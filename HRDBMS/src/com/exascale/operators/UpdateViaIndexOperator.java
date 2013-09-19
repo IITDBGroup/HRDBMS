@@ -1,5 +1,6 @@
 package com.exascale.operators;
 
-public class UpdateViaIndexOperator {
+public class UpdateViaIndexOperator implements Operator
+{
 
 }

@@ -1,5 +1,6 @@
 package com.exascale.operators;
 
-public class ColUpdateOperator {
+public class ColUpdateOperator implements Operator
+{
 
 }
