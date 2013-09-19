@@ -1,4 +1,4 @@
-package com.exascale;
+package com.exascale.tables;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -9,6 +9,17 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.Map;
+
+import com.exascale.exceptions.LockAbortException;
+import com.exascale.exceptions.RecNumOverflowException;
+import com.exascale.filesystem.Block;
+import com.exascale.filesystem.Page;
+import com.exascale.filesystem.RID;
+import com.exascale.logging.InsertLogRec;
+import com.exascale.logging.LogRec;
+import com.exascale.managers.FileManager;
+import com.exascale.managers.HRDBMSWorker;
+import com.exascale.managers.LockManager;
 
 public class Schema 
 {
@@ -103,7 +114,7 @@ public class Schema
 		return colIDs;
 	}
 	
-	private Block addNewBlock(String fn, int[] colIDs) throws IOException, LockAbortException
+	private Block addNewBlock(String fn, int[] colIDs) throws IOException, LockAbortException, Exception
 	{
 		ByteBuffer buff = ByteBuffer.allocate(Page.BLOCK_SIZE);
 		buff.position(0);
@@ -132,11 +143,11 @@ public class Schema
 		
 		int newBlockNum = FileManager.addNewBlock(fn, buff);
 		addNewBlockToHeader(newBlockNum);
-		alertXAManagerToAddNewBlock(newBlockNum, getNodeNumber(), getDeviceNumber(), getTableName());
+		//alertXAManagerToAddNewBlock(newBlockNum, getNodeNumber(), getDeviceNumber(), getTableName()); TODO
 		return new Block(fn, newBlockNum);
 	}
 	
-	private void addNewBlockToHeader(int newBlockNum) throws LockAbortException
+	private void addNewBlockToHeader(int newBlockNum) throws LockAbortException, Exception
 	{
 		int pageNum;
 		int entryNum;
@@ -171,7 +182,7 @@ public class Schema
 		}
 	}
 	
-	private void updateFreeSpace(int off, int length) throws LockAbortException
+	private void updateFreeSpace(int off, int length) throws LockAbortException, Exception
 	{
 		int oldMax = getSizeLargestFS();
 		int i = 0;
@@ -288,7 +299,7 @@ public class Schema
 		}
 	}
 	
-	private void updateHeader(RID rid, FieldValue[] vals, int nextRecNum, int off, int length) throws RecNumOverflowException, LockAbortException
+	private void updateHeader(RID rid, FieldValue[] vals, int nextRecNum, int off, int length) throws RecNumOverflowException, LockAbortException, Exception
 	{
 		this.nextRecNum = findNextFreeRecNum(nextRecNum);
 		updateFreeSpace(off, length);
@@ -612,7 +623,7 @@ public class Schema
 		return new ColIterator();
 	}
 	
-	class RowIterator implements Iterator<Row>
+	public class RowIterator implements Iterator<Row>
 	{
 		private int rowIndex = 0;
 		private Row currentRow;
@@ -645,7 +656,7 @@ public class Schema
 		}
 	}
 	
-	class Row
+	public class Row
 	{
 		private int index;
 		
@@ -761,68 +772,68 @@ public class Schema
 		
 		if (type == DataType.BIGINT)
 		{
-			return new BigintFV(rowIndex, colIndex);
+			return new BigintFV(rowIndex, colIndex, this);
 		}
 		
 		if (type == DataType.BINARY)
 		{
-			return new BinaryFV(rowIndex, colIndex, dt.getLength());
+			return new BinaryFV(rowIndex, colIndex, dt.getLength(), this);
 		}
 		
 		if (type == DataType.DATE || type == DataType.TIME || type == DataType.TIMESTAMP)
 		{
-			return new DateTimeFV(rowIndex, colIndex);
+			return new DateTimeFV(rowIndex, colIndex, this);
 		}
 		
 		if (type == DataType.DECIMAL)
 		{
-			return new DecimalFV(rowIndex, colIndex, dt.getLength(), dt.getScale());
+			return new DecimalFV(rowIndex, colIndex, dt.getLength(), dt.getScale(), this);
 		}
 		
 		if (type == DataType.DOUBLE)
 		{
-			return new DoubleFV(rowIndex, colIndex);
+			return new DoubleFV(rowIndex, colIndex, this);
 		}
 		
 		if (type == DataType.FLOAT)
 		{
-			return new FloatFV(rowIndex, colIndex);
+			return new FloatFV(rowIndex, colIndex, this);
 		}
 		
 		if (type == DataType.INTEGER)
 		{
-			return new IntegerFV(rowIndex, colIndex);
+			return new IntegerFV(rowIndex, colIndex, this);
 		}
 		
 		if (type == DataType.SMALLINT)
 		{
-			return new SmallintFV(rowIndex, colIndex);
+			return new SmallintFV(rowIndex, colIndex, this);
 		}
 		
 		if (type == DataType.VARBINARY)
 		{
-			return new VarbinaryFV(rowIndex, colIndex);
+			return new VarbinaryFV(rowIndex, colIndex, this);
 		}
 		
 		if (type == DataType.VARCHAR)
 		{
-			return new VarcharFV(rowIndex, colIndex);
+			return new VarcharFV(rowIndex, colIndex, this);
 		}
 		
-		System.err.println("Unknown data type in Schema.getField()");
+		HRDBMSWorker.logger.error("Unknown data type in Schema.getField()");
 		return null;
 	}
 	
-	public abstract class FieldValue 
+	public static abstract class FieldValue 
 	{
 		protected boolean isNull;
 		protected boolean exists;
 		protected int off;
 		
-		public FieldValue(int row, int col)
+		public FieldValue(int row, int col, Schema s)
 		{
-			isNull = (nullArray[row][col] != 0);
-			off = offsetArray[row][col];
+			isNull = (s.nullArray[row][col] != 0);
+			off = s.offsetArray[row][col];
 			exists = (off != -1);
 		}
 		
@@ -850,17 +861,17 @@ public class Schema
 		}
 	}
 	
-	public class BigintFV extends FieldValue
+	public static class BigintFV extends FieldValue
 	{
 		private long value;
 		
-		public BigintFV(int row, int col)
+		public BigintFV(int row, int col, Schema s)
 		{
-			super(row, col);
+			super(row, col, s);
 			
 			if (!isNull && exists)
 			{
-				value = p.getLong(off); 
+				value = s.p.getLong(off); 
 			}
 		}
 		
@@ -911,18 +922,18 @@ public class Schema
 		}
 	}
 	
-	public class BinaryFV extends FieldValue
+	public static class BinaryFV extends FieldValue
 	{
 		private byte[] value;
 		
-		public BinaryFV(int row, int col, int len)
+		public BinaryFV(int row, int col, int len, Schema s)
 		{
-			super(row, col);
+			super(row, col, s);
 			
 			if (!isNull && exists)
 			{
 				value = new byte[len];
-				p.get(off, value);
+				s.p.get(off, value);
 			}
 		}
 		
@@ -959,17 +970,17 @@ public class Schema
 		}
 	}
 	
-	public class DateTimeFV extends FieldValue
+	public static class DateTimeFV extends FieldValue
 	{
 		private Date value;
 		
-		public DateTimeFV(int row, int col)
+		public DateTimeFV(int row, int col, Schema s)
 		{
-			super(row, col);
+			super(row, col, s);
 			
 			if (!isNull && exists)
 			{
-				value = new Date(p.getLong(off));
+				value = new Date(s.p.getLong(off));
 			}
 		}
 		
@@ -1007,22 +1018,22 @@ public class Schema
 		}
 	}
 	
-	public class DecimalFV extends FieldValue
+	public static class DecimalFV extends FieldValue
 	{
 		private BigDecimal value;
 		private int length;
 		private byte[] bytes;
 		
-		public DecimalFV(int row, int col, int length, int scale)
+		public DecimalFV(int row, int col, int length, int scale, Schema s)
 		{
-			super(row, col);
+			super(row, col, s);
 			this.length = length;
 			
 			if (!isNull && exists)
 			{
 				int numBytes = (int)(Math.ceil(((length+1)*1.0) / 2.0));
 				bytes = new byte[numBytes];
-				p.get(off, bytes);
+				s.p.get(off, bytes);
 				boolean positive = (bytes[0] & 0xF0) == 0;
 				BigInteger temp = BigInteger.valueOf(bytes[0] & 0x0F);
 				int i = 1;
@@ -1075,17 +1086,17 @@ public class Schema
 		}
 	}
 	
-	public class DoubleFV extends FieldValue
+	public static class DoubleFV extends FieldValue
 	{
 		private double value;
 		
-		public DoubleFV(int row, int col)
+		public DoubleFV(int row, int col, Schema s)
 		{
-			super(row, col);
+			super(row, col, s);
 			
 			if (!isNull && exists)
 			{
-				value = p.getDouble(off); 
+				value = s.p.getDouble(off); 
 			}
 		}
 		
@@ -1123,17 +1134,17 @@ public class Schema
 		}
 	}
 	
-	public class FloatFV extends FieldValue
+	public static class FloatFV extends FieldValue
 	{
 		private float value;
 		
-		public FloatFV(int row, int col)
+		public FloatFV(int row, int col, Schema s)
 		{
-			super(row, col);
+			super(row, col, s);
 			
 			if (!isNull && exists)
 			{
-				value = p.getFloat(off); 
+				value = s.p.getFloat(off); 
 			}
 		}
 		
@@ -1171,17 +1182,17 @@ public class Schema
 		}
 	}
 	
-	public class IntegerFV extends FieldValue
+	public static class IntegerFV extends FieldValue
 	{
 		private int value;
 		
-		public IntegerFV(int row, int col)
+		public IntegerFV(int row, int col, Schema s)
 		{
-			super(row, col);
+			super(row, col, s);
 			
 			if (!isNull && exists)
 			{
-				value = p.getInt(off); 
+				value = s.p.getInt(off); 
 			}
 		}
 		
@@ -1219,17 +1230,17 @@ public class Schema
 		}
 	}
 	
-	public class SmallintFV extends FieldValue
+	public static class SmallintFV extends FieldValue
 	{
 		private short value;
 		
-		public SmallintFV(int row, int col)
+		public SmallintFV(int row, int col, Schema s)
 		{
-			super(row, col);
+			super(row, col, s);
 			
 			if (!isNull && exists)
 			{
-				value = p.getShort(off); 
+				value = s.p.getShort(off); 
 			}
 		}
 		
@@ -1267,19 +1278,19 @@ public class Schema
 		}
 	}
 	
-	public class VarbinaryFV extends FieldValue
+	public static class VarbinaryFV extends FieldValue
 	{
 		private byte[] value;
 		
-		public VarbinaryFV(int row, int col)
+		public VarbinaryFV(int row, int col, Schema s)
 		{
-			super(row, col);
+			super(row, col, s);
 			
 			if (!isNull && exists)
 			{
-				int len = p.getInt(off);
+				int len = s.p.getInt(off);
 				value = new byte[len];
-				p.get(off+4, value);
+				s.p.get(off+4, value);
 			}
 		}
 		
@@ -1324,21 +1335,21 @@ public class Schema
 		}
 	}
 	
-	public class VarcharFV extends FieldValue
+	public static class VarcharFV extends FieldValue
 	{
 		private String value;
 		private int size;
 		
-		public VarcharFV(int row, int col) throws Exception
+		public VarcharFV(int row, int col, Schema s) throws Exception
 		{
-			super(row, col);
+			super(row, col, s);
 			
 			if (!isNull && exists)
 			{
-				int len = p.getInt(off);
+				int len = s.p.getInt(off);
 				byte[] temp = new byte[len];
 				size = 4 + len;
-				p.get(off + 4, temp);
+				s.p.get(off + 4, temp);
 				try
 				{
 					value = new String(temp, "UTF-8");
@@ -1392,7 +1403,7 @@ public class Schema
 		}
 	}
 	
-	public void deleteRow(RID id) throws LockAbortException
+	public void deleteRow(RID id) throws LockAbortException, Exception
 	{
 		int level = tx.getIsolationLevel();
 		if (level == Transaction.ISOLATION_CS || level == Transaction.ISOLATION_UR)
@@ -1487,7 +1498,7 @@ public class Schema
 		}
 	}
 	
-	private void updateFSInHeader(int size) throws LockAbortException
+	private void updateFSInHeader(int size) throws LockAbortException, Exception
 	{
 		int pageNum;
 		int entryNum;
@@ -1516,23 +1527,17 @@ public class Schema
 		}
 	}
 	
-	private int findPage(int data, int colID, int colMarker) throws LockAbortException
+	private int findPage(int data, int colID, int colMarker) throws LockAbortException, Exception
 	{
-		Block[] header = new Block[HEADER_SIZE];
+		Block blk = null;
 		int i = 0;
 		String fn = p.block().fileName();
-		while (i < HEADER_SIZE)
-		{
-			header[i] = new Block(fn, i);
-			i++;
-		}
-		tx.requestPages(header);
-		
-		i = 0;
 		int block = -1;
 		while (i < HEADER_SIZE && block == -1)
 		{
-			HeaderPage hp = tx.readHeaderPage(header[i], blockType);
+			blk = new Block(fn, i);
+			tx.requestPage(blk);
+			HeaderPage hp = tx.readHeaderPage(blk, blockType);
 			
 			if (hp == null)
 			{
@@ -1544,23 +1549,17 @@ public class Schema
 		return block;
 	}
 	
-	private int findPage(int data) throws LockAbortException
+	private int findPage(int data) throws LockAbortException, Exception
 	{
-		Block[] header = new Block[HEADER_SIZE];
+		Block blk = null;
 		int i = 0;
 		String fn = p.block().fileName();
-		while (i < HEADER_SIZE)
-		{
-			header[i] = new Block(fn, i);
-			i++;
-		}
-		tx.requestPages(header);
-		
-		i = 0;
 		int block = -1;
 		while (i < HEADER_SIZE && block == -1)
 		{
-			HeaderPage hp = tx.readHeaderPage(header[i], blockType);
+			blk = new Block(fn, i);
+			tx.requestPage(blk);
+			HeaderPage hp = tx.readHeaderPage(blk, blockType);
 			
 			if (hp == null)
 			{
@@ -1573,7 +1572,7 @@ public class Schema
 		return block;
 	}
 	
-	private int getNodeNumber() throws LockAbortException
+	private int getNodeNumber() throws LockAbortException, Exception
 	{
 		Block b = new Block(p.block().fileName(), 0);
 		tx.requestPage(b);
@@ -1582,7 +1581,7 @@ public class Schema
 		return hp.getNodeNumber();
 	}
 	
-	private int getDeviceNumber() throws LockAbortException
+	private int getDeviceNumber() throws LockAbortException, Exception
 	{
 		Block b = new Block(p.block().fileName(), 0);
 		tx.requestPage(b);
@@ -1591,7 +1590,7 @@ public class Schema
 		return hp.getDeviceNumber();
 	}
 	
-	private int findPage(int after, int data, int colID, int colMarker) throws LockAbortException
+	private int findPage(int after, int data, int colID, int colMarker) throws LockAbortException, Exception
 	{
 		int i = after + 1;
 		int block = -1;
@@ -1604,7 +1603,7 @@ public class Schema
 		return block;
 	}
 	
-	private int findPage(int after, int data) throws LockAbortException
+	private int findPage(int after, int data) throws LockAbortException, Exception
 	{
 		int i = after + 1;
 		int block = -1;
@@ -1617,7 +1616,7 @@ public class Schema
 		return block;
 	}
 	
-	public RIDChange updateRowForColTable(RID id, FieldValue val) throws LockAbortException, IOException, RecNumOverflowException
+	public RIDChange updateRowForColTable(RID id, FieldValue val) throws LockAbortException, IOException, RecNumOverflowException, Exception
 	{
 		RID newRID;
 		this.deleteRow(id);
@@ -1694,7 +1693,7 @@ public class Schema
 		}
 	}
 	
-	public RID insertRow(FieldValue[] vals) throws LockAbortException, UnsupportedEncodingException, IOException, RecNumOverflowException
+	public RID insertRow(FieldValue[] vals) throws LockAbortException, UnsupportedEncodingException, IOException, RecNumOverflowException, Exception
 	{
 			int length = 0;
 			for (FieldValue val : vals)
@@ -1785,7 +1784,7 @@ public class Schema
 			}
 	}
 	
-	public RID[] insertRowForColTable(FieldValue[] vals) throws LockAbortException, IOException, RecNumOverflowException
+	public RID[] insertRowForColTable(FieldValue[] vals) throws LockAbortException, IOException, RecNumOverflowException, Exception
 	{
 		//relies on colID always starting from 0 and being sequential
 		//type TYPE_COL

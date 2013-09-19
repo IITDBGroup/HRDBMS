@@ -1,4 +1,4 @@
-package com.exascale;
+package com.exascale.managers;
 
 import java.io.File;
 import java.io.IOException;
@@ -7,10 +7,16 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.List;
 
+import com.exascale.logging.LogRec;
+import com.exascale.logging.NQCheckLogRec;
+import com.exascale.tables.Transaction;
+import com.exascale.threads.HRDBMSThread;
+
 public class CheckpointManager extends HRDBMSThread
 {	
 	public CheckpointManager()
 	{
+		HRDBMSWorker.logger.info("Starting initialization of the Checkpoint Manager.");
 		this.setWait(true);
 		this.description = "Checkpoint Manager";
 	}
@@ -18,7 +24,7 @@ public class CheckpointManager extends HRDBMSThread
 	public void run()
 	{
 		long sleep = Long.parseLong(HRDBMSWorker.getHParms().getProperty("checkpoint_freq_sec"));
-		
+		HRDBMSWorker.logger.info("Checkpoint Manager initialization complete.");
 		while (true)
 		{
 			try
@@ -35,8 +41,9 @@ public class CheckpointManager extends HRDBMSThread
 				}
 				catch(Exception e)
 				{
-					e.printStackTrace(System.err);
+					HRDBMSWorker.logger.error("Error occurred while flushing the bufferpool in the Checkpoint Manager.", e);
 					this.terminate();
+					return;
 				}
 				LogRec rec = new NQCheckLogRec(Transaction.txList);
 				LogManager.write(rec);
@@ -46,8 +53,9 @@ public class CheckpointManager extends HRDBMSThread
 				}
 				catch(IOException e)
 				{
-					e.printStackTrace(System.err);
+					HRDBMSWorker.logger.error("Error flushing the log in Checkpoint Manager.", e);
 					this.terminate();
+					return;
 				}
 			}
 		}

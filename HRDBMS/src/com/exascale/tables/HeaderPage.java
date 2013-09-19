@@ -1,6 +1,9 @@
-package com.exascale;
+package com.exascale.tables;
 
 import java.nio.ByteBuffer;
+
+import com.exascale.filesystem.Page;
+import com.exascale.managers.LogManager;
 
 public class HeaderPage 
 {

@@ -1,4 +1,4 @@
-package com.exascale;
+package com.exascale.managers;
 
 import java.io.File;
 import java.io.IOException;
@@ -13,6 +13,18 @@ import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
+
+import com.exascale.filesystem.Block;
+import com.exascale.logging.CommitLogRec;
+import com.exascale.logging.DeleteLogRec;
+import com.exascale.logging.ForwardLogIterator;
+import com.exascale.logging.InsertLogRec;
+import com.exascale.logging.LogIterator;
+import com.exascale.logging.LogRec;
+import com.exascale.logging.NQCheckLogRec;
+import com.exascale.logging.RollbackLogRec;
+import com.exascale.threads.ArchiverThread;
+import com.exascale.threads.HRDBMSThread;
 
 public class LogManager extends HRDBMSThread
 {
@@ -31,8 +43,14 @@ public class LogManager extends HRDBMSThread
 	
 	public LogManager()
 	{
+		HRDBMSWorker.logger.info("Starting initialization of the Log Manager.");
 		this.setWait(true);
 		this.description = "Log Manager";
+	}
+	
+	public static BlockingQueue<String> getInputQueue()
+	{
+		return in;
 	}
 	
 	public void run()
@@ -52,9 +70,10 @@ public class LogManager extends HRDBMSThread
 			}
 			catch(Exception e)
 			{
-				e.printStackTrace(System.err);
+				HRDBMSWorker.logger.error("Error creating the active log file.", e);
 				in = null;
 				this.terminate();
+				return;
 			}
 		}
 		try
@@ -63,9 +82,10 @@ public class LogManager extends HRDBMSThread
 		}
 		catch(Exception e)
 		{
-			e.printStackTrace(System.err);
+			HRDBMSWorker.logger.error("Error getting a FileChannel for " + filename, e);
 			in = null;
 			this.terminate();
+			return;
 		}
 		
 		int sleepSecs = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("log_clean_sleep_secs"));
@@ -75,11 +95,13 @@ public class LogManager extends HRDBMSThread
 		}
 		catch(IOException e)
 		{
-			e.printStackTrace(System.err);
+			HRDBMSWorker.logger.error("Error during log recovery.", e);
 			in = null;
 			this.terminate();
+			return;
 		}
 
+		HRDBMSWorker.logger.info("Log Manager initialization complete.");
 		while(true)
 		{
 			String msg = in.poll();
@@ -103,8 +125,9 @@ public class LogManager extends HRDBMSThread
 					catch(IOException e)
 					{
 						in = null;
-						e.printStackTrace(System.err);
+						HRDBMSWorker.logger.error("Error flushing log pages to disk.", e);
 						this.terminate();
+						return;
 					}
 				}
 			}
@@ -129,9 +152,10 @@ public class LogManager extends HRDBMSThread
 		}
 		else
 		{
-			System.err.println("Unknown message received by Log Manager: " + cmd);
+			HRDBMSWorker.logger.error("Unknown message received by Log Manager: " + cmd);
 			in = null;
 			this.terminate();
+			return;
 		}
 	}
 	
@@ -147,9 +171,10 @@ public class LogManager extends HRDBMSThread
 			}
 			catch(Exception e)
 			{
-				e.printStackTrace(System.err);
+				HRDBMSWorker.logger.error("Error creating log file " + log, e);
 				in = null;
 				this.terminate();
+				return;
 			}
 		}
 		try
@@ -159,9 +184,10 @@ public class LogManager extends HRDBMSThread
 		}
 		catch(Exception e)
 		{
-			e.printStackTrace(System.err);
+			HRDBMSWorker.logger.error("Error recovery secondary log " + fn, e);
 			in = null;
 			this.terminate();
+			return;
 		}
 	}
 	
@@ -224,6 +250,10 @@ public class LogManager extends HRDBMSThread
 	public static void flushAll() throws IOException
 	{
 		LinkedList<LogRec> list = logs.get(filename);
+		if (list == null)
+		{
+			return;
+		}
 		synchronized(list)
 		{
 			if (list.size() != 0)
@@ -254,8 +284,11 @@ public class LogManager extends HRDBMSThread
 							fc.position(fc.size());
 							ByteBuffer size = ByteBuffer.allocate(4);
 							size.putInt(rec.size());
+							size.position(0);
+							rec.buffer().position(0);
 							fc.write(size);
 							fc.write(rec.buffer());
+							size.position(0);
 							fc.write(size);
 						}
 						logs.get(fn).remove(rec);
@@ -302,7 +335,7 @@ public class LogManager extends HRDBMSThread
 		}
 		catch(Exception e)
 		{
-			e.printStackTrace(System.err);
+			HRDBMSWorker.logger.error("Error creating LogIterator.", e);
 			return null;
 		}
 	}
@@ -320,7 +353,7 @@ public class LogManager extends HRDBMSThread
 		}
 		catch(Exception e)
 		{
-			e.printStackTrace(System.err);
+			HRDBMSWorker.logger.error("Error creating ForwardLogIterator.", e);
 			return null;
 		}
 	}

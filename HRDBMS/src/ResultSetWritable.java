@@ -144,7 +144,7 @@ public class ResultSetWritable implements WritableComparable, ResultSet, Seriali
 		}
 		catch(Exception e)
 		{
-			e.printStackTrace(System.err);
+			e.printStackTrace(System.out);
 		}
 	}
 	
@@ -183,7 +183,7 @@ public class ResultSetWritable implements WritableComparable, ResultSet, Seriali
 		}
 		catch(Exception e)
 		{
-			e.printStackTrace(System.err);
+			e.printStackTrace(System.out);
 		}
 	}
 	
@@ -242,7 +242,7 @@ public class ResultSetWritable implements WritableComparable, ResultSet, Seriali
 		}
 		catch(Exception e)
 		{
-			e.printStackTrace(System.err);
+			e.printStackTrace(System.out);
 		}
 	}
 	
@@ -287,7 +287,7 @@ public class ResultSetWritable implements WritableComparable, ResultSet, Seriali
 		}
 		catch(Exception e)
 		{
-			e.printStackTrace(System.err);
+			e.printStackTrace(System.out);
 		}
 	}
 	
@@ -304,7 +304,7 @@ public class ResultSetWritable implements WritableComparable, ResultSet, Seriali
 	   }
 	   catch(Exception e)
 	   {
-		   e.printStackTrace(System.err);
+		   e.printStackTrace(System.out);
 	   }
 	   int i = 0;
 	   while (i < rows)
@@ -411,7 +411,7 @@ public class ResultSetWritable implements WritableComparable, ResultSet, Seriali
 	   }
 	   catch(Exception e)
 	   {
-		   e.printStackTrace(System.err);
+		   e.printStackTrace(System.out);
 	   }
 	   int i = 0;
 	   while (i < rows)

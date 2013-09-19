@@ -1,4 +1,4 @@
-package com.exascale;
+package com.exascale.threads;
 
 import java.io.File;
 import java.io.IOException;
@@ -7,6 +7,11 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.HashSet;
 import java.util.List;
+
+import com.exascale.logging.LogRec;
+import com.exascale.logging.NQCheckLogRec;
+import com.exascale.managers.HRDBMSWorker;
+import com.exascale.managers.LogManager;
 
 public class ArchiverThread extends HRDBMSThread
 {
@@ -32,8 +37,9 @@ public class ArchiverThread extends HRDBMSThread
 				}
 				catch(IOException e)
 				{
-					e.printStackTrace(System.err);
+					HRDBMSWorker.logger.error("Error getting FileChannel for " + filename, e);
 					this.terminate();
+					return;
 				}
 				synchronized(fc)
 				{
@@ -44,7 +50,9 @@ public class ArchiverThread extends HRDBMSThread
 			
 						while (true)
 						{
+							sizeBuff.position(0);
 							fc.read(sizeBuff);
+							sizeBuff.position(0);
 							int size = sizeBuff.getInt();
 							fc.position(fc.position() -4 - size);
 							LogRec rec = new LogRec(fc);
@@ -58,7 +66,9 @@ public class ArchiverThread extends HRDBMSThread
 								fc.position(fc.position() - size - 8);
 								while (true)
 								{
+									sizeBuff.position(0);
 									fc.read(sizeBuff);
+									sizeBuff.position(0);
 									size = sizeBuff.getInt();
 									fc.position(fc.position() -4 - size);
 									rec = new LogRec(fc);
@@ -96,6 +106,7 @@ public class ArchiverThread extends HRDBMSThread
 											newArchive.truncate(end);
 											newArchive.close();
 											this.terminate();
+											return;
 										}	
 									}
 									else
@@ -107,6 +118,7 @@ public class ArchiverThread extends HRDBMSThread
 										catch(IllegalArgumentException e)
 										{
 											this.terminate();
+											return;
 										}
 									}
 								}
@@ -120,19 +132,22 @@ public class ArchiverThread extends HRDBMSThread
 								catch(IllegalArgumentException e)
 								{
 									this.terminate();
+									return;
 								}		
 							}
 						}	
 					}
 					catch(IOException e)
 					{
-						e.printStackTrace(System.err); 
+						HRDBMSWorker.logger.error("Error occurred during archiving.", e);
 						this.terminate();
+						return;
 					}
 				}
 			}
 		}
 		
 		this.terminate();
+		return;
 	}
 }

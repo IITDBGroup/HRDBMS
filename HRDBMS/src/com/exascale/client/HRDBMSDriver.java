@@ -1,4 +1,4 @@
-package com.exascale;
+package com.exascale.client;
 import java.net.Socket;
 import java.sql.Connection;
 import java.sql.Driver;
@@ -20,7 +20,7 @@ public class HRDBMSDriver implements Driver
 		}
 		catch(Exception e)
 		{
-			e.printStackTrace(System.err);
+			e.printStackTrace(System.out);
 		}
 	}
 

@@ -1,4 +1,8 @@
-package com.exascale;
+package com.exascale.threads;
+
+import com.exascale.filesystem.Block;
+import com.exascale.managers.BufferManager;
+import com.exascale.managers.HRDBMSWorker;
 
 public class IOThread extends HRDBMSThread
 {
@@ -33,9 +37,10 @@ public class IOThread extends HRDBMSThread
 		}
 		catch(Exception e)
 		{
-			e.printStackTrace(System.err);
+			HRDBMSWorker.logger.error("Error occurred in an I/O thread.", e);
 		}
 		
 		this.terminate();
+		return;
 	}
 }

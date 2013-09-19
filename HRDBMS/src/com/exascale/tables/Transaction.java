@@ -1,9 +1,20 @@
-package com.exascale;
+package com.exascale.tables;
 
 import java.io.IOException;
 import java.util.HashSet;
 
-import com.exascale.Schema.FieldValue;
+import com.exascale.exceptions.LockAbortException;
+import com.exascale.filesystem.Block;
+import com.exascale.filesystem.Page;
+import com.exascale.logging.DeleteLogRec;
+import com.exascale.logging.InsertLogRec;
+import com.exascale.logging.LogRec;
+import com.exascale.logging.StartLogRec;
+import com.exascale.managers.BufferManager;
+import com.exascale.managers.HRDBMSWorker;
+import com.exascale.managers.LockManager;
+import com.exascale.managers.LogManager;
+import com.exascale.tables.Schema.FieldValue;
 
 public class Transaction 
 {
@@ -99,7 +110,7 @@ public class Transaction
 		}
 	}
 	
-	private Page getPage(Block b)
+	private Page getPage(Block b) throws Exception
 	{
 		Page p = BufferManager.getPage(b);
 		
@@ -111,7 +122,7 @@ public class Transaction
 			{
 				try
 				{
-					Thread.sleep(Long.parseLong(HRDBMSWorker.getHParms().getProperty("getpage_fail_sleep_time")));
+					Thread.sleep(Long.parseLong(HRDBMSWorker.getHParms().getProperty("getpage_fail_sleep_time_ms")));
 				}
 				catch(InterruptedException e)
 				{}
@@ -134,7 +145,7 @@ public class Transaction
 			
 		if (p == null)
 		{
-			return null;
+			throw new Exception("Unable to retrieve page " + b.fileName() + ":" + b.number());
 		}
 		
 		return p;
@@ -151,7 +162,7 @@ public class Transaction
 		return nextTxNum;
 	}
 	
-	public void read(Block b, Schema schema) throws LockAbortException
+	public void read(Block b, Schema schema) throws LockAbortException, Exception
 	{
 		if (level == ISOLATION_RR || level == ISOLATION_CS)
 		{
@@ -165,7 +176,7 @@ public class Transaction
 		}
 	}
 	
-	public HeaderPage readHeaderPage(Block b, int type) throws LockAbortException
+	public HeaderPage readHeaderPage(Block b, int type) throws LockAbortException, Exception
 	{
 		if (level == ISOLATION_RR || level == ISOLATION_CS)
 		{

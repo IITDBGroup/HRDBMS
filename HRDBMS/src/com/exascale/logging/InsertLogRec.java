@@ -1,6 +1,11 @@
-package com.exascale;
+package com.exascale.logging;
 
 import java.nio.ByteBuffer;
+
+import com.exascale.filesystem.Block;
+import com.exascale.filesystem.Page;
+import com.exascale.managers.BufferManager;
+import com.exascale.managers.HRDBMSWorker;
 
 public class InsertLogRec extends LogRec
 {
@@ -27,7 +32,7 @@ public class InsertLogRec extends LogRec
 		}
 		catch(Exception e)
 		{
-			e.printStackTrace(System.err);
+			HRDBMSWorker.logger.error("Error converting bytes to UTF-8 string in InsertLogRec constructor.", e);
 			return;
 		}
 		

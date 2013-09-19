@@ -104,8 +104,8 @@ public class DB2InputSplit extends InputSplit implements Writable
 		}
 		catch(Exception e)
 		{
-			System.err.println("Unable to load DB2 driver");
-			e.printStackTrace(System.err);
+			System.out.println("Unable to load DB2 driver");
+			e.printStackTrace(System.out);
 			return null;
 		}
 		
@@ -120,8 +120,8 @@ public class DB2InputSplit extends InputSplit implements Writable
 		}
 		catch(Exception e)
 		{
-			System.err.println("Unable to connect to DB2 @ " + url + " with userid: " + userid + " and password: " + pwd);
-			e.printStackTrace(System.err);
+			System.out.println("Unable to connect to DB2 @ " + url + " with userid: " + userid + " and password: " + pwd);
+			e.printStackTrace(System.out);
 			return null;
 		}
 		

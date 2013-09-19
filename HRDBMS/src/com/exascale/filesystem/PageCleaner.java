@@ -1,4 +1,9 @@
-package com.exascale;
+package com.exascale.filesystem;
+
+import com.exascale.managers.BufferManager;
+import com.exascale.managers.FileManager;
+import com.exascale.managers.HRDBMSWorker;
+import com.exascale.threads.HRDBMSThread;
 
 public class PageCleaner extends HRDBMSThread 
 {
@@ -30,8 +35,9 @@ public class PageCleaner extends HRDBMSThread
 						}
 						catch(Exception e)
 						{
-							e.printStackTrace(System.err);
+							HRDBMSWorker.logger.error("PageCleaner error writing dirty page!", e);
 							this.terminate();
+							return;
 						}
 					
 						p.unpin(-2);

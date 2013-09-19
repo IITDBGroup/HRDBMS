@@ -1,4 +1,6 @@
-package com.exascale;
+package com.exascale.threads;
+
+import com.exascale.managers.HRDBMSWorker;
 
 public abstract class HRDBMSThread extends Thread
 {

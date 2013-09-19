@@ -1,6 +1,7 @@
-package com.exascale;
+package com.exascale.managers;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.io.UnsupportedEncodingException;
@@ -13,6 +14,11 @@ import java.util.StringTokenizer;
 import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
 
+import com.exascale.filesystem.Block;
+import com.exascale.filesystem.Page;
+import com.exascale.misc.CatalogCode;
+import com.exascale.threads.ReadThread;
+
 public class FileManager
 {
 	private static File[] dirs;
@@ -20,14 +26,15 @@ public class FileManager
 	
 	public FileManager() 
 	{
+		HRDBMSWorker.logger.info("Starting initialization of the File Manager.");
 		setDirs(HRDBMSWorker.getHParms().getProperty("data_directories"));
 		
 		for (File dir : dirs)
 		{
 			if (!dir.exists())
 			{
-				System.err.println("Data directory " + dir + " does not exist!");
-				System.err.println("Failed to create the File Manager");
+				HRDBMSWorker.logger.error("Data directory " + dir + " does not exist!");
+				HRDBMSWorker.logger.error("Failed to create the File Manager");
 				System.exit(1);
 			}
 			
@@ -39,6 +46,13 @@ public class FileManager
 				}
 			}
 		}
+		
+		HRDBMSWorker.logger.info("File Manager initialization complete.");
+	}
+	
+	public static File[] getDirs()
+	{
+		return dirs;
 	}
 	
 	public static boolean sysTablesExists()
@@ -69,17 +83,39 @@ public class FileManager
 	{
 		CatalogCode cc = new CatalogCode();
 		cc.buildCode();
+		HRDBMSWorker.logger.debug("Done building source code.");
 		//compile source
-		JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
-		int result = compiler.run(System.in, System.out, System.err, "CatalogCreator.java");
+		HRDBMSWorker.logger.debug("Starting compilation.");
+		int result = -1;
+		try
+		{
+			JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+			FileOutputStream javacOut = new FileOutputStream(new File("javac.out"), false);
+			result = compiler.run(System.in, javacOut, javacOut, "CatalogCreator.java");
+			javacOut.close();
+		}
+		catch(Exception e)
+		{
+			HRDBMSWorker.logger.error("Exception during compilation.");
+			HRDBMSWorker.logger.error("Exception is ", e);
+			System.exit(1);
+		}
 		if (result != 0)
 		{
-			System.err.println("Failure compiling CatalogCreator. Catalog creation will abort.");
+			HRDBMSWorker.logger.error("Failure compiling CatalogCreator. Catalog creation will abort.");
 			System.exit(1);
 		}
 		
 		//create CatalogCreator object and execute it
-		Class.forName("com.exascale.CatalogCreator").newInstance();
+		try
+		{
+			Class.forName("CatalogCreator").newInstance();
+		}
+		catch(Exception e)
+		{
+			HRDBMSWorker.logger.error("" + e.getClass());
+			System.exit(1);
+		}
 	}
 	
 	private static void putString(ByteBuffer bb, String val) throws UnsupportedEncodingException
@@ -93,91 +129,6 @@ public class FileManager
 			i++;
 		}
 	}
-	
-	/*create table is something like this - this was written for row table with 6 cols
-	 * public static void createCatalog() throws IOException
-	{
-	//instead use data directories and create a file on all
-		File table;
-		String fn = HRDBMSWorker.getHParms().getProperty("catalog_directory");
-		
-		if (!fn.endsWith("/"))
-		{
-			fn += "/";
-		}
-		
-		fn += "SYS.TABLES.tbl";
-		
-		table = new File(fn);
-		table.createNewFile();
-		
-		FileChannel fc = getFile(fn);
-		ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
-		bb.position(0);
-		bb.putInt(0); //node 0
-		bb.putInt(0); //device 0
-		bb.putInt(Page.BLOCK_SIZE - (53 + (4 * 6))); //free space if there are 6 columns
-		
-		int i = 12;
-		while (i < Page.BLOCK_SIZE)
-		{
-			bb.putInt(-1);
-			i += 4;
-		}
-		
-		fc.write(bb);
-		//done writing first header page
-		
-		int j = 1;
-		while (j < 4096)
-		{
-			i = 0;
-			bb.position(0);
-			while (i < Page.BLOCK_SIZE)
-			{
-				bb.putInt(-1);
-				i += 4;
-			}
-			
-			fc.write(bb);
-			j++;
-		}
-		
-		//done writing header pages
-		bb.position(0);
-		bb.put(Schema.TYPE_ROW);
-		bb.putInt(0); //nextRecNum
-		bb.putInt(52 + (4 * 6)); //headEnd
-		bb.putInt(Page.BLOCK_SIZE); //dataStart
-		bb.putLong(System.currentTimeMillis()); //modTime
-		bb.putInt(-1); //null ArrayOff
-		bb.putInt(49); //colIDListOff
-		bb.putInt(53 + (4 * 6)); //rowIDListOff
-		bb.putInt(-1); //offArrayOff
-		bb.putInt(1); //freeSpaceListEntries
-		bb.putInt(53 + (4 * 6)); //free space start = headEnd + 1
-		bb.putInt(Page.BLOCK_SIZE - 1); //free space end
-		bb.putInt(6); //colIDListSize - start of colIDs
-		
-		i = 0;
-		while (i < 6)
-		{
-			bb.putInt(i);
-			i++;
-		}
-		
-		bb.putInt(0); //rowIDListSize - start of rowIDs
-		//null Array start
-		//offset array start
-		 
-		 i = bb.position();
-		 while (i < Page.BLOCK_SIZE)
-		 {
-		 	bb.put((byte)0);
-		 	i++;
-		 }
-		 fc.write(bb);
-	} */
 	
 	public static synchronized FileChannel getFile(String filename) throws IOException
 	{
@@ -232,6 +183,7 @@ public class FileManager
 		synchronized(fc)
 		{
 			retval = (int)(fc.size() / Page.BLOCK_SIZE);
+			data.position(0);
 			fc.write(data, fc.size());
 		}
 		

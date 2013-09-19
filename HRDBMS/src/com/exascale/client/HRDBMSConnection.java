@@ -1,4 +1,4 @@
-package com.exascale;
+package com.exascale.client;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.net.Socket;

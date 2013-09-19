@@ -1,9 +1,12 @@
-package com.exascale;
+package com.exascale.logging;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.HashSet;
+
+import com.exascale.filesystem.Block;
+import com.exascale.managers.HRDBMSWorker;
 
 public class LogRec 
 {
@@ -30,11 +33,15 @@ public class LogRec
 	{
 		fc.position(fc.position() - 4);
 		ByteBuffer size = ByteBuffer.allocate(4);
+		size.position(0);
 		fc.read(size);
+		size.position(0);
 		int sizeVal = size.getInt();
 		ByteBuffer rec = ByteBuffer.allocate(sizeVal);
+		rec.position(0);
 		fc.read(rec);
 		buffer = rec;
+		buffer.position(0);
 		type = buffer.getInt();
 		txnum = buffer.getLong();
 		lsn = buffer.getLong();
@@ -55,7 +62,7 @@ public class LogRec
 			}
 			catch(Exception e)
 			{
-				e.printStackTrace(System.err);
+				HRDBMSWorker.logger.error("Error converting bytes to UTF-8 string in LogRec.rebuild().", e);
 				return null;
 			}
 			int imageSize = buffer.getInt();
@@ -82,7 +89,7 @@ public class LogRec
 			}
 			catch(Exception e)
 			{
-				e.printStackTrace(System.err);
+				HRDBMSWorker.logger.error("Error converting bytes to UTF-8 string in LogRec.rebuild().", e);
 				return null;
 			}
 			int imageSize = buffer.getInt();

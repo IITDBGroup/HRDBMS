@@ -1,4 +1,4 @@
-package com.exascale;
+package com.exascale.logging;
 
 import java.nio.ByteBuffer;
 import java.util.HashSet;

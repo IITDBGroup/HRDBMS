@@ -1,4 +1,4 @@
-package com.exascale;
+package com.exascale.misc;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
@@ -12,8 +12,14 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.HashMap;
@@ -24,6 +30,12 @@ import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
 import java.util.Vector;
+
+import com.exascale.filesystem.Page;
+import com.exascale.filesystem.RID;
+import com.exascale.managers.ConnectionManager;
+import com.exascale.managers.FileManager;
+import com.exascale.managers.HRDBMSWorker;
 
 public class CatalogCode 
 {
@@ -36,13 +48,33 @@ public class CatalogCode
 	private static HashMap<String, Socket> sockets = new HashMap<String, Socket>();
 	private static ServerSocket listen;
 	private static Socket listenSock;
+	private static InputStream in;
+	private static OutputStream sockOut;
+	private static int methodNum = 0;
 	
 	public static void buildCode() throws Exception
 	{
+		HRDBMSWorker.logger.debug("Starting build of catalog java code.");
 		if (HRDBMSWorker.type == HRDBMSWorker.TYPE_COORD)
 		{
-			listen = new ServerSocket(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("catalog_sync_port")));
+			int port = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("catalog_sync_port"));
+			HRDBMSWorker.logger.debug("Attempting to listen on port " + port);
+			listen = new ServerSocket(port);
+			HRDBMSWorker.logger.debug("ServerSocket created.  Now attempting accept()");
 			Socket listenSock = listen.accept();
+			HRDBMSWorker.logger.debug("Accepted connection on port " + port);
+			byte[] dummy = new byte[8];
+			in = listenSock.getInputStream();
+			HRDBMSWorker.logger.debug("Got socket input stream.");
+			sockOut = listenSock.getOutputStream();
+			HRDBMSWorker.logger.debug("Got socket output stream.");
+			int num = in.read(dummy);
+			if (num != 8)
+			{
+				HRDBMSWorker.logger.error("Initial handshake on catalog sync port failed!");
+				System.exit(1);
+			}
+			HRDBMSWorker.logger.debug("Initial handshake on catalog sync port successful.");
 		}
 		
 		String in = "SYS.TABLES(INT, VARCHAR, VARCHAR, INT, INT, VARCHAR)\n" +
@@ -287,7 +319,7 @@ public class CatalogCode
 				"(15, 2, null, 0, 0)\n" +
 				"(16, 2, null, 0, 0)\n" + 
 				"(17, 2, null, 0, 0)\n" + 
-				"SYS.INDEXSTATS(INT, INT, INT, INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, INT)\n" + 
+				"SYS.INDEXSTATS(INT, INT, INT, INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, INT, INT, INT)\n" + 
 				"0\n" + 
 				"SYS.COLSTATS(INT, INT, INT, INT, BIGINT, INT, BIGINT)\n" + 
 				"0\n" + 
@@ -310,7 +342,7 @@ public class CatalogCode
 			{
 				if (!line.startsWith("SYS"))
 				{
-					System.out.println("Looking for a table header but found: " + line);
+					HRDBMSWorker.logger.error("Looking for a table header but found: " + line);
 					System.exit(1);
 				}
 				
@@ -318,11 +350,13 @@ public class CatalogCode
 				tableLine = false;
 				numberLine = true;
 				tbldata = new Vector<String>();
+				HRDBMSWorker.logger.debug("Added a table line.");
 			}
 			else if (numberLine)
 			{
 				numLines = Integer.parseInt(line);
 				numberLine = false;
+				HRDBMSWorker.logger.debug("Parsed a number line.");
 				
 				if (numLines == 0)
 				{
@@ -333,6 +367,7 @@ public class CatalogCode
 			else
 			{
 				tbldata.add(line);
+				HRDBMSWorker.logger.debug("Added a data line.");
 				numLines--;
 				
 				if (numLines == 0)
@@ -345,9 +380,11 @@ public class CatalogCode
 		
 		if (!tableLine)
 		{
-			System.out.println("Hit end of input unexpectedly");
+			HRDBMSWorker.logger.error("Hit end of input unexpectedly");
 			System.exit(1);
 		}
+		
+		HRDBMSWorker.logger.debug("Done parsing catalog input data.");
 		
 		for (String header : tableLines)
 		{
@@ -365,50 +402,77 @@ public class CatalogCode
 			temp.add(token.trim());
 			colTypes.add(temp);
 		}
+		HRDBMSWorker.logger.debug("Done parsing table names and column types.");
 		
 		if (HRDBMSWorker.type == HRDBMSWorker.TYPE_MASTER)
 		{
+			HRDBMSWorker.logger.debug("Calling createNodes().");
 			createNodes();
+			HRDBMSWorker.logger.debug("createNodes() has finished.");
 			createNetwork();
+			HRDBMSWorker.logger.debug("createNetwork() has finished.");
 			sendNodesToCoords();
+			HRDBMSWorker.logger.debug("sendNodesToCoords() has finished.");
 			sendNetworkToCoords();
+			HRDBMSWorker.logger.debug("sendNetworkToCoords() has finished.");
 			receiveDevicesFromAllNodes();
+			HRDBMSWorker.logger.debug("receiveDevicesFromAllNodes() has finished.");
 			sendDevicesToCoords();
 		}
 		else
 		{
+			HRDBMSWorker.logger.debug("Calling receiveAndCreateNodes().");
 			receiveAndCreateNodes();
+			HRDBMSWorker.logger.debug("receiveAndCreateNodes() has finished.");
 			receiveAndCreateNetwork();
+			HRDBMSWorker.logger.debug("receiveAndCreateNetwork() has finished.");
 			receiveAndCreateDevices();
+			HRDBMSWorker.logger.debug("receiveAndCreateDevices() has finished.");
 		}
 		
 		createOutputHeader(out);
+		HRDBMSWorker.logger.debug("createOutputHeader() finished.");
 		createTableStats(tableLines, data);
+		HRDBMSWorker.logger.debug("createTableStats() finished.");
 		createIndexStats(tableLines, data);
+		HRDBMSWorker.logger.debug("createIndexStats() finished.");
 		createColStats(tableLines, data);
+		HRDBMSWorker.logger.debug("createColStats() finished.");
 		createBackups();
+		HRDBMSWorker.logger.debug("createBackups() finished.");
 		createNodeState();
+		HRDBMSWorker.logger.debug("createNodeState() finished.");
 		
 		int i = 0;
 		for (Vector<String> table : data)
 		{
+			HRDBMSWorker.logger.debug("Starting processing for table " + tableNames.get(i));
 			int dataSize = calcDataSize(table, colTypes.get(i));
+			HRDBMSWorker.logger.debug("calcDataSize() done for table " + i);
 			sizes.add(dataSize);
 			createTableHeader(out, tableNames.get(i), table.size(), colTypes.get(i).size(), dataSize);
+			HRDBMSWorker.logger.debug("createTableHeader() done for table " + i);
 			writeNullArray(out, table);
+			HRDBMSWorker.logger.debug("writeNullArray() done for table " + i);
 			writeOffsetArray(out, table, dataSize, colTypes.get(i));
+			HRDBMSWorker.logger.debug("writeOffsetArray() done for table " + i);
 			writeData(out, table, dataSize, colTypes.get(i));
+			HRDBMSWorker.logger.debug("writeData() done for table " + i);
 			i++;
 		}
+		HRDBMSWorker.logger.debug("Finished writing code for all tables.");
 		
 		createIndexes(out);
+		HRDBMSWorker.logger.debug("createIndexes() finished.");
 		createOutputTrailer(out, data, tableLines);
+		HRDBMSWorker.logger.debug("createOutputTrailer() finished.");
 		out.close();
-		System.out.println("Processed " + i + " tables while building catalog");
+		HRDBMSWorker.logger.info("Processed " + i + " tables while building catalog");
 		
 		if (HRDBMSWorker.type == HRDBMSWorker.TYPE_MASTER)
 		{
 			sendCompletionChecks();
+			HRDBMSWorker.logger.debug("sendCompletionChecks() finished.");
 			for (Socket sock : sockets.values())
 			{
 				sock.close();
@@ -417,19 +481,23 @@ public class CatalogCode
 		else
 		{
 			receiveCompletionCheck();
-			listenSock.close();
-			listen.close();
+			HRDBMSWorker.logger.debug("receiveCompletionCheck() finished.");
 		}
+		
+		HRDBMSWorker.logger.debug("buildCode() is returning!");
 	}
 	
 	private static void createIndexes(PrintWriter out) throws UnsupportedEncodingException
 	{
+		HRDBMSWorker.logger.debug("Entered createIndexes()");
 		Vector<String> iTable = getTable("SYS.INDEXES", tableLines, data);
 		Vector<String> icTable = getTable("SYS.INDEXCOLS", tableLines, data);
 		Vector<String> cTable = getTable("SYS.COLUMNS", tableLines, data);
+		Vector<String> tTable = getTable("SYS.TABLES", tableLines, data);
 		
 		for (String iRow : iTable)
 		{
+			HRDBMSWorker.logger.debug("Processing row " + iRow);
 			StringTokenizer iRowST = new StringTokenizer(iRow, ",", false);
 			int indexID = Integer.parseInt(iRowST.nextToken().substring(1).trim());
 			String iName = iRowST.nextToken().trim();
@@ -437,6 +505,18 @@ public class CatalogCode
 			iRowST.nextToken();
 			int numKeys = Integer.parseInt(iRowST.nextToken().trim());
 			String tName = null;
+			
+			for (String tRow : tTable)
+			{
+				StringTokenizer tRowST = new StringTokenizer(tRow, ",", false);
+				int tableID2 = Integer.parseInt(tRowST.nextToken().substring(1).trim());
+				if (tableID == tableID2)
+				{
+					HRDBMSWorker.logger.debug("Found matching TABLES row.");
+					tRowST.nextToken();
+					tName = tRowST.nextToken().trim();
+				}
+			}
 			
 			TreeMap<Integer, Integer> pos2ColID = new TreeMap<Integer, Integer>();
 			
@@ -448,6 +528,7 @@ public class CatalogCode
 				
 				if (tableID == tableID2 && indexID == indexID2)
 				{
+					HRDBMSWorker.logger.debug("Found a matching row in INDEXCOLS");
 					int colID = Integer.parseInt(icRowST.nextToken().trim());
 					int pos = Integer.parseInt(icRowST.nextToken().trim());
 					pos2ColID.put(pos,  colID);
@@ -466,6 +547,7 @@ public class CatalogCode
 					
 					if (colID3 == entry.getValue() && tableID3 == tableID)
 					{
+						HRDBMSWorker.logger.debug("Found a matching row in COLUMNS");
 						cRowTS.nextToken();
 						String type = cRowTS.nextToken().trim();
 						pos2Type.put(entry.getKey(), type);
@@ -473,15 +555,20 @@ public class CatalogCode
 				}
 			}
 			
+			HRDBMSWorker.logger.debug("Ready to start reading base table: " + tName);
 			Vector<String> table = getTable("SYS." + tName, tableLines, data);
+			HRDBMSWorker.logger.debug("Fetched the base table.");
+			HRDBMSWorker.logger.debug("Table has " + table.size() + " rows");
 			TreeMap<TextRowSorter, RID> keys2RIDs = new TreeMap<TextRowSorter, RID>();
 			int rowNum = 0;
 			for (String row : table)
 			{
+				HRDBMSWorker.logger.debug("Reading base table row");
 				//get cols in order, create a TextRowSorter object and RID and add to keys2RIDs
 				TextRowSorter keys = new CatalogCode().new TextRowSorter();
 				for (Map.Entry<Integer, Integer> entry : pos2ColID.entrySet())
 				{
+					HRDBMSWorker.logger.debug("Index position " + entry.getKey() + " is colid " + entry.getValue()); 
 					StringTokenizer tokens = new StringTokenizer(row, ",", false);
 					int i = 0;
 					while (i < entry.getValue())
@@ -491,6 +578,7 @@ public class CatalogCode
 					}
 					
 					String col = tokens.nextToken().trim();
+					
 					if (entry.getValue() == 0)
 					{
 						col = col.substring(1);
@@ -498,10 +586,11 @@ public class CatalogCode
 					
 					if (col.endsWith(")"))
 					{
-						col.equals(col.substring(0, col.length() - 1));
+						col = col.substring(0, col.length() - 1);
 					}
-					
+					HRDBMSWorker.logger.debug("Index token is " + col);
 					String type = pos2Type.get(entry.getKey());
+					HRDBMSWorker.logger.debug("Type is " + type);
 					if (type.equals("INT"))
 					{
 						keys.add(Integer.parseInt(col));
@@ -512,16 +601,18 @@ public class CatalogCode
 					}
 					else
 					{
-						System.err.println("Unknown type in createIndex()");
+						HRDBMSWorker.logger.error("Unknown type in createIndex()");
 						System.exit(1);
 					}
 				}
 				
 				keys2RIDs.put(keys, new RID(0, 0, 4097, rowNum));
+				HRDBMSWorker.logger.debug("Adding key/RID pair.");
 				rowNum++;
 			}
 			
-			buildIndexData(out, keys2RIDs, numKeys, "SYS." + iName);
+			HRDBMSWorker.logger.debug("Calling buildIndexData()");
+			buildIndexData(out, keys2RIDs, numKeys, "SYS." + tName + "." + iName);
 		}
 	}
 	
@@ -529,24 +620,24 @@ public class CatalogCode
 	{	
 		ByteBuffer data = ByteBuffer.allocate(Page.BLOCK_SIZE );
 		buildIndexDataBuffer(keys2RID, numKeys, data);
-		
-		out.println("\t\tfn += (\"" + name + "\".index\");");
-		out.println("");
-		out.println("\t\ttable = new File(fn);");
-		out.println("\t\ttable.createNewFile();");
-		out.println("");
-		out.println("\t\tFileChannel fc = getFile(fn);");
-		out.println("\t\tByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);");
-		out.println("\t\tbb.position(0);");
-		
-		int i = 0;
-		data.position(0);
-		while (i < Page.BLOCK_SIZE)
+		String fn = HRDBMSWorker.getHParms().getProperty("catalog_directory");
+		if (!fn.endsWith("/"))
 		{
-			out.println("\t\tbb.put((byte)" + data.get() + ");");
-			i++;
+			fn += "/";
 		}
-		out.println("\t\tfc.write(bb);");
+		fn += (name + ".index");
+		File index = new File(fn);
+		try
+		{
+			index.createNewFile();
+			FileChannel fc = FileManager.getFile(fn);
+			data.position(0);
+			fc.write(data);
+		}
+		catch(IOException e)
+		{
+			HRDBMSWorker.logger.debug("IOException while creating index: " + fn, e);
+		}
 	}
 	
 	private static void buildIndexDataBuffer(TreeMap<TextRowSorter, RID> keys2RID, int numKeys, ByteBuffer data) throws UnsupportedEncodingException
@@ -681,16 +772,24 @@ public class CatalogCode
 			StringTokenizer tokens = new StringTokenizer(row, ",", false);
 			int id = Integer.parseInt(tokens.nextToken().substring(1).trim());
 			String host = tokens.nextToken().trim();
-			if (i == 0)
+			String type = tokens.nextToken().trim();
+			if (type.equals("W"))
 			{
-				responses += ConnectionManager.remoteGetDataDirs(0, id, host);
+				if (i == 0)
+				{
+					responses += ConnectionManager.remoteGetDataDirs(0, id, host);
+					HRDBMSWorker.logger.debug("Received RMI response.");
+				}
+				else
+				{
+					responses += ("~" + ConnectionManager.remoteGetDataDirs(0, id, host));
+					HRDBMSWorker.logger.debug("Received RMI response.");
+				}
+				i++;
 			}
-			else
-			{
-				responses += ("~" + ConnectionManager.remoteGetDataDirs(0, id, host));
-			}
-			i++;
 		}
+		
+		HRDBMSWorker.logger.debug("Done receiving responses from all worker nodes");
 		
 		StringTokenizer response = new StringTokenizer(responses, "~", false);
 		while (response.hasMoreTokens())
@@ -753,6 +852,7 @@ public class CatalogCode
 
 			out.write(msg.getBytes("UTF-8"));
 		}
+		HRDBMSWorker.logger.debug("All completion check requests have been sent.");
 		
 		for (Socket sock : sockets.values())
 		{
@@ -760,14 +860,14 @@ public class CatalogCode
 			byte[] data = new byte[8];
 			if (in.read(data) != 8)
 			{
-				System.err.println("Error receiving response to check completion request.");
+				HRDBMSWorker.logger.error("Error receiving response to check completion request.");
 				System.exit(1);
 			}
 			
 			String response = new String(data, "UTF-8");
 			if (!response.equals("OKOKOKOK"))
 			{
-				System.err.println("Received not OK response to check completion request.");
+				HRDBMSWorker.logger.error("Received not OK response to check completion request.");
 				System.exit(1);
 			}
 		}
@@ -783,6 +883,7 @@ public class CatalogCode
 			
 			Vector<String> rows = getTable("SYS.DEVICES", tableLines, data);
 			int i = 0;
+			HRDBMSWorker.logger.debug("In sendDevicesToCoords(), DEVICES table has " + rows.size() + " rows");
 			for (String row : rows)
 			{
 				if (i == 0)
@@ -796,14 +897,16 @@ public class CatalogCode
 				
 				i++;
 			}
-			
+			 HRDBMSWorker.logger.debug("Devices message is: " + msgPart);
 			int size = msgPart.length();
+			HRDBMSWorker.logger.debug("Devices message length is: " + size);
 			out.write(msg.getBytes("UTF-8"));
 			byte[] buff = new byte[4];
 			buff[0] = (byte)(size >> 24);
 			buff[1] = (byte)((size & 0x00FF0000) >> 16);
 			buff[2] = (byte)((size & 0x0000FF00) >> 8);
 			buff[3] = (byte)((size & 0x000000FF));
+			HRDBMSWorker.logger.debug("" + buff[0] + " " + buff[1] + " " + buff[2] + " " + buff[3]);
 			out.write(buff);
 			out.write(msgPart.getBytes("UTF-8"));
 		}
@@ -902,8 +1005,8 @@ public class CatalogCode
 		
 		if (nodes2Rack.size() == 0)
 		{
-			System.err.println("No worker nodes are defined!");
-			System.err.println("Aborting catalog creation.");
+			HRDBMSWorker.logger.error("No worker nodes are defined!");
+			HRDBMSWorker.logger.error("Aborting catalog creation.");
 			System.exit(1);
 		}
 		
@@ -1060,46 +1163,46 @@ public class CatalogCode
 	
 	private static void receiveAndCreateNodes() throws IOException
 	{
-		InputStream in = listenSock.getInputStream();
+		HRDBMSWorker.logger.debug("Got input stream.");
 		
 		byte[] buff = new byte[8];
 		if (in.read(buff) != 8)
 		{
-			System.err.println("Tried to read command from master, but did not receive 8 bytes.");
-			System.err.println("Catalog synchronization will be aborted.");
+			HRDBMSWorker.logger.error("Tried to read command from master, but did not receive 8 bytes.");
+			HRDBMSWorker.logger.error("Catalog synchronization will be aborted.");
 			System.exit(1);
 		}
+		HRDBMSWorker.logger.debug("Read command from master.");
 		String cmd = new String(buff, "UTF-8");
 		
 		if (!cmd.equals("SENDNODE"))
 		{
-			System.err.println("Expected SENDNODE command from master.  Received " + cmd + " command.");
-			System.err.println("Catalog synchronization will be aborted.");
+			HRDBMSWorker.logger.error("Expected SENDNODE command from master.  Received " + cmd + " command.");
+			HRDBMSWorker.logger.error("Catalog synchronization will be aborted.");
 			System.exit(1);
 		}
+		HRDBMSWorker.logger.debug("Command was SENDNODE.");
 		
 		buff = new byte[4];
 		if (in.read(buff) != 4)
 		{
-			System.err.println("Tried to read message size from master, bit did not receive 4 bytes.");
-			System.err.println("Catalog synchronization will be aborted.");
+			HRDBMSWorker.logger.error("Tried to read message size from master, bit did not receive 4 bytes.");
+			HRDBMSWorker.logger.error("Catalog synchronization will be aborted.");
 			System.exit(1);
 		}
 		
-		int size = buff[0] << 24;
-		size += buff[1] << 16;
-		size += buff[2] << 8;
-		size += buff[3];
-		
+		int size = java.nio.ByteBuffer.wrap(buff).getInt();
+		HRDBMSWorker.logger.debug("Read size from master: " + size);
 		buff = new byte[size];
 		if (in.read(buff) != size)
 		{
-			System.err.println("Tried to read SENDNODE message from master, but did not receive all the expected bytes.");
-			System.err.println("Catalog synchronization will be aborted.");
+			HRDBMSWorker.logger.error("Tried to read SENDNODE message from master, but did not receive all the expected bytes.");
+			HRDBMSWorker.logger.error("Catalog synchronization will be aborted.");
 			System.exit(1);
 		}
 		
 		String msg = new String(buff, "UTF-8");
+		HRDBMSWorker.logger.debug("Read message from master: " + msg);
 		StringTokenizer tokens = new StringTokenizer(msg, "~", false);
 		Vector<String> nTable = getTable("SYS.NODES", tableLines, data);
 		
@@ -1110,89 +1213,84 @@ public class CatalogCode
 	}
 	
 	private static void receiveCompletionCheck() throws IOException
-	{
-		InputStream in = listenSock.getInputStream();
-		
+	{	
 		byte[] buff = new byte[8];
 		if (in.read(buff) != 8)
 		{
-			System.err.println("Tried to read command from master, but did not receive 8 bytes.");
-			System.err.println("Catalog synchronization will be aborted.");
+			HRDBMSWorker.logger.error("Tried to read command from master, but did not receive 8 bytes.");
+			HRDBMSWorker.logger.error("Catalog synchronization will be aborted.");
 			System.exit(1);
 		}
 		String cmd = new String(buff, "UTF-8");
 		
 		if (!cmd.equals("CHECKCMP"))
 		{
-			System.err.println("Expected CHECKCMP command from master.  Received " + cmd + " command.");
-			System.err.println("Catalog synchronization will be aborted.");
+			HRDBMSWorker.logger.error("Expected CHECKCMP command from master.  Received " + cmd + " command.");
+			HRDBMSWorker.logger.error("Catalog synchronization will be aborted.");
 			System.exit(1);
 		}
 		
-		OutputStream out = listenSock.getOutputStream();
-		out.write("OKOKOKOK".getBytes("UTF-8"));
+		sockOut.write("OKOKOKOK".getBytes("UTF-8"));
 	}
 	
 	private static void receiveAndCreateDevices() throws IOException
-	{
-		InputStream in = listenSock.getInputStream();
-		
+	{	
 		byte[] buff = new byte[8];
 		if (in.read(buff) != 8)
 		{
-			System.err.println("Tried to read command from master, but did not receive 8 bytes.");
-			System.err.println("Catalog synchronization will be aborted.");
+			HRDBMSWorker.logger.error("Tried to read command from master, but did not receive 8 bytes.");
+			HRDBMSWorker.logger.error("Catalog synchronization will be aborted.");
 			System.exit(1);
 		}
 		String cmd = new String(buff, "UTF-8");
+		HRDBMSWorker.logger.debug("Received command: " + cmd);
 		
 		if (!cmd.equals("SENDDEV "))
 		{
-			System.err.println("Expected SENDDEV command from master.  Received " + cmd + " command.");
-			System.err.println("Catalog synchronization will be aborted.");
+			HRDBMSWorker.logger.error("Expected SENDDEV command from master.  Received " + cmd + " command.");
+			HRDBMSWorker.logger.error("Catalog synchronization will be aborted.");
 			System.exit(1);
 		}
 		
 		buff = new byte[4];
 		if (in.read(buff) != 4)
 		{
-			System.err.println("Tried to read message size from master, bit did not receive 4 bytes.");
-			System.err.println("Catalog synchronization will be aborted.");
+			HRDBMSWorker.logger.error("Tried to read message size from master, bit did not receive 4 bytes.");
+			HRDBMSWorker.logger.error("Catalog synchronization will be aborted.");
 			System.exit(1);
 		}
 		
-		int size = buff[0] << 24;
-		size += buff[1] << 16;
-		size += buff[2] << 8;
-		size += buff[3];
-		
+		int size = java.nio.ByteBuffer.wrap(buff).getInt();
+		HRDBMSWorker.logger.debug("Message size is: " + size);
+		HRDBMSWorker.logger.debug("" + buff[0] + " " + buff[1] + " " + buff[2] + " " + buff[3]);
 		buff = new byte[size];
 		if (in.read(buff) != size)
 		{
-			System.err.println("Tried to read SENDDEV message from master, but did not receive all the expected bytes.");
-			System.err.println("Catalog synchronization will be aborted.");
+			HRDBMSWorker.logger.error("Tried to read SENDDEV message from master, but did not receive all the expected bytes.");
+			HRDBMSWorker.logger.error("Catalog synchronization will be aborted.");
 			System.exit(1);
 		}
 		
 		String msg = new String(buff, "UTF-8");
+		HRDBMSWorker.logger.debug("Message is: " + msg);
 		StringTokenizer tokens = new StringTokenizer(msg, "~", false);
 		Vector<String> dTable = getTable("SYS.DEVICES", tableLines, data);
 		
 		while (tokens.hasMoreTokens())
 		{
-			dTable.add(tokens.nextToken());
+			String dRow = tokens.nextToken();
+			HRDBMSWorker.logger.debug("Adding row to DEVICES: " + dRow);
+			dTable.add(dRow);
 		}
 	}
 	
 	private static void receiveAndCreateNetwork() throws IOException
 	{
-		InputStream in = listenSock.getInputStream();
-		
 		byte[] buff = new byte[8];
 		if (in.read(buff) != 8)
 		{
-			System.err.println("Tried to read command from master, but did not receive 8 bytes.");
-			System.err.println("Catalog synchronization will be aborted.");
+			HRDBMSWorker.logger.error("Tried to read command from master, but did not receive 8 bytes.");
+			HRDBMSWorker.logger.error("Catalog synchronization will be aborted.");
 			System.exit(1);
 		}
 		
@@ -1200,29 +1298,26 @@ public class CatalogCode
 		
 		if (!cmd.equals("SENDNET "))
 		{
-			System.err.println("Expected SENDNET command from master.  Received " + cmd + " command.");
-			System.err.println("Catalog synchronization will be aborted.");
+			HRDBMSWorker.logger.error("Expected SENDNET command from master.  Received " + cmd + " command.");
+			HRDBMSWorker.logger.error("Catalog synchronization will be aborted.");
 			System.exit(1);
 		}
 		
 		buff = new byte[4];
 		if (in.read(buff) != 4)
 		{
-			System.err.println("Tried to read message size from master, bit did not receive 4 bytes.");
-			System.err.println("Catalog synchronization will be aborted.");
+			HRDBMSWorker.logger.error("Tried to read message size from master, bit did not receive 4 bytes.");
+			HRDBMSWorker.logger.error("Catalog synchronization will be aborted.");
 			System.exit(1);
 		}
 		
-		int size = buff[0] << 24;
-		size += buff[1] << 16;
-		size += buff[2] << 8;
-		size += buff[3];
+		int size = java.nio.ByteBuffer.wrap(buff).getInt();
 		
 		buff = new byte[size];
 		if (in.read(buff) != size)
 		{
-			System.err.println("Tried to read SENDNET message from master, but did not receive all the expected bytes.");
-			System.err.println("Catalog synchronization will be aborted.");
+			HRDBMSWorker.logger.error("Tried to read SENDNET message from master, but did not receive all the expected bytes.");
+			HRDBMSWorker.logger.error("Catalog synchronization will be aborted.");
 			System.exit(1);
 		}
 		
@@ -1251,7 +1346,8 @@ public class CatalogCode
 			}
 			else
 			{
-				System.err.println("Type found in nodes.cfg was not valid: " + type);
+				HRDBMSWorker.logger.error("Type found in nodes.cfg was not valid: " + type);
+				System.exit(1);
 			}
 			String rack = tokens.nextToken().trim();
 			racks.add(rack);
@@ -1260,9 +1356,34 @@ public class CatalogCode
 			String row = "(" + id + "," + host + "," + type + "," + rack + ",null)";
 			nTable.add(row);
 			
-			if (type.equals("C"))
+			if (type.equals("C") && !isThisMyIpAddress(Inet4Address.getByName(host)))
 			{
-				Socket sock = new Socket(host, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("catalog_sync_point")));
+				int port = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("catalog_sync_port"));
+				HRDBMSWorker.logger.debug("Attempting to create connection to " + host + " on port " + port);
+				Socket sock = new Socket();
+				HRDBMSWorker.logger.debug("Socket created.");
+				while (true)
+				{
+					try
+					{	
+						Thread.sleep(Long.parseLong(HRDBMSWorker.getHParms().getProperty("catalog_creation_tcp_wait_ms")));
+						HRDBMSWorker.logger.debug("Attempting connection to " + host + " on port " + port + " with a timeout of 1 sec");
+						sock.connect(new InetSocketAddress(Inet4Address.getByName(host), port), 1000);
+						byte[] dummy = new String("DUMMY   ").getBytes("UTF-8");
+						sock.getOutputStream().write(dummy);
+						break;
+					}
+					catch(SocketTimeoutException e)
+					{
+						HRDBMSWorker.logger.debug("Socket connection timed out.");
+					}
+					catch(Exception e)
+					{
+						HRDBMSWorker.logger.error("Exception thrown during connection", e);
+						System.exit(1);
+					}
+				}
+				HRDBMSWorker.logger.debug("Connection was successful.");
 				sockets.put(host, sock);
 			}
 			
@@ -1297,22 +1418,27 @@ public class CatalogCode
 	
 	private static void createColStatVars()
 	{
+		HRDBMSWorker.logger.debug("Entered createColStatVars()");
 		Vector<String> tTable = getTable("SYS.TABLES", tableLines, data);
 		
 		for (String tRow : tTable)
 		{
+			HRDBMSWorker.logger.debug("Processing row " + tRow);
 			StringTokenizer tokens = new StringTokenizer(tRow, ",", false);
 			int tableId = Integer.parseInt(tokens.nextToken().substring(1).trim());
 			tokens.nextToken();
 			String tName = tokens.nextToken().trim();
 			int numCols = Integer.parseInt(tokens.nextToken().trim());
+			HRDBMSWorker.logger.debug("ID: " + tableId + " Name: " + tName + " Cols: " + numCols);
 			int i = 0;
-			Vector<String> table = getTable("SYS." + tName, tableLines, data);
+			//Vector<String> table = getTable("SYS." + tName, tableLines, data);
 			while (i < numCols)
 			{
 				int[] index = new int[1];
 				index[0] = i;
+				HRDBMSWorker.logger.debug("Calculating # of nulls for col " + i);
 				vars.put("!nulls" + tableId + "_" + i + "!", new Long(getNulls("SYS." + tName, index[0])));
+				HRDBMSWorker.logger.debug("Calculating card for col " + i);
 				int card = getCompositeColCard("SYS." + tName, index, 0);
 				
 				if (card != -1)
@@ -1320,6 +1446,7 @@ public class CatalogCode
 					vars.put("!colcard" + tableId + "_" + i + "!", new Long(card));
 				}
 				
+				HRDBMSWorker.logger.debug("Calculating average length for col " + i);
 				int avglen = getAvgLen("SYS." + tName, index[0]);
 				if (avglen != -1)
 				{
@@ -1434,7 +1561,7 @@ public class CatalogCode
 			}
 			else
 			{
-				System.out.println("Unknown table: " + token);
+				HRDBMSWorker.logger.error("Unknown table: " + token);
 				System.exit(1);
 			}
 			
@@ -1561,7 +1688,7 @@ public class CatalogCode
 			}
 			else
 			{
-				System.out.println("Unknown table: " + token);
+				HRDBMSWorker.logger.error("Unknown table: " + token);
 				System.exit(1);
 			}
 			
@@ -1571,7 +1698,6 @@ public class CatalogCode
 	
 	private static void createOutputTrailer(PrintWriter out, Vector<Vector<String>> data, Vector<String> tableLines)
 	{
-		out.println("\t}");
 		out.println("");
 		out.println("\tprivate static void putString(ByteBuffer bb, String val) throws UnsupportedEncodingException");
 		out.println("\t{");
@@ -1585,15 +1711,20 @@ public class CatalogCode
 		out.println("\t\t}");
 		out.println("\t}");
 		out.println("");
+		HRDBMSWorker.logger.debug("Calling calculateVariables()");
 		calculateVariables(data, tableLines);
+		HRDBMSWorker.logger.debug("calculateVariables() finished.");
 		writeVariables(out);
+		HRDBMSWorker.logger.debug("writeVariables() finished.");
 		out.println("}");
 	}
 	
 	private static void calculateVariables(Vector<Vector<String>> data, Vector<String> tableLines)
 	{
+		HRDBMSWorker.logger.debug("In calculateVariables() with " + vars.keySet().size() + " variables to process.");
 		for (String var : vars.keySet())
 		{
+			HRDBMSWorker.logger.debug("Processing " + var);
 			if (var.equals("!tablerows!"))
 			{
 				int i = 0;
@@ -2640,6 +2771,7 @@ public class CatalogCode
 			}
 		}
 		
+		HRDBMSWorker.logger.debug("Calling createColStatVars()");
 		createColStatVars();
 	}
 	
@@ -2669,7 +2801,7 @@ public class CatalogCode
 						}
 						else
 						{
-							System.out.println("Non-unique index for table: " + table);
+							HRDBMSWorker.logger.error("Non-unique index for table: " + table);
 							System.exit(1);
 						}
 					}
@@ -2682,6 +2814,7 @@ public class CatalogCode
 	
 	private static int getCompositeColCard(String table, int[] colIndexes, int depth)
 	{
+		HRDBMSWorker.logger.debug("Entering getCompositeColCard().");
 		int i = 0;
 		while (i <= depth)
 		{
@@ -2716,7 +2849,7 @@ public class CatalogCode
 				}
 				catch(Exception e)
 				{
-					System.out.println("Exception looking for column " + colIndexes[i] + " for table " + table);
+					HRDBMSWorker.logger.error("Exception looking for column " + colIndexes[i] + " for table " + table, e);
 					System.exit(0);
 				}
 				
@@ -2732,14 +2865,19 @@ public class CatalogCode
 				
 				if (token.startsWith("!"))
 				{
+					HRDBMSWorker.logger.debug("Came across a variable while calculating cardinality");
 					Long val = vars.get(token);
 					
 					if (val == null)
 					{
+						HRDBMSWorker.logger.debug("Variable was not set. Using null.");
 						token = "null";
 					}
-					
-					token = val.toString();
+					else
+					{
+						HRDBMSWorker.logger.debug("Variable was set.");
+						token = val.toString();
+					}
 				}
 				
 				comp += (token + "~");
@@ -2805,8 +2943,10 @@ public class CatalogCode
 				{
 					token = "null";
 				}
-				
-				token = val.toString();
+				else
+				{
+					token = val.toString();
+				}
 			}
 			
 			if (token.equals("null"))
@@ -2833,7 +2973,7 @@ public class CatalogCode
 			}
 			else
 			{
-				System.out.println("Unknown type: " + type);
+				HRDBMSWorker.logger.error("Unknown type: " + type);
 				System.exit(1);
 			}
 				
@@ -2962,6 +3102,7 @@ public class CatalogCode
 	
 	private static void writeData(PrintWriter out, Vector<String> table, int dataSize, Vector<String> types)
 	{
+		out.println("\t\tHRDBMSWorker.logger.debug(\"Writing table data.\");");
 		out.println("");
 		out.println("\t\ti = bb.position();");
 		out.println("\t\twhile (i < (Page.BLOCK_SIZE - " + dataSize + "))");
@@ -3044,7 +3185,7 @@ public class CatalogCode
 				}
 				else
 				{
-					System.out.println("Unknown type: " + type);
+					HRDBMSWorker.logger.error("Unknown type: " + type);
 					System.exit(1);
 				}
 				
@@ -3052,13 +3193,16 @@ public class CatalogCode
 			}
 		}
 		
+		out.println("\t\tbb.position(0);");
 		out.println("\t\tfc.write(bb);");
+		out.println("\t}");
 		out.println("");
 	}
 	
 	private static void writeOffsetArray(PrintWriter out, Vector<String> table, int dataSize, Vector<String> types)
 	{
 		out.println("");
+		out.println("HRDBMSWorker.logger.debug(\"Writing offset array\");");
 		out.println("\t\t//start of offset array");
 		
 		int off = dataSize;
@@ -3118,7 +3262,7 @@ public class CatalogCode
 				}
 				else
 				{
-					System.out.println("Unknown type: " + type);
+					HRDBMSWorker.logger.error("Unknown type: " + type);
 					System.exit(1);
 				}
 				
@@ -3129,6 +3273,7 @@ public class CatalogCode
 	
 	private static void writeNullArray(PrintWriter out, Vector<String> table)
 	{
+		out.println("\t\tHRDBMSWorker.logger.debug(\"Writing null array.\");");
 		for (String row : table)
 		{
 			StringTokenizer tokens = new StringTokenizer(row, ",", false);
@@ -3160,27 +3305,34 @@ public class CatalogCode
 	
 	private static int calcDataSize(Vector<String> table, Vector<String> types)
 	{
+		HRDBMSWorker.logger.debug("In calcDataSize().  Table has " + table.size() + " rows");
 		int total = 0;
+		
 		for (String row : table)
 		{
+			HRDBMSWorker.logger.debug("Starting processing of a row");
 			StringTokenizer tokens = new StringTokenizer(row, ",", false);
 			int i = 0;
 			while (tokens.hasMoreTokens())
 			{
 				String token = tokens.nextToken().trim();
+				HRDBMSWorker.logger.debug("Starting next col: " + token);
 				if (token.startsWith("("))
 				{
 					token = token.substring(1);
+					HRDBMSWorker.logger.debug("Processed first token of the row");
 				}
 				
 				if (token.endsWith(")"))
 				{
 					token = token.substring(0, token.length() - 1);
+					HRDBMSWorker.logger.debug("Processed last token of the row.");
 				}
 				
+				HRDBMSWorker.logger.debug("About to get type for position " + i + ". Type list has size " + types.size());
 				String type = types.get(i);
 				token = token.trim();
-				
+				HRDBMSWorker.logger.debug("Type for this column is " + type);
 				if (type.equals("INT"))
 				{
 					if (!token.equals("null"))
@@ -3212,18 +3364,20 @@ public class CatalogCode
 				}
 				else
 				{
-					System.out.println("Unknown type: " + type);
+					HRDBMSWorker.logger.error("Unknown type: " + type);
 					System.exit(1);
 				}
 				
+				HRDBMSWorker.logger.debug("Done with token");
 				i++;
 			}
-			
+			HRDBMSWorker.logger.debug("Done with all cols.");
 			if (i != types.size())
 			{
-				System.out.println("Row has wrong number of columns: " + row);
+				HRDBMSWorker.logger.error("Row has wrong number of columns: " + row);
 				System.exit(1);
 			}
+			HRDBMSWorker.logger.debug("Done with row.");
 		}
 		
 		return total;
@@ -3231,67 +3385,100 @@ public class CatalogCode
 	
 	private static void createOutputHeader(PrintWriter out)
 	{
-		out.println("package com.exascale;");
-		out.println("");
 		out.println("import java.io.File;");
 		out.println("import java.nio.ByteBuffer;");
 		out.println("import java.nio.channels.FileChannel;");
 		out.println("import java.io.UnsupportedEncodingException;");
+		out.println("import com.exascale.filesystem.Page;");
+		out.println("import com.exascale.managers.HRDBMSWorker;");
+		out.println("import com.exascale.managers.FileManager;");
+		out.println("import com.exascale.tables.Schema;");
+		out.println("import java.io.IOException;");
+		out.println("import java.io.UnsupportedEncodingException;");
 		out.println("");
 		out.println("public class CatalogCreator");
 		out.println("{");
-		out.println("\tpublic CatalogCreator()");
+		out.println("\tFile table;");
+		out.println("\tString fn;");
+		out.println("\tFileChannel fc = null;");
+		out.println("\tByteBuffer bb = null;");
+		out.println("\tByteBuffer head = ByteBuffer.allocate(Page.BLOCK_SIZE * 4095);");
+		out.println("\tint i = 0;");
+		out.println("\tint j = 0;");
+		out.println("\tString base = HRDBMSWorker.getHParms().getProperty(\"catalog_directory\");");
+		out.println("");
+		out.println("\tpublic CatalogCreator() throws IOException, UnsupportedEncodingException");
 		out.println("\t{");
-		out.println("\t\tFile table;");
-		out.println("\t\tString fn;");
-		out.println("\t\tString base = HRDBMSWorker.getHParms().getProperty(\"catalog_directory\");");
-		out.println("\t\tif (!base.endsWith(\"/\")");
+		out.println("\t\tHRDBMSWorker.logger.debug(\"CatalogCreator is starting.\");");
+		out.println("\t\tif (!base.endsWith(\"/\"))");
 		out.println("\t\t{");
 		out.println("\t\t\tbase += \"/\";");
 		out.println("\t\t}");
-		out.println("");
+		HRDBMSWorker.logger.debug("Number of tables is " + data.size());
+		out.println("\t\t i = 0;");
+		out.println("\t\thead.position(0);");
+		out.println("\t\twhile (i < Page.BLOCK_SIZE * 4095)");
+		out.println("\t\t{");
+		out.println("\t\t\thead.putLong(-1);");
+		out.println("\t\t\ti += 8;");
+		out.println("\t\t}");
+		int i = 0;
+		while (i < data.size())
+		{
+			out.println("\t\tcreateTable" + i + "();");
+			i++;
+		}
+		out.println("\t}");
 	}
 	
 	private static void createTableHeader(PrintWriter out, String name, int rows, int cols, int dataSize)
 	{
-		out.println("\t\tfn += (\"" + name + "\".tbl\");");
+		out.println("\tpublic void createTable" + methodNum + "() throws IOException, UnsupportedEncodingException");
+		out.println("\t{");
+		methodNum++;
+		out.println("\t\tHRDBMSWorker.logger.debug(\"Starting creation of table " + name + "\");");
+		out.println("\t\tfn = base + (\"" + name + ".tbl\");");
 		out.println("");
 		out.println("\t\ttable = new File(fn);");
 		out.println("\t\ttable.createNewFile();");
 		out.println("");
-		out.println("\t\tFileChannel fc = getFile(fn);");
-		out.println("\t\tByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);");
+		out.println("\t\tfc = FileManager.getFile(fn);");
+		out.println("\t\tbb = ByteBuffer.allocate(Page.BLOCK_SIZE);");
 		out.println("\t\tbb.position(0);");
 		out.println("\t\tbb.putInt(0); //node 0");
 		out.println("\t\tbb.putInt(0); //device 0");
 		out.println("");
-		out.println("\t\tbb.putInt(Page.BLOCK_SIZE - (57 + " + dataSize + "(16 * " + rows + ") + (5 * " + rows + " * " + cols + ") + (" + cols + " * 4))); //largest free size");
-		System.out.println("Free Space in block = " + (64 * 1024 - (57 + dataSize + (16 * rows) + (5 * rows * cols) + (cols * 4))));
+		out.println("\t\tbb.putInt(Page.BLOCK_SIZE - (57 + " + dataSize + " + (16 * " + rows + ") + (5 * " + rows + " * " + cols + ") + (" + cols + " * 4))); //largest free size");
+		HRDBMSWorker.logger.info("Free Space in block = " + (64 * 1024 - (57 + dataSize + (16 * rows) + (5 * rows * cols) + (cols * 4))));
 		out.println("");
-		out.println("\t\tint i = 12;");
+		out.println("\t\ti = 12;");
 		out.println("\t\twhile (i < Page.BLOCK_SIZE)");
 		out.println("\t\t{");
 		out.println("\t\t\tbb.putInt(-1);");
 		out.println("\t\t\ti += 4;");
 		out.println("\t\t}");
 		out.println("");
+		out.println("\t\tbb.position(0);");
 		out.println("\t\tfc.write(bb);");
 		out.println("\t\t//done writing first header page");
+		out.println("\t\tHRDBMSWorker.logger.debug(\"Done writing first header page.\");");
 		out.println("");
-		out.println("\t\tint j = 1;");
-		out.println("\t\twhile (j < 4096)");
-		out.println("\t\t{");
-		out.println("\t\t\ti = 0;");
-		out.println("\t\t\tbb.position(0);");
-		out.println("\t\t\twhile (i < Page.BLOCK_SIZE)");
-		out.println("\t\t\t{");
-		out.println("\t\t\t\tbb.putInt(-1);");
-		out.println("\t\t\t\ti += 4;");
-		out.println("\t\t\t}");
-		out.println("");
-		out.println("\t\t\tfc.write(bb);");
-		out.println("\t\t\tj++;");
-		out.println("\t\t}");
+		//out.println("\t\t\ti = 0;");
+		//out.println("\t\t\tbb.position(0);");
+		//out.println("\t\t\twhile (i < Page.BLOCK_SIZE)");
+		//out.println("\t\t\t{");
+		//out.println("\t\t\t\tbb.putLong(-1);");
+		//out.println("\t\t\t\ti += 8;");
+		//out.println("\t\t\t}");
+		//out.println("\t\tj = 1;");
+		//out.println("\t\twhile (j < 4096)");
+		//out.println("\t\t{");
+		//out.println("\t\t\tbb.position(0);");
+		//out.println("\t\t\tfc.write(bb);");
+		//out.println("\t\t\tj++;");
+		//out.println("\t\t}");
+		out.println("\t\thead.position(0);");
+		out.println("\t\tfc.write(head);");
 		out.println("");
 		out.println("\t\t//done writing header pages");
 		out.println("\t\tbb.position(0);");
@@ -3423,7 +3610,7 @@ public class CatalogCode
 				}
 				else
 				{
-					System.err.println("Unknown data type " + col.getClass() + " in key cols during catalog index build.");
+					HRDBMSWorker.logger.error("Unknown data type " + col.getClass() + " in key cols during catalog index build.");
 					System.exit(1);
 				}
 			}
@@ -3447,5 +3634,18 @@ public class CatalogCode
 			
 			return ret;
 		}
+	}
+	
+	public static boolean isThisMyIpAddress(InetAddress addr) {
+	    // Check if the address is a valid special local or loop back
+	    if (addr.isAnyLocalAddress() || addr.isLoopbackAddress())
+	        return true;
+
+	    // Check if the address is defined on any interface
+	    try {
+	        return NetworkInterface.getByInetAddress(addr) != null;
+	    } catch (SocketException e) {
+	        return false;
+	    }
 	}
 }

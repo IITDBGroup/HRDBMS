@@ -1,4 +1,6 @@
-package com.exascale;
+package com.exascale.tables;
+
+import com.exascale.filesystem.RID;
 
 public class RIDChange 
 {

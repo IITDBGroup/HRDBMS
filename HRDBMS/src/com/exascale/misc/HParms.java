@@ -1,4 +1,4 @@
-package com.exascale;
+package com.exascale.misc;
 
 import java.io.BufferedReader;
 import java.io.FileReader;

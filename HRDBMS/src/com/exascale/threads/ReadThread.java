@@ -1,8 +1,12 @@
-package com.exascale;
+package com.exascale.threads;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+
+import com.exascale.filesystem.Block;
+import com.exascale.filesystem.Page;
+import com.exascale.managers.FileManager;
 
 public class ReadThread extends HRDBMSThread
 {
@@ -22,6 +26,7 @@ public class ReadThread extends HRDBMSThread
 	public void run()
 	{
 		bb.clear();
+		bb.position(0);
 		try
 		{
 			FileChannel fc = FileManager.getFile(b.fileName());
@@ -34,5 +39,6 @@ public class ReadThread extends HRDBMSThread
 		}
 		p.setReady();
 		this.terminate();
+		return;
 	}
 }

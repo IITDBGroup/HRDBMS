@@ -1,4 +1,4 @@
-package com.exascale;
+package com.exascale.misc;
 
 import java.io.IOException;
 import java.util.Properties;

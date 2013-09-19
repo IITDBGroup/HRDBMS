@@ -1,9 +1,12 @@
-package com.exascale;
+package com.exascale.logging;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Iterator;
+
+import com.exascale.managers.HRDBMSWorker;
+import com.exascale.managers.LogManager;
 
 public class ForwardLogIterator implements Iterator<LogRec>
 {
@@ -17,6 +20,7 @@ public class ForwardLogIterator implements Iterator<LogRec>
 	{
 		this.filename = filename;
 		nextpos = 4;
+		fc = LogManager.getFile(filename);
 	}
 	
 	public boolean hasNext()
@@ -27,7 +31,7 @@ public class ForwardLogIterator implements Iterator<LogRec>
 		}
 		catch(IOException e)
 		{
-			e.printStackTrace(System.err);
+			HRDBMSWorker.logger.error("Error getting file size in ForwardLogIterator.hasNext().", e);
 			return false;
 		}
 	}
@@ -39,14 +43,11 @@ public class ForwardLogIterator implements Iterator<LogRec>
 		{
 			fc.position(nextpos);
 			retval = new LogRec(fc);
-			fc.position(nextpos - 4);
-			fc.read(sizeBuff);
-			size = sizeBuff.getInt();
-			nextpos = fc.position() + size;
+			nextpos = fc.position() + 8;
 		}
 		catch(IOException e)
 		{
-			e.printStackTrace(System.err);
+			HRDBMSWorker.logger.error("Error reading log record in ForwardLogIterator.", e);
 			return null;
 		}
 		

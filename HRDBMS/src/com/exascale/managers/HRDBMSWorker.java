@@ -1,16 +1,32 @@
-package com.exascale;
+package com.exascale.managers;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.PrintStream;
 import java.util.HashMap;
 import java.util.Vector;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.appender.FileAppender;
+import org.apache.logging.log4j.core.appender.RollingFileAppender;
+import org.apache.logging.log4j.core.config.Configuration;
+import org.apache.logging.log4j.core.config.DefaultConfiguration;
+import org.apache.logging.log4j.core.layout.PatternLayout;
+
+import com.exascale.misc.HParms;
+import com.exascale.threads.HRDBMSThread;
+import com.exascale.threads.StartCoordsThread;
+import com.exascale.threads.StartWorkersThread;
+
 public class HRDBMSWorker
 {
 	protected static HParms hparms;
-	protected static final int TYPE_MASTER = 0, TYPE_COORD = 1, TYPE_WORKER = 2;
-	protected static int type;
+	public static final int TYPE_MASTER = 0, TYPE_COORD = 1, TYPE_WORKER = 2;
+	public static int type;
 	protected static ConcurrentHashMap<Long, HRDBMSThread> threadList = new ConcurrentHashMap<Long, HRDBMSThread>();
 	protected static long connectionThread;
 	protected static long bufferThread;
@@ -22,9 +38,24 @@ public class HRDBMSWorker
 	protected static BlockingQueue<String> in = new LinkedBlockingQueue<String>();
 	protected static Long THREAD_NUMBER = new Long(0);
 	protected static ConcurrentHashMap<Long, Vector<Thread>> waitList = new ConcurrentHashMap<Long, Vector<Thread>>();
+	public static org.apache.logging.log4j.Logger logger = org.apache.logging.log4j.LogManager.getLogger("Log");
 	
 	public static void main(String[] args) throws Exception
-	{
+	{	
+		org.apache.logging.log4j.Logger logger
+	    = org.apache.logging.log4j.LogManager.getLogger("Log");
+	  org.apache.logging.log4j.core.Logger coreLogger
+	    = (org.apache.logging.log4j.core.Logger)logger;
+	  org.apache.logging.log4j.core.LoggerContext context
+	    = (org.apache.logging.log4j.core.LoggerContext)coreLogger.getContext();
+	  org.apache.logging.log4j.core.config.BaseConfiguration conf
+	    = (org.apache.logging.log4j.core.config.BaseConfiguration)context.getConfiguration();
+	  FileAppender fa = FileAppender.createAppender("hrdbms.log", "false", "false", "FileLogger", "true", "false", "true", PatternLayout.createLayout("%d{ISO8601}\t%p\t%C{1}: %m%ex%n", conf, null, "UTF-8", "no"), null, "false", null, conf);
+	  fa.start();
+	  coreLogger.addAppender(fa);
+	  coreLogger.setLevel(Level.ALL);
+	  logger.info("Starting HRDBMS.");
+		
 		type = Integer.parseInt(args[0]);
 		try
 		{
@@ -32,10 +63,14 @@ public class HRDBMSWorker
 		}
 		catch(Exception e)
 		{
-			System.err.println("Could not load HParms");
-			e.printStackTrace(System.err);
-			System.exit(-1);
+			logger.error("Could not load HParms", e);
+			System.exit(1);
 		}
+		
+		/*File f1 = new File("hrdbms.log");
+		f1.createNewFile();
+		PrintStream ps = new PrintStream(new FileOutputStream(f1), false);
+		System.setOut(ps);*/
 		
 		if (type == TYPE_MASTER)
 		{
@@ -43,6 +78,7 @@ public class HRDBMSWorker
 			threads[0] = addThread(startWorkers());
 			threads[1] = addThread(startCoordinators());
 			waitOnThreads(threads, Thread.currentThread());
+			logger.info("Done starting all nodes.");
 		}
 		
 		if (type == TYPE_MASTER || type == TYPE_COORD)
@@ -51,14 +87,16 @@ public class HRDBMSWorker
 			//new XAManager(); TODO
 			//new PlanCacheManager(); TODO
 			//failureThread = addThread(new FailureManager()); TODO
-			metaDataThread = addThread(new MetaDataManager());
+			metaDataThread = addThread(new MetaDataManager()); 
 		}
 		
 		//new ExecutionManager(); TODO
 		new FileManager();
 		bufferThread = addThread(new BufferManager(true));
 		logThread = addThread(new LogManager());
+		logger.info("Starting initialization of the Lock Manager.");
 		new LockManager();
+		logger.info("Lock Manager initialization complete.");
 		resourceThread = addThread(new ResourceManager());
 		connectionThread = addThread(new ConnectionManager());
 		checkpointThread = addThread(new CheckpointManager());
@@ -108,7 +146,7 @@ public class HRDBMSWorker
 	protected static void hibernate()
 	{
 		String msg;
-		
+		logger.info("Main thread is about to hibernate.");
 		while (true)
 		{
 			try

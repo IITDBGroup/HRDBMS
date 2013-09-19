@@ -1,4 +1,4 @@
-package com.exascale;
+package com.exascale.tables;
 
 import java.math.BigDecimal;
 import java.util.Date;
@@ -6,7 +6,9 @@ import java.util.Vector;
 
 import javax.swing.tree.TreeNode;
 
-import com.exascale.Schema.FieldValue;
+import com.exascale.operators.Operator;
+import com.exascale.tables.Schema.FieldValue;
+
 import javax.swing.tree.DefaultMutableTreeNode;
 
 public class Plan 
@@ -16,6 +18,15 @@ public class Plan
 	private Vector<TreeNode> trees;
 	private Object[] args;
 	private DataType[] argTypes;
+	
+	public Plan(Plan p)
+	{
+		this.time = p.time;
+		this.reserved = p.reserved;
+		this.trees = p.trees;
+		this.args = null;
+		this.argTypes = argTypes;
+	}
 	
 	public Plan(boolean reserved, Vector<TreeNode> trees)
 	{
@@ -212,5 +223,10 @@ public class Plan
 		}
 		
 		this.args = args;
+	}
+	
+	public Vector<TreeNode> getTrees()
+	{
+		return trees;
 	}
 }

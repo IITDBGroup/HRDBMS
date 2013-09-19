@@ -1,4 +1,4 @@
-package com.exascale;
+package com.exascale.managers;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -6,6 +6,14 @@ import java.util.StringTokenizer;
 import java.util.TreeMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+
+import com.exascale.exceptions.BufferPoolExhaustedException;
+import com.exascale.filesystem.Block;
+import com.exascale.filesystem.Page;
+import com.exascale.filesystem.PageCleaner;
+import com.exascale.misc.MultiHashMap;
+import com.exascale.threads.HRDBMSThread;
+import com.exascale.threads.IOThread;
 
 public class BufferManager extends HRDBMSThread
 {
@@ -21,6 +29,7 @@ public class BufferManager extends HRDBMSThread
 	
 	public BufferManager(boolean log)
 	{
+		HRDBMSWorker.logger.info("Starting initialization of the Buffer Manager.");
 		this.log = log;
 		myBuffers = new MultiHashMap<Long, Page>();
 		numAvailable = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("bp_pages"));
@@ -43,7 +52,7 @@ public class BufferManager extends HRDBMSThread
 	public void run()
 	{
 		HRDBMSWorker.addThread(new PageCleaner());
-		
+		HRDBMSWorker.logger.info("Buffer Manager initialization complete.");
 		try
 		{
 			while (true)
@@ -67,9 +76,10 @@ public class BufferManager extends HRDBMSThread
 		}
 		else
 		{
-			System.err.println("Unknown message in Buffer Manager: " + cmd);
+			HRDBMSWorker.logger.error("Unknown message received by the Buffer Manager: " + cmd);
 			in = null;
 			this.terminate();
+			return;
 		}
 	}
 	
@@ -115,7 +125,7 @@ public class BufferManager extends HRDBMSThread
 			
 			if (index == -1)
 			{
-				System.err.println("Buffer pool exhausted!");
+				HRDBMSWorker.logger.error("Buffer pool exhausted.");
 				throw new BufferPoolExhaustedException();
 			}
 			

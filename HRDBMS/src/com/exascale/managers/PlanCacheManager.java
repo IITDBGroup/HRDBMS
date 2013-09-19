@@ -1,4 +1,4 @@
-package com.exascale;
+package com.exascale.managers;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -7,6 +7,10 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.TreeNode;
+
+import com.exascale.tables.DataType;
+import com.exascale.tables.Plan;
+import com.exascale.tables.SQL;
 
 public class PlanCacheManager 
 {
@@ -335,6 +339,7 @@ public class PlanCacheManager
 		sql = "INSERT INTO SYS.COLUMNS(COLID, TABLEID, COLNAME, COLTYPE, LENGTH, SCALE, IDENTITY, NEXTVAL, INCREMENT, DEFAULT, NULLABLE, PKPOSITION, CLUSTERPOS, GENERATED) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 		//do insert
 		root = new DefaultMutableTreeNode(new InsertOperator(catalogDir + "SYS.COLUMNS.tbl", "@1", "@2", "@3", "@4", "@5", "@6", "@7", "@8", "@9", "@10", "@11", "@12", "@13", "@14"));
+		treeList = new Vector<TreeNode>();
 		treeList.add(root);
 		
 		//inesrt row into all indexes
@@ -345,7 +350,7 @@ public class PlanCacheManager
 		root = new DefaultMutableTreeNode(new UpdateAllIndexRowCountsOperator("SYS", "COLUMNS", 1));
 		treeList.add(root);
 		
-		args = new DataType[12];
+		args = new DataType[14];
 		args[0] = new DataType(DataType.INTEGER, 0, 0);
 		args[1] = new DataType(DataType.INTEGER, 0, 0);
 		args[2] = new DataType(DataType.VARCHAR, 128, 0);
@@ -361,12 +366,367 @@ public class PlanCacheManager
 		args[12] = new DataType(DataType.INTEGER, 0, 0);
 		args[13] = new DataType(DataType.VARCHAR, 1, 0);
 		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "INSERT INTO SYS.TABLESTATS(TABLEID, NODEID, DEVID, CARD, PAGES, AVGROWLEN) VALUES (?, ?, ?, ?, ?, ?)";
+		//do insert
+		root = new DefaultMutableTreeNode(new InsertOperator(catalogDir + "SYS.TABLESTATS.tbl", "@1", "@2", "@3", "@4", "@5", "@6"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(root);
+		
+		//inesrt row into all indexes
+		root = new DefaultMutableTreeNode(new InsertAllIndexesOperator("SYS", "TABLESTATS", "@1", "@2", "@3", "@4", "@5", "@6"));
+		treeList.add(root);
+		
+		//update row count for all indexes in indexstats
+		root = new DefaultMutableTreeNode(new UpdateAllIndexRowCountsOperator("SYS", "TABLESTATS", 1));
+		treeList.add(root);
+		
+		args = new DataType[6];
+		args[0] = new DataType(DataType.INTEGER, 0, 0);
+		args[1] = new DataType(DataType.INTEGER, 0, 0);
+		args[2] = new DataType(DataType.INTEGER, 0, 0);
+		args[3] = new DataType(DataType.BIGINT, 0, 0);
+		args[4] = new DataType(DataType.INTEGER, 0, 0);
+		args[5] = new DataType(DataType.INTEGER, 0, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "INSERT INTO SYS.COLSTATS(TABLEID, NODEID, DEVID, COLID, CARD, AVGCOLLEN, NUMNULLS) VALUES (?, ?, ?, ?, ?, ?, ?)";
+		//do insert
+		root = new DefaultMutableTreeNode(new InsertOperator(catalogDir + "SYS.COLSTATS.tbl", "@1", "@2", "@3", "@4", "@5", "@6", "@7"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(root);
+		
+		//inesrt row into all indexes
+		root = new DefaultMutableTreeNode(new InsertAllIndexesOperator("SYS", "TABLESTATS", "@1", "@2", "@3", "@4", "@5", "@6", "@7"));
+		treeList.add(root);
+		
+		//update row count for all indexes in indexstats
+		root = new DefaultMutableTreeNode(new UpdateAllIndexRowCountsOperator("SYS", "COLSTATS", 1));
+		treeList.add(root);
+		
+		args = new DataType[7];
+		args[0] = new DataType(DataType.INTEGER, 0, 0);
+		args[1] = new DataType(DataType.INTEGER, 0, 0);
+		args[2] = new DataType(DataType.INTEGER, 0, 0);
+		args[3] = new DataType(DataType.INTEGER, 0, 0);
+		args[4] = new DataType(DataType.BIGINT, 0, 0);
+		args[5] = new DataType(DataType.INTEGER, 0, 0);
+		args[6] = new DataType(DataType.BIGINT, 0, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "INSERT INTO SYS.PARTITIONING(TABLEID, LEVEL, GROUPEXP, NODEEXP, DEVEXP) VALUES (?, ?, ?, ?, ?)";
+		//do insert
+		root = new DefaultMutableTreeNode(new InsertOperator(catalogDir + "SYS.PARTITIONING.tbl", "@1", "@2", "@3", "@4", "@5"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(root);
+		
+		//inesrt row into all indexes
+		root = new DefaultMutableTreeNode(new InsertAllIndexesOperator("SYS", "PARTITIONING", "@1", "@2", "@3", "@4", "@5"));
+		treeList.add(root);
+		
+		//update row count for all indexes in indexstats
+		root = new DefaultMutableTreeNode(new UpdateAllIndexRowCountsOperator("SYS", "PARTITIONING", 1));
+		treeList.add(root);
+		
+		args = new DataType[5];
+		args[0] = new DataType(DataType.INTEGER, 0, 0);
+		args[1] = new DataType(DataType.INTEGER, 0, 0);
+		args[2] = new DataType(DataType.VARCHAR, 32768, 0);
+		args[3] = new DataType(DataType.VARCHAR, 32768, 0);
+		args[4] = new DataType(DataType.VARCHAR, 32768, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "INSERT INTO SYS.COLGROUPS(COLGROUPID, TABLEID, COLID, COLGROUPNAME) VALUES (?, ?, ?, ?)";
+		//do insert
+		root = new DefaultMutableTreeNode(new InsertOperator(catalogDir + "SYS.COLGROUPS.tbl", "@1", "@2", "@3", "@4"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(root);
+		
+		//inesrt row into all indexes
+		root = new DefaultMutableTreeNode(new InsertAllIndexesOperator("SYS", "COLGROUPS", "@1", "@2", "@3", "@4"));
+		treeList.add(root);
+		
+		//update row count for all indexes in indexstats
+		root = new DefaultMutableTreeNode(new UpdateAllIndexRowCountsOperator("SYS", "COLGROUPS", 1));
+		treeList.add(root);
+		
+		args = new DataType[4];
+		args[0] = new DataType(DataType.INTEGER, 0, 0);
+		args[1] = new DataType(DataType.INTEGER, 0, 0);
+		args[2] = new DataType(DataType.INTEGER, 0, 0);
+		args[3] = new DataType(DataType.VARCHAR, 128, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "INSERT INTO SYS.NODEGROUPS(NAME, NODEID) VALUES (?, ?)";
+		//get nodegroupid + set next nodegroupid
+		root = new DefaultMutableTreeNode(new AssignToVariableOperator("@3"));
+		c1 = new DefaultMutableTreeNode(new GetAndUpdateIdentityOperator(6, "NODEGROUPID"))
+		root.add(c1);
+		treeList = new Vector<TreeNode>();
+		treeList.add(root);
+		
+		//do insert
+		root = new DefaultMutableTreeNode(new InsertOperator(catalogDir + "SYS.NODEGROUPS.tbl", "@3", "@1", "@2"));
+		treeList.add(root);
+		
+		//inesrt row into all indexes
+		root = new DefaultMutableTreeNode(new InsertAllIndexesOperator("SYS", "NODEGROUPS", "@3", "@1", "@2"));
+		treeList.add(root);
+		
+		//update row count for all indexes in indexstats
+		root = new DefaultMutableTreeNode(new UpdateAllIndexRowCountsOperator("SYS", "NODEGROUPS", 1));
+		treeList.add(root);
+		
+		args = new DataType[2];
+		args[0] = new DataType(DataType.VARCHAR, 128, 0);
+		args[1] = new DataType(DataType.INTEGER, 0, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "INSERT INTO SYS.VIEWS(SCHEMA, NAME, TEXT) VALUES (?, ?, ?)";
+		//get viewid + set next viewid
+		root = new DefaultMutableTreeNode(new AssignToVariableOperator("@4"));
+		c1 = new DefaultMutableTreeNode(new GetAndUpdateIdentityOperator(4, "VIEWID"))
+		root.add(c1);
+		treeList = new Vector<TreeNode>();
+		treeList.add(root);
+		
+		//do insert
+		root = new DefaultMutableTreeNode(new InsertOperator(catalogDir + "SYS.VIEWS.tbl", "@4", "@1", "@2", "@3"));
+		treeList.add(root);
+		
+		//inesrt row into all indexes
+		root = new DefaultMutableTreeNode(new InsertAllIndexesOperator("SYS", "VIEWS", "@4", "@1", "@2", "@3"));
+		treeList.add(root);
+		
+		//update row count for all indexes in indexstats
+		root = new DefaultMutableTreeNode(new UpdateAllIndexRowCountsOperator("SYS", "VIEWS", 1));
+		treeList.add(root);
+				
+		args = new DataType[3];
+		args[0] = new DataType(DataType.VARCHAR, 128, 0);
+		args[1] = new DataType(DataType.VARCHAR, 128, 0);
+		args[2] = new DataType(DataType.VARCHAR, 32768, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "INSERT INTO SYS.INDEXES(INDEXID, INDEXNAME, TABLEID, UNIQUE, NUMCOLS, TYPE) VALUES (?, ?, ?, ?, ?, ?)";
+		//do insert
+		root = new DefaultMutableTreeNode(new InsertOperator(catalogDir + "SYS.INDEXES.tbl", "@1", "@2", "@3", "@4", "@5", "@6"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(root);
+		
+		//inesrt row into all indexes
+		root = new DefaultMutableTreeNode(new InsertAllIndexesOperator("SYS", "INDEXES", "@1", "@2", "@3", "@4", "@5", "@6"));
+		treeList.add(root);
+		
+		//update row count for all indexes in indexstats
+		root = new DefaultMutableTreeNode(new UpdateAllIndexRowCountsOperator("SYS", "INDEXES", 1));
+		treeList.add(root);
+		
+		args = new DataType[6];
+		args[0] = new DataType(DataType.INTEGER, 0, 0);
+		args[1] = new DataType(DataType.VARCHAR, 128, 0);
+		args[2] = new DataType(DataType.INTEGER, 0, 0);
+		args[3] = new DataType(DataType.VARCHAR, 1, 0);
+		args[4] = new DataType(DataType.INTEGER, 0, 0);
+		args[5] = new DataType(DataType.VARCHAR, 1, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "INSERT INTO SYS.INDEXCOLS(INDEXID, TABLEID, COLID, POSITION, ORDER) VALUES (?, ?, ?, ?, ?)";
+		//do insert
+		root = new DefaultMutableTreeNode(new InsertOperator(catalogDir + "SYS.INDEXCOLS.tbl", "@1", "@2", "@3", "@4", "@5"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(root);
+		
+		//inesrt row into all indexes
+		root = new DefaultMutableTreeNode(new InsertAllIndexesOperator("SYS", "INDEXCOLS", "@1", "@2", "@3", "@4", "@5"));
+		treeList.add(root);
+		
+		//update row count for all indexes in indexstats
+		root = new DefaultMutableTreeNode(new UpdateAllIndexRowCountsOperator("SYS", "INDEXCOLS", 1));
+		treeList.add(root);
+		
+		args = new DataType[5];
+		args[0] = new DataType(DataType.INTEGER, 0, 0);
+		args[1] = new DataType(DataType.INTEGER, 0, 0);
+		args[2] = new DataType(DataType.INTEGER, 0, 0);
+		args[3] = new DataType(DataType.INTEGER, 0, 0);
+		args[4] = new DataType(DataType.INTEGER, 0, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "INSERT INTO SYS.INDEXSTATS(TABLEID, INDEXID, NLEAFS, NLEVELS, 1STKEYCARD, 2NDKEYCARD, 3RDKEYCARD, 4THKEYCARD, FULLKEYCARD, NROWS, NBLOCKS, NODEID, DEVID) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+		//do insert
+		root = new DefaultMutableTreeNode(new InsertOperator(catalogDir + "SYS.INDEXSTATS.tbl", "@1", "@2", "@3", "@4", "@5", "@6", "@7", "@8", "@9", "@10", "@11", "@12", "@13"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(root);
+		
+		//inesrt row into all indexes
+		root = new DefaultMutableTreeNode(new InsertAllIndexesOperator("SYS", "INDEXSTATS", "@1", "@2", "@3", "@4", "@5", "@6", "@7", "@8", "@9", "@10", "@11", "@12", "@13"));
+		treeList.add(root);
+		
+		//update row count for all indexes in indexstats
+		root = new DefaultMutableTreeNode(new UpdateAllIndexRowCountsOperator("SYS", "INDEXSTATS", 1));
+		treeList.add(root);
+		
+		args = new DataType[13];
+		args[0] = new DataType(DataType.INTEGER, 0, 0);
+		args[1] = new DataType(DataType.INTEGER, 0, 0);
+		args[2] = new DataType(DataType.INTEGER, 0, 0);
+		args[3] = new DataType(DataType.INTEGER, 0, 0);
+		args[4] = new DataType(DataType.BIGINT, 0, 0);
+		args[5] = new DataType(DataType.BIGINT, 0, 0);
+		args[6] = new DataType(DataType.BIGINT, 0, 0);
+		args[7] = new DataType(DataType.BIGINT, 0, 0);
+		args[8] = new DataType(DataType.BIGINT, 0, 0);
+		args[9] = new DataType(DataType.BIGINT, 0, 0);
+		args[10] = new DataType(DataType.INTEGER, 0, 0);
+		args[11] = new DataType(DataType.INTEGER, 0, 0);
+		args[12] = new DataType(DataType.INTEGER, 0, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "UPDATE SYS.NODESTATE SET STATE = 'I' WHERE NODE = ?";
+		int [] colIDS = new int[1];
+		colIDs[0] = 1;
+		Object[] vals = new Object[1];
+		vals[0] = "I";
+		root = new DefaultMutableTreeNode(new UpdateViaIndexDataRIDChangesAndKeysOperator(catalogDir + "SYS.NODESTATE.PKNODESTATE.index", colIDs, vals, "@1"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(root);
+		
+		args = new DataType[1];
+		args[0] = new DataType(DataType.INTEGER, 0, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "DELETE FROM SYS.TABLES WHERE TABLEID = ?";
+		root = new DefaultMutableTreeNode(new DeleteViaIndexUpdateAllIndexesAndCountsOperator(catalogDir + "SYS.TABLES.PKTABLES.index", "@1"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(node);
+		args = new DataType[1];
+		args[0] = new DataType(DataType.INTEGER, 0, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "DELETE FROM SYS.COLUMNS WHERE TABLEID = ?";
+		root = new DefaultMutableTreeNode(new DeleteViaIndexUpdateAllIndexesAndCountsOperator(catalogDir + "SYS.COLUMNS.PKCOLUMNS.index", "@1"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(node);
+		args = new DataType[1];
+		args[0] = new DataType(DataType.INTEGER, 0, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "DELETE FROM SYS.COLGROUPS WHERE TABLEID = ?";
+		root = new DefaultMutableTreeNode(new DeleteViaIndexUpdateAllIndexesAndCountsOperator(catalogDir + "SYS.COLGROUPS.PKCOLGROUPS.index", "@1"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(node);
+		args = new DataType[1];
+		args[0] = new DataType(DataType.INTEGER, 0, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "DELETE FROM SYS.TABLESTATS WHERE TABLEID = ?";
+		root = new DefaultMutableTreeNode(new DeleteViaIndexUpdateAllIndexesAndCountsOperator(catalogDir + "SYS.TABLESTATS.PKTABLESTATS.index", "@1"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(node);
+		args = new DataType[1];
+		args[0] = new DataType(DataType.INTEGER, 0, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "DELETE FROM SYS.COLGROUPSTATS WHERE TABLEID = ?";
+		root = new DefaultMutableTreeNode(new DeleteViaIndexUpdateAllIndexesAndCountsOperator(catalogDir + "SYS.COLGROUPSTATS.PKCOLGROUPSTATS.index", "@1"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(node);
+		args = new DataType[1];
+		args[0] = new DataType(DataType.INTEGER, 0, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "DELETE FROM SYS.PARTITIONING WHERE TABLEID = ?";
+		root = new DefaultMutableTreeNode(new DeleteViaIndexUpdateAllIndexesAndCountsOperator(catalogDir + "SYS.PARTITIONING.PKPARTITIONING.index", "@1"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(node);
+		args = new DataType[1];
+		args[0] = new DataType(DataType.INTEGER, 0, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "DELETE FROM SYS.COLSTATS WHERE TABLEID = ?";
+		root = new DefaultMutableTreeNode(new DeleteViaIndexUpdateAllIndexesAndCountsOperator(catalogDir + "SYS.COLSTATS.PKCOLSTATS.index", "@1"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(node);
+		args = new DataType[1];
+		args[0] = new DataType(DataType.INTEGER, 0, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "DELETE FROM SYS.COLDIST WHERE TABLEID = ?";
+		root = new DefaultMutableTreeNode(new DeleteViaIndexUpdateAllIndexesAndCountsOperator(catalogDir + "SYS.COLDIST.PKCOLDIST.index", "@1"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(node);
+		args = new DataType[1];
+		args[0] = new DataType(DataType.INTEGER, 0, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "DELETE FROM SYS.COLGROUPS WHERE TABLEID = ? AND COLGROUPNAME = ?";
+		root = new DefaultMutableTreeNode(new DeleteViaIndexUpdateAllIndexesAndCountsOperator(catalogDir + "SYS.COLGROUPS.PKCOLGROUPS.index", "@1", "@2"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(node);
+		args = new DataType[2];
+		args[0] = new DataType(DataType.INTEGER, 0, 0);
+		args[1] = new DataType(DataType.VARCHAR, 128, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "DELETE FROM SYS.COLGROUPSTATS WHERE TABLEID = ? AND COLGROUPID = ?";
+		root = new DefaultMutableTreeNode(new DeleteViaIndexUpdateAllIndexesAndCountsOperator(catalogDir + "SYS.COLGROUPSTATS.PKCOLGROUPSTATS.index", "@1", "@2"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(node);
+		args = new DataType[2];
+		args[0] = new DataType(DataType.INTEGER, 0, 0);
+		args[1] = new DataType(DataType.INTEGER, 0, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "DELETE FROM SYS.NODEGROUPS WHERE NAME = ?";
+		root = new DefaultMutableTreeNode(new DeleteViaIndexUpdateAllIndexesAndCountsOperator(catalogDir + "SYS.NODEGROUPS.PKNODEGROUPS.index", "@1"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(node);
+		args = new DataType[1];
+		args[0] = new DataType(DataType.VARCHAR, 128, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "DELETE FROM SYS.VIEWS WHERE SCHEMA = ? AND NAME = ?";
+		root = new DefaultMutableTreeNode(new DeleteViaIndexUpdateAllIndexesAndCountsOperator(catalogDir + "SYS.VIEWS.PKVIEWS.index", "@1", "@2"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(node);
+		args = new DataType[2];
+		args[0] = new DataType(DataType.VARCHAR, 128, 0);
+		args[1] = new DataType(DataType.VARCHAR, 128, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "DELETE FROM SYS.INDEXES WHERE TABLEID = ? AND INDEXNAME = ?";
+		root = new DefaultMutableTreeNode(new DeleteViaIndexUpdateAllIndexesAndCountsOperator(catalogDir + "SYS.INDEXES.PKINDEXES.index", "@1", "@2"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(node);
+		args = new DataType[2];
+		args[0] = new DataType(DataType.INTEGER, 0, 0);
+		args[1] = new DataType(DataType.VARCHAR, 128, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "DELETE FROM SYS.INDEXCOLS WHERE TABLEID = ? AND INDEXID = ?";
+		root = new DefaultMutableTreeNode(new DeleteViaIndexUpdateAllIndexesAndCountsOperator(catalogDir + "SYS.INDEXCOLSTATS.PKINDEXCOLSTATS.index", "@1", "@2"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(node);
+		args = new DataType[2];
+		args[0] = new DataType(DataType.INTEGER, 0, 0);
+		args[1] = new DataType(DataType.INTEGER, 0, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
+		
+		sql = "DELETE FROM SYS.INDEXSTATS WHERE TABLEID = ? AND INDEXID = ?";
+		root = new DefaultMutableTreeNode(new DeleteViaIndexUpdateAllIndexesAndCountsOperator(catalogDir + "SYS.INDEXSTATS.PKINDEXSTATS.index", "@1", "@2"));
+		treeList = new Vector<TreeNode>();
+		treeList.add(node);
+		args = new DataType[2];
+		args[0] = new DataType(DataType.INTEGER, 0, 0);
+		args[1] = new DataType(DataType.INTEGER, 0, 0);
+		planCache.put(new SQL(sql), new Plan(true, treeList, args));
 	}
 	
 	public static Plan checkPlanCache(String sql)
 	{
 		Plan plan = planCache.get(new SQL(sql));
-		return plan;
+		return new Plan(plan);
 	}
 	
 	public static void addPlan(String sql, Plan p)

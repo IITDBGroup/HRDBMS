@@ -1,8 +1,13 @@
-package com.exascale;
+package com.exascale.locking;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Vector;
+
+import com.exascale.exceptions.LockAbortException;
+import com.exascale.filesystem.Block;
+import com.exascale.managers.HRDBMSWorker;
+import com.exascale.misc.MultiHashMap;
 
 public class LockTable 
 {
@@ -60,7 +65,7 @@ public class LockTable
 		}
 		catch(Exception e)
 		{
-			e.printStackTrace(System.err);
+			HRDBMSWorker.logger.error("Error trying to obtain slock.  Throwing LockAbortException.", e);
 			throw new LockAbortException();
 		}
 	}
@@ -96,7 +101,7 @@ public class LockTable
 		}
 		catch(Exception e)
 		{
-			e.printStackTrace(System.err);
+			HRDBMSWorker.logger.error("Exception occurred trying to obtain xlock. LockAbortException will be thrown.", e);
 			throw new LockAbortException();
 		}
 	}

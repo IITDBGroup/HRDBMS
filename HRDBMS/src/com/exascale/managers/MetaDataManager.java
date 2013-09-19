@@ -1,4 +1,4 @@
-package com.exascale;
+package com.exascale.managers;
 
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -8,10 +8,18 @@ import java.util.Vector;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import com.exascale.tables.DataType;
+import com.exascale.tables.InternalResultSet;
+import com.exascale.tables.Plan;
+import com.exascale.tables.QueueEndMarker;
+import com.exascale.tables.Transaction;
+import com.exascale.threads.HRDBMSThread;
+
 public class MetaDataManager extends HRDBMSThread
 {
 	public MetaDataManager()
 	{
+		HRDBMSWorker.logger.info("Starting initialization of Metadata Manager.");
 		description = "MetaData Manager";
 		this.setWait(true);
 	}
@@ -22,28 +30,35 @@ public class MetaDataManager extends HRDBMSThread
 		{
 			try
 			{
+				HRDBMSWorker.logger.info("About to start initial catalog creation.");
 				FileManager.createCatalog();
 			}
 			catch(Exception e)
 			{
-				System.err.println("Exception occurred during initial catalog creation/synchronization.");
-				e.printStackTrace(System.err);
+				HRDBMSWorker.logger.error("Exception occurred during initial catalog creation/synchronization.", e);
 				System.exit(1);
 			}
+			
+			HRDBMSWorker.logger.info("Metadata Manager initialization complete.");
 		}
 		
 		this.terminate();
+		return;
 	}
 	
-	private static InternalResultSet catalogQuery(Transaction tx, String sql, Object... args)
+	/*private static InternalResultSet catalogQuery(Transaction tx, String sql, Object... args)
 	{
 		Plan p = PlanCacheManager.checkPlanCache(sql);
 		p.setArgs(args);
-		LinkedBlockingQueue q = ExecutionManager.runWithRS(p);
+		LinkedBlockingQueue q = XAManager.runWithRS(p, tx);
 		Vector<Vector<Object>> data = new Vector<Vector<Object>>();
 		Object o = q.take();
 		while (!(o instanceof QueueEndMarker))
 		{
+			if (o instanceof Exception)
+			{
+				throw (Exception)o;
+			}
 			Vector<Object> v = (Vector<Object>)o;
 			data.add(v);
 			o = q.take();
@@ -125,7 +140,7 @@ public class MetaDataManager extends HRDBMSThread
 		
 		try
 		{
-			Vector<Long> failed = HRDBMSWorker.waitOnThreads(threads, Thread.currentThread(), HRDBMSWorker.getHParms().getProperty("create_table_timeout"));
+			Vector<Long> failed = HRDBMSWorker.waitOnThreads(threads, Thread.currentThread(), HRDBMSWorker.get().getProperty("create_table_timeout"));
 			for (Long threadNum : failed)
 			{
 				HRDBMSThread thread = HRDBMSWorker.getThreadList().get(threadNum);
@@ -612,5 +627,5 @@ public class MetaDataManager extends HRDBMSThread
 		
 		return new MetaData(tablesRS, columnsRS, indexRS, indexColsRS, colGroupsRS, tableStatsRS, colGroupStatsRS, indexStatsRS, partRS, colStatsRS, colDistRS);		
 		//DOES NOT INCLUDE NODEGROUPS, NODES, NETWORK, DEVICES, BACKUPS, or NODESTATE
-	}
+	} */
 }

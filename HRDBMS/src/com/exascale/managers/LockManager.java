@@ -1,9 +1,14 @@
-package com.exascale;
+package com.exascale.managers;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Vector;
 import java.util.concurrent.locks.Lock;
+
+import com.exascale.exceptions.LockAbortException;
+import com.exascale.filesystem.Block;
+import com.exascale.locking.LockTable;
+import com.exascale.misc.MultiHashMap;
 
 public class LockManager
 {

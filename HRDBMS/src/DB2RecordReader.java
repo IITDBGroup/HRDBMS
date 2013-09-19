@@ -26,8 +26,8 @@ public class DB2RecordReader<K, V> extends RecordReader<K, V>
 		}
 		catch(Exception e)
 		{
-			System.err.println("Failed to close DB2 connection.");
-			e.printStackTrace(System.err);
+			System.out.println("Failed to close DB2 connection.");
+			e.printStackTrace(System.out);
 		}
 	}
 	
@@ -81,8 +81,8 @@ public class DB2RecordReader<K, V> extends RecordReader<K, V>
 			}
 			catch(Exception e)
 			{
-				System.err.println("Error executing SQL: " + this.split.getSQL());
-				e.printStackTrace(System.err);
+				System.out.println("Error executing SQL: " + this.split.getSQL());
+				e.printStackTrace(System.out);
 			}
 		}
 		

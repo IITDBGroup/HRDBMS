@@ -1,4 +1,4 @@
-package com.exascale;
+package com.exascale.tables;
 
 public class QueueEndMarker 
 {

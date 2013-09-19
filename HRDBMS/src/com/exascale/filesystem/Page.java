@@ -1,4 +1,4 @@
-package com.exascale;
+package com.exascale.filesystem;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -6,6 +6,10 @@ import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.util.HashMap;
+
+import com.exascale.managers.BufferManager;
+import com.exascale.managers.FileManager;
+import com.exascale.managers.LogManager;
 
 public class Page 
 {
