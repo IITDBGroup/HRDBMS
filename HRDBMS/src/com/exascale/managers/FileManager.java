@@ -118,18 +118,6 @@ public class FileManager
 		}
 	}
 	
-	private static void putString(ByteBuffer bb, String val) throws UnsupportedEncodingException
-	{
-		byte[] bytes = val.getBytes("UTF-8");
-		
-		int i = 0;
-		while (i < bytes.length)
-		{
-			bb.put(bytes[i]);
-			i++;
-		}
-	}
-	
 	public static synchronized FileChannel getFile(String filename) throws IOException
 	{
 		FileChannel fc = openFiles.get(filename);

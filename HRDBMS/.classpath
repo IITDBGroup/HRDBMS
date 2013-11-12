@@ -10,5 +10,6 @@
 	<classpathentry kind="lib" path="C:/jsch-0.1.50.jar"/>
 	<classpathentry kind="lib" path="C:/log4j-api-2.0-beta8.jar"/>
 	<classpathentry kind="lib" path="C:/log4j-core-2.0-beta8.jar"/>
+	<classpathentry kind="lib" path="C:/netcdfAll-4.3.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
