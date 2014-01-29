@@ -5,7 +5,7 @@ import java.util.HashMap;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.BufferedLinkedBlockingQueue;
 
 import com.exascale.exceptions.BufferPoolExhaustedException;
 import com.exascale.filesystem.Block;
@@ -17,15 +17,15 @@ import com.exascale.threads.IOThread;
 
 public class BufferManager extends HRDBMSThread
 {
-	private static BlockingQueue<String> in = new LinkedBlockingQueue<String>();
+	protected static BlockingQueue<String> in = new BufferedLinkedBlockingQueue<String>();
 	public static Page[] bp;
-	private static int numAvailable;
+	protected static int numAvailable;
 	public static int numNotTouched;
-	private static HashMap<Block, Integer> pageLookup;
-	private static TreeMap<Long, Block> referencedLookup;
+	protected static HashMap<Block, Integer> pageLookup;
+	protected static TreeMap<Long, Block> referencedLookup;
 	public static TreeMap<Long, Block> unmodLookup;
-	private static boolean log;
-	private static MultiHashMap<Long, Page> myBuffers;
+	protected static boolean log;
+	protected static MultiHashMap<Long, Page> myBuffers;
 	
 	public BufferManager(boolean log)
 	{
@@ -64,7 +64,7 @@ public class BufferManager extends HRDBMSThread
 		{}
 	}
 	
-	private void processCommand(String cmd)
+	protected void processCommand(String cmd)
 	{
 		if (cmd.startsWith("REQUEST PAGES"))
 		{
@@ -83,7 +83,7 @@ public class BufferManager extends HRDBMSThread
 		}
 	}
 	
-	private void requestPage(String cmd)
+	protected void requestPage(String cmd)
 	{
 		cmd = cmd.substring((13));
 		StringTokenizer tokens = new StringTokenizer(cmd,"~", false);
@@ -93,7 +93,7 @@ public class BufferManager extends HRDBMSThread
 		HRDBMSWorker.addThread(new IOThread(new Block(filename, number), txnum));
 	}
 	
-	private void requestPages(String cmd)
+	protected void requestPages(String cmd)
 	{
 		cmd = cmd.substring((14));
 		StringTokenizer tokens = new StringTokenizer(cmd,"~", false);
@@ -184,7 +184,7 @@ public class BufferManager extends HRDBMSThread
 		return numAvailable;
 	}
 	
-	private static synchronized int findExistingPage(Block b)
+	protected static synchronized int findExistingPage(Block b)
 	{
 		Integer temp = pageLookup.get(b);
 		if (temp == null)
@@ -195,7 +195,7 @@ public class BufferManager extends HRDBMSThread
 		return temp.intValue();
 	}
 	
-	private static synchronized int chooseUnpinnedPage()
+	protected static synchronized int chooseUnpinnedPage()
 	{
 		if (numNotTouched > 0)
 		{

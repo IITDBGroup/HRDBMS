@@ -4,8 +4,8 @@ import java.util.StringTokenizer;
 
 public class Block 
 {
-	private String filename;
-	private int blknum;
+	protected String filename;
+	protected int blknum;
 	
 	public Block(String filename, int number)
 	{
@@ -50,6 +50,10 @@ public class Block
 			if (blknum < b.blknum)
 			{
 				return -1;
+			}
+			else if (blknum == b.blknum)
+			{
+				return 0;
 			}
 			else
 			{

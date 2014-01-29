@@ -12,7 +12,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
-import java.util.Vector;
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -20,21 +20,43 @@ import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
 public class CaseOperator implements Operator, Serializable
 {
-	private MetaData meta;
-	private Vector<HashSet<HashMap<Filter, Filter>>> filters;
-	private Vector<Object> results;
-	private Operator child = null;
-	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
-	private String name;
-	private String type;
-	private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-	private Vector<String> origResults;
-	private ArrayList<String> references = new ArrayList<String>();
+	protected MetaData meta;
+	protected ArrayList<HashSet<HashMap<Filter, Filter>>> filters;
+	protected ArrayList<Object> results;
+	protected Operator child = null;
+	protected Operator parent;
+	protected HashMap<String, String> cols2Types;
+	protected HashMap<String, Integer> cols2Pos;
+	protected TreeMap<Integer, String> pos2Col;
+	protected String name;
+	protected String type;
+	//protected SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+	protected ArrayList<String> origResults;
+	protected ArrayList<String> references = new ArrayList<String>();
+	protected int node;
 	
-	public CaseOperator( Vector<HashSet<HashMap<Filter, Filter>>> filters, Vector<String> results, String name, String type, MetaData meta)
+	public void reset()
+	{
+		child.reset();
+	}
+	
+	public void setChildPos(int pos)
+	{
+	}
+	
+	public int getChildPos()
+	{
+		return 0;
+	}
+	
+	public CaseOperator clone()
+	{
+		CaseOperator retval = new CaseOperator(filters, origResults, name, type, meta);
+		retval.node = node;
+		return retval;
+	}
+	
+	public CaseOperator( ArrayList<HashSet<HashMap<Filter, Filter>>> filters, ArrayList<String> results, String name, String type, MetaData meta)
 	{
 		this.filters = filters;
 		this.name = name;
@@ -42,7 +64,7 @@ public class CaseOperator implements Operator, Serializable
 		this.meta = meta;
 		this.origResults = results;
 		
-		this.results = new Vector<Object>();
+		this.results = new ArrayList<Object>(results.size());
 		
 		for (HashSet<HashMap<Filter, Filter>> filter : filters)
 		{
@@ -68,18 +90,10 @@ public class CaseOperator implements Operator, Serializable
 			if (val1.startsWith("DATE('"))
 			{
 				String temp = val1.substring(6);
-				StringTokenizer tokens = new StringTokenizer(temp, "'", false);
+				//FastStringTokenizer tokens = new FastStringTokenizer(temp, "'", false);
+				FastStringTokenizer tokens = new FastStringTokenizer(temp, "'", false);
 				temp = tokens.nextToken();
-			
-				try 
-				{
-					this.results.add(sdf.parse(temp));
-				} 
-				catch (ParseException e) 
-				{
-					e.printStackTrace();
-					System.exit(1);
-				}
+				this.results.add(DateParser.parse(temp));
 			}
 			else if (val1.startsWith("'"))
 			{
@@ -106,6 +120,16 @@ public class CaseOperator implements Operator, Serializable
 		}
 	}
 	
+	public int getNode()
+	{
+		return node;
+	}
+	
+	public void setNode(int node)
+	{
+		this.node = node;
+	}
+	
 	public ArrayList<String> getReferences()
 	{
 		return references;
@@ -118,7 +142,7 @@ public class CaseOperator implements Operator, Serializable
 	
 	public ArrayList<Operator> children()
 	{
-		ArrayList<Operator> retval = new ArrayList<Operator>();
+		ArrayList<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
@@ -144,12 +168,15 @@ public class CaseOperator implements Operator, Serializable
 		{
 			child = op;
 			child.registerParent(this);
-			cols2Types = (HashMap<String, String>)child.getCols2Types().clone();
-			cols2Types.put(name, type);
-			cols2Pos = (HashMap<String, Integer>)child.getCols2Pos().clone();
-			cols2Pos.put(name, cols2Pos.size());
-			pos2Col = (TreeMap<Integer, String>)child.getPos2Col().clone();
-			pos2Col.put(pos2Col.size(), name);
+			if (child.getCols2Types() != null)
+			{
+				cols2Types = (HashMap<String, String>)child.getCols2Types().clone();
+				cols2Types.put(name, type);
+				cols2Pos = (HashMap<String, Integer>)child.getCols2Pos().clone();
+				cols2Pos.put(name, cols2Pos.size());
+				pos2Col = (TreeMap<Integer, String>)child.getPos2Col().clone();
+				pos2Col.put(pos2Col.size(), name);
+			}
 		}
 		else
 		{
@@ -175,6 +202,16 @@ public class CaseOperator implements Operator, Serializable
 	public void start() throws Exception 
 	{
 		child.start();
+	}
+	
+	public void nextAll(Operator op) throws Exception
+	{
+		child.nextAll(op);
+		Object o = next(op);
+		while (!(o instanceof DataEndMarker))
+		{
+			o = next(op);
+		}
 	}
 
 	@Override
@@ -254,7 +291,7 @@ public class CaseOperator implements Operator, Serializable
 		return pos2Col;
 	}
 	
-	private boolean passesCase(ArrayList<Object> row, HashMap<String, Integer> cols2Pos, HashSet<HashMap<Filter, Filter>> ands)
+	protected boolean passesCase(ArrayList<Object> row, HashMap<String, Integer> cols2Pos, HashSet<HashMap<Filter, Filter>> ands)
 	{
 		for (HashMap<Filter, Filter> ors : ands)
 		{
@@ -267,7 +304,7 @@ public class CaseOperator implements Operator, Serializable
 		return true;
 	}
 	
-	private boolean passesOredCondition(ArrayList<Object> row, HashMap<String, Integer> cols2Pos, HashMap<Filter, Filter> filters)
+	protected boolean passesOredCondition(ArrayList<Object> row, HashMap<String, Integer> cols2Pos, HashMap<Filter, Filter> filters)
 	{
 		try
 		{

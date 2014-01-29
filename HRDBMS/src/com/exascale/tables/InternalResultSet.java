@@ -1,13 +1,13 @@
 package com.exascale.tables;
 
-import java.util.Vector;
+import java.util.ArrayList;
 
 public class InternalResultSet
 {
-	private Vector<Vector<Object>> data;
-	private int pos = -1;
+	protected ArrayList<ArrayList<Object>> data;
+	protected int pos = -1;
 	
-	public InternalResultSet(Vector<Vector<Object>> data)
+	public InternalResultSet(ArrayList<ArrayList<Object>> data)
 	{
 		this.data = data;
 	}

@@ -2,7 +2,7 @@ package com.exascale.tables;
 
 public class SQL 
 {
-	private String internal;
+	protected String internal;
 	
 	public SQL(String sql)
 	{
@@ -10,7 +10,7 @@ public class SQL
 		internal = removeExcessWhitespace(internal);
 	}
 	
-	private String removeExcessWhitespace(String in)
+	protected String removeExcessWhitespace(String in)
 	{
 		String out = in.replace('\t', ' ');
 		out = out.replace('\n', ' ');
@@ -64,7 +64,7 @@ public class SQL
 		return internal.hashCode();
 	}
 	
-	private String toUpperCaseExceptQuoted(String in)
+	protected String toUpperCaseExceptQuoted(String in)
 	{
 		String out = "";
 		int i = 0;

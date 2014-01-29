@@ -1,5 +1,6 @@
 package com.exascale.optimizer.testing;
 
+import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -14,35 +15,107 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.TreeMap;
-import java.util.Vector;
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.zip.GZIPOutputStream;
 
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 import com.exascale.threads.ReadThread;
 
 public class NetworkSendOperator implements Operator, Serializable
 {
-	private MetaData meta;
-	private Operator child;
-	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
-	private static final int WORKER_PORT = 3232;
-	private Socket sock;
-	private OutputStream out;
-	private int node;
+	protected MetaData meta;
+	protected Operator child;
+	protected Operator parent;
+	protected HashMap<String, String> cols2Types;
+	protected HashMap<String, Integer> cols2Pos;
+	protected TreeMap<Integer, String> pos2Col;
+	protected static final int WORKER_PORT = 3232;
+	protected CompressedSocket sock;
+	protected OutputStream out;
+	protected int node;
+	protected long count = 0;
+	protected int numParents;
+	protected boolean started = false;
+	protected boolean numpSet = false;
+	protected boolean cardSet = false;
+	
+	public void reset()
+	{
+		System.out.println("NetworkSendOperator does not support reset()");
+		System.exit(1);
+	}
+	
+	public boolean setCard()
+	{
+		if (cardSet)
+		{
+			return false;
+		}
+		
+		cardSet = true;
+		return true;
+	}
+	
+	public boolean notStarted()
+	{
+		return !started;
+	}
+	
+	public void setChildPos(int pos)
+	{
+	}
+	
+	public boolean hasAllConnections()
+	{
+		return false;
+	}
+	
+	public int getChildPos()
+	{
+		return 0;
+	}
 	
 	public MetaData getMeta()
 	{
 		return meta;
 	}
 	
+	public boolean setNumParents()
+	{
+		if (numpSet)
+		{
+			return false;
+		}
+		
+		numpSet = true;
+		return true;
+	}
+	
+	protected NetworkSendOperator()
+	{}
+	
 	public NetworkSendOperator(int node, MetaData meta)
 	{
 		this.meta = meta;
+		this.node = node;
+	}
+	
+	public NetworkSendOperator clone()
+	{
+		NetworkSendOperator retval = new NetworkSendOperator(node, meta);
+		retval.numParents= numParents;
+		retval.numpSet = numpSet;
+		retval.cardSet = cardSet;
+		return retval;
+	}
+	
+	public void addConnection(int fromNode, CompressedSocket sock)
+	{}
+	
+	public void setNode(int node)
+	{
 		this.node = node;
 	}
 	
@@ -53,7 +126,7 @@ public class NetworkSendOperator implements Operator, Serializable
 	
 	public ArrayList<Operator> children()
 	{
-		ArrayList<Operator> retval = new ArrayList<Operator>();
+		ArrayList<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
@@ -100,12 +173,12 @@ public class NetworkSendOperator implements Operator, Serializable
 		return node;
 	}
 	
-	public void setSocket(Socket sock)
+	public void setSocket(CompressedSocket sock)
 	{
 		try
 		{
 			this.sock = sock;
-			out = sock.getOutputStream();
+			out = new BufferedOutputStream(sock.getOutputStream());
 		}
 		catch(Exception e)
 		{
@@ -117,27 +190,26 @@ public class NetworkSendOperator implements Operator, Serializable
 	@Override
 	public synchronized void start() throws Exception 
 	{
+		started = true;
 		child.start();
 		Object o = child.next(this);
 		while (!(o instanceof DataEndMarker))
 		{
 			byte[] obj = toBytes(o);
-			byte[] size = intToBytes(obj.length);
-			byte[] data = new byte[obj.length + size.length];
-			System.arraycopy(size, 0, data, 0, 4);
-			System.arraycopy(obj, 0, data, 4, obj.length);
-			out.write(data);
+			out.write(obj);
+			count++;
+			o = child.next(this);
 		}
 		
 		byte[] obj = toBytes(o);
-		byte[] size = intToBytes(obj.length);
-		byte[] data = new byte[obj.length + size.length];
-		System.arraycopy(size, 0, data, 0, 4);
-		System.arraycopy(obj, 0, data, 4, obj.length);
-		out.write(data);
+		out.write(obj);
+		out.flush();
+		System.out.println("Wrote " + count + " rows");
+		child.close();
+		Thread.sleep(60 * 1000);
 	}
 	
-	private byte[] toBytes(Object v)
+	protected byte[] toBytes(Object v)
 	{
 		ArrayList<Object> val;
 		if (v instanceof ArrayList)
@@ -247,13 +319,13 @@ public class NetworkSendOperator implements Operator, Serializable
 		return retval;
 	}
 	
-	private int bytesToInt(byte[] val)
+	protected int bytesToInt(byte[] val)
 	{
 		int ret = java.nio.ByteBuffer.wrap(val).getInt();
 		return ret;
 	}
 	
-	private static byte[] intToBytes(int val)
+	protected static byte[] intToBytes(int val)
 	{
 		byte[] buff = new byte[4];
 		buff[0] = (byte)(val >> 24);
@@ -262,6 +334,9 @@ public class NetworkSendOperator implements Operator, Serializable
 		buff[3] = (byte)((val & 0x000000FF));
 		return buff;
 	}
+	
+	public void nextAll(Operator op)
+	{}
 
 	public Object next(Operator op) throws Exception
 	{
@@ -304,6 +379,6 @@ public class NetworkSendOperator implements Operator, Serializable
 	
 	public String toString()
 	{
-		return "NetworkSendOperator";
+		return "NetworkSendOperator(" + node + ")";
 	}
 }

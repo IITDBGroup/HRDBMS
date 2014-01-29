@@ -2,16 +2,16 @@ package com.exascale.optimizer.testing;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.Vector;
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
@@ -19,28 +19,83 @@ import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
 public class HashJoinOperator extends JoinOperator implements Serializable
 {
-	private ArrayList<Operator> children = new ArrayList<Operator>();
-	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
-	private MetaData meta;
-	private volatile LinkedBlockingQueue outBuffer = new LinkedBlockingQueue(Driver.QUEUE_SIZE);
-	private int NUM_RT_THREADS = 2 * Runtime.getRuntime().availableProcessors();
-	private int NUM_PTHREADS = 4 * Runtime.getRuntime().availableProcessors();
-	private AtomicLong outCount = new AtomicLong(0);
-	private volatile boolean readersDone = false;
-	private Vector<String> lefts = new Vector<String>();
-	private Vector<String> rights = new Vector<String>();
-	private volatile ArrayList<DiskBackedHashMap> buckets;
-	private CNFFilter cnfFilters;
-	private HashSet<HashMap<Filter, Filter>> f;
-	//private int HASH_BUCKETS = 5000;
-	private int childPos = -1;
-	private AtomicLong inCount = new AtomicLong(0);
+	protected ArrayList<Operator> children = new ArrayList<Operator>(2);
+	protected Operator parent;
+	protected HashMap<String, String> cols2Types;
+	protected HashMap<String, Integer> cols2Pos;
+	protected TreeMap<Integer, String> pos2Col;
+	protected MetaData meta;
+	protected volatile BufferedLinkedBlockingQueue outBuffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
+	protected int NUM_RT_THREADS = 2 * ResourceManager.cpus;
+	protected int NUM_PTHREADS = 4 * ResourceManager.cpus;
+	protected AtomicLong outCount = new AtomicLong(0);
+	protected volatile boolean readersDone = false;
+	protected ArrayList<String> lefts = new ArrayList<String>();
+	protected ArrayList<String> rights = new ArrayList<String>();
+	protected volatile ArrayList<DiskBackedHashMap> buckets;
+	protected CNFFilter cnfFilters;
+	protected HashSet<HashMap<Filter, Filter>> f;
+	protected int HASH_BUCKETS = 5000;
+	protected int childPos = -1;
+	protected AtomicLong inCount = new AtomicLong(0);
 	protected static final Long LARGE_PRIME =  1125899906842597L;
     protected static final Long LARGE_PRIME2 = 6920451961L;
-    private AtomicLong leftCount = new AtomicLong(0);
+    protected AtomicLong leftCount = new AtomicLong(0);
+    protected ArrayList<Object> lastRightRow;
+    protected int node;
+    protected boolean indexAccess = false;
+    protected ArrayList<Index> dynamicIndexes;
+    protected ArrayList<ArrayList<Object>> queuedRows = new ArrayList<ArrayList<Object>>();
+    protected SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+    protected volatile boolean doReset = false;
+    protected int rightChildCard = 16;
+    protected boolean cardSet = false;
+    
+    public void setDynamicIndex(ArrayList<Index> indexes)
+    {
+    	indexAccess = true;
+    	this.dynamicIndexes = indexes;
+    }
+    
+    public void reset()
+	{
+		System.out.println("HashJoinOperator cannot be reset");
+		System.exit(1);
+	}
+    
+    public boolean setRightChildCard(int card)
+    {
+    	if (cardSet)
+    	{
+    		return false;
+    	}
+    	
+    	cardSet = true;
+    	rightChildCard = card;
+    	return true;
+    }
+    
+    public ArrayList<String> getJoinForChild(Operator op)
+    {
+    	if (op.getCols2Pos().keySet().containsAll(lefts))
+    	{
+    		return new ArrayList<String>(lefts);
+    	}
+    	else
+    	{
+    		return new ArrayList<String>(rights);
+    	}
+    }
+    
+    public void setChildPos(int pos)
+	{
+		childPos = pos;
+	}
+	
+	public int getChildPos()
+	{
+		return childPos;
+	}
 	
 	public HashJoinOperator(String left, String right, MetaData meta)
 	{
@@ -54,6 +109,75 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 			e.printStackTrace();
 			System.exit(1);
 		}
+	}
+	
+	protected HashJoinOperator(HashSet<HashMap<Filter, Filter>> f, ArrayList<String> lefts, ArrayList<String> rights, MetaData meta)
+	{
+		this.meta = meta;
+		this.f = f;
+		this.lefts = lefts;
+		this.rights = rights;
+	}
+	
+	public HashJoinOperator clone()
+	{
+		HashJoinOperator retval = new HashJoinOperator(f, lefts, rights, meta);
+		retval.node = node;
+		retval.indexAccess = indexAccess;
+		retval.dynamicIndexes = dynamicIndexes;
+		retval.rightChildCard = rightChildCard;
+		retval.cardSet = cardSet;
+		return retval;
+	}
+	
+	public HashSet<HashMap<Filter, Filter>> getHSHM()
+	{
+		if (f != null)
+		{
+			return getHSHMFilter();
+		}
+		
+		HashSet<HashMap<Filter, Filter>> retval = new HashSet<HashMap<Filter, Filter>>();
+		int i = 0;
+		for (String col : rights)
+		{
+			Filter filter = null;
+			try
+			{
+				filter = new Filter(lefts.get(i), "E", col);
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
+				System.exit(1);
+			}
+			HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
+			hm.put(filter,  filter);
+			retval.add(hm);
+			i++;
+		}
+		
+		return retval;
+	}
+	
+	public int getNode()
+	{
+		return node;
+	}
+	
+	public void setNode(int node)
+	{
+		this.node = node;
+	}
+	
+	public ArrayList<String> getLefts()
+	{
+		return lefts;
+	}
+	
+	public ArrayList<String> getRights()
+	{
+		return rights;
 	}
 	
 	public ArrayList<String> getReferences()
@@ -106,7 +230,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 		return retval;
 	}
 	
-	private String getLeftForRight(String right)
+	protected String getLeftForRight(String right)
 	{
 		int i = 0;
 		for (String r : rights)
@@ -122,7 +246,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 		return null;
 	}
 	
-	private String getRightForLeft(String left)
+	protected String getRightForLeft(String left)
 	{
 		int i = 0;
 		for (String l : lefts)
@@ -145,7 +269,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 			int i = 0;
 			for (String rName : rights)
 			{
-				ArrayList<String> temp = new ArrayList<String>();
+				ArrayList<String> temp = new ArrayList<String>(1);
 				temp.add(rName);
 				if (references.removeAll(temp))
 				{
@@ -161,7 +285,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 			int i = 0;
 			for (String lName : lefts)
 			{
-				ArrayList<String> temp = new ArrayList<String>();
+				ArrayList<String> temp = new ArrayList<String>(1);
 				temp.add(lName);
 				if (references.removeAll(temp))
 				{
@@ -179,9 +303,9 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 		return f;
 	}
 	
-	public void addJoinCondition(Vector<Filter> filters)
+	public void addJoinCondition(ArrayList<Filter> filters)
 	{
-		throw new UnsupportedOperationException("addJoinCondition(Vector<Filter>) is not supported by HashJoinOperator");
+		throw new UnsupportedOperationException("addJoinCondition(ArrayList<Filter>) is not supported by HashJoinOperator");
 	}
 	
 	public void addJoinCondition(String left, String right)
@@ -246,7 +370,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 			}
 			op.registerParent(this);
 			
-			if (children.size() == 2)
+			if (children.size() == 2 && children.get(0).getCols2Types() != null && children.get(1).getCols2Types() != null)
 			{
 				cols2Types = (HashMap<String, String>)children.get(0).getCols2Types().clone();
 				cols2Pos = (HashMap<String, Integer>)children.get(0).getCols2Pos().clone();
@@ -305,22 +429,35 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 	
 	public void start() throws Exception 
 	{
-		buckets = new ArrayList<DiskBackedHashMap>();
-		buckets.add(ResourceManager.newDiskBackedHashMap());
-		for (Operator child : children)
+		if (!indexAccess)
 		{
-			child.start();
-		}
+			buckets = new ArrayList<DiskBackedHashMap>();
+			buckets.add(ResourceManager.newDiskBackedHashMap(false, rightChildCard));
+			for (Operator child : children)
+			{
+				child.start();
+				//System.out.println("cols2Pos = " + child.getCols2Pos());
+			}
 		
-		new InitThread().start();
+			new InitThread().start();
+		}
+		else
+		{
+			System.out.println("HashJoinOperator is started with index access");
+			for (Operator child : children)
+			{
+				child.start();
+				//System.out.println("cols2Pos = " + child.getCols2Pos());
+			}
+		}
 		
 	}
 	
-	private class InitThread extends Thread
+	protected class InitThread extends ThreadPoolThread
 	{
 		public void run()
 		{
-			Thread[] threads;
+			ThreadPoolThread[] threads;
 			int i = 0;
 			threads = new ReaderThread[NUM_RT_THREADS];
 			while (i < NUM_RT_THREADS)
@@ -333,20 +470,24 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 			i = 0;
 			while (i < NUM_RT_THREADS)
 			{
-				try
+				while (true)
 				{
-					threads[i].join();
-					i++;
-				}
-				catch(InterruptedException e)
-				{
+					try 
+					{
+						threads[i].join();
+						i++;
+						break;
+					} 
+					catch (InterruptedException e) 
+					{
+					}
 				}
 			}
 			
 			readersDone = true;
 			
 			i = 0;
-			Thread[] threads2 = new ProcessThread[NUM_PTHREADS];
+			ThreadPoolThread[] threads2 = new ProcessThread[NUM_PTHREADS];
 			while (i < NUM_PTHREADS)
 			{
 				threads2[i] = new ProcessThread();
@@ -357,17 +498,21 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 			i = 0;
 			while (i < NUM_PTHREADS)
 			{
-				try
+				while (true)
 				{
-					threads2[i].join();
-					i++;
-				}
-				catch(InterruptedException e)
-				{
+					try 
+					{
+						threads2[i].join();
+						i++;
+						break;
+					} 
+					catch (InterruptedException e) 
+					{
+					}
 				}
 			}
 			
-			//System.out.println("HashJoinThread processed " + leftCount + " left rows and " + inCount + " right rows");
+			System.out.println("HashJoinThread processed " + leftCount + " left rows and " + inCount + " right rows and generated " + outCount + " rows");
 			
 			while (true)
 			{
@@ -388,7 +533,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 		}
 	}
 	
-	private class ReaderThread extends Thread
+	protected class ReaderThread extends ThreadPoolThread
 	{	
 		public void run()
 		{
@@ -397,6 +542,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 				Operator child = children.get(1);
 				HashMap<String, Integer> childCols2Pos = child.getCols2Pos();
 				Object o = child.next(HashJoinOperator.this);
+				//@Parallel
 				while (! (o instanceof DataEndMarker))
 				{
 					//inBuffer.add(o);
@@ -407,7 +553,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 					//	System.out.println("HashJoinOperator has read " + count + " rows");
 					//}
 					
-					ArrayList<Object> key = new ArrayList<Object>();
+					ArrayList<Object> key = new ArrayList<Object>(rights.size());
 					for (String col : rights)
 					{
 						int pos = childCols2Pos.get(col);
@@ -416,6 +562,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 					
 					long hash = 0x0EFFFFFFFFFFFFFFL & hash(key);
 					writeToHashTable(hash, (ArrayList<Object>)o);
+					lastRightRow = (ArrayList<Object>)o;
 					o = child.next(HashJoinOperator.this);
 				}
 			}
@@ -432,7 +579,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 		}
 	}
 	
-	private class ProcessThread extends Thread
+	protected class ProcessThread extends ThreadPoolThread
 	{
 		public void run()
 		{
@@ -446,18 +593,31 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 				Operator left = children.get(0);
 				HashMap<String, Integer> childCols2Pos = left.getCols2Pos();
 				Object o = left.next(HashJoinOperator.this);
+				ArrayList<Object> key = new ArrayList<Object>(lefts.size());
+				//@Parallel
 				while (! (o instanceof DataEndMarker))
 				{
 					ArrayList<Object> lRow = (ArrayList<Object>)o;
-					ArrayList<Object> key = new ArrayList<Object>();
+					key.clear();
 					for (String col : lefts)
 					{
 						int pos = childCols2Pos.get(col);
-						key.add(lRow.get(pos));
+						try
+						{
+							key.add(lRow.get(pos));
+						}
+						catch(Exception e)
+						{
+							System.out.println("Row - " + lRow);
+							System.out.println("Cols2Pos = " + childCols2Pos);
+							e.printStackTrace();
+							System.exit(1);
+						}
 					}
 					
 					long hash = 0x0EFFFFFFFFFFFFFFL & hash(key);
 					ArrayList<ArrayList<Object>> candidates = getCandidates(hash);	
+					
 					for (ArrayList<Object> rRow : candidates)
 					{
 						if (cnfFilters.passes(lRow, rRow))
@@ -492,8 +652,94 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 		}
 	}
 	
+	public void nextAll(Operator op) throws Exception
+	{
+		children.get(0).nextAll(op);
+		children.get(1).nextAll(op);
+		Object o = next(op);
+		while (!(o instanceof DataEndMarker))
+		{
+			o = next(op);
+		}
+	}
+	
 	public Object next(Operator op) throws Exception
 	{
+		if (indexAccess)
+		{
+			synchronized(this)
+			{
+				if (queuedRows.size() > 0)
+				{
+					return queuedRows.remove(0);
+				}
+			}
+
+				while (true)
+				{
+					Object o = children.get(0).next(this);
+					if (o instanceof DataEndMarker)
+					{
+						return o;
+					}
+					
+					ArrayList<Filter> dynamics = new ArrayList<Filter>(rights.size());
+					int i = 0;
+					for (String right : rights)
+					{
+						Object leftVal = ((ArrayList<Object>)o).get(children.get(0).getCols2Pos().get(lefts.get(i)));
+						String leftString = null;
+						if (leftVal instanceof Integer || leftVal instanceof Long || leftVal instanceof Double)
+						{
+							leftString = leftVal.toString();
+						}
+						else if (leftVal instanceof String)
+						{
+							leftString = "'" + leftVal + "'";
+						}
+						else if (leftVal instanceof Date)
+						{
+							leftString = sdf.format(leftVal);
+						}
+						Filter f = new Filter(leftString, "E", right);
+						dynamics.add(f);
+						i++;
+					}
+				
+					//System.out.println("HashJoinOperator is reseting its right child and " + dynamicIndexes.size() + " indexes");
+					synchronized(this)
+					{
+						if (doReset)
+						{
+							children.get(1).reset();
+						}
+						else
+						{
+							doReset = true;
+						}
+						
+						for (Index index : dynamicIndexes)
+						{
+							index.setDelayedConditions(dynamics);
+						}
+					
+						Object o2 = children.get(1).next(this);
+						while (!(o2 instanceof DataEndMarker))
+						{
+							ArrayList<Object> out = new ArrayList<Object>(((ArrayList<Object>)o).size() + ((ArrayList<Object>)o2).size());
+							out.addAll((ArrayList<Object>)o);
+							out.addAll((ArrayList<Object>)o2);
+							queuedRows.add(out);
+							o2 = children.get(1).next(this);
+						}
+					
+						if (queuedRows.size() > 0)
+						{
+							return queuedRows.remove(0);
+						}
+					}
+				}
+		}
 		Object o;
 		o = outBuffer.take();
 		
@@ -521,9 +767,12 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 			child.close();
 		}
 		
-		for (DiskBackedHashMap bucket : buckets)
+		if (buckets != null)
 		{
-			bucket.close();
+			for (DiskBackedHashMap bucket : buckets)
+			{
+				bucket.close();
+			}
 		}
 	}
 
@@ -554,7 +803,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 		return pos2Col;
 	}
 	
-	private void writeToHashTable(long hash, ArrayList<Object> row) throws Exception
+	protected void writeToHashTable(long hash, ArrayList<Object> row) throws Exception
 	{
 		int i = 0;
 		Object o = buckets.get(i).putIfAbsent(hash, row);
@@ -593,17 +842,16 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 					}
 					else
 					{
-						buckets.add(ResourceManager.newDiskBackedHashMap());
+						buckets.add(ResourceManager.newDiskBackedHashMap(false, rightChildCard));
 						DiskBackedHashMap bucket = buckets.get(i);
 						o = bucket.putIfAbsent(hash, row);
 					}
 				}
-				
 			}
 		}
 	}
 	
-	private ArrayList<ArrayList<Object>> getCandidates(long hash) throws ClassNotFoundException, IOException
+	protected ArrayList<ArrayList<Object>> getCandidates(long hash) throws ClassNotFoundException, IOException
 	{
 		ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>();
 		int i = 0;
@@ -625,7 +873,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 		return retval;
 	}
 	
-	private long hash(ArrayList<Object> key)
+	protected long hash(ArrayList<Object> key)
 	{
 		long hashCode = 1125899906842597L;
 		for (Object e : key)

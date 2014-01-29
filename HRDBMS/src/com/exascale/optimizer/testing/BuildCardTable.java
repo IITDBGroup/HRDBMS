@@ -28,7 +28,7 @@ public class BuildCardTable
 		String line = in.readLine();
 		while (line != null)
 		{
-			StringTokenizer tokens = new StringTokenizer(line, "|", false);
+			FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
 			i = 0;
 			while (tokens.hasMoreTokens())
 			{
@@ -61,7 +61,7 @@ public class BuildCardTable
 		line = in.readLine();
 		while (line != null)
 		{
-			StringTokenizer tokens = new StringTokenizer(line, "|", false);
+			FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
 			i = 0;
 			while (tokens.hasMoreTokens())
 			{
@@ -94,7 +94,7 @@ public class BuildCardTable
 		line = in.readLine();
 		while (line != null)
 		{
-			StringTokenizer tokens = new StringTokenizer(line, "|", false);
+			FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
 			i = 0;
 			while (tokens.hasMoreTokens())
 			{
@@ -127,7 +127,7 @@ public class BuildCardTable
 		line = in.readLine();
 		while (line != null)
 		{
-			StringTokenizer tokens = new StringTokenizer(line, "|", false);
+			FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
 			i = 0;
 			while (tokens.hasMoreTokens())
 			{
@@ -160,7 +160,7 @@ public class BuildCardTable
 		line = in.readLine();
 		while (line != null)
 		{
-			StringTokenizer tokens = new StringTokenizer(line, "|", false);
+			FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
 			i = 0;
 			while (tokens.hasMoreTokens())
 			{
@@ -193,7 +193,7 @@ public class BuildCardTable
 		line = in.readLine();
 		while (line != null)
 		{
-			StringTokenizer tokens = new StringTokenizer(line, "|", false);
+			FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
 			i = 0;
 			while (tokens.hasMoreTokens())
 			{
@@ -226,7 +226,7 @@ public class BuildCardTable
 		line = in.readLine();
 		while (line != null)
 		{
-			StringTokenizer tokens = new StringTokenizer(line, "|", false);
+			FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
 			i = 0;
 			while (tokens.hasMoreTokens())
 			{
@@ -259,7 +259,7 @@ public class BuildCardTable
 		line = in.readLine();
 		while (line != null)
 		{
-			StringTokenizer tokens = new StringTokenizer(line, "|", false);
+			FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
 			i = 0;
 			while (tokens.hasMoreTokens())
 			{

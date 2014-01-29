@@ -10,24 +10,50 @@ import java.util.StringTokenizer;
 
 public class Filter implements Cloneable, Serializable
 {
-	private String val1; //string
-	private String op;
-	private String val2; //string
-	private Date dVal1;
-	private Date dVal2;
-	private Long lVal1;
-	private Long lVal2;
-	private Double fVal1;
-	private Double fVal2;
-	private String colVal1; //column
-	private String colVal2; //column
-	private volatile int posVal1 = -1;
-	private volatile int posVal2 = -1;
-	private boolean always = false;
-	private boolean alwaysVal = false;
-	private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-	private String orig1;
-	private String orig2;
+	protected String val1; //string
+	protected String op;
+	protected String val2; //string
+	protected Date dVal1;
+	protected Date dVal2;
+	protected Long lVal1;
+	protected Long lVal2;
+	protected Double fVal1;
+	protected Double fVal2;
+	protected String colVal1; //column
+	protected String colVal2; //column
+	protected volatile int posVal1 = -1;
+	protected volatile int posVal2 = -1;
+	protected boolean always = false;
+	protected boolean alwaysVal = false;
+	//protected SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+	protected String orig1;
+	protected String orig2;
+	
+	public boolean equals(Object rhs)
+	{
+		Filter r = (Filter)rhs;
+		if (orig1.equals(r.orig1) && op.equals(r.op) && orig2.equals(r.orig2))
+		{
+			return true;
+		}
+		
+		return false;
+	}
+	
+	public int hashCode()
+	{
+		return orig1.hashCode() + op.hashCode() + orig2.hashCode();
+	}
+	
+	public String leftOrig()
+	{
+		return orig1;
+	}
+	
+	public String rightOrig()
+	{
+		return orig2;
+	}
 	
 	protected Filter clone()
 	{
@@ -44,6 +70,9 @@ public class Filter implements Cloneable, Serializable
 		
 		return null;
 	}
+	
+	protected Filter()
+	{}
 	
 	public Filter(String val1, String op, String val2) throws Exception
 	{
@@ -205,7 +234,7 @@ public class Filter implements Cloneable, Serializable
 		return val2;
 	}
 	
-	private void setAlwaysVars() throws Exception
+	protected void setAlwaysVars() throws Exception
 	{
 		if (fVal1 != null)
 		{
@@ -271,15 +300,15 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 	
-	private void parseRHS() throws ParseException
+	protected void parseRHS() throws ParseException
 	{
 		if (val2.startsWith("DATE('"))
 		{
 			String temp = val2.substring(6);
-			StringTokenizer tokens = new StringTokenizer(temp, "'", false);
+			FastStringTokenizer tokens = new FastStringTokenizer(temp, "'", false);
 			temp = tokens.nextToken();
 			
-			dVal2 = sdf.parse(temp);
+			dVal2 = DateParser.parse(temp);
 		}
 		else if (val2.startsWith("'"))
 		{
@@ -303,15 +332,15 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 	
-	private void parseLHS() throws ParseException
+	protected void parseLHS() throws ParseException
 	{
 		if (val1.startsWith("DATE('"))
 		{
 			String temp = val1.substring(6);
-			StringTokenizer tokens = new StringTokenizer(temp, "'", false);
+			FastStringTokenizer tokens = new FastStringTokenizer(temp, "'", false);
 			temp = tokens.nextToken();
 			
-			dVal1 = sdf.parse(temp);
+			dVal1 = DateParser.parse(temp);
 		}
 		else if (val1.startsWith("'"))
 		{
@@ -823,7 +852,7 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 	
-	private Object get(ArrayList<Object> lRow, ArrayList<Object> rRow, int pos)
+	protected Object get(ArrayList<Object> lRow, ArrayList<Object> rRow, int pos)
 	{
 		if (pos < lRow.size())
 		{
@@ -835,7 +864,7 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 	
-	private boolean compare(Comparable lhs, Comparable rhs) throws Exception
+	protected boolean compare(Comparable lhs, Comparable rhs) throws Exception
 	{
 		if (op.equals("E"))
 		{
@@ -880,7 +909,7 @@ public class Filter implements Cloneable, Serializable
 		throw new Exception("Unknown op type in Filter");
 	}
 	
-	private boolean compare(double lhs, double rhs) throws Exception
+	protected boolean compare(double lhs, double rhs) throws Exception
 	{
 		if (op.equals("E"))
 		{

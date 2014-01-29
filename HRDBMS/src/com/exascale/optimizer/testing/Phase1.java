@@ -4,13 +4,15 @@ import java.util.ArrayList;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Vector;
+import java.util.ArrayList;
+
+import com.exascale.optimizer.testing.MetaData.PartitionMetaData;
 
 public class Phase1 
 {
-	private RootOperator root;
-	private boolean pushdownHadResults;
-	private int ADDITIONAL_PUSHDOWNS = 25;
+	protected RootOperator root;
+	protected boolean pushdownHadResults;
+	protected int ADDITIONAL_PUSHDOWNS = 25;
 
 	public Phase1(RootOperator root)
 	{
@@ -56,11 +58,9 @@ public class Phase1
 		}
 		
 		pushDownProjects();
-		long end = System.currentTimeMillis();
-		System.out.println("Optimization completed in " + (end-start) + "ms");
 	}
 	
-	private void pushDownProjects()
+	protected void pushDownProjects()
 	{
 		HashSet<String> references = new HashSet<String>();
 		for (Operator o : root.children())
@@ -81,8 +81,8 @@ public class Phase1
 				try
 				{
 					TableScanOperator table = (TableScanOperator)op;
-					HashMap<String, Integer> cols2Pos = new MetaData().getCols2PosForTable(table.getSchema(), table.getTable());
-					ArrayList<String> needed = new ArrayList<String>();
+					HashMap<String, Integer> cols2Pos = root.getMeta().getCols2PosForTable(table.getSchema(), table.getTable());
+					ArrayList<String> needed = new ArrayList<String>(references.size());
 					for (String col : references)
 					{
 						if (cols2Pos.containsKey(col))
@@ -91,6 +91,10 @@ public class Phase1
 						}
 					}
 					
+					if (needed.size() == 0)
+					{
+						needed.add(new ArrayList<String>(cols2Pos.keySet()).get(0));
+					}
 					table.setNeededCols(needed);
 				}
 				catch(Exception e)
@@ -110,7 +114,7 @@ public class Phase1
 				{
 					if (op instanceof TableScanOperator)
 					{
-						Vector<Operator> parents = (Vector<Operator>)((TableScanOperator)op).parents().clone(); 
+						ArrayList<Operator> parents = (ArrayList<Operator>)((TableScanOperator)op).parents().clone(); 
 						for (Operator op2 : parents)
 						{
 							op2.removeChild(op);
@@ -161,11 +165,11 @@ public class Phase1
 		}
 	}
 	
-	private ArrayList <Operator> getLeaves(Operator op)
+	protected ArrayList <Operator> getLeaves(Operator op)
 	{
 		if (op.children().size() == 0)
 		{
-			ArrayList<Operator> retval = new ArrayList<Operator>();
+			ArrayList<Operator> retval = new ArrayList<Operator>(1);
 			retval.add(op);
 			return retval;
 		}
@@ -179,7 +183,7 @@ public class Phase1
 		return retval;
 	}
 	
-	private void getReferences(Operator o, HashSet<String> references)
+	protected void getReferences(Operator o, HashSet<String> references)
 	{
 		references.addAll(o.getReferences());
 		for (Operator op : o.children())
@@ -188,7 +192,7 @@ public class Phase1
 		}
 	}
 	
-	private void reorderProducts(Operator op)
+	protected void reorderProducts(Operator op)
 	{
 		try
 		{
@@ -215,7 +219,7 @@ public class Phase1
 		}
 	}
 	
-	private void reorderProducts(Operator op, ArrayList<SelectOperator> selects, Operator top) throws Exception
+	protected void reorderProducts(Operator op, ArrayList<SelectOperator> selects, Operator top) throws Exception
 	{
 		if (op instanceof SelectOperator)
 		{
@@ -296,7 +300,7 @@ public class Phase1
 		while (selectsCopy.size() > 0)
 		{
 			SelectOperator select = getMostPromisingSelect(selectsCopy, subtrees, newProd);
-			Vector<Filter> filters = select.getFilter();
+			ArrayList<Filter> filters = select.getFilter();
 			int i = 0;
 			while (i < filters.size())
 			{
@@ -398,7 +402,7 @@ public class Phase1
 		}
 	}
 	
-	private Operator getSubtreeForCol(String col, ArrayList<Operator> subtrees)
+	protected Operator getSubtreeForCol(String col, ArrayList<Operator> subtrees)
 	{
 		for (Operator op : subtrees)
 		{
@@ -411,11 +415,11 @@ public class Phase1
 		return null;
 	}
 	
-	private void combineProductsAndSelects(Operator op) throws Exception
+	protected void combineProductsAndSelects(Operator op) throws Exception
 	{
 		if (op instanceof SelectOperator)
 		{
-			Vector<Filter> filters = ((SelectOperator)op).getFilter();
+			ArrayList<Filter> filters = ((SelectOperator)op).getFilter();
 			boolean isJoin = true;
 			for (Filter filter : filters)
 			{
@@ -517,7 +521,7 @@ public class Phase1
 		}
 	}
 	
-	private void mergeSelectsAndTableScans(Operator op)
+	protected void mergeSelectsAndTableScans(Operator op)
 	{
 		try
 		{
@@ -564,7 +568,7 @@ public class Phase1
 		}
 	}
 	
-	private void pushDownSelects(Operator op)
+	protected void pushDownSelects(Operator op)
 	{
 		if (op instanceof SelectOperator)
 		{
@@ -684,7 +688,7 @@ public class Phase1
 		}
 	} 
 	
-	private void pushUpSelects(Operator op)
+	protected void pushUpSelects(Operator op)
 	{
 		if (op instanceof SelectOperator)
 		{
@@ -763,7 +767,7 @@ public class Phase1
 		}
 	} 
 	
-	private void pushUpSelects(Operator op, ArrayList<Operator> next)
+	protected void pushUpSelects(Operator op, ArrayList<Operator> next)
 	{
 		if (op instanceof SelectOperator)
 		{
@@ -832,13 +836,13 @@ public class Phase1
 		}
 	} 
 	
-	private void removeDuplicateTables() throws Exception
+	protected void removeDuplicateTables() throws Exception
 	{
 		HashMap<TableScanOperator, TableScanOperator> tables = getTableList(root);
 		replaceTableScanOperators(root, tables);
 	}
 	
-	private void replaceTableScanOperators(Operator op, HashMap<TableScanOperator, TableScanOperator> tables) throws Exception
+	protected void replaceTableScanOperators(Operator op, HashMap<TableScanOperator, TableScanOperator> tables) throws Exception
 	{
 		if (op instanceof TableScanOperator)
 		{
@@ -861,7 +865,7 @@ public class Phase1
 		}
 	}
 	
-	private HashMap<TableScanOperator, TableScanOperator> getTableList(Operator op)
+	protected HashMap<TableScanOperator, TableScanOperator> getTableList(Operator op)
 	{
 		HashMap<TableScanOperator, TableScanOperator> retval = null;
 		if (op instanceof TableScanOperator)
@@ -885,7 +889,7 @@ public class Phase1
 		return retval;
 	}
 	
-	private SelectOperator getMostPromisingSelect(ArrayList<SelectOperator> selects, ArrayList<Operator> subtrees, Operator current)
+	protected SelectOperator getMostPromisingSelect(ArrayList<SelectOperator> selects, ArrayList<Operator> subtrees, Operator current)
 	{
 		double minLikelihood = Double.MAX_VALUE;
 		SelectOperator minSelect = null;
@@ -900,6 +904,37 @@ public class Phase1
 					minLikelihood = likelihood;
 					minSelect = select;
 				}
+				else if (likelihood == minLikelihood)
+				{
+					ArrayList<Filter> filters = select.getFilter();
+					if (filters.size() == 1)
+					{
+						if (filters.get(0).leftIsColumn())
+						{
+							String t = root.getMeta().getTableForCol(filters.get(0).leftColumn());
+							if (t != null)
+							{
+								PartitionMetaData pmeta = root.getMeta().getPartMeta("TPCH", t);
+								if (pmeta.noNodeGroupSet() && pmeta.nodeIsHash() && pmeta.getNodeHash().contains(filters.get(0).leftColumn()))
+								{
+									minSelect = select;
+								}
+							}
+						}
+						else if (filters.get(0).rightIsColumn())
+						{
+							String t = root.getMeta().getTableForCol(filters.get(0).rightColumn());
+							if (t != null)
+							{
+								PartitionMetaData pmeta = root.getMeta().getPartMeta("TPCH", t);
+								if (pmeta.noNodeGroupSet() && pmeta.nodeIsHash() && pmeta.getNodeHash().contains(filters.get(0).rightColumn()))
+								{
+									minSelect = select;
+								}
+							}
+						}
+					}
+				}
 			}
 			
 			selects.remove(minSelect);
@@ -908,7 +943,7 @@ public class Phase1
 		
 		for (SelectOperator select : selects)
 		{
-			Vector<Filter> filters = select.getFilter();
+			ArrayList<Filter> filters = select.getFilter();
 			for (Filter filter : filters)
 			{
 				if (filter.leftIsColumn() && filter.rightIsColumn())

@@ -3,11 +3,13 @@ package com.exascale.managers;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.PrintStream;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Vector;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.BufferedLinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.core.Logger;
@@ -24,20 +26,19 @@ import com.exascale.threads.StartWorkersThread;
 
 public class HRDBMSWorker
 {
-	protected static HParms hparms;
-	public static final int TYPE_MASTER = 0, TYPE_COORD = 1, TYPE_WORKER = 2;
-	public static int type;
+	protected static HParms hparms; //configurable parameters
+	public static final int TYPE_MASTER = 0, TYPE_COORD = 1, TYPE_WORKER = 2; //master is the first coord  
+	public static int type; //my type
 	protected static ConcurrentHashMap<Long, HRDBMSThread> threadList = new ConcurrentHashMap<Long, HRDBMSThread>();
 	protected static long connectionThread;
 	protected static long bufferThread;
 	protected static long logThread;
 	protected static long resourceThread;
 	protected static long checkpointThread; 
-	private static long failureThread = -1;
-	private static long metaDataThread = -1;
-	protected static BlockingQueue<String> in = new LinkedBlockingQueue<String>();
-	protected static Long THREAD_NUMBER = new Long(0);
-	protected static ConcurrentHashMap<Long, Vector<Thread>> waitList = new ConcurrentHashMap<Long, Vector<Thread>>();
+	protected static long metaDataThread;
+	protected static BlockingQueue<String> in = new BufferedLinkedBlockingQueue<String>(); //message queue
+	protected static AtomicLong THREAD_NUMBER = new AtomicLong(0);
+	protected static ConcurrentHashMap<Long, ArrayList<Thread>> waitList = new ConcurrentHashMap<Long, ArrayList<Thread>>();
 	public static org.apache.logging.log4j.Logger logger = org.apache.logging.log4j.LogManager.getLogger("Log");
 	
 	public static void main(String[] args) throws Exception
@@ -83,14 +84,9 @@ public class HRDBMSWorker
 		
 		if (type == TYPE_MASTER || type == TYPE_COORD)
 		{
-			//new PlanGenerationManager(); TODO
-			//new XAManager(); TODO
-			//new PlanCacheManager(); TODO
-			//failureThread = addThread(new FailureManager()); TODO
 			metaDataThread = addThread(new MetaDataManager()); 
 		}
 		
-		//new ExecutionManager(); TODO
 		new FileManager();
 		bufferThread = addThread(new BufferManager(true));
 		logThread = addThread(new LogManager());
@@ -99,10 +95,12 @@ public class HRDBMSWorker
 		logger.info("Lock Manager initialization complete.");
 		resourceThread = addThread(new ResourceManager());
 		connectionThread = addThread(new ConnectionManager());
+		//TODO ulimately a coord node should have and internal and an external connection
 		checkpointThread = addThread(new CheckpointManager());
 		hibernate();
 	}
 	
+	//get configurable properties
 	public static HParms getHParms()
 	{
 		return hparms;
@@ -116,11 +114,6 @@ public class HRDBMSWorker
 	public static long getConnectionThread()
 	{
 		return connectionThread;
-	}
-	
-	public static long getFailureThread()
-	{
-		return failureThread;
 	}
 
 	public static long getBufferThread()
@@ -165,7 +158,7 @@ public class HRDBMSWorker
 	{
 		if (msg.equals("SHUTDOWN"))
 		{
-			System.exit(0);
+			//TODO: Graceful shutdown
 		}
 		
 		if (msg.startsWith("TERMINATE THREAD "))
@@ -177,14 +170,9 @@ public class HRDBMSWorker
 	public static long addThread(HRDBMSThread thread)
 	{
 		long retval;
-		synchronized(THREAD_NUMBER)
-		{
-			retval = THREAD_NUMBER;
-			THREAD_NUMBER++;
-		}
-		
+		retval = THREAD_NUMBER.getAndIncrement();
 		thread.setIndex(retval);
-		threadList.putIfAbsent(retval, thread);
+		threadList.put(retval, thread);
 		thread.start();
 		return retval;
 	}
@@ -218,9 +206,8 @@ public class HRDBMSWorker
 							Thread.currentThread().wait();
 							break;
 						}
-						catch(Exception e)
+						catch(InterruptedException e)
 						{
-							break;
 						}
 					}
 				}
@@ -234,25 +221,24 @@ public class HRDBMSWorker
 		{
 			if (!waitList.containsKey(thread))
 			{
-				Vector<Thread> temp = new Vector<Thread>();
+				ArrayList<Thread> temp = new ArrayList<Thread>();
 				temp.add(waiter);
-				waitList.putIfAbsent(thread,  temp);
+				waitList.put(thread,  temp);
 			}
 			else
 			{
-				Vector<Thread> temp = waitList.get(thread);
+				ArrayList<Thread> temp = waitList.get(thread);
 				temp.add(waiter);
-				waitList.replace(thread, temp);
 			}
 		}
 	}
 	
-	private static void terminateThread(long index)
+	protected static void terminateThread(long index)
 	{
 		//if anyone is waiting on this thread, wait for Thread.getState() == WAITING and notify them
 		if (waitList.containsKey(index))
 		{
-			Vector<Thread> threads = waitList.get(index);
+			ArrayList<Thread> threads = waitList.get(index);
 			for (Thread thread : threads)
 			{
 				while (thread.getState() != Thread.State.WAITING) {}
@@ -261,12 +247,12 @@ public class HRDBMSWorker
 		}
 	}
 	
-	private static StartWorkersThread startWorkers()
+	protected static StartWorkersThread startWorkers()
 	{
 		return new StartWorkersThread();
 	}
 	
-	private static StartCoordsThread startCoordinators()
+	protected static StartCoordsThread startCoordinators()
 	{
 		return new StartCoordsThread();
 	}

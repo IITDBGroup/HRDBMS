@@ -13,11 +13,11 @@ import javax.swing.tree.DefaultMutableTreeNode;
 
 public class Plan 
 {
-	private long time;
-	private boolean reserved;
-	private Vector<TreeNode> trees;
-	private Object[] args;
-	private DataType[] argTypes;
+	protected long time;
+	protected boolean reserved;
+	protected Vector<TreeNode> trees;
+	protected Object[] args;
+	protected DataType[] argTypes;
 	
 	public Plan(Plan p)
 	{
@@ -64,7 +64,7 @@ public class Plan
 		return cost;
 	}
 	
-	private long subtreeCost(TreeNode root)
+	protected long subtreeCost(TreeNode root)
 	{
 		long cost = ((Operator)((DefaultMutableTreeNode)root).getUserObject()).cost();
 		int childCount = root.getChildCount();

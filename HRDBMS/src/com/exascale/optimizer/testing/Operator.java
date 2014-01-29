@@ -8,6 +8,7 @@ public interface Operator
 {
 	public void start() throws Exception;
 	public Object next(Operator op) throws Exception;
+	public void nextAll(Operator op) throws Exception;
 	public void close() throws Exception;
 	public void add(Operator op) throws Exception;
 	public void registerParent(Operator op) throws Exception;
@@ -20,4 +21,10 @@ public interface Operator
 	public void removeParent(Operator op);
 	public MetaData getMeta();
 	public ArrayList<String> getReferences();
+	public Operator clone();
+	public void setNode(int node);
+	public int getNode();
+	public void setChildPos(int pos);
+	public int getChildPos();
+	public void reset();
 }

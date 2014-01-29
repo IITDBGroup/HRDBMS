@@ -11,8 +11,10 @@ import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
 
 public class CountOperator implements AggregateOperator, Serializable
 {
-	private String output;
-	private MetaData meta;
+	protected String output;
+	protected MetaData meta;
+	protected String input;
+	protected int NUM_GROUPS = 16;
 	
 	public CountOperator(String output, MetaData meta)
 	{
@@ -20,9 +22,36 @@ public class CountOperator implements AggregateOperator, Serializable
 		this.meta = meta;
 	}
 	
+	public void setNumGroups(int groups)
+	{
+		NUM_GROUPS = groups;
+	}
+	
+	public CountOperator(String input, String output, MetaData meta)
+	{
+		this.input = input;
+		this.output = output;
+		this.meta = meta;
+	}
+	
+	public CountOperator clone()
+	{
+		return new CountOperator(input, output, meta);
+	}
+	
+	public void setInputColumn(String col)
+	{
+		input = col;
+	}
+	
 	public String getInputColumn()
 	{
-		return "";
+		if (input != null)
+		{
+			return input;
+		}
+		
+		return output;
 	}
 	
 	@Override
@@ -38,7 +67,7 @@ public class CountOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public AggregateResultThread newProcessingThread(DiskBackedArray rows, HashMap<String, Integer> cols2Pos) 
+	public AggregateResultThread newProcessingThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos) 
 	{
 		return new CountThread(rows, cols2Pos);
 	}
@@ -48,14 +77,19 @@ public class CountOperator implements AggregateOperator, Serializable
 		return new CountHashThread(cols2Pos);
 	}
 
-	private class CountThread extends AggregateResultThread
+	protected class CountThread extends AggregateResultThread
 	{
-		private DiskBackedArray rows;
-		private long result;
+		protected ArrayList<ArrayList<Object>> rows;
+		protected long result;
+		protected int pos;
 		
-		public CountThread(DiskBackedArray rows, HashMap<String, Integer> cols2Pos)
+		public CountThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos)
 		{
 			this.rows = rows;
+			if (input != null)
+			{
+				pos = cols2Pos.get(input);
+			}
 		}
 		
 		public Object getResult()
@@ -65,34 +99,47 @@ public class CountOperator implements AggregateOperator, Serializable
 		
 		public void run()
 		{
-			result = rows.size();
+			if (input == null)
+			{
+				result = rows.size();
+			}
+			else
+			{
+				result = 0;
+				for (Object o : rows)
+				{
+					ArrayList<Object> row = (ArrayList<Object>)o;
+					Object val = row.get(pos);
+					result++; //TODO only increment if not null
+				}
+			}
 		}
 		
 		public void close()
 		{
-			try
-			{
-				rows.close();
-			}
-			catch(Exception e)
-			{
-				e.printStackTrace();
-			}
 		}
 	}
 	
-	private class CountHashThread extends AggregateResultThread
+	protected class CountHashThread extends AggregateResultThread
 	{
-		private volatile ConcurrentHashMap<ArrayList<Object>, AtomicLong> results = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>();
-		private HashMap<String, Integer> cols2Pos;
+		protected volatile ConcurrentHashMap<ArrayList<Object>, AtomicLong> results = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS, 0.75f, ResourceManager.cpus * 6);
+		protected HashMap<String, Integer> cols2Pos;
+		protected int pos;
 		
 		public CountHashThread(HashMap<String, Integer> cols2Pos)
 		{
 			this.cols2Pos = cols2Pos;
+			if (input != null)
+			{
+				pos = cols2Pos.get(input);
+			}
 		}
 		
+		//@Parallel
 		public void put(ArrayList<Object> row, ArrayList<Object> group)
 		{
+			Object val = row.get(pos);
+			//TODO only do following if val not null
 			AtomicLong al = results.get(group);
 			if (al != null)
 			{

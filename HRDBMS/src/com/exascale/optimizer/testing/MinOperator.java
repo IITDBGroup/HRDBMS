@@ -9,10 +9,11 @@ import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
 
 public class MinOperator implements AggregateOperator, Serializable
 {
-	private String input;
-	private String output;
-	private MetaData meta;
-	private boolean isInt;
+	protected String input;
+	protected String output;
+	protected MetaData meta;
+	protected boolean isInt;
+	protected int NUM_GROUPS = 16;
 	
 	public MinOperator(String input, String output, MetaData meta, boolean isInt)
 	{
@@ -20,6 +21,23 @@ public class MinOperator implements AggregateOperator, Serializable
 		this.output = output;
 		this.meta = meta;
 		this.isInt = isInt;
+	}
+	
+	public void setNumGroups(int groups)
+	{
+		NUM_GROUPS = groups;
+	}
+	
+	public MinOperator clone()
+	{
+		MinOperator retval = new MinOperator(input, output, meta, isInt);
+		retval.NUM_GROUPS = NUM_GROUPS;
+		return retval;
+	}
+	
+	public void setInputColumn(String col)
+	{
+		input = col;
 	}
 	
 	public String getInputColumn()
@@ -47,7 +65,7 @@ public class MinOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public AggregateResultThread newProcessingThread(DiskBackedArray rows, HashMap<String, Integer> cols2Pos) 
+	public AggregateResultThread newProcessingThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos) 
 	{
 		return new MinThread(rows, cols2Pos);
 	}
@@ -57,13 +75,13 @@ public class MinOperator implements AggregateOperator, Serializable
 		return new MinHashThread(cols2Pos);
 	}
 
-	private class MinThread extends AggregateResultThread
+	protected class MinThread extends AggregateResultThread
 	{
-		private DiskBackedArray rows;
-		private HashMap<String, Integer> cols2Pos;
-		private double min;
+		protected ArrayList<ArrayList<Object>> rows;
+		protected HashMap<String, Integer> cols2Pos;
+		protected double min;
 		
-		public MinThread(DiskBackedArray rows, HashMap<String, Integer> cols2Pos)
+		public MinThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos)
 		{
 			this.rows = rows;
 			this.cols2Pos = cols2Pos;
@@ -125,22 +143,14 @@ public class MinOperator implements AggregateOperator, Serializable
 		
 		public void close()
 		{
-			try
-			{
-				rows.close();
-			}
-			catch(Exception e)
-			{
-				e.printStackTrace();
-			}
 		}
 	}
 	
-	private class MinHashThread extends AggregateResultThread
+	protected class MinHashThread extends AggregateResultThread
 	{
-		private volatile ConcurrentHashMap<ArrayList<Object>, AtomicDouble> mins = new ConcurrentHashMap<ArrayList<Object>, AtomicDouble>();
-		private HashMap<String, Integer> cols2Pos;
-		private int pos;
+		protected volatile ConcurrentHashMap<ArrayList<Object>, AtomicDouble> mins = new ConcurrentHashMap<ArrayList<Object>, AtomicDouble>(NUM_GROUPS, 0.75f, ResourceManager.cpus * 6);
+		protected HashMap<String, Integer> cols2Pos;
+		protected int pos;
 		
 		public MinHashThread(HashMap<String, Integer> cols2Pos)
 		{
@@ -157,6 +167,7 @@ public class MinOperator implements AggregateOperator, Serializable
 			}
 		}
 		
+		//@Parallel
 		public void put(ArrayList<Object> row, ArrayList<Object> group)
 		{
 			Object o = row.get(pos);

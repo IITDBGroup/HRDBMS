@@ -46,7 +46,7 @@ public class StartWorkersThread extends HRDBMSThread
 				{
 					String user = HRDBMSWorker.getHParms().getProperty("hrdbms_user");
 					HRDBMSWorker.logger.info("Starting worker " + host);
-					String command1 = "java -Xmx4096m -cp HRDBMS.jar:jsch-0.1.50.jar:log4j-api-2.0-beta8.jar:log4j-core-2.0-beta8.jar com.exascale.managers.HRDBMSWorker " + HRDBMSWorker.TYPE_WORKER;
+					String command1 = "java -Xmx" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -cp HRDBMS.jar:jsch-0.1.50.jar:log4j-api-2.0-beta8.jar:log4j-core-2.0-beta8.jar com.exascale.managers.HRDBMSWorker " + HRDBMSWorker.TYPE_WORKER;
 			        try{
 			             
 			            java.util.Properties config = new java.util.Properties(); 
@@ -94,7 +94,7 @@ public class StartWorkersThread extends HRDBMSThread
 		}
 	}
 	
-	private class MyUserInfo implements UserInfo
+	protected class MyUserInfo implements UserInfo
 	{
 
 		@Override
@@ -104,32 +104,26 @@ public class StartWorkersThread extends HRDBMSThread
 
 		@Override
 		public String getPassword() {
-			// TODO Auto-generated method stub
 			return null;
 		}
 
 		@Override
 		public boolean promptPassphrase(String arg0) {
-			// TODO Auto-generated method stub
 			return false;
 		}
 
 		@Override
 		public boolean promptPassword(String arg0) {
-			// TODO Auto-generated method stub
 			return false;
 		}
 
 		@Override
 		public boolean promptYesNo(String arg0) {
-			// TODO Auto-generated method stub
 			return false;
 		}
 
 		@Override
 		public void showMessage(String arg0) {
-			// TODO Auto-generated method stub
-			
 		}
 		
 	}

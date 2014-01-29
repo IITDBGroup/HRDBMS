@@ -5,34 +5,99 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.Vector;
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
 public class RenameOperator implements Operator, Serializable
 {
-	private Operator child;
-	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
-	private HashMap<String, String> old2New = new HashMap<String, String>();
-	private MetaData meta;
-	private boolean startDone = false;
-	private boolean closeDone = false;
-	private boolean optimize = false;
+	protected Operator child;
+	protected Operator parent;
+	protected HashMap<String, String> cols2Types;
+	protected HashMap<String, Integer> cols2Pos;
+	protected TreeMap<Integer, String> pos2Col;
+	protected HashMap<String, String> old2New = new HashMap<String, String>();
+	protected MetaData meta;
+	protected boolean optimize = false;
+	protected ArrayList<String> oldVals;
+	protected ArrayList<String> newVals;
+	protected int node;
 	
-	public RenameOperator(Vector<String> oldVals, Vector<String> newVals, MetaData meta)
+	public void reset()
 	{
+		child.reset();
+	}
+	
+	public void setChildPos(int pos)
+	{
+	}
+	
+	public int getChildPos()
+	{
+		return 0;
+	}
+	
+	public HashMap<String, String> getIndexRenames()
+	{
+		HashMap<String, String> retval = new HashMap<String, String>();
 		int i = 0;
-		for (String oldVal : oldVals)
+		try
 		{
-			old2New.put(oldVal, newVals.get(i));
-			i++;
+			for (String oldVal : oldVals)
+			{
+				retval.put(newVals.get(i), oldVal);
+				i++;
+			}
+		}
+		catch(Exception e)
+		{
+			e.printStackTrace();
+			System.exit(1);
+		}
+		
+		return retval;
+	}
+	
+	public RenameOperator(ArrayList<String> oldVals, ArrayList<String> newVals, MetaData meta)
+	{
+		this.oldVals = oldVals;
+		this.newVals = newVals;
+		int i = 0;
+		try
+		{
+			for (String oldVal : oldVals)
+			{
+				old2New.put(oldVal, newVals.get(i));
+				i++;
+			}
+		}
+		catch(Exception e)
+		{
+			e.printStackTrace();
+			System.out.println("Old = " + oldVals);
+			System.out.println("New = " + newVals);
+			System.exit(1);
 		}
 		
 		this.meta = meta;
+	}
+	
+	public RenameOperator clone()
+	{
+		RenameOperator retval = new RenameOperator((ArrayList<String>)oldVals.clone(), (ArrayList<String>)newVals.clone(), meta);
+		retval.node = node;
+		return retval;
+	}
+	
+	public int getNode()
+	{
+		return node;
+	}
+	
+	public void setNode(int node)
+	{
+		this.node = node;
 	}
 	
 	public ArrayList<String> getReferences()
@@ -55,7 +120,7 @@ public class RenameOperator implements Operator, Serializable
 	{
 		for (Map.Entry entry : old2New.entrySet())
 		{
-			ArrayList temp = new ArrayList();
+			ArrayList temp = new ArrayList(1);
 			temp.add(entry.getKey());
 			if (references.removeAll(temp))
 			{
@@ -68,7 +133,7 @@ public class RenameOperator implements Operator, Serializable
 	{
 		for (Map.Entry entry : old2New.entrySet())
 		{
-			ArrayList temp = new ArrayList();
+			ArrayList temp = new ArrayList(1);
 			temp.add(entry.getValue());
 			if (references.removeAll(temp))
 			{
@@ -139,26 +204,32 @@ public class RenameOperator implements Operator, Serializable
 	
 	public ArrayList<Operator> children()
 	{
-		ArrayList<Operator> retval = new ArrayList<Operator>();
+		ArrayList<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
 	
 	public String toString()
 	{
-		return "RenameOperator";
+		return "RenameOperator: " + old2New;
 	}
 	
 	@Override
-	public synchronized void start() throws Exception 
+	public void start() throws Exception 
 	{
-		if (!startDone)
-		{
-			startDone = true;
-			child.start();
-		}
+		child.start();
 	}
 
+	public void nextAll(Operator op) throws Exception
+	{
+		child.nextAll(op);
+		Object o = next(op);
+		while (!(o instanceof DataEndMarker))
+		{
+			o = next(op);
+		}
+	}
+	
 	@Override
 	public Object next(Operator op) throws Exception 
 	{
@@ -166,13 +237,9 @@ public class RenameOperator implements Operator, Serializable
 	}
 
 	@Override
-	public synchronized void close() throws Exception 
+	public void close() throws Exception 
 	{
-		if (!closeDone)
-		{
-			closeDone = true;
-			child.close();
-		}
+		child.close();
 	}
 	
 	public void removeChild(Operator op)
@@ -196,45 +263,48 @@ public class RenameOperator implements Operator, Serializable
 		{
 			child = op;
 			child.registerParent(this);
-			cols2Types = new HashMap<String, String>();
-			for (Map.Entry entry : child.getCols2Types().entrySet())
+			if (child.getCols2Types() != null)
 			{
-				String newVal = old2New.get(entry.getKey());
-				if (newVal == null)
+				cols2Types = new HashMap<String, String>();
+				for (Map.Entry entry : child.getCols2Types().entrySet())
 				{
-					cols2Types.put((String)entry.getKey(), (String)entry.getValue());
+					String newVal = old2New.get(entry.getKey());
+					if (newVal == null)
+					{
+						cols2Types.put((String)entry.getKey(), (String)entry.getValue());
+					}
+					else
+					{
+						cols2Types.put(newVal, (String)entry.getValue());
+					}
 				}
-				else
-				{
-					cols2Types.put(newVal, (String)entry.getValue());
-				}
-			}
 				
-			cols2Pos = new HashMap<String, Integer>();
-			for (Map.Entry entry : child.getCols2Pos().entrySet())
-			{
-				String newVal = old2New.get(entry.getKey());
-				if (newVal == null)
+				cols2Pos = new HashMap<String, Integer>();
+				for (Map.Entry entry : child.getCols2Pos().entrySet())
 				{
-					cols2Pos.put((String)entry.getKey(), (Integer)entry.getValue());
+					String newVal = old2New.get(entry.getKey());
+					if (newVal == null)
+					{
+						cols2Pos.put((String)entry.getKey(), (Integer)entry.getValue());
+					}
+					else
+					{
+						cols2Pos.put(newVal, (Integer)entry.getValue());
+					}
 				}
-				else
-				{
-					cols2Pos.put(newVal, (Integer)entry.getValue());
-				}
-			}
 			
-			pos2Col = new TreeMap<Integer, String>();
-			for (Map.Entry entry : child.getPos2Col().entrySet())
-			{
-				String newVal = old2New.get(entry.getValue());
-				if (newVal == null)
+				pos2Col = new TreeMap<Integer, String>();
+				for (Map.Entry entry : child.getPos2Col().entrySet())
 				{
-					pos2Col.put((Integer)entry.getKey(), (String)entry.getValue());
-				}
-				else
-				{
-					pos2Col.put((Integer)entry.getKey(), newVal);
+					String newVal = old2New.get(entry.getValue());
+					if (newVal == null)
+					{
+						pos2Col.put((Integer)entry.getKey(), (String)entry.getValue());
+					}
+					else
+					{
+						pos2Col.put((Integer)entry.getKey(), newVal);
+					}
 				}
 			}
 		}

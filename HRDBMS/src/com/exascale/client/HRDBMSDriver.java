@@ -7,9 +7,6 @@ import java.sql.DriverPropertyInfo;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import com.ibm.db2.jcc.DB2Driver;
-
-
 public class HRDBMSDriver implements Driver
 {
 	static
@@ -26,7 +23,7 @@ public class HRDBMSDriver implements Driver
 
 	@Override
 	public boolean acceptsURL(String arg0) throws SQLException {
-		return (new DB2Driver()).acceptsURL(arg0);
+		//TODO
 	}
 
 	@Override
@@ -34,7 +31,7 @@ public class HRDBMSDriver implements Driver
 		try
 		{
 			String protocol = arg0.substring(0,  11);
-			if (!protocol.equals("jdbc:exa://"))
+			if (!protocol.equals("jdbc:hrdbms://"))
 			{
 				return null;
 			}

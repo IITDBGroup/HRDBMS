@@ -25,44 +25,44 @@ public class Schema
 {
 	public static final byte TYPE_ROW = 0, TYPE_COL = 1;
 	public static final int HEADER_SIZE = 4096;
-	private Map<Integer, DataType> colTypes;
-	private int nextRecNum;
-	private int headEnd;
-	private int dataStart;
-	private long modTime;
-	private byte blockType;
-	private int freeSpaceListEntries;
-	private int nullArrayOff;
-	private int colIDListOff;
-	private int rowIDListOff;
-	private int ColIDListOff;
-	private int offArrayOff;
-	private FreeSpace[] freeSpace;
-	private int[] colIDs;
-	private int colIDListSize;
-	private int rowIDListSize;
-	private RID[] rowIDs;
-	private byte[][] nullArray;
-	private int[][] offsetArray;
-	private Page p;
-	private Map<Integer, Integer> colIDToIndex;
-	private Map<RID, Integer> rowIDToIndex;
-	private Transaction tx;
+	protected Map<Integer, DataType> colTypes;
+	protected int nextRecNum;
+	protected int headEnd;
+	protected int dataStart;
+	protected long modTime;
+	protected byte blockType;
+	protected int freeSpaceListEntries;
+	protected int nullArrayOff;
+	protected int colIDListOff;
+	protected int rowIDListOff;
+	protected int ColIDListOff;
+	protected int offArrayOff;
+	protected FreeSpace[] freeSpace;
+	protected int[] colIDs;
+	protected int colIDListSize;
+	protected int rowIDListSize;
+	protected RID[] rowIDs;
+	protected byte[][] nullArray;
+	protected int[][] offsetArray;
+	protected Page p;
+	protected Map<Integer, Integer> colIDToIndex;
+	protected Map<RID, Integer> rowIDToIndex;
+	protected Transaction tx;
 	
-	private String getTableName()
+	protected String getTableName()
 	{
 		String retval = p.block().fileName();
 		retval = retval.substring(retval.lastIndexOf("/") + 1);
-		retval = retval.substring(0, retval.indexOf(".", retval.indexOf(".")));
+		retval = retval.substring(0, retval.indexOf(".", retval.indexOf("."))); //schema.table.tbl
 		return retval;
 	}
 	
-	private int headerGrowthPerRow()
+	protected int headerGrowthPerRow()
 	{
 		return 24 + colIDListSize * 5;
 	}
 	
-	private Integer hasEnoughSpace(int head, int data)
+	protected Integer hasEnoughSpace(int head, int data)
 	{
 		if (freeSpace.length == 0)
 		{
@@ -75,6 +75,7 @@ public class Schema
 		{
 			if (fs.getEnd() - fs.getStart() + 1 >= head)
 			{
+				//we have enough room to extend header
 				int end = fs.getStart() + head - 1;
 				int dfsx = freeSpace.length - 1;
 				
@@ -84,9 +85,11 @@ public class Schema
 					
 					if (dfs.getEnd() - dfs.getStart() + 1 >= data)
 					{
+						//we have enough room for data
 						int start = dfs.getEnd() - data + 1;
 						if (start > end)
 						{
+							//as long as the header space and data space don't overlap
 							return start;
 						}
 					}
@@ -114,7 +117,7 @@ public class Schema
 		return colIDs;
 	}
 	
-	private Block addNewBlock(String fn, int[] colIDs) throws IOException, LockAbortException, Exception
+	protected Block addNewBlock(String fn, int[] colIDs) throws IOException, LockAbortException, Exception
 	{
 		ByteBuffer buff = ByteBuffer.allocate(Page.BLOCK_SIZE);
 		buff.position(0);
@@ -142,24 +145,24 @@ public class Schema
 		//offset array start
 		
 		int newBlockNum = FileManager.addNewBlock(fn, buff);
-		addNewBlockToHeader(newBlockNum);
-		//alertXAManagerToAddNewBlock(newBlockNum, getNodeNumber(), getDeviceNumber(), getTableName()); TODO
+		addNewBlockToHeader(newBlockNum, colIDs[0]);
 		return new Block(fn, newBlockNum);
 	}
 	
-	private void addNewBlockToHeader(int newBlockNum) throws LockAbortException, Exception
+	//we just added a new block to the table, now register it in the header
+	protected void addNewBlockToHeader(int newBlockNum, int colID) throws LockAbortException, Exception
 	{
 		int pageNum;
 		int entryNum;
 		if (blockType == TYPE_ROW)
 		{
-			pageNum = (p.block().number() + 2) / (Page.BLOCK_SIZE / 4);
-			entryNum = (p.block().number() + 2) % (Page.BLOCK_SIZE / 4);
+			pageNum = (newBlockNum + 2) / (Page.BLOCK_SIZE / 4);
+			entryNum = (newBlockNum + 2) % (Page.BLOCK_SIZE / 4);
 		}
 		else
 		{
-			pageNum = (p.block().number() + 1) / (Page.BLOCK_SIZE / 8);
-			entryNum = (p.block().number() + 1) / (Page.BLOCK_SIZE / 8);
+			pageNum = (newBlockNum + 1) / (Page.BLOCK_SIZE / 8);
+			entryNum = (newBlockNum + 1) / (Page.BLOCK_SIZE / 8);
 		}
 		
 		
@@ -169,20 +172,20 @@ public class Schema
 		Schema newSchema = new Schema(this.colTypes);
 		tx.read(blkd, newSchema);
 		int size = newSchema.getSizeLargestFS();
-		HeaderPage hp = tx.readHeaderPage(blkh, blockType);
+		HeaderPage hp = tx.forceReadHeaderPage(blkh, blockType);
 		
 		if (blockType == TYPE_ROW)
 		{
-			hp.updateSize(entryNum, size, tx.number());
+			hp.updateSize(entryNum, size, tx);
 		}
 		else
 		{
-			hp.updateSize(entryNum, size, tx.number(), 0);
-			hp.updateColNum(entryNum, colIDs[0], tx.number());
+			hp.updateSize(entryNum, size, tx, 0);
+			hp.updateColNum(entryNum, colID, tx);
 		}
 	}
 	
-	private void updateFreeSpace(int off, int length) throws LockAbortException, Exception
+	protected void updateFreeSpace(int off, int length) throws LockAbortException, Exception
 	{
 		int oldMax = getSizeLargestFS();
 		int i = 0;
@@ -228,7 +231,7 @@ public class Schema
 		}
 	}
 	
-	private int getSizeLargestFS()
+	protected int getSizeLargestFS()
 	{
 		int largest = 0;
 		for (FreeSpace fs : freeSpace)
@@ -244,7 +247,7 @@ public class Schema
 		return largest;
 	}
 	
-	private void deleteFSAt(int loc)
+	protected void deleteFSAt(int loc)
 	{
 		FreeSpace[] newFS = new FreeSpace[freeSpace.length - 1];
 		int i = 0;
@@ -264,7 +267,7 @@ public class Schema
 		freeSpaceListEntries--;
 	}
 	
-	private void insertFSAfter(int after, FreeSpace fs)
+	protected void insertFSAfter(int after, FreeSpace fs)
 	{
 		FreeSpace[] newFS = new FreeSpace[freeSpace.length + 1];
 		int i = 0;
@@ -287,19 +290,7 @@ public class Schema
 		freeSpaceListEntries++;
 	}
 	
-	private void copy(byte[] target, int off, byte[] source)
-	{
-		int i = 0;
-		int j = off;
-		while (i < source.length)
-		{
-			target[j] = source[i];
-			i++;
-			j++;
-		}
-	}
-	
-	private void updateHeader(RID rid, FieldValue[] vals, int nextRecNum, int off, int length) throws RecNumOverflowException, LockAbortException, Exception
+	protected void updateHeader(RID rid, FieldValue[] vals, int nextRecNum, int off, int length) throws RecNumOverflowException, LockAbortException, Exception
 	{
 		this.nextRecNum = findNextFreeRecNum(nextRecNum);
 		updateFreeSpace(off, length);
@@ -317,45 +308,61 @@ public class Schema
 		p.get(1, before);
 		byte[] after = new byte[before.length];
 
-		copy(after,0, ByteBuffer.allocate(4).putInt(this.nextRecNum).array()); //nextRecNum
-		copy(after,4, ByteBuffer.allocate(4).putInt(before.length - 1).array()); //headEnd
-		copy(after,8, ByteBuffer.allocate(4).putInt(this.dataStart).array()); //dataStart
-		copy(after,12, ByteBuffer.allocate(8).putLong(this.modTime).array()); //modTime
-		
-		copy(after,32, ByteBuffer.allocate(4).putInt(freeSpaceListEntries).array()); 
+		//copy(after,0, ByteBuffer.allocate(4).putInt(this.nextRecNum).array()); //nextRecNum
+		System.arraycopy(ByteBuffer.allocate(4).putInt(this.nextRecNum).array(), 0, after, 0, 4);
+		//copy(after,4, ByteBuffer.allocate(4).putInt(before.length - 1).array()); //headEnd
+		System.arraycopy(ByteBuffer.allocate(4).putInt(before.length - 1).array(), 0, after, 4, 4);
+		//copy(after,8, ByteBuffer.allocate(4).putInt(this.dataStart).array()); //dataStart
+		System.arraycopy(ByteBuffer.allocate(4).putInt(this.dataStart).array(), 0, after, 8, 4);
+		//copy(after,12, ByteBuffer.allocate(8).putLong(this.modTime).array()); //modTime
+		System.arraycopy(ByteBuffer.allocate(8).putLong(this.modTime).array(), 0, after, 12, 8);
+		//copy(after,32, ByteBuffer.allocate(4).putInt(freeSpaceListEntries).array()); 
+		System.arraycopy(ByteBuffer.allocate(4).putInt(freeSpaceListEntries).array(), 0, after, 32, 4);
 		
 		int i = 36;
 		for (FreeSpace fs : freeSpace)
 		{
-			copy(after, i, ByteBuffer.allocate(4).putInt(fs.getStart()).array());
-			copy(after, i+4, ByteBuffer.allocate(4).putInt(fs.getEnd()).array());
+			//copy(after, i, ByteBuffer.allocate(4).putInt(fs.getStart()).array());
+			System.arraycopy(ByteBuffer.allocate(4).putInt(fs.getStart()).array(), 0, after, i, 4);
+			//copy(after, i+4, ByteBuffer.allocate(4).putInt(fs.getEnd()).array());
+			System.arraycopy(ByteBuffer.allocate(4).putInt(fs.getEnd()).array(), 0, after, i+4, 4);
 			i += 8;
 		}
 		
-		copy(after, 20, ByteBuffer.allocate(4).putInt(i).array());
-		copy(after, i, ByteBuffer.allocate(4).putInt(colIDListSize).array());
+		//copy(after, 20, ByteBuffer.allocate(4).putInt(i).array());
+		System.arraycopy(ByteBuffer.allocate(4).putInt(i).array(), 0, after, 20, 4);
+		//copy(after, i, ByteBuffer.allocate(4).putInt(colIDListSize).array());
+		System.arraycopy(ByteBuffer.allocate(4).putInt(colIDListSize).array(), 0, after, i, 4);
 		i += 4;
 		
 		for (int id : colIDs)
 		{
-			copy(after, i, ByteBuffer.allocate(4).putInt(id).array());
+			//copy(after, i, ByteBuffer.allocate(4).putInt(id).array());
+			System.arraycopy(ByteBuffer.allocate(4).putInt(id).array(), 0, after, i, 4);
 			i += 4;
 		}
 		
-		copy(after, 24, ByteBuffer.allocate(4).putInt(i).array());
-		copy(after, i, ByteBuffer.allocate(4).putInt(rowIDListSize).array());
+		//copy(after, 24, ByteBuffer.allocate(4).putInt(i).array());
+		System.arraycopy(ByteBuffer.allocate(4).putInt(i).array(), 0, after, 24, 4);
+		//copy(after, i, ByteBuffer.allocate(4).putInt(rowIDListSize).array());
+		System.arraycopy(ByteBuffer.allocate(4).putInt(rowIDListSize).array(), 0, after, i, 4);
 		i += 4;
 		
 		for (RID id : rowIDs)
 		{
-			copy(after, i, ByteBuffer.allocate(4).putInt(id.getNode()).array());
-			copy(after, i+4, ByteBuffer.allocate(4).putInt(id.getDevice()).array());
-			copy(after, i+8, ByteBuffer.allocate(4).putInt(id.getBlockNum()).array());
-			copy(after, i+12, ByteBuffer.allocate(4).putInt(id.getRecNum()).array());
+			//copy(after, i, ByteBuffer.allocate(4).putInt(id.getNode()).array());
+			System.arraycopy(ByteBuffer.allocate(4).putInt(id.getNode()).array(), 0, after, i, 4);
+			//copy(after, i+4, ByteBuffer.allocate(4).putInt(id.getDevice()).array());
+			System.arraycopy(ByteBuffer.allocate(4).putInt(id.getDevice()).array(), 0, after, i+4, 4);
+			//copy(after, i+8, ByteBuffer.allocate(4).putInt(id.getBlockNum()).array());
+			System.arraycopy(ByteBuffer.allocate(4).putInt(id.getBlockNum()).array(), 0, after, i+8, 4);
+			//copy(after, i+12, ByteBuffer.allocate(4).putInt(id.getRecNum()).array());
+			System.arraycopy(ByteBuffer.allocate(4).putInt(id.getRecNum()).array(), 0, after, i+12, 4);
 			i += 16;
 		}
 		
-		copy(after, 16, ByteBuffer.allocate(4).putInt(i).array());
+		//copy(after, 16, ByteBuffer.allocate(4).putInt(i).array());
+		System.arraycopy(ByteBuffer.allocate(4).putInt(i).array(), 0, after, 16, 4);
 		
 		for (byte[] row : nullArray)
 		{
@@ -366,13 +373,15 @@ public class Schema
 			}
 		}
 		
-		copy(after, 28, ByteBuffer.allocate(4).putInt(i).array());
+		//copy(after, 28, ByteBuffer.allocate(4).putInt(i).array());
+		System.arraycopy(ByteBuffer.allocate(4).putInt(i).array(), 0, after, 28, 4);
 		
 		for (int[] row : offsetArray)
 		{
 			for (int col : row)
 			{
-				copy(after, i, ByteBuffer.allocate(4).putInt(col).array());
+				//copy(after, i, ByteBuffer.allocate(4).putInt(col).array());
+				System.arraycopy(ByteBuffer.allocate(4).putInt(col).array(), 0, after, i, 4);
 				i += 4;
 			}
 		}
@@ -381,7 +390,7 @@ public class Schema
 		p.write(1, after, tx.number(), rec.lsn());
 	}
 	
-	private void againUpdateFreeList(int headSize)
+	protected void againUpdateFreeList(int headSize)
 	{
 		if (freeSpace[0].getStart() < headSize)
 		{
@@ -392,29 +401,32 @@ public class Schema
 			}
 			
 			FreeSpace[] newFS = new FreeSpace[freeSpace.length - 1];
-			int i = 0;
-			while (i < newFS.length)
-			{
-				newFS[i] = freeSpace[i+1];
-				i++;
-			}
+			//int i = 0;
+			//while (i < newFS.length)
+			//{
+			//	newFS[i] = freeSpace[i+1];
+			//	i++;
+			//}
+			System.arraycopy(freeSpace, 1, newFS, 0, newFS.length);
 			
 			freeSpace = newFS;
 			freeSpaceListEntries--;
 		}
 	}
 	
-	private void updateOffsets(FieldValue[] vals, int off)
+	protected void updateOffsets(FieldValue[] vals, int off)
 	{
 		int[][] newOA = new int[rowIDs.length][colIDs.length];
-		int i = 0;
-		while (i < offsetArray.length)
-		{
-			newOA[i] = offsetArray[i];
-			i++;
-		}
+		//int i = 0;
+		//while (i < offsetArray.length)
+		//{
+		//	newOA[i] = offsetArray[i];
+		//	i++;
+		//}
+		System.arraycopy(offsetArray, 0, newOA, 0, offsetArray.length);
 		
 		int j = 0;
+		int i = offsetArray.length;
 		for (FieldValue fv : vals)
 		{
 			newOA[i][j] = off;
@@ -425,18 +437,20 @@ public class Schema
 		offsetArray = newOA;
 	}
 	
-	private void updateNullArray(FieldValue[] vals)
+	protected void updateNullArray(FieldValue[] vals)
 	{
 		byte[][] newNA;
 		newNA = new byte[nullArray.length + 1][colIDs.length];
-		int i = 0;
-		while (i < nullArray.length)
-		{
-			newNA[i] = nullArray[i];
-			i++;
-		}
+		//int i = 0;
+		//while (i < nullArray.length)
+		//{
+		//	newNA[i] = nullArray[i];
+		//	i++;
+		//}
+		System.arraycopy(nullArray, 0, newNA, 0, nullArray.length);
 		
 		int j = 0;
+		int i = nullArray.length;
 		for (FieldValue fv : vals)
 		{
 			if (fv.isNull())
@@ -452,22 +466,24 @@ public class Schema
 		nullArray = newNA;
 	}
 	
-	private void updateRowIDs(RID id)
+	protected void updateRowIDs(RID id)
 	{
 		RID[] newRI = new RID[rowIDs.length + 1];
-		int i = 0;
-		while (i < rowIDs.length)
-		{
-			newRI[i] = rowIDs[i];
-			i++;
-		}
+		//int i = 0;
+		//while (i < rowIDs.length)
+		//{
+		//	newRI[i] = rowIDs[i];
+		//	i++;
+		//}
+		System.arraycopy(rowIDs, 0, newRI, 0, rowIDs.length);
 		
+		int i = rowIDs.length;
 		newRI[i] = id;
 		rowIDs = newRI;
 		rowIDListSize++;
 	}
 	
-	private int findNextFreeRecNum(int justUsed) throws RecNumOverflowException
+	protected int findNextFreeRecNum(int justUsed) throws RecNumOverflowException
 	{
 		int candidate = justUsed+1;
 		RID[] copy = rowIDs.clone();
@@ -485,13 +501,14 @@ public class Schema
 		}
 		
 		RID[] copy2 = new RID[copy.length - i];
-		int j = 0;
-		while (j < copy2.length)
-		{
-			copy2[j] = copy[i];
-			i++;
-			j++;
-		}
+		//int j = 0;
+		//while (j < copy2.length)
+		//{
+		//	copy2[j] = copy[i];
+		//	i++;
+		//	j++;
+		//}
+		System.arraycopy(copy, i, copy2, 0, copy2.length);
 		
 		for (RID rid : copy2)
 		{
@@ -625,8 +642,8 @@ public class Schema
 	
 	public class RowIterator implements Iterator<Row>
 	{
-		private int rowIndex = 0;
-		private Row currentRow;
+		protected int rowIndex = 0;
+		protected Row currentRow;
 		
 		@Override
 		public boolean hasNext() 
@@ -658,7 +675,7 @@ public class Schema
 	
 	public class Row
 	{
-		private int index;
+		protected int index;
 		
 		public Row(int index)
 		{
@@ -691,8 +708,8 @@ public class Schema
 	
 	class ColIterator implements Iterator<Col>
 	{
-		private int colIndex = 0;
-		private Col currentCol;
+		protected int colIndex = 0;
+		protected Col currentCol;
 		
 		@Override
 		public boolean hasNext() 
@@ -724,7 +741,7 @@ public class Schema
 	
 	class Col
 	{
-		private int index;
+		protected int index;
 		
 		public Col(int index)
 		{
@@ -863,7 +880,7 @@ public class Schema
 	
 	public static class BigintFV extends FieldValue
 	{
-		private long value;
+		protected long value;
 		
 		public BigintFV(int row, int col, Schema s)
 		{
@@ -924,7 +941,7 @@ public class Schema
 	
 	public static class BinaryFV extends FieldValue
 	{
-		private byte[] value;
+		protected byte[] value;
 		
 		public BinaryFV(int row, int col, int len, Schema s)
 		{
@@ -972,7 +989,7 @@ public class Schema
 	
 	public static class DateTimeFV extends FieldValue
 	{
-		private Date value;
+		protected Date value;
 		
 		public DateTimeFV(int row, int col, Schema s)
 		{
@@ -1020,9 +1037,9 @@ public class Schema
 	
 	public static class DecimalFV extends FieldValue
 	{
-		private BigDecimal value;
-		private int length;
-		private byte[] bytes;
+		protected BigDecimal value;
+		protected int length;
+		protected byte[] bytes;
 		
 		public DecimalFV(int row, int col, int length, int scale, Schema s)
 		{
@@ -1088,7 +1105,7 @@ public class Schema
 	
 	public static class DoubleFV extends FieldValue
 	{
-		private double value;
+		protected double value;
 		
 		public DoubleFV(int row, int col, Schema s)
 		{
@@ -1136,7 +1153,7 @@ public class Schema
 	
 	public static class FloatFV extends FieldValue
 	{
-		private float value;
+		protected float value;
 		
 		public FloatFV(int row, int col, Schema s)
 		{
@@ -1184,7 +1201,7 @@ public class Schema
 	
 	public static class IntegerFV extends FieldValue
 	{
-		private int value;
+		protected int value;
 		
 		public IntegerFV(int row, int col, Schema s)
 		{
@@ -1232,7 +1249,7 @@ public class Schema
 	
 	public static class SmallintFV extends FieldValue
 	{
-		private short value;
+		protected short value;
 		
 		public SmallintFV(int row, int col, Schema s)
 		{
@@ -1280,7 +1297,7 @@ public class Schema
 	
 	public static class VarbinaryFV extends FieldValue
 	{
-		private byte[] value;
+		protected byte[] value;
 		
 		public VarbinaryFV(int row, int col, Schema s)
 		{
@@ -1337,8 +1354,8 @@ public class Schema
 	
 	public static class VarcharFV extends FieldValue
 	{
-		private String value;
-		private int size;
+		protected String value;
+		protected int size;
 		
 		public VarcharFV(int row, int col, Schema s) throws Exception
 		{
@@ -1472,14 +1489,15 @@ public class Schema
 			Row row = this.getRow(id);
 			FieldValue[] values = row.getAllCols();
 			this.deleteRow(id);
-			int i = colIDToIndex.get(startColID);
-			int j = 0;
-			while (i < colIDListSize)
-			{
-				values[i] = vals[j];
-				i++;
-				j++;
-			}
+			//int i = colIDToIndex.get(startColID);
+			//int j = 0;
+			//while (i < colIDListSize)
+			//{
+			//	values[i] = vals[j];
+			//	i++;
+			//	j++;
+			//}
+			System.arraycopy(vals, 0, values, colIDToIndex.get(startColID), colIDListSize);
 		
 			RID newRID = this.insertRow(values);
 		
@@ -1498,7 +1516,7 @@ public class Schema
 		}
 	}
 	
-	private void updateFSInHeader(int size) throws LockAbortException, Exception
+	protected void updateFSInHeader(int size) throws LockAbortException, Exception
 	{
 		int pageNum;
 		int entryNum;
@@ -1515,19 +1533,19 @@ public class Schema
 		
 		Block blk = new Block(p.block().fileName(), pageNum);
 		tx.requestPage(blk);
-		HeaderPage hp = tx.readHeaderPage(blk, blockType);
+		HeaderPage hp = tx.forceReadHeaderPage(blk, blockType);
 		
 		if (blockType == TYPE_ROW)
 		{
-			hp.updateSize(entryNum, size, tx.number());
+			hp.updateSize(entryNum, size, tx);
 		}
 		else
 		{
-			hp.updateSize(entryNum, size, tx.number(), 0);
+			hp.updateSize(entryNum, size, tx, 0);
 		}
 	}
 	
-	private int findPage(int data, int colID, int colMarker) throws LockAbortException, Exception
+	protected int findPage(int data, int colID, int colMarker) throws LockAbortException, Exception
 	{
 		Block blk = null;
 		int i = 0;
@@ -1549,7 +1567,7 @@ public class Schema
 		return block;
 	}
 	
-	private int findPage(int data) throws LockAbortException, Exception
+	protected int findPage(int data) throws LockAbortException, Exception
 	{
 		Block blk = null;
 		int i = 0;
@@ -1572,7 +1590,7 @@ public class Schema
 		return block;
 	}
 	
-	private int getNodeNumber() throws LockAbortException, Exception
+	protected int getNodeNumber() throws LockAbortException, Exception
 	{
 		Block b = new Block(p.block().fileName(), 0);
 		tx.requestPage(b);
@@ -1581,7 +1599,7 @@ public class Schema
 		return hp.getNodeNumber();
 	}
 	
-	private int getDeviceNumber() throws LockAbortException, Exception
+	protected int getDeviceNumber() throws LockAbortException, Exception
 	{
 		Block b = new Block(p.block().fileName(), 0);
 		tx.requestPage(b);
@@ -1590,26 +1608,34 @@ public class Schema
 		return hp.getDeviceNumber();
 	}
 	
-	private int findPage(int after, int data, int colID, int colMarker) throws LockAbortException, Exception
+	protected int findPage(int after, int data, int colID, int colMarker) throws LockAbortException, Exception
 	{
 		int i = after + 1;
 		int block = -1;
 		while (i < HEADER_SIZE && block == -1)
 		{
 			HeaderPage hp = tx.readHeaderPage(new Block(p.block().fileName(), i), blockType);
+			if (hp == null)
+			{
+				return -1;
+			}
 			block = hp.findPage(data, colID, colMarker);
 		}
 		
 		return block;
 	}
 	
-	private int findPage(int after, int data) throws LockAbortException, Exception
+	protected int findPage(int after, int data) throws LockAbortException, Exception
 	{
 		int i = after + 1;
 		int block = -1;
 		while (i < HEADER_SIZE && block == -1)
 		{
 			HeaderPage hp = tx.readHeaderPage(new Block(p.block().fileName(), i), blockType);
+			if (hp == null)
+			{
+				return -1;
+			}
 			block = hp.findPage(data);
 		}
 		

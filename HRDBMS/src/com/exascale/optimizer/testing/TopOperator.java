@@ -5,7 +5,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.Vector;
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -14,14 +14,35 @@ import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
 public class TopOperator implements Operator, Serializable
 {
-	private Operator child;
-	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
-	private MetaData meta;
-	private AtomicLong remaining;
-	private boolean cleanerStarted = false;
+	protected Operator child;
+	protected Operator parent;
+	protected HashMap<String, String> cols2Types;
+	protected HashMap<String, Integer> cols2Pos;
+	protected TreeMap<Integer, String> pos2Col;
+	protected MetaData meta;
+	protected AtomicLong remaining;
+	protected boolean cleanerStarted = false;
+	protected int node;
+	
+	public long getRemaining()
+	{
+		return remaining.get();
+	}
+	
+	public void reset()
+	{
+		System.out.println("TopOperator cannot reset");
+		System.exit(1);
+	}
+	
+	public void setChildPos(int pos)
+	{
+	}
+	
+	public int getChildPos()
+	{
+		return 0;
+	}
 	
 	public TopOperator(long numVals, MetaData meta)
 	{
@@ -29,9 +50,26 @@ public class TopOperator implements Operator, Serializable
 		this.meta = meta;
 	}
 	
+	public TopOperator clone()
+	{
+		TopOperator retval = new TopOperator(remaining.get(), meta);
+		retval.node = node;
+		return retval;
+	}
+	
+	public int getNode()
+	{
+		return node;
+	}
+	
+	public void setNode(int node)
+	{
+		this.node = node;
+	}
+	
 	public ArrayList<String> getReferences()
 	{
-		ArrayList<String> retval = new ArrayList<String>();
+		ArrayList<String> retval = new ArrayList<String>(0);
 		return retval;
 	}
 	
@@ -47,7 +85,7 @@ public class TopOperator implements Operator, Serializable
 	
 	public ArrayList<Operator> children()
 	{
-		ArrayList<Operator> retval = new ArrayList<Operator>();
+		ArrayList<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
@@ -62,6 +100,16 @@ public class TopOperator implements Operator, Serializable
 	{
 		child.start();
 	}
+	
+	public void nextAll(Operator op) throws Exception
+	{
+		child.nextAll(op);
+		Object o = next(op);
+		while (!(o instanceof DataEndMarker))
+		{
+			o = next(op);
+		}
+	}
 
 	@Override
 	public Object next(Operator op) throws Exception 
@@ -73,13 +121,9 @@ public class TopOperator implements Operator, Serializable
 			return child.next(this);
 		}
 		
-		if (!cleanerStarted)
-		{
-			CleanerThread ct = new CleanerThread();
-			ct.start();
-			cleanerStarted = true;
-			ct.join();
-		}
+		CleanerThread ct = new CleanerThread();
+		ct.start();
+		ct.join();
 		return new DataEndMarker();
 	}
 
@@ -148,17 +192,13 @@ public class TopOperator implements Operator, Serializable
 		return pos2Col;
 	}
 	
-	private class CleanerThread extends Thread
+	protected class CleanerThread extends ThreadPoolThread
 	{
 		public void run()
 		{
 			try
 			{
-				Object o = child.next(TopOperator.this);
-				while (! (o instanceof DataEndMarker))
-				{
-					o = child.next(TopOperator.this);
-				}
+				child.nextAll(TopOperator.this);
 			}
 			catch(Exception e)
 			{

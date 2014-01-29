@@ -9,10 +9,11 @@ import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
 
 public class MaxOperator implements AggregateOperator, Serializable
 {
-	private String input;
-	private String output;
-	private MetaData meta;
-	private boolean isInt;
+	protected String input;
+	protected String output;
+	protected MetaData meta;
+	protected boolean isInt;
+	protected int NUM_GROUPS = 16;
 	
 	public MaxOperator(String input, String output, MetaData meta, boolean isInt)
 	{
@@ -20,6 +21,23 @@ public class MaxOperator implements AggregateOperator, Serializable
 		this.output = output;
 		this.meta = meta;
 		this.isInt = isInt;
+	}
+	
+	public void setNumGroups(int groups)
+	{
+		NUM_GROUPS = groups;
+	}
+	
+	public MaxOperator clone()
+	{
+		MaxOperator retval = new MaxOperator(input, output, meta, isInt);
+		retval.NUM_GROUPS = NUM_GROUPS;
+		return retval;
+	}
+	
+	public void setInputColumn(String col)
+	{
+		input = col;
 	}
 	
 	public String getInputColumn()
@@ -47,7 +65,7 @@ public class MaxOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public AggregateResultThread newProcessingThread(DiskBackedArray rows, HashMap<String, Integer> cols2Pos) 
+	public AggregateResultThread newProcessingThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos) 
 	{
 		return new MaxThread(rows, cols2Pos);
 	}
@@ -57,13 +75,13 @@ public class MaxOperator implements AggregateOperator, Serializable
 		return new MaxHashThread(cols2Pos);
 	}
 
-	private class MaxThread extends AggregateResultThread
+	protected class MaxThread extends AggregateResultThread
 	{
-		private DiskBackedArray rows;
-		private HashMap<String, Integer> cols2Pos;
-		private double max;
+		protected ArrayList<ArrayList<Object>> rows;
+		protected HashMap<String, Integer> cols2Pos;
+		protected double max;
 		
-		public MaxThread(DiskBackedArray rows, HashMap<String, Integer> cols2Pos)
+		public MaxThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos)
 		{
 			this.rows = rows;
 			this.cols2Pos = cols2Pos;
@@ -125,22 +143,14 @@ public class MaxOperator implements AggregateOperator, Serializable
 		
 		public void close()
 		{
-			try
-			{
-				rows.close();
-			}
-			catch(Exception e)
-			{
-				e.printStackTrace();
-			}
 		}
 	}
 	
-	private class MaxHashThread extends AggregateResultThread
+	protected class MaxHashThread extends AggregateResultThread
 	{
-		private volatile ConcurrentHashMap<ArrayList<Object>, AtomicDouble> maxes = new ConcurrentHashMap<ArrayList<Object>, AtomicDouble>();
-		private HashMap<String, Integer> cols2Pos;
-		private int pos;
+		protected volatile ConcurrentHashMap<ArrayList<Object>, AtomicDouble> maxes = new ConcurrentHashMap<ArrayList<Object>, AtomicDouble>(NUM_GROUPS, 0.75f, ResourceManager.cpus * 6);
+		protected HashMap<String, Integer> cols2Pos;
+		protected int pos;
 		
 		public MaxHashThread(HashMap<String, Integer> cols2Pos)
 		{
@@ -157,6 +167,7 @@ public class MaxOperator implements AggregateOperator, Serializable
 			}
 		}
 		
+		//@Parallel
 		public void put(ArrayList<Object> row, ArrayList<Object> group)
 		{
 			Object o = row.get(pos);

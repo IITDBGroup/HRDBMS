@@ -7,7 +7,7 @@ import com.exascale.threads.HRDBMSThread;
 
 public class PageCleaner extends HRDBMSThread 
 {
-	private static int sizeThresh;
+	protected static int sizeThresh;
 	
 	public PageCleaner()
 	{

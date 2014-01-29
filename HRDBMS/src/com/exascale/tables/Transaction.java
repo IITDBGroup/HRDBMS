@@ -2,6 +2,8 @@ package com.exascale.tables;
 
 import java.io.IOException;
 import java.util.HashSet;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import com.exascale.exceptions.LockAbortException;
 import com.exascale.filesystem.Block;
@@ -19,36 +21,26 @@ import com.exascale.tables.Schema.FieldValue;
 public class Transaction 
 {
 	public static final int ISOLATION_RR = 0, ISOLATION_CS = 1, ISOLATION_UR = 2;
-	private static long nextTxNum = 0;
-	public static HashSet<Long> txList = new HashSet<Long>();
-	private long txnum;
-	private int level;
+	protected static AtomicLong nextTxNum = new AtomicLong(0);
+	public static ConcurrentHashMap<Long, Long> txList = new ConcurrentHashMap<Long, Long>();
+	protected long txnum;
+	protected int level;
 	
 	public Transaction(int level)
 	{
 		this.level = level;
-		while (true)
-		{
-			synchronized(txList)
-			{
-				txnum = nextTx();
-				txList.add(txnum);
-				LogRec rec = new StartLogRec(txnum);
-				LogManager.write(rec);
-				break;
-			}
-		}
+		txnum = nextTx();
+		txList.put(txnum, txnum);
+		LogRec rec = new StartLogRec(txnum);
+		LogManager.write(rec);
 	}
 	
 	public void commit() throws IOException
 	{
-		synchronized(txList)
-		{
-			BufferManager.unpinAll(txnum);
-			LogManager.commit(txnum);
-			LockManager.release(txnum);
-			txList.remove(txnum);
-		}
+		BufferManager.unpinAll(txnum);
+		LogManager.commit(txnum);
+		LockManager.release(txnum);
+		txList.remove(txnum);
 	}
 	
 	public DeleteLogRec delete(byte[] before, byte[] after, int off, Block b)
@@ -63,13 +55,10 @@ public class Transaction
 	
 	public void rollback() throws IOException
 	{
-		synchronized(txList)
-		{
-			BufferManager.unpinAll(txnum);
-			LogManager.rollback(txnum);
-			LockManager.release(txnum);
-			txList.remove(txnum);
-		}
+		BufferManager.unpinAll(txnum);
+		LogManager.rollback(txnum);
+		LockManager.release(txnum);
+		txList.remove(txnum);
 	}
 	
 	public void requestPage(Block b)
@@ -110,7 +99,7 @@ public class Transaction
 		}
 	}
 	
-	private Page getPage(Block b) throws Exception
+	protected Page getPage(Block b) throws Exception
 	{
 		Page p = BufferManager.getPage(b);
 		
@@ -141,6 +130,8 @@ public class Transaction
 				catch(InterruptedException e)
 				{}
 			}
+			
+			requests++;
 		}
 			
 		if (p == null)
@@ -156,10 +147,9 @@ public class Transaction
 		BufferManager.unpin(p, txnum);
 	}
 	
-	private static synchronized long nextTx()
+	protected static long nextTx()
 	{
-		nextTxNum++;
-		return nextTxNum;
+		return nextTxNum.incrementAndGet();
 	}
 	
 	public void read(Block b, Schema schema) throws LockAbortException, Exception
@@ -191,8 +181,27 @@ public class Transaction
 		}
 		else
 		{
-			retval = null;
+			retval = null; //return null if this header page is not used yet
 		}
+		
+		if (level == ISOLATION_CS)
+		{
+			LockManager.unlockSLock(b, txnum);
+		}
+		
+		return retval;
+	}
+	
+	public HeaderPage forceReadHeaderPage(Block b, int type) throws LockAbortException, Exception
+	{
+		if (level == ISOLATION_RR || level == ISOLATION_CS)
+		{
+			LockManager.sLock(b, txnum);
+		}
+		Page p = this.getPage(b);
+		HeaderPage retval;
+		int first = p.getInt(0);
+		retval = new HeaderPage(p, type);
 		
 		if (level == ISOLATION_CS)
 		{
@@ -216,7 +225,5 @@ public class Transaction
 	{
 		return txnum;
 	}
-	
-	//call LogManager.
 }
 	

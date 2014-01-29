@@ -14,7 +14,7 @@ import com.exascale.tables.SQL;
 
 public class PlanCacheManager 
 {
-	private static ConcurrentHashMap<SQL, Plan> planCache = new ConcurrentHashMap<SQL, Plan>();
+	protected static ConcurrentHashMap<SQL, Plan> planCache = new ConcurrentHashMap<SQL, Plan>();
 	//Plans have creation timestamp and reserved flag
 
 	public PlanCacheManager()

@@ -7,12 +7,11 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Random;
 import java.util.TreeMap;
-import java.util.Vector;
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
@@ -21,30 +20,106 @@ import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 public class SortOperator implements Operator, Serializable
 {
 	protected static int PARALLEL_SORT_MIN_NUM_ROWS = 10000;
-	private Operator child;
-	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
-	private boolean startDone = false;
-	private boolean closeDone = false;
-	private Vector<String> sortCols;
-	private Vector<Boolean> orders;
-	private volatile boolean sortComplete = false;
-	private SortThread sortThread;
-	private volatile LinkedBlockingQueue readBuffer = new LinkedBlockingQueue(Driver.QUEUE_SIZE);
-	private volatile DiskBackedArray result;
-	private volatile int[] sortPos;
-	private final int NUM_RT_THREADS = 6 * Runtime.getRuntime().availableProcessors();
-	private MetaData meta;
-	private volatile boolean isClosed = false;
-	private volatile boolean done = false;
+	protected Operator child;
+	protected Operator parent;
+	protected HashMap<String, String> cols2Types;
+	protected HashMap<String, Integer> cols2Pos;
+	protected TreeMap<Integer, String> pos2Col;
+	protected boolean startDone = false;
+	protected boolean closeDone = false;
+	protected ArrayList<String> sortCols;
+	protected ArrayList<Boolean> orders;
+	protected volatile boolean sortComplete = false;
+	protected SortThread sortThread;
+	protected volatile BufferedLinkedBlockingQueue readBuffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
+	protected volatile DiskBackedArray result;
+	protected volatile int[] sortPos;
+	protected final int NUM_RT_THREADS = 1; //6 * ResourceManager.cpus;
+	protected MetaData meta;
+	protected volatile boolean isClosed = false;
+	protected volatile boolean done = false;
+	protected int node;
+	protected int childCard = 16;
+	protected boolean cardSet = false;
 	
-	public SortOperator(Vector<String> sortCols, Vector<Boolean> orders, MetaData meta)
+	public void setChildPos(int pos)
+	{
+	}
+	
+	public boolean setChildCard(int card)
+	{
+		if (cardSet)
+		{
+			return false;
+		}
+		
+		cardSet = true;
+		childCard = card;
+		return true;
+	}
+	
+	public void reset()
+	{
+		child.reset();
+		
+		if (result != null)
+		{
+			try
+			{
+				result.close();
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
+				System.exit(1);
+			}
+		}
+		
+		sortComplete = false;
+		readBuffer.clear();
+		sortThread = new SortThread(child);
+		sortThread.start();
+	}
+	
+	public int getChildPos()
+	{
+		return 0;
+	}
+	
+	public SortOperator(ArrayList<String> sortCols, ArrayList<Boolean> orders, MetaData meta)
 	{
 		this.sortCols = sortCols;
 		this.orders = orders;
 		this.meta = meta;
+	}
+	
+	public SortOperator clone()
+	{
+		SortOperator retval = new SortOperator(sortCols, orders, meta);
+		retval.node = node;
+		retval.childCard = childCard;
+		retval.cardSet = cardSet;
+		return retval;
+	}
+	
+	public int getNode()
+	{
+		return node;
+	}
+	
+	public void setNode(int node)
+	{
+		this.node = node;
+	}
+	
+	public ArrayList<String> getKeys()
+	{
+		return sortCols;
+	}
+	
+	public ArrayList<Boolean> getOrders()
+	{
+		return orders;
 	}
 	
 	public ArrayList<String> getReferences()
@@ -69,7 +144,7 @@ public class SortOperator implements Operator, Serializable
 	
 	public ArrayList<Operator> children()
 	{
-		ArrayList<Operator> retval = new ArrayList<Operator>();
+		ArrayList<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
@@ -171,6 +246,16 @@ public class SortOperator implements Operator, Serializable
 		return pos2Col;
 	}
 	
+	public void nextAll(Operator op) throws Exception
+	{
+		child.nextAll(op);
+		Object o = next(op);
+		while (!(o instanceof DataEndMarker))
+		{
+			o = next(op);
+		}
+	}
+	
 	public Object next(Operator op) throws Exception
 	{
 		if (!sortComplete)
@@ -200,7 +285,7 @@ public class SortOperator implements Operator, Serializable
 		return o;
 	}
 	
-	private class SortThread extends Thread
+	protected class SortThread extends ThreadPoolThread
 	{
 		Operator child;
 		ReaderThread[] threads;
@@ -220,7 +305,7 @@ public class SortOperator implements Operator, Serializable
 		{	
 			try
 			{
-				result = ResourceManager.newDiskBackedArray();
+				result = ResourceManager.newDiskBackedArray(childCard);
 				int i = 0;
 				
 				threads = new ReaderThread[NUM_RT_THREADS];
@@ -260,7 +345,8 @@ public class SortOperator implements Operator, Serializable
 			}
 		}
 		
-		private ParallelSortThread doParallelSort(long left, long right)
+		//@?Parallel (recursive)
+		protected ParallelSortThread doParallelSort(long left, long right)
 		{
 			//System.out.println("Starting parallel sort with " + (right-left+1) + " rows");
 			ParallelSortThread t = new ParallelSortThread(left, right);
@@ -268,9 +354,9 @@ public class SortOperator implements Operator, Serializable
 			return t;
 		}
 		
-		private class ReaderThread extends Thread
+		protected class ReaderThread extends ThreadPoolThread
 		{
-			private volatile DiskBackedArray array;
+			protected volatile DiskBackedArray array;
 			
 			public ReaderThread(DiskBackedArray array)
 			{
@@ -284,7 +370,7 @@ public class SortOperator implements Operator, Serializable
 					Object o = child.next(SortOperator.this);
 					while (! (o instanceof DataEndMarker))
 					{
-						array.add(o);
+						array.add((ArrayList<Object>)o);
 						o = child.next(SortOperator.this);
 					}
 				}
@@ -296,9 +382,9 @@ public class SortOperator implements Operator, Serializable
 			}
 		}
 		
-		private class CopyThread extends Thread
+		protected class CopyThread extends ThreadPoolThread
 		{
-			private volatile DiskBackedArray array;
+			protected volatile DiskBackedArray array;
 			
 			public CopyThread(DiskBackedArray array)
 			{
@@ -317,25 +403,22 @@ public class SortOperator implements Operator, Serializable
 					while (i < size)
 					{
 						ArrayList<Object> row = null;
-						try
+						while (row == null)
 						{
-							row = (ArrayList<Object>)array.get(i);
-						}
-						catch(Exception e)
-						{
-							e.printStackTrace();
-							System.out.println("Array is " + array);
-							System.out.println("isClosed = " + isClosed);
+							try
+							{
+								row = (ArrayList<Object>)array.get(i);
+							}
+							catch(Exception e)
+							{
+								e.printStackTrace();
+								System.out.println("Array is " + array);
+								System.out.println("isClosed = " + isClosed);
+							}
 						}
 						
-						if (row != null)
-						{
-							readBuffer.put(row);
-						}
-						else
-						{
-							System.exit(1);
-						}
+						readBuffer.put(row);
+						
 						i++;
 						
 						long end = System.currentTimeMillis();
@@ -359,10 +442,10 @@ public class SortOperator implements Operator, Serializable
 			}
 		}
 		
-		private class ParallelSortThread extends Thread
+		protected class ParallelSortThread extends ThreadPoolThread
 		{
-			private long left;
-			private long right;
+			protected long left;
+			protected long right;
 			
 			public ParallelSortThread(long left, long right)
 			{
@@ -386,7 +469,7 @@ public class SortOperator implements Operator, Serializable
 						}
 						long pivotIndex = (long)(new Random().nextDouble() * (right - left) + left);
 						ArrayList<Object> temp = (ArrayList<Object>)result.get(pivotIndex);
-						result.update(pivotIndex, result.get(left));
+						result.update(pivotIndex, (ArrayList<Object>)result.get(left));
 						result.update(left, temp);
 						long lt = left;
 						long gt = right;
@@ -398,14 +481,14 @@ public class SortOperator implements Operator, Serializable
 							int cmp = compare(temp, v);
 						    if (cmp < 0)
 						    {
-						    	result.update(i, result.get(lt));
+						    	result.update(i, (ArrayList<Object>)result.get(lt));
 						    	result.update(lt, temp);
 						    	i++;
 						    	lt++;
 						    }
 						    else if (cmp > 0)
 						    {
-						    	result.update(i, result.get(gt));
+						    	result.update(i, (ArrayList<Object>)result.get(gt));
 						    	result.update(gt, temp);
 						    	gt--;
 						    }
@@ -458,7 +541,7 @@ public class SortOperator implements Operator, Serializable
 			}
 		}
 		
-		private void doSequentialSort(long left, long right) throws Exception
+		protected void doSequentialSort(long left, long right) throws Exception
 		{
 			if (right <= left)
 			{
@@ -474,14 +557,14 @@ public class SortOperator implements Operator, Serializable
 				int cmp = compare(temp, v);
 			    if (cmp < 0)
 			    {
-			    	result.update(i, result.get(lt));
+			    	result.update(i, (ArrayList<Object>)result.get(lt));
 			    	result.update(lt, temp);
 			    	i++;
 			    	lt++;
 			    }
 			    else if (cmp > 0)
 			    {
-			    	result.update(i, result.get(gt));
+			    	result.update(i, (ArrayList<Object>)result.get(gt));
 			    	result.update(gt, temp);
 			    	gt--;
 			    }
@@ -495,7 +578,7 @@ public class SortOperator implements Operator, Serializable
 			doSequentialSort(gt+1, right);
 		}
 		
-		private int compare(ArrayList<Object> lhs, ArrayList<Object> rhs) throws Exception
+		protected int compare(ArrayList<Object> lhs, ArrayList<Object> rhs) throws Exception
 		{
 			int result;
 			int i = 0;
@@ -559,11 +642,11 @@ public class SortOperator implements Operator, Serializable
 			return 0;
 		}
 		
-		private long partition(long left, long right, long pivotIndex) throws Exception
+		protected long partition(long left, long right, long pivotIndex) throws Exception
 		{
 			ArrayList<Object> pivotValue = (ArrayList<Object>)result.get(pivotIndex);
 			Object rightRec = result.get(right);
-			result.update(pivotIndex, rightRec);
+			result.update(pivotIndex, (ArrayList<Object>)rightRec);
 			result.update(right,  pivotValue);
 		
 			long i = left;
@@ -578,7 +661,7 @@ public class SortOperator implements Operator, Serializable
 				if (compareResult == -1)
 				{
 					Object row = result.get(storeIndex);
-					result.update(i, row);
+					result.update(i, (ArrayList<Object>)row);
 					result.update(storeIndex, temp);
 					storeIndex++;
 					allEqual = false;
@@ -588,7 +671,7 @@ public class SortOperator implements Operator, Serializable
 					if (random.nextDouble() < 0.5)
 					{
 						Object row = result.get(storeIndex);
-						result.update(i, row);
+						result.update(i, (ArrayList<Object>)row);
 						result.update(storeIndex, temp);
 						storeIndex++;
 					}					
@@ -607,7 +690,7 @@ public class SortOperator implements Operator, Serializable
 			
 			ArrayList<Object> temp = (ArrayList<Object>)result.get(storeIndex);
 			rightRec = result.get(right);
-			result.update(storeIndex, rightRec);
+			result.update(storeIndex, (ArrayList<Object>)rightRec);
 			result.update(right,  temp);
 			return storeIndex;
 		}

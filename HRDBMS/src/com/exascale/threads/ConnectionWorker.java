@@ -6,18 +6,16 @@ import java.io.UnsupportedEncodingException;
 import java.net.Socket;
 import java.util.HashMap;
 import java.util.Vector;
-import java.util.concurrent.LinkedBlockingQueue;
-
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.XAManager;
 import com.exascale.tables.Plan;
-import com.exascale.tables.QueueEndMarker;
 import com.exascale.tables.Transaction;
+import com.exascale.optimizer.testing.*;
 
 public class ConnectionWorker extends HRDBMSThread
 {
-	private Socket sock;
-	private LinkedBlockingQueue rsQueue;
+	protected Socket sock;
+	protected BufferedLinkedBlockingQueue rsQueue;
 	
 	public ConnectionWorker(Socket sock)
 	{
@@ -137,7 +135,7 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 	}
 	
-	private void returnException(String e) throws UnsupportedEncodingException, IOException
+	protected void returnException(String e) throws UnsupportedEncodingException, IOException
 	{
 		byte[] type = "EXCEPT  ".getBytes("UTF-8");
 		byte[] ret = e.getBytes("UTF-8");
@@ -149,7 +147,7 @@ public class ConnectionWorker extends HRDBMSThread
 		sock.getOutputStream().write(data);
 	}
 	
-	private void closeConnection()
+	protected void closeConnection()
 	{
 		try
 		{
@@ -158,7 +156,7 @@ public class ConnectionWorker extends HRDBMSThread
 		catch(Exception e) {}
 	}
 	
-	private void respond(int from, int to, String retval) throws UnsupportedEncodingException, IOException
+	protected void respond(int from, int to, String retval) throws UnsupportedEncodingException, IOException
 	{
 		byte[] type = "RESPOK  ".getBytes("UTF-8");
 		byte[] fromBytes = intToBytes(from);
@@ -175,13 +173,13 @@ public class ConnectionWorker extends HRDBMSThread
 		sock.getOutputStream().write(data);
 	}
 	
-	private int bytesToInt(byte[] val)
+	protected int bytesToInt(byte[] val)
 	{
 		int ret = java.nio.ByteBuffer.wrap(val).getInt();
 		return ret;
 	}
 	
-	private static byte[] intToBytes(int val)
+	protected static byte[] intToBytes(int val)
 	{
 		byte[] buff = new byte[4];
 		buff[0] = (byte)(val >> 24);
@@ -191,12 +189,12 @@ public class ConnectionWorker extends HRDBMSThread
 		return buff;
 	}
 	
-	private String getDataDir(int from, int to)
+	protected String getDataDir(int from, int to)
 	{
 		return to + "," + HRDBMSWorker.getHParms().getProperty("data_directories");
 	}
 	
-	/*private void clientConnection() TODO
+	/*protected void clientConnection() TODO
 	{
 		try
 		{

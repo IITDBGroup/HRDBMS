@@ -12,11 +12,61 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
-import java.util.Vector;
+import java.util.ArrayList;
 
 public class MetaData implements Serializable
 {
-	private boolean LOCAL = true;
+	protected boolean LOCAL = true;
+	protected ArrayList<ArrayList<Object>> cards = null;
+	protected ArrayList<ArrayList<Object>> dists = null;
+	protected Boolean cardsLock = false;
+	protected Boolean distsLock = false;
+	protected HashMap<Filter, Double> lCache = new HashMap<Filter, Double>();
+	
+	public String getTableForCol(String col)
+	{
+		if (col.startsWith("L_"))
+		{
+			return "LINEITEM";
+		}
+		
+		if (col.startsWith("P_"))
+		{
+			return "PART";
+		}
+		
+		if (col.startsWith("PS_"))
+		{
+			return "PARTSUPP";
+		}
+		
+		if (col.startsWith("S_"))
+		{
+			return "SUPPLIER";
+		}
+		
+		if (col.startsWith("C_"))
+		{
+			return "CUSTOMER";
+		}
+		
+		if (col.startsWith("O_"))
+		{
+			return "ORDERS";
+		}
+		
+		if (col.startsWith("N_"))
+		{
+			return "NATION";
+		}
+		
+		if (col.startsWith("R_"))
+		{
+			return "REGION";
+		}
+		
+		return null;
+	}
 	
 	public HashMap<String, String> getCols2TypesForTable(String schema, String name) throws Exception
 	{
@@ -351,6 +401,11 @@ public class MetaData implements Serializable
 		long rightCard = 1;
 		HashMap<String, Double> generated = new HashMap<String, Double>();
 		
+		if (filter instanceof ConstantFilter)
+		{
+			return ((ConstantFilter)filter).getLikelihood();
+		}
+		
 		if (filter.alwaysTrue())
 		{
 			return 1;
@@ -503,6 +558,40 @@ public class MetaData implements Serializable
 		System.out.println("Unknown operator in likelihood()");
 		System.exit(1);
 		return 0;
+	}
+	
+	public double likelihood(HashSet<HashMap<Filter, Filter>> hshm, RootOperator op)
+	{
+		return likelihood(hshm, op.getGenerated());
+	}
+	
+	public double likelihood(HashSet<HashMap<Filter, Filter>> hshm, HashMap<String, Double> generated)
+	{
+		ArrayList<Double> ands = new ArrayList<Double>(hshm.size());
+		for (HashMap<Filter, Filter> ored : hshm)
+		{
+			double sum = 0;
+		
+			for (Filter filter : ored.keySet())
+			{
+				sum += likelihood(filter, generated);
+			}
+		
+			if (sum > 1)
+			{
+				sum = 1;
+			}
+			
+			ands.add(sum);
+		}
+		
+		double retval = 1;
+		for (double x : ands)
+		{
+			retval *= x;
+		}
+		
+		return retval;
 	}
 	
 	public double likelihood(Filter filter, RootOperator op)
@@ -513,16 +602,31 @@ public class MetaData implements Serializable
 	//likelihood of a row directly out of the table passing this test
 	public double likelihood(Filter filter, HashMap<String, Double> generated)
 	{
+		Double r = lCache.get(filter);
+		if (r != null)
+		{
+			return r;
+		}
+		
 		long leftCard = 1;
 		long rightCard = 1;
 		
+		if (filter instanceof ConstantFilter)
+		{
+			double retval = ((ConstantFilter)filter).getLikelihood();
+			lCache.put(filter, retval);
+			return retval;
+		}
+		
 		if (filter.alwaysTrue())
 		{
+			lCache.put(filter, 1.0);
 			return 1;
 		}
 		
 		if (filter.alwaysFalse())
 		{
+			lCache.put(filter, 0.0);
 			return 0;
 		}
 		
@@ -541,18 +645,23 @@ public class MetaData implements Serializable
 		
 		if (op.equals("E"))
 		{
-			return 1.0 / bigger(leftCard, rightCard);
+			double retval = 1.0 / bigger(leftCard, rightCard);
+			lCache.put(filter, retval);
+			return retval;
 		}
 		
 		if (op.equals("NE"))
 		{
-			return 1.0 - 1.0 / bigger(leftCard, rightCard);
+			double retval = 1.0 - 1.0 / bigger(leftCard, rightCard);
+			lCache.put(filter, retval);
+			return retval;
 		}
 		
 		if (op.equals("L") || op.equals("LE"))
 		{
 			if (filter.leftIsColumn() && filter.rightIsColumn())
 			{
+				lCache.put(filter, 0.5);
 				return 0.5;
 			}
 			
@@ -562,20 +671,26 @@ public class MetaData implements Serializable
 				{
 					double right = filter.getRightNumber();
 					String left = filter.leftColumn();
-					return percentBelow(left, right);
+					double retval = percentBelow(left, right);
+					lCache.put(filter, retval);
+					return retval;
 				}
 				else if (filter.rightIsDate())
 				{
 					Date right = filter.getRightDate();
 					String left = filter.leftColumn();
-					return percentBelow(left, right);
+					double retval = percentBelow(left, right);
+					lCache.put(filter, retval);
+					return retval;
 				}
 				else
 				{
 					//string
 					String right = filter.getRightString();
 					String left = filter.leftColumn();
-					return percentBelow(left, right);
+					double retval = percentBelow(left, right);
+					lCache.put(filter, retval);
+					return retval;
 				}
 			}
 			else
@@ -584,20 +699,26 @@ public class MetaData implements Serializable
 				{
 					double left = filter.getLeftNumber();
 					String right = filter.rightColumn();
-					return percentAbove(right, left);
+					double retval = percentAbove(right, left);
+					lCache.put(filter, retval);
+					return retval;
 				}
 				else if (filter.leftIsDate())
 				{
 					Date left = filter.getLeftDate();
 					String right = filter.rightColumn();
-					return percentAbove(right, left);
+					double retval = percentAbove(right, left);
+					lCache.put(filter, retval);
+					return retval;
 				}
 				else
 				{
 					//string
 					String left = filter.getLeftString();
 					String right = filter.rightColumn();
-					return percentAbove(right, left);
+					double retval = percentAbove(right, left);
+					lCache.put(filter, retval);
+					return retval;
 				}
 			}
 		}
@@ -606,6 +727,7 @@ public class MetaData implements Serializable
 		{
 			if (filter.leftIsColumn() && filter.rightIsColumn())
 			{
+				lCache.put(filter, 0.5);
 				return 0.5;
 			}
 			
@@ -615,20 +737,26 @@ public class MetaData implements Serializable
 				{
 					double right = filter.getRightNumber();
 					String left = filter.leftColumn();
-					return percentAbove(left, right);
+					double retval = percentAbove(left, right);
+					lCache.put(filter, retval);
+					return retval;
 				}
 				else if (filter.rightIsDate())
 				{
 					Date right = filter.getRightDate();
 					String left = filter.leftColumn();
-					return percentAbove(left, right);
+					double retval = percentAbove(left, right);
+					lCache.put(filter, retval);
+					return retval;
 				}
 				else
 				{
 					//string
 					String right = filter.getRightString();
 					String left = filter.leftColumn();
-					return percentAbove(left, right);
+					double retval = percentAbove(left, right);
+					lCache.put(filter, retval);
+					return retval;
 				}
 			}
 			else
@@ -637,31 +765,39 @@ public class MetaData implements Serializable
 				{
 					double left = filter.getLeftNumber();
 					String right = filter.rightColumn();
-					return percentBelow(right, left);
+					double retval = percentBelow(right, left);
+					lCache.put(filter, retval);
+					return retval;
 				}
 				else if (filter.leftIsDate())
 				{
 					Date left = filter.getLeftDate();
 					String right = filter.rightColumn();
-					return percentBelow(right, left);
+					double retval = percentBelow(right, left);
+					lCache.put(filter, retval);
+					return retval;
 				}
 				else
 				{
 					//string
 					String left = filter.getLeftString();
 					String right = filter.rightColumn();
-					return percentBelow(right, left);
+					double retval = percentBelow(right, left);
+					lCache.put(filter, retval);
+					return retval;
 				}
 			}
 		}
 		
 		if (op.equals("LI"))
 		{
+			lCache.put(filter, 0.25);
 			return 0.25;
 		}
 		
 		if (op.equals("NL"))
 		{
+			lCache.put(filter, 0.75);
 			return 0.75;
 		}
 		
@@ -670,7 +806,7 @@ public class MetaData implements Serializable
 		return 0;
 	}
 	
-	private long smaller(long x, long y)
+	protected long smaller(long x, long y)
 	{
 		if (x <= y)
 		{
@@ -680,7 +816,7 @@ public class MetaData implements Serializable
 		return y;
 	}
 	
-	private long bigger(long x, long y)
+	protected long bigger(long x, long y)
 	{
 		if (x >= y)
 		{
@@ -694,32 +830,32 @@ public class MetaData implements Serializable
 	{
 		if (table.equals("SUPPLIER"))
 		{
-			return 10000;
+			return 10000 * 64;
 		}
 		
 		if (table.equals("PART"))
 		{
-			return 200000;
+			return 200000 * 64;
 		}
 		
 		if (table.equals("PARTSUPP"))
 		{
-			return 800000;
+			return 800000 * 64;
 		}
 		
 		if (table.equals("CUSTOMER"))
 		{
-			return 150000;
+			return 150000 * 64;
 		}
 		
 		if (table.equals("ORDERS"))
 		{
-			return 1500000;
+			return 1500000 * 64;
 		}
 		
 		if (table.equals("LINEITEM"))
 		{
-			return 6001215;
+			return 6001215 * 64;
 		}
 		
 		if (table.equals("NATION"))
@@ -737,12 +873,12 @@ public class MetaData implements Serializable
 		return 0;
 	}
 	
-	public long getColgroupCard(Vector<String> cols, RootOperator op)
+	public long getColgroupCard(ArrayList<String> cols, RootOperator op)
 	{
 		return getColgroupCard(cols, op.getGenerated());
 	}
 	
-	public long getColgroupCard(Vector<String> cols, HashMap<String, Double> generated)
+	public long getColgroupCard(ArrayList<String> cols, HashMap<String, Double> generated)
 	{
 		//TODO should check gathered colgroup stats
 		double card = 1;
@@ -763,22 +899,36 @@ public class MetaData implements Serializable
 	{
 		try
 		{
-			BufferedReader in = new BufferedReader(new FileReader(new File("card.tbl")));
-			String line = in.readLine();
-			while (line != null)
+			if (cards == null)
 			{
-				StringTokenizer tokens = new StringTokenizer(line, "|", false);
-				String column = tokens.nextToken();
-				if (col.equals(column))
+				synchronized(cardsLock)
 				{
-					in.close();
-					return Long.parseLong(tokens.nextToken());
+					if (cards == null)
+					{
+						cards = new ArrayList<ArrayList<Object>>();
+						BufferedReader in = new BufferedReader(new FileReader(new File("card.tbl")));
+						String line = in.readLine();
+						while (line != null)
+						{
+							ArrayList<Object> cols = new ArrayList<Object>(2);
+							FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
+							cols.add(tokens.nextToken());
+							cols.add(Long.parseLong(tokens.nextToken()));
+							cards.add(cols);
+							line = in.readLine();
+						}
+						in.close();
+					}
 				}
-			
-				line = in.readLine();
 			}
 			
-			in.close();
+			for (ArrayList<Object> line : cards)
+			{
+				if (col.equals(line.get(0)))
+				{
+					return (Long)line.get(1);
+				}
+			}
 		}
 		catch(Exception e)
 		{
@@ -800,9 +950,9 @@ public class MetaData implements Serializable
 	{
 		HashMap<Operator, ArrayList<String>> tables = new HashMap<Operator, ArrayList<String>>();
 		HashMap<Operator, ArrayList<ArrayList<Filter>>> filters = new HashMap<Operator, ArrayList<ArrayList<Filter>>>();
-		ArrayList<Operator> queued = new ArrayList<Operator>();
 		HashMap<Operator, HashMap<String, Double>> retval = new HashMap<Operator, HashMap<String, Double>>();
 		ArrayList<Operator> leaves = getLeaves(op);
+		ArrayList<Operator> queued = new ArrayList<Operator>(leaves.size());
 		for (Operator leaf : leaves)
 		{
 			Operator o = doWork(leaf, tables, filters, retval);
@@ -832,11 +982,11 @@ public class MetaData implements Serializable
 		return retval.get(queued.get(0));
 	}
 	
-	private ArrayList <Operator> getLeaves(Operator op)
+	protected ArrayList <Operator> getLeaves(Operator op)
 	{
 		if (op.children().size() == 0)
 		{
-			ArrayList<Operator> retval = new ArrayList<Operator>();
+			ArrayList<Operator> retval = new ArrayList<Operator>(1);
 			retval.add(op);
 			return retval;
 		}
@@ -850,7 +1000,7 @@ public class MetaData implements Serializable
 		return retval;
 	}
 	
-	private Operator doWork(Operator op, HashMap<Operator, ArrayList<String>> tables, HashMap<Operator, ArrayList<ArrayList<Filter>>> filters, HashMap<Operator, HashMap<String, Double>> retvals)
+	protected Operator doWork(Operator op, HashMap<Operator, ArrayList<String>> tables, HashMap<Operator, ArrayList<ArrayList<Filter>>> filters, HashMap<Operator, HashMap<String, Double>> retvals)
 	{
 		ArrayList<String> t;
 		ArrayList<ArrayList<Filter>> f;
@@ -884,6 +1034,22 @@ public class MetaData implements Serializable
 				//System.out.println("Op is SelectOperator");
 				//System.out.println("Filter list is " + f);
 			}
+			else if (op instanceof SemiJoinOperator)
+			{
+				HashSet<HashMap<Filter, Filter>> hshm = ((SemiJoinOperator)op).getHSHM();
+				for (HashMap<Filter, Filter> ored : hshm)
+				{
+					ArrayList<Filter> filter = new ArrayList<Filter>(ored.keySet());
+					f.add(filter);
+				}
+			}
+			else if (op instanceof AntiJoinOperator)
+			{
+				HashSet<HashMap<Filter, Filter>> hshm = ((AntiJoinOperator)op).getHSHM();
+				ArrayList<Filter> al = new ArrayList<Filter>();
+				al.add(new ConstantFilter(1 - this.likelihood(hshm, r)));
+				f.add(al);
+			}
 			else if (op instanceof RootOperator)
 			{
 				return null;
@@ -895,7 +1061,7 @@ public class MetaData implements Serializable
 				{
 					//System.out.println("Output col: " + col);
 					double card;
-					Vector<String> keys = ((MultiOperator)op).getKeys();
+					ArrayList<String> keys = ((MultiOperator)op).getKeys();
 					if (keys.size() == 1)
 					{
 						card = this.getCard(keys.get(0), r);
@@ -927,7 +1093,7 @@ public class MetaData implements Serializable
 				double card = 1;
 				for (String table : t)
 				{
-					StringTokenizer tokens = new StringTokenizer(table, ".", false);
+					FastStringTokenizer tokens = new FastStringTokenizer(table, ".", false);
 					String schema = tokens.nextToken();
 					String table2 = tokens.nextToken();
 					card *= this.getTableCard(schema, table2);
@@ -947,7 +1113,7 @@ public class MetaData implements Serializable
 				double card = 1;
 				for (String table : t)
 				{
-					StringTokenizer tokens = new StringTokenizer(table, ".", false);
+					FastStringTokenizer tokens = new FastStringTokenizer(table, ".", false);
 					String schema = tokens.nextToken();
 					String table2 = tokens.nextToken();
 					card *= this.getTableCard(schema, table2);
@@ -969,7 +1135,7 @@ public class MetaData implements Serializable
 					double card = this.getCard((String)entry.getKey(), r);
 					for (ArrayList<Filter> filter : f)
 					{
-						ArrayList<String> keys = new ArrayList<String>();
+						ArrayList<String> keys = new ArrayList<String>(1);
 						keys.add((String)entry.getKey());
 						if (references(filter, keys))
 						{
@@ -988,7 +1154,7 @@ public class MetaData implements Serializable
 				double card = 1;
 				for (String table : t)
 				{
-					StringTokenizer tokens = new StringTokenizer(table, ".", false);
+					FastStringTokenizer tokens = new FastStringTokenizer(table, ".", false);
 					String schema = tokens.nextToken();
 					String table2 = tokens.nextToken();
 					card *= this.getTableCard(schema, table2);
@@ -1008,7 +1174,7 @@ public class MetaData implements Serializable
 				double card = 1;
 				for (String table : t)
 				{
-					StringTokenizer tokens = new StringTokenizer(table, ".", false);
+					FastStringTokenizer tokens = new FastStringTokenizer(table, ".", false);
 					String schema = tokens.nextToken();
 					String table2 = tokens.nextToken();
 					card *= this.getTableCard(schema, table2);
@@ -1053,6 +1219,14 @@ public class MetaData implements Serializable
 			
 			if (op.children().size() > 1)
 			{
+				if (op instanceof SemiJoinOperator || op instanceof AntiJoinOperator)
+				{
+					if (oldOp.equals(op.children().get(1)))
+					{
+						t = new ArrayList<String>();
+						t.add("SYSIBM.SYSDUMMY");
+					}
+				}
 				if (!tables.containsKey(op))
 				{
 					tables.put(op, t);
@@ -1071,7 +1245,7 @@ public class MetaData implements Serializable
 		}
 	}
 	
-	private boolean references(ArrayList<Filter> filters, ArrayList<String> cols)
+	protected boolean references(ArrayList<Filter> filters, ArrayList<String> cols)
 	{
 		for (Filter filter : filters)
 		{
@@ -1095,7 +1269,7 @@ public class MetaData implements Serializable
 		return false;
 	}
 	
-	private double percentBelow(String col, double val)
+	protected double percentBelow(String col, double val)
 	{
 		ArrayList<Double> quartiles = getDoubleQuartiles(col);
 		if (quartiles == null)
@@ -1131,7 +1305,7 @@ public class MetaData implements Serializable
 		return 0;
 	}
 	
-	private double percentBelow(String col, String val)
+	protected double percentBelow(String col, String val)
 	{
 		ArrayList<String> quartiles = getStringQuartiles(col);
 		if (quartiles == null)
@@ -1167,7 +1341,7 @@ public class MetaData implements Serializable
 		return 0;
 	}
 	
-	private double percentBelow(String col, Date val)
+	protected double percentBelow(String col, Date val)
 	{
 		ArrayList<Date> quartiles = getDateQuartiles(col);
 		if (quartiles == null)
@@ -1203,7 +1377,7 @@ public class MetaData implements Serializable
 		return 0;
 	}
 	
-	private double percentAbove(String col, double val)
+	protected double percentAbove(String col, double val)
 	{
 		ArrayList<Double> quartiles = getDoubleQuartiles(col);
 		if (quartiles == null)
@@ -1239,7 +1413,7 @@ public class MetaData implements Serializable
 		return 0;
 	}
 	
-	private double percentAbove(String col, String val)
+	protected double percentAbove(String col, String val)
 	{
 		ArrayList<String> quartiles = getStringQuartiles(col);
 		if (quartiles == null)
@@ -1275,7 +1449,7 @@ public class MetaData implements Serializable
 		return 0;
 	}
 	
-	private double percentAbove(String col, Date val)
+	protected double percentAbove(String col, Date val)
 	{
 		ArrayList<Date> quartiles = getDateQuartiles(col);
 		if (quartiles == null)
@@ -1311,32 +1485,75 @@ public class MetaData implements Serializable
 		return 0;
 	}
 	
-	private ArrayList<Double> getDoubleQuartiles(String col)
+	protected ArrayList<Double> getDoubleQuartiles(String col)
 	{
 		try
 		{
-			BufferedReader in = new BufferedReader(new FileReader(new File("dist.tbl")));
-			String line = in.readLine();
-			while (line != null)
+			if (dists == null)
 			{
-				StringTokenizer tokens = new StringTokenizer(line, "|", false);
-				String column = tokens.nextToken();
-				if (col.equals(column))
+				synchronized(distsLock)
 				{
-					ArrayList<Double> retval = new ArrayList<Double>();
-					retval.add(Double.parseDouble(tokens.nextToken()));
-					retval.add(Double.parseDouble(tokens.nextToken()));
-					retval.add(Double.parseDouble(tokens.nextToken()));
-					retval.add(Double.parseDouble(tokens.nextToken()));
-					retval.add(Double.parseDouble(tokens.nextToken()));
-					in.close();
-					return retval;
+					if (dists == null)
+					{
+						dists = new ArrayList<ArrayList<Object>>();
+						BufferedReader in = new BufferedReader(new FileReader(new File("dist.tbl")));
+						String line = in.readLine();
+						while (line != null)
+						{
+							ArrayList<Object> cols = new ArrayList<Object>(6);
+							FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
+							cols.add(tokens.nextToken());
+							cols.add(tokens.nextToken());
+							cols.add(tokens.nextToken());
+							cols.add(tokens.nextToken());
+							cols.add(tokens.nextToken());
+							cols.add(tokens.nextToken());
+							dists.add(cols);
+							line = in.readLine();
+						}
+						in.close();
+					}
 				}
-			
-				line = in.readLine();
 			}
 			
-			in.close();
+			for (ArrayList<Object> line : dists)
+			{
+				String column = (String)line.get(0);
+				if (col.equals(column))
+				{
+					ArrayList<Double> retval = new ArrayList<Double>(5);
+					Object l1 = line.get(1);
+					if (l1 instanceof String)
+					{
+						synchronized(distsLock)
+						{
+							l1 = line.get(1);
+							if (l1 instanceof String)
+							{
+								String l2, l3, l4, l5;
+								l2 = (String)line.get(2);
+								l3 = (String)line.get(3);
+								l4 = (String)line.get(4);
+								l5 = (String)line.get(5);
+								line.clear();
+								line.add(column);
+								line.add(Double.parseDouble((String)l1));
+								line.add(Double.parseDouble(l2));
+								line.add(Double.parseDouble(l3));
+								line.add(Double.parseDouble(l4));
+								line.add(Double.parseDouble(l5));
+							}
+						}
+					}
+					retval.add((Double)line.get(1));
+					retval.add((Double)line.get(2));
+					retval.add((Double)line.get(3));
+					retval.add((Double)line.get(4));
+					retval.add((Double)line.get(5));
+					return retval;
+				}
+			}
+			
 			return null;
 		}
 		catch(Exception e)
@@ -1347,32 +1564,52 @@ public class MetaData implements Serializable
 		}
 	}
 	
-	private ArrayList<String> getStringQuartiles(String col)
+	protected ArrayList<String> getStringQuartiles(String col)
 	{
 		try
 		{
-			BufferedReader in = new BufferedReader(new FileReader(new File("dist.tbl")));
-			String line = in.readLine();
-			while (line != null)
+			if (dists == null)
 			{
-				StringTokenizer tokens = new StringTokenizer(line, "|", false);
-				String column = tokens.nextToken();
-				if (col.equals(column))
+				synchronized(distsLock)
 				{
-					ArrayList<String> retval = new ArrayList<String>();
-					retval.add(tokens.nextToken());
-					retval.add(tokens.nextToken());
-					retval.add(tokens.nextToken());
-					retval.add(tokens.nextToken());
-					retval.add(tokens.nextToken());
-					in.close();
-					return retval;
+					if (dists == null)
+					{
+						dists = new ArrayList<ArrayList<Object>>();
+						BufferedReader in = new BufferedReader(new FileReader(new File("dist.tbl")));
+						String line = in.readLine();
+						while (line != null)
+						{
+							ArrayList<Object> cols = new ArrayList<Object>(6);
+							FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
+							cols.add(tokens.nextToken());
+							cols.add(tokens.nextToken());
+							cols.add(tokens.nextToken());
+							cols.add(tokens.nextToken());
+							cols.add(tokens.nextToken());
+							cols.add(tokens.nextToken());
+							dists.add(cols);
+							line = in.readLine();
+						}
+						in.close();
+					}
 				}
-			
-				line = in.readLine();
 			}
 			
-			in.close();
+			for (ArrayList<Object> line : dists)
+			{
+				String column = (String)line.get(0);
+				if (col.equals(column))
+				{
+					ArrayList<String> retval = new ArrayList<String>(5);
+					retval.add((String)line.get(1));
+					retval.add((String)line.get(2));
+					retval.add((String)line.get(3));
+					retval.add((String)line.get(4));
+					retval.add((String)line.get(5));
+					return retval;
+				}
+			}
+			
 			return null;
 		}
 		catch(Exception e)
@@ -1383,34 +1620,77 @@ public class MetaData implements Serializable
 		}
 	}
 	
-	private ArrayList<Date> getDateQuartiles(String col)
+	protected ArrayList<Date> getDateQuartiles(String col)
 	{
-		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+		//SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 		
 		try
 		{
-			BufferedReader in = new BufferedReader(new FileReader(new File("dist.tbl")));
-			String line = in.readLine();
-			while (line != null)
+			if (dists == null)
 			{
-				StringTokenizer tokens = new StringTokenizer(line, "|", false);
-				String column = tokens.nextToken();
-				if (col.equals(column))
+				synchronized(distsLock)
 				{
-					ArrayList<Date> retval = new ArrayList<Date>();
-					retval.add(sdf.parse(tokens.nextToken()));
-					retval.add(sdf.parse(tokens.nextToken()));
-					retval.add(sdf.parse(tokens.nextToken()));
-					retval.add(sdf.parse(tokens.nextToken()));
-					retval.add(sdf.parse(tokens.nextToken()));
-					in.close();
-					return retval;
+					if (dists == null)
+					{
+						dists = new ArrayList<ArrayList<Object>>();
+						BufferedReader in = new BufferedReader(new FileReader(new File("dist.tbl")));
+						String line = in.readLine();
+						while (line != null)
+						{
+							ArrayList<Object> cols = new ArrayList<Object>(6);
+							FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
+							cols.add(tokens.nextToken());
+							cols.add(tokens.nextToken());
+							cols.add(tokens.nextToken());
+							cols.add(tokens.nextToken());
+							cols.add(tokens.nextToken());
+							cols.add(tokens.nextToken());
+							dists.add(cols);
+							line = in.readLine();
+						}
+						in.close();
+					}
 				}
-			
-				line = in.readLine();
 			}
 			
-			in.close();
+			for (ArrayList<Object> line : dists)
+			{
+				String column = (String)line.get(0);
+				if (col.equals(column))
+				{
+					ArrayList<Date> retval = new ArrayList<Date>(5);
+					Object l1 = line.get(1);
+					if (l1 instanceof String)
+					{
+						synchronized(distsLock)
+						{
+							l1 = line.get(1);
+							if (l1 instanceof String)
+							{
+								String l2, l3, l4, l5;
+								l2 = (String)line.get(2);
+								l3 = (String)line.get(3);
+								l4 = (String)line.get(4);
+								l5 = (String)line.get(5);
+								line.clear();
+								line.add(column);
+								line.add(DateParser.parse((String)l1));
+								line.add(DateParser.parse(l2));
+								line.add(DateParser.parse(l3));
+								line.add(DateParser.parse(l4));
+								line.add(DateParser.parse(l5));
+							}
+						}
+					}
+					retval.add((Date)line.get(1));
+					retval.add((Date)line.get(2));
+					retval.add((Date)line.get(3));
+					retval.add((Date)line.get(4));
+					retval.add((Date)line.get(5));
+					return retval;
+				}
+			}
+			
 			return null;
 		}
 		catch(Exception e)
@@ -1421,7 +1701,7 @@ public class MetaData implements Serializable
 		}
 	}
 	
-	private long stringToLong(String val)
+	protected long stringToLong(String val)
 	{
 		int i = 0;
 		long retval = 0;
@@ -1440,30 +1720,30 @@ public class MetaData implements Serializable
 		return new PartitionMetaData(schema, table);
 	}
 	
-	public class PartitionMetaData
+	public class PartitionMetaData implements Serializable
 	{
-		private static final int NODEGROUP_NONE = -3;
-		private static final int NODE_ANY = -2;
-		private static final int NODE_ALL = -1;
-		private static final int DEVICE_ALL = -1;
-		private ArrayList<Integer> nodeGroupSet;
-		private ArrayList<String> nodeGroupHash;
-		private ArrayList<Object> nodeGroupRange;
-		private int numNodeGroups;
-		private String nodeGroupRangeCol;
-		private HashMap<Integer, ArrayList<Integer>> nodeGroupHashMap;
-		private ArrayList<Integer> nodeSet;
-		private int numNodes;
-		private ArrayList<String> nodeHash;
-		private ArrayList<Object> nodeRange;
-		private String nodeRangeCol;
-		private int numDevices;
-		private ArrayList<Integer> deviceSet;
-		private ArrayList<String> deviceHash;
-		private ArrayList<Object> deviceRange;
-		private String deviceRangeCol;
-		private String schema;
-		private String table;
+		protected static final int NODEGROUP_NONE = -3;
+		protected static final int NODE_ANY = -2;
+		protected static final int NODE_ALL = -1;
+		protected static final int DEVICE_ALL = -1;
+		protected ArrayList<Integer> nodeGroupSet;
+		protected ArrayList<String> nodeGroupHash;
+		protected ArrayList<Object> nodeGroupRange;
+		protected int numNodeGroups;
+		protected String nodeGroupRangeCol;
+		protected HashMap<Integer, ArrayList<Integer>> nodeGroupHashMap;
+		protected ArrayList<Integer> nodeSet;
+		protected int numNodes;
+		protected ArrayList<String> nodeHash;
+		protected ArrayList<Object> nodeRange;
+		protected String nodeRangeCol;
+		protected int numDevices;
+		protected ArrayList<Integer> deviceSet;
+		protected ArrayList<String> deviceHash;
+		protected ArrayList<Object> deviceRange;
+		protected String deviceRangeCol;
+		protected String schema;
+		protected String table;
 		
 		public PartitionMetaData(String schema, String table)
 		{
@@ -1627,20 +1907,20 @@ public class MetaData implements Serializable
 			return numNodes;
 		}
 		
-		private void setNGData(String exp)
+		protected void setNGData(String exp)
 		{
 			if (exp.equals("NONE"))
 			{
-				nodeGroupSet = new ArrayList<Integer>();
+				nodeGroupSet = new ArrayList<Integer>(1);
 				nodeGroupSet.add(NODEGROUP_NONE);
 				return;
 			}
 			
-			StringTokenizer tokens = new StringTokenizer(exp, ",", false);
+			FastStringTokenizer tokens = new FastStringTokenizer(exp, ",", false);
 			String set = tokens.nextToken().substring(1);
 			set = set.substring(0, set.length() - 1);
-			nodeGroupSet = new ArrayList<Integer>();
-			StringTokenizer tokens2 = new StringTokenizer(set, "|", false);
+			FastStringTokenizer tokens2 = new FastStringTokenizer(set, "|", false);
+			nodeGroupSet = new ArrayList<Integer>(tokens2.allTokens().length);
 			numNodeGroups = 0;
 			while (tokens2.hasMoreTokens())
 			{
@@ -1664,8 +1944,8 @@ public class MetaData implements Serializable
 			{
 				set = tokens.nextToken().substring(1);
 				set = set.substring(0, set.length() - 1);
-				nodeGroupHash = new ArrayList<String>();
-				tokens2 = new StringTokenizer(set, "|", false);
+				tokens2 = new FastStringTokenizer(set, "|", false);
+				nodeGroupHash = new ArrayList<String>(tokens2.allTokens().length);
 				while (tokens2.hasMoreTokens())
 				{
 					nodeGroupHash.add(tokens2.nextToken());
@@ -1680,21 +1960,22 @@ public class MetaData implements Serializable
 			}
 		}
 		
-		private void setNData(String exp)
+		protected void setNData(String exp)
 		{
-			StringTokenizer tokens = new StringTokenizer(exp, ",", false);
+			FastStringTokenizer tokens = new FastStringTokenizer(exp, ",", false);
 			String first = tokens.nextToken();
 			
 			if (first.equals("ANY"))
 			{
-				nodeSet = new ArrayList<Integer>();
+				nodeSet = new ArrayList<Integer>(1);
 				nodeSet.add(NODE_ANY);
+				numNodes = 1;
 				return;
 			}
 			
 			if (first.equals("ALL"))
 			{
-				nodeSet = new ArrayList<Integer>();
+				nodeSet = new ArrayList<Integer>(1);
 				nodeSet.add(NODE_ALL);
 				numNodes = MetaData.this.getNumNodes();
 			}
@@ -1702,8 +1983,8 @@ public class MetaData implements Serializable
 			{
 				String set = first.substring(1);
 				set = set.substring(0, set.length() - 1);
-				nodeSet = new ArrayList<Integer>();
-				StringTokenizer tokens2 = new StringTokenizer(set, "|", false);
+				FastStringTokenizer tokens2 = new FastStringTokenizer(set, "|", false);
+				nodeSet = new ArrayList<Integer>(tokens2.allTokens().length);
 				numNodes = 0;
 				while (tokens2.hasMoreTokens())
 				{
@@ -1722,8 +2003,8 @@ public class MetaData implements Serializable
 			{
 				String set = tokens.nextToken().substring(1);
 				set = set.substring(0, set.length() - 1);
-				nodeHash = new ArrayList<String>();
-				StringTokenizer tokens2 = new StringTokenizer(set, "|", false);
+				FastStringTokenizer tokens2 = new FastStringTokenizer(set, "|", false);
+				nodeHash = new ArrayList<String>(tokens2.allTokens().length);
 				while (tokens2.hasMoreTokens())
 				{
 					nodeHash.add(tokens2.nextToken());
@@ -1738,14 +2019,14 @@ public class MetaData implements Serializable
 			}
 		}
 		
-		private void setDData(String exp)
+		protected void setDData(String exp)
 		{
-			StringTokenizer tokens = new StringTokenizer(exp, ",", false);
+			FastStringTokenizer tokens = new FastStringTokenizer(exp, ",", false);
 			String first = tokens.nextToken();
 			
 			if (first.equals("ALL"))
 			{
-				deviceSet = new ArrayList<Integer>();
+				deviceSet = new ArrayList<Integer>(1);
 				deviceSet.add(DEVICE_ALL);
 				numDevices = MetaData.this.getNumDevices();
 			}
@@ -1753,8 +2034,8 @@ public class MetaData implements Serializable
 			{
 				String set = first.substring(1);
 				set = set.substring(0, set.length() - 1);
-				deviceSet = new ArrayList<Integer>();
-				StringTokenizer tokens2 = new StringTokenizer(set, "|", false);
+				FastStringTokenizer tokens2 = new FastStringTokenizer(set, "|", false);
+				deviceSet = new ArrayList<Integer>(tokens2.allTokens().length);
 				numDevices = 0;
 				while (tokens2.hasMoreTokens())
 				{
@@ -1773,8 +2054,8 @@ public class MetaData implements Serializable
 			{
 				String set = tokens.nextToken().substring(1);
 				set = set.substring(0, set.length() - 1);
-				deviceHash = new ArrayList<String>();
-				StringTokenizer tokens2 = new StringTokenizer(set, "|", false);
+				FastStringTokenizer tokens2 = new FastStringTokenizer(set, "|", false);
+				deviceHash = new ArrayList<String>(tokens2.allTokens().length);
 				while (tokens2.hasMoreTokens())
 				{
 					deviceHash.add(tokens2.nextToken());
@@ -1790,12 +2071,12 @@ public class MetaData implements Serializable
 		}
 	}
 	
-	private String getNodeGroupExpression(String schema, String table)
+	protected String getNodeGroupExpression(String schema, String table)
 	{
 		return "NONE";
 	}
 	
-	private String getNodeExpression(String schema, String table)
+	protected String getNodeExpression(String schema, String table)
 	{
 		if (LOCAL)
 		{
@@ -1840,7 +2121,7 @@ public class MetaData implements Serializable
 		return null;
 	}
 	
-	private String getDeviceExpression(String schema, String table)
+	protected String getDeviceExpression(String schema, String table)
 	{
 		if (table.equals("NATION"))
 		{
@@ -1885,13 +2166,13 @@ public class MetaData implements Serializable
 		return null;
 	}
 	
-	private ArrayList<Integer> getNodeListForGroup(int group)
+	protected ArrayList<Integer> getNodeListForGroup(int group)
 	{
 		//TODO
 		return null;
 	}
 	
-	private ArrayList<Object> convertRangeStringToObject(String set, String schema, String table, String rangeCol)
+	protected ArrayList<Object> convertRangeStringToObject(String set, String schema, String table, String rangeCol)
 	{
 		//TODO
 		return null;
@@ -1899,26 +2180,278 @@ public class MetaData implements Serializable
 	
 	public int getNumNodes()
 	{
-		return 2;
+		return 1;
 	}
 	
 	public int getNumDevices()
 	{
-		return 4;
+		return 2;
 	}
 	
 	public String getHostNameForNode(int node)
 	{
+		if (node == -1)
+		{
+			return "192.168.1.3";
+		}
+		
 		if (node == 0)
 		{
 			return "192.168.1.3";
 		}
 		
-		if (node == 1)
+		/*
+		if (node == -1)
 		{
-			return "192.168.1.34";
+			return "hec-01";
 		}
 		
+		if (node == 0)
+		{
+			return "hec-02";
+		}
+		
+		if (node == 1)
+		{
+			return "hec-03";
+		}
+		
+		if (node == 2)
+		{
+			return "hec-04";
+		}
+		
+		if (node == 3)
+		{
+			return "hec-06";
+		}
+		
+		if (node == 4)
+		{
+			return "hec-07";
+		}
+		
+		if (node == 5)
+		{
+			return "hec-08";
+		}
+		
+		if (node == 6)
+		{
+			return "hec-09";
+		}
+		
+		if (node == 7)
+		{
+			return "hec-10";
+		}
+		
+		if (node == 8)
+		{
+			return "hec-11";
+		}
+		
+		if (node == 9)
+		{
+			return "hec-13";
+		}
+		
+		if (node == 10)
+		{
+			return "hec-14";
+		}
+		
+		if (node == 11)
+		{
+			return "hec-16";
+		}
+		
+		if (node == 12)
+		{
+			return "hec-17";
+		}
+		
+		if (node == 13)
+		{
+			return "hec-18";
+		}
+		
+		if (node == 14)
+		{
+			return "hec-19";
+		}
+		
+		if (node == 15)
+		{
+			return "hec-21";
+		}
+		
+		if (node == 16)
+		{
+			return "hec-23";
+		}
+		
+		if (node == 17)
+		{
+			return "hec-24";
+		}
+		
+		if (node == 18)
+		{
+			return "hec-25";
+		}
+		
+		if (node == 19)
+		{
+			return "hec-26";
+		}
+		
+		if (node == 20)
+		{
+			return "hec-27";
+		}
+		
+		if (node == 21)
+		{
+			return "hec-28";
+		}
+		
+		if (node == 22)
+		{
+			return "hec-29";
+		}
+		
+		if (node == 23)
+		{
+			return "hec-53";
+		}
+		
+		if (node == 24)
+		{
+			return "hec-55";
+		}
+		
+		if (node == 25)
+		{
+			return "hec-56";
+		}
+		
+		if (node == 26)
+		{
+			return "hec-58";
+		}
+		
+		if (node == 27)
+		{
+			return "hec-59";
+		}
+		
+		if (node == 28)
+		{
+			return "hec-60";
+		}
+		
+		if (node == 29)
+		{
+			//return "hec-61";
+			return "hec-51"; 
+		}
+		
+		if (node == 30)
+		{
+			return "hec-63";
+		}
+		
+		if (node == 31)
+		{
+			return "hec-30";
+		}
+		
+		if (node == 32)
+		{
+			return "hec-31";
+		}
+		
+		if (node == 33)
+		{
+			return "hec-32";
+		}
+		
+		if (node == 34)
+		{
+			return "hec-33";
+		}
+		
+		if (node == 35)
+		{
+			return "hec-34";
+		}
+		
+		if (node == 36)
+		{
+			return "hec-35";
+		}
+		
+		if (node == 37)
+		{
+			return "hec-36";
+		}
+		
+		if (node == 38)
+		{
+			return "hec-37";
+		}
+		
+		if (node == 39)
+		{
+			return "hec-38";
+		}
+		
+		if (node == 40)
+		{
+			return "hec-39";
+		}
+		
+		if (node == 41)
+		{
+			return "hec-43";
+		}
+		
+		if (node == 42)
+		{
+			return "hec-44";
+		}
+		
+		if (node == 43)
+		{
+			return "hec-45";
+		}
+		
+		if (node == 44)
+		{
+			return "hec-46";
+		}
+		
+		if (node == 45)
+		{
+			return "hec-47";
+		}
+		
+		if (node == 46)
+		{
+			return "hec-49";
+		}
+		
+		if (node == 47)
+		{
+			return "hec-50";
+		}*/
+		
+		//if (node == 48)
+		//{
+		//	return "hec-51";
+		//}
+
 		return null;
 	}
 	
@@ -1926,7 +2459,7 @@ public class MetaData implements Serializable
 	{
 		if (num == 0)
 		{
-			return "/home/hrdbms/";
+			return "/temp2/";
 		}
 		
 		if (num == 1)
@@ -1934,16 +2467,206 @@ public class MetaData implements Serializable
 			return "/temp1/";
 		}
 		
-		if (num == 2)
-		{
-			return "/temp2/";
-		}
-		
-		if (num == 3)
-		{
-			return "/temp3/";
-		}
-		
 		return null;
+	}
+	
+	public ArrayList<Index> getIndexesForTable(String schema, String table)
+	{
+		ArrayList<Index> retval = new ArrayList<Index>();
+		if (table.equals("LINEITEM"))
+		{
+			ArrayList<String> keys = new ArrayList<String>();
+			keys.add("L_SHIPDATE");
+			keys.add("L_EXTENDEDPRICE");
+			keys.add("L_QUANTITY");
+			keys.add("L_DISCOUNT");
+			keys.add("L_SUPPKEY");
+			ArrayList<String> types = new ArrayList<String>();
+			types.add("DATE");
+			types.add("FLOAT");
+			types.add("FLOAT");
+			types.add("FLOAT");
+			types.add("INT");
+			ArrayList<Boolean> orders = new ArrayList<Boolean>();
+			orders.add(true);
+			orders.add(true);
+			orders.add(true);
+			orders.add(true);
+			orders.add(true);
+			retval.add(new Index("xl_shipdate.indx", keys, types, orders));
+			
+			keys = new ArrayList<String>();
+			keys.add("L_RECEIPTDATE");
+			keys.add("L_SHIPMODE");
+			keys.add("L_SHIPINSTRUCT");
+			types = new ArrayList<String>();
+			types.add("DATE");
+			types.add("CHAR");
+			types.add("CHAR");
+			orders = new ArrayList<Boolean>();
+			orders.add(true);
+			orders.add(true);
+			orders.add(true);
+			retval.add(new Index("xl_receiptdate.indx", keys, types, orders));
+			
+			keys = new ArrayList<String>();
+			keys.add("L_ORDERKEY");
+			keys.add("L_SUPPKEY");
+			types = new ArrayList<String>();
+			types.add("INT");
+			types.add("INT");
+			orders = new ArrayList<Boolean>();
+			orders.add(true);
+			orders.add(true);
+			retval.add(new Index("xl_orderkey.indx", keys, types, orders));
+			
+			keys = new ArrayList<String>();
+			keys.add("L_PARTKEY");
+			types = new ArrayList<String>();
+			types.add("INT");
+			orders = new ArrayList<Boolean>();
+			orders.add(true);
+			retval.add(new Index("xl_partkey.indx", keys, types, orders));
+		}
+		
+		if (table.equals("PART"))
+		{
+			ArrayList<String> keys = new ArrayList<String>();
+			keys.add("P_SIZE");
+			ArrayList<String> types = new ArrayList<String>();
+			types.add("INT");
+			ArrayList<Boolean> orders = new ArrayList<Boolean>();
+			orders.add(true);
+			retval.add(new Index("xp_size.indx", keys, types, orders));
+			
+			keys = new ArrayList<String>();
+			keys.add("P_TYPE");
+			keys.add("P_SIZE");
+			types = new ArrayList<String>();
+			types.add("CHAR");
+			types.add("INT");
+			orders = new ArrayList<Boolean>();
+			orders.add(true);
+			orders.add(true);
+			retval.add(new Index("xp_type.indx", keys, types, orders));
+			
+			keys = new ArrayList<String>();
+			keys.add("P_NAME");
+			types = new ArrayList<String>();
+			types.add("CHAR");
+			orders = new ArrayList<Boolean>();
+			orders.add(true);
+			retval.add(new Index("xp_name.indx", keys, types, orders));
+			
+			keys = new ArrayList<String>();
+			keys.add("P_CONTAINER");
+			keys.add("P_BRAND");
+			keys.add("P_SIZE");
+			types = new ArrayList<String>();
+			types.add("CHAR");
+			types.add("CHAR");
+			types.add("INT");
+			orders = new ArrayList<Boolean>();
+			orders.add(true);
+			orders.add(true);
+			orders.add(true);
+			retval.add(new Index("xp_container.indx", keys, types, orders));
+		}
+		
+		if (table.equals("CUSTOMER"))
+		{
+			ArrayList<String> keys = new ArrayList<String>();
+			keys.add("C_MKTSEGMENT");
+			ArrayList<String> types = new ArrayList<String>();
+			types.add("CHAR");
+			ArrayList<Boolean> orders = new ArrayList<Boolean>();
+			orders.add(true);
+			retval.add(new Index("xc_mktsegment.indx", keys, types, orders));
+		}
+		
+		if (table.equals("ORDERS"))
+		{
+			ArrayList<String> keys = new ArrayList<String>();
+			keys.add("O_ORDERDATE");
+			ArrayList<String> types = new ArrayList<String>();
+			types.add("DATE");
+			ArrayList<Boolean> orders = new ArrayList<Boolean>();
+			orders.add(true);
+			retval.add(new Index("xo_orderdate.indx", keys, types, orders));
+			
+			keys = new ArrayList<String>();
+			keys.add("O_CUSTKEY");
+			types = new ArrayList<String>();
+			types.add("INT");
+			orders = new ArrayList<Boolean>();
+			orders.add(true);
+			retval.add(new Index("xo_custkey.indx", keys, types, orders));
+		}
+		
+		if (table.equals("SUPPLIER"))
+		{
+			ArrayList<String> keys = new ArrayList<String>();
+			keys.add("S_COMMENT");
+			ArrayList<String> types = new ArrayList<String>();
+			types.add("CHAR");
+			ArrayList<Boolean> orders = new ArrayList<Boolean>();
+			orders.add(true);
+			retval.add(new Index("xs_comment.indx", keys, types, orders));
+			
+			keys = new ArrayList<String>();
+			keys.add("S_SUPPKEY");
+			types = new ArrayList<String>();
+			types.add("INT");
+			orders = new ArrayList<Boolean>();
+			orders.add(true);
+			retval.add(new Index("xs_suppkey.indx", keys, types, orders));
+		}
+		
+		if (table.equals("PARTSUPP"))
+		{
+			ArrayList<String> keys = new ArrayList<String>();
+			keys.add("PS_PARTKEY");
+			keys.add("PS_SUPPKEY");
+			ArrayList<String> types = new ArrayList<String>();
+			types.add("INT");
+			types.add("INT");
+			ArrayList<Boolean> orders = new ArrayList<Boolean>();
+			orders.add(true);
+			orders.add(true);
+			retval.add(new Index("xps_partkey.indx", keys, types, orders));
+		}
+		
+		return retval;
+	}
+	
+	public Index getBestCompoundIndex(HashSet<String> cols, String schema, String table)
+	{
+		if (cols.size() <= 1)
+		{
+			return null;
+		}
+		
+		ArrayList<Index> indexes = this.getIndexesForTable(schema, table);
+		int maxCount = 1;
+		Index maxIndex = null;
+		for (Index index : indexes)
+		{
+			int count = 0;
+			for (String col : index.getCols())
+			{
+				if (cols.contains(col))
+				{
+					count++;
+				}
+			}
+			
+			if (count > maxCount)
+			{
+				maxCount = count;
+				maxIndex = index;
+			}
+		}
+		
+		return maxIndex;
 	}
 }

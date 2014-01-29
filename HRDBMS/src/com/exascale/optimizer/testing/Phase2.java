@@ -4,15 +4,17 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Random;
+import java.util.ArrayList;
 
 public class Phase2 
 {
-	private RootOperator root;
-	private MetaData meta = new MetaData();
+	protected RootOperator root;
+	protected MetaData meta;
 	
 	public Phase2(RootOperator root)
 	{
 		this.root = root;
+		meta = root.getMeta();
 	}
 	
 	public void optimize()
@@ -21,7 +23,7 @@ public class Phase2
 		updateTree(root);
 	}
 	
-	private void setPartitionMetaData(Operator op)
+	protected void setPartitionMetaData(Operator op)
 	{
 		if (op instanceof TableScanOperator)
 		{
@@ -40,7 +42,7 @@ public class Phase2
 		}
 	}
 	
-	private void updateTree(Operator op)
+	protected void updateTree(Operator op)
 	{
 		if (op instanceof TableScanOperator)
 		{
@@ -67,7 +69,7 @@ public class Phase2
 					{
 						//node is hash or range
 						//node is set or ALL
-						ArrayList<Integer> nodeList = new ArrayList<Integer>();
+						ArrayList<Integer> nodeList = new ArrayList<Integer>(meta.getNumNodes());
 						int i = 0;
 						while (i < meta.getNumNodes())
 						{
@@ -75,7 +77,7 @@ public class Phase2
 							i++;
 						}
 						
-						ArrayList<ArrayList<Integer>> nodeLists = new ArrayList<ArrayList<Integer>>();
+						ArrayList<ArrayList<Integer>> nodeLists = new ArrayList<ArrayList<Integer>>(1);
 						nodeLists.add(nodeList);
 						setActiveNodes(t, filter, o, nodeLists);
 						setActiveDevices(t, filter, o);
@@ -85,7 +87,7 @@ public class Phase2
 				{
 					HashMap<Integer, ArrayList<Integer>> nodeGroupHashMap = t.getNodeGroupHashMap();
 					ArrayList<Integer> entries = determineHashMapEntries(t, filter);
-					ArrayList<ArrayList<Integer>> nodeLists = new ArrayList<ArrayList<Integer>>();
+					ArrayList<ArrayList<Integer>> nodeLists = new ArrayList<ArrayList<Integer>>(entries.size());
 					for (int entry : entries)
 					{
 						nodeLists.add(nodeGroupHashMap.get(entry));
@@ -116,62 +118,42 @@ public class Phase2
 				o.removeChild(op);
 			}
 			
-			HashMap<Integer, TableScanOperator> nodesWithOps = new HashMap<Integer, TableScanOperator>();
 			for (Operator o : parents)
 			{
+				NetworkReceiveOperator receive = new NetworkReceiveOperator(meta);
 				ArrayList<Integer> nodeList = t.getNodeList(o);
 				for (int node : nodeList)
 				{
-					if (nodesWithOps.containsKey(node))
+					TableScanOperator table = t.clone();
+					table.setNode(node);
+					NetworkSendOperator send = new NetworkSendOperator(node, meta);
+					try
 					{
-						TableScanOperator table = nodesWithOps.get(node);
-						NetworkSendOperator send = new NetworkSendOperator(node, meta);
-						NetworkReceiveOperator receive = new NetworkReceiveOperator(meta);
-						try
-						{
-							send.add(table);
-							receive.add(send);
-							o.add(receive);
-						}
-						catch(Exception e)
-						{
-							e.printStackTrace();
-							System.exit(1);
-						}
-						table.addActiveDevices(t.getDeviceList(o));
-						table.setCNFForParent(send, t.getCNFForParent(o));
+						send.add(table);
+						receive.add(send);
 					}
-					else
+					catch(Exception e)
 					{
-						TableScanOperator table = t.clone();
-						nodesWithOps.put(node, table);
-						table.setNode(node);
-						NetworkSendOperator send = new NetworkSendOperator(node, meta);
-						NetworkReceiveOperator receive = new NetworkReceiveOperator(meta);
-						try
-						{
-							send.add(table);
-							receive.add(send);
-							o.add(receive);
-						}
-						catch(Exception e)
-						{
-							e.printStackTrace();
-							System.exit(1);
-						}
-						table.addActiveDevices(t.getDeviceList(o));
-						table.setCNFForParent(send, t.getCNFForParent(o));
+						e.printStackTrace();
+						System.exit(1);
+					}
+					table.addActiveDevices(t.getDeviceList(o));
+					CNFFilter cnf = t.getCNFForParent(o);
+					if (cnf != null)
+					{
+						table.setCNFForParent(send, cnf);
 					}
 				}
-			}
-			
-			for (TableScanOperator table : nodesWithOps.values())
-			{
-				ArrayList<Integer> devices = table.getDeviceList();
-				HashSet hs = new HashSet();
-				hs.addAll(devices);
-				devices.clear();
-				devices.addAll(hs);
+				
+				try
+				{
+					o.add(receive);
+				}
+				catch(Exception e)
+				{
+					e.printStackTrace();
+					System.exit(1);
+				}
 			}
 		}
 		else
@@ -183,7 +165,7 @@ public class Phase2
 		}
 	}
 	
-	private void setActiveDevices(TableScanOperator t, CNFFilter filter, Operator o)
+	protected void setActiveDevices(TableScanOperator t, CNFFilter filter, Operator o)
 	{
 		if (t.isSingleDeviceSet())
 		{
@@ -193,7 +175,7 @@ public class Phase2
 		
 		if (t.deviceIsHash())
 		{
-			if (filter.hashFiltersPartitions(t.getDeviceHash()))
+			if (filter != null && filter.hashFiltersPartitions(t.getDeviceHash()))
 			{
 				if (t.allDevices())
 				{
@@ -227,7 +209,7 @@ public class Phase2
 		else
 		{
 			//device range
-			if (filter.rangeFiltersPartitions(t.getDeviceRangeCol()))
+			if (filter != null && filter.rangeFiltersPartitions(t.getDeviceRangeCol()))
 			{
 				ArrayList<Filter> f = filter.getRangeFilters(); 
 				//handle devices all or devices set
@@ -256,7 +238,7 @@ public class Phase2
 		}
 	}
 	
-	private void setActiveNodes(TableScanOperator t, CNFFilter filter, Operator o, ArrayList<ArrayList<Integer>> nodeLists)
+	protected void setActiveNodes(TableScanOperator t, CNFFilter filter, Operator o, ArrayList<ArrayList<Integer>> nodeLists)
 	{
 		if (t.isSingleNodeSet())
 		{
@@ -269,7 +251,7 @@ public class Phase2
 		
 		if (t.nodeIsHash())
 		{
-			if (filter.hashFiltersPartitions(t.getNodeHash()))
+			if (filter != null && filter.hashFiltersPartitions(t.getNodeHash()))
 			{
 				if (t.allNodes())
 				{
@@ -313,7 +295,7 @@ public class Phase2
 		else
 		{
 			//node range
-			if (filter.rangeFiltersPartitions(t.getNodeRangeCol()))
+			if (filter != null && filter.rangeFiltersPartitions(t.getNodeRangeCol()))
 			{
 				ArrayList<Filter> f = filter.getRangeFilters(); 
 				//handle nodes all or nodes set
@@ -352,26 +334,26 @@ public class Phase2
 		}
 	}
 	
-	private ArrayList<Integer> determineHashMapEntries(TableScanOperator t, CNFFilter filter)
+	protected ArrayList<Integer> determineHashMapEntries(TableScanOperator t, CNFFilter filter)
 	{
 		if (t.isSingleNodeGroupSet())
 		{
-			ArrayList<Integer> retval = new ArrayList<Integer>();
+			ArrayList<Integer> retval = new ArrayList<Integer>(1);
 			retval.add(t.getSingleNodeGroup());
 			return retval;
 		}
 		
 		if (t.nodeGroupIsHash())
 		{
-			if (filter.hashFiltersPartitions(t.getNodeGroupHash()))
+			if (filter != null && filter.hashFiltersPartitions(t.getNodeGroupHash()))
 			{
-				ArrayList<Integer> retval = new ArrayList<Integer>();
+				ArrayList<Integer> retval = new ArrayList<Integer>(1);
 				retval.add(t.nodeGroupSet().get((int)(filter.getPartitionHash() % t.getNumNodeGroups())));
 				return retval;
 			}
 			else
 			{
-				ArrayList<Integer> retval = new ArrayList<Integer>();
+				ArrayList<Integer> retval = new ArrayList<Integer>(t.getNodeGroupHashMap().size());
 				for (int id : t.getNodeGroupHashMap().keySet())
 				{
 					retval.add(id);
@@ -383,7 +365,7 @@ public class Phase2
 		else
 		{
 			//node group range
-			if (filter.rangeFiltersPartitions(t.getNodeGroupRangeCol()))
+			if (filter != null && filter.rangeFiltersPartitions(t.getNodeGroupRangeCol()))
 			{
 				ArrayList<Filter> f = filter.getRangeFilters(); 
 				ArrayList<Integer> devices = t.getNodeGroupsMatchingRangeFilters(f);
@@ -391,7 +373,7 @@ public class Phase2
 			}
 			else
 			{
-				ArrayList<Integer> retval = new ArrayList<Integer>();
+				ArrayList<Integer> retval = new ArrayList<Integer>(t.getNodeGroupHashMap().size());
 				for (int id : t.getNodeGroupHashMap().keySet())
 				{
 					retval.add(id);

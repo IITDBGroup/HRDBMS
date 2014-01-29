@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.io.Serializable;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -14,45 +15,125 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
-import java.util.Vector;
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.exascale.optimizer.testing.MetaData.PartitionMetaData;
 
 public class TableScanOperator implements Operator, Serializable
 {
-	private HashMap<String, String> cols2Types = new HashMap<String, String>();
-	private HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
-	private TreeMap<Integer, String> pos2Col = new TreeMap<Integer, String>();
-	private String name;
-	private String schema;
-	private ArrayList<BufferedReader> ins = new ArrayList<BufferedReader>();
-	private Vector<Operator> parents = new Vector<Operator>();
-	public volatile LinkedBlockingQueue readBuffer = new LinkedBlockingQueue(Driver.QUEUE_SIZE);
-	private volatile HashMap<Operator, LinkedBlockingQueue> readBuffers = new HashMap<Operator, LinkedBlockingQueue>();
-	private boolean startDone = false;
-	private boolean closeDone = false;
-	private boolean optimize = false;
-	public volatile LinkedBlockingQueue queue = new LinkedBlockingQueue(Driver.QUEUE_SIZE);
-	private final int NUM_PTHREADS = Runtime.getRuntime().availableProcessors();
-	private HashMap<Operator, HashSet<HashMap<Filter, Filter>>> filters = new HashMap<Operator, HashSet<HashMap<Filter, Filter>>>();
-	private HashMap<Operator, CNFFilter> orderedFilters = new HashMap<Operator, CNFFilter>();
-	private MetaData meta;
-	private HashMap<Operator, Operator> opParents = new HashMap<Operator, Operator>();
-	private ArrayList<Integer> neededPos;
-	private ArrayList<Integer> fetchPos;
-	private TreeMap<Integer, String> midPos2Col;
-	private HashMap<String, String> midCols2Types;
-	private boolean set = false;
-	private PartitionMetaData partMeta;
-	private HashMap<Operator, ArrayList<Integer>> activeDevices = new HashMap<Operator, ArrayList<Integer>>();
-	private HashMap<Operator, ArrayList<Integer>> activeNodes = new HashMap<Operator, ArrayList<Integer>>();
-	private ArrayList<Integer> devices = new ArrayList<Integer>();
-	private int node;
-	private boolean phase2Done = false;
+	protected HashMap<String, String> cols2Types = new HashMap<String, String>();
+	protected HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
+	protected TreeMap<Integer, String> pos2Col = new TreeMap<Integer, String>();
+	protected String name;
+	protected String schema;
+	protected ArrayList<BufferedReader> ins = new ArrayList<BufferedReader>();
+	protected ArrayList<Operator> parents = new ArrayList<Operator>();
+	public volatile BufferedLinkedBlockingQueue readBuffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
+	protected volatile HashMap<Operator, BufferedLinkedBlockingQueue> readBuffers = new HashMap<Operator, BufferedLinkedBlockingQueue>();
+	protected boolean startDone = false;
+	protected boolean closeDone = false;
+	protected boolean optimize = false;
+	public volatile BufferedLinkedBlockingQueue queue = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
+	protected final int NUM_PTHREADS = ResourceManager.cpus;
+	protected HashMap<Operator, HashSet<HashMap<Filter, Filter>>> filters = new HashMap<Operator, HashSet<HashMap<Filter, Filter>>>();
+	protected HashMap<Operator, CNFFilter> orderedFilters = new HashMap<Operator, CNFFilter>();
+	protected MetaData meta;
+	protected HashMap<Operator, Operator> opParents = new HashMap<Operator, Operator>();
+	protected ArrayList<Integer> neededPos;
+	protected ArrayList<Integer> fetchPos;
+	protected TreeMap<Integer, String> midPos2Col;
+	protected HashMap<String, String> midCols2Types;
+	protected boolean set = false;
+	protected PartitionMetaData partMeta;
+	protected HashMap<Operator, ArrayList<Integer>> activeDevices = new HashMap<Operator, ArrayList<Integer>>();
+	protected HashMap<Operator, ArrayList<Integer>> activeNodes = new HashMap<Operator, ArrayList<Integer>>();
+	protected ArrayList<Integer> devices = new ArrayList<Integer>();
+	protected int node;
+	protected boolean phase2Done = false;
+	protected HashMap<Integer, Operator> device2Child = new HashMap<Integer, Operator>();
+	protected ArrayList<Operator> children = new ArrayList<Operator>();
+	protected ArrayList<BufferedRandomAccessFile> randomIns = new ArrayList<BufferedRandomAccessFile>();
+	protected HashMap<BufferedRandomAccessFile, Integer> ins2Device = new HashMap<BufferedRandomAccessFile, Integer>();
+	protected boolean indexOnly = false;
+	protected volatile boolean forceDone = false;
+	
+	public void reset()
+	{	
+		for (Operator o : children)
+		{
+			try
+			{
+				o.reset();
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
+				System.exit(1);
+			}
+		}
+		
+		readBuffer.clear();
+		queue.clear();
+		forceDone = false;
+		init();
+	}
+	
+	public HashSet<HashMap<Filter, Filter>> getHSHM()
+	{
+		CNFFilter retval = orderedFilters.get(parents.get(0));
+		if (retval == null)
+		{
+			return null;
+		}
+		
+		return retval.getHSHM();
+	}
+	
+	public void nextAll(Operator op)
+	{
+		forceDone = true;
+	}
+	
+	public void setChildForDevice(int device, Operator child)
+	{
+		device2Child.put(device, child);
+	}
+	
+	public CNFFilter getFirstCNF()
+	{
+		for (CNFFilter cnf : orderedFilters.values())
+		{
+			return cnf;
+		}
+		
+		return null;
+	}
+	
+	public void cleanupOrderedFilters()
+	{
+		if (orderedFilters.size() <= 1)
+		{
+			return;
+		}
+		CNFFilter theOne = orderedFilters.get(parents.get(0));
+		orderedFilters.clear();
+		if (theOne != null)
+		{
+			orderedFilters.put(parents.get(0), theOne);
+		}
+	}
+	
+	public void setChildPos(int pos)
+	{
+	}
+	
+	public int getChildPos()
+	{
+		return 0;
+	}
 	
 	public TableScanOperator clone()
 	{
@@ -70,9 +151,15 @@ public class TableScanOperator implements Operator, Serializable
 		retval.fetchPos = (ArrayList<Integer>)fetchPos.clone();
 		retval.midPos2Col = (TreeMap<Integer, String>)midPos2Col.clone();
 		retval.midCols2Types = (HashMap<String, String>)midCols2Types.clone();
+		retval.cols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
+		retval.pos2Col = (TreeMap<Integer, String>)pos2Col.clone();
+		retval.cols2Types = (HashMap<String, String>)cols2Types.clone();
 		retval.set = set;
 		retval.partMeta = partMeta;
 		retval.phase2Done = phase2Done;
+		retval.node = node;
+		retval.devices = (ArrayList<Integer>)devices.clone();
+		retval.indexOnly = indexOnly;
 		return retval;
 	}
 	
@@ -86,9 +173,27 @@ public class TableScanOperator implements Operator, Serializable
 		pos2Col = meta.getPos2ColForTable(schema, name);
 	}
 	
+	public int getNode()
+	{
+		return node;
+	}
+	
+	public void clearOpParents()
+	{
+		if (opParents.size() > 0)
+		{
+			opParents.clear();
+		}
+	}
+	
 	public void setCNFForParent(Operator op, CNFFilter filter)
 	{
 		orderedFilters.put(op, filter);
+		if (op instanceof NetworkHashAndSendOperator || op instanceof NetworkSendMultipleOperator || op instanceof NetworkSendRROperator)
+		{
+			return;
+		}
+		opParents.put(op.parent(), op);
 	}
 	
 	public boolean phase2Done()
@@ -123,11 +228,11 @@ public class TableScanOperator implements Operator, Serializable
 	
 	public ArrayList<String> getReferences()
 	{
-		ArrayList<String> retval = new ArrayList<String>();
+		ArrayList<String> retval = new ArrayList<String>(0);
 		return retval;
 	}
 	
-	public Vector<Operator> parents()
+	public ArrayList<Operator> parents()
 	{
 		return parents;
 	}
@@ -165,7 +270,7 @@ public class TableScanOperator implements Operator, Serializable
 		}
 		else
 		{
-			return (schema.equals(((TableScanOperator)rhs).schema) && name.equals(((TableScanOperator)rhs).name));
+			return (schema.equals(((TableScanOperator)rhs).schema) && name.equals(((TableScanOperator)rhs).name) && node == ((TableScanOperator)rhs).node);
 		}
 	}
 	
@@ -176,18 +281,12 @@ public class TableScanOperator implements Operator, Serializable
 	
 	public ArrayList<Operator> children()
 	{
-		ArrayList<Operator> retval = new ArrayList<Operator>();
-		return retval;
-	}
-	
-	public long bufferSize()
-	{
-		return readBuffer.size();
+		return children;
 	}
 	
 	public String toString()
 	{
-		String retval = "TableScanOperator: " + schema + "." + name;
+		String retval = "TableScanOperator(" + node + ":" + devices + "): " + schema + "." + name;
 		for (Map.Entry entry : orderedFilters.entrySet())
 		{
 			retval += (", (" + entry.getKey().toString() + ", " + entry.getValue().toString()) + ")";
@@ -217,6 +316,19 @@ public class TableScanOperator implements Operator, Serializable
 		{
 			startDone = true;
 			
+			for (Operator o : children)
+			{
+				try
+				{
+					o.start();
+				}
+				catch(Exception e)
+				{
+					e.printStackTrace();
+					System.exit(1);
+				}
+			}
+			
 			if (devices.size() == 0)
 			{
 				BufferedReader in = new BufferedReader(new FileReader(new File(name.toLowerCase() + ".tbl")));
@@ -226,8 +338,17 @@ public class TableScanOperator implements Operator, Serializable
 			{
 				for (int device : devices)
 				{
-					BufferedReader in = new BufferedReader(new FileReader(new File(meta.getDevicePath(device) + name.toLowerCase() + ".tbl")));
-					ins.add(in);
+					if (children.size() == 0)
+					{
+						BufferedReader in = new BufferedReader(new FileReader(new File(meta.getDevicePath(device) + name.toLowerCase() + ".tbl")));
+						ins.add(in);
+					}
+					else
+					{
+						BufferedRandomAccessFile in = new BufferedRandomAccessFile(meta.getDevicePath(device) + name.toLowerCase() + ".tbl", "r", 512);
+						randomIns.add(in);
+						ins2Device.put(in, device);
+					}
 				}
 			}
 			
@@ -248,7 +369,7 @@ public class TableScanOperator implements Operator, Serializable
 			{
 				for (Operator parent : parents)
 				{
-					readBuffers.put(parent, new LinkedBlockingQueue(Driver.QUEUE_SIZE));
+					readBuffers.put(parent, new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE));
 				}
 			}
 			
@@ -256,7 +377,7 @@ public class TableScanOperator implements Operator, Serializable
 		}
 	}
 	
-	public void addFilter(Vector<Filter> filters, Operator op, Operator opParent)
+	public void addFilter(ArrayList<Filter> filters, Operator op, Operator opParent)
 	{
 		opParents.put(opParent, op);
 		
@@ -298,7 +419,7 @@ public class TableScanOperator implements Operator, Serializable
 		orderedFilters.put(op, new CNFFilter(f, meta, cols2Pos));
 	}
 	
-	private void init()
+	protected void init()
 	{ 
 		int i = 0;
 		ParseThread[] threads = new ParseThread[NUM_PTHREADS];
@@ -318,7 +439,7 @@ public class TableScanOperator implements Operator, Serializable
 		if (!optimize)
 		{
 			Object o;
-			LinkedBlockingQueue buffer = readBuffers.get(op);
+			BufferedLinkedBlockingQueue buffer = readBuffers.get(op);
 			
 			o = buffer.take();
 			
@@ -369,17 +490,23 @@ public class TableScanOperator implements Operator, Serializable
 			{
 				in.close();
 			}
+			for (BufferedRandomAccessFile in : randomIns)
+			{
+				in.close();
+			}
 		}
 	}
 	
 	public void add(Operator op) throws Exception
 	{
-		throw new UnsupportedOperationException("TableScanOperator does not support children.");
+		children.add(op);
+		op.registerParent(this);
 	}
 	
 	public void removeChild(Operator op)
 	{
-		throw new UnsupportedOperationException("TableScanOperator does not support removeChild()");
+		children.remove(op);
+		op.removeParent(this);
 	}
 	
 	public void removeParent(Operator op)
@@ -390,12 +517,17 @@ public class TableScanOperator implements Operator, Serializable
 	public void registerParent(Operator op)
 	{
 		parents.add(op);
+		if (opParents.containsKey(op))
+		{
+			orderedFilters.put(op, orderedFilters.get(opParents.get(op)));
+			opParents.put(op.parent(), op);
+		}
 	}
 	
-	private class InitThread extends Thread
+	protected class InitThread extends ThreadPoolThread
 	{
-		private ParseThread[] threads;
-		private ArrayList<ReaderThread> reads = new ArrayList<ReaderThread>();
+		protected ParseThread[] threads;
+		protected ArrayList<ReaderThread> reads = new ArrayList<ReaderThread>(ins.size());
 		
 		public InitThread(ParseThread[] threads)
 		{
@@ -407,6 +539,13 @@ public class TableScanOperator implements Operator, Serializable
 			try
 			{
 				for (BufferedReader in : ins)
+				{
+					ReaderThread read = new ReaderThread(in);
+					read.start();
+					reads.add(read);
+				}
+				
+				for (BufferedRandomAccessFile in : randomIns)
 				{
 					ReaderThread read = new ReaderThread(in);
 					read.start();
@@ -433,7 +572,7 @@ public class TableScanOperator implements Operator, Serializable
 				}
 				else
 				{
-					for (LinkedBlockingQueue q : readBuffers.values())
+					for (BufferedLinkedBlockingQueue q : readBuffers.values())
 					{
 						q.put(new DataEndMarker());
 					}
@@ -447,46 +586,119 @@ public class TableScanOperator implements Operator, Serializable
 		}
 	}
 	
-	private class ReaderThread extends Thread
+	protected class ReaderThread extends ThreadPoolThread
 	{
-		private BufferedReader in;
+		protected BufferedReader in;
+		protected BufferedRandomAccessFile in2;
 		
 		public ReaderThread(BufferedReader in)
 		{
 			this.in = in;
 		}
 		
+		public ReaderThread(BufferedRandomAccessFile in2)
+		{
+			this.in2 = in2;
+		}
+		
 		public void run()
 		{
 			try
 			{
-				int i = 0;
-				String line = in.readLine();
-				while (line != null)
+				if (in2 == null)
 				{
-					StringTokenizer tokens = new StringTokenizer(line, "|", false);
-					ArrayList<String> cols = new ArrayList<String>();
-					while (tokens.hasMoreTokens())
+					int i = 0;
+					String line = in.readLine();
+					//@?Parallel
+					while (line != null)
 					{
-						cols.add(tokens.nextToken());
-					}	
+						FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);		
+						StringBuilder newLine = new StringBuilder();
+						tokens.setIndex(fetchPos.get(0));
+						newLine.append(tokens.nextToken());
+						int j = 1;
+						while (j < fetchPos.size())
+						{
+							newLine.append("|");
+							tokens.setIndex(fetchPos.get(j));
+							newLine.append(tokens.nextToken());
+							j++;
+						}
 				
-					String newLine = cols.get(fetchPos.get(0));
-					int j = 1;
-					while (j < fetchPos.size())
-					{
-						newLine += ("|" + cols.get(fetchPos.get(j)));
-						j++;
+						queue.put(newLine.toString());
+						i++;
+						line = in.readLine();
+				
+						//if (i % 10000 == 0)
+						//{
+						//	System.out.println("Read " + i + " records");
+						//}
 					}
+				}
+				else
+				{
+					int count = 0;
+					Operator child = device2Child.get(ins2Device.get(in2));
+					Object o = child.next(TableScanOperator.this);
+					//@?Parallel
+					while (!(o instanceof DataEndMarker))
+					{
+						if (!indexOnly)
+						{
+							in2.seek((Long)(((ArrayList<Object>)o).get(0)));
+							String line = in2.readLine();
+							FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);		
+							StringBuilder newLine = new StringBuilder();
+							tokens.setIndex(fetchPos.get(0));
+							newLine.append(tokens.nextToken());
+							int j = 1;
+							while (j < fetchPos.size())
+							{
+								newLine.append("|");
+								tokens.setIndex(fetchPos.get(j));
+								newLine.append(tokens.nextToken());
+								j++;
+							}
 				
-					queue.put(newLine);
-					i++;
-					line = in.readLine();
-				
-					//if (i % 10000 == 0)
-					//{
-					//	System.out.println("Read " + i + " records");
-					//}
+							queue.put(newLine.toString());
+							count++;
+							o = child.next(TableScanOperator.this);
+						}
+						else
+						{
+							CNFFilter filter = orderedFilters.get(parents.get(0));
+							filter.updateCols2Pos(child.getCols2Pos());
+							
+							if (filter != null)
+							{
+								if (!filter.passes((ArrayList<Object>)o))
+								{
+									o = child.next(TableScanOperator.this);
+									continue;
+								}
+							}
+							
+							ArrayList<Object> row = new ArrayList<Object>(pos2Col.size());
+							for (String col : pos2Col.values())
+							{
+								row.add(((ArrayList<Object>)o).get(child.getCols2Pos().get(col)));
+							}
+							
+							if (!forceDone)
+							{
+								readBuffer.put(row);
+							}
+							else
+							{
+								readBuffer.put(new DataEndMarker());
+								return;
+							}
+							count++;
+							o = child.next(TableScanOperator.this);
+						}
+					}
+					
+					//System.out.println("TableScanOperator read " + count + " rows based on a RID list");
 				}
 			}
 			catch(Exception e)
@@ -497,16 +709,31 @@ public class TableScanOperator implements Operator, Serializable
 		}
 	}
 	
-	private class ParseThread extends Thread
+	protected class ParseThread extends ThreadPoolThread
 	{
-		private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+		//protected SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+		protected ArrayList<String> types;
 		
 		public void run()
 		{
+			if (indexOnly)
+			{
+				return;
+			}
 			try
 			{
+				CNFFilter filter = orderedFilters.get(parents.get(0));
+				//@?Parallel
 				while (true)
 				{
+					if (types == null)
+					{
+						types = new ArrayList<String>(midPos2Col.size());
+						for (Map.Entry entry : midPos2Col.entrySet())
+						{
+							types.add(midCols2Types.get(entry.getValue()));
+						}
+					}
 					Object o = queue.take();
 					
 					if (o instanceof DataEndMarker)
@@ -516,14 +743,14 @@ public class TableScanOperator implements Operator, Serializable
 					}
 					
 					String line = (String)o;
-					ArrayList<Object> row = new ArrayList<Object>();
-					StringTokenizer tokens = new StringTokenizer(line, "|", false);
+					
+					ArrayList<Object> row = new ArrayList<Object>(types.size());
+					FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
 					int i = 0;
 					try
 					{
-						for (Map.Entry entry : midPos2Col.entrySet())
+						for (String type : types)
 						{
-							String type = midCols2Types.get(entry.getValue());
 							if (type.equals("INT"))
 							{
 								row.add(Integer.parseInt(tokens.nextToken()));
@@ -542,7 +769,7 @@ public class TableScanOperator implements Operator, Serializable
 							}
 							else if (type.equals("DATE"))
 							{
-								row.add(sdf.parse(tokens.nextToken()));
+								row.add(DateParser.parse(tokens.nextToken()));
 							}
 							
 							i++;
@@ -561,14 +788,14 @@ public class TableScanOperator implements Operator, Serializable
 					{
 						for (Map.Entry entry : readBuffers.entrySet())
 						{
-							LinkedBlockingQueue q = (LinkedBlockingQueue)entry.getValue();
-							CNFFilter filter = orderedFilters.get(entry.getKey());
+							BufferedLinkedBlockingQueue q = (BufferedLinkedBlockingQueue)entry.getValue();
+							filter = orderedFilters.get(entry.getKey());
 							
 							if (filter != null)
 							{
 								if (filter.passes(row))
 								{
-									ArrayList<Object> newRow = new ArrayList<Object>();
+									ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
 									for (int pos : neededPos)
 									{
 										newRow.add(row.get(pos));
@@ -578,7 +805,7 @@ public class TableScanOperator implements Operator, Serializable
 							}
 							else
 							{
-								ArrayList<Object> newRow = new ArrayList<Object>();
+								ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
 								for (int pos : neededPos)
 								{
 									newRow.add(row.get(pos));
@@ -588,29 +815,43 @@ public class TableScanOperator implements Operator, Serializable
 						}
 					}
 					else
-					{
-						CNFFilter filter = orderedFilters.get(parents.get(0));
-						
+					{	
 						if (filter != null)
 						{
 							if (filter.passes(row))
 							{
-								ArrayList<Object> newRow = new ArrayList<Object>();
+								ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
 								for (int pos : neededPos)
 								{
 									newRow.add(row.get(pos));
 								}
-								readBuffer.put(newRow);
+								if (!forceDone)
+								{
+									readBuffer.put(newRow);
+								}
+								else
+								{
+									readBuffer.put(new DataEndMarker());
+									return;
+								}
 							}
 						}
 						else
 						{
-							ArrayList<Object> newRow = new ArrayList<Object>();
+							ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
 							for (int pos : neededPos)
 							{
 								newRow.add(row.get(pos));
 							}
-							readBuffer.put(newRow);
+							if (!forceDone)
+							{
+								readBuffer.put(newRow);
+							}
+							else
+							{
+								readBuffer.put(new DataEndMarker());
+								return;
+							}
 						}
 					}
 				}
@@ -625,7 +866,7 @@ public class TableScanOperator implements Operator, Serializable
 	
 	public void setNeededCols(ArrayList<String> needed)
 	{
-		fetchPos = new ArrayList<Integer>();
+		fetchPos = new ArrayList<Integer>(needed.size());
 		for (String col : needed)
 		{
 			fetchPos.add(cols2Pos.get(col));
@@ -661,7 +902,7 @@ public class TableScanOperator implements Operator, Serializable
 		}
 		
 		//calculate how to go from what was fetched to what needs to be output
-		neededPos = new ArrayList<Integer>();
+		neededPos = new ArrayList<Integer>(needed.size());
 		for (String col : needed)
 		{
 			neededPos.add(fetchCols2Pos.get(col));
@@ -710,7 +951,7 @@ public class TableScanOperator implements Operator, Serializable
 		
 		if (list == null)
 		{
-			list = new ArrayList<Integer>();
+			list = new ArrayList<Integer>(1);
 			list.add(i);
 			activeNodes.put(op,  list);
 			return;
@@ -725,7 +966,7 @@ public class TableScanOperator implements Operator, Serializable
 		
 		if (list == null)
 		{
-			list = new ArrayList<Integer>();
+			list = new ArrayList<Integer>(1);
 			list.add(i);
 			activeDevices.put(op,  list);
 			return;
@@ -873,7 +1114,7 @@ public class TableScanOperator implements Operator, Serializable
 		ArrayList<Integer> deviceList = null;
 		if (partMeta.allDevices())
 		{
-			deviceList = new ArrayList<Integer>();
+			deviceList = new ArrayList<Integer>(partMeta.getNumDevices());
 			int i = 0;
 			while (i < partMeta.getNumDevices())
 			{
@@ -913,7 +1154,7 @@ public class TableScanOperator implements Operator, Serializable
 		ArrayList<Integer> nodeList = null;
 		if (partMeta.allNodes())
 		{
-			nodeList = new ArrayList<Integer>();
+			nodeList = new ArrayList<Integer>(partMeta.getNumNodes());
 			int i = 0;
 			
 			if (partMeta.noNodeGroupSet())
@@ -988,7 +1229,7 @@ public class TableScanOperator implements Operator, Serializable
 		return retval;
 	}
 	
-	private boolean canAnythingInRangeSatisfyFilters(ArrayList<Filter> filters, Object lowLE, Object highLE)
+	protected boolean canAnythingInRangeSatisfyFilters(ArrayList<Filter> filters, Object lowLE, Object highLE)
 	{
 		if (lowLE == null)
 		{
@@ -1073,9 +1314,9 @@ public class TableScanOperator implements Operator, Serializable
 				col = filter.rightColumn();
 			}
 			cols2Pos.put(col, 0);
-			ArrayList<Object> row1 = new ArrayList<Object>();
+			ArrayList<Object> row1 = new ArrayList<Object>(1);
 			row1.add(lowLE);
-			ArrayList<Object> row2 = new ArrayList<Object>();
+			ArrayList<Object> row2 = new ArrayList<Object>(1);
 			row2.add(highLE);
 			
 			try
@@ -1122,5 +1363,10 @@ public class TableScanOperator implements Operator, Serializable
 	public ArrayList<Object> getDeviceRanges()
 	{
 		return partMeta.getDeviceRanges();
+	}
+	
+	public void setIndexOnly()
+	{
+		indexOnly = true;
 	}
 }

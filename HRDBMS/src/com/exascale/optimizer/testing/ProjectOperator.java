@@ -6,28 +6,61 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.Vector;
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
 public class ProjectOperator implements Operator, Serializable
 {
-	private Operator child;
-	private Vector<String> cols;
-	private MetaData meta;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
-	private Operator parent;
-	private HashMap<String, Integer> childCols2Pos;
-	private boolean startDone = false;
-	private boolean closeDone = false;
+	protected Operator child;
+	protected ArrayList<String> cols;
+	protected MetaData meta;
+	protected HashMap<String, String> cols2Types;
+	protected HashMap<String, Integer> cols2Pos;
+	protected TreeMap<Integer, String> pos2Col;
+	protected Operator parent;
+	protected HashMap<String, Integer> childCols2Pos;
+	protected int node;
+	protected ArrayList<Integer> pos2Get = new ArrayList<Integer>();
+	protected ArrayList<Integer> toRemove = new ArrayList<Integer>();
+	protected boolean add;
 	
-	public ProjectOperator(Vector<String> cols, MetaData meta)
+	public void setChildPos(int pos)
+	{
+	}
+	
+	public void reset()
+	{
+		child.reset();
+	}
+	
+	public int getChildPos()
+	{
+		return 0;
+	}
+	
+	public ProjectOperator(ArrayList<String> cols, MetaData meta)
 	{
 		this.cols = cols;
 		this.meta = meta;
+	}
+	
+	public ProjectOperator clone()
+	{
+		ProjectOperator retval = new ProjectOperator(cols, meta);
+		retval.node = node;
+		return retval;
+	}
+	
+	public int getNode()
+	{
+		return node;
+	}
+	
+	public void setNode(int node)
+	{
+		this.node = node;
 	}
 	
 	public ArrayList<String> getReferences()
@@ -48,7 +81,7 @@ public class ProjectOperator implements Operator, Serializable
 	
 	public ArrayList<Operator> children()
 	{
-		ArrayList<Operator> retval = new ArrayList<Operator>();
+		ArrayList<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
@@ -59,16 +92,39 @@ public class ProjectOperator implements Operator, Serializable
 	}
 	
 	@Override
-	public synchronized void start() throws Exception 
+	public void start() throws Exception 
 	{
-		if (!startDone)
+		child.start();
+		for (String col : pos2Col.values())
 		{
-			startDone = true;
-			child.start();
+			pos2Get.add(childCols2Pos.get(col));
+		}
+		int i = 0;
+		int removed = 0;
+		for (String col : child.getPos2Col().values())
+		{
+			if (!cols2Pos.containsKey(col))
+			{
+				toRemove.add(i-removed);
+				removed++;
+			}
+			i++;
+		}
+		add = pos2Get.size() < childCols2Pos.size() / 2;
+	}
+	
+	public void nextAll(Operator op) throws Exception
+	{
+		child.nextAll(op);
+		Object o = next(op);
+		while (!(o instanceof DataEndMarker))
+		{
+			o = next(op);
 		}
 	}
 
 	@Override
+	//@?Parallel
 	public Object next(Operator op) throws Exception 
 	{
 		Object o = child.next(this);
@@ -78,23 +134,31 @@ public class ProjectOperator implements Operator, Serializable
 		}
 		
 		ArrayList<Object> row = (ArrayList<Object>)o; 
-		ArrayList<Object> retval = new ArrayList<Object>();
-		for (Map.Entry entry : pos2Col.entrySet())
+		if (add)
 		{
-			retval.add(row.get(childCols2Pos.get(entry.getValue())));
-		}
+			ArrayList<Object> retval = new ArrayList<Object>(pos2Get.size());
+			for (int pos : pos2Get)
+			{
+				retval.add(row.get(pos));
+			}
 		
-		return retval;
+			return retval;
+		}
+		else
+		{
+			for (int remove : toRemove)
+			{
+				row.remove(remove);
+			}
+			
+			return row;
+		}
 	}
 
 	@Override
-	public synchronized void close() throws Exception 
+	public void close() throws Exception 
 	{
-		if (!closeDone)
-		{
-			closeDone = true;
-			child.close();
-		}
+		child.close();
 	}
 	
 	public void removeChild(Operator op)
@@ -118,30 +182,33 @@ public class ProjectOperator implements Operator, Serializable
 		{
 			child = op;
 			child.registerParent(this);
-			childCols2Pos = child.getCols2Pos();
-			Map temp = (HashMap<String, String>)child.getCols2Types().clone();
-			cols2Types = new HashMap<String, String>();
-			Set<Map.Entry> set = temp.entrySet();
-			for (Map.Entry entry : set)
+			if (child.getCols2Types() != null)
 			{
-				if (cols.contains(entry.getKey()))
+				childCols2Pos = child.getCols2Pos();
+				Map temp = (HashMap<String, String>)child.getCols2Types().clone();
+				cols2Types = new HashMap<String, String>();
+				Set<Map.Entry> set = temp.entrySet();
+				for (Map.Entry entry : set)
 				{
-					cols2Types.put((String)entry.getKey(), (String)entry.getValue());
+					if (cols.contains(entry.getKey()))
+					{
+						cols2Types.put((String)entry.getKey(), (String)entry.getValue());
+					}
 				}
-			}
 			
-			temp = (TreeMap<Integer, String>)child.getPos2Col();
-			cols2Pos = new HashMap<String, Integer>();
-			pos2Col = new TreeMap<Integer, String>();
-			set = temp.entrySet();
-			int i = 0;
-			for (Map.Entry entry : set)
-			{
-				if (cols.contains(entry.getValue()))
+				temp = (TreeMap<Integer, String>)child.getPos2Col();
+				cols2Pos = new HashMap<String, Integer>();
+				pos2Col = new TreeMap<Integer, String>();
+				set = temp.entrySet();
+				int i = 0;
+				for (Map.Entry entry : set)
 				{
-					pos2Col.put(i, (String)entry.getValue());
-					cols2Pos.put((String)entry.getValue(), i);
-					i++;
+					if (cols.contains(entry.getValue()))
+					{
+						pos2Col.put(i, (String)entry.getValue());
+						cols2Pos.put((String)entry.getValue(), i);
+						i++;
+					}
 				}
 			}
 		}

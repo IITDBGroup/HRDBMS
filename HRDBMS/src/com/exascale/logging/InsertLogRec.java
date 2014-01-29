@@ -9,10 +9,10 @@ import com.exascale.managers.HRDBMSWorker;
 
 public class InsertLogRec extends LogRec
 {
-	private Block b;
-	private int off;
-	private byte[] before;
-	private byte[] after;
+	protected Block b;
+	protected int off;
+	protected byte[] before;
+	protected byte[] after;
 	
 	public InsertLogRec(long txnum, Block b, int off, byte[] before, byte[] after)
 	{

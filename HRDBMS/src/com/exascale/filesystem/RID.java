@@ -2,10 +2,10 @@ package com.exascale.filesystem;
 
 public class RID 
 {
-	private int node = -1;
-	private int dev = -1;
-	private int block = -1;
-	private int rec = -1;
+	protected int node = -1;
+	protected int dev = -1;
+	protected int block = -1;
+	protected int rec = -1;
 	
 	public void setNode(int node)
 	{

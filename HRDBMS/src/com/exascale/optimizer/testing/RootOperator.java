@@ -6,25 +6,59 @@ import java.util.TreeMap;
 
 public class RootOperator implements Operator
 {
-	private Operator child;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
-	private HashMap<String, Double> generated;
+	protected Operator child;
+	protected HashMap<String, String> cols2Types;
+	protected HashMap<String, Integer> cols2Pos;
+	protected TreeMap<Integer, String> pos2Col;
+	protected HashMap<String, Double> generated;
+	protected int node;
+	protected MetaData meta;
 	
-	public RootOperator()
+	public void setChildPos(int pos)
 	{
+	}
+	
+	public void reset()
+	{
+		System.out.println("RootOperator cannot be reset");
+		System.exit(1);
+	}
+	
+	public int getChildPos()
+	{
+		return 0;
+	}
+	
+	public RootOperator(MetaData meta)
+	{
+		this.meta = meta;
+	}
+	
+	public RootOperator clone()
+	{
+		return new RootOperator(meta);
+	}
+	
+	public int getNode()
+	{
+		return node;
+	}
+	
+	public void setNode(int node)
+	{
+		this.node = node;
 	}
 	
 	public ArrayList<String> getReferences()
 	{
-		ArrayList<String> retval = new ArrayList<String>();
+		ArrayList<String> retval = new ArrayList<String>(0);
 		return retval;
 	}
 	
-	public RootOperator(HashMap<String, Double> generated)
+	public RootOperator(HashMap<String, Double> generated, MetaData meta)
 	{
 		this.generated = generated;
+		this.meta = meta;
 	}
 	
 	public HashMap<String, Double> getGenerated()
@@ -34,14 +68,14 @@ public class RootOperator implements Operator
 	
 	public ArrayList<Operator> children()
 	{
-		ArrayList<Operator> retval = new ArrayList<Operator>();
+		ArrayList<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
 	
 	public MetaData getMeta()
 	{
-		return null;
+		return meta;
 	}
 	
 	public Operator parent()
@@ -92,6 +126,16 @@ public class RootOperator implements Operator
 	public void start() throws Exception 
 	{
 		child.start();
+	}
+	
+	public void nextAll(Operator op) throws Exception
+	{
+		child.nextAll(op);
+		Object o = next(op);
+		while (!(o instanceof DataEndMarker))
+		{
+			o = next(op);
+		}
 	}
 	
 	public Object next() throws Exception

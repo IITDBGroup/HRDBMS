@@ -6,37 +6,86 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.Vector;
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
 
 public class ProductOperator extends JoinOperator implements Serializable
 {
-	private ArrayList<Operator> children = new ArrayList<Operator>();
-	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
-	private MetaData meta;
-	private volatile LinkedBlockingQueue outBuffer = new LinkedBlockingQueue(Driver.QUEUE_SIZE);
-	private volatile DiskBackedArray inBuffer;
-	private int NUM_RT_THREADS = 4 * Runtime.getRuntime().availableProcessors();
-	private int NUM_PTHREADS = 4 * Runtime.getRuntime().availableProcessors();
-	private AtomicLong outCount = new AtomicLong(0);
-	private volatile boolean readersDone = false;
-	private int childPos = -1; 
+	protected ArrayList<Operator> children = new ArrayList<Operator>(2);
+	protected Operator parent;
+	protected HashMap<String, String> cols2Types;
+	protected HashMap<String, Integer> cols2Pos;
+	protected TreeMap<Integer, String> pos2Col;
+	protected MetaData meta;
+	protected volatile BufferedLinkedBlockingQueue outBuffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
+	protected volatile DiskBackedArray inBuffer;
+	protected int NUM_RT_THREADS = 4 * ResourceManager.cpus;
+	protected int NUM_PTHREADS = 4 * ResourceManager.cpus;
+	protected AtomicLong outCount = new AtomicLong(0);
+	protected volatile boolean readersDone = false;
+	protected int childPos = -1; 
+	protected int node;
+	protected int rightChildCard = 16;
+	protected boolean cardSet = false;
+	
+	public void reset()
+	{
+		System.out.println("ProductOperator cannot be reset");
+		System.exit(1);
+	}
+	
+	public boolean setRightChildCard(int card)
+	{
+		if (cardSet)
+		{
+			return false;
+		}
+		
+		cardSet = true;
+		rightChildCard = card;
+		return true;
+	}
+	
+	public void setChildPos(int pos)
+	{
+		childPos = pos;
+	}
+	
+	public int getChildPos()
+	{
+		return childPos;
+	}
 	
 	public ProductOperator(MetaData meta)
 	{
 		this.meta = meta;
 	}
 	
+	public ProductOperator clone()
+	{
+		ProductOperator retval = new ProductOperator(meta);
+		retval.node = node;
+		retval.rightChildCard = rightChildCard;
+		retval.cardSet = cardSet;
+		return retval;
+	}
+	
+	public int getNode()
+	{
+		return node;
+	}
+	
+	public void setNode(int node)
+	{
+		this.node = node;
+	}
+	
 	public ArrayList<String> getReferences()
 	{
-		ArrayList<String> retval = new ArrayList<String>();
+		ArrayList<String> retval = new ArrayList<String>(0);
 		return retval;
 	}
 	
@@ -75,7 +124,7 @@ public class ProductOperator extends JoinOperator implements Serializable
 			}
 			op.registerParent(this);
 			
-			if (children.size() == 2)
+			if (children.size() == 2 && children.get(0).getCols2Types() != null && children.get(1).getCols2Types() != null)
 			{
 				cols2Types = (HashMap<String, String>)children.get(0).getCols2Types().clone();
 				cols2Pos = (HashMap<String, Integer>)children.get(0).getCols2Pos().clone();
@@ -109,7 +158,7 @@ public class ProductOperator extends JoinOperator implements Serializable
 	
 	public void start() throws Exception 
 	{
-		inBuffer = ResourceManager.newDiskBackedArray();
+		inBuffer = ResourceManager.newDiskBackedArray(rightChildCard);
 		
 		for (Operator child : children)
 		{
@@ -120,11 +169,11 @@ public class ProductOperator extends JoinOperator implements Serializable
 		
 	}
 	
-	private class InitThread extends Thread
+	protected class InitThread extends ThreadPoolThread
 	{
 		public void run()
 		{
-			Thread[] threads;
+			ThreadPoolThread[] threads;
 			int i = 0;
 			threads = new ReaderThread[NUM_RT_THREADS];
 			while (i < NUM_RT_THREADS)
@@ -135,7 +184,7 @@ public class ProductOperator extends JoinOperator implements Serializable
 			}
 			
 			i = 0;
-			Thread[] threads2 = new ProcessThread[NUM_PTHREADS];
+			ThreadPoolThread[] threads2 = new ProcessThread[NUM_PTHREADS];
 			while (i < NUM_PTHREADS)
 			{
 				threads2[i] = new ProcessThread();
@@ -146,13 +195,17 @@ public class ProductOperator extends JoinOperator implements Serializable
 			i = 0;
 			while (i < NUM_RT_THREADS)
 			{
-				try
+				while (true)
 				{
-					threads[i].join();
-					i++;
-				}
-				catch(InterruptedException e)
-				{
+					try 
+					{
+						threads[i].join();
+						i++;
+						break;
+					} 
+					catch (InterruptedException e) 
+					{
+					}
 				}
 			}
 			
@@ -161,13 +214,17 @@ public class ProductOperator extends JoinOperator implements Serializable
 			i = 0;
 			while (i < NUM_PTHREADS)
 			{
-				try
+				while (true)
 				{
-					threads2[i].join();
-					i++;
-				}
-				catch(InterruptedException e)
-				{
+					try 
+					{
+						threads2[i].join();
+						i++;
+						break;
+					} 
+					catch (InterruptedException e) 
+					{
+					}
 				}
 			}
 			
@@ -187,7 +244,7 @@ public class ProductOperator extends JoinOperator implements Serializable
 		}
 	}
 	
-	private class ReaderThread extends Thread
+	protected class ReaderThread extends ThreadPoolThread
 	{	
 		public void run()
 		{
@@ -197,7 +254,7 @@ public class ProductOperator extends JoinOperator implements Serializable
 				Object o = child.next(ProductOperator.this);
 				while (! (o instanceof DataEndMarker))
 				{
-					inBuffer.add(o);
+					inBuffer.add((ArrayList<Object>)o);
 					o = child.next(ProductOperator.this);
 				}
 			}
@@ -209,7 +266,7 @@ public class ProductOperator extends JoinOperator implements Serializable
 		}
 	}
 	
-	private class ProcessThread extends Thread
+	protected class ProcessThread extends ThreadPoolThread
 	{
 		public void run()
 		{
@@ -217,6 +274,7 @@ public class ProductOperator extends JoinOperator implements Serializable
 			{
 				Operator left = children.get(0);
 				Object o = left.next(ProductOperator.this);
+				//@Parallel
 				while (! (o instanceof DataEndMarker))
 				{
 					ArrayList<Object> lRow = (ArrayList<Object>)o;
@@ -269,6 +327,17 @@ public class ProductOperator extends JoinOperator implements Serializable
 				e.printStackTrace();
 				System.exit(1);
 			}
+		}
+	}
+	
+	public void nextAll(Operator op) throws Exception
+	{
+		children.get(0).nextAll(op);
+		children.get(1).nextAll(op);
+		Object o = next(op);
+		while (!(o instanceof DataEndMarker))
+		{
+			o = next(op);
 		}
 	}
 	
@@ -332,7 +401,7 @@ public class ProductOperator extends JoinOperator implements Serializable
 	}
 
 	@Override
-	public void addJoinCondition(Vector<Filter> filters) {
+	public void addJoinCondition(ArrayList<Filter> filters) {
 		throw new UnsupportedOperationException("ProductOperator does not support addJoinCondition");
 		
 	}
@@ -345,6 +414,12 @@ public class ProductOperator extends JoinOperator implements Serializable
 
 	@Override
 	public HashSet<HashMap<Filter, Filter>> getHSHMFilter() {
+		return null;
+	}
+
+	@Override
+	public ArrayList<String> getJoinForChild(Operator op) 
+	{
 		return null;
 	}
 }

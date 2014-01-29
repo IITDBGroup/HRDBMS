@@ -57,9 +57,9 @@ package com.exascale.optimizer.testing;
 	 * @see BufferedRandomAccessFile */
 	public class BufferedRandomAccessFile
 	{
-		private String fileName;
-		private boolean isReadOnly = true;
-		private RandomAccessFile theFile;
+		protected String fileName;
+		protected boolean isReadOnly = true;
+		protected RandomAccessFile theFile;
 		protected volatile byte[] byteBuffer;
 		protected volatile boolean byteBufferChanged;
 		protected volatile long offset;
@@ -67,8 +67,9 @@ package com.exascale.optimizer.testing;
 		protected volatile int maxByte;		    
 		protected volatile boolean isEOFInBuffer;
 		protected int byteOrdering;
-		private static final int BIG_ENDIAN = 0;
-		private volatile long length;
+		protected static final int BIG_ENDIAN = 0;
+		protected volatile long length;
+		protected boolean skipLF = false;
 	
 	    /**
 	     * Constructor. Always needs a size for the buffer.
@@ -348,6 +349,19 @@ package com.exascale.optimizer.testing;
 	    		}
 	    	 }
 	    
+	    public long getFilePointer()
+	    {
+	    	return offset+pos;
+	    }
+	    
+	    public void write(byte[] bs) throws IOException
+	    {
+	    	for (byte b : bs)
+	    	{
+	    		write(b);
+	    	}
+	    }
+	    
 	    public final void write(byte b) throws IOException{
 	    		// As long as pos is less than the length of the buffer we can write
 	    		// to the buffer. If the position is after the buffer a new buffer is
@@ -528,6 +542,7 @@ package com.exascale.optimizer.testing;
 	    public void seek(long off) throws IOException{
 	    		/* If the new offset is within the buffer, only the pos value needs
 	    		 * to be modified. Else, the buffer must be moved. */
+	    		skipLF = false;
 	    		if( (off>=offset)&&(off<(offset+byteBuffer.length)) ){
 	    	            if (isReadOnly && isEOFInBuffer && off > offset+maxByte) {
 	    	                // We are seeking beyond EOF in read-only mode!
@@ -539,4 +554,47 @@ package com.exascale.optimizer.testing;
 	    		    readNewBuffer(off);
 	    		}
 	    	 }
+	    
+	    public String readLine() throws IOException 
+	    {
+	    	int c = read();
+	    	if (skipLF && c == (0xFF & '\n'))
+	    	{
+	    		c = read();
+	    		skipLF = false;
+	    	}
+	    	
+	    	StringBuilder s = new StringBuilder();
+	    	while (c != (0xFF & '\n') && c != (0xFF & '\r'))
+	    	{
+	    		s.append((char)c);
+	    		try
+	    		{
+	    			c = read();
+	    		}
+	    		catch(EOFException e)
+	    		{
+	    			c = (0xFF & '\n');
+	    		}
+	    	}
+	    	
+	    	if (c == (0xFF & '\r'))
+	    	{
+	    		skipLF = true;
+	    	}
+	    	
+	    	if (s.length() > 0)
+	    	{
+	    		return s.toString();
+	    	}
+	    	else
+	    	{
+	    		return null;
+	    	}
+	    }
+	    
+	    public long position()
+	    {
+	    	return pos + offset;
+	    }
 	}

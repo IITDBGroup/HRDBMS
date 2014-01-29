@@ -1,17 +1,20 @@
 package com.exascale.optimizer.testing;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Vector;
+import java.util.ArrayList;
 
 public abstract class JoinOperator implements Operator
 {
-	public abstract void addJoinCondition(Vector<Filter> filters);
+	public abstract void addJoinCondition(ArrayList<Filter> filters);
 	public abstract void addJoinCondition(String left, String right);
 	public abstract HashSet<HashMap<Filter, Filter>> getHSHMFilter();
+	public abstract JoinOperator clone();
+	public abstract ArrayList<String> getJoinForChild(Operator op);
 	public static JoinOperator manufactureJoin(JoinOperator prod, SelectOperator select, MetaData meta)
 	{
-		Vector<Filter> filters = select.getFilter();
+		ArrayList<Filter> filters = select.getFilter();
 		if (prod instanceof ProductOperator)
 		{
 			if (filters.size() == 1)

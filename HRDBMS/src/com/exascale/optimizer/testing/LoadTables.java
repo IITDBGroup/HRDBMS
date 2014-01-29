@@ -14,27 +14,27 @@ import java.util.TreeMap;
 
 public class LoadTables 
 {
-	private static HashMap<Integer, ArrayList<Integer>> nodeGroupMap = null;
-	private static ArrayList<Integer> nodeGroupSet = null;
-	private static ArrayList<String> nodeGroupHash = null;;
-	private static ArrayList<Object> nodeGroupRange = null;
-	private static ArrayList<Integer> nodeSet = null;
-	private static ArrayList<String> nodeHash = null;
-	private static ArrayList<Object> nodeRange = null;
-	private static ArrayList<Integer> deviceSet = null;
-	private static ArrayList<String> deviceHash = null;
-	private static ArrayList<Object> deviceRange = null;
-	private static boolean allNodes = false;
-	private static boolean anyNode = false;
-	private static boolean allDevices = false;
-	private static TreeMap<Integer, String> pos2Col = null;
-	private static HashMap<String, String> cols2Types = null;
-	private static HashMap<String, Integer> cols2Pos = null;
-	private static String nodeGroupRangeCol = null;
-	private static String nodeRangeCol = null;
-	private static String deviceRangeCol = null;
-	private static HashMap<String, PrintWriter> writers = null;
-	private static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+	protected static HashMap<Integer, ArrayList<Integer>> nodeGroupMap = null;
+	protected static ArrayList<Integer> nodeGroupSet = null;
+	protected static ArrayList<String> nodeGroupHash = null;;
+	protected static ArrayList<Object> nodeGroupRange = null;
+	protected static ArrayList<Integer> nodeSet = null;
+	protected static ArrayList<String> nodeHash = null;
+	protected static ArrayList<Object> nodeRange = null;
+	protected static ArrayList<Integer> deviceSet = null;
+	protected static ArrayList<String> deviceHash = null;
+	protected static ArrayList<Object> deviceRange = null;
+	protected static boolean allNodes = false;
+	protected static boolean anyNode = false;
+	protected static boolean allDevices = false;
+	protected static TreeMap<Integer, String> pos2Col = null;
+	protected static HashMap<String, String> cols2Types = null;
+	protected static HashMap<String, Integer> cols2Pos = null;
+	protected static String nodeGroupRangeCol = null;
+	protected static String nodeRangeCol = null;
+	protected static String deviceRangeCol = null;
+	protected static HashMap<String, PrintWriter> writers = null;
+	//protected static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 	protected static final Long LARGE_PRIME =  1125899906842597L;
     protected static final Long LARGE_PRIME2 = 6920451961L;
 	
@@ -70,7 +70,7 @@ public class LoadTables
 				nodeGroupMap = new HashMap<Integer, ArrayList<Integer>>();
 				int i = 0;
 				ArrayList<Integer> nodes = new ArrayList<Integer>();
-				while (i < t.getNumNodes())
+				while (i < meta.getNumNodes())
 				{
 					nodes.add(i);
 					i++;
@@ -104,6 +104,16 @@ public class LoadTables
 			}
 			
 			nodeSet = t.nodeSet();
+			if (allNodes)
+			{
+				nodeSet = new ArrayList<Integer>();
+				int i = 0;
+				while (i < meta.getNumNodes())
+				{
+					nodeSet.add(i);
+					i++;
+				}
+			}
 			deviceSet = t.deviceSet();
 			if (allDevices)
 			{
@@ -172,7 +182,7 @@ public class LoadTables
 				nodeGroupMap = new HashMap<Integer, ArrayList<Integer>>();
 				int i = 0;
 				ArrayList<Integer> nodes = new ArrayList<Integer>();
-				while (i < t.getNumNodes())
+				while (i < meta.getNumNodes())
 				{
 					nodes.add(i);
 					i++;
@@ -206,6 +216,16 @@ public class LoadTables
 			}
 			
 			nodeSet = t.nodeSet();
+			if (allNodes)
+			{
+				nodeSet = new ArrayList<Integer>();
+				int i = 0;
+				while (i < meta.getNumNodes())
+				{
+					nodeSet.add(i);
+					i++;
+				}
+			}
 			deviceSet = t.deviceSet();
 			if (allDevices)
 			{
@@ -274,7 +294,7 @@ public class LoadTables
 				nodeGroupMap = new HashMap<Integer, ArrayList<Integer>>();
 				int i = 0;
 				ArrayList<Integer> nodes = new ArrayList<Integer>();
-				while (i < t.getNumNodes())
+				while (i < meta.getNumNodes())
 				{
 					nodes.add(i);
 					i++;
@@ -308,6 +328,16 @@ public class LoadTables
 			}
 			
 			nodeSet = t.nodeSet();
+			if (allNodes)
+			{
+				nodeSet = new ArrayList<Integer>();
+				int i = 0;
+				while (i < meta.getNumNodes())
+				{
+					nodeSet.add(i);
+					i++;
+				}
+			}
 			deviceSet = t.deviceSet();
 			if (allDevices)
 			{
@@ -376,7 +406,7 @@ public class LoadTables
 				nodeGroupMap = new HashMap<Integer, ArrayList<Integer>>();
 				int i = 0;
 				ArrayList<Integer> nodes = new ArrayList<Integer>();
-				while (i < t.getNumNodes())
+				while (i < meta.getNumNodes())
 				{
 					nodes.add(i);
 					i++;
@@ -410,6 +440,16 @@ public class LoadTables
 			}
 			
 			nodeSet = t.nodeSet();
+			if (allNodes)
+			{
+				nodeSet = new ArrayList<Integer>();
+				int i = 0;
+				while (i < meta.getNumNodes())
+				{
+					nodeSet.add(i);
+					i++;
+				}
+			}
 			deviceSet = t.deviceSet();
 			if (allDevices)
 			{
@@ -478,7 +518,7 @@ public class LoadTables
 				nodeGroupMap = new HashMap<Integer, ArrayList<Integer>>();
 				int i = 0;
 				ArrayList<Integer> nodes = new ArrayList<Integer>();
-				while (i < t.getNumNodes())
+				while (i < meta.getNumNodes())
 				{
 					nodes.add(i);
 					i++;
@@ -512,6 +552,16 @@ public class LoadTables
 			}
 			
 			nodeSet = t.nodeSet();
+			if (allNodes)
+			{
+				nodeSet = new ArrayList<Integer>();
+				int i = 0;
+				while (i < meta.getNumNodes())
+				{
+					nodeSet.add(i);
+					i++;
+				}
+			}
 			deviceSet = t.deviceSet();
 			if (allDevices)
 			{
@@ -580,7 +630,7 @@ public class LoadTables
 				nodeGroupMap = new HashMap<Integer, ArrayList<Integer>>();
 				int i = 0;
 				ArrayList<Integer> nodes = new ArrayList<Integer>();
-				while (i < t.getNumNodes())
+				while (i < meta.getNumNodes())
 				{
 					nodes.add(i);
 					i++;
@@ -614,6 +664,16 @@ public class LoadTables
 			}
 			
 			nodeSet = t.nodeSet();
+			if (allNodes)
+			{
+				nodeSet = new ArrayList<Integer>();
+				int i = 0;
+				while (i < meta.getNumNodes())
+				{
+					nodeSet.add(i);
+					i++;
+				}
+			}
 			deviceSet = t.deviceSet();
 			if (allDevices)
 			{
@@ -682,7 +742,7 @@ public class LoadTables
 				nodeGroupMap = new HashMap<Integer, ArrayList<Integer>>();
 				int i = 0;
 				ArrayList<Integer> nodes = new ArrayList<Integer>();
-				while (i < t.getNumNodes())
+				while (i < meta.getNumNodes())
 				{
 					nodes.add(i);
 					i++;
@@ -716,6 +776,16 @@ public class LoadTables
 			}
 			
 			nodeSet = t.nodeSet();
+			if (allNodes)
+			{
+				nodeSet = new ArrayList<Integer>();
+				int i = 0;
+				while (i < meta.getNumNodes())
+				{
+					nodeSet.add(i);
+					i++;
+				}
+			}
 			deviceSet = t.deviceSet();
 			if (allDevices)
 			{
@@ -784,7 +854,7 @@ public class LoadTables
 				nodeGroupMap = new HashMap<Integer, ArrayList<Integer>>();
 				int i = 0;
 				ArrayList<Integer> nodes = new ArrayList<Integer>();
-				while (i < t.getNumNodes())
+				while (i < meta.getNumNodes())
 				{
 					nodes.add(i);
 					i++;
@@ -818,6 +888,16 @@ public class LoadTables
 			}
 			
 			nodeSet = t.nodeSet();
+			if (allNodes)
+			{
+				nodeSet = new ArrayList<Integer>();
+				int i = 0;
+				while (i < meta.getNumNodes())
+				{
+					nodeSet.add(i);
+					i++;
+				}
+			}
 			deviceSet = t.deviceSet();
 			if (allDevices)
 			{
@@ -873,6 +953,12 @@ public class LoadTables
 		if (nodeGroupSet.size() == 1)
 		{
 			allNodeList = nodeGroupMap.get(nodeGroupSet.get(0));
+			if (allNodeList.size() == 0)
+			{
+				System.out.println("nodeGroupSet = " + nodeGroupSet);
+				System.out.println("nodeGroupMap = " + nodeGroupMap);
+				Thread.dumpStack();
+			}
 		}
 		else if (nodeGroupHash != null)
 		{
@@ -1013,9 +1099,9 @@ public class LoadTables
 		return retval;
 	}
 	
-	private static ArrayList<Object> parseRow(String line, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types)
+	protected static ArrayList<Object> parseRow(String line, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types)
 	{
-		StringTokenizer tokens = new StringTokenizer(line, "|", false);
+		FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
 		ArrayList<Object> row = new ArrayList<Object>();
 		int i = 0;
 		try
@@ -1041,7 +1127,7 @@ public class LoadTables
 				}
 				else if (type.equals("DATE"))
 				{
-					row.add(sdf.parse(tokens.nextToken()));
+					row.add(DateParser.parse(tokens.nextToken()));
 				}
 				
 				i++;
@@ -1067,7 +1153,7 @@ public class LoadTables
 		return 0x0EFFFFFFFFFFFFFFL & hash(temp);
 	}
 	
-	private static long hash(ArrayList<Object> key)
+	protected static long hash(ArrayList<Object> key)
 	{
 		long hashCode = 1125899906842597L;
 		for (Object e : key)

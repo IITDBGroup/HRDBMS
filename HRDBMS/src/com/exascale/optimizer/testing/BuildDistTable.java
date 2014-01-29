@@ -10,13 +10,13 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
-import java.util.Vector;
+import java.util.ArrayList;
 import java.util.ArrayList;
 
 public class BuildDistTable 
 {
-	private static int x = 0;
-	private static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+	protected static int x = 0;
+	protected static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 	
 	public static void main(String[] args) throws Exception
 	{
@@ -28,13 +28,13 @@ public class BuildDistTable
 		for (String col : pos2Col.values())
 		{
 			Operator temp = new TableScanOperator("TPCH", "CUSTOMER", meta);
-			Vector<String> vStr = new Vector<String>();
+			ArrayList<String> vStr = new ArrayList<String>();
 			vStr.add(col);
-			Vector<Boolean> vBool = new Vector<Boolean>();
+			ArrayList<Boolean> vBool = new ArrayList<Boolean>();
 			vBool.add(true);
 			Operator temp2 = new SortOperator(vStr, vBool, meta);
 			temp2.add(temp);
-			RootOperator root = new RootOperator();
+			RootOperator root = new RootOperator(meta);
 			root.add(temp2);
 			Driver.phase1(root);
 			root.start();
@@ -103,13 +103,13 @@ public class BuildDistTable
 		for (String col : pos2Col.values())
 		{
 			Operator temp = new TableScanOperator("TPCH", "ORDERS", meta);
-			Vector<String> vStr = new Vector<String>();
+			ArrayList<String> vStr = new ArrayList<String>();
 			vStr.add(col);
-			Vector<Boolean> vBool = new Vector<Boolean>();
+			ArrayList<Boolean> vBool = new ArrayList<Boolean>();
 			vBool.add(true);
 			Operator temp2 = new SortOperator(vStr, vBool, meta);
 			temp2.add(temp);
-			RootOperator root = new RootOperator();
+			RootOperator root = new RootOperator(meta);
 			root.add(temp2);
 			Driver.phase1(root);
 			root.start();
@@ -178,13 +178,13 @@ public class BuildDistTable
 		for (String col : pos2Col.values())
 		{
 			Operator temp = new TableScanOperator("TPCH", "LINEITEM", meta);
-			Vector<String> vStr = new Vector<String>();
+			ArrayList<String> vStr = new ArrayList<String>();
 			vStr.add(col);
-			Vector<Boolean> vBool = new Vector<Boolean>();
+			ArrayList<Boolean> vBool = new ArrayList<Boolean>();
 			vBool.add(true);
 			Operator temp2 = new SortOperator(vStr, vBool, meta);
 			temp2.add(temp);
-			RootOperator root = new RootOperator();
+			RootOperator root = new RootOperator(meta);
 			root.add(temp2);
 			Driver.phase1(root);
 			root.start();
@@ -253,13 +253,13 @@ public class BuildDistTable
 		for (String col : pos2Col.values())
 		{
 			Operator temp = new TableScanOperator("TPCH", "SUPPLIER", meta);
-			Vector<String> vStr = new Vector<String>();
+			ArrayList<String> vStr = new ArrayList<String>();
 			vStr.add(col);
-			Vector<Boolean> vBool = new Vector<Boolean>();
+			ArrayList<Boolean> vBool = new ArrayList<Boolean>();
 			vBool.add(true);
 			Operator temp2 = new SortOperator(vStr, vBool, meta);
 			temp2.add(temp);
-			RootOperator root = new RootOperator();
+			RootOperator root = new RootOperator(meta);
 			root.add(temp2);
 			Driver.phase1(root);
 			root.start();
@@ -328,13 +328,13 @@ public class BuildDistTable
 		for (String col : pos2Col.values())
 		{
 			Operator temp = new TableScanOperator("TPCH", "PART", meta);
-			Vector<String> vStr = new Vector<String>();
+			ArrayList<String> vStr = new ArrayList<String>();
 			vStr.add(col);
-			Vector<Boolean> vBool = new Vector<Boolean>();
+			ArrayList<Boolean> vBool = new ArrayList<Boolean>();
 			vBool.add(true);
 			Operator temp2 = new SortOperator(vStr, vBool, meta);
 			temp2.add(temp);
-			RootOperator root = new RootOperator();
+			RootOperator root = new RootOperator(meta);
 			root.add(temp2);
 			Driver.phase1(root);
 			root.start();
@@ -403,13 +403,13 @@ public class BuildDistTable
 		for (String col : pos2Col.values())
 		{
 			Operator temp = new TableScanOperator("TPCH", "PARTSUPP", meta);
-			Vector<String> vStr = new Vector<String>();
+			ArrayList<String> vStr = new ArrayList<String>();
 			vStr.add(col);
-			Vector<Boolean> vBool = new Vector<Boolean>();
+			ArrayList<Boolean> vBool = new ArrayList<Boolean>();
 			vBool.add(true);
 			Operator temp2 = new SortOperator(vStr, vBool, meta);
 			temp2.add(temp);
-			RootOperator root = new RootOperator();
+			RootOperator root = new RootOperator(meta);
 			root.add(temp2);
 			Driver.phase1(root);
 			root.start();
@@ -478,13 +478,13 @@ public class BuildDistTable
 		for (String col : pos2Col.values())
 		{
 			Operator temp = new TableScanOperator("TPCH", "NATION", meta);
-			Vector<String> vStr = new Vector<String>();
+			ArrayList<String> vStr = new ArrayList<String>();
 			vStr.add(col);
-			Vector<Boolean> vBool = new Vector<Boolean>();
+			ArrayList<Boolean> vBool = new ArrayList<Boolean>();
 			vBool.add(true);
 			Operator temp2 = new SortOperator(vStr, vBool, meta);
 			temp2.add(temp);
-			RootOperator root = new RootOperator();
+			RootOperator root = new RootOperator(meta);
 			root.add(temp2);
 			Driver.phase1(root);
 			root.start();
@@ -553,13 +553,13 @@ public class BuildDistTable
 		for (String col : pos2Col.values())
 		{
 			Operator temp = new TableScanOperator("TPCH", "REGION", meta);
-			Vector<String> vStr = new Vector<String>();
+			ArrayList<String> vStr = new ArrayList<String>();
 			vStr.add(col);
-			Vector<Boolean> vBool = new Vector<Boolean>();
+			ArrayList<Boolean> vBool = new ArrayList<Boolean>();
 			vBool.add(true);
 			Operator temp2 = new SortOperator(vStr, vBool, meta);
 			temp2.add(temp);
-			RootOperator root = new RootOperator();
+			RootOperator root = new RootOperator(meta);
 			root.add(temp2);
 			Driver.phase1(root);
 			root.start();

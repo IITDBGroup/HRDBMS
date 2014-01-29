@@ -10,9 +10,9 @@ import com.exascale.managers.FileManager;
 
 public class ReadThread extends HRDBMSThread
 {
-	private Page p;
-	private Block b;
-	private ByteBuffer bb;
+	protected Page p;
+	protected Block b;
+	protected ByteBuffer bb;
 	
 	public ReadThread(Page p, Block b, ByteBuffer bb)
 	{

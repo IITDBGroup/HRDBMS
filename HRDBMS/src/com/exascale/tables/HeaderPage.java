@@ -3,18 +3,19 @@ package com.exascale.tables;
 import java.nio.ByteBuffer;
 
 import com.exascale.filesystem.Page;
+import com.exascale.logging.InsertLogRec;
 import com.exascale.managers.LogManager;
 
 public class HeaderPage 
 {
-	private int device = -1;
-	private int node = -1;
-	private int type;
-	private static final int ROW_HEADER_ENTRIES_PER_PAGE = Page.BLOCK_SIZE / 4;
-	private static final int COL_HEADER_ENTRIES_PER_PAGE = Page.BLOCK_SIZE / 8;
-	private int blockNum;
-	private int off;
-	private Page p;
+	protected int device = -1;
+	protected int node = -1;
+	protected int type;
+	protected static final int ROW_HEADER_ENTRIES_PER_PAGE = Page.BLOCK_SIZE / 4; //largest free size
+	protected static final int COL_HEADER_ENTRIES_PER_PAGE = Page.BLOCK_SIZE / 8; //largest free size and column id
+	protected int blockNum;
+	protected int off;
+	protected Page p;
 	
 	public HeaderPage(Page p, int type)
 	{
@@ -23,7 +24,7 @@ public class HeaderPage
 		off = 0;
 		if (p.block().number() == 0)
 		{
-			node = p.getInt(0);
+			node = p.getInt(0); //first page contains node and device number
 			device = p.getInt(4);
 			off = 8;
 		}
@@ -48,14 +49,22 @@ public class HeaderPage
 		return device;
 	}
 	
-	public void updateColNum(int entryNum, int colID, long txnum)
-	{
-		p.write(entryNum * 8, ByteBuffer.allocate(4).putInt(colID).array(), txnum, LogManager.getLSN());
+	public void updateColNum(int entryNum, int colID, Transaction tx)
+	{	
+		byte[] before = ByteBuffer.allocate(4).putInt(p.getInt(entryNum * 8)).array();
+		byte[] after = ByteBuffer.allocate(4).putInt(colID).array();
+		InsertLogRec rec = tx.insert(before, after, entryNum * 8, p.block());
+		p.write(entryNum * 8, after, tx.number(), rec.lsn());
 	}
 	
-	public void updateSize(int entryNum, int size, long txnum, int colMarker)
+	public void updateSize(int entryNum, int size, Transaction tx, int colMarker)
 	{
-		p.write(entryNum * 8 + 4, ByteBuffer.allocate(4).putInt(size).array(), txnum, LogManager.getLSN());
+		byte[] before = ByteBuffer.allocate(4).putInt(p.getInt(entryNum * 8 + 4)).array();
+		byte[] after = ByteBuffer.allocate(4).putInt(size).array();
+		//LogManager.write(new InsertLogRec(txnum, p.block(), entryNum * 8 + 4, before, after));
+		//p.write(entryNum * 8 + 4, ByteBuffer.allocate(4).putInt(size).array(), txnum, LogManager.getLSN());
+		InsertLogRec rec = tx.insert(before, after, entryNum * 8 + 4, p.block());
+		p.write(entryNum * 8 + 4, after, tx.number(), rec.lsn());
 	}
 	
 	public int findPage(int data, int colID, int colMarker)
@@ -87,9 +96,14 @@ public class HeaderPage
 		return -1;
 	}
 	
-	public void updateSize(int entryNum, int size, long txnum)
+	public void updateSize(int entryNum, int size, Transaction tx)
 	{
-		p.write(entryNum * 4, ByteBuffer.allocate(4).putInt(size).array(), txnum, LogManager.getLSN());
+		byte[] before = ByteBuffer.allocate(4).putInt(p.getInt(entryNum * 4)).array();
+		byte[] after = ByteBuffer.allocate(4).putInt(size).array();
+		//LogManager.write(new InsertLogRec(txnum, p.block(), entryNum * 4, before, after));
+		//p.write(entryNum * 4, ByteBuffer.allocate(4).putInt(size).array(), txnum, LogManager.getLSN());
+		InsertLogRec rec = tx.insert(before, after, entryNum * 4, p.block());
+		p.write(entryNum * 4, after, tx.number(), rec.lsn());
 	}
 	
 	public int findPage(int data)

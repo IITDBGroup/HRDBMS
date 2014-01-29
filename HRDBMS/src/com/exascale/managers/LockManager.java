@@ -12,8 +12,8 @@ import com.exascale.misc.MultiHashMap;
 
 public class LockManager
 {
-	private static LockTable lockTable = new LockTable();
-	private static MultiHashMap<Long, Lock> locks = new MultiHashMap<Long, Lock>();
+	protected static LockTable lockTable = new LockTable();
+	protected static MultiHashMap<Long, Lock> locks = new MultiHashMap<Long, Lock>();
 	
 	public static void sLock(Block b, long txnum) throws LockAbortException
 	{
@@ -62,7 +62,7 @@ public class LockManager
 		}
 	}
 	
-	private static boolean hasXLock(Block b, long txnum)
+	protected static boolean hasXLock(Block b, long txnum)
 	{
 		synchronized(locks)
 		{
@@ -107,8 +107,8 @@ public class LockManager
 	
 	public static class Lock
 	{
-		private String type;
-		private Block b;
+		protected String type;
+		protected Block b;
 		
 		public Lock(String type, Block b)
 		{

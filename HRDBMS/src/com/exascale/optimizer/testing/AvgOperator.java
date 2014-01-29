@@ -1,25 +1,44 @@
 package com.exascale.optimizer.testing;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.exascale.optimizer.testing.AggregateOperator.AggregateResultThread;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
 
 public class AvgOperator implements AggregateOperator, Serializable
 {
-	private String input;
-	private String output;
-	private MetaData meta;
+	protected String input;
+	protected String output;
+	protected MetaData meta;
+	protected int NUM_GROUPS = 16;
 	
 	public AvgOperator(String input, String output, MetaData meta)
 	{
 		this.input = input;
 		this.output = output;
 		this.meta = meta;
+	}
+	
+	public void setNumGroups(int groups)
+	{
+		NUM_GROUPS = groups;
+	}
+	
+	public AvgOperator clone()
+	{
+		return new AvgOperator(input, output, meta);
+	}
+	
+	public void setInputColumn(String col)
+	{
+		input = col;
 	}
 	
 	public String getInputColumn()
@@ -40,7 +59,7 @@ public class AvgOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public AggregateResultThread newProcessingThread(DiskBackedArray rows, HashMap<String, Integer> cols2Pos) 
+	public AggregateResultThread newProcessingThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos) 
 	{
 		return new AvgThread(rows, cols2Pos);
 	}
@@ -50,13 +69,13 @@ public class AvgOperator implements AggregateOperator, Serializable
 		return new AvgHashThread(cols2Pos);
 	}
 
-	private class AvgThread extends AggregateResultThread
+	protected class AvgThread extends AggregateResultThread
 	{
-		private DiskBackedArray rows;
-		private HashMap<String, Integer> cols2Pos;
-		private double result;
+		protected ArrayList<ArrayList<Object>> rows;
+		protected HashMap<String, Integer> cols2Pos;
+		protected BigDecimal result;
 		
-		public AvgThread(DiskBackedArray rows, HashMap<String, Integer> cols2Pos)
+		public AvgThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos)
 		{
 			this.rows = rows;
 			this.cols2Pos = cols2Pos;
@@ -64,45 +83,37 @@ public class AvgOperator implements AggregateOperator, Serializable
 		
 		public Double getResult()
 		{
-			return result;
+			return result.doubleValue();
 		}
 		
 		public void run()
 		{
 			int pos = cols2Pos.get(input);
 			long numRows = 0;
-			result = 0;
+			result = new BigDecimal(0);
 			
 			for (Object orow : rows)
 			{
 				ArrayList<Object> row = (ArrayList<Object>)orow;
 				numRows++;
-				result += (Double)row.get(pos);
+				result = result.add(new BigDecimal((Double)row.get(pos)));
 			}
 			
-			result = result / (1.0 * numRows);
+			result = result.divide(new BigDecimal(numRows), 16, RoundingMode.HALF_UP);
 			//System.out.println("AvgThread is terminating.");
 		}
 		
 		public void close()
 		{
-			try
-			{
-				rows.close();
-			}
-			catch(Exception e)
-			{
-				e.printStackTrace();
-			}
 		}
 	}
 	
-	private class AvgHashThread extends AggregateResultThread
+	protected class AvgHashThread extends AggregateResultThread
 	{
-		private volatile ConcurrentHashMap<ArrayList<Object>, AtomicDouble> sums = new ConcurrentHashMap<ArrayList<Object>, AtomicDouble>();
-		private volatile ConcurrentHashMap<ArrayList<Object>, AtomicLong> counts = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>();
-		private HashMap<String, Integer> cols2Pos;
-		private int pos;
+		protected volatile ConcurrentHashMap<ArrayList<Object>, AtomicReference<BigDecimal>> sums = new ConcurrentHashMap<ArrayList<Object>, AtomicReference<BigDecimal>>(NUM_GROUPS, 0.75f, ResourceManager.cpus * 6);
+		protected volatile ConcurrentHashMap<ArrayList<Object>, AtomicLong> counts = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS, 0.75f, ResourceManager.cpus * 6);
+		protected HashMap<String, Integer> cols2Pos;
+		protected int pos;
 		
 		public AvgHashThread(HashMap<String, Integer> cols2Pos)
 		{
@@ -110,19 +121,20 @@ public class AvgOperator implements AggregateOperator, Serializable
 			pos = cols2Pos.get(input);
 		}
 		
+		//@Parallel
 		public void put(ArrayList<Object> row, ArrayList<Object> group)
 		{
 			Double val = (Double)row.get(pos);
-			AtomicDouble ad = sums.get(group);
+			AtomicReference<BigDecimal> ad = sums.get(group);
 			if (ad != null)
 			{
-				ad.addAndGet(val);
+				addToSum(group, val);
 			}
 			else
 			{
-				if (sums.putIfAbsent(group, new AtomicDouble(val)) != null)
+				if (sums.putIfAbsent(group, new AtomicReference(new BigDecimal(val))) != null)
 				{
-					sums.get(group).addAndGet(val);
+					addToSum(group, val);
 				}
 			}
 			
@@ -140,10 +152,22 @@ public class AvgOperator implements AggregateOperator, Serializable
 		
 		public Object getResult(ArrayList<Object> keys)
 		{
-			return new Double(sums.get(keys).doubleValue() / counts.get(keys).doubleValue());
+			return new Double(sums.get(keys).get().divide(new BigDecimal(counts.get(keys).get()), 16, RoundingMode.HALF_UP).doubleValue());
 		}
 		
 		public void close()
 		{}
+		
+		public void addToSum(ArrayList<Object> key, double amount) 
+		{
+			BigDecimal val = new BigDecimal(amount);
+		    AtomicReference<BigDecimal> newSum = sums.get(key);
+		    for (;;) 
+		    {
+		       BigDecimal oldVal = newSum.get();
+		       if (newSum.compareAndSet(oldVal, oldVal.add(val)))
+		            return;
+		    }
+		}
 	}
 }

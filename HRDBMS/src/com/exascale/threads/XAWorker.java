@@ -2,7 +2,7 @@ package com.exascale.threads;
 
 import java.net.Socket;
 import java.util.Vector;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.BufferedLinkedBlockingQueue;
 
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.TreeNode;
@@ -11,18 +11,18 @@ import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.XAManager;
 import com.exascale.operators.Operator;
 import com.exascale.tables.Plan;
-import com.exascale.tables.QueueEndMarker;
+import com.exascale.optimizer.testing.*;
 import com.exascale.tables.Transaction;
 import java.util.Collections;
 import java.util.ArrayList;
 
 public class XAWorker extends HRDBMSThread
 {
-	private Plan p;
-	private Transaction tx;
-	private LinkedBlockingQueue q;
+	protected Plan p;
+	protected Transaction tx;
+	protected BufferedLinkedBlockingQueue q;
 	
-	public XAWorker(Plan p, Transaction tx, LinkedBlockingQueue q)
+	public XAWorker(Plan p, Transaction tx, BufferedLinkedBlockingQueue q)
 	{
 		this.description = "XA Worker";
 		this.setWait(false);
@@ -67,7 +67,7 @@ public class XAWorker extends HRDBMSThread
 					}
 					
 					first = false;
-					q.put(new QueueEndMarker());
+					q.put(new DataEndMarker());
 				}
 			}
 		}
@@ -88,7 +88,7 @@ public class XAWorker extends HRDBMSThread
 		}
 	}
 	
-	private void linkAndSendOperators(TreeNode root, Transaction tx)
+	protected void linkAndSendOperators(TreeNode root, Transaction tx)
 	{
 		ArrayList<TreeNode> children = Collections.list(root.children());
 		Operator rootOp = ((Operator)((DefaultMutableTreeNode)root).getUserObject());

@@ -39,18 +39,18 @@ import com.exascale.managers.HRDBMSWorker;
 
 public class CatalogCode 
 {
-	private static TreeMap<String, Long> vars = new TreeMap<String, Long>();
-	private static Vector<Integer> sizes = new Vector<Integer>();
-	private static Vector<String> tableLines = new Vector<String>();
-	private static Vector<Vector<String>> data = new Vector<Vector<String>>();
-	private static Vector<Vector<String>> colTypes = new Vector<Vector<String>>();
-	private static HashSet<String> racks = new HashSet<String>();
-	private static HashMap<String, Socket> sockets = new HashMap<String, Socket>();
-	private static ServerSocket listen;
-	private static Socket listenSock;
-	private static InputStream in;
-	private static OutputStream sockOut;
-	private static int methodNum = 0;
+	protected static TreeMap<String, Long> vars = new TreeMap<String, Long>();
+	protected static Vector<Integer> sizes = new Vector<Integer>();
+	protected static Vector<String> tableLines = new Vector<String>();
+	protected static Vector<Vector<String>> data = new Vector<Vector<String>>();
+	protected static Vector<Vector<String>> colTypes = new Vector<Vector<String>>();
+	protected static HashSet<String> racks = new HashSet<String>();
+	protected static HashMap<String, Socket> sockets = new HashMap<String, Socket>();
+	protected static ServerSocket listen;
+	protected static Socket listenSock;
+	protected static InputStream in;
+	protected static OutputStream sockOut;
+	protected static int methodNum = 0;
 	
 	public static void buildCode() throws Exception
 	{
@@ -88,15 +88,12 @@ public class CatalogCode
 				"(6, SYS, NODEGROUPS, 3, 2, R)\n" + 
 				"(7, SYS, TABLESTATS, 6, 3, R)\n" + 
 				"(8, SYS, COLGROUPSTATS, 5, 4, R)\n" + 
-				"(9, SYS, INDEXSTATS, 13, 4, R)\n" + 
-				"(10, SYS, NODES, 5, 1, R)\n" + 
-				"(11, SYS, NETWORK, 3, 2, R)\n" + 
-				"(12, SYS, DEVICES, 5, 2, R)\n" + 
-				"(13, SYS, PARTITIONING, 5, 1, R)\n" + 
-				"(14, SYS, COLSTATS, 7, 4, R)\n" + 
-				"(15, SYS, COLDIST, 15, 5, R)\n" + 
-				"(16, SYS, BACKUPS, 3, 1, R)\n" +
-				"(17, SYS, NODESTATE, 2, 1, R)\n" + 
+				"(9, SYS, NODES, 5, 1, R)\n" + 
+				"(10, SYS, NETWORK, 3, 2, R)\n" + 
+				"(11, SYS, COLSTATS, 7, 4, R)\n" + 
+				"(12, SYS, COLDIST, 15, 5, R)\n" + 
+				"(13, SYS, BACKUPS, 3, 1, R)\n" +
+				"(14, SYS, NODESTATE, 2, 1, R)\n" + 
 				"SYS.BACKUPS(INT, INT, INT)\n" + 
 				"0\n" + 
 				"SYS.NODESTATE(INT, VARCHAR)\n" + 
@@ -146,69 +143,25 @@ public class CatalogCode
 				"(1, 6, NAME, VARCHAR, 128, null, N, null, null, null, N, 0, 0, N)\n" + 
 				"(2, 6, NODEID, INT, null, null, N, null, null, null, N, 1, 1, N)\n" + 
 				"(0, 7, TABLEID, INT, null, null, N, null, null, null, N, 0, 0, N)\n" +
-				"(1, 7, NODEID, INT, null, null, N, null, null, null, N, 1, 1, N)\n" + 
-				"(2, 7, DEVID, INT, null, null, N, null, null, null, N, 2, 2, N)\n" + 
-				"(3, 7, CARD, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(4, 7, PAGES, INT, null, null, N, null, null, null, N, null, null, N)\n" + 
-				"(5, 7, AVGROWLEN, INT, null, null, N, null, null, null, Y, null, null, N)\n" + 
+				"(1, 7, CARD, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" +   
 				"(0, 8, TABLEID, INT, null, null, N, null, null, null, N, 0, 0, N)\n" + 
 				"(1, 8, COLGROUPID, INT, null, null, N, null, null, null, N, 1, 1, N)\n" + 
 				"(2, 8, CARD, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" +
-				"(3, 8, NODEID, INT, null, null, N, null, null, null, N, 2, 2, N)\n" + 
-				"(4, 8, DEVID, INT, null, null, N, null, null, null, N, 3, 3, N)\n" + 
-				"(0, 9, TABLEID, INT, null, null, N, null, null, null, N, 0, 0, N)\n" + 
-				"(1, 9, INDEXID, INT, null, null, N, null, null, null, N, 1, 1, N)\n" + 
-				"(2, 9, NLEAFS, INT, null, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(3, 9, NLEVELS, INT, null, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(4, 9, 1STKEYCARD, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(5, 9, 2NDKEYCARD, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(6, 9, 3RDKEYCARD, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(7, 9, 4THKEYCARD, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(8, 9, FULLKEYCARD, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(9, 9, NROWS, BIGINT, null, null, N, null, null, null, N, null, null, N)\n" + 
-				"(10, 9, NBLOCKS, INT, null, null, N, null, null, null, Y, null, null, N)\n" +
-				"(11, 9, NODEID, INT, null, null, N, null, null, null, N, 2, 2, N)\n" + 
-				"(12, 9, DEVID, INT, null, null, N, null, null, null, N, 3, 3, N)\n" + 
-				"(0, 10, NODEID, INT, null, null, Y, 0, 1, null, N, 0, 0, D)\n" + 
-				"(1, 10, HOSTNAME, VARCHAR, 128, null, N, null, null, null, N, null, null, N)\n" + 
-				"(2, 10, TYPE, VARCHAR, 1, null, N, null, null, W, N, null, null, N)\n" + 
-				"(3, 10, RACK, VARCHAR, 128, null, N, null, null, null, N, null, null, N)\n" + 
-				"(4, 10, CPUSPEED, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(0, 11, FROMRACK, VARCHAR, 128, null, N, null, null, null, N, 0, 0, N)\n" + 
-				"(1, 11, TORACK, VARCHAR, 128, null, N, null, null, null, N, 1, 1, N)\n" + 
-				"(2, 11, SPEED, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(0, 12, NODEID, INT, null, null, N, null, null, null, N, 0, 0, N)\n" + 
-				"(1, 12, DEVID, INT, null, null, N, null, null, null, N, 1, 1, N)\n" + 
-				"(2, 12, DIRECTORY, VARCHAR, 128, null, N, null, null, null, N, null, null, N)\n" + 
-				"(3, 12, READSPEED, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(4, 12, WRITESPEED, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(0, 13, TABLEID, INT, null, null, N, null, null, null, N, 0, 0, N)\n" + 
-				"(1, 13, LEVEL, INT, null, null, N, null, null, null, N, null, null, N)\n" + 
-				"(2, 13, GROUPEXP, VARCHAR, 32768, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(3, 13, NODEEXP, VARCHAR, 32768, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(4, 13, DEVEXP, VARCHAR, 32768, null, N, null, null, null, N, null, null, N)\n" + 
-				"(0, 14, TABLEID, INT, null, null, N, null, null, null, N, 0, 0, N)\n" + 
-				"(1, 14, NODEID, INT, null, null, N, null, null, null, N, 1, 1, N)\n" + 
-				"(2, 14, DEVID, INT, null, null, N, null, null, null, N, 2, 2, N)\n" + 
-				"(3, 14, COLID, INT, null, null, N, null, null, null, N, 3, 3, N)\n" + 
-				"(4, 14, CARD, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(5, 14, AVGCOLLEN, INT, null, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(6, 14, NUMNULLS, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(0, 15, TABLEID, INT, null, null, N, null, null, null, N, 0, 0, N)\n" + 
-				"(1, 15, NODEID, INT, null, null, N, null, null, null, N, 1, 1, N)\n" + 
-				"(2, 15, DEVID, INT, null, null, N, null, null, null, N, 2, 2, N)\n" + 
-				"(3, 15, COLID, INT, null, null, N, null, null, null, N, 3, 3, N)\n" + 
+				"(0, 9, NODEID, INT, null, null, Y, 0, 1, null, N, 0, 0, D)\n" + 
+				"(1, 9, HOSTNAME, VARCHAR, 128, null, N, null, null, null, N, null, null, N)\n" + 
+				"(2, 9, TYPE, VARCHAR, 1, null, N, null, null, W, N, null, null, N)\n" + 
+				"(3, 9, RACK, VARCHAR, 128, null, N, null, null, null, N, null, null, N)\n" + 
+				"(0, 10, TABLEID, INT, null, null, N, null, null, null, N, 0, 0, N)\n" + 
+				"(1, 10, LEVEL, INT, null, null, N, null, null, null, N, null, null, N)\n" + 
+				"(2, 10, GROUPEXP, VARCHAR, 32768, null, N, null, null, null, Y, null, null, N)\n" + 
+				"(3, 10, NODEEXP, VARCHAR, 32768, null, N, null, null, null, Y, null, null, N)\n" + 
+				"(4, 10, DEVEXP, VARCHAR, 32768, null, N, null, null, null, N, null, null, N)\n" + 
+				"(0, 11, TABLEID, INT, null, null, N, null, null, null, N, 0, 0, N)\n" + 
+				"(1, 11, COLID, INT, null, null, N, null, null, null, N, 3, 3, N)\n" + 
+				"(2, 11, CARD, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" + 
+				"(0, 12, TABLEID, INT, null, null, N, null, null, null, N, 0, 0, N)\n" + 
+				"(1, 12, COLID, INT, null, null, N, null, null, null, N, 3, 3, N)\n" + 
 				"(4, 15, CUTOFFLE, VARBINARY, 32768, null, N, null, null, null, N, 4, 4, N)\n" + 
-				"(5, 15, ROWCOUNT, BIGINT, null, null, N, null, null, null, N, null, null, N)\n" + 
-				"(6, 15, DISTINCTCOUNT, BIGINT, null, null, N, null, null, null, N, null, null, N)\n" + 
-				"(7, 15, 1STFREQVAL, VARBINARY, 32768, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(8, 15, 1STFREQCOUNT, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(9, 15, 2NDFREQVAL, VARBINARY, 32768, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(10, 15, 2NDFREQCOUNT, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(11, 15, 3RDFREQVAL, VARBINARY, 32768, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(12, 15, 3RDFREQCOUNT, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(13, 15, 4THFREQVAL, VARBINARY, 32768, null, N, null, null, null, Y, null, null, N)\n" + 
-				"(14, 15, 4THFREQCOUNT, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" +
 				"(0, 16, FIRST, INT, null, null, N, null, null, null, N, 0, 0, N)\n" + 
 				"(1, 16, SECOND, INT, null, null, N, null, null, null, Y, null, null, N)\n" + 
 				"(2, 16, THIRD, INT, null, null, N, null, null, null, Y, null, null, N)\n" +
@@ -487,7 +440,7 @@ public class CatalogCode
 		HRDBMSWorker.logger.debug("buildCode() is returning!");
 	}
 	
-	private static void createIndexes(PrintWriter out) throws UnsupportedEncodingException
+	protected static void createIndexes(PrintWriter out) throws UnsupportedEncodingException
 	{
 		HRDBMSWorker.logger.debug("Entered createIndexes()");
 		Vector<String> iTable = getTable("SYS.INDEXES", tableLines, data);
@@ -616,7 +569,7 @@ public class CatalogCode
 		}
 	}
 	
-	private static void buildIndexData(PrintWriter out, TreeMap<TextRowSorter, RID> keys2RID, int numKeys, String name) throws UnsupportedEncodingException
+	protected static void buildIndexData(PrintWriter out, TreeMap<TextRowSorter, RID> keys2RID, int numKeys, String name) throws UnsupportedEncodingException
 	{	
 		ByteBuffer data = ByteBuffer.allocate(Page.BLOCK_SIZE );
 		buildIndexDataBuffer(keys2RID, numKeys, data);
@@ -640,7 +593,7 @@ public class CatalogCode
 		}
 	}
 	
-	private static void buildIndexDataBuffer(TreeMap<TextRowSorter, RID> keys2RID, int numKeys, ByteBuffer data) throws UnsupportedEncodingException
+	protected static void buildIndexDataBuffer(TreeMap<TextRowSorter, RID> keys2RID, int numKeys, ByteBuffer data) throws UnsupportedEncodingException
 	{
 		data.position(0);
 		data.putInt(numKeys); //num key cols
@@ -683,7 +636,7 @@ public class CatalogCode
 		}
 	}
 	
-	private static void indexPut(ByteBuffer data, ByteBuffer keyBytes, RID rid)
+	protected static void indexPut(ByteBuffer data, ByteBuffer keyBytes, RID rid)
 	{
 		data.position(14); //offset of first free key value
 		int freeKeyOff = data.getInt();
@@ -743,7 +696,7 @@ public class CatalogCode
 		data.putInt(downOff); //offset
 	}
 	
-	private static ByteBuffer createLeaf(ByteBuffer keyBytes, RID rid, int prevOff, int nextOff)
+	protected static ByteBuffer createLeaf(ByteBuffer keyBytes, RID rid, int prevOff, int nextOff)
 	{
 		ByteBuffer data = ByteBuffer.allocate(41 + keyBytes.limit());
 		data.position(0);
@@ -762,7 +715,7 @@ public class CatalogCode
 		return data;
 	}
 	
-	private static void receiveDevicesFromAllNodes() throws Exception
+	protected static void receiveDevicesFromAllNodes() throws Exception
 	{
 		Vector<String> nTable = getTable("SYS.NODES", tableLines, data);
 		String responses = "";
@@ -807,7 +760,7 @@ public class CatalogCode
 		}
 	}
 	
-	private static void sendNodesToCoords() throws IOException
+	protected static void sendNodesToCoords() throws IOException
 	{
 		for (Socket sock : sockets.values())
 		{
@@ -843,7 +796,7 @@ public class CatalogCode
 		}
 	}
 	
-	private static void sendCompletionChecks() throws IOException
+	protected static void sendCompletionChecks() throws IOException
 	{
 		for (Socket sock : sockets.values())
 		{
@@ -873,7 +826,7 @@ public class CatalogCode
 		}
 	}
 	
-	private static void sendDevicesToCoords() throws IOException
+	protected static void sendDevicesToCoords() throws IOException
 	{
 		for (Socket sock : sockets.values())
 		{
@@ -912,7 +865,7 @@ public class CatalogCode
 		}
 	}
 	
-	private static void sendNetworkToCoords() throws IOException
+	protected static void sendNetworkToCoords() throws IOException
 	{
 		for (Socket sock : sockets.values())
 		{
@@ -948,7 +901,7 @@ public class CatalogCode
 		}
 	}
 	
-	private static void createNetwork()
+	protected static void createNetwork()
 	{
 		Vector<String> nTable = getTable("SYS.NETWORK", tableLines, data);
 		int i = 0;
@@ -970,7 +923,7 @@ public class CatalogCode
 		}
 	}
 	
-	private static void createNodeState()
+	protected static void createNodeState()
 	{
 		Vector<String> nsTable = getTable("SYS.NODESTATE", tableLines, data);
 		Vector<String> nTable = getTable("SYS.NODES", tableLines, data);
@@ -983,7 +936,7 @@ public class CatalogCode
 		}
 	}
 	
-	private static void createBackups()
+	protected static void createBackups()
 	{
 		Vector<String> nTable = getTable("SYS.NODES", tableLines, data);
 		Vector<String> bTable = getTable("SYS.BACKUPS", tableLines, data);
@@ -1047,7 +1000,7 @@ public class CatalogCode
 		}
 	}
 	
-	private static int getNodePreferLocal(int primary, String priRack, HashMap<Integer, String> nodes2Rack, HashMap<Integer, Integer> nodes2NumTables)
+	protected static int getNodePreferLocal(int primary, String priRack, HashMap<Integer, String> nodes2Rack, HashMap<Integer, Integer> nodes2NumTables)
 	{
 		HashMap<Integer, Integer> candidates = new HashMap<Integer, Integer>();
 		for (Map.Entry<Integer, String> entry : nodes2Rack.entrySet())
@@ -1104,7 +1057,7 @@ public class CatalogCode
 		return lowKey;
 	}
 	
-	private static int getNodePreferNonLocal(int primary, int secondary, String priRack, HashMap<Integer, String> nodes2Rack, HashMap<Integer, Integer> nodes2NumTables)
+	protected static int getNodePreferNonLocal(int primary, int secondary, String priRack, HashMap<Integer, String> nodes2Rack, HashMap<Integer, Integer> nodes2NumTables)
 	{
 		HashMap<Integer, Integer> candidates = new HashMap<Integer, Integer>();
 		for (Map.Entry<Integer, String> entry : nodes2Rack.entrySet())
@@ -1161,7 +1114,7 @@ public class CatalogCode
 		return lowKey;
 	}
 	
-	private static void receiveAndCreateNodes() throws IOException
+	protected static void receiveAndCreateNodes() throws IOException
 	{
 		HRDBMSWorker.logger.debug("Got input stream.");
 		
@@ -1212,7 +1165,7 @@ public class CatalogCode
 		}
 	}
 	
-	private static void receiveCompletionCheck() throws IOException
+	protected static void receiveCompletionCheck() throws IOException
 	{	
 		byte[] buff = new byte[8];
 		if (in.read(buff) != 8)
@@ -1233,7 +1186,7 @@ public class CatalogCode
 		sockOut.write("OKOKOKOK".getBytes("UTF-8"));
 	}
 	
-	private static void receiveAndCreateDevices() throws IOException
+	protected static void receiveAndCreateDevices() throws IOException
 	{	
 		byte[] buff = new byte[8];
 		if (in.read(buff) != 8)
@@ -1284,7 +1237,7 @@ public class CatalogCode
 		}
 	}
 	
-	private static void receiveAndCreateNetwork() throws IOException
+	protected static void receiveAndCreateNetwork() throws IOException
 	{
 		byte[] buff = new byte[8];
 		if (in.read(buff) != 8)
@@ -1331,7 +1284,7 @@ public class CatalogCode
 		}
 	}
 	
-	private static void createNodes() throws IOException
+	protected static void createNodes() throws IOException
 	{
 		BufferedReader nodes = new BufferedReader(new FileReader(new File("nodes.cfg")));
 		String line = nodes.readLine();
@@ -1394,7 +1347,7 @@ public class CatalogCode
 		nodes.close();
 	}
 	
-	private static void createColStats(Vector<String> tableLines, Vector<Vector<String>> data)
+	protected static void createColStats(Vector<String> tableLines, Vector<Vector<String>> data)
 	{
 		Vector<String> tTable = getTable("SYS.TABLES", tableLines, data);
 		
@@ -1416,7 +1369,7 @@ public class CatalogCode
 		}
 	}
 	
-	private static void createColStatVars()
+	protected static void createColStatVars()
 	{
 		HRDBMSWorker.logger.debug("Entered createColStatVars()");
 		Vector<String> tTable = getTable("SYS.TABLES", tableLines, data);
@@ -1458,7 +1411,7 @@ public class CatalogCode
 		}
 	}
 	
-	private static void createIndexStats(Vector<String> tableLines, Vector<Vector<String>> data)
+	protected static void createIndexStats(Vector<String> tableLines, Vector<Vector<String>> data)
 	{
 		Vector<String> isTable = null;
 		Vector<String> iTable = null;
@@ -1569,7 +1522,7 @@ public class CatalogCode
 		}
 	}
 	
-	private static Vector<String> getTable(String table, Vector<String> tableLines, Vector<Vector<String>> data)
+	protected static Vector<String> getTable(String table, Vector<String> tableLines, Vector<Vector<String>> data)
 	{
 		int i = 0;
 		for (String header : tableLines)
@@ -1585,7 +1538,7 @@ public class CatalogCode
 		return null;
 	}
 	
-	private static void createTableStats(Vector<String> tableLines, Vector<Vector<String>> data)
+	protected static void createTableStats(Vector<String> tableLines, Vector<Vector<String>> data)
 	{
 		Vector<String> tsTable = null;
 		Vector<String> tTable = null;
@@ -1696,10 +1649,10 @@ public class CatalogCode
 		}
 	}
 	
-	private static void createOutputTrailer(PrintWriter out, Vector<Vector<String>> data, Vector<String> tableLines)
+	protected static void createOutputTrailer(PrintWriter out, Vector<Vector<String>> data, Vector<String> tableLines)
 	{
 		out.println("");
-		out.println("\tprivate static void putString(ByteBuffer bb, String val) throws UnsupportedEncodingException");
+		out.println("\tprotected static void putString(ByteBuffer bb, String val) throws UnsupportedEncodingException");
 		out.println("\t{");
 		out.println("\t\tbyte[] bytes = val.getBytes(\"UTF-8\");");
 		out.println("");
@@ -1719,7 +1672,7 @@ public class CatalogCode
 		out.println("}");
 	}
 	
-	private static void calculateVariables(Vector<Vector<String>> data, Vector<String> tableLines)
+	protected static void calculateVariables(Vector<Vector<String>> data, Vector<String> tableLines)
 	{
 		HRDBMSWorker.logger.debug("In calculateVariables() with " + vars.keySet().size() + " variables to process.");
 		for (String var : vars.keySet())
@@ -2775,7 +2728,7 @@ public class CatalogCode
 		createColStatVars();
 	}
 	
-	private static int getFullKeyCard(String table, int[] indexes)
+	protected static int getFullKeyCard(String table, int[] indexes)
 	{
 		Vector<String> t = getTable("SYS.TABLES", tableLines, data);
 		Vector<String> actual = getTable(table, tableLines, data);
@@ -2812,7 +2765,7 @@ public class CatalogCode
 		return -1;
 	}
 	
-	private static int getCompositeColCard(String table, int[] colIndexes, int depth)
+	protected static int getCompositeColCard(String table, int[] colIndexes, int depth)
 	{
 		HRDBMSWorker.logger.debug("Entering getCompositeColCard().");
 		int i = 0;
@@ -2890,7 +2843,7 @@ public class CatalogCode
 		return unique.size();
 	}
 	
-	private static Vector<String> getTypes(String table)
+	protected static Vector<String> getTypes(String table)
 	{
 		int i = 0;
 		for (String line : tableLines)
@@ -2906,7 +2859,7 @@ public class CatalogCode
 		return null;
 	}
 	
-	private static int getAvgLen(String table, int colIndex)
+	protected static int getAvgLen(String table, int colIndex)
 	{	
 		Vector<String> t = getTable(table, tableLines, data);
 		Vector<String> types = getTypes(table);
@@ -2990,7 +2943,7 @@ public class CatalogCode
 		}
 	}
 	
-	private static int getNulls(String table, int colIndex)
+	protected static int getNulls(String table, int colIndex)
 	{	
 		Vector<String> t = getTable(table, tableLines, data);
 		
@@ -3026,7 +2979,7 @@ public class CatalogCode
 		return total;
 	}
 	
-	private static int getColIndexForIndex(String table, int pos)
+	protected static int getColIndexForIndex(String table, int pos)
 	{
 		Vector<String> t = getTable("SYS.TABLES", tableLines, data);
 		
@@ -3058,7 +3011,7 @@ public class CatalogCode
 		return -1;
 	}
 	
-	private static int getNumIndexCols(String table)
+	protected static int getNumIndexCols(String table)
 	{
 		Vector<String> t = getTable("SYS.TABLES", tableLines, data);
 		
@@ -3092,15 +3045,15 @@ public class CatalogCode
 		return -1;
 	}
 	
-	private static void writeVariables(PrintWriter out)
+	protected static void writeVariables(PrintWriter out)
 	{
 		for (Entry<String, Long> entry : vars.entrySet())
 		{
-			out.println("\tprivate static final int " + entry.getKey().substring(0, entry.getKey().length() - 1).substring(1).toUpperCase() + " = " + entry.getValue() + ";");
+			out.println("\tprotected static final int " + entry.getKey().substring(0, entry.getKey().length() - 1).substring(1).toUpperCase() + " = " + entry.getValue() + ";");
 		}
 	}
 	
-	private static void writeData(PrintWriter out, Vector<String> table, int dataSize, Vector<String> types)
+	protected static void writeData(PrintWriter out, Vector<String> table, int dataSize, Vector<String> types)
 	{
 		out.println("\t\tHRDBMSWorker.logger.debug(\"Writing table data.\");");
 		out.println("");
@@ -3199,7 +3152,7 @@ public class CatalogCode
 		out.println("");
 	}
 	
-	private static void writeOffsetArray(PrintWriter out, Vector<String> table, int dataSize, Vector<String> types)
+	protected static void writeOffsetArray(PrintWriter out, Vector<String> table, int dataSize, Vector<String> types)
 	{
 		out.println("");
 		out.println("HRDBMSWorker.logger.debug(\"Writing offset array\");");
@@ -3271,7 +3224,7 @@ public class CatalogCode
 		}
 	}
 	
-	private static void writeNullArray(PrintWriter out, Vector<String> table)
+	protected static void writeNullArray(PrintWriter out, Vector<String> table)
 	{
 		out.println("\t\tHRDBMSWorker.logger.debug(\"Writing null array.\");");
 		for (String row : table)
@@ -3303,7 +3256,7 @@ public class CatalogCode
 		}
 	}
 	
-	private static int calcDataSize(Vector<String> table, Vector<String> types)
+	protected static int calcDataSize(Vector<String> table, Vector<String> types)
 	{
 		HRDBMSWorker.logger.debug("In calcDataSize().  Table has " + table.size() + " rows");
 		int total = 0;
@@ -3383,7 +3336,7 @@ public class CatalogCode
 		return total;
 	}
 	
-	private static void createOutputHeader(PrintWriter out)
+	protected static void createOutputHeader(PrintWriter out)
 	{
 		out.println("import java.io.File;");
 		out.println("import java.nio.ByteBuffer;");
@@ -3431,7 +3384,7 @@ public class CatalogCode
 		out.println("\t}");
 	}
 	
-	private static void createTableHeader(PrintWriter out, String name, int rows, int cols, int dataSize)
+	protected static void createTableHeader(PrintWriter out, String name, int rows, int cols, int dataSize)
 	{
 		out.println("\tpublic void createTable" + methodNum + "() throws IOException, UnsupportedEncodingException");
 		out.println("\t{");
@@ -3517,9 +3470,9 @@ public class CatalogCode
 		out.println("\t\t//null Array start");
 	}
 	
-	private class TextRowSorter implements Comparable
+	protected class TextRowSorter implements Comparable
 	{
-		private Vector<Comparable> cols = new Vector<Comparable>();
+		protected Vector<Comparable> cols = new Vector<Comparable>();
 		
 		public void add(Integer col)
 		{
@@ -3595,7 +3548,7 @@ public class CatalogCode
 			return 0;
 		}
 		
-		private ByteBuffer getKeyBytes() throws UnsupportedEncodingException
+		protected ByteBuffer getKeyBytes() throws UnsupportedEncodingException
 		{
 			int i = this.cols.size();
 			for (Comparable col : this.cols)

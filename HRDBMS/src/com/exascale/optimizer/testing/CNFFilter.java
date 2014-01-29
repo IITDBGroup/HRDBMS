@@ -1,5 +1,6 @@
 package com.exascale.optimizer.testing;
 
+import java.io.File;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Date;
@@ -8,20 +9,87 @@ import java.util.HashSet;
 
 public class CNFFilter implements Serializable
 {
-	private ArrayList<ArrayList<Filter>> filters = new ArrayList<ArrayList<Filter>>();
-	private MetaData meta;
-	private HashMap<String, Integer> cols2Pos;
-	private ArrayList<Object> partHash;
-	private ArrayList<Filter> rangeFilters;
+	protected ArrayList<ArrayList<Filter>> filters = new ArrayList<ArrayList<Filter>>();
+	protected MetaData meta;
+	protected HashMap<String, Integer> cols2Pos;
+	protected ArrayList<Object> partHash;
+	protected ArrayList<Filter> rangeFilters;
 	protected static final Long LARGE_PRIME =  1125899906842597L;
     protected static final Long LARGE_PRIME2 = 6920451961L;
+    protected HashSet<HashMap<Filter, Filter>> hshm = null;
+    protected Boolean hshmLock = false;
+    
+    public ArrayList<ArrayList<Filter>> getALAL()
+    {
+    	return filters;
+    }
 	
 	public long getPartitionHash()
 	{
 		return 0x0EFFFFFFFFFFFFFFL & hash(partHash);
 	}
 	
-	private long hash(ArrayList<Object> key)
+	public ArrayList<ArrayList<Filter>> cloneFilters()
+	{
+		ArrayList<ArrayList<Filter>> retval = new ArrayList<ArrayList<Filter>>(filters.size());
+		for (ArrayList<Filter> list : filters)
+		{
+			retval.add((ArrayList<Filter>)list.clone());
+		}
+		
+		return retval;
+	}
+	
+	public CNFFilter clone()
+	{
+		CNFFilter retval = new CNFFilter();
+		retval.filters = cloneFilters();
+		retval.meta = meta;
+		retval.cols2Pos = cols2Pos;
+		return retval;
+	}
+	
+	public HashSet<HashMap<Filter, Filter>> getHSHM()
+	{	
+		if (hshm == null)
+		{
+			synchronized(hshmLock)
+			{
+				if (hshm == null)
+				{
+					hshm = new HashSet<HashMap<Filter, Filter>>();
+					for (ArrayList<Filter> filter : filters)
+					{
+						HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
+						for (Filter f : filter)
+						{
+							hm.put(f,  f);
+						}
+				
+						hshm.add(hm);
+					}
+				}
+			}
+		}
+		
+		return hshm;
+	}
+	
+	public void setHSHM(HashSet<HashMap<Filter, Filter>> hshm)
+	{
+		filters = new ArrayList<ArrayList<Filter>>(hshm.size());
+		for (HashMap<Filter, Filter> hm : hshm)
+		{
+			ArrayList<Filter> ors = new ArrayList<Filter>(hm.keySet());
+			filters.add(ors);
+			synchronized(hshmLock)
+			{
+				this.hshm = hshm;
+			}
+		}
+	}
+	
+	protected long hash(ArrayList<Object> key)
 	{
 		long hashCode = 1125899906842597L;
 		for (Object e : key)
@@ -186,19 +254,25 @@ public class CNFFilter implements Serializable
 	
 	public ArrayList<String> getReferences()
 	{
-		ArrayList<String> retval = new ArrayList<String>();
+		ArrayList<String> retval = new ArrayList<String>(filters.size());
 		for (ArrayList<Filter> f : filters)
 		{
 			for (Filter filter : f)
 			{
 				if (filter.leftIsColumn())
 				{
-					retval.add(filter.leftColumn());
+					if (!retval.contains(filter.leftColumn()))
+					{
+						retval.add(filter.leftColumn());
+					}
 				}
 				
 				if (filter.rightIsColumn())
 				{
-					retval.add(filter.rightColumn());
+					if (!retval.contains(filter.rightColumn()))
+					{
+						retval.add(filter.rightColumn());
+					}
 				}
 			}
 		}
@@ -206,6 +280,7 @@ public class CNFFilter implements Serializable
 		return retval;
 	}
 	
+	//@Parallel
 	public boolean passes(ArrayList<Object> row)
 	{
 		for (ArrayList<Filter> filter : filters)
@@ -219,6 +294,7 @@ public class CNFFilter implements Serializable
 		return true;
 	}
 	
+	//@Parallel
 	public boolean passes(ArrayList<Object> lRow, ArrayList<Object> rRow)
 	{
 		for (ArrayList<Filter> filter : filters)
@@ -232,7 +308,7 @@ public class CNFFilter implements Serializable
 		return true;
 	}
 	
-	private boolean passesOredCondition(ArrayList<Filter> filter, ArrayList<Object> row)
+	protected boolean passesOredCondition(ArrayList<Filter> filter, ArrayList<Object> row)
 	{
 		try
 		{
@@ -253,7 +329,7 @@ public class CNFFilter implements Serializable
 		return false;
 	}
 	
-	private boolean passesOredCondition(ArrayList<Filter> filter, ArrayList<Object> lRow, ArrayList<Object> rRow)
+	protected boolean passesOredCondition(ArrayList<Filter> filter, ArrayList<Object> lRow, ArrayList<Object> rRow)
 	{
 		try
 		{
@@ -286,11 +362,16 @@ public class CNFFilter implements Serializable
 	{
 		this.meta = meta;
 		this.cols2Pos = cols2Pos;
+		if (!new File("./card.tbl").exists())
+		{
+			setHSHM(clause);
+			return;
+		}
 		
 		for (HashMap<Filter, Filter> ored : clause)
 		{
-			ArrayList<Filter> oredArray = new ArrayList<Filter>();
-			ArrayList<Double> scores = new ArrayList<Double>();
+			ArrayList<Filter> oredArray = new ArrayList<Filter>(ored.size());
+			ArrayList<Double> scores = new ArrayList<Double>(ored.size());
 			for (Filter filter : ored.keySet())
 			{
 				oredArray.add(filter);
@@ -302,7 +383,7 @@ public class CNFFilter implements Serializable
 			filters.add(oredArray);
 		}
 		
-		ArrayList<Double> scores = new ArrayList<Double>();
+		ArrayList<Double> scores = new ArrayList<Double>(filters.size());
 		for (ArrayList<Filter> ored : filters)
 		{
 			scores.add(meta.likelihood(ored, generated)); //less likely = better
@@ -316,11 +397,16 @@ public class CNFFilter implements Serializable
 	{
 		this.meta = meta;
 		this.cols2Pos = cols2Pos;
+		if (!new File("./card.tbl").exists())
+		{
+			setHSHM(clause);
+			return;
+		}
 		
 		for (HashMap<Filter, Filter> ored : clause)
 		{
-			ArrayList<Filter> oredArray = new ArrayList<Filter>();
-			ArrayList<Double> scores = new ArrayList<Double>();
+			ArrayList<Filter> oredArray = new ArrayList<Filter>(ored.size());
+			ArrayList<Double> scores = new ArrayList<Double>(ored.size());
 			for (Filter filter : ored.keySet())
 			{
 				oredArray.add(filter);
@@ -332,7 +418,7 @@ public class CNFFilter implements Serializable
 			filters.add(oredArray);
 		}
 		
-		ArrayList<Double> scores = new ArrayList<Double>();
+		ArrayList<Double> scores = new ArrayList<Double>(filters.size());
 		for (ArrayList<Filter> ored : filters)
 		{
 			scores.add(meta.likelihood(ored));
@@ -340,6 +426,12 @@ public class CNFFilter implements Serializable
 		
 		//sort filters and scores
 		quicksort(filters, scores);
+	}
+	
+	public CNFFilter(HashSet<HashMap<Filter, Filter>> clause, HashMap<String, Integer> cols2Pos)
+	{
+		this.cols2Pos = cols2Pos;
+		this.setHSHM(clause);
 	}
 	
 	public static void quicksort(ArrayList main, ArrayList<Double> scores) {
@@ -369,7 +461,7 @@ public class CNFFilter implements Serializable
 		}
 
 	// partition a[left] to a[right], assumes left < right
-	private static int partition(ArrayList<Object> a, ArrayList<Double> scores,	int left, int right) 
+	protected static int partition(ArrayList<Object> a, ArrayList<Double> scores,	int left, int right) 
 	{
 	    int i = left - 1;
 	    int j = right;
@@ -386,7 +478,7 @@ public class CNFFilter implements Serializable
 	}
 	
 	// partition a[left] to a[right], assumes left < right
-		private static int reversePartition(ArrayList<Object> a, ArrayList<Double> scores,	int left, int right) 
+		protected static int reversePartition(ArrayList<Object> a, ArrayList<Double> scores,	int left, int right) 
 		{
 		    int i = left - 1;
 		    int j = right;
@@ -403,16 +495,16 @@ public class CNFFilter implements Serializable
 		}
 
 	// is x < y ?
-	private static boolean less(Double x, Double y) {
+	protected static boolean less(Double x, Double y) {
 	    return x.compareTo(y) < 0;
 	}
 	
-	private static boolean more(Double x, Double y) {
+	protected static boolean more(Double x, Double y) {
 	    return x.compareTo(y) > 0;
 	}
 
 	// exchange a[i] and a[j]
-	private static void exch(ArrayList<Object> a, ArrayList<Double> scores, int i, int j) {
+	protected static void exch(ArrayList<Object> a, ArrayList<Double> scores, int i, int j) {
 	    Object swap1 = a.get(i);
 	    Object swap2 = a.get(j);
 	    Double swap3 = scores.get(i);

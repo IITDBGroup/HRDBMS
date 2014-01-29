@@ -2,17 +2,18 @@ package com.exascale.misc;
 
 import java.util.HashMap;
 import java.util.Vector;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class MultiHashMap<K, V>
 {	
-	private HashMap<K,Vector<V>> map;
+	protected ConcurrentHashMap<K,Vector<V>> map;
 	
 	public MultiHashMap()
 	{
-		map = new HashMap<K,Vector<V>>();
+		map = new ConcurrentHashMap<K,Vector<V>>();
 	}
 	
-	public void multiPut(K key, V val)
+	public synchronized void multiPut(K key, V val)
 	{
 		if (map.containsKey(key))
 		{
@@ -31,7 +32,7 @@ public class MultiHashMap<K, V>
 		}
 	}
 	
-	public void multiRemove(K key, V val)
+	public synchronized void multiRemove(K key, V val)
 	{
 		if (map.containsKey(key))
 		{

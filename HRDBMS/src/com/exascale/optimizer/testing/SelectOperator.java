@@ -7,7 +7,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.TreeMap;
-import java.util.Vector;
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -15,18 +15,33 @@ import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
 public class SelectOperator implements Operator, Cloneable, Serializable
 {
-	private MetaData meta;
-	private Vector<Filter> filters;
-	private Operator child = null;
-	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
-	private boolean startDone = false;
-	private boolean closeDone = false;
-	private AtomicLong passed = new AtomicLong(0);
-	private AtomicLong total = new AtomicLong(0);
-	private ArrayList<String> references = new ArrayList<String>();
+	protected MetaData meta;
+	protected ArrayList<Filter> filters;
+	protected Operator child = null;
+	protected Operator parent;
+	protected HashMap<String, String> cols2Types;
+	protected HashMap<String, Integer> cols2Pos;
+	protected TreeMap<Integer, String> pos2Col;
+	protected AtomicLong passed = new AtomicLong(0);
+	protected AtomicLong total = new AtomicLong(0);
+	protected ArrayList<String> references = new ArrayList<String>();
+	protected int node;
+	
+	public void reset()
+	{
+		child.reset();
+		passed = new AtomicLong(0);
+		total = new AtomicLong(0);
+	}
+	
+	public void setChildPos(int pos)
+	{
+	}
+	
+	public int getChildPos()
+	{
+		return 0;
+	}
 	
 	public double likelihood()
 	{
@@ -38,14 +53,15 @@ public class SelectOperator implements Operator, Cloneable, Serializable
 		return meta.likelihood(new ArrayList<Filter>(filters), op);
 	}
 	
-	protected SelectOperator clone()
+	public SelectOperator clone()
 	{
-		Vector<Filter> filtersDeepClone = new Vector<Filter>();
+		ArrayList<Filter> filtersDeepClone = new ArrayList<Filter>(filters.size());
 		for (Filter f : filters)
 		{
 			filtersDeepClone.add((Filter)f.clone());
 		}
 		SelectOperator retval = new SelectOperator(filtersDeepClone, meta);
+		retval.node = node;
 		return retval;
 	}
 	
@@ -57,7 +73,7 @@ public class SelectOperator implements Operator, Cloneable, Serializable
 	public SelectOperator(Filter filter, MetaData meta)
 	{
 		this.meta = meta;
-		this.filters = new Vector<Filter>();
+		this.filters = new ArrayList<Filter>();
 		this.filters.add(filter);
 		
 		if (filter.leftIsColumn() && !references.contains(filter.leftColumn()))
@@ -88,7 +104,7 @@ public class SelectOperator implements Operator, Cloneable, Serializable
 		}
 	}
 	
-	public SelectOperator(Vector<Filter> filters, MetaData meta)
+	public SelectOperator(ArrayList<Filter> filters, MetaData meta)
 	{
 		this.filters = filters;
 		this.meta = meta;
@@ -107,19 +123,29 @@ public class SelectOperator implements Operator, Cloneable, Serializable
 		}
 	}
 	
+	public int getNode()
+	{
+		return node;
+	}
+	
+	public void setNode(int node)
+	{
+		this.node = node;
+	}
+	
 	public ArrayList<String> getReferences()
 	{
 		return references;
 	}
 	
-	public Vector<Filter> getFilter()
+	public ArrayList<Filter> getFilter()
 	{
 		return filters;
 	}
 	
 	public ArrayList<Operator> children()
 	{
-		ArrayList<Operator> retval = new ArrayList<Operator>();
+		ArrayList<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
@@ -160,15 +186,22 @@ public class SelectOperator implements Operator, Cloneable, Serializable
 	}
 	
 	@Override
-	public synchronized void start() throws Exception 
+	public void start() throws Exception 
 	{
-		if (!startDone)
+		child.start();
+	}
+	
+	public void nextAll(Operator op) throws Exception
+	{
+		child.nextAll(op);
+		Object o = next(op);
+		while (!(o instanceof DataEndMarker))
 		{
-			startDone = true;
-			child.start();
+			o = next(op);
 		}
 	}
 
+	//@?Parallel
 	@Override
 	public Object next(Operator op) throws Exception 
 	{
@@ -194,13 +227,9 @@ public class SelectOperator implements Operator, Cloneable, Serializable
 	}
 
 	@Override
-	public synchronized void close() throws Exception 
+	public void close() throws Exception 
 	{
-		if (!closeDone)
-		{
-			closeDone = true;
-			child.close();
-		}
+		child.close();
 	}
 
 	public void registerParent(Operator op) throws Exception

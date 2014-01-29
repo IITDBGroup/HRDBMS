@@ -21,8 +21,8 @@ import com.exascale.threads.ReadThread;
 
 public class FileManager
 {
-	private static File[] dirs;
-	private static Map<String, FileChannel> openFiles = new HashMap<String, FileChannel>();
+	protected static File[] dirs;
+	protected static Map<String, FileChannel> openFiles = new HashMap<String, FileChannel>();
 	
 	public FileManager() 
 	{
@@ -133,7 +133,7 @@ public class FileManager
 		return fc;
 	}
 	
-	private static void setDirs(String list)
+	protected static void setDirs(String list)
 	{
 		StringTokenizer tokens = new StringTokenizer(list, ",", false);
 		int i = 0;

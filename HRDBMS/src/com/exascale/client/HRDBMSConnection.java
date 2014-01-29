@@ -1,4 +1,6 @@
 package com.exascale.client;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.net.Socket;
@@ -24,18 +26,18 @@ import java.util.Properties;
 
 public class HRDBMSConnection implements Connection
 {
-	private DataInputStream in;
-	private DataOutputStream out;
-	private Socket sock;
-	private String user;
-	private String pwd;
-	private String db;
-	private boolean autoCommit = true;
-	private boolean closed = false;
-	private SQLWarning firstWarning = null;
-	private boolean openTransaction = false;
-	private boolean readOnly = false;
-	private int isolationLevel = Connection.TRANSACTION_READ_COMMITTED;
+	protected BufferedInputStream in;
+	protected BufferedOutputStream out;
+	protected Socket sock;
+	protected String user;
+	protected String pwd;
+	protected String db;
+	protected boolean autoCommit = true;
+	protected boolean closed = false;
+	protected SQLWarning firstWarning = null;
+	protected boolean openTransaction = false;
+	protected boolean readOnly = false;
+	protected int isolationLevel = Connection.TRANSACTION_READ_COMMITTED;
 	
 	public HRDBMSConnection(Socket sock, String user, String pwd, String db) throws Exception
 	{
@@ -43,8 +45,8 @@ public class HRDBMSConnection implements Connection
 		this.user = user;
 		this.pwd = pwd;
 		this.db = db;
-		in = new DataInputStream(sock.getInputStream());
-		out = new DataOutputStream(sock.getOutputStream());
+		in = new BufferedInputStream(sock.getInputStream());
+		out = new BufferedOutputStream(sock.getOutputStream());
 		clientHandshake();
 	}
 
@@ -76,8 +78,13 @@ public class HRDBMSConnection implements Connection
 		}
 		
 		closed = true;
-		in.close();
-		out.close();
+		try
+		{
+			in.close();
+			out.close();
+		}
+		catch(Exception e)
+		{}
 	}
 
 	@Override

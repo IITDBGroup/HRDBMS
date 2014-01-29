@@ -13,15 +13,37 @@ import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashSet;
 
 public class CountDistinctOperator implements AggregateOperator, Serializable
 {
-	private String input;
-	private String output;
-	private MetaData meta;
+	protected String input;
+	protected String output;
+	protected MetaData meta;
+	protected int NUM_GROUPS = 16;
+	protected int childCard = 16 * 16;
 	
 	public CountDistinctOperator(String input, String output, MetaData meta)
 	{
 		this.input = input;
 		this.output = output;
 		this.meta = meta;
+	}
+	
+	public void setNumGroups(int groups)
+	{
+		NUM_GROUPS = groups;
+	}
+	
+	public void setChildCard(int card)
+	{
+		childCard = card;
+	}
+	
+	public CountDistinctOperator clone()
+	{
+		return new CountDistinctOperator(input, output, meta);
+	}
+	
+	public void setInputColumn(String col)
+	{
+		input = col;
 	}
 	
 	public String getInputColumn()
@@ -42,7 +64,7 @@ public class CountDistinctOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public AggregateResultThread newProcessingThread(DiskBackedArray rows, HashMap<String, Integer> cols2Pos) 
+	public AggregateResultThread newProcessingThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos) 
 	{
 		return new CountDistinctThread(rows, cols2Pos);
 	}
@@ -52,15 +74,15 @@ public class CountDistinctOperator implements AggregateOperator, Serializable
 		return new CountDistinctHashThread(cols2Pos);
 	}
 
-	private class CountDistinctThread extends AggregateResultThread
+	protected class CountDistinctThread extends AggregateResultThread
 	{
-		private DiskBackedArray rows;
-		private HashMap<String, Integer> cols2Pos;
-		private long result;
-		private int pos;
-		private DiskBackedHashSet distinct = ResourceManager.newDiskBackedHashSet();
+		protected ArrayList<ArrayList<Object>> rows;
+		protected HashMap<String, Integer> cols2Pos;
+		protected long result;
+		protected int pos;
+		protected HashSet<Object> distinct = new HashSet<Object>();
 		
-		public CountDistinctThread(DiskBackedArray rows, HashMap<String, Integer> cols2Pos)
+		public CountDistinctThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos)
 		{
 			this.cols2Pos = cols2Pos;
 			this.rows = rows;
@@ -86,22 +108,14 @@ public class CountDistinctOperator implements AggregateOperator, Serializable
 		
 		public void close()
 		{
-			try
-			{
-				rows.close();
-				distinct.close();
-			}
-			catch(Exception e)
-			{
-				e.printStackTrace();
-			}
 		}
 	}
 	
-	private class CountDistinctHashThread extends AggregateResultThread
+	protected class CountDistinctHashThread extends AggregateResultThread
 	{
-		private volatile ConcurrentHashMap<ArrayList<Object>, DiskBackedHashSet> results = new ConcurrentHashMap<ArrayList<Object>, DiskBackedHashSet>();
-		private HashMap<String, Integer> cols2Pos;
+		protected volatile ConcurrentHashMap<ArrayList<Object>, AtomicLong> results = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS, 0.75f, ResourceManager.cpus * 6);
+		protected volatile DiskBackedHashSet hashSet = ResourceManager.newDiskBackedHashSet(false, childCard);
+		protected HashMap<String, Integer> cols2Pos;
 		int pos;
 		
 		public CountDistinctHashThread(HashMap<String, Integer> cols2Pos)
@@ -110,50 +124,42 @@ public class CountDistinctOperator implements AggregateOperator, Serializable
 			pos = cols2Pos.get(input);
 		}
 		
+		//@Parallel
 		public void put(ArrayList<Object> row, ArrayList<Object> group)
 		{
-			DiskBackedHashSet distinct = results.get(group);
-			if (distinct != null)
+			ArrayList<Object> consolidated = new ArrayList<Object>();
+			consolidated.addAll(group);
+			consolidated.add(row.get(pos));
+			if (hashSet.add(consolidated))
 			{
-				distinct.add(row.get(pos));
-				return;
-			}
-			
-			DiskBackedHashSet set = ResourceManager.newDiskBackedHashSet();
-			results.putIfAbsent(group, set);
-			DiskBackedHashSet set2 = results.get(group);
-			set2.add(row.get(pos));
-			if (set2 != set)
-			{
-				try
+				AtomicLong al = results.get(group);
+				if (al != null)
 				{
-					set.close();
+					al.incrementAndGet();
+					return;
 				}
-				catch(Exception e)
+				
+				if (results.putIfAbsent(group, new AtomicLong(1)) != null)
 				{
-					e.printStackTrace();
+					results.get(group).incrementAndGet();
 				}
 			}
 		}
 	
 		public Object getResult(ArrayList<Object> keys)
 		{
-			long retval = results.get(keys).size();
-			return retval;
+			return ((AtomicLong)results.get(keys)).longValue();
 		}
 		
 		public void close()
 		{
-			for (DiskBackedHashSet set : results.values())
+			try
 			{
-				try
-				{
-					set.close();
-				}
-				catch(Exception e)
-				{
-					e.printStackTrace();
-				}
+				hashSet.close();
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
 			}
 		}
 	}

@@ -15,7 +15,7 @@ import com.exascale.managers.LogManager;
 
 public class ArchiverThread extends HRDBMSThread
 {
-	private String filename;
+	protected String filename;
 	
 	public ArchiverThread(String filename)
 	{
@@ -37,7 +37,7 @@ public class ArchiverThread extends HRDBMSThread
 				}
 				catch(IOException e)
 				{
-					HRDBMSWorker.logger.error("Error getting FileChannel for " + filename, e);
+					HRDBMSWorker.logger.error("Archiving error while getting FileChannel for " + filename, e);
 					this.terminate();
 					return;
 				}

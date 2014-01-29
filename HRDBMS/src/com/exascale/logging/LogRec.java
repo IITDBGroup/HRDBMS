@@ -10,11 +10,11 @@ import com.exascale.managers.HRDBMSWorker;
 
 public class LogRec 
 {
-	private int type;
-	private long txnum;
-	private long lsn;
-	private long timestamp;
-	private ByteBuffer buffer;
+	protected int type;
+	protected long txnum;
+	protected long lsn;
+	protected long timestamp;
+	protected ByteBuffer buffer;
 	
 	public static final int NQCHECK = 0, START = 1, COMMIT = 2, ROLLB = 3, INSERT = 4,  DELETE = 5;
 	
@@ -31,7 +31,7 @@ public class LogRec
 	
 	public LogRec(FileChannel fc) throws IOException
 	{
-		fc.position(fc.position() - 4);
+		fc.position(fc.position() - 4); //leading size
 		ByteBuffer size = ByteBuffer.allocate(4);
 		size.position(0);
 		fc.read(size);
@@ -121,6 +121,21 @@ public class LogRec
 			retval.setLSN(lsn);
 			retval.setTimeStamp(timestamp);
 			return retval;
+		}
+		
+		if (type == START)
+		{
+			return new StartLogRec(txnum);
+		}
+		
+		if (type == COMMIT)
+		{
+			return new CommitLogRec(txnum);
+		}
+		
+		if (type == ROLLB)
+		{
+			return new RollbackLogRec(txnum);
 		}
 		
 		return this;

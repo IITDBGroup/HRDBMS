@@ -2,6 +2,7 @@ package com.exascale.optimizer.testing;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -9,45 +10,128 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Random;
 import java.util.TreeMap;
-import java.util.Vector;
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
 public class NestedLoopJoinOperator extends JoinOperator implements Serializable 
 {
-	private ArrayList<Operator> children = new ArrayList<Operator>();
-	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
-	private MetaData meta;
-	private volatile LinkedBlockingQueue outBuffer = new LinkedBlockingQueue(
+	protected ArrayList<Operator> children = new ArrayList<Operator>(2);
+	protected Operator parent;
+	protected HashMap<String, String> cols2Types;
+	protected HashMap<String, Integer> cols2Pos;
+	protected TreeMap<Integer, String> pos2Col;
+	protected MetaData meta;
+	protected volatile BufferedLinkedBlockingQueue outBuffer = new BufferedLinkedBlockingQueue(
 			Driver.QUEUE_SIZE);
-	private volatile DiskBackedArray inBuffer;
-	private int NUM_RT_THREADS = 4 * Runtime.getRuntime().availableProcessors();
-	private int NUM_PTHREADS = 4 * Runtime.getRuntime().availableProcessors();
-	private AtomicLong outCount = new AtomicLong(0);
-	private volatile boolean readersDone = false;
-	private CNFFilter cnfFilters;
-	private HashSet<HashMap<Filter, Filter>> f;
-	private int childPos = -1;
+	protected volatile DiskBackedArray inBuffer;
+	protected int NUM_RT_THREADS = 4 * ResourceManager.cpus;
+	protected int NUM_PTHREADS = 4 * ResourceManager.cpus;
+	protected AtomicLong outCount = new AtomicLong(0);
+	protected volatile boolean readersDone = false;
+	protected CNFFilter cnfFilters;
+	protected HashSet<HashMap<Filter, Filter>> f;
+	protected int childPos = -1;
+	protected int node;
+	protected boolean indexAccess = false;
+	protected ArrayList<Index> dynamicIndexes;
+    protected ArrayList<ArrayList<Object>> queuedRows = new ArrayList<ArrayList<Object>>();
+    protected SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+    protected volatile boolean doReset = false;
+    protected int rightChildCard = 16;
+    protected ArrayList<DiskBackedHashMap> buckets = new ArrayList<DiskBackedHashMap>();
+	protected AtomicLong inCount2 = new AtomicLong(0);
+	protected boolean alreadySorted = false;
+	protected boolean cardSet = false;
+    
+    public void setDynamicIndex(ArrayList<Index> indexes)
+    {
+    	indexAccess = true;
+    	this.dynamicIndexes = indexes;
+    }
+    
+    
+    public boolean setRightChildCard(int card)
+    {
+    	if (cardSet)
+    	{
+    		return false;
+    	}
+    	
+    	cardSet = true;
+    	rightChildCard = card;
+    	return true;
+    }
+	
+	public void reset()
+	{
+		System.out.println("NestedLoopJoinOperator cannot be reset");
+		System.exit(1);
+	}
+	
+	public void setChildPos(int pos)
+	{
+		childPos = pos;
+	}
+	
+	public int getChildPos()
+	{
+		return childPos;
+	}
 
 	public NestedLoopJoinOperator(JoinOperator op) {
 		this.meta = op.getMeta();
 		this.f = op.getHSHMFilter();
 	}
 
-	public NestedLoopJoinOperator(Vector<Filter> filters, MetaData meta) {
+	public NestedLoopJoinOperator(ArrayList<Filter> filters, MetaData meta) {
 		this.meta = meta;
 		this.addFilter(filters);
 	}
 	
+	protected NestedLoopJoinOperator(MetaData meta)
+	{
+		this.meta = meta;
+	}
+	
+	public NestedLoopJoinOperator clone()
+	{
+		NestedLoopJoinOperator retval = new NestedLoopJoinOperator(meta);
+		retval.f = this.getHSHMFilter();
+		retval.node = node;
+		retval.indexAccess = indexAccess;
+		retval.dynamicIndexes = dynamicIndexes;
+		retval.alreadySorted = alreadySorted;
+		retval.rightChildCard = rightChildCard;
+		retval.cardSet = cardSet;
+		return retval;
+	}
+	
+	public HashSet<HashMap<Filter, Filter>> getHSHM()
+	{
+		return getHSHMFilter();
+	}
+	
+	public int getNode()
+	{
+		return node;
+	}
+	
+	public void alreadySorted()
+	{
+		alreadySorted = true;
+	}
+	
+	public void setNode(int node)
+	{
+		this.node = node;
+	}
+	
 	public ArrayList<String> getReferences()
 	{
-		ArrayList<String> retval = new ArrayList<String>();
+		ArrayList<String> retval = new ArrayList<String>(f.size());
 		for (HashMap<Filter, Filter> filters : f)
 		{
 			for (Filter filter : filters.keySet())
@@ -74,7 +158,7 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 		return f;
 	}
 
-	public void addJoinCondition(Vector<Filter> filters) {
+	public void addJoinCondition(ArrayList<Filter> filters) {
 		addFilter(filters);
 	}
 
@@ -83,7 +167,7 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 				"NestedLoopJoinOperator does not support addJoinCondition(String, String)");
 	}
 
-	public void addFilter(Vector<Filter> filters) {
+	public void addFilter(ArrayList<Filter> filters) {
 		if (f == null) {
 			f = new HashSet<HashMap<Filter, Filter>>();
 			HashMap<Filter, Filter> map = new HashMap<Filter, Filter>();
@@ -127,7 +211,7 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 			}
 			op.registerParent(this);
 
-			if (children.size() == 2) {
+			if (children.size() == 2 && children.get(0).getCols2Types() != null && children.get(1).getCols2Types() != null) {
 				cols2Types = (HashMap<String, String>) children.get(0)
 						.getCols2Types().clone();
 				cols2Pos = (HashMap<String, Integer>) children.get(0)
@@ -160,29 +244,30 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 
 	public void start() throws Exception 
 	{
-		inBuffer = ResourceManager.newDiskBackedArray();
-		for (Operator child : children) {
-			child.start();
+		if (!indexAccess)
+		{
+			inBuffer = ResourceManager.newDiskBackedArray(rightChildCard);
+			for (Operator child : children) {
+				child.start();
+			}
+
+			new InitThread().start();
 		}
-
-		new InitThread().start();
-
+		else
+		{
+			for (Operator child : children) {
+				child.start();
+			}
+		}
 	}
 
-	private class InitThread extends Thread {
-		private NLSortThread nlSort = null;
-		private NLHashThread nlHash = null;
-		private Filter first = null;
+	protected class InitThread extends ThreadPoolThread {
+		protected NLSortThread nlSort = null;
+		protected NLHashThread nlHash = null;
+		protected Filter first = null;
 		
 		public void run() {
-			Thread[] threads;
-			int i = 0;
-			threads = new ReaderThread[NUM_RT_THREADS];
-			while (i < NUM_RT_THREADS) {
-				threads[i] = new ReaderThread();
-				threads[i].start();
-				i++;
-			}
+			ThreadPoolThread[] threads = null;
 			
 			boolean isHash = false;
 			boolean isSort = false;
@@ -221,27 +306,29 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 								if (filter.leftIsColumn() && filter.rightIsColumn())
 								{
 									//System.out.println("NestedLoopJoin qualifies for partial hashing");
-									nlHash = new NLHashThread(filter);
-									first = filter;
-									nlHash.start();
-									i = 0;
-									while (i < NUM_RT_THREADS) {
-										try {
-											threads[i].join();
-											i++;
-										} catch (InterruptedException e) {
-										}
+									int j = 0;
+									ArrayList<NLHashThread> nlThreads = new ArrayList<NLHashThread>(NUM_RT_THREADS);
+									while (j < NUM_RT_THREADS)
+									{
+										nlHash = new NLHashThread(filter);
+										nlThreads.add(nlHash);
+										first = filter;
+										nlHash.start();
+										j++;
 									}
 									readersDone = true;
-									while (true)
+									for (NLHashThread thread : nlThreads)
 									{
-										try
+										while (true)
 										{
-											nlHash.join();
-											break;
+											try
+											{
+												nlHash.join();
+												break;
+											}
+											catch(InterruptedException e)
+											{}
 										}
-										catch(InterruptedException e)
-										{}
 									}
 								}
 							}
@@ -258,6 +345,18 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 			}
 			else if (isSort)
 			{
+				int i = 0;
+				if (alreadySorted)
+				{
+					NUM_RT_THREADS = 1;
+				}
+				threads = new ReaderThread[NUM_RT_THREADS];
+				while (i < NUM_RT_THREADS) {
+					threads[i] = new ReaderThread();
+					threads[i].start();
+					i++;
+				}
+				
 				for (HashMap<Filter, Filter> filters : f)
 				{
 					if (filters.size() == 1)
@@ -272,10 +371,17 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 									nlSort = new NLSortThread(filter);
 									i = 0;
 									while (i < NUM_RT_THREADS) {
-										try {
-											threads[i].join();
-											i++;
-										} catch (InterruptedException e) {
+										while (true)
+										{
+											try 
+											{
+												threads[i].join();
+												i++;
+												break;
+											} 
+											catch (InterruptedException e) 
+											{
+											}
 										}
 									}
 									readersDone = true;
@@ -304,9 +410,19 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 					}
 				}
 			}
+			else
+			{
+				int i = 0;
+				threads = new ReaderThread[NUM_RT_THREADS];
+				while (i < NUM_RT_THREADS) {
+					threads[i] = new ReaderThread();
+					threads[i].start();
+					i++;
+				}
+			}
 
-			i = 0;
-			Thread[] threads2 = new ProcessThread[NUM_PTHREADS];
+			int i = 0;
+			ThreadPoolThread[] threads2 = new ProcessThread[NUM_PTHREADS];
 			while (i < NUM_PTHREADS) {
 				if (nlSort == null && nlHash == null)
 				{
@@ -328,10 +444,17 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 			{
 				i = 0;
 				while (i < NUM_RT_THREADS) {
-					try {
-						threads[i].join();
-						i++;
-					} catch (InterruptedException e) {
+					while (true)
+					{
+						try 
+						{
+							threads[i].join();
+							i++;
+							break;
+						} 
+						catch (InterruptedException e) 
+						{
+						}
 					}
 				}
 				readersDone = true;
@@ -339,10 +462,17 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 
 			i = 0;
 			while (i < NUM_PTHREADS) {
-				try {
-					threads2[i].join();
-					i++;
-				} catch (InterruptedException e) {
+				while (true)
+				{
+					try 
+					{
+						threads2[i].join();
+						i++;
+						break;
+					} 
+					catch (InterruptedException e) 
+					{
+					}
 				}
 			}
 			
@@ -364,13 +494,13 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 		}
 	}
 
-	private class ReaderThread extends Thread {
+	protected class ReaderThread extends ThreadPoolThread {
 		public void run() {
 			try {
 				Operator child = children.get(1);
 				Object o = child.next(NestedLoopJoinOperator.this);
 				while (!(o instanceof DataEndMarker)) {
-					inBuffer.add(o);
+					inBuffer.add((ArrayList<Object>)o);
 					o = child.next(NestedLoopJoinOperator.this);
 				}
 			} catch (Exception e) {
@@ -380,17 +510,14 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 		}
 	}
 	
-	private class NLHashThread extends Thread
+	protected class NLHashThread extends ThreadPoolThread
 	{
-		private Filter filter;
-		private int pos;
-		private ArrayList<DiskBackedHashMap> buckets = new ArrayList<DiskBackedHashMap>();
-		private AtomicLong inCount = new AtomicLong(0);
+		protected Filter filter;
+		protected int pos;
 		
 		public NLHashThread(Filter filter)
 		{
 			this.filter = filter;
-			buckets.add(ResourceManager.newDiskBackedHashMap());
 		}
 		
 		public void close()
@@ -422,47 +549,27 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 			
 			try
 			{
-				long i = 0;
-				while (true)
+				Operator child = children.get(1);
+				HashMap<String, Integer> childCols2Pos = child.getCols2Pos();
+				Object o = child.next(NestedLoopJoinOperator.this);
+				ArrayList<Object> key = new ArrayList<Object>(1);
+				//@Parallel
+				while (! (o instanceof DataEndMarker))
 				{
-					if (i >= inBuffer.size())
-					{
-						if (readersDone)
-						{
-							if (i >= inBuffer.size())
-							{
-								break;
-							}
-							
-							continue;
-						}
-						else
-						{
-							Thread.sleep(1);
-							continue;
-						}
-					}
-					
-					ArrayList<Object> o = (ArrayList<Object>)inBuffer.get(i);
-					if (o == null)
-					{
-						Thread.sleep(1);
-						continue;
-					}
 					//inBuffer.add(o);
-					long count = inCount.incrementAndGet();
+					long count = inCount2.incrementAndGet();
 					
 					//if (count % 10000 == 0)
 					//{
-					//	System.out.println("Partial hash has read " + count + " rows");
+					//	System.out.println("HashJoinOperator has read " + count + " rows");
 					//}
 					
-					ArrayList<Object> key = new ArrayList<Object>();
-					key.add(o.get(pos));
+					key.clear();
+					key.add(((ArrayList<Object>)o).get(pos));
 					
 					long hash = 0x0EFFFFFFFFFFFFFFL & hash(key);
-					writeToHashTable(hash, o);
-					i++;
+					writeToHashTable(hash, (ArrayList<Object>)o);
+					o = child.next(NestedLoopJoinOperator.this);
 				}
 			}
 			catch(Exception e)
@@ -475,8 +582,18 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 			}
 		}
 		
-		private void writeToHashTable(long hash, ArrayList<Object> row) throws Exception
+		protected void writeToHashTable(long hash, ArrayList<Object> row) throws Exception
 		{
+			if (buckets.size() == 0)
+			{
+				synchronized(this)
+				{
+					if (buckets.size() == 0)
+					{
+						buckets.add(ResourceManager.newDiskBackedHashMap(false, rightChildCard));
+					}
+				}
+			}
 			int i = 0;
 			Object o = buckets.get(i).putIfAbsent(hash, row);
 			while (o != null)
@@ -514,7 +631,7 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 						}
 						else
 						{
-							buckets.add(ResourceManager.newDiskBackedHashMap());
+							buckets.add(ResourceManager.newDiskBackedHashMap(false, rightChildCard));
 							DiskBackedHashMap bucket = buckets.get(i);
 							o = bucket.putIfAbsent(hash, row);
 						}
@@ -524,7 +641,7 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 			}
 		}
 		
-		private ArrayList<ArrayList<Object>> getCandidates(long hash) throws ClassNotFoundException, IOException
+		protected ArrayList<ArrayList<Object>> getCandidates(long hash) throws ClassNotFoundException, IOException
 		{
 			ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>();
 			int i = 0;
@@ -546,7 +663,7 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 			return retval;
 		}
 		
-		private long hash(ArrayList<Object> key)
+		protected long hash(ArrayList<Object> key)
 		{
 			long hashCode = 1125899906842597L;
 			for (Object e : key)
@@ -611,11 +728,11 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 		}
 	}
 	
-	private class NLSortThread extends Thread
+	protected class NLSortThread extends ThreadPoolThread
 	{
-		private Filter filter;
-		private boolean vBool;
-		private int pos;
+		protected Filter filter;
+		protected boolean vBool;
+		protected int pos;
 		
 		public NLSortThread(Filter filter)
 		{
@@ -652,6 +769,10 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 			
 			try
 			{
+				if (alreadySorted)
+				{
+					return;
+				}
 				if (inBuffer.size() < SortOperator.PARALLEL_SORT_MIN_NUM_ROWS)
 				{
 					doSequentialSort(0, inBuffer.size()-1);
@@ -669,7 +790,7 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 			}
 		}
 		
-		private ParallelSortThread doParallelSort(long left, long right)
+		protected ParallelSortThread doParallelSort(long left, long right)
 		{
 			//System.out.println("Starting parallel sort with " + (right-left+1) + " rows");
 			ParallelSortThread t = new ParallelSortThread(left, right);
@@ -677,10 +798,10 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 			return t;
 		}
 	
-		private class ParallelSortThread extends Thread
+		protected class ParallelSortThread extends ThreadPoolThread
 		{
-			private long left;
-			private long right;
+			protected long left;
+			protected long right;
 		
 			public ParallelSortThread(long left, long right)
 			{
@@ -704,7 +825,7 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 						}
 						long pivotIndex = (long)(new Random().nextDouble() * (right - left) + left);
 						ArrayList<Object> temp = (ArrayList<Object>)inBuffer.get(pivotIndex);
-						inBuffer.update(pivotIndex, inBuffer.get(left));
+						inBuffer.update(pivotIndex, (ArrayList<Object>)inBuffer.get(left));
 						inBuffer.update(left, temp);
 						long lt = left;
 						long gt = right;
@@ -716,14 +837,14 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 							int cmp = compare(temp, v);
 							if (cmp < 0)
 							{
-								inBuffer.update(i, inBuffer.get(lt));
+								inBuffer.update(i, (ArrayList<Object>)inBuffer.get(lt));
 								inBuffer.update(lt, temp);
 								i++;
 								lt++;
 							}
 							else if (cmp > 0)
 							{
-								inBuffer.update(i, inBuffer.get(gt));
+								inBuffer.update(i, (ArrayList<Object>)inBuffer.get(gt));
 								inBuffer.update(gt, temp);
 								gt--;
 							}
@@ -776,7 +897,7 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 			}
 		}
 	
-		private void doSequentialSort(long left, long right) throws Exception
+		protected void doSequentialSort(long left, long right) throws Exception
 		{
 			if (right <= left)
 			{
@@ -792,14 +913,14 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 				int cmp = compare(temp, v);
 				if (cmp < 0)
 				{
-					inBuffer.update(i, inBuffer.get(lt));
+					inBuffer.update(i, (ArrayList<Object>)inBuffer.get(lt));
 					inBuffer.update(lt, temp);
 					i++;
 					lt++;
 				}
 				else if (cmp > 0)
 				{
-					inBuffer.update(i, inBuffer.get(gt));
+					inBuffer.update(i, (ArrayList<Object>)inBuffer.get(gt));
 					inBuffer.update(gt, temp);
 					gt--;
 				}
@@ -813,7 +934,7 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 			doSequentialSort(gt+1, right);
 		}
 	
-		private int compare(ArrayList<Object> lhs, ArrayList<Object> rhs) throws Exception
+		protected int compare(ArrayList<Object> lhs, ArrayList<Object> rhs) throws Exception
 		{
 			int result;
 			int i = 0;
@@ -872,11 +993,11 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 			return 0;
 		}
 	
-		private long partition(long left, long right, long pivotIndex) throws Exception
+		protected long partition(long left, long right, long pivotIndex) throws Exception
 		{
 			ArrayList<Object> pivotValue = (ArrayList<Object>)inBuffer.get(pivotIndex);
 			Object rightRec = inBuffer.get(right);
-			inBuffer.update(pivotIndex, rightRec);
+			inBuffer.update(pivotIndex, (ArrayList<Object>)rightRec);
 			inBuffer.update(right,  pivotValue);
 	
 			long i = left;
@@ -891,7 +1012,7 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 				if (compareResult == -1)
 				{
 					Object row = inBuffer.get(storeIndex);
-					inBuffer.update(i, row);
+					inBuffer.update(i, (ArrayList<Object>)row);
 					inBuffer.update(storeIndex, temp);
 					storeIndex++;
 					allEqual = false;
@@ -901,7 +1022,7 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 					if (random.nextDouble() < 0.5)
 					{
 						Object row = inBuffer.get(storeIndex);
-						inBuffer.update(i, row);
+						inBuffer.update(i, (ArrayList<Object>)row);
 						inBuffer.update(storeIndex, temp);
 						storeIndex++;
 					}					
@@ -920,15 +1041,15 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 		
 			ArrayList<Object> temp = (ArrayList<Object>)inBuffer.get(storeIndex);
 			rightRec = inBuffer.get(right);
-			inBuffer.update(storeIndex, rightRec);
+			inBuffer.update(storeIndex, (ArrayList<Object>)rightRec);
 			inBuffer.update(right,  temp);
 			return storeIndex;
 		}
 	}
 
-	private class ProcessThread extends Thread {
-		private Filter first = null;
-		private NLHashThread nlHash = null;
+	protected class ProcessThread extends ThreadPoolThread {
+		protected Filter first = null;
+		protected NLHashThread nlHash = null;
 		
 		public ProcessThread()
 		{}
@@ -960,6 +1081,7 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 						pos = left.getCols2Pos().get(first.rightColumn());
 					}
 				}
+				//@Parallel
 				while (!(o instanceof DataEndMarker)) 
 				{
 					ArrayList<Object> lRow = (ArrayList<Object>) o;
@@ -968,7 +1090,7 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 					{
 						if (nlHash != null)
 						{
-							ArrayList<Object> key = new ArrayList<Object>();
+							ArrayList<Object> key = new ArrayList<Object>(1);
 							key.add(lRow.get(pos));
 							long hash = 0x0EFFFFFFFFFFFFFFL & nlHash.hash(key);
 							for (ArrayList<Object> rRow : nlHash.getCandidates(hash))
@@ -1052,8 +1174,121 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 			}
 		}
 	}
+	
+	public void nextAll(Operator op) throws Exception
+	{
+		children.get(0).nextAll(op);
+		children.get(1).nextAll(op);
+		Object o = next(op);
+		while (!(o instanceof DataEndMarker))
+		{
+			o = next(op);
+		}
+	}
 
 	public Object next(Operator op) throws Exception {
+		if (indexAccess)
+		{
+			synchronized(this)
+			{
+				if (queuedRows.size() > 0)
+				{
+					return queuedRows.remove(0);
+				}
+			}
+
+				while (true)
+				{
+					Object o = children.get(0).next(this);
+					if (o instanceof DataEndMarker)
+					{
+						return o;
+					}
+					ArrayList<Filter> dynamics = new ArrayList<Filter>(this.cnfFilters.getALAL().size());
+					int i = 0;
+					for (ArrayList<Filter> al : this.cnfFilters.getALAL())
+					{
+						Filter f = al.get(0);
+						String leftCol = null;
+						String rightCol = null;
+						if (children.get(0).getCols2Pos().keySet().contains(f.leftColumn()))
+						{
+							leftCol = f.leftColumn();
+							Object leftVal = ((ArrayList<Object>)o).get(children.get(0).getCols2Pos().get(leftCol));
+							String leftString = null;
+							if (leftVal instanceof Integer || leftVal instanceof Long || leftVal instanceof Double)
+							{
+								leftString = leftVal.toString();
+							}
+							else if (leftVal instanceof String)
+							{
+								leftString = "'" + leftVal + "'";
+							}
+							else if (leftVal instanceof Date)
+							{
+								leftString = sdf.format(leftVal);
+							}
+							Filter f2 = new Filter(leftString, f.op(), f.rightColumn());
+							dynamics.add(f2);
+						}
+						else
+						{
+							rightCol = f.rightColumn();
+							Object leftVal = ((ArrayList<Object>)o).get(children.get(0).getCols2Pos().get(rightCol));
+							String leftString = null;
+							if (leftVal instanceof Integer || leftVal instanceof Long || leftVal instanceof Double)
+							{
+								leftString = leftVal.toString();
+							}
+							else if (leftVal instanceof String)
+							{
+								leftString = "'" + leftVal + "'";
+							}
+							else if (leftVal instanceof Date)
+							{
+								leftString = sdf.format(leftVal);
+							}
+							Filter f2 = new Filter(f.leftColumn(), f.op(), leftString);
+							dynamics.add(f2);
+						}
+						
+						i++;
+					}
+
+					synchronized(this)
+					{
+						if (doReset)
+						{
+							children.get(1).reset();
+						}
+						else
+						{
+							doReset = true;
+						}
+					
+						for (Index index : dynamicIndexes)
+						{
+							index.setDelayedConditions(dynamics);
+						}
+					
+						Object o2 = children.get(1).next(this);
+						while (!(o2 instanceof DataEndMarker))
+						{
+							ArrayList<Object> out = new ArrayList<Object>(((ArrayList<Object>)o).size() + ((ArrayList<Object>)o2).size());
+							out.addAll((ArrayList<Object>)o);
+							out.addAll((ArrayList<Object>)o2);
+							queuedRows.add(out);
+							o2 = children.get(1).next(this);
+						}
+					
+						if (queuedRows.size() > 0)
+						{
+							return queuedRows.remove(0);
+						}
+					}	
+				}
+		}
+		
 		Object o;
 		o = outBuffer.take();
 
@@ -1075,7 +1310,10 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 			child.close();
 		}
 		
-		inBuffer.close();
+		if (inBuffer != null)
+		{
+			inBuffer.close();
+		}
 	}
 
 	public void registerParent(Operator op) throws Exception {
@@ -1100,5 +1338,202 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 	@Override
 	public TreeMap<Integer, String> getPos2Col() {
 		return pos2Col;
+	}
+	
+	public boolean usesHash()
+	{
+		for (HashMap<Filter, Filter> filters : f)
+		{
+			if (filters.size() == 1)
+			{
+				for (Filter filter : filters.keySet())
+				{
+					if (filter.op().equals("E") && filter.leftIsColumn() && filter.rightIsColumn())
+					{
+						return true;
+					}
+				}
+			}
+		}
+		
+		return false;
+	}
+	
+	public ArrayList<Boolean> sortOrders()
+	{
+		boolean isSort = false;
+
+		for (HashMap<Filter, Filter> filters : f)
+		{
+			if (filters.size() == 1)
+			{
+				for (Filter filter : filters.keySet())
+				{
+					if (filter.op().equals("G") || filter.op().equals("GE") || filter.op().equals("L") || filter.op().equals("LE"))
+					{
+						if (filter.leftIsColumn() && filter.rightIsColumn())
+						{
+							String vStr;
+							boolean vBool;
+							if (filter.op().equals("G") || filter.op().equals("GE"))
+							{
+								vStr = filter.rightColumn();
+								vBool = true;
+								//System.out.println("VBool set to true");
+							}
+							else
+							{
+								vStr = filter.rightColumn();
+								vBool = false;
+								//System.out.println("VBool set to false");
+							}
+							
+							try
+							{
+								int pos = children.get(1).getCols2Pos().get(vStr);
+							}
+							catch(Exception e)
+							{
+								//vStr = filter.leftColumn();
+								vBool = !vBool;
+								//pos = children.get(1).getCols2Pos().get(vStr);
+							}
+							
+							ArrayList<Boolean> retval = new ArrayList<Boolean>(1);
+							retval.add(vBool);
+							return retval;
+						}
+					}
+					else if (filter.op().equals("E") && filter.leftIsColumn() && filter.rightIsColumn())
+					{
+						return null;
+					}
+				}
+			}
+		}
+		
+		return null;
+	}
+	
+	public ArrayList<String> sortKeys()
+	{
+		boolean isSort = false;
+
+		for (HashMap<Filter, Filter> filters : f)
+		{
+			if (filters.size() == 1)
+			{
+				for (Filter filter : filters.keySet())
+				{
+					if (filter.op().equals("G") || filter.op().equals("GE") || filter.op().equals("L") || filter.op().equals("LE"))
+					{
+						if (filter.leftIsColumn() && filter.rightIsColumn())
+						{
+							String vStr;
+							if (filter.op().equals("G") || filter.op().equals("GE"))
+							{
+								vStr = filter.rightColumn();
+								//vBool = true;
+								//System.out.println("VBool set to true");
+							}
+							else
+							{
+								vStr = filter.rightColumn();
+								//vBool = false;
+								//System.out.println("VBool set to false");
+							}
+							
+							try
+							{
+								int pos = children.get(1).getCols2Pos().get(vStr);
+							}
+							catch(Exception e)
+							{
+								vStr = filter.leftColumn();
+								//vBool = !vBool;
+								//pos = children.get(1).getCols2Pos().get(vStr);
+							}
+							
+							ArrayList<String> retval = new ArrayList<String>(1);
+							retval.add(vStr);
+							return retval;
+						}
+					}
+					else if (filter.op().equals("E") && filter.leftIsColumn() && filter.rightIsColumn())
+					{
+						return null;
+					}
+				}
+			}
+		}
+		
+		return null;
+	}
+	
+	public boolean usesSort()
+	{
+		boolean isSort = false;
+		
+		for (HashMap<Filter, Filter> filters : f)
+		{
+			if (filters.size() == 1)
+			{
+				for (Filter filter : filters.keySet())
+				{
+					if (filter.op().equals("G") || filter.op().equals("GE") || filter.op().equals("L") || filter.op().equals("LE"))
+					{
+						if (filter.leftIsColumn() && filter.rightIsColumn())
+						{
+							isSort = true;
+						}
+					}
+					else if (filter.op().equals("E") && filter.leftIsColumn() && filter.rightIsColumn())
+					{
+						return false;
+					}
+				}
+			}
+		}
+		
+		return isSort;
+	}
+	
+	public ArrayList<String> getJoinForChild(Operator op)
+	{
+		Filter x = null;
+		for (HashMap<Filter, Filter> filters : f)
+		{
+			if (filters.size() == 1)
+			{
+				for (Filter filter : filters.keySet())
+				{
+					if (filter.op().equals("E"))
+					{
+						if (filter.leftIsColumn() && filter.rightIsColumn())
+						{
+							x = filter;
+						}
+					}
+					
+					break;
+				}
+			}
+			
+			if (x != null)
+			{
+				break;
+			}
+		}
+		
+		if (op.getCols2Pos().keySet().contains(x.leftColumn()))
+		{
+			ArrayList<String> retval = new ArrayList<String>(1);
+			retval.add(x.leftColumn());
+			return retval;
+		}
+		
+		ArrayList<String> retval = new ArrayList<String>(1);
+		retval.add(x.rightColumn());
+		return retval;
 	}
 }

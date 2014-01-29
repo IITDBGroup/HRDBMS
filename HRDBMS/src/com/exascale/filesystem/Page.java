@@ -6,42 +6,38 @@ import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.exascale.managers.BufferManager;
 import com.exascale.managers.FileManager;
+import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LogManager;
 
 public class Page 
 {
-	public static final int BLOCK_SIZE = 64 * 1024;
-	private ByteBuffer contents;
-	private Block blk;
-	private HashMap<Long, Integer> pins;
-	private long modifiedBy = -1;
-	private long timePinned = -1;
-	private long lsn;
-	private static boolean direct = true;
-	private boolean readDone;
+	public static final int BLOCK_SIZE = 128 * 1024; //match btrfs compression extent size
+	protected ByteBuffer contents;
+	protected Block blk;
+	protected ConcurrentHashMap<Long, AtomicInteger> pins;
+	protected long modifiedBy = -1;
+	protected long timePinned = -1;
+	protected long lsn;
+	protected boolean readDone;
 	
 	public Page()
 	{
 		try
 		{
-			if (direct)
-			{
-				this.contents = ByteBuffer.allocateDirect(BLOCK_SIZE);
-			}
-			else
-			{
-				this.contents = ByteBuffer.allocate(BLOCK_SIZE);
-			}
+			this.contents = ByteBuffer.allocateDirect(BLOCK_SIZE);
 		}
 		catch (Throwable e)
 		{
-			direct = false;
-			this.contents = ByteBuffer.allocate(BLOCK_SIZE);
+			//System.out.println("Bufferpool manager failed to allocate pages for the bufferpool");
+			HRDBMSWorker.logger.error("Bufferpool manager failed to allocate pages for the bufferpool");
+			System.exit(1);
 		}
-		pins = new HashMap<Long, Integer>();
+		pins = new ConcurrentHashMap<Long, AtomicInteger>();
 		readDone = false;
 	}
 	
@@ -50,16 +46,20 @@ public class Page
 		return blk;
 	}
 	
-	public synchronized void pin(long lsn, long txnum)
+	public void pin(long lsn, long txnum)
 	{
-		Integer numPins = pins.get(txnum);
+		AtomicInteger numPins = pins.get(txnum);
 		if (numPins == null)
 		{
-			pins.put(txnum, 1);
+			AtomicInteger prev = pins.putIfAbsent(txnum, new AtomicInteger(1));
+			if (prev != null)
+			{
+				pins.get(txnum).getAndIncrement();
+			}
 		}
 		else
 		{
-			pins.put(txnum, numPins+1);
+			pins.get (txnum).getAndIncrement();
 		}
 		this.timePinned = lsn;
 	}
@@ -74,12 +74,15 @@ public class Page
 		timePinned = time;
 	}
 	
-	public synchronized void unpin(long txnum)
+	public void unpin(long txnum)
 	{
-		pins.remove(txnum);
+		synchronized(pins)
+		{
+			pins.remove(txnum);
+		}
 	}
 	
-	public synchronized boolean isPinned()
+	public boolean isPinned()
 	{
 		return pins.size() > 0;
 	}

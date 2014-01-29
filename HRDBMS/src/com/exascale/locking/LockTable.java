@@ -3,6 +3,7 @@ package com.exascale.locking;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Vector;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.exascale.exceptions.LockAbortException;
 import com.exascale.filesystem.Block;
@@ -11,9 +12,9 @@ import com.exascale.misc.MultiHashMap;
 
 public class LockTable 
 {
-	private static int MAX_TIME_SECS;
-	private static Map<Block, Integer> locks = new HashMap<Block, Integer>();
-	private static MultiHashMap<Block, Thread> waitList = new MultiHashMap<Block, Thread>();
+	protected static int MAX_TIME_SECS;
+	protected static ConcurrentHashMap<Block, Integer> locks = new ConcurrentHashMap<Block, Integer>();
+	protected static MultiHashMap<Block, Thread> waitList = new MultiHashMap<Block, Thread>();
 	public static boolean blockSLocks = false;
 	
 	public LockTable()
@@ -37,30 +38,31 @@ public class LockTable
 		try
 		{
 			long time = System.currentTimeMillis();
-			while (hasXLock(b) && !waitingTooLong(time))
+			while (true)
 			{
-				synchronized(waitList)
+				while (hasXLock(b) && !waitingTooLong(time))
 				{
 					waitList.multiPut(b, Thread.currentThread());
+					Thread.currentThread().wait(MAX_TIME_SECS * 1000);
 				}
-				
-				Thread.currentThread().wait(MAX_TIME_SECS * 1000);
-			}
-			
-			synchronized(waitList)
-			{
+
 				waitList.multiRemove(b, Thread.currentThread());
-			}
-			
-			synchronized(locks)
-			{
-				if (hasXLock(b))
+
+				synchronized(locks)
 				{
-					throw new LockAbortException();
-				}
+					if (hasXLock(b))
+					{
+						if (waitingTooLong(time))
+						{
+							throw new LockAbortException();
+						}
+						continue;
+					}
 			
-				int val = getLockVal(b);
-				locks.put(b, val+1);
+					int val = getLockVal(b);
+					locks.put(b, val+1);
+					break;
+				}
 			}
 		}
 		catch(Exception e)
@@ -75,28 +77,31 @@ public class LockTable
 		try
 		{
 			long time = System.currentTimeMillis();
-			while (hasOtherSLocks(b) && !waitingTooLong(time))
+			while (true)
 			{
-				synchronized(waitList)
+				while (hasOtherSLocks(b) && !waitingTooLong(time))
 				{
 					waitList.multiPut(b, Thread.currentThread());
+					Thread.currentThread().wait(MAX_TIME_SECS * 1000);
 				}
-				Thread.currentThread().wait(MAX_TIME_SECS * 1000);
-			}
-			
-			synchronized(waitList)
-			{
+
 				waitList.multiRemove(b, Thread.currentThread());
-			}
 			
-			synchronized(locks)
-			{
-				if (hasOtherSLocks(b))
+				synchronized(locks)
 				{
-					throw new LockAbortException();
-				}
+					if (hasOtherSLocks(b))
+					{
+						if (waitingTooLong(time))
+						{
+							throw new LockAbortException();
+						}
+					
+						continue;
+					}
 			
-				locks.put(b,  -1);
+					locks.put(b,  -1);
+					break;
+				}
 			}
 		}
 		catch(Exception e)
@@ -126,29 +131,26 @@ public class LockTable
 		}
 	}
 	
-	private static boolean hasXLock(Block b)
+	protected static boolean hasXLock(Block b)
 	{
 		return getLockVal(b) < 0;
 	}
 	
-	private static boolean hasOtherSLocks(Block b)
+	protected static boolean hasOtherSLocks(Block b)
 	{
 		return getLockVal(b) > 1;
 	}
 	
-	private static boolean waitingTooLong(long time)
+	protected static boolean waitingTooLong(long time)
 	{
 		long now = System.currentTimeMillis();
 		return (now - time) > (MAX_TIME_SECS * 1000);
 	}
 	
-	private static int getLockVal(Block b)
+	protected static int getLockVal(Block b)
 	{
 		Integer ival;
-		synchronized(locks)
-		{
-			ival = locks.get(b);
-		}
+		ival = locks.get(b);
 		return (ival == null) ? 0 : ival.intValue();
 	}
 }

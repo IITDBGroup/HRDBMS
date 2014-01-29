@@ -10,11 +10,11 @@ import com.exascale.managers.LogManager;
 
 public class ForwardLogIterator implements Iterator<LogRec>
 {
-	private String filename;
-	private long nextpos;
-	private ByteBuffer sizeBuff = ByteBuffer.allocate(4);
-	private FileChannel fc;
-	private int size;
+	protected String filename;
+	protected long nextpos;
+	protected ByteBuffer sizeBuff = ByteBuffer.allocate(4);
+	protected FileChannel fc;
+	protected int size;
 	
 	public ForwardLogIterator(String filename) throws IOException
 	{

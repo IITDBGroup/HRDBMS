@@ -11,16 +11,16 @@ import com.exascale.managers.LogManager;
 
 public class LogIterator implements Iterator<LogRec>
 {
-	private String filename;
-	private long nextpos;
-	private ByteBuffer sizeBuff = ByteBuffer.allocate(4);
-	private FileChannel fc;
-	private int size;
+	protected String filename;
+	protected long nextpos;
+	protected ByteBuffer sizeBuff = ByteBuffer.allocate(4);
+	protected FileChannel fc;
+	protected int size;
 	
 	public LogIterator(String filename) throws IOException
 	{
 		this.filename = filename;
-		synchronized(LogManager.noArchive)
+		synchronized(LogManager.noArchive) //disable archiving while we have an iterator open
 		{
 			LogManager.openIters++;
 			LogManager.noArchive = true;
@@ -37,7 +37,7 @@ public class LogIterator implements Iterator<LogRec>
 		{
 			try
 			{
-				fc.position(fc.size() - 4);
+				fc.position(fc.size() - 4); //trailing log rec size
 				sizeBuff.position(0);
 				fc.read(sizeBuff);
 				sizeBuff.position(0);

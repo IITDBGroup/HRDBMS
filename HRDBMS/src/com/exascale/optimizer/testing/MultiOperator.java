@@ -4,11 +4,11 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.TreeMap;
-import java.util.Vector;
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.LinkedBlockingQueue;
 
 import com.exascale.optimizer.testing.AggregateOperator.AggregateResultThread;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
@@ -16,23 +16,49 @@ import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
 public class MultiOperator implements Operator, Serializable
 {
-	private Operator child;
-	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
-	private MetaData meta;
-	private boolean startDone = false;
-	private boolean closeDone = false;
-	private Vector<AggregateOperator> ops;
-	private Vector<String> groupCols;
-	private volatile ArrayList<AggregateThread> inFlight = new ArrayList<AggregateThread>();
-	private volatile LinkedBlockingQueue readBuffer = new LinkedBlockingQueue(Driver.QUEUE_SIZE);
-	private boolean sorted;
-	private static final int NUM_HGBR_THREADS = 6 * Runtime.getRuntime().availableProcessors();
-
+	protected Operator child;
+	protected Operator parent;
+	protected HashMap<String, String> cols2Types;
+	protected HashMap<String, Integer> cols2Pos;
+	protected TreeMap<Integer, String> pos2Col;
+	protected MetaData meta;
+	protected ArrayList<AggregateOperator> ops;
+	protected ArrayList<String> groupCols;
+	protected static final int ATHREAD_QUEUE_SIZE = BufferedLinkedBlockingQueue.BLOCK_SIZE < 1000 ? 1000 : BufferedLinkedBlockingQueue.BLOCK_SIZE;
+	protected volatile BufferedLinkedBlockingQueue inFlight = new BufferedLinkedBlockingQueue(ATHREAD_QUEUE_SIZE);
+	protected volatile BufferedLinkedBlockingQueue readBuffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
+	protected boolean sorted;
+	protected static final int NUM_HGBR_THREADS = ResourceManager.cpus;
+	protected int node;
+	protected int NUM_GROUPS = 16;
+	protected int childCard = 16 * 16;
+	protected boolean cardSet = false;
 	
-	public MultiOperator(Vector<AggregateOperator> ops, Vector<String> groupCols, MetaData meta, boolean sorted)
+	public void reset()
+	{
+		child.reset();
+		inFlight = new BufferedLinkedBlockingQueue(ATHREAD_QUEUE_SIZE);
+		readBuffer.clear();
+		if (sorted)
+		{
+			init();
+		}
+		else
+		{
+			new HashGroupByThread().start();
+		}
+	}
+	
+	public void setChildPos(int pos)
+	{
+	}
+	
+	public int getChildPos()
+	{
+		return 0;
+	}
+	
+	public MultiOperator(ArrayList<AggregateOperator> ops, ArrayList<String> groupCols, MetaData meta, boolean sorted)
 	{
 		this.ops = ops;
 		this.groupCols = groupCols;
@@ -40,9 +66,153 @@ public class MultiOperator implements Operator, Serializable
 		this.sorted = sorted;
 	}
 	
+	public MultiOperator clone()
+	{
+		ArrayList<AggregateOperator> opsClone = new ArrayList<AggregateOperator>(ops.size());
+		for (AggregateOperator op : ops)
+		{
+			opsClone.add(op.clone());
+		}
+		
+		MultiOperator retval =  new MultiOperator(opsClone, groupCols, meta, sorted);
+		retval.node = node;
+		retval.NUM_GROUPS = NUM_GROUPS;
+		retval.childCard = childCard;
+		retval.cardSet = cardSet;
+		return retval;
+	}
+	
+	public boolean setNumGroupsAndChildCard(int groups, int childCard)
+	{
+		if (cardSet)
+		{
+			return false;
+		}
+		
+		cardSet = true;
+		NUM_GROUPS = groups;
+		this.childCard = childCard; 
+		for (AggregateOperator op : ops)
+		{
+			op.setNumGroups(NUM_GROUPS);
+			if (op instanceof CountDistinctOperator)
+			{
+				((CountDistinctOperator)op).setChildCard(childCard);
+			}
+		}
+		
+		return true;
+	}
+	
+	public int getNode()
+	{
+		return node;
+	}
+	
+	public void setNode(int node)
+	{
+		this.node = node;
+	}
+	
+	public String getAvgCol()
+	{
+		for (AggregateOperator op : ops)
+		{
+			if (op instanceof AvgOperator)
+			{
+				return op.outputColumn();
+			}
+		}
+		
+		return null;
+	}
+	
+	public void changeCountsToSums()
+	{
+		ArrayList<AggregateOperator> remove = new ArrayList<AggregateOperator>();
+		ArrayList<AggregateOperator> add = new ArrayList<AggregateOperator>();
+		for (AggregateOperator op : ops)
+		{
+			if (op instanceof CountOperator)
+			{
+				remove.add(op);
+				add.add(new SumOperator(op.getInputColumn(), op.outputColumn(), meta, true));
+			}
+		}
+		
+		int i = 0;
+		for (AggregateOperator op : remove)
+		{
+			int pos = ops.indexOf(op);
+			ops.remove(pos);
+			ops.add(pos, add.get(i));
+			i++;
+		}
+	}
+	
+	public void updateInputColumns(ArrayList<String> outputs, ArrayList<String> inputs)
+	{
+		for (AggregateOperator op : ops)
+		{
+			int index = outputs.indexOf(op.outputColumn());
+			op.setInputColumn(inputs.get(index));
+		}
+	}
+	
+	public void removeCountDistinct()
+	{
+		for (AggregateOperator op : ops)
+		{
+			if (op instanceof CountDistinctOperator)
+			{
+				groupCols.add(((CountDistinctOperator)op).getInputColumn());
+				ops.remove(op);
+			}
+		}
+	}
+	
+	public void addCount(String outCol)
+	{
+		ops.add(new CountOperator(outCol, meta));
+	}
+	
+	public void replaceAvgWithSumAndCount(HashMap<String, ArrayList<String>> old2New)
+	{
+		for (AggregateOperator op : ops)
+		{
+			if (op instanceof AvgOperator)
+			{
+				String outCol1 = null;
+				String outCol2 = null;
+				for (Map.Entry entry : old2New.entrySet())
+				{
+					outCol1 = ((ArrayList<String>)entry.getValue()).get(0);
+					outCol2 = ((ArrayList<String>)entry.getValue()).get(1);
+				}
+				ops.remove(op);
+				ops.add(new SumOperator(op.getInputColumn(), outCol1, meta, false));
+				ops.add(new CountOperator(op.getInputColumn(), outCol2, meta));
+				return;
+			}
+		}
+	}
+	
+	public boolean hasAvg()
+	{
+		for (AggregateOperator op : ops)
+		{
+			if (op instanceof AvgOperator)
+			{
+				return true;
+			}
+		}
+		
+		return false;
+	}
+	
 	public ArrayList<String> getReferences()
 	{
-		ArrayList<String> retval = new ArrayList<String>();
+		ArrayList<String> retval = new ArrayList<String>(ops.size());
 		for (AggregateOperator op : ops)
 		{
 			retval.add(op.getInputColumn());
@@ -51,17 +221,28 @@ public class MultiOperator implements Operator, Serializable
 		return retval;
 	}
 	
-	public Vector<String> getKeys()
+	public ArrayList<String> getKeys()
 	{
 		return groupCols;
 	}
 	
 	public ArrayList<String> getOutputCols()
 	{
-		ArrayList<String> retval = new ArrayList<String>();
+		ArrayList<String> retval = new ArrayList<String>(ops.size());
 		for (AggregateOperator op : ops)
 		{
 			retval.add(op.outputColumn());
+		}
+		
+		return retval;
+	}
+	
+	public ArrayList<String> getInputCols()
+	{
+		ArrayList<String> retval = new ArrayList<String>(ops.size());
+		for (AggregateOperator op : ops)
+		{
+			retval.add(op.getInputColumn());
 		}
 		
 		return retval;
@@ -79,42 +260,47 @@ public class MultiOperator implements Operator, Serializable
 	
 	public ArrayList<Operator> children()
 	{
-		ArrayList<Operator> retval = new ArrayList<Operator>();
+		ArrayList<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
 	
 	public String toString()
 	{
-		return "MultiOperator";
-	}
-	
-	public synchronized void start() throws Exception 
-	{
-		//System.out.println("In start() in MultiOperator");
-		if (!startDone)
+		String retval = "MultiOperator: [";
+		int i = 0;
+		for (String in : getInputCols())
 		{
-			startDone = true;
-			child.start();
-			if (sorted)
-			{
-				init();
-			}
-			else
-			{
-				//System.out.println("HasGroupByThread created via start()");
-				new HashGroupByThread().start();
-			}
-		} 
-	}
-	
-	public synchronized void close() throws Exception 
-	{
-		if (!closeDone)
-		{
-			closeDone = true;
-			child.close();
+			retval += (in + "->" + getOutputCols().get(i) + "  ");
+			i++;
 		}
+		
+		retval += "]";
+		return retval;
+	}
+	
+	public void start() throws Exception 
+	{
+		child.start();
+		if (sorted)
+		{
+			init();
+		}
+		else
+		{
+			//System.out.println("HasGroupByThread created via start()");
+			new HashGroupByThread().start();
+		}
+	}
+	
+	public void setSorted()
+	{
+		sorted = true;
+	}
+	
+	public void close() throws Exception 
+	{
+		child.close();
 	}
 	
 	public void removeChild(Operator op)
@@ -137,27 +323,30 @@ public class MultiOperator implements Operator, Serializable
 		{
 			child = op;
 			op.registerParent(this);
-			HashMap<String, String> tempCols2Types = child.getCols2Types();
-			HashMap<String, Integer> tempCols2Pos = child.getCols2Pos();
-			cols2Types = new HashMap<String, String>();
-			cols2Pos = new HashMap<String, Integer>();
-			pos2Col = new TreeMap<Integer, String>();
-			
-			int i = 0;
-			for (String groupCol : groupCols)
+			if (child.getCols2Types() != null)
 			{
-				cols2Types.put(groupCol, tempCols2Types.get(groupCol));
-				cols2Pos.put(groupCol, i);
-				pos2Col.put(i, groupCol);
-				i++;
-			}
+				HashMap<String, String> tempCols2Types = child.getCols2Types();
+				HashMap<String, Integer> tempCols2Pos = child.getCols2Pos();
+				cols2Types = new HashMap<String, String>();
+				cols2Pos = new HashMap<String, Integer>();
+				pos2Col = new TreeMap<Integer, String>();
 			
-			for (AggregateOperator op2 : ops)
-			{
-				cols2Types.put(op2.outputColumn(), op2.outputType());
-				cols2Pos.put(op2.outputColumn(), i);
-				pos2Col.put(i, op2.outputColumn());
-				i++;
+				int i = 0;
+				for (String groupCol : groupCols)
+				{
+					cols2Types.put(groupCol, tempCols2Types.get(groupCol));
+					cols2Pos.put(groupCol, i);
+					pos2Col.put(i, groupCol);
+					i++;
+				}
+			
+				for (AggregateOperator op2 : ops)
+				{
+					cols2Types.put(op2.outputColumn(), op2.outputType());
+					cols2Pos.put(op2.outputColumn(), i);
+					pos2Col.put(i, op2.outputColumn());
+					i++;
+				}
 			}
 		}
 		else
@@ -193,10 +382,20 @@ public class MultiOperator implements Operator, Serializable
 		return pos2Col;
 	}
 	
-	private void init()
+	protected void init()
 	{
 		new InitThread().start();
 		new CleanerThread().start();
+	}
+	
+	public void nextAll(Operator op) throws Exception
+	{
+		child.nextAll(op);
+		Object o = next(op);
+		while (!(o instanceof DataEndMarker))
+		{
+			o = next(op);
+		}
 	}
 	
 	public Object next(Operator op) throws Exception
@@ -221,10 +420,10 @@ public class MultiOperator implements Operator, Serializable
 		return o;
 	}
 	
-	private class HashGroupByThread extends Thread
+	protected class HashGroupByThread extends ThreadPoolThread
 	{
-		private volatile ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>> groups = new ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>>();
-		private AggregateResultThread[] threads = new AggregateResultThread[ops.size()];
+		protected volatile ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>> groups = new ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>>(NUM_GROUPS, 0.75f, ResourceManager.cpus * 6);
+		protected AggregateResultThread[] threads = new AggregateResultThread[ops.size()];
 		
 		public void run()
 		{
@@ -274,7 +473,7 @@ public class MultiOperator implements Operator, Serializable
 						row.add(thread.getResult(keys));
 					}
 				
-					readBuffer.add(row);
+					readBuffer.put(row);
 				}
 			
 				readBuffer.put(new DataEndMarker());
@@ -291,8 +490,10 @@ public class MultiOperator implements Operator, Serializable
 			}
 		}
 		
-		private class HashGroupByReaderThread extends Thread
+		protected class HashGroupByReaderThread extends ThreadPoolThread
 		{
+			protected ArrayList<Integer> groupPos = null;
+			
 			public void run()
 			{
 				try
@@ -302,9 +503,19 @@ public class MultiOperator implements Operator, Serializable
 					{
 						ArrayList<Object> row = (ArrayList<Object>)o;
 						ArrayList<Object> groupKeys = new ArrayList<Object>();
-						for (String groupCol : groupCols)
+						
+						if (groupPos == null)
 						{
-							groupKeys.add(row.get(child.getCols2Pos().get(groupCol)));
+							groupPos = new ArrayList<Integer>(groupCols.size());
+							for (String groupCol : groupCols)
+							{
+								groupPos.add(child.getCols2Pos().get(groupCol));
+							}
+						}
+						
+						for (int pos : groupPos)
+						{
+							groupKeys.add(row.get(pos));
 						}
 			
 						groups.put(groupKeys, groupKeys);
@@ -326,7 +537,7 @@ public class MultiOperator implements Operator, Serializable
 		}
 	}
 	
-	private class InitThread extends Thread
+	protected class InitThread extends ThreadPoolThread
 	{	
 		public void run()
 		{
@@ -334,7 +545,7 @@ public class MultiOperator implements Operator, Serializable
 			{
 				Object[] groupKeys = new Object[groupCols.size()];
 				Object[] oldGroup = null;
-				DiskBackedArray rows = null;
+				ArrayList<ArrayList<Object>> rows = null;
 				boolean newGroup = false;;
 			
 				Object o = child.next(MultiOperator.this);
@@ -373,11 +584,20 @@ public class MultiOperator implements Operator, Serializable
 						if (rows != null)
 						{
 							AggregateThread aggThread = new AggregateThread(oldGroup, ops, rows);
-							inFlight.add(aggThread);
 							aggThread.start();
+							while (true)
+							{
+								try
+								{
+									inFlight.put(aggThread);
+									break;
+								}
+								catch(Exception f)
+								{}
+							}
 						}
 						
-						rows = ResourceManager.newDiskBackedArray();
+						rows = new ArrayList<ArrayList<Object>>();
 					}
 					
 					rows.add(row);
@@ -385,12 +605,30 @@ public class MultiOperator implements Operator, Serializable
 				}
 			
 				AggregateThread aggThread = new AggregateThread(groupKeys, ops, rows);
-				inFlight.add(aggThread);
 				aggThread.start();
+				while (true)
+				{
+					try
+					{
+						inFlight.put(aggThread);
+						break;
+					}
+					catch(Exception f)
+					{}
+				}
 				//System.out.println("Last aggregation thread has been started.");
 			
 				aggThread = new AggregateThread();
-				inFlight.add(aggThread);
+				while (true)
+				{
+					try
+					{
+						inFlight.put(aggThread);
+						break;
+					}
+					catch(Exception f)
+					{}
+				}
 			}
 			catch(Exception e)
 			{
@@ -400,13 +638,13 @@ public class MultiOperator implements Operator, Serializable
 		}
 	}
 	
-	private class AggregateThread
+	protected class AggregateThread
 	{
-		private ArrayList<Thread> threads = new ArrayList<Thread>();
+		private ArrayList<ThreadPoolThread> threads = new ArrayList<ThreadPoolThread>();
 		ArrayList<Object> row = new ArrayList<Object>();
-		private boolean end = false;
+		protected boolean end = false;
 		
-		public AggregateThread(Object[] groupKeys, Vector<AggregateOperator> ops, DiskBackedArray rows)
+		public AggregateThread(Object[] groupKeys, ArrayList<AggregateOperator> ops, ArrayList<ArrayList<Object>> rows)
 		{
 			for (Object o : groupKeys)
 			{
@@ -415,7 +653,7 @@ public class MultiOperator implements Operator, Serializable
 			
 			for (AggregateOperator op : ops)
 			{
-				Thread thread = op.newProcessingThread(rows, child.getCols2Pos());
+				ThreadPoolThread thread = op.newProcessingThread(rows, child.getCols2Pos());
 				threads.add(thread);
 			}
 		}
@@ -437,29 +675,30 @@ public class MultiOperator implements Operator, Serializable
 				return;
 			}
 			
-			for (Thread thread : threads)
+			for (ThreadPoolThread thread : threads)
 			{
-				thread.start();
+				//thread.start();
+				thread.run();
 			}
 		}
 		
 		public ArrayList<Object> getResult()
 		{
-			for (Thread thread : threads)
+			for (ThreadPoolThread thread : threads)
 			{
 				AggregateResultThread t = (AggregateResultThread)thread;
-				while (true)
-				{
-					try
-					{
-						t.join();
-						break;
-					}
-					catch(InterruptedException e)
-					{
-						continue;
-					}
-				}
+				//while (true)
+				//{
+				//	try
+				//	{
+				//		t.join();
+				//		break;
+				//	}
+				//	catch(InterruptedException e)
+				//	{
+				//		continue;
+				//	}
+				//}
 				row.add(t.getResult());
 				t.close();
 			}
@@ -469,23 +708,23 @@ public class MultiOperator implements Operator, Serializable
 		}
 	}
 	
-	private class CleanerThread extends Thread
+	protected class CleanerThread extends ThreadPoolThread
 	{	
 		public void run()
 		{
-			int i = 0;
 			while (true)
 			{
-				while (i >= inFlight.size())
+				AggregateThread t = null;
+				while (true)
 				{
 					try
 					{
-						Thread.currentThread().sleep(1);
+						t = (AggregateThread)inFlight.take();
+						break;
 					}
-					catch(InterruptedException e) {}
-				}	
-				
-				AggregateThread t = inFlight.get(i);
+					catch(Exception e)
+					{}
+				}
 				if (t.isEnd())
 				{
 					while (true)
@@ -495,7 +734,7 @@ public class MultiOperator implements Operator, Serializable
 							readBuffer.put(new DataEndMarker());
 							break;
 						}
-						catch(InterruptedException e)
+						catch(Exception e)
 						{}
 					}
 					//System.out.println("MultiOperator marked end of output.");
@@ -509,11 +748,10 @@ public class MultiOperator implements Operator, Serializable
 						readBuffer.put(t.getResult());
 						break;
 					}
-					catch(InterruptedException e)
+					catch(Exception e)
 					{}
 				}
 				//System.out.println("Picked up aggregation result.");
-				i++;
 			}
 		}
 	}

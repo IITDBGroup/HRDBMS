@@ -4,8 +4,8 @@ import com.exascale.filesystem.RID;
 
 public class RIDChange 
 {
-	private RID oldRID;
-	private RID newRID;
+	protected RID oldRID;
+	protected RID newRID;
 	
 	public RIDChange(RID oldRID, RID newRID)
 	{

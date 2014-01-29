@@ -2,6 +2,7 @@ package com.exascale.optimizer.testing;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -9,50 +10,224 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Random;
 import java.util.TreeMap;
-import java.util.Vector;
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
 public class SemiJoinOperator implements Operator, Serializable
 {
-	private ArrayList<Operator> children = new ArrayList<Operator>();
-	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
-	private MetaData meta;
-	private volatile DiskBackedArray inBuffer = ResourceManager.newDiskBackedArray(true);
-	private int NUM_RT_THREADS = 6 * Runtime.getRuntime().availableProcessors();
-	private int NUM_PTHREADS = 6 * Runtime.getRuntime().availableProcessors();
-	private AtomicLong outCount = new AtomicLong(0);
-	private AtomicLong inCount = new AtomicLong(0);
-	private volatile boolean readersDone = false;
-	private Vector<String> cols;
-	private volatile LinkedBlockingQueue outBuffer = new LinkedBlockingQueue(Driver.QUEUE_SIZE);
-	private volatile Vector<Integer> poses;
-	private int childPos = -1;
-	private HashSet<HashMap<Filter, Filter>> f = null;
+	protected ArrayList<Operator> children = new ArrayList<Operator>(2);
+	protected Operator parent;
+	protected HashMap<String, String> cols2Types;
+	protected HashMap<String, Integer> cols2Pos;
+	protected TreeMap<Integer, String> pos2Col;
+	protected MetaData meta;
+	protected volatile DiskBackedArray inBuffer;
+	protected int NUM_RT_THREADS = 6 * ResourceManager.cpus;
+	protected int NUM_PTHREADS = 6 * ResourceManager.cpus;
+	protected AtomicLong outCount = new AtomicLong(0);
+	protected AtomicLong inCount = new AtomicLong(0);
+	protected volatile boolean readersDone = false;
+	protected ArrayList<String> cols;
+	protected volatile BufferedLinkedBlockingQueue outBuffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
+	protected volatile ArrayList<Integer> poses;
+	protected int childPos = -1;
+	protected HashSet<HashMap<Filter, Filter>> f = null;
+	protected int node;
+	protected boolean indexAccess = false;
+	protected ArrayList<Index> dynamicIndexes;
+    protected SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+    protected HashSet<HashMap<Filter, Filter>> hshm;
+    protected volatile boolean doReset = false;
+    protected int rightChildCard = 16;
+    protected ArrayList<DiskBackedHashMap> buckets = new ArrayList<DiskBackedHashMap>();
+	protected AtomicLong inCount2 = new AtomicLong(0);
+	protected boolean alreadySorted = false;
+	protected boolean cardSet = false;
+    
+    public void setDynamicIndex(ArrayList<Index> indexes)
+    {
+    	indexAccess = true;
+    	this.dynamicIndexes = indexes;
+    }
+    
+    public boolean setRightChildCard(int card)
+    {
+    	if (cardSet)
+    	{
+    		return false;
+    	}
+    	
+    	cardSet = true;
+    	rightChildCard = card;
+    	return true;
+    }
+	
+	public void reset()
+	{
+		System.out.println("SemiJoinOperator cannot be reset");
+		System.exit(1);
+	}
+	
+	public HashSet<HashMap<Filter, Filter>> getHSHM()
+	{
+		if (f != null)
+		{
+			return f;
+		}
+		
+		HashSet<HashMap<Filter, Filter>> retval = new HashSet<HashMap<Filter, Filter>>();
+		int i = 0;
+		for (String col : children.get(1).getPos2Col().values())
+		{
+			Filter filter = null;
+			try
+			{
+				filter = new Filter(cols.get(i), "E", col);
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
+				System.exit(1);
+			}
+			HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
+			hm.put(filter,  filter);
+			retval.add(hm);
+			i++;
+		}
+		
+		return retval;
+	}
+	
+	public void setChildPos(int pos)
+	{
+		childPos = pos;
+	}
+	
+	public int getChildPos()
+	{
+		return childPos;
+	}
 	
 	public SemiJoinOperator(String col, MetaData meta)
 	{
-		this.cols = new Vector<String>();
+		this.cols = new ArrayList<String>(1);
 		this.cols.add(col);
 		this.meta = meta;
 	}
 	
-	public SemiJoinOperator(Vector<String> cols, MetaData meta)
+	public SemiJoinOperator(ArrayList<String> cols, MetaData meta)
 	{
 		this.cols = cols;
+		this.meta = meta;
+	}
+	
+	public SemiJoinOperator clone()
+	{
+		SemiJoinOperator retval = new SemiJoinOperator(cols, f, meta);
+		retval.node = node;
+		retval.indexAccess = indexAccess;
+		retval.dynamicIndexes = dynamicIndexes;
+		retval.alreadySorted = alreadySorted;
+		retval.rightChildCard = rightChildCard;
+		retval.cardSet = cardSet;
+		return retval;
 	}
 	
 	public SemiJoinOperator(HashSet<HashMap<Filter, Filter>> f, MetaData meta)
 	{
 		this.f = f;
 		this.meta = meta;
-		this.cols = new Vector<String>();
+		this.cols = new ArrayList<String>(0);
+	}
+	
+	protected SemiJoinOperator(ArrayList<String> cols, HashSet<HashMap<Filter, Filter>> f, MetaData meta)
+	{
+		this.f = f;
+		this.cols = cols;
+		this.meta = meta;
+	}
+	
+	public void alreadySorted()
+	{
+		alreadySorted = true;
+	}
+	
+	public int getNode()
+	{
+		return node;
+	}
+	
+	public void setNode(int node)
+	{
+		this.node = node;
+	}
+	
+	public ArrayList<String> getLefts()
+	{
+		if (cols.size() > 0)
+		{
+			return cols;
+		}
+		
+		ArrayList<String> retval = new ArrayList<String>(f.size());
+		for (HashMap<Filter, Filter> filters : f)
+		{
+			if (filters.size() == 1)
+			{
+				for (Filter filter : filters.keySet())
+				{
+					if (filter.op().equals("E"))
+					{
+						if (children.get(0).getCols2Pos().keySet().contains(filter.leftColumn()))
+						{
+							retval.add(filter.leftColumn());
+						}
+						else
+						{
+							retval.add(filter.rightColumn());
+						}
+					}
+				}
+			}
+		}
+		
+		return retval;
+	}
+	
+	public ArrayList<String> getRights()
+	{
+		if (cols.size() > 0)
+		{
+			ArrayList<String> retval = new ArrayList<String>(children.get(1).getCols2Pos().keySet());
+			return retval;
+		}
+		
+		ArrayList<String> retval = new ArrayList<String>(f.size());
+		for (HashMap<Filter, Filter> filters : f)
+		{
+			if (filters.size() == 1)
+			{
+				for (Filter filter : filters.keySet())
+				{
+					if (filter.op().equals("E"))
+					{
+						if (children.get(1).getCols2Pos().keySet().contains(filter.leftColumn()))
+						{
+							retval.add(filter.leftColumn());
+						}
+						else
+						{
+							retval.add(filter.rightColumn());
+						}
+					}
+				}
+			}
+		}
+		
+		return retval;
 	}
 	
 	public ArrayList<String> getReferences()
@@ -116,13 +291,13 @@ public class SemiJoinOperator implements Operator, Serializable
 			}
 			op.registerParent(this);
 			
-			if (children.size() == 2)
+			if (children.size() == 2 && children.get(0).getCols2Types() != null && children.get(1).getCols2Types() != null)
 			{
 				cols2Types = children.get(0).getCols2Types();
 				cols2Pos = children.get(0).getCols2Pos();
 				pos2Col = children.get(0).getPos2Col();
 				
-				poses = new Vector<Integer>();
+				poses = new ArrayList<Integer>(cols.size());
 				for (String col : cols)
 				{
 					poses.add(cols2Pos.get(col));
@@ -138,6 +313,12 @@ public class SemiJoinOperator implements Operator, Serializable
 	public void removeChild(Operator op)
 	{
 		childPos = children.indexOf(op);
+		if (childPos == -1)
+		{
+			System.err.println("Removing a non-existent child!");
+			Thread.dumpStack();
+			System.exit(1);
+		}
 		children.remove(op);
 		op.removeParent(this);
 	}
@@ -149,36 +330,38 @@ public class SemiJoinOperator implements Operator, Serializable
 	
 	public void start() throws Exception 
 	{
-		for (Operator child : children)
+		if (!indexAccess)
 		{
-			child.start();
+			for (Operator child : children)
+			{
+				child.start();
+			}
+		
+			inBuffer = ResourceManager.newDiskBackedArray(true, rightChildCard);
+			new InitThread().start();
 		}
-		
-		new InitThread().start();
-		
+		else
+		{
+			for (Operator child : children)
+			{
+				child.start();
+			}
+		}
 	}
 	
-	private class InitThread extends Thread
+	protected class InitThread extends ThreadPoolThread
 	{
-		private NLSortThread nlSort = null;
-		private NLHashThread nlHash = null;
-		private Filter first = null;
+		protected NLSortThread nlSort = null;
+		protected NLHashThread nlHash = null;
+		protected Filter first = null;
 		
 		public void run()
 		{
-			Thread[] threads;
-			int i = 0;
-			threads = new ReaderThread[NUM_RT_THREADS];
-			while (i < NUM_RT_THREADS)
-			{
-				threads[i] = new ReaderThread();
-				threads[i].start();
-				i++;
-			}
+			ThreadPoolThread[] threads = null;
 			
-			i = 0;
+			int i = 0;
 			CNFFilter cnf = null;
-			Thread[] threads2 = new ProcessThread[NUM_PTHREADS];
+			ThreadPoolThread[] threads2 = new ProcessThread[NUM_PTHREADS];
 			if (f != null)
 			{
 				//System.out.println("Using non-equijoin semijoin!");
@@ -188,7 +371,7 @@ public class SemiJoinOperator implements Operator, Serializable
 					tempC2P.put((String)entry.getValue(), tempC2P.size());
 				}
 				
-				cnf = new CNFFilter(f, meta, tempC2P);
+				cnf = new CNFFilter(f, tempC2P);
 				
 				boolean isHash = false;
 				boolean isSort = false;
@@ -227,27 +410,29 @@ public class SemiJoinOperator implements Operator, Serializable
 									if (filter.leftIsColumn() && filter.rightIsColumn())
 									{
 										//System.out.println("NestedLoopJoin qualifies for partial hashing");
-										nlHash = new NLHashThread(filter);
-										first = filter;
-										nlHash.start();
-										i = 0;
-										while (i < NUM_RT_THREADS) {
-											try {
-												threads[i].join();
-												i++;
-											} catch (InterruptedException e) {
-											}
+										int j = 0;
+										ArrayList<NLHashThread> nlThreads = new ArrayList<NLHashThread>(NUM_RT_THREADS);
+										while (j < NUM_RT_THREADS)
+										{
+											nlHash = new NLHashThread(filter);
+											nlThreads.add(nlHash);
+											first = filter;
+											nlHash.start();
+											j++;
 										}
 										readersDone = true;
-										while (true)
+										for (NLHashThread thread : nlThreads)
 										{
-											try
+											while (true)
 											{
-												nlHash.join();
-												break;
+												try
+												{
+													nlHash.join();
+													break;
+												}
+												catch(InterruptedException e)
+												{}
 											}
-											catch(InterruptedException e)
-											{}
 										}
 									}
 								}
@@ -264,6 +449,19 @@ public class SemiJoinOperator implements Operator, Serializable
 				}
 				else if (isSort)
 				{
+					i = 0;
+					if (alreadySorted)
+					{
+						NUM_RT_THREADS = 1;
+					}
+					threads = new ReaderThread[NUM_RT_THREADS];
+					while (i < NUM_RT_THREADS)
+					{
+						threads[i] = new ReaderThread();
+						threads[i].start();
+						i++;
+					}
+					
 					for (HashMap<Filter, Filter> filters : f)
 					{
 						if (filters.size() == 1)
@@ -277,11 +475,19 @@ public class SemiJoinOperator implements Operator, Serializable
 										//System.out.println("NestedLoopJoin qualifies for sorting");
 										nlSort = new NLSortThread(filter);
 										i = 0;
+									
 										while (i < NUM_RT_THREADS) {
-											try {
-												threads[i].join();
-												i++;
-											} catch (InterruptedException e) {
+											while (true)
+											{
+												try 
+												{
+													threads[i].join();
+													i++;
+													break;
+												} 
+												catch (InterruptedException e) 
+												{
+												}
 											}
 										}
 										readersDone = true;
@@ -310,6 +516,17 @@ public class SemiJoinOperator implements Operator, Serializable
 						}
 					}
 				}
+				else
+				{
+					i = 0;
+					threads = new ReaderThread[NUM_RT_THREADS];
+					while (i < NUM_RT_THREADS)
+					{
+						threads[i] = new ReaderThread();
+						threads[i].start();
+						i++;
+					}
+				}
 
 				i = 0;
 				while (i < NUM_PTHREADS) {
@@ -331,6 +548,16 @@ public class SemiJoinOperator implements Operator, Serializable
 			}
 			else
 			{
+				i = 0;
+				threads = new ReaderThread[NUM_RT_THREADS];
+				while (i < NUM_RT_THREADS)
+				{
+					threads[i] = new ReaderThread();
+					threads[i].start();
+					i++;
+				}
+				
+				i = 0;
 				while (i < NUM_PTHREADS)
 				{
 					threads2[i] = new ProcessThread();
@@ -341,13 +568,17 @@ public class SemiJoinOperator implements Operator, Serializable
 				i = 0;
 				while (i < NUM_RT_THREADS)
 				{
-					try
+					while (true)
 					{
-						threads[i].join();
-						i++;
-					}
-					catch(InterruptedException e)
-					{
+						try 
+						{
+							threads[i].join();
+							i++;
+							break;
+						} 
+						catch (InterruptedException e) 
+						{
+						}
 					}
 				}
 				
@@ -358,13 +589,17 @@ public class SemiJoinOperator implements Operator, Serializable
 			i = 0;
 			while (i < NUM_PTHREADS)
 			{
-				try
+				while (true)
 				{
-					threads2[i].join();
-					i++;
-				}
-				catch(InterruptedException e)
-				{
+					try 
+					{
+						threads2[i].join();
+						i++;
+						break;
+					} 
+					catch (InterruptedException e) 
+					{
+					}
 				}
 			}
 			
@@ -391,7 +626,7 @@ public class SemiJoinOperator implements Operator, Serializable
 		}
 	}
 	
-	private class ReaderThread extends Thread
+	protected class ReaderThread extends ThreadPoolThread
 	{	
 		public void run()
 		{
@@ -401,8 +636,8 @@ public class SemiJoinOperator implements Operator, Serializable
 				Object o = child.next(SemiJoinOperator.this);
 				while (! (o instanceof DataEndMarker))
 				{
-					inBuffer.add(o);
-					long count = inCount.getAndIncrement();
+					inBuffer.add((ArrayList<Object>)o);
+					//long count = inCount.getAndIncrement();
 					//if (count % 10000 == 0)
 					//{
 					//	System.out.println("SemiJoinOperator has read " + count + " rows");
@@ -418,17 +653,14 @@ public class SemiJoinOperator implements Operator, Serializable
 		}
 	}
 	
-	private class NLHashThread extends Thread
+	protected class NLHashThread extends ThreadPoolThread
 	{
-		private Filter filter;
-		private int pos;
-		private ArrayList<DiskBackedHashMap> buckets = new ArrayList<DiskBackedHashMap>();
-		private AtomicLong inCount = new AtomicLong(0);
+		protected Filter filter;
+		protected int pos;
 		
 		public NLHashThread(Filter filter)
 		{
 			this.filter = filter;
-			buckets.add(ResourceManager.newDiskBackedHashMap());
 		}
 		
 		public void close()
@@ -460,47 +692,27 @@ public class SemiJoinOperator implements Operator, Serializable
 			
 			try
 			{
-				long i = 0;
-				while (true)
+				Operator child = children.get(1);
+				HashMap<String, Integer> childCols2Pos = child.getCols2Pos();
+				Object o = child.next(SemiJoinOperator.this);
+				ArrayList<Object> key = new ArrayList<Object>(1);
+				//@Parallel
+				while (! (o instanceof DataEndMarker))
 				{
-					if (i >= inBuffer.size())
-					{
-						if (readersDone)
-						{
-							if (i >= inBuffer.size())
-							{
-								break;
-							}
-							
-							continue;
-						}
-						else
-						{
-							Thread.sleep(1);
-							continue;
-						}
-					}
-					
-					ArrayList<Object> o = (ArrayList<Object>)inBuffer.get(i);
-					if (o == null)
-					{
-						Thread.sleep(1);
-						continue;
-					}
 					//inBuffer.add(o);
-					long count = inCount.incrementAndGet();
+					long count = inCount2.incrementAndGet();
 					
 					//if (count % 10000 == 0)
 					//{
-					//	System.out.println("Partial hash has read " + count + " rows");
+					//	System.out.println("HashJoinOperator has read " + count + " rows");
 					//}
 					
-					ArrayList<Object> key = new ArrayList<Object>();
-					key.add(o.get(pos));
+					key.clear();
+					key.add(((ArrayList<Object>)o).get(pos));
 					
 					long hash = 0x0EFFFFFFFFFFFFFFL & hash(key);
-					writeToHashTable(hash, o);
-					i++;
+					writeToHashTable(hash, (ArrayList<Object>)o);
+					o = child.next(SemiJoinOperator.this);
 				}
 			}
 			catch(Exception e)
@@ -513,8 +725,18 @@ public class SemiJoinOperator implements Operator, Serializable
 			}
 		}
 		
-		private void writeToHashTable(long hash, ArrayList<Object> row) throws Exception
+		protected void writeToHashTable(long hash, ArrayList<Object> row) throws Exception
 		{
+			if (buckets.size() == 0)
+			{
+				synchronized(this)
+				{
+					if (buckets.size() == 0)
+					{
+						buckets.add(ResourceManager.newDiskBackedHashMap(false, rightChildCard));
+					}
+				}
+			}
 			int i = 0;
 			Object o = buckets.get(i).putIfAbsent(hash, row);
 			while (o != null)
@@ -552,7 +774,7 @@ public class SemiJoinOperator implements Operator, Serializable
 						}
 						else
 						{
-							buckets.add(ResourceManager.newDiskBackedHashMap());
+							buckets.add(ResourceManager.newDiskBackedHashMap(false, rightChildCard));
 							DiskBackedHashMap bucket = buckets.get(i);
 							o = bucket.putIfAbsent(hash, row);
 						}
@@ -562,7 +784,7 @@ public class SemiJoinOperator implements Operator, Serializable
 			}
 		}
 		
-		private ArrayList<ArrayList<Object>> getCandidates(long hash) throws ClassNotFoundException, IOException
+		protected ArrayList<ArrayList<Object>> getCandidates(long hash) throws ClassNotFoundException, IOException
 		{
 			ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>();
 			int i = 0;
@@ -584,7 +806,7 @@ public class SemiJoinOperator implements Operator, Serializable
 			return retval;
 		}
 		
-		private long hash(ArrayList<Object> key)
+		protected long hash(ArrayList<Object> key)
 		{
 			long hashCode = 1125899906842597L;
 			for (Object e : key)
@@ -649,11 +871,11 @@ public class SemiJoinOperator implements Operator, Serializable
 		}
 	}
 	
-	private class NLSortThread extends Thread
+	protected class NLSortThread extends ThreadPoolThread
 	{
-		private Filter filter;
-		private boolean vBool;
-		private int pos;
+		protected Filter filter;
+		protected boolean vBool;
+		protected int pos;
 		
 		public NLSortThread(Filter filter)
 		{
@@ -690,6 +912,10 @@ public class SemiJoinOperator implements Operator, Serializable
 			
 			try
 			{
+				if (alreadySorted)
+				{
+					return;
+				}
 				if (inBuffer.size() < SortOperator.PARALLEL_SORT_MIN_NUM_ROWS)
 				{
 					doSequentialSort(0, inBuffer.size()-1);
@@ -707,7 +933,7 @@ public class SemiJoinOperator implements Operator, Serializable
 			}
 		}
 		
-		private ParallelSortThread doParallelSort(long left, long right)
+		protected ParallelSortThread doParallelSort(long left, long right)
 		{
 			//System.out.println("Starting parallel sort with " + (right-left+1) + " rows");
 			ParallelSortThread t = new ParallelSortThread(left, right);
@@ -715,10 +941,10 @@ public class SemiJoinOperator implements Operator, Serializable
 			return t;
 		}
 	
-		private class ParallelSortThread extends Thread
+		protected class ParallelSortThread extends ThreadPoolThread
 		{
-			private long left;
-			private long right;
+			protected long left;
+			protected long right;
 		
 			public ParallelSortThread(long left, long right)
 			{
@@ -742,7 +968,7 @@ public class SemiJoinOperator implements Operator, Serializable
 						}
 						long pivotIndex = (long)(new Random().nextDouble() * (right - left) + left);
 						ArrayList<Object> temp = (ArrayList<Object>)inBuffer.get(pivotIndex);
-						inBuffer.update(pivotIndex, inBuffer.get(left));
+						inBuffer.update(pivotIndex, (ArrayList<Object>)inBuffer.get(left));
 						inBuffer.update(left, temp);
 						long lt = left;
 						long gt = right;
@@ -754,14 +980,14 @@ public class SemiJoinOperator implements Operator, Serializable
 							int cmp = compare(temp, v);
 							if (cmp < 0)
 							{
-								inBuffer.update(i, inBuffer.get(lt));
+								inBuffer.update(i, (ArrayList<Object>)inBuffer.get(lt));
 								inBuffer.update(lt, temp);
 								i++;
 								lt++;
 							}
 							else if (cmp > 0)
 							{
-								inBuffer.update(i, inBuffer.get(gt));
+								inBuffer.update(i, (ArrayList<Object>)inBuffer.get(gt));
 								inBuffer.update(gt, temp);
 								gt--;
 							}
@@ -814,7 +1040,7 @@ public class SemiJoinOperator implements Operator, Serializable
 			}
 		}
 	
-		private void doSequentialSort(long left, long right) throws Exception
+		protected void doSequentialSort(long left, long right) throws Exception
 		{
 			if (right <= left)
 			{
@@ -830,14 +1056,14 @@ public class SemiJoinOperator implements Operator, Serializable
 				int cmp = compare(temp, v);
 				if (cmp < 0)
 				{
-					inBuffer.update(i, inBuffer.get(lt));
+					inBuffer.update(i, (ArrayList<Object>)inBuffer.get(lt));
 					inBuffer.update(lt, temp);
 					i++;
 					lt++;
 				}
 				else if (cmp > 0)
 				{
-					inBuffer.update(i, inBuffer.get(gt));
+					inBuffer.update(i, (ArrayList<Object>)inBuffer.get(gt));
 					inBuffer.update(gt, temp);
 					gt--;
 				}
@@ -851,7 +1077,7 @@ public class SemiJoinOperator implements Operator, Serializable
 			doSequentialSort(gt+1, right);
 		}
 	
-		private int compare(ArrayList<Object> lhs, ArrayList<Object> rhs) throws Exception
+		protected int compare(ArrayList<Object> lhs, ArrayList<Object> rhs) throws Exception
 		{
 			int result;
 			int i = 0;
@@ -910,11 +1136,11 @@ public class SemiJoinOperator implements Operator, Serializable
 			return 0;
 		}
 	
-		private long partition(long left, long right, long pivotIndex) throws Exception
+		protected long partition(long left, long right, long pivotIndex) throws Exception
 		{
 			ArrayList<Object> pivotValue = (ArrayList<Object>)inBuffer.get(pivotIndex);
 			Object rightRec = inBuffer.get(right);
-			inBuffer.update(pivotIndex, rightRec);
+			inBuffer.update(pivotIndex, (ArrayList<Object>)rightRec);
 			inBuffer.update(right,  pivotValue);
 	
 			long i = left;
@@ -929,7 +1155,7 @@ public class SemiJoinOperator implements Operator, Serializable
 				if (compareResult == -1)
 				{
 					Object row = inBuffer.get(storeIndex);
-					inBuffer.update(i, row);
+					inBuffer.update(i, (ArrayList<Object>)row);
 					inBuffer.update(storeIndex, temp);
 					storeIndex++;
 					allEqual = false;
@@ -939,7 +1165,7 @@ public class SemiJoinOperator implements Operator, Serializable
 					if (random.nextDouble() < 0.5)
 					{
 						Object row = inBuffer.get(storeIndex);
-						inBuffer.update(i, row);
+						inBuffer.update(i, (ArrayList<Object>)row);
 						inBuffer.update(storeIndex, temp);
 						storeIndex++;
 					}					
@@ -958,17 +1184,17 @@ public class SemiJoinOperator implements Operator, Serializable
 		
 			ArrayList<Object> temp = (ArrayList<Object>)inBuffer.get(storeIndex);
 			rightRec = inBuffer.get(right);
-			inBuffer.update(storeIndex, rightRec);
+			inBuffer.update(storeIndex, (ArrayList<Object>)rightRec);
 			inBuffer.update(right,  temp);
 			return storeIndex;
 		}
 	}
 	
-	private class ProcessThread extends Thread
+	protected class ProcessThread extends ThreadPoolThread
 	{
-		private CNFFilter cnf = null;
-		private Filter first = null;
-		private NLHashThread nlHash = null;
+		protected CNFFilter cnf = null;
+		protected Filter first = null;
+		protected NLHashThread nlHash = null;
 		
 		public ProcessThread()
 		{}
@@ -1019,10 +1245,12 @@ public class SemiJoinOperator implements Operator, Serializable
 						tempC2P.put((String)entry.getValue(), tempC2P.size());
 					}
 				}
+				ArrayList<Object> obj = new ArrayList<Object>(poses.size());
+				//@Parallel
 				while (! (o instanceof DataEndMarker))
 				{
 					ArrayList<Object> lRow = (ArrayList<Object>)o;
-					ArrayList<Object> obj = new ArrayList<Object>();
+					obj.clear();
 					if (cnf == null)
 					{
 						for (int pos2 : poses)
@@ -1035,7 +1263,7 @@ public class SemiJoinOperator implements Operator, Serializable
 					{
 						if (nlHash != null)
 						{
-							ArrayList<Object> key = new ArrayList<Object>();
+							ArrayList<Object> key = new ArrayList<Object>(1);
 							key.add(lRow.get(pos));
 							long hash = 0x0EFFFFFFFFFFFFFFL & nlHash.hash(key);
 							for (ArrayList<Object> rRow : nlHash.getCandidates(hash))
@@ -1062,7 +1290,7 @@ public class SemiJoinOperator implements Operator, Serializable
 						if (cnf == null && inBuffer.contains(obj))
 						{
 							//System.out.println("Call completed successfully");
-							outBuffer.add(lRow);
+							outBuffer.put(lRow);
 							long count = outCount.getAndIncrement();
 							//if (count % 10000 == 0)
 							//{
@@ -1079,7 +1307,7 @@ public class SemiJoinOperator implements Operator, Serializable
 								break;
 							}
 							
-							Thread.sleep(1);
+							Thread.sleep(50);
 						}
 						else
 						{	
@@ -1091,7 +1319,7 @@ public class SemiJoinOperator implements Operator, Serializable
 									ArrayList<Object> rRow = (ArrayList<Object>)orow;
 									if (cnf.passes(lRow, rRow))
 									{
-										outBuffer.add(lRow);
+										outBuffer.put(lRow);
 										long count = outCount.getAndIncrement();
 										//if (count % 10000 == 0)
 										//{
@@ -1112,7 +1340,7 @@ public class SemiJoinOperator implements Operator, Serializable
 									break;
 								}
 								
-								Thread.sleep(1);
+								Thread.sleep(50);
 							}
 							else
 							{
@@ -1122,7 +1350,7 @@ public class SemiJoinOperator implements Operator, Serializable
 									ArrayList<Object> rRow = (ArrayList<Object>)orow;
 									if (cnf.passes(lRow, rRow))
 									{
-										outBuffer.add(lRow);
+										outBuffer.put(lRow);
 										long count = outCount.getAndIncrement();
 										//if (count % 10000 == 0)
 										//{
@@ -1153,8 +1381,118 @@ public class SemiJoinOperator implements Operator, Serializable
 		}
 	}
 	
+	public void nextAll(Operator op) throws Exception
+	{
+		children.get(0).nextAll(op);
+		children.get(1).nextAll(op);
+		Object o = next(op);
+		while (!(o instanceof DataEndMarker))
+		{
+			o = next(op);
+		}
+	}
+	
 	public Object next(Operator op) throws Exception
 	{
+		if (indexAccess)
+		{
+				while (true)
+				{
+					Object o = children.get(0).next(this);
+					if (o instanceof DataEndMarker)
+					{
+						return o;
+					}
+					
+					if (hshm == null)
+					{
+						hshm = getHSHM();
+					}
+					ArrayList<Filter> dynamics = new ArrayList<Filter>(hshm.size());
+					int i = 0;
+					for (HashMap<Filter, Filter> hm : hshm)
+					{
+						Filter f = new ArrayList<Filter>(hm.keySet()).get(0);
+						String leftCol = null;
+						String rightCol = null;
+						if (children.get(0).getCols2Pos().keySet().contains(f.leftColumn()))
+						{
+							leftCol = f.leftColumn();
+							Object leftVal = ((ArrayList<Object>)o).get(children.get(0).getCols2Pos().get(leftCol));
+							String leftString = null;
+							if (leftVal instanceof Integer || leftVal instanceof Long || leftVal instanceof Double)
+							{
+								leftString = leftVal.toString();
+							}
+							else if (leftVal instanceof String)
+							{
+								leftString = "'" + leftVal + "'";
+							}	
+							else if (leftVal instanceof Date)
+							{
+								leftString = sdf.format(leftVal);
+							}
+							Filter f2 = new Filter(leftString, f.op(), f.rightColumn());
+							dynamics.add(f2);
+						}
+						else
+						{
+							rightCol = f.rightColumn();
+							Object leftVal = ((ArrayList<Object>)o).get(children.get(0).getCols2Pos().get(rightCol));
+							String leftString = null;
+							if (leftVal instanceof Integer || leftVal instanceof Long || leftVal instanceof Double)
+							{
+								leftString = leftVal.toString();
+							}
+							else if (leftVal instanceof String)
+							{
+								leftString = "'" + leftVal + "'";
+							}
+							else if (leftVal instanceof Date)
+							{
+								leftString = sdf.format(leftVal);
+							}	
+							Filter f2 = new Filter(f.leftColumn(), f.op(), leftString);
+							dynamics.add(f2);
+						}
+					
+						i++;
+					}
+
+					synchronized(this)
+					{
+						if (doReset)
+						{
+							children.get(1).reset();
+						}
+						else
+						{
+							doReset = true;
+						}
+					
+						for (Index index : dynamicIndexes)
+						{
+							index.setDelayedConditions(dynamics);
+						}
+				
+						boolean retval = false;
+						Object o2 = children.get(1).next(this);
+						if (!(o2 instanceof DataEndMarker))
+						{
+							retval = true;
+						}
+					
+						Operator c1 = children.get(1);
+						c1.nextAll(SemiJoinOperator.this);
+					
+						if (retval)
+						{
+							return o;
+						}
+					}
+				}
+		}
+		
 		Object o;
 		o = outBuffer.take();
 		
@@ -1182,7 +1520,10 @@ public class SemiJoinOperator implements Operator, Serializable
 			child.close();
 		}
 		
-		inBuffer.close();
+		if (inBuffer != null)
+		{
+			inBuffer.close();
+		}
 	}
 
 	public void registerParent(Operator op) throws Exception
@@ -1210,5 +1551,234 @@ public class SemiJoinOperator implements Operator, Serializable
 	@Override
 	public TreeMap<Integer, String> getPos2Col() {
 		return pos2Col;
+	}
+	
+	public boolean usesHash()
+	{
+		if (cols.size() > 0)
+		{
+			return true;
+		}
+		
+		for (HashMap<Filter, Filter> filters : f)
+		{
+			if (filters.size() == 1)
+			{
+				for (Filter filter : filters.keySet())
+				{
+					if (filter.op().equals("E") && filter.leftIsColumn() && filter.rightIsColumn())
+					{
+						return true;
+					}
+				}
+			}
+		}
+		
+		return false;
+	}
+	
+	public ArrayList<Boolean> sortOrders()
+	{
+		if (cols.size() > 0)
+		{
+			return null;
+		}
+		
+		boolean isSort = false;
+
+		for (HashMap<Filter, Filter> filters : f)
+		{
+			if (filters.size() == 1)
+			{
+				for (Filter filter : filters.keySet())
+				{
+					if (filter.op().equals("G") || filter.op().equals("GE") || filter.op().equals("L") || filter.op().equals("LE"))
+					{
+						if (filter.leftIsColumn() && filter.rightIsColumn())
+						{
+							String vStr;
+							boolean vBool;
+							if (filter.op().equals("G") || filter.op().equals("GE"))
+							{
+								vStr = filter.rightColumn();
+								vBool = true;
+								//System.out.println("VBool set to true");
+							}
+							else
+							{
+								vStr = filter.rightColumn();
+								vBool = false;
+								//System.out.println("VBool set to false");
+							}
+							
+							try
+							{
+								int pos = children.get(1).getCols2Pos().get(vStr);
+							}
+							catch(Exception e)
+							{
+								//vStr = filter.leftColumn();
+								vBool = !vBool;
+								//pos = children.get(1).getCols2Pos().get(vStr);
+							}
+							
+							ArrayList<Boolean> retval = new ArrayList<Boolean>(1);
+							retval.add(vBool);
+							return retval;
+						}
+					}
+					else if (filter.op().equals("E") && filter.leftIsColumn() && filter.rightIsColumn())
+					{
+						return null;
+					}
+				}
+			}
+		}
+		
+		return null;
+	}
+	
+	public ArrayList<String> sortKeys()
+	{
+		if (cols.size() > 0)
+		{
+			return null;
+		}
+		
+		boolean isSort = false;
+
+		for (HashMap<Filter, Filter> filters : f)
+		{
+			if (filters.size() == 1)
+			{
+				for (Filter filter : filters.keySet())
+				{
+					if (filter.op().equals("G") || filter.op().equals("GE") || filter.op().equals("L") || filter.op().equals("LE"))
+					{
+						if (filter.leftIsColumn() && filter.rightIsColumn())
+						{
+							String vStr;
+							if (filter.op().equals("G") || filter.op().equals("GE"))
+							{
+								vStr = filter.rightColumn();
+								//vBool = true;
+								//System.out.println("VBool set to true");
+							}
+							else
+							{
+								vStr = filter.rightColumn();
+								//vBool = false;
+								//System.out.println("VBool set to false");
+							}
+							
+							try
+							{
+								int pos = children.get(1).getCols2Pos().get(vStr);
+							}
+							catch(Exception e)
+							{
+								vStr = filter.leftColumn();
+								//vBool = !vBool;
+								//pos = children.get(1).getCols2Pos().get(vStr);
+							}
+							
+							ArrayList<String> retval = new ArrayList<String>(1);
+							retval.add(vStr);
+							return retval;
+						}
+					}
+					else if (filter.op().equals("E") && filter.leftIsColumn() && filter.rightIsColumn())
+					{
+						return null;
+					}
+				}
+			}
+		}
+		
+		return null;
+	}
+	
+	public boolean usesSort()
+	{
+		if (cols.size() > 0)
+		{
+			return false;
+		}
+		
+		boolean isSort = false;
+		
+		for (HashMap<Filter, Filter> filters : f)
+		{
+			if (filters.size() == 1)
+			{
+				for (Filter filter : filters.keySet())
+				{
+					if (filter.op().equals("G") || filter.op().equals("GE") || filter.op().equals("L") || filter.op().equals("LE"))
+					{
+						if (filter.leftIsColumn() && filter.rightIsColumn())
+						{
+							isSort = true;
+						}
+					}
+					else if (filter.op().equals("E") && filter.leftIsColumn() && filter.rightIsColumn())
+					{
+						return false;
+					}
+				}
+			}
+		}
+		
+		return isSort;
+	}
+	
+	public ArrayList<String> getJoinForChild(Operator op)
+	{
+		if (cols.size() > 0)
+		{
+			if (op.getCols2Pos().keySet().containsAll(cols))
+			{
+				return new ArrayList<String>(cols);
+			}
+			else
+			{
+				return new ArrayList<String>(op.getCols2Pos().keySet());
+			}
+		}
+		
+		Filter x = null;
+		for (HashMap<Filter, Filter> filters : f)
+		{
+			if (filters.size() == 1)
+			{
+				for (Filter filter : filters.keySet())
+				{
+					if (filter.op().equals("E"))
+					{
+						if (filter.leftIsColumn() && filter.rightIsColumn())
+						{
+							x = filter;
+						}
+					}
+					
+					break;
+				}
+			}
+			
+			if (x != null)
+			{
+				break;
+			}
+		}
+		
+		if (op.getCols2Pos().keySet().contains(x.leftColumn()))
+		{
+			ArrayList<String> retval = new ArrayList<String>(1);
+			retval.add(x.leftColumn());
+			return retval;
+		}
+		
+		ArrayList<String> retval = new ArrayList<String>(1);
+		retval.add(x.rightColumn());
+		return retval;
 	}
 }

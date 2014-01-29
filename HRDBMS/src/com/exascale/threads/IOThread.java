@@ -6,8 +6,8 @@ import com.exascale.managers.HRDBMSWorker;
 
 public class IOThread extends HRDBMSThread
 {
-	private Block[] bs;
-	private long txnum;
+	protected Block[] bs;
+	protected long txnum;
 	
 	public IOThread(Block b, long txnum)
 	{

@@ -4,8 +4,8 @@ import java.util.Comparator;
 import java.util.concurrent.atomic.AtomicReference;  
   
 public class AtomicDouble extends Number implements Comparable<AtomicDouble> {  
-    private static final long serialVersionUID = -2419445336101038676L;  
-    private AtomicReference<Double> value;  
+    protected static final long serialVersionUID = -2419445336101038676L;  
+    protected AtomicReference<Double> value;  
   
     // Constructors  
     public AtomicDouble() {  

@@ -7,9 +7,9 @@ import java.util.Properties;
 
 public class HParms extends Properties 
 {
-	private static HParms retval = null;
+	protected static HParms retval = null;
 	
-	private HParms(HParmsDefaults defaults)
+	protected HParms(HParmsDefaults defaults)
 	{
 		super(defaults);
 	}

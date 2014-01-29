@@ -15,17 +15,32 @@ import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
 public class SubstringOperator implements Operator, Serializable
 {
-	private Operator child;
-	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
-	private String col;
-	private String name;
-	private int colPos;
-	private MetaData meta;
-	private int start;
-	private int end;
+	protected Operator child;
+	protected Operator parent;
+	protected HashMap<String, String> cols2Types;
+	protected HashMap<String, Integer> cols2Pos;
+	protected TreeMap<Integer, String> pos2Col;
+	protected String col;
+	protected String name;
+	protected int colPos;
+	protected MetaData meta;
+	protected int start;
+	protected int end;
+	protected int node;
+	
+	public void reset()
+	{
+		child.reset();
+	}
+	
+	public void setChildPos(int pos)
+	{
+	}
+	
+	public int getChildPos()
+	{
+		return 0;
+	}
 	
 	public SubstringOperator(String col, int start, int end, String name, MetaData meta)
 	{
@@ -36,6 +51,23 @@ public class SubstringOperator implements Operator, Serializable
 		this.end = end;
 	}
 	
+	public SubstringOperator clone()
+	{
+		SubstringOperator retval = new SubstringOperator(col, start, end, name, meta);
+		retval.node = node;
+		return retval;
+	}
+	
+	public int getNode()
+	{
+		return node;
+	}
+	
+	public void setNode(int node)
+	{
+		this.node = node;
+	}
+	
 	public String getOutputCol()
 	{
 		return name;
@@ -43,7 +75,7 @@ public class SubstringOperator implements Operator, Serializable
 	
 	public ArrayList<String> getReferences()
 	{
-		ArrayList<String> retval = new ArrayList<String>();
+		ArrayList<String> retval = new ArrayList<String>(1);
 		retval.add(col);
 		return retval;
 	}
@@ -60,7 +92,7 @@ public class SubstringOperator implements Operator, Serializable
 	
 	public ArrayList<Operator> children()
 	{
-		ArrayList<Operator> retval = new ArrayList<Operator>();
+		ArrayList<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
@@ -74,6 +106,16 @@ public class SubstringOperator implements Operator, Serializable
 	public void start() throws Exception 
 	{
 		child.start();
+	}
+	
+	public void nextAll(Operator op) throws Exception
+	{
+		child.nextAll(op);
+		Object o = next(op);
+		while (!(o instanceof DataEndMarker))
+		{
+			o = next(op);
+		}
 	}
 
 	@Override
@@ -118,13 +160,16 @@ public class SubstringOperator implements Operator, Serializable
 		{
 			child = op;
 			child.registerParent(this);
-			cols2Types = (HashMap<String, String>)child.getCols2Types().clone();
-			cols2Types.put(name, "CHAR");
-			cols2Pos = (HashMap<String, Integer>)child.getCols2Pos().clone();
-			cols2Pos.put(name, cols2Pos.size());
-			pos2Col = (TreeMap<Integer, String>)child.getPos2Col().clone();
-			pos2Col.put(pos2Col.size(), name);
-			colPos = cols2Pos.get(col);
+			if (child.getCols2Types() != null)
+			{
+				cols2Types = (HashMap<String, String>)child.getCols2Types().clone();
+				cols2Types.put(name, "CHAR");
+				cols2Pos = (HashMap<String, Integer>)child.getCols2Pos().clone();
+				cols2Pos.put(name, cols2Pos.size());
+				pos2Col = (TreeMap<Integer, String>)child.getPos2Col().clone();
+				pos2Col.put(pos2Col.size(), name);
+				colPos = cols2Pos.get(col);
+			}
 		}
 		else
 		{

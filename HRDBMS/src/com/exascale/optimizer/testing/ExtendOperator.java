@@ -12,28 +12,61 @@ import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
 public class ExtendOperator implements Operator, Serializable
 {
-	private Operator child;
-	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
-	private String prefix;
-	private MetaData meta;
-	private String name;
-	private boolean startDone = false;
-	private boolean closeDone = false;
+	protected Operator child;
+	protected Operator parent;
+	protected HashMap<String, String> cols2Types;
+	protected HashMap<String, Integer> cols2Pos;
+	protected TreeMap<Integer, String> pos2Col;
+	protected String prefix;
+	protected MetaData meta;
+	protected String name;
+	protected int node;
+	FastStringTokenizer tokens;
+	
+	public void reset()
+	{
+		child.reset();
+	}
+	
+	public void setChildPos(int pos)
+	{
+	}
+	
+	public int getChildPos()
+	{
+		return 0;
+	}
 	
 	public ExtendOperator(String prefix, String name, MetaData meta)
 	{
 		this.prefix = prefix;
 		this.meta = meta;
 		this.name = name;
+		this.tokens = new FastStringTokenizer(prefix, ",", false);
+	}
+	
+	public ExtendOperator clone()
+	{
+		ExtendOperator retval = new ExtendOperator(prefix, name, meta);
+		retval.node = node;
+		retval.tokens = tokens.clone();
+		return retval;
+	}
+	
+	public int getNode()
+	{
+		return node;
+	}
+	
+	public void setNode(int node)
+	{
+		this.node = node;
 	}
 	
 	public ArrayList<String> getReferences()
 	{
 		ArrayList<String> retval = new ArrayList<String>();
-		StringTokenizer tokens = new StringTokenizer(prefix, ",", false);
+		FastStringTokenizer tokens = new FastStringTokenizer(prefix, ",", false);
 		while (tokens.hasMoreTokens())
 		{
 			String temp = tokens.nextToken();
@@ -63,26 +96,33 @@ public class ExtendOperator implements Operator, Serializable
 	
 	public ArrayList<Operator> children()
 	{
-		ArrayList<Operator> retval = new ArrayList<Operator>();
+		ArrayList<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
 	
 	public String toString()
 	{
-		return "ExtendOperator";
+		return "ExtendOperator: " + name + "=" + prefix;
 	}
 	
 	@Override
-	public synchronized void start() throws Exception 
+	public void start() throws Exception 
 	{
-		if (!startDone)
+		child.start();
+	}
+	
+	public void nextAll(Operator op) throws Exception
+	{
+		child.nextAll(op);
+		Object o = next(op);
+		while (!(o instanceof DataEndMarker))
 		{
-			startDone = true;
-			child.start();
+			o = next(op);
 		}
 	}
 
+	//@?Parallel
 	@Override
 	public Object next(Operator op) throws Exception 
 	{
@@ -98,13 +138,9 @@ public class ExtendOperator implements Operator, Serializable
 	}
 
 	@Override
-	public synchronized void close() throws Exception 
+	public void close() throws Exception 
 	{
-		if (!closeDone)
-		{
-			closeDone = true;
-			child.close();
-		}
+		child.close();
 	}
 	
 	public void removeChild(Operator op)
@@ -128,12 +164,15 @@ public class ExtendOperator implements Operator, Serializable
 		{
 			child = op;
 			child.registerParent(this);
-			cols2Types = (HashMap<String, String>)child.getCols2Types().clone();
-			cols2Types.put(name, "FLOAT");
-			cols2Pos = (HashMap<String, Integer>)child.getCols2Pos().clone();
-			cols2Pos.put(name, cols2Pos.size());
-			pos2Col = (TreeMap<Integer, String>)child.getPos2Col().clone();
-			pos2Col.put(pos2Col.size(), name);
+			if (child.getCols2Types() != null)
+			{
+				cols2Types = (HashMap<String, String>)child.getCols2Types().clone();
+				cols2Types.put(name, "FLOAT");
+				cols2Pos = (HashMap<String, Integer>)child.getCols2Pos().clone();
+				cols2Pos.put(name, cols2Pos.size());
+				pos2Col = (TreeMap<Integer, String>)child.getPos2Col().clone();
+				pos2Col.put(pos2Col.size(), name);
+			}
 		}
 		else
 		{
@@ -168,14 +207,14 @@ public class ExtendOperator implements Operator, Serializable
 		return pos2Col;
 	}
 
-	private Double parsePrefixDouble(String prefix, ArrayList<Object> row)
+	protected Double parsePrefixDouble(String prefix, ArrayList<Object> row)
 	{
 		Stack<String> parseStack = new Stack<String>();
 		Stack<Object> execStack = new Stack<Object>();
-		StringTokenizer tokens = new StringTokenizer(prefix, ",", false);
-		while (tokens.hasMoreTokens())
+		
+		for (String token : tokens.allTokens())
 		{
-			parseStack.push(tokens.nextToken());
+			parseStack.push(token);
 		}
 		
 		while (parseStack.size() > 0)
@@ -212,7 +251,18 @@ public class ExtendOperator implements Operator, Serializable
 				{
 					if (Character.isLetter(temp.charAt(0)) || (temp.charAt(0) == '_'))
 					{
-						Object field = row.get(cols2Pos.get(temp));
+						Object field = null;
+						try
+						{
+							field = row.get(cols2Pos.get(temp));
+						}
+						catch(Exception e)
+						{
+							e.printStackTrace();
+							System.out.println("Error getting column " + temp + " from row " + row);
+							System.out.println("Cols2Pos = " + cols2Pos);
+							System.exit(1);
+						}
 						if (field instanceof Long)
 						{
 							execStack.push(new Double(((Long)field).longValue()));
@@ -224,6 +274,13 @@ public class ExtendOperator implements Operator, Serializable
 						else if (field instanceof Double)
 						{
 							execStack.push(field);
+						}
+						else
+						{
+							System.out.println("Unknown type in ExtendOperator: " + field.getClass());
+							System.out.println("Row: " + row);
+							System.out.println("Cols2Pos: " + cols2Pos);
+							System.exit(1);
 						}
 					}
 					else

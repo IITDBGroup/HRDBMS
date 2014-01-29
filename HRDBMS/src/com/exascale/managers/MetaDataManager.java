@@ -6,12 +6,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Vector;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-
+import com.exascale.optimizer.testing.*;
 import com.exascale.tables.DataType;
 import com.exascale.tables.InternalResultSet;
 import com.exascale.tables.Plan;
-import com.exascale.tables.QueueEndMarker;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.HRDBMSThread;
 
@@ -46,14 +44,14 @@ public class MetaDataManager extends HRDBMSThread
 		return;
 	}
 	
-	/*private static InternalResultSet catalogQuery(Transaction tx, String sql, Object... args)
+	/*protected static InternalResultSet catalogQuery(Transaction tx, String sql, Object... args)
 	{
 		Plan p = PlanCacheManager.checkPlanCache(sql);
 		p.setArgs(args);
-		LinkedBlockingQueue q = XAManager.runWithRS(p, tx);
+		BufferedLinkedBlockingQueue q = XAManager.runWithRS(p, tx);
 		Vector<Vector<Object>> data = new Vector<Vector<Object>>();
 		Object o = q.take();
-		while (!(o instanceof QueueEndMarker))
+		while (!(o instanceof DataEndMarker))
 		{
 			if (o instanceof Exception)
 			{

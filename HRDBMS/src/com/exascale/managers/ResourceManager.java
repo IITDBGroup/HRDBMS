@@ -8,8 +8,8 @@ import com.exascale.threads.HRDBMSThread;
 
 public class ResourceManager extends HRDBMSThread
 {
-	private static int percent;
-	private static long sleep;
+	protected static int percent;
+	protected static long sleep;
 	
 	public ResourceManager()
 	{
@@ -40,7 +40,7 @@ public class ResourceManager extends HRDBMSThread
 		}
 	}
 	
-	private void lowMem()
+	protected void lowMem()
 	{
 		//PlanCacheManager.reduce(); TODO
 		System.gc();

@@ -2,8 +2,8 @@ package com.exascale.tables;
 
 public class FreeSpace 
 {
-	private int startOffset;
-	private int endOffset;
+	protected int startOffset;
+	protected int endOffset;
 	
 	public FreeSpace(int start, int end)
 	{

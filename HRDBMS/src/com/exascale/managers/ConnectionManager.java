@@ -6,15 +6,15 @@ import java.io.UnsupportedEncodingException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
+import com.exascale.optimizer.testing.*;
 
 import com.exascale.threads.ConnectionWorker;
 import com.exascale.threads.HRDBMSThread;
 
 public class ConnectionManager extends HRDBMSThread
 {
-	private static BlockingQueue<String> in = new LinkedBlockingQueue<String>();
-	private static boolean accepting = true;
+	protected static BufferedLinkedBlockingQueue in = new BufferedLinkedBlockingQueue();
+	protected static boolean accepting = true;
 	
 	public ConnectionManager()
 	{
@@ -23,7 +23,7 @@ public class ConnectionManager extends HRDBMSThread
 		this.setWait(true);
 	}
 	
-	public static BlockingQueue<String> getInputQueue()
+	public static BufferedLinkedBlockingQueue getInputQueue()
 	{
 		return in;
 	}
@@ -36,7 +36,7 @@ public class ConnectionManager extends HRDBMSThread
 			HRDBMSWorker.logger.info("Connection Manager initialization complete.");
 			while (true)
 			{
-				String msg = in.poll();
+				String msg = (String)in.peek();
 				if (msg != null)
 				{
 					processMessage(msg);
@@ -62,7 +62,7 @@ public class ConnectionManager extends HRDBMSThread
 		}
 	}
 	
-	private void processMessage(String msg)
+	protected void processMessage(String msg)
 	{
 		if (msg.equals("STOP ACCEPT"))
 		{
@@ -92,13 +92,13 @@ public class ConnectionManager extends HRDBMSThread
 		return result;
 	}
 	
-	private static int bytesToInt(byte[] val)
+	protected static int bytesToInt(byte[] val)
 	{
 		int x = java.nio.ByteBuffer.wrap(val).getInt();
 		return x;
 	}
 	
-	private static String rmiCall(byte[] data, String host) throws Exception
+	protected static String rmiCall(byte[] data, String host) throws Exception
 	{
 		int port = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"));
 		HRDBMSWorker.logger.debug("In rmiCall(), creating connection to " + host + " on port " + port);
@@ -173,7 +173,7 @@ public class ConnectionManager extends HRDBMSThread
 		}
 	}
 	
-	private static byte[] intToBytes(int val)
+	protected static byte[] intToBytes(int val)
 	{
 		byte[] buff = new byte[4];
 		buff[0] = (byte)(val >> 24);
@@ -183,7 +183,7 @@ public class ConnectionManager extends HRDBMSThread
 		return buff;
 	}
 	
-	private static byte[] formCall2Args(String cmd, byte[] arg1, byte[] arg2) throws UnsupportedEncodingException
+	protected static byte[] formCall2Args(String cmd, byte[] arg1, byte[] arg2) throws UnsupportedEncodingException
 	{
 		byte[] cmdBytes = cmd.getBytes("UTF-8");
 		byte[] retval = new byte[cmdBytes.length + arg1.length + arg2.length];

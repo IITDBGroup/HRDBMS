@@ -12,7 +12,7 @@ import java.util.LinkedList;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.BufferedLinkedBlockingQueue;
 
 import com.exascale.filesystem.Block;
 import com.exascale.logging.CommitLogRec;
@@ -28,11 +28,11 @@ import com.exascale.threads.HRDBMSThread;
 
 public class LogManager extends HRDBMSThread
 {
-	private static Long last_lsn;
+	protected static Long last_lsn;
 	public static Map<String, FileChannel> openFiles = new HashMap<String, FileChannel>();
-	private static String filename;
+	protected static String filename;
 	public static ConcurrentHashMap<String, LinkedList<LogRec>> logs = new ConcurrentHashMap<String, LinkedList<LogRec>>();
-	private static BlockingQueue<String> in = new LinkedBlockingQueue<String>();
+	protected static BlockingQueue<String> in = new BufferedLinkedBlockingQueue<String>();
 	public static Boolean noArchive = false;
 	public static int openIters = 0;
 
@@ -144,7 +144,7 @@ public class LogManager extends HRDBMSThread
 		}
 	}
 	
-	private void processMessage(String cmd)
+	protected void processMessage(String cmd)
 	{
 		if (cmd.startsWith("ADD LOG"))
 		{
@@ -159,7 +159,7 @@ public class LogManager extends HRDBMSThread
 		}
 	}
 	
-	private void addLog(String cmd)
+	protected void addLog(String cmd)
 	{
 		String fn = cmd.substring(8);
 		File log = new File(fn);
@@ -230,12 +230,12 @@ public class LogManager extends HRDBMSThread
 	
 	public static long write(LogRec rec)
 	{
-		rec.setTimeStamp(System.currentTimeMillis());
 		return write(rec, filename);
 	}
 	
 	public static long write(LogRec rec, String fn)
 	{
+		rec.setTimeStamp(System.currentTimeMillis());
 		LinkedList<LogRec> list = logs.get(fn);
 		long retval;
 		retval = getLSN();
@@ -270,32 +270,32 @@ public class LogManager extends HRDBMSThread
 	public static void flush(long lsn, String fn) throws IOException
 	{
 		LinkedList<LogRec> list = logs.get(fn);
-		synchronized(list)
+		synchronized(noArchive)
 		{
-			for (LogRec rec : list)
+			synchronized(list)
 			{
-				if (rec.lsn() <= lsn)
+				FileChannel fc = getFile(fn);
+				for (LogRec rec : list)
 				{
-					try
+					if (rec.lsn() <= lsn)
 					{
-						FileChannel fc = getFile(fn);
-						synchronized(fc)
-						{
-							fc.position(fc.size());
-							ByteBuffer size = ByteBuffer.allocate(4);
-							size.putInt(rec.size());
-							size.position(0);
-							rec.buffer().position(0);
-							fc.write(size);
-							fc.write(rec.buffer());
-							size.position(0);
-							fc.write(size);
-						}
-						logs.get(fn).remove(rec);
+						try
+						{	
+							synchronized(fc)
+							{
+								fc.position(fc.size());
+								ByteBuffer size = ByteBuffer.allocate(4);
+								size.putInt(rec.size());
+								size.position(0);
+								rec.buffer().position(0);
+								fc.write(size);
+								fc.write(rec.buffer());
+								size.position(0);
+								fc.write(size);
+							}
+							logs.get(fn).remove(rec);
 						
-						if (fc.size() > Long.parseLong(HRDBMSWorker.getHParms().getProperty("target_log_size")))
-						{
-							synchronized(noArchive)
+							if (fc.size() > Long.parseLong(HRDBMSWorker.getHParms().getProperty("target_log_size")))
 							{
 								if (!noArchive)
 								{
@@ -303,21 +303,21 @@ public class LogManager extends HRDBMSThread
 								}
 							}
 						}
+						catch(IOException e)
+						{
+							throw(e);
+						}
 					}
-					catch(IOException e)
+					else
 					{
-						throw(e);
+						break;
 					}
-				}
-				else
-				{
-					break;
 				}
 			}
 		}
 	}
 	
-	private static void runArchive(String fn)
+	protected static void runArchive(String fn)
 	{
 		HRDBMSWorker.addThread(new ArchiverThread(fn));
 	}
@@ -447,7 +447,7 @@ public class LogManager extends HRDBMSThread
 			}
 		
 			((ForwardLogIterator)iter2).close();
-			LogRec rec = new NQCheckLogRec(new HashSet<Long>());
+			LogRec rec = new NQCheckLogRec(new ConcurrentHashMap<Long, Long>());
 			write(rec, fn);
 			flush(rec.lsn(), fn);
 		}
