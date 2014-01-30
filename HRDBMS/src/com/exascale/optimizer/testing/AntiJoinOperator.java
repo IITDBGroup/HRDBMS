@@ -1505,7 +1505,6 @@ public class AntiJoinOperator implements Operator, Serializable
 					}
 				}
 		}
-		
 		Object o;
 		o = outBuffer.take();
 		

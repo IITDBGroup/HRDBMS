@@ -1492,7 +1492,6 @@ public class SemiJoinOperator implements Operator, Serializable
 					}
 				}
 		}
-		
 		Object o;
 		o = outBuffer.take();
 		

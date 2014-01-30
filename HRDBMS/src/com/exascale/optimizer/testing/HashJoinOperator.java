@@ -740,6 +740,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 					}
 				}
 		}
+		
 		Object o;
 		o = outBuffer.take();
 		
