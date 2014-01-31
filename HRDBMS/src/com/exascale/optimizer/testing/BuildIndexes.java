@@ -13,6 +13,7 @@ import java.util.StringTokenizer;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import com.exascale.threads.ReadThread;
 
@@ -60,6 +61,7 @@ public class BuildIndexes
 		
 		public void run()
 		{
+			System.out.println("Starting build of " + indexFile);
 			try
 			{
 				BufferedRandomAccessFile out = new BufferedRandomAccessFile(indexFile, "rw");
@@ -84,7 +86,7 @@ public class BuildIndexes
 				int i = 0;
 				while (i < Runtime.getRuntime().availableProcessors())
 				{
-					ReadThread rt = new ReadThread(file, keys, cols2Pos, unique2RIDS);
+					ReadThread rt = new ReadThread(file, keys, cols2Pos, unique2RIDS, indexFile, tableName);
 					rt.start();
 					threads.add(rt);
 					i++;
@@ -105,6 +107,7 @@ public class BuildIndexes
 				while (true)
 				{
 					i = 0;
+					int size = unique2RIDS.size();
 					for (Map.Entry entry : unique2RIDS.entrySet())
 					{
 						if (i % BRANCH_FACTOR == 0)
@@ -125,6 +128,11 @@ public class BuildIndexes
 						outLine.append("\n");
 						out.write(outLine.toString().getBytes("UTF-8"));
 						i++;
+						
+						if (i % 1000000 == 0)
+						{
+							System.out.println("Wrote " + i + "/" + size + " entries to index " + indexFile);
+						}
 					}
 		
 					out.write("\u0000\n".getBytes("UTF-8"));
@@ -158,17 +166,26 @@ public class BuildIndexes
 	
 	private static class ReadThread extends ThreadPoolThread
 	{
+		protected static ConcurrentHashMap<String, AtomicLong> readCounts = new ConcurrentHashMap<String, AtomicLong>();
+		protected static MetaData meta = new MetaData();
 		protected RandomAccessFile file;
 		protected ArrayList<String> keys;
 		protected HashMap<String, Integer> cols2Pos;
 		protected ConcurrentSkipListMap<String[], ArrayListLong> unique2RIDS;
+		protected String indexFile;
+		protected String table;
+		protected long tableCount;
 		
-		public ReadThread(RandomAccessFile file, ArrayList<String> keys, HashMap<String, Integer> cols2Pos, ConcurrentSkipListMap<String[], ArrayListLong> unique2RIDS)
+		public ReadThread(RandomAccessFile file, ArrayList<String> keys, HashMap<String, Integer> cols2Pos, ConcurrentSkipListMap<String[], ArrayListLong> unique2RIDS, String indexFile, String table)
 		{
 			this.file = file;
 			this.keys = keys;
 			this.cols2Pos = cols2Pos;
 			this.unique2RIDS = unique2RIDS;
+			this.indexFile = indexFile;
+			this.table = table;
+			readCounts.putIfAbsent(indexFile, new AtomicLong(0));
+			tableCount = meta.getTableCard("TPCH", table);
 		}
 		
 		public void run()
@@ -206,9 +223,10 @@ public class BuildIndexes
 					ArrayListLong prev = unique2RIDS.putIfAbsent(key, rid);
 					if (prev == null)
 					{
-						if ((rt.freeMemory() * 1.0) / (rt.maxMemory() * 1.0) < 0)
+						long count = readCounts.get(indexFile).getAndIncrement();
+						if (count % 1000000 == 0)
 						{
-							//offload
+							System.out.println("Read " + count + "/" + tableCount + " rows for building " + indexFile);
 						}
 						continue;
 					}
@@ -217,6 +235,11 @@ public class BuildIndexes
 					synchronized(rid)
 					{
 						rid.add(RID);
+					}
+					long count = readCounts.get(indexFile).getAndIncrement();
+					if (count % 1000000 == 0)
+					{
+						System.out.println("Read " + count + "/" + tableCount + " rows for building " + indexFile);
 					}
 				}
 			}
