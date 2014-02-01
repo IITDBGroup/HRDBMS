@@ -381,6 +381,11 @@ public class ResourceManager extends ThreadPoolThread
 	//	System.gc(); 
 		while (lowMem())
 		{	
+			new CleanInternThread(internIntMap).start();
+			new CleanInternThread(internLongMap).start();
+			new CleanInternThread(internDoubleMap).start();
+			new CleanInternThread(internStringMap).start();
+			new CleanInternThread(internDateMap).start();
 			ArrayList<ThreadPoolThread> threads = new ArrayList<ThreadPoolThread>(collections.size());
 			///System.out.println(((Runtime.getRuntime().freeMemory() + Runtime.getRuntime().maxMemory() - Runtime.getRuntime().totalMemory()) * 100.0) / (Runtime.getRuntime().maxMemory() * 1.0) + "% free");
 			int i = 0;
