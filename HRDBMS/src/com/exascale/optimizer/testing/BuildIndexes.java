@@ -27,20 +27,33 @@ public class BuildIndexes
 		new ResourceManager().start();
 		IndexThread it = null;
 		it = new IndexThread("./xp_type.indx", "./part.tbl", "PART", "P_TYPE", "P_SIZE");
+		it.start();
 		it = new IndexThread("./xp_size.indx", "./part.tbl", "PART", "P_SIZE");
+		it.start();
 		it = new IndexThread("./xc_mktsegment.indx", "./customer.tbl", "CUSTOMER", "C_MKTSEGMENT");
+		it.start();
 		it = new IndexThread("./xo_orderdate.indx", "./orders.tbl", "ORDERS", "O_ORDERDATE");
+		it.start();
 		it = new IndexThread("./xl_shipdate.indx", "./lineitem.tbl", "LINEITEM", "L_SHIPDATE", "L_EXTENDEDPRICE", "L_QUANTITY", "L_DISCOUNT", "L_SUPPKEY");
+		it.start();
 		it = new IndexThread("./xp_name.indx", "./part.tbl", "PART", "P_NAME");
+		it.start();
 		it = new IndexThread("./xp_container.indx", "./part.tbl", "PART", "P_CONTAINER", "P_BRAND", "P_SIZE");
+		it.start();
 		it = new IndexThread("./xl_receiptdate.indx", "./lineitem.tbl", "LINEITEM", "L_RECEIPTDATE", "L_SHIPMODE", "L_SHIPINSTRUCT");
+		it.start();
 		it = new IndexThread("./xs_comment.indx", "./supplier.tbl", "SUPPLIER", "S_COMMENT");
+		it.start();
 		it = new IndexThread("./xps_partkey.indx", "./partsupp.tbl", "PARTSUPP", "PS_PARTKEY", "PS_SUPPKEY");
+		it.start();
 		it = new IndexThread("./xl_orderkey.indx", "./lineitem.tbl", "LINEITEM", "L_ORDERKEY", "L_SUPPKEY");
+		it.start();
 		it = new IndexThread("./xl_partkey.indx", "./lineitem.tbl", "LINEITEM", "L_PARTKEY");
+		it.start();
 		it = new IndexThread("./xo_custkey.indx", "./orders.tbl", "ORDERS", "O_CUSTKEY");
+		it.start();
 		it = new IndexThread("./xs_suppkey.indx", "./supplier.tbl", "SUPPLIER", "S_SUPPKEY");
-		System.exit(0);
+		it.start();
 	}
 	
 	private static class IndexThread extends ThreadPoolThread
@@ -185,7 +198,7 @@ public class BuildIndexes
 			this.indexFile = indexFile;
 			this.table = table;
 			readCounts.putIfAbsent(indexFile, new AtomicLong(0));
-			tableCount = meta.getTableCard("TPCH", table);
+			tableCount = meta.getTableCard("TPCH", table) / (meta.getNumDevices() * meta.getNumNodes());
 		}
 		
 		public void run()

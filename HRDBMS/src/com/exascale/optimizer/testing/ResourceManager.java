@@ -74,6 +74,11 @@ public class ResourceManager extends ThreadPoolThread
     
     public static String internString(String in)
 	{
+    	if (in == null)
+    	{
+    		return null;
+    	}
+    	
 		if (!internStringMap.containsKey(in))
 		{
 			internStringMap.put(in, in);
@@ -87,6 +92,10 @@ public class ResourceManager extends ThreadPoolThread
     
     public static Long internLong(Long in)
 	{
+    	if (in == null)
+    	{
+    		return null;
+    	}
 		if (!internLongMap.containsKey(in))
 		{
 			internLongMap.put(in, in);
