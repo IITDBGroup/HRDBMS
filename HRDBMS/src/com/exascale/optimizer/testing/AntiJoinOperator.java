@@ -769,7 +769,7 @@ public class AntiJoinOperator implements Operator, Serializable
 						}
 						else
 						{
-							buckets.add(ResourceManager.newDiskBackedHashMap(false, rightChildCard));
+							buckets.add(ResourceManager.newDiskBackedHashMap(false, rightChildCard / buckets.size()));
 							DiskBackedHashMap bucket = buckets.get(i);
 							o = bucket.putIfAbsent(hash, row);
 						}
