@@ -422,6 +422,29 @@ public class ResourceManager extends ThreadPoolThread
 		}
 	}
 	
+	private static class CleanInternThread extends ThreadPoolThread
+	{
+		private ConcurrentHashMap map;
+		
+		public CleanInternThread(ConcurrentHashMap map)
+		{
+			this.map = map;
+		}
+		
+		public void run()
+		{
+			Iterator it = map.entrySet().iterator();
+			while (it.hasNext())
+			{
+				Map.Entry entry = (Map.Entry)it.next();
+				if (((WeakReference)entry.getValue()).get() == null)
+				{
+					it.remove();
+				}
+			}
+		}
+	}
+	
 	protected static void handleHighMem()
 	{
 	//	System.gc(); 
