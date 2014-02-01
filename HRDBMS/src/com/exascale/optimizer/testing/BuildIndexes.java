@@ -229,7 +229,7 @@ public class BuildIndexes
 			Thread.currentThread().setPriority(Thread.NORM_PRIORITY);
 			try
 			{
-				Long RID = new Long(0);
+				long RID = 0;
 				String line = null;
 			
 				while (true)
@@ -238,7 +238,7 @@ public class BuildIndexes
 					{
 						if (lineCount % NUM_THREADS == lineOffset)
 						{
-							RID = ResourceManager.internLong(file.getFilePointer()); 
+							RID = file.getFilePointer(); 
 							line = file.readLine();
 							lineCount++;
 							break;
