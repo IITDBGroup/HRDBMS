@@ -80,7 +80,6 @@ public class BuildIndexes
 			{
 				BufferedRandomAccessFile out = new BufferedRandomAccessFile(indexFile, "rw");
 				MetaData meta = new MetaData();
-				RandomAccessFile file = new RandomAccessFile(tableFile, "r");
 				HashMap<String, Integer> cols2Pos = meta.getCols2PosForTable("TPCH",  tableName);
 				HashMap<String, String> cols2Types = meta.getCols2TypesForTable("TPCH", tableName);
 				ArrayList<String> keys = new ArrayList<String>(columns.length);
@@ -100,7 +99,7 @@ public class BuildIndexes
 				int i = 0;
 				while (i < Runtime.getRuntime().availableProcessors())
 				{
-					ReadThread rt = new ReadThread(file, keys, cols2Pos, unique2RIDS, indexFile, tableName);
+					ReadThread rt = new ReadThread(keys, cols2Pos, unique2RIDS, indexFile, tableName, i, tableFile);
 					rt.start();
 					threads.add(rt);
 					i++;
@@ -165,7 +164,6 @@ public class BuildIndexes
 					newUnique2RIDS = new ConcurrentSkipListMap<String[], ArrayListLong>(new RowComparator(orders, types));
 				}
 		
-				file.close();
 				out.close();
 				unique2RIDS = null;
 				newUnique2RIDS = null;
@@ -189,10 +187,21 @@ public class BuildIndexes
 		protected String indexFile;
 		protected String table;
 		protected long tableCount;
+		protected int lineOffset;
+		protected long lineCount = 0;
+		protected int cpus = Runtime.getRuntime().availableProcessors();
 		
-		public ReadThread(RandomAccessFile file, ArrayList<String> keys, HashMap<String, Integer> cols2Pos, ConcurrentSkipListMap<String[], ArrayListLong> unique2RIDS, String indexFile, String table)
+		public ReadThread(ArrayList<String> keys, HashMap<String, Integer> cols2Pos, ConcurrentSkipListMap<String[], ArrayListLong> unique2RIDS, String indexFile, String table, int lineOffset, String tableFile)
 		{
-			this.file = file;
+			try
+			{
+				this.file = new RandomAccessFile(tableFile, "r");
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
+				System.exit(1);
+			}
 			this.keys = keys;
 			this.cols2Pos = cols2Pos;
 			this.unique2RIDS = unique2RIDS;
@@ -200,6 +209,7 @@ public class BuildIndexes
 			this.table = table;
 			readCounts.putIfAbsent(indexFile, new AtomicLong(0));
 			tableCount = meta.getTableCard("TPCH", table) / (meta.getNumDevices() * meta.getNumNodes());
+			this.lineOffset = lineOffset;
 		}
 		
 		public void run()
@@ -212,11 +222,24 @@ public class BuildIndexes
 			
 				while (true)
 				{
-					synchronized(file)
+					while (true)
 					{
 						RID = ResourceManager.internLong(file.getFilePointer()); 
 						line = file.readLine();
+						if (lineCount % cpus == lineOffset)
+						{
+							lineCount++;
+							break;
+						}
+						
+						lineCount++;
 					}
+					
+					//synchronized(file)
+					//{
+					//	RID = ResourceManager.internLong(file.getFilePointer()); 
+					//	line = file.readLine();
+					//}
 					
 					if (line == null)
 					{
