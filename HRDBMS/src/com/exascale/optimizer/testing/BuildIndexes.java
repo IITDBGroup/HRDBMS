@@ -74,6 +74,7 @@ public class BuildIndexes
 		
 		public void run()
 		{
+			Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
 			System.out.println("Starting build of " + indexFile);
 			try
 			{
@@ -203,6 +204,7 @@ public class BuildIndexes
 		
 		public void run()
 		{
+			Thread.currentThread().setPriority(Thread.NORM_PRIORITY);
 			try
 			{
 				Long RID = new Long(0);
