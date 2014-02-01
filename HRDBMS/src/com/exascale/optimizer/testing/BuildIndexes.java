@@ -193,7 +193,7 @@ public class BuildIndexes
 	{
 		protected static ConcurrentHashMap<String, AtomicLong> readCounts = new ConcurrentHashMap<String, AtomicLong>();
 		protected static MetaData meta = new MetaData();
-		protected RandomAccessFile file;
+		protected BufferedRandomAccessFile file;
 		protected ArrayList<String> keys;
 		protected HashMap<String, Integer> cols2Pos;
 		protected ConcurrentSkipListMap<String[], ArrayListLong> unique2RIDS;
@@ -207,7 +207,7 @@ public class BuildIndexes
 		{
 			try
 			{
-				this.file = new RandomAccessFile(tableFile, "r");
+				this.file = new BufferedRandomAccessFile(tableFile, "r");
 			}
 			catch(Exception e)
 			{
@@ -236,14 +236,19 @@ public class BuildIndexes
 				{
 					while (true)
 					{
-						RID = ResourceManager.internLong(file.getFilePointer()); 
-						line = file.readLine();
 						if (lineCount % NUM_THREADS == lineOffset)
 						{
+							RID = ResourceManager.internLong(file.getFilePointer()); 
+							line = file.readLine();
 							lineCount++;
 							break;
 						}
 						
+						if (!file.skipLine())
+						{
+							line = null;
+							break;
+						}
 						lineCount++;
 					}
 					

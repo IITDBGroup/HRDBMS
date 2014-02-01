@@ -557,10 +557,25 @@ package com.exascale.optimizer.testing;
 	    
 	    public String readLine() throws IOException 
 	    {
-	    	int c = read();
-	    	if (skipLF && c == (0xFF & '\n'))
+	    	int c = 0;
+	    	try
 	    	{
 	    		c = read();
+	    	}
+    		catch(EOFException e)
+    		{
+    			c = (0xFF & '\n');
+    		}
+	    	if (skipLF && c == (0xFF & '\n'))
+	    	{
+	    		try
+	    		{
+	    			c = read();
+	    		}
+	    		catch(EOFException e)
+	    		{
+	    			c = (0xFF & '\n');
+	    		}
 	    		skipLF = false;
 	    	}
 	    	
@@ -596,5 +611,49 @@ package com.exascale.optimizer.testing;
 	    public long position()
 	    {
 	    	return pos + offset;
+	    }
+	    
+	    public boolean skipLine() throws IOException 
+	    {
+	    	int c = 0;
+	    	try
+	    	{
+	    		c = read();
+	    	}
+    		catch(EOFException e)
+    		{
+    			return false;
+    		}
+	    	if (skipLF && c == (0xFF & '\n'))
+	    	{
+	    		try
+	    		{
+	    			c = read();
+	    		}
+	    		catch(EOFException e)
+	    		{
+	    			return false;
+	    		}
+	    		skipLF = false;
+	    	}
+	    	
+	    	while (c != (0xFF & '\n') && c != (0xFF & '\r'))
+	    	{
+	    		try
+	    		{
+	    			c = read();
+	    		}
+	    		catch(EOFException e)
+	    		{
+	    			return false;
+	    		}
+	    	}
+	    	
+	    	if (c == (0xFF & '\r'))
+	    	{
+	    		skipLF = true;
+	    	}
+	    	
+	    	return true;
 	    }
 	}
