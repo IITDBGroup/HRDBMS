@@ -12,6 +12,7 @@ import java.io.StringWriter;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
@@ -64,48 +65,81 @@ public class ResourceManager extends ThreadPoolThread
     public static int cpus;
     public static final ExecutorService pool;
     public static final AtomicInteger objID = new AtomicInteger(0);
-    protected static final ConcurrentHashMap<String, String> internStringMap = new ConcurrentHashMap<String, String>();
-    protected static final ConcurrentHashMap<Long, Long> internLongMap = new ConcurrentHashMap<Long, Long>();
+    protected static final ConcurrentHashMap<String, WeakReference<String>> internStringMap = new ConcurrentHashMap<String, WeakReference<String>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
+    protected static final ConcurrentHashMap<Long, WeakReference<Long>> internLongMap = new ConcurrentHashMap<Long, WeakReference<Long>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
+    protected static final ConcurrentHashMap<Integer, WeakReference<Integer>> internIntMap = new ConcurrentHashMap<Integer, WeakReference<Integer>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
+    protected static final ConcurrentHashMap<Double, WeakReference<Double>> internDoubleMap = new ConcurrentHashMap<Double, WeakReference<Double>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
+    protected static final ConcurrentHashMap<Date, WeakReference<Date>> internDateMap = new ConcurrentHashMap<Date, WeakReference<Date>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
     
     static
     {
     	pool = Executors.newCachedThreadPool();
     }
     
-    public static String internString(String in)
-	{
-    	if (in == null)
-    	{
-    		return null;
-    	}
-    	
-		if (!internStringMap.containsKey(in))
-		{
-			internStringMap.put(in, in);
-			return in;
-		}
-		else
-		{
-			return internStringMap.get(in);
-		}
-	}
+    public static String internString(final String str)
+    {
+        final WeakReference<String> cached = internStringMap.get(str);
+        if (cached != null)
+        {
+            final String value = cached.get();
+            if (value != null)
+                return value;
+        }
+        internStringMap.put(str, new WeakReference<String>(str));
+        return str;
+    }
     
-    public static Long internLong(Long in)
-	{
-    	if (in == null)
-    	{
-    		return null;
-    	}
-		if (!internLongMap.containsKey(in))
-		{
-			internLongMap.put(in, in);
-			return in;
-		}
-		else
-		{
-			return internLongMap.get(in);
-		}
-	}
+    public static Integer internInt(final Integer str)
+    {
+        final WeakReference<Integer> cached = internIntMap.get(str);
+        if (cached != null)
+        {
+            final Integer value = cached.get();
+            if (value != null)
+                return value;
+        }
+        internIntMap.put(str, new WeakReference<Integer>(str));
+        return str;
+    }
+    
+    public static Double internDouble(final Double str)
+    {
+        final WeakReference<Double> cached = internDoubleMap.get(str);
+        if (cached != null)
+        {
+            final Double value = cached.get();
+            if (value != null)
+                return value;
+        }
+        internDoubleMap.put(str, new WeakReference<Double>(str));
+        return str;
+    }
+    
+    public static Date internDate(final Date str)
+    {
+        final WeakReference<Date> cached = internDateMap.get(str);
+        if (cached != null)
+        {
+            final Date value = cached.get();
+            if (value != null)
+                return value;
+        }
+        internDateMap.put(str, new WeakReference<Date>(str));
+        return str;
+    }
+    
+    public static Long internLong(final Long str)
+    {
+        final WeakReference<Long> cached = internLongMap.get(str);
+        if (cached != null)
+        {
+            final Long value = cached.get();
+            if (value != null)
+                return value;
+        }
+        internLongMap.put(str, new WeakReference<Long>(str));
+        return str;
+    }
 	
 	public ResourceManager()
 	{
