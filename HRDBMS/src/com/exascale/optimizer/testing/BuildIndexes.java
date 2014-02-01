@@ -21,7 +21,7 @@ public class BuildIndexes
 {
 	protected static final int BRANCH_FACTOR = 128;
 	protected static final Runtime rt = Runtime.getRuntime();
-	protected static int NUM_THREADS = 2;
+	protected static int NUM_THREADS = 1;
 	
 	public static void main(String[] args) throws Exception
 	{
@@ -46,14 +46,14 @@ public class BuildIndexes
 		it.start();
 		mark.join();
 		
-		NUM_THREADS = 8;
+		NUM_THREADS = 4;
 		mark = new IndexThread("./xo_orderdate.indx", "./orders.tbl", "ORDERS", "O_ORDERDATE");
 		mark.start();
 		it = new IndexThread("./xo_custkey.indx", "./orders.tbl", "ORDERS", "O_CUSTKEY");
 		it.start();
 		mark.join();
 		
-		NUM_THREADS = 16;
+		NUM_THREADS = 8;
 		it = new IndexThread("./xl_receiptdate.indx", "./lineitem.tbl", "LINEITEM", "L_RECEIPTDATE", "L_SHIPMODE", "L_SHIPINSTRUCT");
 		it.start();
 		it.join();
