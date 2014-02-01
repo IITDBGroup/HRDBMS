@@ -21,6 +21,7 @@ public class BuildIndexes
 {
 	protected static final int BRANCH_FACTOR = 128;
 	protected static final Runtime rt = Runtime.getRuntime();
+	protected static final int NUM_THREADS = 1;
 	
 	public static void main(String[] args) throws Exception
 	{
@@ -97,7 +98,7 @@ public class BuildIndexes
 				ConcurrentSkipListMap<String[], ArrayListLong> unique2RIDS = new ConcurrentSkipListMap<String[], ArrayListLong>(new RowComparator(orders, types));
 				ArrayList<ReadThread> threads = new ArrayList<ReadThread>(Runtime.getRuntime().availableProcessors());
 				int i = 0;
-				while (i < Runtime.getRuntime().availableProcessors())
+				while (i < NUM_THREADS)
 				{
 					ReadThread rt = new ReadThread(keys, cols2Pos, unique2RIDS, indexFile, tableName, i, tableFile);
 					rt.start();
@@ -106,7 +107,7 @@ public class BuildIndexes
 				}
 				
 				i = 0;
-				while (i < Runtime.getRuntime().availableProcessors())
+				while (i < NUM_THREADS)
 				{
 					threads.get(i).join();
 					i++;
@@ -189,7 +190,6 @@ public class BuildIndexes
 		protected long tableCount;
 		protected int lineOffset;
 		protected long lineCount = 0;
-		protected int cpus = Runtime.getRuntime().availableProcessors();
 		
 		public ReadThread(ArrayList<String> keys, HashMap<String, Integer> cols2Pos, ConcurrentSkipListMap<String[], ArrayListLong> unique2RIDS, String indexFile, String table, int lineOffset, String tableFile)
 		{
@@ -226,7 +226,7 @@ public class BuildIndexes
 					{
 						RID = ResourceManager.internLong(file.getFilePointer()); 
 						line = file.readLine();
-						if (lineCount % cpus == lineOffset)
+						if (lineCount % NUM_THREADS == lineOffset)
 						{
 							lineCount++;
 							break;
@@ -255,21 +255,25 @@ public class BuildIndexes
 						key[i] = ResourceManager.internString(all[cols2Pos.get(k)]);
 						i++;
 					}
-		
-					ArrayListLong rid = new ArrayListLong(1);
-					rid.add(RID);
-					ArrayListLong prev = unique2RIDS.putIfAbsent(key, rid);
-					if (prev == null)
-					{
-						long count = readCounts.get(indexFile).getAndIncrement();
-						if (count % 1000000 == 0)
-						{
-							System.out.println("Read " + count + "/" + tableCount + " rows for building " + indexFile);
-						}
-						continue;
-					}
 						
-					rid = unique2RIDS.get(key);
+					ArrayListLong rid = unique2RIDS.get(key);
+					if (rid == null)
+					{
+						rid = new ArrayListLong(1);
+						rid.add(RID);
+						ArrayListLong prev = unique2RIDS.putIfAbsent(key, rid);
+						if (prev == null)
+						{
+							long count = readCounts.get(indexFile).getAndIncrement();
+							if (count % 1000000 == 0)
+							{
+								System.out.println("Read " + count + "/" + tableCount + " rows for building " + indexFile);
+							}
+							continue;
+						}
+						rid = prev;
+					}
+					
 					synchronized(rid)
 					{
 						rid.add(RID);
