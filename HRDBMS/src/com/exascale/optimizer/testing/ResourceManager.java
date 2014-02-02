@@ -65,11 +65,11 @@ public class ResourceManager extends ThreadPoolThread
     public static int cpus;
     public static final ExecutorService pool;
     public static final AtomicInteger objID = new AtomicInteger(0);
-    protected static final ConcurrentHashMap<String, WeakReference<String>> internStringMap = new ConcurrentHashMap<String, WeakReference<String>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
-    protected static final ConcurrentHashMap<Long, WeakReference<Long>> internLongMap = new ConcurrentHashMap<Long, WeakReference<Long>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
-    protected static final ConcurrentHashMap<Integer, WeakReference<Integer>> internIntMap = new ConcurrentHashMap<Integer, WeakReference<Integer>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
-    protected static final ConcurrentHashMap<Double, WeakReference<Double>> internDoubleMap = new ConcurrentHashMap<Double, WeakReference<Double>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
-    protected static final ConcurrentHashMap<Date, WeakReference<Date>> internDateMap = new ConcurrentHashMap<Date, WeakReference<Date>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
+    protected static final ConcurrentWeakHashMap<String, WeakReference<String>> internStringMap = new ConcurrentWeakHashMap<String, WeakReference<String>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
+    protected static final ConcurrentWeakHashMap<Long, WeakReference<Long>> internLongMap = new ConcurrentWeakHashMap<Long, WeakReference<Long>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
+    protected static final ConcurrentWeakHashMap<Integer, WeakReference<Integer>> internIntMap = new ConcurrentWeakHashMap<Integer, WeakReference<Integer>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
+    protected static final ConcurrentWeakHashMap<Double, WeakReference<Double>> internDoubleMap = new ConcurrentWeakHashMap<Double, WeakReference<Double>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
+    protected static final ConcurrentWeakHashMap<Date, WeakReference<Date>> internDateMap = new ConcurrentWeakHashMap<Date, WeakReference<Date>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
     
     static
     {
@@ -440,9 +440,9 @@ public class ResourceManager extends ThreadPoolThread
 	
 	private static class CleanInternThread extends ThreadPoolThread
 	{
-		private ConcurrentHashMap map;
+		private ConcurrentWeakHashMap map;
 		
-		public CleanInternThread(ConcurrentHashMap map)
+		public CleanInternThread(ConcurrentWeakHashMap map)
 		{
 			this.map = map;
 		}
