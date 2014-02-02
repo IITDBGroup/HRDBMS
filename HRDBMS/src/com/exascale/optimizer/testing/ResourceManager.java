@@ -76,6 +76,15 @@ public class ResourceManager extends ThreadPoolThread
     	pool = Executors.newCachedThreadPool();
     }
     
+    public static void clearInternMaps()
+    {
+    	internStringMap.clear();
+    	internIntMap.clear();
+    	internLongMap.clear();
+    	internDoubleMap.clear();
+    	internDateMap.clear();
+    }
+    
     public static String internString(final String str)
     {
         final WeakReference<String> cached = internStringMap.get(str);
@@ -85,7 +94,9 @@ public class ResourceManager extends ThreadPoolThread
             if (value != null)
                 return value;
         }
-        internStringMap.put(str, new WeakReference<String>(str));
+        
+        WeakReference<String> wr = new WeakReference<String>(str);
+        internStringMap.put(wr, wr);
         return str;
     }
     
@@ -98,7 +109,8 @@ public class ResourceManager extends ThreadPoolThread
             if (value != null)
                 return value;
         }
-        internIntMap.put(str, new WeakReference<Integer>(str));
+        WeakReference<Integer> wr = new WeakReference<Integer>(str);
+        internIntMap.put(wr, wr);
         return str;
     }
     
@@ -111,7 +123,8 @@ public class ResourceManager extends ThreadPoolThread
             if (value != null)
                 return value;
         }
-        internDoubleMap.put(str, new WeakReference<Double>(str));
+        WeakReference<Double> wr = new WeakReference<Double>(str);
+        internDoubleMap.put(wr, wr);
         return str;
     }
     
@@ -124,7 +137,8 @@ public class ResourceManager extends ThreadPoolThread
             if (value != null)
                 return value;
         }
-        internDateMap.put(str, new WeakReference<Date>(str));
+        WeakReference<Date> wr = new WeakReference<Date>(str);
+        internDateMap.put(wr, wr);
         return str;
     }
     
@@ -137,7 +151,8 @@ public class ResourceManager extends ThreadPoolThread
             if (value != null)
                 return value;
         }
-        internLongMap.put(str, new WeakReference<Long>(str));
+        WeakReference<Long> wr = new WeakReference<Long>(str);
+        internLongMap.put(wr, wr);
         return str;
     }
 	
@@ -449,6 +464,7 @@ public class ResourceManager extends ThreadPoolThread
 		
 		public void run()
 		{
+			int i = 0;
 			Iterator it = map.entrySet().iterator();
 			while (it.hasNext())
 			{
@@ -456,6 +472,12 @@ public class ResourceManager extends ThreadPoolThread
 				if (((WeakReference)entry.getValue()).get() == null)
 				{
 					it.remove();
+					i++;
+					
+					if (i % 1000000 == 0)
+					{
+						System.out.println("Cleaned up " + i + " entries from " + map);
+					}
 				}
 			}
 		}

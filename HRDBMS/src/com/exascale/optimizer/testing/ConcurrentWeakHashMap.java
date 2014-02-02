@@ -453,6 +453,37 @@ public class ConcurrentWeakHashMap<K, V> extends AbstractMap<K, V>
                 unlock();
             }
         }
+        
+        V put(WeakReference<K> key, int hash, V value, boolean onlyIfAbsent) {
+            lock();
+            try {
+                int c = count;
+                if (c++ > threshold) // ensure capacity
+                    rehash();
+                HashEntry<K,V>[] tab = table;
+                int index = hash & (tab.length - 1);
+                HashEntry<K,V> first = tab[index];
+                HashEntry<K,V> e = first;
+                while (e != null && (e.hash != hash || !key.get().equals(e.getKey())))
+                    e = e.next;
+
+                V oldValue;
+                if (e != null) {
+                    oldValue = e.value;
+                    if (!onlyIfAbsent)
+                        e.value = value;
+                }
+                else {
+                    oldValue = null;
+                    ++modCount;
+                    tab[index] = new HashEntry<K,V>(key, hash, first, value);
+                    count = c; // write-volatile
+                }
+                return oldValue;
+            } finally {
+                unlock();
+            }
+        }
 
         void rehash() {
             HashEntry<K,V>[] oldTable = table;
@@ -512,7 +543,7 @@ public class ConcurrentWeakHashMap<K, V> extends AbstractMap<K, V>
                             K pk = p.getKey();
                             if (pk != null)
                             {
-                            	newTable[k] = new HashEntry<K,V>(pk, p.hash,
+                            	newTable[k] = new HashEntry<K,V>(p.key, p.hash,
                             									n, p.value);
                             }
                         }
@@ -551,7 +582,7 @@ public class ConcurrentWeakHashMap<K, V> extends AbstractMap<K, V>
                         	K pk = p.getKey();
                         	if (pk != null)
                         	{
-                        		newFirst = new HashEntry<K,V>(pk, p.hash,
+                        		newFirst = new HashEntry<K,V>(p.key, p.hash,
                                                           newFirst, p.value);
                         	}
                         }
@@ -898,6 +929,14 @@ public class ConcurrentWeakHashMap<K, V> extends AbstractMap<K, V>
      */
     public V put(K key, V value) {
         if (value == null)
+            throw new NullPointerException();
+        int hash = hash(key.hashCode());
+        return segmentFor(hash).put(key, hash, value, false);
+    }
+    
+    public V put(WeakReference<K> key, V value)
+    {
+    	if (value == null)
             throw new NullPointerException();
         int hash = hash(key.hashCode());
         return segmentFor(hash).put(key, hash, value, false);
@@ -1342,5 +1381,46 @@ public class ConcurrentWeakHashMap<K, V> extends AbstractMap<K, V>
     		
     		i++;
     	}
+    }
+    
+    public String toString()
+    {
+    	return "InternMap<" + findFirstNonNullKey().getClass() + ">";
+    }
+    
+    public Object findFirstNonNullKey()
+    {
+    	int i = 0;
+    	while (i < segments.length)
+    	{
+    		Segment s = segments[i];
+    		if (s == null)
+    		{
+    			i++;
+    			continue;
+    		}
+    		
+    		int j = 0;
+    		while (j < s.table.length)
+    		{
+    			HashEntry h = s.table[j];
+    			while (h != null)
+    			{
+    				Object retval = h.key.get();
+    				if (retval == null)
+    				{
+    					return retval;
+    				}
+    				
+    				h = h.next;
+    			}
+    			
+    			j++;
+    		}
+    		
+    		i++;
+    	}
+    	
+    	return null;
     }
 }

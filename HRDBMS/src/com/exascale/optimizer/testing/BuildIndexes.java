@@ -12,7 +12,6 @@ import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.exascale.threads.ReadThread;
@@ -45,6 +44,7 @@ public class BuildIndexes
 		it = new IndexThread("./xs_suppkey.indx", "./supplier.tbl", "SUPPLIER", "S_SUPPKEY");
 		it.start();
 		mark.join();
+		ResourceManager.clearInternMaps();
 		
 		NUM_THREADS = 4;
 		mark = new IndexThread("./xo_orderdate.indx", "./orders.tbl", "ORDERS", "O_ORDERDATE");
@@ -52,17 +52,21 @@ public class BuildIndexes
 		it = new IndexThread("./xo_custkey.indx", "./orders.tbl", "ORDERS", "O_CUSTKEY");
 		it.start();
 		mark.join();
+		ResourceManager.clearInternMaps();
 		
 		NUM_THREADS = 8;
 		it = new IndexThread("./xl_receiptdate.indx", "./lineitem.tbl", "LINEITEM", "L_RECEIPTDATE", "L_SHIPMODE", "L_SHIPINSTRUCT");
 		it.start();
 		it.join();
+		ResourceManager.clearInternMaps();
 		it = new IndexThread("./xl_orderkey.indx", "./lineitem.tbl", "LINEITEM", "L_ORDERKEY", "L_SUPPKEY");
 		it.start();
 		it.join();
+		ResourceManager.clearInternMaps();
 		it = new IndexThread("./xl_partkey.indx", "./lineitem.tbl", "LINEITEM", "L_PARTKEY");
 		it.start();
 		it.join();
+		ResourceManager.clearInternMaps();
 		it = new IndexThread("./xl_shipdate.indx", "./lineitem.tbl", "LINEITEM", "L_SHIPDATE", "L_EXTENDEDPRICE", "L_QUANTITY", "L_DISCOUNT", "L_SUPPKEY");
 		it.start();
 		it.join();
@@ -107,7 +111,7 @@ public class BuildIndexes
 				{
 					types.add(cols2Types.get(k));
 				}
-				ConcurrentSkipListMap<String[], ArrayListLong> unique2RIDS = new ConcurrentSkipListMap<String[], ArrayListLong>(new RowComparator(orders, types));
+				ConcurrentSkipTreeMap<String[], ArrayListLong> unique2RIDS = new ConcurrentSkipTreeMap<String[], ArrayListLong>(new RowComparator(orders, types));
 				ArrayList<ReadThread> threads = new ArrayList<ReadThread>(Runtime.getRuntime().availableProcessors());
 				int i = 0;
 				while (i < NUM_THREADS)
@@ -128,7 +132,7 @@ public class BuildIndexes
 				StringBuilder outLine = new StringBuilder();
 				outLine.append("                     \n");
 				out.write(outLine.toString().getBytes("UTF-8"));
-				ConcurrentSkipListMap<String[], ArrayListLong> newUnique2RIDS = new ConcurrentSkipListMap<String[], ArrayListLong>(new RowComparator(orders, types));
+				ConcurrentSkipTreeMap<String[], ArrayListLong> newUnique2RIDS = new ConcurrentSkipTreeMap<String[], ArrayListLong>(new RowComparator(orders, types));
 		
 				while (true)
 				{
@@ -174,7 +178,7 @@ public class BuildIndexes
 					}
 			
 					unique2RIDS = newUnique2RIDS;
-					newUnique2RIDS = new ConcurrentSkipListMap<String[], ArrayListLong>(new RowComparator(orders, types));
+					newUnique2RIDS = new ConcurrentSkipTreeMap<String[], ArrayListLong>(new RowComparator(orders, types));
 				}
 		
 				out.close();
@@ -196,14 +200,14 @@ public class BuildIndexes
 		protected BufferedRandomAccessFile file;
 		protected ArrayList<String> keys;
 		protected HashMap<String, Integer> cols2Pos;
-		protected ConcurrentSkipListMap<String[], ArrayListLong> unique2RIDS;
+		protected ConcurrentSkipTreeMap<String[], ArrayListLong> unique2RIDS;
 		protected String indexFile;
 		protected String table;
 		protected long tableCount;
 		protected int lineOffset;
 		protected long lineCount = 0;
 		
-		public ReadThread(ArrayList<String> keys, HashMap<String, Integer> cols2Pos, ConcurrentSkipListMap<String[], ArrayListLong> unique2RIDS, String indexFile, String table, int lineOffset, String tableFile)
+		public ReadThread(ArrayList<String> keys, HashMap<String, Integer> cols2Pos, ConcurrentSkipTreeMap<String[], ArrayListLong> unique2RIDS, String indexFile, String table, int lineOffset, String tableFile)
 		{
 			try
 			{
