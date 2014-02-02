@@ -386,6 +386,11 @@ public class ResourceManager extends ThreadPoolThread
 		return ((Runtime.getRuntime().freeMemory() + Runtime.getRuntime().maxMemory() - Runtime.getRuntime().totalMemory()) * 100.0) / (Runtime.getRuntime().maxMemory() * 1.0) < LOW_PERCENT_FREE;
 	}
 	
+	protected static boolean extremeLowMem()
+	{
+		return ((Runtime.getRuntime().freeMemory() + Runtime.getRuntime().maxMemory() - Runtime.getRuntime().totalMemory()) * 100.0) / (Runtime.getRuntime().maxMemory() * 1.0) < 0;
+	}
+	
 	protected static boolean highMem()
 	{
 		return ((Runtime.getRuntime().freeMemory() + Runtime.getRuntime().maxMemory() - Runtime.getRuntime().totalMemory()) * 100.0) / (Runtime.getRuntime().maxMemory() * 1.0) > HIGH_PERCENT_FREE;
@@ -396,16 +401,6 @@ public class ResourceManager extends ThreadPoolThread
 	//	System.gc(); 
 		while (lowMem())
 		{	
-			CleanInternThread cit1 = new CleanInternThread(internIntMap);
-			CleanInternThread cit2 = new CleanInternThread(internLongMap);
-			CleanInternThread cit3 = new CleanInternThread(internDoubleMap);
-			CleanInternThread cit4 = new CleanInternThread(internStringMap);
-			CleanInternThread cit5 = new CleanInternThread(internDateMap);
-			cit1.start();
-			cit2.start();
-			cit3.start();
-			cit4.start();
-			cit5.start();
 			ArrayList<ThreadPoolThread> threads = new ArrayList<ThreadPoolThread>(collections.size());
 			///System.out.println(((Runtime.getRuntime().freeMemory() + Runtime.getRuntime().maxMemory() - Runtime.getRuntime().totalMemory()) * 100.0) / (Runtime.getRuntime().maxMemory() * 1.0) + "% free");
 			int i = 0;
@@ -440,16 +435,33 @@ public class ResourceManager extends ThreadPoolThread
 				}
 			}
 			
-			try
+			if (extremeLowMem())
 			{
-				cit1.join();
-				cit2.join();
-				cit3.join();
-				cit4.join();
-				cit5.join();
+				clearInternMaps();
 			}
-			catch(Exception e)
-			{}
+			else
+			{	
+				CleanInternThread cit1 = new CleanInternThread(internIntMap);
+				CleanInternThread cit2 = new CleanInternThread(internLongMap);
+				CleanInternThread cit3 = new CleanInternThread(internDoubleMap);
+				CleanInternThread cit4 = new CleanInternThread(internStringMap);
+				CleanInternThread cit5 = new CleanInternThread(internDateMap);
+				cit1.start();
+				cit2.start();
+				cit3.start();
+				cit4.start();
+				cit5.start();
+				try
+				{
+					cit1.join();
+					cit2.join();
+					cit3.join();
+					cit4.join();
+					cit5.join();
+				}
+				catch(Exception e)
+				{}
+			}
 		}
 	}
 	
