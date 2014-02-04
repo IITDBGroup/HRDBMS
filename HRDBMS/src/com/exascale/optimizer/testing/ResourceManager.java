@@ -435,33 +435,7 @@ public class ResourceManager extends ThreadPoolThread
 				}
 			}
 			
-			if (extremeLowMem())
-			{
-				clearInternMaps();
-			}
-			else
-			{	
-				CleanInternThread cit1 = new CleanInternThread(internIntMap);
-				CleanInternThread cit2 = new CleanInternThread(internLongMap);
-				CleanInternThread cit3 = new CleanInternThread(internDoubleMap);
-				CleanInternThread cit4 = new CleanInternThread(internStringMap);
-				CleanInternThread cit5 = new CleanInternThread(internDateMap);
-				cit1.start();
-				cit2.start();
-				cit3.start();
-				cit4.start();
-				cit5.start();
-				try
-				{
-					cit1.join();
-					cit2.join();
-					cit3.join();
-					cit4.join();
-					cit5.join();
-				}
-				catch(Exception e)
-				{}
-			}
+			clearInternMaps();
 		}
 	}
 	

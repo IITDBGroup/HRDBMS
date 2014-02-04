@@ -131,23 +131,6 @@ public class ConcurrentSkipTreeSet<E>
         this.m = m;
     }
 
-    /**
-     * Returns a shallow copy of this <tt>ConcurrentSkipTreeSet</tt>
-     * instance. (The elements themselves are not cloned.)
-     *
-     * @return a shallow copy of this set
-     */
-    public ConcurrentSkipTreeSet<E> clone() {
-        ConcurrentSkipTreeSet<E> clone = null;
-        try {
-            clone = (ConcurrentSkipTreeSet<E>) super.clone();
-                clone.setMap(new ConcurrentSkipTreeMap(m, Boolean.TRUE));
-        } catch (CloneNotSupportedException e) {
-            throw new InternalError();
-        }
-        return clone;
-    }
-
     /* ---------------- Set operations -------------- */
 
     /**

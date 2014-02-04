@@ -381,7 +381,7 @@ public class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOperator i
 						socks.put(child, sock);
 						OutputStream out = sock.getOutputStream();
 						outs.put(child, out);
-						InputStream in = new BufferedInputStream(sock.getInputStream());
+						InputStream in = new BufferedInputStream(sock.getInputStream(), 65536);
 						ins.put(child, in);
 						byte[] command = "SNDRMTTR".getBytes("UTF-8");
 						byte[] from = intToBytes(node);

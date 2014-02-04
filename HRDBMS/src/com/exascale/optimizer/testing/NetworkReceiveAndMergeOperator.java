@@ -369,7 +369,7 @@ public class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator imple
 						OutputStream out = sock.getOutputStream();
 						outs.put(child, out);
 						InputStream in = sock.getInputStream();
-						ins.put(child, new BufferedInputStream(in));
+						ins.put(child, new BufferedInputStream(in, 65536));
 						byte[] command = "REMOTTRE".getBytes("UTF-8");
 						byte[] from = intToBytes(-1);
 						byte[] to = intToBytes(child.getNode());
