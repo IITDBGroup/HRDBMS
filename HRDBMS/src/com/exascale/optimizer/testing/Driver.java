@@ -39,6 +39,7 @@ public class Driver
 			long start, end;
 			Phase4 phase4 = null;
 			Phase5 phase5 = null;
+			/*
 			start = System.currentTimeMillis();
 			meta = new MetaData();
 			parseOutput = getTree(1);
@@ -67,6 +68,7 @@ public class Driver
 			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #2 took " + ((end - start) / 1000) + " seconds");
+			*/
 			start = System.currentTimeMillis();
 			meta = new MetaData();
 			parseOutput = getTree(3);
@@ -81,6 +83,7 @@ public class Driver
 			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #3 took " + ((end - start) / 1000) + " seconds");
+			/*
 			start = System.currentTimeMillis();
 			meta = new MetaData();
 			parseOutput = getTree(4);
@@ -165,6 +168,7 @@ public class Driver
 			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #9 took " + ((end - start) / 1000) + " seconds");
+			/*
 			start = System.currentTimeMillis();
 			meta = new MetaData();
 			parseOutput = getTree(10);
@@ -193,6 +197,7 @@ public class Driver
 			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #11 took " + ((end - start) / 1000) + " seconds");
+			*/
 			start = System.currentTimeMillis();
 			meta = new MetaData();
 			parseOutput = getTree(12);
@@ -207,6 +212,7 @@ public class Driver
 			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #12 took " + ((end - start) / 1000) + " seconds");
+			/*
 			start = System.currentTimeMillis();
 			meta = new MetaData();
 			parseOutput = getTree(14);
@@ -249,6 +255,7 @@ public class Driver
 			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #16 took " + ((end - start) / 1000) + " seconds");
+			*/
 			start = System.currentTimeMillis();
 			meta = new MetaData();
 			parseOutput = getTree(17);
@@ -263,6 +270,7 @@ public class Driver
 			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #17 took " + ((end - start) / 1000) + " seconds");
+			/*
 			start = System.currentTimeMillis();
 			meta = new MetaData();
 			parseOutput = getTree(18);
@@ -319,6 +327,7 @@ public class Driver
 			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #21 took " + ((end - start) / 1000) + " seconds");
+			*/
 			start = System.currentTimeMillis();
 			meta = new MetaData();
 			parseOutput = getTree(22);
