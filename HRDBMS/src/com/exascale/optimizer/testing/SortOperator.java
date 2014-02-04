@@ -12,6 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
@@ -467,7 +468,7 @@ public class SortOperator implements Operator, Serializable
 						{
 							return;
 						}
-						long pivotIndex = (long)(new Random().nextDouble() * (right - left) + left);
+						long pivotIndex = (long)(ThreadLocalRandom.current().nextDouble() * (right - left) + left);
 						ArrayList<Object> temp = (ArrayList<Object>)result.get(pivotIndex);
 						result.update(pivotIndex, (ArrayList<Object>)result.get(left));
 						result.update(left, temp);
@@ -653,7 +654,6 @@ public class SortOperator implements Operator, Serializable
 			long storeIndex = left;
 			boolean allEqual = true;
 			
-			Random random = new Random(System.currentTimeMillis());
 			while (i < right)
 			{
 				ArrayList<Object> temp = (ArrayList<Object>)result.get(i);
@@ -668,7 +668,7 @@ public class SortOperator implements Operator, Serializable
 				}
 				else if (compareResult == 0)
 				{
-					if (random.nextDouble() < 0.5)
+					if (ThreadLocalRandom.current().nextDouble() < 0.5)
 					{
 						Object row = result.get(storeIndex);
 						result.update(i, (ArrayList<Object>)row);

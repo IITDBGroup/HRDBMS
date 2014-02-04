@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Random;
 import java.util.ArrayList;
+import java.util.concurrent.ThreadLocalRandom;
 
 import com.exascale.optimizer.testing.MetaData.PartitionMetaData;
 
@@ -17,7 +18,6 @@ public class Phase3
 	protected static final int MAX_CARD_BEFORE_HASH = 500000;
 	protected static final int MIN_CARD_BEFORE_HASH = 250000;
 	protected HashSet<Integer> usedNodes = new HashSet<Integer>();
-	protected Random random = new Random(System.currentTimeMillis());
 	protected static int colSuffix = 0;
 	
 	public Phase3(RootOperator root)
@@ -97,10 +97,10 @@ public class Phase3
 				
 				if (i == numPerMiddle)
 				{
-					int node = Math.abs(random.nextInt()) % meta.getNumNodes();
+					int node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
 					while (usedNodes.contains(node))
 					{
-						node = Math.abs(random.nextInt()) % meta.getNumNodes();
+						node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
 					}
 					NetworkSendOperator newSend = new NetworkSendOperator(node, meta);
 					try

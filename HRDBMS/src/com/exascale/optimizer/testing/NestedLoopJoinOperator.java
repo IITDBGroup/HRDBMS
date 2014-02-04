@@ -12,7 +12,9 @@ import java.util.Random;
 import java.util.TreeMap;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
+
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
@@ -823,7 +825,7 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 						{
 							return;
 						}
-						long pivotIndex = (long)(new Random().nextDouble() * (right - left) + left);
+						long pivotIndex = (long)(ThreadLocalRandom.current().nextDouble() * (right - left) + left);
 						ArrayList<Object> temp = (ArrayList<Object>)inBuffer.get(pivotIndex);
 						inBuffer.update(pivotIndex, (ArrayList<Object>)inBuffer.get(left));
 						inBuffer.update(left, temp);
@@ -1004,7 +1006,6 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 			long storeIndex = left;
 			boolean allEqual = true;
 		
-			Random random = new Random(System.currentTimeMillis());
 			while (i < right)
 			{
 				ArrayList<Object> temp = (ArrayList<Object>)inBuffer.get(i);
@@ -1019,7 +1020,7 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 				}	
 				else if (compareResult == 0)
 				{
-					if (random.nextDouble() < 0.5)
+					if (ThreadLocalRandom.current().nextDouble() < 0.5)
 					{
 						Object row = inBuffer.get(storeIndex);
 						inBuffer.update(i, (ArrayList<Object>)row);

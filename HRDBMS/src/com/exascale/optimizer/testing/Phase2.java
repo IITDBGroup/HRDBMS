@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Random;
 import java.util.ArrayList;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class Phase2 
 {
@@ -60,7 +61,7 @@ public class Phase2
 				{
 					if (t.anyNode())
 					{
-						int i = Math.abs(new Random(System.currentTimeMillis()).nextInt());
+						int i = Math.abs(ThreadLocalRandom.current().nextInt());
 						i = i % meta.getNumNodes();
 						t.addActiveNodeForParent(i, o);
 						setActiveDevices(t, filter, o);

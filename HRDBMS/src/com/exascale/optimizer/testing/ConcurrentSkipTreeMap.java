@@ -137,12 +137,6 @@ public class ConcurrentSkipTreeMap<K,V> extends AbstractMap<K,V>
     private transient volatile Node<K,V> leafHead;
 
     /**
-     * Generates the initial random seed for the cheaper per-instance
-     * random number generators used in randomLevel.
-     */
-    private static final Random seedGenerator = new Random();        
-    
-    /**
      * Seed for simple random number generator.  Not volatile since it
      * doesn't matter too much if different threads don't see updates.
      */
@@ -192,7 +186,7 @@ public class ConcurrentSkipTreeMap<K,V> extends AbstractMap<K,V>
         entrySet = null;
         valuesCollection = null;
         descendingMap = null;        
-        randomSeed = seedGenerator.nextInt() | 0x0100;
+        randomSeed = ThreadLocalRandom.current().nextInt() | 0x0100;
         Object[] keys = new Object[1];
         Object[] values = (valueProxy == null) ? new Object[1] : null;
         keys[0] = PositiveInfinity.INSTANCE;

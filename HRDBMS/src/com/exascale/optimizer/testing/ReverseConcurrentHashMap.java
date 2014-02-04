@@ -1,5 +1,6 @@
 package com.exascale.optimizer.testing;
 
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.locks.*;
 import java.util.*;
 import java.io.Serializable;
@@ -160,7 +161,6 @@ public class ReverseConcurrentHashMap implements Serializable {
         * or disabled for all instances.
         */
         static final boolean ALTERNATIVE_HASHING;
-        static final Random SEED_MAKER = new Random(System.currentTimeMillis());
 
         static {
             // Use the "threshold" system property even though our threshold
@@ -198,7 +198,7 @@ public class ReverseConcurrentHashMap implements Serializable {
     {
         if (Holder.ALTERNATIVE_HASHING) {
         	int seed;
-        	seed = Holder.SEED_MAKER.nextInt();
+        	seed = ThreadLocalRandom.current().nextInt();
         	return (0 != seed) ? seed : 1;   
         }
 

@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Random;
 import java.util.ArrayList;
+import java.util.concurrent.ThreadLocalRandom;
 
 import com.exascale.optimizer.testing.MetaData.PartitionMetaData;
 
@@ -23,7 +24,6 @@ public class Phase4
 	protected static int id = 0;
 	protected static int iNode = 0;
 	protected HashSet<Integer> usedNodes = new HashSet<Integer>();
-	protected Random random = new Random(System.currentTimeMillis());
 	protected HashMap<Operator, Long> cCache = new HashMap<Operator, Long>();
 	
 	public Phase4(RootOperator root)
@@ -1608,10 +1608,10 @@ public class Phase4
 				
 				if (i == numPerMiddle)
 				{
-					int node = Math.abs(random.nextInt()) % meta.getNumNodes();
+					int node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
 					while (usedNodes.contains(node))
 					{
-						node = Math.abs(random.nextInt()) % meta.getNumNodes();
+						node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
 					}
 					NetworkSendOperator newSend = new NetworkSendOperator(node, meta);
 					try
@@ -3313,10 +3313,10 @@ public class Phase4
 			}
 					
 			NetworkHashReceiveOperator newReceive = new NetworkHashReceiveOperator(sends.get(0).getID(), meta);
-			int node = Math.abs(random.nextInt()) % meta.getNumNodes();
+			int node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
 			while (usedNodes.contains(node))
 			{
-				node = Math.abs(random.nextInt()) % meta.getNumNodes();
+				node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
 			}
 			newReceive.setNode(node);
 			receives2.add(newReceive);
@@ -3370,10 +3370,10 @@ public class Phase4
 				if (j == numPerMiddle)
 				{
 					newReceive = new NetworkHashReceiveOperator(sends.get(0).getID(), meta);
-					node = Math.abs(random.nextInt()) % meta.getNumNodes();
+					node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
 					while (usedNodes.contains(node))
 					{
-						node = Math.abs(random.nextInt()) % meta.getNumNodes();
+						node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
 					}
 					newReceive.setNode(node);
 					receives2.add(newReceive);
@@ -3440,10 +3440,10 @@ public class Phase4
 			
 			NetworkSendRROperator rr = (NetworkSendRROperator)receives.get(0).children().get(0);
 			NetworkHashReceiveOperator newReceive = new NetworkHashReceiveOperator(rr.getID(), meta);
-			int node = Math.abs(random.nextInt()) % meta.getNumNodes();
+			int node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
 			while (usedNodes.contains(node))
 			{
-				node = Math.abs(random.nextInt()) % meta.getNumNodes();
+				node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
 			}
 			newReceive.setNode(node);
 			receives2.add(newReceive);
@@ -3491,10 +3491,10 @@ public class Phase4
 				if (j == numPerMiddle)
 				{
 					newReceive = new NetworkHashReceiveOperator(rr.getID(), meta);
-					node = Math.abs(random.nextInt()) % meta.getNumNodes();
+					node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
 					while (usedNodes.contains(node))
 					{
-						node = Math.abs(random.nextInt()) % meta.getNumNodes();
+						node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
 					}
 					newReceive.setNode(node);
 					try
