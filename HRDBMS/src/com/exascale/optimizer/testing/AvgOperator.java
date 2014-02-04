@@ -152,7 +152,7 @@ public class AvgOperator implements AggregateOperator, Serializable
 		
 		public Object getResult(ArrayList<Object> keys)
 		{
-			return new Double(sums.get(keys).get().divide(new BigDecimal(counts.get(keys).get()), 16, RoundingMode.HALF_UP).doubleValue());
+			return ResourceManager.internDouble(new Double(sums.get(keys).get().divide(new BigDecimal(counts.get(keys).get()), 16, RoundingMode.HALF_UP).doubleValue()));
 		}
 		
 		public void close()

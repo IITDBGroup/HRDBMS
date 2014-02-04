@@ -91,10 +91,10 @@ public class MaxOperator implements AggregateOperator, Serializable
 		{
 			if (isInt)
 			{
-				return new Long((long)max);
+				return ResourceManager.internLong(new Long((long)max));
 			}
 			
-			return new Double(max);
+			return ResourceManager.internDouble(new Double(max));
 		}
 		
 		public void run()
@@ -174,11 +174,11 @@ public class MaxOperator implements AggregateOperator, Serializable
 			Double val;
 			if (o instanceof Integer)
 			{
-				val = new Double((Integer)o);
+				val = ResourceManager.internDouble(new Double((Integer)o));
 			}
 			else if (o instanceof Long)
 			{
-				val = new Double((Long)o);
+				val = ResourceManager.internDouble(new Double((Long)o));
 			}
 			else
 			{
@@ -228,7 +228,7 @@ public class MaxOperator implements AggregateOperator, Serializable
 		{
 			if (isInt)
 			{
-				return new Long((long)maxes.get(keys).doubleValue());
+				return ResourceManager.internLong(new Long((long)maxes.get(keys).doubleValue()));
 			}
 			
 			return maxes.get(keys).doubleValue();

@@ -233,25 +233,25 @@ public class NetworkReceiveOperator implements Operator, Serializable
 				if (bytes[i+4] == 0)
 				{
 					//long
-					Long o = bb.getLong();
+					Long o = ResourceManager.internLong(bb.getLong());
 					retval.add(o);
 				}
 				else if (bytes[i+4] == 1)
 				{
 					//integer
-					Integer o = bb.getInt();
+					Integer o = ResourceManager.internInt(bb.getInt());
 					retval.add(o);
 				}
 				else if (bytes[i+4] == 2)
 				{
 					//double
-					Double o = bb.getDouble();
+					Double o = ResourceManager.internDouble(bb.getDouble());
 					retval.add(o);
 				}
 				else if (bytes[i+4] == 3)
 				{
 					//date
-					Date o = new Date(bb.getLong());
+					Date o = ResourceManager.internDate(new Date(bb.getLong()));
 					retval.add(o);
 				}
 				else if (bytes[i+4] == 4)
@@ -262,7 +262,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 					bb.get(temp);
 					try
 					{
-						String o = new String(temp, "UTF-8");
+						String o = ResourceManager.internString(new String(temp, "UTF-8"));
 						retval.add(o);
 					}
 					catch(Exception e)

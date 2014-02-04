@@ -13,7 +13,7 @@ public class DateParser
 		int iYear = Integer.parseInt(year);
 		int iMonth = Integer.parseInt(month);
 		int iDay = Integer.parseInt(day);
-		return new GregorianCalendar(iYear, iMonth - 1, iDay).getTime();
+		return ResourceManager.internDate(new GregorianCalendar(iYear, iMonth - 1, iDay).getTime());
 		//return new Date(iYear - 1900, iMonth - 1, iDay);
 	}
 }

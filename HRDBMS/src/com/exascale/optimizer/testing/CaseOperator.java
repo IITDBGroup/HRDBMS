@@ -109,7 +109,7 @@ public class CaseOperator implements Operator, Serializable
 				}
 				else
 				{
-					this.results.add(Long.parseLong(val1));
+					this.results.add(ResourceManager.internLong(Long.parseLong(val1)));
 				}
 			}
 			else

@@ -226,19 +226,19 @@ public class Index implements Serializable
 					String type = fetchTypes.get(j);
 					if (type.equals("INT"))
 					{
-						row.add(Integer.parseInt(val));
+						row.add(ResourceManager.internInt(Integer.parseInt(val)));
 					}
 					else if (type.equals("FLOAT"))
 					{
-						row.add(Double.parseDouble(val));
+						row.add(ResourceManager.internDouble(Double.parseDouble(val)));
 					}
 					else if (type.equals("CHAR"))
 					{
-						row.add(val);
+						row.add(ResourceManager.internString(val));
 					}
 					else if (type.equals("LONG"))
 					{
-						row.add(Long.parseLong(val));
+						row.add(ResourceManager.internLong(Long.parseLong(val)));
 					}
 					else if (type.equals("DATE"))
 					{
@@ -698,19 +698,19 @@ public class Index implements Serializable
 	{
 		if (type.equals("INT"))
 		{
-			return Long.parseLong(val);
+			return ResourceManager.internLong(Long.parseLong(val));
 		}
 		else if (type.equals("FLOAT"))
 		{
-			return Double.parseDouble(val);
+			return ResourceManager.internDouble(Double.parseDouble(val));
 		}
 		else if (type.equals("CHAR"))
 		{
-			return val;
+			return ResourceManager.internString(val);
 		}
 		else if (type.equals("LONG"))
 		{
-			return Long.parseLong(val);
+			return ResourceManager.internLong(Long.parseLong(val));
 		}
 		else if (type.equals("DATE"))
 		{

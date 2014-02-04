@@ -91,7 +91,7 @@ public class CountDistinctOperator implements AggregateOperator, Serializable
 		
 		public Object getResult()
 		{
-			return new Long(result);
+			return ResourceManager.internLong(new Long(result));
 		}
 		
 		public void run()

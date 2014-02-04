@@ -600,7 +600,7 @@ package com.exascale.optimizer.testing;
 	    	
 	    	if (s.length() > 0)
 	    	{
-	    		return s.toString();
+	    		return ResourceManager.internString(s.toString());
 	    	}
 	    	else
 	    	{

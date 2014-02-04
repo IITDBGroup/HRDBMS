@@ -265,11 +265,11 @@ public class ExtendOperator implements Operator, Serializable
 						}
 						if (field instanceof Long)
 						{
-							execStack.push(new Double(((Long)field).longValue()));
+							execStack.push(ResourceManager.internDouble(new Double(((Long)field).longValue())));
 						}
 						else if (field instanceof Integer)
 						{
-							execStack.push(new Double(((Integer)field).intValue()));
+							execStack.push(ResourceManager.internDouble(new Double(((Integer)field).intValue())));
 						}
 						else if (field instanceof Double)
 						{

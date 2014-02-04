@@ -625,7 +625,7 @@ public class TableScanOperator implements Operator, Serializable
 							j++;
 						}
 				
-						queue.put(newLine.toString());
+						queue.put(ResourceManager.internString(newLine.toString()));
 						i++;
 						line = in.readLine();
 				
@@ -660,7 +660,7 @@ public class TableScanOperator implements Operator, Serializable
 								j++;
 							}
 				
-							queue.put(newLine.toString());
+							queue.put(ResourceManager.internString(newLine.toString()));
 							count++;
 							o = child.next(TableScanOperator.this);
 						}
@@ -753,19 +753,19 @@ public class TableScanOperator implements Operator, Serializable
 						{
 							if (type.equals("INT"))
 							{
-								row.add(Integer.parseInt(tokens.nextToken()));
+								row.add(ResourceManager.internInt(Integer.parseInt(tokens.nextToken())));
 							}
 							else if (type.equals("FLOAT"))
 							{
-								row.add(Double.parseDouble(tokens.nextToken()));
+								row.add(ResourceManager.internDouble(Double.parseDouble(tokens.nextToken())));
 							}
 							else if (type.equals("CHAR"))
 							{
-								row.add(tokens.nextToken());
+								row.add(ResourceManager.internString(tokens.nextToken()));
 							}
 							else if (type.equals("LONG"))
 							{
-								row.add(Long.parseLong(tokens.nextToken()));
+								row.add(ResourceManager.internLong(Long.parseLong(tokens.nextToken())));
 							}
 							else if (type.equals("DATE"))
 							{

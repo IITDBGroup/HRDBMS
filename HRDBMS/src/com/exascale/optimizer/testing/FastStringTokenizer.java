@@ -26,14 +26,14 @@ public class FastStringTokenizer implements Serializable {
  
         while (j >= 0)
         {
-            temp[wordCount++] = string.substring(i, j);
+            temp[wordCount++] = ResourceManager.internString(string.substring(i, j));
             i = j + 1;
             j = string.indexOf(delimiter, i);
         }
  
         if (i < string.length())
         {
-        	temp[wordCount++] = string.substring(i);
+        	temp[wordCount++] = ResourceManager.internString(string.substring(i));
         }
  
         result = new String[wordCount];

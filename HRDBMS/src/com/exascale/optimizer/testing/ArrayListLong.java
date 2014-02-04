@@ -617,7 +617,7 @@ public class ArrayListLong
             if (i >= elementData.length)
                 throw new ConcurrentModificationException();
             cursor = i + 1;
-            return new Long(elementData[lastRet = i]);
+            return ResourceManager.internLong(new Long(elementData[lastRet = i]));
         }
 
         public void remove() {
