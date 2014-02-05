@@ -1091,7 +1091,18 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 						if (nlHash != null)
 						{
 							ArrayList<Object> key = new ArrayList<Object>(1);
-							key.add(lRow.get(pos));
+							try
+							{
+								key.add(lRow.get(pos));
+							}
+							catch(Exception e)
+							{
+								e.printStackTrace();
+								System.out.println("pos = " + pos);
+								System.out.println("lRow = " + lRow);
+								System.out.println("key = " + key);
+								System.exit(1);
+							}
 							long hash = 0x0EFFFFFFFFFFFFFFL & nlHash.hash(key);
 							for (ArrayList<Object> rRow : nlHash.getCandidates(hash))
 							{
@@ -1189,7 +1200,7 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 	public Object next(Operator op) throws Exception {
 		if (indexAccess)
 		{
-			synchronized(this)
+			synchronized(queuedRows)
 			{
 				if (queuedRows.size() > 0)
 				{
@@ -1255,23 +1266,62 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 						i++;
 					}
 
-					Operator clone = clone(children.get(1));
-					clone.start();
-					
+					Operator clone = null;
 					if (!doReset)
 					{
-						doReset = true;
-						for (Index index : dynamicIndexes)
+						synchronized(this)
+						{
+							if (!doReset)
+							{
+								doReset = true;
+								for (Index index : dynamicIndexes)
+								{
+									index.setDelayedConditions(deepClone(dynamics));
+								}
+						
+								clone = children.get(1);
+							}
+							else
+							{
+								clone = clone(children.get(1));
+								RootOperator root = new RootOperator(meta);
+								root.add(clone);
+								if (clone instanceof TableScanOperator)
+								{
+									if (((TableScanOperator) children.get(1)).orderedFilters.size() > 0)
+									{
+										((TableScanOperator) clone).setCNFForParent(root, ((TableScanOperator)children.get(1)).getCNFForParent(this));
+									}
+								}
+								clone = root;
+								clone.start();
+							
+								for (Index index : dynamicIndexes(children.get(1), clone.children().get(0)))
+								{
+									index.setDelayedConditions(deepClone(dynamics));
+								}
+							}
+						}
+					}
+					else
+					{	
+						clone = clone(children.get(1));
+						RootOperator root = new RootOperator(meta);
+						root.add(clone);
+						if (clone instanceof TableScanOperator)
+						{
+							if (((TableScanOperator) children.get(1)).orderedFilters.size() > 0)
+							{
+								((TableScanOperator) clone).setCNFForParent(root, ((TableScanOperator)children.get(1)).getCNFForParent(this));
+							}
+						}
+						clone = root;
+						clone.start();
+					
+						for (Index index : dynamicIndexes(children.get(1), clone.children().get(0)))
 						{
 							index.setDelayedConditions(deepClone(dynamics));
 						}
-						
-						children.get(1).nextAll(NestedLoopJoinOperator.this);
-					}
-					
-					for (Index index : dynamicIndexes(children.get(1), clone))
-					{
-						index.setDelayedConditions(deepClone(dynamics));
 					}
 				
 					boolean retval = false;
@@ -1557,6 +1607,16 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 			try
 			{
 				clone.add(clone(o));
+				clone.setChildPos(op.getChildPos());
+				if (o instanceof TableScanOperator)
+				{
+					CNFFilter cnf = ((TableScanOperator) o).getCNFForParent(op);
+					if (cnf != null)
+					{
+						Operator child = clone.children().get(i);
+						((TableScanOperator)child).setCNFForParent(clone, cnf);
+					}
+				}
 				
 				if (op instanceof TableScanOperator)
 				{

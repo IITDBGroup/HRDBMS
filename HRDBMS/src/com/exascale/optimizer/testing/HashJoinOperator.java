@@ -667,7 +667,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 	{
 		if (indexAccess)
 		{
-			synchronized(this)
+			synchronized(queuedRows)
 			{
 				if (queuedRows.size() > 0)
 				{
@@ -706,23 +706,62 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 						i++;
 					}
 				
-					Operator clone = clone(children.get(1));
-					clone.start();
-					
+					Operator clone = null;
 					if (!doReset)
 					{
-						doReset = true;
-						for (Index index : dynamicIndexes)
+						synchronized(this)
+						{
+							if (!doReset)
+							{
+								doReset = true;
+								for (Index index : dynamicIndexes)
+								{
+									index.setDelayedConditions(deepClone(dynamics));
+								}
+						
+								clone = children.get(1);
+							}
+							else
+							{
+								clone = clone(children.get(1));
+								RootOperator root = new RootOperator(meta);
+								root.add(clone);
+								if (clone instanceof TableScanOperator)
+								{
+									if (((TableScanOperator) children.get(1)).orderedFilters.size() > 0)
+									{
+										((TableScanOperator) clone).setCNFForParent(root, ((TableScanOperator)children.get(1)).getCNFForParent(this));
+									}
+								}
+								clone = root;
+								clone.start();
+							
+								for (Index index : dynamicIndexes(children.get(1), clone.children().get(0)))
+								{
+									index.setDelayedConditions(deepClone(dynamics));
+								}
+							}
+						}
+					}
+					else
+					{	
+						clone = clone(children.get(1));
+						RootOperator root = new RootOperator(meta);
+						root.add(clone);
+						if (clone instanceof TableScanOperator)
+						{
+							if (((TableScanOperator) children.get(1)).orderedFilters.size() > 0)
+							{
+								((TableScanOperator) clone).setCNFForParent(root, ((TableScanOperator)children.get(1)).getCNFForParent(this));
+							}
+						}
+						clone = root;
+						clone.start();
+					
+						for (Index index : dynamicIndexes(children.get(1), clone.children().get(0)))
 						{
 							index.setDelayedConditions(deepClone(dynamics));
 						}
-						
-						children.get(1).nextAll(HashJoinOperator.this);
-					}
-					
-					for (Index index : dynamicIndexes(children.get(1), clone))
-					{
-						index.setDelayedConditions(deepClone(dynamics));
 					}
 				
 					boolean retval = false;
@@ -957,11 +996,22 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 			try
 			{
 				clone.add(clone(o));
+				clone.setChildPos(op.getChildPos());
+				if (o instanceof TableScanOperator)
+				{
+					CNFFilter cnf = ((TableScanOperator) o).getCNFForParent(op);
+					if (cnf != null)
+					{
+						Operator child = clone.children().get(i);
+						((TableScanOperator)child).setCNFForParent(clone, cnf);
+					}
+				}
 				
 				if (op instanceof TableScanOperator)
 				{
 					Operator child = clone.children().get(i);
 					int device = -1;
+					
 					for (Map.Entry entry : (((TableScanOperator) op).device2Child).entrySet())
 					{
 						if (entry.getValue() == o)

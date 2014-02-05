@@ -143,9 +143,9 @@ public class RootOperator implements Operator
 		return child.next(this);
 	}
 	
-	public ArrayList<Object> next(Operator op) throws Exception
+	public Object next(Operator op) throws Exception
 	{
-		throw new Exception("Cannot call next(op) on RootOperator");
+		return child.next(this);
 	}
 	
 	public void close() throws Exception 

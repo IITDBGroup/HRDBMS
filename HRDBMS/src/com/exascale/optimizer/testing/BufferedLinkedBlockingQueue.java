@@ -53,6 +53,12 @@ public class BufferedLinkedBlockingQueue  implements Serializable
 	
 	public void put(Object o)
 	{
+		if (o == null)
+		{
+			System.out.println("Null object placed on queue");
+			Thread.dumpStack();
+			System.exit(1);
+		}
 		ArrayAndIndex oa = threadLocal.get(Thread.currentThread());
 		if (oa == null)
 		{

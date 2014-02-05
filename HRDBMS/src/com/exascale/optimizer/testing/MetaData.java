@@ -2613,13 +2613,13 @@ public class MetaData implements Serializable
 			orders.add(true);
 			retval.add(new Index("xs_comment.indx", keys, types, orders));
 			
-			//keys = new ArrayList<String>();
-			//keys.add("S_SUPPKEY");
-			//types = new ArrayList<String>();
-			//types.add("INT");
-			//orders = new ArrayList<Boolean>();
-			//orders.add(true);
-			//retval.add(new Index("xs_suppkey.indx", keys, types, orders));
+			keys = new ArrayList<String>();
+			keys.add("S_SUPPKEY");
+			types = new ArrayList<String>();
+			types.add("INT");
+			orders = new ArrayList<Boolean>();
+			orders.add(true);
+			retval.add(new Index("xs_suppkey.indx", keys, types, orders));
 		}
 		
 		if (table.equals("PARTSUPP"))

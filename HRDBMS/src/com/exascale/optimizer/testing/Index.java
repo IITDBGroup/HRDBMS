@@ -51,7 +51,7 @@ public class Index implements Serializable
 		}
 	}
 	
-	public Index clone()
+	public synchronized Index clone()
 	{
 		Index retval = new Index(fileName, keys, types, orders);
 		if (f != null)
@@ -96,6 +96,32 @@ public class Index implements Serializable
 		{
 			retval.renames = null;
 		}
+		if (delayedConditions != null)
+		{
+			retval.delayedConditions = deepClone(delayedConditions);
+			retval.delayed = true;
+		}
+		else
+		{
+			retval.delayedConditions = null;
+		}
+		
+		if (retval.delayedConditions != null)
+		{
+			for (Filter filter : retval.delayedConditions)
+			{
+				if (retval.f != null && filter.equals(retval.f))
+				{
+					retval.f = null;
+				}
+				else
+				{
+					retval.secondary.remove(filter);
+				}
+			}
+			retval.delayedConditions = null;
+		}
+		
 		return retval;
 	}
 	
@@ -104,7 +130,7 @@ public class Index implements Serializable
 		this.renames = renames;
 	}
 	
-	public void setDelayedConditions(ArrayList<Filter> filters)
+	public synchronized void setDelayedConditions(ArrayList<Filter> filters)
 	{
 		this.delayedConditions = filters;
 		for (Filter filter : filters)
@@ -149,10 +175,10 @@ public class Index implements Serializable
 			System.exit(1);
 		}
 		
-		if (delayed)
-		{
-			System.out.println("Index is opened delayed");
-		}
+		//if (delayed)
+		//{
+		//	System.out.println("Index is opened delayed");
+		//}
 	}
 	
 	public void close()
@@ -1279,7 +1305,7 @@ public class Index implements Serializable
 		return retval;
 	}
 	
-	public void reset()
+	public synchronized void reset()
 	{
 		try
 		{

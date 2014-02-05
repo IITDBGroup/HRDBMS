@@ -568,7 +568,8 @@ public class Phase5
 					leftCard = 1;
 				}
 				//System.out.println("Left card = " + leftCard);
-				//System.out.println(meta.likelihood(((HashJoinOperator)op).getHSHM(), root) * leftCard);
+				System.out.println(meta.likelihood(((HashJoinOperator)op).getHSHM(), root) * leftCard);
+				System.out.println("Before multiplier: " + meta.likelihood(((HashJoinOperator)op).getHSHM(), root));
 				if (leftCard < rightCard && meta.likelihood(((HashJoinOperator)op).getHSHM(), root) * leftCard <= 1.0 / 400.0)
 				{
 					retval.add(op);
@@ -602,7 +603,8 @@ public class Phase5
 						leftCard = 1;
 					}
 					//System.out.println("Left card = " + leftCard);
-					//System.out.println(meta.likelihood(hshm, root) * leftCard);
+					System.out.println(meta.likelihood(hshm, root) * leftCard);
+					System.out.println("Before multiplier: " + meta.likelihood(hshm, root));
 					if (leftCard < rightCard && meta.likelihood(hshm, root) * leftCard <= 1.0 / 400.0)
 					{
 						retval.add(op);
@@ -637,7 +639,8 @@ public class Phase5
 						leftCard = 1;
 					}
 				//	System.out.println("Left card = " + leftCard);
-					//System.out.println(meta.likelihood(hshm, root) * leftCard);
+					System.out.println(meta.likelihood(hshm, root) * leftCard);
+					System.out.println("Before multiplier: " + meta.likelihood(hshm, root));
 					if (leftCard < rightCard && meta.likelihood(hshm, root) * leftCard <= 1.0 / 400.0)
 					{
 						retval.add(op);
@@ -672,7 +675,8 @@ public class Phase5
 						leftCard = 1;
 					}
 					//System.out.println("Left card = " + leftCard);
-					//System.out.println(meta.likelihood(hshm, root) * leftCard);
+					System.out.println(meta.likelihood(hshm, root) * leftCard);
+					System.out.println("Before multiplier: " + meta.likelihood(hshm, root));
 					if (leftCard < rightCard && meta.likelihood(hshm, root) * leftCard <= 1.0 / 400.0)
 					{
 						retval.add(op);
