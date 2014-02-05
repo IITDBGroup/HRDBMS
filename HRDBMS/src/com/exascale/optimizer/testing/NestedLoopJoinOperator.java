@@ -26,8 +26,7 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 	protected HashMap<String, Integer> cols2Pos;
 	protected TreeMap<Integer, String> pos2Col;
 	protected MetaData meta;
-	protected volatile BufferedLinkedBlockingQueue outBuffer = new BufferedLinkedBlockingQueue(
-			Driver.QUEUE_SIZE);
+	protected volatile BufferedLinkedBlockingQueue outBuffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
 	protected volatile DiskBackedArray inBuffer;
 	protected int NUM_RT_THREADS = 4 * ResourceManager.cpus;
 	protected int NUM_PTHREADS = 4 * ResourceManager.cpus;
@@ -58,7 +57,7 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
     public boolean setRightChildCard(int card)
     {
     	if (cardSet)
-    	{
+{
     		return false;
     	}
     	
@@ -1256,37 +1255,48 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 						i++;
 					}
 
-					synchronized(this)
-					{
-						if (doReset)
-						{
-							children.get(1).reset();
-						}
-						else
-						{
-							doReset = true;
-						}
+					Operator clone = clone(children.get(1));
+					clone.start();
 					
+					if (!doReset)
+					{
+						doReset = true;
 						for (Index index : dynamicIndexes)
 						{
-							index.setDelayedConditions(dynamics);
+							index.setDelayedConditions(deepClone(dynamics));
 						}
+						
+						children.get(1).nextAll(NestedLoopJoinOperator.this);
+					}
 					
-						Object o2 = children.get(1).next(this);
-						while (!(o2 instanceof DataEndMarker))
+					for (Index index : dynamicIndexes(children.get(1), clone))
+					{
+						index.setDelayedConditions(deepClone(dynamics));
+					}
+				
+					boolean retval = false;
+					Object o2 = clone.next(this);
+					
+					while (!(o2 instanceof DataEndMarker))
+					{
+						ArrayList<Object> out = new ArrayList<Object>(((ArrayList<Object>)o).size() + ((ArrayList<Object>)o2).size());
+						out.addAll((ArrayList<Object>)o);
+						out.addAll((ArrayList<Object>)o2);
+						synchronized(queuedRows)
 						{
-							ArrayList<Object> out = new ArrayList<Object>(((ArrayList<Object>)o).size() + ((ArrayList<Object>)o2).size());
-							out.addAll((ArrayList<Object>)o);
-							out.addAll((ArrayList<Object>)o2);
 							queuedRows.add(out);
-							o2 = children.get(1).next(this);
 						}
+						o2 = clone.next(this);
+					}
 					
+					clone.close();
+					synchronized(queuedRows)
+					{
 						if (queuedRows.size() > 0)
 						{
 							return queuedRows.remove(0);
 						}
-					}	
+					}
 				}
 		}
 		
@@ -1541,17 +1551,34 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 	private Operator clone(Operator op)
 	{
 		Operator clone = op.clone();
+		int i = 0;
 		for (Operator o : op.children())
 		{
 			try
 			{
-				clone.add(o.clone());
+				clone.add(clone(o));
+				
+				if (op instanceof TableScanOperator)
+				{
+					Operator child = clone.children().get(i);
+					int device = -1;
+					for (Map.Entry entry : (((TableScanOperator) op).device2Child).entrySet())
+					{
+						if (entry.getValue() == o)
+						{
+							device = (Integer)entry.getKey();
+						}
+					}
+					((TableScanOperator) clone).setChildForDevice(device, child);
+				}
 			}
 			catch(Exception e)
 			{
 				e.printStackTrace();
 				System.exit(1);
 			}
+			
+			i++;
 		}
 		
 		return clone;
@@ -1578,5 +1605,16 @@ public class NestedLoopJoinOperator extends JoinOperator implements Serializable
 		}
 		
 		return retval;
+	}
+	
+	private ArrayList<Filter> deepClone(ArrayList<Filter> in)
+	{
+		ArrayList<Filter> out = new ArrayList<Filter>();
+		for (Filter f : in)
+		{
+			out.add(f.clone());
+		}
+		
+		return out;
 	}
 }

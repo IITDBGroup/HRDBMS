@@ -1465,7 +1465,7 @@ public class SemiJoinOperator implements Operator, Serializable
 						doReset = true;
 						for (Index index : dynamicIndexes)
 						{
-							index.setDelayedConditions(dynamics);
+							index.setDelayedConditions(deepClone(dynamics));
 						}
 						
 						children.get(1).nextAll(SemiJoinOperator.this);
@@ -1476,7 +1476,7 @@ public class SemiJoinOperator implements Operator, Serializable
 					
 					for (Index index : dynamicIndexes(children.get(1), clone))
 					{
-						index.setDelayedConditions(dynamics);
+						index.setDelayedConditions(deepClone(dynamics));
 					}
 				
 					boolean retval = false;
@@ -1786,17 +1786,34 @@ public class SemiJoinOperator implements Operator, Serializable
 	private Operator clone(Operator op)
 	{
 		Operator clone = op.clone();
+		int i = 0;
 		for (Operator o : op.children())
 		{
 			try
 			{
-				clone.add(o.clone());
+				clone.add(clone(o));
+				
+				if (op instanceof TableScanOperator)
+				{
+					Operator child = clone.children().get(i);
+					int device = -1;
+					for (Map.Entry entry : (((TableScanOperator) op).device2Child).entrySet())
+					{
+						if (entry.getValue() == o)
+						{
+							device = (Integer)entry.getKey();
+						}
+					}
+					((TableScanOperator) clone).setChildForDevice(device, child);
+				}
 			}
 			catch(Exception e)
 			{
 				e.printStackTrace();
 				System.exit(1);
 			}
+			
+			i++;
 		}
 		
 		return clone;
@@ -1823,5 +1840,16 @@ public class SemiJoinOperator implements Operator, Serializable
 		}
 		
 		return retval;
+	}
+	
+	private ArrayList<Filter> deepClone(ArrayList<Filter> in)
+	{
+		ArrayList<Filter> out = new ArrayList<Filter>();
+		for (Filter f : in)
+		{
+			out.add(f.clone());
+		}
+		
+		return out;
 	}
 }

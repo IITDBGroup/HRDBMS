@@ -706,33 +706,43 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 						i++;
 					}
 				
-					//System.out.println("HashJoinOperator is reseting its right child and " + dynamicIndexes.size() + " indexes");
-					synchronized(this)
+					Operator clone = clone(children.get(1));
+					clone.start();
+					
+					if (!doReset)
 					{
-						if (doReset)
-						{
-							children.get(1).reset();
-						}
-						else
-						{
-							doReset = true;
-						}
-						
+						doReset = true;
 						for (Index index : dynamicIndexes)
 						{
-							index.setDelayedConditions(dynamics);
+							index.setDelayedConditions(deepClone(dynamics));
 						}
+						
+						children.get(1).nextAll(HashJoinOperator.this);
+					}
 					
-						Object o2 = children.get(1).next(this);
-						while (!(o2 instanceof DataEndMarker))
+					for (Index index : dynamicIndexes(children.get(1), clone))
+					{
+						index.setDelayedConditions(deepClone(dynamics));
+					}
+				
+					boolean retval = false;
+					Object o2 = clone.next(this);
+					
+					while (!(o2 instanceof DataEndMarker))
+					{
+						ArrayList<Object> out = new ArrayList<Object>(((ArrayList<Object>)o).size() + ((ArrayList<Object>)o2).size());
+						out.addAll((ArrayList<Object>)o);
+						out.addAll((ArrayList<Object>)o2);
+						synchronized(queuedRows)
 						{
-							ArrayList<Object> out = new ArrayList<Object>(((ArrayList<Object>)o).size() + ((ArrayList<Object>)o2).size());
-							out.addAll((ArrayList<Object>)o);
-							out.addAll((ArrayList<Object>)o2);
 							queuedRows.add(out);
-							o2 = children.get(1).next(this);
 						}
+						o2 = clone.next(this);
+					}
 					
+					clone.close();
+					synchronized(queuedRows)
+					{
 						if (queuedRows.size() > 0)
 						{
 							return queuedRows.remove(0);
@@ -936,5 +946,75 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 		    hashCode = 31*hashCode + (e==null ? 0 : eHash);
 		}
 		return hashCode;
+	}
+	
+	private Operator clone(Operator op)
+	{
+		Operator clone = op.clone();
+		int i = 0;
+		for (Operator o : op.children())
+		{
+			try
+			{
+				clone.add(clone(o));
+				
+				if (op instanceof TableScanOperator)
+				{
+					Operator child = clone.children().get(i);
+					int device = -1;
+					for (Map.Entry entry : (((TableScanOperator) op).device2Child).entrySet())
+					{
+						if (entry.getValue() == o)
+						{
+							device = (Integer)entry.getKey();
+						}
+					}
+					((TableScanOperator) clone).setChildForDevice(device, child);
+				}
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
+				System.exit(1);
+			}
+			
+			i++;
+		}
+		
+		return clone;
+	}
+	
+	private ArrayList<Index> dynamicIndexes(Operator model, Operator actual)
+	{
+		ArrayList<Index> retval = new ArrayList<Index>(dynamicIndexes.size());
+		if (model instanceof IndexOperator)
+		{
+			if (dynamicIndexes.contains(((IndexOperator) model).index))
+			{
+				retval.add(((IndexOperator)actual).index);
+			}
+		}
+		else
+		{
+			int i = 0;
+			for (Operator o : model.children())
+			{
+				retval.addAll(dynamicIndexes(o, actual.children().get(i)));
+				i++;
+			}
+		}
+		
+		return retval;
+	}
+	
+	private ArrayList<Filter> deepClone(ArrayList<Filter> in)
+	{
+		ArrayList<Filter> out = new ArrayList<Filter>();
+		for (Filter f : in)
+		{
+			out.add(f.clone());
+		}
+		
+		return out;
 	}
 }

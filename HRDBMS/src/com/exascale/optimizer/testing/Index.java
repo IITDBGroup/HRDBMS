@@ -54,13 +54,48 @@ public class Index implements Serializable
 	public Index clone()
 	{
 		Index retval = new Index(fileName, keys, types, orders);
-		retval.f = this.f;
-		retval.secondary = (ArrayList<Filter>)secondary.clone();
+		if (f != null)
+		{
+			retval.f = this.f.clone();
+		}
+		else
+		{
+			retval.f = null;
+		}
+		if (secondary != null)
+		{
+			retval.secondary = deepClone(secondary);
+		}
+		else
+		{
+			retval.secondary = null;
+		}
 		retval.indexOnly = indexOnly;
-		retval.fetches = fetches;
-		retval.fetchTypes = fetchTypes;
+		if (fetches != null)
+		{
+			retval.fetches = (ArrayList<Integer>)fetches.clone();
+		}
+		else
+		{
+			retval.fetches = null;
+		}
+		if (fetchTypes != null)
+		{
+			retval.fetchTypes = (ArrayList<String>)fetchTypes.clone();
+		}
+		else
+		{
+			retval.fetchTypes = null;
+		}
 		retval.delayed = delayed;
-		retval.renames = renames;
+		if (renames != null)
+		{
+			retval.renames = (HashMap<String, String>)renames.clone();
+		}
+		else
+		{
+			retval.renames = null;
+		}
 		return retval;
 	}
 	
@@ -1282,5 +1317,16 @@ public class Index implements Serializable
 	public void runDelayed()
 	{
 		delayed = true;
+	}
+	
+	private ArrayList<Filter> deepClone(ArrayList<Filter> in)
+	{
+		ArrayList<Filter> out = new ArrayList<Filter>();
+		for (Filter f : in)
+		{
+			out.add(f.clone());
+		}
+		
+		return out;
 	}
 }

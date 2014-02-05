@@ -1481,7 +1481,7 @@ public class AntiJoinOperator implements Operator, Serializable
 						doReset = true;
 						for (Index index : dynamicIndexes)
 						{
-							index.setDelayedConditions(dynamics);
+							index.setDelayedConditions(deepClone(dynamics));
 						}
 						
 						children.get(1).nextAll(AntiJoinOperator.this);
@@ -1489,7 +1489,7 @@ public class AntiJoinOperator implements Operator, Serializable
 					
 					for (Index index : dynamicIndexes(children.get(1), clone))
 					{
-						index.setDelayedConditions(dynamics);
+						index.setDelayedConditions(deepClone(dynamics));
 					}
 				
 					boolean retval = false;
@@ -1804,17 +1804,34 @@ public class AntiJoinOperator implements Operator, Serializable
 	private Operator clone(Operator op)
 	{
 		Operator clone = op.clone();
+		int i = 0;
 		for (Operator o : op.children())
 		{
 			try
 			{
-				clone.add(o.clone());
+				clone.add(clone(o));
+				
+				if (op instanceof TableScanOperator)
+				{
+					Operator child = clone.children().get(i);
+					int device = -1;
+					for (Map.Entry entry : (((TableScanOperator) op).device2Child).entrySet())
+					{
+						if (entry.getValue() == o)
+						{
+							device = (Integer)entry.getKey();
+						}
+					}
+					((TableScanOperator) clone).setChildForDevice(device, child);
+				}
 			}
 			catch(Exception e)
 			{
 				e.printStackTrace();
 				System.exit(1);
 			}
+			
+			i++;
 		}
 		
 		return clone;
@@ -1835,11 +1852,35 @@ public class AntiJoinOperator implements Operator, Serializable
 			int i = 0;
 			for (Operator o : model.children())
 			{
-				retval.addAll(dynamicIndexes(o, actual.children().get(i)));
+				try
+				{
+					retval.addAll(dynamicIndexes(o, actual.children().get(i)));
+				}
+				catch(Exception e)
+				{
+					e.printStackTrace();
+					System.out.println("Model and actual don't match!");
+					System.out.println("Actual = " + actual);
+					System.out.println("Actual children = " + actual.children());
+					System.out.println("Model = " + model);
+					System.out.println("Model children = " + model.children());
+					System.exit(1);
+				}
 				i++;
 			}
 		}
 		
 		return retval;
+	}
+	
+	private ArrayList<Filter> deepClone(ArrayList<Filter> in)
+	{
+		ArrayList<Filter> out = new ArrayList<Filter>();
+		for (Filter f : in)
+		{
+			out.add(f.clone());
+		}
+		
+		return out;
 	}
 }

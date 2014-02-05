@@ -34,7 +34,6 @@ public class TableScanOperator implements Operator, Serializable
 	public volatile BufferedLinkedBlockingQueue readBuffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
 	protected volatile HashMap<Operator, BufferedLinkedBlockingQueue> readBuffers = new HashMap<Operator, BufferedLinkedBlockingQueue>();
 	protected boolean startDone = false;
-	protected boolean closeDone = false;
 	protected boolean optimize = false;
 	public volatile BufferedLinkedBlockingQueue queue = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
 	protected final int NUM_PTHREADS = ResourceManager.cpus;
@@ -481,18 +480,27 @@ public class TableScanOperator implements Operator, Serializable
 		}
 	}
 	
-	public synchronized void close() throws IOException
+	public void close() throws IOException
 	{
-		if (!closeDone)
+		for (BufferedReader in : ins)
 		{
-			closeDone = true;
-			for (BufferedReader in : ins)
+			in.close();
+		}
+		for (BufferedRandomAccessFile in : randomIns)
+		{
+			in.close();
+		}
+		
+		for (Operator o : children)
+		{
+			try
 			{
-				in.close();
+				o.close();
 			}
-			for (BufferedRandomAccessFile in : randomIns)
+			catch(Exception e)
 			{
-				in.close();
+				e.printStackTrace();
+				System.exit(1);
 			}
 		}
 	}
@@ -639,7 +647,20 @@ public class TableScanOperator implements Operator, Serializable
 				{
 					int count = 0;
 					Operator child = device2Child.get(ins2Device.get(in2));
-					Object o = child.next(TableScanOperator.this);
+					Object o = null;
+					try
+					{
+						o = child.next(TableScanOperator.this);
+					}
+					catch(Exception e)
+					{
+						e.printStackTrace();
+						System.out.println("ins2Device = " + ins2Device);
+						System.out.println("ins2Device.get(in2) = " + ins2Device.get(in2));
+						System.out.println("device2Child = " + device2Child);
+						System.out.println("device2Child.get(ins2Device.get(in2)) = " + device2Child.get(ins2Device.get(in2)));
+						System.exit(1);
+					}
 					//@?Parallel
 					while (!(o instanceof DataEndMarker))
 					{
