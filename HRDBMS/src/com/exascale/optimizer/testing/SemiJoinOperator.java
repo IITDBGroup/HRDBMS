@@ -1460,36 +1460,37 @@ public class SemiJoinOperator implements Operator, Serializable
 						i++;
 					}
 
-					synchronized(this)
+					if (!doReset)
 					{
-						if (doReset)
-						{
-							children.get(1).reset();
-						}
-						else
-						{
-							doReset = true;
-						}
-					
+						doReset = true;
 						for (Index index : dynamicIndexes)
 						{
 							index.setDelayedConditions(dynamics);
 						}
+						
+						children.get(1).nextAll(SemiJoinOperator.this);
+					}
+
+					Operator clone = clone(children.get(1));
+					clone.start();
+					
+					for (Index index : dynamicIndexes(children.get(1), clone))
+					{
+						index.setDelayedConditions(dynamics);
+					}
 				
-						boolean retval = false;
-						Object o2 = children.get(1).next(this);
-						if (!(o2 instanceof DataEndMarker))
-						{
-							retval = true;
-						}
+					boolean retval = false;
+					Object o2 = clone.next(this);
+					if (!(o2 instanceof DataEndMarker))
+					{
+						retval = true;
+					}
 					
-						Operator c1 = children.get(1);
-						c1.nextAll(SemiJoinOperator.this);
-					
-						if (retval)
-						{
-							return o;
-						}
+					clone.nextAll(SemiJoinOperator.this);
+					clone.close();
+					if (retval)
+					{
+						return o;
 					}
 				}
 		}
@@ -1779,6 +1780,48 @@ public class SemiJoinOperator implements Operator, Serializable
 		
 		ArrayList<String> retval = new ArrayList<String>(1);
 		retval.add(x.rightColumn());
+		return retval;
+	}
+	
+	private Operator clone(Operator op)
+	{
+		Operator clone = op.clone();
+		for (Operator o : op.children())
+		{
+			try
+			{
+				clone.add(o.clone());
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
+				System.exit(1);
+			}
+		}
+		
+		return clone;
+	}
+	
+	private ArrayList<Index> dynamicIndexes(Operator model, Operator actual)
+	{
+		ArrayList<Index> retval = new ArrayList<Index>(dynamicIndexes.size());
+		if (model instanceof IndexOperator)
+		{
+			if (dynamicIndexes.contains(((IndexOperator) model).index))
+			{
+				retval.add(((IndexOperator)actual).index);
+			}
+		}
+		else
+		{
+			int i = 0;
+			for (Operator o : model.children())
+			{
+				retval.addAll(dynamicIndexes(o, actual.children().get(i)));
+				i++;
+			}
+		}
+		
 		return retval;
 	}
 }
