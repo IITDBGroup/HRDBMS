@@ -129,7 +129,7 @@ public class SubstringOperator implements Operator, Serializable
 		
 		ArrayList<Object> row = (ArrayList<Object>)o;
 		String field = (String)row.get(colPos);
-		row.add(ResourceManager.internString(field.substring(start, end)));
+		row.add(field.substring(start, end));
 		return row;
 	}
 

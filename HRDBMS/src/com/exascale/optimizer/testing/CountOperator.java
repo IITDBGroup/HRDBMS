@@ -94,7 +94,7 @@ public class CountOperator implements AggregateOperator, Serializable
 		
 		public Object getResult()
 		{
-			return ResourceManager.internLong(new Long(result));
+			return new Long(result);
 		}
 		
 		public void run()

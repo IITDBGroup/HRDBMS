@@ -31,19 +31,19 @@ public class RowComparator implements Comparator
 			String type = types.get(i);
 			if (type.equals("INT"))
 			{
-				lhs.add(ResourceManager.internInt(Integer.parseInt(((String[])arg0)[i])));
+				lhs.add(Integer.parseInt(((String[])arg0)[i]));
 			}
 			else if (type.equals("FLOAT"))
 			{
-				lhs.add(ResourceManager.internDouble(Double.parseDouble(((String[])arg0)[i])));
+				lhs.add(Double.parseDouble(((String[])arg0)[i]));
 			}
 			else if (type.equals("CHAR"))
 			{
-				lhs.add(ResourceManager.internString(((String[])arg0)[i]));
+				lhs.add(((String[])arg0)[i]);
 			}
 			else if (type.equals("LONG"))
 			{
-				lhs.add(ResourceManager.internLong(Long.parseLong(((String[])arg0)[i])));
+				lhs.add(Long.parseLong(((String[])arg0)[i]));
 			}
 			else if (type.equals("DATE"))
 			{
@@ -68,19 +68,19 @@ public class RowComparator implements Comparator
 			String type = types.get(i);
 			if (type.equals("INT"))
 			{
-				rhs.add(ResourceManager.internInt(Integer.parseInt(((String[])arg1)[i])));
+				rhs.add(Integer.parseInt(((String[])arg1)[i]));
 			}
 			else if (type.equals("FLOAT"))
 			{
-				rhs.add(ResourceManager.internDouble(Double.parseDouble(((String[])arg1)[i])));
+				rhs.add(Double.parseDouble(((String[])arg1)[i]));
 			}
 			else if (type.equals("CHAR"))
 			{
-				rhs.add(ResourceManager.internString(((String[])arg1)[i]));
+				rhs.add(((String[])arg1)[i]);
 			}
 			else if (type.equals("LONG"))
 			{
-				rhs.add(ResourceManager.internLong(Long.parseLong(((String[])arg1)[i])));
+				rhs.add(Long.parseLong(((String[])arg1)[i]));
 			}
 			else if (type.equals("DATE"))
 			{

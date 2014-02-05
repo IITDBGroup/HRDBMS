@@ -93,10 +93,10 @@ public class SumOperator implements AggregateOperator, Serializable
 		{
 			if (isInt)
 			{
-				return ResourceManager.internLong(new Long(result.longValue()));
+				return new Long(result.longValue());
 			}
 			
-			return ResourceManager.internDouble(new Double(result.doubleValue()));
+			return new Double(result.doubleValue());
 		}
 		
 		public void run()
@@ -168,11 +168,11 @@ public class SumOperator implements AggregateOperator, Serializable
 			Double val;
 			if (o instanceof Integer)
 			{
-				val = ResourceManager.internDouble(new Double((Integer)o));
+				val = new Double((Integer)o);
 			}
 			else if (o instanceof Long)
 			{
-				val = ResourceManager.internDouble(new Double((Long)o));
+				val = new Double((Long)o);
 			}
 			else
 			{
@@ -206,10 +206,10 @@ public class SumOperator implements AggregateOperator, Serializable
 		{
 			if (isInt)
 			{
-				return ResourceManager.internLong(new Long(results.get(keys).get().longValue()));
+				return new Long(results.get(keys).get().longValue());
 			}
 			
-			return ResourceManager.internDouble(new Double(results.get(keys).get().doubleValue()));
+			return new Double(results.get(keys).get().doubleValue());
 		}
 		
 		public void close()

@@ -34,6 +34,8 @@ public class Index implements Serializable
 	protected MetaData meta;
 	protected ArrayList<Filter> delayedConditions;
 	protected HashMap<String, String> renames;
+	protected BufferedLinkedBlockingQueue queue = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
+	protected IndexWriterThread iwt;
 	
 	public Index(String fileName, ArrayList<String> keys, ArrayList<String> types, ArrayList<Boolean> orders)
 	{
@@ -147,117 +149,142 @@ public class Index implements Serializable
 		{
 			setStartingPos();
 			positioned = true;
+			iwt = new IndexWriterThread();
+			iwt.start();
 		}
 		
-		if (!indexOnly)
-		{
-			if (ridList.size() > 0)
-			{
-				ArrayList<Object> retval = new ArrayList<Object>(1);
-				retval.add(ridList.remove(0));
-				count++;
-				return retval;
-			}
+		Object o;
+		o = queue.take();
 		
-			ArrayList<Object> retval = null;
-			try
+		if (o instanceof DataEndMarker)
+		{
+			o = queue.peek();
+			if (o == null)
 			{
-				while (!currentKeySatisfies())
-				{
-					if (marksEnd())
-					{
-						//System.out.println("Index " + fileName + "(" + f + ") returned " + count + " RIDs");
-						return new DataEndMarker();
-					}
-			
-					line = in.readLine();
-				}
-			
-				ridList.addAll(getRids());
-				retval = new ArrayList<Object>(1);
-				retval.add(ridList.remove(0));
-				count++;
-				line = in.readLine();
+				queue.put(new DataEndMarker());
+				return new DataEndMarker();
 			}
-			catch(Exception e)
+			else
 			{
-				e.printStackTrace();
-				System.exit(1);
+				queue.put(new DataEndMarker());
+				return o;
 			}
-			return retval;
 		}
-		else
-		{
-			if (ridList.size() > 0)
-			{
-				ridList.remove(0);
-				count++;
-				return row.clone();
-			}
+		return o;
 		
-			row = new ArrayList<Object>(fetches.size());
-			try
+	}
+	
+	private class IndexWriterThread extends ThreadPoolThread
+	{
+		public void run()
+		{
+			while (true)
 			{
-				while (!currentKeySatisfies())
+				if (!indexOnly)
 				{
-					if (marksEnd())
+					try
 					{
-						//System.out.println("Index " + fileName + "(" + f + ") returned " + count + " RIDs");
-						return new DataEndMarker();
-					}
-			
-					line = in.readLine();
-				}
-			
-				ridList.addAll(getRids());
-				int i = 0;
-				int j = 0;
-				FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
-				for (int pos : fetches)
-				{
-					while (i < pos)
-					{
-						tokens.nextToken();
-						i++;
-					}
-					
-					String val = tokens.nextToken();
-					i++;
-					String type = fetchTypes.get(j);
-					if (type.equals("INT"))
-					{
-						row.add(ResourceManager.internInt(Integer.parseInt(val)));
-					}
-					else if (type.equals("FLOAT"))
-					{
-						row.add(ResourceManager.internDouble(Double.parseDouble(val)));
-					}
-					else if (type.equals("CHAR"))
-					{
-						row.add(ResourceManager.internString(val));
-					}
-					else if (type.equals("LONG"))
-					{
-						row.add(ResourceManager.internLong(Long.parseLong(val)));
-					}
-					else if (type.equals("DATE"))
-					{
-						row.add(DateParser.parse(val));
-					}
-					
-					j++;
-				}
+						while (!currentKeySatisfies())
+						{
+							if (marksEnd())
+							{
+								queue.put(new DataEndMarker());
+								return;
+							}
 				
-				ridList.remove(0);
-				count++;
-				line = in.readLine();
+							line = in.readLine();
+						}
+				
+						for (Object r : getRids())
+						{
+							ArrayList<Object> al = new ArrayList<Object>(1);
+							al.add(r);
+							queue.put(al);
+						}
+						
+						line = in.readLine();
+					}
+					catch(Exception e)
+					{
+						e.printStackTrace();
+						System.exit(1);
+					}
+				}
+				else
+				{
+					if (ridList.size() > 0)
+					{
+						ridList.remove(0);
+						count++;
+						queue.put(row.clone());
+						continue;
+					}
+			
+					row = new ArrayList<Object>(fetches.size());
+					try
+					{
+						while (!currentKeySatisfies())
+						{
+							if (marksEnd())
+							{
+								queue.put(new DataEndMarker());
+								return;
+							}
+				
+							line = in.readLine();
+						}
+				
+						ridList.addAll(getRids());
+						int i = 0;
+						int j = 0;
+						FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
+						for (int pos : fetches)
+						{
+							while (i < pos)
+							{
+								tokens.nextToken();
+								i++;
+							}
+						
+							String val = tokens.nextToken();
+							i++;
+							String type = fetchTypes.get(j);
+							if (type.equals("INT"))
+							{
+								row.add(Integer.parseInt(val));
+							}
+							else if (type.equals("FLOAT"))
+							{
+								row.add(Double.parseDouble(val));
+							}
+							else if (type.equals("CHAR"))
+							{
+								row.add(val);
+							}
+							else if (type.equals("LONG"))
+							{
+								row.add(Long.parseLong(val));
+							}
+							else if (type.equals("DATE"))
+							{
+								row.add(DateParser.parse(val));
+							}
+						
+							j++;
+						}
+					
+						ridList.remove(0);
+						count++;
+						line = in.readLine();
+					}
+					catch(Exception e)
+					{
+						e.printStackTrace();
+						System.exit(1);
+					}
+					queue.put(row.clone());
+				}
 			}
-			catch(Exception e)
-			{
-				e.printStackTrace();
-				System.exit(1);
-			}
-			return row.clone();
 		}
 	}
 	
@@ -1222,6 +1249,8 @@ public class Index implements Serializable
 		try
 		{
 			in.seek(0);
+			iwt.join();
+			queue.clear();
 		}
 		catch(Exception e)
 		{

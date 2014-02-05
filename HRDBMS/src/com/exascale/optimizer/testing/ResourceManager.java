@@ -65,26 +65,17 @@ public class ResourceManager extends ThreadPoolThread
     public static int cpus;
     public static final ExecutorService pool;
     public static final AtomicInteger objID = new AtomicInteger(0);
-<<<<<<< Upstream, based on master
     protected static final ConcurrentWeakHashMap<String, WeakReference<String>> internStringMap = new ConcurrentWeakHashMap<String, WeakReference<String>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
     protected static final ConcurrentWeakHashMap<Long, WeakReference<Long>> internLongMap = new ConcurrentWeakHashMap<Long, WeakReference<Long>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
     protected static final ConcurrentWeakHashMap<Integer, WeakReference<Integer>> internIntMap = new ConcurrentWeakHashMap<Integer, WeakReference<Integer>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
     protected static final ConcurrentWeakHashMap<Double, WeakReference<Double>> internDoubleMap = new ConcurrentWeakHashMap<Double, WeakReference<Double>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
     protected static final ConcurrentWeakHashMap<Date, WeakReference<Date>> internDateMap = new ConcurrentWeakHashMap<Date, WeakReference<Date>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
-=======
-    protected static final ConcurrentHashMap<String, String> internStringMap = new ConcurrentHashMap<String, String>();
-    protected static final ConcurrentHashMap<Long, Long> internLongMap = new ConcurrentHashMap<Long, Long>();
-    protected static final ConcurrentHashMap<Integer, Integer> internIntMap = new ConcurrentHashMap<Integer, Integer>();
-    protected static final ConcurrentHashMap<Double, Double> internDoubleMap = new ConcurrentHashMap<Double, Double>();
-    protected static final ConcurrentHashMap<Date, Date> internDateMap = new ConcurrentHashMap<Date, Date>();
->>>>>>> d90a925 Object interning.
     
     static
     {
     	pool = Executors.newCachedThreadPool();
     }
     
-<<<<<<< Upstream, based on master
     public static void clearInternMaps()
     {
     	internStringMap.clear();
@@ -93,7 +84,7 @@ public class ResourceManager extends ThreadPoolThread
     	internDoubleMap.clear();
     	internDateMap.clear();
     }
-=======
+
     public static String internString(final String str)
     {
         final WeakReference<String> cached = internStringMap.get(str);
@@ -635,7 +626,7 @@ public class ResourceManager extends ThreadPoolThread
 						val2.append(((ArrayList)val).get(i).toString());
 						i++;
 					}
-					newVal = ResourceManager.internString(val2.toString());
+					newVal = val2.toString();
 				}
 				
 				long hash = hash(newVal) & 0x0EFFFFFFFFFFFFFFL;
@@ -708,7 +699,7 @@ public class ResourceManager extends ThreadPoolThread
 							val2.append(((ArrayList)val).get(i).toString());
 							i++;
 						}
-						val = ResourceManager.internString(val2.toString());
+						val = val2.toString();
 					}
 				}
 				long hash = hash(val) & 0x0EFFFFFFFFFFFFFFL;
@@ -764,7 +755,7 @@ public class ResourceManager extends ThreadPoolThread
 							val2.append(((ArrayList)val).get(i).toString());
 							i++;
 						}
-						val = ResourceManager.internString(val2.toString());
+						val = val2.toString();
 					}
 				}
 				
@@ -1902,25 +1893,25 @@ public class ResourceManager extends ThreadPoolThread
 				if (bytes[i+4] == 0)
 				{
 					//long
-					Long o = ResourceManager.internLong(bb.getLong());
+					Long o = bb.getLong();
 					retval.add(o);
 				}
 				else if (bytes[i+4] == 1)
 				{
 					//integer
-					Integer o = ResourceManager.internInt(bb.getInt());
+					Integer o = bb.getInt();
 					retval.add(o);
 				}
 				else if (bytes[i+4] == 2)
 				{
 					//double
-					Double o = ResourceManager.internDouble(bb.getDouble());
+					Double o = bb.getDouble();
 					retval.add(o);
 				}
 				else if (bytes[i+4] == 3)
 				{
 					//date
-					Date o = ResourceManager.internDate(new Date(bb.getLong()));
+					Date o = new Date(bb.getLong());
 					retval.add(o);
 				}
 				else if (bytes[i+4] == 4)
@@ -1931,7 +1922,7 @@ public class ResourceManager extends ThreadPoolThread
 					bb.get(temp);
 					try
 					{
-						String o = ResourceManager.internString(new String(temp, "UTF-8"));
+						String o = new String(temp, "UTF-8");
 						retval.add(o);
 					}
 					catch(Exception e)

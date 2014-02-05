@@ -13,7 +13,7 @@ public class AtomicDouble extends Number implements Comparable<AtomicDouble> {
     }  
   
     public AtomicDouble(double initVal) {  
-        this(ResourceManager.internDouble(new Double(initVal)));  
+        this(new Double(initVal));  
     }  
       
     public AtomicDouble(Double initVal) {  
@@ -48,7 +48,7 @@ public class AtomicDouble extends Number implements Comparable<AtomicDouble> {
     public boolean compareAndSet(double expect, double update) {  
         Double origVal, newVal;  
   
-        newVal = ResourceManager.internDouble(new Double(update));  
+        newVal = new Double(update);  
         while (true) {  
             origVal = getDoubleValue();  
   

@@ -91,10 +91,10 @@ public class MinOperator implements AggregateOperator, Serializable
 		{
 			if (isInt)
 			{
-				return ResourceManager.internLong(new Long((long)min));
+				return new Long((long)min);
 			}
 			
-			return ResourceManager.internDouble(new Double(min));
+			return new Double(min);
 		}
 		
 		public void run()
@@ -174,11 +174,11 @@ public class MinOperator implements AggregateOperator, Serializable
 			Double val;
 			if (o instanceof Integer)
 			{
-				val = ResourceManager.internDouble(new Double((Integer)o));
+				val = new Double((Integer)o);
 			}
 			else if (o instanceof Long)
 			{
-				val = ResourceManager.internDouble(new Double((Long)o));
+				val = new Double((Long)o);
 			}
 			else
 			{
@@ -228,7 +228,7 @@ public class MinOperator implements AggregateOperator, Serializable
 		{
 			if (isInt)
 			{
-				return ResourceManager.internLong(new Long((long)mins.get(keys).doubleValue()));
+				return new Long((long)mins.get(keys).doubleValue());
 			}
 			
 			return mins.get(keys).doubleValue();
