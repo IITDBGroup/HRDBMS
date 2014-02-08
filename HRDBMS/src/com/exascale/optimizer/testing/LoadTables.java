@@ -1111,11 +1111,11 @@ public class LoadTables
 				String type = cols2Types.get(pos2Col.get(i));
 				if (type.equals("INT"))
 				{
-					row.add(Integer.parseInt(tokens.nextToken()));
+					row.add(Utils.parseInt(tokens.nextToken()));
 				}
 				else if (type.equals("FLOAT"))
 				{
-					row.add(Double.parseDouble(tokens.nextToken()));
+					row.add(Utils.parseDouble(tokens.nextToken()));
 				}
 				else if (type.equals("CHAR"))
 				{
@@ -1123,7 +1123,7 @@ public class LoadTables
 				}
 				else if (type.equals("LONG"))
 				{
-					row.add(Long.parseLong(tokens.nextToken()));
+					row.add(Utils.parseLong(tokens.nextToken()));
 				}
 				else if (type.equals("DATE"))
 				{

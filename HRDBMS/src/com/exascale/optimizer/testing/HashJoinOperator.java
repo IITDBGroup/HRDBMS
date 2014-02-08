@@ -50,6 +50,8 @@ public class HashJoinOperator extends JoinOperator implements Serializable
     protected volatile boolean doReset = false;
     protected int rightChildCard = 16;
     protected boolean cardSet = false;
+    protected ArrayList<Operator> clones = new ArrayList<Operator>();
+    protected ArrayList<Boolean> lockVector = new ArrayList<Boolean>();
     
     public void setDynamicIndex(ArrayList<Index> indexes)
     {
@@ -723,19 +725,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 							}
 							else
 							{
-								clone = clone(children.get(1));
-								RootOperator root = new RootOperator(meta);
-								root.add(clone);
-								if (clone instanceof TableScanOperator)
-								{
-									if (((TableScanOperator) children.get(1)).orderedFilters.size() > 0)
-									{
-										((TableScanOperator) clone).setCNFForParent(root, ((TableScanOperator)children.get(1)).getCNFForParent(this));
-									}
-								}
-								clone = root;
-								clone.start();
-							
+								clone = getClone();
 								for (Index index : dynamicIndexes(children.get(1), clone.children().get(0)))
 								{
 									index.setDelayedConditions(deepClone(dynamics));
@@ -745,19 +735,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 					}
 					else
 					{	
-						clone = clone(children.get(1));
-						RootOperator root = new RootOperator(meta);
-						root.add(clone);
-						if (clone instanceof TableScanOperator)
-						{
-							if (((TableScanOperator) children.get(1)).orderedFilters.size() > 0)
-							{
-								((TableScanOperator) clone).setCNFForParent(root, ((TableScanOperator)children.get(1)).getCNFForParent(this));
-							}
-						}
-						clone = root;
-						clone.start();
-					
+						clone = getClone();
 						for (Index index : dynamicIndexes(children.get(1), clone.children().get(0)))
 						{
 							index.setDelayedConditions(deepClone(dynamics));
@@ -779,7 +757,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 						o2 = clone.next(this);
 					}
 					
-					clone.close();
+					freeClone(clone);
 					synchronized(queuedRows)
 					{
 						if (queuedRows.size() > 0)
@@ -824,6 +802,11 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 				bucket.close();
 			}
 		}
+		
+		for (Operator o : clones)
+		{
+			o.close();
+		}
 	}
 
 	public void registerParent(Operator op) throws Exception
@@ -855,50 +838,57 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 	
 	protected void writeToHashTable(long hash, ArrayList<Object> row) throws Exception
 	{
+		if (buckets.size() == 0)
+		{
+			synchronized(this)
+			{
+				if (buckets.size() == 0)
+				{
+					buckets.add(ResourceManager.newDiskBackedHashMap(false, rightChildCard));
+				}
+			}
+		}
+		
 		int i = 0;
-		Object o = buckets.get(i).putIfAbsent(hash, row);
+		Object o = 0;
 		while (o != null)
 		{
-			i++;
-			
 			if (i < buckets.size())
 			{
-				DiskBackedHashMap bucket = null;
-				while (bucket == null)
+				o = null;
+				while (o == null)
 				{
-					bucket = buckets.get(i);
+					o = buckets.get(i);
 				}
-				try
-				{
-					o = bucket.putIfAbsent(hash, row);
-				}
-				catch(Exception e)
-				{
-					e.printStackTrace();
-					System.out.println("Buckets is " + buckets);
-					System.out.println("Hash is " + hash);
-					System.out.println("Row is " + row);
-					System.exit(1);
-				}
+				o = ((DiskBackedHashMap)o).putIfAbsent(hash, row);
 			}
 			else
 			{
 				synchronized(buckets)
 				{
-					if (i <buckets.size())
+					if (i < buckets.size())
 					{
-						DiskBackedHashMap bucket = buckets.get(i);
-						o = bucket.putIfAbsent(hash, row);
+						o = null;
+						while (o == null)
+						{
+							o = buckets.get(i);
+						}
+						o = ((DiskBackedHashMap)o).putIfAbsent(hash, row);
 					}
 					else
 					{
-						buckets.add(ResourceManager.newDiskBackedHashMap(false, rightChildCard / buckets.size()));
-						DiskBackedHashMap bucket = buckets.get(i);
-						o = bucket.putIfAbsent(hash, row);
+						o = ResourceManager.newDiskBackedHashMap(false, rightChildCard / buckets.size());
+						((DiskBackedHashMap)o).put(hash, row);
+						buckets.add((DiskBackedHashMap)o);
+						o = null;
 					}
 				}
 			}
+			
+			i++;
 		}
+		
+		return;
 	}
 	
 	protected ArrayList<ArrayList<Object>> getCandidates(long hash) throws ClassNotFoundException, IOException
@@ -1066,5 +1056,86 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 		}
 		
 		return out;
+	}
+	
+	private Operator getClone()
+	{
+		int i = 0;
+		while (i < lockVector.size())
+		{
+			if (!lockVector.get(i))
+			{
+				synchronized(lockVector)
+				{
+					if (!lockVector.get(i))
+					{
+						Operator retval = clones.get(i);
+						synchronized(retval)
+						{
+							lockVector.set(i, true);
+							retval.reset();
+							return retval;
+						}
+					}
+				}
+			}
+			
+			i++;
+		}
+		
+		Operator clone = clone(children.get(1));
+		RootOperator root = new RootOperator(meta);
+		try
+		{
+			root.add(clone);
+		}
+		catch(Exception e)
+		{
+			e.printStackTrace();
+			System.exit(1);
+		}
+		if (clone instanceof TableScanOperator)
+		{
+			if (((TableScanOperator) children.get(1)).orderedFilters.size() > 0)
+			{
+				((TableScanOperator) clone).setCNFForParent(root, ((TableScanOperator)children.get(1)).getCNFForParent(this));
+			}
+		}
+		clone = root;
+		try
+		{
+			clone.start();
+		}
+		catch(Exception e)
+		{
+			e.printStackTrace();
+			System.exit(1);
+		}
+		synchronized(lockVector)
+		{
+			lockVector.add(true);
+			clones.add(clone);
+		}
+		
+		return clone;
+	}
+	
+	private void freeClone(Operator clone)
+	{
+		int i = 0;
+		while (i < clones.size())
+		{
+			Operator o = clones.get(i);
+			if (clone == o)
+			{
+				synchronized(lockVector)
+				{
+					lockVector.set(i, false);
+					return;
+				}
+			}
+			
+			i++;
+		}
 	}
 }

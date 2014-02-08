@@ -312,11 +312,11 @@ public class Index implements Serializable
 							String type = fetchTypes.get(j);
 							if (type.equals("INT"))
 							{
-								row.add(Integer.parseInt(val));
+								row.add(Utils.parseInt(val));
 							}
 							else if (type.equals("FLOAT"))
 							{
-								row.add(Double.parseDouble(val));
+								row.add(Utils.parseDouble(val));
 							}
 							else if (type.equals("CHAR"))
 							{
@@ -324,7 +324,7 @@ public class Index implements Serializable
 							}
 							else if (type.equals("LONG"))
 							{
-								row.add(Long.parseLong(val));
+								row.add(Utils.parseLong(val));
 							}
 							else if (type.equals("DATE"))
 							{
@@ -380,7 +380,7 @@ public class Index implements Serializable
 		try
 		{
 			line = in.readLine();
-			off = Long.parseLong(line);
+			off = Utils.parseLong(line);
 			in.seek(-1 * off);
 		}
 		catch(Exception e)
@@ -604,7 +604,7 @@ public class Index implements Serializable
 					tokens.nextToken();
 					i++;
 				}	
-				off = Long.parseLong(tokens.nextToken());
+				off = Utils.parseLong(tokens.nextToken());
 				if (off >= 0)
 				{
 					break;
@@ -684,7 +684,7 @@ public class Index implements Serializable
 						
 							try
 							{
-								oldOff = Long.parseLong(tokens.nextToken());
+								oldOff = Utils.parseLong(tokens.nextToken());
 							}
 							catch(Exception e)
 							{
@@ -703,7 +703,7 @@ public class Index implements Serializable
 									i++;
 								}
 						
-								oldOff = Long.parseLong(tokens.nextToken());
+								oldOff = Utils.parseLong(tokens.nextToken());
 							}
 							break;
 						}
@@ -722,7 +722,7 @@ public class Index implements Serializable
 								i++;
 							}
 						
-							oldOff = Long.parseLong(tokens.nextToken());
+							oldOff = Utils.parseLong(tokens.nextToken());
 						}
 						else if (((Comparable)key).compareTo(val) == 0)
 						{
@@ -734,7 +734,7 @@ public class Index implements Serializable
 									i++;
 								}
 						
-								oldOff = Long.parseLong(tokens.nextToken());
+								oldOff = Utils.parseLong(tokens.nextToken());
 							}
 							break;
 						}
@@ -756,7 +756,7 @@ public class Index implements Serializable
 						i++;
 					}
 				
-					oldOff = Long.parseLong(tokens.nextToken());
+					oldOff = Utils.parseLong(tokens.nextToken());
 				}
 
 				if (oldOff >= 0)
@@ -786,19 +786,19 @@ public class Index implements Serializable
 	{
 		if (type.equals("INT"))
 		{
-			return ResourceManager.internLong(Long.parseLong(val));
+			return Utils.parseLong(val);
 		}
 		else if (type.equals("FLOAT"))
 		{
-			return ResourceManager.internDouble(Double.parseDouble(val));
+			return Utils.parseDouble(val);
 		}
 		else if (type.equals("CHAR"))
 		{
-			return ResourceManager.internString(val);
+			return val;
 		}
 		else if (type.equals("LONG"))
 		{
-			return ResourceManager.internLong(Long.parseLong(val));
+			return Utils.parseLong(val);
 		}
 		else if (type.equals("DATE"))
 		{
@@ -866,7 +866,7 @@ public class Index implements Serializable
 		ArrayListLong retval = new ArrayListLong(tokens.allTokens().length);
 		while (tokens.hasMoreTokens())
 		{
-			retval.add(Long.parseLong(tokens.nextToken()));
+			retval.add(Utils.parseLong(tokens.nextToken()));
 		}
 		
 		return retval;

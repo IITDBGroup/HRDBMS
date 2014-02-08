@@ -913,7 +913,7 @@ public class MetaData implements Serializable
 							ArrayList<Object> cols = new ArrayList<Object>(2);
 							FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
 							cols.add(tokens.nextToken());
-							cols.add(Long.parseLong(tokens.nextToken()));
+							cols.add(Utils.parseLong(tokens.nextToken()));
 							cards.add(cols);
 							line = in.readLine();
 						}
@@ -1537,11 +1537,11 @@ public class MetaData implements Serializable
 								l5 = (String)line.get(5);
 								line.clear();
 								line.add(column);
-								line.add(Double.parseDouble((String)l1));
-								line.add(Double.parseDouble(l2));
-								line.add(Double.parseDouble(l3));
-								line.add(Double.parseDouble(l4));
-								line.add(Double.parseDouble(l5));
+								line.add(Utils.parseDouble((String)l1));
+								line.add(Utils.parseDouble(l2));
+								line.add(Utils.parseDouble(l3));
+								line.add(Utils.parseDouble(l4));
+								line.add(Utils.parseDouble(l5));
 							}
 						}
 					}
@@ -1924,7 +1924,7 @@ public class MetaData implements Serializable
 			numNodeGroups = 0;
 			while (tokens2.hasMoreTokens())
 			{
-				nodeGroupSet.add(Integer.parseInt(tokens2.nextToken()));
+				nodeGroupSet.add(Utils.parseInt(tokens2.nextToken()));
 				numNodeGroups++;
 			}
 			
@@ -1988,7 +1988,7 @@ public class MetaData implements Serializable
 				numNodes = 0;
 				while (tokens2.hasMoreTokens())
 				{
-					nodeSet.add(Integer.parseInt(tokens2.nextToken()));
+					nodeSet.add(Utils.parseInt(tokens2.nextToken()));
 					numNodes++;
 				}
 			}
@@ -2039,7 +2039,7 @@ public class MetaData implements Serializable
 				numDevices = 0;
 				while (tokens2.hasMoreTokens())
 				{
-					deviceSet.add(Integer.parseInt(tokens2.nextToken()));
+					deviceSet.add(Utils.parseInt(tokens2.nextToken()));
 					numDevices++;
 				}
 			}

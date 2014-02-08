@@ -1071,59 +1071,32 @@ public class ResourceManager extends ThreadPoolThread
 			return;
 		}
 		
-		public Object putIfAbsent(Long key, ArrayList<Object> val) throws Exception
+		public Object putIfAbsent(long key, ArrayList<Object> val) throws Exception
 		{	
-			if (!lowMem)
+			this.lock.readLock().lock();
+			if (this.index != null)
 			{
-				ArrayList<Object> retval = internal.get(key);
-				if (retval != null)
-				{
-					return retval;
-				}
-			
-				this.lock.readLock().lock();
-				retval = (ArrayList<Object>)this.getFromDisk(key);
-				if (retval != null)
+				long r = this.index.get(key);
+				if (r != -1)
 				{
 					this.lock.readLock().unlock();
-					return retval;
+					return r;
 				}
-
-				retval = internal.putIfAbsent(key,  val);
-				this.lock.readLock().unlock();
-				if (retval == null)
-				{
-					if (indexed)
-					{
-						valueIndex.put(val, key);
-					}
-			
-					size.incrementAndGet();
-				}
-			
-				return retval;
 			}
-			else
+			
+			Object retval;
+			retval = internal.putIfAbsent(key, val);
+			this.lock.readLock().unlock();
+			if (retval == null)
 			{
-				synchronized(IALock)
-				{
-					Object retval = this.get(key);
-					if (retval != null)
-					{
-						return retval;
-					}
-					
-					putToDisk(key, val);
-				}
-				
 				if (indexed)
 				{
 					valueIndex.put(val, key);
 				}
-				
+			
 				size.incrementAndGet();
-				return null;
 			}
+			return retval;
 		}
 		
 		public void put(Long key, ArrayList<Object> val) throws Exception

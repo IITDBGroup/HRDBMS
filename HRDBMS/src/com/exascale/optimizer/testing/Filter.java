@@ -319,11 +319,11 @@ public class Filter implements Cloneable, Serializable
 		{
 			if (val2.contains("."))
 			{
-				fVal2 = Double.parseDouble(val2);
+				fVal2 = Utils.parseDouble(val2);
 			}
 			else
 			{
-				lVal2 = Long.parseLong(val2);
+				lVal2 = Utils.parseLong(val2);
 			}
 		}
 		else
@@ -351,11 +351,11 @@ public class Filter implements Cloneable, Serializable
 		{
 			if (val1.contains("."))
 			{
-				fVal1 = Double.parseDouble(val1);
+				fVal1 = Utils.parseDouble(val1);
 			}
 			else
 			{
-				lVal1 = Long.parseLong(val1);
+				lVal1 = Utils.parseLong(val1);
 			}
 		}
 		else

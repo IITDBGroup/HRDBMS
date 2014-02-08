@@ -285,7 +285,7 @@ public class ExtendOperator implements Operator, Serializable
 					}
 					else
 					{
-						double d = Double.parseDouble(temp);
+						double d = Utils.parseDouble(temp);
 						execStack.push(d);
 					}
 				}

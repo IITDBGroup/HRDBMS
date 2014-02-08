@@ -39,6 +39,7 @@ public class Driver
 			long start, end;
 			Phase4 phase4 = null;
 			Phase5 phase5 = null;
+			/*
 			start = System.currentTimeMillis();
 			meta = new MetaData();
 			parseOutput = getTree(1);
@@ -50,7 +51,7 @@ public class Driver
 			end = System.currentTimeMillis();
 			System.out.println("Query #1 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
-			//runQuery(parseOutput);
+			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #1 took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
@@ -64,7 +65,7 @@ public class Driver
 			end = System.currentTimeMillis();
 			System.out.println("Query #2 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
-			//runQuery(parseOutput);
+			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #2 took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
@@ -78,7 +79,7 @@ public class Driver
 			end = System.currentTimeMillis();
 			System.out.println("Query #3 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
-			//runQuery(parseOutput);
+			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #3 took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
@@ -92,7 +93,7 @@ public class Driver
 			end = System.currentTimeMillis();
 			System.out.println("Query #4 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
-			//runQuery(parseOutput);
+			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #4 took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
@@ -106,7 +107,7 @@ public class Driver
 			end = System.currentTimeMillis();
 			System.out.println("Query #5 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
-			//runQuery(parseOutput);
+			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #5 took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
@@ -120,7 +121,7 @@ public class Driver
 			end = System.currentTimeMillis();
 			System.out.println("Query #6 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
-			//runQuery(parseOutput);
+			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #6 took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
@@ -134,7 +135,7 @@ public class Driver
 			end = System.currentTimeMillis();
 			System.out.println("Query #7 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
-			//runQuery(parseOutput);
+			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #7 took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
@@ -148,7 +149,7 @@ public class Driver
 			end = System.currentTimeMillis();
 			System.out.println("Query #8 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
-			//runQuery(parseOutput);
+			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #8 took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
@@ -162,7 +163,7 @@ public class Driver
 			end = System.currentTimeMillis();
 			System.out.println("Query #9 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
-			//runQuery(parseOutput);
+			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #9 took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
@@ -176,7 +177,7 @@ public class Driver
 			end = System.currentTimeMillis();
 			System.out.println("Query #10 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
-			//runQuery(parseOutput);
+			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #10 took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
@@ -190,7 +191,7 @@ public class Driver
 			end = System.currentTimeMillis();
 			System.out.println("Query #11 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
-			//runQuery(parseOutput);
+			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #11 took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
@@ -204,7 +205,7 @@ public class Driver
 			end = System.currentTimeMillis();
 			System.out.println("Query #12 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
-			//runQuery(parseOutput);
+			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #12 took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
@@ -218,7 +219,7 @@ public class Driver
 			end = System.currentTimeMillis();
 			System.out.println("Query #14 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
-			//runQuery(parseOutput);
+			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #14 took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
@@ -232,7 +233,7 @@ public class Driver
 			end = System.currentTimeMillis();
 			System.out.println("Query #15 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
-			//runQuery(parseOutput);
+			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #15 took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
@@ -246,7 +247,7 @@ public class Driver
 			end = System.currentTimeMillis();
 			System.out.println("Query #16 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
-			//runQuery(parseOutput);
+			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #16 took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
@@ -260,7 +261,7 @@ public class Driver
 			end = System.currentTimeMillis();
 			System.out.println("Query #17 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
-			//runQuery(parseOutput);
+			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #17 took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
@@ -274,7 +275,7 @@ public class Driver
 			end = System.currentTimeMillis();
 			System.out.println("Query #18 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
-			//runQuery(parseOutput);
+			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #18 took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
@@ -288,9 +289,10 @@ public class Driver
 			end = System.currentTimeMillis();
 			System.out.println("Query #19 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
-			//runQuery(parseOutput);
+			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #19 took " + ((end - start) / 1000) + " seconds");
+			*/
 			start = System.currentTimeMillis();
 			meta = new MetaData();
 			parseOutput = getTree(20);
@@ -302,7 +304,7 @@ public class Driver
 			end = System.currentTimeMillis();
 			System.out.println("Query #20 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
-			//runQuery(parseOutput);
+			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #20 took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
@@ -316,7 +318,7 @@ public class Driver
 			end = System.currentTimeMillis();
 			System.out.println("Query #21 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
-			//runQuery(parseOutput);
+			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #21 took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
@@ -330,7 +332,7 @@ public class Driver
 			end = System.currentTimeMillis();
 			System.out.println("Query #22 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
-			//runQuery(parseOutput);
+			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #22 took " + ((end - start) / 1000) + " seconds");
 			System.out.println("Execution is complete.");

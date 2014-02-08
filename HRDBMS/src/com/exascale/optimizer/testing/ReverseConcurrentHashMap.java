@@ -170,7 +170,7 @@ public class ReverseConcurrentHashMap implements Serializable {
             int threshold;
             try {
                 threshold = (null != altThreshold)
-                        ? Integer.parseInt(altThreshold)
+                        ? Utils.parseInt(altThreshold)
                         : Integer.MAX_VALUE;
 
                 // disable alternative hashing if -1

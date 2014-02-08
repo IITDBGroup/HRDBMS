@@ -105,11 +105,11 @@ public class CaseOperator implements Operator, Serializable
 			{
 				if (val1.contains("."))
 				{
-					this.results.add(Double.parseDouble(val1));
+					this.results.add(Utils.parseDouble(val1));
 				}
 				else
 				{
-					this.results.add(Long.parseLong(val1));
+					this.results.add(Utils.parseLong(val1));
 				}
 			}
 			else

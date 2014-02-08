@@ -20,8 +20,7 @@ public class RootOperator implements Operator
 	
 	public void reset()
 	{
-		System.out.println("RootOperator cannot be reset");
-		System.exit(1);
+		child.reset();
 	}
 	
 	public int getChildPos()
