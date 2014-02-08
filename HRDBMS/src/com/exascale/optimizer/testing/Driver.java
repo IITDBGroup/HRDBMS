@@ -39,7 +39,6 @@ public class Driver
 			long start, end;
 			Phase4 phase4 = null;
 			Phase5 phase5 = null;
-			/*
 			start = System.currentTimeMillis();
 			meta = new MetaData();
 			parseOutput = getTree(1);
@@ -292,7 +291,6 @@ public class Driver
 			runQuery(parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #19 took " + ((end - start) / 1000) + " seconds");
-			*/
 			start = System.currentTimeMillis();
 			meta = new MetaData();
 			parseOutput = getTree(20);

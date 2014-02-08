@@ -35,7 +35,6 @@ public class TableScanOperator implements Operator, Serializable
 	protected volatile HashMap<Operator, BufferedLinkedBlockingQueue> readBuffers = new HashMap<Operator, BufferedLinkedBlockingQueue>();
 	protected boolean startDone = false;
 	protected boolean optimize = false;
-	public volatile BufferedLinkedBlockingQueue queue = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
 	protected final int NUM_PTHREADS = ResourceManager.cpus;
 	protected HashMap<Operator, HashSet<HashMap<Filter, Filter>>> filters = new HashMap<Operator, HashSet<HashMap<Filter, Filter>>>();
 	protected HashMap<Operator, CNFFilter> orderedFilters = new HashMap<Operator, CNFFilter>();
@@ -75,7 +74,6 @@ public class TableScanOperator implements Operator, Serializable
 		}
 		
 		readBuffer.clear();
-		queue.clear();
 		forceDone = false;
 		init();
 	}
@@ -421,15 +419,7 @@ public class TableScanOperator implements Operator, Serializable
 	protected void init()
 	{ 
 		int i = 0;
-		ParseThread[] threads = new ParseThread[NUM_PTHREADS];
-		while (i < NUM_PTHREADS)
-		{
-			threads[i] = new ParseThread();
-			threads[i].start();
-			i++;
-		}
-		
-		InitThread t = new InitThread(threads);
+		InitThread t = new InitThread();
 		t.start();
 	}
 	
@@ -534,13 +524,7 @@ public class TableScanOperator implements Operator, Serializable
 	
 	protected class InitThread extends ThreadPoolThread
 	{
-		protected ParseThread[] threads;
 		protected ArrayList<ReaderThread> reads = new ArrayList<ReaderThread>(ins.size());
-		
-		public InitThread(ParseThread[] threads)
-		{
-			this.threads = threads;
-		}
 		
 		public void run()
 		{
@@ -563,15 +547,6 @@ public class TableScanOperator implements Operator, Serializable
 				for (ReaderThread read : reads)
 				{
 					read.join();
-				}
-				
-				queue.put(new DataEndMarker());
-				
-				int i = 0;
-				while (i < NUM_PTHREADS)
-				{
-					threads[i].join();
-					i++;
 				}
 				
 				if (optimize)
@@ -611,29 +586,127 @@ public class TableScanOperator implements Operator, Serializable
 		
 		public void run()
 		{
+			ArrayList<String> types = null;
+			CNFFilter filter = orderedFilters.get(parents.get(0));
+			if (types == null)
+			{
+				types = new ArrayList<String>(midPos2Col.size());
+				for (Map.Entry entry : midPos2Col.entrySet())
+				{
+					types.add(midCols2Types.get(entry.getValue()));
+				}
+			}
+			
 			try
 			{
 				if (in2 == null)
-				{
+				{	
 					int i = 0;
 					String line = in.readLine();
 					//@?Parallel
 					while (line != null)
 					{
+						ArrayList<Object> row = new ArrayList<Object>(types.size());
 						FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);		
-						StringBuilder newLine = new StringBuilder();
-						tokens.setIndex(fetchPos.get(0));
-						newLine.append(tokens.nextToken());
-						int j = 1;
+						int j = 0;
 						while (j < fetchPos.size())
 						{
-							newLine.append("|");
+							String type = types.get(j);
 							tokens.setIndex(fetchPos.get(j));
-							newLine.append(tokens.nextToken());
+							if (type.equals("INT"))
+							{
+								row.add(Utils.parseInt(tokens.nextToken()));
+							}
+							else if (type.equals("FLOAT"))
+							{
+								row.add(Utils.parseDouble(tokens.nextToken()));
+							}
+							else if (type.equals("CHAR"))
+							{
+								row.add(tokens.nextToken());
+							}
+							else if (type.equals("LONG"))
+							{
+								row.add(Utils.parseLong(tokens.nextToken()));
+							}
+							else if (type.equals("DATE"))
+							{
+								row.add(DateParser.parse(tokens.nextToken()));
+							}
 							j++;
 						}
 				
-						queue.put(newLine.toString());
+						if (!optimize)
+						{
+							for (Map.Entry entry : readBuffers.entrySet())
+							{
+								BufferedLinkedBlockingQueue q = (BufferedLinkedBlockingQueue)entry.getValue();
+								filter = orderedFilters.get(entry.getKey());
+								
+								if (filter != null)
+								{
+									if (filter.passes(row))
+									{
+										ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
+										for (int pos : neededPos)
+										{
+											newRow.add(row.get(pos));
+										}
+										q.put(newRow);
+									}
+								}
+								else
+								{
+									ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
+									for (int pos : neededPos)
+									{
+										newRow.add(row.get(pos));
+									}
+									q.put(newRow);
+								}
+							}
+						}
+						else
+						{	
+							if (filter != null)
+							{
+								if (filter.passes(row))
+								{
+									ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
+									for (int pos : neededPos)
+									{
+										newRow.add(row.get(pos));
+									}
+									if (!forceDone)
+									{
+										readBuffer.put(newRow);
+									}
+									else
+									{
+										readBuffer.put(new DataEndMarker());
+										return;
+									}
+								}
+							}
+							else
+							{
+								ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
+								for (int pos : neededPos)
+								{
+									newRow.add(row.get(pos));
+								}
+								if (!forceDone)
+								{
+									readBuffer.put(newRow);
+								}
+								else
+								{
+									readBuffer.put(new DataEndMarker());
+									return;
+								}
+							}
+						}
+						
 						i++;
 						line = in.readLine();
 				
@@ -668,26 +741,113 @@ public class TableScanOperator implements Operator, Serializable
 						{
 							in2.seek((Long)(((ArrayList<Object>)o).get(0)));
 							String line = in2.readLine();
+							ArrayList<Object> row = new ArrayList<Object>(types.size());
 							FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);		
-							StringBuilder newLine = new StringBuilder();
-							tokens.setIndex(fetchPos.get(0));
-							newLine.append(tokens.nextToken());
-							int j = 1;
+							int j = 0;
 							while (j < fetchPos.size())
 							{
-								newLine.append("|");
+								String type = types.get(j);
 								tokens.setIndex(fetchPos.get(j));
-								newLine.append(tokens.nextToken());
+								if (type.equals("INT"))
+								{
+									row.add(Utils.parseInt(tokens.nextToken()));
+								}
+								else if (type.equals("FLOAT"))
+								{
+									row.add(Utils.parseDouble(tokens.nextToken()));
+								}
+								else if (type.equals("CHAR"))
+								{
+									row.add(tokens.nextToken());
+								}
+								else if (type.equals("LONG"))
+								{
+									row.add(Utils.parseLong(tokens.nextToken()));
+								}
+								else if (type.equals("DATE"))
+								{
+									row.add(DateParser.parse(tokens.nextToken()));
+								}
 								j++;
 							}
-				
-							queue.put(newLine.toString());
+					
+							if (!optimize)
+							{
+								for (Map.Entry entry : readBuffers.entrySet())
+								{
+									BufferedLinkedBlockingQueue q = (BufferedLinkedBlockingQueue)entry.getValue();
+									filter = orderedFilters.get(entry.getKey());
+									
+									if (filter != null)
+									{
+										if (filter.passes(row))
+										{
+											ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
+											for (int pos : neededPos)
+											{
+												newRow.add(row.get(pos));
+											}
+											q.put(newRow);
+										}
+									}
+									else
+									{
+										ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
+										for (int pos : neededPos)
+										{
+											newRow.add(row.get(pos));
+										}
+										q.put(newRow);
+									}
+								}
+							}
+							else
+							{	
+								if (filter != null)
+								{
+									if (filter.passes(row))
+									{
+										ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
+										for (int pos : neededPos)
+										{
+											newRow.add(row.get(pos));
+										}
+										if (!forceDone)
+										{
+											readBuffer.put(newRow);
+										}
+										else
+										{
+											readBuffer.put(new DataEndMarker());
+											return;
+										}
+									}
+								}
+								else
+								{
+									ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
+									for (int pos : neededPos)
+									{
+										newRow.add(row.get(pos));
+									}
+									if (!forceDone)
+									{
+										readBuffer.put(newRow);
+									}
+									else
+									{
+										readBuffer.put(new DataEndMarker());
+										return;
+									}
+								}
+							}
+							
 							count++;
 							o = child.next(TableScanOperator.this);
 						}
 						else
 						{
-							CNFFilter filter = orderedFilters.get(parents.get(0));
+							filter = orderedFilters.get(parents.get(0));
 							filter.updateCols2Pos(child.getCols2Pos());
 							
 							if (filter != null)
@@ -720,161 +880,6 @@ public class TableScanOperator implements Operator, Serializable
 					}
 					
 					//System.out.println("TableScanOperator read " + count + " rows based on a RID list");
-				}
-			}
-			catch(Exception e)
-			{
-				e.printStackTrace();
-				System.exit(1);
-			}
-		}
-	}
-	
-	protected class ParseThread extends ThreadPoolThread
-	{
-		//protected SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-		protected ArrayList<String> types;
-		
-		public void run()
-		{
-			if (indexOnly)
-			{
-				return;
-			}
-			try
-			{
-				CNFFilter filter = orderedFilters.get(parents.get(0));
-				//@?Parallel
-				while (true)
-				{
-					if (types == null)
-					{
-						types = new ArrayList<String>(midPos2Col.size());
-						for (Map.Entry entry : midPos2Col.entrySet())
-						{
-							types.add(midCols2Types.get(entry.getValue()));
-						}
-					}
-					Object o = queue.take();
-					
-					if (o instanceof DataEndMarker)
-					{
-						queue.put(o);
-						return;
-					}
-					
-					String line = (String)o;
-					
-					ArrayList<Object> row = new ArrayList<Object>(types.size());
-					FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
-					int i = 0;
-					try
-					{
-						for (String type : types)
-						{
-							if (type.equals("INT"))
-							{
-								row.add(Utils.parseInt(tokens.nextToken()));
-							}
-							else if (type.equals("FLOAT"))
-							{
-								row.add(Utils.parseDouble(tokens.nextToken()));
-							}
-							else if (type.equals("CHAR"))
-							{
-								row.add(tokens.nextToken());
-							}
-							else if (type.equals("LONG"))
-							{
-								row.add(Utils.parseLong(tokens.nextToken()));
-							}
-							else if (type.equals("DATE"))
-							{
-								row.add(DateParser.parse(tokens.nextToken()));
-							}
-							
-							i++;
-						}
-					}
-					catch(Exception e)
-					{
-						e.printStackTrace();
-						System.err.println(line);
-						System.err.println(i);
-						System.err.println(schema + "." + name);
-						System.err.println(cols2Types);
-					}
-						
-					if (!optimize)
-					{
-						for (Map.Entry entry : readBuffers.entrySet())
-						{
-							BufferedLinkedBlockingQueue q = (BufferedLinkedBlockingQueue)entry.getValue();
-							filter = orderedFilters.get(entry.getKey());
-							
-							if (filter != null)
-							{
-								if (filter.passes(row))
-								{
-									ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
-									for (int pos : neededPos)
-									{
-										newRow.add(row.get(pos));
-									}
-									q.put(newRow);
-								}
-							}
-							else
-							{
-								ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
-								for (int pos : neededPos)
-								{
-									newRow.add(row.get(pos));
-								}
-								q.put(newRow);
-							}
-						}
-					}
-					else
-					{	
-						if (filter != null)
-						{
-							if (filter.passes(row))
-							{
-								ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
-								for (int pos : neededPos)
-								{
-									newRow.add(row.get(pos));
-								}
-								if (!forceDone)
-								{
-									readBuffer.put(newRow);
-								}
-								else
-								{
-									readBuffer.put(new DataEndMarker());
-									return;
-								}
-							}
-						}
-						else
-						{
-							ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
-							for (int pos : neededPos)
-							{
-								newRow.add(row.get(pos));
-							}
-							if (!forceDone)
-							{
-								readBuffer.put(newRow);
-							}
-							else
-							{
-								readBuffer.put(new DataEndMarker());
-								return;
-							}
-						}
-					}
 				}
 			}
 			catch(Exception e)
