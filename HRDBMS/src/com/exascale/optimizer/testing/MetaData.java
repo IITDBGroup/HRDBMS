@@ -830,32 +830,32 @@ public final class MetaData implements Serializable
 	{
 		if (table.equals("SUPPLIER"))
 		{
-			return 10000 * 64;
+			return 10000 * 100;
 		}
 		
 		if (table.equals("PART"))
 		{
-			return 200000 * 64;
+			return 200000 * 100;
 		}
 		
 		if (table.equals("PARTSUPP"))
 		{
-			return 800000 * 64;
+			return 800000 * 100;
 		}
 		
 		if (table.equals("CUSTOMER"))
 		{
-			return 150000 * 64;
+			return 150000 * 100;
 		}
 		
 		if (table.equals("ORDERS"))
 		{
-			return 1500000 * 64;
+			return 1500000 * 100;
 		}
 		
 		if (table.equals("LINEITEM"))
 		{
-			return 6001215 * 64;
+			return 6001215 * 100;
 		}
 		
 		if (table.equals("NATION"))
