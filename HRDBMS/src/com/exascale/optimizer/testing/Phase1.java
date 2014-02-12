@@ -8,7 +8,7 @@ import java.util.ArrayList;
 
 import com.exascale.optimizer.testing.MetaData.PartitionMetaData;
 
-public class Phase1 
+public final class Phase1 
 {
 	protected RootOperator root;
 	protected boolean pushdownHadResults;

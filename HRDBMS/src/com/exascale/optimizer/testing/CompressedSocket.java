@@ -34,7 +34,7 @@ import java.net.Socket;
  *
  * @author harald
  */
-public class CompressedSocket extends Socket {
+public final class CompressedSocket extends Socket {
 
   private CompressedOutputStream out;
   private CompressedInputStream in;

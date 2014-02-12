@@ -13,21 +13,24 @@ import java.util.TreeMap;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.LockSupport;
 
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 import com.exascale.optimizer.testing.SemiJoinOperator.ProcessThread;
 import com.exascale.optimizer.testing.SemiJoinOperator.ReaderThread;
 
-public class AntiJoinOperator implements Operator, Serializable
+public final class AntiJoinOperator implements Operator, Serializable
 {
 	protected ArrayList<Operator> children = new ArrayList<Operator>(2);
 	protected Operator parent;
 	protected HashMap<String, String> cols2Types;
 	protected HashMap<String, Integer> cols2Pos;
 	protected TreeMap<Integer, String> pos2Col;
-	protected MetaData meta;
+	protected final MetaData meta;
 	protected volatile DiskBackedArray inBuffer;
 	protected int NUM_RT_THREADS = 6 * ResourceManager.cpus;
 	protected int NUM_PTHREADS = 6 * ResourceManager.cpus;
@@ -51,7 +54,7 @@ public class AntiJoinOperator implements Operator, Serializable
 	protected boolean alreadySorted = false;
 	protected boolean cardSet = false;
 	protected ArrayList<Operator> clones = new ArrayList<Operator>();
-	protected ArrayList<Boolean> lockVector = new ArrayList<Boolean>();
+	protected ArrayList<AtomicBoolean> lockVector = new ArrayList<AtomicBoolean>();
     
     public void setDynamicIndex(ArrayList<Index> indexes)
     {
@@ -350,7 +353,7 @@ public class AntiJoinOperator implements Operator, Serializable
 		}
 	}
 	
-	protected class InitThread extends ThreadPoolThread
+	protected final class InitThread extends ThreadPoolThread
 	{
 		protected NLSortThread nlSort = null;
 		protected NLHashThread nlHash = null;
@@ -625,7 +628,7 @@ public class AntiJoinOperator implements Operator, Serializable
 		}
 	}
 	
-	protected class ReaderThread extends ThreadPoolThread
+	protected final class ReaderThread extends ThreadPoolThread
 	{	
 		public void run()
 		{
@@ -652,7 +655,7 @@ public class AntiJoinOperator implements Operator, Serializable
 		}
 	}
 	
-	protected class NLHashThread extends ThreadPoolThread
+	protected final class NLHashThread extends ThreadPoolThread
 	{
 		protected Filter filter;
 		protected int pos;
@@ -724,7 +727,7 @@ public class AntiJoinOperator implements Operator, Serializable
 			}
 		}
 		
-		protected void writeToHashTable(long hash, ArrayList<Object> row) throws Exception
+		protected final void writeToHashTable(long hash, ArrayList<Object> row) throws Exception
 		{
 			if (buckets.size() == 0)
 			{
@@ -779,7 +782,7 @@ public class AntiJoinOperator implements Operator, Serializable
 			return;
 		}
 		
-		protected ArrayList<ArrayList<Object>> getCandidates(long hash) throws ClassNotFoundException, IOException
+		protected final ArrayList<ArrayList<Object>> getCandidates(long hash) throws ClassNotFoundException, IOException
 		{
 			ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>();
 			int i = 0;
@@ -866,7 +869,7 @@ public class AntiJoinOperator implements Operator, Serializable
 		}
 	}
 	
-	protected class NLSortThread extends ThreadPoolThread
+	protected final class NLSortThread extends ThreadPoolThread
 	{
 		protected Filter filter;
 		protected boolean vBool;
@@ -936,7 +939,7 @@ public class AntiJoinOperator implements Operator, Serializable
 			return t;
 		}
 	
-		protected class ParallelSortThread extends ThreadPoolThread
+		protected final class ParallelSortThread extends ThreadPoolThread
 		{
 			protected long left;
 			protected long right;
@@ -1184,7 +1187,7 @@ public class AntiJoinOperator implements Operator, Serializable
 		}
 	}
 	
-	protected class ProcessThread extends ThreadPoolThread
+	protected final class ProcessThread extends ThreadPoolThread
 	{
 		protected CNFFilter cnf = null;
 		protected Filter first = null;
@@ -1305,7 +1308,7 @@ public class AntiJoinOperator implements Operator, Serializable
 								break;
 							}
 							
-							Thread.sleep(1);
+							LockSupport.parkNanos(350000);
 						}
 						else
 						{	
@@ -1336,8 +1339,6 @@ public class AntiJoinOperator implements Operator, Serializable
 									//	System.out.println("AntiJoinOperator has output " + count + " rows");
 									//}
 								}
-								
-								Thread.sleep(1);
 							}
 							else
 							{
@@ -1917,20 +1918,14 @@ public class AntiJoinOperator implements Operator, Serializable
 		int i = 0;
 		while (i < lockVector.size())
 		{
-			if (!lockVector.get(i))
+			AtomicBoolean lock = lockVector.get(i);
+			if (!lock.get())
 			{
-				synchronized(lockVector)
-				{
-					if (!lockVector.get(i))
-					{
-						Operator retval = clones.get(i);
-						synchronized(retval)
-						{
-							lockVector.set(i, true);
-							retval.reset();
-							return retval;
-						}
-					}
+				if (lock.compareAndSet(false, true))
+				{	
+					Operator retval = clones.get(i);
+					retval.reset();
+					return retval;
 				}
 			}
 			
@@ -1965,11 +1960,9 @@ public class AntiJoinOperator implements Operator, Serializable
 			e.printStackTrace();
 			System.exit(1);
 		}
-		synchronized(lockVector)
-		{
-			lockVector.add(true);
-			clones.add(clone);
-		}
+
+		clones.add(clone);
+		lockVector.add(new AtomicBoolean(true));
 		
 		return clone;
 	}
@@ -1982,11 +1975,8 @@ public class AntiJoinOperator implements Operator, Serializable
 			Operator o = clones.get(i);
 			if (clone == o)
 			{
-				synchronized(lockVector)
-				{
-					lockVector.set(i, false);
-					return;
-				}
+				lockVector.get(i).set(false);
+				return;
 			}
 			
 			i++;

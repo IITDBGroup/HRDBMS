@@ -36,7 +36,7 @@ import java.util.zip.Inflater;
  * 
  * Counterpart to CompressedOutputStream.
  */
-public class CompressedInputStream extends FilterInputStream {
+public final class CompressedInputStream extends FilterInputStream {
 
   private byte[] infBuf;                // buffer holding compressed data for the inflater (size is dynamically adapted)
   private Inflater inflater;            // zip inflater

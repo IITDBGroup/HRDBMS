@@ -81,7 +81,7 @@ import java.util.RandomAccess;
  * @since   1.2
  */
 
-public class ArrayListLong
+public final class ArrayListLong
         implements RandomAccess, Cloneable, java.io.Serializable, Iterable
 {
     private static final long serialVersionUID = 8683452581122892190L;
@@ -598,7 +598,7 @@ public class ArrayListLong
     /**
      * An optimized version of AbstractList.Itr
      */
-    private class Itr implements Iterator {
+    private final class Itr implements Iterator {
         int cursor;       // index of next element to return
         int lastRet = -1; // index of last element returned; -1 if no such
         int expectedModCount = modCount;

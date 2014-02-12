@@ -10,9 +10,9 @@ import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.GZIPOutputStream;
 
-public class NetworkHashAndSendOperator extends NetworkSendOperator
+public final class NetworkHashAndSendOperator extends NetworkSendOperator
 {
-	protected ArrayList<String> hashCols;
+	protected final ArrayList<String> hashCols;
 	protected int numNodes;
 	protected int id;
 	protected int starting;

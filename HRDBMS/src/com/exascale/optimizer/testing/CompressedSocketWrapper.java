@@ -35,7 +35,7 @@ import java.net.SocketException;
  *
  * @author harald
  */
-public class CompressedSocketWrapper extends SocketWrapper {
+public final class CompressedSocketWrapper extends SocketWrapper {
   
   
   private CompressedOutputStream out;

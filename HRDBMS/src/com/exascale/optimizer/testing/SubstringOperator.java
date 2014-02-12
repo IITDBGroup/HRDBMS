@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
-public class SubstringOperator implements Operator, Serializable
+public final class SubstringOperator implements Operator, Serializable
 {
 	protected Operator child;
 	protected Operator parent;

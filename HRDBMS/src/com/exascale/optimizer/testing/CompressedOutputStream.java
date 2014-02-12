@@ -44,7 +44,7 @@ import java.util.zip.Deflater;
  * MSBit signals whether the packet is compressed or not.
  * Because of this, the maximum buffer size is limited to 32K - 1.
  */
-public class CompressedOutputStream extends FilterOutputStream {
+public final class CompressedOutputStream extends FilterOutputStream {
 
   /**
    * The maximum compression buffer size. The larger the buffer, the better the compression.

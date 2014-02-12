@@ -1,6 +1,6 @@
 package com.exascale.optimizer.testing;
-
 import java.util.concurrent.ThreadLocalRandom;
+ 
 import java.util.concurrent.locks.*;
 import java.util.*;
 import java.io.Serializable;
@@ -70,7 +70,7 @@ import com.exascale.optimizer.testing.LongPrimitiveConcurrentHashMap.HashEntry;
  * @param <K> the type of keys maintained by this map
  * @param <V> the type of mapped values
  */
-public class InternalConcurrentHashMap implements Serializable {
+public final class InternalConcurrentHashMap implements Serializable {
     private static final long serialVersionUID = 7249069246763182399L;
 
     /*
@@ -150,7 +150,7 @@ public class InternalConcurrentHashMap implements Serializable {
     /**
      * holds values which can't be initialized until after VM is booted.
      */
-    private static class Holder {
+    private static final class Holder {
 
         /**
         * Enable alternative hashing of String keys?

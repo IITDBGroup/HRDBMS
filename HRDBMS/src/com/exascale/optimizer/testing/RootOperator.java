@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.TreeMap;
 
-public class RootOperator implements Operator
+public final class RootOperator implements Operator
 {
 	protected Operator child;
 	protected HashMap<String, String> cols2Types;

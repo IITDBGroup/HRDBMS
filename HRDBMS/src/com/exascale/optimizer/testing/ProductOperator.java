@@ -9,10 +9,11 @@ import java.util.TreeMap;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.LockSupport;
 
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
 
-public class ProductOperator extends JoinOperator implements Serializable
+public final class ProductOperator extends JoinOperator implements Serializable
 {
 	protected ArrayList<Operator> children = new ArrayList<Operator>(2);
 	protected Operator parent;
@@ -169,7 +170,7 @@ public class ProductOperator extends JoinOperator implements Serializable
 		
 	}
 	
-	protected class InitThread extends ThreadPoolThread
+	protected final class InitThread extends ThreadPoolThread
 	{
 		public void run()
 		{
@@ -244,7 +245,7 @@ public class ProductOperator extends JoinOperator implements Serializable
 		}
 	}
 	
-	protected class ReaderThread extends ThreadPoolThread
+	protected final class ReaderThread extends ThreadPoolThread
 	{	
 		public void run()
 		{
@@ -266,7 +267,7 @@ public class ProductOperator extends JoinOperator implements Serializable
 		}
 	}
 	
-	protected class ProcessThread extends ThreadPoolThread
+	protected final class ProcessThread extends ThreadPoolThread
 	{
 		public void run()
 		{
@@ -294,7 +295,7 @@ public class ProductOperator extends JoinOperator implements Serializable
 							}
 							else
 							{
-								Thread.sleep(1);
+								LockSupport.parkNanos(75000);
 								continue;
 							}
 						}
@@ -304,7 +305,7 @@ public class ProductOperator extends JoinOperator implements Serializable
 						
 						if (orow == null)
 						{
-							Thread.sleep(1);
+							LockSupport.parkNanos(75000);
 							continue;
 						}
 						

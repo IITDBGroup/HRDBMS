@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
-public class YearOperator implements Operator, Serializable
+public final class YearOperator implements Operator, Serializable
 {
 	protected Operator child;
 	protected Operator parent;

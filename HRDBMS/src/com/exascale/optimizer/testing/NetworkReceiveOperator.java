@@ -131,7 +131,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	{
 	}
 	
-	protected class ReadThread extends ThreadPoolThread
+	protected final class ReadThread extends ThreadPoolThread
 	{
 		protected Operator op;
 		
@@ -283,7 +283,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 		}
 	}
 	
-	protected class InitThread extends ThreadPoolThread
+	protected final class InitThread extends ThreadPoolThread
 	{
 		public void run()
 		{
@@ -471,7 +471,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	}
 	
 	protected HashSet<ObjectAndField> printed = new HashSet<ObjectAndField>();
-	private class ObjectAndField
+	private final class ObjectAndField
 	{
 		private Object obj;
 		private Field field;

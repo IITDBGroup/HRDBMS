@@ -6,11 +6,11 @@ import java.util.Comparator;
 import java.util.Date;
 import java.util.Map;
 
-public class RowComparator implements Comparator 
+public final class RowComparator implements Comparator 
 {
 
-	protected ArrayList<Boolean> orders;
-	protected ArrayList<String> types;
+	protected final ArrayList<Boolean> orders;
+	protected final ArrayList<String> types;
 	//protected SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 	
 	public RowComparator(ArrayList<Boolean> orders, ArrayList<String> types)

@@ -2,7 +2,7 @@ package com.exascale.optimizer.testing;
 
 import java.util.ArrayList;
 
-public class NullCNFFilter extends CNFFilter
+public final class NullCNFFilter extends CNFFilter
 {
 	public boolean passes(ArrayList<Object> row)
 	{

@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
-public class ReorderOperator implements Operator, Serializable
+public final class ReorderOperator implements Operator, Serializable
 {
 	protected Operator child;
 	protected Operator parent;

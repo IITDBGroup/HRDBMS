@@ -27,11 +27,11 @@ import com.exascale.optimizer.testing.NetworkReceiveOperator.InitThread;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 import com.exascale.threads.ReadThread;
 
-public class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOperator implements Operator, Serializable
+public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOperator implements Operator, Serializable
 {
-	protected ArrayList<String> sortCols;
-	protected ArrayList<Boolean> orders;
-	protected int ID;
+	protected final ArrayList<String> sortCols;
+	protected final ArrayList<Boolean> orders;
+	protected final int ID;
 	protected int[] sortPos;
 	
 	public MetaData getMeta()
@@ -54,7 +54,7 @@ public class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOperator i
 		this.ID = ID;
 	}
 	
-	protected class ReadThread extends ThreadPoolThread
+	protected final class ReadThread extends ThreadPoolThread
 	{
 		protected ArrayList<Operator> children;
 		protected HashMap<Operator, ArrayList<Object>> rows = new HashMap<Operator, ArrayList<Object>>();
@@ -307,7 +307,7 @@ public class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOperator i
 		}
 	}
 	
-	protected class InitThread extends ThreadPoolThread
+	protected final class InitThread extends ThreadPoolThread
 	{
 		public void run()
 		{

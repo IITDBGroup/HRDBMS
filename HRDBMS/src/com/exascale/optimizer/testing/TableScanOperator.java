@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import com.exascale.optimizer.testing.MetaData.PartitionMetaData;
 
-public class TableScanOperator implements Operator, Serializable
+public final class TableScanOperator implements Operator, Serializable
 {
 	protected HashMap<String, String> cols2Types = new HashMap<String, String>();
 	protected HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
@@ -522,7 +522,7 @@ public class TableScanOperator implements Operator, Serializable
 		}
 	}
 	
-	protected class InitThread extends ThreadPoolThread
+	protected final class InitThread extends ThreadPoolThread
 	{
 		protected ArrayList<ReaderThread> reads = new ArrayList<ReaderThread>(ins.size());
 		
@@ -569,7 +569,7 @@ public class TableScanOperator implements Operator, Serializable
 		}
 	}
 	
-	protected class ReaderThread extends ThreadPoolThread
+	protected final class ReaderThread extends ThreadPoolThread
 	{
 		protected BufferedReader in;
 		protected BufferedRandomAccessFile in2;
@@ -584,7 +584,7 @@ public class TableScanOperator implements Operator, Serializable
 			this.in2 = in2;
 		}
 		
-		public void run()
+		public final void run()
 		{
 			ArrayList<String> types = null;
 			CNFFilter filter = orderedFilters.get(parents.get(0));
@@ -604,10 +604,11 @@ public class TableScanOperator implements Operator, Serializable
 					int i = 0;
 					String line = in.readLine();
 					//@?Parallel
+					FastStringTokenizer tokens = new FastStringTokenizer("", "|", false);	
 					while (line != null)
 					{
 						ArrayList<Object> row = new ArrayList<Object>(types.size());
-						FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);		
+						tokens.reuse(line, "|", false);	
 						int j = 0;
 						while (j < fetchPos.size())
 						{
@@ -735,6 +736,7 @@ public class TableScanOperator implements Operator, Serializable
 						System.exit(1);
 					}
 					//@?Parallel
+					FastStringTokenizer tokens = new FastStringTokenizer("", "|", false);	
 					while (!(o instanceof DataEndMarker))
 					{
 						if (!indexOnly)
@@ -742,7 +744,7 @@ public class TableScanOperator implements Operator, Serializable
 							in2.seek((Long)(((ArrayList<Object>)o).get(0)));
 							String line = in2.readLine();
 							ArrayList<Object> row = new ArrayList<Object>(types.size());
-							FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);		
+							tokens.reuse(line, "|", false);	
 							int j = 0;
 							while (j < fetchPos.size())
 							{

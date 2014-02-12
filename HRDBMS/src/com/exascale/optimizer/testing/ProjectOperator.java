@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
-public class ProjectOperator implements Operator, Serializable
+public final class ProjectOperator implements Operator, Serializable
 {
 	protected Operator child;
 	protected ArrayList<String> cols;

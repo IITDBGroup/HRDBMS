@@ -1,8 +1,8 @@
 package com.exascale.optimizer.testing;
 
-public class Utils 
+public final class Utils 
 {   
-	public static int parseInt(String s)
+	public static final int parseInt(String s)
 	{
 		boolean negative = false;
 		int offset = 0;
@@ -32,7 +32,7 @@ public class Utils
 		return result;
 	}
 	
-	public static long parseLong(String s)
+	public static final long parseLong(String s)
 	{
 		boolean negative = false;
 		int offset = 0;
@@ -62,9 +62,10 @@ public class Utils
 		return result;
 	}
 	
-	public static double parseDouble(String s)
+	public static final double parseDouble(String s)
 	{
-		if (s.indexOf('.') < 0)
+		int p = s.indexOf('.');
+		if (p < 0)
 		{
 			return parseLong(s);
 		}
@@ -77,7 +78,6 @@ public class Utils
 			offset = 1;
 		}
 		
-		int p = s.indexOf('.');
 		s = s.substring(offset, p) + s.substring(p+1, s.length());
 		long n = parseLong(s);
 		int x = s.length() - p - offset;

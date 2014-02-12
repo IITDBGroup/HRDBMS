@@ -44,7 +44,7 @@ import sun.misc.Unsafe;
  * @param <E> the type of elements maintained by this set
  */
 @SuppressWarnings("unchecked")
-public class ConcurrentSkipTreeSet<E>
+public final class ConcurrentSkipTreeSet<E>
     extends AbstractChunkedSet<E>
     implements NavigableSet<E>, Cloneable, java.io.Serializable {
 

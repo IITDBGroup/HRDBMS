@@ -33,7 +33,7 @@ import java.net.Socket;
  *
  * @author harald
  */
-public class CompressedServerSocket extends ServerSocket {
+public final class CompressedServerSocket extends ServerSocket {
   
   
   /**

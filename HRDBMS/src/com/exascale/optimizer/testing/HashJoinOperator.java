@@ -12,12 +12,15 @@ import java.util.TreeMap;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.LockSupport;
 
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
-public class HashJoinOperator extends JoinOperator implements Serializable
+public final class HashJoinOperator extends JoinOperator implements Serializable
 {
 	protected ArrayList<Operator> children = new ArrayList<Operator>(2);
 	protected Operator parent;
@@ -51,7 +54,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
     protected int rightChildCard = 16;
     protected boolean cardSet = false;
     protected ArrayList<Operator> clones = new ArrayList<Operator>();
-    protected ArrayList<Boolean> lockVector = new ArrayList<Boolean>();
+    protected ArrayList<AtomicBoolean> lockVector = new ArrayList<AtomicBoolean>();
     
     public void setDynamicIndex(ArrayList<Index> indexes)
     {
@@ -455,7 +458,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 		
 	}
 	
-	protected class InitThread extends ThreadPoolThread
+	protected final class InitThread extends ThreadPoolThread
 	{
 		public void run()
 		{
@@ -535,7 +538,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 		}
 	}
 	
-	protected class ReaderThread extends ThreadPoolThread
+	protected final class ReaderThread extends ThreadPoolThread
 	{	
 		public void run()
 		{
@@ -581,7 +584,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 		}
 	}
 	
-	protected class ProcessThread extends ThreadPoolThread
+	protected final class ProcessThread extends ThreadPoolThread
 	{
 		public void run()
 		{
@@ -589,7 +592,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 			{
 				while (!readersDone)
 				{
-					Thread.sleep(1);
+					LockSupport.parkNanos(75000);
 				}
 				
 				Operator left = children.get(0);
@@ -836,7 +839,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 		return pos2Col;
 	}
 	
-	protected void writeToHashTable(long hash, ArrayList<Object> row) throws Exception
+	protected final void writeToHashTable(long hash, ArrayList<Object> row) throws Exception
 	{
 		if (buckets.size() == 0)
 		{
@@ -891,7 +894,7 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 		return;
 	}
 	
-	protected ArrayList<ArrayList<Object>> getCandidates(long hash) throws ClassNotFoundException, IOException
+	protected final ArrayList<ArrayList<Object>> getCandidates(long hash) throws ClassNotFoundException, IOException
 	{
 		ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>();
 		int i = 0;
@@ -1063,20 +1066,14 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 		int i = 0;
 		while (i < lockVector.size())
 		{
-			if (!lockVector.get(i))
+			AtomicBoolean lock = lockVector.get(i);
+			if (!lock.get())
 			{
-				synchronized(lockVector)
-				{
-					if (!lockVector.get(i))
-					{
-						Operator retval = clones.get(i);
-						synchronized(retval)
-						{
-							lockVector.set(i, true);
-							retval.reset();
-							return retval;
-						}
-					}
+				if (lock.compareAndSet(false, true))
+				{	
+					Operator retval = clones.get(i);
+					retval.reset();
+					return retval;
 				}
 			}
 			
@@ -1111,11 +1108,9 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 			e.printStackTrace();
 			System.exit(1);
 		}
-		synchronized(lockVector)
-		{
-			lockVector.add(true);
-			clones.add(clone);
-		}
+
+		clones.add(clone);
+		lockVector.add(new AtomicBoolean(true));
 		
 		return clone;
 	}
@@ -1128,11 +1123,8 @@ public class HashJoinOperator extends JoinOperator implements Serializable
 			Operator o = clones.get(i);
 			if (clone == o)
 			{
-				synchronized(lockVector)
-				{
-					lockVector.set(i, false);
-					return;
-				}
+				lockVector.get(i).set(false);
+				return;
 			}
 			
 			i++;

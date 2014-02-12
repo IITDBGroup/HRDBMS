@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
-public class IndexOperator implements Operator, Cloneable, Serializable
+public final class IndexOperator implements Operator, Cloneable, Serializable
 {
 	protected MetaData meta;
 	protected Operator parent;

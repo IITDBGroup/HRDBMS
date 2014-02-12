@@ -6,12 +6,13 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.StringTokenizer;
+import java.util.concurrent.locks.LockSupport;
 
-public class Index implements Serializable
+public final class Index implements Serializable
 {
-	protected String fileName;
-	protected ArrayList<String> keys;
-	protected ArrayList<String> types;
+	protected final String fileName;
+	protected final ArrayList<String> keys;
+	protected final ArrayList<String> types;
 	protected ArrayList<Boolean> orders;
 	protected Filter f;
 	protected ArrayList<Filter> secondary = new ArrayList<Filter>();
@@ -23,7 +24,7 @@ public class Index implements Serializable
 	protected ArrayList<Filter> terminates = new ArrayList<Filter>();
 	protected String line;
 	//protected SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-	protected HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
+	protected final HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
 	protected int count = 0;
 	protected boolean indexOnly = false;
 	protected ArrayList<Integer> fetches = new ArrayList<Integer>();
@@ -198,12 +199,7 @@ public class Index implements Serializable
 	{
 		while (delayed)
 		{
-			try
-			{
-				Thread.sleep(1);
-			}
-			catch(InterruptedException e)
-			{}
+			LockSupport.parkNanos(75000);
 		}
 		
 		if (!positioned)
@@ -235,10 +231,11 @@ public class Index implements Serializable
 		
 	}
 	
-	private class IndexWriterThread extends ThreadPoolThread
+	private final class IndexWriterThread extends ThreadPoolThread
 	{
-		public void run()
+		public final void run()
 		{
+			FastStringTokenizer tokens = new FastStringTokenizer("", "|", false);
 			while (true)
 			{
 				if (!indexOnly)
@@ -298,7 +295,7 @@ public class Index implements Serializable
 						ridList.addAll(getRids());
 						int i = 0;
 						int j = 0;
-						FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
+						tokens.reuse(line, "|", false);
 						for (int pos : fetches)
 						{
 							while (i < pos)
@@ -374,7 +371,7 @@ public class Index implements Serializable
 		return keys.contains(col);
 	}
 	
-	private void setStartingPos()
+	private final void setStartingPos()
 	{
 		long off = -1;
 		try
@@ -589,15 +586,16 @@ public class Index implements Serializable
 		}
 	}
 	
-	private void setFirstPosition()
+	private final void setFirstPosition()
 	{
 		try
 		{
 			line = in.readLine();
 			long off = -1;
+			FastStringTokenizer tokens = new FastStringTokenizer("", "|", false);
 			while (true)
 			{
-				FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
+				tokens.reuse(line, "|", false);
 				int i = 0;
 				while (i < keys.size())
 				{
@@ -634,7 +632,7 @@ public class Index implements Serializable
 		return retval;
 	}
 	
-	private void setEqualsPos(Object val)
+	private final void setEqualsPos(Object val)
 	{
 		int count = 0;
 		try

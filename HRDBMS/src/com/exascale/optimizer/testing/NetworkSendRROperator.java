@@ -10,11 +10,11 @@ import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.GZIPOutputStream;
 
-public class NetworkSendRROperator extends NetworkSendOperator
+public final class NetworkSendRROperator extends NetworkSendOperator
 {
-	protected int id;
-	protected ConcurrentHashMap<Integer, CompressedSocket> connections = new ConcurrentHashMap<Integer, CompressedSocket>(Phase3.MAX_INCOMING_CONNECTIONS, 0.75f, Phase3.MAX_INCOMING_CONNECTIONS);
-	protected ConcurrentHashMap<Integer, OutputStream> outs = new ConcurrentHashMap<Integer, OutputStream>(Phase3.MAX_INCOMING_CONNECTIONS, 0.75f, Phase3.MAX_INCOMING_CONNECTIONS);
+	protected final int id;
+	protected final ConcurrentHashMap<Integer, CompressedSocket> connections = new ConcurrentHashMap<Integer, CompressedSocket>(Phase3.MAX_INCOMING_CONNECTIONS, 0.75f, Phase3.MAX_INCOMING_CONNECTIONS);
+	protected final ConcurrentHashMap<Integer, OutputStream> outs = new ConcurrentHashMap<Integer, OutputStream>(Phase3.MAX_INCOMING_CONNECTIONS, 0.75f, Phase3.MAX_INCOMING_CONNECTIONS);
 	protected ArrayList<Operator> parents = new ArrayList<Operator>();
 	
 	public NetworkSendRROperator(int id, MetaData meta)

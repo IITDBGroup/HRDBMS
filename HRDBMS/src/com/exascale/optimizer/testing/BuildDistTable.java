@@ -12,6 +12,7 @@ import java.util.StringTokenizer;
 import java.util.TreeMap;
 import java.util.ArrayList;
 import java.util.ArrayList;
+import java.util.concurrent.locks.LockSupport;
 
 public class BuildDistTable 
 {
@@ -40,7 +41,7 @@ public class BuildDistTable
 			root.start();
 			while (!((SortOperator)temp2).done())
 			{
-				Thread.sleep(1);
+				LockSupport.parkNanos(75000);
 			}
 			long total = ((SortOperator)temp2).size();
 			long i = 0;
@@ -115,7 +116,7 @@ public class BuildDistTable
 			root.start();
 			while (!((SortOperator)temp2).done())
 			{
-				Thread.sleep(1);
+				LockSupport.parkNanos(75000);
 			}
 			long total = ((SortOperator)temp2).size();
 			long i = 0;
@@ -190,7 +191,7 @@ public class BuildDistTable
 			root.start();
 			while (!((SortOperator)temp2).done())
 			{
-				Thread.sleep(1);
+				LockSupport.parkNanos(75000);
 			}
 			long total = ((SortOperator)temp2).size();
 			long i = 0;
@@ -265,7 +266,7 @@ public class BuildDistTable
 			root.start();
 			while (!((SortOperator)temp2).done())
 			{
-				Thread.sleep(1);
+				LockSupport.parkNanos(75000);
 			}
 			long total = ((SortOperator)temp2).size();
 			long i = 0;
@@ -340,7 +341,7 @@ public class BuildDistTable
 			root.start();
 			while (!((SortOperator)temp2).done())
 			{
-				Thread.sleep(1);
+				LockSupport.parkNanos(75000);
 			}
 			long total = ((SortOperator)temp2).size();
 			long i = 0;
@@ -415,7 +416,7 @@ public class BuildDistTable
 			root.start();
 			while (!((SortOperator)temp2).done())
 			{
-				Thread.sleep(1);
+				LockSupport.parkNanos(75000);
 			}
 			long total = ((SortOperator)temp2).size();
 			long i = 0;
@@ -490,7 +491,7 @@ public class BuildDistTable
 			root.start();
 			while (!((SortOperator)temp2).done())
 			{
-				Thread.sleep(1);
+				LockSupport.parkNanos(75000);
 			}
 			long total = ((SortOperator)temp2).size();
 			long i = 0;
@@ -565,7 +566,7 @@ public class BuildDistTable
 			root.start();
 			while (!((SortOperator)temp2).done())
 			{
-				Thread.sleep(1);
+				LockSupport.parkNanos(75000);
 			}
 			long total = ((SortOperator)temp2).size();
 			long i = 0;

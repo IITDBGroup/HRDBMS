@@ -14,7 +14,7 @@ import java.util.StringTokenizer;
 import java.util.TreeMap;
 import java.util.ArrayList;
 
-public class MetaData implements Serializable
+public final class MetaData implements Serializable
 {
 	protected boolean LOCAL = true;
 	protected ArrayList<ArrayList<Object>> cards = null;
@@ -1720,7 +1720,7 @@ public class MetaData implements Serializable
 		return new PartitionMetaData(schema, table);
 	}
 	
-	public class PartitionMetaData implements Serializable
+	public final class PartitionMetaData implements Serializable
 	{
 		protected static final int NODEGROUP_NONE = -3;
 		protected static final int NODE_ANY = -2;

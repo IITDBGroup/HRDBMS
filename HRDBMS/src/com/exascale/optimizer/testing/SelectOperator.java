@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
-public class SelectOperator implements Operator, Cloneable, Serializable
+public final class SelectOperator implements Operator, Cloneable, Serializable
 {
 	protected MetaData meta;
 	protected ArrayList<Filter> filters;

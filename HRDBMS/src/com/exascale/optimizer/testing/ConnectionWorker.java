@@ -9,7 +9,7 @@ import java.net.Socket;
 import java.util.HashMap;
 import java.util.ArrayList;
 
-public class ConnectionWorker extends ThreadPoolThread
+public final class ConnectionWorker extends ThreadPoolThread
 {
 	protected CompressedSocket sock;
 	protected static HashMap<Integer, NetworkSendOperator> sends;

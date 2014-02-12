@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
-public class CaseOperator implements Operator, Serializable
+public final class CaseOperator implements Operator, Serializable
 {
 	protected MetaData meta;
 	protected ArrayList<HashSet<HashMap<Filter, Filter>>> filters;

@@ -6,11 +6,11 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Random;
 import java.util.ArrayList;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.ThreadLocalRandom; 
 
 import com.exascale.optimizer.testing.MetaData.PartitionMetaData;
 
-public class Phase4 
+public final class Phase4 
 {
 	protected RootOperator root;
 	protected MetaData meta;

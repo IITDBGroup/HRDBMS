@@ -364,7 +364,7 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 	
-	public boolean passes(ArrayList<Object> row, HashMap<String, Integer> cols2Pos) throws Exception
+	public final boolean passes(ArrayList<Object> row, HashMap<String, Integer> cols2Pos) throws Exception
 	{
 		if (cols2Pos == null)
 		{
@@ -618,7 +618,7 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 	
-	public boolean passes(ArrayList<Object> lRow, ArrayList<Object> rRow, HashMap<String, Integer> cols2Pos) throws Exception
+	public final boolean passes(ArrayList<Object> lRow, ArrayList<Object> rRow, HashMap<String, Integer> cols2Pos) throws Exception
 	{
 		if (cols2Pos == null)
 		{

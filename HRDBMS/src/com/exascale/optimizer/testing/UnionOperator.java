@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashSet;
 
-public class UnionOperator implements Operator, Serializable
+public final class UnionOperator implements Operator, Serializable
 {
 	protected ArrayList<Operator> children = new ArrayList<Operator>();
 	protected MetaData meta;
@@ -116,7 +116,7 @@ public class UnionOperator implements Operator, Serializable
 		new InitThread().start();
 	}
 	
-	private class InitThread extends ThreadPoolThread
+	private final class InitThread extends ThreadPoolThread
 	{
 		protected ArrayList<ReadThread> threads = new ArrayList<ReadThread>(children.size());
 		
@@ -198,7 +198,7 @@ public class UnionOperator implements Operator, Serializable
 		}
 	}
 	
-	private class ReadThread extends ThreadPoolThread
+	private final class ReadThread extends ThreadPoolThread
 	{
 		protected Operator op;
 		

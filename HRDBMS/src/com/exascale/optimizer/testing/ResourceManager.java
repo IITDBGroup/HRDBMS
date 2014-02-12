@@ -1,7 +1,5 @@
 package com.exascale.optimizer.testing;
 
-import gnu.trove.map.hash.TCustomHashMap;
-
 import java.io.EOFException;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -44,13 +42,13 @@ import com.exascale.optimizer.testing.LongPrimitiveConcurrentHashMap.EntrySet;
 import com.exascale.optimizer.testing.LongPrimitiveConcurrentHashMap.WriteThroughEntry;
 import com.exascale.optimizer.testing.MetaData.PartitionMetaData;
 
-public class ResourceManager extends ThreadPoolThread
+public final class ResourceManager extends ThreadPoolThread
 {
-	protected static int SLEEP_TIME = 10000;
-	protected static int LOW_PERCENT_FREE = 30;
-	protected static int HIGH_PERCENT_FREE = 50;
-	protected static int PERCENT_TO_CUT = 1;
-	protected static volatile Vector<DiskBackedCollection> collections = new Vector<DiskBackedCollection>();
+	protected static final int SLEEP_TIME = 10000;
+	protected static final int LOW_PERCENT_FREE = 30;
+	protected static final int HIGH_PERCENT_FREE = 70;
+	protected static final int PERCENT_TO_CUT = 1;
+	protected static final Vector<DiskBackedCollection> collections = new Vector<DiskBackedCollection>();
 	protected static volatile boolean lowMem = false;
 	protected static final int TEMP_COUNT = 2;
 	protected static ArrayList<String> TEMP_DIRS;
@@ -58,104 +56,27 @@ public class ResourceManager extends ThreadPoolThread
 	protected static final int NUM_CTHREADS = 16;
 	protected static final Long LARGE_PRIME =  1125899906842597L;
     protected static final Long LARGE_PRIME2 = 6920451961L;
-    protected static AtomicLong idGen = new AtomicLong(0);
+    protected static final AtomicLong idGen = new AtomicLong(0);
     protected static HashMap<Long, String> creations = new HashMap<Long, String>();
-    protected static volatile boolean hasBeenLowMem = false;
-    protected static boolean PROFILE = false;
-    public static int cpus;
+    protected static volatile boolean hasBeenLowMem = true;
+    protected static final boolean PROFILE = false;
+    public static final int cpus;
     public static final ExecutorService pool;
     public static final AtomicInteger objID = new AtomicInteger(0);
-    protected static final ConcurrentWeakHashMap<String, WeakReference<String>> internStringMap = new ConcurrentWeakHashMap<String, WeakReference<String>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
-    protected static final ConcurrentWeakHashMap<Long, WeakReference<Long>> internLongMap = new ConcurrentWeakHashMap<Long, WeakReference<Long>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
-    protected static final ConcurrentWeakHashMap<Integer, WeakReference<Integer>> internIntMap = new ConcurrentWeakHashMap<Integer, WeakReference<Integer>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
-    protected static final ConcurrentWeakHashMap<Double, WeakReference<Double>> internDoubleMap = new ConcurrentWeakHashMap<Double, WeakReference<Double>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
-    protected static final ConcurrentWeakHashMap<Date, WeakReference<Date>> internDateMap = new ConcurrentWeakHashMap<Date, WeakReference<Date>>(1024, 1.0f, 64 * Runtime.getRuntime().availableProcessors());
+    protected static final long maxMemory;
     
     static
     {
     	pool = Executors.newCachedThreadPool();
+    	cpus = Runtime.getRuntime().availableProcessors();
+		maxMemory = Runtime.getRuntime().maxMemory();
     }
     
-    public static void clearInternMaps()
-    {
-    	internStringMap.clear();
-    	internIntMap.clear();
-    	internLongMap.clear();
-    	internDoubleMap.clear();
-    	internDateMap.clear();
-    }
-
-    public static String internString(final String str)
-    {
-        final WeakReference<String> cached = internStringMap.get(str);
-        if (cached != null)
-        {
-            final String value = cached.get();
-            if (value != null)
-                return value;
-        }
-        internStringMap.put(str, new WeakReference<String>(str));
-        return str;
-    }
-    
-    public static Integer internInt(final Integer str)
-    {
-        final WeakReference<Integer> cached = internIntMap.get(str);
-        if (cached != null)
-        {
-            final Integer value = cached.get();
-            if (value != null)
-                return value;
-        }
-        internIntMap.put(str, new WeakReference<Integer>(str));
-        return str;
-    }
-    
-    public static Double internDouble(final Double str)
-    {
-        final WeakReference<Double> cached = internDoubleMap.get(str);
-        if (cached != null)
-        {
-            final Double value = cached.get();
-            if (value != null)
-                return value;
-        }
-        internDoubleMap.put(str, new WeakReference<Double>(str));
-        return str;
-    }
-    
-    public static Date internDate(final Date str)
-    {
-        final WeakReference<Date> cached = internDateMap.get(str);
-        if (cached != null)
-        {
-            final Date value = cached.get();
-            if (value != null)
-                return value;
-        }
-        internDateMap.put(str, new WeakReference<Date>(str));
-        return str;
-    }
-    
-    public static Long internLong(final Long str)
-    {
-        final WeakReference<Long> cached = internLongMap.get(str);
-        if (cached != null)
-        {
-            final Long value = cached.get();
-            if (value != null)
-                return value;
-        }
-        internLongMap.put(str, new WeakReference<Long>(str));
-        return str;
-    }
-	
 	public ResourceManager()
 	{
 		TEMP_DIRS = new ArrayList<String>(TEMP_COUNT);
 		TEMP_DIRS.add("/temp3/");
 		TEMP_DIRS.add("/home/hrdbms/");
-		cpus = Runtime.getRuntime().availableProcessors();
 		for (String temp : TEMP_DIRS)
 		{
 			File dir = new File(temp);
@@ -208,12 +129,12 @@ public class ResourceManager extends ThreadPoolThread
 		}
 	}
 	
-	private static class ProfileThread extends ThreadPoolThread
+	private static final class ProfileThread extends ThreadPoolThread
 	{
 		protected HashMap<CodePosition, CodePosition> counts = new HashMap<CodePosition, CodePosition>();
 		long samples = 0;
 		
-		private static class CodePosition implements Comparable
+		private static final class CodePosition implements Comparable
 		{
 			String file;
 			String method;
@@ -325,7 +246,7 @@ public class ResourceManager extends ThreadPoolThread
 		}
 	}
 	
-	private static class DeadlockThread extends ThreadPoolThread
+	private static final class DeadlockThread extends ThreadPoolThread
 	{
 		public void run()
 		{
@@ -359,13 +280,13 @@ public class ResourceManager extends ThreadPoolThread
 		}
 	}
 	
-	private static class MonitorThread extends ThreadPoolThread
+	private static final class MonitorThread extends ThreadPoolThread
 	{
 		public void run()
 		{
 			while (true)
 			{
-				System.out.println(((Runtime.getRuntime().freeMemory() + Runtime.getRuntime().maxMemory() - Runtime.getRuntime().totalMemory()) * 100.0) / (Runtime.getRuntime().maxMemory() * 1.0) + "% free");
+				System.out.println(((Runtime.getRuntime().freeMemory() + maxMemory - Runtime.getRuntime().totalMemory()) * 100.0) / (maxMemory * 1.0) + "% free");
 				try
 				{
 					Thread.sleep(SLEEP_TIME);
@@ -377,17 +298,17 @@ public class ResourceManager extends ThreadPoolThread
 	
 	protected static boolean lowMem()
 	{
-		return ((Runtime.getRuntime().freeMemory() + Runtime.getRuntime().maxMemory() - Runtime.getRuntime().totalMemory()) * 100.0) / (Runtime.getRuntime().maxMemory() * 1.0) < LOW_PERCENT_FREE;
+		return ((Runtime.getRuntime().freeMemory() + maxMemory - Runtime.getRuntime().totalMemory()) * 100.0) / (maxMemory * 1.0) < LOW_PERCENT_FREE;
 	}
 	
 	protected static boolean extremeLowMem()
 	{
-		return ((Runtime.getRuntime().freeMemory() + Runtime.getRuntime().maxMemory() - Runtime.getRuntime().totalMemory()) * 100.0) / (Runtime.getRuntime().maxMemory() * 1.0) < 0;
+		return ((Runtime.getRuntime().freeMemory() + maxMemory - Runtime.getRuntime().totalMemory()) * 100.0) / (maxMemory * 1.0) < 0;
 	}
 	
 	protected static boolean highMem()
 	{
-		return ((Runtime.getRuntime().freeMemory() + Runtime.getRuntime().maxMemory() - Runtime.getRuntime().totalMemory()) * 100.0) / (Runtime.getRuntime().maxMemory() * 1.0) > HIGH_PERCENT_FREE;
+		return ((Runtime.getRuntime().freeMemory() + maxMemory - Runtime.getRuntime().totalMemory()) * 100.0) / (maxMemory * 1.0) > HIGH_PERCENT_FREE;
 	}
 	
 	protected static void handleLowMem()
@@ -396,7 +317,7 @@ public class ResourceManager extends ThreadPoolThread
 		while (lowMem())
 		{	
 			ArrayList<ThreadPoolThread> threads = new ArrayList<ThreadPoolThread>(collections.size());
-			///System.out.println(((Runtime.getRuntime().freeMemory() + Runtime.getRuntime().maxMemory() - Runtime.getRuntime().totalMemory()) * 100.0) / (Runtime.getRuntime().maxMemory() * 1.0) + "% free");
+			///System.out.println(((Runtime.getRuntime().freeMemory() + maxMemory - Runtime.getRuntime().totalMemory()) * 100.0) / (maxMemory * 1.0) + "% free");
 			int i = 0;
 			while (i < collections.size())
 			{
@@ -422,42 +343,10 @@ public class ResourceManager extends ThreadPoolThread
 					try
 					{
 						rt.join();
-						//System.out.println(((Runtime.getRuntime().freeMemory() + Runtime.getRuntime().maxMemory() - Runtime.getRuntime().totalMemory()) * 100.0) / (Runtime.getRuntime().maxMemory() * 1.0) + "% free");
+						//System.out.println(((Runtime.getRuntime().freeMemory() + maxMemory - Runtime.getRuntime().totalMemory()) * 100.0) / (maxMemory * 1.0) + "% free");
 						break;
 					}
 					catch(InterruptedException e) {}
-				}
-			}
-			
-			clearInternMaps();
-		}
-	}
-	
-	private static class CleanInternThread extends ThreadPoolThread
-	{
-		private ConcurrentWeakHashMap map;
-		
-		public CleanInternThread(ConcurrentWeakHashMap map)
-		{
-			this.map = map;
-		}
-		
-		public void run()
-		{
-			int i = 0;
-			Iterator it = map.entrySet().iterator();
-			while (it.hasNext())
-			{
-				Map.Entry entry = (Map.Entry)it.next();
-				if (((WeakReference)entry.getValue()).get() == null)
-				{
-					it.remove();
-					i++;
-					
-					if (i % 1000000 == 0)
-					{
-						System.out.println("Cleaned up " + i + " entries from " + map);
-					}
 				}
 			}
 		}
@@ -469,7 +358,7 @@ public class ResourceManager extends ThreadPoolThread
 		while (highMem())
 		{	
 			ArrayList<ThreadPoolThread> threads = new ArrayList<ThreadPoolThread>(collections.size());
-			///System.out.println(((Runtime.getRuntime().freeMemory() + Runtime.getRuntime().maxMemory() - Runtime.getRuntime().totalMemory()) * 100.0) / (Runtime.getRuntime().maxMemory() * 1.0) + "% free");
+			///System.out.println(((Runtime.getRuntime().freeMemory() + maxMemory - Runtime.getRuntime().totalMemory()) * 100.0) / (maxMemory * 1.0) + "% free");
 			int i = 0;
 			while (i < collections.size())
 			{
@@ -492,7 +381,7 @@ public class ResourceManager extends ThreadPoolThread
 					try
 					{
 						rt.join();
-						//System.out.println(((Runtime.getRuntime().freeMemory() + Runtime.getRuntime().maxMemory() - Runtime.getRuntime().totalMemory()) * 100.0) / (Runtime.getRuntime().maxMemory() * 1.0) + "% free");
+						//System.out.println(((Runtime.getRuntime().freeMemory() + maxMemory - Runtime.getRuntime().totalMemory()) * 100.0) / (maxMemory * 1.0) + "% free");
 						break;
 					}
 					catch(InterruptedException e) {}
@@ -501,7 +390,7 @@ public class ResourceManager extends ThreadPoolThread
 		}
 	}
 	
-	protected static class ReduceThread extends ThreadPoolThread
+	protected static final class ReduceThread extends ThreadPoolThread
 	{
 		protected volatile DiskBackedCollection collection;
 		
@@ -510,7 +399,7 @@ public class ResourceManager extends ThreadPoolThread
 			this.collection = collection;
 		}
 		
-		public void run()
+		public final void run()
 		{
 			try
 			{
@@ -523,7 +412,7 @@ public class ResourceManager extends ThreadPoolThread
 		}
 	}
 	
-	protected static class ImportThread extends ThreadPoolThread
+	protected static final class ImportThread extends ThreadPoolThread
 	{
 		protected volatile DiskBackedCollection collection;
 		
@@ -532,7 +421,7 @@ public class ResourceManager extends ThreadPoolThread
 			this.collection = collection;
 		}
 		
-		public void run()
+		public final void run()
 		{
 			try
 			{
@@ -575,7 +464,7 @@ public class ResourceManager extends ThreadPoolThread
 		public abstract void reduceResources() throws IOException;
 	}
 	
-	public static class DiskBackedHashSet extends DiskBackedCollection 
+	public static final class DiskBackedHashSet extends DiskBackedCollection 
 	{
 		protected volatile DiskBackedHashMap internal;
 		protected AtomicLong count = new AtomicLong(0);
@@ -846,7 +735,7 @@ public class ResourceManager extends ThreadPoolThread
 		}
 	}
 	
-	public static class DiskBackedArray extends DiskBackedCollection implements Iterable
+	public static final class DiskBackedArray extends DiskBackedCollection implements Iterable
 	{
 		protected volatile DiskBackedHashMap internal;
 		protected AtomicLong index = new AtomicLong(0);
@@ -906,7 +795,7 @@ public class ResourceManager extends ThreadPoolThread
 		} */
 	}
 	
-	public static class DiskBackedArrayIterator implements Iterator
+	public static final class DiskBackedArrayIterator implements Iterator
 	{
 		protected volatile DiskBackedArray array;
 		protected long index = 0;
@@ -945,17 +834,17 @@ public class ResourceManager extends ThreadPoolThread
 		}
 	}
 	
-	public static class DiskBackedHashMap extends DiskBackedCollection
+	public static final class DiskBackedHashMap extends DiskBackedCollection
 	{
-		protected volatile InternalConcurrentHashMap internal;
-		protected AtomicLong size = new AtomicLong(0);
+		protected final InternalConcurrentHashMap internal;
+		protected final AtomicLong size = new AtomicLong(0);
 		protected volatile ArrayList<FileChannel> ofcs = new ArrayList<FileChannel>(TEMP_COUNT);
-		protected volatile ArrayList<AtomicLong> ofcSizes = new ArrayList<AtomicLong>(TEMP_COUNT);
+		protected final ArrayList<AtomicLong> ofcSizes = new ArrayList<AtomicLong>(TEMP_COUNT);
 		protected volatile ArrayList<Vector<FileChannel>> ifcsArrayList = new ArrayList<Vector<FileChannel>>(TEMP_COUNT);
-		protected volatile ArrayList<Vector<Boolean>> locksArrayList = new ArrayList<Vector<Boolean>>(TEMP_COUNT);
-		protected volatile ReadWriteLock lock = new ReentrantReadWriteLock();
+		protected final ArrayList<Vector<Boolean>> locksArrayList = new ArrayList<Vector<Boolean>>(TEMP_COUNT);
+		protected final ReadWriteLock lock = new ReentrantReadWriteLock();
 		protected AtomicLong ctCount;
-		protected boolean indexed;
+		protected final boolean indexed;
 		protected volatile ReverseConcurrentHashMap valueIndex;
 		protected volatile DiskBackedHashSet diskValueIndex;
 		protected long id;
@@ -969,13 +858,13 @@ public class ResourceManager extends ThreadPoolThread
 		{
 			this.indexed = indexed;
 			estimate = estimate / 1024;
-			if (estimate * 16 * 30 * 35 < 0.25 * Runtime.getRuntime().maxMemory())
+			if (estimate * 16 * 30 * 35 < 0.25 * maxMemory)
 			{
 				this.estimate = estimate;
 			}
 			else
 			{
-				this.estimate = (int)((5.0 / 350000.0) * Runtime.getRuntime().maxMemory());
+				this.estimate = (int)((5.0 / 350000.0) * maxMemory);
 			}
 			internal = new InternalConcurrentHashMap(estimate / 16, 16.0f, cpus*6);
 			if (indexed)
@@ -1071,8 +960,23 @@ public class ResourceManager extends ThreadPoolThread
 			return;
 		}
 		
-		public Object putIfAbsent(long key, ArrayList<Object> val) throws Exception
+		public final Object putIfAbsent(long key, ArrayList<Object> val) throws Exception
 		{	
+			Object retval = internal.get(key);
+			if (retval != null)
+			{
+				return retval;
+			}
+			
+			if (index != null)
+			{
+				long r = index.get(key);
+				if (r != -1)
+				{
+					return r;
+				}
+			}
+			
 			this.lock.readLock().lock();
 			if (this.index != null)
 			{
@@ -1084,7 +988,6 @@ public class ResourceManager extends ThreadPoolThread
 				}
 			}
 			
-			Object retval;
 			retval = internal.putIfAbsent(key, val);
 			this.lock.readLock().unlock();
 			if (retval == null)
@@ -1099,15 +1002,15 @@ public class ResourceManager extends ThreadPoolThread
 			return retval;
 		}
 		
-		public void put(Long key, ArrayList<Object> val) throws Exception
+		public final void put(Long key, ArrayList<Object> val) throws Exception
 		{
-			if (lowMem)
-			{
-				putToDisk(key, val);
-				//System.out.println("Wrote key " + key + " to disk");
-				size.incrementAndGet();
-				return;
-			}
+			//if (lowMem)
+			//{
+			//	putToDisk(key, val);
+			//	//System.out.println("Wrote key " + key + " to disk");
+			//	size.incrementAndGet();
+			//	return;
+			//}
 			
 			internal.put(key,  val);
 			
@@ -1119,14 +1022,14 @@ public class ResourceManager extends ThreadPoolThread
 			size.incrementAndGet();
 		}
 		
-		public void putNoSize(Long key, ArrayList<Object> val) throws Exception
+		public final void putNoSize(Long key, ArrayList<Object> val) throws Exception
 		{
-			if (lowMem)
-			{
-				putToDisk(key, val);
-				//System.out.println("Wrote key " + key + " to disk");
-				return;
-			}
+			//if (lowMem)
+			//{
+			//	putToDisk(key, val);
+			//	//System.out.println("Wrote key " + key + " to disk");
+			//	return;
+			//}
 			
 			internal.put(key,  val);
 			
@@ -1136,7 +1039,7 @@ public class ResourceManager extends ThreadPoolThread
 			}
 		}
 		
-		public ArrayList<Object> get(Long key) throws IOException, ClassNotFoundException
+		public final ArrayList<Object> get(Long key) throws IOException, ClassNotFoundException
 		{
 			ArrayList<Object> o = null;
 			o = internal.get(key);
@@ -1148,7 +1051,7 @@ public class ResourceManager extends ThreadPoolThread
 			return (ArrayList<Object>)getFromDisk(key);
 		}
 		
-		public void reduceResources() throws IOException
+		public final void reduceResources() throws IOException
 		{	
 			lock.writeLock().lock();
 			InternalConcurrentHashMap.EntrySet set = internal.entrySet();
@@ -1240,7 +1143,7 @@ public class ResourceManager extends ThreadPoolThread
 			lock.writeLock().unlock();
 		}
 		
-		protected class CleanerThread extends ThreadPoolThread
+		protected final class CleanerThread extends ThreadPoolThread
 		{
 			protected ArrayList<InternalConcurrentHashMap.WriteThroughEntry> entries;
 			
@@ -1249,7 +1152,7 @@ public class ResourceManager extends ThreadPoolThread
 				this.entries = entries;
 			}
 			
-			public void run()
+			public final void run()
 			{
 				try
 				{
@@ -1262,7 +1165,7 @@ public class ResourceManager extends ThreadPoolThread
 			}
 		}
 		
-		public void importResources() throws IOException
+		public final void importResources() throws IOException
 		{	
 			if (index == null)
 			{
@@ -1359,7 +1262,7 @@ public class ResourceManager extends ThreadPoolThread
 			lock.writeLock().unlock();
 		}
 		
-		protected class Import2Thread extends ThreadPoolThread
+		protected final class Import2Thread extends ThreadPoolThread
 		{
 			protected ArrayList<WriteThroughEntry> entries;
 			
@@ -1368,7 +1271,7 @@ public class ResourceManager extends ThreadPoolThread
 				this.entries = entries;
 			}
 			
-			public void run()
+			public final void run()
 			{
 				try
 				{
@@ -1392,7 +1295,7 @@ public class ResourceManager extends ThreadPoolThread
 			}
 		}
 		
-		public Object getFromDisk(Long keyVal) throws IOException, ClassNotFoundException
+		public final Object getFromDisk(Long keyVal) throws IOException, ClassNotFoundException
 		{	
 			//ByteBuffer keyBB = ByteBuffer.allocate(8);
 			//keyBB.putLong(keyVal.longValue());
@@ -1429,11 +1332,11 @@ public class ResourceManager extends ThreadPoolThread
 			FileChannel fc = getFreeFC((int)(keyVal % TEMP_COUNT));
 			synchronized(fc)
 			{
-				long fcSize = fc.size();
-				if (resultVal + 4 > fcSize)
-				{
-					ofcs.get((int)((keyVal % TEMP_COUNT))).force(true);
-				}
+				//long fcSize = fc.size();
+				//if (resultVal + 4 > fcSize)
+				//{
+				//	ofcs.get((int)((keyVal % TEMP_COUNT))).force(true);
+				//}
 
 				fc.position(resultVal);
 				ByteBuffer sizeBuffer = ByteBuffer.allocate(4);
@@ -1444,57 +1347,57 @@ public class ResourceManager extends ThreadPoolThread
 				}
 				sizeBuffer.position(0);
 				int size = sizeBuffer.getInt();
-				while (size == 0)
-				{
-					ofcs.get((int)((keyVal % TEMP_COUNT))).force(true);
-					sizeBuffer.position(0);
-					fc.position(resultVal);
-					count = 0;
-					while (count < sizeBuffer.limit())
-					{
-						count += fc.read(sizeBuffer);
-					}
-					sizeBuffer.position(0);
-					size = sizeBuffer.getInt();
-				}
+				//while (size == 0)
+				//{
+				//	ofcs.get((int)((keyVal % TEMP_COUNT))).force(true);
+				//	sizeBuffer.position(0);
+				//	fc.position(resultVal);
+				//	count = 0;
+				//	while (count < sizeBuffer.limit())
+				//	{
+				//		count += fc.read(sizeBuffer);
+				//	}
+				//	sizeBuffer.position(0);
+				//	size = sizeBuffer.getInt();
+				//}
 				object = ByteBuffer.allocate(size);
-				if (resultVal + 4 + size > fcSize)
-				{
-					ofcs.get((int)((keyVal % TEMP_COUNT))).force(true);
-				}
+				//if (resultVal + 4 + size > fcSize)
+				//{
+				//	ofcs.get((int)((keyVal % TEMP_COUNT))).force(true);
+				//}
 				count = 0;
 				while (count < object.limit())
 				{
 					count += fc.read(object);
 				}
-				object.position(0);
-				int numFields = object.getInt();
-				int failures = 0;
-				while (numFields == 0)
-				{
-					ofcs.get((int)((keyVal % TEMP_COUNT))).force(true);
-					object.position(0);
-					fc.position(resultVal+4);
-					count = 0;
-					while (count < object.limit())
-					{
-						count += fc.read(object);
-					}
-					object.position(0);
-					numFields = object.getInt();
-					failures++;
-					
-					if (failures % 100 == 0)
-					{
-						System.out.println("Read object with numFields == 0, " + failures + " times.");
-					}
-				}
+				//object.position(0);
+				//int numFields = object.getInt();
+				//int failures = 0;
+				//while (numFields == 0)
+				//{
+				//	ofcs.get((int)((keyVal % TEMP_COUNT))).force(true);
+				//	object.position(0);
+				//	fc.position(resultVal+4);
+				//	count = 0;
+				//	while (count < object.limit())
+				//	{
+				//		count += fc.read(object);
+				//	}
+				//	object.position(0);
+				//	numFields = object.getInt();
+				//	failures++;
+				//	
+				//	if (failures % 100 == 0)
+				//	{
+				//		System.out.println("Read object with numFields == 0, " + failures + " times.");
+				//	}
+				//}
 			}
 			freeFC(fc, (int)(keyVal % TEMP_COUNT));
 			return fromBytes(object.array());
 		}
 		
-		protected long getFromIndex(long key) throws IOException
+		protected final long getFromIndex(long key) throws IOException
 		{
 			long retval = index.get(key);
 			if (retval == -1)
@@ -1505,7 +1408,7 @@ public class ResourceManager extends ThreadPoolThread
 			return retval;
 		}
 		
-		public void freeFC(FileChannel ifc, int hash)
+		public final void freeFC(FileChannel ifc, int hash)
 		{
 			int i = 0;
 			Vector<FileChannel> ifcs = ifcsArrayList.get(hash);
@@ -1523,7 +1426,7 @@ public class ResourceManager extends ThreadPoolThread
 			}
 		}
 		
-		public FileChannel getFreeFC(int hash)
+		public final FileChannel getFreeFC(int hash)
 		{
 			int i = 0;
 			Vector<Boolean> locks = locksArrayList.get(hash);
@@ -1595,7 +1498,7 @@ public class ResourceManager extends ThreadPoolThread
 			return retval;
 		}
 		
-		public void putToDisk(long eKey, Object eVal) throws Exception
+		public final void putToDisk(long eKey, Object eVal) throws Exception
 		{	
 			if (!filesAllocated)
 			{
@@ -1675,7 +1578,7 @@ public class ResourceManager extends ThreadPoolThread
 			}
 		}
 		
-		public void putToDisk(ArrayList<InternalConcurrentHashMap.WriteThroughEntry> entries) throws Exception
+		public final void putToDisk(ArrayList<InternalConcurrentHashMap.WriteThroughEntry> entries) throws Exception
 		{	
 			if (!filesAllocated)
 			{
@@ -1775,7 +1678,7 @@ public class ResourceManager extends ThreadPoolThread
 			}
 		}
 		
-		protected void putToIndex(long key, long value) throws Exception
+		protected final void putToIndex(long key, long value) throws Exception
 		{
 			index.put(key, value);
 		}
@@ -1841,7 +1744,7 @@ public class ResourceManager extends ThreadPoolThread
 			return size.get();
 		}
 		
-		protected Object fromBytes(byte[] val)
+		protected final Object fromBytes(byte[] val)
 		{	
 			ByteBuffer bb = ByteBuffer.wrap(val);
 			int numFields = bb.getInt();
@@ -1915,7 +1818,7 @@ public class ResourceManager extends ThreadPoolThread
 			return retval;
 		}
 		
-		protected byte[] toBytes(Object v)
+		protected final byte[] toBytes(Object v)
 		{
 			ArrayList<Object> val;
 			if (v instanceof ArrayList)
@@ -2030,7 +1933,7 @@ public class ResourceManager extends ThreadPoolThread
 			return retval;
 		}
 		
-		protected byte[] arrayListToBytes(ArrayList<InternalConcurrentHashMap.WriteThroughEntry> entries)
+		protected final byte[] arrayListToBytes(ArrayList<InternalConcurrentHashMap.WriteThroughEntry> entries)
 		{
 			ArrayList<byte[]> results = new ArrayList<byte[]>(entries.size());
 			for (InternalConcurrentHashMap.WriteThroughEntry entry : entries)

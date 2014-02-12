@@ -22,7 +22,7 @@ public class Driver
 	protected static MetaData meta = null;
 	protected static final int QUEUE_SIZE = 2500000;
 	
-	private static class ConnectionManagerThread extends ThreadPoolThread
+	private static final class ConnectionManagerThread extends ThreadPoolThread
 	{
 		public void run()
 		{

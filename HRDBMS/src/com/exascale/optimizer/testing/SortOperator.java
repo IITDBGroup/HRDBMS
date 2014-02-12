@@ -18,9 +18,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
-public class SortOperator implements Operator, Serializable
+public final class SortOperator implements Operator, Serializable
 {
-	protected static int PARALLEL_SORT_MIN_NUM_ROWS = 10000;
+	protected static final int PARALLEL_SORT_MIN_NUM_ROWS = 2500;
 	protected Operator child;
 	protected Operator parent;
 	protected HashMap<String, String> cols2Types;
@@ -28,15 +28,15 @@ public class SortOperator implements Operator, Serializable
 	protected TreeMap<Integer, String> pos2Col;
 	protected boolean startDone = false;
 	protected boolean closeDone = false;
-	protected ArrayList<String> sortCols;
-	protected ArrayList<Boolean> orders;
+	protected final ArrayList<String> sortCols;
+	protected final ArrayList<Boolean> orders;
 	protected volatile boolean sortComplete = false;
 	protected SortThread sortThread;
 	protected volatile BufferedLinkedBlockingQueue readBuffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
 	protected volatile DiskBackedArray result;
 	protected volatile int[] sortPos;
 	protected final int NUM_RT_THREADS = 1; //6 * ResourceManager.cpus;
-	protected MetaData meta;
+	protected final MetaData meta;
 	protected volatile boolean isClosed = false;
 	protected volatile boolean done = false;
 	protected int node;
@@ -286,7 +286,7 @@ public class SortOperator implements Operator, Serializable
 		return o;
 	}
 	
-	protected class SortThread extends ThreadPoolThread
+	protected final class SortThread extends ThreadPoolThread
 	{
 		Operator child;
 		ReaderThread[] threads;
@@ -355,7 +355,7 @@ public class SortOperator implements Operator, Serializable
 			return t;
 		}
 		
-		protected class ReaderThread extends ThreadPoolThread
+		protected final class ReaderThread extends ThreadPoolThread
 		{
 			protected volatile DiskBackedArray array;
 			
@@ -383,7 +383,7 @@ public class SortOperator implements Operator, Serializable
 			}
 		}
 		
-		protected class CopyThread extends ThreadPoolThread
+		protected final class CopyThread extends ThreadPoolThread
 		{
 			protected volatile DiskBackedArray array;
 			
@@ -443,7 +443,7 @@ public class SortOperator implements Operator, Serializable
 			}
 		}
 		
-		protected class ParallelSortThread extends ThreadPoolThread
+		protected final class ParallelSortThread extends ThreadPoolThread
 		{
 			protected long left;
 			protected long right;
@@ -542,7 +542,7 @@ public class SortOperator implements Operator, Serializable
 			}
 		}
 		
-		protected void doSequentialSort(long left, long right) throws Exception
+		protected final void doSequentialSort(long left, long right) throws Exception
 		{
 			if (right <= left)
 			{

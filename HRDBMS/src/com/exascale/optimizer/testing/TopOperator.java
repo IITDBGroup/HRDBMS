@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
-public class TopOperator implements Operator, Serializable
+public final class TopOperator implements Operator, Serializable
 {
 	protected Operator child;
 	protected Operator parent;
@@ -192,7 +192,7 @@ public class TopOperator implements Operator, Serializable
 		return pos2Col;
 	}
 	
-	protected class CleanerThread extends ThreadPoolThread
+	protected final class CleanerThread extends ThreadPoolThread
 	{
 		public void run()
 		{

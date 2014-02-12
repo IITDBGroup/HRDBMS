@@ -40,12 +40,12 @@ import java.net.SocketOptions;
  * 
  * @author harald
  */
-public class SocketImplWrapper extends SocketImpl {
+public final class SocketImplWrapper extends SocketImpl {
 
   private final Socket socket;    // the wrapped socket
   
   
-  private static class WrappedException extends IOException {
+  private static final class WrappedException extends IOException {
     private WrappedException() {
       super("operation not allowed for wrapped socket");
     }

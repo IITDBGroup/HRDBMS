@@ -26,10 +26,10 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 import com.exascale.threads.ReadThread;
 
-public class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator implements Operator, Serializable
+public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator implements Operator, Serializable
 {
-	protected ArrayList<String> sortCols;
-	protected ArrayList<Boolean> orders;
+	protected final ArrayList<String> sortCols;
+	protected final ArrayList<Boolean> orders;
 	protected int[] sortPos;
 	
 	public MetaData getMeta()
@@ -51,7 +51,7 @@ public class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator imple
 		this.orders = orders;
 	}
 	
-	protected class ReadThread extends ThreadPoolThread
+	protected final class ReadThread extends ThreadPoolThread
 	{
 		protected ArrayList<Operator> children;
 		protected HashMap<Operator, ArrayList<Object>> rows = new HashMap<Operator, ArrayList<Object>>();
@@ -304,7 +304,7 @@ public class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator imple
 		}
 	}
 	
-	protected class InitThread extends ThreadPoolThread
+	protected final class InitThread extends ThreadPoolThread
 	{
 		public void run()
 		{

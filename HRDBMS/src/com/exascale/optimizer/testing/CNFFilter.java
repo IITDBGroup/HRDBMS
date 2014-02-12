@@ -308,7 +308,7 @@ public class CNFFilter implements Serializable
 		return true;
 	}
 	
-	protected boolean passesOredCondition(ArrayList<Filter> filter, ArrayList<Object> row)
+	protected final boolean passesOredCondition(ArrayList<Filter> filter, ArrayList<Object> row)
 	{
 		try
 		{
@@ -329,7 +329,7 @@ public class CNFFilter implements Serializable
 		return false;
 	}
 	
-	protected boolean passesOredCondition(ArrayList<Filter> filter, ArrayList<Object> lRow, ArrayList<Object> rRow)
+	protected final boolean passesOredCondition(ArrayList<Filter> filter, ArrayList<Object> lRow, ArrayList<Object> rRow)
 	{
 		try
 		{

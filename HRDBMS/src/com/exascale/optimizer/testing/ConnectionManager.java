@@ -7,7 +7,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.BlockingQueue;
 
-public class ConnectionManager 
+public final class ConnectionManager 
 {
 	protected static final int WORKER_PORT = 3232;
 	

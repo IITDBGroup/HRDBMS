@@ -1,6 +1,6 @@
 package com.exascale.optimizer.testing;
 
-import java.util.concurrent.ThreadLocalRandom;
+ 
 import java.util.concurrent.locks.*;
 import java.util.*;
 import java.io.Serializable;
@@ -9,7 +9,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.ObjectStreamField;
 import java.lang.reflect.Field;
-
+import java.util.concurrent.ThreadLocalRandom;
 import com.exascale.optimizer.testing.InternalConcurrentHashMap.HashEntry;
 
 /**
@@ -70,7 +70,7 @@ import com.exascale.optimizer.testing.InternalConcurrentHashMap.HashEntry;
  * @param <K> the type of keys maintained by this map
  * @param <V> the type of mapped values
  */
-public class ReverseConcurrentHashMap implements Serializable {
+public final class ReverseConcurrentHashMap implements Serializable {
     private static final long serialVersionUID = 7249069246763182398L;
 
     /*
@@ -150,7 +150,7 @@ public class ReverseConcurrentHashMap implements Serializable {
     /**
      * holds values which can't be initialized until after VM is booted.
      */
-    private static class Holder {
+    private static final class Holder {
 
         /**
         * Enable alternative hashing of String keys?

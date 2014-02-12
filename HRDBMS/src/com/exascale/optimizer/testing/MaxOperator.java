@@ -7,7 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
 
-public class MaxOperator implements AggregateOperator, Serializable
+public final class MaxOperator implements AggregateOperator, Serializable
 {
 	protected String input;
 	protected String output;
@@ -75,7 +75,7 @@ public class MaxOperator implements AggregateOperator, Serializable
 		return new MaxHashThread(cols2Pos);
 	}
 
-	protected class MaxThread extends AggregateResultThread
+	protected final class MaxThread extends AggregateResultThread
 	{
 		protected ArrayList<ArrayList<Object>> rows;
 		protected HashMap<String, Integer> cols2Pos;
@@ -146,10 +146,10 @@ public class MaxOperator implements AggregateOperator, Serializable
 		}
 	}
 	
-	protected class MaxHashThread extends AggregateResultThread
+	protected final class MaxHashThread extends AggregateResultThread
 	{
-		protected volatile ConcurrentHashMap<ArrayList<Object>, AtomicDouble> maxes = new ConcurrentHashMap<ArrayList<Object>, AtomicDouble>(NUM_GROUPS, 0.75f, ResourceManager.cpus * 6);
-		protected HashMap<String, Integer> cols2Pos;
+		protected final ConcurrentHashMap<ArrayList<Object>, AtomicDouble> maxes = new ConcurrentHashMap<ArrayList<Object>, AtomicDouble>(NUM_GROUPS, 0.75f, ResourceManager.cpus * 6);
+		protected final HashMap<String, Integer> cols2Pos;
 		protected int pos;
 		
 		public MaxHashThread(HashMap<String, Integer> cols2Pos)
@@ -168,7 +168,7 @@ public class MaxOperator implements AggregateOperator, Serializable
 		}
 		
 		//@Parallel
-		public void put(ArrayList<Object> row, ArrayList<Object> group)
+		public final void put(ArrayList<Object> row, ArrayList<Object> group)
 		{
 			Object o = row.get(pos);
 			Double val;

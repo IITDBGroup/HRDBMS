@@ -55,7 +55,7 @@ package com.exascale.optimizer.testing;
 	 * @see BinaryDataOutput
 	 * @see BinaryDataInput
 	 * @see BufferedRandomAccessFile */
-	public class BufferedRandomAccessFile
+	public final class BufferedRandomAccessFile
 	{
 		protected String fileName;
 		protected boolean isReadOnly = true;

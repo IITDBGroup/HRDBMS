@@ -9,7 +9,7 @@ import java.rmi.ConnectException;
 
 import com.exascale.optimizer.testing.NetworkReceiveOperator.InitThread;
 
-public class NetworkHashReceiveOperator extends NetworkReceiveOperator
+public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 {
 	protected int ID;
 	

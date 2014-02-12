@@ -1,6 +1,7 @@
 package com.exascale.optimizer.testing;
 
 import java.io.Serializable;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Stack;
@@ -10,18 +11,19 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
-public class ExtendOperator implements Operator, Serializable
+public final class ExtendOperator implements Operator, Serializable
 {
 	protected Operator child;
 	protected Operator parent;
 	protected HashMap<String, String> cols2Types;
 	protected HashMap<String, Integer> cols2Pos;
 	protected TreeMap<Integer, String> pos2Col;
-	protected String prefix;
-	protected MetaData meta;
-	protected String name;
+	protected final String prefix;
+	protected final MetaData meta;
+	protected final String name;
 	protected int node;
-	FastStringTokenizer tokens;
+	protected FastStringTokenizer tokens;
+	protected ArrayDeque<String> master;
 	
 	public void reset()
 	{
@@ -43,6 +45,11 @@ public class ExtendOperator implements Operator, Serializable
 		this.meta = meta;
 		this.name = name;
 		this.tokens = new FastStringTokenizer(prefix, ",", false);
+		this.master = new ArrayDeque<String>();
+		for (String token : tokens.allTokens())
+		{
+			master.push(token);
+		}
 	}
 	
 	public ExtendOperator clone()
@@ -133,7 +140,7 @@ public class ExtendOperator implements Operator, Serializable
 		}
 		
 		ArrayList<Object> row = (ArrayList<Object>)o; 
-		row.add(parsePrefixDouble(prefix, row));
+		row.add(parsePrefixDouble(row));
 		return row;
 	}
 
@@ -207,15 +214,10 @@ public class ExtendOperator implements Operator, Serializable
 		return pos2Col;
 	}
 
-	protected Double parsePrefixDouble(String prefix, ArrayList<Object> row)
+	protected final Double parsePrefixDouble(ArrayList<Object> row)
 	{
-		Stack<String> parseStack = new Stack<String>();
-		Stack<Object> execStack = new Stack<Object>();
-		
-		for (String token : tokens.allTokens())
-		{
-			parseStack.push(token);
-		}
+		ArrayDeque<String> parseStack = master.clone();
+		ArrayDeque<Object> execStack = new ArrayDeque<Object>();
 		
 		while (parseStack.size() > 0)
 		{

@@ -1,7 +1,6 @@
 package com.exascale.optimizer.testing;
 
 import java.io.Serializable;
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
@@ -9,7 +8,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
 
-public class SumOperator implements AggregateOperator, Serializable
+public final class SumOperator implements AggregateOperator, Serializable
 {
 	protected String input;
 	protected String output;
@@ -77,11 +76,11 @@ public class SumOperator implements AggregateOperator, Serializable
 		return new SumHashThread(cols2Pos);
 	}
 
-	protected class SumThread extends AggregateResultThread
+	protected final class SumThread extends AggregateResultThread
 	{
 		protected ArrayList<ArrayList<Object>> rows;
 		protected HashMap<String, Integer> cols2Pos;
-		protected BigDecimal result;
+		protected double result;
 		
 		public SumThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos)
 		{
@@ -93,16 +92,16 @@ public class SumOperator implements AggregateOperator, Serializable
 		{
 			if (isInt)
 			{
-				return new Long(result.longValue());
+				return (long)result;
 			}
 			
-			return new Double(result.doubleValue());
+			return result;
 		}
 		
 		public void run()
 		{
 			int pos = cols2Pos.get(input);
-			result = new BigDecimal(0);
+			result = 0;
 			
 			for (Object orow : rows)
 			{
@@ -112,11 +111,11 @@ public class SumOperator implements AggregateOperator, Serializable
 					Object o = row.get(pos);
 					if (o instanceof Integer)
 					{
-						result = result.add(new BigDecimal((Integer)o));
+						result += (Integer)o;
 					}
 					else if (o instanceof Long)
 					{
-						result = result.add(new BigDecimal((Long)o));
+						result += (Long)o;
 					}
 					else
 					{
@@ -127,7 +126,7 @@ public class SumOperator implements AggregateOperator, Serializable
 				else
 				{
 					Double o = (Double)row.get(pos);
-					result = result.add(new BigDecimal((Double)o));
+					result += (Double)o;
 				}
 			}
 			
@@ -139,10 +138,10 @@ public class SumOperator implements AggregateOperator, Serializable
 		}
 	}
 	
-	protected class SumHashThread extends AggregateResultThread
+	protected final class SumHashThread extends AggregateResultThread
 	{
-		protected volatile ConcurrentHashMap<ArrayList<Object>, AtomicReference<BigDecimal>> results = new ConcurrentHashMap<ArrayList<Object>, AtomicReference<BigDecimal>>(NUM_GROUPS, 0.75f, ResourceManager.cpus * 6);
-		protected HashMap<String, Integer> cols2Pos;
+		protected final ConcurrentHashMap<ArrayList<Object>, AtomicDouble> results = new ConcurrentHashMap<ArrayList<Object>, AtomicDouble>(NUM_GROUPS, 0.75f, ResourceManager.cpus * 6);
+		protected final HashMap<String, Integer> cols2Pos;
 		protected int pos;
 		
 		public SumHashThread(HashMap<String, Integer> cols2Pos)
@@ -162,7 +161,7 @@ public class SumOperator implements AggregateOperator, Serializable
 		}
 		
 		//@Parallel
-		public void put(ArrayList<Object> row, ArrayList<Object> group)
+		public final void put(ArrayList<Object> row, ArrayList<Object> group)
 		{
 			Object o = row.get(pos);
 			Double val;
@@ -179,7 +178,7 @@ public class SumOperator implements AggregateOperator, Serializable
 				val = (Double)o;
 			}
 			
-			AtomicReference ad = results.get(group);
+			AtomicDouble ad = results.get(group);
 			if (ad != null)
 			{
 				try
@@ -196,7 +195,7 @@ public class SumOperator implements AggregateOperator, Serializable
 				}
 				return;
 			}
-			if (results.putIfAbsent(group, new AtomicReference(new BigDecimal(val))) != null)
+			if (results.putIfAbsent(group, new AtomicDouble(val)) != null)
 			{
 				addToSum(group, val);
 			}
@@ -206,23 +205,22 @@ public class SumOperator implements AggregateOperator, Serializable
 		{
 			if (isInt)
 			{
-				return new Long(results.get(keys).get().longValue());
+				return (long)results.get(keys).get();
 			}
 			
-			return new Double(results.get(keys).get().doubleValue());
+			return results.get(keys).get();
 		}
 		
 		public void close()
 		{}
 		
-		public void addToSum(ArrayList<Object> key, double amount) 
+		public final void addToSum(ArrayList<Object> key, double amount) 
 		{
-			BigDecimal val = new BigDecimal(amount);
-		    AtomicReference<BigDecimal> newSum = results.get(key);
+		    AtomicDouble newSum = results.get(key);
 		    for (;;) 
 		    {
-		       BigDecimal oldVal = newSum.get();
-		       if (newSum.compareAndSet(oldVal, oldVal.add(val)))
+		       double oldVal = newSum.get();
+		       if (newSum.compareAndSet(oldVal, oldVal + amount))
 		            return;
 		    }
 		}

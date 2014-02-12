@@ -3,7 +3,7 @@ package com.exascale.optimizer.testing;
 import java.util.Comparator;  
 import java.util.concurrent.atomic.AtomicReference;  
   
-public class AtomicDouble extends Number implements Comparable<AtomicDouble> {  
+public final class AtomicDouble extends Number implements Comparable<AtomicDouble> {  
     protected static final long serialVersionUID = -2419445336101038676L;  
     protected AtomicReference<Double> value;  
   
@@ -194,7 +194,7 @@ public class AtomicDouble extends Number implements Comparable<AtomicDouble> {
       
     public static AtomicDoubleComparator comparator =  
                                         new AtomicDoubleComparator();  
-    public static class AtomicDoubleComparator  
+    public final static class AtomicDoubleComparator  
                     implements Comparator<AtomicDouble> {  
         public int compare(AtomicDouble d1, AtomicDouble d2) {  
             return Double.compare(d1.doubleValue(), d2.doubleValue());  

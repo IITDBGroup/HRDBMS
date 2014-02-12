@@ -10,7 +10,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 import com.exascale.optimizer.testing.MetaData.PartitionMetaData;
 
-public class Phase3 
+public final class Phase3 
 {
 	protected RootOperator root;
 	protected MetaData meta;

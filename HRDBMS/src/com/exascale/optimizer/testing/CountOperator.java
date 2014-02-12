@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.optimizer.testing.AggregateOperator.AggregateResultThread;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
 
-public class CountOperator implements AggregateOperator, Serializable
+public final class CountOperator implements AggregateOperator, Serializable
 {
 	protected String output;
 	protected MetaData meta;
@@ -77,7 +77,7 @@ public class CountOperator implements AggregateOperator, Serializable
 		return new CountHashThread(cols2Pos);
 	}
 
-	protected class CountThread extends AggregateResultThread
+	protected final class CountThread extends AggregateResultThread
 	{
 		protected ArrayList<ArrayList<Object>> rows;
 		protected long result;
@@ -120,10 +120,10 @@ public class CountOperator implements AggregateOperator, Serializable
 		}
 	}
 	
-	protected class CountHashThread extends AggregateResultThread
+	protected final class CountHashThread extends AggregateResultThread
 	{
-		protected volatile ConcurrentHashMap<ArrayList<Object>, AtomicLong> results = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS, 0.75f, ResourceManager.cpus * 6);
-		protected HashMap<String, Integer> cols2Pos;
+		protected final ConcurrentHashMap<ArrayList<Object>, AtomicLong> results = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS, 0.75f, ResourceManager.cpus * 6);
+		protected final HashMap<String, Integer> cols2Pos;
 		protected int pos;
 		
 		public CountHashThread(HashMap<String, Integer> cols2Pos)
@@ -136,7 +136,7 @@ public class CountOperator implements AggregateOperator, Serializable
 		}
 		
 		//@Parallel
-		public void put(ArrayList<Object> row, ArrayList<Object> group)
+		public final void put(ArrayList<Object> row, ArrayList<Object> group)
 		{
 			Object val = row.get(pos);
 			//TODO only do following if val not null

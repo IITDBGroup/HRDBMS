@@ -6,7 +6,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 import com.exascale.optimizer.testing.MultiOperator.AggregateThread;
 
-public class BufferedLinkedBlockingQueue  implements Serializable
+public final class BufferedLinkedBlockingQueue  implements Serializable
 {
 	protected final static int BLOCK_SIZE = 256;
 	protected ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal = new ConcurrentHashMap<Thread, ArrayAndIndex>(64 * ResourceManager.cpus);
@@ -92,7 +92,7 @@ public class BufferedLinkedBlockingQueue  implements Serializable
 		return oa.take(q);
 	}
 	
-	private static class ArrayAndIndex
+	private final static class ArrayAndIndex
 	{
 		protected volatile Object[] oa;
 		protected int index = 0;

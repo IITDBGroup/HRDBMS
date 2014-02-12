@@ -25,7 +25,7 @@ import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashSet;
 import com.exascale.threads.ReadThread;
 
-public class IntersectOperator implements Operator, Serializable
+public final class IntersectOperator implements Operator, Serializable
 {
 	protected MetaData meta;
 	protected ArrayList<Operator> children = new ArrayList<Operator>();
@@ -156,7 +156,7 @@ public class IntersectOperator implements Operator, Serializable
 		new InitThread().start();
 	}
 	
-	protected class ReadThread extends ThreadPoolThread
+	protected final class ReadThread extends ThreadPoolThread
 	{
 		protected Operator op;
 		protected int i;
@@ -187,7 +187,7 @@ public class IntersectOperator implements Operator, Serializable
 		}
 	}
 	
-	protected class InitThread extends ThreadPoolThread
+	protected final class InitThread extends ThreadPoolThread
 	{
 		protected ArrayList<ReadThread> threads = new ArrayList<ReadThread>(children.size());
 		

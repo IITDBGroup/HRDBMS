@@ -1,6 +1,6 @@
 package com.exascale.optimizer.testing;
 
-public class ConstantFilter extends Filter
+public final class ConstantFilter extends Filter
 {
 	protected double likelihood;
 

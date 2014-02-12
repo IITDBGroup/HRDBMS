@@ -9,7 +9,7 @@ import java.util.ArrayList;
 
 import com.exascale.optimizer.testing.MetaData.PartitionMetaData;
 
-public class Phase5
+public final class Phase5
 {
 	private static long WORKER_MEMORY = 37L * 1024L * 1024L * 1024L;
 	protected RootOperator root;

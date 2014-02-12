@@ -55,7 +55,6 @@ public class BuildIndexes
 		it = new IndexThread("./xs_suppkey.indx", "./supplier.tbl", "SUPPLIER", "S_SUPPKEY");
 		it.start();
 		mark.join();
-		ResourceManager.clearInternMaps();
 		
 		NUM_THREADS = 4;
 		mark = new IndexThread("./xo_orderdate.indx", "./orders.tbl", "ORDERS", "O_ORDERDATE");
@@ -63,21 +62,17 @@ public class BuildIndexes
 		it = new IndexThread("./xo_custkey.indx", "./orders.tbl", "ORDERS", "O_CUSTKEY");
 		it.start();
 		mark.join();
-		ResourceManager.clearInternMaps();
 		
 		NUM_THREADS = 8;
 		it = new IndexThread("./xl_receiptdate.indx", "./lineitem.tbl", "LINEITEM", "L_RECEIPTDATE", "L_SHIPMODE", "L_SHIPINSTRUCT");
 		it.start();
 		it.join();
-		ResourceManager.clearInternMaps();
 		it = new IndexThread("./xl_orderkey.indx", "./lineitem.tbl", "LINEITEM", "L_ORDERKEY", "L_SUPPKEY");
 		it.start();
 		it.join();
-		ResourceManager.clearInternMaps();
 		it = new IndexThread("./xl_partkey.indx", "./lineitem.tbl", "LINEITEM", "L_PARTKEY");
 		it.start();
 		it.join();
-		ResourceManager.clearInternMaps();
 		it = new IndexThread("./xl_shipdate.indx", "./lineitem.tbl", "LINEITEM", "L_SHIPDATE", "L_EXTENDEDPRICE", "L_QUANTITY", "L_DISCOUNT", "L_SUPPKEY");
 		it.start();
 		it.join();
@@ -249,6 +244,7 @@ public class BuildIndexes
 				long RID = 0;
 				String line = null;
 			
+				FastStringTokenizer tokens = new FastStringTokenizer("", "|", false);
 				while (true)
 				{
 					while (true)
@@ -281,12 +277,12 @@ public class BuildIndexes
 					}
 					
 					String[] key = new String[keys.size()];
-					FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
+					tokens.reuse(line, "|", false);
 					String[] all = tokens.allTokens();
 					int i = 0;
 					for (String k : keys)
 					{
-						key[i] = ResourceManager.internString(all[cols2Pos.get(k)]);
+						key[i] = all[cols2Pos.get(k)];
 						i++;
 					}
 						

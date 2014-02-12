@@ -1,5 +1,5 @@
 package com.exascale.optimizer.testing;
 
-public class DataEndMarker {
+public final class DataEndMarker {
 
 }

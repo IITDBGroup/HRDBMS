@@ -14,7 +14,7 @@ import com.exascale.optimizer.testing.AggregateOperator.AggregateResultThread;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
-public class MultiOperator implements Operator, Serializable
+public final class MultiOperator implements Operator, Serializable
 {
 	protected Operator child;
 	protected Operator parent;
@@ -420,7 +420,7 @@ public class MultiOperator implements Operator, Serializable
 		return o;
 	}
 	
-	protected class HashGroupByThread extends ThreadPoolThread
+	protected final class HashGroupByThread extends ThreadPoolThread
 	{
 		protected volatile ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>> groups = new ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>>(NUM_GROUPS, 0.75f, ResourceManager.cpus * 6);
 		protected AggregateResultThread[] threads = new AggregateResultThread[ops.size()];
@@ -490,7 +490,7 @@ public class MultiOperator implements Operator, Serializable
 			}
 		}
 		
-		protected class HashGroupByReaderThread extends ThreadPoolThread
+		protected final class HashGroupByReaderThread extends ThreadPoolThread
 		{
 			protected ArrayList<Integer> groupPos = null;
 			
@@ -537,7 +537,7 @@ public class MultiOperator implements Operator, Serializable
 		}
 	}
 	
-	protected class InitThread extends ThreadPoolThread
+	protected final class InitThread extends ThreadPoolThread
 	{	
 		public void run()
 		{
@@ -638,7 +638,7 @@ public class MultiOperator implements Operator, Serializable
 		}
 	}
 	
-	protected class AggregateThread
+	protected final class AggregateThread
 	{
 		private ArrayList<ThreadPoolThread> threads = new ArrayList<ThreadPoolThread>();
 		ArrayList<Object> row = new ArrayList<Object>();
@@ -708,7 +708,7 @@ public class MultiOperator implements Operator, Serializable
 		}
 	}
 	
-	protected class CleanerThread extends ThreadPoolThread
+	protected final class CleanerThread extends ThreadPoolThread
 	{	
 		public void run()
 		{
