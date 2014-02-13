@@ -21,6 +21,7 @@ public class Driver
 	protected static ArrayList<AggregateOperator> vOp = new ArrayList<AggregateOperator>();
 	protected static MetaData meta = null;
 	protected static final int QUEUE_SIZE = 2500000;
+	protected static final int CUDA_SIZE = 30720;
 	
 	private static final class ConnectionManagerThread extends ThreadPoolThread
 	{

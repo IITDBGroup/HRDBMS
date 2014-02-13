@@ -6,27 +6,24 @@ import java.util.List;
 import com.exascale.optimizer.testing.ExtendOperator.ExtendKernel;
 
 public class Rootbeer 
-{
-	static
-	{
-		System.load("./extend_kernel.so");
-	}
-	
+{	
 	public void runAll(List<Kernel> jobs)
 	{
+		System.out.println("Rootbeer runAll() called with " + jobs.size() + " jobs");
+		System.out.flush();
 		if (jobs.get(0) instanceof ExtendKernel)
 		{
 			//format things for JNI
 			ExtendKernel first = (ExtendKernel)jobs.get(0);
-			double[] rows = new double[jobs.size() * first.poses.size()];
-			double[] results = new double[jobs.size()];
+			float[] rows = new float[jobs.size() * first.poses.size()];
+			float[] results = new float[jobs.size()];
 			int i = 0;
 			for (Kernel k : jobs)
 			{
 				ExtendKernel kernel = (ExtendKernel)k;
 				for (int pos : kernel.poses)
 				{
-					rows[i] = ((Number)kernel.row.get(pos)).doubleValue();
+					rows[i] = ((Number)kernel.row.get(pos)).floatValue();
 					i++;
 				}
 			}
@@ -58,12 +55,11 @@ public class Rootbeer
 					System.exit(1);
 				}
 			}
-			
 			extendKernel(rows, prefixBytes, results, jobs.size(), first.poses.size(), first.master.size(), prefixBytes.length);
 			//format things for ExtendOperator
-			for (double result : results)
+			for (float result : results)
 			{
-				first.calced.add(result);
+				first.calced.add(result * 1.0);
 			}
 		}
 		else
@@ -73,5 +69,5 @@ public class Rootbeer
 		}
 	}
 	
-	private native void extendKernel(double[] rows, byte[] prefix, double[] results, int numJobs, int numCols, int numPrefixes, int prefixBytesLength);
+	private native void extendKernel(float[] rows, byte[] prefix, float[] results, int numJobs, int numCols, int numPrefixes, int prefixBytesLength);
 }

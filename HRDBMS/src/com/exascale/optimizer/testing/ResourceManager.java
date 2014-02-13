@@ -36,7 +36,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+
 import sun.misc.Unsafe;
+
 import com.exascale.optimizer.testing.LongPrimitiveConcurrentHashMap.EntryIterator;
 import com.exascale.optimizer.testing.LongPrimitiveConcurrentHashMap.EntrySet;
 import com.exascale.optimizer.testing.LongPrimitiveConcurrentHashMap.WriteThroughEntry;
@@ -70,6 +72,18 @@ public final class ResourceManager extends ThreadPoolThread
     	pool = Executors.newCachedThreadPool();
     	cpus = Runtime.getRuntime().availableProcessors();
 		maxMemory = Runtime.getRuntime().maxMemory();
+		System.out.println("Going to load CUDA code");
+		try
+		{
+			System.loadLibrary("extend_kernel");
+		}
+		catch(Exception e)
+		{
+			e.printStackTrace();
+			System.exit(1);
+		}
+		
+		System.out.println("CUDA code loaded");
     }
     
 	public ResourceManager()

@@ -141,7 +141,8 @@ public final class ExtendOperator implements Operator, Serializable {
 	private final class GPUThread extends ThreadPoolThread {
 		public void run() 
 		{
-			List<Kernel> jobs = new ArrayList<Kernel>();
+			System.out.println("GPUThread is starting");
+			List<Kernel> jobs = new ArrayList<Kernel>(Driver.CUDA_SIZE);
 			ArrayList<Double> calced = new ArrayList<Double>();
 			int i = 0;
 			while (true) 
@@ -188,7 +189,7 @@ public final class ExtendOperator implements Operator, Serializable {
 					jobs.add(new ExtendKernel(row, master, poses, calced));
 					i++;
 					
-					if (i == Driver.QUEUE_SIZE)
+					if (i == Driver.CUDA_SIZE)
 					{
 						Rootbeer rootbeer = new Rootbeer();
 						rootbeer.runAll(jobs);
