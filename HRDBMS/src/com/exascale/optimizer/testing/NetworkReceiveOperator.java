@@ -1,5 +1,7 @@
 package com.exascale.optimizer.testing;
 
+ 
+
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.File;
@@ -38,7 +40,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	protected HashMap<Operator, OutputStream> outs = new HashMap<Operator, OutputStream>();
 	protected HashMap<Operator, InputStream> ins = new HashMap<Operator, InputStream>();
 	protected HashMap<Operator, ObjectOutputStream> objOuts = new HashMap<Operator, ObjectOutputStream>();
-	protected BufferedLinkedBlockingQueue outBuffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
+	protected BufferedLinkedBlockingQueue outBuffer;
 	protected ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
 	protected volatile boolean fullyStarted = false;
 	protected AtomicLong readCounter = new AtomicLong(0);
@@ -129,6 +131,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	@Override
 	public void start() throws Exception 
 	{
+		outBuffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
 	}
 	
 	protected final class ReadThread extends ThreadPoolThread
@@ -251,7 +254,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 				else if (bytes[i+4] == 3)
 				{
 					//date
-					Date o = new Date(bb.getLong());
+				 MyDate o = new MyDate(bb.getLong());
 					retval.add(o);
 				}
 				else if (bytes[i+4] == 4)

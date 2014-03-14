@@ -5,7 +5,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.Serializable;
 import java.text.ParseException;
-import java.text.SimpleDateFormat;
+ 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -30,7 +30,7 @@ public final class CaseOperator implements Operator, Serializable
 	protected TreeMap<Integer, String> pos2Col;
 	protected String name;
 	protected String type;
-	//protected SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+	//protected MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
 	protected ArrayList<String> origResults;
 	protected ArrayList<String> references = new ArrayList<String>();
 	protected int node;

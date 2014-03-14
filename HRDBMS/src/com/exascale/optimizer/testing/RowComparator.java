@@ -1,6 +1,6 @@
 package com.exascale.optimizer.testing;
 
-import java.text.SimpleDateFormat;
+ 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
@@ -11,7 +11,7 @@ public final class RowComparator implements Comparator
 
 	protected final ArrayList<Boolean> orders;
 	protected final ArrayList<String> types;
-	//protected SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+	//protected MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
 	
 	public RowComparator(ArrayList<Boolean> orders, ArrayList<String> types)
 	{
@@ -120,9 +120,9 @@ public final class RowComparator implements Comparator
 			{
 				result = ((String)lField).compareTo((String)rField);
 			}
-			else if (lField instanceof Date)
+			else if (lField instanceof MyDate)
 			{
-				result = ((Date)lField).compareTo((Date)rField);
+				result = ((MyDate)lField).compareTo((MyDate)rField);
 			}
 			else
 			{

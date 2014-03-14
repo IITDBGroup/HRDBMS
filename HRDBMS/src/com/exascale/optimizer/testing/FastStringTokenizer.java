@@ -3,11 +3,11 @@ package com.exascale.optimizer.testing;
 import java.io.Serializable;
 
 public final class FastStringTokenizer implements Serializable {
-    protected String[] result;
     protected int index;
     protected String delim;
     protected String string;
     protected String[] temp;
+    protected int limit;
     
     public final void reuse(String string, String delim, boolean bool)
     {
@@ -36,12 +36,7 @@ public final class FastStringTokenizer implements Serializable {
         	temp[wordCount++] = string.substring(i);
         }
         
-        if (result.length != wordCount)
-        {
-        	result = new String[wordCount];
-        }
-        
-        System.arraycopy(temp, 0, result, 0, wordCount);
+        limit = wordCount;
         index = 0;
     }
     
@@ -73,23 +68,29 @@ public final class FastStringTokenizer implements Serializable {
         	temp[wordCount++] = string.substring(i);
         }
  
-        result = new String[wordCount];
-        System.arraycopy(temp, 0, result, 0, wordCount);
+        limit = wordCount;
         index = 0;
     }
     
     public boolean hasMoreTokens()
     {
-    	return index < result.length;
+    	return index < limit;
+    }
+    
+    public int getLimit()
+    {
+    	return limit;
     }
     
     public String nextToken()
     {
-    	return result[index++];
+    	return temp[index++];
     }
     
     public String[] allTokens()
     {
+    	String[] result = new String[limit];
+    	System.arraycopy(temp, 0, result, 0, limit);
     	return result;
     }
     

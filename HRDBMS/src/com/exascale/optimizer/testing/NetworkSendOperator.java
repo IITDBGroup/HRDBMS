@@ -1,5 +1,7 @@
 package com.exascale.optimizer.testing;
 
+ 
+
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.File;
@@ -251,7 +253,7 @@ public class NetworkSendOperator implements Operator, Serializable
 				header[i] = (byte)2;
 				size += 8;
 			}
-			else if (o instanceof Date)
+			else if (o instanceof MyDate)
 			{
 				header[i] = (byte)3;
 				size += 8;
@@ -295,7 +297,7 @@ public class NetworkSendOperator implements Operator, Serializable
 			}
 			else if (retval[i] == 3)
 			{
-				retvalBB.putLong(((Date)o).getTime());	
+				retvalBB.putLong(((MyDate)o).getTime());	
 			}
 			else if (retval[i] == 4)
 			{

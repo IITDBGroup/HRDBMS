@@ -34,7 +34,7 @@ public class Driver
 	public static void main(String[] args)
 	{	
 		new ResourceManager().start();
-		//new ConnectionManagerThread().start();
+		new ConnectionManagerThread().start();
 		try
 		{
 			long start, end;
@@ -62,6 +62,7 @@ public class Driver
 			phase3(parseOutput);
 			phase4 = phase4(parseOutput);
 			phase5(parseOutput);
+			printTree(0, parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #2 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
@@ -132,6 +133,7 @@ public class Driver
 			phase3(parseOutput);
 			phase4 = phase4(parseOutput);
 			phase5(parseOutput);
+			//printTree(0, parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #7 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();
@@ -286,6 +288,7 @@ public class Driver
 			phase3(parseOutput);
 			phase4 = phase4(parseOutput);
 			phase5(parseOutput);
+			//printTree(0, parseOutput);
 			end = System.currentTimeMillis();
 			System.out.println("Query #19 optimization took " + ((end - start) / 1000) + " seconds");
 			start = System.currentTimeMillis();

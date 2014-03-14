@@ -6,12 +6,13 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.io.Serializable;
-import java.text.SimpleDateFormat;
+ 
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
@@ -31,7 +32,7 @@ public final class TableScanOperator implements Operator, Serializable
 	protected String schema;
 	protected ArrayList<BufferedReader> ins = new ArrayList<BufferedReader>();
 	protected ArrayList<Operator> parents = new ArrayList<Operator>();
-	public volatile BufferedLinkedBlockingQueue readBuffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
+	public volatile BufferedLinkedBlockingQueue readBuffer;
 	protected volatile HashMap<Operator, BufferedLinkedBlockingQueue> readBuffers = new HashMap<Operator, BufferedLinkedBlockingQueue>();
 	protected boolean startDone = false;
 	protected boolean optimize = false;
@@ -60,11 +61,11 @@ public final class TableScanOperator implements Operator, Serializable
 	
 	public void reset()
 	{	
-		for (Operator o : children)
+		if (!startDone)
 		{
 			try
 			{
-				o.reset();
+				start();
 			}
 			catch(Exception e)
 			{
@@ -72,10 +73,25 @@ public final class TableScanOperator implements Operator, Serializable
 				System.exit(1);
 			}
 		}
+		else
+		{
+			for (Operator o : children)
+			{
+				try
+				{
+					o.reset();
+				}
+				catch(Exception e)
+				{
+					e.printStackTrace();
+					System.exit(1);
+				}
+			}
 		
-		readBuffer.clear();
-		forceDone = false;
-		init();
+			readBuffer.clear();
+			forceDone = false;
+			init();
+		}
 	}
 	
 	public HashSet<HashMap<Filter, Filter>> getHSHM()
@@ -369,6 +385,10 @@ public final class TableScanOperator implements Operator, Serializable
 					readBuffers.put(parent, new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE));
 				}
 			}
+			else
+			{
+				readBuffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
+			}
 			
 			init();
 		}
@@ -605,6 +625,9 @@ public final class TableScanOperator implements Operator, Serializable
 					String line = in.readLine();
 					//@?Parallel
 					FastStringTokenizer tokens = new FastStringTokenizer("", "|", false);	
+					List<Kernel> jobs = new ArrayList<Kernel>();
+					int x = 0;
+					ArrayList<ArrayList<Object>> rows = new ArrayList<ArrayList<Object>>();
 					while (line != null)
 					{
 						ArrayList<Object> row = new ArrayList<Object>(types.size());
@@ -636,14 +659,13 @@ public final class TableScanOperator implements Operator, Serializable
 							}
 							j++;
 						}
-				
 						if (!optimize)
 						{
 							for (Map.Entry entry : readBuffers.entrySet())
 							{
 								BufferedLinkedBlockingQueue q = (BufferedLinkedBlockingQueue)entry.getValue();
 								filter = orderedFilters.get(entry.getKey());
-								
+							
 								if (filter != null)
 								{
 									if (filter.passes(row))
@@ -707,14 +729,9 @@ public final class TableScanOperator implements Operator, Serializable
 								}
 							}
 						}
-						
+					
 						i++;
 						line = in.readLine();
-				
-						//if (i % 10000 == 0)
-						//{
-						//	System.out.println("Read " + i + " records");
-						//}
 					}
 				}
 				else
@@ -736,7 +753,10 @@ public final class TableScanOperator implements Operator, Serializable
 						System.exit(1);
 					}
 					//@?Parallel
-					FastStringTokenizer tokens = new FastStringTokenizer("", "|", false);	
+					FastStringTokenizer tokens = new FastStringTokenizer("", "|", false);
+					ArrayList<Kernel> jobs = new ArrayList<Kernel>();
+					int x = 0;
+					ArrayList<ArrayList<Object>> rows = new ArrayList<ArrayList<Object>>();
 					while (!(o instanceof DataEndMarker))
 					{
 						if (!indexOnly)
@@ -1273,9 +1293,9 @@ public final class TableScanOperator implements Operator, Serializable
 			{
 				lowLE = Integer.MIN_VALUE;
 			}
-			else if (highLE instanceof Date)
+			else if (highLE instanceof MyDate)
 			{
-				lowLE = new Date(Long.MIN_VALUE);
+				lowLE = new MyDate(Long.MIN_VALUE);
 			}
 			else if (highLE instanceof String)
 			{
@@ -1297,9 +1317,9 @@ public final class TableScanOperator implements Operator, Serializable
 			{
 				highLE = Integer.MAX_VALUE;
 			}
-			else if (lowLE instanceof Date)
+			else if (lowLE instanceof MyDate)
 			{
-				highLE = new Date(Long.MAX_VALUE);
+				highLE = new MyDate(Long.MAX_VALUE);
 			}
 			else if (lowLE instanceof String)
 			{

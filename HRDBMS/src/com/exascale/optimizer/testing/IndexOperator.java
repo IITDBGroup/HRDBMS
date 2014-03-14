@@ -24,6 +24,7 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 	protected Index index;
 	protected int device = -1;
 	protected volatile boolean forceDone = false;
+	protected volatile Boolean startCalled = false;
 	
 	public void setChildPos(int pos)
 	{
@@ -109,6 +110,18 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 	@Override
 	public void start() throws Exception 
 	{
+		synchronized(startCalled)
+		{
+			if (!startCalled)
+			{
+				startCalled = true;
+			}
+			else
+			{
+				System.out.println("Start called more than once on IndexOperator!");
+				System.exit(1);
+			}
+		}
 		index.open(device, meta);
 	}
 	
@@ -221,7 +234,21 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 	
 	public void reset()
 	{
-		index.reset();
-		forceDone = false;
+		if (!startCalled)
+		{
+			try
+			{
+				start();
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
+			}
+		}
+		else
+		{
+			index.reset();
+			forceDone = false;
+		}
 	}
 }

@@ -30,7 +30,7 @@ public class BuildIndexes
 	protected static final int BRANCH_FACTOR = 128;
 	protected static final Runtime rt = Runtime.getRuntime();
 	protected static int NUM_THREADS = 1;
-	protected static int SEGMENT_SIZE = 50000000;
+	protected static int SEGMENT_SIZE = 5000000;
 	
 	public static void main(String[] args) throws Exception
 	{
@@ -46,15 +46,15 @@ public class BuildIndexes
 		it.start();
 		it = new IndexThread("./xp_name.indx", "./part.tbl", "PART", "P_NAME");
 		it.start();
-		it = new IndexThread("./xp_container.indx", "./part.tbl", "PART", "P_CONTAINER", "P_BRAND", "P_SIZE");
+		it = new IndexThread("./xp_container.indx", "./part.tbl", "PART", "P_BRAND", "P_CONTAINER", "P_SIZE");
 		it.start();
 		it = new IndexThread("./xs_comment.indx", "./supplier.tbl", "SUPPLIER", "S_COMMENT");
 		it.start();
 		mark = new IndexThread("./xps_partkey.indx", "./partsupp.tbl", "PARTSUPP", "PS_PARTKEY", "PS_SUPPKEY");
 		mark.start();
-		it = new IndexThread("./xs_suppkey.indx", "./supplier.tbl", "SUPPLIER", "S_SUPPKEY");
-		it.start();
+		it.join();
 		mark.join();
+		
 		
 		NUM_THREADS = 4;
 		mark = new IndexThread("./xo_orderdate.indx", "./orders.tbl", "ORDERS", "O_ORDERDATE");
@@ -62,9 +62,13 @@ public class BuildIndexes
 		it = new IndexThread("./xo_custkey.indx", "./orders.tbl", "ORDERS", "O_CUSTKEY");
 		it.start();
 		mark.join();
+		it.join();
 		
 		NUM_THREADS = 8;
-		it = new IndexThread("./xl_receiptdate.indx", "./lineitem.tbl", "LINEITEM", "L_RECEIPTDATE", "L_SHIPMODE", "L_SHIPINSTRUCT");
+		it = new IndexThread("./xl_receiptdate.indx", "./lineitem.tbl", "LINEITEM", "L_SHIPMODE", "L_RECEIPTDATE");
+		it.start();
+		it.join();
+		it = new IndexThread("./xl_shipmode.indx", "./lineitem.tbl", "LINEITEM", "L_SHIPINSTRUCT", "L_SHIPMODE", "L_QUANTITY");
 		it.start();
 		it.join();
 		it = new IndexThread("./xl_orderkey.indx", "./lineitem.tbl", "LINEITEM", "L_ORDERKEY", "L_SUPPKEY");

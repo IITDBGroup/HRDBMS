@@ -24,13 +24,29 @@ public final class ExtendOperator implements Operator, Serializable {
 	protected int node;
 	protected FastStringTokenizer tokens;
 	protected ArrayDeque<String> master;
-	protected BufferedLinkedBlockingQueue queue = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
+	protected BufferedLinkedBlockingQueue queue;
 	protected volatile ArrayList<Integer> poses;
+	private volatile boolean startDone = false;
 
 	public void reset() {
-		queue.clear();
-		child.reset();
-		new GPUThread().start();
+		if (!startDone)
+		{
+			try
+			{
+				start();
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
+				System.exit(1);
+			}
+		}
+		else
+		{
+			queue.clear();
+			child.reset();
+			new GPUThread().start();
+		}
 	}
 
 	public void setChildPos(int pos) {
@@ -103,7 +119,9 @@ public final class ExtendOperator implements Operator, Serializable {
 
 	@Override
 	public void start() throws Exception {
+		startDone = true;
 		child.start();
+		queue = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
 		new GPUThread().start();
 	}
 
@@ -179,9 +197,10 @@ public final class ExtendOperator implements Operator, Serializable {
 				}
 
 				ArrayList<Object> row = (ArrayList<Object>) o;
-				if (poses == null)
+				if (poses == null || !ResourceManager.GPU)
 				{
-					row.add(parsePrefixDouble(row));
+					Double ppd = parsePrefixDouble(row);
+					row.add(ppd);
 					queue.put(row);
 				}
 				else
@@ -197,7 +216,8 @@ public final class ExtendOperator implements Operator, Serializable {
 						
 						for (Kernel k : jobs)
 						{
-							((ExtendKernel)k).getRow().add(calced.get(i));
+							Double ppd = calced.get(i);
+							((ExtendKernel)k).getRow().add(ppd);
 							queue.put(((ExtendKernel)k).getRow());
 							i++;
 						}
@@ -295,25 +315,32 @@ public final class ExtendOperator implements Operator, Serializable {
 		ArrayList<Integer> p = new ArrayList<Integer>();
 		ArrayDeque<String> parseStack = master.clone();
 		ArrayDeque<Object> execStack = new ArrayDeque<Object>();
+		//System.out.println("Starting parse stack = " + parseStack);
 
 		while (parseStack.size() > 0) {
+			//System.out.println("Exec stack = " + execStack);
 			String temp = parseStack.pop();
+			//System.out.println("We popped " + temp);
 			if (temp.equals("*")) {
 				Double lhs = (Double) execStack.pop();
 				Double rhs = (Double) execStack.pop();
+				//System.out.println("Arguments are " + lhs + " and " + rhs);
 				execStack.push(lhs * rhs);
 
 			} else if (temp.equals("-")) {
 				Double lhs = (Double) execStack.pop();
 				Double rhs = (Double) execStack.pop();
+				//System.out.println("Arguments are " + lhs + " and " + rhs);
 				execStack.push(lhs - rhs);
 			} else if (temp.equals("+")) {
 				Double lhs = (Double) execStack.pop();
 				Double rhs = (Double) execStack.pop();
+				//System.out.println("Arguments are " + lhs + " and " + rhs);
 				execStack.push(lhs + rhs);
 			} else if (temp.equals("/")) {
 				Double lhs = (Double) execStack.pop();
 				Double rhs = (Double) execStack.pop();
+				//System.out.println("Arguments are " + lhs + " and " + rhs);
 				execStack.push(lhs / rhs);
 			} else {
 				try {
@@ -321,9 +348,12 @@ public final class ExtendOperator implements Operator, Serializable {
 							|| (temp.charAt(0) == '_')) {
 						Object field = null;
 						try {
+							//System.out.println("Fetching field " + temp + " from " + cols2Pos);
+							//System.out.println("Row is " + row);
 							int x = cols2Pos.get(temp);
 							p.add(x);
 							field = row.get(x);
+							//System.out.println("Fetched value is " + field);
 						} catch (Exception e) {
 							e.printStackTrace();
 							System.out.println("Error getting column " + temp
@@ -349,6 +379,7 @@ public final class ExtendOperator implements Operator, Serializable {
 						}
 					} else {
 						double d = Utils.parseDouble(temp);
+						//System.out.println("Parsed a literal numeric value and got " + d);
 						execStack.push(d);
 					}
 				} catch (Exception e) {
@@ -359,6 +390,8 @@ public final class ExtendOperator implements Operator, Serializable {
 		}
 
 		poses = p;
-		return (Double) execStack.pop();
+		Double retval = (Double)execStack.pop();
+		//System.out.println("Going to return " + retval);
+		return retval;
 	}
 }

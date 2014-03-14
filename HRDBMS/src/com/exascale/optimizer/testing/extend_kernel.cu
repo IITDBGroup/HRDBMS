@@ -88,24 +88,32 @@ __device__ float myStrtod(char* string)
 		offset = 1;
 	}
 	
+	while (temp[offset] == '0')
+	{
+		offset++;
+	}
+	
 	int strlen = myStrlen(temp);
-	int i = 0;
+	int i = offset;
+	int a = 0;
 	while (i < p)
 	{
-		newTemp[i] = temp[i];
+		newTemp[a] = temp[i];
 		i++;
+		a++;
 	}
 	
 	i++;
 	while (i < strlen)
 	{
-		newTemp[i-1] = temp[i];
+		newTemp[a] = temp[i];
 		i++;
+		a++;
 	}
-	
+	newTemp[a] = 0;
 	temp = newTemp;
 	long n = parseLong(temp);
-	int x = strlen - p - offset;
+	int x = strlen - p - 1;
 	i = 0;
 	long d = 1;
 	while (i < x)

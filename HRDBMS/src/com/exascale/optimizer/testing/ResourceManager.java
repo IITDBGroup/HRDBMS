@@ -34,11 +34,16 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import sun.misc.Unsafe;
 
+import com.exascale.optimizer.testing.InternalConcurrentHashMap.KeyIterator;
+import com.exascale.optimizer.testing.InternalConcurrentHashMap.KeySet;
+import com.exascale.optimizer.testing.InternalConcurrentHashMap.ValueIterator;
+import com.exascale.optimizer.testing.InternalConcurrentHashMap.Values;
 import com.exascale.optimizer.testing.LongPrimitiveConcurrentHashMap.EntryIterator;
 import com.exascale.optimizer.testing.LongPrimitiveConcurrentHashMap.EntrySet;
 import com.exascale.optimizer.testing.LongPrimitiveConcurrentHashMap.WriteThroughEntry;
@@ -49,10 +54,10 @@ public final class ResourceManager extends ThreadPoolThread
 	protected static final int SLEEP_TIME = 10000;
 	protected static final int LOW_PERCENT_FREE = 30;
 	protected static final int HIGH_PERCENT_FREE = 70;
-	protected static final int PERCENT_TO_CUT = 1;
+	protected static final int PERCENT_TO_CUT = 2;
 	protected static final Vector<DiskBackedCollection> collections = new Vector<DiskBackedCollection>();
 	protected static volatile boolean lowMem = false;
-	protected static final int TEMP_COUNT = 2;
+	protected static final int TEMP_COUNT = 1;
 	protected static ArrayList<String> TEMP_DIRS;
 	protected static final int MIN_CT_SIZE = 20000;
 	protected static final int NUM_CTHREADS = 16;
@@ -60,37 +65,47 @@ public final class ResourceManager extends ThreadPoolThread
     protected static final Long LARGE_PRIME2 = 6920451961L;
     protected static final AtomicLong idGen = new AtomicLong(0);
     protected static HashMap<Long, String> creations = new HashMap<Long, String>();
-    protected static volatile boolean hasBeenLowMem = true;
-    protected static final boolean PROFILE = false;
+    protected static volatile boolean hasBeenLowMem = false;
+    protected static final boolean PROFILE = true;
     public static final int cpus;
     public static final ExecutorService pool;
     public static final AtomicInteger objID = new AtomicInteger(0);
     protected static final long maxMemory;
+    public static volatile AtomicInteger NO_OFFLOAD = new AtomicInteger(0);
+    public static final boolean GPU = false;
     
     static
     {
-    	pool = Executors.newCachedThreadPool();
     	cpus = Runtime.getRuntime().availableProcessors();
+    	pool = Executors.newCachedThreadPool();
 		maxMemory = Runtime.getRuntime().maxMemory();
-		System.out.println("Going to load CUDA code");
-		try
+		if (GPU)
 		{
-			System.loadLibrary("extend_kernel");
-		}
-		catch(Exception e)
-		{
-			e.printStackTrace();
-			System.exit(1);
-		}
+			System.out.println("Going to load CUDA code");
+			try
+			{
+				System.loadLibrary("extend_kernel");
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
+				System.exit(1);
+			}
 		
-		System.out.println("CUDA code loaded");
+			System.out.println("CUDA code loaded");
+		}
     }
     
 	public ResourceManager()
 	{
 		TEMP_DIRS = new ArrayList<String>(TEMP_COUNT);
-		TEMP_DIRS.add("/temp3/");
-		TEMP_DIRS.add("/home/hrdbms/");
+		//TEMP_DIRS.add("/home/hrdbms/");
+		//TEMP_DIRS.add("/temp1/");
+		//TEMP_DIRS.add("/temp2/");
+		//TEMP_DIRS.add("/temp3/");
+		//TEMP_DIRS.add("/temp4/");
+		//TEMP_DIRS.add("/temp5/");
+		TEMP_DIRS.add("/mnt/ssd/");
 		for (String temp : TEMP_DIRS)
 		{
 			File dir = new File(temp);
@@ -366,6 +381,18 @@ public final class ResourceManager extends ThreadPoolThread
 		}
 	}
 	
+	public static void waitForSync()
+	{
+		for (DiskBackedCollection dbc : (Vector<DiskBackedCollection>)collections.clone())
+		{
+			if (dbc instanceof DiskBackedHashMap)
+			{
+				((DiskBackedHashMap) dbc).lock.readLock().lock();
+				((DiskBackedHashMap) dbc).lock.readLock().unlock();
+			}
+		}
+	}
+	
 	protected static void handleHighMem()
 	{
 	//	System.gc(); 
@@ -495,6 +522,15 @@ public final class ResourceManager extends ThreadPoolThread
 			}
 		}
 		
+		public void clear()
+		{
+			internal.clear();
+			if (internal2 != null)
+			{
+				internal2.clear();
+			}
+		}
+		
 		public void close() throws IOException
 		{
 			internal.close();
@@ -514,6 +550,8 @@ public final class ResourceManager extends ThreadPoolThread
 				{
 					newVal = ((ArrayList)val).get(0);
 				}
+				else if (val.size() == 0)
+				{}
 				else
 				{
 					StringBuilder val2 = new StringBuilder();
@@ -587,6 +625,8 @@ public final class ResourceManager extends ThreadPoolThread
 					{
 						val = ((ArrayList)val).get(0);
 					}
+					else if (((ArrayList)val).size() == 0)
+					{}
 					else
 					{
 						StringBuilder val2 = new StringBuilder();
@@ -643,6 +683,8 @@ public final class ResourceManager extends ThreadPoolThread
 					{
 						val = ((ArrayList)val).get(0);
 					}
+					else if (((ArrayList)val).size() == 0)
+					{}
 					else
 					{
 						StringBuilder val2 = new StringBuilder();
@@ -691,62 +733,21 @@ public final class ResourceManager extends ThreadPoolThread
 		{
 			return internal2;
 		}
-		
-		protected long hash(Object e)
+	}
+	
+	protected static long hash(Object key)
+	{
+		long eHash;
+		if (key == null)
 		{
-			long hashCode = 1125899906842597L;
-			long eHash = 1;
-			if (e instanceof Integer)
-			{
-				long i = ((Integer)e).longValue();
-				// Spread out values
-			    long scaled = i * LARGE_PRIME;
-			    // Fill in the lower bits
-			    eHash = scaled + LARGE_PRIME2;
-			}
-			else if (e instanceof Long)
-			{
-				long i = (Long)e;
-				// Spread out values
-			    long scaled = i * LARGE_PRIME;
-			    // Fill in the lower bits
-			    eHash = scaled + LARGE_PRIME2;
-			}
-			else if (e instanceof String)
-			{
-				String string = (String)e;
-				long h = 1125899906842597L; // prime
-				int len = string.length();
-
-				for (int i = 0; i < len; i++) 
-				{
-					h = 31*h + string.charAt(i);
-				}
-				eHash = h;
-			}
-			else if (e instanceof Double)
-			{
-				long i = Double.doubleToLongBits((Double)e);
-				// Spread out values
-			    long scaled = i * LARGE_PRIME;
-			    // Fill in the lower bits
-			    eHash = scaled + LARGE_PRIME2;
-			}
-			else if (e instanceof Date)
-			{
-				long i = ((Date)e).getTime();
-				// Spread out values
-			    long scaled = i * LARGE_PRIME;
-			    // Fill in the lower bits
-			    eHash = scaled + LARGE_PRIME2;
-			}
-			else
-			{
-				eHash = e.hashCode();
-			}
-				
-			return eHash;
+			eHash = 0;
 		}
+		else
+		{
+			eHash = MurmurHash.hash64(key.toString());
+		}
+			
+		return eHash;
 	}
 	
 	public static final class DiskBackedArray extends DiskBackedCollection implements Iterable
@@ -768,6 +769,12 @@ public final class ResourceManager extends ThreadPoolThread
 		{
 			long myIndex = index.getAndIncrement();
 			internal.put(myIndex, o);
+		}
+		
+		public void clear()
+		{
+			internal.clear();
+			index.set(0);
 		}
 		
 		public void update(long index, ArrayList<Object> o) throws Exception
@@ -856,7 +863,7 @@ public final class ResourceManager extends ThreadPoolThread
 		protected final ArrayList<AtomicLong> ofcSizes = new ArrayList<AtomicLong>(TEMP_COUNT);
 		protected volatile ArrayList<Vector<FileChannel>> ifcsArrayList = new ArrayList<Vector<FileChannel>>(TEMP_COUNT);
 		protected final ArrayList<Vector<Boolean>> locksArrayList = new ArrayList<Vector<Boolean>>(TEMP_COUNT);
-		protected final ReadWriteLock lock = new ReentrantReadWriteLock();
+		public final ReadWriteLock lock = new ReentrantReadWriteLock();
 		protected AtomicLong ctCount;
 		protected final boolean indexed;
 		protected volatile ReverseConcurrentHashMap valueIndex;
@@ -868,22 +875,49 @@ public final class ResourceManager extends ThreadPoolThread
 		protected Object IALock = new Boolean(false);
 		protected volatile LongPrimitiveConcurrentHashMap index;
 		
+		public void clear()
+		{
+			lock.readLock().lock();
+			internal.clear();
+			lock.readLock().unlock();
+			size.set(0);
+			if (valueIndex != null)
+			{
+				valueIndex.clear();
+			}
+			
+			if (diskValueIndex != null)
+			{
+				diskValueIndex.clear();
+			}
+			
+			if (index != null)
+			{
+				index.clear();
+			}
+		}
+		
 		public DiskBackedHashMap(boolean indexed, int estimate)
 		{
 			this.indexed = indexed;
 			estimate = estimate / 1024;
-			if (estimate * 16 * 30 * 35 < 0.25 * maxMemory)
+			if (estimate < 10)
 			{
-				this.estimate = estimate;
+				estimate = 10;
 			}
-			else
-			{
-				this.estimate = (int)((5.0 / 350000.0) * maxMemory);
-			}
-			internal = new InternalConcurrentHashMap(estimate / 16, 16.0f, cpus*6);
+			//System.out.println("Estimate is " + estimate);
+			//if (estimate * 16 * 30 * 35 < 0.25 * maxMemory)
+			//{
+			//	this.estimate = estimate;
+			//}
+			//else
+			//{
+			//	this.estimate = (int)((5.0 / 350000.0) * maxMemory);
+			//}
+			internal = new InternalConcurrentHashMap((int)(1.5 * estimate), 1.0f, cpus*6); //FIXME
 			if (indexed)
 			{
-				valueIndex = new ReverseConcurrentHashMap(estimate / 16, 16.0f, cpus*6);
+				valueIndex = new ReverseConcurrentHashMap((int)(1.5 * estimate), 1.0f, cpus*6);
 				diskValueIndex = ResourceManager.newDiskBackedHashSet(false, estimate);
 			}
 
@@ -961,15 +995,13 @@ public final class ResourceManager extends ThreadPoolThread
 		
 		public void update(Long key, ArrayList<Object> val) throws Exception
 		{
-			lock.readLock().lock();
 			ArrayList<Object> o = internal.replace(key, val);
-			lock.readLock().unlock();
 			if (o != null)
 			{
 				return;
 			}
 			
-			removeFromDisk(key);
+			//removeFromDisk(key);
 			putNoSize(key,  val);
 			return;
 		}
@@ -1018,15 +1050,15 @@ public final class ResourceManager extends ThreadPoolThread
 		
 		public final void put(Long key, ArrayList<Object> val) throws Exception
 		{
-			//if (lowMem)
-			//{
-			//	putToDisk(key, val);
-			//	//System.out.println("Wrote key " + key + " to disk");
-			//	size.incrementAndGet();
-			//	return;
-			//}
+			if (lowMem)
+			{
+				putToDisk(key, val);
+				//System.out.println("Wrote key " + key + " to disk");
+				size.incrementAndGet();
+				return;
+			}
 			
-			internal.put(key,  val);
+			internal.put(key, val);
 			
 			if (indexed)
 			{
@@ -1038,12 +1070,12 @@ public final class ResourceManager extends ThreadPoolThread
 		
 		public final void putNoSize(Long key, ArrayList<Object> val) throws Exception
 		{
-			//if (lowMem)
-			//{
-			//	putToDisk(key, val);
-			//	//System.out.println("Wrote key " + key + " to disk");
-			//	return;
-			//}
+			if (lowMem)
+			{
+				putToDisk(key, val);
+				//System.out.println("Wrote key " + key + " to disk");
+				return;
+			}
 			
 			internal.put(key,  val);
 			
@@ -1067,17 +1099,28 @@ public final class ResourceManager extends ThreadPoolThread
 		
 		public final void reduceResources() throws IOException
 		{	
+			if (NO_OFFLOAD.get() != 0)
+			{
+				try
+				{
+					Thread.sleep(SLEEP_TIME);
+				}
+				catch(Exception e)
+				{}
+				return;
+			}
 			lock.writeLock().lock();
 			InternalConcurrentHashMap.EntrySet set = internal.entrySet();
 			long size = set.size();
 			int num2Cut = 0;
-			if (size < MIN_CT_SIZE)
+			num2Cut = (size * PERCENT_TO_CUT / 100) > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int)(size * PERCENT_TO_CUT / 100);
+			if (num2Cut < MIN_CT_SIZE)
 			{
-				num2Cut = (int)size;
-			}
-			else
-			{
-				num2Cut = (size * PERCENT_TO_CUT / 100) > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int)(size * PERCENT_TO_CUT / 100);
+				num2Cut = MIN_CT_SIZE;
+				if (num2Cut > size)
+				{
+					num2Cut = (int)size;
+				}
 			}
 			
 			if (num2Cut == 0)
@@ -1155,6 +1198,16 @@ public final class ResourceManager extends ThreadPoolThread
 			}
 			
 			lock.writeLock().unlock();
+			
+			if (num2Cut == size)
+			{
+				try
+				{
+					Thread.sleep(SLEEP_TIME);
+				}
+				catch(InterruptedException e)
+				{}
+			}
 		}
 		
 		protected final class CleanerThread extends ThreadPoolThread
@@ -1181,6 +1234,17 @@ public final class ResourceManager extends ThreadPoolThread
 		
 		public final void importResources() throws IOException
 		{	
+			if (NO_OFFLOAD.get() != 0)
+			{
+				try
+				{
+					Thread.sleep(SLEEP_TIME);
+				}
+				catch(Exception e)
+				{}
+				return;
+			}
+			
 			if (index == null)
 			{
 				return;
@@ -1190,18 +1254,25 @@ public final class ResourceManager extends ThreadPoolThread
 			EntrySet set = index.entrySet();
 			long size = set.size();
 			int num2Cut = 0;
-			if (size < MIN_CT_SIZE)
+			num2Cut = (size * PERCENT_TO_CUT / 100) > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int)(size * PERCENT_TO_CUT / 100);
+			if (num2Cut < MIN_CT_SIZE)
 			{
-				num2Cut = (int)size;
-			}
-			else
-			{
-				num2Cut = (size * PERCENT_TO_CUT / 100) > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int)(size * PERCENT_TO_CUT / 100);
+				num2Cut = MIN_CT_SIZE;
+				if (num2Cut > size)
+				{
+					num2Cut = (int)size;
+				}
 			}
 			
 			if (num2Cut == 0)
 			{
 				lock.writeLock().unlock();
+				try
+				{
+					Thread.sleep(SLEEP_TIME);
+				}
+				catch(Exception e)
+				{}
 				return;
 			}
 			
@@ -1343,8 +1414,9 @@ public final class ResourceManager extends ThreadPoolThread
 			return iis.readObject();*/
 
 			ByteBuffer object = null;
-			FileChannel fc = getFreeFC((int)(keyVal % TEMP_COUNT));
-			synchronized(fc)
+			FileChannelAndInt fcai = getFreeFC((int)(keyVal % TEMP_COUNT));
+			FileChannel fc = fcai.fc;
+			//synchronized(fc)
 			{
 				//long fcSize = fc.size();
 				//if (resultVal + 4 > fcSize)
@@ -1352,12 +1424,15 @@ public final class ResourceManager extends ThreadPoolThread
 				//	ofcs.get((int)((keyVal % TEMP_COUNT))).force(true);
 				//}
 
-				fc.position(resultVal);
+				//fc.position(resultVal);
 				ByteBuffer sizeBuffer = ByteBuffer.allocate(4);
 				int count = 0;
 				while (count < sizeBuffer.limit())
 				{
-					count += fc.read(sizeBuffer);
+					//count += fc.read(sizeBuffer);
+					int temp = fc.read(sizeBuffer, resultVal);
+					count += temp;
+					resultVal += temp;
 				}
 				sizeBuffer.position(0);
 				int size = sizeBuffer.getInt();
@@ -1382,7 +1457,9 @@ public final class ResourceManager extends ThreadPoolThread
 				count = 0;
 				while (count < object.limit())
 				{
-					count += fc.read(object);
+					int temp = fc.read(object, resultVal);
+					count += temp;
+					resultVal += temp;
 				}
 				//object.position(0);
 				//int numFields = object.getInt();
@@ -1407,8 +1484,69 @@ public final class ResourceManager extends ThreadPoolThread
 				//	}
 				//}
 			}
-			freeFC(fc, (int)(keyVal % TEMP_COUNT));
+			freeFC(fc, (int)(keyVal % TEMP_COUNT), fcai.i);
 			return fromBytes(object.array());
+		}
+		
+		public final ArrayList<Object> getAllFromDisk() throws IOException, ClassNotFoundException
+		{	
+			if (!filesAllocated)
+			{
+				return null;
+			}
+			
+			long siz = this.size() - this.internal.size();
+			int s = (siz >= 0 && siz <= Integer.MAX_VALUE) ? (int)siz : Integer.MAX_VALUE;
+			ArrayList<Object> retval = new ArrayList<Object>(s);
+			EntryIterator it = this.index.entrySet().iterator();
+			FileChannelAndInt[] fcais = new FileChannelAndInt[TEMP_COUNT];
+			int i = 0;
+			while (i < TEMP_COUNT)
+			{
+				fcais[i] = getFreeFC(i);
+				i++;
+			}
+			
+			while (it.hasNext())
+			{
+				WriteThroughEntry entry = it.next();
+				long keyVal = entry.getKey();
+				long resultVal = entry.getValue();
+
+				ByteBuffer object = null;
+				FileChannel fc = fcais[(int)(keyVal % TEMP_COUNT)].fc;
+				//synchronized(fc)
+				{
+					//fc.position(resultVal);
+					ByteBuffer sizeBuffer = ByteBuffer.allocate(4);
+					int count = 0;
+					while (count < sizeBuffer.limit())
+					{
+						int temp = fc.read(sizeBuffer, resultVal);
+						count += temp;
+						resultVal += temp;
+					}
+					sizeBuffer.position(0);
+					int size = sizeBuffer.getInt();
+					object = ByteBuffer.allocate(size);
+					count = 0;
+					while (count < object.limit())
+					{
+						int temp = fc.read(object, resultVal);
+						count += temp;
+						resultVal += temp;
+					}
+				}
+				retval.add(fromBytes(object.array()));
+			}
+			
+			i = 0;
+			for (FileChannelAndInt fcai : fcais)
+			{
+				freeFC(fcai.fc, i, fcai.i);
+				i++;
+			}
+			return retval;
 		}
 		
 		protected final long getFromIndex(long key) throws IOException
@@ -1422,25 +1560,16 @@ public final class ResourceManager extends ThreadPoolThread
 			return retval;
 		}
 		
-		public final void freeFC(FileChannel ifc, int hash)
+		public final void freeFC(FileChannel ifc, int hash, int i)
 		{
-			int i = 0;
 			Vector<FileChannel> ifcs = ifcsArrayList.get(hash);
 			Vector<Boolean> locks = locksArrayList.get(hash);
-			while (i < ifcs.size())
-			{
-				FileChannel fc = ifcs.get(i);
-				if (ifc.equals(fc))
-				{
-					locks.set(i,  false);
-					return;
-				}
-				
-				i++;
-			}
+			FileChannel fc = ifcs.get(i);
+			locks.set(i,  false);
+			return;
 		}
 		
-		public final FileChannel getFreeFC(int hash)
+		public final FileChannelAndInt getFreeFC(int hash)
 		{
 			int i = 0;
 			Vector<Boolean> locks = locksArrayList.get(hash);
@@ -1451,7 +1580,7 @@ public final class ResourceManager extends ThreadPoolThread
 				if (!locked)
 				{
 					locks.set(i, true);
-					return ifcs.get(i);
+					return new FileChannelAndInt(ifcs.get(i), i);
 				}
 				i++;
 			}
@@ -1462,13 +1591,30 @@ public final class ResourceManager extends ThreadPoolThread
 				retval = new RandomAccessFile(TEMP_DIRS.get(hash) + "DBHM" + id + ".tmp", "r").getChannel();
 				locks.add(true);
 				ifcs.add(retval);
-				return retval;
+				i = 0;
+				while (!ifcs.get(i).equals(retval))
+				{
+					i++;
+				}
+				return new FileChannelAndInt(retval, i);
 			}
 			catch(Exception e)
 			{
 				e.printStackTrace();
 				System.exit(1);
 				return null;
+			}
+		}
+		
+		private static final class FileChannelAndInt
+		{
+			protected FileChannel fc;
+			protected int i;
+			
+			public FileChannelAndInt(FileChannel fc, int i)
+			{
+				this.fc = fc;
+				this.i = i;
 			}
 		}
 		
@@ -1521,7 +1667,7 @@ public final class ResourceManager extends ThreadPoolThread
 					if (!filesAllocated)
 					{
 						int i = 0;
-						index = new LongPrimitiveConcurrentHashMap(estimate / 16, 16.0f, cpus*6);
+						index = new LongPrimitiveConcurrentHashMap((int)(estimate * 1.5), 1.0f, cpus*6);
 						while (i < TEMP_COUNT)
 						{
 							/*
@@ -1575,13 +1721,16 @@ public final class ResourceManager extends ThreadPoolThread
 			
 			ByteBuffer bb = ByteBuffer.wrap(bytes);
 			FileChannel ofci = ofcs.get((int)((eKey % TEMP_COUNT)));
-			synchronized(ofci)
+			//synchronized(ofci)
 			{
-				ofci.position(indexValue);
+				//ofci.position(indexValue);
+				long pos = indexValue;
 				int count = 0;
 				while (count < bb.limit())
 				{
-					count += ofci.write(bb);
+					int temp = ofci.write(bb, pos);
+					count += temp;
+					pos += temp;
 				}
 			}
 			
@@ -1601,7 +1750,7 @@ public final class ResourceManager extends ThreadPoolThread
 					if (!filesAllocated)
 					{
 						int i = 0;
-						index = new LongPrimitiveConcurrentHashMap(estimate / 16, 16.0f, cpus*6);
+						index = new LongPrimitiveConcurrentHashMap((int)(estimate * 1.5), 1.0f, cpus*6);
 						//index = new ConcurrentHashMap<Long, Long>(estimate, 0.75f, Runtime.getRuntime().availableProcessors() * 6);
 						while (i < TEMP_COUNT)
 						{
@@ -1650,13 +1799,16 @@ public final class ResourceManager extends ThreadPoolThread
 					long indexValue = ofcSizes.get((int)(((Long)part.get(0).getKey()) % TEMP_COUNT)).getAndAdd(bytes.length);		
 					ByteBuffer bb = ByteBuffer.wrap(bytes);
 					FileChannel ofci = ofcs.get((int)(((Long)part.get(0).getKey()) % TEMP_COUNT));
-					synchronized(ofci)
+					//synchronized(ofci)
 					{
-						ofci.position(indexValue);
+						//ofci.position(indexValue);
+						long pos = indexValue;
 						int count = 0;
 						while (count < bb.limit())
 						{
-							count += ofci.write(bb);
+							int temp = ofci.write(bb, pos);
+							count += temp;
+							pos += temp;
 						}
 					}
 					
@@ -1763,11 +1915,9 @@ public final class ResourceManager extends ThreadPoolThread
 			ByteBuffer bb = ByteBuffer.wrap(val);
 			int numFields = bb.getInt();
 			
-			if (numFields <= 0)
+			if (numFields == 0)
 			{
-				System.out.println("Negative or zero number of fields in fromBytes()");
-				System.out.println("NumFields = " + numFields);
-				System.exit(1);
+				return new ArrayList<Object>();
 			}
 			
 			bb.position(bb.position() + numFields);
@@ -1801,7 +1951,7 @@ public final class ResourceManager extends ThreadPoolThread
 				else if (bytes[i+4] == 3)
 				{
 					//date
-					Date o = new Date(bb.getLong());
+				 MyDate o = new MyDate(bb.getLong());
 					retval.add(o);
 				}
 				else if (bytes[i+4] == 4)
@@ -1821,6 +1971,23 @@ public final class ResourceManager extends ThreadPoolThread
 						System.exit(1);
 					}
 				}
+				else if (bytes[i+4] == 6)
+				{
+					//AtomicLong
+					long o = bb.getLong();
+					retval.add(new AtomicLong(o));
+				}
+				else if (bytes[i+4] == 7)
+				{
+					//AtomicDouble
+					double o = bb.getDouble();
+					retval.add(new AtomicDouble(o));
+				}
+				else if (bytes[i+4] == 8)
+				{
+					//Empty ArrayList
+					retval.add(new ArrayList<Object>());
+				}
 				else
 				{
 					System.out.println("Unknown type in fromBytes()");
@@ -1838,11 +2005,6 @@ public final class ResourceManager extends ThreadPoolThread
 			if (v instanceof ArrayList)
 			{
 				val = (ArrayList<Object>)v;
-				if (val.size() == 0)
-				{
-					System.out.println("Zero sized array list in toBytes().");
-					System.exit(1);
-				}
 			}
 			else
 			{
@@ -1879,7 +2041,7 @@ public final class ResourceManager extends ThreadPoolThread
 					header[i] = (byte)2;
 					size += 8;
 				}
-				else if (o instanceof Date)
+				else if (o instanceof MyDate)
 				{
 					header[i] = (byte)3;
 					size += 8;
@@ -1888,6 +2050,26 @@ public final class ResourceManager extends ThreadPoolThread
 				{
 					header[i] = (byte)4;
 					size += (4 + ((String)o).length());
+				}
+				else if (o instanceof AtomicLong)
+				{
+					header[i] = (byte)6;
+					size += 8;
+				}
+				else if (o instanceof AtomicDouble)
+				{
+					header[i] = (byte)7;
+					size += 8;
+				}
+				else if (o instanceof ArrayList)
+				{
+					if (((ArrayList) o).size() != 0)
+					{
+						System.out.println("Non-zero size ArrayList in toBytes()");
+						Thread.dumpStack();
+						System.exit(1);
+					}
+					header[i] = (byte)8;
 				}
 				else
 				{
@@ -1923,7 +2105,7 @@ public final class ResourceManager extends ThreadPoolThread
 				}
 				else if (retval[i] == 3)
 				{
-					retvalBB.putLong(((Date)o).getTime());
+					retvalBB.putLong(((MyDate)o).getTime());
 				}
 				else if (retval[i] == 4)
 				{
@@ -1940,6 +2122,16 @@ public final class ResourceManager extends ThreadPoolThread
 					retvalBB.putInt(temp.length);
 					retvalBB.put(temp);
 				}
+				else if (retval[i] == 6)
+				{
+					retvalBB.putLong(((AtomicLong)o).get());
+				}
+				else if (retval[i] == 7)
+				{
+					retvalBB.putDouble(((AtomicDouble)o).get());
+				}
+				else if (retval[i] == 8)
+				{}
 				
 				i++;
 			}
@@ -1957,11 +2149,6 @@ public final class ResourceManager extends ThreadPoolThread
 				if (v instanceof ArrayList)
 				{
 					val = (ArrayList<Object>)v;
-					if (val.size() == 0)
-					{
-						System.out.println("In arrayListToBytes() with zero size array.");
-						System.exit(1);
-					}
 				}
 				else
 				{
@@ -1999,7 +2186,7 @@ public final class ResourceManager extends ThreadPoolThread
 						header[i] = (byte)2;
 						size += 8;
 					}
-					else if (o instanceof Date)
+					else if (o instanceof MyDate)
 					{
 						header[i] = (byte)3;
 						size += 8;
@@ -2008,6 +2195,26 @@ public final class ResourceManager extends ThreadPoolThread
 					{
 						header[i] = (byte)4;
 						size += (4 + ((String)o).length());
+					}
+					else if (o instanceof AtomicLong)
+					{
+						header[i] = (byte)6;
+						size += 8;
+					}
+					else if (o instanceof AtomicDouble)
+					{
+						header[i] = (byte)7;
+						size += 8;
+					}
+					else if (o instanceof ArrayList)
+					{
+						if (((ArrayList) o).size() != 0)
+						{
+							System.out.println("Non-zero size ArrayList in toBytes()");
+							Thread.dumpStack();
+							System.exit(1);
+						}
+						header[i] = (byte)8;
 					}
 					else
 					{
@@ -2043,7 +2250,7 @@ public final class ResourceManager extends ThreadPoolThread
 					}
 					else if (retval[i] == 3)
 					{
-						retvalBB.putLong(((Date)o).getTime());	
+						retvalBB.putLong(((MyDate)o).getTime());	
 					}
 					else if (retval[i] == 4)
 					{
@@ -2060,6 +2267,16 @@ public final class ResourceManager extends ThreadPoolThread
 						retvalBB.putInt(temp.length);
 						retvalBB.put(temp);
 					}
+					else if (retval[i] == 6)
+					{
+						retvalBB.putLong(((AtomicLong)o).get());
+					}
+					else if (retval[i] == 7)
+					{
+						retvalBB.putDouble(((AtomicDouble)o).get());
+					}
+					else if (retval[i] == 8)
+					{}
 				
 					i++;
 				}
@@ -2081,6 +2298,340 @@ public final class ResourceManager extends ThreadPoolThread
 			}
 			
 			return retval;
+		}
+	}
+	
+	public static final class DiskBackedALOHashMap<V>
+	{
+		private DiskBackedHashMap keys;
+		private DiskBackedHashMap values;
+		
+		public DiskBackedALOHashMap(int size)
+		{
+			keys = ResourceManager.newDiskBackedHashMap(false, size);
+			values = ResourceManager.newDiskBackedHashMap(false, size);
+		}
+		
+		public Set<ArrayList<Object>> keySet()
+		{
+			keys.lock.readLock().lock();
+			HashSet retval = new HashSet<ArrayList<Object>>((keys.size() >= 0 && keys.size() <= Integer.MAX_VALUE) ? (int)keys.size() : Integer.MAX_VALUE);
+			//Values set = keys.internal.values();
+			//ValueIterator it = set.iterator();
+			//while (it.hasNext())
+			//{
+			//	retval.add(it.next());
+			//}
+			retval.addAll(keys.internal.values());
+			
+			if (keys.index != null)
+			{
+				//com.exascale.optimizer.testing.LongPrimitiveConcurrentHashMap.KeySet set2 = keys.index.keySet();
+				//com.exascale.optimizer.testing.LongPrimitiveConcurrentHashMap.KeyIterator it2 = set2.iterator();
+				//while (it2.hasNext())
+				//{
+				//	try
+				//	{
+				//		retval.add(keys.getFromDisk(it2.next()));
+				//	}
+				//	catch(Exception e)
+				//	{
+				//		e.printStackTrace();
+				//		System.exit(1);
+				//	}
+				//}
+				
+				try
+				{
+					retval.addAll(keys.getAllFromDisk());
+				}
+				catch(Exception e)
+				{
+					e.printStackTrace();
+					System.exit(1);
+				}
+			}
+			
+			return retval;
+		}
+		
+		public V get(ArrayList<Object> key)
+		{
+			long plus = 0;
+			long hash = hash(key);
+			try
+			{
+				ArrayList<Object> current = keys.get(0x0EFFFFFFFFFFFFFFL & (hash + plus * plus));
+				if (current == null)
+				{
+					return null;
+				}
+				while (!current.equals(key))
+				{
+					plus++;
+					current = keys.get(0x0EFFFFFFFFFFFFFFL & (hash + plus * plus));
+					if (current == null)
+					{
+						return null;
+					}
+				}
+			
+				values.lock.readLock().lock();
+				boolean disk = false;
+				ArrayList<Object> valueAL = values.internal.get(0x0EFFFFFFFFFFFFFFL & (hash + plus * plus));
+				if (valueAL == null)
+				{
+					disk = true;
+					valueAL = (ArrayList<Object>)values.getFromDisk(0x0EFFFFFFFFFFFFFFL & (hash + plus * plus));
+				}
+				while (valueAL == null)
+				{
+					disk = false;
+					valueAL = values.internal.get(0x0EFFFFFFFFFFFFFFL & (hash + plus * plus));
+					if (valueAL == null)
+					{
+						disk = true;
+						valueAL = (ArrayList<Object>)values.getFromDisk(0x0EFFFFFFFFFFFFFFL & (hash + plus * plus));
+					}
+				}
+				
+				if (disk)
+				{
+					ArrayList<Object> result = values.internal.putIfAbsent(0x0EFFFFFFFFFFFFFFL & (hash + plus * plus), valueAL);
+					if (result != null)
+					{
+						valueAL = result;
+					}
+				}
+				values.lock.readLock().unlock();
+				if (valueAL.size() == 1 && (valueAL.get(0) instanceof AtomicLong || valueAL.get(0) instanceof AtomicDouble))
+				{
+					Object o = valueAL.get(0);
+					return (V)o;
+				}
+				else
+				{
+					return (V)valueAL;
+				}
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
+				System.exit(1);
+			}
+			
+			return null;
+		}
+		
+		public V debugGet(ArrayList<Object> key)
+		{
+			System.out.println("In debugGet() with key = " + key);
+			System.out.println("Keys.size() = " + keys.size());
+			System.out.println("Values.size() = " + values.size());  
+			long plus = 0;
+			long hash = hash(key);
+			try
+			{
+				ArrayList<Object> current = keys.get(0x0EFFFFFFFFFFFFFFL & (hash + plus * plus));
+				System.out.println("keys.get(" + (0x0EFFFFFFFFFFFFFFL & (hash + plus * plus)) + ") = " + current);
+				if (current == null)
+				{
+					com.exascale.optimizer.testing.InternalConcurrentHashMap.EntryIterator it = keys.internal.entrySet().iterator();
+					while (it.hasNext())
+					{
+						com.exascale.optimizer.testing.InternalConcurrentHashMap.WriteThroughEntry entry = it.next();
+						if (entry.getValue().equals(key))
+						{
+							System.out.println("But this key was found at hash = " + entry.getKey());
+							System.out.println("with value " + values.get(entry.getKey()));
+							return null;
+						}
+					}
+					
+					System.out.println("The key was not found in the internal key store");
+					if (keys.index != null)
+					{
+						EntryIterator it2 = keys.index.entrySet().iterator();
+						while (it2.hasNext())
+						{
+							WriteThroughEntry entry = it2.next();
+							if (keys.getFromDisk(entry.getKey()).equals(key))
+							{
+								System.out.println("But this key was found at hash = " + entry.getKey());
+								System.out.println("with value " + values.get(entry.getKey()));
+								return null;
+							}
+						}
+					}
+					return null;
+				}
+				while (!current.equals(key))
+				{
+					plus++;
+					current = keys.get(0x0EFFFFFFFFFFFFFFL & (hash + plus * plus));
+					System.out.println("keys.get(" + (0x0EFFFFFFFFFFFFFFL & (hash + plus * plus)) + ") = " + current);
+					if (current == null)
+					{
+						com.exascale.optimizer.testing.InternalConcurrentHashMap.EntryIterator it = keys.internal.entrySet().iterator();
+						while (it.hasNext())
+						{
+							com.exascale.optimizer.testing.InternalConcurrentHashMap.WriteThroughEntry entry = it.next();
+							if (entry.getValue().equals(key))
+							{
+								System.out.println("But this key was found at hash = " + entry.getKey());
+								System.out.println("with value " + values.get(entry.getKey()));
+								return null;
+							}
+						}
+						
+						System.out.println("The key was not found in the internal key store");
+						if (keys.index != null)
+						{
+							EntryIterator it2 = keys.index.entrySet().iterator();
+							while (it2.hasNext())
+							{
+								WriteThroughEntry entry = it2.next();
+								if (keys.getFromDisk(entry.getKey()).equals(key))
+								{
+									System.out.println("But this key was found at hash = " + entry.getKey());
+									System.out.println("with value " + values.get(entry.getKey()));
+									return null;
+								}
+							}
+						}
+						return null;
+					}
+				}
+			
+				values.lock.readLock().lock();
+				boolean disk = false;
+				ArrayList<Object> valueAL = values.internal.get(0x0EFFFFFFFFFFFFFFL & (hash + plus * plus));
+				if (valueAL == null)
+				{
+					disk = true;
+					valueAL = (ArrayList<Object>)values.getFromDisk(0x0EFFFFFFFFFFFFFFL & (hash + plus * plus));
+				}
+				while (valueAL == null)
+				{
+					disk = false;
+					valueAL = values.internal.get(0x0EFFFFFFFFFFFFFFL & (hash + plus * plus));
+					if (valueAL == null)
+					{
+						disk = true;
+						valueAL = (ArrayList<Object>)values.getFromDisk(0x0EFFFFFFFFFFFFFFL & (hash + plus * plus));
+					}
+				}
+				
+				if (disk)
+				{
+					ArrayList<Object> result = values.internal.putIfAbsent(0x0EFFFFFFFFFFFFFFL & (hash + plus * plus), valueAL);
+					if (result != null)
+					{
+						valueAL = result;
+					}
+				}
+				values.lock.readLock().unlock();
+				if (valueAL.size() == 1 && (valueAL.get(0) instanceof AtomicLong || valueAL.get(0) instanceof AtomicDouble))
+				{
+					Object o = valueAL.get(0);
+					return (V)o;
+				}
+				else
+				{
+					return (V)valueAL;
+				}
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
+				System.exit(1);
+			}
+			
+			return null;
+		}
+		
+		public Object putIfAbsent(ArrayList<Object> key, V value)
+		{
+			ArrayList<Object> temp;
+			if (!(value instanceof ArrayList))
+			{
+				temp = new ArrayList<Object>();
+				temp.add(value);
+			}
+			else
+			{
+				temp = (ArrayList)value;
+			}
+			long plus = 0;
+			long hash = hash(key);
+			try
+			{
+				while (true) 
+				{
+					Object retval = keys.putIfAbsent(0x0EFFFFFFFFFFFFFFL & (hash + plus * plus), key);
+					if (retval == null)
+					{
+						break;
+					}
+					
+					ArrayList<Object> r = keys.get(0x0EFFFFFFFFFFFFFFL & (hash + plus * plus));
+					if (r.equals(key))
+					{
+						return retval;
+					}
+					plus++;
+				}
+			
+				values.put(0x0EFFFFFFFFFFFFFFL & (hash + plus * plus), temp);
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
+				System.exit(1);
+			}
+			
+			return null;
+		}
+		
+		public void close()
+		{
+			try
+			{
+				keys.close();
+				values.close();
+			}
+			catch(Exception e)
+			{}
+		}
+		
+		public void put(ArrayList<Object> key, V value)
+		{
+			ArrayList<Object> temp;
+			if (!(value instanceof ArrayList))
+			{
+				temp = new ArrayList<Object>();
+				temp.add(value);
+			}
+			else
+			{
+				temp = (ArrayList)value;
+			}
+			long plus = 0;
+			long hash = hash(key);
+			try
+			{
+				while (keys.putIfAbsent(0x0EFFFFFFFFFFFFFFL & (hash + plus * plus), key) != null)
+				{
+					plus++;
+				}
+			
+				values.put(0x0EFFFFFFFFFFFFFFL & (hash + plus * plus), temp);
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
+				System.exit(1);
+			}
 		}
 	}
 }

@@ -35,22 +35,18 @@ public final class IntersectOperator implements Operator, Serializable
 	protected TreeMap<Integer, String> pos2Col;
 	protected int node;
 	protected ArrayList<DiskBackedHashSet> sets = new ArrayList<DiskBackedHashSet>();
-	protected BufferedLinkedBlockingQueue buffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
+	protected BufferedLinkedBlockingQueue buffer;
 	protected int estimate = 16;
+	protected volatile boolean inited = false;
+	protected volatile boolean startDone = false;
 	
 	public void reset()
 	{
-		for (Operator op : children)
-		{
-			op.reset();
-		}
-		
-		for (DiskBackedHashSet set : sets)
+		if (!startDone)
 		{
 			try
 			{
-				set.getArray().close();
-				set.close();
+				start();
 			}
 			catch(Exception e)
 			{
@@ -58,11 +54,41 @@ public final class IntersectOperator implements Operator, Serializable
 				System.exit(1);
 			}
 		}
+		else
+		{
+			inited = false;
+			for (Operator op : children)
+			{
+				op.reset();
+			}
 		
-		sets = new ArrayList<DiskBackedHashSet>();
-		buffer.clear();
+			for (DiskBackedHashSet set : sets)
+			{
+				try
+				{
+					set.getArray().close();
+					set.close();
+				}
+				catch(Exception e)
+				{
+					e.printStackTrace();
+					System.exit(1);
+				}
+			}
 		
-		new InitThread().start();
+			sets = new ArrayList<DiskBackedHashSet>();
+			buffer.clear();
+			if (!inited)
+			{
+			}
+			else
+			{
+				System.out.println("IntersectOperator is inited more than once!");
+				Thread.dumpStack();
+				System.exit(1);
+			}
+			new InitThread().start();
+		}
 	}
 	
 	public void setEstimate(int estimate)
@@ -148,11 +174,22 @@ public final class IntersectOperator implements Operator, Serializable
 	@Override
 	public void start() throws Exception 
 	{
+		startDone = true;
 		for (Operator op : children)
 		{
 			op.start();
 		}
 		
+		buffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
+		if (!inited)
+		{
+		}
+		else
+		{
+			System.out.println("IntersectOperator is inited more than once!");
+			Thread.dumpStack();
+			System.exit(1);
+		}
 		new InitThread().start();
 	}
 	
@@ -193,6 +230,16 @@ public final class IntersectOperator implements Operator, Serializable
 		
 		public void run()
 		{
+			if (!inited)
+			{
+				inited = true;
+			}
+			else
+			{
+				System.out.println("IntersectOperator is inited more than once!");
+				Thread.dumpStack();
+				System.exit(1);
+			}
 			if (children.size() == 1)
 			{
 				int count = 0;

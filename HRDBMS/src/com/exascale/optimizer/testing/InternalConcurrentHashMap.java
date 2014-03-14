@@ -859,8 +859,23 @@ public final class InternalConcurrentHashMap implements Serializable {
     @SuppressWarnings("unchecked")
     public InternalConcurrentHashMap(int initialCapacity,
                              float loadFactor, int concurrencyLevel) {
-        if (!(loadFactor > 0) || initialCapacity < 0 || concurrencyLevel <= 0)
-            throw new IllegalArgumentException();
+        //if (!(loadFactor > 0) || initialCapacity < 0 || concurrencyLevel <= 0)
+        //    throw new IllegalArgumentException();
+    	if (loadFactor <= 0)
+    	{
+    		loadFactor = 1.0f;
+    	}
+    	
+    	if (initialCapacity <= 0)
+    	{
+    		initialCapacity = 16;
+    	}
+    	
+    	if (concurrencyLevel <= 0)
+    	{
+    		concurrencyLevel = 16;
+    	}
+    	
         if (concurrencyLevel > MAX_SEGMENTS)
             concurrencyLevel = MAX_SEGMENTS;
         // Find power-of-two sizes best matching arguments
@@ -1326,7 +1341,7 @@ public final class InternalConcurrentHashMap implements Serializable {
 
     /* ---------------- Iterator Support -------------- */
 
-    abstract class HashIterator {
+    abstract class HashIterator implements Iterator {
         int nextSegmentIndex;
         int nextTableIndex;
         HashEntry[] currentTable;
@@ -1384,7 +1399,7 @@ public final class InternalConcurrentHashMap implements Serializable {
     final class KeyIterator
         extends HashIterator
     {
-        public final long next()        { return super.nextEntry().key; }
+        public final Long next()        { return super.nextEntry().key; }
         public final long nextElement() { return super.nextEntry().key; }
     }
 
@@ -1466,12 +1481,16 @@ public final class InternalConcurrentHashMap implements Serializable {
         }
     }
 
-    final class Values  {
+    final class Values implements Set  {
         public ValueIterator iterator() {
             return new ValueIterator();
         }
-        public long size() {
+        public long longSize() {
             return InternalConcurrentHashMap.this.size();
+        }
+        public int size()
+        {
+        	return (InternalConcurrentHashMap.this.size() >= 0 && InternalConcurrentHashMap.this.size() <= Integer.MAX_VALUE) ? (int)InternalConcurrentHashMap.this.size() : Integer.MAX_VALUE; 
         }
         public boolean isEmpty() {
             return InternalConcurrentHashMap.this.isEmpty();
@@ -1482,6 +1501,60 @@ public final class InternalConcurrentHashMap implements Serializable {
         public void clear() {
             InternalConcurrentHashMap.this.clear();
         }
+		@Override
+		public boolean contains(Object o) {
+			System.out.println("Unimplemented");
+			System.exit(1);
+			return false;
+		}
+		@Override
+		public Object[] toArray() {
+			System.out.println("Unimplemented");
+			System.exit(1);
+			return null;
+		}
+		@Override
+		public Object[] toArray(Object[] a) {
+			System.out.println("Unimplemented");
+			System.exit(1);
+			return null;
+		}
+		@Override
+		public boolean add(Object e) {
+			System.out.println("Unimplemented");
+			System.exit(1);
+			return false;
+		}
+		@Override
+		public boolean remove(Object o) {
+			System.out.println("Unimplemented");
+			System.exit(1);
+			return false;
+		}
+		@Override
+		public boolean containsAll(Collection c) {
+			System.out.println("Unimplemented");
+			System.exit(1);
+			return false;
+		}
+		@Override
+		public boolean addAll(Collection c) {
+			System.out.println("Unimplemented");
+			System.exit(1);
+			return false;
+		}
+		@Override
+		public boolean retainAll(Collection c) {
+			System.out.println("Unimplemented");
+			System.exit(1);
+			return false;
+		}
+		@Override
+		public boolean removeAll(Collection c) {
+			System.out.println("Unimplemented");
+			System.exit(1);
+			return false;
+		}
     }
 
     final class EntrySet  {

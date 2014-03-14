@@ -16,7 +16,7 @@ public class CNFFilter implements Serializable
 	protected ArrayList<Filter> rangeFilters;
 	protected static final Long LARGE_PRIME =  1125899906842597L;
     protected static final Long LARGE_PRIME2 = 6920451961L;
-    protected HashSet<HashMap<Filter, Filter>> hshm = null;
+    protected volatile HashSet<HashMap<Filter, Filter>> hshm = null;
     protected Boolean hshmLock = false;
     
     public ArrayList<ArrayList<Filter>> getALAL()
@@ -57,7 +57,8 @@ public class CNFFilter implements Serializable
 			{
 				if (hshm == null)
 				{
-					hshm = new HashSet<HashMap<Filter, Filter>>();
+					HashSet<HashMap<Filter, Filter>> hshmTemp = new HashSet<HashMap<Filter, Filter>>();
+					//release
 					for (ArrayList<Filter> filter : filters)
 					{
 						HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
@@ -66,8 +67,10 @@ public class CNFFilter implements Serializable
 							hm.put(f,  f);
 						}
 				
-						hshm.add(hm);
+						hshmTemp.add(hm);
 					}
+					
+					hshm = hshmTemp;
 				}
 			}
 		}
@@ -89,68 +92,19 @@ public class CNFFilter implements Serializable
 		}
 	}
 	
-	protected long hash(ArrayList<Object> key)
+	protected long hash(Object key)
 	{
-		long hashCode = 1125899906842597L;
-		for (Object e : key)
+		long eHash;
+		if (key == null)
 		{
-			long eHash = 1;
-			if (e instanceof Integer)
-			{
-				long i = ((Integer)e).longValue();
-				// Spread out values
-			    long scaled = i * LARGE_PRIME;
-
-			    // Fill in the lower bits
-			    eHash = scaled + LARGE_PRIME2;
-			}
-			else if (e instanceof Long)
-			{
-				long i = (Long)e;
-				// Spread out values
-			    long scaled = i * LARGE_PRIME;
-
-			    // Fill in the lower bits
-			    eHash = scaled + LARGE_PRIME2;
-			}
-			else if (e instanceof String)
-			{
-				String string = (String)e;
-				  long h = 1125899906842597L; // prime
-				  int len = string.length();
-
-				  for (int i = 0; i < len; i++) 
-				  {
-					   h = 31*h + string.charAt(i);
-				  }
-				  eHash = h;
-			}
-			else if (e instanceof Double)
-			{
-				long i = Double.doubleToLongBits((Double)e);
-				// Spread out values
-			    long scaled = i * LARGE_PRIME;
-
-			    // Fill in the lower bits
-			    eHash = scaled + LARGE_PRIME2;
-			}
-			else if (e instanceof Date)
-			{
-				long i = ((Date)e).getTime();
-				// Spread out values
-			    long scaled = i * LARGE_PRIME;
-
-			    // Fill in the lower bits
-			    eHash = scaled + LARGE_PRIME2;
-			}
-			else
-			{
-				eHash = e.hashCode();
-			}
-			
-		    hashCode = 31*hashCode + (e==null ? 0 : eHash);
+			eHash = 0;
 		}
-		return hashCode;
+		else
+		{
+			eHash = MurmurHash.hash64(key.toString());
+		}
+			
+		return eHash;
 	}
 	
 	public ArrayList<Filter> getRangeFilters()

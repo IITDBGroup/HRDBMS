@@ -1,5 +1,7 @@
 package com.exascale.optimizer.testing;
 
+ 
+
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.File;
@@ -151,9 +153,9 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 				{
 					result = ((String)lField).compareTo((String)rField);
 				}
-				else if (lField instanceof Date)
+				else if (lField instanceof MyDate)
 				{
-					result = ((Date)lField).compareTo((Date)rField);
+					result = ((MyDate)lField).compareTo((MyDate)rField);
 				}
 				else
 				{
@@ -275,7 +277,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 				else if (bytes[i+4] == 3)
 				{
 					//date
-					Date o = new Date(bb.getLong());
+				 MyDate o = new MyDate(bb.getLong());
 					retval.add(o);
 				}
 				else if (bytes[i+4] == 4)

@@ -21,7 +21,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	protected HashMap<String, Integer> cols2Pos;
 	protected TreeMap<Integer, String> pos2Col;
 	protected MetaData meta;
-	protected volatile BufferedLinkedBlockingQueue outBuffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
+	protected volatile BufferedLinkedBlockingQueue outBuffer;
 	protected volatile DiskBackedArray inBuffer;
 	protected int NUM_RT_THREADS = 4 * ResourceManager.cpus;
 	protected int NUM_PTHREADS = 4 * ResourceManager.cpus;
@@ -166,6 +166,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 			child.start();
 		}
 		
+		outBuffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
 		new InitThread().start();
 		
 	}

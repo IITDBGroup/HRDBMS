@@ -1,6 +1,7 @@
 package com.exascale.optimizer.testing;
 
 import java.io.Serializable;
+import com.exascale.optimizer.testing.ResourceManager.DiskBackedALOHashMap;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -113,7 +114,8 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 	
 	protected final class CountDistinctHashThread extends AggregateResultThread
 	{
-		protected final ConcurrentHashMap<ArrayList<Object>, AtomicLong> results = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS, 0.75f, ResourceManager.cpus * 6);
+		//protected final DiskBackedALOHashMap<AtomicLong> results = new DiskBackedALOHashMap<AtomicLong>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
+		protected final ConcurrentHashMap<ArrayList<Object>, AtomicLong> results = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS > 0 ? NUM_GROUPS : 16, 1.0f);
 		protected final DiskBackedHashSet hashSet = ResourceManager.newDiskBackedHashSet(false, childCard);
 		protected final HashMap<String, Integer> cols2Pos;
 		protected final int pos;
@@ -156,6 +158,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 			try
 			{
 				hashSet.close();
+				//results.close();
 			}
 			catch(Exception e)
 			{

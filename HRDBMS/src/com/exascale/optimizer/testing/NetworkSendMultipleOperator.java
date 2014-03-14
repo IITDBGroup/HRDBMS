@@ -1,5 +1,7 @@
 package com.exascale.optimizer.testing;
 
+ 
+
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -13,8 +15,8 @@ import java.util.zip.GZIPOutputStream;
 public final class NetworkSendMultipleOperator extends NetworkSendOperator
 {
 	protected final int id;
-	protected final ConcurrentHashMap<Integer, CompressedSocket> connections = new ConcurrentHashMap<Integer, CompressedSocket>(Phase3.MAX_INCOMING_CONNECTIONS, 0.75f, Phase3.MAX_INCOMING_CONNECTIONS);
-	protected final ConcurrentHashMap<Integer, OutputStream> outs = new ConcurrentHashMap<Integer, OutputStream>(Phase3.MAX_INCOMING_CONNECTIONS, 0.75f, Phase3.MAX_INCOMING_CONNECTIONS);
+	protected final ConcurrentHashMap<Integer, CompressedSocket> connections = new ConcurrentHashMap<Integer, CompressedSocket>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
+	protected final ConcurrentHashMap<Integer, OutputStream> outs = new ConcurrentHashMap<Integer, OutputStream>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
 	protected ArrayList<Operator> parents = new ArrayList<Operator>();
 	
 	public NetworkSendMultipleOperator(int id, MetaData meta)

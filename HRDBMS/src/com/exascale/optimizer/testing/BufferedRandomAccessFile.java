@@ -104,6 +104,11 @@ package com.exascale.optimizer.testing;
 	        byteOrdering = BIG_ENDIAN;
 	    }
 	    
+	    public final int getBufferSize()
+	    {
+	    	return byteBuffer.length;
+	    }
+	    
 	    protected final void readNewBuffer(long off) throws IOException{
 	    		/* If the buffer have changed. We need to write it to
 	    		 * the file before reading a new buffer.

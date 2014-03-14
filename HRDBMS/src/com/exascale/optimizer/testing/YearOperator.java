@@ -124,9 +124,7 @@ public final class YearOperator implements Operator, Serializable
 		}
 		
 		ArrayList<Object> row = (ArrayList<Object>)o; 
-		Calendar myCal = new GregorianCalendar();
-		myCal.setTime((Date)row.get(colPos));
-		row.add(myCal.get(Calendar.YEAR));
+		row.add(((MyDate)row.get(colPos)).getYear());
 		return row;
 	}
 

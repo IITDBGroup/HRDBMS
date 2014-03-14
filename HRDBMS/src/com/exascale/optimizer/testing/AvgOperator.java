@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import com.exascale.optimizer.testing.ResourceManager.DiskBackedALOHashMap;
 
 import com.exascale.optimizer.testing.AggregateOperator.AggregateResultThread;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
@@ -109,8 +110,10 @@ public final class AvgOperator implements AggregateOperator, Serializable
 	
 	protected final class AvgHashThread extends AggregateResultThread
 	{
-		protected final ConcurrentHashMap<ArrayList<Object>, AtomicDouble> sums = new ConcurrentHashMap<ArrayList<Object>, AtomicDouble>(NUM_GROUPS, 0.75f, ResourceManager.cpus * 6);
-		protected final ConcurrentHashMap<ArrayList<Object>, AtomicLong> counts = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS, 0.75f, ResourceManager.cpus * 6);
+		//protected final DiskBackedALOHashMap<AtomicDouble> sums = new DiskBackedALOHashMap<AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
+		//protected final DiskBackedALOHashMap<AtomicLong> counts = new DiskBackedALOHashMap<AtomicLong>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
+		protected final ConcurrentHashMap<ArrayList<Object>, AtomicDouble> sums = new ConcurrentHashMap<ArrayList<Object>, AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16, 1.0f);
+		protected final ConcurrentHashMap<ArrayList<Object>, AtomicLong> counts = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS > 0 ? NUM_GROUPS : 16, 1.0f);
 		protected final HashMap<String, Integer> cols2Pos;
 		protected final int pos;
 		
@@ -127,13 +130,13 @@ public final class AvgOperator implements AggregateOperator, Serializable
 			AtomicDouble ad = sums.get(group);
 			if (ad != null)
 			{
-				addToSum(group, val);
+				addToSum(ad, val);
 			}
 			else
 			{
 				if (sums.putIfAbsent(group, new AtomicDouble(val)) != null)
 				{
-					addToSum(group, val);
+					addToSum(sums.get(group), val);
 				}
 			}
 			
@@ -155,11 +158,14 @@ public final class AvgOperator implements AggregateOperator, Serializable
 		}
 		
 		public void close()
-		{}
-		
-		public final void addToSum(ArrayList<Object> key, double amount) 
 		{
-		    AtomicDouble newSum = sums.get(key);
+			//sums.close();
+			//counts.close();
+		}
+		
+		public final void addToSum(AtomicDouble ad, double amount) 
+		{
+		    AtomicDouble newSum = ad;
 		    for (;;) 
 		    {
 		       double oldVal = newSum.get();

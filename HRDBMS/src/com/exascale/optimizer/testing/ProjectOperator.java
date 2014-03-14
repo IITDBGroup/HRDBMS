@@ -23,8 +23,7 @@ public final class ProjectOperator implements Operator, Serializable
 	protected HashMap<String, Integer> childCols2Pos;
 	protected int node;
 	protected ArrayList<Integer> pos2Get = new ArrayList<Integer>();
-	protected ArrayList<Integer> toRemove = new ArrayList<Integer>();
-	protected boolean add;
+	private volatile boolean startDone = false;
 	
 	public void setChildPos(int pos)
 	{
@@ -32,7 +31,22 @@ public final class ProjectOperator implements Operator, Serializable
 	
 	public void reset()
 	{
-		child.reset();
+		if (!startDone)
+		{
+			try
+			{
+				start();
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
+				System.exit(1);
+			}
+		}
+		else
+		{
+			child.reset();
+		}
 	}
 	
 	public int getChildPos()
@@ -94,23 +108,12 @@ public final class ProjectOperator implements Operator, Serializable
 	@Override
 	public void start() throws Exception 
 	{
+		startDone = true;
 		child.start();
 		for (String col : pos2Col.values())
 		{
 			pos2Get.add(childCols2Pos.get(col));
 		}
-		int i = 0;
-		int removed = 0;
-		for (String col : child.getPos2Col().values())
-		{
-			if (!cols2Pos.containsKey(col))
-			{
-				toRemove.add(i-removed);
-				removed++;
-			}
-			i++;
-		}
-		add = pos2Get.size() < childCols2Pos.size() / 2;
 	}
 	
 	public void nextAll(Operator op) throws Exception
@@ -134,25 +137,13 @@ public final class ProjectOperator implements Operator, Serializable
 		}
 		
 		ArrayList<Object> row = (ArrayList<Object>)o; 
-		if (add)
+		ArrayList<Object> retval = new ArrayList<Object>(pos2Get.size());
+		for (int pos : pos2Get)
 		{
-			ArrayList<Object> retval = new ArrayList<Object>(pos2Get.size());
-			for (int pos : pos2Get)
-			{
-				retval.add(row.get(pos));
-			}
+			retval.add(row.get(pos));
+		}
 		
-			return retval;
-		}
-		else
-		{
-			for (int remove : toRemove)
-			{
-				row.remove(remove);
-			}
-			
-			return row;
-		}
+		return retval;
 	}
 
 	@Override

@@ -1,21 +1,22 @@
 package com.exascale.optimizer.testing;
 
 import java.io.Serializable;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ArrayBlockingQueue;
 
 import com.exascale.optimizer.testing.MultiOperator.AggregateThread;
 
 public final class BufferedLinkedBlockingQueue  implements Serializable
 {
 	protected final static int BLOCK_SIZE = 256;
-	protected ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal = new ConcurrentHashMap<Thread, ArrayAndIndex>(64 * ResourceManager.cpus);
-	protected ConcurrentHashMap<Thread, ArrayAndIndex> receives = new ConcurrentHashMap<Thread, ArrayAndIndex>(64 * ResourceManager.cpus);
-	protected LinkedBlockingQueue q;
+	protected ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal = new ConcurrentHashMap<Thread, ArrayAndIndex>(64 * ResourceManager.cpus, 1.0f);
+	protected ConcurrentHashMap<Thread, ArrayAndIndex> receives = new ConcurrentHashMap<Thread, ArrayAndIndex>(64 * ResourceManager.cpus, 1.0f);
+	protected ArrayBlockingQueue q;
 	
 	public BufferedLinkedBlockingQueue(int cap)
 	{
-		q = new LinkedBlockingQueue(cap / BLOCK_SIZE);
+		q = new ArrayBlockingQueue(cap / BLOCK_SIZE);
 	}
 	
 	public void clear()
@@ -92,7 +93,7 @@ public final class BufferedLinkedBlockingQueue  implements Serializable
 		return oa.take(q);
 	}
 	
-	private final static class ArrayAndIndex
+	private final class ArrayAndIndex
 	{
 		protected volatile Object[] oa;
 		protected int index = 0;
@@ -107,7 +108,7 @@ public final class BufferedLinkedBlockingQueue  implements Serializable
 			this.oa = oa;
 		}
 		
-		private void put(Object o, LinkedBlockingQueue q, ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal)
+		private void put(Object o, ArrayBlockingQueue q, ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal)
 		{
 			synchronized(this.oa)
 			{
@@ -128,7 +129,7 @@ public final class BufferedLinkedBlockingQueue  implements Serializable
 			}
 		}
 		
-		private Object peek(LinkedBlockingQueue q)
+		private Object peek(ArrayBlockingQueue q)
 		{
 			if (index < BLOCK_SIZE && oa[index] != null)
 			{
@@ -159,7 +160,7 @@ public final class BufferedLinkedBlockingQueue  implements Serializable
 			return oa[index++];
 		}
 		
-		private Object take(LinkedBlockingQueue q)
+		private Object take(ArrayBlockingQueue q)
 		{
 			if (index < BLOCK_SIZE && oa[index] != null)
 			{
@@ -186,7 +187,7 @@ public final class BufferedLinkedBlockingQueue  implements Serializable
 			return oa[index++];
 		}
 		
-		private void flush(LinkedBlockingQueue q)
+		private void flush(ArrayBlockingQueue q)
 		{
 			while (true)
 			{
@@ -209,7 +210,7 @@ public final class BufferedLinkedBlockingQueue  implements Serializable
 			}
 		}
 		
-		private void flushAll(LinkedBlockingQueue q, ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal)
+		private void flushAll(ArrayBlockingQueue q, ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal)
 		{
 			for (ArrayAndIndex oa : threadLocal.values())
 			{
@@ -246,6 +247,14 @@ public final class BufferedLinkedBlockingQueue  implements Serializable
 						if (this.oa[0] != null)
 						{
 							q.put(this.oa);
+							int i = 0;
+							Object[] temp = new Object[BLOCK_SIZE];
+							temp[0] = new DataEndMarker();
+							while (i < receives.size())
+							{
+								q.put(temp);
+								i++;
+							}
 							this.oa = new Object[BLOCK_SIZE];
 							this.index = 0;
 						}

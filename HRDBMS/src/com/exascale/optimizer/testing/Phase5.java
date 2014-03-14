@@ -3,6 +3,7 @@ package com.exascale.optimizer.testing;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Random;
 import java.util.ArrayList;
@@ -11,7 +12,7 @@ import com.exascale.optimizer.testing.MetaData.PartitionMetaData;
 
 public final class Phase5
 {
-	private static long WORKER_MEMORY = 37L * 1024L * 1024L * 1024L;
+	private static int MAX_INDEX_PER_TABLE = 4;
 	protected RootOperator root;
 	protected MetaData meta;
 	protected HashMap<Operator, Long> cCache = new HashMap<Operator, Long>();
@@ -25,10 +26,40 @@ public final class Phase5
 	public void optimize()
 	{
 		addIndexesToTableScans();
+		turnOffDistinctUnion(root, false);
 		setCards(root);
 		addIndexesToJoins();
 		setNumParents(root);
 	}
+	
+	private void turnOffDistinctUnion(Operator op, boolean seenIntersect)
+	{
+		if (op instanceof UnionOperator)
+		{
+			//System.out.println("UnionOperator");
+			if (seenIntersect)
+			{
+				//System.out.println("With a parent intersect operator");
+				((UnionOperator)op).setDistinct(false);
+			}
+			else
+			{
+				//System.out.println("Without a parent intersect operator");
+			}
+		}
+		else if (op instanceof IntersectOperator)
+		{
+			seenIntersect = true;
+			//System.out.println("IntersectOperator");
+		}
+		
+		for (Operator o : op.children())
+		{
+			turnOffDistinctUnion(o, seenIntersect);
+		}
+	}
+	
+	
 	
 	private void setNumParents(Operator op)
 	{
@@ -555,6 +586,7 @@ public final class Phase5
 	
 	private ArrayList<Operator> filtersEnough(ArrayList<Operator> joins)
 	{
+		System.out.println("Entered filtersEnough");
 		ArrayList<Operator> retval = new ArrayList<Operator>();
 		for (Operator op : joins)
 		{
@@ -569,7 +601,7 @@ public final class Phase5
 				}
 				//System.out.println("Left card = " + leftCard);
 				System.out.println(meta.likelihood(((HashJoinOperator)op).getHSHM(), root) * leftCard);
-				System.out.println("Before multiplier: " + meta.likelihood(((HashJoinOperator)op).getHSHM(), root));
+				//System.out.println("Before multiplier: " + meta.likelihood(((HashJoinOperator)op).getHSHM(), root));
 				if (leftCard < rightCard && meta.likelihood(((HashJoinOperator)op).getHSHM(), root) * leftCard <= 1.0 / 400.0)
 				{
 					retval.add(op);
@@ -604,7 +636,7 @@ public final class Phase5
 					}
 					//System.out.println("Left card = " + leftCard);
 					System.out.println(meta.likelihood(hshm, root) * leftCard);
-					System.out.println("Before multiplier: " + meta.likelihood(hshm, root));
+					//System.out.println("Before multiplier: " + meta.likelihood(hshm, root));
 					if (leftCard < rightCard && meta.likelihood(hshm, root) * leftCard <= 1.0 / 400.0)
 					{
 						retval.add(op);
@@ -640,7 +672,7 @@ public final class Phase5
 					}
 				//	System.out.println("Left card = " + leftCard);
 					System.out.println(meta.likelihood(hshm, root) * leftCard);
-					System.out.println("Before multiplier: " + meta.likelihood(hshm, root));
+					//System.out.println("Before multiplier: " + meta.likelihood(hshm, root));
 					if (leftCard < rightCard && meta.likelihood(hshm, root) * leftCard <= 1.0 / 400.0)
 					{
 						retval.add(op);
@@ -676,7 +708,7 @@ public final class Phase5
 					}
 					//System.out.println("Left card = " + leftCard);
 					System.out.println(meta.likelihood(hshm, root) * leftCard);
-					System.out.println("Before multiplier: " + meta.likelihood(hshm, root));
+					//System.out.println("Before multiplier: " + meta.likelihood(hshm, root));
 					if (leftCard < rightCard && meta.likelihood(hshm, root) * leftCard <= 1.0 / 400.0)
 					{
 						retval.add(op);
@@ -691,20 +723,6 @@ public final class Phase5
 		}
 		
 		return retval;
-	}
-	
-	private boolean memoryUsageTooHigh(Operator op, Operator left)
-	{
-		long calc = 48 * card(op);
-		//System.out.println("Caclulated as needing " + (calc * 1.0 / (1024*1024*1024 * 1.0)) + "GB");
-		if (48L * card(op) * 15L * 4500000L > WORKER_MEMORY * card(left))
-		{
-			return true;
-		}
-		else
-		{
-			return false;
-		}
 	}
 	
 	private ArrayList<Operator> getEligibleJoins(HashSet<Operator> joins)
@@ -776,7 +794,7 @@ public final class Phase5
 	
 	private ArrayList<Operator> getJoins(Operator op)
 	{
-		ArrayList<Operator> retval = new ArrayList<Operator>();
+		ArrayList<Operator> retval = new ArrayList<Operator>(meta.getNumNodes());
 		if (op instanceof HashJoinOperator || op instanceof NestedLoopJoinOperator || op instanceof SemiJoinOperator || op instanceof AntiJoinOperator)
 		{
 			retval.add(op);
@@ -894,15 +912,19 @@ public final class Phase5
 	private void useIndexes(String schema, String table, CNFFilter cnf, TableScanOperator tOp)
 	{
 		HashSet<HashMap<Filter, Filter>> hshm = cnf.getHSHM();
+		//System.out.println("HSHM is " + hshm);
 		ArrayList<Index> available = meta.getIndexesForTable(schema, table);
 		for (HashMap<Filter, Filter> hm : (HashSet<HashMap<Filter, Filter>>)hshm.clone())
 		{
+			//System.out.println("Looking at " + hm);
 			ArrayList<Index> indexes = new ArrayList<Index>();
 			boolean doIt = true;
 			double likely = 0;
 			for (Filter f : hm.keySet())
 			{
-				likely += meta.likelihood(f, root);
+				double l = meta.likelihood(f, root);
+				//System.out.println("Likelihood of " + f + " = " + l);
+				likely += l;
 			}
 			
 			if (hm.size() == 1)
@@ -942,6 +964,7 @@ public final class Phase5
 			
 			if (likely > (3.0 / 20.0))
 			{
+				//System.out.println("Does not filter enough");
 				continue;
 			}
 			
@@ -969,6 +992,7 @@ public final class Phase5
 			
 				if (index == null)
 				{
+					//System.out.println("There is no matching index for " + f);
 					doIt = false;
 					if (f.leftIsColumn() && f.rightIsColumn())
 					{
@@ -1095,13 +1119,15 @@ public final class Phase5
 	
 	private ArrayList<TableScanOperator> getTableScans(Operator op)
 	{
-		ArrayList<TableScanOperator> retval = new ArrayList<TableScanOperator>();
+		ArrayList<TableScanOperator> retval = null;
 		if (op instanceof TableScanOperator)
 		{
+			retval = new ArrayList<TableScanOperator>(1);
 			retval.add((TableScanOperator)op);
 			return retval;
 		}
 		
+		retval = new ArrayList<TableScanOperator>(meta.getNumNodes());
 		for (Operator o : op.children())
 		{
 			retval.addAll(getTableScans(o));
@@ -1302,7 +1328,7 @@ public final class Phase5
 			if (table.children().get(0).children().size() == 1)
 			{
 				union = (UnionOperator)table.children().get(0).children().get(0);
-				System.out.println("Union parent = " + union.parent());
+				//System.out.println("Union parent = " + union.parent());
 			}
 			else
 			{
@@ -1312,7 +1338,7 @@ public final class Phase5
 		else
 		{
 			union = (UnionOperator)table.children().get(0);
-			System.out.println("Union parent = " + union.parent());
+			//System.out.println("Union parent = " + union.parent());
 		}
 		
 		if (union.children().size() != 1)
@@ -1356,16 +1382,16 @@ public final class Phase5
 			{
 				while (o != table)
 				{
-					System.out.println("Parent = " + o);
-					System.out.println("Child = " + child);
+					//System.out.println("Parent = " + o);
+					//System.out.println("Child = " + child);
 					o.removeChild(child);
 					o.add(child);
 					child = o;
 					o = o.parent();
 				}
 			
-				System.out.println("Parent = " + o);
-				System.out.println("Child = " + child);
+				//System.out.println("Parent = " + o);
+				//System.out.println("Child = " + child);
 				o.removeChild(child);
 				o.add(child);
 			}
@@ -1483,6 +1509,12 @@ public final class Phase5
 	
 	public long card(Operator op)
 	{
+		Long r = cCache.get(op);
+		if (r != null)
+		{
+			return r;
+		}
+		
 		if (op instanceof AntiJoinOperator)
 		{
 			long retval = (long)((1 - meta.likelihood(((AntiJoinOperator)op).getHSHM(), root)) * card(op.children().get(0)));

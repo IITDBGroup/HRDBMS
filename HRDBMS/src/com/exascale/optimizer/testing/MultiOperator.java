@@ -1,6 +1,9 @@
 package com.exascale.optimizer.testing;
 
 import java.io.Serializable;
+
+import com.exascale.optimizer.testing.ResourceManager.DiskBackedALOHashMap;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -13,6 +16,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import com.exascale.optimizer.testing.AggregateOperator.AggregateResultThread;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
+import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashSet;
 
 public final class MultiOperator implements Operator, Serializable
 {
@@ -25,27 +29,43 @@ public final class MultiOperator implements Operator, Serializable
 	protected ArrayList<AggregateOperator> ops;
 	protected ArrayList<String> groupCols;
 	protected static final int ATHREAD_QUEUE_SIZE = BufferedLinkedBlockingQueue.BLOCK_SIZE < 1000 ? 1000 : BufferedLinkedBlockingQueue.BLOCK_SIZE;
-	protected volatile BufferedLinkedBlockingQueue inFlight = new BufferedLinkedBlockingQueue(ATHREAD_QUEUE_SIZE);
-	protected volatile BufferedLinkedBlockingQueue readBuffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
+	protected volatile BufferedLinkedBlockingQueue inFlight;
+	protected volatile BufferedLinkedBlockingQueue readBuffer;
 	protected boolean sorted;
 	protected static final int NUM_HGBR_THREADS = ResourceManager.cpus;
 	protected int node;
 	protected int NUM_GROUPS = 16;
 	protected int childCard = 16 * 16;
 	protected boolean cardSet = false;
+	protected volatile boolean startDone = false;
 	
 	public void reset()
 	{
-		child.reset();
-		inFlight = new BufferedLinkedBlockingQueue(ATHREAD_QUEUE_SIZE);
-		readBuffer.clear();
-		if (sorted)
+		if (!startDone)
 		{
-			init();
+			try
+			{
+				start();
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
+				System.exit(1);
+			}
 		}
 		else
 		{
-			new HashGroupByThread().start();
+			child.reset();
+			inFlight = new BufferedLinkedBlockingQueue(ATHREAD_QUEUE_SIZE);
+			readBuffer.clear();
+			if (sorted)
+			{
+				init();
+			}
+			else
+			{
+				new HashGroupByThread().start();
+			}
 		}
 	}
 	
@@ -281,7 +301,10 @@ public final class MultiOperator implements Operator, Serializable
 	
 	public void start() throws Exception 
 	{
+		startDone = true;
 		child.start();
+		inFlight = new BufferedLinkedBlockingQueue(ATHREAD_QUEUE_SIZE);
+		readBuffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
 		if (sorted)
 		{
 			init();
@@ -422,7 +445,8 @@ public final class MultiOperator implements Operator, Serializable
 	
 	protected final class HashGroupByThread extends ThreadPoolThread
 	{
-		protected volatile ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>> groups = new ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>>(NUM_GROUPS, 0.75f, ResourceManager.cpus * 6);
+		//protected volatile DiskBackedHashSet groups = ResourceManager.newDiskBackedHashSet(true, NUM_GROUPS > 0 ? NUM_GROUPS : 16);
+		protected volatile ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>> groups = new ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>>(NUM_GROUPS > 0 ? NUM_GROUPS : 16, 1.0f);
 		protected AggregateResultThread[] threads = new AggregateResultThread[ops.size()];
 		
 		public void run()
@@ -460,8 +484,12 @@ public final class MultiOperator implements Operator, Serializable
 					i++;
 				}
 			
-				for (ArrayList<Object> keys : groups.keySet())
+				//groups.close();
+				
+				for (Object k : groups.keySet())
+				//for (Object k : groups.getArray())
 				{
+					ArrayList<Object> keys = (ArrayList<Object>)k;
 					ArrayList<Object> row = new ArrayList<Object>();
 					for (Object field : keys)
 					{
@@ -476,6 +504,7 @@ public final class MultiOperator implements Operator, Serializable
 					readBuffer.put(row);
 				}
 			
+				//groups.getArray().close();
 				readBuffer.put(new DataEndMarker());
 				
 				for (AggregateResultThread thread : threads)
@@ -519,6 +548,7 @@ public final class MultiOperator implements Operator, Serializable
 						}
 			
 						groups.put(groupKeys, groupKeys);
+						//groups.add(groupKeys);
 			
 						for (AggregateResultThread thread : threads)
 						{

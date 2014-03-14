@@ -78,9 +78,14 @@ public final class Utils
 			offset = 1;
 		}
 		
-		s = s.substring(offset, p) + s.substring(p+1, s.length());
-		long n = parseLong(s);
-		int x = s.length() - p - offset;
+		while (s.charAt(offset) == '0')
+		{
+			offset++;
+		}
+		
+		String s2 = s.substring(offset, p) + s.substring(p+1, s.length());
+		long n = parseLong(s2);
+		int x = s.length() - p - 1;
 		int i = 0;
 		long d = 1;
 		while (i < x)

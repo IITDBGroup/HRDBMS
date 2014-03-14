@@ -137,11 +137,11 @@ public final class Phase4
 			HashMap<NetworkReceiveOperator, Integer> receives = getReceives(root, 0);
 			for (NetworkReceiveOperator receive : order(receives))
 			{
-				if (!treeContains(root, receive))
+				if (completed.contains(receive))
 				{
 					continue;
 				}
-				if (completed.contains(receive))
+				if (!treeContains(root, receive))
 				{
 					continue;
 				}
@@ -273,7 +273,7 @@ public final class Phase4
 					{
 						r = 1;
 					}
-					System.out.println("Attempting to push down SemiJoin");
+					//System.out.println("Attempting to push down SemiJoin");
 					Operator parent = op.parent();
 					if (((SemiJoinOperator)op).usesHash() && card(op.children().get(0)) + card(op.children().get(1)) <= MAX_LOCAL_LEFT_HASH && noLargeUpstreamJoins(op))
 					{
@@ -296,7 +296,7 @@ public final class Phase4
 						continue;
 					}
 						
-					System.out.println("SemiJoin is pushed down");
+					//System.out.println("SemiJoin is pushed down");
 					if (!redistributeSemi(receive))
 					{
 						completed.add(receive);
@@ -318,7 +318,7 @@ public final class Phase4
 					{
 						r = 1;
 					}
-					System.out.println("Attempting to push down AntiJoin");
+					//System.out.println("Attempting to push down AntiJoin");
 					Operator parent = op.parent();
 					if (((AntiJoinOperator)op).usesHash() && card(op.children().get(0)) + card(op.children().get(1)) <= MAX_LOCAL_LEFT_HASH && noLargeUpstreamJoins(op))
 					{
@@ -341,7 +341,7 @@ public final class Phase4
 						continue;
 					}
 						
-					System.out.println("AntiJoin is pushed down");
+					//System.out.println("AntiJoin is pushed down");
 					if (!redistributeAnti(receive))
 					{
 						completed.add(receive);

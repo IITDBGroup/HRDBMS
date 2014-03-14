@@ -2,7 +2,7 @@ package com.exascale.optimizer.testing;
 
 import java.io.IOException;
 import java.io.Serializable;
-import java.text.SimpleDateFormat;
+ 
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -11,12 +11,14 @@ import java.util.Map;
 import java.util.Random;
 import java.util.TreeMap;
 import java.util.ArrayList;
+import java.util.Vector;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadLocalRandom; 
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
+import java.util.concurrent.locks.ReentrantLock;
 
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedArray;
 import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
@@ -29,7 +31,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	protected HashMap<String, Integer> cols2Pos;
 	protected TreeMap<Integer, String> pos2Col;
 	protected MetaData meta;
-	protected volatile BufferedLinkedBlockingQueue outBuffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
+	protected volatile BufferedLinkedBlockingQueue outBuffer;
 	protected volatile DiskBackedArray inBuffer;
 	protected int NUM_RT_THREADS = 4 * ResourceManager.cpus;
 	protected int NUM_PTHREADS = 4 * ResourceManager.cpus;
@@ -42,15 +44,17 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	protected boolean indexAccess = false;
 	protected ArrayList<Index> dynamicIndexes;
     protected ArrayList<ArrayList<Object>> queuedRows = new ArrayList<ArrayList<Object>>();
-    protected SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+    protected MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
     protected volatile boolean doReset = false;
     protected int rightChildCard = 16;
     protected ArrayList<DiskBackedHashMap> buckets = new ArrayList<DiskBackedHashMap>();
+    protected ReentrantLock bucketsLock = new ReentrantLock();
 	protected AtomicLong inCount2 = new AtomicLong(0);
 	protected boolean alreadySorted = false;
 	protected boolean cardSet = false;
-	protected ArrayList<Operator> clones = new ArrayList<Operator>();
-	protected ArrayList<AtomicBoolean> lockVector = new ArrayList<AtomicBoolean>();
+	protected Vector<Operator> clones = new Vector<Operator>();
+	protected Vector<AtomicBoolean> lockVector = new Vector<AtomicBoolean>();
+	protected ReentrantLock thisLock = new ReentrantLock();
     
     public void setDynamicIndex(ArrayList<Index> indexes)
     {
@@ -257,6 +261,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				child.start();
 			}
 
+			outBuffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
 			new InitThread().start();
 		}
 		else
@@ -264,6 +269,8 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			for (Operator child : children) {
 				child.start();
 			}
+			
+			outBuffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
 		}
 	}
 
@@ -592,7 +599,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		{
 			if (buckets.size() == 0)
 			{
-				synchronized(this)
+				synchronized(buckets)
 				{
 					if (buckets.size() == 0)
 					{
@@ -616,10 +623,12 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				}
 				else
 				{
-					synchronized(buckets)
+					//synchronized(buckets)
+					bucketsLock.lock();
 					{
 						if (i < buckets.size())
 						{
+							bucketsLock.unlock();
 							o = null;
 							while (o == null)
 							{
@@ -632,6 +641,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 							o = ResourceManager.newDiskBackedHashMap(false, rightChildCard / buckets.size());
 							((DiskBackedHashMap)o).put(hash, row);
 							buckets.add((DiskBackedHashMap)o);
+							bucketsLock.unlock();
 							o = null;
 						}
 					}
@@ -665,68 +675,19 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			return retval;
 		}
 		
-		protected long hash(ArrayList<Object> key)
+		protected long hash(Object key)
 		{
-			long hashCode = 1125899906842597L;
-			for (Object e : key)
+			long eHash;
+			if (key == null)
 			{
-				long eHash = 1;
-				if (e instanceof Integer)
-				{
-					long i = ((Integer)e).longValue();
-					// Spread out values
-				    long scaled = i * HashJoinOperator.LARGE_PRIME;
-
-				    // Fill in the lower bits
-				    eHash = scaled + HashJoinOperator.LARGE_PRIME2;
-				}
-				else if (e instanceof Long)
-				{
-					long i = (Long)e;
-					// Spread out values
-				    long scaled = i * HashJoinOperator.LARGE_PRIME;
-
-				    // Fill in the lower bits
-				    eHash = scaled + HashJoinOperator.LARGE_PRIME2;
-				}
-				else if (e instanceof String)
-				{
-					String string = (String)e;
-					  long h = 1125899906842597L; // prime
-					  int len = string.length();
-
-					  for (int i = 0; i < len; i++) 
-					  {
-						   h = 31*h + string.charAt(i);
-					  }
-					  eHash = h;
-				}
-				else if (e instanceof Double)
-				{
-					long i = Double.doubleToLongBits((Double)e);
-					// Spread out values
-				    long scaled = i * HashJoinOperator.LARGE_PRIME;
-
-				    // Fill in the lower bits
-				    eHash = scaled + HashJoinOperator.LARGE_PRIME2;
-				}
-				else if (e instanceof Date)
-				{
-					long i = ((Date)e).getTime();
-					// Spread out values
-				    long scaled = i * HashJoinOperator.LARGE_PRIME;
-
-				    // Fill in the lower bits
-				    eHash = scaled + HashJoinOperator.LARGE_PRIME2;
-				}
-				else
-				{
-					eHash = e.hashCode();
-				}
-				
-			    hashCode = 31*hashCode + (e==null ? 0 : eHash);
+				eHash = 0;
 			}
-			return hashCode;
+			else
+			{
+				eHash = MurmurHash.hash64(key.toString());
+			}
+				
+			return eHash;
 		}
 	}
 	
@@ -775,6 +736,8 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				{
 					return;
 				}
+				ResourceManager.NO_OFFLOAD.getAndIncrement();
+				ResourceManager.waitForSync();
 				if (inBuffer.size() < SortOperator.PARALLEL_SORT_MIN_NUM_ROWS)
 				{
 					doSequentialSort(0, inBuffer.size()-1);
@@ -784,6 +747,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 					ParallelSortThread t = doParallelSort(0, inBuffer.size()-1);
 					t.join();
 				}
+				ResourceManager.NO_OFFLOAD.getAndDecrement();
 			}
 			catch(Exception e)
 			{
@@ -960,9 +924,9 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			{
 				result = ((String)lField).compareTo((String)rField);
 			}
-			else if (lField instanceof Date)
+			else if (lField instanceof MyDate)
 			{
-				result = ((Date)lField).compareTo((Date)rField);
+				result = ((MyDate)lField).compareTo((MyDate)rField);
 			}
 			else
 			{
@@ -993,58 +957,6 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			}
 		
 			return 0;
-		}
-	
-		protected long partition(long left, long right, long pivotIndex) throws Exception
-		{
-			ArrayList<Object> pivotValue = (ArrayList<Object>)inBuffer.get(pivotIndex);
-			Object rightRec = inBuffer.get(right);
-			inBuffer.update(pivotIndex, (ArrayList<Object>)rightRec);
-			inBuffer.update(right,  pivotValue);
-	
-			long i = left;
-			long storeIndex = left;
-			boolean allEqual = true;
-		
-			while (i < right)
-			{
-				ArrayList<Object> temp = (ArrayList<Object>)inBuffer.get(i);
-				int compareResult = compare(temp, pivotValue);
-				if (compareResult == -1)
-				{
-					Object row = inBuffer.get(storeIndex);
-					inBuffer.update(i, (ArrayList<Object>)row);
-					inBuffer.update(storeIndex, temp);
-					storeIndex++;
-					allEqual = false;
-				}	
-				else if (compareResult == 0)
-				{
-					if (ThreadLocalRandom.current().nextDouble() < 0.5)
-					{
-						Object row = inBuffer.get(storeIndex);
-						inBuffer.update(i, (ArrayList<Object>)row);
-						inBuffer.update(storeIndex, temp);
-						storeIndex++;
-					}					
-				}
-				else
-				{
-					allEqual = false;
-				}	
-				i++;
-			}
-		
-			if (allEqual)
-			{
-				return -1;
-			}
-		
-			ArrayList<Object> temp = (ArrayList<Object>)inBuffer.get(storeIndex);
-			rightRec = inBuffer.get(right);
-			inBuffer.update(storeIndex, (ArrayList<Object>)rightRec);
-			inBuffer.update(right,  temp);
-			return storeIndex;
 		}
 	}
 
@@ -1236,7 +1148,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 							{
 								leftString = "'" + leftVal + "'";
 							}
-							else if (leftVal instanceof Date)
+							else if (leftVal instanceof MyDate)
 							{
 								leftString = sdf.format(leftVal);
 							}
@@ -1256,7 +1168,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 							{
 								leftString = "'" + leftVal + "'";
 							}
-							else if (leftVal instanceof Date)
+							else if (leftVal instanceof MyDate)
 							{
 								leftString = sdf.format(leftVal);
 							}
@@ -1267,56 +1179,33 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 						i++;
 					}
 
-					Operator clone = null;
-					if (!doReset)
+					Operator clone = null;	
+					clone = getClone();
+					synchronized(clone)
 					{
-						synchronized(this)
-						{
-							if (!doReset)
-							{
-								doReset = true;
-								for (Index index : dynamicIndexes)
-								{
-									index.setDelayedConditions(deepClone(dynamics));
-								}
-						
-								clone = children.get(1);
-							}
-							else
-							{
-								clone = getClone();
-								for (Index index : dynamicIndexes(children.get(1), clone.children().get(0)))
-								{
-									index.setDelayedConditions(deepClone(dynamics));
-								}
-							}
-						}
-					}
-					else
-					{	
-						clone = getClone();
+						clone.reset();
 						for (Index index : dynamicIndexes(children.get(1), clone.children().get(0)))
 						{
 							index.setDelayedConditions(deepClone(dynamics));
 						}
-					}
 				
-					boolean retval = false;
-					Object o2 = clone.next(this);
+						boolean retval = false;
+						Object o2 = clone.next(this);
 					
-					while (!(o2 instanceof DataEndMarker))
-					{
-						ArrayList<Object> out = new ArrayList<Object>(((ArrayList<Object>)o).size() + ((ArrayList<Object>)o2).size());
-						out.addAll((ArrayList<Object>)o);
-						out.addAll((ArrayList<Object>)o2);
-						synchronized(queuedRows)
+						while (!(o2 instanceof DataEndMarker))
 						{
-							queuedRows.add(out);
+							ArrayList<Object> out = new ArrayList<Object>(((ArrayList<Object>)o).size() + ((ArrayList<Object>)o2).size());
+							out.addAll((ArrayList<Object>)o);
+							out.addAll((ArrayList<Object>)o2);
+							synchronized(queuedRows)
+							{
+								queuedRows.add(out);
+							}
+							o2 = clone.next(this);
 						}
-						o2 = clone.next(this);
-					}
 					
-					freeClone(clone);
+						freeClone(clone);
+					}	
 					synchronized(queuedRows)
 					{
 						if (queuedRows.size() > 0)
@@ -1662,71 +1551,66 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	
 	private Operator getClone()
 	{
-		int i = 0;
-		while (i < lockVector.size())
+		synchronized(clones)
 		{
-			AtomicBoolean lock = lockVector.get(i);
-			if (!lock.get())
+			int i = 0;
+			while (i < lockVector.size())
 			{
-				if (lock.compareAndSet(false, true))
-				{	
-					Operator retval = clones.get(i);
-					retval.reset();
-					return retval;
+				AtomicBoolean lock = lockVector.get(i);
+				if (!lock.get())
+				{
+					if (lock.compareAndSet(false, true))
+					{	
+						Operator retval = clones.get(i);
+						return retval;
+					}
+				}
+			
+				i++;
+			}
+		
+			Operator clone = clone(children.get(1));
+			RootOperator root = new RootOperator(meta);
+			try
+			{
+				root.add(clone);
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
+				System.exit(1);
+			}
+			if (clone instanceof TableScanOperator)
+			{
+				if (((TableScanOperator) children.get(1)).orderedFilters.size() > 0)
+				{
+					((TableScanOperator) clone).setCNFForParent(root, ((TableScanOperator)children.get(1)).getCNFForParent(this));
 				}
 			}
-			
-			i++;
-		}
+			clone = root;
+			clones.add(clone);
+			lockVector.add(new AtomicBoolean(true));
 		
-		Operator clone = clone(children.get(1));
-		RootOperator root = new RootOperator(meta);
-		try
-		{
-			root.add(clone);
+			return clone;
 		}
-		catch(Exception e)
-		{
-			e.printStackTrace();
-			System.exit(1);
-		}
-		if (clone instanceof TableScanOperator)
-		{
-			if (((TableScanOperator) children.get(1)).orderedFilters.size() > 0)
-			{
-				((TableScanOperator) clone).setCNFForParent(root, ((TableScanOperator)children.get(1)).getCNFForParent(this));
-			}
-		}
-		clone = root;
-		try
-		{
-			clone.start();
-		}
-		catch(Exception e)
-		{
-			e.printStackTrace();
-			System.exit(1);
-		}
-
-		clones.add(clone);
-		lockVector.add(new AtomicBoolean(true));
-		
-		return clone;
 	}
 	
 	private void freeClone(Operator clone)
 	{
-		int i = 0;
-		while (i < clones.size())
+		synchronized(clones)
 		{
-			Operator o = clones.get(i);
-			if (clone == o)
+			int i = 0;
+			while (i < clones.size())
 			{
-				lockVector.get(i).set(false);
-				return;
-			}
+				Operator o = clones.get(i);
+				if (clone == o)
+				{
+					lockVector.get(i).set(false);
+					return;
+				}
 			
-			i++;
+				i++;
+			}
 		}
 	}
 }

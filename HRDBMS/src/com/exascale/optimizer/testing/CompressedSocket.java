@@ -1,3 +1,4 @@
+package com.exascale.optimizer.testing;
 /**
  * Tentackle - a framework for java desktop applications
  * Copyright (C) 2001-2008 Harald Krake, harald@krake.de, +49 7722 9508-0
@@ -17,16 +18,11 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-// $Id: CompressedSocket.java 336 2008-05-09 14:40:20Z harald $
-
-
-package com.exascale.optimizer.testing;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
-
 
 /**
  * Socket with compressing streams.

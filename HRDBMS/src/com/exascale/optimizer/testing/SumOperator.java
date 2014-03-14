@@ -1,6 +1,9 @@
 package com.exascale.optimizer.testing;
 
 import java.io.Serializable;
+
+import com.exascale.optimizer.testing.ResourceManager.DiskBackedALOHashMap;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
@@ -140,7 +143,8 @@ public final class SumOperator implements AggregateOperator, Serializable
 	
 	protected final class SumHashThread extends AggregateResultThread
 	{
-		protected final ConcurrentHashMap<ArrayList<Object>, AtomicDouble> results = new ConcurrentHashMap<ArrayList<Object>, AtomicDouble>(NUM_GROUPS, 0.75f, ResourceManager.cpus * 6);
+		//protected final DiskBackedALOHashMap<AtomicDouble> results = new DiskBackedALOHashMap<AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
+		protected final ConcurrentHashMap<ArrayList<Object>, AtomicDouble> results = new ConcurrentHashMap<ArrayList<Object>, AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16, 1.0f);
 		protected final HashMap<String, Integer> cols2Pos;
 		protected int pos;
 		
@@ -163,7 +167,20 @@ public final class SumOperator implements AggregateOperator, Serializable
 		//@Parallel
 		public final void put(ArrayList<Object> row, ArrayList<Object> group)
 		{
-			Object o = row.get(pos);
+			Object o = null;
+			try
+			{
+				o = row.get(pos);
+			}
+			catch(Exception e)
+			{
+				System.out.println("Pos is " + pos);
+				System.out.println("Cols2Pos is " + cols2Pos);
+				System.out.println("Input is " + input);
+				System.out.println("Row is " + row);
+				e.printStackTrace();
+				System.exit(1);
+			}
 			Double val;
 			if (o instanceof Integer)
 			{
@@ -183,7 +200,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 			{
 				try
 				{
-					addToSum(group, val);
+					addToSum(ad, val);
 				}
 				catch(Exception e)
 				{
@@ -197,7 +214,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 			}
 			if (results.putIfAbsent(group, new AtomicDouble(val)) != null)
 			{
-				addToSum(group, val);
+				addToSum(results.get(group), val);
 			}
 		}
 		
@@ -208,15 +225,39 @@ public final class SumOperator implements AggregateOperator, Serializable
 				return (long)results.get(keys).get();
 			}
 			
-			return results.get(keys).get();
+			try
+			{
+				AtomicDouble ad = results.get(keys);
+				return ad.get();
+			}
+			catch(Exception e)
+			{
+				System.out.println("Error looking up result for key = " + keys + " in SumOperator");
+				for (Object key : keys)
+				{
+					System.out.println("Types are " + key.getClass());
+				}
+				for (ArrayList<Object> keys2 : results.keySet())
+				{
+					for (Object key :keys2)
+					{
+						System.out.println("Result types are " + key.getClass());
+					}
+					break;
+				}
+				System.exit(1);
+			}
+			return null;
 		}
 		
 		public void close()
-		{}
-		
-		public final void addToSum(ArrayList<Object> key, double amount) 
 		{
-		    AtomicDouble newSum = results.get(key);
+			//results.close();
+		}
+		
+		public final void addToSum(AtomicDouble ad, double amount) 
+		{
+		    AtomicDouble newSum = ad;
 		    for (;;) 
 		    {
 		       double oldVal = newSum.get();

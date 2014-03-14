@@ -100,7 +100,9 @@ public final class ConnectionWorker extends ThreadPoolThread
 						out.flush();
 					}
 					
+					System.out.println("Getting id = " + id);
 					NetworkSendOperator send = sends.get(id);
+					System.out.println("Adding connection from " + from + " to " + send + " = " + sock);
 					send.addConnection(from, sock);
 					synchronized(send)
 					{

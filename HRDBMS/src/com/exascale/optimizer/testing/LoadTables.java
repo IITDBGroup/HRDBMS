@@ -4,7 +4,7 @@ import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.PrintWriter;
-import java.text.SimpleDateFormat;
+ 
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -34,9 +34,10 @@ public class LoadTables
 	protected static String nodeRangeCol = null;
 	protected static String deviceRangeCol = null;
 	protected static HashMap<String, PrintWriter> writers = null;
-	//protected static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+	//protected static MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
 	protected static final Long LARGE_PRIME =  1125899906842597L;
     protected static final Long LARGE_PRIME2 = 6920451961L;
+    protected static final MetaData meta = new MetaData();
 	
 	public static void main(String[] args)
 	{
@@ -1075,6 +1076,7 @@ public class LoadTables
 		for (int node : chosenNodes)
 		{
 			String name = table.toLowerCase() + ".tbl.N" + node + ".D" + chosenDevice;
+			//String name = meta.getDevicePath(chosenDevice) +  table.toLowerCase() + ".tbl";
 			PrintWriter writer = writers.get(name);
 			if (writer != null)
 			{
@@ -1153,67 +1155,18 @@ public class LoadTables
 		return 0x0EFFFFFFFFFFFFFFL & hash(temp);
 	}
 	
-	protected static long hash(ArrayList<Object> key)
+	protected static long hash(Object key)
 	{
-		long hashCode = 1125899906842597L;
-		for (Object e : key)
+		long eHash;
+		if (key == null)
 		{
-			long eHash = 1;
-			if (e instanceof Integer)
-			{
-				long i = ((Integer)e).longValue();
-				// Spread out values
-			    long scaled = i * LARGE_PRIME;
-
-			    // Fill in the lower bits
-			    eHash = scaled + LARGE_PRIME2;
-			}
-			else if (e instanceof Long)
-			{
-				long i = (Long)e;
-				// Spread out values
-			    long scaled = i * LARGE_PRIME;
-
-			    // Fill in the lower bits
-			    eHash = scaled + LARGE_PRIME2;
-			}
-			else if (e instanceof String)
-			{
-				String string = (String)e;
-				  long h = 1125899906842597L; // prime
-				  int len = string.length();
-
-				  for (int i = 0; i < len; i++) 
-				  {
-					   h = 31*h + string.charAt(i);
-				  }
-				  eHash = h;
-			}
-			else if (e instanceof Double)
-			{
-				long i = Double.doubleToLongBits((Double)e);
-				// Spread out values
-			    long scaled = i * LARGE_PRIME;
-
-			    // Fill in the lower bits
-			    eHash = scaled + LARGE_PRIME2;
-			}
-			else if (e instanceof Date)
-			{
-				long i = ((Date)e).getTime();
-				// Spread out values
-			    long scaled = i * LARGE_PRIME;
-
-			    // Fill in the lower bits
-			    eHash = scaled + LARGE_PRIME2;
-			}
-			else
-			{
-				eHash = e.hashCode();
-			}
-			
-		    hashCode = 31*hashCode + (e==null ? 0 : eHash);
+			eHash = 0;
 		}
-		return hashCode;
+		else
+		{
+			eHash = MurmurHash.hash64(key.toString());
+		}
+			
+		return eHash;
 	}
 }

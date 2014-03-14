@@ -24,13 +24,21 @@ public final class UnionOperator implements Operator, Serializable
 	protected HashMap<String, Integer> childCols2Pos;
 	protected int node;
 	protected boolean distinct;
-	protected BufferedLinkedBlockingQueue buffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
+	protected BufferedLinkedBlockingQueue buffer;
 	protected DiskBackedHashSet set;
 	protected AtomicLong counter = new AtomicLong(0);
 	protected int estimate = 16;
+	protected volatile boolean inited = false;
+	protected ArrayList<ReadThread> threads;
+	protected boolean startDone = false;
 	
 	public void setChildPos(int pos)
 	{
+	}
+	
+	public void setDistinct(boolean distinct)
+	{
+		this.distinct = distinct;
 	}
 	
 	public void setEstimate(int estimate)
@@ -96,32 +104,78 @@ public final class UnionOperator implements Operator, Serializable
 	@Override
 	public void start() throws Exception 
 	{
+		startDone = true;
 		for (Operator child : children)
 		{
 			child.start();
 		}
 			
-		buffer.clear();
+		buffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
+		if (!inited)
+		{
+		}
+		else
+		{
+			System.out.println("UnionOperator has been inited more than once!");
+			Thread.dumpStack();
+			System.exit(1);
+		}
 		new InitThread().start();
 	}
 	
 	public void reset()
-	{
-		for (Operator child : children)
+	{	
+		if (!startDone)
 		{
-			child.reset();
+			try
+			{
+				start();
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
+				System.exit(1);
+			}
 		}
+		else
+		{
+			for (Operator child : children)
+			{
+				child.reset();
+			}
 			
-		buffer.clear();
-		new InitThread().start();
+			buffer.clear();
+			inited = false;
+			if (!inited)
+			{
+			}
+			else
+			{
+				System.out.println("UnionOperator has been inited more than once!");
+				Thread.dumpStack();
+				System.exit(1);
+			}
+			new InitThread().start();
+		}
 	}
 	
 	private final class InitThread extends ThreadPoolThread
-	{
-		protected ArrayList<ReadThread> threads = new ArrayList<ReadThread>(children.size());
-		
+	{	
 		public void run()
 		{
+			if (!inited)
+			{
+				inited = true;
+			}
+			else
+			{
+				System.out.println("UnionOperator has been inited more than once!");
+				Thread.dumpStack();
+				System.exit(1);
+			}
+			
+			threads = new ArrayList<ReadThread>(children.size());
+			
 			if (distinct && children.size() > 1)
 			{
 				set = ResourceManager.newDiskBackedHashSet(true, estimate);
@@ -283,6 +337,11 @@ public final class UnionOperator implements Operator, Serializable
 
 	public void close() throws Exception 
 	{
+		for (ThreadPoolThread thread : threads)
+		{
+			thread.kill();
+		}
+		
 		for (Operator child : children)
 		{
 			child.close();

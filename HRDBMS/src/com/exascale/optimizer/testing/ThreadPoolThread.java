@@ -21,4 +21,9 @@ public abstract class ThreadPoolThread implements Runnable
 		catch(ExecutionException e)
 		{}
 	}
+	
+	public void kill()
+	{
+		forJoin.cancel(true);
+	}
 }

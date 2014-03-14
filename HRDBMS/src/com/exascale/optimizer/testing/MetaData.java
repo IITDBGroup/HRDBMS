@@ -16,7 +16,7 @@ import java.util.ArrayList;
 
 public final class MetaData implements Serializable
 {
-	protected boolean LOCAL = true;
+	protected boolean LOCAL = false;
 	protected ArrayList<ArrayList<Object>> cards = null;
 	protected ArrayList<ArrayList<Object>> dists = null;
 	protected Boolean cardsLock = false;
@@ -403,7 +403,13 @@ public final class MetaData implements Serializable
 		
 		if (filter instanceof ConstantFilter)
 		{
-			return ((ConstantFilter)filter).getLikelihood();
+			double retval = ((ConstantFilter)filter).getLikelihood();
+			if (retval < 0)
+			{
+				System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+				Thread.dumpStack();
+				System.exit(1);
+			}
 		}
 		
 		if (filter.alwaysTrue())
@@ -431,12 +437,28 @@ public final class MetaData implements Serializable
 		
 		if (op.equals("E"))
 		{
-			return 1.0 / bigger(leftCard, rightCard);
+			double retval = 1.0 / bigger(leftCard, rightCard);
+			if (retval < 0)
+			{
+				System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+				Thread.dumpStack();
+				System.exit(1);
+			}
+			
+			return retval;
 		}
 		
 		if (op.equals("NE"))
 		{
-			return 1.0 - 1.0 / bigger(leftCard, rightCard);
+			double retval = 1.0 - 1.0 / bigger(leftCard, rightCard);
+			if (retval < 0)
+			{
+				System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+				Thread.dumpStack();
+				System.exit(1);
+			}
+			
+			return retval;
 		}
 		
 		if (op.equals("L") || op.equals("LE"))
@@ -452,20 +474,44 @@ public final class MetaData implements Serializable
 				{
 					double right = filter.getRightNumber();
 					String left = filter.leftColumn();
-					return percentBelow(left, right);
+					double retval = percentBelow(left, right);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
+					
+					return retval;
 				}
 				else if (filter.rightIsDate())
 				{
-					Date right = filter.getRightDate();
+					MyDate right = filter.getRightDate();
 					String left = filter.leftColumn();
-					return percentBelow(left, right);
+					double retval = percentBelow(left, right);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
+					
+					return retval;
 				}
 				else
 				{
 					//string
 					String right = filter.getRightString();
 					String left = filter.leftColumn();
-					return percentBelow(left, right);
+					double retval = percentBelow(left, right);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
+					
+					return retval;
 				}
 			}
 			else
@@ -474,20 +520,44 @@ public final class MetaData implements Serializable
 				{
 					double left = filter.getLeftNumber();
 					String right = filter.rightColumn();
-					return percentAbove(right, left);
+					double retval = percentAbove(right, left);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
+					
+					return retval;
 				}
 				else if (filter.leftIsDate())
 				{
-					Date left = filter.getLeftDate();
+					MyDate left = filter.getLeftDate();
 					String right = filter.rightColumn();
-					return percentAbove(right, left);
+					double retval = percentAbove(right, left);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
+					
+					return retval;
 				}
 				else
 				{
 					//string
 					String left = filter.getLeftString();
 					String right = filter.rightColumn();
-					return percentAbove(right, left);
+					double retval = percentAbove(right, left);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
+					
+					return retval;
 				}
 			}
 		}
@@ -505,20 +575,44 @@ public final class MetaData implements Serializable
 				{
 					double right = filter.getRightNumber();
 					String left = filter.leftColumn();
-					return percentAbove(left, right);
+					double retval = percentAbove(left, right);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
+					
+					return retval;
 				}
 				else if (filter.rightIsDate())
 				{
-					Date right = filter.getRightDate();
+					MyDate right = filter.getRightDate();
 					String left = filter.leftColumn();
-					return percentAbove(left, right);
+					double retval = percentAbove(left, right);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
+					
+					return retval;
 				}
 				else
 				{
 					//string
 					String right = filter.getRightString();
 					String left = filter.leftColumn();
-					return percentAbove(left, right);
+					double retval = percentAbove(left, right);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
+					
+					return retval;
 				}
 			}
 			else
@@ -527,20 +621,44 @@ public final class MetaData implements Serializable
 				{
 					double left = filter.getLeftNumber();
 					String right = filter.rightColumn();
-					return percentBelow(right, left);
+					double retval = percentBelow(right, left);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
+					
+					return retval;
 				}
 				else if (filter.leftIsDate())
 				{
-					Date left = filter.getLeftDate();
+					MyDate left = filter.getLeftDate();
 					String right = filter.rightColumn();
-					return percentBelow(right, left);
+					double retval = percentBelow(right, left);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
+					
+					return retval;
 				}
 				else
 				{
 					//string
 					String left = filter.getLeftString();
 					String right = filter.rightColumn();
-					return percentBelow(right, left);
+					double retval = percentBelow(right, left);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
+					
+					return retval;
 				}
 			}
 		}
@@ -614,6 +732,12 @@ public final class MetaData implements Serializable
 		if (filter instanceof ConstantFilter)
 		{
 			double retval = ((ConstantFilter)filter).getLikelihood();
+			if (retval < 0)
+			{
+				System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+				Thread.dumpStack();
+				System.exit(1);
+			}
 			lCache.put(filter, retval);
 			return retval;
 		}
@@ -646,6 +770,12 @@ public final class MetaData implements Serializable
 		if (op.equals("E"))
 		{
 			double retval = 1.0 / bigger(leftCard, rightCard);
+			if (retval < 0)
+			{
+				System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+				Thread.dumpStack();
+				System.exit(1);
+			}
 			lCache.put(filter, retval);
 			return retval;
 		}
@@ -653,6 +783,12 @@ public final class MetaData implements Serializable
 		if (op.equals("NE"))
 		{
 			double retval = 1.0 - 1.0 / bigger(leftCard, rightCard);
+			if (retval < 0)
+			{
+				System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+				Thread.dumpStack();
+				System.exit(1);
+			}
 			lCache.put(filter, retval);
 			return retval;
 		}
@@ -672,14 +808,26 @@ public final class MetaData implements Serializable
 					double right = filter.getRightNumber();
 					String left = filter.leftColumn();
 					double retval = percentBelow(left, right);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
 					lCache.put(filter, retval);
 					return retval;
 				}
 				else if (filter.rightIsDate())
 				{
-					Date right = filter.getRightDate();
+					MyDate right = filter.getRightDate();
 					String left = filter.leftColumn();
 					double retval = percentBelow(left, right);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
 					lCache.put(filter, retval);
 					return retval;
 				}
@@ -689,6 +837,12 @@ public final class MetaData implements Serializable
 					String right = filter.getRightString();
 					String left = filter.leftColumn();
 					double retval = percentBelow(left, right);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
 					lCache.put(filter, retval);
 					return retval;
 				}
@@ -700,14 +854,26 @@ public final class MetaData implements Serializable
 					double left = filter.getLeftNumber();
 					String right = filter.rightColumn();
 					double retval = percentAbove(right, left);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
 					lCache.put(filter, retval);
 					return retval;
 				}
 				else if (filter.leftIsDate())
 				{
-					Date left = filter.getLeftDate();
+					MyDate left = filter.getLeftDate();
 					String right = filter.rightColumn();
 					double retval = percentAbove(right, left);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
 					lCache.put(filter, retval);
 					return retval;
 				}
@@ -717,6 +883,12 @@ public final class MetaData implements Serializable
 					String left = filter.getLeftString();
 					String right = filter.rightColumn();
 					double retval = percentAbove(right, left);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
 					lCache.put(filter, retval);
 					return retval;
 				}
@@ -738,14 +910,26 @@ public final class MetaData implements Serializable
 					double right = filter.getRightNumber();
 					String left = filter.leftColumn();
 					double retval = percentAbove(left, right);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
 					lCache.put(filter, retval);
 					return retval;
 				}
 				else if (filter.rightIsDate())
 				{
-					Date right = filter.getRightDate();
+					MyDate right = filter.getRightDate();
 					String left = filter.leftColumn();
 					double retval = percentAbove(left, right);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
 					lCache.put(filter, retval);
 					return retval;
 				}
@@ -755,6 +939,12 @@ public final class MetaData implements Serializable
 					String right = filter.getRightString();
 					String left = filter.leftColumn();
 					double retval = percentAbove(left, right);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
 					lCache.put(filter, retval);
 					return retval;
 				}
@@ -766,14 +956,26 @@ public final class MetaData implements Serializable
 					double left = filter.getLeftNumber();
 					String right = filter.rightColumn();
 					double retval = percentBelow(right, left);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
 					lCache.put(filter, retval);
 					return retval;
 				}
 				else if (filter.leftIsDate())
 				{
-					Date left = filter.getLeftDate();
+					MyDate left = filter.getLeftDate();
 					String right = filter.rightColumn();
 					double retval = percentBelow(right, left);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
 					lCache.put(filter, retval);
 					return retval;
 				}
@@ -783,6 +985,12 @@ public final class MetaData implements Serializable
 					String left = filter.getLeftString();
 					String right = filter.rightColumn();
 					double retval = percentBelow(right, left);
+					if (retval < 0)
+					{
+						System.out.println("ERROR: likelihood(" + filter + ")" + " returned " + retval);
+						Thread.dumpStack();
+						System.exit(1);
+					}
 					lCache.put(filter, retval);
 					return retval;
 				}
@@ -830,32 +1038,32 @@ public final class MetaData implements Serializable
 	{
 		if (table.equals("SUPPLIER"))
 		{
-			return 10000 * 100;
+			return 10000 * 4;
 		}
 		
 		if (table.equals("PART"))
 		{
-			return 200000 * 100;
+			return 200000 * 4;
 		}
 		
 		if (table.equals("PARTSUPP"))
 		{
-			return 800000 * 100;
+			return 800000 * 4;
 		}
 		
 		if (table.equals("CUSTOMER"))
 		{
-			return 150000 * 100;
+			return 150000 * 4;
 		}
 		
 		if (table.equals("ORDERS"))
 		{
-			return 1500000 * 100;
+			return 1500000 * 4;
 		}
 		
 		if (table.equals("LINEITEM"))
 		{
-			return 6001215 * 100;
+			return 6001215 * 4;
 		}
 		
 		if (table.equals("NATION"))
@@ -905,7 +1113,7 @@ public final class MetaData implements Serializable
 				{
 					if (cards == null)
 					{
-						cards = new ArrayList<ArrayList<Object>>();
+						ArrayList<ArrayList<Object>> cardsTemp = new ArrayList<ArrayList<Object>>();
 						BufferedReader in = new BufferedReader(new FileReader(new File("card.tbl")));
 						String line = in.readLine();
 						while (line != null)
@@ -914,10 +1122,11 @@ public final class MetaData implements Serializable
 							FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
 							cols.add(tokens.nextToken());
 							cols.add(Utils.parseLong(tokens.nextToken()));
-							cards.add(cols);
+							cardsTemp.add(cols);
 							line = in.readLine();
 						}
 						in.close();
+						cards = cardsTemp;
 					}
 				}
 			}
@@ -1341,9 +1550,9 @@ public final class MetaData implements Serializable
 		return 0;
 	}
 	
-	protected double percentBelow(String col, Date val)
+	protected double percentBelow(String col, MyDate val)
 	{
-		ArrayList<Date> quartiles = getDateQuartiles(col);
+		ArrayList<MyDate> quartiles = getDateQuartiles(col);
 		if (quartiles == null)
 		{
 			return 0.5;
@@ -1380,6 +1589,8 @@ public final class MetaData implements Serializable
 	protected double percentAbove(String col, double val)
 	{
 		ArrayList<Double> quartiles = getDoubleQuartiles(col);
+		//System.out.println("In percentAbove with col = " + col + " and val = " + val);
+		//System.out.println("Quartiles are " + quartiles);
 		if (quartiles == null)
 		{
 			return 0.5;
@@ -1405,7 +1616,7 @@ public final class MetaData implements Serializable
 			return 0.25 + 0.25 * ((quartiles.get(3) - val) / (quartiles.get(3) - quartiles.get(2)));
 		}
 		
-		if (quartiles.get(4) <= val)
+		if (quartiles.get(4) >= val)
 		{
 			return 0.25 * ((quartiles.get(4) - val) / (quartiles.get(4) - quartiles.get(3)));
 		}
@@ -1449,9 +1660,9 @@ public final class MetaData implements Serializable
 		return 0;
 	}
 	
-	protected double percentAbove(String col, Date val)
+	protected double percentAbove(String col, MyDate val)
 	{
-		ArrayList<Date> quartiles = getDateQuartiles(col);
+		ArrayList<MyDate> quartiles = getDateQuartiles(col);
 		if (quartiles == null)
 		{
 			return 0.5;
@@ -1495,7 +1706,7 @@ public final class MetaData implements Serializable
 				{
 					if (dists == null)
 					{
-						dists = new ArrayList<ArrayList<Object>>();
+						ArrayList<ArrayList<Object>> distsTemp = new ArrayList<ArrayList<Object>>();
 						BufferedReader in = new BufferedReader(new FileReader(new File("dist.tbl")));
 						String line = in.readLine();
 						while (line != null)
@@ -1508,10 +1719,12 @@ public final class MetaData implements Serializable
 							cols.add(tokens.nextToken());
 							cols.add(tokens.nextToken());
 							cols.add(tokens.nextToken());
-							dists.add(cols);
+							distsTemp.add(cols);
 							line = in.readLine();
 						}
 						in.close();
+						
+						dists = distsTemp;
 					}
 				}
 			}
@@ -1574,7 +1787,7 @@ public final class MetaData implements Serializable
 				{
 					if (dists == null)
 					{
-						dists = new ArrayList<ArrayList<Object>>();
+						ArrayList<ArrayList<Object>> distsTemp = new ArrayList<ArrayList<Object>>();
 						BufferedReader in = new BufferedReader(new FileReader(new File("dist.tbl")));
 						String line = in.readLine();
 						while (line != null)
@@ -1587,10 +1800,11 @@ public final class MetaData implements Serializable
 							cols.add(tokens.nextToken());
 							cols.add(tokens.nextToken());
 							cols.add(tokens.nextToken());
-							dists.add(cols);
+							distsTemp.add(cols);
 							line = in.readLine();
 						}
 						in.close();
+						dists = distsTemp;
 					}
 				}
 			}
@@ -1620,7 +1834,7 @@ public final class MetaData implements Serializable
 		}
 	}
 	
-	protected ArrayList<Date> getDateQuartiles(String col)
+	protected ArrayList<MyDate> getDateQuartiles(String col)
 	{
 		//SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 		
@@ -1632,7 +1846,7 @@ public final class MetaData implements Serializable
 				{
 					if (dists == null)
 					{
-						dists = new ArrayList<ArrayList<Object>>();
+						ArrayList<ArrayList<Object>> distsTemp = new ArrayList<ArrayList<Object>>();
 						BufferedReader in = new BufferedReader(new FileReader(new File("dist.tbl")));
 						String line = in.readLine();
 						while (line != null)
@@ -1645,10 +1859,11 @@ public final class MetaData implements Serializable
 							cols.add(tokens.nextToken());
 							cols.add(tokens.nextToken());
 							cols.add(tokens.nextToken());
-							dists.add(cols);
+							distsTemp.add(cols);
 							line = in.readLine();
 						}
 						in.close();
+						dists = distsTemp;
 					}
 				}
 			}
@@ -1658,7 +1873,7 @@ public final class MetaData implements Serializable
 				String column = (String)line.get(0);
 				if (col.equals(column))
 				{
-					ArrayList<Date> retval = new ArrayList<Date>(5);
+					ArrayList<MyDate> retval = new ArrayList<MyDate>(5);
 					Object l1 = line.get(1);
 					if (l1 instanceof String)
 					{
@@ -1682,11 +1897,11 @@ public final class MetaData implements Serializable
 							}
 						}
 					}
-					retval.add((Date)line.get(1));
-					retval.add((Date)line.get(2));
-					retval.add((Date)line.get(3));
-					retval.add((Date)line.get(4));
-					retval.add((Date)line.get(5));
+					retval.add((MyDate)line.get(1));
+					retval.add((MyDate)line.get(2));
+					retval.add((MyDate)line.get(3));
+					retval.add((MyDate)line.get(4));
+					retval.add((MyDate)line.get(5));
 					return retval;
 				}
 			}
@@ -2180,26 +2395,104 @@ public final class MetaData implements Serializable
 	
 	public int getNumNodes()
 	{
-		return 1;
+		return 16;
 	}
 	
 	public int getNumDevices()
 	{
-		return 2;
+		return 1;
 	}
 	
 	public String getHostNameForNode(int node)
 	{
 		if (node == -1)
 		{
-			return "192.168.1.3";
+			return "54.186.68.29";
 		}
 		
 		if (node == 0)
 		{
-			return "192.168.1.3";
+			return "172.31.6.176";
 		}
 		
+		if (node == 1)
+		{
+			return "172.31.6.20";
+		}
+		
+		if (node == 2)
+		{
+			return "172.31.10.16";
+		}
+		
+		if (node == 3)
+		{
+			return "172.31.14.253";
+		}
+		
+		if (node == 4)
+		{
+			return "172.31.0.234";
+		}
+		
+		if (node == 5)
+		{
+			return "172.31.0.235";
+		}
+		
+		if (node == 6)
+		{
+			return "172.31.0.236";
+		}
+		
+		if (node == 7)
+		{
+			return "172.31.0.237";
+		}
+		
+		if (node == 8)
+		{
+			return "172.31.13.210";
+		}
+		
+		if (node == 9)
+		{
+			return "172.31.13.211";
+		}
+		if (node == 10)
+		{
+			return "172.31.13.212";
+		}
+		if (node == 11)
+		{
+			return "172.31.13.213";
+		}
+		if (node == 12)
+		{
+			return "172.31.13.214";
+		}
+		if (node == 13)
+		{
+			return "172.31.13.215";
+		}
+		if (node == 14)
+		{
+			return "172.31.13.216";
+		}
+		if (node == 15)
+		{
+			return "172.31.13.217";
+		}
+		
+		//if (node == -1)
+		//{
+		//	return "192.168.1.3";
+		//}
+		//
+		//if (node == 0)
+		//{
+		//	return "192.168.1.3";
+		//}
 		/*
 		if (node == -1)
 		{
@@ -2283,7 +2576,7 @@ public final class MetaData implements Serializable
 		
 		if (node == 15)
 		{
-			return "hec-21";
+			return "hec-20";
 		}
 		
 		if (node == 16)
@@ -2298,154 +2591,115 @@ public final class MetaData implements Serializable
 		
 		if (node == 18)
 		{
-			return "hec-25";
+			return "hec-26";
 		}
 		
 		if (node == 19)
 		{
-			return "hec-26";
+			return "hec-27";
 		}
 		
 		if (node == 20)
 		{
-			return "hec-27";
-		}
-		
-		if (node == 21)
-		{
-			return "hec-28";
-		}
-		
-		if (node == 22)
-		{
 			return "hec-29";
 		}
 		
-		if (node == 23)
-		{
-			return "hec-53";
-		}
 		
-		if (node == 24)
+		if (node == 21)
 		{
 			return "hec-55";
 		}
 		
-		if (node == 25)
+		if (node == 22)
 		{
 			return "hec-56";
 		}
 		
-		if (node == 26)
+		if (node == 23)
 		{
 			return "hec-58";
 		}
 		
-		if (node == 27)
+		if (node == 24)
 		{
 			return "hec-59";
 		}
 		
-		if (node == 28)
+		if (node == 25)
 		{
-			return "hec-60";
+			return "hec-61"; 
 		}
 		
-		if (node == 29)
-		{
-			//return "hec-61";
-			return "hec-51"; 
-		}
-		
-		if (node == 30)
+		if (node == 26)
 		{
 			return "hec-63";
 		}
 		
-		if (node == 31)
-		{
-			return "hec-30";
-		}
-		
-		if (node == 32)
-		{
-			return "hec-31";
-		}
-		
-		if (node == 33)
+		if (node == 27)
 		{
 			return "hec-32";
 		}
 		
-		if (node == 34)
-		{
-			return "hec-33";
-		}
-		
-		if (node == 35)
+		if (node == 28)
 		{
 			return "hec-34";
 		}
 		
-		if (node == 36)
+		if (node == 29)
 		{
 			return "hec-35";
 		}
 		
-		if (node == 37)
+		if (node == 30)
 		{
 			return "hec-36";
 		}
 		
-		if (node == 38)
+		if (node == 31)
 		{
 			return "hec-37";
 		}
 		
-		if (node == 39)
+		if (node == 32)
 		{
 			return "hec-38";
 		}
 		
-		if (node == 40)
+		if (node == 33)
 		{
 			return "hec-39";
 		}
 		
-		if (node == 41)
+		if (node == 34)
+		{
+			return "hec-41";
+		}
+		
+		if (node == 35)
 		{
 			return "hec-43";
 		}
 		
-		if (node == 42)
-		{
-			return "hec-44";
-		}
-		
-		if (node == 43)
+		if (node == 36)
 		{
 			return "hec-45";
 		}
 		
-		if (node == 44)
+		if (node == 37)
 		{
 			return "hec-46";
 		}
 		
-		if (node == 45)
+		if (node == 38)
 		{
 			return "hec-47";
 		}
 		
-		if (node == 46)
+		if (node == 39)
 		{
 			return "hec-49";
 		}
-		
-		if (node == 47)
-		{
-			return "hec-50";
-		}*/
+		*/
 		
 		//if (node == 48)
 		//{
@@ -2459,13 +2713,33 @@ public final class MetaData implements Serializable
 	{
 		if (num == 0)
 		{
-			return "/temp2/";
+			return "/mnt/ssd/";
 		}
 		
-		if (num == 1)
-		{
-			return "/temp1/";
-		}
+		//if (num == 1)
+		//{
+		//	return "/data2/";
+		//}
+		//
+		//if (num == 2)
+		//{
+		//	return "/data3/";
+		//}
+		//
+		//if (num == 3)
+		//{
+		//	return "/data4/";
+		//}
+		//
+		//if (num == 4)
+		//{
+		//	return "/data5/";
+		//}
+		//
+		//if (num == 5)
+		//{
+		//	return "/data6/";
+		//}
 		
 		return null;
 	}
@@ -2496,18 +2770,29 @@ public final class MetaData implements Serializable
 			retval.add(new Index("xl_shipdate.indx", keys, types, orders));
 			
 			keys = new ArrayList<String>();
-			keys.add("L_RECEIPTDATE");
 			keys.add("L_SHIPMODE");
-			keys.add("L_SHIPINSTRUCT");
+			keys.add("L_RECEIPTDATE");
 			types = new ArrayList<String>();
+			types.add("INT");
 			types.add("DATE");
+			orders = new ArrayList<Boolean>();
+			orders.add(true);
+			orders.add(true);
+			retval.add(new Index("xl_receiptdate.indx", keys, types, orders));
+			
+			keys = new ArrayList<String>();
+			keys.add("L_SHIPINSTRUCT");
+			keys.add("L_SHIPMODE");
+			keys.add("L_QUANTITY");
+			types = new ArrayList<String>();
 			types.add("CHAR");
 			types.add("CHAR");
+			types.add("FLOAT");
 			orders = new ArrayList<Boolean>();
 			orders.add(true);
 			orders.add(true);
 			orders.add(true);
-			retval.add(new Index("xl_receiptdate.indx", keys, types, orders));
+			retval.add(new Index("xl_shipmode.indx", keys, types, orders));
 			
 			keys = new ArrayList<String>();
 			keys.add("L_ORDERKEY");
@@ -2559,8 +2844,8 @@ public final class MetaData implements Serializable
 			retval.add(new Index("xp_name.indx", keys, types, orders));
 			
 			keys = new ArrayList<String>();
-			keys.add("P_CONTAINER");
 			keys.add("P_BRAND");
+			keys.add("P_CONTAINER");
 			keys.add("P_SIZE");
 			types = new ArrayList<String>();
 			types.add("CHAR");
@@ -2613,13 +2898,13 @@ public final class MetaData implements Serializable
 			orders.add(true);
 			retval.add(new Index("xs_comment.indx", keys, types, orders));
 			
-			keys = new ArrayList<String>();
-			keys.add("S_SUPPKEY");
-			types = new ArrayList<String>();
-			types.add("INT");
-			orders = new ArrayList<Boolean>();
-			orders.add(true);
-			retval.add(new Index("xs_suppkey.indx", keys, types, orders));
+			//keys = new ArrayList<String>();
+			//keys.add("S_SUPPKEY");
+			//types = new ArrayList<String>();
+			//types.add("INT");
+			//orders = new ArrayList<Boolean>();
+			//orders.add(true);
+			//retval.add(new Index("xs_suppkey.indx", keys, types, orders));
 		}
 		
 		if (table.equals("PARTSUPP"))

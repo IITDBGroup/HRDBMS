@@ -1,6 +1,7 @@
 package com.exascale.optimizer.testing;
 
 import java.io.Serializable;
+import com.exascale.optimizer.testing.ResourceManager.DiskBackedALOHashMap;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
@@ -148,7 +149,8 @@ public final class MaxOperator implements AggregateOperator, Serializable
 	
 	protected final class MaxHashThread extends AggregateResultThread
 	{
-		protected final ConcurrentHashMap<ArrayList<Object>, AtomicDouble> maxes = new ConcurrentHashMap<ArrayList<Object>, AtomicDouble>(NUM_GROUPS, 0.75f, ResourceManager.cpus * 6);
+		//protected final DiskBackedALOHashMap<AtomicDouble> maxes = new DiskBackedALOHashMap<AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
+		protected final ConcurrentHashMap<ArrayList<Object>, AtomicDouble> maxes = new ConcurrentHashMap<ArrayList<Object>, AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
 		protected final HashMap<String, Integer> cols2Pos;
 		protected int pos;
 		
@@ -235,6 +237,8 @@ public final class MaxOperator implements AggregateOperator, Serializable
 		}
 		
 		public void close()
-		{}
+		{
+			//maxes.close();
+		}
 	}
 }

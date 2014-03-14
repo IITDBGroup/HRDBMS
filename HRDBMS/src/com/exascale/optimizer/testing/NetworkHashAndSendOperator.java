@@ -1,5 +1,7 @@
 package com.exascale.optimizer.testing;
 
+ 
+
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -16,8 +18,8 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 	protected int numNodes;
 	protected int id;
 	protected int starting;
-	protected ConcurrentHashMap<Integer, CompressedSocket> connections = new ConcurrentHashMap<Integer, CompressedSocket>(Phase3.MAX_INCOMING_CONNECTIONS, 0.75f, Phase3.MAX_INCOMING_CONNECTIONS);
-	protected ConcurrentHashMap<Integer, OutputStream> outs = new ConcurrentHashMap<Integer, OutputStream>(Phase3.MAX_INCOMING_CONNECTIONS, Phase3.MAX_INCOMING_CONNECTIONS);
+	protected ConcurrentHashMap<Integer, CompressedSocket> connections = new ConcurrentHashMap<Integer, CompressedSocket>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
+	protected ConcurrentHashMap<Integer, OutputStream> outs = new ConcurrentHashMap<Integer, OutputStream>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
 	protected ArrayList<Operator> parents = new ArrayList<Operator>();
 	protected static final Long LARGE_PRIME =  1125899906842597L;
     protected static final Long LARGE_PRIME2 = 6920451961L;
@@ -216,67 +218,18 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		Thread.sleep(60*1000);
 	}
 	
-	protected long hash(ArrayList<Object> key)
+	protected long hash(Object key)
 	{
-		long hashCode = 1125899906842597L;
-		for (Object e : key)
+		long eHash;
+		if (key == null)
 		{
-			long eHash = 1;
-			if (e instanceof Integer)
-			{
-				long i = ((Integer)e).longValue();
-				// Spread out values
-			    long scaled = i * LARGE_PRIME;
-
-			    // Fill in the lower bits
-			    eHash = scaled + LARGE_PRIME2;
-			}
-			else if (e instanceof Long)
-			{
-				long i = (Long)e;
-				// Spread out values
-			    long scaled = i * LARGE_PRIME;
-
-			    // Fill in the lower bits
-			    eHash = scaled + LARGE_PRIME2;
-			}
-			else if (e instanceof String)
-			{
-				String string = (String)e;
-				  long h = 1125899906842597L; // prime
-				  int len = string.length();
-
-				  for (int i = 0; i < len; i++) 
-				  {
-					   h = 31*h + string.charAt(i);
-				  }
-				  eHash = h;
-			}
-			else if (e instanceof Double)
-			{
-				long i = Double.doubleToLongBits((Double)e);
-				// Spread out values
-			    long scaled = i * LARGE_PRIME;
-
-			    // Fill in the lower bits
-			    eHash = scaled + LARGE_PRIME2;
-			}
-			else if (e instanceof Date)
-			{
-				long i = ((Date)e).getTime();
-				// Spread out values
-			    long scaled = i * LARGE_PRIME;
-
-			    // Fill in the lower bits
-			    eHash = scaled + LARGE_PRIME2;
-			}
-			else
-			{
-				eHash = e.hashCode();
-			}
-			
-		    hashCode = 31*hashCode + (e==null ? 0 : eHash);
+			eHash = 0;
 		}
-		return hashCode;
+		else
+		{
+			eHash = MurmurHash.hash64(key.toString());
+		}
+			
+		return eHash;
 	}
 }

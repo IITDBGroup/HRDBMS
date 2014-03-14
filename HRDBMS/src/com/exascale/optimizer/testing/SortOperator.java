@@ -20,7 +20,7 @@ import com.exascale.optimizer.testing.ResourceManager.DiskBackedHashMap;
 
 public final class SortOperator implements Operator, Serializable
 {
-	protected static final int PARALLEL_SORT_MIN_NUM_ROWS = 2500;
+	protected static final int PARALLEL_SORT_MIN_NUM_ROWS = 50000;
 	protected Operator child;
 	protected Operator parent;
 	protected HashMap<String, String> cols2Types;
@@ -32,7 +32,7 @@ public final class SortOperator implements Operator, Serializable
 	protected final ArrayList<Boolean> orders;
 	protected volatile boolean sortComplete = false;
 	protected SortThread sortThread;
-	protected volatile BufferedLinkedBlockingQueue readBuffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
+	protected volatile BufferedLinkedBlockingQueue readBuffer;
 	protected volatile DiskBackedArray result;
 	protected volatile int[] sortPos;
 	protected final int NUM_RT_THREADS = 1; //6 * ResourceManager.cpus;
@@ -61,13 +61,11 @@ public final class SortOperator implements Operator, Serializable
 	
 	public void reset()
 	{
-		child.reset();
-		
-		if (result != null)
+		if (!startDone)
 		{
 			try
 			{
-				result.close();
+				start();
 			}
 			catch(Exception e)
 			{
@@ -75,11 +73,28 @@ public final class SortOperator implements Operator, Serializable
 				System.exit(1);
 			}
 		}
+		else
+		{
+			child.reset();
 		
-		sortComplete = false;
-		readBuffer.clear();
-		sortThread = new SortThread(child);
-		sortThread.start();
+			if (result != null)
+			{
+				try
+				{
+					result.clear();
+				}
+				catch(Exception e)
+				{
+					e.printStackTrace();
+					System.exit(1);
+				}
+			}
+		
+			sortComplete = false;
+			readBuffer.clear();
+			sortThread = new SortThread(child);
+			sortThread.start();
+		}
 	}
 	
 	public int getChildPos()
@@ -167,6 +182,7 @@ public final class SortOperator implements Operator, Serializable
 			startDone = true;
 			child.start();
 			sortThread = new SortThread(child);
+			readBuffer = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
 			sortThread.start();
 		}
 	}
@@ -249,7 +265,7 @@ public final class SortOperator implements Operator, Serializable
 	
 	public void nextAll(Operator op) throws Exception
 	{
-		child.nextAll(op);
+		//child.nextAll(op);
 		Object o = next(op);
 		while (!(o instanceof DataEndMarker))
 		{
@@ -306,7 +322,10 @@ public final class SortOperator implements Operator, Serializable
 		{	
 			try
 			{
-				result = ResourceManager.newDiskBackedArray(childCard);
+				if (result == null)
+				{
+					result = ResourceManager.newDiskBackedArray(childCard);
+				}
 				int i = 0;
 				
 				threads = new ReaderThread[NUM_RT_THREADS];
@@ -324,14 +343,20 @@ public final class SortOperator implements Operator, Serializable
 					i++;
 				}
 				
-				if (result.size() < PARALLEL_SORT_MIN_NUM_ROWS)
+				if (result.size() > 0)
 				{
-					doSequentialSort(0, result.size()-1);
-				}
-				else
-				{
-					ParallelSortThread t = doParallelSort(0, result.size()-1);
-					t.join();
+					ResourceManager.NO_OFFLOAD.getAndIncrement();
+					ResourceManager.waitForSync();
+					if (result.size() < PARALLEL_SORT_MIN_NUM_ROWS)
+					{
+						doSequentialSort(0, result.size()-1);
+					}
+					else
+					{
+						ParallelSortThread t = doParallelSort(0, result.size()-1);
+						t.join();
+					}
+					ResourceManager.NO_OFFLOAD.getAndDecrement();
 				}
 				
 				done = true;
@@ -400,7 +425,7 @@ public final class SortOperator implements Operator, Serializable
 					long i = 0;
 					long firstStart = System.currentTimeMillis();
 					long start = firstStart;
-					long nullCount = 0; //DEBUG
+					//long nullCount = 0; //DEBUG
 					while (i < size)
 					{
 						ArrayList<Object> row = null;
@@ -433,7 +458,7 @@ public final class SortOperator implements Operator, Serializable
 					//System.out.println(nullCount + "/" + size + " records were null after sort.");
 				
 					readBuffer.put(new DataEndMarker());
-					array.close();
+					//array.close();
 				}
 				catch(Exception e)
 				{
@@ -605,9 +630,9 @@ public final class SortOperator implements Operator, Serializable
 				{
 					result = ((String)lField).compareTo((String)rField);
 				}
-				else if (lField instanceof Date)
+				else if (lField instanceof MyDate)
 				{
-					result = ((Date)lField).compareTo((Date)rField);
+					result = ((MyDate)lField).compareTo((MyDate)rField);
 				}
 				else
 				{
@@ -642,58 +667,5 @@ public final class SortOperator implements Operator, Serializable
 			
 			return 0;
 		}
-		
-		protected long partition(long left, long right, long pivotIndex) throws Exception
-		{
-			ArrayList<Object> pivotValue = (ArrayList<Object>)result.get(pivotIndex);
-			Object rightRec = result.get(right);
-			result.update(pivotIndex, (ArrayList<Object>)rightRec);
-			result.update(right,  pivotValue);
-		
-			long i = left;
-			long storeIndex = left;
-			boolean allEqual = true;
-			
-			while (i < right)
-			{
-				ArrayList<Object> temp = (ArrayList<Object>)result.get(i);
-				int compareResult = compare(temp, pivotValue);
-				if (compareResult == -1)
-				{
-					Object row = result.get(storeIndex);
-					result.update(i, (ArrayList<Object>)row);
-					result.update(storeIndex, temp);
-					storeIndex++;
-					allEqual = false;
-				}
-				else if (compareResult == 0)
-				{
-					if (ThreadLocalRandom.current().nextDouble() < 0.5)
-					{
-						Object row = result.get(storeIndex);
-						result.update(i, (ArrayList<Object>)row);
-						result.update(storeIndex, temp);
-						storeIndex++;
-					}					
-				}
-				else
-				{
-					allEqual = false;
-				}
-				i++;
-			}
-			
-			if (allEqual)
-			{
-				return -1;
-			}
-			
-			ArrayList<Object> temp = (ArrayList<Object>)result.get(storeIndex);
-			rightRec = result.get(right);
-			result.update(storeIndex, (ArrayList<Object>)rightRec);
-			result.update(right,  temp);
-			return storeIndex;
-		}
-		
 	}
 }

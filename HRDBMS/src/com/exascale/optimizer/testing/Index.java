@@ -2,7 +2,7 @@ package com.exascale.optimizer.testing;
 
 import java.io.RandomAccessFile;
 import java.io.Serializable;
-import java.text.SimpleDateFormat;
+ 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.StringTokenizer;
@@ -23,7 +23,7 @@ public final class Index implements Serializable
 	protected String op;
 	protected ArrayList<Filter> terminates = new ArrayList<Filter>();
 	protected String line;
-	//protected SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+	//protected MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
 	protected final HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
 	protected int count = 0;
 	protected boolean indexOnly = false;
@@ -35,8 +35,9 @@ public final class Index implements Serializable
 	protected MetaData meta;
 	protected ArrayList<Filter> delayedConditions;
 	protected HashMap<String, String> renames;
-	protected BufferedLinkedBlockingQueue queue = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
+	protected BufferedLinkedBlockingQueue queue;
 	protected IndexWriterThread iwt;
+	protected volatile Thread lastThread = null;
 	
 	public Index(String fileName, ArrayList<String> keys, ArrayList<String> types, ArrayList<Boolean> orders)
 	{
@@ -166,7 +167,7 @@ public final class Index implements Serializable
 	{
 		try
 		{
-			in = new BufferedRandomAccessFile(meta.getDevicePath(device) + fileName, "r", 512);
+			in = new BufferedRandomAccessFile(meta.getDevicePath(device) + fileName, "r", 64*1024);
 			this.device = device;
 			this.meta = meta;
 		}
@@ -197,6 +198,23 @@ public final class Index implements Serializable
 	
 	public Object next()
 	{
+		if (lastThread == null)
+		{
+			synchronized(this)
+			{
+				if (lastThread == null)
+				{
+					lastThread = Thread.currentThread();
+				}
+			}
+		}
+		
+		if (Thread.currentThread() != lastThread)
+		{
+			System.out.println("More than 1 thread in Index.next()");
+			Thread.dumpStack();
+		}
+		
 		while (delayed)
 		{
 			LockSupport.parkNanos(75000);
@@ -204,9 +222,10 @@ public final class Index implements Serializable
 		
 		if (!positioned)
 		{
+			queue = new BufferedLinkedBlockingQueue(Driver.QUEUE_SIZE);
 			setStartingPos();
 			positioned = true;
-			iwt = new IndexWriterThread();
+			iwt = new IndexWriterThread(keys);
 			iwt.start();
 		}
 		
@@ -233,6 +252,13 @@ public final class Index implements Serializable
 	
 	private final class IndexWriterThread extends ThreadPoolThread
 	{
+		protected final ArrayList<String> keys;
+		
+		public IndexWriterThread(ArrayList<String> keys)
+		{
+			this.keys = keys;
+		}
+		
 		public final void run()
 		{
 			FastStringTokenizer tokens = new FastStringTokenizer("", "|", false);
@@ -253,7 +279,7 @@ public final class Index implements Serializable
 							line = in.readLine();
 						}
 				
-						for (Object r : getRids())
+						for (Object r : getRids(keys))
 						{
 							ArrayList<Object> al = new ArrayList<Object>(1);
 							al.add(r);
@@ -292,7 +318,7 @@ public final class Index implements Serializable
 							line = in.readLine();
 						}
 				
-						ridList.addAll(getRids());
+						ridList.addAll(getRids(keys));
 						int i = 0;
 						int j = 0;
 						tokens.reuse(line, "|", false);
@@ -672,6 +698,25 @@ public final class Index implements Serializable
 					}
 					if (orders.get(0))
 					{
+						if (key instanceof Double)
+						{
+							if (val instanceof Long)
+							{
+								val = ((Long) val).doubleValue();
+							}
+							else if (val instanceof Integer)
+							{
+								val = ((Integer) val).doubleValue();
+							}
+						}
+						else if (key instanceof Long)
+						{
+							if (val instanceof Integer)
+							{
+								val = ((Integer) val).longValue();
+							}
+						}
+						
 						if (((Comparable)key).compareTo(val) < 0)
 						{
 							while (i < keys.size())
@@ -827,7 +872,9 @@ public final class Index implements Serializable
 		}
 		
 		FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
-		ArrayList<Object> row = new ArrayList<Object>(tokens.allTokens().length);
+		int length = types.size();
+		ArrayList<Object> row = new ArrayList<Object>(length);
+		
 		for (String type : types)
 		{
 			row.add(getObject(tokens.nextToken(), type));
@@ -851,7 +898,7 @@ public final class Index implements Serializable
 		return false;
 	}
 	
-	private ArrayListLong getRids()
+	private ArrayListLong getRids(ArrayList<String> keys)
 	{
 		FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
 		int i = 0;
@@ -877,8 +924,10 @@ public final class Index implements Serializable
 			return false;
 		}
 		
-		ArrayList<Object> row = new ArrayList<Object>(types.size());
 		FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
+		int length = types.size();
+		ArrayList<Object> row = new ArrayList<Object>(length);
+		
 		for (String type : types)
 		{
 			row.add(getObject(tokens.nextToken(), type));
@@ -924,7 +973,7 @@ public final class Index implements Serializable
 	
 	public String toString()
 	{
-		return super.toString() + ": " + keys.toString();
+		return super.toString() + ": " + keys.toString() + "f = " + f + "; secondary = " + secondary;
 	}
 	
 	public String getFileName()
@@ -1305,11 +1354,15 @@ public final class Index implements Serializable
 	
 	public synchronized void reset()
 	{
+		lastThread = null;
+		
 		try
 		{
 			in.seek(0);
-			iwt.join();
-			queue.clear();
+			if (iwt != null)
+			{
+				iwt.join();
+			}
 		}
 		catch(Exception e)
 		{

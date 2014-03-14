@@ -23,6 +23,7 @@ public final class TopOperator implements Operator, Serializable
 	protected AtomicLong remaining;
 	protected boolean cleanerStarted = false;
 	protected int node;
+	protected volatile boolean demSent = false;
 	
 	public long getRemaining()
 	{
@@ -118,13 +119,24 @@ public final class TopOperator implements Operator, Serializable
 		
 		if (num > 0)
 		{
-			return child.next(this);
+			Object retval = child.next(this);
+			if (retval instanceof DataEndMarker)
+			{
+				demSent = true;
+				remaining.set(0);
+			}
+			return retval;
 		}
 		
-		CleanerThread ct = new CleanerThread();
-		ct.start();
-		ct.join();
-		return new DataEndMarker();
+		if (demSent)
+		{
+			return new DataEndMarker();
+		}
+		else
+		{
+			child.nextAll(TopOperator.this);
+			return new DataEndMarker();
+		}
 	}
 
 	@Override
@@ -191,21 +203,4 @@ public final class TopOperator implements Operator, Serializable
 	public TreeMap<Integer, String> getPos2Col() {
 		return pos2Col;
 	}
-	
-	protected final class CleanerThread extends ThreadPoolThread
-	{
-		public void run()
-		{
-			try
-			{
-				child.nextAll(TopOperator.this);
-			}
-			catch(Exception e)
-			{
-				e.printStackTrace();
-				System.exit(1);
-			}
-		}
-	}
-
 }

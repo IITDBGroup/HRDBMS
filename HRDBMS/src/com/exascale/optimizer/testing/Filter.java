@@ -2,7 +2,7 @@ package com.exascale.optimizer.testing;
 
 import java.io.Serializable;
 import java.text.ParseException;
-import java.text.SimpleDateFormat;
+ 
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -13,8 +13,8 @@ public class Filter implements Cloneable, Serializable
 	protected String val1; //string
 	protected String op;
 	protected String val2; //string
-	protected Date dVal1;
-	protected Date dVal2;
+	protected MyDate dVal1;
+	protected MyDate dVal2;
 	protected Long lVal1;
 	protected Long lVal2;
 	protected Double fVal1;
@@ -25,7 +25,7 @@ public class Filter implements Cloneable, Serializable
 	protected volatile int posVal2 = -1;
 	protected boolean always = false;
 	protected boolean alwaysVal = false;
-	//protected SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+	//protected MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
 	protected String orig1;
 	protected String orig2;
 	
@@ -59,7 +59,24 @@ public class Filter implements Cloneable, Serializable
 	{
 		try
 		{
-			Filter retval = new Filter(orig1, op, orig2);
+			Filter retval = new Filter();
+			retval.val1 = val1; //string
+			retval.op = op;
+			retval.val2 = val2; //string
+			retval.dVal1 = dVal1;
+			retval.dVal2 = dVal2;
+			retval.lVal1 = lVal1;
+			retval.lVal2 = lVal2;
+			retval.fVal1 = fVal1;
+			retval.fVal2 = fVal2;
+			retval.colVal1 = colVal1; //column
+			retval.colVal2 = colVal2; //column
+			retval.posVal1 = -1;
+			retval.posVal2 = -1;
+			retval.always = always;
+			retval.alwaysVal = alwaysVal;
+			retval.orig1 = orig1;
+			retval.orig2 = orig2;
 			return retval;
 		}
 		catch(Exception e)
@@ -214,12 +231,12 @@ public class Filter implements Cloneable, Serializable
 		return lVal2;
 	}
 	
-	public Date getLeftDate()
+	public MyDate getLeftDate()
 	{
 		return dVal1;
 	}
 	
-	public Date getRightDate()
+	public MyDate getRightDate()
 	{
 		return dVal2;
 	}
@@ -395,11 +412,11 @@ public class Filter implements Cloneable, Serializable
 			int pos1 = posVal1;
 			Object lo = row.get(pos1);
 			
-			if (lo instanceof Date)
+			if (lo instanceof MyDate)
 			{
 				if (dVal2 != null)
 				{
-					return compare((Date)lo, dVal2);
+					return compare((MyDate)lo, dVal2);
 				}
 				else
 				{
@@ -409,8 +426,8 @@ public class Filter implements Cloneable, Serializable
 					}
 					
 					int pos2 = posVal2;
-					Date ro = (Date)row.get(pos2);
-					return compare ((Date)lo, ro);
+				 MyDate ro = (MyDate)row.get(pos2);
+					return compare ((MyDate)lo, ro);
 				}
 			}
 			else if (lo instanceof String)
@@ -586,7 +603,7 @@ public class Filter implements Cloneable, Serializable
 			}
 			
 			int pos = posVal2;
-			Date o = (Date)row.get(pos);
+		 MyDate o = (MyDate)row.get(pos);
 			return compare(dVal1, o);
 		}
 		else if (fVal1 != null)
@@ -642,11 +659,11 @@ public class Filter implements Cloneable, Serializable
 			int pos1 = posVal1;
 			lo = get(lRow, rRow, pos1);
 			
-			if (lo instanceof Date)
+			if (lo instanceof MyDate)
 			{
 				if (dVal2 != null)
 				{
-					return compare((Date)lo, dVal2);
+					return compare((MyDate)lo, dVal2);
 				}
 				else
 				{
@@ -656,8 +673,8 @@ public class Filter implements Cloneable, Serializable
 					}
 					
 					int pos2 = posVal2;
-					Date ro = (Date)get(lRow, rRow, pos2);
-					return compare ((Date)lo, ro);
+				 MyDate ro = (MyDate)get(lRow, rRow, pos2);
+					return compare ((MyDate)lo, ro);
 				}
 			}
 			else if (lo instanceof String)
@@ -820,7 +837,7 @@ public class Filter implements Cloneable, Serializable
 			}
 			
 			int pos = posVal2;
-			Date o = (Date)get(lRow, rRow, pos);
+		 MyDate o = (MyDate)get(lRow, rRow, pos);
 			return compare(dVal1, o);
 		}
 		else if (fVal1 != null)

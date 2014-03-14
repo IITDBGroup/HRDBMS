@@ -4,7 +4,7 @@ import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.PrintWriter;
-import java.text.SimpleDateFormat;
+ 
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -17,7 +17,7 @@ import java.util.concurrent.locks.LockSupport;
 public class BuildDistTable 
 {
 	protected static int x = 0;
-	protected static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+	protected static MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
 	
 	public static void main(String[] args) throws Exception
 	{
@@ -88,7 +88,7 @@ public class BuildDistTable
 			root.next();
 			root.close();
 			
-			if (val0 instanceof Date)
+			if (val0 instanceof MyDate)
 			{
 				out.write(col + "|" + sdf.format(val0) + "|" + sdf.format(val1) + "|" + sdf.format(val2) + "|" + sdf.format(val3) + "|" + sdf.format(val4) + "\n");
 			}
@@ -163,7 +163,7 @@ public class BuildDistTable
 			root.next();
 			root.close();
 			
-			if (val0 instanceof Date)
+			if (val0 instanceof MyDate)
 			{
 				out.write(col + "|" + sdf.format(val0) + "|" + sdf.format(val1) + "|" + sdf.format(val2) + "|" + sdf.format(val3) + "|" + sdf.format(val4) + "\n");
 			}
@@ -238,7 +238,7 @@ public class BuildDistTable
 			root.next();
 			root.close();
 			
-			if (val0 instanceof Date)
+			if (val0 instanceof MyDate)
 			{
 				out.write(col + "|" + sdf.format(val0) + "|" + sdf.format(val1) + "|" + sdf.format(val2) + "|" + sdf.format(val3) + "|" + sdf.format(val4) + "\n");
 			}
@@ -313,7 +313,7 @@ public class BuildDistTable
 			root.next();
 			root.close();
 			
-			if (val0 instanceof Date)
+			if (val0 instanceof MyDate)
 			{
 				out.write(col + "|" + sdf.format(val0) + "|" + sdf.format(val1) + "|" + sdf.format(val2) + "|" + sdf.format(val3) + "|" + sdf.format(val4) + "\n");
 			}
@@ -388,7 +388,7 @@ public class BuildDistTable
 			root.next();
 			root.close();
 			
-			if (val0 instanceof Date)
+			if (val0 instanceof MyDate)
 			{
 				out.write(col + "|" + sdf.format(val0) + "|" + sdf.format(val1) + "|" + sdf.format(val2) + "|" + sdf.format(val3) + "|" + sdf.format(val4) + "\n");
 			}
@@ -463,7 +463,7 @@ public class BuildDistTable
 			root.next();
 			root.close();
 			
-			if (val0 instanceof Date)
+			if (val0 instanceof MyDate)
 			{
 				out.write(col + "|" + sdf.format(val0) + "|" + sdf.format(val1) + "|" + sdf.format(val2) + "|" + sdf.format(val3) + "|" + sdf.format(val4) + "\n");
 			}
@@ -538,7 +538,7 @@ public class BuildDistTable
 			root.next();
 			root.close();
 			
-			if (val0 instanceof Date)
+			if (val0 instanceof MyDate)
 			{
 				out.write(col + "|" + sdf.format(val0) + "|" + sdf.format(val1) + "|" + sdf.format(val2) + "|" + sdf.format(val3) + "|" + sdf.format(val4) + "\n");
 			}
@@ -613,7 +613,7 @@ public class BuildDistTable
 			root.next();
 			root.close();
 			
-			if (val0 instanceof Date)
+			if (val0 instanceof MyDate)
 			{
 				out.write(col + "|" + sdf.format(val0) + "|" + sdf.format(val1) + "|" + sdf.format(val2) + "|" + sdf.format(val3) + "|" + sdf.format(val4) + "\n");
 			}
