@@ -3,17 +3,16 @@ package com.exascale.threads;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
 import com.exascale.managers.FileManager;
 
 public class ReadThread extends HRDBMSThread
 {
-	protected Page p;
-	protected Block b;
-	protected ByteBuffer bb;
-	
+	private final Page p;
+	private final Block b;
+	private final ByteBuffer bb;
+
 	public ReadThread(Page p, Block b, ByteBuffer bb)
 	{
 		this.description = "Read thread for buffer Manager";
@@ -22,17 +21,18 @@ public class ReadThread extends HRDBMSThread
 		this.b = b;
 		this.bb = bb;
 	}
-	
+
+	@Override
 	public void run()
 	{
 		bb.clear();
 		bb.position(0);
 		try
 		{
-			FileChannel fc = FileManager.getFile(b.fileName());
+			final FileChannel fc = FileManager.getFile(b.fileName());
 			fc.read(bb, b.number() * bb.capacity());
 		}
-		catch(IOException e)
+		catch (final IOException e)
 		{
 			this.terminate();
 			return;

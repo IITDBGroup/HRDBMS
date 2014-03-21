@@ -1,6 +1,6 @@
 package com.exascale.exceptions;
 
-public class LockAbortException extends Exception 
+public class LockAbortException extends Exception
 {
 
 }

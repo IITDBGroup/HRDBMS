@@ -1,16 +1,39 @@
 package com.exascale.tables;
 
-public class SQL 
+public class SQL
 {
-	protected String internal;
-	
+	private String internal;
+
 	public SQL(String sql)
 	{
 		internal = toUpperCaseExceptQuoted(sql);
 		internal = removeExcessWhitespace(internal);
 	}
-	
-	protected String removeExcessWhitespace(String in)
+
+	@Override
+	public boolean equals(Object rhs)
+	{
+		if (rhs == null)
+		{
+			return false;
+		}
+
+		if (rhs instanceof SQL)
+		{
+			final SQL r = (SQL)rhs;
+			return internal.equals(r.internal);
+		}
+
+		return false;
+	}
+
+	@Override
+	public int hashCode()
+	{
+		return internal.hashCode();
+	}
+
+	private String removeExcessWhitespace(String in)
 	{
 		String out = in.replace('\t', ' ');
 		out = out.replace('\n', ' ');
@@ -34,37 +57,17 @@ public class SQL
 					whitespaceCount = 1;
 				}
 				else
-				{}
+				{
+				}
 			}
-			
+
 			i++;
 		}
-		
+
 		return out2;
 	}
-	
-	public boolean equals(Object rhs)
-	{
-		if (rhs == null)
-		{
-			return false;
-		}
-		
-		if (rhs instanceof SQL)
-		{
-			SQL r = (SQL)rhs;
-			return internal.equals(r.internal);
-		}
-		
-		return false;
-	}
-	
-	public int hashCode()
-	{
-		return internal.hashCode();
-	}
-	
-	protected String toUpperCaseExceptQuoted(String in)
+
+	private String toUpperCaseExceptQuoted(String in)
 	{
 		String out = "";
 		int i = 0;
@@ -87,13 +90,13 @@ public class SQL
 			{
 				if (quoteType == 0)
 				{
-					if (in.charAt(i) == '\'' && ((i+1) == in.length() || in.charAt(i+1) != '\''))
+					if (in.charAt(i) == '\'' && ((i + 1) == in.length() || in.charAt(i + 1) != '\''))
 					{
 						quoteType = 1;
 						quoted = true;
 						out += '\'';
 					}
-					else if (in.charAt(i) == '"' && ((i+1) == in.length() || in.charAt(i+1) != '"'))
+					else if (in.charAt(i) == '"' && ((i + 1) == in.length() || in.charAt(i + 1) != '"'))
 					{
 						quoteType = 2;
 						quoted = true;
@@ -102,13 +105,13 @@ public class SQL
 					else
 					{
 						out += in.charAt(i);
-						out += in.charAt(i+1);
+						out += in.charAt(i + 1);
 						i++;
 					}
 				}
 				else if (quoteType == 1)
 				{
-					if (in.charAt(i) == '\'' && ((i+1) == in.length() || in.charAt(i+1) != '\''))
+					if (in.charAt(i) == '\'' && ((i + 1) == in.length() || in.charAt(i + 1) != '\''))
 					{
 						quoteType = 0;
 						quoted = false;
@@ -124,9 +127,9 @@ public class SQL
 						i++;
 					}
 				}
-				else 
+				else
 				{
-					if (in.charAt(i) == '"' && ((i+1) == in.length() || in.charAt(i+1) != '"'))
+					if (in.charAt(i) == '"' && ((i + 1) == in.length() || in.charAt(i + 1) != '"'))
 					{
 						quoteType = 0;
 						quoted = false;
@@ -143,10 +146,10 @@ public class SQL
 					}
 				}
 			}
-			
+
 			i++;
 		}
-		
+
 		return out;
 	}
 }

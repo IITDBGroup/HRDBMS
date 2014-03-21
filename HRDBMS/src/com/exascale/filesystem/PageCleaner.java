@@ -5,26 +5,27 @@ import com.exascale.managers.FileManager;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.threads.HRDBMSThread;
 
-public class PageCleaner extends HRDBMSThread 
+public class PageCleaner extends HRDBMSThread
 {
-	protected static int sizeThresh;
-	
+	private static int sizeThresh;
+
 	public PageCleaner()
 	{
 		this.setWait(false);
 		this.description = "Buffer Page Cleaner";
 	}
-	
+
+	@Override
 	public void run()
 	{
-		int pct = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("page_cleaner_dirty_pct"));
+		final int pct = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("page_cleaner_dirty_pct"));
 		sizeThresh = (int)(BufferManager.bp.length - (((pct * 1.0) / 100.0) * BufferManager.bp.length));
-		
+
 		while (true)
 		{
 			if (BufferManager.numNotTouched == 0 && BufferManager.unmodLookup.size() < sizeThresh)
 			{
-				for (Page p : BufferManager.bp)
+				for (final Page p : BufferManager.bp)
 				{
 					if (p.isModified() && (!p.isPinned()))
 					{
@@ -33,26 +34,27 @@ public class PageCleaner extends HRDBMSThread
 						{
 							FileManager.write(p.block(), p.buffer());
 						}
-						catch(Exception e)
+						catch (final Exception e)
 						{
 							HRDBMSWorker.logger.error("PageCleaner error writing dirty page!", e);
 							this.terminate();
 							return;
 						}
-					
+
 						p.unpin(-2);
 					}
 				}
 			}
 			else
 			{
-				long sleep = Long.parseLong(HRDBMSWorker.getHParms().getProperty("page_cleaner_sleep_ms"));
+				final long sleep = Long.parseLong(HRDBMSWorker.getHParms().getProperty("page_cleaner_sleep_ms"));
 				try
 				{
 					Thread.sleep(sleep);
 				}
-				catch(InterruptedException e)
-				{}
+				catch (final InterruptedException e)
+				{
+				}
 			}
 		}
 	}

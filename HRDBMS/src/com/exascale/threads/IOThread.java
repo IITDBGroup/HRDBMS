@@ -6,9 +6,9 @@ import com.exascale.managers.HRDBMSWorker;
 
 public class IOThread extends HRDBMSThread
 {
-	protected Block[] bs;
-	protected long txnum;
-	
+	private final Block[] bs;
+	private final long txnum;
+
 	public IOThread(Block b, long txnum)
 	{
 		this.setWait(false);
@@ -17,7 +17,7 @@ public class IOThread extends HRDBMSThread
 		bs[0] = b;
 		this.txnum = txnum;
 	}
-	
+
 	public IOThread(Block[] bs, long txnum)
 	{
 		this.setWait(false);
@@ -25,21 +25,22 @@ public class IOThread extends HRDBMSThread
 		this.bs = bs;
 		this.txnum = txnum;
 	}
-	
+
+	@Override
 	public void run()
 	{
 		try
 		{
-			for (Block b : bs)
+			for (final Block b : bs)
 			{
 				BufferManager.pin(b, txnum);
 			}
 		}
-		catch(Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("Error occurred in an I/O thread.", e);
 		}
-		
+
 		this.terminate();
 		return;
 	}

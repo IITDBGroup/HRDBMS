@@ -1,6 +1,6 @@
 package com.exascale.exceptions;
 
-public class BufferPoolExhaustedException extends Exception 
+public class BufferPoolExhaustedException extends Exception
 {
 
 }
