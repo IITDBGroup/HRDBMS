@@ -1174,6 +1174,7 @@ public final class TableScanOperator implements Operator, Serializable
 			{
 				if (in2 == null)
 				{
+					//TODO acquire table length lock in shared mode
 					int numBlocks = (int)(new File(in).length() / Page.BLOCK_SIZE);
 					HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
 					HashMap<String, String> cols2Types = meta.getCols2TypesForTable(schema, name);
