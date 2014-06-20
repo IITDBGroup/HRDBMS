@@ -133,6 +133,11 @@ public final class TopOperator implements Operator, Serializable
 				demSent = true;
 				remaining.set(0);
 			}
+			
+			if (retval instanceof Exception)
+			{
+				throw (Exception)retval;
+			}
 			return retval;
 		}
 
@@ -152,7 +157,7 @@ public final class TopOperator implements Operator, Serializable
 	{
 		child.nextAll(op);
 		Object o = next(op);
-		while (!(o instanceof DataEndMarker))
+		while (!(o instanceof DataEndMarker) && !(o instanceof Exception))
 		{
 			o = next(op);
 		}
@@ -194,10 +199,10 @@ public final class TopOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void reset()
+	public void reset() throws Exception
 	{
 		HRDBMSWorker.logger.error("TopOperator cannot reset");
-		System.exit(1);
+		throw new Exception("TopOperator cannot reset");
 	}
 
 	@Override

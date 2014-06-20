@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.TreeMap;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
+import com.exascale.managers.ResourceManager.DiskBackedArray;
 import com.exascale.managers.ResourceManager.DiskBackedHashSet;
 import com.exascale.misc.BufferedLinkedBlockingQueue;
 import com.exascale.misc.DataEndMarker;
@@ -29,6 +30,7 @@ public final class IntersectOperator implements Operator, Serializable
 	private volatile boolean inited = false;
 	private volatile boolean startDone = false;
 	private Plan plan;
+	private boolean estimateSet = false;
 	
 	public void setPlan(Plan plan)
 	{
@@ -114,7 +116,7 @@ public final class IntersectOperator implements Operator, Serializable
 	@Override
 	public ArrayList<String> getReferences()
 	{
-		return null;
+		return new ArrayList<String>();
 	}
 
 	@Override
@@ -137,6 +139,11 @@ public final class IntersectOperator implements Operator, Serializable
 				return o;
 			}
 		}
+		
+		if (o instanceof Exception)
+		{
+			throw (Exception)o;
+		}
 		return o;
 	}
 
@@ -148,7 +155,7 @@ public final class IntersectOperator implements Operator, Serializable
 			o.nextAll(op);
 		}
 		Object o = next(op);
-		while (!(o instanceof DataEndMarker))
+		while (!(o instanceof DataEndMarker) && !(o instanceof Exception))
 		{
 			o = next(op);
 		}
@@ -187,7 +194,7 @@ public final class IntersectOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void reset()
+	public void reset() throws Exception
 	{
 		if (!startDone)
 		{
@@ -198,7 +205,7 @@ public final class IntersectOperator implements Operator, Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 		else
@@ -219,7 +226,6 @@ public final class IntersectOperator implements Operator, Serializable
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
 				}
 			}
 
@@ -232,7 +238,7 @@ public final class IntersectOperator implements Operator, Serializable
 			{
 				Exception e = new Exception();
 				HRDBMSWorker.logger.error("IntersectOperator is inited more than once!");
-				System.exit(1);
+				throw new Exception("IntersectOperator is inited more than once!");
 			}
 			new InitThread().start();
 		}
@@ -243,9 +249,15 @@ public final class IntersectOperator implements Operator, Serializable
 	{
 	}
 
-	public void setEstimate(int estimate)
+	public boolean setEstimate(int estimate)
 	{
+		if (estimateSet)
+		{
+			return false;
+		}
 		this.estimate = estimate;
+		estimateSet = true;
+		return true;
 	}
 
 	@Override
@@ -269,9 +281,9 @@ public final class IntersectOperator implements Operator, Serializable
 		}
 		else
 		{
-			Exception e = new Exception();
+			Exception e = new Exception("IntersectOperator is inited more than once!");
 			HRDBMSWorker.logger.error("IntersectOperator is inited more than once!", e);
-			System.exit(1);
+			throw e;
 		}
 		new InitThread().start();
 	}
@@ -295,12 +307,19 @@ public final class IntersectOperator implements Operator, Serializable
 			}
 			else
 			{
-				Exception e = new Exception();
+				Exception e = new Exception("IntersectOperator is inited more than once!");
 				HRDBMSWorker.logger.error("IntersectOperator is inited more than once!", e);
-				System.exit(1);
+				try
+				{
+					buffer.put(e);
+				}
+				catch(Exception f)
+				{}
+				return;
 			}
 			if (children.size() == 1)
 			{
+				//uses not distinct logic since this can only happen during index processing
 				int count = 0;
 				try
 				{
@@ -340,11 +359,18 @@ public final class IntersectOperator implements Operator, Serializable
 				catch (final Exception f)
 				{
 					HRDBMSWorker.logger.error("", f);
-					System.exit(1);
+					try
+					{
+						buffer.put(f);
+					}
+					catch(Exception g)
+					{}
+					return;
 				}
 
 				return;
 			}
+			
 			int i = 0;
 			while (i < children.size())
 			{
@@ -391,10 +417,23 @@ public final class IntersectOperator implements Operator, Serializable
 				boolean inAll = true;
 				for (final DiskBackedHashSet set : sets)
 				{
-					if (!set.contains(o))
+					try
 					{
-						inAll = false;
-						break;
+						if (!set.contains(o))
+						{
+							inAll = false;
+							break;
+						}
+					}
+					catch(Exception e)
+					{
+						try
+						{
+							buffer.put(e);
+						}
+						catch(Exception f)
+						{}
+						return;
 					}
 				}
 
@@ -458,7 +497,13 @@ public final class IntersectOperator implements Operator, Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				try
+				{
+					buffer.put(e);
+				}
+				catch(Exception f)
+				{}
+				return;
 			}
 		}
 	}

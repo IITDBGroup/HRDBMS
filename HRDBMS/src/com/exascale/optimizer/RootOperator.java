@@ -131,7 +131,13 @@ public final class RootOperator implements Operator
 	@Override
 	public Object next(Operator op) throws Exception
 	{
-		return child.next(this);
+		Object o = child.next(this);
+		if (o instanceof Exception)
+		{
+			throw (Exception)o;
+		}
+		
+		return o;
 	}
 
 	@Override
@@ -139,7 +145,7 @@ public final class RootOperator implements Operator
 	{
 		child.nextAll(op);
 		Object o = next(op);
-		while (!(o instanceof DataEndMarker))
+		while (!(o instanceof DataEndMarker) && !(o instanceof Exception))
 		{
 			o = next(op);
 		}
@@ -174,7 +180,7 @@ public final class RootOperator implements Operator
 	}
 
 	@Override
-	public void reset()
+	public void reset() throws Exception
 	{
 		child.reset();
 	}

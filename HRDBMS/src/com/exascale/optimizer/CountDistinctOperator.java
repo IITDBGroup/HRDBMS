@@ -115,7 +115,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 
 		// @Parallel
 		@Override
-		public final void put(ArrayList<Object> row, ArrayList<Object> group)
+		public final void put(ArrayList<Object> row, ArrayList<Object> group) throws Exception
 		{
 			final ArrayList<Object> consolidated = new ArrayList<Object>();
 			consolidated.addAll(group);

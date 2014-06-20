@@ -54,6 +54,11 @@ public final class ExtendOperator implements Operator, Serializable
 			master.push(token);
 		}
 	}
+	
+	public String getPrefix()
+	{
+		return prefix;
+	}
 
 	@Override
 	public void add(Operator op) throws Exception
@@ -180,6 +185,11 @@ public final class ExtendOperator implements Operator, Serializable
 				return o;
 			}
 		}
+		
+		if (o instanceof Exception)
+		{
+			throw (Exception)o;
+		}
 		return o;
 	}
 
@@ -188,7 +198,7 @@ public final class ExtendOperator implements Operator, Serializable
 	{
 		child.nextAll(op);
 		Object o = next(op);
-		while (!(o instanceof DataEndMarker))
+		while (!(o instanceof DataEndMarker) && !(o instanceof Exception))
 		{
 			o = next(op);
 		}
@@ -230,7 +240,7 @@ public final class ExtendOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void reset()
+	public void reset() throws Exception
 	{
 		if (!startDone)
 		{
@@ -241,7 +251,8 @@ public final class ExtendOperator implements Operator, Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				queue.put(e);
+				return;
 			}
 		}
 		else
@@ -340,7 +351,8 @@ public final class ExtendOperator implements Operator, Serializable
 						{
 							HRDBMSWorker.logger.error("Error getting column " + temp + " from row " + row, e);
 							HRDBMSWorker.logger.error("Cols2Pos = " + cols2Pos);
-							System.exit(1);
+							queue.put(e);
+							return 0D;
 						}
 						if (field instanceof Long)
 						{
@@ -359,7 +371,8 @@ public final class ExtendOperator implements Operator, Serializable
 							HRDBMSWorker.logger.error("Unknown type in ExtendOperator: " + field.getClass());
 							HRDBMSWorker.logger.error("Row: " + row);
 							HRDBMSWorker.logger.error("Cols2Pos: " + cols2Pos);
-							System.exit(1);
+							queue.put(new Exception("Unknown type in ExtendOperator: " + field.getClass()));
+							return 0D;
 						}
 					}
 					else
@@ -373,7 +386,13 @@ public final class ExtendOperator implements Operator, Serializable
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					try
+					{
+						queue.put(e);
+					}
+					catch(Exception f)
+					{}
+					return 0D;
 				}
 			}
 		}
@@ -424,7 +443,13 @@ public final class ExtendOperator implements Operator, Serializable
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					try
+					{
+						queue.put(e);
+					}
+					catch(Exception f)
+					{}
+					return;
 				}
 
 				if (o instanceof DataEndMarker)
@@ -432,19 +457,45 @@ public final class ExtendOperator implements Operator, Serializable
 					if (i > 0)
 					{
 						final Rootbeer rootbeer = new Rootbeer();
-						rootbeer.runAll(jobs);
-						i = 0;
-
-						for (final Kernel k : jobs)
+						try
 						{
-							((ExtendKernel)k).getRow().add(calced.get(i));
-							queue.put(((ExtendKernel)k).getRow());
-							i++;
+							rootbeer.runAll(jobs);
+							i = 0;
+
+							for (final Kernel k : jobs)
+							{
+								((ExtendKernel)k).getRow().add(calced.get(i));
+								queue.put(((ExtendKernel)k).getRow());
+								i++;
+							}
+						}
+						catch(Exception e)
+						{
+							try
+							{
+								queue.put(e);
+							}
+							catch(Exception f)
+							{}
+							return;
 						}
 					}
 
-					queue.put(o);
-					return;
+					try
+					{
+						queue.put(o);
+						return;
+					}
+					catch(Exception e)
+					{
+						try
+						{
+							queue.put(e);
+						}
+						catch(Exception f)
+						{}
+						return;
+					}
 				}
 
 				final ArrayList<Object> row = (ArrayList<Object>)o;
@@ -452,7 +503,20 @@ public final class ExtendOperator implements Operator, Serializable
 				{
 					final Double ppd = parsePrefixDouble(row);
 					row.add(ppd);
-					queue.put(row);
+					try
+					{
+						queue.put(row);
+					}
+					catch(Exception e)
+					{
+						try
+						{
+							queue.put(e);
+						}
+						catch(Exception f)
+						{}
+						return;
+					}
 				}
 				else
 				{
@@ -462,15 +526,28 @@ public final class ExtendOperator implements Operator, Serializable
 					if (i == ResourceManager.CUDA_SIZE)
 					{
 						final Rootbeer rootbeer = new Rootbeer();
-						rootbeer.runAll(jobs);
-						i = 0;
-
-						for (final Kernel k : jobs)
+						try
 						{
-							final Double ppd = calced.get(i);
-							((ExtendKernel)k).getRow().add(ppd);
-							queue.put(((ExtendKernel)k).getRow());
-							i++;
+							rootbeer.runAll(jobs);
+							i = 0;
+
+							for (final Kernel k : jobs)
+							{
+								final Double ppd = calced.get(i);
+								((ExtendKernel)k).getRow().add(ppd);
+								queue.put(((ExtendKernel)k).getRow());
+								i++;
+							}
+						}
+						catch(Exception e)
+						{
+							try
+							{
+								queue.put(e);
+							}
+							catch(Exception f)
+							{}
+							return;
 						}
 
 						i = 0;

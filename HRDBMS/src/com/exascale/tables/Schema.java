@@ -1337,6 +1337,19 @@ public class Schema
 				value = new MyDate(s.p.getLong(off));
 			}
 		}
+		
+		public DateFV(MyDate val)
+		{
+			this.exists = true;
+			if (val == null)
+			{
+				this.isNull = true;
+			}
+			else
+			{
+				this.value = val;
+			}
+		}
 
 		@Override
 		public MyDate getValue()
@@ -1457,6 +1470,19 @@ public class Schema
 			if (!isNull && exists)
 			{
 				value = s.p.getDouble(off);
+			}
+		}
+		
+		public DoubleFV(Double val)
+		{
+			this.exists = true;
+			if (val == null)
+			{
+				this.isNull = true;
+			}
+			else
+			{
+				this.value = val;
 			}
 		}
 
@@ -1599,6 +1625,19 @@ public class Schema
 			if (!isNull && exists)
 			{
 				value = s.p.getInt(off);
+			}
+		}
+		
+		public IntegerFV(Integer val)
+		{
+			this.exists = true;
+			if (val == null)
+			{
+				this.isNull = true;
+			}
+			else
+			{
+				this.value = val;
 			}
 		}
 
@@ -1839,6 +1878,26 @@ public class Schema
 				{
 					throw e;
 				}
+			}
+		}
+		
+		public VarcharFV(String val)
+		{
+			this.exists = true;
+			if (val == null)
+			{
+				this.isNull = true;
+				size = 0;
+			}
+			else
+			{
+				this.value = val;
+				try
+				{
+					size = 4 + val.getBytes("UTF-8").length;
+				}
+				catch(Exception e)
+				{}
 			}
 		}
 

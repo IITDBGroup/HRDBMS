@@ -1,6 +1,8 @@
 package com.exascale.filesystem;
 
-public class RID
+import java.io.Serializable;
+
+public class RID implements Serializable
 {
 	private int node = -1;
 	private int dev = -1;

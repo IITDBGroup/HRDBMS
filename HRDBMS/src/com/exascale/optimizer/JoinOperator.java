@@ -6,7 +6,7 @@ import java.util.HashSet;
 
 public abstract class JoinOperator implements Operator
 {
-	public static JoinOperator manufactureJoin(JoinOperator prod, SelectOperator select, MetaData meta)
+	public static JoinOperator manufactureJoin(JoinOperator prod, SelectOperator select, MetaData meta) throws Exception
 	{
 		final ArrayList<Filter> filters = select.getFilter();
 		if (prod instanceof ProductOperator)
@@ -52,7 +52,7 @@ public abstract class JoinOperator implements Operator
 
 	public abstract void addJoinCondition(ArrayList<Filter> filters);
 
-	public abstract void addJoinCondition(String left, String right);
+	public abstract void addJoinCondition(String left, String right) throws Exception;
 
 	@Override
 	public abstract JoinOperator clone();

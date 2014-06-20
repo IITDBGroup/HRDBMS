@@ -173,6 +173,10 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 		total.getAndIncrement();
 		while (!(o instanceof DataEndMarker))
 		{
+			if (o instanceof Exception)
+			{
+				throw (Exception)o;
+			}
 			for (final Filter filter : filters)
 			{
 				if (filter.passes((ArrayList<Object>)o, cols2Pos))
@@ -196,7 +200,7 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 	{
 		child.nextAll(op);
 		Object o = next(op);
-		while (!(o instanceof DataEndMarker))
+		while (!(o instanceof DataEndMarker) && !(o instanceof Exception))
 		{
 			o = next(op);
 		}
@@ -238,7 +242,7 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 	}
 
 	@Override
-	public void reset()
+	public void reset() throws Exception
 	{
 		child.reset();
 		passed = new AtomicLong(0);

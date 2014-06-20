@@ -193,7 +193,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 		return cols2Types;
 	}
 
-	public HashSet<HashMap<Filter, Filter>> getHSHM()
+	public HashSet<HashMap<Filter, Filter>> getHSHM() throws Exception
 	{
 		if (f != null)
 		{
@@ -212,7 +212,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			final HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
 			hm.put(filter, filter);
@@ -397,6 +397,10 @@ public final class AntiJoinOperator implements Operator, Serializable
 				{
 					return o;
 				}
+				else if (o instanceof Exception)
+				{
+					throw (Exception)o;
+				}
 
 				if (hshm == null)
 				{
@@ -494,6 +498,10 @@ public final class AntiJoinOperator implements Operator, Serializable
 				return o;
 			}
 		}
+		else if (o instanceof Exception)
+		{
+			throw (Exception)o;
+		}
 		return o;
 	}
 
@@ -503,7 +511,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 		children.get(0).nextAll(op);
 		children.get(1).nextAll(op);
 		Object o = next(op);
-		while (!(o instanceof DataEndMarker))
+		while (!(o instanceof DataEndMarker) && !(o instanceof Exception))
 		{
 			o = next(op);
 		}
@@ -543,10 +551,10 @@ public final class AntiJoinOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void reset()
+	public void reset() throws Exception
 	{
 		HRDBMSWorker.logger.error("AntiJoinOperator cannot be reset");
-		System.exit(1);
+		throw new Exception("AntiJoinOperator cannot be reset");
 	}
 
 	@Override
@@ -790,7 +798,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 		return isSort;
 	}
 
-	private Operator clone(Operator op)
+	private Operator clone(Operator op) throws Exception
 	{
 		final Operator clone = op.clone();
 		int i = 0;
@@ -827,7 +835,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 
 			i++;
@@ -847,7 +855,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 		return out;
 	}
 
-	private ArrayList<Index> dynamicIndexes(Operator model, Operator actual)
+	private ArrayList<Index> dynamicIndexes(Operator model, Operator actual) throws Exception
 	{
 		final ArrayList<Index> retval = new ArrayList<Index>(dynamicIndexes.size());
 		if (model instanceof IndexOperator)
@@ -869,7 +877,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("Model and actual don't match!", e);
-					System.exit(1);
+					throw e;
 				}
 				i++;
 			}
@@ -897,7 +905,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 		}
 	}
 
-	private Operator getClone()
+	private Operator getClone() throws Exception
 	{
 		synchronized (clones)
 		{
@@ -926,7 +934,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			if (clone instanceof TableScanOperator)
 			{
@@ -1202,7 +1210,12 @@ public final class AntiJoinOperator implements Operator, Serializable
 
 			if (nlHash != null)
 			{
-				nlHash.close();
+				try
+				{
+					nlHash.close();
+				}
+				catch(Exception e)
+				{}
 			}
 
 			// System.out.println("AntiJoinOperator output " + outCount.get() +
@@ -1213,7 +1226,6 @@ public final class AntiJoinOperator implements Operator, Serializable
 				try
 				{
 					outBuffer.put(new DataEndMarker());
-					inBuffer.close();
 					break;
 				}
 				catch (final Exception e)
@@ -1221,6 +1233,13 @@ public final class AntiJoinOperator implements Operator, Serializable
 					HRDBMSWorker.logger.error("", e);
 				}
 			}
+			
+			try
+			{
+				inBuffer.close();
+			}
+			catch(Exception e)
+			{}
 		}
 	}
 
@@ -1234,7 +1253,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 			this.filter = filter;
 		}
 
-		public void close()
+		public void close() throws Exception
 		{
 			for (final DiskBackedHashMap map : buckets)
 			{
@@ -1245,7 +1264,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 		}
@@ -1292,11 +1311,17 @@ public final class AntiJoinOperator implements Operator, Serializable
 				HRDBMSWorker.logger.error("Error in partial hash thread.", e);
 				HRDBMSWorker.logger.error("Left child cols to pos is: " + children.get(0).getCols2Pos());
 				HRDBMSWorker.logger.error("Right child cols to pos is: " + children.get(1).getCols2Pos());
-				System.exit(1);
+				try
+				{
+					outBuffer.put(e);
+				}
+				catch(Exception f)
+				{}
+				return;
 			}
 		}
 
-		private final ArrayList<ArrayList<Object>> getCandidates(long hash) throws ClassNotFoundException, IOException
+		private final ArrayList<ArrayList<Object>> getCandidates(long hash) throws Exception
 		{
 			final ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>();
 			int i = 0;
@@ -1455,7 +1480,13 @@ public final class AntiJoinOperator implements Operator, Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				try
+				{
+					outBuffer.put(e);
+				}
+				catch(Exception f)
+				{}
+				return;
 			}
 		}
 
@@ -1657,7 +1688,13 @@ public final class AntiJoinOperator implements Operator, Serializable
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					try
+					{
+						outBuffer.put(e);
+					}
+					catch(Exception f)
+					{}
+					return;
 				}
 			}
 		}
@@ -1854,7 +1891,13 @@ public final class AntiJoinOperator implements Operator, Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				try
+				{
+					outBuffer.put(e);
+				}
+				catch(Exception f)
+				{}
+				return;
 			}
 		}
 	}
@@ -1883,7 +1926,13 @@ public final class AntiJoinOperator implements Operator, Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				try
+				{
+					outBuffer.put(e);
+				}
+				catch(Exception f)
+				{}
+				return;
 			}
 		}
 	}

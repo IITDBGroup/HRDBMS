@@ -48,7 +48,7 @@ public final class Phase4
 		}
 	}
 
-	public long card(Operator op)
+	public long card(Operator op) throws Exception
 	{
 		final Long r = cCache.get(op);
 		if (r != null)
@@ -69,11 +69,39 @@ public final class Phase4
 			cCache.put(op, retval);
 			return retval;
 		}
+		
+		if (op instanceof ConcatOperator)
+		{
+			final long retval = card(op.children().get(0));
+			cCache.put(op, retval);
+			return retval;
+		}
+		
+		if (op instanceof DateMathOperator)
+		{
+			final long retval = card(op.children().get(0));
+			cCache.put(op, retval);
+			return retval;
+		}
+		
+		if (op instanceof ExceptOperator)
+		{
+			long card = card(op.children().get(0));
+			cCache.put(op, card);
+			return card;
+		}
 
 		if (op instanceof ExtendOperator)
 		{
 			final long retval = card(op.children().get(0));
 			cCache.put(op, retval);
+			return retval;
+		}
+		
+		if (op instanceof ExtendObjectOperator)
+		{
+			final long retval = card(op.children().get(0));
+			cCache.put(op,  retval);
 			return retval;
 		}
 
@@ -82,6 +110,23 @@ public final class Phase4
 			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((HashJoinOperator)op).getHSHM(), root));
 			cCache.put(op, retval);
 			return retval;
+		}
+		
+		if (op instanceof IntersectOperator)
+		{
+			long lCard = card(op.children().get(0));
+			long rCard = card(op.children().get(1));
+			
+			if (lCard <= rCard)
+			{
+				cCache.put(op, lCard);
+				return lCard;
+			}
+			else
+			{
+				cCache.put(op, rCard);
+				return rCard;
+			}
 		}
 
 		if (op instanceof MultiOperator)
@@ -251,11 +296,10 @@ public final class Phase4
 		}
 
 		HRDBMSWorker.logger.error("Unknown operator in card() in Phase4: " + op.getClass());
-		System.exit(1);
-		return 0;
+		throw new Exception("Unknown operator in card() in Phase4: " + op.getClass());
 	}
 
-	public void optimize()
+	public void optimize() throws Exception
 	{
 		if (meta.getNumNodes() > 1)
 		{
@@ -266,7 +310,7 @@ public final class Phase4
 		}
 	}
 
-	private void checkOrder(Operator op)
+	private void checkOrder(Operator op) throws Exception
 	{
 		final Operator parent = op;
 		final Operator left = parent.children().get(0);
@@ -284,7 +328,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 
 			Operator p = parent.parent();
@@ -300,7 +344,7 @@ public final class Phase4
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 				}
 
@@ -326,7 +370,7 @@ public final class Phase4
 		}
 	}
 
-	private Operator cloneTree(Operator op, int level)
+	private Operator cloneTree(Operator op, int level) throws Exception
 	{
 		final Operator clone = op.clone();
 		if (level == 0)
@@ -350,7 +394,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 		}
@@ -383,7 +427,7 @@ public final class Phase4
 		return retval;
 	}
 
-	private boolean doHashAnti(NetworkReceiveOperator receive)
+	private boolean doHashAnti(NetworkReceiveOperator receive) throws Exception
 	{
 		final Operator parent = receive.parent();
 		verify2ReceivesForHash(parent);
@@ -456,7 +500,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			send.setNode(node);
 			sends.add(send);
@@ -483,7 +527,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 		}
@@ -499,7 +543,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			clone.setNode(receive2.getNode());
 			parents.add(clone);
@@ -547,7 +591,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			send.setNode(node);
 			sends.add(send);
@@ -574,7 +618,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 		}
@@ -593,7 +637,7 @@ public final class Phase4
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 				}
 			}
@@ -607,7 +651,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 
@@ -622,7 +666,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 		try
@@ -632,7 +676,7 @@ public final class Phase4
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 		makeHierarchical2(r);
 		makeHierarchical(r);
@@ -640,7 +684,7 @@ public final class Phase4
 		return false;
 	}
 
-	private boolean doHashSemi(NetworkReceiveOperator receive)
+	private boolean doHashSemi(NetworkReceiveOperator receive) throws Exception
 	{
 		final Operator parent = receive.parent();
 		verify2ReceivesForHash(parent);
@@ -713,7 +757,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			send.setNode(node);
 			sends.add(send);
@@ -740,7 +784,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 		}
@@ -756,7 +800,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			clone.setNode(receive2.getNode());
 			parents.add(clone);
@@ -804,7 +848,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			send.setNode(node);
 			sends.add(send);
@@ -831,7 +875,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 		}
@@ -850,7 +894,7 @@ public final class Phase4
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 				}
 			}
@@ -864,7 +908,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 
@@ -879,7 +923,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 		try
@@ -889,7 +933,7 @@ public final class Phase4
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 		makeHierarchical2(r);
 		makeHierarchical(r);
@@ -897,7 +941,7 @@ public final class Phase4
 		return false;
 	}
 
-	private boolean doNonHashSemi(NetworkReceiveOperator receive)
+	private boolean doNonHashSemi(NetworkReceiveOperator receive) throws Exception
 	{
 		final Operator parent = receive.parent();
 		verify2ReceivesForSemi(parent);
@@ -938,7 +982,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 
 				for (final Operator o : (ArrayList<Operator>)clone.children().clone())
@@ -964,7 +1008,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 
 				final NetworkSendOperator send2 = new NetworkSendOperator(clone.getNode(), meta);
@@ -975,7 +1019,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 
 				sends2.add(send2);
@@ -993,7 +1037,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 
@@ -1004,7 +1048,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 
 			makeHierarchical(r);
@@ -1078,7 +1122,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			send.setNode(node);
 			sends.add(send);
@@ -1121,7 +1165,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 
 			receive2.setNode(grandChild.getNode());
@@ -1149,7 +1193,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 
@@ -1165,7 +1209,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 
@@ -1178,7 +1222,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 
 			sends2.add(send2);
@@ -1196,7 +1240,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 
@@ -1207,7 +1251,7 @@ public final class Phase4
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 
 		for (final NetworkReceiveOperator receive2 : receives)
@@ -1224,7 +1268,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 
 				c = p;
@@ -1238,7 +1282,7 @@ public final class Phase4
 		return false;
 	}
 
-	private void doSortRedistribution(SortOperator op)
+	private void doSortRedistribution(SortOperator op) throws Exception
 	{
 		final long numNodes = card(op) / MAX_LOCAL_SORT;
 		final int starting = getStartingNode(numNodes);
@@ -1255,7 +1299,7 @@ public final class Phase4
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 		rr.setNode(-1);
 
@@ -1279,7 +1323,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 
@@ -1297,7 +1341,7 @@ public final class Phase4
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 		makeHierarchical4(receive);
 		if (parent instanceof TopOperator)
@@ -1308,7 +1352,7 @@ public final class Phase4
 		cCache.clear();
 	}
 
-	private Operator fullyCloneTree(Operator op)
+	private Operator fullyCloneTree(Operator op) throws Exception
 	{
 		final Operator clone = op.clone();
 
@@ -1331,7 +1375,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 
@@ -1357,7 +1401,7 @@ public final class Phase4
 		return retval;
 	}
 
-	private SortOperator getLocalSort(Operator op)
+	private SortOperator getLocalSort(Operator op) throws Exception
 	{
 		SortOperator retval = null;
 		if (op instanceof SortOperator)
@@ -1370,9 +1414,9 @@ public final class Phase4
 				}
 				else
 				{
-					Exception e = new Exception();
+					Exception e = new Exception("Found more than 1 sort on the coord node!");
 					HRDBMSWorker.logger.error("Found more than 1 sort on the coord node!", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 		}
@@ -1390,9 +1434,9 @@ public final class Phase4
 					}
 					else
 					{
-						Exception e = new Exception();
+						Exception e = new Exception("Found more than 1 sort on the coord node!");
 						HRDBMSWorker.logger.error("Found more than 1 sort on the coord node!", e);
-						System.exit(1);
+						throw e;
 					}
 				}
 			}
@@ -1442,7 +1486,7 @@ public final class Phase4
 		return (int)(Math.random() * range);
 	}
 
-	private boolean handleMulti(NetworkReceiveOperator receive)
+	private boolean handleMulti(NetworkReceiveOperator receive) throws Exception
 	{
 		if (receive.children().size() == 1)
 		{
@@ -1481,7 +1525,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 				send.setNode(o.getNode());
 				sends.add(send);
@@ -1502,7 +1546,7 @@ public final class Phase4
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 				}
 				receives.add(hrec);
@@ -1526,7 +1570,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 
@@ -1537,7 +1581,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			cCache.clear();
 			return true;
@@ -1598,7 +1642,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 
@@ -1653,7 +1697,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 
@@ -1688,13 +1732,13 @@ public final class Phase4
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 		cCache.clear();
 		return false;
 	}
 
-	private boolean handleSort(NetworkReceiveOperator receive)
+	private boolean handleSort(NetworkReceiveOperator receive) throws Exception
 	{
 		if (receive.children().size() == 1)
 		{
@@ -1742,14 +1786,14 @@ public final class Phase4
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 
 		cCache.clear();
 		return false;
 	}
 
-	private boolean handleTop(NetworkReceiveOperator receive)
+	private boolean handleTop(NetworkReceiveOperator receive) throws Exception
 	{
 		if (receive.children().size() == 1)
 		{
@@ -1789,7 +1833,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 
@@ -1835,7 +1879,7 @@ public final class Phase4
 		return true;
 	}
 
-	private void makeHierarchical(NetworkReceiveOperator receive)
+	private void makeHierarchical(NetworkReceiveOperator receive) throws Exception
 	{
 		if (receive.children().size() > MAX_INCOMING_CONNECTIONS)
 		{
@@ -1867,7 +1911,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 				sends.remove(0);
 				i++;
@@ -1888,7 +1932,7 @@ public final class Phase4
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 					newReceive = new NetworkReceiveOperator(meta);
 					i = 0;
@@ -1899,7 +1943,7 @@ public final class Phase4
 		}
 	}
 
-	private void makeHierarchical2(NetworkReceiveOperator op)
+	private void makeHierarchical2(NetworkReceiveOperator op) throws Exception
 	{
 		// NetworkHashAndSend -> NetworkHashReceive
 		ArrayList<NetworkHashReceiveOperator> lreceives = new ArrayList<NetworkHashReceiveOperator>();
@@ -2003,7 +2047,7 @@ public final class Phase4
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 				}
 			}
@@ -2018,7 +2062,7 @@ public final class Phase4
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 				}
 			}
@@ -2059,7 +2103,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 
 			int j = 0;
@@ -2105,7 +2149,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 
 				if (dol)
@@ -2149,7 +2193,7 @@ public final class Phase4
 							catch (final Exception e)
 							{
 								HRDBMSWorker.logger.error("", e);
-								System.exit(1);
+								throw e;
 							}
 						}
 					}
@@ -2164,7 +2208,7 @@ public final class Phase4
 							catch (final Exception e)
 							{
 								HRDBMSWorker.logger.error("", e);
-								System.exit(1);
+								throw e;
 							}
 						}
 					}
@@ -2205,7 +2249,7 @@ public final class Phase4
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 
 					j = 0;
@@ -2238,7 +2282,7 @@ public final class Phase4
 		cCache.clear();
 	}
 
-	private void makeHierarchical3(NetworkReceiveOperator op)
+	private void makeHierarchical3(NetworkReceiveOperator op) throws Exception
 	{
 		// NetworkSendMultiple -> NetworkHashReceive
 		ArrayList<NetworkHashReceiveOperator> receives = new ArrayList<NetworkHashReceiveOperator>();
@@ -2290,7 +2334,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 
@@ -2305,7 +2349,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 
 			int j = 0;
@@ -2322,7 +2366,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 
 				receive.setID(newID);
@@ -2347,7 +2391,7 @@ public final class Phase4
 						catch (final Exception e)
 						{
 							HRDBMSWorker.logger.error("", e);
-							System.exit(1);
+							throw e;
 						}
 					}
 
@@ -2362,7 +2406,7 @@ public final class Phase4
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 
 					j = 0;
@@ -2376,7 +2420,7 @@ public final class Phase4
 		cCache.clear();
 	}
 
-	private void makeHierarchical4(NetworkReceiveOperator op)
+	private void makeHierarchical4(NetworkReceiveOperator op) throws Exception
 	{
 		// NetworkSendRR -> NetworkHashReceive
 		ArrayList<NetworkHashReceiveOperator> receives = new ArrayList<NetworkHashReceiveOperator>();
@@ -2415,7 +2459,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 
 			int newID = id.getAndIncrement();
@@ -2429,7 +2473,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 
 			int j = 0;
@@ -2443,7 +2487,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 
 				receive.setID(newID);
@@ -2465,7 +2509,7 @@ public final class Phase4
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 
 					newID = id.getAndIncrement();
@@ -2479,7 +2523,7 @@ public final class Phase4
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 
 					j = 0;
@@ -2493,7 +2537,7 @@ public final class Phase4
 		cCache.clear();
 	}
 
-	private boolean noLargeUpstreamJoins(Operator op)
+	private boolean noLargeUpstreamJoins(Operator op) throws Exception
 	{
 		Operator o = op.parent();
 		while (!(o instanceof RootOperator))
@@ -2666,7 +2710,7 @@ public final class Phase4
 		return retval;
 	}
 
-	private void pushAcross(NetworkReceiveOperator receive)
+	private void pushAcross(NetworkReceiveOperator receive) throws Exception
 	{
 		final Operator parent = receive.parent();
 		final Operator grandParent = parent.parent();
@@ -2708,12 +2752,12 @@ public final class Phase4
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 		cCache.clear();
 	}
 
-	private void pushUpReceives()
+	private void pushUpReceives() throws Exception
 	{
 		final HashSet<NetworkReceiveOperator> completed = new HashSet<NetworkReceiveOperator>();
 		final HashSet<NetworkReceiveOperator> eligible = new HashSet<NetworkReceiveOperator>();
@@ -2734,7 +2778,7 @@ public final class Phase4
 				}
 
 				final Operator op = receive.parent();
-				if (op instanceof SelectOperator || op instanceof YearOperator || op instanceof SubstringOperator || op instanceof ProjectOperator || op instanceof ExtendOperator || op instanceof RenameOperator || op instanceof ReorderOperator || op instanceof CaseOperator)
+				if (op instanceof SelectOperator || op instanceof YearOperator || op instanceof SubstringOperator || op instanceof ProjectOperator || op instanceof ExtendOperator || op instanceof RenameOperator || op instanceof ReorderOperator || op instanceof CaseOperator || op instanceof ExtendObjectOperator || op instanceof DateMathOperator || op instanceof ConcatOperator)
 				{
 					pushAcross(receive);
 					workToDo = true;
@@ -2962,7 +3006,7 @@ public final class Phase4
 		}
 	}
 
-	private boolean redistributeAnti(NetworkReceiveOperator receive)
+	private boolean redistributeAnti(NetworkReceiveOperator receive) throws Exception
 	{
 		if (((AntiJoinOperator)receive.parent()).usesHash())
 		{
@@ -2972,7 +3016,7 @@ public final class Phase4
 		return doNonHashSemi(receive);
 	}
 
-	private boolean redistributeHash(NetworkReceiveOperator receive)
+	private boolean redistributeHash(NetworkReceiveOperator receive) throws Exception
 	{
 		final Operator parent = receive.parent();
 		verify2ReceivesForHash(parent);
@@ -3045,7 +3089,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			send.setNode(node);
 			sends.add(send);
@@ -3072,7 +3116,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 		}
@@ -3088,7 +3132,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			clone.setNode(receive2.getNode());
 			parents.add(clone);
@@ -3136,7 +3180,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			send.setNode(node);
 			sends.add(send);
@@ -3163,7 +3207,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 		}
@@ -3182,7 +3226,7 @@ public final class Phase4
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 				}
 			}
@@ -3196,7 +3240,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 
@@ -3211,7 +3255,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 		try
@@ -3221,7 +3265,7 @@ public final class Phase4
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 		makeHierarchical2(r);
 		makeHierarchical(r);
@@ -3229,7 +3273,7 @@ public final class Phase4
 		return false;
 	}
 
-	private boolean redistributeNL(NetworkReceiveOperator receive)
+	private boolean redistributeNL(NetworkReceiveOperator receive) throws Exception
 	{
 		if (((NestedLoopJoinOperator)receive.parent()).usesHash())
 		{
@@ -3239,7 +3283,7 @@ public final class Phase4
 		return redistributeProduct(receive);
 	}
 
-	private boolean redistributeProduct(NetworkReceiveOperator receive)
+	private boolean redistributeProduct(NetworkReceiveOperator receive) throws Exception
 	{
 		final Operator parent = receive.parent();
 		verify2ReceivesForProduct(parent);
@@ -3280,7 +3324,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 
 				for (final Operator o : (ArrayList<Operator>)clone.children().clone())
@@ -3306,7 +3350,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 
 				final NetworkSendOperator send2 = new NetworkSendOperator(clone.getNode(), meta);
@@ -3317,7 +3361,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 
 				sends2.add(send2);
@@ -3335,7 +3379,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 
@@ -3346,7 +3390,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 
 			makeHierarchical(r);
@@ -3382,7 +3426,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			send.setNode(node);
 			sends.add(send);
@@ -3416,7 +3460,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 
 			receive2.setNode(grandChild.getNode());
@@ -3444,7 +3488,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 
@@ -3460,7 +3504,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 
@@ -3473,7 +3517,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 
 			sends2.add(send2);
@@ -3491,7 +3535,7 @@ public final class Phase4
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 
@@ -3502,7 +3546,7 @@ public final class Phase4
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 
 		for (final NetworkHashReceiveOperator receive2 : receives)
@@ -3519,7 +3563,7 @@ public final class Phase4
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 
 				c = p;
@@ -3533,7 +3577,7 @@ public final class Phase4
 		return false;
 	}
 
-	private boolean redistributeSemi(NetworkReceiveOperator receive)
+	private boolean redistributeSemi(NetworkReceiveOperator receive) throws Exception
 	{
 		if (((SemiJoinOperator)receive.parent()).usesHash())
 		{
@@ -3543,7 +3587,7 @@ public final class Phase4
 		return doNonHashSemi(receive);
 	}
 
-	private void redistributeSorts()
+	private void redistributeSorts() throws Exception
 	{
 		final SortOperator sort = getLocalSort(root);
 		if (sort != null && card(sort) > MAX_LOCAL_SORT)
@@ -3591,7 +3635,7 @@ public final class Phase4
 		return false;
 	}
 
-	private void verify2ReceivesForHash(Operator op)
+	private void verify2ReceivesForHash(Operator op) throws Exception
 	{
 		try
 		{
@@ -3624,11 +3668,11 @@ public final class Phase4
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 	}
 
-	private void verify2ReceivesForProduct(Operator op)
+	private void verify2ReceivesForProduct(Operator op) throws Exception
 	{
 		try
 		{
@@ -3687,11 +3731,11 @@ public final class Phase4
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 	}
 
-	private void verify2ReceivesForSemi(Operator op)
+	private void verify2ReceivesForSemi(Operator op) throws Exception
 	{
 		try
 		{
@@ -3750,7 +3794,7 @@ public final class Phase4
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 	}
 }

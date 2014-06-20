@@ -28,7 +28,7 @@ public final class RenameOperator implements Operator, Serializable
 		this.plan = plan;
 	}
 
-	public RenameOperator(ArrayList<String> oldVals, ArrayList<String> newVals, MetaData meta)
+	public RenameOperator(ArrayList<String> oldVals, ArrayList<String> newVals, MetaData meta) throws Exception
 	{
 		this.oldVals = oldVals;
 		this.newVals = newVals;
@@ -45,7 +45,7 @@ public final class RenameOperator implements Operator, Serializable
 		{
 			HRDBMSWorker.logger.error("Old = " + oldVals, e);
 			HRDBMSWorker.logger.error("New = " + newVals);
-			System.exit(1);
+			throw e;
 		}
 
 		this.meta = meta;
@@ -120,9 +120,16 @@ public final class RenameOperator implements Operator, Serializable
 	@Override
 	public RenameOperator clone()
 	{
-		final RenameOperator retval = new RenameOperator((ArrayList<String>)oldVals.clone(), (ArrayList<String>)newVals.clone(), meta);
-		retval.node = node;
-		return retval;
+		try
+		{
+			final RenameOperator retval = new RenameOperator((ArrayList<String>)oldVals.clone(), (ArrayList<String>)newVals.clone(), meta);
+			retval.node = node;
+			return retval;
+		}
+		catch(Exception e)
+		{
+			return null;
+		}
 	}
 
 	@Override
@@ -149,7 +156,7 @@ public final class RenameOperator implements Operator, Serializable
 		return cols2Types;
 	}
 
-	public HashMap<String, String> getIndexRenames()
+	public HashMap<String, String> getIndexRenames() throws Exception
 	{
 		final HashMap<String, String> retval = new HashMap<String, String>();
 		int i = 0;
@@ -164,7 +171,7 @@ public final class RenameOperator implements Operator, Serializable
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 
 		return retval;
@@ -203,7 +210,13 @@ public final class RenameOperator implements Operator, Serializable
 	@Override
 	public Object next(Operator op) throws Exception
 	{
-		return child.next(this);
+		Object o = child.next(this);
+		if (o instanceof Exception)
+		{
+			throw (Exception)o;
+		}
+		
+		return o;
 	}
 
 	@Override
@@ -211,7 +224,7 @@ public final class RenameOperator implements Operator, Serializable
 	{
 		child.nextAll(op);
 		Object o = next(op);
-		while (!(o instanceof DataEndMarker))
+		while (!(o instanceof DataEndMarker) && !(o instanceof Exception))
 		{
 			o = next(op);
 		}
@@ -253,7 +266,7 @@ public final class RenameOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void reset()
+	public void reset() throws Exception
 	{
 		child.reset();
 	}

@@ -17,13 +17,13 @@ public final class Phase2
 		meta = root.getMeta();
 	}
 
-	public void optimize()
+	public void optimize() throws Exception
 	{
 		setPartitionMetaData(root);
 		updateTree(root);
 	}
 
-	private ArrayList<Integer> determineHashMapEntries(TableScanOperator t, CNFFilter filter)
+	private ArrayList<Integer> determineHashMapEntries(TableScanOperator t, CNFFilter filter) throws Exception
 	{
 		if (t.isSingleNodeGroupSet())
 		{
@@ -73,7 +73,7 @@ public final class Phase2
 		}
 	}
 
-	private void setActiveDevices(TableScanOperator t, CNFFilter filter, Operator o)
+	private void setActiveDevices(TableScanOperator t, CNFFilter filter, Operator o) throws Exception
 	{
 		if (t.isSingleDeviceSet())
 		{
@@ -146,7 +146,7 @@ public final class Phase2
 		}
 	}
 
-	private void setActiveNodes(TableScanOperator t, CNFFilter filter, Operator o, ArrayList<ArrayList<Integer>> nodeLists)
+	private void setActiveNodes(TableScanOperator t, CNFFilter filter, Operator o, ArrayList<ArrayList<Integer>> nodeLists) throws Exception
 	{
 		if (t.isSingleNodeSet())
 		{
@@ -261,7 +261,7 @@ public final class Phase2
 		}
 	}
 
-	private void updateTree(Operator op)
+	private void updateTree(Operator op) throws Exception
 	{
 		if (op instanceof TableScanOperator)
 		{
@@ -354,7 +354,7 @@ public final class Phase2
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 					table.addActiveDevices(t.getDeviceList(o));
 					final CNFFilter cnf = t.getCNFForParent(o);
@@ -371,7 +371,7 @@ public final class Phase2
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 		}

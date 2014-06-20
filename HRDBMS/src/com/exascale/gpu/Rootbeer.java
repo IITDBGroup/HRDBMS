@@ -7,7 +7,7 @@ import com.exascale.optimizer.ExtendOperator.ExtendKernel;
 
 public class Rootbeer
 {
-	public void runAll(List<Kernel> jobs)
+	public void runAll(List<Kernel> jobs) throws Exception
 	{
 		HRDBMSWorker.logger.debug("Rootbeer runAll() called with " + jobs.size() + " jobs");
 		if (jobs.get(0) instanceof ExtendKernel)
@@ -51,7 +51,7 @@ public class Rootbeer
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 			extendKernel(rows, prefixBytes, results, jobs.size(), first.poses.size(), first.master.size(), prefixBytes.length);
@@ -64,7 +64,7 @@ public class Rootbeer
 		else
 		{
 			HRDBMSWorker.logger.error("Unknown kernel type in Rootbeer: " + jobs.get(0).getClass());
-			System.exit(1);
+			throw new Exception("Unknown kernel type in Rootbeer: " + jobs.get(0).getClass());
 		}
 	}
 

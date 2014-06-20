@@ -21,7 +21,12 @@ import com.exascale.logging.InsertLogRec;
 import com.exascale.logging.LogIterator;
 import com.exascale.logging.LogRec;
 import com.exascale.logging.NQCheckLogRec;
+import com.exascale.logging.NotReadyLogRec;
+import com.exascale.logging.PrepareLogRec;
+import com.exascale.logging.ReadyLogRec;
 import com.exascale.logging.RollbackLogRec;
+import com.exascale.logging.XAAbortLogRec;
+import com.exascale.logging.XACommitLogRec;
 import com.exascale.threads.ArchiverThread;
 import com.exascale.threads.HRDBMSThread;
 
@@ -55,6 +60,30 @@ public class LogManager extends HRDBMSThread
 	public static void commit(long txnum, String fn) throws IOException
 	{
 		final LogRec rec = new CommitLogRec(txnum);
+		write(rec, fn);
+		flush(rec.lsn(), fn);
+	}
+	
+	public static void ready(long txnum, String host) throws IOException
+	{
+		ready(txnum, host, filename);
+	}
+
+	public static void ready(long txnum, String host, String fn) throws IOException
+	{
+		final LogRec rec = new ReadyLogRec(txnum, host);
+		write(rec, fn);
+		flush(rec.lsn(), fn);
+	}
+	
+	public static void notReady(long txnum) throws IOException
+	{
+		notReady(txnum, filename);
+	}
+
+	public static void notReady(long txnum, String fn) throws IOException
+	{
+		final LogRec rec = new NotReadyLogRec(txnum);
 		write(rec, fn);
 		flush(rec.lsn(), fn);
 	}
@@ -297,6 +326,9 @@ public class LogManager extends HRDBMSThread
 			final Iterator<LogRec> iter = iterator(fn);
 			final HashSet<Long> commitList = new HashSet<Long>();
 			final HashSet<Long> rollbackList = new HashSet<Long>();
+			final HashSet<Long> needsCommit = new HashSet<Long>();
+			final HashSet<Long> commitListXA = new HashSet<Long>();
+			final HashSet<Long> rollbackListXA = new HashSet<Long>();
 			while (iter.hasNext())
 			{
 				final LogRec rec = iter.next();
@@ -304,9 +336,46 @@ public class LogManager extends HRDBMSThread
 				{
 					commitList.add(rec.txnum());
 				}
-				else if (rec.type() == LogRec.ROLLB)
+				else if (rec.type() == LogRec.ROLLB || rec.type() == LogRec.NOTREADY)
 				{
 					rollbackList.add(rec.txnum());
+				}
+				else if (rec.type() == LogRec.READY)
+				{
+					ReadyLogRec xa = (ReadyLogRec)rec.rebuild();
+					if (XAManager.askXAManager(xa))
+					{
+						commitList.add(rec.txnum());
+						needsCommit.add(rec.txnum());
+					}
+					else
+					{
+						rollbackList.add(rec.txnum());
+					}
+				}
+				else if (rec.type() == LogRec.XACOMMIT)
+				{
+					XACommitLogRec xa = (XACommitLogRec)rec.rebuild();
+					XAManager.phase2(xa.txnum(), xa.getNodes());
+					commitListXA.add(rec.txnum());
+				}
+				else if (rec.type() == LogRec.XAABORT)
+				{
+					XAAbortLogRec xa = (XAAbortLogRec)rec.rebuild();
+					XAManager.rollback(xa.txnum(), xa.getNodes());
+					rollbackListXA.add(rec.txnum());
+				}
+				else if (rec.type() == LogRec.PREPARE)
+				{
+					if (rollbackListXA.contains(rec.txnum()) || commitListXA.contains(rec.txnum()))
+					{
+					}
+					else
+					{
+						PrepareLogRec xa = (PrepareLogRec)rec.rebuild();
+						XAManager.rollback(xa.txnum(), xa.getNodes());
+						rollbackListXA.add(rec.txnum());
+					}
 				}
 				else if (rec.type() == LogRec.INSERT || rec.type() == LogRec.DELETE)
 				{
@@ -333,6 +402,10 @@ public class LogManager extends HRDBMSThread
 			}
 
 			((ForwardLogIterator)iter2).close();
+			for (long txnum : needsCommit)
+			{
+				this.commit(txnum);
+			}
 			final LogRec rec = new NQCheckLogRec(new HashSet<Long>());
 			write(rec, fn);
 			flush(rec.lsn(), fn);
@@ -347,8 +420,10 @@ public class LogManager extends HRDBMSThread
 		{
 			filename += "/";
 		}
+		String filename2 = new String(filename);
 		filename += "active.log";
-		final File log = new File(filename);
+		filename2 += "xa.log";
+		File log = new File(filename);
 		if (!log.exists())
 		{
 			try
@@ -374,12 +449,46 @@ public class LogManager extends HRDBMSThread
 			this.terminate();
 			return;
 		}
+		
+		if (HRDBMSWorker.type == HRDBMSWorker.TYPE_COORD || HRDBMSWorker.type == HRDBMSWorker.TYPE_MASTER)
+		{
+			log = new File(filename2);
+			if (!log.exists())
+			{
+				try
+				{
+					log.createNewFile();
+				}
+				catch (final Exception e)
+				{
+					HRDBMSWorker.logger.error("Error creating the xa log file.", e);
+					in = null;
+					this.terminate();
+					return;
+				}
+			}
+			try
+			{
+				getFile(filename2);
+			}
+			catch (final Exception e)
+			{
+				HRDBMSWorker.logger.error("Error getting a FileChannel for " + filename2, e);
+				in = null;
+				this.terminate();
+				return;
+			}
+		}
 
 		final int sleepSecs = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("log_clean_sleep_secs"));
 		try
 		{
 			recover(); // sync on everything possible to delay every synchronous
 						// method call
+			if (HRDBMSWorker.type == HRDBMSWorker.TYPE_COORD || HRDBMSWorker.type == HRDBMSWorker.TYPE_MASTER)
+			{
+				recover(filename2);
+			}
 		}
 		catch (final IOException e)
 		{

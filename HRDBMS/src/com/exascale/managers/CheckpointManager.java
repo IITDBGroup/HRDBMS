@@ -43,7 +43,7 @@ public class CheckpointManager extends HRDBMSThread
 					this.terminate();
 					return;
 				}
-				final LogRec rec = new NQCheckLogRec(new HashSet<Long>(Transaction.txList.keySet()));
+				LogRec rec = new NQCheckLogRec(new HashSet<Long>(Transaction.txList.keySet()));
 				LogManager.write(rec);
 				try
 				{
@@ -54,6 +54,33 @@ public class CheckpointManager extends HRDBMSThread
 					HRDBMSWorker.logger.error("Error flushing the log in Checkpoint Manager.", e);
 					this.terminate();
 					return;
+				}
+				
+				if (HRDBMSWorker.type == HRDBMSWorker.TYPE_COORD || HRDBMSWorker.type == HRDBMSWorker.TYPE_MASTER)
+				{
+					String filename = HRDBMSWorker.getHParms().getProperty("log_dir");
+					if (!filename.endsWith("/"))
+					{
+						filename += "/";
+					}
+					filename += "xa.log";
+					HashSet<Long> open = new HashSet<Long>();
+					for (Transaction tx : XAManager.txs.keySet())
+					{
+						open.add(tx.number());
+					}
+					rec = new NQCheckLogRec(open);
+					LogManager.write(rec, filename);
+					try
+					{
+						LogManager.flush(rec.lsn(), filename);
+					}
+					catch (final IOException e)
+					{
+						HRDBMSWorker.logger.error("Error flushing the log in Checkpoint Manager.", e);
+						this.terminate();
+						return;
+					}
 				}
 			}
 		}

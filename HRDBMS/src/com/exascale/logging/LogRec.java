@@ -3,6 +3,7 @@ package com.exascale.logging;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.ArrayList;
 import java.util.HashSet;
 import com.exascale.filesystem.Block;
 import com.exascale.managers.HRDBMSWorker;
@@ -13,9 +14,9 @@ public class LogRec
 	private final long txnum;
 	private long lsn;
 	private long timestamp;
-	private final ByteBuffer buffer;
+	protected final ByteBuffer buffer;
 
-	public static final int NQCHECK = 0, START = 1, COMMIT = 2, ROLLB = 3, INSERT = 4, DELETE = 5;
+	public static final int NQCHECK = 0, START = 1, COMMIT = 2, ROLLB = 3, INSERT = 4, DELETE = 5, PREPARE = 6, READY = 7, NOTREADY = 8, XACOMMIT = 9, XAABORT = 10;
 
 	public LogRec(FileChannel fc) throws IOException
 	{
@@ -84,6 +85,62 @@ public class LogRec
 			retval.setLSN(lsn);
 			retval.setTimeStamp(timestamp);
 			return retval;
+		}
+		
+		if (type == XACOMMIT)
+		{
+			buffer.position(28);
+			int size = buffer.getInt();
+			ArrayList<Integer> retval = new ArrayList<Integer>(size);
+			while (size > 0)
+			{
+				retval.add(buffer.getInt());
+				size--;
+			}
+			
+			return new XACommitLogRec(txnum, retval);
+		}
+		
+		if (type == XAABORT)
+		{
+			buffer.position(28);
+			int size = buffer.getInt();
+			ArrayList<Integer> retval = new ArrayList<Integer>(size);
+			while (size > 0)
+			{
+				retval.add(buffer.getInt());
+				size--;
+			}
+			
+			return new XAAbortLogRec(txnum, retval);
+		}
+		
+		if (type == PREPARE)
+		{
+			buffer.position(28);
+			int size = buffer.getInt();
+			ArrayList<Integer> retval = new ArrayList<Integer>(size);
+			while (size > 0)
+			{
+				retval.add(buffer.getInt());
+				size--;
+			}
+			
+			return new PrepareLogRec(txnum, retval);
+		}
+		
+		if (type == READY)
+		{
+			buffer.position(28);
+			int length = buffer.getInt();
+			byte[] data = new byte[length];
+			buffer.get(data);
+			try
+			{
+				return new ReadyLogRec(txnum, new String(data, "UTF-8"));
+			}
+			catch(Exception e)
+			{}
 		}
 
 		if (type == DELETE)

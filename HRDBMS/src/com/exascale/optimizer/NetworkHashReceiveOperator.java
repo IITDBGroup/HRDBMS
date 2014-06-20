@@ -47,7 +47,7 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 						catch (final java.net.ConnectException e)
 						{
 							HRDBMSWorker.logger.error("Connection failed to " + meta.getHostNameForNode(child.getNode()), e);
-							System.exit(1);
+							throw e;
 						}
 						socks.put(child, sock);
 						final OutputStream out = sock.getOutputStream();
@@ -102,6 +102,11 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 				outBuffer.put(new DataEndMarker());
 				return o;
 			}
+		}
+		
+		if (o instanceof Exception)
+		{
+			throw (Exception)o;
 		}
 		return o;
 	}

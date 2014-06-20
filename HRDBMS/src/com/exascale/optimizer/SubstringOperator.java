@@ -19,7 +19,7 @@ public final class SubstringOperator implements Operator, Serializable
 	private int colPos;
 	private final MetaData meta;
 	private final int start;
-	private final int end;
+	private int end = -1;
 	private int node;
 	private Plan plan;
 	
@@ -35,6 +35,14 @@ public final class SubstringOperator implements Operator, Serializable
 		this.name = name;
 		this.start = start;
 		this.end = end;
+	}
+	
+	public SubstringOperator(String col, int start, String name, MetaData meta)
+	{
+		this.col = col;
+		this.meta = meta;
+		this.name = name;
+		this.start = start;
 	}
 
 	@Override
@@ -140,10 +148,29 @@ public final class SubstringOperator implements Operator, Serializable
 		{
 			return o;
 		}
+		
+		if (o instanceof Exception)
+		{
+			throw (Exception)o;
+		}
 
 		final ArrayList<Object> row = (ArrayList<Object>)o;
 		final String field = (String)row.get(colPos);
-		row.add(field.substring(start, end));
+		if (end != -1)
+		{
+			if (end <= field.length())
+			{
+				row.add(field.substring(start, end));
+			}
+			else
+			{
+				row.add(field.substring(start));
+			}
+		}
+		else
+		{
+			row.add(field.substring(start));
+		}
 		return row;
 	}
 
@@ -152,7 +179,7 @@ public final class SubstringOperator implements Operator, Serializable
 	{
 		child.nextAll(op);
 		Object o = next(op);
-		while (!(o instanceof DataEndMarker))
+		while (!(o instanceof DataEndMarker) && !(o instanceof Exception))
 		{
 			o = next(op);
 		}
@@ -194,7 +221,7 @@ public final class SubstringOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void reset()
+	public void reset() throws Exception
 	{
 		child.reset();
 	}

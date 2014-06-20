@@ -153,6 +153,11 @@ public final class ProjectOperator implements Operator, Serializable
 		{
 			return o;
 		}
+		
+		if (o instanceof Exception)
+		{
+			throw (Exception)o;
+		}
 
 		final ArrayList<Object> row = (ArrayList<Object>)o;
 		final ArrayList<Object> retval = new ArrayList<Object>(pos2Get.size());
@@ -169,7 +174,7 @@ public final class ProjectOperator implements Operator, Serializable
 	{
 		child.nextAll(op);
 		Object o = next(op);
-		while (!(o instanceof DataEndMarker))
+		while (!(o instanceof DataEndMarker) && !(o instanceof Exception))
 		{
 			o = next(op);
 		}
@@ -211,7 +216,7 @@ public final class ProjectOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void reset()
+	public void reset() throws Exception
 	{
 		if (!startDone)
 		{
@@ -222,7 +227,7 @@ public final class ProjectOperator implements Operator, Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 		else

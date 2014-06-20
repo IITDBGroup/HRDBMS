@@ -225,6 +225,11 @@ public class NetworkReceiveOperator implements Operator, Serializable
 				return o;
 			}
 		}
+		
+		if (o instanceof Exception)
+		{
+			throw (Exception)o;
+		}
 		return o;
 	}
 
@@ -232,7 +237,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	public void nextAll(Operator op) throws Exception
 	{
 		Object o = next(op);
-		while (!(o instanceof DataEndMarker))
+		while (!(o instanceof DataEndMarker) && !(o instanceof Exception))
 		{
 			o = next(op);
 		}
@@ -271,10 +276,10 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void reset()
+	public void reset() throws Exception
 	{
 		HRDBMSWorker.logger.error("NetworkReceiveOperator does not support reset()");
-		System.exit(1);
+		throw new Exception("NetworkReceiveOperator does not support reset()");
 	}
 
 	@Override
@@ -363,7 +368,8 @@ public class NetworkReceiveOperator implements Operator, Serializable
 							if (temp == -1)
 							{
 								HRDBMSWorker.logger.error("Early EOF reading from socket connected to " + socks.get(op).getRemoteSocketAddress());
-								System.exit(1);
+								outBuffer.put(new Exception("Early EOF reading from socket connected to " + socks.get(op).getRemoteSocketAddress()));
+								return;
 							}
 							else
 							{
@@ -373,7 +379,8 @@ public class NetworkReceiveOperator implements Operator, Serializable
 						catch (final Exception e)
 						{
 							HRDBMSWorker.logger.error("Early EOF reading from socket connected to " + socks.get(op).getRemoteSocketAddress(), e);
-							System.exit(1);
+							outBuffer.put(new Exception("Early EOF reading from socket connected to " + socks.get(op).getRemoteSocketAddress()));
+							return;
 						}
 					}
 					bytes.getAndAdd(4);
@@ -390,7 +397,8 @@ public class NetworkReceiveOperator implements Operator, Serializable
 						catch (final Exception e)
 						{
 							HRDBMSWorker.logger.error("Early EOF reading from socket connected to " + socks.get(op).getRemoteSocketAddress(), e);
-							System.exit(1);
+							outBuffer.put(new Exception("Early EOF reading from socket connected to " + socks.get(op).getRemoteSocketAddress()));
+							return;
 						}
 					}
 					bytes.getAndAdd(size);
@@ -398,6 +406,12 @@ public class NetworkReceiveOperator implements Operator, Serializable
 
 					if (row instanceof DataEndMarker)
 					{
+						return;
+					}
+					
+					if (row instanceof Exception)
+					{
+						outBuffer.put((Exception)row);
 						return;
 					}
 
@@ -408,11 +422,17 @@ public class NetworkReceiveOperator implements Operator, Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				try
+				{
+					outBuffer.put(e);
+				}
+				catch(Exception f)
+				{}
+				return;
 			}
 		}
 
-		private Object fromBytes(byte[] val)
+		private Object fromBytes(byte[] val) throws Exception
 		{
 			final ByteBuffer bb = ByteBuffer.wrap(val);
 			final int numFields = bb.getInt();
@@ -421,7 +441,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 			{
 				HRDBMSWorker.logger.error("Negative number of fields in fromBytes()");
 				HRDBMSWorker.logger.error("NumFields = " + numFields);
-				System.exit(1);
+				throw new Exception("Negative number of fields in fromBytes()");
 			}
 
 			bb.position(bb.position() + numFields);
@@ -429,6 +449,21 @@ public class NetworkReceiveOperator implements Operator, Serializable
 			if (bytes[4] == 5)
 			{
 				return new DataEndMarker();
+			}
+			if (bytes[4] == 10)
+			{
+				final int length = bb.getInt();
+				final byte[] temp = new byte[length];
+				bb.get(temp);
+				try
+				{
+					final String o = new String(temp, "UTF-8");
+					return new Exception(o);
+				}
+				catch (final Exception e)
+				{
+					throw e;
+				}
 			}
 			final ArrayList<Object> retval = new ArrayList<Object>(numFields);
 			int i = 0;
@@ -472,13 +507,13 @@ public class NetworkReceiveOperator implements Operator, Serializable
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 				}
 				else
 				{
 					HRDBMSWorker.logger.error("Unknown type " + bytes[i + 4] + " in fromBytes()");
-					System.exit(1);
+					throw new Exception("Unknown type " + bytes[i + 4] + " in fromBytes()");
 				}
 
 				i++;

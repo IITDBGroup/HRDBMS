@@ -77,7 +77,7 @@ public final class Index implements Serializable
 		}
 	}
 	
-	private boolean isUnique() throws LockAbortException
+	private boolean isUnique() throws Exception
 	{
 		Block b = new Block(fileName, 0);
 		LockManager.sLock(b, tx.number());
@@ -90,13 +90,13 @@ public final class Index implements Serializable
 		catch(Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 		
 		return p.get(4) == 1;
 	}
 	
-	private boolean reallyViolatesUniqueConstraint(FieldValue[] keys) throws LockAbortException
+	private boolean reallyViolatesUniqueConstraint(FieldValue[] keys) throws Exception
 	{
 		IndexRecord line2 = line;
 		while (line2.keysMatch(keys))
@@ -114,6 +114,7 @@ public final class Index implements Serializable
 	
 	public void insert(FieldValue[] keys, RID rid) throws Exception
 	{
+		seek(13);
 		this.setEqualsPosMulti(keys);
 		if (line.keysMatch(keys))
 		{
@@ -147,6 +148,7 @@ public final class Index implements Serializable
 	
 	public void update(FieldValue[] keys, RID oldRid, RID newRid) throws Exception
 	{
+		seek(13);
 		this.setEqualsPosMulti(keys);
 		while (!line.getRid().equals(oldRid) || line.isTombstone())
 		{
@@ -163,6 +165,7 @@ public final class Index implements Serializable
 	
 	public void delete(FieldValue[] keys, RID rid) throws Exception
 	{
+		seek(13);
 		this.setEqualsPosMulti(keys);
 		while (!line.getRid().equals(rid) || line.isTombstone())
 		{
@@ -175,6 +178,26 @@ public final class Index implements Serializable
 		}
 		
 		line.markTombstone();
+	}
+	
+	public void massDelete() throws Exception
+	{
+		seek(13);
+		line = new IndexRecord(in, offset, tx);
+		while (!line.isLeaf())
+		{
+			line = line.getDown(0);
+		}
+		
+		while (!line.isNull())
+		{
+			if (!line.isTombstone())
+			{
+				line.markTombstone();
+			}
+			
+			line = line.nextRecord();
+		}
 	}
 	
 	private static final class BlockAndOffset
@@ -199,7 +222,7 @@ public final class Index implements Serializable
 		}
 	}
 	
-	private final void setEqualsPosMulti(FieldValue[] vals) throws LockAbortException
+	private final void setEqualsPosMulti(FieldValue[] vals) throws Exception
 	{
 		line = new IndexRecord(fileName, offset, tx);
 		
@@ -394,7 +417,7 @@ public final class Index implements Serializable
 		return secondary;
 	}
 
-	public Object next() 
+	public Object next() throws Exception
 	{
 		if (lastThread == null)
 		{
@@ -428,7 +451,7 @@ public final class Index implements Serializable
 			catch(Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			positioned = true;
 			iwt = new IndexWriterThread(keys);
@@ -452,11 +475,16 @@ public final class Index implements Serializable
 				return o;
 			}
 		}
+		
+		if (o instanceof Exception)
+		{
+			throw (Exception)o;
+		}
 		return o;
 
 	}
 
-	public void open(int device, MetaData meta)
+	public void open(int device, MetaData meta) throws Exception
 	{
 		try
 		{
@@ -465,7 +493,7 @@ public final class Index implements Serializable
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 
 		// if (delayed)
@@ -473,8 +501,13 @@ public final class Index implements Serializable
 		// System.out.println("Index is opened delayed");
 		// }
 	}
+	
+	public void open()
+	{
+		in = fileName;
+	}
 
-	public synchronized void reset()
+	public synchronized void reset() throws Exception
 	{
 		lastThread = null;
 
@@ -489,7 +522,7 @@ public final class Index implements Serializable
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 
 		delayed = true;
@@ -595,7 +628,7 @@ public final class Index implements Serializable
 		return super.toString() + ": " + keys.toString() + "f = " + f + "; secondary = " + secondary;
 	}
 
-	private Object calculateSecondaryStarting()
+	private Object calculateSecondaryStarting() throws Exception
 	{
 		for (final Filter filter : secondary)
 		{
@@ -717,13 +750,13 @@ public final class Index implements Serializable
 					else
 					{
 						HRDBMSWorker.logger.error("Unknown operator in Index: " + op);
-						System.exit(1);
+						throw new Exception("Unknown operator in Index: " + op);
 					}
 				}
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 			else
@@ -735,7 +768,7 @@ public final class Index implements Serializable
 		return null;
 	}
 
-	private void calculateSecondaryTerminations()
+	private void calculateSecondaryTerminations() throws Exception
 	{
 		for (final Filter filter : secondary)
 		{
@@ -869,13 +902,13 @@ public final class Index implements Serializable
 					else
 					{
 						HRDBMSWorker.logger.error("Unknown operator in Index: " + op);
-						System.exit(1);
+						throw new Exception("Unknown operator in Index: " + op);
 					}
 				}
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 			else
@@ -885,7 +918,7 @@ public final class Index implements Serializable
 		}
 	}
 
-	private boolean currentKeySatisfies()
+	private boolean currentKeySatisfies() throws Exception
 	{
 		if (line.isNull())
 		{
@@ -932,10 +965,8 @@ public final class Index implements Serializable
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
-
-		return false;
 	}
 
 	private ArrayList<Filter> deepClone(ArrayList<Filter> in)
@@ -949,7 +980,7 @@ public final class Index implements Serializable
 		return out;
 	}
 
-	private Object getObject(String val, String type)
+	private Object getObject(String val, String type) throws Exception
 	{
 		if (type.equals("INT"))
 		{
@@ -976,7 +1007,7 @@ public final class Index implements Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 
@@ -993,7 +1024,7 @@ public final class Index implements Serializable
 		return line.getPartialRid();
 	}
 
-	private boolean marksEnd()
+	private boolean marksEnd() throws Exception
 	{
 		if (line.isNull())
 		{
@@ -1020,7 +1051,7 @@ public final class Index implements Serializable
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 
 		return false;
@@ -1035,7 +1066,7 @@ public final class Index implements Serializable
 		return retval;
 	}
 	
-	private final void setEqualsPos(Object val) throws LockAbortException
+	private final void setEqualsPos(Object val) throws Exception
 	{
 		line = new IndexRecord(fileName, offset, tx);
 		
@@ -1225,7 +1256,7 @@ public final class Index implements Serializable
 	}
 	*/
 	
-	private final void setFirstPosition() throws LockAbortException
+	private final void setFirstPosition() throws Exception
 	{
 		line = new IndexRecord(in, offset, tx);
 		while (!line.isLeaf())
@@ -1268,7 +1299,7 @@ public final class Index implements Serializable
 	}
 */
 
-	private final void setStartingPos() throws LockAbortException
+	private final void setStartingPos() throws Exception
 	{
 		boolean doFirst = true;
 		Object equalVal = null;
@@ -1388,13 +1419,13 @@ public final class Index implements Serializable
 				else
 				{
 					HRDBMSWorker.logger.error("Unknown operator in Index: " + op);
-					System.exit(1);
+					throw new Exception("Unknown operator in Index: " + op);
 				}
 			}
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 		else
@@ -1509,7 +1540,13 @@ public final class Index implements Serializable
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						try
+						{
+							queue.put(e);
+						}
+						catch(Exception f)
+						{}
+						return;
 					}
 				}
 				else
@@ -1541,9 +1578,29 @@ public final class Index implements Serializable
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						try
+						{
+							queue.put(e);
+						}
+						catch(Exception f)
+						{}
+						return;
 					}
-					queue.put(row.clone());
+					try
+					{
+						queue.put(row.clone());
+					}
+					catch(Exception e)
+					{
+						HRDBMSWorker.logger.error("", e);
+						try
+						{
+							queue.put(e);
+						}
+						catch(Exception f)
+						{}
+						return;
+					}
 				}
 			}
 		}
@@ -1563,7 +1620,7 @@ public final class Index implements Serializable
 		private int numKeys;
 		private boolean isTombstone = false;
 		
-		public IndexRecord(String file, long offset, Transaction tx) throws LockAbortException
+		public IndexRecord(String file, long offset, Transaction tx) throws Exception
 		{
 			this.file = file;
 			this.tx = tx;
@@ -1578,7 +1635,7 @@ public final class Index implements Serializable
 			catch(Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			
 			isLeaf = (p.get(off+0) == 1);
@@ -1612,7 +1669,7 @@ public final class Index implements Serializable
 			return numKeys < 128;
 		}
 		
-		public boolean keysMatch(FieldValue[] keys)
+		public boolean keysMatch(FieldValue[] keys) throws Exception
 		{
 			ArrayList<Object> rhs = getKeys(types);
 			ArrayList<Object> lhs = new ArrayList<Object>(keys.length);
@@ -1630,14 +1687,14 @@ public final class Index implements Serializable
 			return new RID(node, device, blockNum, recNum);
 		}
 		
-		public IndexRecord getDown(int num) throws LockAbortException
+		public IndexRecord getDown(int num) throws Exception
 		{
 			int block = p.getInt(off+9+num*8);
 			int o = p.getInt(off+13+num*8);
 			return new IndexRecord(file, block, o, tx);
 		}
 		
-		public IndexRecord getDown(int num, boolean x) throws LockAbortException
+		public IndexRecord getDown(int num, boolean x) throws Exception
 		{
 			if (!x)
 			{
@@ -1666,7 +1723,7 @@ public final class Index implements Serializable
 			return lastFree - firstFree + 1;
 		}
 		
-		private byte[] genKeyBytes(FieldValue[] keys)
+		private byte[] genKeyBytes(FieldValue[] keys) throws Exception
 		{
 			int size = keys.length;
 			int i = 0;
@@ -1697,7 +1754,7 @@ public final class Index implements Serializable
 				else
 				{
 					HRDBMSWorker.logger.error("Unknown type in IndexRecord.genKeyBytes(): " + type);
-					System.exit(1);
+					throw new Exception("Unknown type in IndexRecord.genKeyBytes(): " + type);
 				}
 				
 				i++;
@@ -1736,7 +1793,7 @@ public final class Index implements Serializable
 					catch(Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 				}
 			}
@@ -1811,7 +1868,7 @@ public final class Index implements Serializable
 						else
 						{
 							HRDBMSWorker.logger.error("Unknown data type in IndexRecord.addDown(): " + type);
-							System.exit(1);
+							throw new Exception("Unknown data type in IndexRecord.addDown(): " + type);
 						}
 					}
 					
@@ -1964,7 +2021,7 @@ public final class Index implements Serializable
 				catch(Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 				
 				//move current index record to start of new page
@@ -2091,7 +2148,7 @@ public final class Index implements Serializable
 			catch(Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			
 			int numBytes = p.getInt(5);
@@ -2153,7 +2210,7 @@ public final class Index implements Serializable
 					else
 					{
 						HRDBMSWorker.logger.error("Unknown type in IndexRecord.split(): " + type);
-						System.exit(1);
+						throw new Exception("Unknown type in IndexRecord.split(): " + type);
 					}
 				}
 				
@@ -2200,7 +2257,7 @@ public final class Index implements Serializable
 					else
 					{
 						HRDBMSWorker.logger.error("Unknown type in IndexRecord.split(): " + type);
-						System.exit(1);
+						throw new Exception("Unknown type in IndexRecord.split(): " + type);
 					}
 				}
 				
@@ -2282,7 +2339,7 @@ public final class Index implements Serializable
 				catch(Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 				
 				firstFreeByte = p3.getInt(5);
@@ -2383,13 +2440,13 @@ public final class Index implements Serializable
 							catch(Exception e)
 							{
 								HRDBMSWorker.logger.error("", e);
-								System.exit(1);
+								throw e;
 							}
 						}
 						else
 						{
 							HRDBMSWorker.logger.error("Unknown type in IndexRecord.addInternalDown(): " + type);
-							System.exit(1);
+							throw new Exception("Unknown type in IndexRecord.addInternalDown(): " + type);
 						}
 					}
 					int i = 0;
@@ -2437,13 +2494,13 @@ public final class Index implements Serializable
 								catch(Exception e)
 								{
 									HRDBMSWorker.logger.error("", e);
-									System.exit(1);
+									throw e;
 								}
 							}
 							else
 							{
 								HRDBMSWorker.logger.error("Unknown type in IndexRecord.addInternalDown(): " + type);
-								System.exit(1);
+								throw new Exception("Unknown type in IndexRecord.addInternalDown(): " + type);
 							}
 						}
 						
@@ -2540,7 +2597,7 @@ public final class Index implements Serializable
 								else
 								{
 									HRDBMSWorker.logger.error("Unknown type in IndexRecord.addInternalDown(): " + type);
-									System.exit(1);
+									throw new Exception("Unknown type in IndexRecord.addInternalDown(): " + type);
 								}
 								
 							}
@@ -2591,7 +2648,7 @@ public final class Index implements Serializable
 					catch(Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 					
 					int length = p.getInt(5);
@@ -2669,7 +2726,7 @@ public final class Index implements Serializable
 			}
 		}
 		
-		private IndexRecord getDownMatchingKey(byte[] keyBytes) throws LockAbortException
+		private IndexRecord getDownMatchingKey(byte[] keyBytes) throws Exception
 		{
 			int o = off+9+129*8;
 			int i = 0;
@@ -2703,7 +2760,7 @@ public final class Index implements Serializable
 					else
 					{
 						HRDBMSWorker.logger.error("Unknown type in IndexRecord.getDownMatchingKey(): " + type);
-						System.exit(1);
+						throw new Exception("Unknown type in IndexRecord.getDownMatchingKey(): " + type);
 					}
 				}
 				
@@ -2723,7 +2780,7 @@ public final class Index implements Serializable
 			}
 		}
 		
-		private IndexRecord getRecordAfter(BlockAndOffset bao) throws LockAbortException
+		private IndexRecord getRecordAfter(BlockAndOffset bao) throws Exception
 		{
 			int o = off+9;
 			while (true)
@@ -2737,7 +2794,7 @@ public final class Index implements Serializable
 			}
 		}
 		
-		private ArrayList<Object> convertBytesToRow(byte[] keyBytes)
+		private ArrayList<Object> convertBytesToRow(byte[] keyBytes) throws Exception
 		{
 			ByteBuffer bb = ByteBuffer.wrap(keyBytes);
 			int o = 0;
@@ -2779,7 +2836,7 @@ public final class Index implements Serializable
 					catch(Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 				}
 			}
@@ -2787,7 +2844,7 @@ public final class Index implements Serializable
 			return retval;
 		}
 		
-		private byte[] getKeyBytesByIndex(int index)
+		private byte[] getKeyBytesByIndex(int index) throws Exception
 		{
 			int o = off+9;
 			int i = 0;
@@ -2820,7 +2877,7 @@ public final class Index implements Serializable
 					else
 					{
 						HRDBMSWorker.logger.error("Unknown type in IndexRecord.getKeyBytesByIndex(): " + type);
-						System.exit(1);
+						throw new Exception("Unknown type in IndexRecord.getKeyBytesByIndex(): " + type);
 					}
 				}
 				
@@ -2855,7 +2912,7 @@ public final class Index implements Serializable
 				else
 				{
 					HRDBMSWorker.logger.error("Unknown type in IndexRecord.getKeyBytesByIndex(): " + type);
-					System.exit(1);
+					throw new Exception("Unknown type in IndexRecord.getKeyBytesByIndex(): " + type);
 				}
 			}
 			
@@ -2864,7 +2921,7 @@ public final class Index implements Serializable
 			return retval;
 		}
 		
-		private void replaceDownKey(BlockAndOffset bao, byte[] keyBytes) throws IOException, LockAbortException
+		private void replaceDownKey(BlockAndOffset bao, byte[] keyBytes) throws Exception
 		{
 			int o = off+9;
 			int i = 0;
@@ -2916,7 +2973,7 @@ public final class Index implements Serializable
 					else
 					{
 						HRDBMSWorker.logger.error("Unknown type in IndexRecord.replaceDownKey(): " + type);
-						System.exit(1);
+						throw new Exception("Unknown type in IndexRecord.replaceDownKey(): " + type);
 					}
 				}
 				
@@ -2974,7 +3031,7 @@ public final class Index implements Serializable
 						else
 						{
 							HRDBMSWorker.logger.error("Unknown type in IndexRecord.replaceDownKey(): " + type);
-							System.exit(1);
+							throw new Exception("Unknown type in IndexRecord.replaceDownKey(): " + type);
 						}
 					}
 					
@@ -3050,7 +3107,7 @@ public final class Index implements Serializable
 							else
 							{
 								HRDBMSWorker.logger.error("Unknown type in IndexRecord.replaceDownKey(): " + type);
-								System.exit(1);
+								throw new Exception("Unknown type in IndexRecord.replaceDownKey(): " + type);
 							}
 						}
 						
@@ -3114,7 +3171,7 @@ public final class Index implements Serializable
 					catch(Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 					
 					int length = p.getInt(5);
@@ -3140,7 +3197,7 @@ public final class Index implements Serializable
 			}
 		}
 		
-		public BlockAndOffset writeNewLeaf(FieldValue[] keys, RID rid) throws IOException, LockAbortException
+		public BlockAndOffset writeNewLeaf(FieldValue[] keys, RID rid) throws Exception
 		{
 			int firstFree = p.getInt(5);
 			int lastFree = p.getInt(9);
@@ -3186,7 +3243,7 @@ public final class Index implements Serializable
 				catch(Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 				
 				firstFree = p2.getInt(5);
@@ -3224,7 +3281,7 @@ public final class Index implements Serializable
 			catch(Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			
 			//copy first 5 bytes
@@ -3277,7 +3334,7 @@ public final class Index implements Serializable
 			p.write(off+1, after.array(), tx.number(), rec.lsn());
 		}
 		
-		private void insertAfter(BlockAndOffset bao) throws LockAbortException
+		private void insertAfter(BlockAndOffset bao) throws Exception
 		{
 			IndexRecord next = new IndexRecord(file, nextBlock, nextOff, tx, true);
 			this.setNext(bao);
@@ -3302,7 +3359,7 @@ public final class Index implements Serializable
 			p.write(off+25, after.array(), tx.number(), rec.lsn());
 		}
 		
-		public IndexRecord(String file, int block, int offset, Transaction tx) throws LockAbortException
+		public IndexRecord(String file, int block, int offset, Transaction tx) throws Exception
 		{
 			this.file = file;
 			this.tx = tx;
@@ -3317,7 +3374,7 @@ public final class Index implements Serializable
 			catch(Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			
 			isLeaf = (p.get(off+0) == 1);
@@ -3346,7 +3403,7 @@ public final class Index implements Serializable
 			}
 		}
 		
-		public IndexRecord(String file, int block, int offset, Transaction tx, boolean x) throws LockAbortException
+		public IndexRecord(String file, int block, int offset, Transaction tx, boolean x) throws Exception
 		{
 			this.file = file;
 			this.tx = tx;
@@ -3361,7 +3418,7 @@ public final class Index implements Serializable
 			catch(Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			
 			isLeaf = (p.get(off+0) == 1);
@@ -3393,7 +3450,7 @@ public final class Index implements Serializable
 		private IndexRecord()
 		{}
 		
-		public ArrayList<Object> getKeys(ArrayList<String> types)
+		public ArrayList<Object> getKeys(ArrayList<String> types) throws Exception
 		{
 			int o = off+41;
 			ArrayList<Object> retval = new ArrayList<Object>(types.size());
@@ -3423,7 +3480,7 @@ public final class Index implements Serializable
 					catch(Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 					o += length;
 				}
@@ -3440,7 +3497,7 @@ public final class Index implements Serializable
 				else
 				{
 					HRDBMSWorker.logger.error("Unknown type in IndexRecord.getKeys(): " + type);
-					System.exit(1);
+					throw new Exception("Unknown type in IndexRecord.getKeys(): " + type);
 				}
 			}
 			
@@ -3462,7 +3519,7 @@ public final class Index implements Serializable
 			return (((long)blockNum) << 32) + recNum;
 		}
 		
-		public IndexRecord nextRecord() throws LockAbortException
+		public IndexRecord nextRecord() throws Exception
 		{
 			if (nextBlock == 0 && nextOff == 0)
 			{
@@ -3474,7 +3531,7 @@ public final class Index implements Serializable
 			return new IndexRecord(file, nextBlock, nextOff, tx);
 		}
 		
-		public IndexRecord prevRecord() throws LockAbortException
+		public IndexRecord prevRecord() throws Exception
 		{
 			if (prevBlock == 0 && prevOff == 0)
 			{
@@ -3486,7 +3543,7 @@ public final class Index implements Serializable
 			return new IndexRecord(file, prevBlock, prevOff, tx);
 		}
 		
-		public IndexRecord prevRecord(boolean x) throws LockAbortException
+		public IndexRecord prevRecord(boolean x) throws Exception
 		{
 			if (!x)
 			{
@@ -3503,7 +3560,7 @@ public final class Index implements Serializable
 			return new IndexRecord(file, prevBlock, prevOff, tx, true);
 		}
 		
-		public IndexRecord nextRecord(boolean x) throws LockAbortException
+		public IndexRecord nextRecord(boolean x) throws Exception
 		{
 			if (!x)
 			{
@@ -3520,7 +3577,7 @@ public final class Index implements Serializable
 			return new IndexRecord(file, nextBlock, nextOff, tx, true);
 		}
 		
-		public IndexRecord getUp() throws LockAbortException
+		public IndexRecord getUp() throws Exception
 		{
 			if (upBlock == 0 && upOff == 0)
 			{
@@ -3532,7 +3589,7 @@ public final class Index implements Serializable
 			return new IndexRecord(file, upBlock, upOff, tx);
 		}
 		
-		public IndexRecord getUp(boolean x) throws LockAbortException
+		public IndexRecord getUp(boolean x) throws Exception
 		{
 			if (upBlock == 0 && upOff == 0)
 			{
@@ -3556,7 +3613,7 @@ public final class Index implements Serializable
 			return isLeaf;
 		}
 		
-		private ArrayList<Object> getInternalKeys(ArrayList<String> types)
+		private ArrayList<Object> getInternalKeys(ArrayList<String> types) throws Exception
 		{
 			ArrayList<Object> retval = new ArrayList<Object>(types.size());
 			for (String type : types)
@@ -3584,7 +3641,7 @@ public final class Index implements Serializable
 					catch(Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 					keyOff += length;
 				}
@@ -3601,7 +3658,7 @@ public final class Index implements Serializable
 				else
 				{
 					HRDBMSWorker.logger.error("Unknown type in IndexRecord.getInternalKeys(): " + type);
-					System.exit(1);
+					throw new Exception("Unknown type in IndexRecord.getInternalKeys(): " + type);
 				}
 			}
 			
@@ -3634,7 +3691,14 @@ public final class Index implements Serializable
 			@Override
 			public Object next()
 			{
-				return getInternalKeys(types);
+				try
+				{
+					return getInternalKeys(types);
+				}
+				catch(Exception e)
+				{
+					return null;
+				}
 			}
 
 			@Override

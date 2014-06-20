@@ -64,6 +64,7 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("archive_dir", "/home/hrdbms/");
 		retval.setProperty("hrdbms_user", "hrdbms");
 		retval.setProperty("Xmx_string", "64g");
+		retval.setProperty("number_of_coords", "1");
 		return retval;
 	}
 }

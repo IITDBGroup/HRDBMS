@@ -72,6 +72,66 @@ public final class TableScanOperator implements Operator, Serializable
 	private static int PAGES_IN_ADVANCE;
 	private Transaction tx;
 	private Plan plan;
+	private String alias;
+	private boolean getRID = false;
+	
+	public boolean isGetRID()
+	{
+		return getRID;
+	}
+	
+	public void getRID()
+	{
+		getRID = true;
+		cols2Types.put("_RID1", "INT");
+		cols2Types.put("_RID2", "INT");
+		cols2Types.put("_RID3", "INT");
+		cols2Types.put("_RID4", "INT");
+		
+		HashMap<String, Integer> newCols2Pos = new HashMap<String, Integer>();
+		TreeMap<Integer, String> newPos2Col = new TreeMap<Integer, String>();
+		newCols2Pos.put("_RID1", 0);
+		newCols2Pos.put("_RID2", 1);
+		newCols2Pos.put("_RID3", 2);
+		newCols2Pos.put("_RID4", 3);
+		newPos2Col.put(0, "_RID1");
+		newPos2Col.put(1, "_RID2");
+		newPos2Col.put(2, "_RID3");
+		newPos2Col.put(3, "_RID4");
+		for (Map.Entry entry : cols2Pos.entrySet())
+		{
+			newCols2Pos.put((String)entry.getKey(), (Integer)entry.getValue() + 4);
+			newPos2Col.put((Integer)entry.getValue() + 4, (String)entry.getKey());
+		}
+		cols2Pos = newCols2Pos;
+		pos2Col = newPos2Col;
+	}
+	
+	public void setAlias(String alias)
+	{
+		this.alias = alias;
+		TreeMap<Integer, String> newPos2Col = new TreeMap<Integer, String>();
+		HashMap<String, Integer> newCols2Pos = new HashMap<String, Integer>();
+		HashMap<String, String> newCols2Types = new HashMap<String, String>();
+		for (Map.Entry entry : pos2Col.entrySet())
+		{
+			String val = (String)entry.getValue();
+			val = val.substring(val.indexOf('.') + 1);
+			newPos2Col.put((Integer)entry.getKey(), alias + "." + val);
+			newCols2Pos.put(alias + "." + val, (Integer)entry.getKey());
+		}
+		
+		for (Map.Entry entry : cols2Types.entrySet())
+		{
+			String val = (String)entry.getKey();
+			val = val.substring(val.indexOf('.') + 1);
+			newCols2Types.put(alias + "." + val, (String)entry.getValue());
+		}
+		
+		pos2Col = newPos2Col;
+		cols2Pos = newCols2Pos;
+		cols2Types = newCols2Types;
+	}
 	
 	public void setPlan(Plan plan)
 	{
@@ -246,7 +306,7 @@ public final class TableScanOperator implements Operator, Serializable
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			return null;
 		}
 		retval.neededPos = (ArrayList<Integer>)neededPos.clone();
 		retval.fetchPos = (ArrayList<Integer>)fetchPos.clone();
@@ -261,11 +321,15 @@ public final class TableScanOperator implements Operator, Serializable
 		retval.node = node;
 		retval.devices = (ArrayList<Integer>)devices.clone();
 		retval.indexOnly = indexOnly;
+		if (alias != null)
+		{
+			retval.setAlias(alias);
+		}
 		return retval;
 	}
 
 	@Override
-	public void close() throws IOException
+	public void close() throws Exception
 	{
 		for (final Operator o : children)
 		{
@@ -276,7 +340,7 @@ public final class TableScanOperator implements Operator, Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 	}
@@ -357,7 +421,7 @@ public final class TableScanOperator implements Operator, Serializable
 		return partMeta.getDeviceRanges();
 	}
 
-	public ArrayList<Integer> getDevicesMatchingRangeFilters(ArrayList<Filter> rangeFilters)
+	public ArrayList<Integer> getDevicesMatchingRangeFilters(ArrayList<Filter> rangeFilters) throws Exception
 	{
 		final ArrayList<Integer> retval = new ArrayList<Integer>();
 		ArrayList<Integer> deviceList = null;
@@ -450,7 +514,7 @@ public final class TableScanOperator implements Operator, Serializable
 		return partMeta.getNodeGroupRanges();
 	}
 
-	public ArrayList<Integer> getNodeGroupsMatchingRangeFilters(ArrayList<Filter> rangeFilters)
+	public ArrayList<Integer> getNodeGroupsMatchingRangeFilters(ArrayList<Filter> rangeFilters) throws Exception
 	{
 		final ArrayList<Integer> retval = new ArrayList<Integer>();
 		final ArrayList<Integer> nodeGroupList = partMeta.nodeGroupSet();
@@ -496,7 +560,7 @@ public final class TableScanOperator implements Operator, Serializable
 		return partMeta.getNodeRanges();
 	}
 
-	public ArrayList<Integer> getNodesMatchingRangeFilters(ArrayList<Filter> rangeFilters)
+	public ArrayList<Integer> getNodesMatchingRangeFilters(ArrayList<Filter> rangeFilters) throws Exception
 	{
 		final ArrayList<Integer> retval = new ArrayList<Integer>();
 		ArrayList<Integer> nodeList = null;
@@ -654,6 +718,11 @@ public final class TableScanOperator implements Operator, Serializable
 					return o;
 				}
 			}
+			
+			if (o instanceof Exception)
+			{
+				throw (Exception)o;
+			}
 			return o;
 		}
 		else
@@ -673,6 +742,11 @@ public final class TableScanOperator implements Operator, Serializable
 					readBuffer.put(new DataEndMarker());
 					return o;
 				}
+			}
+			
+			if (o instanceof Exception)
+			{
+				throw (Exception)o;
 			}
 			return o;
 		}
@@ -710,7 +784,7 @@ public final class TableScanOperator implements Operator, Serializable
 	}
 
 	@Override
-	public Operator parent()
+	public Operator parent() throws UnsupportedOperationException
 	{
 		throw new UnsupportedOperationException("TableScanOperator does not support parent()");
 	}
@@ -750,7 +824,7 @@ public final class TableScanOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void reset()
+	public void reset() throws Exception
 	{
 		if (!startDone)
 		{
@@ -761,7 +835,7 @@ public final class TableScanOperator implements Operator, Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 		else
@@ -775,7 +849,7 @@ public final class TableScanOperator implements Operator, Serializable
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 
@@ -893,7 +967,7 @@ public final class TableScanOperator implements Operator, Serializable
 	}
 
 	@Override
-	public synchronized void start() throws IOException
+	public synchronized void start() throws Exception
 	{
 		if (!startDone)
 		{
@@ -908,7 +982,7 @@ public final class TableScanOperator implements Operator, Serializable
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 
@@ -976,7 +1050,7 @@ public final class TableScanOperator implements Operator, Serializable
 		return retval;
 	}
 
-	private boolean canAnythingInRangeSatisfyFilters(ArrayList<Filter> filters, Object lowLE, Object highLE)
+	private boolean canAnythingInRangeSatisfyFilters(ArrayList<Filter> filters, Object lowLE, Object highLE) throws Exception
 	{
 		if (lowLE == null)
 		{
@@ -1080,7 +1154,7 @@ public final class TableScanOperator implements Operator, Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 
@@ -1136,7 +1210,13 @@ public final class TableScanOperator implements Operator, Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				try
+				{
+					readBuffer.put(e);
+				}
+				catch(Exception f)
+				{}
+				return;
 			}
 		}
 	}
@@ -1234,6 +1314,14 @@ public final class TableScanOperator implements Operator, Serializable
 								continue;
 							}
 							final ArrayList<Object> row = new ArrayList<Object>(types.size());
+							if (getRID)
+							{
+								RID rid = r.getRID();
+								row.add(rid.getNode());
+								row.add(rid.getDevice());
+								row.add(rid.getBlockNum());
+								row.add(rid.getRecNum());
+							}
 							int j = 0;
 							while (j < fetchPos.size())
 							{
@@ -1330,7 +1418,8 @@ public final class TableScanOperator implements Operator, Serializable
 						HRDBMSWorker.logger.error("ins2Device.get(in2) = " + ins2Device.get(in2));
 						HRDBMSWorker.logger.error("device2Child = " + device2Child);
 						HRDBMSWorker.logger.error("device2Child.get(ins2Device.get(in2)) = " + device2Child.get(ins2Device.get(in2)));
-						System.exit(1);
+						readBuffer.put(e);
+						return;
 					}
 					// @?Parallel
 					int device = ins2Device.get(in2);
@@ -1381,6 +1470,13 @@ public final class TableScanOperator implements Operator, Serializable
 							}
 							final Row r = sch.getRow(new RID(node, device, blockNum, recNum));
 							final ArrayList<Object> row = new ArrayList<Object>(types.size());
+							if (getRID)
+							{
+								row.add(node);
+								row.add(device);
+								row.add(blockNum);
+								row.add(recNum);
+							}
 							int j = 0;
 							while (j < fetchPos.size())
 							{
@@ -1502,7 +1598,13 @@ public final class TableScanOperator implements Operator, Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				try
+				{
+					readBuffer.put(e);
+				}
+				catch(Exception f)
+				{}
+				return;
 			}
 		}
 	}

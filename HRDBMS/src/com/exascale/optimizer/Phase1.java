@@ -334,7 +334,7 @@ public final class Phase1
 		return retval;
 	}
 
-	private void mergeSelectsAndTableScans(Operator op)
+	private void mergeSelectsAndTableScans(Operator op) throws Exception
 	{
 		try
 		{
@@ -377,11 +377,11 @@ public final class Phase1
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 	}
 
-	private void pushDownProjects()
+	private void pushDownProjects() throws Exception
 	{
 		final HashSet<String> references = new HashSet<String>();
 		for (final Operator o : root.children())
@@ -421,7 +421,7 @@ public final class Phase1
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 		}
@@ -461,7 +461,7 @@ public final class Phase1
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 
@@ -479,14 +479,14 @@ public final class Phase1
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 				}
 			}
 		}
 	}
 
-	private void pushDownSelects(Operator op)
+	private void pushDownSelects(Operator op) throws Exception
 	{
 		if (op instanceof SelectOperator)
 		{
@@ -574,7 +574,7 @@ public final class Phase1
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 
 					if (!(child instanceof SelectOperator))
@@ -608,7 +608,7 @@ public final class Phase1
 		}
 	}
 
-	private void pushUpSelects(Operator op)
+	private void pushUpSelects(Operator op) throws Exception
 	{
 		if (op instanceof SelectOperator)
 		{
@@ -661,7 +661,7 @@ public final class Phase1
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 
 					pushUpSelects(op, next);
@@ -688,7 +688,7 @@ public final class Phase1
 		}
 	}
 
-	private void pushUpSelects(Operator op, ArrayList<Operator> next)
+	private void pushUpSelects(Operator op, ArrayList<Operator> next) throws Exception
 	{
 		if (op instanceof SelectOperator)
 		{
@@ -740,7 +740,7 @@ public final class Phase1
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 
 					pushUpSelects(op, next);
@@ -754,7 +754,7 @@ public final class Phase1
 		else
 		{
 			HRDBMSWorker.logger.error("This should never happen!");
-			System.exit(1);
+			throw new Exception("This should never happen!");
 		}
 	}
 
@@ -764,7 +764,7 @@ public final class Phase1
 		replaceTableScanOperators(root, tables);
 	}
 
-	private void reorderProducts(Operator op)
+	private void reorderProducts(Operator op) throws Exception
 	{
 		try
 		{
@@ -787,7 +787,7 @@ public final class Phase1
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 	}
 

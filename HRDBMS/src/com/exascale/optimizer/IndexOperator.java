@@ -146,7 +146,13 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 	{
 		if (!forceDone)
 		{
-			return index.next();
+			Object o = index.next();
+			if (o instanceof Exception)
+			{
+				throw (Exception)o;
+			}
+			
+			return o;
 		}
 		else
 		{
@@ -191,7 +197,7 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 	}
 
 	@Override
-	public void reset()
+	public void reset() throws Exception
 	{
 		if (!startCalled)
 		{
@@ -202,6 +208,7 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
+				throw e;
 			}
 		}
 		else
@@ -260,7 +267,7 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 			else
 			{
 				HRDBMSWorker.logger.error("Start called more than once on IndexOperator!");
-				System.exit(1);
+				throw new Exception("Start called more than once on IndexOperator!");
 			}
 		}
 		index.open(device, meta);

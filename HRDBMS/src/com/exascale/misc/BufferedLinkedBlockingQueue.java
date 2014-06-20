@@ -59,13 +59,13 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 		return oa.peek(q);
 	}
 
-	public void put(Object o)
+	public void put(Object o) throws Exception
 	{
 		if (o == null)
 		{
-			Exception e = new Exception();
+			Exception e = new Exception("Null object placed on queue");
 			HRDBMSWorker.logger.error("Null object placed on queue", e);
-			System.exit(1);
+			throw e;
 		}
 		ArrayAndIndex oa = threadLocal.get(Thread.currentThread());
 		if (oa == null)

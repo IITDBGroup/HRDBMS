@@ -376,7 +376,7 @@ public final class ResourceManager extends HRDBMSThread
 			}
 		}
 
-		public V get(ArrayList<Object> key)
+		public V get(ArrayList<Object> key) throws Exception
 		{
 			long plus = 0;
 			final long hash = hash(key);
@@ -438,13 +438,11 @@ public final class ResourceManager extends HRDBMSThread
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
-
-			return null;
 		}
 
-		public Set<ArrayList<Object>> keySet()
+		public Set<ArrayList<Object>> keySet() throws Exception
 		{
 			keys.lock.readLock().lock();
 			final HashSet retval = new HashSet<ArrayList<Object>>((keys.size() >= 0 && keys.size() <= Integer.MAX_VALUE) ? (int)keys.size() : Integer.MAX_VALUE);
@@ -482,14 +480,14 @@ public final class ResourceManager extends HRDBMSThread
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 
 			return retval;
 		}
 
-		public void put(ArrayList<Object> key, V value)
+		public void put(ArrayList<Object> key, V value) throws Exception
 		{
 			ArrayList<Object> temp;
 			if (!(value instanceof ArrayList))
@@ -515,11 +513,11 @@ public final class ResourceManager extends HRDBMSThread
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 
-		public Object putIfAbsent(ArrayList<Object> key, V value)
+		public Object putIfAbsent(ArrayList<Object> key, V value) throws Exception
 		{
 			ArrayList<Object> temp;
 			if (!(value instanceof ArrayList))
@@ -556,7 +554,7 @@ public final class ResourceManager extends HRDBMSThread
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 
 			return null;
@@ -590,12 +588,12 @@ public final class ResourceManager extends HRDBMSThread
 			internal.close();
 		}
 
-		public boolean contains(Object val)
+		public boolean contains(Object val) throws Exception
 		{
 			return internal.containsValue(val);
 		}
 
-		public Object get(long index) throws ClassNotFoundException, IOException
+		public Object get(long index) throws Exception
 		{
 			return internal.get(index);
 		}
@@ -796,7 +794,7 @@ public final class ResourceManager extends HRDBMSThread
 			}
 		}
 
-		public boolean containsValue(Object val)
+		public boolean containsValue(Object val) throws Exception
 		{
 			ArrayList<Object> val2 = null;
 			if (val instanceof ArrayList)
@@ -851,7 +849,7 @@ public final class ResourceManager extends HRDBMSThread
 			return;
 		}
 
-		public final ArrayList<Object> get(Long key) throws IOException, ClassNotFoundException
+		public final ArrayList<Object> get(Long key) throws Exception
 		{
 			ArrayList<Object> o = null;
 			o = internal.get(key);
@@ -863,7 +861,7 @@ public final class ResourceManager extends HRDBMSThread
 			return (ArrayList<Object>)getFromDisk(key);
 		}
 
-		public final ArrayList<Object> getAllFromDisk() throws IOException, ClassNotFoundException
+		public final ArrayList<Object> getAllFromDisk() throws Exception
 		{
 			if (!filesAllocated)
 			{
@@ -924,7 +922,7 @@ public final class ResourceManager extends HRDBMSThread
 			return retval;
 		}
 
-		public final FileChannelAndInt getFreeFC(int hash)
+		public final FileChannelAndInt getFreeFC(int hash) throws Exception
 		{
 			int i = 0;
 			final Vector<Boolean> locks = locksArrayList.get(hash);
@@ -956,12 +954,11 @@ public final class ResourceManager extends HRDBMSThread
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
-				return null;
+				throw e;
 			}
 		}
 
-		public final Object getFromDisk(Long keyVal) throws IOException, ClassNotFoundException
+		public final Object getFromDisk(Long keyVal) throws Exception
 		{
 			// ByteBuffer keyBB = ByteBuffer.allocate(8);
 			// keyBB.putLong(keyVal.longValue());
@@ -1633,7 +1630,7 @@ public final class ResourceManager extends HRDBMSThread
 			return;
 		}
 
-		private final byte[] arrayListToBytes(ArrayList<InternalConcurrentHashMap.WriteThroughEntry> entries)
+		private final byte[] arrayListToBytes(ArrayList<InternalConcurrentHashMap.WriteThroughEntry> entries) throws Exception
 		{
 			final ArrayList<byte[]> results = new ArrayList<byte[]>(entries.size());
 			for (final InternalConcurrentHashMap.WriteThroughEntry entry : entries)
@@ -1704,9 +1701,9 @@ public final class ResourceManager extends HRDBMSThread
 					{
 						if (((ArrayList)o).size() != 0)
 						{
-							Exception e = new Exception();
+							Exception e = new Exception("Non-zero size ArrayList in toBytes()");
 							HRDBMSWorker.logger.error("Non-zero size ArrayList in toBytes()", e);
-							System.exit(1);
+							throw e;
 						}
 						header[i] = (byte)8;
 					}
@@ -1714,7 +1711,7 @@ public final class ResourceManager extends HRDBMSThread
 					{
 						HRDBMSWorker.logger.error("Unknown type " + o.getClass() + " in toBytes()");
 						HRDBMSWorker.logger.error(o);
-						System.exit(1);
+						throw new Exception("Non-zero size ArrayList in toBytes()");
 					}
 
 					i++;
@@ -1757,7 +1754,7 @@ public final class ResourceManager extends HRDBMSThread
 						catch (final Exception e)
 						{
 							HRDBMSWorker.logger.error("", e);
-							System.exit(1);
+							throw e;
 						}
 						retvalBB.putInt(temp.length);
 						retvalBB.put(temp);
@@ -1796,7 +1793,7 @@ public final class ResourceManager extends HRDBMSThread
 			return retval;
 		}
 
-		private final Object fromBytes(byte[] val)
+		private final Object fromBytes(byte[] val) throws Exception
 		{
 			final ByteBuffer bb = ByteBuffer.wrap(val);
 			final int numFields = bb.getInt();
@@ -1854,7 +1851,7 @@ public final class ResourceManager extends HRDBMSThread
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 				}
 				else if (bytes[i + 4] == 6)
@@ -1877,7 +1874,7 @@ public final class ResourceManager extends HRDBMSThread
 				else
 				{
 					HRDBMSWorker.logger.error("Unknown type in fromBytes()");
-					System.exit(1);
+					throw new Exception("Unknown type in fromBytes()");
 				}
 
 				i++;
@@ -1902,7 +1899,7 @@ public final class ResourceManager extends HRDBMSThread
 			index.put(key, value);
 		}
 
-		private void remove(long index)
+		private void remove(long index) throws Exception
 		{
 			lock.readLock().lock();
 			final ArrayList<Object> o = internal.remove(index);
@@ -1919,7 +1916,7 @@ public final class ResourceManager extends HRDBMSThread
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			lock.readLock().unlock();
 		}
@@ -1935,7 +1932,7 @@ public final class ResourceManager extends HRDBMSThread
 			return retval;
 		}
 
-		private final byte[] toBytes(Object v)
+		private final byte[] toBytes(Object v) throws Exception
 		{
 			ArrayList<Object> val;
 			if (v instanceof ArrayList)
@@ -2001,9 +1998,9 @@ public final class ResourceManager extends HRDBMSThread
 				{
 					if (((ArrayList)o).size() != 0)
 					{
-						Exception e = new Exception();
+						Exception e = new Exception("Non-zero size ArrayList in toBytes()");
 						HRDBMSWorker.logger.error("Non-zero size ArrayList in toBytes()", e);
-						System.exit(1);
+						throw e;
 					}
 					header[i] = (byte)8;
 				}
@@ -2011,7 +2008,7 @@ public final class ResourceManager extends HRDBMSThread
 				{
 					HRDBMSWorker.logger.error("Unknown type " + o.getClass() + " in toBytes()");
 					HRDBMSWorker.logger.error(o);
-					System.exit(1);
+					throw new Exception("Unknown type " + o.getClass() + " in toBytes()");
 				}
 
 				i++;
@@ -2054,7 +2051,7 @@ public final class ResourceManager extends HRDBMSThread
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 					retvalBB.putInt(temp.length);
 					retvalBB.put(temp);
@@ -2165,7 +2162,7 @@ public final class ResourceManager extends HRDBMSThread
 			}
 		}
 
-		public boolean add(ArrayList<Object> val)
+		public boolean add(ArrayList<Object> val) throws Exception
 		{
 			Object newVal = val;
 			try
@@ -2234,10 +2231,8 @@ public final class ResourceManager extends HRDBMSThread
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
-
-			return false;
 		}
 
 		public void clear()
@@ -2254,7 +2249,7 @@ public final class ResourceManager extends HRDBMSThread
 			internal.close();
 		}
 
-		public boolean contains(Object val)
+		public boolean contains(Object val) throws Exception
 		{
 			try
 			{
@@ -2300,10 +2295,8 @@ public final class ResourceManager extends HRDBMSThread
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
-
-			return false;
 		}
 
 		public DiskBackedArray getArray()
@@ -2317,7 +2310,7 @@ public final class ResourceManager extends HRDBMSThread
 			internal.reduceResources();
 		}
 
-		public void removeObject(Object val)
+		public void removeObject(Object val) throws Exception
 		{
 			try
 			{
@@ -2372,7 +2365,7 @@ public final class ResourceManager extends HRDBMSThread
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 
@@ -2535,7 +2528,7 @@ public final class ResourceManager extends HRDBMSThread
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					return;
 				}
 			}
 		}

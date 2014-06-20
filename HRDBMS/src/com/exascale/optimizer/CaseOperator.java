@@ -198,7 +198,7 @@ public final class CaseOperator implements Operator, Serializable
 	{
 		final Object o = child.next(this);
 
-		if (!(o instanceof DataEndMarker))
+		if (!(o instanceof DataEndMarker) && !(o instanceof Exception))
 		{
 			int i = 0;
 			for (final HashSet<HashMap<Filter, Filter>> aCase : filters)
@@ -233,6 +233,10 @@ public final class CaseOperator implements Operator, Serializable
 				return o;
 			}
 		}
+		else if (o instanceof Exception)
+		{
+			throw (Exception)o;
+		}
 
 		return o;
 	}
@@ -242,7 +246,7 @@ public final class CaseOperator implements Operator, Serializable
 	{
 		child.nextAll(op);
 		Object o = next(op);
-		while (!(o instanceof DataEndMarker))
+		while (!(o instanceof DataEndMarker) && !(o instanceof Exception))
 		{
 			o = next(op);
 		}
@@ -284,7 +288,7 @@ public final class CaseOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void reset()
+	public void reset() throws Exception
 	{
 		child.reset();
 	}
@@ -312,7 +316,7 @@ public final class CaseOperator implements Operator, Serializable
 		return "CaseOperator";
 	}
 
-	private boolean passesCase(ArrayList<Object> row, HashMap<String, Integer> cols2Pos, HashSet<HashMap<Filter, Filter>> ands)
+	private boolean passesCase(ArrayList<Object> row, HashMap<String, Integer> cols2Pos, HashSet<HashMap<Filter, Filter>> ands) throws Exception
 	{
 		for (final HashMap<Filter, Filter> ors : ands)
 		{
@@ -325,7 +329,7 @@ public final class CaseOperator implements Operator, Serializable
 		return true;
 	}
 
-	private boolean passesOredCondition(ArrayList<Object> row, HashMap<String, Integer> cols2Pos, HashMap<Filter, Filter> filters)
+	private boolean passesOredCondition(ArrayList<Object> row, HashMap<String, Integer> cols2Pos, HashMap<Filter, Filter> filters) throws Exception
 	{
 		try
 		{
@@ -340,7 +344,7 @@ public final class CaseOperator implements Operator, Serializable
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 
 		return false;

@@ -321,7 +321,13 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			{
 				if (queuedRows.size() > 0)
 				{
-					return queuedRows.remove(0);
+					Object o = queuedRows.remove(0);
+					if (o instanceof Exception)
+					{
+						throw (Exception)o;
+					}
+					
+					return o;
 				}
 			}
 
@@ -331,6 +337,10 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				if (o instanceof DataEndMarker)
 				{
 					return o;
+				}
+				if (o instanceof Exception)
+				{
+					throw (Exception)o;
 				}
 				final ArrayList<Filter> dynamics = new ArrayList<Filter>(this.cnfFilters.getALAL().size());
 				for (final ArrayList<Filter> al : this.cnfFilters.getALAL())
@@ -410,7 +420,13 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				{
 					if (queuedRows.size() > 0)
 					{
-						return queuedRows.remove(0);
+						Object obj = queuedRows.remove(0);
+						if (obj instanceof Exception)
+						{
+							throw (Exception)obj;
+						}
+						
+						return obj;
 					}
 				}
 			}
@@ -433,6 +449,11 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				return o;
 			}
 		}
+		
+		if (o instanceof Exception)
+		{
+			throw (Exception)o;
+		}
 		return o;
 	}
 
@@ -442,7 +463,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		children.get(0).nextAll(op);
 		children.get(1).nextAll(op);
 		Object o = next(op);
-		while (!(o instanceof DataEndMarker))
+		while (!(o instanceof DataEndMarker) && !(o instanceof Exception))
 		{
 			o = next(op);
 		}
@@ -482,10 +503,10 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	}
 
 	@Override
-	public void reset()
+	public void reset() throws Exception
 	{
 		HRDBMSWorker.logger.error("NestedLoopJoinOperator cannot be reset");
-		System.exit(1);
+		throw new Exception("NestedLoopJoinOperator cannot be reset");
 	}
 
 	@Override
@@ -742,7 +763,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				return null;
 			}
 
 			i++;
@@ -804,7 +825,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		}
 	}
 
-	private Operator getClone()
+	private Operator getClone() throws Exception
 	{
 		synchronized (clones)
 		{
@@ -833,7 +854,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			if (clone instanceof TableScanOperator)
 			{
@@ -1078,7 +1099,12 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 
 			if (nlHash != null)
 			{
-				nlHash.close();
+				try
+				{
+					nlHash.close();
+				}
+				catch(Exception e)
+				{}
 			}
 
 			while (true)
@@ -1086,7 +1112,6 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				try
 				{
 					outBuffer.put(new DataEndMarker());
-					inBuffer.close();
 					break;
 				}
 				catch (final Exception e)
@@ -1094,6 +1119,13 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 					HRDBMSWorker.logger.error("", e);
 				}
 			}
+			
+			try
+			{
+				inBuffer.close();
+			}
+			catch(Exception e)
+			{}
 		}
 	}
 
@@ -1107,7 +1139,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			this.filter = filter;
 		}
 
-		public void close()
+		public void close() throws Exception
 		{
 			for (final DiskBackedHashMap map : buckets)
 			{
@@ -1118,7 +1150,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 		}
@@ -1165,11 +1197,17 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				HRDBMSWorker.logger.error("Error in partial hash thread.", e);
 				HRDBMSWorker.logger.error("Left child cols to pos is: " + children.get(0).getCols2Pos());
 				HRDBMSWorker.logger.error("Right child cols to pos is: " + children.get(1).getCols2Pos());
-				System.exit(1);
+				try
+				{
+					outBuffer.put(e);
+				}
+				catch(Exception f)
+				{}
+				return;
 			}
 		}
 
-		private final ArrayList<ArrayList<Object>> getCandidates(long hash) throws ClassNotFoundException, IOException
+		private final ArrayList<ArrayList<Object>> getCandidates(long hash) throws Exception
 		{
 			final ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>();
 			int i = 0;
@@ -1328,7 +1366,13 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				try
+				{
+					outBuffer.put(e);
+				}
+				catch(Exception f)
+				{}
+				return;
 			}
 		}
 
@@ -1530,7 +1574,13 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					try
+					{
+						outBuffer.put(e);
+					}
+					catch(Exception f)
+					{}
+					return;
 				}
 			}
 		}
@@ -1594,7 +1644,8 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 								HRDBMSWorker.logger.error("pos = " + pos, e);
 								HRDBMSWorker.logger.error("lRow = " + lRow);
 								HRDBMSWorker.logger.error("key = " + key);
-								System.exit(1);
+								outBuffer.put(e);
+								return;
 							}
 							final long hash = 0x0EFFFFFFFFFFFFFFL & nlHash.hash(key);
 							for (final ArrayList<Object> rRow : nlHash.getCandidates(hash))
@@ -1673,7 +1724,13 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				try
+				{
+					outBuffer.put(e);
+				}
+				catch(Exception f)
+				{}
+				return;
 			}
 		}
 	}
@@ -1696,7 +1753,13 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				try
+				{
+					outBuffer.put(e);
+				}
+				catch(Exception f)
+				{}
+				return;
 			}
 		}
 	}

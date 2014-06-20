@@ -33,10 +33,16 @@ public final class UnionOperator implements Operator, Serializable
 	private ArrayList<ReadThread> threads;
 	private boolean startDone = false;
 	private Plan plan;
+	private boolean estimateSet = false;
 	
 	public void setPlan(Plan plan)
 	{
 		this.plan = plan;
+	}
+	
+	public boolean isDistinct()
+	{
+		return distinct;
 	}
 
 	public UnionOperator(boolean distinct, MetaData meta)
@@ -147,6 +153,11 @@ public final class UnionOperator implements Operator, Serializable
 				return o;
 			}
 		}
+		
+		if (o instanceof Exception)
+		{
+			throw (Exception)o;
+		}
 		return o;
 	}
 
@@ -159,7 +170,7 @@ public final class UnionOperator implements Operator, Serializable
 		}
 
 		Object o = next(op);
-		while (!(o instanceof DataEndMarker))
+		while (!(o instanceof DataEndMarker) && !(o instanceof Exception))
 		{
 			o = next(op);
 		}
@@ -198,7 +209,7 @@ public final class UnionOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void reset()
+	public void reset() throws Exception
 	{
 		if (!startDone)
 		{
@@ -209,7 +220,7 @@ public final class UnionOperator implements Operator, Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 		else
@@ -226,9 +237,9 @@ public final class UnionOperator implements Operator, Serializable
 			}
 			else
 			{
-				Exception e = new Exception();
+				Exception e = new Exception("UnionOperator has been inited more than once!");
 				HRDBMSWorker.logger.error("UnionOperator has been inited more than once!", e);
-				System.exit(1);
+				throw e;
 			}
 			new InitThread().start();
 		}
@@ -244,9 +255,15 @@ public final class UnionOperator implements Operator, Serializable
 		this.distinct = distinct;
 	}
 
-	public void setEstimate(int estimate)
+	public boolean setEstimate(int estimate)
 	{
+		if (estimateSet)
+		{
+			return false;
+		}
 		this.estimate = estimate;
+		estimateSet = true;
+		return true;
 	}
 
 	@Override
@@ -270,9 +287,9 @@ public final class UnionOperator implements Operator, Serializable
 		}
 		else
 		{
-			Exception e = new Exception();
+			Exception e = new Exception("UnionOperator has been inited more than once!");
 			HRDBMSWorker.logger.error("UnionOperator has been inited more than once!", e);
-			System.exit(1);
+			throw e;
 		}
 		new InitThread().start();
 	}
@@ -296,12 +313,18 @@ public final class UnionOperator implements Operator, Serializable
 			{
 				Exception e = new Exception();
 				HRDBMSWorker.logger.error("UnionOperator has been inited more than once!", e);
-				System.exit(1);
+				try
+				{
+					buffer.put(e);
+				}
+				catch(Exception f)
+				{}
+				return;
 			}
 
 			threads = new ArrayList<ReadThread>(children.size());
 
-			if (distinct && children.size() > 1)
+			if (distinct)
 			{
 				set = ResourceManager.newDiskBackedHashSet(true, estimate);
 			}
@@ -331,7 +354,7 @@ public final class UnionOperator implements Operator, Serializable
 				}
 			}
 
-			if (distinct && children.size() > 1)
+			if (distinct)
 			{
 				for (final Object o : set.getArray())
 				{
@@ -359,7 +382,6 @@ public final class UnionOperator implements Operator, Serializable
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
 				}
 			}
 			else
@@ -400,7 +422,12 @@ public final class UnionOperator implements Operator, Serializable
 				o = op.next(UnionOperator.this);
 				while (!(o instanceof DataEndMarker))
 				{
-					if (distinct && children.size() > 1)
+					if (o instanceof Exception)
+					{
+						buffer.put(o);
+						return;
+					}
+					if (distinct)
 					{
 						set.add((ArrayList<Object>)o);
 					}
@@ -426,9 +453,14 @@ public final class UnionOperator implements Operator, Serializable
 			catch (final Exception f)
 			{
 				HRDBMSWorker.logger.error("", f);
-				System.exit(1);
+				try
+				{
+					buffer.put(f);
+				}
+				catch(Exception g)
+				{}
+				return;
 			}
 		}
 	}
-
 }

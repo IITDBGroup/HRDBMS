@@ -137,6 +137,11 @@ public final class YearOperator implements Operator, Serializable
 		{
 			return o;
 		}
+		
+		if (o instanceof Exception)
+		{
+			throw (Exception)o;
+		}
 
 		final ArrayList<Object> row = (ArrayList<Object>)o;
 		row.add(((MyDate)row.get(colPos)).getYear());
@@ -148,7 +153,7 @@ public final class YearOperator implements Operator, Serializable
 	{
 		child.nextAll(op);
 		Object o = next(op);
-		while (!(o instanceof DataEndMarker))
+		while (!(o instanceof DataEndMarker) && !(o instanceof Exception))
 		{
 			o = next(op);
 		}
@@ -190,7 +195,7 @@ public final class YearOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void reset()
+	public void reset() throws Exception
 	{
 		child.reset();
 	}

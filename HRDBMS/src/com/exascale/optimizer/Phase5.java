@@ -33,7 +33,7 @@ public final class Phase5
 		}
 	}
 
-	public long card(Operator op)
+	public long card(Operator op) throws Exception
 	{
 		final Long r = cCache.get(op);
 		if (r != null)
@@ -54,8 +54,36 @@ public final class Phase5
 			cCache.put(op, retval);
 			return retval;
 		}
+		
+		if (op instanceof ConcatOperator)
+		{
+			final long retval = card(op.children().get(0));
+			cCache.put(op, retval);
+			return retval;
+		}
+		
+		if (op instanceof DateMathOperator)
+		{
+			final long retval = card(op.children().get(0));
+			cCache.put(op, retval);
+			return retval;
+		}
+		
+		if (op instanceof ExceptOperator)
+		{
+			long card = card(op.children().get(0));
+			cCache.put(op, card);
+			return card;
+		}
 
 		if (op instanceof ExtendOperator)
+		{
+			final long retval = card(op.children().get(0));
+			cCache.put(op, retval);
+			return retval;
+		}
+		
+		if (op instanceof ExtendObjectOperator)
 		{
 			final long retval = card(op.children().get(0));
 			cCache.put(op, retval);
@@ -67,6 +95,23 @@ public final class Phase5
 			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((HashJoinOperator)op).getHSHM(), root));
 			cCache.put(op, retval);
 			return retval;
+		}
+		
+		if (op instanceof IntersectOperator)
+		{
+			long lCard = card(op.children().get(0));
+			long rCard = card(op.children().get(1));
+			
+			if (lCard <= rCard)
+			{
+				cCache.put(op, lCard);
+				return lCard;
+			}
+			else
+			{
+				cCache.put(op, rCard);
+				return rCard;
+			}
 		}
 
 		if (op instanceof MultiOperator)
@@ -372,11 +417,10 @@ public final class Phase5
 		}
 
 		HRDBMSWorker.logger.error("Unknown operator in card() in Phase5: " + op.getClass());
-		System.exit(1);
-		return 0;
+		throw new Exception("Unknown operator in card() in Phase5: " + op.getClass());
 	}
 
-	public void optimize()
+	public void optimize() throws Exception
 	{
 		addIndexesToTableScans();
 		turnOffDistinctUnion(root, false);
@@ -385,7 +429,7 @@ public final class Phase5
 		setNumParents(root);
 	}
 
-	private void addIndexesToJoins()
+	private void addIndexesToJoins() throws Exception
 	{
 		final ArrayList<Operator> x = getJoins(root);
 		final HashSet<Operator> joins = new HashSet<Operator>(x);
@@ -414,7 +458,7 @@ public final class Phase5
 		}
 	}
 
-	private void addIndexesToTableScans()
+	private void addIndexesToTableScans() throws Exception
 	{
 		final ArrayList<TableScanOperator> s = getTableScans(root);
 		final HashSet<TableScanOperator> set = new HashSet<TableScanOperator>(s);
@@ -452,7 +496,7 @@ public final class Phase5
 		}
 	}
 
-	private void addIndexForJoin(Operator op, Index index)
+	private void addIndexForJoin(Operator op, Index index) throws Exception
 	{
 		Operator o = op;
 		if (o instanceof SortOperator)
@@ -470,7 +514,7 @@ public final class Phase5
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 
 			return;
@@ -491,13 +535,13 @@ public final class Phase5
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 
 		// cCache.clear();
 	}
 
-	private void addSort(TableScanOperator table)
+	private void addSort(TableScanOperator table) throws Exception
 	{
 		final Operator child = table.children().get(0);
 		table.removeChild(child);
@@ -514,7 +558,7 @@ public final class Phase5
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 
 		// cCache.clear();
@@ -535,7 +579,7 @@ public final class Phase5
 		}
 	}
 
-	private Operator cloneTree(Operator op)
+	private Operator cloneTree(Operator op) throws Exception
 	{
 		final Operator clone = op.clone();
 		for (final Operator o : op.children())
@@ -549,7 +593,7 @@ public final class Phase5
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 
@@ -608,7 +652,7 @@ public final class Phase5
 		}
 	}
 
-	private void correctForDevices(TableScanOperator table)
+	private void correctForDevices(TableScanOperator table) throws Exception
 	{
 		for (final Operator child : (ArrayList<Operator>)table.children().clone())
 		{
@@ -624,7 +668,7 @@ public final class Phase5
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 
 				setDevice(clone, device);
@@ -708,7 +752,7 @@ public final class Phase5
 		cnf.setHSHM(hshm);
 	}
 
-	private ArrayList<Operator> filtersEnough(ArrayList<Operator> joins)
+	private ArrayList<Operator> filtersEnough(ArrayList<Operator> joins) throws Exception
 	{
 		final ArrayList<Operator> retval = new ArrayList<Operator>();
 		for (final Operator op : joins)
@@ -885,7 +929,7 @@ public final class Phase5
 		}
 	}
 
-	private ArrayList<Index> getDynamicIndex(Operator op)
+	private ArrayList<Index> getDynamicIndex(Operator op) throws Exception
 	{
 		HashSet<HashMap<Filter, Filter>> hshm = null;
 		final ArrayList<Index> retval = new ArrayList<Index>();
@@ -983,7 +1027,7 @@ public final class Phase5
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 
 			correctForDevices(table);
@@ -1125,7 +1169,7 @@ public final class Phase5
 		}
 	}
 
-	private HashMap<String, String> getIndexRenames(Operator op)
+	private HashMap<String, String> getIndexRenames(Operator op) throws Exception
 	{
 		if (op instanceof RenameOperator)
 		{
@@ -1189,7 +1233,7 @@ public final class Phase5
 		return retval;
 	}
 
-	private ArrayList<Operator> hasIndex(ArrayList<Operator> joins)
+	private ArrayList<Operator> hasIndex(ArrayList<Operator> joins) throws Exception
 	{
 		final ArrayList<Operator> retval = new ArrayList<Operator>();
 		for (final Operator op : joins)
@@ -1245,8 +1289,12 @@ public final class Phase5
 		return retval;
 	}
 
-	private boolean indexOnly(TableScanOperator table)
+	private boolean indexOnly(TableScanOperator table) throws Exception
 	{
+		if (table.isGetRID())
+		{
+			return false;
+		}
 		UnionOperator union = null;
 		if (!(table.children().get(0) instanceof UnionOperator))
 		{
@@ -1292,7 +1340,7 @@ public final class Phase5
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			final ArrayList<String> types = new ArrayList<String>(references.size());
 			for (final String col : references)
@@ -1323,7 +1371,7 @@ public final class Phase5
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			// cCache.clear();
 			return true;
@@ -1463,7 +1511,7 @@ public final class Phase5
 		}
 	}
 
-	private void setCards(Operator op)
+	private void setCards(Operator op) throws Exception
 	{
 		if (op instanceof MultiOperator)
 		{
@@ -1601,6 +1649,80 @@ public final class Phase5
 				return;
 			}
 		}
+		else if (op instanceof UnionOperator)
+		{
+			final long xl = card(op.children().get(0)) + card(op.children().get(1));
+			int x = 1;
+			if (xl > Integer.MAX_VALUE)
+			{
+				x = Integer.MAX_VALUE;
+			}
+			else
+			{
+				x = (int)xl;
+			}
+
+			if (!((UnionOperator)op).setEstimate(x))
+			{
+				return;
+			}
+		}
+		else if (op instanceof IntersectOperator)
+		{
+			final long xl1 = card(op.children().get(0));
+			final long xl2 = card(op.children().get(1));
+			long xl;
+			if (xl1 >= xl2)
+			{
+				xl = xl1;
+			}
+			else
+			{
+				xl = xl2;
+			}
+			int x = 1;
+			if (xl > Integer.MAX_VALUE)
+			{
+				x = Integer.MAX_VALUE;
+			}
+			else
+			{
+				x = (int)xl;
+			}
+
+			if (!((IntersectOperator)op).setEstimate(x))
+			{
+				return;
+			}
+		}
+		else if (op instanceof ExceptOperator)
+		{
+			final long xl1 = card(op.children().get(0));
+			final long xl2 = card(op.children().get(1));
+			long xl;
+			if (xl1 >= xl2)
+			{
+				xl = xl1;
+			}
+			else
+			{
+				xl = xl2;
+			}
+			int x = 1;
+			if (xl > Integer.MAX_VALUE)
+			{
+				x = Integer.MAX_VALUE;
+			}
+			else
+			{
+				x = (int)xl;
+			}
+
+			if (!((ExceptOperator)op).setEstimate(x))
+			{
+				return;
+			}
+		}
 		else if (op instanceof NetworkSendOperator)
 		{
 			if (!((NetworkSendOperator)op).setCard())
@@ -1695,7 +1817,7 @@ public final class Phase5
 		}
 	}
 
-	private void useIndexes(String schema, String table, CNFFilter cnf, TableScanOperator tOp)
+	private void useIndexes(String schema, String table, CNFFilter cnf, TableScanOperator tOp) throws Exception
 	{
 		final HashSet<HashMap<Filter, Filter>> hshm = cnf.getHSHM();
 		// System.out.println("HSHM is " + hshm);
@@ -1832,7 +1954,7 @@ public final class Phase5
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 			}
 		}

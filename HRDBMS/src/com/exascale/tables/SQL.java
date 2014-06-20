@@ -9,6 +9,11 @@ public class SQL
 		internal = toUpperCaseExceptQuoted(sql);
 		internal = removeExcessWhitespace(internal);
 	}
+	
+	public String toString()
+	{
+		return internal;
+	}
 
 	@Override
 	public boolean equals(Object rhs)

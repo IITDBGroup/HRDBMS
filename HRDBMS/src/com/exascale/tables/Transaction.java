@@ -15,16 +15,22 @@ import com.exascale.managers.BufferManager;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LockManager;
 import com.exascale.managers.LogManager;
+import com.exascale.optimizer.MetaData;
 
 public class Transaction implements Serializable
 {
 	public static final int ISOLATION_RR = 0, ISOLATION_CS = 1, ISOLATION_UR = 2;
-	private static AtomicLong nextTxNum = new AtomicLong(0);
+	private static AtomicLong nextTxNum = new AtomicLong(MetaData.myCoordNum());
 	public static ConcurrentHashMap<Long, Long> txList = new ConcurrentHashMap<Long, Long>();
 
 	private final long txnum;
 
 	public int level;
+	
+	public Transaction(long txnum)
+	{
+		this.txnum = txnum;
+	}
 
 	public Transaction(int level)
 	{
@@ -34,10 +40,21 @@ public class Transaction implements Serializable
 		final LogRec rec = new StartLogRec(txnum);
 		LogManager.write(rec);
 	}
+	
+	public boolean equals(Object rhs)
+	{
+		if (rhs == null || !(rhs instanceof Transaction))
+		{
+			return false;
+		}
+		
+		Transaction tx = (Transaction)rhs;
+		return txnum == tx.txnum;
+	}
 
 	private static long nextTx()
 	{
-		return nextTxNum.incrementAndGet();
+		return nextTxNum.getAndAdd(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("number_of_coords")));
 	}
 
 	public void commit() throws IOException
@@ -46,6 +63,19 @@ public class Transaction implements Serializable
 		LogManager.commit(txnum);
 		LockManager.release(txnum);
 		txList.remove(txnum);
+	}
+	
+	public void tryCommit(String host) throws IOException
+	{
+		try
+		{
+			LogManager.ready(txnum, host);
+		}
+		catch(Exception e)
+		{
+			LogManager.notReady(txnum);
+			throw new IOException();
+		}
 	}
 
 	public DeleteLogRec delete(byte[] before, byte[] after, int off, Block b)

@@ -201,6 +201,10 @@ public final class ProductOperator extends JoinOperator implements Serializable
 				return o;
 			}
 		}
+		if (o instanceof Exception)
+		{
+			throw (Exception)o;
+		}
 		return o;
 	}
 
@@ -210,7 +214,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 		children.get(0).nextAll(op);
 		children.get(1).nextAll(op);
 		Object o = next(op);
-		while (!(o instanceof DataEndMarker))
+		while (!(o instanceof DataEndMarker) && !(o instanceof Exception))
 		{
 			o = next(op);
 		}
@@ -250,10 +254,10 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	}
 
 	@Override
-	public void reset()
+	public void reset() throws Exception
 	{
 		HRDBMSWorker.logger.error("ProductOperator cannot be reset");
-		System.exit(1);
+		throw new Exception("ProductOperator cannot be reset");
 	}
 
 	@Override
@@ -369,6 +373,12 @@ public final class ProductOperator extends JoinOperator implements Serializable
 					inBuffer.close();
 					break;
 				}
+				catch(Exception e)
+				{}
+				try
+				{
+					inBuffer.close();
+				}
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
@@ -433,7 +443,13 @@ public final class ProductOperator extends JoinOperator implements Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				try
+				{
+					outBuffer.put(e);
+				}
+				catch(Exception f)
+				{}
+				return;
 			}
 		}
 	}
@@ -456,7 +472,13 @@ public final class ProductOperator extends JoinOperator implements Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				try
+				{
+					outBuffer.put(e);
+				}
+				catch(Exception f)
+				{}
+				return;
 			}
 		}
 	}

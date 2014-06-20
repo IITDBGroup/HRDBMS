@@ -14,7 +14,7 @@ public final class MaxOperator implements AggregateOperator, Serializable
 	private final String output;
 
 	private final MetaData meta;
-	private final boolean isInt;
+	private boolean isInt;
 	private int NUM_GROUPS = 16;
 
 	public MaxOperator(String input, String output, MetaData meta, boolean isInt)
@@ -32,9 +32,14 @@ public final class MaxOperator implements AggregateOperator, Serializable
 		retval.NUM_GROUPS = NUM_GROUPS;
 		return retval;
 	}
+	
+	public void setIsInt(boolean isInt)
+	{
+		this.isInt = isInt;
+	}
 
 	@Override
-	public AggregateResultThread getHashThread(HashMap<String, Integer> cols2Pos)
+	public AggregateResultThread getHashThread(HashMap<String, Integer> cols2Pos) throws Exception
 	{
 		return new MaxHashThread(cols2Pos);
 	}
@@ -90,7 +95,7 @@ public final class MaxOperator implements AggregateOperator, Serializable
 		private final HashMap<String, Integer> cols2Pos;
 		private int pos;
 
-		public MaxHashThread(HashMap<String, Integer> cols2Pos)
+		public MaxHashThread(HashMap<String, Integer> cols2Pos) throws Exception
 		{
 			this.cols2Pos = cols2Pos;
 			try
@@ -100,7 +105,7 @@ public final class MaxOperator implements AggregateOperator, Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error(cols2Pos, e);
-				System.exit(1);
+				throw e;
 			}
 		}
 
@@ -236,6 +241,7 @@ public final class MaxOperator implements AggregateOperator, Serializable
 					}
 					else
 					{
+						//TODO should be fixed when MAX and MIN are updated
 						HRDBMSWorker.logger.error("Unknown class type in MaxOperator.");
 						System.exit(1);
 					}

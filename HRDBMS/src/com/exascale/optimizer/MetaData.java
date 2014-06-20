@@ -14,6 +14,10 @@ import com.exascale.misc.DateParser;
 import com.exascale.misc.FastStringTokenizer;
 import com.exascale.misc.MyDate;
 import com.exascale.misc.Utils;
+import com.exascale.tables.Transaction;
+import com.exascale.threads.ConnectionWorker;
+
+//TODO columns are qualified by table
 
 public final class MetaData implements Serializable
 {
@@ -24,6 +28,33 @@ public final class MetaData implements Serializable
 	private final Boolean cardsLock = false;
 	private final Boolean distsLock = false;
 	private final HashMap<Filter, Double> lCache = new HashMap<Filter, Double>();
+	private static final HashMap<ConnectionWorker, String> defaultSchemas = new HashMap<ConnectionWorker, String>();
+	private ConnectionWorker connection = null;
+	
+	public MetaData(ConnectionWorker connection)
+	{
+		this.connection = connection;
+	}
+	
+	public MetaData()
+	{
+		
+	}
+	
+	public static int myCoordNum()
+	{
+		return 0;
+	}
+	
+	public static void setDefaultSchema(ConnectionWorker conn, String schema)
+	{
+		defaultSchemas.put(conn, schema);
+	}
+	
+	public static void removeDefaultSchema(ConnectionWorker conn)
+	{
+		defaultSchemas.remove(conn);
+	}
 
 	public HashMap<String, Double> generateCard(Operator op)
 	{
@@ -90,6 +121,162 @@ public final class MetaData implements Serializable
 		}
 
 		return maxIndex;
+	}
+	
+	public String getCurrentSchema()
+	{
+		if (connection == null)
+		{
+			return null;
+		}
+		
+		String retval = defaultSchemas.get(connection);
+		if (retval == null)
+		{
+			//TODO return userid
+			return "HRDBMS";
+		}
+		
+		return retval;
+	}
+	
+	public String getMyHostName()
+	{
+		return "";
+	}
+	
+	public static boolean verifyInsert(String schema, String table, Operator op)
+	{
+		//TODO verify that the number of cols and data types from op match an insert into table
+		return true;
+	}
+	
+	public static ArrayList<Integer> getNodesForTable(String schema, String table)
+	{
+		return new ArrayList<Integer>();
+	}
+	
+	public static ArrayList<String> getIndexFileNamesForTable(String schema, String table)
+	{
+		return new ArrayList<String>();
+	}
+	
+	public static ArrayList<ArrayList<String>> getKeys(ArrayList<String> indexes)
+	{
+		return new ArrayList<ArrayList<String>>();)
+	}
+	
+	public static ArrayList<ArrayList<String>> getTypes(ArrayList<String> indexes)
+	{
+		return new ArrayList<ArrayList<String>>();
+	}
+	
+	public static ArrayList<ArrayList<Boolean>> getOrders(ArrayList<String> indexes)
+	{
+		return new ArrayList<ArrayList<Boolean>>();
+	}
+	
+	public static ArrayList<String> getIndexColsForTable(String schema, String table)
+	{
+		return new ArrayList<String>();
+	}
+	
+	public static ArrayList<String> getColsFromIndexFileName(String index)
+	{
+		return new ArrayList<String>();
+	}
+	
+	public static int determineNode(String schema, String table, ArrayList<Object> row)
+	{
+		return 0;
+	}
+	
+	public static int determineDevice(ArrayList<Object> row, PartitionMetaData partMeta)
+	{
+		return 0;
+	}
+	
+	public static int getLengthForCharCol(String schema, String table, String col)
+	{
+		return 0;
+	}
+	
+	public static void createView(String schema, String table, String text, Transaction tx) throws Exception
+	{
+		
+	}
+	
+	public static void dropView(String schema, String table, Transaction tx) throws Exception
+	{
+		
+	}
+	
+	public static boolean verifyIndexExistence(String schema, String index)
+	{
+		return true;
+	}
+	
+	public static boolean verifyColExistence(String schema, String table, String col)
+	{
+		return true;
+	}
+	
+	public static void createIndex(String schema, String table, String index, ArrayList<IndexDef> defs, boolean unique, Transaction tx) throws Exception
+	{
+		
+	}
+	
+	public static void dropIndex(String schema, String index, Transaction tx) throws Exception
+	{
+		
+	}
+	
+	public static void dropTable(String schema, String table, Transaction tx) throws Exception
+	{
+		
+	}
+	
+	public static void createTable(String schema, String table, ArrayList<ColDef> defs, ArrayList<String> pks, Transaction tx) throws Exception
+	{
+		
+	}
+	
+	public static ArrayList<Integer> getAllTableNodes(String schema, String table)
+	{
+		return new ArrayList<Integer>();
+	}
+	
+	public static boolean verifyUpdate(String schema, String tbl, ArrayList<Column> cols, ArrayList<String> buildList, Operator op) throws Exception
+	{
+		//verify that all columns are 1 part - parseException
+		//get data types for cols on this table
+		//make sure that selecting the buildList cols from op in that order satisfies updates for cols on this table
+		return true;
+	}
+	
+	public boolean verifyViewExistence(String schema, String name)
+	{
+		return false;
+	}
+	
+	public String getViewSQL(String schema, String name)
+	{
+		return "";
+	}
+	
+	public boolean verifyTableExistence(String schema, String name)
+	{
+		if (!schema.equals("TPCH"))
+		{
+			return false;
+		}
+		
+		if (name.equals("LINEITEM") || name.equals("CUSTOMER") || name.equals("ORDERS") || name.equals("PART") || name.equals("SUPPLIER") || name.equals("PARTSUPP") || name.equals("NATION") || name.equals("REGION"))
+		{
+			return true;
+		}
+		
+		return false;
 	}
 
 	public long getCard(String col, HashMap<String, Double> generated)
@@ -914,7 +1101,7 @@ public final class MetaData implements Serializable
 		return 0;
 	}
 
-	public String getTableForCol(String col) //TODO must return schema.table
+	public String getTableForCol(String col) //TODO must return schema.table - must accept qualified or unqualified col
 	{
 		if (col.startsWith("L_"))
 		{

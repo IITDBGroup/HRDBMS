@@ -8,7 +8,7 @@ public interface AggregateOperator
 {
 	public AggregateOperator clone();
 
-	public AggregateResultThread getHashThread(HashMap<String, Integer> cols2Pos);
+	public AggregateResultThread getHashThread(HashMap<String, Integer> cols2Pos) throws Exception;
 
 	public String getInputColumn();
 
@@ -33,12 +33,12 @@ public interface AggregateOperator
 			return null;
 		}
 
-		public Object getResult(ArrayList<Object> keys)
+		public Object getResult(ArrayList<Object> keys) throws Exception
 		{
 			return null;
 		}
 
-		public void put(ArrayList<Object> row, ArrayList<Object> groupKeys)
+		public void put(ArrayList<Object> row, ArrayList<Object> groupKeys) throws Exception
 		{
 		}
 

@@ -272,6 +272,11 @@ public final class MultiOperator implements Operator, Serializable
 				return o;
 			}
 		}
+		
+		if (o instanceof Exception)
+		{
+			throw (Exception)o;
+		}
 		return o;
 	}
 
@@ -280,7 +285,7 @@ public final class MultiOperator implements Operator, Serializable
 	{
 		child.nextAll(op);
 		Object o = next(op);
-		while (!(o instanceof DataEndMarker))
+		while (!(o instanceof DataEndMarker) && !(o instanceof Exception))
 		{
 			o = next(op);
 		}
@@ -355,7 +360,7 @@ public final class MultiOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void reset()
+	public void reset() throws Exception
 	{
 		if (!startDone)
 		{
@@ -366,7 +371,7 @@ public final class MultiOperator implements Operator, Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 		}
 		else
@@ -661,7 +666,13 @@ public final class MultiOperator implements Operator, Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				try
+				{
+					readBuffer.put(e);
+				}
+				catch(Exception f)
+				{}
+				return;
 			}
 		}
 
@@ -708,7 +719,13 @@ public final class MultiOperator implements Operator, Serializable
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					try
+					{
+						readBuffer.put(e);
+					}
+					catch(Exception f)
+					{}
+					return;
 				}
 			}
 		}
@@ -816,7 +833,13 @@ public final class MultiOperator implements Operator, Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				try
+				{
+					readBuffer.put(e);
+				}
+				catch(Exception f)
+				{}
+				return;
 			}
 		}
 	}

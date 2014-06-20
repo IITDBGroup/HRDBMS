@@ -79,7 +79,6 @@ public class StartWorkersThread extends HRDBMSThread
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("Error starting a worker node.", e);
-						System.exit(1);
 					}
 				}
 
@@ -92,7 +91,6 @@ public class StartWorkersThread extends HRDBMSThread
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("Error starting a worker node.", e);
-			System.exit(1);
 		}
 	}
 

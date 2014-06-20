@@ -14,7 +14,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 	private final String output;
 
 	private final MetaData meta;
-	private final boolean isInt;
+	private boolean isInt;
 	private int NUM_GROUPS = 16;
 
 	public SumOperator(String input, String output, MetaData meta, boolean isInt)
@@ -32,9 +32,14 @@ public final class SumOperator implements AggregateOperator, Serializable
 		retval.NUM_GROUPS = NUM_GROUPS;
 		return retval;
 	}
+	
+	public void setIsInt(boolean isInt)
+	{
+		this.isInt = isInt;
+	}
 
 	@Override
-	public AggregateResultThread getHashThread(HashMap<String, Integer> cols2Pos)
+	public AggregateResultThread getHashThread(HashMap<String, Integer> cols2Pos) throws Exception
 	{
 		return new SumHashThread(cols2Pos);
 	}
@@ -90,7 +95,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 		private final HashMap<String, Integer> cols2Pos;
 		private int pos;
 
-		public SumHashThread(HashMap<String, Integer> cols2Pos)
+		public SumHashThread(HashMap<String, Integer> cols2Pos) throws Exception
 		{
 			this.cols2Pos = cols2Pos;
 			try
@@ -101,7 +106,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 			{
 				HRDBMSWorker.logger.error(cols2Pos, e);
 				HRDBMSWorker.logger.error(input);
-				System.exit(1);
+				throw e;
 			}
 		}
 
@@ -125,7 +130,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 		}
 
 		@Override
-		public Object getResult(ArrayList<Object> keys)
+		public Object getResult(ArrayList<Object> keys) throws Exception
 		{
 			if (isInt)
 			{
@@ -152,14 +157,13 @@ public final class SumOperator implements AggregateOperator, Serializable
 					}
 					break;
 				}
-				System.exit(1);
+				throw e;
 			}
-			return null;
 		}
 
 		// @Parallel
 		@Override
-		public final void put(ArrayList<Object> row, ArrayList<Object> group)
+		public final void put(ArrayList<Object> row, ArrayList<Object> group) throws Exception
 		{
 			Object o = null;
 			try
@@ -172,7 +176,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 				HRDBMSWorker.logger.error("Cols2Pos is " + cols2Pos);
 				HRDBMSWorker.logger.error("Input is " + input);
 				HRDBMSWorker.logger.error("Row is " + row);
-				System.exit(1);
+				throw e;
 			}
 			Double val;
 			if (o instanceof Integer)
@@ -200,7 +204,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 					HRDBMSWorker.logger.error("Error calling addAndGet() in SumOperator", e);
 					HRDBMSWorker.logger.error("ad = " + ad);
 					HRDBMSWorker.logger.error("val = " + val);
-					System.exit(1);
+					throw e;
 				}
 				return;
 			}

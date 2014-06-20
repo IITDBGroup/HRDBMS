@@ -142,7 +142,13 @@ public final class ReorderOperator implements Operator, Serializable
 	{
 		if (nullOp)
 		{
-			return child.next(this);
+			Object o = child.next(this);
+			if (o instanceof Exception)
+			{
+				throw (Exception)o;
+			}
+			
+			return o;
 		}
 		else
 		{
@@ -150,6 +156,11 @@ public final class ReorderOperator implements Operator, Serializable
 			if (o instanceof DataEndMarker)
 			{
 				return o;
+			}
+			
+			if (o instanceof Exception)
+			{
+				throw (Exception)o;
 			}
 
 			final ArrayList<Object> row = (ArrayList<Object>)o;
@@ -163,7 +174,7 @@ public final class ReorderOperator implements Operator, Serializable
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("Error in ReorderOperator looking for " + col + " in " + child.getCols2Pos(), e);
-					System.exit(1);
+					throw e;
 				}
 			}
 
@@ -176,7 +187,7 @@ public final class ReorderOperator implements Operator, Serializable
 	{
 		child.nextAll(op);
 		Object o = next(op);
-		while (!(o instanceof DataEndMarker))
+		while (!(o instanceof DataEndMarker) && !(o instanceof Exception))
 		{
 			o = next(op);
 		}
@@ -218,7 +229,7 @@ public final class ReorderOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void reset()
+	public void reset() throws Exception
 	{
 		child.reset();
 	}

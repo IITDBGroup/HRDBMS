@@ -72,7 +72,7 @@ public class ArchiverThread extends HRDBMSThread
 									fc.position(fc.position() - 4 - size);
 									rec = new LogRec(fc);
 
-									if (rec.type() == LogRec.START)
+									if (rec.type() == LogRec.START || rec.type() == LogRec.PREPARE)
 									{
 										list.remove(rec.txnum());
 

@@ -1,6 +1,7 @@
 package com.exascale.optimizer;
 
 import java.io.BufferedOutputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
@@ -19,6 +20,8 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 	private final ConcurrentHashMap<Integer, CompressedSocket> connections = new ConcurrentHashMap<Integer, CompressedSocket>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
 	private final ConcurrentHashMap<Integer, OutputStream> outs = new ConcurrentHashMap<Integer, OutputStream>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
 	private final ArrayList<Operator> parents = new ArrayList<Operator>();
+	private boolean error = false;
+	private String errorText;
 
 	public NetworkHashAndSendOperator(ArrayList<String> hashCols, long numNodes, int id, int starting, MetaData meta)
 	{
@@ -47,7 +50,9 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		catch (final IOException e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			error = true;
+			errorText = e.getMessage();
+			outs.putIfAbsent(fromNode, new BufferedOutputStream(new ByteArrayOutputStream()));
 		}
 	}
 
@@ -111,11 +116,10 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 	}
 
 	@Override
-	public Operator parent()
+	public Operator parent() 
 	{
 		Exception e = new Exception();
 		HRDBMSWorker.logger.error("NetworkHashAndSendOperator does not support parent()", e);
-		System.exit(1);
 		return null;
 	}
 
@@ -165,58 +169,111 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 	}
 
 	@Override
-	public synchronized void start() throws Exception
+	public synchronized void start() 
 	{
-		started = true;
-		child.start();
-		Object o = child.next(this);
-		while (!(o instanceof DataEndMarker))
+		try
 		{
-			final byte[] obj = toBytes(o);
-			final ArrayList<Object> key = new ArrayList<Object>(hashCols.size());
-			for (final String col : hashCols)
+			if (error)
 			{
-				int pos = -1;
+				throw new Exception(errorText);
+			}
+			started = true;
+			child.start();
+			Object o = child.next(this);
+			while (!(o instanceof DataEndMarker))
+			{
+				if (o instanceof Exception)
+				{
+					throw (Exception)o;
+				}
+				final byte[] obj = toBytes(o);
+				final ArrayList<Object> key = new ArrayList<Object>(hashCols.size());
+				for (final String col : hashCols)
+				{
+					int pos = -1;
+					try
+					{
+						pos = child.getCols2Pos().get(col);
+					}
+					catch (final Exception e)
+					{
+						HRDBMSWorker.logger.error("Looking looking up column position in NetworkHashAndSend", e);
+						HRDBMSWorker.logger.error("Looking for " + col + " in " + child.getCols2Pos());
+						throw e;
+					}
+					key.add(((ArrayList<Object>)o).get(pos));
+				}
+
+				final int hash = (int)(starting + ((0x0EFFFFFFFFFFFFFFL & hash(key)) % numNodes));
 				try
 				{
-					pos = child.getCols2Pos().get(col);
+					final OutputStream out = outs.get(hash);
+					out.write(obj);
 				}
-				catch (final Exception e)
+				catch (final NullPointerException e)
 				{
-					HRDBMSWorker.logger.error("Looking looking up column position in NetworkHashAndSend", e);
-					HRDBMSWorker.logger.error("Looking for " + col + " in " + child.getCols2Pos());
-					System.exit(1);
+					HRDBMSWorker.logger.error("HashAndSend is looking for a connection to node " + hash + " in " + outs + ". Starting is " + starting, e);
+					HRDBMSWorker.logger.error("Outs = " + outs);
+					HRDBMSWorker.logger.error("Outs.get(hash) = " + outs.get(hash));
+					HRDBMSWorker.logger.error("Obj = " + obj);
+					throw e;
 				}
-				key.add(((ArrayList<Object>)o).get(pos));
+				count++;
+				o = child.next(this);
 			}
 
-			final int hash = (int)(starting + ((0x0EFFFFFFFFFFFFFFL & hash(key)) % numNodes));
+			final byte[] obj = toBytes(o);
+			for (final OutputStream out : outs.values())
+			{
+				out.write(obj);
+				out.flush();
+			}
+			HRDBMSWorker.logger.debug("Wrote " + count + " rows");
 			try
 			{
-				final OutputStream out = outs.get(hash);
-				out.write(obj);
+				child.close();
 			}
-			catch (final NullPointerException e)
-			{
-				HRDBMSWorker.logger.error("HashAndSend is looking for a connection to node " + hash + " in " + outs + ". Starting is " + starting, e);
-				HRDBMSWorker.logger.error("Outs = " + outs);
-				HRDBMSWorker.logger.error("Outs.get(hash) = " + outs.get(hash));
-				HRDBMSWorker.logger.error("Obj = " + obj);
-				System.exit(1);
-			}
-			count++;
-			o = child.next(this);
+			catch(Exception e)
+			{}
+			Thread.sleep(60 * 1000);
 		}
-
-		final byte[] obj = toBytes(o);
-		for (final OutputStream out : outs.values())
+		catch(Exception e)
 		{
-			out.write(obj);
-			out.flush();
+			byte[] obj = null;
+			try
+			{
+				obj = toBytes(e);
+			}
+			catch(Exception f)
+			{
+				for (final OutputStream out : outs.values())
+				{
+					try
+					{
+						out.close();
+					}
+					catch(Exception g)
+					{}
+				}
+			}
+			for (final OutputStream out : outs.values())
+			{
+				try
+				{
+					out.write(obj);
+					out.flush();
+				}
+				catch(Exception f)
+				{
+					try
+					{
+						out.close();
+					}
+					catch(Exception g)
+					{}
+				}
+			}
 		}
-		HRDBMSWorker.logger.debug("Wrote " + count + " rows");
-		child.close();
-		Thread.sleep(60 * 1000);
 	}
 
 	@Override

@@ -375,7 +375,7 @@ public class CNFFilter implements Serializable
 	}
 
 	// @Parallel
-	public boolean passes(ArrayList<Object> row)
+	public boolean passes(ArrayList<Object> row) throws Exception
 	{
 		for (final ArrayList<Filter> filter : filters)
 		{
@@ -389,7 +389,7 @@ public class CNFFilter implements Serializable
 	}
 
 	// @Parallel
-	public boolean passes(ArrayList<Object> lRow, ArrayList<Object> rRow)
+	public boolean passes(ArrayList<Object> lRow, ArrayList<Object> rRow) throws Exception
 	{
 		for (final ArrayList<Filter> filter : filters)
 		{
@@ -488,7 +488,7 @@ public class CNFFilter implements Serializable
 		return eHash;
 	}
 
-	private final boolean passesOredCondition(ArrayList<Filter> filter, ArrayList<Object> row)
+	private final boolean passesOredCondition(ArrayList<Filter> filter, ArrayList<Object> row) throws Exception
 	{
 		try
 		{
@@ -503,13 +503,13 @@ public class CNFFilter implements Serializable
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 
 		return false;
 	}
 
-	private final boolean passesOredCondition(ArrayList<Filter> filter, ArrayList<Object> lRow, ArrayList<Object> rRow)
+	private final boolean passesOredCondition(ArrayList<Filter> filter, ArrayList<Object> lRow, ArrayList<Object> rRow) throws Exception
 	{
 		try
 		{
@@ -524,7 +524,7 @@ public class CNFFilter implements Serializable
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 
 		return false;

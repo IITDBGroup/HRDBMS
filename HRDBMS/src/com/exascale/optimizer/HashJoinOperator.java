@@ -65,7 +65,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		this.plan = plan;
 	}
 
-	public HashJoinOperator(String left, String right, MetaData meta)
+	public HashJoinOperator(String left, String right, MetaData meta) throws Exception
 	{
 		this.meta = meta;
 		try
@@ -75,7 +75,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 	}
 
@@ -161,13 +161,13 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 	}
 
 	@Override
-	public void addJoinCondition(ArrayList<Filter> filters)
+	public void addJoinCondition(ArrayList<Filter> filters) throws UnsupportedOperationException
 	{
 		throw new UnsupportedOperationException("addJoinCondition(ArrayList<Filter>) is not supported by HashJoinOperator");
 	}
 
 	@Override
-	public void addJoinCondition(String left, String right)
+	public void addJoinCondition(String left, String right) throws Exception
 	{
 		try
 		{
@@ -176,7 +176,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 	}
 
@@ -238,7 +238,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		return cols2Types;
 	}
 
-	public HashSet<HashMap<Filter, Filter>> getHSHM()
+	public HashSet<HashMap<Filter, Filter>> getHSHM() throws Exception
 	{
 		if (f != null)
 		{
@@ -257,7 +257,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			final HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
 			hm.put(filter, filter);
@@ -332,7 +332,13 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			{
 				if (queuedRows.size() > 0)
 				{
-					return queuedRows.remove(0);
+					Object obj = queuedRows.remove(0);
+					if (obj instanceof Exception)
+					{
+						throw (Exception)obj;
+					}
+					
+					return obj;
 				}
 			}
 
@@ -342,6 +348,11 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 				if (o instanceof DataEndMarker)
 				{
 					return o;
+				}
+				
+				if (o instanceof Exception)
+				{
+					throw (Exception)o;
 				}
 
 				final ArrayList<Filter> dynamics = new ArrayList<Filter>(rights.size());
@@ -421,6 +432,11 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 				return o;
 			}
 		}
+		
+		if (o instanceof Exception)
+		{
+			throw (Exception)o;
+		}
 		return o;
 	}
 
@@ -430,7 +446,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		children.get(0).nextAll(op);
 		children.get(1).nextAll(op);
 		Object o = next(op);
-		while (!(o instanceof DataEndMarker))
+		while (!(o instanceof DataEndMarker) && !(o instanceof Exception))
 		{
 			o = next(op);
 		}
@@ -480,7 +496,6 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 	public void reset()
 	{
 		HRDBMSWorker.logger.error("HashJoinOperator cannot be reset");
-		System.exit(1);
 	}
 
 	public void reverseUpdateReferences(ArrayList<String> references, int pos)
@@ -661,7 +676,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				return null;
 			}
 
 			i++;
@@ -704,7 +719,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		return retval;
 	}
 
-	private void freeClone(Operator clone)
+	private void freeClone(Operator clone) throws Exception
 	{
 		synchronized (clones)
 		{
@@ -716,9 +731,9 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 				{
 					if (!lockVector.get(i).get())
 					{
-						Exception e = new Exception();
+						Exception e = new Exception("About to unlock an unlocked lock");
 						HRDBMSWorker.logger.error("About to unlock an unlocked lock", e);
-						System.exit(1);
+						throw e;
 					}
 					lockVector.get(i).set(false);
 					return;
@@ -729,7 +744,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		}
 	}
 
-	private final ArrayList<ArrayList<Object>> getCandidates(long hash) throws ClassNotFoundException, IOException
+	private final ArrayList<ArrayList<Object>> getCandidates(long hash) throws Exception
 	{
 		final ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>();
 		int i = 0;
@@ -751,7 +766,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		return retval;
 	}
 
-	private Operator getClone()
+	private Operator getClone() throws Exception
 	{
 		synchronized (clones)
 		{
@@ -781,7 +796,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
 			if (clone instanceof TableScanOperator)
 			{
@@ -1017,7 +1032,8 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 						{
 							HRDBMSWorker.logger.error("Row - " + lRow, e);
 							HRDBMSWorker.logger.error("Cols2Pos = " + childCols2Pos);
-							System.exit(1);
+							outBuffer.put(e);
+							return;
 						}
 					}
 
@@ -1043,7 +1059,13 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("Error in hash join reader thread.", e);
-				System.exit(1);
+				try
+				{
+					outBuffer.put(e);
+				}
+				catch(Exception f)
+				{}
+				return;
 			}
 		}
 	}
@@ -1084,7 +1106,13 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("Error in hash join reader thread.", e);
-				System.exit(1);
+				try
+				{
+					outBuffer.put(e);
+				}
+				catch(Exception f)
+				{}
+				return;
 			}
 		}
 	}

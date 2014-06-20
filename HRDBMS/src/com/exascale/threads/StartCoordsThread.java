@@ -107,7 +107,6 @@ public class StartCoordsThread extends HRDBMSThread
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("Failed to start a coordinator node.", e);
-						System.exit(1);
 					}
 				}
 
@@ -120,7 +119,6 @@ public class StartCoordsThread extends HRDBMSThread
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("Failed to start a coordinator node.", e);
-			System.exit(1);
 		}
 	}
 

@@ -41,7 +41,7 @@ public interface Operator
 
 	public void removeParent(Operator op);
 
-	public void reset();
+	public void reset() throws Exception;
 
 	public void setChildPos(int pos);
 

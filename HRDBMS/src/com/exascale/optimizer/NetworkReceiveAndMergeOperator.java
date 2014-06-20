@@ -41,7 +41,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 	}
 
 	@Override
-	public void add(Operator op)
+	public void add(Operator op) throws Exception
 	{
 		try
 		{
@@ -50,7 +50,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 		if (sortPos == null)
 		{
@@ -140,6 +140,11 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 				return o;
 			}
 		}
+		
+		if (o instanceof Exception)
+		{
+			throw (Exception)o;
+		}
 		return o;
 	}
 
@@ -219,10 +224,23 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 		{
 			for (final Operator op : children)
 			{
-				final ArrayList<Object> row = readRow(op);
-				if (row != null)
+				try
 				{
-					rows.put(op, row);
+					final ArrayList<Object> row = readRow(op);
+					if (row != null)
+					{
+						rows.put(op, row);
+					}
+				}
+				catch(Exception e)
+				{
+					try
+					{
+						outBuffer.put(e);
+					}
+					catch(Exception f)
+					{}
+					return;
 				}
 			}
 
@@ -247,7 +265,13 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 						catch (final Exception e)
 						{
 							HRDBMSWorker.logger.error("", e);
-							System.exit(1);
+							try
+							{
+								outBuffer.put(e);
+							}
+							catch(Exception f)
+							{}
+							return;
 						}
 					}
 				}
@@ -263,14 +287,27 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 					{
 					}
 				}
-				final ArrayList<Object> row = readRow((Operator)minEntry.getKey());
-				if (row != null)
+				try
 				{
-					rows.put((Operator)minEntry.getKey(), row);
+					final ArrayList<Object> row = readRow((Operator)minEntry.getKey());
+					if (row != null)
+					{
+						rows.put((Operator)minEntry.getKey(), row);
+					}
+					else
+					{
+						rows.remove(minEntry.getKey());
+					}
 				}
-				else
+				catch(Exception e)
 				{
-					rows.remove(minEntry.getKey());
+					try
+					{
+						outBuffer.put(e);
+					}
+					catch(Exception f)
+					{}
+					return;
 				}
 			}
 		}
@@ -339,7 +376,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 			return 0;
 		}
 
-		private Object fromBytes(byte[] val)
+		private Object fromBytes(byte[] val) throws Exception
 		{
 			final ByteBuffer bb = ByteBuffer.wrap(val);
 			final int numFields = bb.getInt();
@@ -348,7 +385,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 			{
 				HRDBMSWorker.logger.error("Negative number of fields in fromBytes()");
 				HRDBMSWorker.logger.error("NumFields = " + numFields);
-				System.exit(1);
+				throw new Exception("Negative number of fields in fromBytes()");
 			}
 
 			bb.position(bb.position() + numFields);
@@ -356,6 +393,21 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 			if (bytes[4] == 5)
 			{
 				return new DataEndMarker();
+			}
+			if (bytes[4] == 10)
+			{
+				final int length = bb.getInt();
+				final byte[] temp = new byte[length];
+				bb.get(temp);
+				try
+				{
+					final String o = new String(temp, "UTF-8");
+					return new Exception(o);
+				}
+				catch (final Exception e)
+				{
+					throw e;
+				}
 			}
 			final ArrayList<Object> retval = new ArrayList<Object>(numFields);
 			int i = 0;
@@ -399,13 +451,13 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
-						System.exit(1);
+						throw e;
 					}
 				}
 				else
 				{
 					HRDBMSWorker.logger.error("Unknown type " + bytes[i + 4] + " in fromBytes()");
-					System.exit(1);
+					throw new Exception("Unknown type " + bytes[i + 4] + " in fromBytes()");
 				}
 
 				i++;
@@ -414,7 +466,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 			return retval;
 		}
 
-		private ArrayList<Object> readRow(Operator op)
+		private ArrayList<Object> readRow(Operator op) throws Exception
 		{
 			try
 			{
@@ -443,6 +495,11 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 					{
 						return null;
 					}
+					
+					if (row instanceof Exception)
+					{
+						throw (Exception)row;
+					}
 
 					readCounter.getAndIncrement();
 					return (ArrayList<Object>)row;
@@ -451,10 +508,8 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
-				System.exit(1);
+				throw e;
 			}
-
-			return null;
 		}
 	}
 }

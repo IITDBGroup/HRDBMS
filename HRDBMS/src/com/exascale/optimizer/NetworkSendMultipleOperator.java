@@ -1,6 +1,7 @@
 package com.exascale.optimizer;
 
 import java.io.BufferedOutputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
@@ -15,6 +16,8 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 	private final ConcurrentHashMap<Integer, CompressedSocket> connections = new ConcurrentHashMap<Integer, CompressedSocket>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
 	private final ConcurrentHashMap<Integer, OutputStream> outs = new ConcurrentHashMap<Integer, OutputStream>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
 	private final ArrayList<Operator> parents = new ArrayList<Operator>();
+	private boolean error = false;
+	private String errorText;
 
 	public NetworkSendMultipleOperator(int id, MetaData meta)
 	{
@@ -33,7 +36,9 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 		catch (final IOException e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			error = true;
+			errorText = e.getMessage();
+			outs.putIfAbsent(fromNode,  new BufferedOutputStream(new ByteArrayOutputStream()));
 		}
 	}
 
@@ -96,7 +101,6 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 	{
 		Exception e = new Exception();
 		HRDBMSWorker.logger.error("NetworkSendMultipleOperator does not support parent()", e);
-		System.exit(1);
 		return null;
 	}
 
@@ -131,31 +135,84 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 	}
 
 	@Override
-	public synchronized void start() throws Exception
+	public synchronized void start()
 	{
-		started = true;
-		child.start();
-		Object o = child.next(this);
-		while (!(o instanceof DataEndMarker))
+		try
 		{
+			if (error)
+			{
+				throw new Exception(errorText);
+			}
+			started = true;
+			child.start();
+			Object o = child.next(this);
+			while (!(o instanceof DataEndMarker))
+			{
+				if (o instanceof Exception)
+				{
+					throw (Exception)o;
+				}
+				final byte[] obj = toBytes(o);
+				for (final OutputStream out : outs.values())
+				{
+					out.write(obj);
+				}
+				count++;
+				o = child.next(this);
+			}
+
 			final byte[] obj = toBytes(o);
 			for (final OutputStream out : outs.values())
 			{
 				out.write(obj);
+				out.flush();
 			}
-			count++;
-			o = child.next(this);
+			HRDBMSWorker.logger.debug("Wrote " + count + " rows");
+			try
+			{
+				child.close();
+			}
+			catch(Exception e)
+			{}
+			Thread.sleep(60 * 1000);
 		}
-
-		final byte[] obj = toBytes(o);
-		for (final OutputStream out : outs.values())
+		catch(Exception e)
 		{
-			out.write(obj);
-			out.flush();
+			byte[] obj = null;
+			try
+			{
+				obj = toBytes(e);
+			}
+			catch(Exception f)
+			{
+				for (final OutputStream out : outs.values())
+				{
+					try
+					{
+						out.close();
+					}
+					catch(Exception g)
+					{}
+				}
+			}
+			for (final OutputStream out : outs.values())
+			{
+				try
+				{
+					out.write(obj);
+					out.flush();
+				}
+				catch(Exception f)
+				{
+					try
+					{
+						out.close();
+					}
+					catch(Exception g)
+					{}
+				}
+			}
 		}
-		HRDBMSWorker.logger.debug("Wrote " + count + " rows");
-		child.close();
-		Thread.sleep(60 * 1000);
 	}
 
 	@Override

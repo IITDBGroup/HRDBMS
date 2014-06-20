@@ -171,7 +171,7 @@ public class Filter implements Cloneable, Serializable
 		if (cols2Pos == null)
 		{
 			HRDBMSWorker.logger.error("Filter.passes() called with null cols2Pos!");
-			System.exit(1);
+			throw new Exception("Filter.passes() called with null cols2Pos!");
 		}
 		if (always)
 		{
@@ -221,7 +221,7 @@ public class Filter implements Cloneable, Serializable
 						catch (final Exception e)
 						{
 							HRDBMSWorker.logger.error("Error looking up column " + colVal2 + " in " + cols2Pos, e);
-							System.exit(1);
+							throw e;
 						}
 					}
 
@@ -234,7 +234,7 @@ public class Filter implements Cloneable, Serializable
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("Error fetching column from row in Filter", e);
-						System.exit(1);
+						throw e;
 					}
 					return compare((String)lo, ro);
 				}
@@ -269,7 +269,7 @@ public class Filter implements Cloneable, Serializable
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error(this.toString(), e);
-						System.exit(1);
+						throw e;
 					}
 				}
 			}
@@ -318,7 +318,7 @@ public class Filter implements Cloneable, Serializable
 							HRDBMSWorker.logger.error("Error fetching position from colsPos in Filter");
 							HRDBMSWorker.logger.error(cols2Pos);
 							HRDBMSWorker.logger.error(colVal2);
-							System.exit(1);
+							throw e;
 						}
 					}
 
@@ -328,7 +328,7 @@ public class Filter implements Cloneable, Serializable
 				}
 			}
 
-			throw new Exception("How the hell did I get here!");
+			throw new Exception("How did I get here!");
 		}
 		else if (lVal1 != null)
 		{
@@ -389,7 +389,7 @@ public class Filter implements Cloneable, Serializable
 		if (cols2Pos == null)
 		{
 			HRDBMSWorker.logger.error("Filter.passes() called with null cols2Pos!");
-			System.exit(1);
+			throw new Exception("Filter.passes() called with null cols2Pos!");
 		}
 		if (always)
 		{
@@ -408,7 +408,7 @@ public class Filter implements Cloneable, Serializable
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("Failed to lookup " + colVal1 + " in " + cols2Pos);
-					System.exit(1);
+					throw e;
 				}
 			}
 
@@ -446,7 +446,7 @@ public class Filter implements Cloneable, Serializable
 						catch (final Exception e)
 						{
 							HRDBMSWorker.logger.error("Error looking up column " + colVal2 + " in " + cols2Pos);
-							System.exit(1);
+							throw e;
 						}
 					}
 
@@ -459,7 +459,7 @@ public class Filter implements Cloneable, Serializable
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("Error fetching column from row in Filter", e);
-						System.exit(1);
+						throw e;
 					}
 					return compare((String)lo, ro);
 				}
@@ -491,7 +491,7 @@ public class Filter implements Cloneable, Serializable
 							HRDBMSWorker.logger.error(this.toString(), e);
 							HRDBMSWorker.logger.error(colVal2);
 							HRDBMSWorker.logger.error(cols2Pos);
-							System.exit(1);
+							throw e;
 						}
 					}
 
@@ -504,7 +504,7 @@ public class Filter implements Cloneable, Serializable
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error(this.toString(), e);
-						System.exit(1);
+						throw e;
 					}
 				}
 			}
@@ -551,7 +551,7 @@ public class Filter implements Cloneable, Serializable
 						catch (final Exception e)
 						{
 							HRDBMSWorker.logger.error("Error fetching position from colsPos in Filter", e);
-							System.exit(1);
+							throw e;
 						}
 					}
 
@@ -561,7 +561,7 @@ public class Filter implements Cloneable, Serializable
 				}
 			}
 
-			throw new Exception("How the hell did I get here!");
+			throw new Exception("How did I get here!");
 		}
 		else if (lVal1 != null)
 		{
@@ -923,7 +923,7 @@ public class Filter implements Cloneable, Serializable
 	}
 
 	@Override
-	protected Filter clone()
+	protected Filter clone() 
 	{
 		try
 		{
@@ -950,7 +950,6 @@ public class Filter implements Cloneable, Serializable
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
 		}
 
 		return null;

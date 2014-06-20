@@ -195,10 +195,10 @@ public class NetworkSendOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void reset()
+	public void reset() throws Exception
 	{
 		HRDBMSWorker.logger.error("NetworkSendOperator does not support reset()");
-		System.exit(1);
+		throw new Exception("NetworkSendOperator does not support reset()"); 
 	}
 
 	public boolean setCard()
@@ -234,7 +234,7 @@ public class NetworkSendOperator implements Operator, Serializable
 		return true;
 	}
 
-	public void setSocket(CompressedSocket sock)
+	public void setSocket(CompressedSocket sock) throws Exception
 	{
 		try
 		{
@@ -244,30 +244,55 @@ public class NetworkSendOperator implements Operator, Serializable
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
+			throw e;
 		}
 	}
 
 	@Override
-	public synchronized void start() throws Exception
+	public synchronized void start()
 	{
-		started = true;
-		child.start();
-		Object o = child.next(this);
-		while (!(o instanceof DataEndMarker))
+		try
 		{
+			started = true;
+			child.start();
+			Object o = child.next(this);
+			while (!(o instanceof DataEndMarker))
+			{
+				if (o instanceof Exception)
+				{
+					throw (Exception)o;
+				}
+				final byte[] obj = toBytes(o);
+				out.write(obj);
+				count++;
+				o = child.next(this);
+			}
+			
 			final byte[] obj = toBytes(o);
 			out.write(obj);
-			count++;
-			o = child.next(this);
+			out.flush();
+			HRDBMSWorker.logger.debug("Wrote " + count + " rows");
+			child.close();
+			Thread.sleep(60 * 1000);
 		}
-
-		final byte[] obj = toBytes(o);
-		out.write(obj);
-		out.flush();
-		HRDBMSWorker.logger.debug("Wrote " + count + " rows");
-		child.close();
-		Thread.sleep(60 * 1000);
+		catch(Exception e)
+		{
+			try
+			{
+				byte[] obj = toBytes(e);
+				out.write(obj);
+				out.flush();
+			}
+			catch(Exception f)
+			{
+				try
+				{
+					out.close();
+				}
+				catch(Exception g)
+				{}
+			}
+		}
 	}
 
 	@Override
@@ -276,12 +301,34 @@ public class NetworkSendOperator implements Operator, Serializable
 		return "NetworkSendOperator(" + node + ")";
 	}
 
-	protected byte[] toBytes(Object v)
+	protected byte[] toBytes(Object v) throws Exception
 	{
-		ArrayList<Object> val;
+		ArrayList<Object> val = null;
 		if (v instanceof ArrayList)
 		{
 			val = (ArrayList<Object>)v;
+		}
+		else if (v instanceof Exception)
+		{
+			Exception e = (Exception)v;
+			byte[] data = null;
+			try
+			{
+				data = e.getMessage().getBytes("UTF-8");
+			}
+			catch(Exception f)
+			{}
+			
+			int dataLen = data.length;
+			int recLen = 9 + dataLen;
+			ByteBuffer bb = ByteBuffer.allocate(recLen+4);
+			bb.position(0);
+			bb.putInt(recLen);
+			bb.putInt(1);
+			bb.put((byte)10);
+			bb.putInt(dataLen);
+			bb.put(data);
+			return bb.array();
 		}
 		else
 		{
@@ -330,9 +377,9 @@ public class NetworkSendOperator implements Operator, Serializable
 			}
 			else
 			{
-				HRDBMSWorker.logger.error("Unknown type " + o.getClass() + " in toyBytes()");
+				HRDBMSWorker.logger.error("Unknown type " + o.getClass() + " in toBytes()");
 				HRDBMSWorker.logger.error(o);
-				System.exit(1);
+				throw new Exception("Unknown type " + o.getClass() + " in toBytes()");
 			}
 
 			i++;
@@ -375,7 +422,7 @@ public class NetworkSendOperator implements Operator, Serializable
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					throw e;
 				}
 				retvalBB.putInt(temp.length);
 				retvalBB.put(temp);
