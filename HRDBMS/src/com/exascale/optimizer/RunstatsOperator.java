@@ -22,7 +22,7 @@ import com.exascale.tables.Plan;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.HRDBMSThread;
 
-public final class CreateTableOperator implements Operator, Serializable
+public final class RunstatsOperator implements Operator, Serializable
 {
 	private Operator child;
 	private final MetaData meta;
@@ -36,11 +36,6 @@ public final class CreateTableOperator implements Operator, Serializable
 	private String table;
 	private boolean done = false;
 	private Transaction tx;
-	private ArrayList<ColDef> defs;
-	private ArrayList<String> pks;
-	private String nodeGroupExp;
-	private String nodeExp;
-	private String deviceExp;
 	
 	public void setPlan(Plan plan)
 	{
@@ -52,22 +47,17 @@ public final class CreateTableOperator implements Operator, Serializable
 		this.tx = tx;
 	}
 
-	public CreateTableOperator(String schema, String table, ArrayList<ColDef> defs, ArrayList<String> pks, String nodeGroupExp, String nodeExp, String deviceExp, MetaData meta)
+	public RunstatsOperator(String schema, String table, MetaData meta)
 	{
 		this.meta = meta;
 		this.schema = schema;
 		this.table = table;
-		this.defs = defs;
-		this.pks = pks;
-		this.nodeGroupExp = nodeGroupExp;
-		this.nodeExp = nodeExp;
-		this.deviceExp = deviceExp;
 	}
 
 	@Override
 	public void add(Operator op) throws Exception
 	{
-		throw new Exception("CreateTableOperator does not support children");
+		throw new Exception("RunstatsOperator does not support children");
 	}
 
 	@Override
@@ -78,9 +68,9 @@ public final class CreateTableOperator implements Operator, Serializable
 	}
 
 	@Override
-	public CreateTableOperator clone()
+	public RunstatsOperator clone()
 	{
-		final CreateTableOperator retval = new CreateTableOperator(schema, table, defs, pks, nodeGroupExp, nodeExp, deviceExp, meta);
+		final RunstatsOperator retval = new RunstatsOperator(schema, table, meta);
 		retval.node = node;
 		return retval;
 	}
@@ -140,7 +130,7 @@ public final class CreateTableOperator implements Operator, Serializable
 		if (!done)
 		{
 			done = true;
-			MetaData.createTable(schema, table, defs, pks, tx, nodeGroupExp, nodeExp, deviceExp);
+			MetaData.runstats(schema, table, tx);
 			return 1;
 		}
 		else
@@ -163,7 +153,7 @@ public final class CreateTableOperator implements Operator, Serializable
 	@Override
 	public void registerParent(Operator op) throws Exception
 	{
-		throw new Exception("CreateTableOperator does not support parents.");
+		throw new Exception("RunstatsOperator does not support parents.");
 	}
 
 	@Override
@@ -179,7 +169,7 @@ public final class CreateTableOperator implements Operator, Serializable
 	@Override
 	public void reset() throws Exception
 	{
-		throw new Exception("CreateTableOperator is not resetable");
+		throw new Exception("RunstatsOperator is not resetable");
 	}
 
 	@Override
@@ -201,6 +191,7 @@ public final class CreateTableOperator implements Operator, Serializable
 	@Override
 	public String toString()
 	{
-		return "CreateTableOperator";
+		return "RunstatsOperator";
 	}
+
 }

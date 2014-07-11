@@ -209,7 +209,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 	public void start() throws Exception
 	{
 		//get all nodes that contain data for this table
-		ArrayList<Integer> nodes = MetaData.getNodesForTable(schema, table);
+		ArrayList<Integer> nodes = MetaData.getNodesForTable(schema, table, tx);
 		ArrayList<Object> tree = makeTree(nodes);
 		//send all of them a mass delete message for this table with this transaction
 		boolean ok = sendMassDeletes(tree, tx);
@@ -375,10 +375,10 @@ public final class MassDeleteOperator implements Operator, Serializable
 				obj = ((ArrayList)obj).get(0);
 			}
 			
-			String hostname = new MetaData().getHostNameForNode((Integer)obj);
 			Socket sock = null;
 			try
 			{
+				String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
 				sock = new Socket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "MDELETE         ".getBytes("UTF-8");
@@ -396,12 +396,12 @@ public final class MassDeleteOperator implements Operator, Serializable
 				out.write(stringToBytes(schema));
 				out.write(stringToBytes(table));
 				ObjectOutputStream objOut = new ObjectOutputStream(out);
-				objOut.writeObject(convertToHosts(tree));
-				ArrayList<String> indexes = MetaData.getIndexFileNamesForTable(schema, table);
+				objOut.writeObject(convertToHosts(tree, tx));
+				ArrayList<String> indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
 				objOut.writeObject(indexes);
-				objOut.writeObject(MetaData.getKeys(indexes));
-				objOut.writeObject(MetaData.getTypes(indexes));
-				objOut.writeObject(MetaData.getOrders(indexes));
+				objOut.writeObject(MetaData.getKeys(indexes, tx));
+				objOut.writeObject(MetaData.getTypes(indexes, tx));
+				objOut.writeObject(MetaData.getOrders(indexes, tx));
 				objOut.flush();
 				out.flush();
 				objOut.close();
@@ -486,7 +486,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 		return buff;
 	}
 	
-	private static ArrayList<Object> convertToHosts(ArrayList<Object> tree)
+	private static ArrayList<Object> convertToHosts(ArrayList<Object> tree, Transaction tx) throws Exception
 	{
 		ArrayList<Object> retval = new ArrayList<Object>();
 		int i = 0;
@@ -495,11 +495,11 @@ public final class MassDeleteOperator implements Operator, Serializable
 			Object obj = tree.get(i);
 			if (obj instanceof Integer)
 			{
-				retval.add(new MetaData().getHostNameForNode((Integer)obj));
+				retval.add(new MetaData().getHostNameForNode((Integer)obj, tx));
 			}
 			else
 			{
-				retval.add(convertToHosts((ArrayList<Object>)obj));
+				retval.add(convertToHosts((ArrayList<Object>)obj, tx));
 			}
 			
 			i++;

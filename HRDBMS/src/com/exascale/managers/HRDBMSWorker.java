@@ -132,8 +132,6 @@ public class HRDBMSWorker
 		logger.info("Lock Manager initialization complete.");
 		resourceThread = addThread(new ResourceManager());
 		connectionThread = addThread(new ConnectionManager());
-		// TODO ulimately a coord node should have and internal and an external
-		// connection
 		checkpointThread = addThread(new CheckpointManager());
 		hibernate();
 	}

@@ -8,7 +8,7 @@ import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.optimizer.MetaData.PartitionMetaData;
-import com.exascale.testing.Driver;
+import com.exascale.tables.Transaction;
 
 public final class Phase3
 {
@@ -19,10 +19,12 @@ public final class Phase3
 	private static final int MIN_CARD_BEFORE_HASH = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("min_card_for_hash")); // 250000
 	private final HashSet<Integer> usedNodes = new HashSet<Integer>();
 	protected static int colSuffix = 0;
+	private Transaction tx;
 
-	public Phase3(RootOperator root)
+	public Phase3(RootOperator root, Transaction tx)
 	{
 		this.root = root;
+		this.tx = tx;
 		meta = root.getMeta();
 	}
 
@@ -45,7 +47,7 @@ public final class Phase3
 	{
 		if (op instanceof AntiJoinOperator)
 		{
-			return (long)((1 - meta.likelihood(((AntiJoinOperator)op).getHSHM(), root)) * card(op.children().get(0)));
+			return (long)((1 - meta.likelihood(((AntiJoinOperator)op).getHSHM(), root, tx, op)) * card(op.children().get(0)));
 		}
 
 		if (op instanceof CaseOperator)
@@ -80,7 +82,7 @@ public final class Phase3
 
 		if (op instanceof HashJoinOperator)
 		{
-			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((HashJoinOperator)op).getHSHM(), root));
+			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((HashJoinOperator)op).getHSHM(), root, tx, op));
 			return retval;
 		}
 		
@@ -102,7 +104,7 @@ public final class Phase3
 		if (op instanceof MultiOperator)
 		{
 			// return card(op.children().get(0));
-			final long groupCard = meta.getColgroupCard(((MultiOperator)op).getKeys(), root);
+			final long groupCard = meta.getColgroupCard(((MultiOperator)op).getKeys(), root, tx, op);
 			if (groupCard > card(op.children().get(0)))
 			{
 				return card(op.children().get(0));
@@ -113,7 +115,7 @@ public final class Phase3
 
 		if (op instanceof NestedLoopJoinOperator)
 		{
-			return (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((NestedLoopJoinOperator)op).getHSHM(), root));
+			return (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((NestedLoopJoinOperator)op).getHSHM(), root, tx, op));
 		}
 
 		if (op instanceof NetworkReceiveOperator)
@@ -169,12 +171,12 @@ public final class Phase3
 
 		if (op instanceof SelectOperator)
 		{
-			return (long)(((SelectOperator)op).likelihood(root) * card(op.children().get(0)));
+			return (long)(((SelectOperator)op).likelihood(root, tx) * card(op.children().get(0)));
 		}
 
 		if (op instanceof SemiJoinOperator)
 		{
-			return (long)(meta.likelihood(((SemiJoinOperator)op).getHSHM(), root) * card(op.children().get(0)));
+			return (long)(meta.likelihood(((SemiJoinOperator)op).getHSHM(), root, tx, op) * card(op.children().get(0)));
 		}
 
 		if (op instanceof SortOperator)
@@ -223,10 +225,10 @@ public final class Phase3
 			final HashSet<HashMap<Filter, Filter>> hshm = ((TableScanOperator)op).getHSHM();
 			if (hshm != null)
 			{
-				return (long)(meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable()) * meta.likelihood(hshm, root) * (1.0 / ((TableScanOperator)op).getNumNodes()));
+				return (long)(meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx) * meta.likelihood(hshm, root, tx, op) * (1.0 / ((TableScanOperator)op).getNumNodes()));
 			}
 
-			return (long)((1.0 / ((TableScanOperator)op).getNumNodes()) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable()));
+			return (long)((1.0 / ((TableScanOperator)op).getNumNodes()) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx));
 		}
 
 		HRDBMSWorker.logger.error("Unknown operator in card() in Phase3: " + op.getClass());
@@ -303,7 +305,7 @@ public final class Phase3
 				final Operator parent = ((TableScanOperator)op).firstParent();
 				final CNFFilter cnf = ((TableScanOperator)op).getCNFForParent(parent);
 				parent.removeChild(op);
-				final Operator send = new NetworkSendOperator(Math.abs(new Random(System.currentTimeMillis()).nextInt()) % meta.getNumNodes(), meta);
+				final Operator send = new NetworkSendOperator(Math.abs(new Random(System.currentTimeMillis()).nextInt()) % meta.getNumNodes(tx), meta);
 				op.setNode(send.getNode());
 				final Operator receive = new NetworkReceiveOperator(meta);
 				try
@@ -523,14 +525,14 @@ public final class Phase3
 		}
 	}
 
-	private int getStartingNode(long numNodes)
+	private int getStartingNode(long numNodes) throws Exception
 	{
-		if (numNodes >= meta.getNumNodes())
+		if (numNodes >= meta.getNumNodes(tx))
 		{
 			return 0;
 		}
 
-		final int range = (int)(meta.getNumNodes() - numNodes);
+		final int range = (int)(meta.getNumNodes(tx) - numNodes);
 		return (int)(Math.random() * range);
 	}
 
@@ -554,7 +556,7 @@ public final class Phase3
 
 	private boolean handleAnti(NetworkReceiveOperator receive) throws Exception
 	{
-		if (meta.getNumNodes() == 1)
+		if (meta.getNumNodes(tx) == 1)
 		{
 			pushAcross2(receive);
 			return true;
@@ -644,8 +646,8 @@ public final class Phase3
 			final HashSet<String> tables = new HashSet<String>();
 			while (i < lefts.size())
 			{
-				tables.add(meta.getTableForCol(lefts.get(i)));
-				tables.add(meta.getTableForCol(rights.get(i)));
+				tables.add(meta.getTableForCol(lefts.get(i), parent));
+				tables.add(meta.getTableForCol(rights.get(i), parent));
 				i++;
 			}
 
@@ -659,7 +661,7 @@ public final class Phase3
 			{
 				String schema = table.substring(0, table.indexOf('.'));
 				table = table.substring(table.indexOf('.') + 1);
-				pmetas.add(meta.getPartMeta(schema, table));
+				pmetas.add(meta.getPartMeta(schema, table, tx));
 			}
 
 			if (pmetas.get(0).noNodeGroupSet() && pmetas.get(1).noNodeGroupSet())
@@ -698,10 +700,38 @@ public final class Phase3
 			}
 		}
 	}
+	
+	private boolean handleUnion(NetworkReceiveOperator receive) throws Exception
+	{
+		if (meta.getNumNodes(tx) == 1)
+		{
+			pushAcross2(receive);
+			return true;
+		}
+		
+		UnionOperator union = (UnionOperator)receive.parent();
+		if (!union.isDistinct())
+		{
+			pushAcross2(receive);
+			return true;
+		}
+		
+		return false;
+	}
+	
+	private boolean handleIntersect(NetworkReceiveOperator receive) throws Exception
+	{
+		return false;
+	}
+	
+	private boolean handleExcept(NetworkReceiveOperator receive) throws Exception
+	{
+		return false;
+	}
 
 	private boolean handleHash(NetworkReceiveOperator receive) throws Exception
 	{
-		if (meta.getNumNodes() == 1)
+		if (meta.getNumNodes(tx) == 1)
 		{
 			pushAcross2(receive);
 			return true;
@@ -787,13 +817,13 @@ public final class Phase3
 			final HashSet<String> tables = new HashSet<String>();
 			while (i < lefts.size())
 			{
-				String name = meta.getTableForCol(lefts.get(i));
+				String name = meta.getTableForCol(lefts.get(i), parent);
 				if (name == null)
 				{
 					return false;
 				}
 				tables.add(name);
-				name = meta.getTableForCol(rights.get(i));
+				name = meta.getTableForCol(rights.get(i), parent);
 				if (name == null)
 				{
 					return false;
@@ -812,7 +842,7 @@ public final class Phase3
 			{
 				String schema = table.substring(0, table.indexOf('.'));
 				table = table.substring(table.indexOf('.') + 1);
-				pmetas.add(meta.getPartMeta(schema, table));
+				pmetas.add(meta.getPartMeta(schema, table, tx));
 			}
 
 			if (pmetas.get(0).noNodeGroupSet() && pmetas.get(1).noNodeGroupSet())
@@ -876,7 +906,7 @@ public final class Phase3
 			final HashMap<String, ArrayList<String>> table2Cols = new HashMap<String, ArrayList<String>>();
 			while (i < parent.getKeys().size())
 			{
-				final String name = meta.getTableForCol(parent.getKeys().get(i));
+				final String name = meta.getTableForCol(parent.getKeys().get(i), parent);
 				if (name == null)
 				{
 					doIt = false;
@@ -899,7 +929,7 @@ public final class Phase3
 				{
 					String schema = table.substring(0, table.indexOf('.'));
 					table = table.substring(table.indexOf('.') + 1);
-					final PartitionMetaData partMeta = meta.getPartMeta(schema, table);
+					final PartitionMetaData partMeta = meta.getPartMeta(schema, table, tx);
 					if (partMeta.nodeIsHash() && partMeta.noNodeGroupSet())
 					{
 						if (table2Cols.get(table).containsAll(partMeta.getNodeHash()))
@@ -956,7 +986,7 @@ public final class Phase3
 					cnf = ((TableScanOperator)o).getCNFForParent(receive);
 				}
 
-				final NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(cols2, card / MIN_CARD_BEFORE_HASH, ID, starting, meta);
+				final NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(cols2, card / MIN_CARD_BEFORE_HASH, ID, starting, meta, tx);
 				try
 				{
 					send.add(o);
@@ -976,7 +1006,7 @@ public final class Phase3
 
 			int i = 0;
 			final ArrayList<NetworkHashReceiveOperator> receives = new ArrayList<NetworkHashReceiveOperator>();
-			while (i < card / MIN_CARD_BEFORE_HASH && i < meta.getNumNodes())
+			while (i < card / MIN_CARD_BEFORE_HASH && i < meta.getNumNodes(tx))
 			{
 				final NetworkHashReceiveOperator hrec = new NetworkHashReceiveOperator(ID, meta);
 				hrec.setNode(i + starting);
@@ -1180,7 +1210,7 @@ public final class Phase3
 
 	private boolean handleNested(NetworkReceiveOperator receive) throws Exception
 	{
-		if (meta.getNumNodes() == 1)
+		if (meta.getNumNodes(tx) == 1)
 		{
 			pushAcross2(receive);
 			return true;
@@ -1270,8 +1300,8 @@ public final class Phase3
 			final HashSet<String> tables = new HashSet<String>();
 			while (i < lefts.size())
 			{
-				tables.add(meta.getTableForCol(lefts.get(i)));
-				tables.add(meta.getTableForCol(rights.get(i)));
+				tables.add(meta.getTableForCol(lefts.get(i), parent));
+				tables.add(meta.getTableForCol(rights.get(i), parent));
 				i++;
 			}
 
@@ -1285,7 +1315,7 @@ public final class Phase3
 			{
 				String schema = table.substring(0, table.indexOf('.'));
 				table = table.substring(table.indexOf('.') + 1);
-				pmetas.add(meta.getPartMeta(schema, table));
+				pmetas.add(meta.getPartMeta(schema, table, tx));
 			}
 
 			if (pmetas.get(0).noNodeGroupSet() && pmetas.get(1).noNodeGroupSet())
@@ -1327,7 +1357,7 @@ public final class Phase3
 
 	private boolean handleProduct(NetworkReceiveOperator receive) throws Exception
 	{
-		if (meta.getNumNodes() == 1)
+		if (meta.getNumNodes(tx) == 1)
 		{
 			pushAcross2(receive);
 			return true;
@@ -1411,7 +1441,7 @@ public final class Phase3
 
 	private boolean handleSemi(NetworkReceiveOperator receive) throws Exception
 	{
-		if (meta.getNumNodes() == 1)
+		if (meta.getNumNodes(tx) == 1)
 		{
 			pushAcross2(receive);
 			return true;
@@ -1501,8 +1531,8 @@ public final class Phase3
 			final HashSet<String> tables = new HashSet<String>();
 			while (i < lefts.size())
 			{
-				tables.add(meta.getTableForCol(lefts.get(i)));
-				tables.add(meta.getTableForCol(rights.get(i)));
+				tables.add(meta.getTableForCol(lefts.get(i), parent));
+				tables.add(meta.getTableForCol(rights.get(i), parent));
 				i++;
 			}
 
@@ -1516,7 +1546,7 @@ public final class Phase3
 			{
 				String schema = table.substring(0, table.indexOf('.'));
 				table = table.substring(table.indexOf('.') + 1);
-				pmetas.add(meta.getPartMeta(schema, table));
+				pmetas.add(meta.getPartMeta(schema, table, tx));
 			}
 
 			if (pmetas.get(0).noNodeGroupSet() && pmetas.get(1).noNodeGroupSet())
@@ -1716,10 +1746,10 @@ public final class Phase3
 
 				if (i == numPerMiddle)
 				{
-					int node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
+					int node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
 					while (usedNodes.contains(node))
 					{
-						node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
+						node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
 					}
 					final NetworkSendOperator newSend = new NetworkSendOperator(node, meta);
 					try
@@ -2075,6 +2105,27 @@ public final class Phase3
 					else if (op instanceof SortOperator)
 					{
 						if (!handleSort(receive))
+						{
+							break;
+						}
+					}
+					else if (op instanceof UnionOperator)
+					{
+						if (!handleUnion(receive))
+						{
+							break;
+						}
+					}
+					else if (op instanceof ExceptOperator)
+					{
+						if (!handleExcept(receive))
+						{
+							break;
+						}
+					}
+					else if (op instanceof IntersectOperator)
+					{
+						if (!handleIntersect(receive))
 						{
 							break;
 						}

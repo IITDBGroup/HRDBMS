@@ -6,14 +6,17 @@ import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
+import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
 import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.StringTokenizer;
+import java.util.TreeMap;
 import java.util.Vector;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedSocket;
@@ -21,12 +24,15 @@ import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
 import com.exascale.filesystem.RID;
 import com.exascale.logging.LogRec;
+import com.exascale.managers.FileManager;
 import com.exascale.managers.HRDBMSWorker;
+import com.exascale.managers.LockManager;
 import com.exascale.managers.LogManager;
 import com.exascale.managers.XAManager;
 import com.exascale.misc.AtomicDouble;
 import com.exascale.misc.BufferedLinkedBlockingQueue;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.HParms;
 import com.exascale.misc.MultiHashMap;
 import com.exascale.misc.MyDate;
 import com.exascale.optimizer.Index;
@@ -47,6 +53,8 @@ public class ConnectionWorker extends HRDBMSThread
 {
 	private final CompressedSocket sock;
 	private static HashMap<Integer, NetworkSendOperator> sends;
+	private static int PREFETCH_REQUEST_SIZE;
+	private static int PAGES_IN_ADVANCE;
 	private boolean clientConnection = false;
 	private Transaction tx = null;
 	private XAWorker worker;
@@ -54,6 +62,9 @@ public class ConnectionWorker extends HRDBMSThread
 	static
 	{
 		sends = new HashMap<Integer, NetworkSendOperator>();
+		HParms hparms = HRDBMSWorker.getHParms();
+		PREFETCH_REQUEST_SIZE = Integer.parseInt(hparms.getProperty("prefetch_request_size")); // 80
+		PAGES_IN_ADVANCE = Integer.parseInt(hparms.getProperty("pages_in_advance")); // 40
 	}
 
 	public ConnectionWorker(CompressedSocket sock)
@@ -320,6 +331,18 @@ public class ConnectionWorker extends HRDBMSThread
 				else if (command.equals("EXECUTEU"))
 				{
 					executeUpdate();
+				}
+				else if (command.equals("NEWTABLE"))
+				{
+					newTable();
+				}
+				else if (command.equals("NEWINDEX"))
+				{
+					newIndex();
+				}
+				else if (command.equals("POPINDEX"))
+				{
+					popIndex();
 				}
 				else
 				{
@@ -1358,7 +1381,7 @@ public class ConnectionWorker extends HRDBMSThread
 			{
 				try
 				{
-					worker.out.take();
+					obj = worker.out.take();
 					break;
 				}
 				catch(InterruptedException e)
@@ -1663,8 +1686,10 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 		catch(Exception e)
 		{
-			queueCommandSelf("ROLLBACK", tx);
-			blackListSelf();
+			//TODO queueCommandSelf("ROLLBACK", tx);
+			//TODO blackListSelf();
+			HRDBMSWorker.logger.fatal("BLACKLIST", e);
+			System.exit(1);
 		}
 		
 		Object obj = tree.get(0);
@@ -1725,8 +1750,10 @@ public class ConnectionWorker extends HRDBMSThread
 				}
 				catch(Exception e)
 				{
-					blackListByHost((String)o);
-					queueCommandByHost((String)o, "ROLLBACK", tx);
+					//TODO blackListByHost((String)o);
+					//TODO queueCommandByHost((String)o, "ROLLBACK", tx);
+					HRDBMSWorker.logger.fatal("BLACKLIST", e);
+					System.exit(1);
 				}
 			}
 			else if (((ArrayList<Object>)o).size() > 0)
@@ -1765,9 +1792,16 @@ public class ConnectionWorker extends HRDBMSThread
 				}
 				catch(Exception e)
 				{
-					sock.close();
-					blackListByHost((String)obj2);
-					queueCommandByHost((String)obj2, "ROLLBACK", tx);
+					try
+					{
+						sock.close();
+					}
+					catch(Exception f)
+					{}
+					//TODO blackListByHost((String)obj2);
+					//TODO queueCommandByHost((String)obj2, "ROLLBACK", tx);
+					HRDBMSWorker.logger.fatal("BLACKLIST", e);
+					System.exit(1);
 					//retry others
 					boolean toDo = rebuildTree((ArrayList<Object>)o, (String)obj2);
 					if (toDo)
@@ -1977,9 +2011,16 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 		catch(Exception e)
 		{
-			sock.close();
-			blackListByHost((String)obj);
-			queueCommandByHost((String)obj, "ROLLBACK", tx);
+			try
+			{
+				sock.close();
+			}
+			catch(Exception f)
+			{}
+			//TODO blackListByHost((String)obj);
+			//TODO queueCommandByHost((String)obj, "ROLLBACK", tx);
+			HRDBMSWorker.logger.fatal("BLACKLIST", e);
+			System.exit(1);
 			boolean toDo = rebuildTree(tree, (String)obj);
 			if (toDo)
 			{
@@ -2014,8 +2055,10 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 		catch(Exception e)
 		{
-			queueCommandSelf("COMMIT", tx);
-			blackListSelf();
+			//TODO queueCommandSelf("COMMIT", tx);
+			//TODO blackListSelf();
+			HRDBMSWorker.logger.fatal("BLACKLIST", e);
+			System.exit(1);
 		}
 		
 		Object obj = tree.get(0);
@@ -2076,8 +2119,10 @@ public class ConnectionWorker extends HRDBMSThread
 				}
 				catch(Exception e)
 				{
-					blackListByHost((String)o);
-					queueCommandByHost((String)o, "COMMIT", tx);
+					//TODO blackListByHost((String)o);
+					//TODO queueCommandByHost((String)o, "COMMIT", tx);
+					HRDBMSWorker.logger.fatal("BLACKLIST", e);
+					System.exit(1);
 				}
 			}
 			else if (((ArrayList<Object>)o).size() > 0)
@@ -2116,9 +2161,16 @@ public class ConnectionWorker extends HRDBMSThread
 				}
 				catch(Exception e)
 				{
-					sock.close();
-					blackListByHost((String)obj2);
-					queueCommandByHost((String)obj2, "COMMIT", tx);
+					try
+					{
+						sock.close();
+					}
+					catch(Exception f)
+					{}
+					//TODO blackListByHost((String)obj2);
+					//TODO queueCommandByHost((String)obj2, "COMMIT", tx);
+					HRDBMSWorker.logger.fatal("BLACKLIST", e);
+					System.exit(1);
 					//retry others
 					boolean toDo = rebuildTree((ArrayList<Object>)o, (String)obj2);
 					if (toDo)
@@ -2166,9 +2218,16 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 		catch(Exception e)
 		{
-			sock.close();
-			blackListByHost((String)obj);
-			queueCommandByHost((String)obj, "COMMIT", tx);
+			try
+			{
+				sock.close();
+			}
+			catch(Exception f)
+			{}
+			//TODO blackListByHost((String)obj);
+			//TODO queueCommandByHost((String)obj, "COMMIT", tx);
+			HRDBMSWorker.logger.fatal("BLACKLIST", e);
+			System.exit(1);
 			boolean toDo = rebuildTree(tree, (String)obj);
 			if (toDo)
 			{
@@ -2648,7 +2707,15 @@ public class ConnectionWorker extends HRDBMSThread
 			{
 				return;
 			}
-			//TODO get length lock
+			try
+			{
+				LockManager.sLock(new Block(file.getAbsolutePath(), -1), tx.number());
+			}
+			catch(Exception e)
+			{
+				ok = false;
+				return;
+			}
 			int numBlocks = (int)(file.length() / Page.BLOCK_SIZE);
 			HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
 			Schema sch = new Schema(layout);
@@ -3098,14 +3165,14 @@ public class ConnectionWorker extends HRDBMSThread
 		MultiHashMap<Integer, ArrayList<Object>> map = new MultiHashMap<Integer, ArrayList<Object>>();
 		for (ArrayList<Object> row : list)
 		{
-			map.multiPut(MetaData.determineDevice(row, partMeta), row);
+			map.multiPut(MetaData.determineDevice(row, partMeta, cols2Pos), row);
 		}
 		
 		ArrayList<FlushInsertThread> threads = new ArrayList<FlushInsertThread>();
 		for (Object o : map.getKeySet())
 		{
 			int device = (Integer)o;
-			threads.add(new FlushInsertThread(map.get(device), tx, schema, table, keys, types, orders, indexes, cols2Pos, device));
+			threads.add(new FlushInsertThread(map.get(device), new Transaction(txNum), schema, table, keys, types, orders, indexes, cols2Pos, device));
 		}
 		
 		for (FlushInsertThread thread : threads)
@@ -3501,6 +3568,424 @@ public class ConnectionWorker extends HRDBMSThread
 		{
 			this.sendNo();
 			returnExceptionToClient(e);
+		}
+	}
+	
+	private static void createTableHeader(String tbl, int cols, int device) throws Exception
+	{
+		String fn = new MetaData().getDevicePath(device);
+		if (!fn.endsWith("/"))
+		{
+			fn += "/";
+		}
+		fn += tbl;
+
+		File table = new File(fn);
+		if (table.exists())
+		{
+			table.delete();
+		}
+		table.createNewFile();
+		
+		FileChannel fc = FileManager.getFile(fn);
+		ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
+		bb.position(0);
+		bb.putInt(MetaData.myNodeNum());
+		bb.putInt(device);
+		bb.putInt(Page.BLOCK_SIZE - (57 + (cols * 4)));
+		
+		int i = 12;
+		while (i < Page.BLOCK_SIZE)
+		{
+			bb.putInt(-1);
+			i += 4;
+		}
+		
+		bb.position(0);
+		fc.write(bb);
+		
+		ByteBuffer head = ByteBuffer.allocate(Page.BLOCK_SIZE * 4095);
+		i = 0;
+		while (i < Page.BLOCK_SIZE * 4095)
+		{
+			head.putInt(-1);
+			i += 4;
+		}
+		head.position(0);
+		fc.write(head);
+		
+		bb.position(0);
+		bb.put(Schema.TYPE_ROW);
+		bb.putInt(0); //next rec num
+		bb.putInt(56 + (cols * 4)); //headEnd
+		bb.putInt(Page.BLOCK_SIZE); //dataStart
+		bb.putLong(System.currentTimeMillis()); //modTime
+		bb.putInt(57 + (4 * cols)); //nullArray offset
+		bb.putInt(49); //colIDListOff
+		bb.putInt(53 + (4 * cols)); //rowIDListOff
+		bb.putInt(57 + (4 * cols)); // offset Array offset
+		bb.putInt(1); //freeSpaceListEntries
+		bb.putInt(57 + (cols * 4)); //free space start
+		bb.putInt(Page.BLOCK_SIZE - 1); //free space end
+		bb.putInt(cols); //colIDListSize
+
+		i = 0;
+		while (i < cols)
+		{
+			bb.putInt(i);
+			i++;
+		}
+		
+		bb.putInt(0); //rowIDListSize
+		fc.write(bb);
+		fc.close();
+	}
+	
+	private void newTable()
+	{
+		byte[] fnLenBytes = new byte[4];
+		int fnLen;
+		byte[] fnBytes;
+		String fn;
+		byte[] ncBytes = new byte[4];
+		int numCols;
+		ArrayList<Integer> devices;
+		
+		try
+		{
+			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
+			readNonCoord(ncBytes);
+			numCols = bytesToInt(ncBytes);
+			readNonCoord(fnLenBytes);
+			fnLen = bytesToInt(fnLenBytes);
+			fnBytes = new byte[fnLen];
+			readNonCoord(fnBytes);
+			fn = new String(fnBytes, "UTF-8");
+			devices = (ArrayList<Integer>)objIn.readObject();
+			
+			for (int device : devices)
+			{
+				createTableHeader(fn, numCols, device);
+			}
+			
+			sendOK();
+		}
+		catch(Exception e)
+		{
+			sendNo();
+			return;
+		}
+	}
+	
+	private void newIndex()
+	{
+		byte[] fnLenBytes = new byte[4];
+		int fnLen;
+		byte[] fnBytes;
+		String fn;
+		byte[] ncBytes = new byte[4];
+		int numCols;
+		byte[] uBytes = new byte[4];
+		int unique;
+		ArrayList<Integer> devices;
+		
+		try
+		{
+			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
+			readNonCoord(ncBytes);
+			numCols = bytesToInt(ncBytes);
+			readNonCoord(uBytes);
+			unique = bytesToInt(uBytes);
+			readNonCoord(fnLenBytes);
+			fnLen = bytesToInt(fnLenBytes);
+			fnBytes = new byte[fnLen];
+			readNonCoord(fnBytes);
+			fn = new String(fnBytes, "UTF-8");
+			devices = (ArrayList<Integer>)objIn.readObject();
+			
+			for (int device : devices)
+			{
+				createIndexHeader(fn, numCols, device, unique);
+			}
+			
+			sendOK();
+		}
+		catch(Exception e)
+		{
+			sendNo();
+			return;
+		}
+	}
+	
+	private void createIndexHeader(String indx, int numCols, int device, int unique) throws Exception
+	{
+		String fn = new MetaData().getDevicePath(device);
+		if (!fn.endsWith("/"))
+		{
+			fn += "/";
+		}
+		fn += indx;
+
+		File table = new File(fn);
+		if (table.exists())
+		{
+			table.delete();
+		}
+		table.createNewFile();
+		
+		FileChannel fc = FileManager.getFile(fn);
+		ByteBuffer data = ByteBuffer.allocate(Page.BLOCK_SIZE);
+		
+		data.position(0);
+		data.putInt(numCols); // num key cols
+		if (unique != 0)
+		{
+			data.put((byte)1); // unique
+		}
+		else
+		{
+			data.put((byte)0); //not unique
+		}
+		data.position(9); // first free byte @ 5
+		data.putInt(Page.BLOCK_SIZE - 1); // last free byte
+
+		data.put((byte)0); // not a leaf
+		// offset of next free value from start of record (13)
+		data.position(18);
+		data.putInt(0); // zero valid key values in this internal node
+		int i = 0;
+		while (i < 128)
+		{
+			data.putInt(0); // down block
+			data.putInt(0); // down offset
+			i++;
+		}
+
+		data.putInt(0); // no up block
+		data.putInt(0); // no up offset
+
+		// fill in first free val pointer
+		int pos = data.position();
+		data.position(14);
+		data.putInt(pos - 13);
+		data.position(5);
+		data.putInt(pos); // first free byte
+		data.position(pos);
+
+		while (pos < (Page.BLOCK_SIZE))
+		{
+			data.put((byte)2); // fill page out with 2s
+			pos++;
+		}
+		
+		fc.write(data);
+		fc.close();
+	}
+	
+	private void popIndex()
+	{
+		byte[] fnLenBytes = new byte[4];
+		int fnLen;
+		byte[] fnBytes;
+		String iFn;
+		String tFn;
+		ArrayList<Integer> devices;
+		ArrayList<String> keys;
+		ArrayList<String> types;
+		ArrayList<Boolean> orders;
+		ArrayList<Integer> poses;
+		TreeMap<Integer, String> pos2Col;
+		HashMap<String, String> cols2Types;
+		
+		try
+		{
+			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
+			readNonCoord(fnLenBytes);
+			fnLen = bytesToInt(fnLenBytes);
+			fnBytes = new byte[fnLen];
+			readNonCoord(fnBytes);
+			iFn = new String(fnBytes, "UTF-8");
+			readNonCoord(fnLenBytes);
+			fnLen = bytesToInt(fnLenBytes);
+			fnBytes = new byte[fnLen];
+			readNonCoord(fnBytes);
+			tFn = new String(fnBytes, "UTF-8");
+			devices = (ArrayList<Integer>)objIn.readObject();
+			keys = (ArrayList<String>)objIn.readObject();
+			types = (ArrayList<String>)objIn.readObject();
+			orders = (ArrayList<Boolean>)objIn.readObject();
+			poses = (ArrayList<Integer>)objIn.readObject();
+			pos2Col = (TreeMap<Integer, String>)objIn.readObject();
+			cols2Types = (HashMap<String, String>)objIn.readObject();
+			
+			ArrayList<PopIndexThread> threads = new ArrayList<PopIndexThread>();
+			for (int device : devices)
+			{
+				threads.add(new PopIndexThread(iFn, tFn, device, keys, types, orders, poses, pos2Col, cols2Types, tx));
+			}
+			
+			for (PopIndexThread pop : threads)
+			{
+				pop.start();
+			}
+			
+			boolean ok = true;
+			for (PopIndexThread pop : threads)
+			{
+				pop.join();
+				if (!pop.getOK())
+				{
+					ok = false;
+				}
+			}
+			
+			if (ok)
+			{
+				sendOK();
+			}
+			else
+			{
+				sendNo();
+			}
+		}
+		catch(Exception e)
+		{
+			sendNo();
+			return;
+		}
+	}
+	
+	private static class PopIndexThread extends HRDBMSThread
+	{
+		private String iFn;
+		private String tFn;
+		private int device;
+		private ArrayList<String> keys;
+		private ArrayList<String> types;
+		private ArrayList<Boolean> orders;
+		private ArrayList<Integer> poses;
+		private boolean ok = true;
+		private TreeMap<Integer, String> pos2Col;
+		private HashMap<String, String> cols2Types;
+		private Transaction tx;
+		
+		public PopIndexThread(String iFn, String tFn, int device, ArrayList<String> keys, ArrayList<String> types, ArrayList<Boolean> orders, ArrayList<Integer> poses, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, Transaction tx)
+		{
+			this.iFn = iFn;
+			this.tFn = tFn;
+			this.device = device;
+			this.keys = keys;
+			this.types = types;
+			this.orders = orders;
+			this.poses = poses;
+			this.pos2Col = pos2Col;
+			this.cols2Types = cols2Types;
+			this.tx = tx;
+		}
+		
+		public boolean getOK()
+		{
+			return ok;
+		}
+		
+		public void run()
+		{
+			try
+			{
+				String fn = new MetaData().getDevicePath(device);
+				if (!fn.endsWith("/"))
+				{
+					fn += "/";
+				}
+				fn += tFn;
+				tFn = fn;
+				
+				Index idx = new Index(new MetaData().getDevicePath(device) + iFn, keys, types, orders);
+				idx.open();
+				LockManager.xLock(new Block(tFn, -1), tx.number());
+				int numBlocks = (int)(new File(tFn).length() / Page.BLOCK_SIZE);
+				int i = Schema.HEADER_SIZE;
+				while (i < numBlocks)
+				{
+					LockManager.xLock(new Block(tFn, i), tx.number());
+					i++;
+				}
+			
+				HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+				for (Map.Entry entry : pos2Col.entrySet())
+				{
+					String type = cols2Types.get(entry.getValue());
+					DataType value = null;
+					if (type.equals("INT"))
+					{
+						value = new DataType(DataType.INTEGER, 0, 0);
+					}
+					else if (type.equals("FLOAT"))
+					{
+						value = new DataType(DataType.DOUBLE, 0, 0);
+					}
+					else if (type.equals("CHAR"))
+					{
+						value = new DataType(DataType.VARCHAR, 0, 0);
+					}
+					else if (type.equals("LONG"))
+					{
+						value = new DataType(DataType.BIGINT, 0, 0);
+					}
+					else if (type.equals("DATE"))
+					{
+						value = new DataType(DataType.DATE, 0, 0);
+					}
+
+					layout.put((Integer)entry.getKey(), value);
+				}
+
+				Schema sch = new Schema(layout);
+				int onPage = Schema.HEADER_SIZE;
+				int lastRequested = Schema.HEADER_SIZE - 1;
+				while (onPage < numBlocks)
+				{
+					if (lastRequested - onPage < PAGES_IN_ADVANCE)
+					{
+						Block[] toRequest = new Block[lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1];
+						i = 0;
+						while (i < toRequest.length)
+						{
+							toRequest[i] = new Block(tFn, lastRequested + i + 1);
+							i++;
+						}
+						tx.requestPages(toRequest);
+						lastRequested += toRequest.length;
+					}
+
+					tx.read(new Block(tFn, onPage++), sch);
+					RowIterator rit = sch.rowIterator();
+					while (rit.hasNext())
+					{
+						Row r = rit.next();
+						if (!r.getCol(0).exists())
+						{
+							continue;
+						}
+						final ArrayList<FieldValue> row = new ArrayList<FieldValue>(types.size());
+						RID rid = r.getRID();
+						int j = 0;
+						while (j < poses.size())
+						{
+							FieldValue fv = r.getCol(poses.get(j));
+							row.add(fv);
+							j++;
+						}
+					
+						//insert into index
+						idx.insert((FieldValue[])row.toArray(), rid);
+					}
+				}
+			}
+			catch(Exception e)
+			{
+				ok = false;
+			}
 		}
 	}
 }

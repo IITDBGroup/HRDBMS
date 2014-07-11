@@ -8,6 +8,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.optimizer.MetaData.PartitionMetaData;
+import com.exascale.tables.Transaction;
 
 public final class Phase4
 {
@@ -22,14 +23,16 @@ public final class Phase4
 	private static final int MIN_CARD_BEFORE_HASH = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("min_card_for_hash")); // 250000
 	protected static AtomicInteger id = new AtomicInteger(0);
 	private final HashSet<Integer> usedNodes = new HashSet<Integer>();
+	private Transaction tx;
 
 	private final HashMap<Operator, Long> cCache = new HashMap<Operator, Long>();
 
 	private boolean lt = true;
 
-	public Phase4(RootOperator root)
+	public Phase4(RootOperator root, Transaction tx)
 	{
 		this.root = root;
+		this.tx = tx;
 		meta = root.getMeta();
 	}
 
@@ -58,7 +61,7 @@ public final class Phase4
 
 		if (op instanceof AntiJoinOperator)
 		{
-			final long retval = (long)((1 - meta.likelihood(((AntiJoinOperator)op).getHSHM(), root)) * card(op.children().get(0)));
+			final long retval = (long)((1 - meta.likelihood(((AntiJoinOperator)op).getHSHM(), root, tx, op)) * card(op.children().get(0)));
 			cCache.put(op, retval);
 			return retval;
 		}
@@ -107,7 +110,7 @@ public final class Phase4
 
 		if (op instanceof HashJoinOperator)
 		{
-			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((HashJoinOperator)op).getHSHM(), root));
+			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((HashJoinOperator)op).getHSHM(), root, tx, op));
 			cCache.put(op, retval);
 			return retval;
 		}
@@ -132,7 +135,7 @@ public final class Phase4
 		if (op instanceof MultiOperator)
 		{
 			// return card(op.children().get(0));
-			final long groupCard = meta.getColgroupCard(((MultiOperator)op).getKeys(), root);
+			final long groupCard = meta.getColgroupCard(((MultiOperator)op).getKeys(), root, tx, op);
 			if (groupCard > card(op.children().get(0)))
 			{
 				final long retval = card(op.children().get(0));
@@ -147,7 +150,7 @@ public final class Phase4
 
 		if (op instanceof NestedLoopJoinOperator)
 		{
-			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((NestedLoopJoinOperator)op).getHSHM(), root));
+			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((NestedLoopJoinOperator)op).getHSHM(), root, tx, op));
 			cCache.put(op, retval);
 			return retval;
 		}
@@ -220,14 +223,14 @@ public final class Phase4
 
 		if (op instanceof SelectOperator)
 		{
-			final long retval = (long)(((SelectOperator)op).likelihood(root) * card(op.children().get(0)));
+			final long retval = (long)(((SelectOperator)op).likelihood(root, tx) * card(op.children().get(0)));
 			cCache.put(op, retval);
 			return retval;
 		}
 
 		if (op instanceof SemiJoinOperator)
 		{
-			final long retval = (long)(meta.likelihood(((SemiJoinOperator)op).getHSHM(), root) * card(op.children().get(0)));
+			final long retval = (long)(meta.likelihood(((SemiJoinOperator)op).getHSHM(), root, tx, op) * card(op.children().get(0)));
 			cCache.put(op, retval);
 			return retval;
 		}
@@ -285,12 +288,12 @@ public final class Phase4
 			final HashSet<HashMap<Filter, Filter>> hshm = ((TableScanOperator)op).getHSHM();
 			if (hshm != null)
 			{
-				final long retval = (long)(meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable()) * meta.likelihood(hshm, root) * (1.0 / ((TableScanOperator)op).getNumNodes()));
+				final long retval = (long)(meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx) * meta.likelihood(hshm, root, tx, op) * (1.0 / ((TableScanOperator)op).getNumNodes()));
 				cCache.put(op, retval);
 				return retval;
 			}
 
-			final long retval = (long)((1.0 / ((TableScanOperator)op).getNumNodes()) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable()));
+			final long retval = (long)((1.0 / ((TableScanOperator)op).getNumNodes()) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx));
 			cCache.put(op, retval);
 			return retval;
 		}
@@ -301,7 +304,7 @@ public final class Phase4
 
 	public void optimize() throws Exception
 	{
-		if (meta.getNumNodes() > 1)
+		if (meta.getNumNodes(tx) > 1)
 		{
 			pushUpReceives();
 			redistributeSorts();
@@ -447,13 +450,13 @@ public final class Phase4
 				other = o;
 			}
 		}
-		String t = meta.getTableForCol(((AntiJoinOperator)parent).getJoinForChild(other).get(0));
+		String t = meta.getTableForCol(((AntiJoinOperator)parent).getJoinForChild(other).get(0), parent);
 		String schema = t.substring(0, t.indexOf('.'));
 		t = t.substring(t.indexOf('.') + 1);
 		PartitionMetaData pmeta = null;
 		if (t != null)
 		{
-			pmeta = meta.getPartMeta(schema, t);
+			pmeta = meta.getPartMeta(schema, t, tx);
 		}
 
 		if (pmeta != null && isLocal(other.children().get(0).children().get(0)) && pmeta.noNodeGroupSet() && pmeta.nodeIsHash() && join.containsAll(pmeta.getNodeHash()) && pmeta.allNodes())
@@ -473,13 +476,13 @@ public final class Phase4
 				cnf = ((TableScanOperator)grandChild).getCNFForParent(child);
 			}
 			child.removeChild(grandChild);
-			t = meta.getTableForCol(join.get(0));
+			t = meta.getTableForCol(join.get(0), grandChild);
 			schema = t.substring(0, t.indexOf('.'));
 			t = t.substring(t.indexOf('.') + 1);
 			pmeta = null;
 			if (t != null)
 			{
-				pmeta = meta.getPartMeta(schema, t);
+				pmeta = meta.getPartMeta(schema, t, tx);
 			}
 
 			if (pmeta != null && isLocal(grandChild) && pmeta.noNodeGroupSet() && pmeta.nodeIsHash() && join.containsAll(pmeta.getNodeHash()) && pmeta.allNodes())
@@ -488,7 +491,7 @@ public final class Phase4
 				card = Long.MAX_VALUE;
 			}
 
-			final NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(join, card / MIN_LOCAL_LEFT_HASH + 1, ID, starting, meta);
+			final NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(join, card / MIN_LOCAL_LEFT_HASH + 1, ID, starting, meta, tx);
 			try
 			{
 				send.add(grandChild);
@@ -508,7 +511,7 @@ public final class Phase4
 
 		int i = starting;
 		ArrayList<Operator> receives = new ArrayList<Operator>();
-		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes())
+		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes(tx))
 		{
 			final NetworkHashReceiveOperator receive2 = new NetworkHashReceiveOperator(ID, meta);
 			receive2.setNode(i);
@@ -579,7 +582,7 @@ public final class Phase4
 			}
 			child.removeChild(grandChild);
 
-			final NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(join, card / MIN_LOCAL_LEFT_HASH + 1, ID, starting, meta);
+			final NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(join, card / MIN_LOCAL_LEFT_HASH + 1, ID, starting, meta, tx);
 			try
 			{
 				send.add(grandChild);
@@ -599,7 +602,7 @@ public final class Phase4
 
 		i = starting;
 		receives = new ArrayList<Operator>();
-		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes())
+		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes(tx))
 		{
 			final NetworkHashReceiveOperator receive2 = new NetworkHashReceiveOperator(ID, meta);
 			receive2.setNode(i);
@@ -704,13 +707,13 @@ public final class Phase4
 				other = o;
 			}
 		}
-		String t = meta.getTableForCol(((SemiJoinOperator)parent).getJoinForChild(other).get(0));
+		String t = meta.getTableForCol(((SemiJoinOperator)parent).getJoinForChild(other).get(0), other);
 		String schema = t.substring(0, t.indexOf('.'));
 		t = t.substring(t.indexOf('.') + 1);
 		PartitionMetaData pmeta = null;
 		if (t != null)
 		{
-			pmeta = meta.getPartMeta(schema, t);
+			pmeta = meta.getPartMeta(schema, t, tx);
 		}
 
 		if (pmeta != null && isLocal(other.children().get(0).children().get(0)) && pmeta.noNodeGroupSet() && pmeta.nodeIsHash() && join.containsAll(pmeta.getNodeHash()) && pmeta.allNodes())
@@ -730,13 +733,13 @@ public final class Phase4
 				cnf = ((TableScanOperator)grandChild).getCNFForParent(child);
 			}
 			child.removeChild(grandChild);
-			t = meta.getTableForCol(join.get(0));
+			t = meta.getTableForCol(join.get(0), grandChild);
 			schema = t.substring(0, t.indexOf('.'));
 			t = t.substring(t.indexOf('.') + 1);
 			pmeta = null;
 			if (t != null)
 			{
-				pmeta = meta.getPartMeta(schema, t);
+				pmeta = meta.getPartMeta(schema, t, tx);
 			}
 
 			if (pmeta != null && isLocal(grandChild) && pmeta.noNodeGroupSet() && pmeta.nodeIsHash() && join.containsAll(pmeta.getNodeHash()) && pmeta.allNodes())
@@ -745,7 +748,7 @@ public final class Phase4
 				card = Long.MAX_VALUE;
 			}
 
-			final NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(join, card / MIN_LOCAL_LEFT_HASH + 1, ID, starting, meta);
+			final NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(join, card / MIN_LOCAL_LEFT_HASH + 1, ID, starting, meta, tx);
 			try
 			{
 				send.add(grandChild);
@@ -765,7 +768,7 @@ public final class Phase4
 
 		int i = starting;
 		ArrayList<Operator> receives = new ArrayList<Operator>();
-		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes())
+		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes(tx))
 		{
 			final NetworkHashReceiveOperator receive2 = new NetworkHashReceiveOperator(ID, meta);
 			receive2.setNode(i);
@@ -836,7 +839,7 @@ public final class Phase4
 			}
 			child.removeChild(grandChild);
 
-			final NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(join, card / MIN_LOCAL_LEFT_HASH + 1, ID, starting, meta);
+			final NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(join, card / MIN_LOCAL_LEFT_HASH + 1, ID, starting, meta, tx);
 			try
 			{
 				send.add(grandChild);
@@ -856,7 +859,7 @@ public final class Phase4
 
 		i = starting;
 		receives = new ArrayList<Operator>();
-		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes())
+		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes(tx))
 		{
 			final NetworkHashReceiveOperator receive2 = new NetworkHashReceiveOperator(ID, meta);
 			receive2.setNode(i);
@@ -1305,7 +1308,7 @@ public final class Phase4
 
 		final ArrayList<NetworkSendOperator> sends = new ArrayList<NetworkSendOperator>();
 		int i = 0;
-		while (i < numNodes && starting + i < meta.getNumNodes())
+		while (i < numNodes && starting + i < meta.getNumNodes(tx))
 		{
 			try
 			{
@@ -1475,14 +1478,14 @@ public final class Phase4
 		}
 	}
 
-	private int getStartingNode(long numNodes)
+	private int getStartingNode(long numNodes) throws Exception
 	{
-		if (numNodes >= meta.getNumNodes())
+		if (numNodes >= meta.getNumNodes(tx))
 		{
 			return 0;
 		}
 
-		final int range = (int)(meta.getNumNodes() - numNodes);
+		final int range = (int)(meta.getNumNodes(tx) - numNodes);
 		return (int)(Math.random() * range);
 	}
 
@@ -1513,7 +1516,7 @@ public final class Phase4
 					cnf = ((TableScanOperator)o).getCNFForParent(receive);
 				}
 
-				final NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(cols2, card / MIN_CARD_BEFORE_HASH, ID, starting, meta);
+				final NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(cols2, card / MIN_CARD_BEFORE_HASH, ID, starting, meta, tx);
 				try
 				{
 					send.add(o);
@@ -1533,7 +1536,7 @@ public final class Phase4
 
 			int i = 0;
 			final ArrayList<NetworkHashReceiveOperator> receives = new ArrayList<NetworkHashReceiveOperator>();
-			while (i < card / MIN_CARD_BEFORE_HASH && i < meta.getNumNodes())
+			while (i < card / MIN_CARD_BEFORE_HASH && i < meta.getNumNodes(tx))
 			{
 				final NetworkHashReceiveOperator hrec = new NetworkHashReceiveOperator(ID, meta);
 				hrec.setNode(i + starting);
@@ -1918,10 +1921,10 @@ public final class Phase4
 
 				if (i == numPerMiddle)
 				{
-					int node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
+					int node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
 					while (usedNodes.contains(node))
 					{
-						node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
+						node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
 					}
 					final NetworkSendOperator newSend = new NetworkSendOperator(node, meta);
 					try
@@ -2318,10 +2321,10 @@ public final class Phase4
 			}
 
 			NetworkHashReceiveOperator newReceive = new NetworkHashReceiveOperator(sends.get(0).getID(), meta);
-			int node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
+			int node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
 			while (usedNodes.contains(node))
 			{
-				node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
+				node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
 			}
 			newReceive.setNode(node);
 			receives2.add(newReceive);
@@ -2375,10 +2378,10 @@ public final class Phase4
 				if (j == numPerMiddle)
 				{
 					newReceive = new NetworkHashReceiveOperator(sends.get(0).getID(), meta);
-					node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
+					node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
 					while (usedNodes.contains(node))
 					{
-						node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
+						node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
 					}
 					newReceive.setNode(node);
 					receives2.add(newReceive);
@@ -2445,10 +2448,10 @@ public final class Phase4
 
 			final NetworkSendRROperator rr = (NetworkSendRROperator)receives.get(0).children().get(0);
 			NetworkHashReceiveOperator newReceive = new NetworkHashReceiveOperator(rr.getID(), meta);
-			int node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
+			int node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
 			while (usedNodes.contains(node))
 			{
-				node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
+				node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
 			}
 			newReceive.setNode(node);
 			receives2.add(newReceive);
@@ -2496,10 +2499,10 @@ public final class Phase4
 				if (j == numPerMiddle)
 				{
 					newReceive = new NetworkHashReceiveOperator(rr.getID(), meta);
-					node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
+					node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
 					while (usedNodes.contains(node))
 					{
-						node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes();
+						node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
 					}
 					newReceive.setNode(node);
 					try
@@ -2855,6 +2858,54 @@ public final class Phase4
 					workToDo = true;
 					break;
 				}
+				else if (op instanceof UnionOperator)
+				{
+					final Operator parent = op.parent();
+					if (card(op.children().get(0)) + card(op.children().get(1)) <= MAX_LOCAL_LEFT_HASH && noLargeUpstreamJoins(op))
+					{
+						continue;
+					}
+
+					if (!handleUnion(receive))
+					{
+						completed.add(receive);
+					}
+					eligible.add((NetworkReceiveOperator)parent.children().get(0));
+					workToDo = true;
+					break;
+				}
+				else if (op instanceof IntersectOperator)
+				{
+					final Operator parent = op.parent();
+					if (card(op.children().get(0)) + card(op.children().get(1)) <= MAX_LOCAL_LEFT_HASH && noLargeUpstreamJoins(op))
+					{
+						continue;
+					}
+
+					if (!handleExcept(receive))
+					{
+						completed.add(receive);
+					}
+					eligible.add((NetworkReceiveOperator)parent.children().get(0));
+					workToDo = true;
+					break;
+				}
+				else if (op instanceof ExceptOperator)
+				{
+					final Operator parent = op.parent();
+					if (card(op.children().get(0)) + card(op.children().get(1)) <= MAX_LOCAL_LEFT_HASH && noLargeUpstreamJoins(op))
+					{
+						continue;
+					}
+
+					if (!handleExcept(receive))
+					{
+						completed.add(receive);
+					}
+					eligible.add((NetworkReceiveOperator)parent.children().get(0));
+					workToDo = true;
+					break;
+				}
 				else if (op instanceof NestedLoopJoinOperator)
 				{
 					final Operator parent = op.parent();
@@ -3036,13 +3087,13 @@ public final class Phase4
 				other = o;
 			}
 		}
-		String t = meta.getTableForCol(((JoinOperator)parent).getJoinForChild(other).get(0));
+		String t = meta.getTableForCol(((JoinOperator)parent).getJoinForChild(other).get(0), other);
 		String schema = t.substring(0, t.indexOf('.'));
 		t = t.substring(t.indexOf('.') + 1);
 		PartitionMetaData pmeta = null;
 		if (t != null)
 		{
-			pmeta = meta.getPartMeta(schema, t);
+			pmeta = meta.getPartMeta(schema, t, tx);
 		}
 
 		if (pmeta != null && isLocal(other.children().get(0).children().get(0)) && pmeta.noNodeGroupSet() && pmeta.nodeIsHash() && join.containsAll(pmeta.getNodeHash()) && pmeta.allNodes())
@@ -3062,13 +3113,13 @@ public final class Phase4
 				cnf = ((TableScanOperator)grandChild).getCNFForParent(child);
 			}
 			child.removeChild(grandChild);
-			t = meta.getTableForCol(join.get(0));
+			t = meta.getTableForCol(join.get(0), grandChild);
 			schema = t.substring(0, t.indexOf('.'));
 			t = t.substring(t.indexOf('.') + 1);
 			pmeta = null;
 			if (t != null)
 			{
-				pmeta = meta.getPartMeta(schema, t);
+				pmeta = meta.getPartMeta(schema, t, tx);
 			}
 
 			if (pmeta != null && isLocal(grandChild) && pmeta.noNodeGroupSet() && pmeta.nodeIsHash() && join.containsAll(pmeta.getNodeHash()) && pmeta.allNodes())
@@ -3077,7 +3128,7 @@ public final class Phase4
 				card = Long.MAX_VALUE;
 			}
 
-			final NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(join, card / MIN_LOCAL_LEFT_HASH + 1, ID, starting, meta);
+			final NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(join, card / MIN_LOCAL_LEFT_HASH + 1, ID, starting, meta, tx);
 			try
 			{
 				send.add(grandChild);
@@ -3097,7 +3148,7 @@ public final class Phase4
 
 		int i = starting;
 		ArrayList<Operator> receives = new ArrayList<Operator>();
-		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes())
+		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes(tx))
 		{
 			final NetworkHashReceiveOperator receive2 = new NetworkHashReceiveOperator(ID, meta);
 			receive2.setNode(i);
@@ -3168,7 +3219,7 @@ public final class Phase4
 			}
 			child.removeChild(grandChild);
 
-			final NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(join, card / MIN_LOCAL_LEFT_HASH + 1, ID, starting, meta);
+			final NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(join, card / MIN_LOCAL_LEFT_HASH + 1, ID, starting, meta, tx);
 			try
 			{
 				send.add(grandChild);
@@ -3188,7 +3239,461 @@ public final class Phase4
 
 		i = starting;
 		receives = new ArrayList<Operator>();
-		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes())
+		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes(tx))
+		{
+			final NetworkHashReceiveOperator receive2 = new NetworkHashReceiveOperator(ID, meta);
+			receive2.setNode(i);
+			receives.add(receive2);
+			i++;
+		}
+
+		for (final Operator receive2 : receives)
+		{
+			for (final Operator send : sends)
+			{
+				try
+				{
+					receive2.add(send);
+				}
+				catch (final Exception e)
+				{
+					HRDBMSWorker.logger.error("", e);
+					throw e;
+				}
+			}
+		}
+
+		final ArrayList<NetworkSendOperator> sends2 = new ArrayList<NetworkSendOperator>(parents.size());
+		for (final Operator clone : parents)
+		{
+			for (final Operator receive2 : receives)
+			{
+				if (clone.getNode() == receive2.getNode())
+				{
+					try
+					{
+						clone.add(receive2);
+					}
+					catch (final Exception e)
+					{
+						HRDBMSWorker.logger.error("", e);
+						throw e;
+					}
+				}
+			}
+
+			final NetworkSendOperator send = new NetworkSendOperator(clone.getNode(), meta);
+			sends2.add(send);
+			try
+			{
+				send.add(clone);
+			}
+			catch (final Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				throw e;
+			}
+		}
+
+		final NetworkReceiveOperator r = new NetworkReceiveOperator(meta);
+		r.setNode(-1);
+		for (final NetworkSendOperator send : sends2)
+		{
+			try
+			{
+				r.add(send);
+			}
+			catch (final Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				throw e;
+			}
+		}
+		try
+		{
+			grandParent.add(r);
+		}
+		catch (final Exception e)
+		{
+			HRDBMSWorker.logger.error("", e);
+			throw e;
+		}
+		makeHierarchical2(r);
+		makeHierarchical(r);
+		cCache.clear();
+		return false;
+	}
+	
+	private boolean handleExcept(NetworkReceiveOperator receive) throws Exception
+	{
+		final Operator parent = receive.parent();
+		verify2ReceivesForHash(parent);
+		final Operator grandParent = parent.parent();
+		long card = card(parent.children().get(0)) + card(parent.children().get(1));
+		parent.removeChild(receive);
+		grandParent.removeChild(parent);
+		ArrayList<Operator> sends = new ArrayList<Operator>(receive.children().size());
+		int starting = getStartingNode(card / MIN_LOCAL_LEFT_HASH + 1);
+		int ID = id.getAndIncrement();
+		Operator other = null;
+		for (final Operator o : parent.children())
+		{
+			if (o != receive)
+			{
+				other = o;
+			}
+		}
+		
+		CNFFilter cnf = null;
+		for (final Operator child : (ArrayList<Operator>)receive.children().clone())
+		{
+			final int node = child.getNode();
+			final Operator grandChild = child.children().get(0);
+
+			if (grandChild instanceof TableScanOperator)
+			{
+				cnf = ((TableScanOperator)grandChild).getCNFForParent(child);
+			}
+			child.removeChild(grandChild);
+
+			final NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(new ArrayList<String>(grandChild.getPos2Col().values()), card / MIN_LOCAL_LEFT_HASH + 1, ID, starting, meta, tx);
+			try
+			{
+				send.add(grandChild);
+				if (cnf != null)
+				{
+					((TableScanOperator)grandChild).setCNFForParent(send, cnf);
+				}
+			}
+			catch (final Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				throw e;
+			}
+			send.setNode(node);
+			sends.add(send);
+		}
+
+		int i = starting;
+		ArrayList<Operator> receives = new ArrayList<Operator>();
+		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes(tx))
+		{
+			final NetworkHashReceiveOperator receive2 = new NetworkHashReceiveOperator(ID, meta);
+			receive2.setNode(i);
+			receives.add(receive2);
+			i++;
+		}
+
+		for (final Operator receive2 : receives)
+		{
+			for (final Operator send : sends)
+			{
+				try
+				{
+					receive2.add(send);
+				}
+				catch (final Exception e)
+				{
+					HRDBMSWorker.logger.error("", e);
+					throw e;
+				}
+			}
+		}
+
+		final ArrayList<Operator> parents = new ArrayList<Operator>(receives.size());
+		for (final Operator receive2 : receives)
+		{
+			final Operator clone = cloneTree(parent, 0);
+			try
+			{
+				clone.add(receive2);
+			}
+			catch (final Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				throw e;
+			}
+			clone.setNode(receive2.getNode());
+			parents.add(clone);
+			for (final Operator o : (ArrayList<Operator>)clone.children().clone())
+			{
+				if (!o.equals(receive2))
+				{
+					clone.removeChild(o);
+				}
+			}
+		}
+
+		Operator otherChild = null;
+		for (final Operator child : parent.children())
+		{
+			if (!child.equals(receive))
+			{
+				otherChild = child;
+			}
+		}
+
+		sends = new ArrayList<Operator>(otherChild.children().size());
+		ID = id.getAndIncrement();
+		for (final Operator child : (ArrayList<Operator>)otherChild.children().clone())
+		{
+			final int node = child.getNode();
+			final Operator grandChild = child.children().get(0);
+			cnf = null;
+			if (grandChild instanceof TableScanOperator)
+			{
+				cnf = ((TableScanOperator)grandChild).getCNFForParent(child);
+			}
+			child.removeChild(grandChild);
+
+			final NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(new ArrayList<String>(grandChild.getPos2Col().values()), card / MIN_LOCAL_LEFT_HASH + 1, ID, starting, meta, tx);
+			try
+			{
+				send.add(grandChild);
+				if (cnf != null)
+				{
+					((TableScanOperator)grandChild).setCNFForParent(send, cnf);
+				}
+			}
+			catch (final Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				throw e;
+			}
+			send.setNode(node);
+			sends.add(send);
+		}
+
+		i = starting;
+		receives = new ArrayList<Operator>();
+		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes(tx))
+		{
+			final NetworkHashReceiveOperator receive2 = new NetworkHashReceiveOperator(ID, meta);
+			receive2.setNode(i);
+			receives.add(receive2);
+			i++;
+		}
+
+		for (final Operator receive2 : receives)
+		{
+			for (final Operator send : sends)
+			{
+				try
+				{
+					receive2.add(send);
+				}
+				catch (final Exception e)
+				{
+					HRDBMSWorker.logger.error("", e);
+					throw e;
+				}
+			}
+		}
+
+		final ArrayList<NetworkSendOperator> sends2 = new ArrayList<NetworkSendOperator>(parents.size());
+		for (final Operator clone : parents)
+		{
+			for (final Operator receive2 : receives)
+			{
+				if (clone.getNode() == receive2.getNode())
+				{
+					try
+					{
+						clone.add(receive2);
+					}
+					catch (final Exception e)
+					{
+						HRDBMSWorker.logger.error("", e);
+						throw e;
+					}
+				}
+			}
+
+			final NetworkSendOperator send = new NetworkSendOperator(clone.getNode(), meta);
+			sends2.add(send);
+			try
+			{
+				send.add(clone);
+			}
+			catch (final Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				throw e;
+			}
+		}
+
+		final NetworkReceiveOperator r = new NetworkReceiveOperator(meta);
+		r.setNode(-1);
+		for (final NetworkSendOperator send : sends2)
+		{
+			try
+			{
+				r.add(send);
+			}
+			catch (final Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				throw e;
+			}
+		}
+		try
+		{
+			grandParent.add(r);
+		}
+		catch (final Exception e)
+		{
+			HRDBMSWorker.logger.error("", e);
+			throw e;
+		}
+		makeHierarchical2(r);
+		makeHierarchical(r);
+		cCache.clear();
+		return false;
+	}
+	
+	private boolean handleUnion(NetworkReceiveOperator receive) throws Exception
+	{
+		final Operator parent = receive.parent();
+		verify2ReceivesForHash(parent);
+		final Operator grandParent = parent.parent();
+		long card = card(parent.children().get(0)) + card(parent.children().get(1));
+		parent.removeChild(receive);
+		grandParent.removeChild(parent);
+		ArrayList<Operator> sends = new ArrayList<Operator>(receive.children().size());
+		int starting = getStartingNode(card / MIN_LOCAL_LEFT_HASH + 1);
+		int ID = id.getAndIncrement();
+		Operator other = null;
+		for (final Operator o : parent.children())
+		{
+			if (o != receive)
+			{
+				other = o;
+			}
+		}
+		
+		CNFFilter cnf = null;
+		for (final Operator child : (ArrayList<Operator>)receive.children().clone())
+		{
+			final int node = child.getNode();
+			final Operator grandChild = child.children().get(0);
+
+			if (grandChild instanceof TableScanOperator)
+			{
+				cnf = ((TableScanOperator)grandChild).getCNFForParent(child);
+			}
+			child.removeChild(grandChild);
+
+			final NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(new ArrayList<String>(grandChild.getPos2Col().values()), card / MIN_LOCAL_LEFT_HASH + 1, ID, starting, meta, tx);
+			try
+			{
+				send.add(grandChild);
+				if (cnf != null)
+				{
+					((TableScanOperator)grandChild).setCNFForParent(send, cnf);
+				}
+			}
+			catch (final Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				throw e;
+			}
+			send.setNode(node);
+			sends.add(send);
+		}
+
+		int i = starting;
+		ArrayList<Operator> receives = new ArrayList<Operator>();
+		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes(tx))
+		{
+			final NetworkHashReceiveOperator receive2 = new NetworkHashReceiveOperator(ID, meta);
+			receive2.setNode(i);
+			receives.add(receive2);
+			i++;
+		}
+
+		for (final Operator receive2 : receives)
+		{
+			for (final Operator send : sends)
+			{
+				try
+				{
+					receive2.add(send);
+				}
+				catch (final Exception e)
+				{
+					HRDBMSWorker.logger.error("", e);
+					throw e;
+				}
+			}
+		}
+
+		final ArrayList<Operator> parents = new ArrayList<Operator>(receives.size());
+		for (final Operator receive2 : receives)
+		{
+			final Operator clone = cloneTree(parent, 0);
+			try
+			{
+				clone.add(receive2);
+			}
+			catch (final Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				throw e;
+			}
+			clone.setNode(receive2.getNode());
+			parents.add(clone);
+			for (final Operator o : (ArrayList<Operator>)clone.children().clone())
+			{
+				if (!o.equals(receive2))
+				{
+					clone.removeChild(o);
+				}
+			}
+		}
+
+		Operator otherChild = null;
+		for (final Operator child : parent.children())
+		{
+			if (!child.equals(receive))
+			{
+				otherChild = child;
+			}
+		}
+
+		sends = new ArrayList<Operator>(otherChild.children().size());
+		ID = id.getAndIncrement();
+		for (final Operator child : (ArrayList<Operator>)otherChild.children().clone())
+		{
+			final int node = child.getNode();
+			final Operator grandChild = child.children().get(0);
+			cnf = null;
+			if (grandChild instanceof TableScanOperator)
+			{
+				cnf = ((TableScanOperator)grandChild).getCNFForParent(child);
+			}
+			child.removeChild(grandChild);
+
+			final NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(new ArrayList<String>(grandChild.getPos2Col().values()), card / MIN_LOCAL_LEFT_HASH + 1, ID, starting, meta, tx);
+			try
+			{
+				send.add(grandChild);
+				if (cnf != null)
+				{
+					((TableScanOperator)grandChild).setCNFForParent(send, cnf);
+				}
+			}
+			catch (final Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				throw e;
+			}
+			send.setNode(node);
+			sends.add(send);
+		}
+
+		i = starting;
+		receives = new ArrayList<Operator>();
+		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes(tx))
 		{
 			final NetworkHashReceiveOperator receive2 = new NetworkHashReceiveOperator(ID, meta);
 			receive2.setNode(i);
@@ -3702,7 +4207,7 @@ public final class Phase4
 				final int starting = getStartingNode(numNodes);
 				final ArrayList<NetworkSendOperator> sends = new ArrayList<NetworkSendOperator>();
 				int i = 0;
-				while (i < numNodes && starting + i < meta.getNumNodes())
+				while (i < numNodes && starting + i < meta.getNumNodes(tx))
 				{
 					final NetworkHashReceiveOperator receive = new NetworkHashReceiveOperator(ID, meta);
 					receive.setNode(starting + i);
@@ -3765,7 +4270,7 @@ public final class Phase4
 				final int starting = getStartingNode(numNodes);
 				final ArrayList<NetworkSendOperator> sends = new ArrayList<NetworkSendOperator>();
 				int i = 0;
-				while (i < numNodes && starting + i < meta.getNumNodes())
+				while (i < numNodes && starting + i < meta.getNumNodes(tx))
 				{
 					final NetworkHashReceiveOperator receive = new NetworkHashReceiveOperator(ID, meta);
 					receive.setNode(starting + i);

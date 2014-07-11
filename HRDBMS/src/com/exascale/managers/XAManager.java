@@ -51,13 +51,13 @@ public class XAManager
 		
 		if (plan == null)
 		{
-			SQLParser parse = new SQLParser(sql, conn);
+			SQLParser parse = new SQLParser(sql, conn, tx);
 			Operator op = parse.parse();
-			new Phase1((RootOperator)op).optimize();
-			new Phase2((RootOperator)op).optimize();
-			new Phase3((RootOperator)op).optimize();
-			new Phase4((RootOperator)op).optimize();
-			new Phase5((RootOperator)op).optimize();
+			new Phase1((RootOperator)op, tx).optimize();
+			new Phase2((RootOperator)op, tx).optimize();
+			new Phase3((RootOperator)op, tx).optimize();
+			new Phase4((RootOperator)op, tx).optimize();
+			new Phase5((RootOperator)op, tx).optimize();
 			ArrayList<Operator> array = new ArrayList<Operator>(1);
 			array.add(op);
 			plan = new Plan(false, array);
@@ -72,6 +72,12 @@ public class XAManager
 		return new XAWorker(plan, tx, true);
 	}
 	
+	public static XAWorker executeCatalogQuery(Plan p, Transaction tx) throws Exception
+	{	
+		txs.multiPut(tx, p);
+		return new XAWorker(p, tx, true);
+	}
+	
 	public static XAWorker executeUpdate(String sql, Transaction tx, ConnectionWorker conn) throws Exception
 	{
 		String sql2 = sql.toUpperCase();
@@ -81,7 +87,26 @@ public class XAManager
 		}
 		
 		
-		SQLParser parse = new SQLParser(sql, conn);
+		SQLParser parse = new SQLParser(sql, conn, tx);
+		Operator op = parse.parse();
+		ArrayList<Operator> array = new ArrayList<Operator>(1);
+		array.add(op);
+		Plan plan = new Plan(false, array);
+		txs.multiPut(tx, plan);
+		return new XAWorker(plan, tx, false);
+	}
+	
+	public static XAWorker executeAuthorizedUpdate(String sql, Transaction tx) throws Exception
+	{
+		String sql2 = sql.toUpperCase();
+		if (sql2.startsWith("SELECT") || sql2.startsWith("WITH"))
+		{
+			throw new Exception("SELECT statement is not allowed");
+		}
+		
+		
+		SQLParser parse = new SQLParser(sql, null, tx);
+		parse.authorize();
 		Operator op = parse.parse();
 		ArrayList<Operator> array = new ArrayList<Operator>(1);
 		array.add(op);
@@ -101,7 +126,7 @@ public class XAManager
 		ArrayList<Integer> nodes = new ArrayList<Integer>();
 		for (Plan p : ps)
 		{
-			nodes.addAll(getNodes(p));
+			nodes.addAll(getNodes(p, tx));
 		}
 		
 		nodes = consolidateNodes(nodes);
@@ -132,7 +157,7 @@ public class XAManager
 		ArrayList<Integer> nodes = new ArrayList<Integer>();
 		for (Plan p : ps)
 		{
-			nodes.addAll(getNodes(p));
+			nodes.addAll(getNodes(p, tx));
 		}
 		nodes = consolidateNodes(nodes);
 		ArrayList<Object> tree = makeTree(nodes);
@@ -205,10 +230,11 @@ public class XAManager
 			obj = ((ArrayList)obj).get(0);
 		}
 		
-		String hostname = new MetaData().getHostNameForNode((Integer)obj);
 		Socket sock = null;
 		try
 		{
+			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
+	
 			sock = new Socket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "LROLLBCK        ".getBytes("UTF-8");
@@ -223,7 +249,7 @@ public class XAManager
 			out.write(outMsg);
 			out.write(longToBytes(tx.number()));
 			ObjectOutputStream objOut = new ObjectOutputStream(out);
-			objOut.writeObject(convertToHosts(tree));
+			objOut.writeObject(convertToHosts(tree, tx));
 			objOut.flush();
 			out.flush();
 			objOut.close();
@@ -233,9 +259,16 @@ public class XAManager
 		}
 		catch(Exception e)
 		{
-			sock.close();
-			blackList((Integer)obj);
-			queueCommand((Integer)obj, "ROLLBACK", tx);
+			try
+			{
+				sock.close();
+			}
+			catch(Exception f)
+			{}
+			//TODO blackList((Integer)obj);
+			//TODO queueCommand((Integer)obj, "ROLLBACK", tx);
+			HRDBMSWorker.logger.fatal("BLACKLIST", e);
+			System.exit(1);
 			boolean toDo = rebuildTree(tree, (Integer)obj);
 			if (toDo)
 			{
@@ -532,7 +565,10 @@ public class XAManager
 		}
 		catch(Exception e)
 		{
-			return askReplicas(xa);
+			//TODO return askReplicas(xa);
+			HRDBMSWorker.logger.fatal("ASK REPLICAS", e);
+			System.exit(1);
+			return false;
 		}
 	}
 	
@@ -577,11 +613,11 @@ public class XAManager
 			obj = ((ArrayList)obj).get(0);
 		}
 		
-		String hostname = new MetaData().getHostNameForNode((Integer)obj);
 		Socket sock = null;
-		String host = new MetaData().getMyHostName();
 		try
 		{
+			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
+			String host = new MetaData().getMyHostName(tx);
 			byte[] data = host.getBytes("UTF-8");
 			byte[] length = intToBytes(data.length);
 			sock = new Socket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
@@ -600,7 +636,7 @@ public class XAManager
 			out.write(length);
 			out.write(data);
 			ObjectOutputStream objOut = new ObjectOutputStream(out);
-			objOut.writeObject(convertToHosts(tree));
+			objOut.writeObject(convertToHosts(tree, tx));
 			objOut.flush();
 			out.flush();
 			objOut.close();
@@ -646,10 +682,10 @@ public class XAManager
 			obj = ((ArrayList)obj).get(0);
 		}
 		
-		String hostname = new MetaData().getHostNameForNode((Integer)obj);
 		Socket sock = null;
 		try
 		{
+			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
 			sock = new Socket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "LCOMMIT         ".getBytes("UTF-8");
@@ -664,7 +700,7 @@ public class XAManager
 			out.write(outMsg);
 			out.write(longToBytes(tx.number()));
 			ObjectOutputStream objOut = new ObjectOutputStream(out);
-			objOut.writeObject(convertToHosts(tree));
+			objOut.writeObject(convertToHosts(tree, tx));
 			objOut.flush();
 			out.flush();
 			objOut.close();
@@ -674,9 +710,16 @@ public class XAManager
 		}
 		catch(Exception e)
 		{
-			sock.close();
-			blackList((Integer)obj);
-			queueCommand((Integer)obj, "COMMIT", tx);
+			try
+			{
+				sock.close();
+			}
+			catch(Exception f)
+			{}
+			//TODO blackList((Integer)obj);
+			//TODO queueCommand((Integer)obj, "COMMIT", tx);
+			HRDBMSWorker.logger.fatal("BLACKLIST", e);
+			System.exit(1);
 			boolean toDo = rebuildTree(tree, (Integer)obj);
 			if (toDo)
 			{
@@ -685,7 +728,7 @@ public class XAManager
 		}
 	}
 	
-	private static ArrayList<Object> convertToHosts(ArrayList<Object> tree)
+	private static ArrayList<Object> convertToHosts(ArrayList<Object> tree, Transaction tx) throws Exception
 	{
 		ArrayList<Object> retval = new ArrayList<Object>();
 		int i = 0;
@@ -694,11 +737,11 @@ public class XAManager
 			Object obj = tree.get(i);
 			if (obj instanceof Integer)
 			{
-				retval.add(new MetaData().getHostNameForNode((Integer)obj));
+				retval.add(new MetaData().getHostNameForNode((Integer)obj, tx));
 			}
 			else
 			{
-				retval.add(convertToHosts((ArrayList<Object>)obj));
+				retval.add(convertToHosts((ArrayList<Object>)obj, tx));
 			}
 			
 			i++;
@@ -806,22 +849,22 @@ public class XAManager
 		return retval;
 	}
 	
-	private static ArrayList<Integer> getNodes(Plan p)
+	private static ArrayList<Integer> getNodes(Plan p, Transaction tx) throws Exception
 	{
 		HashSet<Integer> set = new HashSet<Integer>();
 		for (Operator o : p.getTrees())
 		{
-			set.addAll(getNodes(o));
+			set.addAll(getNodes(o, tx));
 		}
 		
 		return new ArrayList<Integer>(set);
 	}
 	
-	private static ArrayList<Integer> getNodes(Operator o)
+	private static ArrayList<Integer> getNodes(Operator o, Transaction tx) throws Exception
 	{
 		if (o instanceof MassDeleteOperator)
 		{
-			return MetaData.getAllTableNodes(((MassDeleteOperator)o).getSchema(), ((MassDeleteOperator)o).getTable);
+			return MetaData.getNodesForTable(((MassDeleteOperator)o).getSchema(), ((MassDeleteOperator)o).getTable(), tx);
 		}
 		ArrayList<Integer> list = new ArrayList<Integer>();
 		if (o instanceof NetworkSendOperator)
@@ -835,7 +878,7 @@ public class XAManager
 		
 		for (Operator op : o.children())
 		{
-			list.addAll(getNodes(op));
+			list.addAll(getNodes(op, tx));
 		}
 		
 		if (o instanceof InsertOperator && list.isEmpty())

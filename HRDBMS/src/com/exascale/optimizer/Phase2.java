@@ -5,15 +5,18 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.concurrent.ThreadLocalRandom;
 import com.exascale.managers.HRDBMSWorker;
+import com.exascale.tables.Transaction;
 
 public final class Phase2
 {
 	private final RootOperator root;
 	private final MetaData meta;
+	private Transaction tx;
 
-	public Phase2(RootOperator root)
+	public Phase2(RootOperator root, Transaction tx)
 	{
 		this.root = root;
+		this.tx = tx;
 		meta = root.getMeta();
 	}
 
@@ -242,14 +245,14 @@ public final class Phase2
 		}
 	}
 
-	private void setPartitionMetaData(Operator op)
+	private void setPartitionMetaData(Operator op) throws Exception
 	{
 		if (op instanceof TableScanOperator)
 		{
 			final TableScanOperator t = (TableScanOperator)op;
 			if (!t.metaDataSet())
 			{
-				t.setMetaData();
+				t.setMetaData(tx);
 			}
 		}
 		else
@@ -280,7 +283,7 @@ public final class Phase2
 					if (t.anyNode())
 					{
 						int i = Math.abs(ThreadLocalRandom.current().nextInt());
-						i = i % meta.getNumNodes();
+						i = i % meta.getNumNodes(tx);
 						t.addActiveNodeForParent(i, o);
 						setActiveDevices(t, filter, o);
 					}
@@ -288,9 +291,9 @@ public final class Phase2
 					{
 						// node is hash or range
 						// node is set or ALL
-						final ArrayList<Integer> nodeList = new ArrayList<Integer>(meta.getNumNodes());
+						final ArrayList<Integer> nodeList = new ArrayList<Integer>(meta.getNumNodes(tx));
 						int i = 0;
-						while (i < meta.getNumNodes())
+						while (i < meta.getNumNodes(tx))
 						{
 							nodeList.add(i);
 							i++;

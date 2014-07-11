@@ -20,8 +20,10 @@ import com.exascale.optimizer.DropTableOperator;
 import com.exascale.optimizer.DropViewOperator;
 import com.exascale.optimizer.IndexOperator;
 import com.exascale.optimizer.InsertOperator;
+import com.exascale.optimizer.LoadOperator;
 import com.exascale.optimizer.MassDeleteOperator;
 import com.exascale.optimizer.Operator;
+import com.exascale.optimizer.RunstatsOperator;
 import com.exascale.optimizer.TableScanOperator;
 import com.exascale.optimizer.UpdateOperator;
 import com.exascale.tables.Plan;
@@ -32,8 +34,8 @@ public class XAWorker extends HRDBMSThread
 	private final Plan p;
 	private final Transaction tx;
 	private final boolean result;
-	protected ArrayBlockingQueue<Object> in = new ArrayBlockingQueue<Object>(ResourceManager.QUEUE_SIZE);
-	protected ArrayBlockingQueue<Object> out = new ArrayBlockingQueue<Object>(ResourceManager.QUEUE_SIZE);
+	public ArrayBlockingQueue<Object> in = new ArrayBlockingQueue<Object>(ResourceManager.QUEUE_SIZE);
+	public ArrayBlockingQueue<Object> out = new ArrayBlockingQueue<Object>(ResourceManager.QUEUE_SIZE);
 	private int updateCount;
 	private Exception ex;
 
@@ -191,6 +193,14 @@ public class XAWorker extends HRDBMSThread
 		else if (op instanceof DropIndexOperator)
 		{
 			((DropIndexOperator)op).setTransaction(tx);
+		}
+		else if (op instanceof LoadOperator)
+		{
+			((LoadOperator)op).setTransaction(tx);
+		}
+		else if (op instanceof RunstatsOperator)
+		{
+			((RunstatsOperator)op).setTransaction(tx);
 		}
 		
 		op.setPlan(p);

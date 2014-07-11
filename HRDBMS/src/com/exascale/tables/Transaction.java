@@ -20,8 +20,21 @@ import com.exascale.optimizer.MetaData;
 public class Transaction implements Serializable
 {
 	public static final int ISOLATION_RR = 0, ISOLATION_CS = 1, ISOLATION_UR = 2;
-	private static AtomicLong nextTxNum = new AtomicLong(MetaData.myCoordNum());
+	private static AtomicLong nextTxNum;
 	public static ConcurrentHashMap<Long, Long> txList = new ConcurrentHashMap<Long, Long>();
+	
+	static
+	{
+		try
+		{
+			nextTxNum = new AtomicLong(MetaData.myCoordNum());
+		}
+		catch(Exception e)
+		{
+			HRDBMSWorker.logger.fatal("Exception during static initialization of Transaction", e);
+			System.exit(1);
+		}
+	}
 
 	private final long txnum;
 

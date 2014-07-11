@@ -4,8 +4,10 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.AtomicDouble;
+import com.exascale.misc.MyDate;
 
 public final class MaxOperator implements AggregateOperator, Serializable
 {
@@ -15,6 +17,10 @@ public final class MaxOperator implements AggregateOperator, Serializable
 
 	private final MetaData meta;
 	private boolean isInt;
+	private boolean isLong;
+	private boolean isFloat;
+	private boolean isChar;
+	private boolean isDate;
 	private int NUM_GROUPS = 16;
 
 	public MaxOperator(String input, String output, MetaData meta, boolean isInt)
@@ -22,7 +28,23 @@ public final class MaxOperator implements AggregateOperator, Serializable
 		this.input = input;
 		this.output = output;
 		this.meta = meta;
-		this.isInt = isInt;
+
+		if (isInt)
+		{
+			isInt = true;
+			isLong = false;
+			isFloat = false;
+			isChar = false;
+			isDate = false;
+		}
+		else
+		{
+			isInt = false;
+			isLong = false;
+			isFloat = true;
+			isChar = false;
+			isDate = false;
+		}
 	}
 
 	@Override
@@ -30,12 +52,37 @@ public final class MaxOperator implements AggregateOperator, Serializable
 	{
 		final MaxOperator retval = new MaxOperator(input, output, meta, isInt);
 		retval.NUM_GROUPS = NUM_GROUPS;
+		retval.isInt = isInt;
+		retval.isLong = isLong;
+		retval.isFloat = isFloat;
+		retval.isChar = isChar;
+		retval.isDate = isDate;
 		return retval;
 	}
 	
 	public void setIsInt(boolean isInt)
 	{
 		this.isInt = isInt;
+	}
+	
+	public void setIsLong(boolean isInt)
+	{
+		this.isLong = isInt;
+	}
+	
+	public void setIsFloat(boolean isInt)
+	{
+		this.isFloat = isInt;
+	}
+	
+	public void setIsChar(boolean isInt)
+	{
+		this.isChar = isInt;
+	}
+	
+	public void setIsDate(boolean isInt)
+	{
+		this.isDate = isInt;
 	}
 
 	@Override
@@ -67,11 +114,23 @@ public final class MaxOperator implements AggregateOperator, Serializable
 	{
 		if (isInt)
 		{
+			return "INT";
+		}
+		else if (isLong)
+		{
 			return "LONG";
+		}
+		else if (isFloat)
+		{
+			return "FLOAT";
+		}
+		else if (isChar)
+		{
+			return "CHAR";
 		}
 		else
 		{
-			return "FLOAT";
+			return "DATE";
 		}
 	}
 
@@ -91,7 +150,7 @@ public final class MaxOperator implements AggregateOperator, Serializable
 	{
 		// private final DiskBackedALOHashMap<AtomicDouble> maxes = new
 		// DiskBackedALOHashMap<AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
-		private final ConcurrentHashMap<ArrayList<Object>, AtomicDouble> maxes = new ConcurrentHashMap<ArrayList<Object>, AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
+		private final ConcurrentHashMap<ArrayList<Object>, AtomicReference> maxes = new ConcurrentHashMap<ArrayList<Object>, AtomicReference>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
 		private final HashMap<String, Integer> cols2Pos;
 		private int pos;
 
@@ -118,12 +177,7 @@ public final class MaxOperator implements AggregateOperator, Serializable
 		@Override
 		public Object getResult(ArrayList<Object> keys)
 		{
-			if (isInt)
-			{
-				return new Long((long)maxes.get(keys).doubleValue());
-			}
-
-			return maxes.get(keys).doubleValue();
+			return maxes.get(keys);
 		}
 
 		// @Parallel
@@ -131,30 +185,17 @@ public final class MaxOperator implements AggregateOperator, Serializable
 		public final void put(ArrayList<Object> row, ArrayList<Object> group)
 		{
 			final Object o = row.get(pos);
-			Double val;
-			if (o instanceof Integer)
-			{
-				val = new Double((Integer)o);
-			}
-			else if (o instanceof Long)
-			{
-				val = new Double((Long)o);
-			}
-			else
-			{
-				val = (Double)o;
-			}
-
-			AtomicDouble ad = maxes.get(group);
+			Comparable val = (Comparable)o;
+			AtomicReference ad = maxes.get(group);
 			if (ad != null)
 			{
-				double max = ad.get();
-				if (val > max)
+				Comparable max = (Comparable)ad.get();
+				if (val.compareTo(max) > 0)
 				{
 					while (!ad.compareAndSet(max, val))
 					{
-						max = ad.get();
-						if (val <= max)
+						max = (Comparable)ad.get();
+						if (val.compareTo(max) < 1)
 						{
 							break;
 						}
@@ -164,16 +205,16 @@ public final class MaxOperator implements AggregateOperator, Serializable
 				return;
 			}
 
-			if (maxes.putIfAbsent(group, new AtomicDouble(val)) != null)
+			if (maxes.putIfAbsent(group, new AtomicReference(val)) != null)
 			{
 				ad = maxes.get(group);
-				double max = ad.get();
-				if (val > max)
+				Comparable max = (Comparable)ad.get();
+				if (val.compareTo(max) > 0)
 				{
 					while (!ad.compareAndSet(max, val))
 					{
-						max = ad.get();
-						if (val <= max)
+						max = (Comparable)ad.get();
+						if (val.compareTo(max) < 1)
 						{
 							break;
 						}
@@ -189,7 +230,7 @@ public final class MaxOperator implements AggregateOperator, Serializable
 	{
 		private final ArrayList<ArrayList<Object>> rows;
 		private final HashMap<String, Integer> cols2Pos;
-		private double max;
+		private Comparable max;
 
 		public MaxThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos)
 		{
@@ -205,51 +246,74 @@ public final class MaxOperator implements AggregateOperator, Serializable
 		@Override
 		public Object getResult()
 		{
-			if (isInt)
-			{
-				return new Long((long)max);
-			}
-
-			return new Double(max);
+			return max;
 		}
 
 		@Override
 		public void run()
 		{
 			final int pos = cols2Pos.get(input);
-			max = Double.NEGATIVE_INFINITY;
+			max = null;
 
 			for (final Object orow : rows)
 			{
 				final ArrayList<Object> row = (ArrayList<Object>)orow;
 				if (isInt)
 				{
-					final Object o = row.get(pos);
-					if (o instanceof Integer)
+					final Integer o = (Integer)row.get(pos);
+					if (max == null)
 					{
-						if ((Integer)o > max)
-						{
-							max = (Integer)o;
-						}
+						max = o;
 					}
-					else if (o instanceof Long)
+					else if (o.compareTo((Integer)max) > 0)
 					{
-						if ((Long)o > max)
-						{
-							max = (Long)o;
-						}
+						max = o;
 					}
-					else
+				}
+				else if (isLong)
+				{
+					final Long o = (Long)row.get(pos);
+					if (max == null)
 					{
-						//TODO should be fixed when MAX and MIN are updated
-						HRDBMSWorker.logger.error("Unknown class type in MaxOperator.");
-						System.exit(1);
+						max = o;
+					}
+					else if (o.compareTo((Long)max) > 0)
+					{
+						max = o;
+					}
+				}
+				else if (isFloat)
+				{
+					final Double o = (Double)row.get(pos);
+					if (max == null)
+					{
+						max = o;
+					}
+					else if (o.compareTo((Double)max) > 0)
+					{
+						max = o;
+					}
+				}
+				else if (isChar)
+				{
+					final String o = (String)row.get(pos);
+					if (max == null)
+					{
+						max = o;
+					}
+					else if (o.compareTo((String)max) > 0)
+					{
+						max = o;
 					}
 				}
 				else
 				{
-					final Double o = (Double)row.get(pos);
-					if (o > max)
+					final MyDate o = (MyDate)row.get(pos);
+					if (max == null)
+					{
+						max = o;
+					}
+					else if (o.compareTo((MyDate)max) > 0)
 					{
 						max = o;
 					}

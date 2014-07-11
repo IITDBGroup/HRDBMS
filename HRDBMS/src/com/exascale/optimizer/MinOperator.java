@@ -4,8 +4,10 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.AtomicDouble;
+import com.exascale.misc.MyDate;
 
 public final class MinOperator implements AggregateOperator, Serializable
 {
@@ -15,6 +17,10 @@ public final class MinOperator implements AggregateOperator, Serializable
 
 	private final MetaData meta;
 	private boolean isInt;
+	private boolean isLong;
+	private boolean isFloat;
+	private boolean isChar;
+	private boolean isDate;
 	private int NUM_GROUPS = 16;
 
 	public MinOperator(String input, String output, MetaData meta, boolean isInt)
@@ -22,7 +28,22 @@ public final class MinOperator implements AggregateOperator, Serializable
 		this.input = input;
 		this.output = output;
 		this.meta = meta;
-		this.isInt = isInt;
+		if (isInt)
+		{
+			this.isInt = true;
+			this.isLong = false;
+			this.isFloat = false;
+			this.isChar = false;
+			this.isDate = false;
+		}
+		else
+		{
+			this.isInt = false;
+			this.isLong = false;
+			this.isFloat = true;
+			this.isChar = false;
+			this.isDate = false;
+		}
 	}
 
 	@Override
@@ -30,12 +51,37 @@ public final class MinOperator implements AggregateOperator, Serializable
 	{
 		final MinOperator retval = new MinOperator(input, output, meta, isInt);
 		retval.NUM_GROUPS = NUM_GROUPS;
+		retval.isInt = isInt;
+		retval.isLong = isLong;
+		retval.isFloat = isFloat;
+		retval.isChar = isChar;
+		retval.isDate = isDate;
 		return retval;
 	}
 	
 	public void setIsInt(boolean isInt)
 	{
 		this.isInt = isInt;
+	}
+	
+	public void setIsLong(boolean isInt)
+	{
+		this.isLong = isInt;
+	}
+	
+	public void setIsFloat(boolean isInt)
+	{
+		this.isFloat = isInt;
+	}
+	
+	public void setIsChar(boolean isInt)
+	{
+		this.isChar = isInt;
+	}
+	
+	public void setIsDate(boolean isInt)
+	{
+		this.isDate = isInt;
 	}
 
 	@Override
@@ -67,11 +113,23 @@ public final class MinOperator implements AggregateOperator, Serializable
 	{
 		if (isInt)
 		{
+			return "INT";
+		}
+		else if (isLong)
+		{
 			return "LONG";
+		}
+		else if (isFloat)
+		{
+			return "FLOAT";
+		}
+		else if (isChar)
+		{
+			return "CHAR";
 		}
 		else
 		{
-			return "FLOAT";
+			return "DATE";
 		}
 	}
 
@@ -91,7 +149,7 @@ public final class MinOperator implements AggregateOperator, Serializable
 	{
 		// private final DiskBackedALOHashMap<AtomicDouble> mins = new
 		// DiskBackedALOHashMap<AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
-		private final ConcurrentHashMap<ArrayList<Object>, AtomicDouble> mins = new ConcurrentHashMap<ArrayList<Object>, AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16, 1.0f);
+		private final ConcurrentHashMap<ArrayList<Object>, AtomicReference> mins = new ConcurrentHashMap<ArrayList<Object>, AtomicReference>(NUM_GROUPS > 0 ? NUM_GROUPS : 16, 1.0f);
 		private final HashMap<String, Integer> cols2Pos;
 		private int pos;
 
@@ -118,12 +176,7 @@ public final class MinOperator implements AggregateOperator, Serializable
 		@Override
 		public Object getResult(ArrayList<Object> keys)
 		{
-			if (isInt)
-			{
-				return new Long((long)mins.get(keys).doubleValue());
-			}
-
-			return mins.get(keys).doubleValue();
+			return mins.get(keys);
 		}
 
 		// @Parallel
@@ -131,30 +184,18 @@ public final class MinOperator implements AggregateOperator, Serializable
 		public final void put(ArrayList<Object> row, ArrayList<Object> group)
 		{
 			final Object o = row.get(pos);
-			Double val;
-			if (o instanceof Integer)
-			{
-				val = new Double((Integer)o);
-			}
-			else if (o instanceof Long)
-			{
-				val = new Double((Long)o);
-			}
-			else
-			{
-				val = (Double)o;
-			}
-
-			AtomicDouble ad = mins.get(group);
+			Comparable val = (Comparable)o;
+			
+			AtomicReference ad = mins.get(group);
 			if (ad != null)
 			{
-				double min = ad.get();
-				if (val < min)
+				Comparable min = (Comparable)ad.get();
+				if (val.compareTo(min) < 0)
 				{
 					while (!ad.compareAndSet(min, val))
 					{
-						min = ad.get();
-						if (val >= min)
+						min = (Comparable)ad.get();
+						if (val.compareTo(min) > -1)
 						{
 							break;
 						}
@@ -164,16 +205,16 @@ public final class MinOperator implements AggregateOperator, Serializable
 				return;
 			}
 
-			if (mins.putIfAbsent(group, new AtomicDouble(val)) != null)
+			if (mins.putIfAbsent(group, new AtomicReference(val)) != null)
 			{
 				ad = mins.get(group);
-				double min = ad.get();
-				if (val < min)
+				Comparable min = (Comparable)ad.get();
+				if (val.compareTo(min) < 0)
 				{
 					while (!ad.compareAndSet(min, val))
 					{
-						min = ad.get();
-						if (val >= min)
+						min = (Comparable)ad.get();
+						if (val.compareTo(min) > -1)
 						{
 							break;
 						}
@@ -189,7 +230,7 @@ public final class MinOperator implements AggregateOperator, Serializable
 	{
 		private final ArrayList<ArrayList<Object>> rows;
 		private final HashMap<String, Integer> cols2Pos;
-		private double min;
+		private Comparable min;
 
 		public MinThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos)
 		{
@@ -205,51 +246,74 @@ public final class MinOperator implements AggregateOperator, Serializable
 		@Override
 		public Object getResult()
 		{
-			if (isInt)
-			{
-				return new Long((long)min);
-			}
-
-			return new Double(min);
+			return min;
 		}
 
 		@Override
 		public void run()
 		{
 			final int pos = cols2Pos.get(input);
-			min = Double.POSITIVE_INFINITY;
+			min = null;
 
 			for (final Object orow : rows)
 			{
 				final ArrayList<Object> row = (ArrayList<Object>)orow;
 				if (isInt)
 				{
-					final Object o = row.get(pos);
-					if (o instanceof Integer)
+					final Integer o = (Integer)row.get(pos);
+					if (min == null)
 					{
-						if ((Integer)o < min)
-						{
-							min = (Integer)o;
-						}
+						min = o;
 					}
-					else if (o instanceof Long)
+					else if (o.compareTo((Integer)min) < 0)
 					{
-						if ((Long)o < min)
-						{
-							min = (Long)o;
-						}
+						min = o;
 					}
-					else
+				}
+				else if (isLong)
+				{
+					final Long o = (Long)row.get(pos);
+					if (min == null)
 					{
-						//TODO should be fixed by MAX MIN update
-						HRDBMSWorker.logger.error("Unknown class type in MinOperator.");
-						System.exit(1);
+						min = o;
+					}
+					else if (o.compareTo((Long)min) < 0)
+					{
+						min = o;
+					}
+				}
+				else if (isFloat)
+				{
+					final Double o = (Double)row.get(pos);
+					if (min == null)
+					{
+						min = o;
+					}
+					else if (o.compareTo((Double)min) < 0)
+					{
+						min = o;
+					}
+				}
+				else if (isChar)
+				{
+					final String o = (String)row.get(pos);
+					if (min == null)
+					{
+						min = o;
+					}
+					else if (o.compareTo((String)min) < 0)
+					{
+						min = o;
 					}
 				}
 				else
 				{
-					final Double o = (Double)row.get(pos);
-					if (o < min)
+					final MyDate o = (MyDate)row.get(pos);
+					if (min == null)
+					{
+						min = o;
+					}
+					else if (o.compareTo((MyDate)min) < 0)
 					{
 						min = o;
 					}

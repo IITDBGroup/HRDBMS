@@ -15,6 +15,7 @@ import com.exascale.misc.DateParser;
 import com.exascale.misc.MyDate;
 import com.exascale.misc.MySimpleDateFormat;
 import com.exascale.tables.SQL;
+import com.exascale.tables.Transaction;
 import com.exascale.threads.ConnectionWorker;
 
 //TODO CaseOperator
@@ -29,16 +30,24 @@ public class SQLParser
 	private ArrayList<ArrayList<Object>> complex = new ArrayList<ArrayList<Object>>();
 	private ConnectionWorker connection;
 	private boolean doesNotUseCurrentSchema = true;
+	private boolean authorized = false;
+	private Transaction tx;
 	
 	public static final int TYPE_INLINE = 0;
 	public static final int TYPE_GROUPBY = 1;
 	public static final int TYPE_DATE = 2;
 	public static final int TYPE_DAYS = 3;
 
-	public SQLParser(String sql, ConnectionWorker connection)
+	public SQLParser(String sql, ConnectionWorker connection, Transaction tx)
 	{
 		this.sql = new SQL(sql);
 		this.connection = connection;
+		this.tx = tx;
+	}
+	
+	public void authorize()
+	{
+		authorized = true;
 	}
 	
 	public boolean doesNotUseCurrentSchema()
@@ -59,66 +68,132 @@ public class SQLParser
 		if (stmt instanceof Select)
 		{
 			Operator op = buildOperatorTreeFromSelect((Select)stmt);
-			RootOperator retval = new RootOperator(meta.generateCard(op), new MetaData());
+			RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
 			retval.add(op);
 			return retval;
 		}
 		
 		if (stmt instanceof Insert)
 		{
+			Insert insert = (Insert)stmt;
+			TableName table = insert.getTable();
+			if (!authorized && table.getSchema() != null && table.getSchema().equals("SYS"))
+			{
+				throw new ParseException("Catalog updates are not allowed!");
+			}
 			Operator op = buildOperatorTreeFromInsert((Insert)stmt);
 			return op;
 		}
 		
 		if (stmt instanceof Update)
 		{
+			Update update = (Update)stmt;
+			TableName table = update.getTable();
+			if (!authorized && table.getSchema() != null && table.getSchema().equals("SYS"))
+			{
+				throw new ParseException("Catalog updates are not allowed!");
+			}
 			Operator op = buildOperatorTreeFromUpdate((Update)stmt);
 			return op;
 		}
 		
 		if (stmt instanceof Delete)
 		{
+			Delete delete = (Delete)stmt;
+			TableName table = delete.getTable();
+			if (!authorized && table.getSchema() != null && table.getSchema().equals("SYS"))
+			{
+				throw new ParseException("Catalog updates are not allowed!");
+			}
 			Operator op = buildOperatorTreeFromDelete((Delete)stmt);
+			return op;
+		}
+		
+		if (stmt instanceof Runstats)
+		{
+			Operator op = buildOperatorTreeFromRunstats((Runstats)stmt);
 			return op;
 		}
 		
 		if (stmt instanceof CreateTable)
 		{
+			CreateTable createTable = (CreateTable)stmt;
+			TableName table = createTable.getTable();
+			if (table.getSchema() != null && table.getSchema().equals("SYS"))
+			{
+				throw new ParseException("You cannot create new tables in the SYS schema");
+			}
 			Operator op = buildOperatorTreeFromCreateTable((CreateTable)stmt);
-			//TODO
+			return op;
 		}
 		
 		if (stmt instanceof DropTable)
 		{
+			DropTable dropTable = (DropTable)stmt;
+			TableName table = dropTable.getTable();
+			if (table.getSchema() != null && table.getSchema().equals("SYS"))
+			{
+				throw new ParseException("You cannot drop tables in the SYS schema");
+			}
 			Operator op = buildOperatorTreeFromDropTable((DropTable)stmt);
-			//TODO
+			return op;
 		}
 		
 		if (stmt instanceof CreateIndex)
 		{
 			Operator op = buildOperatorTreeFromCreateIndex((CreateIndex)stmt);
-			//TODO
+			return op;
 		}
 		
 		if (stmt instanceof DropIndex)
 		{
 			Operator op = buildOperatorTreeFromDropIndex((DropIndex)stmt);
-			//TODO
+			return op;
 		}
 		
 		if (stmt instanceof CreateView)
 		{
 			Operator op = buildOperatorTreeFromCreateView((CreateView)stmt);
-			//TODO
+			return op;
 		}
 		
 		if (stmt instanceof DropView)
 		{
 			Operator op = buildOperatorTreeFromDropView((DropView)stmt);
-			//TODO
+			return op;
+		}
+		
+		if (stmt instanceof Load)
+		{
+			Operator op = buildOperatorTreeFromLoad((Load)stmt);
+			return op;
 		}
 		
 		return null;
+	}
+	
+	private Operator buildOperatorTreeFromLoad(Load load) throws Exception
+	{
+		TableName table = load.getTable();
+		String schema = null;
+		String tbl = null;
+		if (table.getSchema() == null)
+		{
+			schema = new MetaData(connection).getCurrentSchema();
+			tbl = table.getName();
+		}
+		else
+		{
+			schema = table.getSchema();
+			tbl = table.getName();
+		}
+		
+		if (!meta.verifyTableExistence(schema, tbl, tx))
+		{
+			throw new ParseException("Table does not exist");
+		}
+		
+		return new LoadOperator(schema, tbl, load.isReplace(), load.getDelimiter(), load.getGlob(), meta);
 	}
 	
 	private Operator buildOperatorTreeFromCreateView(CreateView createView) throws Exception
@@ -138,7 +213,7 @@ public class SQLParser
 			tbl = table.getName();
 		}
 		
-		if (meta.verifyTableExistence(schema, tbl) || meta.verifyViewExistence(schema, tbl))
+		if (meta.verifyTableExistence(schema, tbl, tx) || meta.verifyViewExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table or view already exists");
 		}
@@ -162,7 +237,7 @@ public class SQLParser
 			tbl = table.getName();
 		}
 		
-		if (!meta.verifyViewExistence(schema, tbl))
+		if (!meta.verifyViewExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table or view does not exist");
 		}
@@ -186,7 +261,7 @@ public class SQLParser
 			tbl = table.getName();
 		}
 		
-		if (!meta.verifyTableExistence(schema, tbl))
+		if (!meta.verifyTableExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table does not exist");
 		}
@@ -197,7 +272,7 @@ public class SQLParser
 			throw new ParseException("Schemas cannot be specified for index names");
 		}
 		
-		if (meta.verifyIndexExistence(schema, index))
+		if (meta.verifyIndexExistence(schema, index, tx))
 		{
 			throw new ParseException("Index already exists");
 		}
@@ -211,7 +286,7 @@ public class SQLParser
 			{
 				throw new ParseException("Column names cannot be qualified with table names in a CREATE INDEX statement");
 			}
-			if (!meta.verifyColExistence(schema, tbl, col))
+			if (!meta.verifyColExistence(schema, tbl, col, tx))
 			{
 				throw new ParseException("Column " + col + " does not exist");
 			}
@@ -236,7 +311,7 @@ public class SQLParser
 			tbl = table.getName();
 		}
 		
-		if (!meta.verifyIndexExistence(schema, tbl))
+		if (!meta.verifyIndexExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Index does not exist");
 		}
@@ -260,7 +335,7 @@ public class SQLParser
 			tbl = table.getName();
 		}
 		
-		if (meta.verifyTableExistence(schema, tbl) || meta.verifyViewExistence(schema, tbl))
+		if (meta.verifyTableExistence(schema, tbl, tx) || meta.verifyViewExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table or view already exists");
 		}
@@ -307,7 +382,7 @@ public class SQLParser
 			}
 		}
 		
-		return new CreateTableOperator(schema, tbl, colDefs, new ArrayList<String>(pks), meta);
+		return new CreateTableOperator(schema, tbl, colDefs, new ArrayList<String>(pks), createTable.getNodeGroupExp(), createTable.getNodeExp(), createTable.getDeviceExp(), meta);
 	}
 	
 	private Operator buildOperatorTreeFromDropTable(DropTable dropTable) throws Exception
@@ -326,12 +401,36 @@ public class SQLParser
 			tbl = table.getName();
 		}
 		
-		if (!meta.verifyIndexExistence(schema, tbl))
+		if (!meta.verifyTableExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table does not exist");
 		}
 		
 		return new DropTableOperator(schema, tbl, meta);
+	}
+	
+	private Operator buildOperatorTreeFromRunstats(Runstats runstats) throws Exception
+	{
+		TableName table = runstats.getTable();
+		String schema = null;
+		String tbl = null;
+		if (table.getSchema() == null)
+		{
+			schema = new MetaData(connection).getCurrentSchema();
+			tbl = table.getName();
+		}
+		else
+		{
+			schema = table.getSchema();
+			tbl = table.getName();
+		}
+		
+		if (!meta.verifyTableExistence(schema, tbl, tx))
+		{
+			throw new ParseException("Table does not exist");
+		}
+		
+		return new RunstatsOperator(schema, tbl, meta);
 	}
 	
 	private Operator buildOperatorTreeFromUpdate(Update update) throws Exception
@@ -350,12 +449,12 @@ public class SQLParser
 			tbl = table.getName();
 		}
 		
-		if (!meta.verifyTableExistence(schema, tbl))
+		if (!meta.verifyTableExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table does not exist");
 		}
 		
-		TableScanOperator scan = new TableScanOperator(schema, tbl, meta);
+		TableScanOperator scan = new TableScanOperator(schema, tbl, meta, tx);
 		Operator op = null;
 		if (update.getWhere() != null)
 		{
@@ -416,23 +515,23 @@ public class SQLParser
 			}
 		}
 		
-		if (!MetaData.verifyUpdate(schema, tbl, update.getCols(), buildList, op))
+		if (!MetaData.verifyUpdate(schema, tbl, update.getCols(), buildList, op, tx))
 		{
 			throw new ParseException("The number of columns and/or data types do not match the columns being updated");
 		}
 		
 		cols.addAll(new HashSet<String>(buildList));
-		cols.addAll(MetaData.getIndexColsForTable(schema, tbl));
+		cols.addAll(MetaData.getIndexColsForTable(schema, tbl, tx));
 		ProjectOperator project = new ProjectOperator(cols, meta);
 		project.add(op);
 		op = project;
-		RootOperator retval = new RootOperator(meta.generateCard(op), new MetaData());
+		RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
 		retval.add(op);
-		new Phase1(retval).optimize();
-		new Phase2(retval).optimize();
-		new Phase3(retval).optimize();
-		new Phase4(retval).optimize();
-		new Phase5(retval).optimize();
+		new Phase1(retval, tx).optimize();
+		new Phase2(retval, tx).optimize();
+		new Phase3(retval, tx).optimize();
+		new Phase4(retval, tx).optimize();
+		new Phase5(retval, tx).optimize();
 		UpdateOperator uOp = new UpdateOperator(schema, tbl, update.getCols(), buildList, meta);
 		uOp.add(retval);
 		return uOp;
@@ -454,7 +553,7 @@ public class SQLParser
 			tbl = table.getName();
 		}
 		
-		if (!meta.verifyTableExistence(schema, tbl))
+		if (!meta.verifyTableExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table does not exist");
 		}
@@ -462,15 +561,15 @@ public class SQLParser
 		if (insert.fromSelect())
 		{
 			Operator op = buildOperatorTreeFromFullSelect(insert.getSelect());
-			RootOperator retval = new RootOperator(meta.generateCard(op), new MetaData());
+			RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
 			retval.add(op);
-			new Phase1(retval).optimize();
-			new Phase2(retval).optimize();
-			new Phase3(retval).optimize();
-			new Phase4(retval).optimize();
-			new Phase5(retval).optimize();
+			new Phase1(retval, tx).optimize();
+			new Phase2(retval, tx).optimize();
+			new Phase3(retval, tx).optimize();
+			new Phase4(retval, tx).optimize();
+			new Phase5(retval, tx).optimize();
 			
-			if (!MetaData.verifyInsert(schema, tbl, op))
+			if (!MetaData.verifyInsert(schema, tbl, op, tx))
 			{
 				throw new ParseException("The number of columns and/or data types from the select portion do not match the table being inserted into");
 			}
@@ -507,7 +606,7 @@ public class SQLParser
 				}
 			}
 			
-			if (!MetaData.verifyInsert(schema, tbl, op))
+			if (!MetaData.verifyInsert(schema, tbl, op, tx))
 			{
 				throw new ParseException("The number of columns and/or data types from the select portion do not match the table being inserted into");
 			}
@@ -534,7 +633,7 @@ public class SQLParser
 			tbl = table.getName();
 		}
 		
-		if (!meta.verifyTableExistence(schema, tbl))
+		if (!meta.verifyTableExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table does not exist");
 		}
@@ -544,7 +643,7 @@ public class SQLParser
 			return new MassDeleteOperator(schema, tbl, meta);
 		}
 		
-		TableScanOperator scan = new TableScanOperator(schema, tbl, meta);
+		TableScanOperator scan = new TableScanOperator(schema, tbl, meta, tx);
 		Operator op = buildOperatorTreeFromWhere(delete.getWhere(), scan);
 		scan.getRID();
 		ArrayList<String> cols = new ArrayList<String>();
@@ -552,23 +651,23 @@ public class SQLParser
 		cols.add("_RID2");
 		cols.add("_RID3");
 		cols.add("_RID4");
-		cols.addAll(MetaData.getIndexColsForTable(schema, tbl));
+		cols.addAll(MetaData.getIndexColsForTable(schema, tbl, tx));
 		ProjectOperator project = new ProjectOperator(cols, meta);
 		project.add(op);
 		op = project;
-		RootOperator retval = new RootOperator(meta.generateCard(op), new MetaData());
+		RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
 		retval.add(op);
-		new Phase1(retval).optimize();
-		new Phase2(retval).optimize();
-		new Phase3(retval).optimize();
-		new Phase4(retval).optimize();
-		new Phase5(retval).optimize();
+		new Phase1(retval, tx).optimize();
+		new Phase2(retval, tx).optimize();
+		new Phase3(retval, tx).optimize();
+		new Phase4(retval, tx).optimize();
+		new Phase5(retval, tx).optimize();
 		DeleteOperator dOp = new DeleteOperator(schema, tbl, meta);
 		dOp.add(retval);
 		return dOp;
 	}
 	
-	private Operator buildOperatorTreeFromSelect(Select select) throws ParseException
+	private Operator buildOperatorTreeFromSelect(Select select) throws Exception
 	{
 		if (select.getCTEs().size() > 0)
 		{
@@ -703,7 +802,7 @@ public class SQLParser
 		}
 	}
 	
-	private Operator buildOperatorTreeFromFullSelect(FullSelect select) throws ParseException
+	private Operator buildOperatorTreeFromFullSelect(FullSelect select) throws Exception
 	{
 		Operator op;
 		if (select.getSubSelect() != null)
@@ -2102,7 +2201,7 @@ public class SQLParser
 		}
 	}
 	
-	private Operator buildOperatorTreeFromSubSelect(SubSelect select) throws ParseException
+	private Operator buildOperatorTreeFromSubSelect(SubSelect select) throws Exception
 	{
 		Operator op = buildOperatorTreeFromFrom(select.getFrom());
 		getComplexColumns(select.getSelect(), select);
@@ -2218,17 +2317,45 @@ public class SQLParser
 						throw new ParseException("Column " + col + " was referenced but not found");
 					}
 					
-					if (type.equals("INT") || type.equals("LONG"))
+					if (type.equals("INT"))
 					{
 						((MaxOperator)agop).setIsInt(true);
+						((MaxOperator)agop).setIsLong(false);
+						((MaxOperator)agop).setIsFloat(false);
+						((MaxOperator)agop).setIsChar(false);
+						((MaxOperator)agop).setIsDate(false);
+					}
+					else if (type.equals("LONG"))
+					{
+						((MaxOperator)agop).setIsInt(false);
+						((MaxOperator)agop).setIsLong(true);
+						((MaxOperator)agop).setIsFloat(false);
+						((MaxOperator)agop).setIsChar(false);
+						((MaxOperator)agop).setIsDate(false);
 					}
 					else if (type.equals("FLOAT"))
 					{
 						((MaxOperator)agop).setIsInt(false);
+						((MaxOperator)agop).setIsLong(false);
+						((MaxOperator)agop).setIsFloat(true);
+						((MaxOperator)agop).setIsChar(false);
+						((MaxOperator)agop).setIsDate(false);
 					}
-					else
+					else if (type.equals("CHAR"))
 					{
-						throw new ParseException("The argument to MAX() must be numeric");
+						((MaxOperator)agop).setIsInt(false);
+						((MaxOperator)agop).setIsLong(false);
+						((MaxOperator)agop).setIsFloat(false);
+						((MaxOperator)agop).setIsChar(true);
+						((MaxOperator)agop).setIsDate(false);
+					}
+					else if (type.equals("DATE"))
+					{
+						((MaxOperator)agop).setIsInt(false);
+						((MaxOperator)agop).setIsLong(false);
+						((MaxOperator)agop).setIsFloat(false);
+						((MaxOperator)agop).setIsChar(false);
+						((MaxOperator)agop).setIsDate(true);
 					}
 				}
 				else if (agop instanceof MinOperator)
@@ -2241,17 +2368,45 @@ public class SQLParser
 						throw new ParseException("Column " + col + " was referenced but not found");
 					}
 					
-					if (type.equals("INT") || type.equals("LONG"))
+					if (type.equals("INT"))
 					{
 						((MinOperator)agop).setIsInt(true);
+						((MinOperator)agop).setIsLong(false);
+						((MinOperator)agop).setIsFloat(false);
+						((MinOperator)agop).setIsChar(false);
+						((MinOperator)agop).setIsDate(false);
+					}
+					else if (type.equals("LONG"))
+					{
+						((MinOperator)agop).setIsInt(false);
+						((MinOperator)agop).setIsLong(true);
+						((MinOperator)agop).setIsFloat(false);
+						((MinOperator)agop).setIsChar(false);
+						((MinOperator)agop).setIsDate(false);
 					}
 					else if (type.equals("FLOAT"))
 					{
 						((MinOperator)agop).setIsInt(false);
+						((MinOperator)agop).setIsLong(false);
+						((MinOperator)agop).setIsFloat(true);
+						((MinOperator)agop).setIsChar(false);
+						((MinOperator)agop).setIsDate(false);
 					}
-					else
+					else if (type.equals("CHAR"))
 					{
-						throw new ParseException("The argument to MIN() must be numeric");
+						((MinOperator)agop).setIsInt(false);
+						((MinOperator)agop).setIsLong(false);
+						((MinOperator)agop).setIsFloat(false);
+						((MinOperator)agop).setIsChar(true);
+						((MinOperator)agop).setIsDate(false);
+					}
+					else if (type.equals("DATE"))
+					{
+						((MinOperator)agop).setIsInt(false);
+						((MinOperator)agop).setIsLong(false);
+						((MinOperator)agop).setIsFloat(false);
+						((MinOperator)agop).setIsChar(false);
+						((MinOperator)agop).setIsDate(true);
 					}
 				}
 				else if (agop instanceof SumOperator)
@@ -2375,7 +2530,7 @@ public class SQLParser
 		return op;
 	}
 	
-	private Operator buildOperatorTreeFromHaving(Having having, Operator op) throws ParseException
+	private Operator buildOperatorTreeFromHaving(Having having, Operator op) throws Exception
 	{
 		SearchCondition search = having.getSearch();
 		return buildOperatorTreeFromSearchCondition(search, op);
@@ -2466,13 +2621,13 @@ public class SQLParser
 		}
 	}
 	
-	private Operator buildOperatorTreeFromWhere(Where where, Operator op) throws ParseException
+	private Operator buildOperatorTreeFromWhere(Where where, Operator op) throws Exception
 	{
 		SearchCondition search = where.getSearch();
 		return buildOperatorTreeFromSearchCondition(search, op);
 	}
 	
-	private Operator buildOperatorTreeFromSearchCondition(SearchCondition search, Operator op) throws ParseException
+	private Operator buildOperatorTreeFromSearchCondition(SearchCondition search, Operator op) throws Exception
 	{
 		SearchClause clause = search.getClause();
 		if (search.getConnected() != null && search.getConnected().size() > 0)
@@ -4472,7 +4627,7 @@ public class SQLParser
 		}
 	}
 	
-	private Operator buildOperatorTreeFromFrom(FromClause from) throws ParseException
+	private Operator buildOperatorTreeFromFrom(FromClause from) throws Exception
 	{
 		ArrayList<TableReference> tables = from.getTables();
 		ArrayList<Operator> ops = new ArrayList<Operator>(tables.size());
@@ -4515,7 +4670,7 @@ public class SQLParser
 		}
 	}
 	
-	private Operator buildOperatorTreeFromTableReference(TableReference table) throws ParseException
+	private Operator buildOperatorTreeFromTableReference(TableReference table) throws Exception
 	{
 		if (table.isSingleTable())
 		{
@@ -4700,7 +4855,7 @@ public class SQLParser
 		}
 	}
 	
-	private Operator buildOperatorTreeFromSingleTable(SingleTable table) throws ParseException
+	private Operator buildOperatorTreeFromSingleTable(SingleTable table) throws Exception
 	{
 		TableName name = table.getName();
 		String schema, tblName;
@@ -4716,14 +4871,14 @@ public class SQLParser
 		
 		tblName = name.getName();
 		
-		if (!meta.verifyTableExistence(schema, tblName))
+		if (!meta.verifyTableExistence(schema, tblName, tx))
 		{
-			if (!meta.verifyViewExistence(schema, tblName))
+			if (!meta.verifyViewExistence(schema, tblName, tx))
 			{
 				throw new ParseException("Table or view " + schema + "." + tblName + " does not exist!");
 			}
 			
-			SQLParser viewParser = new SQLParser(meta.getViewSQL(schema, tblName), connection);
+			SQLParser viewParser = new SQLParser(meta.getViewSQL(schema, tblName, tx), connection, tx);
 			Operator op = null;
 			try
 			{
@@ -4746,7 +4901,7 @@ public class SQLParser
 		TableScanOperator op = null;
 		try
 		{
-			op = new TableScanOperator(schema, tblName, meta);
+			op = new TableScanOperator(schema, tblName, meta, tx);
 		}
 		catch(Exception e)
 		{
@@ -4761,7 +4916,7 @@ public class SQLParser
 		return op;
 	}
 	
-	private boolean isCorrelated(SubSelect select) throws ParseException
+	private boolean isCorrelated(SubSelect select) throws Exception
 	{
 		try
 		{

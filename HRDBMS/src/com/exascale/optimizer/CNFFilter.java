@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.MurmurHash;
+import com.exascale.tables.Transaction;
 
 public class CNFFilter implements Serializable
 {
@@ -34,15 +35,10 @@ public class CNFFilter implements Serializable
 		this.setHSHM(clause);
 	}
 
-	public CNFFilter(HashSet<HashMap<Filter, Filter>> clause, MetaData meta, HashMap<String, Integer> cols2Pos)
+	public CNFFilter(HashSet<HashMap<Filter, Filter>> clause, MetaData meta, HashMap<String, Integer> cols2Pos, Transaction tx, Operator tree) throws Exception
 	{
 		this.meta = meta;
 		this.cols2Pos = cols2Pos;
-		if (!new File("./card.tbl").exists())
-		{
-			setHSHM(clause);
-			return;
-		}
 
 		for (final HashMap<Filter, Filter> ored : clause)
 		{
@@ -51,7 +47,7 @@ public class CNFFilter implements Serializable
 			for (final Filter filter : ored.keySet())
 			{
 				oredArray.add(filter);
-				scores.add(meta.likelihood(filter));
+				scores.add(meta.likelihood(filter, tx, tree));
 			}
 
 			// sort oredArray and scores
@@ -62,22 +58,17 @@ public class CNFFilter implements Serializable
 		final ArrayList<Double> scores = new ArrayList<Double>(filters.size());
 		for (final ArrayList<Filter> ored : filters)
 		{
-			scores.add(meta.likelihood(ored));
+			scores.add(meta.likelihood(ored, tx, tree));
 		}
 
 		// sort filters and scores
 		quicksort(filters, scores);
 	}
 
-	public CNFFilter(HashSet<HashMap<Filter, Filter>> clause, MetaData meta, HashMap<String, Integer> cols2Pos, HashMap<String, Double> generated)
+	public CNFFilter(HashSet<HashMap<Filter, Filter>> clause, MetaData meta, HashMap<String, Integer> cols2Pos, HashMap<String, Double> generated, Transaction tx, Operator tree) throws Exception
 	{
 		this.meta = meta;
 		this.cols2Pos = cols2Pos;
-		if (!new File("./card.tbl").exists())
-		{
-			setHSHM(clause);
-			return;
-		}
 
 		for (final HashMap<Filter, Filter> ored : clause)
 		{
@@ -86,7 +77,7 @@ public class CNFFilter implements Serializable
 			for (final Filter filter : ored.keySet())
 			{
 				oredArray.add(filter);
-				scores.add(meta.likelihood(filter, generated)); // more likely =
+				scores.add(meta.likelihood(filter, generated, tx, tree)); // more likely =
 																// better
 			}
 
@@ -98,7 +89,7 @@ public class CNFFilter implements Serializable
 		final ArrayList<Double> scores = new ArrayList<Double>(filters.size());
 		for (final ArrayList<Filter> ored : filters)
 		{
-			scores.add(meta.likelihood(ored, generated)); // less likely =
+			scores.add(meta.likelihood(ored, generated, tx, tree)); // less likely =
 															// better
 		}
 
@@ -106,9 +97,9 @@ public class CNFFilter implements Serializable
 		quicksort(filters, scores);
 	}
 
-	public CNFFilter(HashSet<HashMap<Filter, Filter>> clause, MetaData meta, HashMap<String, Integer> cols2Pos, RootOperator op)
+	public CNFFilter(HashSet<HashMap<Filter, Filter>> clause, MetaData meta, HashMap<String, Integer> cols2Pos, RootOperator op, Transaction tx) throws Exception
 	{
-		this(clause, meta, cols2Pos, op.getGenerated());
+		this(clause, meta, cols2Pos, op.getGenerated(), tx, op);
 	}
 
 	public static void quicksort(ArrayList main, ArrayList<Double> scores)

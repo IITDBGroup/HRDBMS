@@ -118,6 +118,17 @@ public interface SelectListener extends ParseTreeListener {
 	void exitSelectClause(@NotNull SelectParser.SelectClauseContext ctx);
 
 	/**
+	 * Enter a parse tree produced by {@link SelectParser#remainder}.
+	 * @param ctx the parse tree
+	 */
+	void enterRemainder(@NotNull SelectParser.RemainderContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link SelectParser#remainder}.
+	 * @param ctx the parse tree
+	 */
+	void exitRemainder(@NotNull SelectParser.RemainderContext ctx);
+
+	/**
 	 * Enter a parse tree produced by {@link SelectParser#JoinP}.
 	 * @param ctx the parse tree
 	 */
@@ -184,17 +195,6 @@ public interface SelectListener extends ParseTreeListener {
 	void exitTable2Part(@NotNull SelectParser.Table2PartContext ctx);
 
 	/**
-	 * Enter a parse tree produced by {@link SelectParser#dropView}.
-	 * @param ctx the parse tree
-	 */
-	void enterDropView(@NotNull SelectParser.DropViewContext ctx);
-	/**
-	 * Exit a parse tree produced by {@link SelectParser#dropView}.
-	 * @param ctx the parse tree
-	 */
-	void exitDropView(@NotNull SelectParser.DropViewContext ctx);
-
-	/**
 	 * Enter a parse tree produced by {@link SelectParser#Col1Part}.
 	 * @param ctx the parse tree
 	 */
@@ -204,6 +204,17 @@ public interface SelectListener extends ParseTreeListener {
 	 * @param ctx the parse tree
 	 */
 	void exitCol1Part(@NotNull SelectParser.Col1PartContext ctx);
+
+	/**
+	 * Enter a parse tree produced by {@link SelectParser#dropView}.
+	 * @param ctx the parse tree
+	 */
+	void enterDropView(@NotNull SelectParser.DropViewContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link SelectParser#dropView}.
+	 * @param ctx the parse tree
+	 */
+	void exitDropView(@NotNull SelectParser.DropViewContext ctx);
 
 	/**
 	 * Enter a parse tree produced by {@link SelectParser#singleTable}.
@@ -327,6 +338,17 @@ public interface SelectListener extends ParseTreeListener {
 	void exitDropTable(@NotNull SelectParser.DropTableContext ctx);
 
 	/**
+	 * Enter a parse tree produced by {@link SelectParser#groupExp}.
+	 * @param ctx the parse tree
+	 */
+	void enterGroupExp(@NotNull SelectParser.GroupExpContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link SelectParser#groupExp}.
+	 * @param ctx the parse tree
+	 */
+	void exitGroupExp(@NotNull SelectParser.GroupExpContext ctx);
+
+	/**
 	 * Enter a parse tree produced by {@link SelectParser#Table1Part}.
 	 * @param ctx the parse tree
 	 */
@@ -391,6 +413,17 @@ public interface SelectListener extends ParseTreeListener {
 	 * @param ctx the parse tree
 	 */
 	void exitIndexDef(@NotNull SelectParser.IndexDefContext ctx);
+
+	/**
+	 * Enter a parse tree produced by {@link SelectParser#load}.
+	 * @param ctx the parse tree
+	 */
+	void enterLoad(@NotNull SelectParser.LoadContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link SelectParser#load}.
+	 * @param ctx the parse tree
+	 */
+	void exitLoad(@NotNull SelectParser.LoadContext ctx);
 
 	/**
 	 * Enter a parse tree produced by {@link SelectParser#notNull}.
@@ -470,6 +503,17 @@ public interface SelectListener extends ParseTreeListener {
 	void exitUpdate(@NotNull SelectParser.UpdateContext ctx);
 
 	/**
+	 * Enter a parse tree produced by {@link SelectParser#groupDef}.
+	 * @param ctx the parse tree
+	 */
+	void enterGroupDef(@NotNull SelectParser.GroupDefContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link SelectParser#groupDef}.
+	 * @param ctx the parse tree
+	 */
+	void exitGroupDef(@NotNull SelectParser.GroupDefContext ctx);
+
+	/**
 	 * Enter a parse tree produced by {@link SelectParser#createTable}.
 	 * @param ctx the parse tree
 	 */
@@ -490,6 +534,17 @@ public interface SelectListener extends ParseTreeListener {
 	 * @param ctx the parse tree
 	 */
 	void exitNumericLiteral(@NotNull SelectParser.NumericLiteralContext ctx);
+
+	/**
+	 * Enter a parse tree produced by {@link SelectParser#nodeExp}.
+	 * @param ctx the parse tree
+	 */
+	void enterNodeExp(@NotNull SelectParser.NodeExpContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link SelectParser#nodeExp}.
+	 * @param ctx the parse tree
+	 */
+	void exitNodeExp(@NotNull SelectParser.NodeExpContext ctx);
 
 	/**
 	 * Enter a parse tree produced by {@link SelectParser#NullExp}.
@@ -580,17 +635,6 @@ public interface SelectListener extends ParseTreeListener {
 	void exitHavingClause(@NotNull SelectParser.HavingClauseContext ctx);
 
 	/**
-	 * Enter a parse tree produced by {@link SelectParser#SortKeyCol}.
-	 * @param ctx the parse tree
-	 */
-	void enterSortKeyCol(@NotNull SelectParser.SortKeyColContext ctx);
-	/**
-	 * Exit a parse tree produced by {@link SelectParser#SortKeyCol}.
-	 * @param ctx the parse tree
-	 */
-	void exitSortKeyCol(@NotNull SelectParser.SortKeyColContext ctx);
-
-	/**
 	 * Enter a parse tree produced by {@link SelectParser#correlationClause}.
 	 * @param ctx the parse tree
 	 */
@@ -600,6 +644,17 @@ public interface SelectListener extends ParseTreeListener {
 	 * @param ctx the parse tree
 	 */
 	void exitCorrelationClause(@NotNull SelectParser.CorrelationClauseContext ctx);
+
+	/**
+	 * Enter a parse tree produced by {@link SelectParser#SortKeyCol}.
+	 * @param ctx the parse tree
+	 */
+	void enterSortKeyCol(@NotNull SelectParser.SortKeyColContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link SelectParser#SortKeyCol}.
+	 * @param ctx the parse tree
+	 */
+	void exitSortKeyCol(@NotNull SelectParser.SortKeyColContext ctx);
 
 	/**
 	 * Enter a parse tree produced by {@link SelectParser#long2}.
@@ -657,6 +712,17 @@ public interface SelectListener extends ParseTreeListener {
 	void exitStringLiteral(@NotNull SelectParser.StringLiteralContext ctx);
 
 	/**
+	 * Enter a parse tree produced by {@link SelectParser#runstats}.
+	 * @param ctx the parse tree
+	 */
+	void enterRunstats(@NotNull SelectParser.RunstatsContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link SelectParser#runstats}.
+	 * @param ctx the parse tree
+	 */
+	void exitRunstats(@NotNull SelectParser.RunstatsContext ctx);
+
+	/**
 	 * Enter a parse tree produced by {@link SelectParser#PExpression}.
 	 * @param ctx the parse tree
 	 */
@@ -666,6 +732,17 @@ public interface SelectListener extends ParseTreeListener {
 	 * @param ctx the parse tree
 	 */
 	void exitPExpression(@NotNull SelectParser.PExpressionContext ctx);
+
+	/**
+	 * Enter a parse tree produced by {@link SelectParser#deviceExp}.
+	 * @param ctx the parse tree
+	 */
+	void enterDeviceExp(@NotNull SelectParser.DeviceExpContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link SelectParser#deviceExp}.
+	 * @param ctx the parse tree
+	 */
+	void exitDeviceExp(@NotNull SelectParser.DeviceExpContext ctx);
 
 	/**
 	 * Enter a parse tree produced by {@link SelectParser#Function}.
@@ -710,6 +787,17 @@ public interface SelectListener extends ParseTreeListener {
 	 * @param ctx the parse tree
 	 */
 	void exitExpSelect(@NotNull SelectParser.ExpSelectContext ctx);
+
+	/**
+	 * Enter a parse tree produced by {@link SelectParser#rangeExp}.
+	 * @param ctx the parse tree
+	 */
+	void enterRangeExp(@NotNull SelectParser.RangeExpContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link SelectParser#rangeExp}.
+	 * @param ctx the parse tree
+	 */
+	void exitRangeExp(@NotNull SelectParser.RangeExpContext ctx);
 
 	/**
 	 * Enter a parse tree produced by {@link SelectParser#dataType}.

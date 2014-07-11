@@ -2000,7 +2000,6 @@ public final class Index implements Serializable
 			else
 			{
 				//no room to extend internal record with a new key, could be root record
-				//TODO get length lock
 				ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
 				int i = 0;
 				while (i < Page.BLOCK_SIZE)
@@ -2009,7 +2008,7 @@ public final class Index implements Serializable
 					i++;
 				}
 				
-				FileManager.addNewBlock(file, bb);
+				FileManager.addNewBlock(file, bb, tx);
 				Block bl = new Block(file, (int)((new File(file)).length() / Page.BLOCK_SIZE - 1));
 				LockManager.xLock(bl, tx.number());
 				tx.requestPage(bl);
@@ -2127,7 +2126,6 @@ public final class Index implements Serializable
 		public void split() throws Exception
 		{
 			//create a new internal record that has high half of keys and down pointers
-			//TODO get length lock
 			ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
 			int i = 0;
 			while (i < Page.BLOCK_SIZE)
@@ -2136,7 +2134,7 @@ public final class Index implements Serializable
 				i++;
 			}
 			
-			FileManager.addNewBlock(file, bb);
+			FileManager.addNewBlock(file, bb, tx);
 			Block bl = new Block(file, (int)((new File(file)).length() / Page.BLOCK_SIZE - 1));
 			LockManager.xLock(bl, tx.number());
 			tx.requestPage(bl);
@@ -2327,7 +2325,7 @@ public final class Index implements Serializable
 					i++;
 				}
 				
-				FileManager.addNewBlock(file, bb);
+				FileManager.addNewBlock(file, bb, tx);
 				Block bl2 = new Block(file, (int)((new File(file)).length() / Page.BLOCK_SIZE - 1));
 				LockManager.xLock(bl2, tx.number());
 				tx.requestPage(bl2);
@@ -2627,7 +2625,6 @@ public final class Index implements Serializable
 					}
 					
 					//otherwise move record and then update in place
-					//TODO get length lock
 					ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
 					int i = 0;
 					while (i < Page.BLOCK_SIZE)
@@ -2636,7 +2633,7 @@ public final class Index implements Serializable
 						i++;
 					}
 					
-					FileManager.addNewBlock(file, bb);
+					FileManager.addNewBlock(file, bb, tx);
 					Block bl = new Block(file, (int)((new File(file)).length() / Page.BLOCK_SIZE - 1));
 					LockManager.xLock(bl, tx.number());
 					tx.requestPage(bl);
@@ -3150,7 +3147,6 @@ public final class Index implements Serializable
 				else
 				{
 					//we need to move this internal node to a new page, update the parent down pointer, and recall method
-					//TODO get length lock
 					ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
 					i = 0;
 					while (i < Page.BLOCK_SIZE)
@@ -3159,7 +3155,7 @@ public final class Index implements Serializable
 						i++;
 					}
 					
-					FileManager.addNewBlock(file, bb);
+					FileManager.addNewBlock(file, bb, tx);
 					Block bl = new Block(file, (int)((new File(file)).length() / Page.BLOCK_SIZE - 1));
 					LockManager.xLock(bl, tx.number());
 					tx.requestPage(bl);
@@ -3227,7 +3223,7 @@ public final class Index implements Serializable
 				return new BlockAndOffset(b.number(), leafOff);
 			}
 			
-			//TODO obtain length lock
+			LockManager.sLock(new Block(file, -1), tx.number());
 			int i = 1;
 			int numBlocks = (int)((new File(file)).length() / Page.BLOCK_SIZE);
 			while (i < numBlocks)
@@ -3269,7 +3265,7 @@ public final class Index implements Serializable
 				i++;
 			}
 			
-			FileManager.addNewBlock(file, bb);
+			FileManager.addNewBlock(file, bb, tx);
 			Block bl = new Block(file, (int)((new File(file)).length() / Page.BLOCK_SIZE - 1));
 			LockManager.xLock(bl, tx.number());
 			tx.requestPage(bl);

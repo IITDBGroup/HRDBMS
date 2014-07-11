@@ -30,7 +30,7 @@ public class MultiHashMap<K, V>
 		return map.keySet();
 	}
 	
-	public void clear()
+	public synchronized void clear()
 	{
 		map.clear();
 	}

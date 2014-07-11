@@ -15,6 +15,7 @@ import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
 import com.exascale.misc.CatalogCode;
 import com.exascale.threads.ReadThread;
+import com.exascale.tables.Transaction;
 
 public class FileManager
 {
@@ -47,8 +48,9 @@ public class FileManager
 		HRDBMSWorker.logger.info("File Manager initialization complete.");
 	}
 
-	public static int addNewBlock(String fn, ByteBuffer data) throws IOException
+	public static int addNewBlock(String fn, ByteBuffer data, Transaction tx) throws Exception
 	{
+		LockManager.xLock(new Block(fn, -1), tx.number());
 		final FileChannel fc = getFile(fn);
 		int retval;
 		synchronized (fc)
@@ -128,7 +130,9 @@ public class FileManager
 	public static boolean sysTablesExists()
 	{
 		File sysTables;
-		String fn = HRDBMSWorker.getHParms().getProperty("catalog_directory");
+		String fn = HRDBMSWorker.getHParms().getProperty("data_directories");
+		StringTokenizer tokens = new StringTokenizer(fn, ",", false);
+		fn = tokens.nextToken();
 
 		if (!fn.endsWith("/"))
 		{

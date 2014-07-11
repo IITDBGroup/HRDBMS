@@ -3,33 +3,115 @@ package com.exascale.optimizer;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+import java.io.InputStream;
+import java.io.ObjectOutputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.Socket;
+import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+import java.util.StringTokenizer;
 import java.util.TreeMap;
+import com.exascale.exceptions.ParseException;
 import com.exascale.managers.HRDBMSWorker;
+import com.exascale.managers.PlanCacheManager;
+import com.exascale.managers.XAManager;
+import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.DateParser;
 import com.exascale.misc.FastStringTokenizer;
+import com.exascale.misc.MurmurHash;
 import com.exascale.misc.MyDate;
 import com.exascale.misc.Utils;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.ConnectionWorker;
-
-//TODO columns are qualified by table
+import com.exascale.threads.HRDBMSThread;
+import com.exascale.threads.XAWorker;
 
 public final class MetaData implements Serializable
 {
-	private final boolean LOCAL = false;
-
-	private ArrayList<ArrayList<Object>> cards = null;
-	private ArrayList<ArrayList<Object>> dists = null;
-	private final Boolean cardsLock = false;
-	private final Boolean distsLock = false;
-	private final HashMap<Filter, Double> lCache = new HashMap<Filter, Double>();
 	private static final HashMap<ConnectionWorker, String> defaultSchemas = new HashMap<ConnectionWorker, String>();
+	private static int myNode;
+	private static HashMap<Integer, String> nodeTable = new HashMap<Integer, String>();
 	private ConnectionWorker connection = null;
+	
+	static
+	{
+		try
+		{
+			final BufferedReader nodes = new BufferedReader(new FileReader(new File("nodes.cfg")));
+			String line = nodes.readLine();
+			int workerID = 0;
+			int coordID = -2;
+			while (line != null)
+			{
+				final StringTokenizer tokens = new StringTokenizer(line, ",", false);
+				final String host = tokens.nextToken().trim();
+				String type = tokens.nextToken().trim().toUpperCase();
+				if (isMyIP(host))
+				{
+					if (HRDBMSWorker.type == HRDBMSWorker.TYPE_WORKER)
+					{
+						myNode = workerID;
+						nodeTable.put(myNode, host);
+						workerID++;
+					}
+					else
+					{
+						myNode = coordID;
+						nodeTable.put(myNode, host);
+						coordID--;
+					}
+				}
+				else
+				{
+					if (type.equals("W"))
+					{
+						nodeTable.put(workerID, host);
+						workerID++;
+					}
+					else
+					{
+						nodeTable.put(coordID, host);
+						coordID--;
+					}
+				}
+			}
+		}
+		catch(Exception e)
+		{
+			HRDBMSWorker.logger.fatal("Error during static metadata initialization", e);
+			System.exit(1);
+		}
+	}
+	
+	public static int myNodeNum()
+	{
+		return myNode;
+	}
+	
+	public static boolean isMyIP(String host) throws Exception
+	{
+		return isThisMyIpAddress(InetAddress.getByName(host));
+	}
+	
+	public static boolean isThisMyIpAddress(InetAddress addr) {
+	    // Check if the address is a valid special local or loop back
+	    if (addr.isAnyLocalAddress() || addr.isLoopbackAddress())
+	        return true;
+
+	    // Check if the address is defined on any interface
+	    try {
+	        return NetworkInterface.getByInetAddress(addr) != null;
+	    } catch (SocketException e) {
+	        return false;
+	    }
+	}
 	
 	public MetaData(ConnectionWorker connection)
 	{
@@ -41,9 +123,14 @@ public final class MetaData implements Serializable
 		
 	}
 	
-	public static int myCoordNum()
+	public static int myCoordNum() throws Exception
 	{
-		return 0;
+		if (HRDBMSWorker.type == HRDBMSWorker.TYPE_WORKER)
+		{
+			throw new Exception("Not a coordinator");
+		}
+		
+		return myNode;
 	}
 	
 	public static void setDefaultSchema(ConnectionWorker conn, String schema)
@@ -56,7 +143,7 @@ public final class MetaData implements Serializable
 		defaultSchemas.remove(conn);
 	}
 
-	public HashMap<String, Double> generateCard(Operator op)
+	public HashMap<String, Double> generateCard(Operator op, Transaction tx, Operator tree) throws Exception
 	{
 		final HashMap<Operator, ArrayList<String>> tables = new HashMap<Operator, ArrayList<String>>();
 		final HashMap<Operator, ArrayList<ArrayList<Filter>>> filters = new HashMap<Operator, ArrayList<ArrayList<Filter>>>();
@@ -65,7 +152,7 @@ public final class MetaData implements Serializable
 		final ArrayList<Operator> queued = new ArrayList<Operator>(leaves.size());
 		for (final Operator leaf : leaves)
 		{
-			final Operator o = doWork(leaf, tables, filters, retval);
+			final Operator o = doWork(leaf, tables, filters, retval, tx, tree);
 			if (o != null)
 			{
 				queued.add(o);
@@ -78,7 +165,7 @@ public final class MetaData implements Serializable
 			if (queued.indexOf(o) != queued.lastIndexOf(o))
 			{
 				queued.remove(queued.lastIndexOf(o));
-				final Operator o2 = doWork(o, tables, filters, retval);
+				final Operator o2 = doWork(o, tables, filters, retval, tx, tree);
 				queued.add(o2);
 				queued.remove(0);
 			}
@@ -92,14 +179,14 @@ public final class MetaData implements Serializable
 		return retval.get(queued.get(0));
 	}
 
-	public Index getBestCompoundIndex(HashSet<String> cols, String schema, String table)
+	public Index getBestCompoundIndex(HashSet<String> cols, String schema, String table, Transaction tx) throws Exception
 	{
 		if (cols.size() <= 1)
 		{
 			return null;
 		}
 
-		final ArrayList<Index> indexes = this.getIndexesForTable(schema, table);
+		final ArrayList<Index> indexes = this.getIndexesForTable(schema, table, tx);
 		int maxCount = 1;
 		Index maxIndex = null;
 		for (final Index index : indexes)
@@ -140,406 +227,1435 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 	
-	public String getMyHostName()
+	public String getMyHostName(Transaction tx) throws Exception
 	{
-		return "";
+		return PlanCacheManager.getHostLookup().setParms(myNode).execute(tx);
 	}
 	
-	public static boolean verifyInsert(String schema, String table, Operator op)
+	public static boolean verifyInsert(String schema, String table, Operator op, Transaction tx) throws Exception
 	{
-		//TODO verify that the number of cols and data types from op match an insert into table
-		return true;
-	}
-	
-	public static ArrayList<Integer> getNodesForTable(String schema, String table)
-	{
-		return new ArrayList<Integer>();
-	}
-	
-	public static ArrayList<String> getIndexFileNamesForTable(String schema, String table)
-	{
-		return new ArrayList<String>();
-	}
-	
-	public static ArrayList<ArrayList<String>> getKeys(ArrayList<String> indexes)
-	{
-		return new ArrayList<ArrayList<String>>();)
-	}
-	
-	public static ArrayList<ArrayList<String>> getTypes(ArrayList<String> indexes)
-	{
-		return new ArrayList<ArrayList<String>>();
-	}
-	
-	public static ArrayList<ArrayList<Boolean>> getOrders(ArrayList<String> indexes)
-	{
-		return new ArrayList<ArrayList<Boolean>>();
-	}
-	
-	public static ArrayList<String> getIndexColsForTable(String schema, String table)
-	{
-		return new ArrayList<String>();
-	}
-	
-	public static ArrayList<String> getColsFromIndexFileName(String index)
-	{
-		return new ArrayList<String>();
-	}
-	
-	public static int determineNode(String schema, String table, ArrayList<Object> row)
-	{
-		return 0;
-	}
-	
-	public static int determineDevice(ArrayList<Object> row, PartitionMetaData partMeta)
-	{
-		return 0;
-	}
-	
-	public static int getLengthForCharCol(String schema, String table, String col)
-	{
-		return 0;
-	}
-	
-	public static void createView(String schema, String table, String text, Transaction tx) throws Exception
-	{
+		TreeMap<Integer, String> catalogPos2Col = MetaData.getPos2ColForTable(schema, table, tx);
+		HashMap<String, String> catalogCols2Types = new MetaData().getCols2TypesForTable(schema, table, tx);
+		HashMap<Integer, String> catalogPos2Types = new HashMap<Integer, String>();
+		int i = 0;
+		while (i < catalogPos2Col.size())
+		{
+			catalogPos2Types.put(i, catalogCols2Types.get(catalogPos2Col.get(i)));
+			i++;
+		}
 		
-	}
-	
-	public static void dropView(String schema, String table, Transaction tx) throws Exception
-	{
+		HashMap<Integer, String> opPos2Types = new HashMap<Integer, String>();
+		i = 0;
+		while (i < op.getPos2Col().size())
+		{
+			opPos2Types.put(i, op.getCols2Types().get(op.getPos2Col().get(i)));
+			i++;
+		}
 		
-	}
-	
-	public static boolean verifyIndexExistence(String schema, String index)
-	{
-		return true;
-	}
-	
-	public static boolean verifyColExistence(String schema, String table, String col)
-	{
-		return true;
-	}
-	
-	public static void createIndex(String schema, String table, String index, ArrayList<IndexDef> defs, boolean unique, Transaction tx) throws Exception
-	{
-		
-	}
-	
-	public static void dropIndex(String schema, String index, Transaction tx) throws Exception
-	{
-		
-	}
-	
-	public static void dropTable(String schema, String table, Transaction tx) throws Exception
-	{
-		
-	}
-	
-	public static void createTable(String schema, String table, ArrayList<ColDef> defs, ArrayList<String> pks, Transaction tx) throws Exception
-	{
-		
-	}
-	
-	public static ArrayList<Integer> getAllTableNodes(String schema, String table)
-	{
-		return new ArrayList<Integer>();
-	}
-	
-	public static boolean verifyUpdate(String schema, String tbl, ArrayList<Column> cols, ArrayList<String> buildList, Operator op) throws Exception
-	{
-		//verify that all columns are 1 part - parseException
-		//get data types for cols on this table
-		//make sure that selecting the buildList cols from op in that order satisfies updates for cols on this table
-		return true;
-	}
-	
-	public boolean verifyViewExistence(String schema, String name)
-	{
-		return false;
-	}
-	
-	public String getViewSQL(String schema, String name)
-	{
-		return "";
-	}
-	
-	public boolean verifyTableExistence(String schema, String name)
-	{
-		if (!schema.equals("TPCH"))
+		if (catalogPos2Types.size() != opPos2Types.size())
 		{
 			return false;
 		}
 		
-		if (name.equals("LINEITEM") || name.equals("CUSTOMER") || name.equals("ORDERS") || name.equals("PART") || name.equals("SUPPLIER") || name.equals("PARTSUPP") || name.equals("NATION") || name.equals("REGION"))
+		i = 0;
+		while (i < opPos2Types.size())
 		{
-			return true;
+			String opType = opPos2Types.get(i);
+			String catalogType = catalogPos2Types.get(i);
+			
+			if (opType.equals("CHAR") && !opType.equals(catalogType))
+			{
+				return false;
+			}
+			else if (opType.equals("DATE") && !opType.equals(catalogType))
+			{
+				return false;
+			}
+			else if (opType.equals("INT") || opType.equals("LONG") || opType.equals("FLOAT"))
+			{
+				if (catalogType.equals("CHAR") || catalogType.equals("DATE"))
+				{
+					return false;
+				}
+			}
+			i++;
 		}
 		
-		return false;
+		return true;
+	}
+	
+	public static ArrayList<Integer> getDevicesForTable(String schema, String table, Transaction tx) throws Exception
+	{
+		PartitionMetaData pmeta = new MetaData().new PartitionMetaData(schema, table, tx);
+		if (pmeta.allDevices())
+		{
+			ArrayList<Integer> retval = new ArrayList<Integer>();
+			int i = 0;
+			while (i < getNumDevices())
+			{
+				retval.add(i);
+				i++;
+			}
+			
+			return retval;
+		}
+		else
+		{
+			return pmeta.deviceSet();
+		}
+	}
+	
+	public static ArrayList<Integer> getNodesForTable(String schema, String table, Transaction tx) throws Exception
+	{
+		Object r = PlanCacheManager.getPartitioning().setParms(schema, table).execute(tx);
+		if (r instanceof DataEndMarker)
+		{
+			throw new Exception("Table not found");
+		}
+		
+		ArrayList<Object> row = (ArrayList<Object>)r;
+		String nodeGroupExp = (String)row.get(0);
+		String nodeExp = (String)row.get(1);
+		
+		if (nodeGroupExp.equals("NONE"))
+		{
+			if (nodeExp.startsWith("ALL") || nodeExp.startsWith("ANY"))
+			{
+				ArrayList<Object> rows = PlanCacheManager.getWorkerNodes().setParms().execute(tx);
+				ArrayList<Integer> retval = new ArrayList<Integer>();
+				for (Object o : rows)
+				{
+					if (o instanceof ArrayList)
+					{
+						retval.add((Integer)((ArrayList)o).get(0));
+					}
+				}
+				
+				return retval;
+			}
+			
+			StringTokenizer tokens1 = new StringTokenizer(nodeExp, ",", false);
+			String nodeSet = tokens1.nextToken();
+			StringTokenizer tokens2 = new StringTokenizer(nodeSet, "|{}", false);
+			HashSet<Integer> retval = new HashSet<Integer>();
+			while (tokens2.hasMoreTokens())
+			{
+				int node = Integer.parseInt(tokens2.nextToken());
+				retval.add(node);
+			}
+			
+			return new ArrayList<Integer>(retval);
+		}
+		
+		StringTokenizer tokens1 = new StringTokenizer(nodeGroupExp, ",", false);
+		String nodeGroupSet = tokens1.nextToken();
+		StringTokenizer tokens2 = new StringTokenizer(nodeGroupSet, "|{}", false);
+		HashSet<Integer> retval = new HashSet<Integer>();
+		while (tokens2.hasMoreTokens())
+		{
+			int node = Integer.parseInt(tokens2.nextToken());
+			retval.add(node);
+		}
+		
+		return new ArrayList<Integer>(retval);
+	}
+	
+	public static ArrayList<String> getIndexFileNamesForTable(String schema, String table, Transaction tx) throws Exception
+	{
+		ArrayList<Object> rs = PlanCacheManager.getIndexes().setParms(schema, table).execute(tx);
+		ArrayList<String> retval = new ArrayList<String>();
+		
+		for (Object o : rs)
+		{
+			ArrayList<Object> row = (ArrayList<Object>)o;
+			retval.add(schema + "." + row.get(0) + ".indx");
+		}
+		
+		return retval;
+	}
+	
+	public static ArrayList<ArrayList<String>> getKeys(ArrayList<String> indexes, Transaction tx) throws Exception
+	{
+		ArrayList<ArrayList<String>> retval = new ArrayList<ArrayList<String>>();
+		for (String index : indexes)
+		{
+			String schema = index.substring(0, index.indexOf('.'));
+			String name = index.substring(schema.length()+1, index.indexOf('.', schema.length() + 1));
+			ArrayList<Object> rs = PlanCacheManager.getKeys().setParms(schema, name).execute(tx);
+			//tabname, colname
+			ArrayList<String> retRow = new ArrayList<String>();
+			for (Object o : rs)
+			{
+				ArrayList<Object> row = (ArrayList<Object>)o;
+				retRow.add(row.get(0) + "." + row.get(1));
+			}
+			retval.add(retRow);
+		}
+		
+		return retval;
+	}
+	
+	public static ArrayList<ArrayList<String>> getTypes(ArrayList<String> indexes, Transaction tx) throws Exception
+	{
+		ArrayList<ArrayList<String>> retval = new ArrayList<ArrayList<String>>();
+		for (String index : indexes)
+		{
+			String schema = index.substring(0, index.indexOf('.'));
+			String name = index.substring(schema.length()+1, index.indexOf('.', schema.length() + 1));
+			ArrayList<Object> rs = PlanCacheManager.getTypes().setParms(schema, name).execute(tx);
+			ArrayList<String> retRow = new ArrayList<String>();
+			for (Object o : rs)
+			{
+				ArrayList<Object> row = (ArrayList<Object>)o;
+				String type = (String)row.get(0);
+				if (type.equals("BIGINT"))
+				{
+					type = "LONG";
+				}
+				else if (type.equals("VARCHAR"))
+				{
+					type = "CHAR";
+				}
+				else if (type.equals("DOUBLE"))
+				{
+					type = "FLOAT";
+				}
+				retRow.add(type);
+			}
+			retval.add(retRow);
+		}
+		
+		return retval;
+	}
+	
+	public static ArrayList<ArrayList<Boolean>> getOrders(ArrayList<String> indexes, Transaction tx) throws Exception
+	{
+		ArrayList<ArrayList<Boolean>> retval = new ArrayList<ArrayList<Boolean>>();
+		for (String index : indexes)
+		{
+			String schema = index.substring(0, index.indexOf('.'));
+			String name = index.substring(schema.length()+1, index.indexOf('.', schema.length() + 1));
+			ArrayList<Object> rs = PlanCacheManager.getOrders().setParms(schema, name).execute(tx);
+			ArrayList<Boolean> retRow = new ArrayList<Boolean>();
+			for (Object o : rs)
+			{
+				ArrayList<Object> row = (ArrayList<Object>)o;
+				String ord = (String)row.get(0);
+				boolean order = true;
+				if (!ord.equals("A"))
+				{
+					order = false;
+				}
+				retRow.add(order);
+			}
+			retval.add(retRow);
+		}
+		
+		return retval;
+	}
+	
+	public static ArrayList<String> getIndexColsForTable(String schema, String table, Transaction tx) throws Exception
+	{
+		ArrayList<Object> rs = PlanCacheManager.getIndexColsForTable().setParms(schema, table).execute(tx);
+		ArrayList<String> retRow = new ArrayList<String>();
+		for (Object o : rs)
+		{
+			ArrayList<Object> row = (ArrayList<Object>)o;
+			retRow.add(table + "." + row.get(0));
+		}
+		
+		return retRow;
+	}
+	
+	public static ArrayList<String> getColsFromIndexFileName(String index, Transaction tx) throws Exception
+	{
+		String schema = index.substring(0, index.indexOf('.'));
+		String name = index.substring(schema.length()+1, index.indexOf('.', schema.length() + 1));
+		ArrayList<Object> rs = PlanCacheManager.getKeys().setParms(schema, name).execute(tx);
+		//tabname, colname
+		ArrayList<String> retRow = new ArrayList<String>();
+		for (Object o : rs)
+		{
+			ArrayList<Object> row = (ArrayList<Object>)o;
+			retRow.add(row.get(0) + "." + row.get(1));
+		}
+		
+		return retRow;
+	}
+	
+	public static ArrayList<Integer> determineNode(String schema, String table, ArrayList<Object> row, Transaction tx) throws Exception
+	{
+		PartitionMetaData pmeta = new MetaData().new PartitionMetaData(schema, table, tx);
+		HashMap<String, Integer> cols2Pos = MetaData.getCols2PosForTable(schema, table, tx);
+		if (pmeta.noNodeGroupSet())
+		{
+			if (pmeta.anyNode())
+			{
+				ArrayList<Object> rows = PlanCacheManager.getWorkerNodes().setParms().execute(tx);
+				ArrayList<Integer> retval = new ArrayList<Integer>();
+				for (Object o : rows)
+				{
+					if (o instanceof ArrayList)
+					{
+						retval.add((Integer)((ArrayList)o).get(0));
+					}
+				}
+				
+				return retval;
+			}
+			else if (pmeta.isSingleNodeSet())
+			{
+				if (pmeta.getSingleNode() == -1)
+				{
+					ArrayList<Object> rows = PlanCacheManager.getCoordNodes().setParms().execute(tx);
+					ArrayList<Integer> retval = new ArrayList<Integer>();
+					for (Object o : rows)
+					{
+						if (o instanceof ArrayList)
+						{
+							retval.add((Integer)((ArrayList)o).get(0));
+						}
+					}
+					
+					return retval;
+				}
+				else
+				{
+					ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(pmeta.getSingleNode());
+					return retval;
+				}
+			}
+			else if (pmeta.nodeIsHash())
+			{
+				ArrayList<String> nodeHash = pmeta.getNodeHash();
+				ArrayList<Object> partial = new ArrayList<Object>();
+				for (String col : nodeHash)
+				{
+					partial.add(row.get(cols2Pos.get(table + "." + col)));
+				}
+				
+				long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+				if (pmeta.allNodes())
+				{
+					ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add((int)(hash % new MetaData().getNumNodes(tx))); //LOOKOUT if we ever do dynamic # nodes
+					return retval;
+				}
+				else
+				{
+					ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(pmeta.nodeSet().get((int)(hash % pmeta.nodeSet().size())));
+					return retval;
+				}
+			}
+			else
+			{
+				//range
+				String col = table + "." + pmeta.getNodeRangeCol();
+				Object obj = row.get(cols2Pos.get(col));
+				ArrayList<Object> ranges = pmeta.getNodeRanges();
+				int i = 0;
+				while (i < ranges.size())
+				{
+					if (((Comparable)obj).compareTo((Comparable)ranges.get(i)) <= 0)
+					{
+						if (pmeta.allNodes())
+						{
+							ArrayList<Integer> retval = new ArrayList<Integer>();
+							retval.add(i);
+							return retval;
+						}
+						else
+						{
+							ArrayList<Integer> retval = new ArrayList<Integer>();
+							retval.add(pmeta.nodeSet().get(i));
+							return retval;
+						}
+					}
+					
+					i++;
+				}
+				
+				if (pmeta.allNodes())
+				{
+					ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(i);
+					return retval;
+				}
+				else
+				{
+					ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(pmeta.nodeSet().get(i));
+					return retval;
+				}
+			}
+		}
+		else
+		{
+			ArrayList<Integer> ngSet = null;
+			if (pmeta.nodeGroupIsHash())
+			{
+				ArrayList<String> nodeGroupHash = pmeta.getNodeGroupHash();
+				ArrayList<Object> partial = new ArrayList<Object>();
+				for (String col : nodeGroupHash)
+				{
+					partial.add(row.get(cols2Pos.get(table + "." + col)));
+				}
+				
+				long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+				ngSet = pmeta.getNodeGroupHashMap().get((int)(hash % pmeta.getNodeGroupHashMap().size()));
+			}
+			else
+			{
+				String col = table + "." + pmeta.getNodeGroupRangeCol();
+				Object obj = row.get(cols2Pos.get(col));
+				ArrayList<Object> ranges = pmeta.getNodeGroupRanges();
+				int i = 0;
+				while (i < ranges.size())
+				{
+					if (((Comparable)obj).compareTo((Comparable)ranges.get(i)) <= 0)
+					{
+						ngSet = pmeta.getNodeGroupHashMap().get(i);
+						break;
+					}
+					
+					i++;
+				}
+				
+				if (ngSet == null)
+				{
+					ngSet = pmeta.getNodeGroupHashMap().get(i);
+				}
+			}
+			
+			if (pmeta.anyNode())
+			{
+				return ngSet;
+			}
+			else if (pmeta.nodeIsHash())
+			{
+				ArrayList<String> nodeHash = pmeta.getNodeHash();
+				ArrayList<Object> partial = new ArrayList<Object>();
+				for (String col : nodeHash)
+				{
+					partial.add(row.get(cols2Pos.get(table + "." + col)));
+				}
+				
+				long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+				if (pmeta.allNodes())
+				{
+					ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(ngSet.get((int)(hash % ngSet.size())));
+					return retval;
+				}
+				else
+				{
+					ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(ngSet.get(pmeta.nodeSet().get((int)(hash % pmeta.nodeSet().size()))));
+					return retval;
+				}
+			}
+			else
+			{
+				//range
+				String col = table + "." + pmeta.getNodeRangeCol();
+				Object obj = row.get(cols2Pos.get(col));
+				ArrayList<Object> ranges = pmeta.getNodeRanges();
+				int i = 0;
+				while (i < ranges.size())
+				{
+					if (((Comparable)obj).compareTo((Comparable)ranges.get(i)) <= 0)
+					{
+						if (pmeta.allNodes())
+						{
+							ArrayList<Integer> retval = new ArrayList<Integer>();
+							retval.add(ngSet.get(i));
+							return retval;
+						}
+						else
+						{
+							ArrayList<Integer> retval = new ArrayList<Integer>();
+							retval.add(ngSet.get(pmeta.nodeSet().get(i)));
+							return retval;
+						}
+					}
+					
+					i++;
+				}
+				
+				if (pmeta.allNodes())
+				{
+					ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(ngSet.get(i));
+					return retval;
+				}
+				else
+				{
+					ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(ngSet.get(pmeta.nodeSet().get(i)));
+					return retval;
+				}
+			}
+		}
+	}
+	
+	private static long hash(Object key)
+	{
+		long eHash;
+		if (key == null)
+		{
+			eHash = 0;
+		}
+		else
+		{
+			eHash = MurmurHash.hash64(key.toString());
+		}
+
+		return eHash;
+	}
+	
+	public static int determineDevice(ArrayList<Object> row, PartitionMetaData pmeta, HashMap<String, Integer> cols2Pos)
+	{
+		String schema = pmeta.getTable();
+		String table = pmeta.getTable();
+		if (pmeta.deviceIsHash())
+		{
+			ArrayList<String> devHash = pmeta.getDeviceHash();
+			ArrayList<Object> partial = new ArrayList<Object>();
+			for (String col : devHash)
+			{
+				partial.add(row.get(cols2Pos.get(table + "." + col)));
+			}
+			
+			long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+			if (pmeta.allDevices())
+			{
+				return (int)(hash % getNumDevices());
+			}
+			else
+			{
+				return pmeta.deviceSet().get((int)(hash % pmeta.deviceSet().size()));
+			}
+		}
+		else
+		{
+			String col = table + "." + pmeta.getDeviceRangeCol();
+			Object obj = row.get(cols2Pos.get(col));
+			ArrayList<Object> ranges = pmeta.getDeviceRanges();
+			int i = 0;
+			while (i < ranges.size())
+			{
+				if (((Comparable)obj).compareTo((Comparable)ranges.get(i)) <= 0)
+				{
+					if (pmeta.allDevices())
+					{
+						return i;
+					}
+					else
+					{
+						return pmeta.deviceSet().get(i);
+					}
+				}
+				
+				i++;
+			}
+			
+			if (pmeta.allNodes())
+			{
+				return i;
+			}
+			else
+			{
+				return pmeta.deviceSet().get(i);
+			}
+		}
+	}
+	
+	public static int determineDevice(String schema, String table, ArrayList<Object> row, PartitionMetaData pmeta, Transaction tx) throws Exception
+	{
+		HashMap<String, Integer> cols2Pos = MetaData.getCols2PosForTable(schema, table, tx);
+		if (pmeta.deviceIsHash())
+		{
+			ArrayList<String> devHash = pmeta.getDeviceHash();
+			ArrayList<Object> partial = new ArrayList<Object>();
+			for (String col : devHash)
+			{
+				partial.add(row.get(cols2Pos.get(table + "." + col)));
+			}
+			
+			long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+			if (pmeta.allDevices())
+			{
+				return (int)(hash % getNumDevices());
+			}
+			else
+			{
+				return pmeta.deviceSet().get((int)(hash % pmeta.deviceSet().size()));
+			}
+		}
+		else
+		{
+			String col = table + "." + pmeta.getDeviceRangeCol();
+			Object obj = row.get(cols2Pos.get(col));
+			ArrayList<Object> ranges = pmeta.getDeviceRanges();
+			int i = 0;
+			while (i < ranges.size())
+			{
+				if (((Comparable)obj).compareTo((Comparable)ranges.get(i)) <= 0)
+				{
+					if (pmeta.allDevices())
+					{
+						return i;
+					}
+					else
+					{
+						return pmeta.deviceSet().get(i);
+					}
+				}
+				
+				i++;
+			}
+			
+			if (pmeta.allNodes())
+			{
+				return i;
+			}
+			else
+			{
+				return pmeta.deviceSet().get(i);
+			}
+		}
+	}
+	
+	public static int getLengthForCharCol(String schema, String table, String col, Transaction tx) throws Exception
+	{
+		return PlanCacheManager.getLength().setParms(schema, table, col).execute(tx);
+	}
+	
+	public static void createView(String schema, String table, String text, Transaction tx) throws Exception
+	{
+		int id = PlanCacheManager.getNextViewID().setParms().execute(tx);
+		PlanCacheManager.getInsertView().setParms(id, schema, table, text).execute(tx);
+	}
+	
+	public static void dropView(String schema, String table, Transaction tx) throws Exception
+	{
+		PlanCacheManager.getDeleteView().setParms(schema, table).execute(tx);
+	}
+	
+	public static boolean verifyIndexExistence(String schema, String index, Transaction tx) throws Exception
+	{
+		Object o = PlanCacheManager.getVerifyIndexExist().setParms(schema, index).execute(tx);
+		if (o instanceof DataEndMarker)
+		{
+			return false;
+		}
+		
+		return true;
+	}
+	
+	public static boolean verifyColExistence(String schema, String table, String col, Transaction tx) throws Exception
+	{
+		HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
+		return cols2Pos.containsKey(table + "." + col);
+	}
+	
+	public static void createIndex(String schema, String table, String index, ArrayList<IndexDef> defs, boolean unique, Transaction tx) throws Exception
+	{
+		int tableID = PlanCacheManager.getTableID().setParms(schema, table).execute(tx);
+		int id = PlanCacheManager.getNextIndexID().setParms(tableID).execute(tx);
+		PlanCacheManager.getInsertIndex().setParms(id, index, tableID, unique).execute(tx);
+		HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
+		int pos = 0;
+		for (IndexDef def : defs)
+		{
+			String col = def.getCol().getColumn();
+			int colID = cols2Pos.get(table + "." + col);
+			PlanCacheManager.getInsertIndexCol().setParms(id, tableID, colID, pos, def.isAsc()).execute(tx);
+			pos++;
+		}
+		
+		buildIndex(schema, index, table, defs.size(), unique, tx);
+		populateIndex(schema, index, table, tx);
+	}
+	
+	public static void dropIndex(String schema, String index, Transaction tx) throws Exception
+	{
+		PlanCacheManager.invalidate();
+		ArrayList<Object> row = PlanCacheManager.getTableAndIndexID().setParms(schema, index).execute(tx);
+		int tableID = (Integer)row.get(0);
+		int indexID = (Integer)row.get(1);
+		PlanCacheManager.getDeleteIndex().setParms(tableID, indexID).execute(tx);
+		PlanCacheManager.getDeleteIndexCol().setParms(tableID, indexID).execute(tx);
+		PlanCacheManager.getDeleteIndexStats().setParms(tableID, indexID).execute(tx);
+		PlanCacheManager.invalidate();
+	}
+	
+	public static void dropTable(String schema, String table, Transaction tx) throws Exception
+	{
+		PlanCacheManager.invalidate();
+		int id = PlanCacheManager.getTableID().setParms(schema, table).execute(tx);
+		PlanCacheManager.getDeleteTable().setParms(schema, table).execute(tx);
+		PlanCacheManager.getDeleteCols().setParms(id).execute(tx);
+		PlanCacheManager.getMultiDeleteIndexes().setParms(id).execute(tx);
+		PlanCacheManager.getMultiDeleteIndexCols().setParms(id).execute(tx);
+		PlanCacheManager.getDeleteTableStats().setParms(id).execute(tx);
+		PlanCacheManager.getDeleteColStats().setParms(id).execute(tx);
+		PlanCacheManager.getDeleteColDist().setParms(id).execute(tx);
+		PlanCacheManager.getDeletePartitioning().setParms(id).execute(tx);
+		PlanCacheManager.getMultiDeleteIndexStats().setParms(id).execute(tx);
+		PlanCacheManager.invalidate();
+	}
+	
+	public static void createTable(String schema, String table, ArrayList<ColDef> defs, ArrayList<String> pks, Transaction tx, String nodeGroupExp, String nodeExp, String deviceExp) throws Exception
+	{
+		//validate expressions
+		PartitionMetaData pmeta = new MetaData().new PartitionMetaData(schema, table, nodeGroupExp, nodeExp, deviceExp, tx);
+		//tables
+		//cols
+		//indexes
+		//indexcols
+		//partitioning
+		int tableID = PlanCacheManager.getNextTableID().setParms().execute(tx);
+		PlanCacheManager.getInsertTable().setParms(tableID, schema, table, "R").execute(tx);
+		int colID = 0;
+		for (ColDef def : defs)
+		{
+			//INT, LONG, FLOAT, DATE, CHAR(x)
+			//COLID, TABLEID, NAME, TYPE, LENGTH, SCALE, PKPOS, NULLABLE
+			String name = def.getCol().getColumn();
+			String type = def.getType();
+			int length = 0;
+			int scale = 0;
+			if (type.equals("LONG"))
+			{
+				type = "BIGINT";
+				length = 8;
+			}
+			else if (type.equals("FLOAT"))
+			{
+				type = "DOUBLE";
+				length = 8;
+			}
+			else if (type.equals("INT"))
+			{
+				length = 4;
+			}
+			else if (type.equals("DATE"))
+			{
+				length = 8;
+			}
+			else if (type.startsWith("CHAR"))
+			{
+				length = Integer.parseInt(type.substring(5, type.length()-1));
+				type = "VARCHAR";
+				type = "VARCHAR";
+			}
+			
+			int pkpos = -1;
+			if (pks.contains(name))
+			{
+				pkpos = pks.indexOf(name);
+			}
+			
+			PlanCacheManager.getInsertCol().setParms(colID, tableID, name, type, length, scale, pkpos, def.isNullable()).execute(tx);
+			colID++;
+		}
+		
+		PlanCacheManager.getInsertPartition().setParms(tableID, nodeGroupExp, nodeExp, deviceExp).execute(tx);
+		int indexID = PlanCacheManager.getNextIndexID().setParms(tableID).execute(tx);
+		PlanCacheManager.getInsertIndex().setParms(indexID, "PK"+table, tableID, true).execute(tx);
+		HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
+		int pos = 0;
+		for (String col : pks)
+		{
+			colID = cols2Pos.get(table + "." + col);
+			PlanCacheManager.getInsertIndexCol().setParms(indexID, tableID, colID, pos, true).execute(tx);
+			pos++;
+		}
+		
+		buildTable(schema, table, defs.size(), tx);
+		buildIndex(schema, "PK"+table, table, pks.size(), true, tx);
+	}
+	
+	private static void buildTable(String schema, String table, int numCols, Transaction tx) throws Exception
+	{
+		String fn = schema + "." + table + ".tbl";
+		ArrayList<Integer> nodes = MetaData.getNodesForTable(schema, table, tx);
+		ArrayList<Integer> devices = MetaData.getDevicesForTable(schema, table, tx);
+		ArrayList<Socket> sockets = new ArrayList<Socket>();
+		int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
+		
+		for (int node : nodes)
+		{
+			Socket sock;
+			String hostname = new MetaData().getHostNameForNode(node, tx);
+			sock = new Socket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			OutputStream out = sock.getOutputStream();
+			byte[] outMsg = "NEWTABLE        ".getBytes("UTF-8");
+			outMsg[8] = 0;
+			outMsg[9] = 0;
+			outMsg[10] = 0;
+			outMsg[11] = 0;
+			outMsg[12] = 0;
+			outMsg[13] = 0;
+			outMsg[14] = 0;
+			outMsg[15] = 0;
+			out.write(outMsg);
+			out.write(intToBytes(numCols));
+			out.write(stringToBytes(fn));
+			ObjectOutputStream objOut = new ObjectOutputStream(out);
+			objOut.writeObject(devices);
+			objOut.flush();
+			out.flush();
+			objOut.close();
+			sockets.add(sock);
+			
+			if (sockets.size() >= max)
+			{
+				sock = sockets.get(0);
+				out = sock.getOutputStream();
+				getConfirmation(sock);
+				out.close();
+				sock.close();
+				sockets.remove(0);
+			}
+		}
+		
+		for (Socket sock : sockets)
+		{
+			OutputStream out = sock.getOutputStream();
+			getConfirmation(sock);
+			out.close();
+			sock.close();
+		}
+	}
+	
+	private static void buildIndex(String schema, String index, String table, int numCols, boolean unique, Transaction tx) throws Exception
+	{
+		String fn = schema + "." + index + ".indx";
+		ArrayList<Integer> nodes = MetaData.getNodesForTable(schema, table, tx);
+		ArrayList<Integer> devices = MetaData.getDevicesForTable(schema, table, tx);
+		ArrayList<Socket> sockets = new ArrayList<Socket>();
+		int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
+		
+		for (int node : nodes)
+		{
+			Socket sock;
+			String hostname = new MetaData().getHostNameForNode(node, tx);
+			sock = new Socket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			OutputStream out = sock.getOutputStream();
+			byte[] outMsg = "NEWINDEX        ".getBytes("UTF-8");
+			outMsg[8] = 0;
+			outMsg[9] = 0;
+			outMsg[10] = 0;
+			outMsg[11] = 0;
+			outMsg[12] = 0;
+			outMsg[13] = 0;
+			outMsg[14] = 0;
+			outMsg[15] = 0;
+			out.write(outMsg);
+			out.write(intToBytes(numCols));
+			if (unique)
+			{
+				out.write(intToBytes(1));
+			}
+			else
+			{
+				out.write(intToBytes(0));
+			}
+			out.write(stringToBytes(fn));
+			ObjectOutputStream objOut = new ObjectOutputStream(out);
+			objOut.writeObject(devices);
+			objOut.flush();
+			out.flush();
+			objOut.close();
+			sockets.add(sock);
+			
+			if (sockets.size() >= max)
+			{
+				sock = sockets.get(0);
+				out = sock.getOutputStream();
+				getConfirmation(sock);
+				out.close();
+				sock.close();
+				sockets.remove(0);
+			}
+		}
+		
+		for (Socket sock : sockets)
+		{
+			OutputStream out = sock.getOutputStream();
+			getConfirmation(sock);
+			out.close();
+			sock.close();
+		}
+	}
+	
+	private static void populateIndex(String schema, String index, String table, Transaction tx) throws Exception
+	{
+		String iFn = schema + "." + index + ".indx";
+		String tFn = schema + "." + table + ".tbl";
+		ArrayList<Integer> nodes = MetaData.getNodesForTable(schema, table, tx);
+		ArrayList<Integer> devices = MetaData.getDevicesForTable(schema, table, tx);
+		ArrayList<Object> rs = PlanCacheManager.getKeys().setParms(schema, index).execute(tx);
+		//tabname, colname
+		ArrayList<String> keys = new ArrayList<String>();
+		for (Object o : rs)
+		{
+			ArrayList<Object> row = (ArrayList<Object>)o;
+			keys.add(row.get(0) + "." + row.get(1));
+		}
+		
+		rs = PlanCacheManager.getTypes().setParms(schema, index).execute(tx);
+		ArrayList<String> types = new ArrayList<String>();
+		for (Object o : rs)
+		{
+			ArrayList<Object> row = (ArrayList<Object>)o;
+			String type = (String)row.get(0);
+			if (type.equals("BIGINT"))
+			{
+				type = "LONG";
+			}
+			else if (type.equals("VARCHAR"))
+			{
+				type = "CHAR";
+			}
+			else if (type.equals("DOUBLE"))
+			{
+				type = "FLOAT";
+			}
+			types.add(type);
+		}
+		
+		rs = PlanCacheManager.getOrders().setParms(schema, index).execute(tx);
+		ArrayList<Boolean> orders = new ArrayList<Boolean>();
+		for (Object o : rs)
+		{
+			ArrayList<Object> row = (ArrayList<Object>)o;
+			String ord = (String)row.get(0);
+			boolean order = true;
+			if (!ord.equals("A"))
+			{
+				order = false;
+			}
+			orders.add(order);
+		}
+		
+		ArrayList<Integer> poses = new ArrayList<Integer>();
+		HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
+		for (String col : keys)
+		{
+			poses.add(cols2Pos.get(col));
+		}
+		
+		ArrayList<Socket> sockets = new ArrayList<Socket>();
+		int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
+		
+		TreeMap<Integer, String> pos2Col = getPos2ColForTable(schema, table, tx);
+		HashMap<String, String> cols2Types = getCols2TypesForTable(schema, table, tx);
+		
+		for (int node : nodes)
+		{
+			Socket sock;
+			String hostname = new MetaData().getHostNameForNode(node, tx);
+			sock = new Socket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			OutputStream out = sock.getOutputStream();
+			byte[] outMsg = "POPINDEX        ".getBytes("UTF-8");
+			outMsg[8] = 0;
+			outMsg[9] = 0;
+			outMsg[10] = 0;
+			outMsg[11] = 0;
+			outMsg[12] = 0;
+			outMsg[13] = 0;
+			outMsg[14] = 0;
+			outMsg[15] = 0;
+			out.write(outMsg);
+			out.write(stringToBytes(iFn));
+			out.write(stringToBytes(tFn));
+			ObjectOutputStream objOut = new ObjectOutputStream(out);
+			objOut.writeObject(devices);
+			objOut.writeObject(keys);
+			objOut.writeObject(types);
+			objOut.writeObject(orders);
+			objOut.writeObject(poses);
+			objOut.writeObject(pos2Col);
+			objOut.writeObject(cols2Types);
+			objOut.flush();
+			out.flush();
+			objOut.close();
+			sockets.add(sock);
+			
+			if (sockets.size() >= max)
+			{
+				sock = sockets.get(0);
+				out = sock.getOutputStream();
+				getConfirmation(sock);
+				out.close();
+				sock.close();
+				sockets.remove(0);
+			}
+		}
+		
+		for (Socket sock : sockets)
+		{
+			OutputStream out = sock.getOutputStream();
+			getConfirmation(sock);
+			out.close();
+			sock.close();
+		}
+	}
+	
+	private static void getConfirmation(Socket sock) throws Exception
+	{
+		InputStream in = sock.getInputStream();
+		byte[] inMsg = new byte[2];
+		
+		int count = 0;
+		while (count < 2)
+		{
+			try
+			{
+				int temp = in.read(inMsg, count, 2 - count);
+				if (temp == -1)
+				{
+					in.close();
+					throw new Exception();
+				}
+				else
+				{
+					count += temp;
+				}
+			}
+			catch (final Exception e)
+			{
+				in.close();
+				throw new Exception();
+			}
+		}
+		
+		String inStr = new String(inMsg, "UTF-8");
+		if (!inStr.equals("OK"))
+		{
+			in.close();
+			throw new Exception();
+		}
+		
+		try
+		{
+			in.close();
+		}
+		catch(Exception e)
+		{}
 	}
 
-	public long getCard(String col, HashMap<String, Double> generated)
+	private static byte[] intToBytes(int val)
+	{
+		final byte[] buff = new byte[4];
+		buff[0] = (byte)(val >> 24);
+		buff[1] = (byte)((val & 0x00FF0000) >> 16);
+		buff[2] = (byte)((val & 0x0000FF00) >> 8);
+		buff[3] = (byte)((val & 0x000000FF));
+		return buff;
+	}
+
+	private static byte[] stringToBytes(String string)
+	{
+		byte[] data = null;
+		try
+		{
+			data = string.getBytes("UTF-8");
+		}
+		catch(Exception e)
+		{}
+		byte[] len = intToBytes(data.length);
+		byte[] retval = new byte[data.length + len.length];
+		System.arraycopy(len, 0, retval, 0, len.length);
+		System.arraycopy(data, 0, retval, len.length, data.length);
+		return retval;
+	}
+		
+	public static boolean verifyUpdate(String schema, String tbl, ArrayList<Column> cols, ArrayList<String> buildList, Operator op, Transaction tx) throws Exception
+	{
+		//verify that all columns are 1 part - parseException
+		for (Column col : cols)
+		{
+			if (col.getTable() != null)
+			{
+				throw new ParseException("Two part column names are not allowed in a SET clause");
+			}
+		}
+		//get data types for cols on this table
+		//make sure that selecting the buildList cols from op in that order satisfies updates for cols on this table
+		TreeMap<Integer, String> catalogPos2Col = MetaData.getPos2ColForTable(schema, tbl, tx);
+		HashMap<String, String> catalogCols2Types = new MetaData().getCols2TypesForTable(schema, tbl, tx);
+		HashMap<Integer, String> catalogPos2Types = new HashMap<Integer, String>();
+		int i = 0;
+		while (i < catalogPos2Col.size())
+		{
+			catalogPos2Types.put(i, catalogCols2Types.get(catalogPos2Col.get(i)));
+			i++;
+		}
+		
+		HashMap<Integer, String> opPos2Types = new HashMap<Integer, String>();
+		i = 0;
+		while (i < buildList.size())
+		{
+			opPos2Types.put(i, op.getCols2Types().get(buildList.get(i)));
+			i++;
+		}
+		
+		if (catalogPos2Types.size() != opPos2Types.size())
+		{
+			return false;
+		}
+		
+		i = 0;
+		while (i < opPos2Types.size())
+		{
+			String opType = opPos2Types.get(i);
+			String catalogType = catalogPos2Types.get(i);
+			
+			if (opType.equals("CHAR") && !opType.equals(catalogType))
+			{
+				return false;
+			}
+			else if (opType.equals("DATE") && !opType.equals(catalogType))
+			{
+				return false;
+			}
+			else if (opType.equals("INT") || opType.equals("LONG") || opType.equals("FLOAT"))
+			{
+				if (catalogType.equals("CHAR") || catalogType.equals("DATE"))
+				{
+					return false;
+				}
+			}
+			i++;
+		}
+		
+		return true;
+	}
+	
+	public boolean verifyViewExistence(String schema, String name, Transaction tx) throws Exception
+	{
+		Object o = PlanCacheManager.getVerifyViewExist().setParms(schema, name).execute(tx);
+		if (o instanceof DataEndMarker)
+		{
+			return false;
+		}
+		
+		return true;
+	}
+	
+	public String getViewSQL(String schema, String name, Transaction tx) throws Exception
+	{
+		return PlanCacheManager.getViewSQL().setParms(schema, name).execute(tx);
+	}
+	
+	public boolean verifyTableExistence(String schema, String name, Transaction tx) throws Exception
+	{
+		Object o = PlanCacheManager.getVerifyTableExist().setParms(schema, name).execute(tx);
+		if (o instanceof DataEndMarker)
+		{
+			return false;
+		}
+		
+		return true;
+	}
+
+	public long getCard(String schema, String table, String col, HashMap<String, Double> generated, Transaction tx)
 	{
 		try
 		{
-			if (cards == null)
-			{
-				synchronized (cardsLock)
-				{
-					if (cards == null)
-					{
-						final ArrayList<ArrayList<Object>> cardsTemp = new ArrayList<ArrayList<Object>>();
-						final BufferedReader in = new BufferedReader(new FileReader(new File("card.tbl")));
-						String line = in.readLine();
-						while (line != null)
-						{
-							final ArrayList<Object> cols = new ArrayList<Object>(2);
-							final FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
-							cols.add(tokens.nextToken());
-							cols.add(Utils.parseLong(tokens.nextToken()));
-							cardsTemp.add(cols);
-							line = in.readLine();
-						}
-						in.close();
-						cards = cardsTemp;
-					}
-				}
-			}
-
-			for (final ArrayList<Object> line : cards)
-			{
-				if (col.equals(line.get(0)))
-				{
-					return (Long)line.get(1);
-				}
-			}
+			long card = PlanCacheManager.getColCard().setParms(schema, table, col).execute(tx);
+			return card;
 		}
-		catch (final Exception e)
-		{
-			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
-		}
+		catch(Exception e)
+		{}
 
 		if (generated.containsKey(col))
 		{
 			return (generated.get(col).longValue());
 		}
 
-		// System.out.println("Can't find cardinality for " + col);
-		// Thread.dumpStack();
+		HRDBMSWorker.logger.warn("Can't find cardinality for " + schema + "." + table + "."  + col);
+		return 1000000;
+	}
+	
+	public long getCard(String col, HashMap<String, Double> generated, Transaction tx, Operator tree) throws Exception
+	{
+		String c = col.substring(col.indexOf('.') + 1);
+		String ST = getTableForCol(col, tree);
+		String schema = ST.substring(0, ST.indexOf('.'));
+		String table = ST.substring(ST.indexOf('.') + 1);
+		try
+		{
+			long card = PlanCacheManager.getColCard().setParms(schema, table, c).execute(tx);
+			return card;
+		}
+		catch(Exception e)
+		{}
+
+		if (generated.containsKey(col))
+		{
+			return (generated.get(col).longValue());
+		}
+
+		HRDBMSWorker.logger.warn("Can't find cardinality for " + schema + "." + table + "."  + col);
 		return 1000000;
 	}
 
-	public long getCard(String col, RootOperator op)
+	public long getCard(String schema, String table, String col, RootOperator op, Transaction tx)
 	{
-		return getCard(col, op.getGenerated());
+		return getCard(schema, table, col, op.getGenerated(), tx);
+	}
+	
+	public long getCard(String col, RootOperator op, Transaction tx, Operator tree) throws Exception
+	{
+		return getCard(col, op.getGenerated(), tx, tree);
 	}
 
-	public long getColgroupCard(ArrayList<String> cols, HashMap<String, Double> generated)
+	public long getColgroupCard(ArrayList<String> schemas, ArrayList<String> tables, ArrayList<String> cols, HashMap<String, Double> generated, Transaction tx) throws Exception
 	{
-		// TODO should check gathered colgroup stats
+		boolean oneSchema = true;
+		boolean oneTable = true;
+		String theSchema = null;
+		String theTable = null;
+		
+		int i = 0;
+		for (String schema : schemas)
+		{
+			if (theSchema == null)
+			{
+				theSchema = schema;
+			}
+			else
+			{
+				if (!schema.equals(theSchema))
+				{
+					oneSchema = false;
+					break;
+				}
+			}
+			
+			String table = tables.get(i);
+			if (theTable == null)
+			{
+				theTable = table;
+			}
+			else
+			{
+				if (!table.equals(theTable))
+				{
+					oneTable = false;
+					break;
+				}
+			}
+		}
+		
+		if (oneSchema && oneTable)
+		{
+			int tableID = PlanCacheManager.getTableID().setParms(theSchema, theTable).execute(tx);
+			ArrayList<Object> rs = PlanCacheManager.getIndexIDsForTable().setParms(theSchema, theTable).execute(tx);
+			for (Object r : rs)
+			{
+				ArrayList<Object> row = (ArrayList<Object>)r;
+				int count = PlanCacheManager.getIndexColCount().setParms(tableID, (Integer)row.get(0)).execute(tx);
+				if (count == schemas.size())
+				{
+					boolean hasAllCols = true;
+					HashMap<String, Integer> cols2Pos = getCols2PosForTable(theSchema, theTable, tx);
+					for (String col : cols)
+					{
+						int colID = cols2Pos.get(theTable + "." + col);
+						Object o = PlanCacheManager.getCheckIndexForCol().setParms(tableID, (Integer)row.get(0), colID).execute(tx);
+						if (o instanceof DataEndMarker)
+						{
+							hasAllCols = false;
+							break;
+						}
+					}
+					
+					if (hasAllCols)
+					{
+						Object o = PlanCacheManager.getIndexCard().setParms(tableID, (Integer)row.get(0)).execute(tx);
+						if (o instanceof DataEndMarker)
+						{
+							continue;
+						}
+						else
+						{
+							ArrayList<Object> cardRow = (ArrayList<Object>)o;
+							return (Long)cardRow.get(0);
+						}
+					}
+				}
+			}
+		}
+		
 		double card = 1;
+		i = 0;
 		for (final String col : cols)
 		{
-			card *= this.getCard(col, generated);
+			card *= this.getCard(schemas.get(i), tables.get(i), col, generated, tx);
+			i++;
+		}
+
+		return (long)card;
+	}
+	
+	public long getColgroupCard(ArrayList<String> cs, HashMap<String, Double> generated, Transaction tx, Operator tree) throws Exception
+	{
+		ArrayList<String> schemas = new ArrayList<String>();
+		ArrayList<String> tables = new ArrayList<String>();
+		ArrayList<String> cols = new ArrayList<String>();
+		for (String c : cs)
+		{
+			cols.add(c.substring(c.indexOf('.') + 1));
+			String ST = getTableForCol(c, tree);
+			schemas.add(ST.substring(0, ST.indexOf('.')));
+			tables.add(ST.substring(ST.indexOf('.') + 1));
+		}
+		boolean oneSchema = true;
+		boolean oneTable = true;
+		String theSchema = null;
+		String theTable = null;
+		
+		int i = 0;
+		for (String schema : schemas)
+		{
+			if (theSchema == null)
+			{
+				theSchema = schema;
+			}
+			else
+			{
+				if (!schema.equals(theSchema))
+				{
+					oneSchema = false;
+					break;
+				}
+			}
+			
+			String table = tables.get(i);
+			if (theTable == null)
+			{
+				theTable = table;
+			}
+			else
+			{
+				if (!table.equals(theTable))
+				{
+					oneTable = false;
+					break;
+				}
+			}
+		}
+		
+		if (oneSchema && oneTable)
+		{
+			int tableID = PlanCacheManager.getTableID().setParms(theSchema, theTable).execute(tx);
+			ArrayList<Object> rs = PlanCacheManager.getIndexIDsForTable().setParms(theSchema, theTable).execute(tx);
+			for (Object r : rs)
+			{
+				ArrayList<Object> row = (ArrayList<Object>)r;
+				int count = PlanCacheManager.getIndexColCount().setParms(tableID, (Integer)row.get(0)).execute(tx);
+				if (count == schemas.size())
+				{
+					boolean hasAllCols = true;
+					HashMap<String, Integer> cols2Pos = getCols2PosForTable(theSchema, theTable, tx);
+					for (String col : cols)
+					{
+						int colID = cols2Pos.get(theTable + "." + col);
+						Object o = PlanCacheManager.getCheckIndexForCol().setParms(tableID, (Integer)row.get(0), colID).execute(tx);
+						if (o instanceof DataEndMarker)
+						{
+							hasAllCols = false;
+							break;
+						}
+					}
+					
+					if (hasAllCols)
+					{
+						Object o = PlanCacheManager.getIndexCard().setParms(tableID, (Integer)row.get(0)).execute(tx);
+						if (o instanceof DataEndMarker)
+						{
+							continue;
+						}
+						else
+						{
+							ArrayList<Object> cardRow = (ArrayList<Object>)o;
+							return (Long)cardRow.get(0);
+						}
+					}
+				}
+			}
+		}
+		
+		double card = 1;
+		i = 0;
+		for (final String col : cols)
+		{
+			card *= this.getCard(schemas.get(i), tables.get(i), col, generated, tx);
+			i++;
 		}
 
 		return (long)card;
 	}
 
-	public long getColgroupCard(ArrayList<String> cols, RootOperator op)
+	public long getColgroupCard(ArrayList<String> schemas, ArrayList<String> tables, ArrayList<String> cols, RootOperator op, Transaction tx) throws Exception
 	{
-		return getColgroupCard(cols, op.getGenerated());
+		return getColgroupCard(schemas, tables, cols, op.getGenerated(), tx);
+	}
+	
+	public long getColgroupCard(ArrayList<String> cols, RootOperator op, Transaction tx, Operator tree) throws Exception
+	{
+		return getColgroupCard(cols, op.getGenerated(), tx, tree);
 	}
 
-	public HashMap<String, Integer> getCols2PosForTable(String schema, String name) throws Exception
+	public static HashMap<String, Integer> getCols2PosForTable(String schema, String name, Transaction tx) throws Exception
 	{
 		final HashMap<String, Integer> retval = new HashMap<String, Integer>();
-		if (name.equals("LINEITEM"))
+		ArrayList<Object> rs = PlanCacheManager.getCols2PosForTable().setParms(schema, name).execute(tx);
+		for (Object r : rs)
 		{
-			retval.put("L_ORDERKEY", 0);
-			retval.put("L_PARTKEY", 1);
-			retval.put("L_SUPPKEY", 2);
-			retval.put("L_LINENUMBER", 3);
-			retval.put("L_QUANTITY", 4);
-			retval.put("L_EXTENDEDPRICE", 5);
-			retval.put("L_DISCOUNT", 6);
-			retval.put("L_TAX", 7);
-			retval.put("L_RETURNFLAG", 8);
-			retval.put("L_LINESTATUS", 9);
-			retval.put("L_SHIPDATE", 10);
-			retval.put("L_COMMITDATE", 11);
-			retval.put("L_RECEIPTDATE", 12);
-			retval.put("L_SHIPINSTRUCT", 13);
-			retval.put("L_SHIPMODE", 14);
-			retval.put("L_COMMENT", 15);
-		}
-		else if (name.equals("CUSTOMER"))
-		{
-			retval.put("C_CUSTKEY", 0);
-			retval.put("C_NAME", 1);
-			retval.put("C_ADDRESS", 2);
-			retval.put("C_NATIONKEY", 3);
-			retval.put("C_PHONE", 4);
-			retval.put("C_ACCTBAL", 5);
-			retval.put("C_MKTSEGMENT", 6);
-			retval.put("C_COMMENT", 7);
-		}
-		else if (name.equals("ORDERS"))
-		{
-			retval.put("O_ORDERKEY", 0);
-			retval.put("O_CUSTKEY", 1);
-			retval.put("O_ORDERSTATUS", 2);
-			retval.put("O_TOTALPRICE", 3);
-			retval.put("O_ORDERDATE", 4);
-			retval.put("O_ORDERPRIORITY", 5);
-			retval.put("O_CLERK", 6);
-			retval.put("O_SHIPPRIORITY", 7);
-			retval.put("O_COMMENT", 8);
-		}
-		else if (name.equals("SUPPLIER"))
-		{
-			retval.put("S_SUPPKEY", 0);
-			retval.put("S_NAME", 1);
-			retval.put("S_ADDRESS", 2);
-			retval.put("S_NATIONKEY", 3);
-			retval.put("S_PHONE", 4);
-			retval.put("S_ACCTBAL", 5);
-			retval.put("S_COMMENT", 6);
-		}
-		else if (name.equals("NATION"))
-		{
-			retval.put("N_NATIONKEY", 0);
-			retval.put("N_NAME", 1);
-			retval.put("N_REGIONKEY", 2);
-			retval.put("N_COMMENT", 3);
-		}
-		else if (name.equals("REGION"))
-		{
-			retval.put("R_REGIONKEY", 0);
-			retval.put("R_NAME", 1);
-			retval.put("R_COMMENT", 2);
-		}
-		else if (name.equals("PART"))
-		{
-			retval.put("P_PARTKEY", 0);
-			retval.put("P_NAME", 1);
-			retval.put("P_MFGR", 2);
-			retval.put("P_BRAND", 3);
-			retval.put("P_TYPE", 4);
-			retval.put("P_SIZE", 5);
-			retval.put("P_CONTAINER", 6);
-			retval.put("P_RETAILPRICE", 7);
-			retval.put("P_COMMENT", 8);
-		}
-		else if (name.equals("PARTSUPP"))
-		{
-			retval.put("PS_PARTKEY", 0);
-			retval.put("PS_SUPPKEY", 1);
-			retval.put("PS_AVAILQTY", 2);
-			retval.put("PS_SUPPLYCOST", 3);
-			retval.put("PS_COMMENT", 4);
-		}
-		else
-		{
-			throw new Exception("Unknown table.");
+			if (r instanceof DataEndMarker)
+			{}
+			else
+			{
+				ArrayList<Object> row = (ArrayList<Object>)r;
+				retval.put(name + "." + (String)row.get(0), (Integer)row.get(1));
+			}
 		}
 
 		return retval;
 	}
 
-	public HashMap<String, String> getCols2TypesForTable(String schema, String name) throws Exception
+	public static HashMap<String, String> getCols2TypesForTable(String schema, String name, Transaction tx) throws Exception
 	{
 		final HashMap<String, String> retval = new HashMap<String, String>();
-		if (name.equals("LINEITEM"))
+		ArrayList<Object> rs = PlanCacheManager.getCols2Types().setParms(schema, name).execute(tx);
+		for (Object r : rs)
 		{
-			retval.put("L_ORDERKEY", "INT");
-			retval.put("L_PARTKEY", "INT");
-			retval.put("L_SUPPKEY", "INT");
-			retval.put("L_LINENUMBER", "INT");
-			retval.put("L_QUANTITY", "FLOAT");
-			retval.put("L_EXTENDEDPRICE", "FLOAT");
-			retval.put("L_DISCOUNT", "FLOAT");
-			retval.put("L_TAX", "FLOAT");
-			retval.put("L_RETURNFLAG", "CHAR");
-			retval.put("L_LINESTATUS", "CHAR");
-			retval.put("L_SHIPDATE", "DATE");
-			retval.put("L_COMMITDATE", "DATE");
-			retval.put("L_RECEIPTDATE", "DATE");
-			retval.put("L_SHIPINSTRUCT", "CHAR");
-			retval.put("L_SHIPMODE", "CHAR");
-			retval.put("L_COMMENT", "CHAR");
-		}
-		else if (name.equals("CUSTOMER"))
-		{
-			retval.put("C_CUSTKEY", "INT");
-			retval.put("C_NAME", "CHAR");
-			retval.put("C_ADDRESS", "CHAR");
-			retval.put("C_NATIONKEY", "INT");
-			retval.put("C_PHONE", "CHAR");
-			retval.put("C_ACCTBAL", "FLOAT");
-			retval.put("C_MKTSEGMENT", "CHAR");
-			retval.put("C_COMMENT", "CHAR");
-		}
-		else if (name.equals("ORDERS"))
-		{
-			retval.put("O_ORDERKEY", "INT");
-			retval.put("O_CUSTKEY", "INT");
-			retval.put("O_ORDERSTATUS", "CHAR");
-			retval.put("O_TOTALPRICE", "FLOAT");
-			retval.put("O_ORDERDATE", "DATE");
-			retval.put("O_ORDERPRIORITY", "CHAR");
-			retval.put("O_CLERK", "CHAR");
-			retval.put("O_SHIPPRIORITY", "INT");
-			retval.put("O_COMMENT", "CHAR");
-		}
-		else if (name.equals("SUPPLIER"))
-		{
-			retval.put("S_SUPPKEY", "INT");
-			retval.put("S_NAME", "CHAR");
-			retval.put("S_ADDRESS", "CHAR");
-			retval.put("S_NATIONKEY", "INT");
-			retval.put("S_PHONE", "CHAR");
-			retval.put("S_ACCTBAL", "FLOAT");
-			retval.put("S_COMMENT", "CHAR");
-		}
-		else if (name.equals("NATION"))
-		{
-			retval.put("N_NATIONKEY", "INT");
-			retval.put("N_NAME", "CHAR");
-			retval.put("N_REGIONKEY", "INT");
-			retval.put("N_COMMENT", "CHAR");
-		}
-		else if (name.equals("REGION"))
-		{
-			retval.put("R_REGIONKEY", "INT");
-			retval.put("R_NAME", "CHAR");
-			retval.put("R_COMMENT", "CHAR");
-		}
-		else if (name.equals("PART"))
-		{
-			retval.put("P_PARTKEY", "INT");
-			retval.put("P_NAME", "CHAR");
-			retval.put("P_MFGR", "CHAR");
-			retval.put("P_BRAND", "CHAR");
-			retval.put("P_TYPE", "CHAR");
-			retval.put("P_SIZE", "INT");
-			retval.put("P_CONTAINER", "CHAR");
-			retval.put("P_RETAILPRICE", "FLOAT");
-			retval.put("P_COMMENT", "CHAR");
-		}
-		else if (name.equals("PARTSUPP"))
-		{
-			retval.put("PS_PARTKEY", "INT");
-			retval.put("PS_SUPPKEY", "INT");
-			retval.put("PS_AVAILQTY", "INT");
-			retval.put("PS_SUPPLYCOST", "FLOAT");
-			retval.put("PS_COMMENT", "CHAR");
-		}
-		else
-		{
-			throw new Exception("Unknown table.");
+			ArrayList<Object> row = (ArrayList<Object>)r;
+			String col = name + "." + (String)row.get(0);
+			String type = (String)row.get(1);
+			if (type.equals("BIGINT"))
+			{
+				type = "LONG";
+			}
+			else if (type.equals("DOUBLE"))
+			{
+				type = "FLOAT";
+			}
+			else if (type.equals("VARCHAR"))
+			{
+				type = "CHAR";
+			}
+			
+			retval.put(col, type);
 		}
 
 		return retval;
@@ -547,612 +1663,291 @@ public final class MetaData implements Serializable
 
 	public String getDevicePath(int num)
 	{
-		if (num == 0)
+		String deviceList = HRDBMSWorker.getHParms().getProperty("data_directories");
+		FastStringTokenizer tokens = new FastStringTokenizer(deviceList, ",", false);
+		tokens.setIndex(num);
+		String path = tokens.nextToken();
+		if (!path.endsWith("/"))
 		{
-			return "/mnt/ssd/";
+			path += "/";
 		}
-
-		// if (num == 1)
-		// {
-		// return "/data2/";
-		// }
-		//
-		// if (num == 2)
-		// {
-		// return "/data3/";
-		// }
-		//
-		// if (num == 3)
-		// {
-		// return "/data4/";
-		// }
-		//
-		// if (num == 4)
-		// {
-		// return "/data5/";
-		// }
-		//
-		// if (num == 5)
-		// {
-		// return "/data6/";
-		// }
-
-		return null;
+		
+		return path;
 	}
 
+	public String getHostNameForNode(int node, Transaction tx) throws Exception
+	{
+		return PlanCacheManager.getHostLookup().setParms(node).execute(tx);
+	}
+	
 	public String getHostNameForNode(int node)
 	{
-		if (node == -1)
-		{
-			return "54.186.68.29";
-		}
-
-		if (node == 0)
-		{
-			return "172.31.6.176";
-		}
-
-		if (node == 1)
-		{
-			return "172.31.6.20";
-		}
-
-		if (node == 2)
-		{
-			return "172.31.10.16";
-		}
-
-		if (node == 3)
-		{
-			return "172.31.14.253";
-		}
-
-		if (node == 4)
-		{
-			return "172.31.0.234";
-		}
-
-		if (node == 5)
-		{
-			return "172.31.0.235";
-		}
-
-		if (node == 6)
-		{
-			return "172.31.0.236";
-		}
-
-		if (node == 7)
-		{
-			return "172.31.0.237";
-		}
-
-		if (node == 8)
-		{
-			return "172.31.13.210";
-		}
-
-		if (node == 9)
-		{
-			return "172.31.13.211";
-		}
-		if (node == 10)
-		{
-			return "172.31.13.212";
-		}
-		if (node == 11)
-		{
-			return "172.31.13.213";
-		}
-		if (node == 12)
-		{
-			return "172.31.13.214";
-		}
-		if (node == 13)
-		{
-			return "172.31.13.215";
-		}
-		if (node == 14)
-		{
-			return "172.31.13.216";
-		}
-		if (node == 15)
-		{
-			return "172.31.13.217";
-		}
-
-		// if (node == -1)
-		// {
-		// return "192.168.1.3";
-		// }
-		//
-		// if (node == 0)
-		// {
-		// return "192.168.1.3";
-		// }
-		/*
-		 * if (node == -1) { return "hec-01"; }
-		 * 
-		 * if (node == 0) { return "hec-02"; }
-		 * 
-		 * if (node == 1) { return "hec-03"; }
-		 * 
-		 * if (node == 2) { return "hec-04"; }
-		 * 
-		 * if (node == 3) { return "hec-06"; }
-		 * 
-		 * if (node == 4) { return "hec-07"; }
-		 * 
-		 * if (node == 5) { return "hec-08"; }
-		 * 
-		 * if (node == 6) { return "hec-09"; }
-		 * 
-		 * if (node == 7) { return "hec-10"; }
-		 * 
-		 * if (node == 8) { return "hec-11"; }
-		 * 
-		 * if (node == 9) { return "hec-13"; }
-		 * 
-		 * if (node == 10) { return "hec-14"; }
-		 * 
-		 * if (node == 11) { return "hec-16"; }
-		 * 
-		 * if (node == 12) { return "hec-17"; }
-		 * 
-		 * if (node == 13) { return "hec-18"; }
-		 * 
-		 * if (node == 14) { return "hec-19"; }
-		 * 
-		 * if (node == 15) { return "hec-20"; }
-		 * 
-		 * if (node == 16) { return "hec-23"; }
-		 * 
-		 * if (node == 17) { return "hec-24"; }
-		 * 
-		 * if (node == 18) { return "hec-26"; }
-		 * 
-		 * if (node == 19) { return "hec-27"; }
-		 * 
-		 * if (node == 20) { return "hec-29"; }
-		 * 
-		 * 
-		 * if (node == 21) { return "hec-55"; }
-		 * 
-		 * if (node == 22) { return "hec-56"; }
-		 * 
-		 * if (node == 23) { return "hec-58"; }
-		 * 
-		 * if (node == 24) { return "hec-59"; }
-		 * 
-		 * if (node == 25) { return "hec-61"; }
-		 * 
-		 * if (node == 26) { return "hec-63"; }
-		 * 
-		 * if (node == 27) { return "hec-32"; }
-		 * 
-		 * if (node == 28) { return "hec-34"; }
-		 * 
-		 * if (node == 29) { return "hec-35"; }
-		 * 
-		 * if (node == 30) { return "hec-36"; }
-		 * 
-		 * if (node == 31) { return "hec-37"; }
-		 * 
-		 * if (node == 32) { return "hec-38"; }
-		 * 
-		 * if (node == 33) { return "hec-39"; }
-		 * 
-		 * if (node == 34) { return "hec-41"; }
-		 * 
-		 * if (node == 35) { return "hec-43"; }
-		 * 
-		 * if (node == 36) { return "hec-45"; }
-		 * 
-		 * if (node == 37) { return "hec-46"; }
-		 * 
-		 * if (node == 38) { return "hec-47"; }
-		 * 
-		 * if (node == 39) { return "hec-49"; }
-		 */
-
-		// if (node == 48)
-		// {
-		// return "hec-51";
-		// }
-
-		return null;
+		return nodeTable.get(node);
 	}
 
-	public ArrayList<Index> getIndexesForTable(String schema, String table)
+	public ArrayList<Index> getIndexesForTable(String schema, String table, Transaction tx) throws Exception
 	{
 		final ArrayList<Index> retval = new ArrayList<Index>();
-		if (table.equals("LINEITEM"))
+		ArrayList<Object> rs = PlanCacheManager.getIndexes().setParms(schema, table).execute(tx);
+		for (Object o : rs)
 		{
+			ArrayList<Object> row = (ArrayList<Object>)o;
+			ArrayList<Object> rs2 = PlanCacheManager.getKeys().setParms(schema, (String)row.get(1)).execute(tx);
+			//tabname, colname
 			ArrayList<String> keys = new ArrayList<String>();
-			keys.add("L_SHIPDATE");
-			keys.add("L_EXTENDEDPRICE");
-			keys.add("L_QUANTITY");
-			keys.add("L_DISCOUNT");
-			keys.add("L_SUPPKEY");
+			for (Object o2 : rs2)
+			{
+				ArrayList<Object> row2 = (ArrayList<Object>)o2;
+				keys.add(row.get(0) + "." + row.get(1));
+			}
+			
+			rs2 = PlanCacheManager.getTypes().setParms(schema, (String)row.get(1)).execute(tx);
 			ArrayList<String> types = new ArrayList<String>();
-			types.add("DATE");
-			types.add("FLOAT");
-			types.add("FLOAT");
-			types.add("FLOAT");
-			types.add("INT");
+			for (Object o2 : rs2)
+			{
+				ArrayList<Object> row2 = (ArrayList<Object>)o2;
+				String type = (String)row.get(0);
+				if (type.equals("BIGINT"))
+				{
+					type = "LONG";
+				}
+				else if (type.equals("VARCHAR"))
+				{
+					type = "CHAR";
+				}
+				else if (type.equals("DOUBLE"))
+				{
+					type = "FLOAT";
+				}
+				types.add(type);
+			}
+			
+			rs2 = PlanCacheManager.getOrders().setParms(schema, (String)row.get(1)).execute(tx);
 			ArrayList<Boolean> orders = new ArrayList<Boolean>();
-			orders.add(true);
-			orders.add(true);
-			orders.add(true);
-			orders.add(true);
-			orders.add(true);
-			retval.add(new Index("xl_shipdate.indx", keys, types, orders));
-
-			keys = new ArrayList<String>();
-			keys.add("L_SHIPMODE");
-			keys.add("L_RECEIPTDATE");
-			types = new ArrayList<String>();
-			types.add("INT");
-			types.add("DATE");
-			orders = new ArrayList<Boolean>();
-			orders.add(true);
-			orders.add(true);
-			retval.add(new Index("xl_receiptdate.indx", keys, types, orders));
-
-			keys = new ArrayList<String>();
-			keys.add("L_SHIPINSTRUCT");
-			keys.add("L_SHIPMODE");
-			keys.add("L_QUANTITY");
-			types = new ArrayList<String>();
-			types.add("CHAR");
-			types.add("CHAR");
-			types.add("FLOAT");
-			orders = new ArrayList<Boolean>();
-			orders.add(true);
-			orders.add(true);
-			orders.add(true);
-			retval.add(new Index("xl_shipmode.indx", keys, types, orders));
-
-			keys = new ArrayList<String>();
-			keys.add("L_ORDERKEY");
-			keys.add("L_SUPPKEY");
-			types = new ArrayList<String>();
-			types.add("INT");
-			types.add("INT");
-			orders = new ArrayList<Boolean>();
-			orders.add(true);
-			orders.add(true);
-			retval.add(new Index("xl_orderkey.indx", keys, types, orders));
-
-			keys = new ArrayList<String>();
-			keys.add("L_PARTKEY");
-			types = new ArrayList<String>();
-			types.add("INT");
-			orders = new ArrayList<Boolean>();
-			orders.add(true);
-			retval.add(new Index("xl_partkey.indx", keys, types, orders));
+			for (Object o2 : rs2)
+			{
+				ArrayList<Object> row2 = (ArrayList<Object>)o2;
+				String ord = (String)row.get(0);
+				boolean order = true;
+				if (!ord.equals("A"))
+				{
+					order = false;
+				}
+				orders.add(order);
+			}
+			
+			retval.add(new Index(schema + "." + row.get(0) + ".indx", keys, types, orders));
 		}
+		
+		return retval;
+	}
 
-		if (table.equals("PART"))
+	public static int getNumDevices()
+	{
+		String dirList = HRDBMSWorker.getHParms().getProperty("data_directories");
+		FastStringTokenizer tokens = new FastStringTokenizer(dirList, ",", false);
+		return tokens.allTokens().length;
+	}
+
+	public int getNumNodes(Transaction tx) throws Exception
+	{
+		return PlanCacheManager.getCountWorkerNodes().setParms().execute(tx);
+	}
+
+	public PartitionMetaData getPartMeta(String schema, String table, Transaction tx) throws Exception
+	{
+		return new PartitionMetaData(schema, table, tx);
+	}
+
+	public static TreeMap<Integer, String> getPos2ColForTable(String schema, String name, Transaction tx) throws Exception
+	{
+		final TreeMap<Integer, String> retval = new TreeMap<Integer, String>();
+		ArrayList<Object> rs = PlanCacheManager.getCols2PosForTable().setParms(schema, name).execute(tx);
+		for (Object r : rs)
 		{
-			ArrayList<String> keys = new ArrayList<String>();
-			keys.add("P_SIZE");
-			ArrayList<String> types = new ArrayList<String>();
-			types.add("INT");
-			ArrayList<Boolean> orders = new ArrayList<Boolean>();
-			orders.add(true);
-			retval.add(new Index("xp_size.indx", keys, types, orders));
-
-			keys = new ArrayList<String>();
-			keys.add("P_TYPE");
-			keys.add("P_SIZE");
-			types = new ArrayList<String>();
-			types.add("CHAR");
-			types.add("INT");
-			orders = new ArrayList<Boolean>();
-			orders.add(true);
-			orders.add(true);
-			retval.add(new Index("xp_type.indx", keys, types, orders));
-
-			keys = new ArrayList<String>();
-			keys.add("P_NAME");
-			types = new ArrayList<String>();
-			types.add("CHAR");
-			orders = new ArrayList<Boolean>();
-			orders.add(true);
-			retval.add(new Index("xp_name.indx", keys, types, orders));
-
-			keys = new ArrayList<String>();
-			keys.add("P_BRAND");
-			keys.add("P_CONTAINER");
-			keys.add("P_SIZE");
-			types = new ArrayList<String>();
-			types.add("CHAR");
-			types.add("CHAR");
-			types.add("INT");
-			orders = new ArrayList<Boolean>();
-			orders.add(true);
-			orders.add(true);
-			orders.add(true);
-			retval.add(new Index("xp_container.indx", keys, types, orders));
-		}
-
-		if (table.equals("CUSTOMER"))
-		{
-			final ArrayList<String> keys = new ArrayList<String>();
-			keys.add("C_MKTSEGMENT");
-			final ArrayList<String> types = new ArrayList<String>();
-			types.add("CHAR");
-			final ArrayList<Boolean> orders = new ArrayList<Boolean>();
-			orders.add(true);
-			retval.add(new Index("xc_mktsegment.indx", keys, types, orders));
-		}
-
-		if (table.equals("ORDERS"))
-		{
-			ArrayList<String> keys = new ArrayList<String>();
-			keys.add("O_ORDERDATE");
-			ArrayList<String> types = new ArrayList<String>();
-			types.add("DATE");
-			ArrayList<Boolean> orders = new ArrayList<Boolean>();
-			orders.add(true);
-			retval.add(new Index("xo_orderdate.indx", keys, types, orders));
-
-			keys = new ArrayList<String>();
-			keys.add("O_CUSTKEY");
-			types = new ArrayList<String>();
-			types.add("INT");
-			orders = new ArrayList<Boolean>();
-			orders.add(true);
-			retval.add(new Index("xo_custkey.indx", keys, types, orders));
-		}
-
-		if (table.equals("SUPPLIER"))
-		{
-			final ArrayList<String> keys = new ArrayList<String>();
-			keys.add("S_COMMENT");
-			final ArrayList<String> types = new ArrayList<String>();
-			types.add("CHAR");
-			final ArrayList<Boolean> orders = new ArrayList<Boolean>();
-			orders.add(true);
-			retval.add(new Index("xs_comment.indx", keys, types, orders));
-
-			// keys = new ArrayList<String>();
-			// keys.add("S_SUPPKEY");
-			// types = new ArrayList<String>();
-			// types.add("INT");
-			// orders = new ArrayList<Boolean>();
-			// orders.add(true);
-			// retval.add(new Index("xs_suppkey.indx", keys, types, orders));
-		}
-
-		if (table.equals("PARTSUPP"))
-		{
-			final ArrayList<String> keys = new ArrayList<String>();
-			keys.add("PS_PARTKEY");
-			keys.add("PS_SUPPKEY");
-			final ArrayList<String> types = new ArrayList<String>();
-			types.add("INT");
-			types.add("INT");
-			final ArrayList<Boolean> orders = new ArrayList<Boolean>();
-			orders.add(true);
-			orders.add(true);
-			retval.add(new Index("xps_partkey.indx", keys, types, orders));
+			if (r instanceof DataEndMarker)
+			{}
+			else
+			{
+				ArrayList<Object> row = (ArrayList<Object>)r;
+				retval.put((Integer)row.get(1), name + "." + (String)row.get(0));
+			}
 		}
 
 		return retval;
 	}
 
-	public int getNumDevices()
+	public long getTableCard(String schema, String table, Transaction tx)
 	{
-		return 1;
+		try
+		{
+			long card = PlanCacheManager.getTableCard().setParms(schema, table).execute(tx);
+			return card;
+		}
+		catch(Exception e)
+		{
+			HRDBMSWorker.logger.warn("No table card found for table " + schema + "." + table);
+			return 1000000;
+		}
 	}
-
-	public int getNumNodes()
+	
+	private boolean isQualified(String col)
 	{
-		return 16;
+		if (col.contains(".") && !col.startsWith("."))
+		{
+			return true;
+		}
+		
+		return false;
 	}
-
-	public PartitionMetaData getPartMeta(String schema, String table)
+	
+	private  ArrayList<TableScanOperator> getTables(Operator op)
 	{
-		return new PartitionMetaData(schema, table);
-	}
-
-	public TreeMap<Integer, String> getPos2ColForTable(String schema, String name) throws Exception
-	{
-		final TreeMap<Integer, String> retval = new TreeMap<Integer, String>();
-		if (name.equals("LINEITEM"))
+		ArrayList<TableScanOperator> retval = new ArrayList<TableScanOperator>();
+		if (op instanceof TableScanOperator)
 		{
-			retval.put(0, "L_ORDERKEY");
-			retval.put(1, "L_PARTKEY");
-			retval.put(2, "L_SUPPKEY");
-			retval.put(3, "L_LINENUMBER");
-			retval.put(4, "L_QUANTITY");
-			retval.put(5, "L_EXTENDEDPRICE");
-			retval.put(6, "L_DISCOUNT");
-			retval.put(7, "L_TAX");
-			retval.put(8, "L_RETURNFLAG");
-			retval.put(9, "L_LINESTATUS");
-			retval.put(10, "L_SHIPDATE");
-			retval.put(11, "L_COMMITDATE");
-			retval.put(12, "L_RECEIPTDATE");
-			retval.put(13, "L_SHIPINSTRUCT");
-			retval.put(14, "L_SHIPMODE");
-			retval.put(15, "L_COMMENT");
-		}
-		else if (name.equals("CUSTOMER"))
-		{
-			retval.put(0, "C_CUSTKEY");
-			retval.put(1, "C_NAME");
-			retval.put(2, "C_ADDRESS");
-			retval.put(3, "C_NATIONKEY");
-			retval.put(4, "C_PHONE");
-			retval.put(5, "C_ACCTBAL");
-			retval.put(6, "C_MKTSEGMENT");
-			retval.put(7, "C_COMMENT");
-		}
-		else if (name.equals("ORDERS"))
-		{
-			retval.put(0, "O_ORDERKEY");
-			retval.put(1, "O_CUSTKEY");
-			retval.put(2, "O_ORDERSTATUS");
-			retval.put(3, "O_TOTALPRICE");
-			retval.put(4, "O_ORDERDATE");
-			retval.put(5, "O_ORDERPRIORITY");
-			retval.put(6, "O_CLERK");
-			retval.put(7, "O_SHIPPRIORITY");
-			retval.put(8, "O_COMMENT");
-		}
-		else if (name.equals("SUPPLIER"))
-		{
-			retval.put(0, "S_SUPPKEY");
-			retval.put(1, "S_NAME");
-			retval.put(2, "S_ADDRESS");
-			retval.put(3, "S_NATIONKEY");
-			retval.put(4, "S_PHONE");
-			retval.put(5, "S_ACCTBAL");
-			retval.put(6, "S_COMMENT");
-		}
-		else if (name.equals("NATION"))
-		{
-			retval.put(0, "N_NATIONKEY");
-			retval.put(1, "N_NAME");
-			retval.put(2, "N_REGIONKEY");
-			retval.put(3, "N_COMMENT");
-		}
-		else if (name.equals("REGION"))
-		{
-			retval.put(0, "R_REGIONKEY");
-			retval.put(1, "R_NAME");
-			retval.put(2, "R_COMMENT");
-		}
-		else if (name.equals("PART"))
-		{
-			retval.put(0, "P_PARTKEY");
-			retval.put(1, "P_NAME");
-			retval.put(2, "P_MFGR");
-			retval.put(3, "P_BRAND");
-			retval.put(4, "P_TYPE");
-			retval.put(5, "P_SIZE");
-			retval.put(6, "P_CONTAINER");
-			retval.put(7, "P_RETAILPRICE");
-			retval.put(8, "P_COMMENT");
-		}
-		else if (name.equals("PARTSUPP"))
-		{
-			retval.put(0, "PS_PARTKEY");
-			retval.put(1, "PS_SUPPKEY");
-			retval.put(2, "PS_AVAILQTY");
-			retval.put(3, "PS_SUPPLYCOST");
-			retval.put(4, "PS_COMMENT");
+			retval.add((TableScanOperator)op);
+			return retval;
 		}
 		else
 		{
-			throw new Exception("Unknown table.");
+			for (Operator o : op.children())
+			{
+				retval.addAll(getTables(o));
+			}
+			
+			return retval;
 		}
-
-		return retval;
 	}
-
-	public long getTableCard(String schema, String table)
+	
+	private String getQual(String col)
 	{
-		if (table.equals("SUPPLIER"))
-		{
-			return 10000 * 4;
-		}
-
-		if (table.equals("PART"))
-		{
-			return 200000 * 4;
-		}
-
-		if (table.equals("PARTSUPP"))
-		{
-			return 800000 * 4;
-		}
-
-		if (table.equals("CUSTOMER"))
-		{
-			return 150000 * 4;
-		}
-
-		if (table.equals("ORDERS"))
-		{
-			return 1500000 * 4;
-		}
-
-		if (table.equals("LINEITEM"))
-		{
-			return 6001215 * 4;
-		}
-
-		if (table.equals("NATION"))
-		{
-			return 25;
-		}
-
-		if (table.equals("REGION"))
-		{
-			return 5;
-		}
-
-		HRDBMSWorker.logger.error("Unknown table in getTableCard()");
-		System.exit(1);
-		return 0;
+		return col.substring(0, col.indexOf('.'));
 	}
-
-	public String getTableForCol(String col) //TODO must return schema.table - must accept qualified or unqualified col
+	
+	private String getCol(String col)
 	{
-		if (col.startsWith("L_"))
+		if (!col.contains("."))
 		{
-			return "LINEITEM";
+			return col;
 		}
-
-		if (col.startsWith("P_"))
+		else
 		{
-			return "PART";
+			return col.substring(col.indexOf('.') + 1);
 		}
-
-		if (col.startsWith("PS_"))
+	}
+	
+	private boolean schemaIs(TableScanOperator t, String q)
+	{
+		return t.getSchema().equals(q);
+	}
+	
+	private boolean aliasIs(TableScanOperator t, String q)
+	{
+		return t.getAlias().equals(q);
+	}
+	
+	private boolean containsCol(Operator op, String c)
+	{
+		Set<String> set = op.getCols2Pos().keySet();
+		for (String s : set)
 		{
-			return "PARTSUPP";
+			if (s.contains("."))
+			{
+				s = s.substring(s.indexOf('.') + 1);
+				if (s.equals(c))
+				{
+					return true;
+				}
+			}
 		}
-
-		if (col.startsWith("S_"))
-		{
-			return "SUPPLIER";
-		}
-
-		if (col.startsWith("C_"))
-		{
-			return "CUSTOMER";
-		}
-
-		if (col.startsWith("O_"))
-		{
-			return "ORDERS";
-		}
-
-		if (col.startsWith("N_"))
-		{
-			return "NATION";
-		}
-
-		if (col.startsWith("R_"))
-		{
-			return "REGION";
-		}
-
-		return null;
+		
+		return false;
 	}
 
-	public double likelihood(ArrayList<Filter> filters)
+	public String getTableForCol(String col, Operator tree) throws Exception//must return schema.table - must accept qualified or unqualified col
+	{
+		Operator op = tree;
+		ArrayList<TableScanOperator> tables = getTables(tree);
+		if (isQualified(col))
+		{
+			String qual = getQual(col);
+			String c = getCol(col);
+			String retSchema = null;
+			String retTable = null;
+			for (TableScanOperator t : tables)
+			{
+				if (containsCol(t, c))
+				{
+					if (schemaIs(t, qual) || aliasIs(t, qual))
+					{
+						if (retSchema == null)
+						{
+							retSchema = t.getSchema();
+							retTable = t.getTable();
+						}
+						else
+						{
+							if (!retSchema.equals(t.getSchema()) || !retTable.equals(t.getTable()))
+							{
+								throw new Exception("Ambiguous column " + col);
+							}
+						}
+					}
+				}
+			}
+			
+			if (retSchema != null)
+			{
+				return retSchema + "." + retTable;
+			}
+			else
+			{
+				throw new Exception("Column not found when trying to figure out table " + col);
+			}
+		}
+		else
+		{
+			String c = getCol(col);
+			String retSchema = null;
+			String retTable = null;
+			for (TableScanOperator t : tables)
+			{
+				if (containsCol(t, c))
+				{
+					if (retSchema == null)
+					{
+						retSchema = t.getSchema();
+						retTable = t.getTable();
+					}
+					else
+					{
+						if (!retSchema.equals(t.getSchema()) || !retTable.equals(t.getTable()))
+						{
+							throw new Exception("Ambiguous column " + col);
+						}
+					}
+				}
+			}
+			
+			if (retSchema != null)
+			{
+				return retSchema + "." + retTable;
+			}
+			else
+			{
+				return ".";
+			}
+		}
+	}
+
+	public double likelihood(ArrayList<Filter> filters, Transaction tx, Operator tree) throws Exception
 	{
 		double sum = 0;
 
 		for (final Filter filter : filters)
 		{
-			sum += likelihood(filter);
+			sum += likelihood(filter, tx, tree);
 		}
 
 		if (sum > 1)
@@ -1163,13 +1958,13 @@ public final class MetaData implements Serializable
 		return sum;
 	}
 
-	public double likelihood(ArrayList<Filter> filters, HashMap<String, Double> generated)
+	public double likelihood(ArrayList<Filter> filters, HashMap<String, Double> generated, Transaction tx, Operator tree) throws Exception
 	{
 		double sum = 0;
 
 		for (final Filter filter : filters)
 		{
-			sum += likelihood(filter, generated);
+			sum += likelihood(filter, generated, tx, tree);
 		}
 
 		if (sum > 1)
@@ -1180,12 +1975,12 @@ public final class MetaData implements Serializable
 		return sum;
 	}
 
-	public double likelihood(ArrayList<Filter> filters, RootOperator op)
+	public double likelihood(ArrayList<Filter> filters, RootOperator op, Transaction tx, Operator tree) throws Exception
 	{
-		return likelihood(filters, op.getGenerated());
+		return likelihood(filters, op.getGenerated(), tx, tree);
 	}
 
-	public double likelihood(Filter filter)
+	public double likelihood(Filter filter, Transaction tx, Operator tree) throws Exception
 	{
 		long leftCard = 1;
 		long rightCard = 1;
@@ -1214,13 +2009,23 @@ public final class MetaData implements Serializable
 
 		if (filter.leftIsColumn())
 		{
-			leftCard = getCard(filter.leftColumn(), generated);
+			String left = filter.leftColumn();
+			String leftST = getTableForCol(left, tree);
+			String leftSchema = leftST.substring(0, leftST.indexOf('.'));
+			String leftTable = leftST.substring(leftST.indexOf('.') + 1);
+			String leftCol = left.substring(left.indexOf('.') + 1);
+			leftCard = getCard(leftSchema, leftTable, leftCol, generated, tx);
 		}
 
 		if (filter.rightIsColumn())
 		{
 			// figure out number of possible values for right side
-			rightCard = getCard(filter.rightColumn(), generated);
+			String right = filter.rightColumn();
+			String rightST = getTableForCol(right, tree);
+			String rightSchema = rightST.substring(0, rightST.indexOf('.'));
+			String rightTable = rightST.substring(rightST.indexOf('.') + 1);
+			String rightCol = right.substring(right.indexOf('.') + 1);
+			rightCard = getCard(rightSchema, rightTable, rightCol, generated, tx);
 		}
 
 		final String op = filter.op();
@@ -1264,7 +2069,7 @@ public final class MetaData implements Serializable
 				{
 					final double right = filter.getRightNumber();
 					final String left = filter.leftColumn();
-					final double retval = percentBelow(left, right);
+					final double retval = percentBelow(left, right, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
@@ -1278,7 +2083,7 @@ public final class MetaData implements Serializable
 				{
 					final MyDate right = filter.getRightDate();
 					final String left = filter.leftColumn();
-					final double retval = percentBelow(left, right);
+					final double retval = percentBelow(left, right, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
@@ -1293,7 +2098,7 @@ public final class MetaData implements Serializable
 					// string
 					final String right = filter.getRightString();
 					final String left = filter.leftColumn();
-					final double retval = percentBelow(left, right);
+					final double retval = percentBelow(left, right, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
@@ -1310,7 +2115,7 @@ public final class MetaData implements Serializable
 				{
 					final double left = filter.getLeftNumber();
 					final String right = filter.rightColumn();
-					final double retval = percentAbove(right, left);
+					final double retval = percentAbove(right, left, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
@@ -1324,7 +2129,7 @@ public final class MetaData implements Serializable
 				{
 					final MyDate left = filter.getLeftDate();
 					final String right = filter.rightColumn();
-					final double retval = percentAbove(right, left);
+					final double retval = percentAbove(right, left, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
@@ -1339,7 +2144,7 @@ public final class MetaData implements Serializable
 					// string
 					final String left = filter.getLeftString();
 					final String right = filter.rightColumn();
-					final double retval = percentAbove(right, left);
+					final double retval = percentAbove(right, left, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
@@ -1365,7 +2170,7 @@ public final class MetaData implements Serializable
 				{
 					final double right = filter.getRightNumber();
 					final String left = filter.leftColumn();
-					final double retval = percentAbove(left, right);
+					final double retval = percentAbove(left, right, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
@@ -1379,7 +2184,7 @@ public final class MetaData implements Serializable
 				{
 					final MyDate right = filter.getRightDate();
 					final String left = filter.leftColumn();
-					final double retval = percentAbove(left, right);
+					final double retval = percentAbove(left, right, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
@@ -1394,7 +2199,7 @@ public final class MetaData implements Serializable
 					// string
 					final String right = filter.getRightString();
 					final String left = filter.leftColumn();
-					final double retval = percentAbove(left, right);
+					final double retval = percentAbove(left, right, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
@@ -1411,7 +2216,7 @@ public final class MetaData implements Serializable
 				{
 					final double left = filter.getLeftNumber();
 					final String right = filter.rightColumn();
-					final double retval = percentBelow(right, left);
+					final double retval = percentBelow(right, left, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
@@ -1425,7 +2230,7 @@ public final class MetaData implements Serializable
 				{
 					final MyDate left = filter.getLeftDate();
 					final String right = filter.rightColumn();
-					final double retval = percentBelow(right, left);
+					final double retval = percentBelow(right, left, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
@@ -1440,7 +2245,7 @@ public final class MetaData implements Serializable
 					// string
 					final String left = filter.getLeftString();
 					final String right = filter.rightColumn();
-					final double retval = percentBelow(right, left);
+					final double retval = percentBelow(right, left, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
@@ -1469,14 +2274,8 @@ public final class MetaData implements Serializable
 	}
 
 	// likelihood of a row directly out of the table passing this test
-	public double likelihood(Filter filter, HashMap<String, Double> generated)
+	public double likelihood(Filter filter, HashMap<String, Double> generated, Transaction tx, Operator tree) throws Exception
 	{
-		final Double r = lCache.get(filter);
-		if (r != null)
-		{
-			return r;
-		}
-
 		long leftCard = 1;
 		long rightCard = 1;
 
@@ -1489,31 +2288,38 @@ public final class MetaData implements Serializable
 				HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
 				System.exit(1);
 			}
-			lCache.put(filter, retval);
 			return retval;
 		}
 
 		if (filter.alwaysTrue())
 		{
-			lCache.put(filter, 1.0);
 			return 1;
 		}
 
 		if (filter.alwaysFalse())
 		{
-			lCache.put(filter, 0.0);
 			return 0;
 		}
 
 		if (filter.leftIsColumn())
 		{
-			leftCard = getCard(filter.leftColumn(), generated);
+			String left = filter.leftColumn();
+			String leftST = getTableForCol(left, tree);
+			String leftSchema = leftST.substring(0, leftST.indexOf('.'));
+			String leftTable = leftST.substring(leftST.indexOf('.') + 1);
+			String leftCol = left.substring(left.indexOf('.') + 1);
+			leftCard = getCard(leftSchema, leftTable, leftCol, generated, tx);
 		}
 
 		if (filter.rightIsColumn())
 		{
 			// figure out number of possible values for right side
-			rightCard = getCard(filter.rightColumn(), generated);
+			String right = filter.rightColumn();
+			String rightST = getTableForCol(right, tree);
+			String rightSchema = rightST.substring(0, rightST.indexOf('.'));
+			String rightTable = rightST.substring(rightST.indexOf('.') + 1);
+			String rightCol = right.substring(right.indexOf('.') + 1);
+			rightCard = getCard(rightSchema, rightTable, rightCol, generated, tx);
 		}
 
 		final String op = filter.op();
@@ -1527,7 +2333,6 @@ public final class MetaData implements Serializable
 				HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
 				System.exit(1);
 			}
-			lCache.put(filter, retval);
 			return retval;
 		}
 
@@ -1540,7 +2345,6 @@ public final class MetaData implements Serializable
 				HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
 				System.exit(1);
 			}
-			lCache.put(filter, retval);
 			return retval;
 		}
 
@@ -1548,7 +2352,6 @@ public final class MetaData implements Serializable
 		{
 			if (filter.leftIsColumn() && filter.rightIsColumn())
 			{
-				lCache.put(filter, 0.5);
 				return 0.5;
 			}
 
@@ -1558,28 +2361,26 @@ public final class MetaData implements Serializable
 				{
 					final double right = filter.getRightNumber();
 					final String left = filter.leftColumn();
-					final double retval = percentBelow(left, right);
+					final double retval = percentBelow(left, right, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
 						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
 						System.exit(1);
 					}
-					lCache.put(filter, retval);
 					return retval;
 				}
 				else if (filter.rightIsDate())
 				{
 					final MyDate right = filter.getRightDate();
 					final String left = filter.leftColumn();
-					final double retval = percentBelow(left, right);
+					final double retval = percentBelow(left, right, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
 						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
 						System.exit(1);
 					}
-					lCache.put(filter, retval);
 					return retval;
 				}
 				else
@@ -1587,14 +2388,13 @@ public final class MetaData implements Serializable
 					// string
 					final String right = filter.getRightString();
 					final String left = filter.leftColumn();
-					final double retval = percentBelow(left, right);
+					final double retval = percentBelow(left, right, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
 						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
 						System.exit(1);
 					}
-					lCache.put(filter, retval);
 					return retval;
 				}
 			}
@@ -1604,28 +2404,26 @@ public final class MetaData implements Serializable
 				{
 					final double left = filter.getLeftNumber();
 					final String right = filter.rightColumn();
-					final double retval = percentAbove(right, left);
+					final double retval = percentAbove(right, left, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
 						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
 						System.exit(1);
 					}
-					lCache.put(filter, retval);
 					return retval;
 				}
 				else if (filter.leftIsDate())
 				{
 					final MyDate left = filter.getLeftDate();
 					final String right = filter.rightColumn();
-					final double retval = percentAbove(right, left);
+					final double retval = percentAbove(right, left, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
 						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
 						System.exit(1);
 					}
-					lCache.put(filter, retval);
 					return retval;
 				}
 				else
@@ -1633,14 +2431,13 @@ public final class MetaData implements Serializable
 					// string
 					final String left = filter.getLeftString();
 					final String right = filter.rightColumn();
-					final double retval = percentAbove(right, left);
+					final double retval = percentAbove(right, left, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
 						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
 						System.exit(1);
 					}
-					lCache.put(filter, retval);
 					return retval;
 				}
 			}
@@ -1650,7 +2447,6 @@ public final class MetaData implements Serializable
 		{
 			if (filter.leftIsColumn() && filter.rightIsColumn())
 			{
-				lCache.put(filter, 0.5);
 				return 0.5;
 			}
 
@@ -1660,28 +2456,26 @@ public final class MetaData implements Serializable
 				{
 					final double right = filter.getRightNumber();
 					final String left = filter.leftColumn();
-					final double retval = percentAbove(left, right);
+					final double retval = percentAbove(left, right, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
 						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
 						System.exit(1);
 					}
-					lCache.put(filter, retval);
 					return retval;
 				}
 				else if (filter.rightIsDate())
 				{
 					final MyDate right = filter.getRightDate();
 					final String left = filter.leftColumn();
-					final double retval = percentAbove(left, right);
+					final double retval = percentAbove(left, right, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
 						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
 						System.exit(1);
 					}
-					lCache.put(filter, retval);
 					return retval;
 				}
 				else
@@ -1689,14 +2483,13 @@ public final class MetaData implements Serializable
 					// string
 					final String right = filter.getRightString();
 					final String left = filter.leftColumn();
-					final double retval = percentAbove(left, right);
+					final double retval = percentAbove(left, right, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
 						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
 						System.exit(1);
 					}
-					lCache.put(filter, retval);
 					return retval;
 				}
 			}
@@ -1706,28 +2499,26 @@ public final class MetaData implements Serializable
 				{
 					final double left = filter.getLeftNumber();
 					final String right = filter.rightColumn();
-					final double retval = percentBelow(right, left);
+					final double retval = percentBelow(right, left, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
 						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
 						System.exit(1);
 					}
-					lCache.put(filter, retval);
 					return retval;
 				}
 				else if (filter.leftIsDate())
 				{
 					final MyDate left = filter.getLeftDate();
 					final String right = filter.rightColumn();
-					final double retval = percentBelow(right, left);
+					final double retval = percentBelow(right, left, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
 						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
 						System.exit(1);
 					}
-					lCache.put(filter, retval);
 					return retval;
 				}
 				else
@@ -1735,14 +2526,13 @@ public final class MetaData implements Serializable
 					// string
 					final String left = filter.getLeftString();
 					final String right = filter.rightColumn();
-					final double retval = percentBelow(right, left);
+					final double retval = percentBelow(right, left, tx, tree);
 					if (retval < 0)
 					{
 						Exception e = new Exception();
 						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
 						System.exit(1);
 					}
-					lCache.put(filter, retval);
 					return retval;
 				}
 			}
@@ -1750,13 +2540,11 @@ public final class MetaData implements Serializable
 
 		if (op.equals("LI"))
 		{
-			lCache.put(filter, 0.25);
 			return 0.25;
 		}
 
 		if (op.equals("NL"))
 		{
-			lCache.put(filter, 0.75);
 			return 0.75;
 		}
 
@@ -1765,12 +2553,12 @@ public final class MetaData implements Serializable
 		return 0;
 	}
 
-	public double likelihood(Filter filter, RootOperator op)
+	public double likelihood(Filter filter, RootOperator op, Transaction tx, Operator tree) throws Exception
 	{
-		return likelihood(filter, op.getGenerated());
+		return likelihood(filter, op.getGenerated(), tx, tree);
 	}
 
-	public double likelihood(HashSet<HashMap<Filter, Filter>> hshm, HashMap<String, Double> generated)
+	public double likelihood(HashSet<HashMap<Filter, Filter>> hshm, HashMap<String, Double> generated, Transaction tx, Operator tree) throws Exception
 	{
 		final ArrayList<Double> ands = new ArrayList<Double>(hshm.size());
 		for (final HashMap<Filter, Filter> ored : hshm)
@@ -1779,7 +2567,7 @@ public final class MetaData implements Serializable
 
 			for (final Filter filter : ored.keySet())
 			{
-				sum += likelihood(filter, generated);
+				sum += likelihood(filter, generated, tx, tree);
 			}
 
 			if (sum > 1)
@@ -1799,9 +2587,9 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	public double likelihood(HashSet<HashMap<Filter, Filter>> hshm, RootOperator op)
+	public double likelihood(HashSet<HashMap<Filter, Filter>> hshm, RootOperator op, Transaction tx, Operator tree) throws Exception
 	{
-		return likelihood(hshm, op.getGenerated());
+		return likelihood(hshm, op.getGenerated(), tx, tree);
 	}
 
 	private long bigger(long x, long y)
@@ -1814,13 +2602,43 @@ public final class MetaData implements Serializable
 		return y;
 	}
 
-	private ArrayList<Object> convertRangeStringToObject(String set, String schema, String table, String rangeCol)
+	private ArrayList<Object> convertRangeStringToObject(String set, String schema, String table, String rangeCol, Transaction tx) throws Exception
 	{
-		// TODO
-		return null;
+		String type = PlanCacheManager.getColType().setParms(schema, table, rangeCol).execute(tx);
+		ArrayList<Object> retval = new ArrayList<Object>();
+		StringTokenizer tokens = new StringTokenizer(set, "{}|");
+		while (tokens.hasMoreTokens())
+		{
+			String token = tokens.nextToken();
+			if (type.equals("INT"))
+			{
+				retval.add(Integer.parseInt(token));
+			}
+			else if (type.equals("BIGINT"))
+			{
+				retval.add(Long.parseLong(token));
+			}
+			else if (type.equals("DOUBLE"))
+			{
+				retval.add(Utils.parseDouble(token));
+			}
+			else if (type.equals("VARCHAR"))
+			{
+				retval.add(token);
+			}
+			else if (type.equals("DATE"))
+			{
+				int year = Integer.parseInt(token.substring(0, 4));
+				int month = Integer.parseInt(token.substring(5, 7));
+				int day = Integer.parseInt(token.substring(8, 10));
+				retval.add(new MyDate(year, month, day));
+			}
+		}
+		
+		return retval;
 	}
 
-	private Operator doWork(Operator op, HashMap<Operator, ArrayList<String>> tables, HashMap<Operator, ArrayList<ArrayList<Filter>>> filters, HashMap<Operator, HashMap<String, Double>> retvals)
+	private Operator doWork(Operator op, HashMap<Operator, ArrayList<String>> tables, HashMap<Operator, ArrayList<ArrayList<Filter>>> filters, HashMap<Operator, HashMap<String, Double>> retvals, Transaction tx, Operator tree) throws Exception
 	{
 		ArrayList<String> t;
 		ArrayList<ArrayList<Filter>> f;
@@ -1867,7 +2685,7 @@ public final class MetaData implements Serializable
 			{
 				final HashSet<HashMap<Filter, Filter>> hshm = ((AntiJoinOperator)op).getHSHM();
 				final ArrayList<Filter> al = new ArrayList<Filter>();
-				al.add(new ConstantFilter(1 - this.likelihood(hshm, r)));
+				al.add(new ConstantFilter(1 - this.likelihood(hshm, r, tx, tree)));
 				f.add(al);
 			}
 			else if (op instanceof RootOperator)
@@ -1884,7 +2702,7 @@ public final class MetaData implements Serializable
 					final ArrayList<String> keys = ((MultiOperator)op).getKeys();
 					if (keys.size() == 1)
 					{
-						card = this.getCard(keys.get(0), r);
+						card = this.getCard(keys.get(0), r, tx, tree);
 					}
 					else if (keys.size() == 0)
 					{
@@ -1892,14 +2710,14 @@ public final class MetaData implements Serializable
 					}
 					else
 					{
-						card = this.getColgroupCard(keys, r);
+						card = this.getColgroupCard(keys, r, tx, tree);
 					}
 
 					for (final ArrayList<Filter> filter : f)
 					{
 						if (references(filter, new ArrayList(keys)))
 						{
-							card *= this.likelihood(filter, r);
+							card *= this.likelihood(filter, r, tx, tree);
 						}
 					}
 
@@ -1916,12 +2734,12 @@ public final class MetaData implements Serializable
 					final FastStringTokenizer tokens = new FastStringTokenizer(table, ".", false);
 					final String schema = tokens.nextToken();
 					final String table2 = tokens.nextToken();
-					card *= this.getTableCard(schema, table2);
+					card *= this.getTableCard(schema, table2, tx);
 				}
 
 				for (final ArrayList<Filter> filter : f)
 				{
-					card *= this.likelihood(filter, r);
+					card *= this.likelihood(filter, r, tx, tree);
 				}
 
 				r.put(((YearOperator)op).getOutputCol(), card);
@@ -1936,12 +2754,12 @@ public final class MetaData implements Serializable
 					final FastStringTokenizer tokens = new FastStringTokenizer(table, ".", false);
 					final String schema = tokens.nextToken();
 					final String table2 = tokens.nextToken();
-					card *= this.getTableCard(schema, table2);
+					card *= this.getTableCard(schema, table2, tx);
 				}
 
 				for (final ArrayList<Filter> filter : f)
 				{
-					card *= this.likelihood(filter, r);
+					card *= this.likelihood(filter, r, tx, tree);
 				}
 
 				r.put(((SubstringOperator)op).getOutputCol(), card);
@@ -1952,14 +2770,14 @@ public final class MetaData implements Serializable
 			{
 				for (final Map.Entry entry : ((RenameOperator)op).getRenameMap().entrySet())
 				{
-					double card = this.getCard((String)entry.getKey(), r);
+					double card = this.getCard((String)entry.getKey(), r, tx, tree);
 					for (final ArrayList<Filter> filter : f)
 					{
 						final ArrayList<String> keys = new ArrayList<String>(1);
 						keys.add((String)entry.getKey());
 						if (references(filter, keys))
 						{
-							card *= this.likelihood(filter, r);
+							card *= this.likelihood(filter, r, tx, tree);
 						}
 					}
 
@@ -1977,12 +2795,12 @@ public final class MetaData implements Serializable
 					final FastStringTokenizer tokens = new FastStringTokenizer(table, ".", false);
 					final String schema = tokens.nextToken();
 					final String table2 = tokens.nextToken();
-					card *= this.getTableCard(schema, table2);
+					card *= this.getTableCard(schema, table2, tx);
 				}
 
 				for (final ArrayList<Filter> filter : f)
 				{
-					card *= this.likelihood(filter, r);
+					card *= this.likelihood(filter, r, tx, tree);
 				}
 
 				r.put(((ExtendOperator)op).getOutputCol(), card);
@@ -1997,12 +2815,12 @@ public final class MetaData implements Serializable
 					final FastStringTokenizer tokens = new FastStringTokenizer(table, ".", false);
 					final String schema = tokens.nextToken();
 					final String table2 = tokens.nextToken();
-					card *= this.getTableCard(schema, table2);
+					card *= this.getTableCard(schema, table2, tx);
 				}
 
 				for (final ArrayList<Filter> filter : f)
 				{
-					card *= this.likelihood(filter, r);
+					card *= this.likelihood(filter, r, tx, tree);
 				}
 
 				r.put(((CaseOperator)op).getOutputCol(), card);
@@ -2065,212 +2883,72 @@ public final class MetaData implements Serializable
 		}
 	}
 
-	private ArrayList<MyDate> getDateQuartiles(String col)
+	private ArrayList<MyDate> getDateQuartiles(String col, Transaction tx, Operator tree) throws Exception
 	{
 		// SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-
-		try
+		String c = col.substring(col.indexOf('.') + 1);
+		String ST = getTableForCol(col, tree);
+		String schema = ST.substring(0, ST.indexOf('.'));
+		String table = ST.substring(ST.indexOf('.') + 1);
+		ArrayList<MyDate> retval = new ArrayList<MyDate>(5);
+		Object o = PlanCacheManager.getDist().setParms(schema, table, c).execute(tx);
+		if (o instanceof DataEndMarker)
 		{
-			if (dists == null)
-			{
-				synchronized (distsLock)
-				{
-					if (dists == null)
-					{
-						final ArrayList<ArrayList<Object>> distsTemp = new ArrayList<ArrayList<Object>>();
-						final BufferedReader in = new BufferedReader(new FileReader(new File("dist.tbl")));
-						String line = in.readLine();
-						while (line != null)
-						{
-							final ArrayList<Object> cols = new ArrayList<Object>(6);
-							final FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
-							cols.add(tokens.nextToken());
-							cols.add(tokens.nextToken());
-							cols.add(tokens.nextToken());
-							cols.add(tokens.nextToken());
-							cols.add(tokens.nextToken());
-							cols.add(tokens.nextToken());
-							distsTemp.add(cols);
-							line = in.readLine();
-						}
-						in.close();
-						dists = distsTemp;
-					}
-				}
-			}
 
-			for (final ArrayList<Object> line : dists)
-			{
-				final String column = (String)line.get(0);
-				if (col.equals(column))
-				{
-					final ArrayList<MyDate> retval = new ArrayList<MyDate>(5);
-					Object l1 = line.get(1);
-					if (l1 instanceof String)
-					{
-						synchronized (distsLock)
-						{
-							l1 = line.get(1);
-							if (l1 instanceof String)
-							{
-								String l2, l3, l4, l5;
-								l2 = (String)line.get(2);
-								l3 = (String)line.get(3);
-								l4 = (String)line.get(4);
-								l5 = (String)line.get(5);
-								line.clear();
-								line.add(column);
-								line.add(DateParser.parse((String)l1));
-								line.add(DateParser.parse(l2));
-								line.add(DateParser.parse(l3));
-								line.add(DateParser.parse(l4));
-								line.add(DateParser.parse(l5));
-							}
-						}
-					}
-					retval.add((MyDate)line.get(1));
-					retval.add((MyDate)line.get(2));
-					retval.add((MyDate)line.get(3));
-					retval.add((MyDate)line.get(4));
-					retval.add((MyDate)line.get(5));
-					return retval;
-				}
-			}
-
-			return null;
+			retval.add(new MyDate(1960, 1, 1));
+			retval.add(new MyDate(2000, 1, 1));
+			retval.add(new MyDate(2020, 1, 1));
+			retval.add(new MyDate(2040, 1, 1));
+			retval.add(new MyDate(2060, 1, 1));
 		}
-		catch (final Exception e)
+		else
 		{
-			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
-			return null;
+			for (Object obj : (ArrayList<Object>)o)
+			{
+				String val = (String)obj;
+				int year = Integer.parseInt(val.substring(0, 4));
+				int month = Integer.parseInt(val.substring(5, 7));
+				int day = Integer.parseInt(val.substring(8, 10));
+				retval.add(new MyDate(year, month, day));
+			}
 		}
+		
+		return retval;
 	}
 
-	private String getDeviceExpression(String schema, String table)
+	private String getDeviceExpression(String schema, String table, Transaction tx) throws Exception
 	{
-		if (table.equals("NATION"))
-		{
-			return "ALL,HASH,{N_NATIONKEY}";
-		}
-
-		if (table.equals("REGION"))
-		{
-			return "ALL,HASH,{R_REGIONKEY}";
-		}
-
-		if (table.equals("CUSTOMER"))
-		{
-			return "ALL,HASH,{C_NAME}";
-		}
-
-		if (table.equals("ORDERS"))
-		{
-			return "ALL,HASH,{O_COMMENT}";
-		}
-
-		if (table.equals("LINEITEM"))
-		{
-			return "ALL,HASH,{L_COMMENT}";
-		}
-
-		if (table.equals("SUPPLIER"))
-		{
-			return "ALL,HASH,{S_NAME}";
-		}
-
-		if (table.equals("PART"))
-		{
-			return "ALL,HASH,{P_NAME}";
-		}
-
-		if (table.equals("PARTSUPP"))
-		{
-			return "ALL,HASH,{PS_COMMENT}";
-		}
-
-		return null;
+		ArrayList<Object> row = PlanCacheManager.getPartitioning().setParms(schema, table).execute(tx);
+		return (String)row.get(2);
 	}
 
-	private ArrayList<Double> getDoubleQuartiles(String col)
+	private ArrayList<Double> getDoubleQuartiles(String col, Transaction tx, Operator tree) throws Exception
 	{
-		try
+		String c = col.substring(col.indexOf('.') + 1);
+		String ST = getTableForCol(col, tree);
+		String schema = ST.substring(0, ST.indexOf('.'));
+		String table = ST.substring(ST.indexOf('.') + 1);
+		ArrayList<Double> retval = new ArrayList<Double>(5);
+		Object o = PlanCacheManager.getDist().setParms(schema, table, c).execute(tx);
+		if (o instanceof DataEndMarker)
 		{
-			if (dists == null)
-			{
-				synchronized (distsLock)
-				{
-					if (dists == null)
-					{
-						final ArrayList<ArrayList<Object>> distsTemp = new ArrayList<ArrayList<Object>>();
-						final BufferedReader in = new BufferedReader(new FileReader(new File("dist.tbl")));
-						String line = in.readLine();
-						while (line != null)
-						{
-							final ArrayList<Object> cols = new ArrayList<Object>(6);
-							final FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
-							cols.add(tokens.nextToken());
-							cols.add(tokens.nextToken());
-							cols.add(tokens.nextToken());
-							cols.add(tokens.nextToken());
-							cols.add(tokens.nextToken());
-							cols.add(tokens.nextToken());
-							distsTemp.add(cols);
-							line = in.readLine();
-						}
-						in.close();
 
-						dists = distsTemp;
-					}
-				}
-			}
-
-			for (final ArrayList<Object> line : dists)
-			{
-				final String column = (String)line.get(0);
-				if (col.equals(column))
-				{
-					final ArrayList<Double> retval = new ArrayList<Double>(5);
-					Object l1 = line.get(1);
-					if (l1 instanceof String)
-					{
-						synchronized (distsLock)
-						{
-							l1 = line.get(1);
-							if (l1 instanceof String)
-							{
-								String l2, l3, l4, l5;
-								l2 = (String)line.get(2);
-								l3 = (String)line.get(3);
-								l4 = (String)line.get(4);
-								l5 = (String)line.get(5);
-								line.clear();
-								line.add(column);
-								line.add(Utils.parseDouble((String)l1));
-								line.add(Utils.parseDouble(l2));
-								line.add(Utils.parseDouble(l3));
-								line.add(Utils.parseDouble(l4));
-								line.add(Utils.parseDouble(l5));
-							}
-						}
-					}
-					retval.add((Double)line.get(1));
-					retval.add((Double)line.get(2));
-					retval.add((Double)line.get(3));
-					retval.add((Double)line.get(4));
-					retval.add((Double)line.get(5));
-					return retval;
-				}
-			}
-
-			return null;
+			retval.add(Double.MIN_VALUE);
+			retval.add(Double.MIN_VALUE / 2);
+			retval.add(0D);
+			retval.add(Double.MAX_VALUE / 2);
+			retval.add(Double.MAX_VALUE);
 		}
-		catch (final Exception e)
+		else
 		{
-			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
-			return null;
+			for (Object obj : (ArrayList<Object>)o)
+			{
+				String val = (String)obj;
+				retval.add(Utils.parseDouble(val));
+			}
 		}
+		
+		return retval;
 	}
 
 	private ArrayList<Operator> getLeaves(Operator op)
@@ -2291,122 +2969,50 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	private String getNodeExpression(String schema, String table)
+	private String getNodeExpression(String schema, String table, Transaction tx) throws Exception
 	{
-		if (LOCAL)
-		{
-			return "{0}";
-		}
-
-		if (table.equals("NATION") || table.equals("REGION"))
-		{
-			return "ANY";
-		}
-
-		if (table.equals("CUSTOMER"))
-		{
-			return "ALL,HASH,{C_CUSTKEY}";
-		}
-
-		if (table.equals("ORDERS"))
-		{
-			return "ALL,HASH,{O_ORDERKEY}";
-		}
-
-		if (table.equals("LINEITEM"))
-		{
-			return "ALL,HASH,{L_ORDERKEY}";
-		}
-
-		if (table.equals("SUPPLIER"))
-		{
-			return "ALL,HASH,{S_SUPPKEY}";
-		}
-
-		if (table.equals("PART"))
-		{
-			return "ALL,HASH,{P_PARTKEY}";
-		}
-
-		if (table.equals("PARTSUPP"))
-		{
-			return "ALL,HASH,{PS_PARTKEY}";
-		}
-
-		return null;
+		ArrayList<Object> row = PlanCacheManager.getPartitioning().setParms(schema, table).execute(tx);
+		return (String)row.get(1);
 	}
 
-	private String getNodeGroupExpression(String schema, String table)
+	private String getNodeGroupExpression(String schema, String table, Transaction tx) throws Exception
 	{
-		return "NONE";
+		ArrayList<Object> row = PlanCacheManager.getPartitioning().setParms(schema, table).execute(tx);
+		return (String)row.get(0);
 	}
 
-	private ArrayList<Integer> getNodeListForGroup(int group)
+	private ArrayList<String> getStringQuartiles(String col, Transaction tx, Operator tree) throws Exception
 	{
-		// TODO
-		return null;
-	}
-
-	private ArrayList<String> getStringQuartiles(String col)
-	{
-		try
+		String c = col.substring(col.indexOf('.') + 1);
+		String ST = getTableForCol(col, tree);
+		String schema = ST.substring(0, ST.indexOf('.'));
+		String table = ST.substring(ST.indexOf('.') + 1);
+		ArrayList<String> retval = new ArrayList<String>(5);
+		Object o = PlanCacheManager.getDist().setParms(schema, table, c).execute(tx);
+		if (o instanceof DataEndMarker)
 		{
-			if (dists == null)
+
+			retval.add("A");
+			retval.add("N");
+			retval.add("Z");
+			retval.add("n");
+			retval.add("z");
+		}
+		else
+		{
+			for (Object obj : (ArrayList<Object>)o)
 			{
-				synchronized (distsLock)
-				{
-					if (dists == null)
-					{
-						final ArrayList<ArrayList<Object>> distsTemp = new ArrayList<ArrayList<Object>>();
-						final BufferedReader in = new BufferedReader(new FileReader(new File("dist.tbl")));
-						String line = in.readLine();
-						while (line != null)
-						{
-							final ArrayList<Object> cols = new ArrayList<Object>(6);
-							final FastStringTokenizer tokens = new FastStringTokenizer(line, "|", false);
-							cols.add(tokens.nextToken());
-							cols.add(tokens.nextToken());
-							cols.add(tokens.nextToken());
-							cols.add(tokens.nextToken());
-							cols.add(tokens.nextToken());
-							cols.add(tokens.nextToken());
-							distsTemp.add(cols);
-							line = in.readLine();
-						}
-						in.close();
-						dists = distsTemp;
-					}
-				}
+				String val = (String)obj;
+				retval.add(val);
 			}
-
-			for (final ArrayList<Object> line : dists)
-			{
-				final String column = (String)line.get(0);
-				if (col.equals(column))
-				{
-					final ArrayList<String> retval = new ArrayList<String>(5);
-					retval.add((String)line.get(1));
-					retval.add((String)line.get(2));
-					retval.add((String)line.get(3));
-					retval.add((String)line.get(4));
-					retval.add((String)line.get(5));
-					return retval;
-				}
-			}
-
-			return null;
 		}
-		catch (final Exception e)
-		{
-			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
-			return null;
-		}
+		
+		return retval;
 	}
 
-	private double percentAbove(String col, double val)
+	private double percentAbove(String col, double val, Transaction tx, Operator tree) throws Exception
 	{
-		final ArrayList<Double> quartiles = getDoubleQuartiles(col);
+		final ArrayList<Double> quartiles = getDoubleQuartiles(col, tx, tree);
 		// System.out.println("In percentAbove with col = " + col +
 		// " and val = " + val);
 		// System.out.println("Quartiles are " + quartiles);
@@ -2443,9 +3049,9 @@ public final class MetaData implements Serializable
 		return 0;
 	}
 
-	private double percentAbove(String col, MyDate val)
+	private double percentAbove(String col, MyDate val, Transaction tx, Operator tree) throws Exception
 	{
-		final ArrayList<MyDate> quartiles = getDateQuartiles(col);
+		final ArrayList<MyDate> quartiles = getDateQuartiles(col, tx, tree);
 		if (quartiles == null)
 		{
 			return 0.5;
@@ -2479,9 +3085,9 @@ public final class MetaData implements Serializable
 		return 0;
 	}
 
-	private double percentAbove(String col, String val)
+	private double percentAbove(String col, String val, Transaction tx, Operator tree) throws Exception
 	{
-		final ArrayList<String> quartiles = getStringQuartiles(col);
+		final ArrayList<String> quartiles = getStringQuartiles(col, tx, tree);
 		if (quartiles == null)
 		{
 			return 0.5;
@@ -2515,9 +3121,9 @@ public final class MetaData implements Serializable
 		return 0;
 	}
 
-	private double percentBelow(String col, double val)
+	private double percentBelow(String col, double val, Transaction tx, Operator tree) throws Exception
 	{
-		final ArrayList<Double> quartiles = getDoubleQuartiles(col);
+		final ArrayList<Double> quartiles = getDoubleQuartiles(col, tx, tree);
 		if (quartiles == null)
 		{
 			return 0.5;
@@ -2551,9 +3157,9 @@ public final class MetaData implements Serializable
 		return 0;
 	}
 
-	private double percentBelow(String col, MyDate val)
+	private double percentBelow(String col, MyDate val, Transaction tx, Operator tree) throws Exception
 	{
-		final ArrayList<MyDate> quartiles = getDateQuartiles(col);
+		final ArrayList<MyDate> quartiles = getDateQuartiles(col, tx, tree);
 		if (quartiles == null)
 		{
 			return 0.5;
@@ -2587,9 +3193,9 @@ public final class MetaData implements Serializable
 		return 0;
 	}
 
-	private double percentBelow(String col, String val)
+	private double percentBelow(String col, String val, Transaction tx, Operator tree) throws Exception
 	{
-		final ArrayList<String> quartiles = getStringQuartiles(col);
+		final ArrayList<String> quartiles = getStringQuartiles(col, tx, tree);
 		if (quartiles == null)
 		{
 			return 0.5;
@@ -2660,6 +3266,584 @@ public final class MetaData implements Serializable
 
 		return retval;
 	}
+	
+	private static class TableStatsThread extends HRDBMSThread
+	{
+		private String schema;
+		private String table;
+		private int tableID;
+		private Transaction tx;
+		private boolean ok = true;
+		
+		public TableStatsThread(String schema, String table, int tableID, Transaction tx)
+		{
+			this.schema = schema;
+			this.table = table;
+			this.tableID = tableID;
+			this.tx = tx;
+		}
+		
+		public void run()
+		{
+			try
+			{
+				String sql = "INSERT INTO SYS.TABLESTATS SELECT " + tableID + ", COUNT(*) FROM " + schema + "." + table;
+				XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+				worker.start();
+				worker.join();
+			}
+			catch(Exception e)
+			{
+				ok = false;
+			}
+		}
+		
+		public boolean getOK()
+		{
+			return ok;
+		}
+	}
+	
+	private static class ColStatsThread extends HRDBMSThread
+	{
+		private String schema;
+		private String table;
+		private String col;
+		private int tableID;
+		private int colID;
+		private Transaction tx;
+		private boolean ok = true;
+		
+		public ColStatsThread(String schema, String table, String col, int tableID, int colID, Transaction tx)
+		{
+			this.schema = schema;
+			this.table = table;
+			this.col = col;
+			this.tableID = tableID;
+			this.colID = colID;
+			this.tx = tx;
+		}
+		
+		public void run()
+		{
+			try
+			{
+				String sql = "INSERT INTO SYS.COLSTATS SELECT " + tableID + "," + colID + ", COUNT(DISTINCT " + col + ") FROM " + schema + "." + table;
+				XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+				worker.start();
+				worker.join();
+			}
+			catch(Exception e)
+			{
+				ok = false;
+			}
+		}
+		
+		public boolean getOK()
+		{
+			return ok;
+		}
+	}
+	
+	private static class IndexStatsThread extends HRDBMSThread
+	{
+		private String schema;
+		private String table;
+		private ArrayList<String> keys;
+		private int tableID;
+		private int indexID;
+		private Transaction tx;
+		private boolean ok = true;
+		
+		public IndexStatsThread(String schema, String table, ArrayList<String> keys, int tableID, int indexID, Transaction tx)
+		{
+			this.schema = schema;
+			this.table = table;
+			this.keys = keys;
+			this.tableID = tableID;
+			this.indexID = indexID;
+			this.tx = tx;
+		}
+		
+		public void run()
+		{
+			try
+			{
+				String sql = "INSERT INTO SYS.INDEXSTATS SELECT " + tableID + "," + indexID + ", SELECT COUNT(*) FROM (SELECT DISTINCT " + keys.get(0);
+				int i = 1;
+				while (i < keys.size())
+				{
+					sql += (", " + keys.get(i));
+					i++;
+				}
+				sql += (" FROM " + schema + "." + table + ")");
+				XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+				worker.start();
+				worker.join();
+			}
+			catch(Exception e)
+			{
+				ok = false;
+			}
+		}
+		
+		public boolean getOK()
+		{
+			return ok;
+		}
+	}
+	
+	private static class ColDistThread extends HRDBMSThread
+	{
+		private String schema;
+		private String table;
+		private String col;
+		private int tableID;
+		private int colID;
+		private long card;
+		private Transaction tx;
+		private boolean ok = true;
+		
+		public ColDistThread(String schema, String table, String col, int tableID, int colID, long card, Transaction tx)
+		{
+			this.schema = schema;
+			this.table = table;
+			this.col = col;
+			this.tableID = tableID;
+			this.colID = colID;
+			this.card = card;
+			this.tx = tx;
+		}
+		
+		public void run()
+		{
+			try
+			{
+				String type = PlanCacheManager.getColType().setParms(schema, table, col).execute(tx);
+				String sql = "SELECT " + col + " FROM " + schema + "." + table + " ORDER BY " + col + " ASC";
+				XAWorker worker = XAManager.executeQuery(sql, tx, null);
+				worker.start();
+				ArrayList<Object> cmd = new ArrayList<Object>();
+				cmd.add("NEXT");
+				cmd.add(1000000);
+				worker.in.put(cmd);
+				Object o = worker.out.take();
+				if (o instanceof DataEndMarker)
+				{
+					throw new Exception("No data in table");
+				}
+				ArrayList<Object> row = (ArrayList<Object>)o;
+				String low = null;
+				String q1 = null;
+				String q2 = null;
+				String q3 = null;
+				String high = null;
+				if (type.equals("INT"))
+				{
+					low = Integer.toString((Integer)row.get(0));
+				}
+				else if (type.equals("BIGINT"))
+				{
+					low = Long.toString((Long)row.get(0));
+				}
+				else if (type.equals("VARCHAR"))
+				{
+					low = (String)row.get(0);
+				}
+				else if (type.equals("DOUBLE"))
+				{
+					low = Double.toString((Double)row.get(0));
+				}
+				else if (type.equals("DATE"))
+				{
+					low = ((MyDate)row.get(0)).format();
+				}
+				
+				int i = 1;
+				Object o2 = o;
+				while (i < card / 4 && !(o2 instanceof DataEndMarker))
+				{
+					o = o2;
+					o2 = worker.out.take();
+					i++;
+				}
+				
+				if (o2 instanceof DataEndMarker)
+				{
+					row = (ArrayList<Object>)o;
+					if (type.equals("INT"))
+					{
+						high = q3 = q2 = q1 = Integer.toString((Integer)row.get(0));
+					}
+					else if (type.equals("BIGINT"))
+					{
+						high = q3 = q2 = q1 = Long.toString((Long)row.get(0));
+					}
+					else if (type.equals("VARCHAR"))
+					{
+						high = q3 = q2 = q1 = (String)row.get(0);
+					}
+					else if (type.equals("DOUBLE"))
+					{
+						high = q3 = q2 = q1 = Double.toString((Double)row.get(0));
+					}
+					else if (type.equals("DATE"))
+					{
+						high = q3 = q2 = q1 = ((MyDate)row.get(0)).format();
+					}
+					
+					sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
+					worker = XAManager.executeAuthorizedUpdate(sql, tx);
+					worker.start();
+					worker.join();
+					return;
+				}
+				else
+				{
+					row = (ArrayList<Object>)o2;
+					if (type.equals("INT"))
+					{
+						q1 = Integer.toString((Integer)row.get(0));
+					}
+					else if (type.equals("BIGINT"))
+					{
+						q1 = Long.toString((Long)row.get(0));
+					}
+					else if (type.equals("VARCHAR"))
+					{
+						q1 = (String)row.get(0);
+					}
+					else if (type.equals("DOUBLE"))
+					{
+						q1 = Double.toString((Double)row.get(0));
+					}
+					else if (type.equals("DATE"))
+					{
+						q1 = ((MyDate)row.get(0)).format();
+					}
+				}
+				
+				while (i < card / 2 && !(o2 instanceof DataEndMarker))
+				{
+					o = o2;
+					o2 = worker.out.take();
+					i++;
+				}
+				
+				if (o2 instanceof DataEndMarker)
+				{
+					row = (ArrayList<Object>)o;
+					if (type.equals("INT"))
+					{
+						high = q3 = q2 = Integer.toString((Integer)row.get(0));
+					}
+					else if (type.equals("BIGINT"))
+					{
+						high = q3 = q2 = Long.toString((Long)row.get(0));
+					}
+					else if (type.equals("VARCHAR"))
+					{
+						high = q3 = q2 = (String)row.get(0);
+					}
+					else if (type.equals("DOUBLE"))
+					{
+						high = q3 = q2 = Double.toString((Double)row.get(0));
+					}
+					else if (type.equals("DATE"))
+					{
+						high = q3 = q2 = ((MyDate)row.get(0)).format();
+					}
+					
+					sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
+					worker = XAManager.executeAuthorizedUpdate(sql, tx);
+					worker.start();
+					worker.join();
+					return;
+				}
+				else
+				{
+					row = (ArrayList<Object>)o2;
+					if (type.equals("INT"))
+					{
+						q2 = Integer.toString((Integer)row.get(0));
+					}
+					else if (type.equals("BIGINT"))
+					{
+						q2 = Long.toString((Long)row.get(0));
+					}
+					else if (type.equals("VARCHAR"))
+					{
+						q2 = (String)row.get(0);
+					}
+					else if (type.equals("DOUBLE"))
+					{
+						q2 = Double.toString((Double)row.get(0));
+					}
+					else if (type.equals("DATE"))
+					{
+						q2 = ((MyDate)row.get(0)).format();
+					}
+				}
+				
+				while (i < card * 3 / 4 && !(o2 instanceof DataEndMarker))
+				{
+					o = o2;
+					o2 = worker.out.take();
+					i++;
+				}
+				
+				if (o2 instanceof DataEndMarker)
+				{
+					row = (ArrayList<Object>)o;
+					if (type.equals("INT"))
+					{
+						high = q3 = Integer.toString((Integer)row.get(0));
+					}
+					else if (type.equals("BIGINT"))
+					{
+						high = q3 = Long.toString((Long)row.get(0));
+					}
+					else if (type.equals("VARCHAR"))
+					{
+						high = q3 = (String)row.get(0);
+					}
+					else if (type.equals("DOUBLE"))
+					{
+						high = q3 = Double.toString((Double)row.get(0));
+					}
+					else if (type.equals("DATE"))
+					{
+						high = q3 = ((MyDate)row.get(0)).format();
+					}
+					
+					sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
+					worker = XAManager.executeAuthorizedUpdate(sql, tx);
+					worker.start();
+					worker.join();
+					return;
+				}
+				else
+				{
+					row = (ArrayList<Object>)o2;
+					if (type.equals("INT"))
+					{
+						q3 = Integer.toString((Integer)row.get(0));
+					}
+					else if (type.equals("BIGINT"))
+					{
+						q3 = Long.toString((Long)row.get(0));
+					}
+					else if (type.equals("VARCHAR"))
+					{
+						q3 = (String)row.get(0);
+					}
+					else if (type.equals("DOUBLE"))
+					{
+						q3 = Double.toString((Double)row.get(0));
+					}
+					else if (type.equals("DATE"))
+					{
+						q3 = ((MyDate)row.get(0)).format();
+					}
+				}
+				
+				while (!(o2 instanceof DataEndMarker))
+				{
+					o = o2;
+					o2 = worker.out.take();
+					i++;
+				}
+				
+				row = (ArrayList<Object>)o;
+				if (type.equals("INT"))
+				{
+					high = Integer.toString((Integer)row.get(0));
+				}
+				else if (type.equals("BIGINT"))
+				{
+					high = Long.toString((Long)row.get(0));
+				}
+				else if (type.equals("VARCHAR"))
+				{
+					high = (String)row.get(0);
+				}
+				else if (type.equals("DOUBLE"))
+				{
+					high = Double.toString((Double)row.get(0));
+				}
+				else if (type.equals("DATE"))
+				{
+					high = ((MyDate)row.get(0)).format();
+				}
+					
+				sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
+				worker = XAManager.executeAuthorizedUpdate(sql, tx);
+				worker.start();
+				worker.join();
+			}
+			catch(Exception e)
+			{
+				ok = false;
+			}
+		}
+		
+		public boolean getOK()
+		{
+			return ok;
+		}
+	}
+	
+	public static void runstats(String schema, String table, Transaction tx) throws Exception
+	{
+		Transaction tTx = new Transaction(Transaction.ISOLATION_UR);
+		int tableID = PlanCacheManager.getTableID().setParms(schema, table).execute(tx);
+		TableStatsThread tThread = new TableStatsThread(schema, table, tableID, tTx);
+		tThread.start();
+		TreeMap<Integer, String> pos2Col = getPos2ColForTable(schema, table, tx);
+		ArrayList<ColStatsThread> cThreads = new ArrayList<ColStatsThread>();
+		ArrayList<Transaction> cTxs = new ArrayList<Transaction>();
+		int i = 0;
+		while (i < pos2Col.size())
+		{
+			Transaction ctx = new Transaction(Transaction.ISOLATION_UR);
+			cTxs.add(ctx);
+			cThreads.add(new ColStatsThread(schema, table, pos2Col.get(i), tableID, i, ctx));
+			i++;
+		}
+		
+		for (ColStatsThread thread : cThreads)
+		{
+			thread.start();
+		}
+		
+		//indexes
+		ArrayList<IndexStatsThread> iThreads = new ArrayList<IndexStatsThread>();
+		ArrayList<Transaction> iTxs = new ArrayList<Transaction>();
+		ArrayList<Object> rs = PlanCacheManager.getIndexIDsForTable().setParms(schema, table).execute(tx);
+		for (Object o : rs)
+		{
+			if (o instanceof DataEndMarker)
+			{
+				continue;
+			}
+			
+			ArrayList<Object> row = (ArrayList<Object>)o;
+			int indexID = (Integer)row.get(0);
+			ArrayList<Object> rs2 = PlanCacheManager.getKeysByID().setParms(tableID, indexID).execute(tx);
+			ArrayList<String> keys = new ArrayList<String>();
+			for (Object o2 : rs2)
+			{
+				if (o2 instanceof DataEndMarker)
+				{
+					continue;
+				}
+				
+				keys.add((String)((ArrayList<Object>)o2).get(0));
+			}
+			
+			Transaction itx = new Transaction(Transaction.ISOLATION_UR);
+			iThreads.add(new IndexStatsThread(schema, table, keys, tableID, indexID, itx));
+			iTxs.add(itx);
+		}
+		
+		for (IndexStatsThread thread : iThreads)
+		{
+			thread.start();
+		}
+		
+		tThread.join();
+		boolean allOK = true;
+		if (!tThread.getOK())
+		{
+			allOK = false;
+		}
+		
+		ArrayList<Transaction> cdTxs = new ArrayList<Transaction>();
+		if (allOK)
+		{
+			ArrayList<ColDistThread> cdThreads = new ArrayList<ColDistThread>();
+			i = 0;
+			long card = PlanCacheManager.getTableCard().setParms(schema, table).execute(tx);
+			while (i < pos2Col.size())
+			{
+				Transaction ctx = new Transaction(Transaction.ISOLATION_UR);
+				cdTxs.add(ctx);
+				cdThreads.add(new ColDistThread(schema, table, pos2Col.get(i), tableID, i, card, ctx));
+				i++;
+			}
+			
+			for (ColDistThread thread : cdThreads)
+			{
+				thread.start();
+			}
+			
+			for (ColDistThread thread : cdThreads)
+			{
+				thread.join();
+				if (!thread.getOK())
+				{
+					allOK = false;
+				}
+			}
+		}
+		
+		for (ColStatsThread thread : cThreads)
+		{
+			thread.join();
+			if (!thread.getOK())
+			{
+				allOK = false;
+			}
+		}
+		
+		for (IndexStatsThread thread : iThreads)
+		{
+			thread.join();
+			if (!thread.getOK())
+			{
+				allOK = false;
+			}
+		} 
+		
+
+			
+		if (allOK)
+		{
+			tTx.commit();
+			for (Transaction ctx : cTxs)
+			{
+				ctx.commit();
+			}
+			for (Transaction itx : iTxs)
+			{
+				itx.commit();
+			}
+			for (Transaction cdtx : cdTxs)
+			{
+				cdtx.commit();
+			}
+			
+			return;
+		}
+		else
+		{
+			tTx.rollback();
+			for (Transaction ctx : cTxs)
+			{
+				ctx.rollback();
+			}
+			for (Transaction itx : iTxs)
+			{
+				itx.rollback();
+			}
+			for (Transaction cdtx : cdTxs)
+			{
+				cdtx.rollback();
+			}
+			
+			throw new Exception("An error occurred during runstats processing");
+		}
+	}
 
 	public final class PartitionMetaData implements Serializable
 	{
@@ -2683,19 +3867,42 @@ public final class MetaData implements Serializable
 		private ArrayList<String> deviceHash;
 		private ArrayList<Object> deviceRange;
 		private String deviceRangeCol;
-		private final String schema;
-		private final String table;
+		private String schema;
+		private String table;
+		private Transaction tx;
 
-		public PartitionMetaData(String schema, String table)
+		public PartitionMetaData(String schema, String table, Transaction tx) throws Exception
 		{
 			this.schema = schema;
 			this.table = table;
-			final String ngExp = getNodeGroupExpression(schema, table);
-			final String nExp = getNodeExpression(schema, table);
-			final String dExp = getDeviceExpression(schema, table);
+			this.tx = tx;
+			ArrayList<Object> row = PlanCacheManager.getPartitioning().setParms(schema,  table).execute(tx);
+			final String ngExp = (String)row.get(0);
+			final String nExp = (String)row.get(1);
+			final String dExp = (String)row.get(2);
 			setNGData(ngExp);
 			setNData(nExp);
 			setDData(dExp);
+		}
+		
+		public PartitionMetaData(String schema, String table, String ngExp, String nExp, String dExp, Transaction tx) throws Exception
+		{
+			this.schema = schema;
+			this.table = table;
+			this.tx = tx;
+			setNGData(ngExp);
+			setNData(nExp);
+			setDData(dExp);
+		}
+		
+		public String getSchema()
+		{
+			return schema;
+		}
+		
+		public String getTable()
+		{
+			return table;
 		}
 
 		public boolean allDevices()
@@ -2848,7 +4055,7 @@ public final class MetaData implements Serializable
 			return nodeGroupSet.get(0) == NODEGROUP_NONE;
 		}
 
-		private void setDData(String exp)
+		private void setDData(String exp) throws Exception
 		{
 			final FastStringTokenizer tokens = new FastStringTokenizer(exp, ",", false);
 			final String first = tokens.nextToken();
@@ -2895,11 +4102,11 @@ public final class MetaData implements Serializable
 				deviceRangeCol = tokens.nextToken();
 				String set = tokens.nextToken().substring(1);
 				set = set.substring(0, set.length() - 1);
-				deviceRange = convertRangeStringToObject(set, schema, table, deviceRangeCol);
+				deviceRange = convertRangeStringToObject(set, schema, table, deviceRangeCol, tx);
 			}
 		}
 
-		private void setNData(String exp)
+		private void setNData(String exp) throws Exception
 		{
 			final FastStringTokenizer tokens = new FastStringTokenizer(exp, ",", false);
 			final String first = tokens.nextToken();
@@ -2916,7 +4123,7 @@ public final class MetaData implements Serializable
 			{
 				nodeSet = new ArrayList<Integer>(1);
 				nodeSet.add(NODE_ALL);
-				numNodes = MetaData.this.getNumNodes();
+				numNodes = MetaData.this.getNumNodes(tx);
 			}
 			else
 			{
@@ -2954,11 +4161,11 @@ public final class MetaData implements Serializable
 				nodeRangeCol = tokens.nextToken();
 				String set = tokens.nextToken().substring(1);
 				set = set.substring(0, set.length() - 1);
-				nodeRange = convertRangeStringToObject(set, schema, table, nodeRangeCol);
+				nodeRange = convertRangeStringToObject(set, schema, table, nodeRangeCol, tx);
 			}
 		}
 
-		private void setNGData(String exp)
+		private void setNGData(String exp) throws Exception
 		{
 			if (exp.equals("NONE"))
 			{
@@ -2970,13 +4177,26 @@ public final class MetaData implements Serializable
 			final FastStringTokenizer tokens = new FastStringTokenizer(exp, ",", false);
 			String set = tokens.nextToken().substring(1);
 			set = set.substring(0, set.length() - 1);
-			FastStringTokenizer tokens2 = new FastStringTokenizer(set, "|", false);
-			nodeGroupSet = new ArrayList<Integer>(tokens2.allTokens().length);
+			StringTokenizer tokens2 = new StringTokenizer(set, "{}", false);
+			nodeGroupSet = new ArrayList<Integer>();
 			numNodeGroups = 0;
+			int setNum = 0;
+			nodeGroupHashMap = new HashMap<Integer, ArrayList<Integer>>();
 			while (tokens2.hasMoreTokens())
 			{
-				nodeGroupSet.add(Utils.parseInt(tokens2.nextToken()));
+				String nodesInGroup = tokens2.nextToken();
+				nodeGroupSet.add(setNum);
 				numNodeGroups++;
+				
+				ArrayList<Integer> nodeListForGroup = new ArrayList<Integer>();
+				FastStringTokenizer tokens3 = new FastStringTokenizer(nodesInGroup, "|", false);
+				while (tokens3.hasMoreTokens())
+				{
+					String token = tokens3.nextToken();
+					nodeListForGroup.add(Integer.parseInt(token));
+				}
+				nodeGroupHashMap.put(setNum, nodeListForGroup);
+				setNum++;
 			}
 
 			if (numNodeGroups == 1)
@@ -2984,19 +4204,13 @@ public final class MetaData implements Serializable
 				return;
 			}
 
-			nodeGroupHashMap = new HashMap<Integer, ArrayList<Integer>>();
-			for (final int groupID : nodeGroupSet)
-			{
-				nodeGroupHashMap.put(groupID, getNodeListForGroup(groupID));
-			}
-
 			final String type = tokens.nextToken();
 			if (type.equals("HASH"))
 			{
 				set = tokens.nextToken().substring(1);
 				set = set.substring(0, set.length() - 1);
-				tokens2 = new FastStringTokenizer(set, "|", false);
-				nodeGroupHash = new ArrayList<String>(tokens2.allTokens().length);
+				tokens2 = new StringTokenizer(set, "|", false);
+				nodeGroupHash = new ArrayList<String>();
 				while (tokens2.hasMoreTokens())
 				{
 					nodeGroupHash.add(tokens2.nextToken());
@@ -3007,7 +4221,7 @@ public final class MetaData implements Serializable
 				nodeGroupRangeCol = tokens.nextToken();
 				set = tokens.nextToken().substring(1);
 				set = set.substring(0, set.length() - 1);
-				nodeGroupRange = convertRangeStringToObject(set, schema, table, nodeGroupRangeCol);
+				nodeGroupRange = convertRangeStringToObject(set, schema, table, nodeGroupRangeCol, tx);
 			}
 		}
 	}

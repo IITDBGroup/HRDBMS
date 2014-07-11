@@ -71,6 +71,11 @@ public class InsertLogRec extends LogRec
 	@Override
 	public void undo()
 	{
+		if (b.fileName().endsWith("SYS.NODESTATE.tbl"))
+		{
+			return;
+		}
+		
 		final String cmd = "REQUEST PAGE " + this.txnum() + "~" + b.toString();
 		while (true)
 		{

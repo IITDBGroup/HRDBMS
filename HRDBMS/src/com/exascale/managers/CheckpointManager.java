@@ -65,7 +65,7 @@ public class CheckpointManager extends HRDBMSThread
 					}
 					filename += "xa.log";
 					HashSet<Long> open = new HashSet<Long>();
-					for (Transaction tx : XAManager.txs.keySet())
+					for (Transaction tx : XAManager.txs.getKeySet())
 					{
 						open.add(tx.number());
 					}

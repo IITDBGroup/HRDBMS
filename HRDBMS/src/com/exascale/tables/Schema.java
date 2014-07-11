@@ -614,7 +614,6 @@ public class Schema
 
 	private Block addNewBlock(String fn, int[] colIDs) throws IOException, LockAbortException, Exception
 	{
-		//TODO obtain X lock on table length
 		final ByteBuffer buff = ByteBuffer.allocate(Page.BLOCK_SIZE);
 		buff.position(0);
 		buff.put(blockType);
@@ -640,7 +639,7 @@ public class Schema
 		// null Array start
 		// offset array start
 
-		final int newBlockNum = FileManager.addNewBlock(fn, buff);
+		final int newBlockNum = FileManager.addNewBlock(fn, buff, tx);
 		addNewBlockToHeader(newBlockNum, colIDs[0]);
 		return new Block(fn, newBlockNum);
 	}

@@ -3,6 +3,7 @@ package com.exascale.optimizer;
 import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -14,6 +15,7 @@ import com.exascale.filesystem.Page;
 import com.exascale.filesystem.RID;
 import com.exascale.gpu.Kernel;
 import com.exascale.managers.HRDBMSWorker;
+import com.exascale.managers.LockManager;
 import com.exascale.managers.ResourceManager;
 import com.exascale.misc.BufferedLinkedBlockingQueue;
 import com.exascale.misc.DataEndMarker;
@@ -72,12 +74,19 @@ public final class TableScanOperator implements Operator, Serializable
 	private static int PAGES_IN_ADVANCE;
 	private Transaction tx;
 	private Plan plan;
-	private String alias;
+	private String alias = "";
 	private boolean getRID = false;
+	private HashMap<String, String> tableCols2Types;
+	private TreeMap<Integer, String> tablePos2Col;
 	
 	public boolean isGetRID()
 	{
 		return getRID;
+	}
+	
+	public String getAlias()
+	{
+		return alias;
 	}
 	
 	public void getRID()
@@ -145,14 +154,16 @@ public final class TableScanOperator implements Operator, Serializable
 		PAGES_IN_ADVANCE = Integer.parseInt(hparms.getProperty("pages_in_advance")); // 40
 	}
 
-	public TableScanOperator(String schema, String name, MetaData meta) throws Exception
+	public TableScanOperator(String schema, String name, MetaData meta, Transaction tx) throws Exception
 	{
 		this.meta = meta;
 		this.name = name;
 		this.schema = schema;
-		cols2Types = meta.getCols2TypesForTable(schema, name);
-		cols2Pos = meta.getCols2PosForTable(schema, name);
-		pos2Col = meta.getPos2ColForTable(schema, name);
+		cols2Types = meta.getCols2TypesForTable(schema, name, tx);
+		cols2Pos = meta.getCols2PosForTable(schema, name, tx);
+		pos2Col = meta.getPos2ColForTable(schema, name, tx);
+		tableCols2Types = meta.getCols2TypesForTable(schema, name, tx);
+		tablePos2Col = meta.getPos2ColForTable(schema, name, tx);
 	}
 
 	@Override
@@ -210,7 +221,7 @@ public final class TableScanOperator implements Operator, Serializable
 		list.add(i);
 	}
 
-	public void addFilter(ArrayList<Filter> filters, Operator op, Operator opParent)
+	public void addFilter(ArrayList<Filter> filters, Operator op, Operator opParent) throws Exception
 	{
 		opParents.put(opParent, op);
 
@@ -236,7 +247,9 @@ public final class TableScanOperator implements Operator, Serializable
 
 				f.add(map);
 				this.filters.put(op, f);
-				orderedFilters.put(op, new CNFFilter(f, meta, cols2Pos));
+				Transaction t = new Transaction(Transaction.ISOLATION_RR);
+				orderedFilters.put(op, new CNFFilter(f, meta, cols2Pos, t, this));
+				t.commit();
 				return;
 			}
 		}
@@ -249,7 +262,9 @@ public final class TableScanOperator implements Operator, Serializable
 
 		f.add(map);
 		this.filters.put(op, f);
-		orderedFilters.put(op, new CNFFilter(f, meta, cols2Pos));
+		Transaction t = new Transaction(Transaction.ISOLATION_RR);
+		orderedFilters.put(op, new CNFFilter(f, meta, cols2Pos, t, this));
+		t.commit();
 	}
 
 	public boolean allDevices()
@@ -301,7 +316,9 @@ public final class TableScanOperator implements Operator, Serializable
 		TableScanOperator retval = null;
 		try
 		{
-			retval = new TableScanOperator(schema, name, meta);
+			Transaction t = new Transaction(Transaction.ISOLATION_RR);
+			retval = new TableScanOperator(schema, name, meta, t);
+			t.commit();
 		}
 		catch (final Exception e)
 		{
@@ -884,10 +901,10 @@ public final class TableScanOperator implements Operator, Serializable
 		indexOnly = true;
 	}
 
-	public void setMetaData()
+	public void setMetaData(Transaction t) throws Exception
 	{
 		set = true;
-		partMeta = meta.getPartMeta(schema, name);
+		partMeta = meta.getPartMeta(schema, name, t);
 	}
 
 	public void setNeededCols(ArrayList<String> needed)
@@ -1254,13 +1271,12 @@ public final class TableScanOperator implements Operator, Serializable
 			{
 				if (in2 == null)
 				{
-					//TODO acquire table length lock in shared mode
+					LockManager.xLock(new Block(in, -1), tx.number());
 					int numBlocks = (int)(new File(in).length() / Page.BLOCK_SIZE);
 					HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
-					HashMap<String, String> cols2Types = meta.getCols2TypesForTable(schema, name);
-					for (Map.Entry entry : meta.getPos2ColForTable(schema, name).entrySet())
+					for (Map.Entry entry : tablePos2Col.entrySet())
 					{
-						String type = cols2Types.get(entry.getValue());
+						String type = tableCols2Types.get(entry.getValue());
 						DataType value = null;
 						if (type.equals("INT"))
 						{
@@ -1425,10 +1441,9 @@ public final class TableScanOperator implements Operator, Serializable
 					int device = ins2Device.get(in2);
 					int currentPage = -1;
 					HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
-					HashMap<String, String> cols2Types = meta.getCols2TypesForTable(schema, name);
-					for (Map.Entry entry : meta.getPos2ColForTable(schema, name).entrySet())
+					for (Map.Entry entry : tablePos2Col.entrySet())
 					{
-						String type = cols2Types.get(entry.getValue());
+						String type = tableCols2Types.get(entry.getValue());
 						DataType value = null;
 						if (type.equals("INT"))
 						{

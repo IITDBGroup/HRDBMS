@@ -28,7 +28,6 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("checkpoint_freq_sec", "1800");
 		retval.setProperty("port_number", "3232");
 		retval.setProperty("data_directories", "/home/hrdbms/");
-		retval.setProperty("catalog_directory", "/home/hrdbms/");
 		retval.setProperty("log_dir", "/home/hrdbms");
 		retval.setProperty("log_clean_sleep_secs", "60");
 		retval.setProperty("target_log_size", "8589934592");

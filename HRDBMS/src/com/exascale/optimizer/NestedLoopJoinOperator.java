@@ -23,6 +23,7 @@ import com.exascale.misc.MurmurHash;
 import com.exascale.misc.MyDate;
 import com.exascale.misc.MySimpleDateFormat;
 import com.exascale.tables.Plan;
+import com.exascale.tables.Transaction;
 import com.exascale.threads.ThreadPoolThread;
 
 public final class NestedLoopJoinOperator extends JoinOperator implements Serializable
@@ -113,7 +114,9 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 					cols2Pos.put((String)entry.getValue(), cols2Pos.size());
 					pos2Col.put(pos2Col.size(), (String)entry.getValue());
 				}
-				cnfFilters = new CNFFilter(f, meta, cols2Pos);
+				Transaction tx = new Transaction(Transaction.ISOLATION_RR);
+				cnfFilters = new CNFFilter(f, meta, cols2Pos, tx, this);
+				tx.commit();
 			}
 		}
 		else

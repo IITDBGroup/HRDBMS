@@ -7,6 +7,7 @@ import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.tables.Plan;
+import com.exascale.tables.Transaction;
 
 public final class SelectOperator implements Operator, Cloneable, Serializable
 {
@@ -155,14 +156,14 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 		return references;
 	}
 
-	public double likelihood()
+	public double likelihood(Transaction tx) throws Exception
 	{
-		return meta.likelihood(new ArrayList<Filter>(filters));
+		return meta.likelihood(new ArrayList<Filter>(filters), tx, this);
 	}
 
-	public double likelihood(RootOperator op)
+	public double likelihood(RootOperator op, Transaction tx) throws Exception
 	{
-		return meta.likelihood(new ArrayList<Filter>(filters), op);
+		return meta.likelihood(new ArrayList<Filter>(filters), op, tx, this);
 	}
 
 	// @?Parallel

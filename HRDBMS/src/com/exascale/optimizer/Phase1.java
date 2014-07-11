@@ -6,16 +6,19 @@ import java.util.HashMap;
 import java.util.HashSet;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.optimizer.MetaData.PartitionMetaData;
+import com.exascale.tables.Transaction;
 
 public final class Phase1
 {
 	private final RootOperator root;
 	private boolean pushdownHadResults;
 	private final int ADDITIONAL_PUSHDOWNS = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("phase1_additional_pushdowns")); // 25
+	private Transaction tx;
 
-	public Phase1(RootOperator root)
+	public Phase1(RootOperator root, Transaction tx)
 	{
 		this.root = root;
+		this.tx = tx;
 	}
 
 	public void optimize() throws Exception
@@ -182,7 +185,7 @@ public final class Phase1
 		return retval;
 	}
 
-	private SelectOperator getMostPromisingSelect(ArrayList<SelectOperator> selects, ArrayList<Operator> subtrees, Operator current)
+	private SelectOperator getMostPromisingSelect(ArrayList<SelectOperator> selects, ArrayList<Operator> subtrees, Operator current) throws Exception
 	{
 		double minLikelihood = Double.MAX_VALUE;
 		SelectOperator minSelect = null;
@@ -191,7 +194,7 @@ public final class Phase1
 		{
 			for (final SelectOperator select : selects)
 			{
-				final double likelihood = select.likelihood(root);
+				final double likelihood = select.likelihood(root, tx);
 				if (likelihood < minLikelihood)
 				{
 					minLikelihood = likelihood;
@@ -204,12 +207,12 @@ public final class Phase1
 					{
 						if (filters.get(0).leftIsColumn())
 						{
-							String t = root.getMeta().getTableForCol(filters.get(0).leftColumn());
+							String t = root.getMeta().getTableForCol(filters.get(0).leftColumn(), select);
 							String schema = t.substring(0, t.indexOf('.'));
 							t = t.substring(t.indexOf('.') + 1);
 							if (t != null)
 							{
-								final PartitionMetaData pmeta = root.getMeta().getPartMeta(schema, t);
+								final PartitionMetaData pmeta = root.getMeta().getPartMeta(schema, t, tx);
 								if (pmeta.noNodeGroupSet() && pmeta.nodeIsHash() && pmeta.getNodeHash().contains(filters.get(0).leftColumn()))
 								{
 									minSelect = select;
@@ -218,12 +221,12 @@ public final class Phase1
 						}
 						else if (filters.get(0).rightIsColumn())
 						{
-							String t = root.getMeta().getTableForCol(filters.get(0).rightColumn());
+							String t = root.getMeta().getTableForCol(filters.get(0).rightColumn(), select);
 							String schema = t.substring(0, t.indexOf('.'));
 							t = t.substring(t.indexOf('.') + 1);
 							if (t != null)
 							{
-								final PartitionMetaData pmeta = root.getMeta().getPartMeta(schema, t);
+								final PartitionMetaData pmeta = root.getMeta().getPartMeta(schema, t, tx);
 								if (pmeta.noNodeGroupSet() && pmeta.nodeIsHash() && pmeta.getNodeHash().contains(filters.get(0).rightColumn()))
 								{
 									minSelect = select;
@@ -247,7 +250,7 @@ public final class Phase1
 				{
 					if (current.getCols2Pos().containsKey(filter.leftColumn()))
 					{
-						final double likelihood = select.likelihood(root);
+						final double likelihood = select.likelihood(root, tx);
 						if (likelihood < minLikelihood)
 						{
 							minLikelihood = likelihood;
@@ -257,7 +260,7 @@ public final class Phase1
 
 					if (current.getCols2Pos().containsKey(filter.rightColumn()))
 					{
-						final double likelihood = select.likelihood(root);
+						final double likelihood = select.likelihood(root, tx);
 						if (likelihood < minLikelihood)
 						{
 							minLikelihood = likelihood;
@@ -276,7 +279,7 @@ public final class Phase1
 
 		for (final SelectOperator select : selects)
 		{
-			final double likelihood = select.likelihood(root);
+			final double likelihood = select.likelihood(root, tx);
 			if (likelihood < minLikelihood)
 			{
 				minLikelihood = likelihood;
@@ -402,7 +405,7 @@ public final class Phase1
 				try
 				{
 					final TableScanOperator table = (TableScanOperator)op;
-					final HashMap<String, Integer> cols2Pos = root.getMeta().getCols2PosForTable(table.getSchema(), table.getTable());
+					final HashMap<String, Integer> cols2Pos = root.getMeta().getCols2PosForTable(table.getSchema(), table.getTable(), tx);
 					final ArrayList<String> needed = new ArrayList<String>(references.size());
 					for (final String col : references)
 					{

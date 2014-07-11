@@ -759,7 +759,19 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 			pk = (PrimaryKey)visit(ctx.primaryKey());
 		}
 		
-		return new CreateTable(table, cols, pk);
+		String nodeGroupExp = "NONE";
+		String nodeExp = "";
+		String deviceExp = "";
+		
+		if (ctx.groupExp() != null)
+		{
+			nodeGroupExp = ctx.groupExp().getText();
+		}
+		
+		nodeExp = ctx.nodeExp().getText();
+		deviceExp = ctx.deviceExp().getText();
+		
+		return new CreateTable(table, cols, pk, nodeGroupExp, nodeExp, deviceExp);
 	}
 	
 	public CreateView visitCreateView(SelectParser.CreateViewContext ctx)
@@ -867,5 +879,30 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 		}
 		
 		return cols;
+	}
+	
+	public Load visitLoad(SelectParser.LoadContext ctx)
+	{
+		boolean replace = true;
+		if (ctx.RESUME() != null)
+		{
+			replace = false;
+		}
+		
+		String delimited = "|";
+		if (ctx.ANY() != null)
+		{
+			delimited = ctx.ANY().getText();
+		}
+		
+		TableName table = (TableName)visit(ctx.tableName());
+		String glob = ctx.remainder().getText();
+		
+		return new Load(table, replace, delimited, glob);
+	}
+	
+	public Runstats visitRunstats(SelectParser.RunstatsContext ctx)
+	{
+		return new Runstats((TableName)visit(ctx.tableName()));
 	}
 }

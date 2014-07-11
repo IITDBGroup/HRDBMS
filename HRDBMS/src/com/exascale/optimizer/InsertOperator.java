@@ -221,21 +221,25 @@ public final class InsertOperator implements Operator, Serializable
 	@Override
 	public void start() throws Exception
 	{
-		ArrayList<String> indexes = MetaData.getIndexFileNamesForTable(schema, table);
+		ArrayList<String> indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
 		HashMap<Integer, Integer> pos2Length = new HashMap<Integer, Integer>();
-		HashMap<String, Integer> cols2Pos = new MetaData().getCols2PosForTable(schema, table);
-		for (Map.Entry entry : new MetaData().getCols2TypesForTable(schema, table).entrySet())
+		HashMap<String, Integer> cols2Pos = MetaData.getCols2PosForTable(schema, table, tx);
+		TreeMap<Integer, String> pos2Col = MetaData.getPos2ColForTable(schema, table, tx);
+		HashMap<String, String> cols2Types = new MetaData().getCols2TypesForTable(schema, table, tx);
+		for (Map.Entry entry : new MetaData().getCols2TypesForTable(schema, table, tx).entrySet())
 		{
 			if (entry.getValue().equals("CHAR"))
 			{
-				int length = MetaData.getLengthForCharCol(schema, table, (String)entry.getKey());
+				int length = MetaData.getLengthForCharCol(schema, table, (String)entry.getKey(), tx);
 				pos2Length.put(cols2Pos.get(entry.getKey()), length);
 			}
 		}
+		
 		Object o = child.next(this);
 		while (!(o instanceof DataEndMarker))
 		{
 			ArrayList<Object> row = (ArrayList<Object>)o;
+			cast(row, pos2Col, cols2Types);
 			for (Map.Entry entry : pos2Length.entrySet())
 			{
 				if (((String)row.get((Integer)entry.getKey())).length() > (Integer)entry.getValue())
@@ -244,10 +248,13 @@ public final class InsertOperator implements Operator, Serializable
 					return;
 				}
 			}
-			int node = MetaData.determineNode(schema, table, row);
-			plan.addNode(node);
-			map.multiPut(node, row);
-			num.incrementAndGet();
+			ArrayList<Integer> nodes = MetaData.determineNode(schema, table, row, tx);
+			for (Integer node : nodes)
+			{
+				plan.addNode(node);
+				map.multiPut(node, row);
+				num.incrementAndGet();
+			}
 			if (map.size() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes")))
 			{
 				flush(indexes);
@@ -337,10 +344,10 @@ public final class InsertOperator implements Operator, Serializable
 		public void run()
 		{
 			//send schema, table, tx, indexes, list, and cols2Pos
-			String hostname = new MetaData().getHostNameForNode(node);
 			Socket sock = null;
 			try
 			{
+				String hostname = new MetaData().getHostNameForNode(node, tx);
 				sock = new Socket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "INSERT          ".getBytes("UTF-8");
@@ -359,11 +366,11 @@ public final class InsertOperator implements Operator, Serializable
 				ObjectOutputStream objOut = new ObjectOutputStream(out);
 				objOut.writeObject(indexes);
 				objOut.writeObject(list);
-				objOut.writeObject(MetaData.getKeys(indexes));
-				objOut.writeObject(MetaData.getTypes(indexes));
-				objOut.writeObject(MetaData.getOrders(indexes));
-				objOut.writeObject(new MetaData().getCols2PosForTable(schema, table));
-				objOut.writeObject(new MetaData().getPartMeta(schema, table));
+				objOut.writeObject(MetaData.getKeys(indexes, tx));
+				objOut.writeObject(MetaData.getTypes(indexes, tx));
+				objOut.writeObject(MetaData.getOrders(indexes, tx));
+				objOut.writeObject(new MetaData().getCols2PosForTable(schema, table, tx));
+				objOut.writeObject(new MetaData().getPartMeta(schema, table, tx));
 				objOut.flush();
 				out.flush();
 				objOut.close();
@@ -471,5 +478,56 @@ public final class InsertOperator implements Operator, Serializable
 	public String toString()
 	{
 		return "InsertOperator";
+	}
+	
+	private void cast(ArrayList<Object> row, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types)
+	{
+		int i = 0;
+		while (i < pos2Col.size())
+		{
+			String type = cols2Types.get(pos2Col.get(i));
+			Object o = row.get(i);
+			if (type.equals("INT"))
+			{
+				if (o instanceof Long)
+				{
+					row.remove(i);
+					row.add(i, ((Long)o).intValue());
+				}
+				else if (o instanceof Double)
+				{
+					row.remove(i);
+					row.add(i, ((Double)o).intValue());
+				}
+			}
+			else if (type.equals("LONG"))
+			{
+				if (o instanceof Integer)
+				{
+					row.remove(i);
+					row.add(i, ((Integer)o).longValue());
+				}
+				else if (o instanceof Double)
+				{
+					row.remove(i);
+					row.add(i, ((Double)o).longValue());
+				}
+			}
+			else if (type.equals("FLOAT"))
+			{
+				if (o instanceof Integer)
+				{
+					row.remove(i);
+					row.add(i, ((Integer)o).doubleValue());
+				}
+				else if (o instanceof Long)
+				{
+					row.remove(i);
+					row.add(i, ((Long)o).doubleValue());
+				}
+			}
+			
+			i++;
+		}
 	}
 }

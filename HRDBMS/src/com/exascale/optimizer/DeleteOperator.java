@@ -216,7 +216,7 @@ public final class DeleteOperator implements Operator, Serializable
 	@Override
 	public void start() throws Exception
 	{
-		ArrayList<String> indexes = MetaData.getIndexFileNamesForTable(schema, table);
+		ArrayList<String> indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
 		Object o = child.next(this);
 		while (!(o instanceof DataEndMarker))
 		{
@@ -229,7 +229,7 @@ public final class DeleteOperator implements Operator, Serializable
 			for (String index : indexes)
 			{
 				ArrayList<Object> keys = new ArrayList<Object>();
-				ArrayList<String> cols = MetaData.getColsFromIndexFileName(index);
+				ArrayList<String> cols = MetaData.getColsFromIndexFileName(index, tx);
 				for (String col : cols)
 				{
 					keys.add(row.get(child.getCols2Pos().get(col)));
@@ -329,10 +329,10 @@ public final class DeleteOperator implements Operator, Serializable
 		{
 			int node = list.get(0).getRID().getNode();
 			//send schema, table, tx, indexes, and list
-			String hostname = new MetaData().getHostNameForNode(node);
 			Socket sock = null;
 			try
 			{
+				String hostname = new MetaData().getHostNameForNode(node, tx);
 				sock = new Socket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "DELETE          ".getBytes("UTF-8");
@@ -351,9 +351,9 @@ public final class DeleteOperator implements Operator, Serializable
 				ObjectOutputStream objOut = new ObjectOutputStream(out);
 				objOut.writeObject(indexes);
 				objOut.writeObject(list);
-				objOut.writeObject(MetaData.getKeys(indexes));
-				objOut.writeObject(MetaData.getTypes(indexes));
-				objOut.writeObject(MetaData.getOrders(indexes));
+				objOut.writeObject(MetaData.getKeys(indexes, tx));
+				objOut.writeObject(MetaData.getTypes(indexes, tx));
+				objOut.writeObject(MetaData.getOrders(indexes, tx));
 				objOut.flush();
 				out.flush();
 				objOut.close();

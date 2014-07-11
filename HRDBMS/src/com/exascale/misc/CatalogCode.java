@@ -48,7 +48,7 @@ public class CatalogCode
 	private static int methodNum = 0;
 
 	public static void buildCode() throws Exception
-	{
+	{ 
 		HRDBMSWorker.logger.debug("Starting build of catalog java code.");
 		if (HRDBMSWorker.type == HRDBMSWorker.TYPE_COORD)
 		{
@@ -72,7 +72,177 @@ public class CatalogCode
 			HRDBMSWorker.logger.debug("Initial handshake on catalog sync port successful.");
 		}
 
-		final String in = "SYS.TABLES(INT, VARCHAR, VARCHAR, INT, INT, VARCHAR)\n" + "18\n" + "(0, SYS, TABLES, 6, 2, R)\n" + "(1, SYS, COLUMNS, 14, 2, R)\n" + "(2, SYS, INDEXES, 6, 2, R)\n" + "(3, SYS, INDEXCOLS, 5, 3, R)\n" + "(4, SYS, VIEWS, 4, 2, R)\n" + "(5, SYS, COLGROUPS, 4, 3, R)\n" + "(6, SYS, NODEGROUPS, 3, 2, R)\n" + "(7, SYS, TABLESTATS, 6, 3, R)\n" + "(8, SYS, COLGROUPSTATS, 5, 4, R)\n" + "(9, SYS, NODES, 5, 1, R)\n" + "(10, SYS, NETWORK, 3, 2, R)\n" + "(11, SYS, COLSTATS, 7, 4, R)\n" + "(12, SYS, COLDIST, 15, 5, R)\n" + "(13, SYS, BACKUPS, 3, 1, R)\n" + "(14, SYS, NODESTATE, 2, 1, R)\n" + "SYS.BACKUPS(INT, INT, INT)\n" + "0\n" + "SYS.NODESTATE(INT, VARCHAR)\n" + "0\n" + "SYS.COLUMNS(INT, INT, VARCHAR, VARCHAR, INT, INT, VARCHAR, BIGINT, INT, VARBINARY, VARCHAR, INT, INT, VARCHAR)\n" + "111\n" + "(0, 1, COLID, INT, null, null, N, null, null, null, N, null, null, N)\n" + "(1, 1, TABLEID, INT, null, null, N, null, null, null, N, 0, 0, N)\n" + "(2, 1, COLNAME, VARCHAR, 128, null, N, null, null, null, N, 1, 1, N)\n" + "(3, 1, COLTYPE, VARCHAR, 16, null, N, null, null, null, N, null, null, N)\n" + "(4, 1, LENGTH, INT, null, null, N, null, null, null, Y, null, null, N)\n" + "(5, 1, SCALE, INT, null, null, N, null, null, null, Y, null, null, N)\n" + "(6, 1, IDENTITY, VARCHAR, 1, null, N, null, null, N, N, null, null, N)\n" + "(7, 1, NEXTVAL, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" + "(8, 1, INCREMENT, INT, null, null, N, null, null, null, Y, null, null, N)\n" + "(9, 1, DEFAULT, VARBINARY, 32768, null, N, null, null, null, Y, null, null, N)\n" + "(10, 1, NULLABLE, VARCHAR, 1, null, N, null, null, Y, N, null, null, N)\n" + "(11, 1, PKPOSITION, INT, null, null, N, null, null, null, Y, null, null, N)\n" + "(12, 1, CLUSTERPOS, INT, null, null, N, null, null, null, Y, null, null, N)\n" + "(13, 1, GENERATED, VARCHAR, 1, null, N, null, null, N, N, null, null, N)\n" + "(0, 0, TABLEID, INT, null, null, Y, !tablerows!, 1, null, N, null, null, A)\n" + "(1, 0, SCHEMA, VARCHAR, 128, null, N, null, null, null, N, 0, 0, N)\n" + "(2, 0, TABNAME, VARCHAR, 128, null, N, null, null, null, N, 1, 1, N)\n" + "(3, 0, NUMCOLS, INT, null, null, N, null, null, null, N, null, null, N)\n" + "(4, 0, NUMKEYCOLS, INT, null, null, N, null, null, null, N, null, null, N)\n" + "(5, 0, TYPE, VARCHAR, 1, null, N, null, null, R, N, null, null, N)\n" + "(0, 2, INDEXID, INT, null, null, N, null, null, null, N, null, null, N)\n" + "(1, 2, INDEXNAME, VARCHAR, 128, null, N, null, null, null, N, 1, 1, N)\n" + "(2, 2, TABLEID, INT, null, null, N, null, null, null, N, 0, 0, N)\n" + "(3, 2, UNIQUE, VARCHAR, 1, null, N, null, null, null, N, null, null, N)\n" + "(4, 2, NUMCOLS, INT, null, null, N, null, null,  null, N, null, null, N)\n" + "(5, 2, TYPE, VARCHAR, 1, null, N, null, null, N, N, null, null, N)\n" + "(0, 3, INDEXID, INT, null, null, N, null, null, null, N, 1, 1, N)\n" + "(1, 3, TABLEID, INT, null, null, N, null, null, null, N, 0, 0, N)\n" + "(2, 3, COLID, INT, null, null, N, null, null, null, N, 2, 2, N)\n" + "(3, 3, POSITION, INT, null, null, N, null, null, null, N, null, null, N)\n" + "(4, 3, ORDER, VARCHAR, 1, null, N, null, null, A, N, null, null, N)\n" + "(0, 4, VIEWID, INT, null, null, Y, 0, 1, null, N, null, null, A)\n" + "(1, 4, SCHEMA, VARCHAR, 128, null, N, null, null, null, N, 0, 0, N)\n" + "(2, 4, NAME, VARCHAR, 128, null, N, null, null, null, N, 1, 1, N)\n" + "(3, 4, TEXT, VARCHAR, 32768, null, N, null, null, null, N, null, null, N)\n" + "(0, 5, COLGROUPID, INT, null, null, N, null, null, null, N, null, null, N)\n" + "(1, 5, TABLEID, INT, null, null, N, null, null, null, N, 0, 0, N)\n" + "(2, 5, COLID, INT, null, null, N, null, null, null, N, 2, 2, N)\n" + "(3, 5, COLGROUPNAME, VARCHAR, 128, null, N, null, null, null, N, 1, 1, N)\n" + "(0, 6, NODEGROUPID, INT, null, null, Y, !nodegrouprows!, 1, null, N, null, null, A)\n" + "(1, 6, NAME, VARCHAR, 128, null, N, null, null, null, N, 0, 0, N)\n" + "(2, 6, NODEID, INT, null, null, N, null, null, null, N, 1, 1, N)\n" + "(0, 7, TABLEID, INT, null, null, N, null, null, null, N, 0, 0, N)\n" + "(1, 7, CARD, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" + "(0, 8, TABLEID, INT, null, null, N, null, null, null, N, 0, 0, N)\n" + "(1, 8, COLGROUPID, INT, null, null, N, null, null, null, N, 1, 1, N)\n" + "(2, 8, CARD, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" + "(0, 9, NODEID, INT, null, null, Y, 0, 1, null, N, 0, 0, D)\n" + "(1, 9, HOSTNAME, VARCHAR, 128, null, N, null, null, null, N, null, null, N)\n" + "(2, 9, TYPE, VARCHAR, 1, null, N, null, null, W, N, null, null, N)\n" + "(3, 9, RACK, VARCHAR, 128, null, N, null, null, null, N, null, null, N)\n" + "(0, 10, TABLEID, INT, null, null, N, null, null, null, N, 0, 0, N)\n" + "(1, 10, LEVEL, INT, null, null, N, null, null, null, N, null, null, N)\n" + "(2, 10, GROUPEXP, VARCHAR, 32768, null, N, null, null, null, Y, null, null, N)\n" + "(3, 10, NODEEXP, VARCHAR, 32768, null, N, null, null, null, Y, null, null, N)\n" + "(4, 10, DEVEXP, VARCHAR, 32768, null, N, null, null, null, N, null, null, N)\n" + "(0, 11, TABLEID, INT, null, null, N, null, null, null, N, 0, 0, N)\n" + "(1, 11, COLID, INT, null, null, N, null, null, null, N, 3, 3, N)\n" + "(2, 11, CARD, BIGINT, null, null, N, null, null, null, Y, null, null, N)\n" + "(0, 12, TABLEID, INT, null, null, N, null, null, null, N, 0, 0, N)\n" + "(1, 12, COLID, INT, null, null, N, null, null, null, N, 3, 3, N)\n" + "(4, 15, CUTOFFLE, VARBINARY, 32768, null, N, null, null, null, N, 4, 4, N)\n" + "(0, 16, FIRST, INT, null, null, N, null, null, null, N, 0, 0, N)\n" + "(1, 16, SECOND, INT, null, null, N, null, null, null, Y, null, null, N)\n" + "(2, 16, THIRD, INT, null, null, N, null, null, null, Y, null, null, N)\n" + "(0, 17, NODE, INT, null, null, N, null, null, null, N, 0, 0, N)\n" + "(1, 17, STATE, VARCHAR, 1, null, N, null, null, A, N, null, null, N)\n" + "SYS.VIEWS(INT, VARCHAR, VARCHAR, VARCHAR)\n" + "0\n" + "SYS.INDEXES(INT, VARCHAR, INT, VARCHAR, INT, VARCHAR)\n" + "19\n" + "(0, PKTABLES, 0, Y, 2, N)\n" + "(0, PKCOLUMNS, 1, Y, 2, N)\n" + "(0, PKINDEXES, 2, Y, 2, N)\n" + "(0, PKINDEXCOLS, 3, Y, 3, N)\n" + "(0, PKVIEWS, 4, Y, 2, N)\n" + "(0, PKCOLGROUPS, 5, Y, 3, N)\n" + "(0, PKNODEGROUPS, 6, Y, 2, N)\n" + "(0, PKTABLESTATS, 7, Y, 3, N)\n" + "(0, PKCOLGROUPSTATS, 8, Y, 4, N)\n" + "(0, PKINDEXSTATS, 9, Y, 4, N)\n" + "(0, PKNODES, 10, Y, 1, N)\n" + "(0, PKNETWORK1, 11, Y, 2, N)\n" + "(1, PKNETWORK2, 11, Y, 2, N)\n" + "(0, PKDEVICES, 12, Y, 2, N)\n" + "(0, PKPARTITIONING, 13, Y, 1, N)\n" + "(0, PKCOLSTATS, 14, Y, 4, N)\n" + "(0, PKCOLDIST, 15, Y, 5, N)\n" + "(0, PKBACKUPS, 16, Y, 1, N)\n" + "(0, PKNODESTATE, 17, Y, 1, N)\n" + "SYS.INDEXCOLS(INT, INT, INT, INT, VARCHAR)\n" + "46\n" + "(0, 0, 1, 0, A)\n" + "(0, 0, 2, 1, A)\n" + "(0, 1, 1, 0, A)\n" + "(0, 1, 2, 1, A)\n" + "(0, 2, 1, 1, A)\n" + "(0, 2, 2, 0, A)\n" + "(0, 3, 0, 1, A)\n" + "(0, 3, 1, 0, A)\n" + "(0, 3, 2, 2, A)\n" + "(0, 4, 1, 0, A)\n" + "(0, 4, 2, 1, A)\n" + "(0, 5, 0, 1, A)\n" + "(0, 5, 1, 0, A)\n" + "(0, 5, 2, 2, A)\n" + "(0, 6, 1, 0, A)\n" + "(0, 6, 2, 1, A)\n" + "(0, 7, 0, 0, A)\n" + "(0, 7, 1, 1, A)\n" + "(0, 7, 2, 2, A)\n" + "(0, 8, 0, 0, A)\n" + "(0, 8, 1, 1, A)\n" + "(0, 8, 3, 2, A)\n" + "(0, 8, 4, 3, A)\n" + "(0, 9, 0, 0, A)\n" + "(0, 9, 1, 1, A)\n" + "(0, 9, 11, 2, A)\n" + "(0, 9, 12, 3, A)\n" + "(0, 10, 0, 0, A)\n" + "(0, 11, 0, 0, A)\n" + "(0, 11, 1, 1, A)\n" + "(1, 11, 1, 0, A)\n" + "(1, 11, 0, 1, A)\n" + "(0, 12, 0, 0, A)\n" + "(0, 12, 1, 1, A)\n" + "(0, 13, 0, 0, A)\n" + "(0, 14, 0, 0, A)\n" + "(0, 14, 1, 1, A)\n" + "(0, 14, 2, 2, A)\n" + "(0, 14, 3, 3, A)\n" + "(0, 15, 0, 0, A)\n" + "(0, 15, 1, 1, A)\n" + "(0, 15, 2, 2, A)\n" + "(0, 15, 3, 3, A)\n" + "(0, 15, 4, 4, A)\n" + "(0, 16, 0, 0, A)\n" + "(0, 17, 0, 0, A)\n" + "SYS.COLGROUPS(INT, INT, INT)\n" + "0\n" + "SYS.NODEGROUPS(INT, INT)\n" + "0\n" + "SYS.TABLESTATS(INT, INT, INT, BIGINT, INT, INT)\n" + "0\n" + "SYS.COLGROUPSTATS(INT, INT, BIGINT)\n" + "0\n" + "SYS.NODES(INT, VARCHAR, VARCHAR, VARCHAR, BIGINT)\n" + "0\n" + "SYS.NETWORK(VARCHAR, VARCHAR, BIGINT)\n" + "0\n" + "SYS.DEVICES(INT, INT, VARCHAR, BIGINT, BIGINT)\n" + "0\n" + "SYS.PARTITIONING(INT, INT, VARCHAR, VARCHAR, VARCHAR)\n" + "18\n" + "(0, 2, null, 0, 0)\n" + "(1, 2, null, 0, 0)\n" + "(2, 2, null, 0, 0)\n" + "(3, 2, null, 0, 0)\n" + "(4, 2, null, 0, 0)\n" + "(5, 2, null, 0, 0)\n" + "(6, 2, null, 0, 0)\n" + "(7, 2, null, 0, 0)\n" + "(8, 2, null, 0, 0)\n" + "(9, 2, null, 0, 0)\n" + "(10, 2, null, 0, 0)\n" + "(11, 2, null, 0, 0)\n" + "(12, 2, null, 0, 0)\n" + "(13, 2, null, 0, 0)\n" + "(14, 2, null, 0, 0)\n" + "(15, 2, null, 0, 0)\n" + "(16, 2, null, 0, 0)\n" + "(17, 2, null, 0, 0)\n" + "SYS.INDEXSTATS(INT, INT, INT, INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, INT, INT, INT)\n" + "0\n" + "SYS.COLSTATS(INT, INT, INT, INT, BIGINT, INT, BIGINT)\n" + "0\n" + "SYS.COLDIST(INT, INT, INT, INT, VARBINARY, BIGINT, BIGINT, VARCHAR, BIGINT, VARCHAR, BIGINT, VARCHAR, BIGINT, VARCHAR, BIGINT)\n" + "0";
+		final String in = 
+		//SYS.TABLES(ID, SCHEMA, NAME, TYPE)
+		"SYS.TABLES(INT, VARCHAR, VARCHAR, VARCHAR)\n"
+		+ "13\n" 
+		+ "(0, SYS, TABLES, R)\n" 
+		+ "(1, SYS, COLUMNS, R)\n" 
+		+ "(2, SYS, INDEXES, R)\n" 
+		+ "(3, SYS, INDEXCOLS, R)\n" 
+		+ "(4, SYS, VIEWS, R)\n"  
+		+ "(5, SYS, TABLESTATS, R)\n"  
+		+ "(6, SYS, NODES, R)\n" 
+		+ "(7, SYS, COLSTATS, R)\n" 
+		+ "(8, SYS, COLDIST, R)\n" 
+		+ "(9, SYS, BACKUPS, R)\n" 
+		+ "(10, SYS, NODESTATE, R)\n"
+		+ "(11, SYS, PARTITIONING, R)\n"
+		+ "(12, SYS, INDEXSTATS, R)\n"
+		
+		+ "SYS.BACKUPS(INT, INT, INT)\n" 
+		+ "0\n"
+		
+		+ "SYS.NODESTATE(INT, VARCHAR)\n" 
+		+ "0\n"
+		
+		//SYS.COLUMNS(COLID, TABLEID, NAME, TYPE, LENGTH, SCALE, PKPOS, NULL)
+		+ "SYS.COLUMNS(INT, INT, VARCHAR, VARCHAR, INT, INT, INT, VARCHAR)\n" 
+		+ "50\n" 
+		+ "(0, 1, COLID, INT, 4, 0, -1, N)\n" 
+		+ "(1, 1, TABLEID, INT, 4, 0, 0, N)\n" 
+		+ "(2, 1, COLNAME, VARCHAR, 128, 0, 1, N)\n" 
+		+ "(3, 1, COLTYPE, VARCHAR, 16, 0, -1, N)\n" 
+		+ "(4, 1, LENGTH, INT, 4, 0, -1, N)\n" 
+		+ "(5, 1, SCALE, INT, 4, 0, -1, N)\n"
+		+ "(6, 1, PKPOS, INT, 4, 0, -1, N)\n" 
+		+ "(7, 1, NULLABLE, VARCHAR, 1, 0, -1, N)\n"
+		
+		+ "(0, 0, TABLEID, INT, 4, 0, -1, N)\n" 
+		+ "(1, 0, SCHEMA, VARCHAR, 128, 0, 0, N)\n" 
+		+ "(2, 0, TABNAME, VARCHAR, 128, 0, 1, N)\n"  
+		+ "(3, 0, TYPE, VARCHAR, 1, 0, -1, N)\n" 
+		
+		+ "(0, 2, INDEXID, INT, 4, 0, -1, N)\n" 
+		+ "(1, 2, INDEXNAME, VARCHAR, 128, 0, 1, N)\n" 
+		+ "(2, 2, TABLEID, INT, 4, 0, 0, N)\n" 
+		+ "(3, 2, UNIQUE, VARCHAR, 1, 0, -1, N)\n" 
+		
+		+ "(0, 3, INDEXID, INT, 4, 0, 1, N)\n" 
+		+ "(1, 3, TABLEID, INT, 4, 0, 0, N)\n" 
+		+ "(2, 3, COLID, INT, 4, 0, 2, N)\n" 
+		+ "(3, 3, POSITION, INT, 4, 0, -1, N)\n" 
+		+ "(4, 3, ORDER, VARCHAR, 1, 0, -1, N)\n"
+		
+		+ "(0, 4, VIEWID, INT, 4, 0, -1, N)\n" 
+		+ "(1, 4, SCHEMA, VARCHAR, 128, 0, 0, N)\n" 
+		+ "(2, 4, NAME, VARCHAR, 128, 0, 1, N)\n" 
+		+ "(3, 4, TEXT, VARCHAR, 32768, 0, -1, N)\n" 
+		
+		+ "(0, 5, TABLEID, INT, 4, 0, 0, N)\n" 
+		+ "(1, 5, CARD, BIGINT, 8, 0, -1, N)\n"
+		
+		+ "(0, 6, NODEID, INT, 4, 0, -1, N)\n" 
+		+ "(1, 6, HOSTNAME, VARCHAR, 128, 0, 0, N)\n" 
+		+ "(2, 6, TYPE, VARCHAR, 1, 0, -1, N)\n" 
+		+ "(3, 6, RACK, VARCHAR, 128, 0, -1, N)\n"
+		
+		+ "(0, 7, TABLEID, INT, 4, 0, 0, N)\n" 
+		+ "(1, 7, COLID, INT, 4, 0, 1, N)\n" 
+		+ "(2, 7, CARD, BIGINT, 8, 0, -1, N)\n"
+		
+		+ "(0, 8, TABLEID, INT, 4, 0, 0, N)\n" 
+		+ "(1, 8, COLID, INT, 4, 0, 1, N)\n"
+		+ "(2, 8, LOW, VARCHAR, 4096, 0, -1, N)\n"
+		+ "(3, 8, Q1, VARCHAR, 4096, 0, -1, N)\n"
+		+ "(4, 8, Q2, VARCHAR, 4096, 0, -1, N)\n"
+		+ "(5, 8, Q3, VARCHAR, 4096, 0, -1, N)\n"
+		+ "(6, 8, HIGH, VARCHAR, 4096, 0, -1, N)\n"
+		
+		+ "(0, 9, FIRST, INT, 4, 0, 0, N)\n" 
+		+ "(1, 9, SECOND, INT, 4, 0, -1, N)\n" 
+		+ "(2, 9, THIRD, INT, 4, 0, -1, N)\n"
+		
+		+ "(0, 10, NODE, INT, 4, 0, 0, N)\n" 
+		+ "(1, 10, STATE, VARCHAR, 1, 0, -1, N)\n"
+		
+		+ "(0, 11, TABLEID, INT, 4, 0, 0, N)\n"
+		+ "(1, 11, GROUPEXP, VARCHAR, 8192, 0, -1, N)\n"
+		+ "(2, 11, NODEEXP, VARCHAR, 8192, 0, -1, N)\n"
+		+ "(3, 11, DEVICEEXP, VARCHAR, 8192, 0, -1, N)\n"
+		
+		+ "(0, 12, TABLEID, INT, 4, 0, 0, N)\n"
+		+ "(1, 12, INDEXID, INT, 4, 0, 1, N)\n"
+		+ "(2, 12, NUMDISTINCT, BIGINT, 8, 0, -1, N)\n"
+		
+		+ "SYS.VIEWS(INT, VARCHAR, VARCHAR, VARCHAR)\n" 
+		+ "0\n" 
+		
+		+ "SYS.INDEXES(INT, VARCHAR, INT, VARCHAR)\n" 
+		+ "15\n" 
+		+ "(0, PKTABLES, 0, Y)\n" 
+		+ "(0, PKCOLUMNS, 1, Y)\n" 
+		+ "(0, PKINDEXES, 2, Y)\n" 
+		+ "(0, PKINDEXCOLS, 3, Y)\n" 
+		+ "(0, PKVIEWS, 4, Y)\n"  
+		+ "(0, PKTABLESTATS, 5, Y)\n" 
+		+ "(0, PKNODES, 6, Y)\n" 
+		+ "(0, PKCOLSTATS, 7, Y)\n" 
+		+ "(0, PKCOLDIST, 8, Y)\n" 
+		+ "(0, PKBACKUPS, 9, Y)\n" 
+		+ "(0, PKNODESTATE, 10, Y)\n"
+		+ "(0, PKPARTITIONING, 11, Y)\n"
+		+ "(0, PKINDEXSTATS, 12, Y)\n"
+		+ "(1, SKNODES, 6, Y)\n"
+		+ "(1, SKINDEXES, 2, N)\n"
+		
+		+ "SYS.INDEXCOLS(INT, INT, INT, INT, VARCHAR)\n" 
+		+ "24\n" 
+		+ "(0, 0, 1, 0, A)\n" //TABLES(SCHEMA, NAME) 
+		+ "(0, 0, 2, 1, A)\n" 
+		+ "(0, 1, 1, 0, A)\n" //COLUMNS(TABLEID, COLNAME)
+		+ "(0, 1, 2, 1, A)\n" 
+		+ "(0, 2, 1, 1, A)\n" //INDEXES(TABLEID, INDEXNAME)
+		+ "(0, 2, 2, 0, A)\n" 
+		+ "(0, 3, 0, 1, A)\n" //INDEXCOLS(TABLE, INDEX, COL)
+		+ "(0, 3, 1, 0, A)\n" 
+		+ "(0, 3, 2, 2, A)\n" 
+		+ "(0, 4, 1, 0, A)\n" //VIEWS(SCHEMA, NAME)
+		+ "(0, 4, 2, 1, A)\n" 
+		+ "(0, 5, 0, 0, A)\n" //TABLESTATS(ID) 
+		+ "(0, 6, 1, 0, A)\n" //NODES(HOSTNAME) 
+		+ "(0, 7, 0, 0, A)\n" //COLSTATS(TABLE, COL) 
+		+ "(0, 7, 1, 1, A)\n" 
+		+ "(0, 8, 0, 0, A)\n" //COLDIST(TABLE, COL)
+		+ "(0, 8, 1, 1, A)\n"
+		+ "(0, 9, 0, 0, A)\n" //BACKUPS(FIRST) 
+		+ "(0, 10, 0, 0, A)\n" //NODESTATE(NODE)
+		+ "(0, 11, 0, 0, A)\n" //PARTITIONING(TABLE)
+		+ "(0, 12, 0, 0, A)\n" //INDEXSTATS(TABLE, INDEX)
+		+ "(0, 12, 1, 1, A)\n"
+		+ "(1, 6, 0, 0, A)\n" //NODES(NODEID)
+		+ "(1, 2, 1, 0, A)\n" //INDEXES(INDEXNAME)
+		
+		+ "SYS.TABLESTATS(INT, BIGINT)\n" 
+		+ "0\n" 
+		
+		+ "SYS.NODES(INT, VARCHAR, VARCHAR, VARCHAR)\n" 
+		+ "0\n" 
+		
+		+ "SYS.COLSTATS(INT, INT, BIGINT)\n" 
+		+ "0\n" 
+		
+		+ "SYS.COLDIST(INT, INT, VARCHAR, VARCHAR, VARCHAR, VARCHAR, VARCHAR)\n" 
+		+ "0\n"
+		
+		+ "SYS.PARTITIONING(INT, VARCHAR, VARCHAR, VARCHAR)\n"
+		+ "12\n"
+		+ "(0, NONE, {-1}, {0})\n"
+		+ "(1, NONE, {-1}, {0})\n"
+		+ "(2, NONE, {-1}, {0})\n"
+		+ "(3, NONE, {-1}, {0})\n"
+		+ "(4, NONE, {-1}, {0})\n"
+		+ "(5, NONE, {-1}, {0})\n"
+		+ "(6, NONE, {-1}, {0})\n"
+		+ "(7, NONE, {-1}, {0})\n"
+		+ "(8, NONE, {-1}, {0})\n"
+		+ "(9, NONE, {-1}, {0})\n"
+		+ "(10, NONE, {-1}, {0})\n"
+		+ "(11, NONE, {-1}, {0})\n"
+		+ "(12, NONE, {-1}, {0})"
+		
+		+ "SYS.INDEXSTATS(INT, INT, BIGINT)\n"
+		+ "0";
 
 		final PrintWriter out = new PrintWriter(new FileWriter("CatalogCreator.java", false));
 
@@ -157,25 +327,14 @@ public class CatalogCode
 			HRDBMSWorker.logger.debug("Calling createNodes().");
 			createNodes();
 			HRDBMSWorker.logger.debug("createNodes() has finished.");
-			createNetwork();
-			HRDBMSWorker.logger.debug("createNetwork() has finished.");
 			sendNodesToCoords();
 			HRDBMSWorker.logger.debug("sendNodesToCoords() has finished.");
-			sendNetworkToCoords();
-			HRDBMSWorker.logger.debug("sendNetworkToCoords() has finished.");
-			receiveDevicesFromAllNodes();
-			HRDBMSWorker.logger.debug("receiveDevicesFromAllNodes() has finished.");
-			sendDevicesToCoords();
 		}
 		else
 		{
 			HRDBMSWorker.logger.debug("Calling receiveAndCreateNodes().");
 			receiveAndCreateNodes();
 			HRDBMSWorker.logger.debug("receiveAndCreateNodes() has finished.");
-			receiveAndCreateNetwork();
-			HRDBMSWorker.logger.debug("receiveAndCreateNetwork() has finished.");
-			receiveAndCreateDevices();
-			HRDBMSWorker.logger.debug("receiveAndCreateDevices() has finished.");
 		}
 
 		createOutputHeader(out);
@@ -258,7 +417,9 @@ public class CatalogCode
 	{
 		final ByteBuffer data = ByteBuffer.allocate(Page.BLOCK_SIZE);
 		buildIndexDataBuffer(keys2RID, numKeys, data);
-		String fn = HRDBMSWorker.getHParms().getProperty("catalog_directory");
+		String fn = HRDBMSWorker.getHParms().getProperty("data_directories");
+		StringTokenizer tokens = new StringTokenizer(fn, ",", false);
+		fn = tokens.nextToken();
 		if (!fn.endsWith("/"))
 		{
 			fn += "/";
@@ -372,14 +533,6 @@ public class CatalogCode
 						total += (4 + token.length());
 					}
 				}
-				else if (type.equals("VARBINARY"))
-				{
-					// always assumes it varchar
-					if (!token.equals("null"))
-					{
-						total += (8 + token.length());
-					}
-				}
 				else
 				{
 					HRDBMSWorker.logger.error("Unknown type: " + type);
@@ -442,24 +595,11 @@ public class CatalogCode
 					i++;
 				}
 			}
-			else if (var.equals("!table1kc!"))
+			else if (var.equals("!tablefkc!"))
 			{
-				int i = 0;
 				long card;
-				final int[] colIndexes = new int[getNumIndexCols("SYS.TABLES")];
-				while (i < 4)
-				{
-					colIndexes[i] = getColIndexForIndex("SYS.TABLES", i);
-					card = getCompositeColCard("SYS.TABLES", colIndexes, i);
 
-					if (card != -1)
-					{
-						vars.put("!table" + (i + 1) + "kc!", card);
-					}
-					i++;
-				}
-
-				card = getFullKeyCard("SYS.TABLES", colIndexes);
+				card = getFullKeyCard("SYS.TABLES");
 				if (card != -1)
 				{
 					vars.put("!tablefkc!", card);
@@ -479,45 +619,11 @@ public class CatalogCode
 					i++;
 				}
 			}
-			else if (var.equals("!backupavgrow!"))
+			else if (var.equals("!backupkkc!"))
 			{
-				int i = 0;
-				for (final String header : tableLines)
-				{
-					if (header.startsWith("SYS.BACKUPS("))
-					{
-						try
-						{
-							vars.put("!backupavgrow!", new Long(sizes.get(i) / data.get(i).size()));
-						}
-						catch (final Exception e)
-						{
-							vars.put("!backupavgrow!", new Long(0));
-						}
-						break;
-					}
-
-					i++;
-				}
-			}
-			else if (var.equals("!backup1kc!"))
-			{
-				int i = 0;
 				long card;
-				final int[] colIndexes = new int[getNumIndexCols("SYS.BACKUPS")];
-				while (i < 4)
-				{
-					colIndexes[i] = getColIndexForIndex("SYS.BACKUPS", i);
-					card = getCompositeColCard("SYS.BACKUPS", colIndexes, i);
-
-					if (card != -1)
-					{
-						vars.put("!backup" + (i + 1) + "kc!", card);
-					}
-					i++;
-				}
-
-				card = getFullKeyCard("SYS.BACKUPS", colIndexes);
+				
+				card = getFullKeyCard("SYS.BACKUPS");
 				if (card != -1)
 				{
 					vars.put("!backupfkc!", card);
@@ -537,45 +643,10 @@ public class CatalogCode
 					i++;
 				}
 			}
-			else if (var.equals("!nodestateavgrow!"))
+			else if (var.equals("!nodestatefkc!"))
 			{
-				int i = 0;
-				for (final String header : tableLines)
-				{
-					if (header.startsWith("SYS.NODESTATE("))
-					{
-						try
-						{
-							vars.put("!nodestateavgrow!", new Long(sizes.get(i) / data.get(i).size()));
-						}
-						catch (final Exception e)
-						{
-							vars.put("!nodestateavgrow!", new Long(0));
-						}
-						break;
-					}
-
-					i++;
-				}
-			}
-			else if (var.equals("!nodestate1kc!"))
-			{
-				int i = 0;
 				long card;
-				final int[] colIndexes = new int[getNumIndexCols("SYS.NODESTATE")];
-				while (i < 4)
-				{
-					colIndexes[i] = getColIndexForIndex("SYS.NODESTATE", i);
-					card = getCompositeColCard("SYS.NODESTATE", colIndexes, i);
-
-					if (card != -1)
-					{
-						vars.put("!nodestate" + (i + 1) + "kc!", card);
-					}
-					i++;
-				}
-
-				card = getFullKeyCard("SYS.NODESTATE", colIndexes);
+				card = getFullKeyCard("SYS.NODESTATE");
 				if (card != -1)
 				{
 					vars.put("!nodestatefkc!", card);
@@ -595,45 +666,11 @@ public class CatalogCode
 					i++;
 				}
 			}
-			else if (var.equals("!columnavgrow!"))
+			else if (var.equals("!columnfkc!"))
 			{
-				int i = 0;
-				for (final String header : tableLines)
-				{
-					if (header.startsWith("SYS.COLUMNS("))
-					{
-						try
-						{
-							vars.put("!columnavgrow!", new Long(sizes.get(i) / data.get(i).size()));
-						}
-						catch (final Exception e)
-						{
-							vars.put("!columnavgrow!", new Long(0));
-						}
-						break;
-					}
-
-					i++;
-				}
-			}
-			else if (var.equals("!column1kc!"))
-			{
-				int i = 0;
 				long card;
-				final int[] colIndexes = new int[getNumIndexCols("SYS.COLUMNS")];
-				while (i < 4)
-				{
-					colIndexes[i] = getColIndexForIndex("SYS.COLUMNS", i);
-					card = getCompositeColCard("SYS.COLUMNS", colIndexes, i);
-
-					if (card != -1)
-					{
-						vars.put("!column" + (i + 1) + "kc!", card);
-					}
-					i++;
-				}
-
-				card = getFullKeyCard("SYS.COLUMNS", colIndexes);
+				
+				card = getFullKeyCard("SYS.COLUMNS");
 				if (card != -1)
 				{
 					vars.put("!columnfkc!", card);
@@ -653,45 +690,11 @@ public class CatalogCode
 					i++;
 				}
 			}
-			else if (var.equals("!indexavgrow!"))
+			else if (var.equals("!indexfkc!"))
 			{
-				int i = 0;
-				for (final String header : tableLines)
-				{
-					if (header.startsWith("SYS.INDEXES("))
-					{
-						try
-						{
-							vars.put("!indexavgrow!", new Long(sizes.get(i) / data.get(i).size()));
-						}
-						catch (final Exception e)
-						{
-							vars.put("!indexavgrow!", new Long(0));
-						}
-						break;
-					}
-
-					i++;
-				}
-			}
-			else if (var.equals("!index1kc!"))
-			{
-				int i = 0;
 				long card;
-				final int[] colIndexes = new int[getNumIndexCols("SYS.INDEXES")];
-				while (i < 4)
-				{
-					colIndexes[i] = getColIndexForIndex("SYS.INDEXES", i);
-					card = getCompositeColCard("SYS.INDEXES", colIndexes, i);
 
-					if (card != -1)
-					{
-						vars.put("!index" + (i + 1) + "kc!", card);
-					}
-					i++;
-				}
-
-				card = getFullKeyCard("SYS.INDEXES", colIndexes);
+				card = getFullKeyCard("SYS.INDEXES");
 				if (card != -1)
 				{
 					vars.put("!indexfkc!", card);
@@ -711,45 +714,11 @@ public class CatalogCode
 					i++;
 				}
 			}
-			else if (var.equals("!indexcolavgrow!"))
+			else if (var.equals("!indexcolfkc!"))
 			{
-				int i = 0;
-				for (final String header : tableLines)
-				{
-					if (header.startsWith("SYS.INDEXCOLS("))
-					{
-						try
-						{
-							vars.put("!indexcolavgrow!", new Long(sizes.get(i) / data.get(i).size()));
-						}
-						catch (final Exception e)
-						{
-							vars.put("!indexcolavgrow!", new Long(0));
-						}
-						break;
-					}
-
-					i++;
-				}
-			}
-			else if (var.equals("!indexcol1kc!"))
-			{
-				int i = 0;
 				long card;
-				final int[] colIndexes = new int[getNumIndexCols("SYS.INDEXCOLS")];
-				while (i < 4)
-				{
-					colIndexes[i] = getColIndexForIndex("SYS.INDEXCOLS", i);
-					card = getCompositeColCard("SYS.INDEXCOLS", colIndexes, i);
 
-					if (card != -1)
-					{
-						vars.put("!indexcol" + (i + 1) + "kc!", card);
-					}
-					i++;
-				}
-
-				card = getFullKeyCard("SYS.INDEXCOLS", colIndexes);
+				card = getFullKeyCard("SYS.INDEXCOLS");
 				if (card != -1)
 				{
 					vars.put("!indexcolfkc!", card);
@@ -769,164 +738,14 @@ public class CatalogCode
 					i++;
 				}
 			}
-			else if (var.equals("!viewavgrow!"))
+			else if (var.equals("!viewfkc!"))
 			{
-				int i = 0;
-				for (final String header : tableLines)
-				{
-					if (header.startsWith("SYS.VIEWS("))
-					{
-						try
-						{
-							vars.put("!viewavgrow!", new Long(sizes.get(i) / data.get(i).size()));
-						}
-						catch (final Exception e)
-						{
-							vars.put("!viewavgrow!", new Long(0));
-						}
-						break;
-					}
-
-					i++;
-				}
-			}
-			else if (var.equals("!view1kc!"))
-			{
-				int i = 0;
 				long card;
-				final int[] colIndexes = new int[getNumIndexCols("SYS.VIEWS")];
-				while (i < 4)
-				{
-					colIndexes[i] = getColIndexForIndex("SYS.VIEWS", i);
-					card = getCompositeColCard("SYS.VIEWS", colIndexes, i);
 
-					if (card != -1)
-					{
-						vars.put("!view" + (i + 1) + "kc!", card);
-					}
-					i++;
-				}
-
-				card = getFullKeyCard("SYS.VIEWS", colIndexes);
+				card = getFullKeyCard("SYS.VIEWS");
 				if (card != -1)
 				{
 					vars.put("!viewfkc!", card);
-				}
-			}
-			else if (var.equals("!colgrouprows!"))
-			{
-				int i = 0;
-				for (final String header : tableLines)
-				{
-					if (header.startsWith("SYS.COLGROUPS("))
-					{
-						vars.put("!colgrouprows!", new Long(data.get(i).size()));
-						break;
-					}
-
-					i++;
-				}
-			}
-			else if (var.equals("!colgroupavgrow!"))
-			{
-				int i = 0;
-				for (final String header : tableLines)
-				{
-					if (header.startsWith("SYS.COLGROUPS("))
-					{
-						try
-						{
-							vars.put("!colgroupavgrow!", new Long(sizes.get(i) / data.get(i).size()));
-						}
-						catch (final Exception e)
-						{
-							vars.put("!colgroupavgrow!", new Long(0));
-						}
-						break;
-					}
-
-					i++;
-				}
-			}
-			else if (var.equals("!colgroup1kc!"))
-			{
-				int i = 0;
-				long card;
-				final int[] colIndexes = new int[getNumIndexCols("SYS.COLGROUPS")];
-				while (i < 4)
-				{
-					colIndexes[i] = getColIndexForIndex("SYS.COLGROUPS", i);
-					card = getCompositeColCard("SYS.COLGROUPS", colIndexes, i);
-
-					if (card != -1)
-					{
-						vars.put("!colgroup" + (i + 1) + "kc!", card);
-					}
-					i++;
-				}
-
-				card = getFullKeyCard("SYS.COLGROUPS", colIndexes);
-				if (card != -1)
-				{
-					vars.put("!colgroupfkc!", card);
-				}
-			}
-			else if (var.equals("!nodegrouprows!"))
-			{
-				int i = 0;
-				for (final String header : tableLines)
-				{
-					if (header.startsWith("SYS.NODEGROUPS("))
-					{
-						vars.put("!nodegrouprows!", new Long(data.get(i).size()));
-						break;
-					}
-
-					i++;
-				}
-			}
-			else if (var.equals("!nodegroupavgrow!"))
-			{
-				int i = 0;
-				for (final String header : tableLines)
-				{
-					if (header.startsWith("SYS.NODEGROUPS("))
-					{
-						try
-						{
-							vars.put("!nodegroupavgrow!", new Long(sizes.get(i) / data.get(i).size()));
-						}
-						catch (final Exception e)
-						{
-							vars.put("!nodegroupavgrow!", new Long(0));
-						}
-						break;
-					}
-
-					i++;
-				}
-			}
-			else if (var.equals("!nodegroup1kc!"))
-			{
-				int i = 0;
-				long card;
-				final int[] colIndexes = new int[getNumIndexCols("SYS.NODEGROUPS")];
-				while (i < 4)
-				{
-					colIndexes[i] = getColIndexForIndex("SYS.NODEGROUPS", i);
-					card = getCompositeColCard("SYS.NODEGROUPS", colIndexes, i);
-
-					if (card != -1)
-					{
-						vars.put("!nodegroup" + (i + 1) + "kc!", card);
-					}
-					i++;
-				}
-
-				card = getFullKeyCard("SYS.NODEGROUPS", colIndexes);
-				if (card != -1)
-				{
-					vars.put("!nodegroupfkc!", card);
 				}
 			}
 			else if (var.equals("!tablestatrows!"))
@@ -943,106 +762,14 @@ public class CatalogCode
 					i++;
 				}
 			}
-			else if (var.equals("!tablestatavgrow!"))
+			else if (var.equals("!tablestatfkc!"))
 			{
-				int i = 0;
-				for (final String header : tableLines)
-				{
-					if (header.startsWith("SYS.TABLESTATS("))
-					{
-						try
-						{
-							vars.put("!tablestatavgrow!", new Long(sizes.get(i) / data.get(i).size()));
-						}
-						catch (final Exception e)
-						{
-							vars.put("!tablestatavgrow!", new Long(0));
-						}
-						break;
-					}
-
-					i++;
-				}
-			}
-			else if (var.equals("!tablestat1kc!"))
-			{
-				int i = 0;
 				long card;
-				final int[] colIndexes = new int[getNumIndexCols("SYS.TABLESTATS")];
-				while (i < 4)
-				{
-					colIndexes[i] = getColIndexForIndex("SYS.TABLESTATS", i);
-					card = getCompositeColCard("SYS.TABLESTATS", colIndexes, i);
 
-					if (card != -1)
-					{
-						vars.put("!tablestat" + (i + 1) + "kc!", card);
-					}
-					i++;
-				}
-
-				card = getFullKeyCard("SYS.TABLESTATS", colIndexes);
+				card = getFullKeyCard("SYS.TABLESTATS");
 				if (card != -1)
 				{
 					vars.put("!tablestatfkc!", card);
-				}
-			}
-			else if (var.equals("!colgroupstatrows!"))
-			{
-				int i = 0;
-				for (final String header : tableLines)
-				{
-					if (header.startsWith("SYS.COLGROUPSTATS("))
-					{
-						vars.put("!colgroupstatrows!", new Long(data.get(i).size()));
-						break;
-					}
-
-					i++;
-				}
-			}
-			else if (var.equals("!colgroupstatavgrow!"))
-			{
-				int i = 0;
-				for (final String header : tableLines)
-				{
-					if (header.startsWith("SYS.COLGROUPSTATS("))
-					{
-						try
-						{
-							vars.put("!colgroupstatavgrow!", new Long(sizes.get(i) / data.get(i).size()));
-						}
-						catch (final Exception e)
-						{
-							vars.put("!colgroupstatavgrow!", new Long(0));
-						}
-						break;
-					}
-
-					i++;
-				}
-			}
-			else if (var.equals("!colgroupstat1kc!"))
-			{
-				int i = 0;
-				long card;
-				final int[] colIndexes = new int[getNumIndexCols("SYS.COLGROUPSTATS")];
-				while (i < 4)
-				{
-					colIndexes[i] = getColIndexForIndex("SYS.COLGROUPSTATS", i);
-					card = getCompositeColCard("SYS.COLGROUPSTATS", colIndexes, i);
-
-					if (card != -1)
-					{
-						vars.put("!colgroupstat" + (i + 1) + "kc!", card);
-					}
-					i++;
-				}
-
-				card = getFullKeyCard("SYS.COLGROUPSTATS", colIndexes);
-				if (card != -1)
-				{
-					vars.put("!colgroupstatfkc!", card);
 				}
 			}
 			else if (var.equals("!indexstatrows!"))
@@ -1059,45 +786,11 @@ public class CatalogCode
 					i++;
 				}
 			}
-			else if (var.equals("!indexstatavgrow!"))
+			else if (var.equals("!indexstatfkc!"))
 			{
-				int i = 0;
-				for (final String header : tableLines)
-				{
-					if (header.startsWith("SYS.INDEXSTATS("))
-					{
-						try
-						{
-							vars.put("!indexstatavgrow!", new Long(sizes.get(i) / data.get(i).size()));
-						}
-						catch (final Exception e)
-						{
-							vars.put("!indexstatavgrow!", new Long(0));
-						}
-						break;
-					}
-
-					i++;
-				}
-			}
-			else if (var.equals("!indexstat1kc!"))
-			{
-				int i = 0;
 				long card;
-				final int[] colIndexes = new int[getNumIndexCols("SYS.INDEXSTATS")];
-				while (i < 4)
-				{
-					colIndexes[i] = getColIndexForIndex("SYS.INDEXSTATS", i);
-					card = getCompositeColCard("SYS.INDEXSTATS", colIndexes, i);
 
-					if (card != -1)
-					{
-						vars.put("!indexstat" + (i + 1) + "kc!", card);
-					}
-					i++;
-				}
-
-				card = getFullKeyCard("SYS.INDEXSTATS", colIndexes);
+				card = getFullKeyCard("SYS.INDEXSTATS");
 				if (card != -1)
 				{
 					vars.put("!indexstatfkc!", card);
@@ -1117,164 +810,14 @@ public class CatalogCode
 					i++;
 				}
 			}
-			else if (var.equals("!nodeavgrow!"))
+			else if (var.equals("!nodefkc!"))
 			{
-				int i = 0;
-				for (final String header : tableLines)
-				{
-					if (header.startsWith("SYS.NODES("))
-					{
-						try
-						{
-							vars.put("!nodeavgrow!", new Long(sizes.get(i) / data.get(i).size()));
-						}
-						catch (final Exception e)
-						{
-							vars.put("!nodeavgrow!", new Long(0));
-						}
-						break;
-					}
-
-					i++;
-				}
-			}
-			else if (var.equals("!node1kc!"))
-			{
-				int i = 0;
 				long card;
-				final int[] colIndexes = new int[getNumIndexCols("SYS.NODES")];
-				while (i < 4)
-				{
-					colIndexes[i] = getColIndexForIndex("SYS.NODES", i);
-					card = getCompositeColCard("SYS.NODES", colIndexes, i);
 
-					if (card != -1)
-					{
-						vars.put("!node" + (i + 1) + "kc!", card);
-					}
-					i++;
-				}
-
-				card = getFullKeyCard("SYS.NODES", colIndexes);
+				card = getFullKeyCard("SYS.NODES");
 				if (card != -1)
 				{
 					vars.put("!nodefkc!", card);
-				}
-			}
-			else if (var.equals("!networkrows!"))
-			{
-				int i = 0;
-				for (final String header : tableLines)
-				{
-					if (header.startsWith("SYS.NETWORK("))
-					{
-						vars.put("!networkrows!", new Long(data.get(i).size()));
-						break;
-					}
-
-					i++;
-				}
-			}
-			else if (var.equals("!networkavgrow!"))
-			{
-				int i = 0;
-				for (final String header : tableLines)
-				{
-					if (header.startsWith("SYS.NETWORK("))
-					{
-						try
-						{
-							vars.put("!networkavgrow!", new Long(sizes.get(i) / data.get(i).size()));
-						}
-						catch (final Exception e)
-						{
-							vars.put("!networkavgrow!", new Long(0));
-						}
-						break;
-					}
-
-					i++;
-				}
-			}
-			else if (var.equals("!network1kc!"))
-			{
-				int i = 0;
-				long card;
-				final int[] colIndexes = new int[getNumIndexCols("SYS.NETWORK")];
-				while (i < 4)
-				{
-					colIndexes[i] = getColIndexForIndex("SYS.NETWORK", i);
-					card = getCompositeColCard("SYS.NETWORK", colIndexes, i);
-
-					if (card != -1)
-					{
-						vars.put("!network" + (i + 1) + "kc!", card);
-					}
-					i++;
-				}
-
-				card = getFullKeyCard("SYS.NETWORK", colIndexes);
-				if (card != -1)
-				{
-					vars.put("!networkfkc!", card);
-				}
-			}
-			else if (var.equals("!devicerows!"))
-			{
-				int i = 0;
-				for (final String header : tableLines)
-				{
-					if (header.startsWith("SYS.DEVICES("))
-					{
-						vars.put("!devicerows!", new Long(data.get(i).size()));
-						break;
-					}
-
-					i++;
-				}
-			}
-			else if (var.equals("!deviceavgrow!"))
-			{
-				int i = 0;
-				for (final String header : tableLines)
-				{
-					if (header.startsWith("SYS.DEVICES("))
-					{
-						try
-						{
-							vars.put("!deviceavgrow!", new Long(sizes.get(i) / data.get(i).size()));
-						}
-						catch (final Exception e)
-						{
-							vars.put("!deviceavgrow!", new Long(0));
-						}
-						break;
-					}
-
-					i++;
-				}
-			}
-			else if (var.equals("!device1kc!"))
-			{
-				int i = 0;
-				long card;
-				final int[] colIndexes = new int[getNumIndexCols("SYS.DEVICES")];
-				while (i < 4)
-				{
-					colIndexes[i] = getColIndexForIndex("SYS.DEVICES", i);
-					card = getCompositeColCard("SYS.DEVICES", colIndexes, i);
-
-					if (card != -1)
-					{
-						vars.put("!device" + (i + 1) + "kc!", card);
-					}
-					i++;
-				}
-
-				card = getFullKeyCard("SYS.DEVICES", colIndexes);
-				if (card != -1)
-				{
-					vars.put("!devicefkc!", card);
 				}
 			}
 			else if (var.equals("!partrows!"))
@@ -1291,45 +834,11 @@ public class CatalogCode
 					i++;
 				}
 			}
-			else if (var.equals("!partavgrow!"))
+			else if (var.equals("!partfkc!"))
 			{
-				int i = 0;
-				for (final String header : tableLines)
-				{
-					if (header.startsWith("SYS.PARTITIONING("))
-					{
-						try
-						{
-							vars.put("!partavgrow!", new Long(sizes.get(i) / data.get(i).size()));
-						}
-						catch (final Exception e)
-						{
-							vars.put("!partavgrow!", new Long(0));
-						}
-						break;
-					}
-
-					i++;
-				}
-			}
-			else if (var.equals("!part1kc!"))
-			{
-				int i = 0;
 				long card;
-				final int[] colIndexes = new int[getNumIndexCols("SYS.PARTITIONING")];
-				while (i < 4)
-				{
-					colIndexes[i] = getColIndexForIndex("SYS.PARTITIONING", i);
-					card = getCompositeColCard("SYS.PARTITIONING", colIndexes, i);
 
-					if (card != -1)
-					{
-						vars.put("!part" + (i + 1) + "kc!", card);
-					}
-					i++;
-				}
-
-				card = getFullKeyCard("SYS.PARTITIONING", colIndexes);
+				card = getFullKeyCard("SYS.PARTITIONING");
 				if (card != -1)
 				{
 					vars.put("!partfkc!", card);
@@ -1349,45 +858,11 @@ public class CatalogCode
 					i++;
 				}
 			}
-			else if (var.equals("!colstatavgrow!"))
+			else if (var.equals("!colstatfkc!"))
 			{
-				int i = 0;
-				for (final String header : tableLines)
-				{
-					if (header.startsWith("SYS.COLSTATS("))
-					{
-						try
-						{
-							vars.put("!colstatavgrow!", new Long(sizes.get(i) / data.get(i).size()));
-						}
-						catch (final Exception e)
-						{
-							vars.put("!colstatavgrow!", new Long(0));
-						}
-						break;
-					}
-
-					i++;
-				}
-			}
-			else if (var.equals("!colstat1kc!"))
-			{
-				int i = 0;
 				long card;
-				final int[] colIndexes = new int[getNumIndexCols("SYS.COLSTATS")];
-				while (i < 4)
-				{
-					colIndexes[i] = getColIndexForIndex("SYS.COLSTATS", i);
-					card = getCompositeColCard("SYS.COLSTATS", colIndexes, i);
 
-					if (card != -1)
-					{
-						vars.put("!colstat" + (i + 1) + "kc!", card);
-					}
-					i++;
-				}
-
-				card = getFullKeyCard("SYS.COLSTATS", colIndexes);
+				card = getFullKeyCard("SYS.COLSTATS");
 				if (card != -1)
 				{
 					vars.put("!colstatfkc!", card);
@@ -1407,45 +882,11 @@ public class CatalogCode
 					i++;
 				}
 			}
-			else if (var.equals("!coldistavgrow!"))
+			else if (var.equals("!coldistfkc!"))
 			{
-				int i = 0;
-				for (final String header : tableLines)
-				{
-					if (header.startsWith("SYS.COLDIST"))
-					{
-						try
-						{
-							vars.put("!coldistavgrow!", new Long(sizes.get(i) / data.get(i).size()));
-						}
-						catch (final Exception e)
-						{
-							vars.put("!coldistavgrow!", new Long(0));
-						}
-						break;
-					}
-
-					i++;
-				}
-			}
-			else if (var.equals("!coldist1kc!"))
-			{
-				int i = 0;
 				long card;
-				final int[] colIndexes = new int[getNumIndexCols("SYS.COLDIST")];
-				while (i < 4)
-				{
-					colIndexes[i] = getColIndexForIndex("SYS.COLDIST", i);
-					card = getCompositeColCard("SYS.COLDIST", colIndexes, i);
-
-					if (card != -1)
-					{
-						vars.put("!coldist" + (i + 1) + "kc!", card);
-					}
-					i++;
-				}
-
-				card = getFullKeyCard("SYS.COLDIST", colIndexes);
+				
+				card = getFullKeyCard("SYS.COLDIST");
 				if (card != -1)
 				{
 					vars.put("!coldistfkc!", card);
@@ -1529,18 +970,55 @@ public class CatalogCode
 		{
 			final StringTokenizer tokens = new StringTokenizer(tRow, ",", false);
 			final int tableId = Integer.parseInt(tokens.nextToken().substring(1).trim());
-			tokens.nextToken();
-			tokens.nextToken().trim();
-			final int numCols = Integer.parseInt(tokens.nextToken().trim());
+			final int numCols = numCols(tableId);
 			int i = 0;
 			final Vector<String> csTable = getTable("SYS.COLSTATS", tableLines, data);
 			while (i < numCols)
 			{
-				final String row = "(" + tableId + ",0,0," + i + ",!colcard" + tableId + "_" + i + "!,!avglen" + tableId + "_" + i + "!,!nulls" + tableId + "_" + i + "!)";
+				final String row = "(" + tableId + "," + i + ",!colcard" + tableId + "_" + i + "!)";
 				csTable.add(row);
 				i++;
 			}
 		}
+	}
+	
+	private static int numCols(int tableId)
+	{
+		final Vector<String> cTable = getTable("SYS.COLUMNS", tableLines, data);
+		
+		int num = 0;
+		for (final String cRow : cTable)
+		{
+			final StringTokenizer tokens = new StringTokenizer(cRow, ",", false);
+			tokens.nextToken();
+			
+			if (Integer.parseInt(tokens.nextToken()) == tableId)
+			{
+				num++;
+			}
+		}
+		
+		return num;
+	}
+	
+	private static int numKeys(int tableId, int indexId)
+	{
+		final Vector<String> cTable = getTable("SYS.INDEXCOLS", tableLines, data);
+		
+		int num = 0;
+		for (final String cRow : cTable)
+		{
+			final StringTokenizer tokens = new StringTokenizer(cRow, ",", false);
+			if (Integer.parseInt(tokens.nextToken()) == indexId)
+			{
+				if (Integer.parseInt(tokens.nextToken()) == tableId)
+				{
+					num++;
+				}
+			}
+		}
+		
+		return num;
 	}
 
 	private static void createColStatVars()
@@ -1555,7 +1033,7 @@ public class CatalogCode
 			final int tableId = Integer.parseInt(tokens.nextToken().substring(1).trim());
 			tokens.nextToken();
 			final String tName = tokens.nextToken().trim();
-			final int numCols = Integer.parseInt(tokens.nextToken().trim());
+			final int numCols = numCols(tableId);
 			HRDBMSWorker.logger.debug("ID: " + tableId + " Name: " + tName + " Cols: " + numCols);
 			int i = 0;
 			// Vector<String> table = getTable("SYS." + tName, tableLines,
@@ -1572,13 +1050,6 @@ public class CatalogCode
 				if (card != -1)
 				{
 					vars.put("!colcard" + tableId + "_" + i + "!", new Long(card));
-				}
-
-				HRDBMSWorker.logger.debug("Calculating average length for col " + i);
-				final int avglen = getAvgLen("SYS." + tName, index[0]);
-				if (avglen != -1)
-				{
-					vars.put("!avglen" + tableId + "_" + i + "!", new Long(avglen));
 				}
 
 				i++;
@@ -1601,8 +1072,7 @@ public class CatalogCode
 			final int indexID = Integer.parseInt(iRowST.nextToken().substring(1).trim());
 			final String iName = iRowST.nextToken().trim();
 			final int tableID = Integer.parseInt(iRowST.nextToken().trim());
-			iRowST.nextToken();
-			final int numKeys = Integer.parseInt(iRowST.nextToken().trim());
+			final int numKeys = numKeys(tableID, indexID);
 			String tName = null;
 
 			for (final String tRow : tTable)
@@ -1745,82 +1215,62 @@ public class CatalogCode
 				}
 			}
 
-			String row = "(" + tableId + "," + indexId + ",1,2,"; // 1-4 key
-																	// card,
-																	// full,
-																	// rows,
-																	// blocks
+			String row = "(" + tableId + "," + indexId + ",";
 			if (token.equals("TABLES"))
 			{
-				row += "!table1kc!,!table2kc!,!table3kc!,!table4kc!,!tablefkc!,!tablerows!,2,0,0)";
+				row += "!tablefkc!)";
 			}
 			else if (token.equals("BACKUPS"))
 			{
-				row += "!backup1kc!,!backup2kc!,!backup3kc!,!backup4kc!,!backupfkc!,!backuprows!,2,0,0)";
+				row += "!backup4kc!)";
 			}
 			else if (token.equals("NODESTATE"))
 			{
-				row += "!nodestate1kc!,!nodestate2kc!,!nodestate3kc!,!nodestate4kc!,!nodestatefkc!,!nodestaterows!,2,0,0)";
+				row += "!nodestatefkc!)";
 			}
 			else if (token.equals("COLUMNS"))
 			{
-				row += "!column1kc!,!column2kc!,!column3kc!,!column4kc!,!columnfkc!,!columnrows!,2,0,0)";
+				row += "!columnfkc!)";
 			}
 			else if (token.equals("INDEXES"))
 			{
-				row += "!index1kc!,!index2kc!,!index3kc!,!index4kc!,!indexfkc!,!indexrows!,2,0,0)";
+				row += "!indexfkc!)";
 			}
 			else if (token.equals("INDEXCOLS"))
 			{
-				row += "!indexcol1kc!,!indexcol2kc!,!indexcol3kc!,!indexcol4kc!,!indexcolfkc!,!indexcolrows!,2,0,0)";
-			}
-			else if (token.equals("COLGROUPS"))
-			{
-				row += "!colgroup1kc!,!colgroup2kc!,!colgroup3kc!,!colgroup4kc!,!colgroupfkc!,!colgrouprows!,2,0,0)";
+				row += "!indexcolfkc!)";
 			}
 			else if (token.equals("VIEWS"))
 			{
-				row += "!view1kc!,!view2kc!,!view3kc!,!view4kc!,!viewfkc!,!viewrows!,2,0,0)";
+				row += "!viewfkc!)";
 			}
 			else if (token.equals("TABLESTATS"))
 			{
-				row += "!tablestat1kc!,!tablestat2kc!,!tablestat3kc!,!tablestat4kc!,!tablestatfkc!,!tablestatrows!,2,0,0)";
+				row += "!tablestatfkc!)";
 			}
 			else if (token.equals("INDEXSTATS"))
 			{
-				row += "!indexstat1kc!,!indexstat2kc!,!indexstat3kc!,!indexstat4kc!,!indexstatfkc!,!indexstatrows!,2,0,0)";
+				row += "!indexstatfkc!)";
 			}
 			else if (token.equals("COLSTATS"))
 			{
-				row += "!colstat1kc!,!colstat2kc!,!colstat3kc!,!colstat4kc!,!colstatfkc!,!colstatrows!,2,0,0)";
+				row += "!colstatfkc!)";
 			}
 			else if (token.equals("COLGROUPSTATS"))
 			{
-				row += "!colgroupstat1kc!,!colgroupstat2kc!,!colgroupstat3kc!,!colgroupstat4kc!,!colgroupstatfkc!,!colgroupstatrows!,2,0,0)";
-			}
-			else if (token.equals("DEVICES"))
-			{
-				row += "!device1kc!,!device2kc!,!device3kc!,!device4kc!,!devicefkc!,!devicerows!,2,0,0)";
+				row += "!colgroupstatfkc!)";
 			}
 			else if (token.equals("NODES"))
 			{
-				row += "!node1kc!,!node2kc!,!node3kc!,!node4kc!,!nodefkc!,!noderows!,2,0,0)";
-			}
-			else if (token.equals("NODEGROUPS"))
-			{
-				row += "!nodegroup1kc!,!nodegroup2kc!,!nodegroup3kc!,!nodegroup4kc!,!nodegroupfkc!,!nodegrouprows!,2,0,0)";
-			}
-			else if (token.equals("NETWORK"))
-			{
-				row += "!network1kc!,!network2kc!,!network3kc!,!network4kc!,!networkfkc!,!networkrows!,2,0,0)";
+				row += "!nodefkc!)";
 			}
 			else if (token.equals("PARTITIONING"))
 			{
-				row += "!part1kc!,!part2kc!,!part3kc!,!part4kc!,!partfkc!,!partrows!,2,0,0)";
+				row += "!partfkc!)";
 			}
 			else if (token.equals("COLDIST"))
 			{
-				row += "!coldist1kc!,!coldist2kc!,!coldist3kc!,!coldist4kc!,!coldistfkc!,!coldistrows!,2,0,0)";
+				row += "!coldistfkc!)";
 			}
 			else
 			{
@@ -1851,52 +1301,38 @@ public class CatalogCode
 		return data;
 	}
 
-	private static void createNetwork()
-	{
-		final Vector<String> nTable = getTable("SYS.NETWORK", tableLines, data);
-		int i = 0;
-		for (final String rack : racks)
-		{
-			int j = 0;
-			for (final String rack2 : racks)
-			{
-				if (j > i)
-				{
-					final String row = "(" + rack + "," + rack2 + ",null)";
-					nTable.add(row);
-				}
-
-				j++;
-			}
-
-			i++;
-		}
-	}
-
 	private static void createNodes() throws IOException
 	{
 		final BufferedReader nodes = new BufferedReader(new FileReader(new File("nodes.cfg")));
 		String line = nodes.readLine();
-		int id = 0;
+		int workerId = 0;
+		int coordId = -2;
 		while (line != null)
 		{
 			final StringTokenizer tokens = new StringTokenizer(line, ",", false);
 			final String host = tokens.nextToken().trim();
 			final String type = tokens.nextToken().trim().toUpperCase();
-			if (type.equals("C") || type.equals("W"))
+			final String rack = tokens.nextToken().trim();
+			racks.add(rack);
+			final Vector<String> nTable = getTable("SYS.NODES", tableLines, data);
+			
+			if (type.equals("C"))
 			{
+				final String row = "(" + coordId + "," + host + "," + type + "," + rack + ",null)";
+				nTable.add(row);
+				coordId--;
+			}
+			else if (type.equals("W"))
+			{
+				final String row = "(" + workerId + "," + host + "," + type + "," + rack + ",null)";
+				nTable.add(row);
+				workerId++;
 			}
 			else
 			{
 				HRDBMSWorker.logger.error("Type found in nodes.cfg was not valid: " + type);
 				System.exit(1);
 			}
-			final String rack = tokens.nextToken().trim();
-			racks.add(rack);
-			final Vector<String> nTable = getTable("SYS.NODES", tableLines, data);
-
-			final String row = "(" + id + "," + host + "," + type + "," + rack + ",null)";
-			nTable.add(row);
 
 			if (type.equals("C") && !isThisMyIpAddress(InetAddress.getByName(host)))
 			{
@@ -1931,7 +1367,6 @@ public class CatalogCode
 			}
 
 			line = nodes.readLine();
-			id++;
 		}
 
 		nodes.close();
@@ -1972,7 +1407,9 @@ public class CatalogCode
 		out.println("\tByteBuffer head = ByteBuffer.allocate(Page.BLOCK_SIZE * 4095);");
 		out.println("\tint i = 0;");
 		out.println("\tint j = 0;");
-		out.println("\tString base = HRDBMSWorker.getHParms().getProperty(\"catalog_directory\");");
+		out.println("\tString base = HRDBMSWorker.getHParms().getProperty(\"data_directories\");");
+		out.println("StringTokenizer tokens = new StringTokenizer(base, \",\", false);");
+		out.println("base = tokens.nextToken();");
 		out.println("");
 		out.println("\tpublic CatalogCreator() throws IOException, UnsupportedEncodingException");
 		out.println("\t{");
@@ -2095,7 +1532,7 @@ public class CatalogCode
 		out.println("");
 		out.println("\t\tbb.putInt(" + rows + "); //rowIDListSize - start of rowIDs");
 		out.println("\t\ti = 0;");
-		out.println("\t\twhile (i < 0)");
+		out.println("\t\twhile (i < " + rows + ")");
 		out.println("\t\t{");
 		out.println("\t\t\tbb.putInt(0); //node 0");
 		out.println("\t\t\tbb.putInt(0); //device 0");
@@ -2135,78 +1572,58 @@ public class CatalogCode
 			tokens.nextToken();
 			final String token = tokens.nextToken().trim(); // table name
 
-			String row = "(" + tableId + ",0,0,"; // card, pages, avgrow
+			String row = "(" + tableId + ","; // card, pages, avgrow
 			if (token.equals("TABLES"))
 			{
-				row += "!tablerows!,4097,!tableavgrow!)";
+				row += "!tablerows!)";
 			}
 			else if (token.equals("BACKUPS"))
 			{
-				row += "!backuprows!, 4097, !backupavgrow!)";
+				row += "!backuprows!)";
 			}
 			else if (token.equals("NODESTATE"))
 			{
-				row += "!nodestaterows!, 4097, !nodestateavgrow!)";
+				row += "!nodestaterows!)";
 			}
 			else if (token.equals("COLUMNS"))
 			{
-				row += "!columnrows!,4097,!columnavgrow!)";
+				row += "!columnrows!)";
 			}
 			else if (token.equals("INDEXES"))
 			{
-				row += "!indexrows!,4097,!indexavgrow!)";
+				row += "!indexrows!)";
 			}
 			else if (token.equals("INDEXCOLS"))
 			{
-				row += "!indexcolrows!,4097,!indexcolavgrow!)";
-			}
-			else if (token.equals("COLGROUPS"))
-			{
-				row += "!colgrouprows!,4097,!colgroupavgrow!)";
+				row += "!indexcolrows!)";
 			}
 			else if (token.equals("VIEWS"))
 			{
-				row += "!viewrows!,4097,!viewavgrow!)";
+				row += "!viewrows!)";
 			}
 			else if (token.equals("TABLESTATS"))
 			{
-				row += "!tablestatrows!,4097,!tablestatavgrow!)";
+				row += "!tablestatrows!)";
 			}
 			else if (token.equals("INDEXSTATS"))
 			{
-				row += "!indexstatrows!,4097,!indexstatavgrow!)";
+				row += "!indexstatrows!)";
 			}
 			else if (token.equals("COLSTATS"))
 			{
-				row += "!colstatrows!,4097,!colstatavgrow!)";
-			}
-			else if (token.equals("COLGROUPSTATS"))
-			{
-				row += "!colgroupstatrows!,4097,!colgroupstatavgrow!)";
-			}
-			else if (token.equals("DEVICES"))
-			{
-				row += "!devicerows!,4097,!deviceavgrow!)";
+				row += "!colstatrows!)";
 			}
 			else if (token.equals("NODES"))
 			{
-				row += "!noderows!,4097,!nodeavgrow!)";
-			}
-			else if (token.equals("NODEGROUPS"))
-			{
-				row += "!nodegrouprows!,4097,!nodegroupavgrow!)";
-			}
-			else if (token.equals("NETWORK"))
-			{
-				row += "!networkrows!,4097,!networkavgrow!)";
+				row += "!noderows!)";
 			}
 			else if (token.equals("PARTITIONING"))
 			{
-				row += "!partrows!,4097,!partavgrow!)";
+				row += "!partrows!)";
 			}
 			else if (token.equals("COLDIST"))
 			{
-				row += "!coldistrows!,4097,!coldistavgrow!)";
+				row += "!coldistrows!)";
 			}
 			else
 			{
@@ -2218,7 +1635,7 @@ public class CatalogCode
 		}
 	}
 
-	private static int getAvgLen(String table, int colIndex)
+	/*private static int getAvgLen(String table, int colIndex)
 	{
 		final Vector<String> t = getTable(table, tableLines, data);
 		final Vector<String> types = getTypes(table);
@@ -2300,9 +1717,9 @@ public class CatalogCode
 		{
 			return total / num;
 		}
-	}
+	}*/
 
-	private static int getColIndexForIndex(String table, int pos)
+	/*private static int getColIndexForIndex(String table, int pos)
 	{
 		Vector<String> t = getTable("SYS.TABLES", tableLines, data);
 
@@ -2332,7 +1749,7 @@ public class CatalogCode
 		}
 
 		return -1;
-	}
+	}*/
 
 	private static int getCompositeColCard(String table, int[] colIndexes, int depth)
 	{
@@ -2412,7 +1829,7 @@ public class CatalogCode
 		return unique.size();
 	}
 
-	private static int getFullKeyCard(String table, int[] indexes)
+	private static int getFullKeyCard(String table)
 	{
 		final Vector<String> t = getTable("SYS.TABLES", tableLines, data);
 		final Vector<String> actual = getTable(table, tableLines, data);
@@ -2454,7 +1871,7 @@ public class CatalogCode
 		final HashMap<Integer, Integer> candidates = new HashMap<Integer, Integer>();
 		for (final Map.Entry<Integer, String> entry : nodes2Rack.entrySet())
 		{
-			if (entry.getKey().intValue() != primary)
+			if (entry.getKey().intValue() >= 0 && entry.getKey().intValue() != primary)
 			{
 				if (entry.getValue().equals(priRack))
 				{
@@ -2465,7 +1882,7 @@ public class CatalogCode
 
 		if (candidates.size() > 0)
 		{
-			int lowKey = -1;
+			int lowKey = Integer.MIN_VALUE;
 			int lowValue = Integer.MAX_VALUE;
 			for (final Map.Entry<Integer, Integer> entry : candidates.entrySet())
 			{
@@ -2482,7 +1899,7 @@ public class CatalogCode
 
 		for (final Map.Entry<Integer, String> entry : nodes2Rack.entrySet())
 		{
-			if (entry.getKey().intValue() != primary)
+			if (entry.getKey().intValue() >= 0 && entry.getKey().intValue() != primary)
 			{
 				if (!entry.getValue().equals(priRack))
 				{
@@ -2511,7 +1928,7 @@ public class CatalogCode
 		final HashMap<Integer, Integer> candidates = new HashMap<Integer, Integer>();
 		for (final Map.Entry<Integer, String> entry : nodes2Rack.entrySet())
 		{
-			if (entry.getKey().intValue() != primary && entry.getKey().intValue() != secondary)
+			if (entry.getKey().intValue() >= 0 && entry.getKey().intValue() != primary && entry.getKey().intValue() != secondary)
 			{
 				if (!entry.getValue().equals(priRack))
 				{
@@ -2539,7 +1956,7 @@ public class CatalogCode
 
 		for (final Map.Entry<Integer, String> entry : nodes2Rack.entrySet())
 		{
-			if (entry.getKey().intValue() != primary && entry.getKey().intValue() != secondary)
+			if (entry.getKey().intValue() >= 0 && entry.getKey().intValue() != primary && entry.getKey().intValue() != secondary)
 			{
 				if (entry.getValue().equals(priRack))
 				{
@@ -2597,40 +2014,6 @@ public class CatalogCode
 		}
 
 		return total;
-	}
-
-	private static int getNumIndexCols(String table)
-	{
-		Vector<String> t = getTable("SYS.TABLES", tableLines, data);
-
-		for (final String row : t)
-		{
-			final StringTokenizer tokens = new StringTokenizer(row, ",", false);
-			final int id = Integer.parseInt(tokens.nextToken().trim().substring(1));
-			tokens.nextToken();
-			if (tokens.nextToken().trim().equals(table.substring(table.indexOf(".") + 1)))
-			{
-				t = getTable("SYS.INDEXES", tableLines, data);
-				for (final String r : t)
-				{
-					final StringTokenizer tokens2 = new StringTokenizer(r, ",", false);
-					tokens2.nextToken();
-					tokens2.nextToken();
-					if (id == Integer.parseInt(tokens2.nextToken().trim()))
-					{
-						tokens2.nextToken();
-						int retval = Integer.parseInt(tokens2.nextToken().trim());
-						if (retval < 4)
-						{
-							retval = 4;
-						}
-						return retval;
-					}
-				}
-			}
-		}
-
-		return -1;
 	}
 
 	private static Vector<String> getTable(String table, Vector<String> tableLines, Vector<Vector<String>> data)
@@ -2730,105 +2113,7 @@ public class CatalogCode
 		data.putInt(0); // block 0
 		data.putInt(downOff); // offset
 	}
-
-	private static void receiveAndCreateDevices() throws IOException
-	{
-		byte[] buff = new byte[8];
-		if (in.read(buff) != 8)
-		{
-			HRDBMSWorker.logger.error("Tried to read command from master, but did not receive 8 bytes.");
-			HRDBMSWorker.logger.error("Catalog synchronization will be aborted.");
-			System.exit(1);
-		}
-		final String cmd = new String(buff, "UTF-8");
-		HRDBMSWorker.logger.debug("Received command: " + cmd);
-
-		if (!cmd.equals("SENDDEV "))
-		{
-			HRDBMSWorker.logger.error("Expected SENDDEV command from master.  Received " + cmd + " command.");
-			HRDBMSWorker.logger.error("Catalog synchronization will be aborted.");
-			System.exit(1);
-		}
-
-		buff = new byte[4];
-		if (in.read(buff) != 4)
-		{
-			HRDBMSWorker.logger.error("Tried to read message size from master, bit did not receive 4 bytes.");
-			HRDBMSWorker.logger.error("Catalog synchronization will be aborted.");
-			System.exit(1);
-		}
-
-		final int size = java.nio.ByteBuffer.wrap(buff).getInt();
-		HRDBMSWorker.logger.debug("Message size is: " + size);
-		HRDBMSWorker.logger.debug("" + buff[0] + " " + buff[1] + " " + buff[2] + " " + buff[3]);
-		buff = new byte[size];
-		if (in.read(buff) != size)
-		{
-			HRDBMSWorker.logger.error("Tried to read SENDDEV message from master, but did not receive all the expected bytes.");
-			HRDBMSWorker.logger.error("Catalog synchronization will be aborted.");
-			System.exit(1);
-		}
-
-		final String msg = new String(buff, "UTF-8");
-		HRDBMSWorker.logger.debug("Message is: " + msg);
-		final StringTokenizer tokens = new StringTokenizer(msg, "~", false);
-		final Vector<String> dTable = getTable("SYS.DEVICES", tableLines, data);
-
-		while (tokens.hasMoreTokens())
-		{
-			final String dRow = tokens.nextToken();
-			HRDBMSWorker.logger.debug("Adding row to DEVICES: " + dRow);
-			dTable.add(dRow);
-		}
-	}
-
-	private static void receiveAndCreateNetwork() throws IOException
-	{
-		byte[] buff = new byte[8];
-		if (in.read(buff) != 8)
-		{
-			HRDBMSWorker.logger.error("Tried to read command from master, but did not receive 8 bytes.");
-			HRDBMSWorker.logger.error("Catalog synchronization will be aborted.");
-			System.exit(1);
-		}
-
-		final String cmd = new String(buff, "UTF-8");
-
-		if (!cmd.equals("SENDNET "))
-		{
-			HRDBMSWorker.logger.error("Expected SENDNET command from master.  Received " + cmd + " command.");
-			HRDBMSWorker.logger.error("Catalog synchronization will be aborted.");
-			System.exit(1);
-		}
-
-		buff = new byte[4];
-		if (in.read(buff) != 4)
-		{
-			HRDBMSWorker.logger.error("Tried to read message size from master, bit did not receive 4 bytes.");
-			HRDBMSWorker.logger.error("Catalog synchronization will be aborted.");
-			System.exit(1);
-		}
-
-		final int size = java.nio.ByteBuffer.wrap(buff).getInt();
-
-		buff = new byte[size];
-		if (in.read(buff) != size)
-		{
-			HRDBMSWorker.logger.error("Tried to read SENDNET message from master, but did not receive all the expected bytes.");
-			HRDBMSWorker.logger.error("Catalog synchronization will be aborted.");
-			System.exit(1);
-		}
-
-		final String msg = new String(buff, "UTF-8");
-		final StringTokenizer tokens = new StringTokenizer(msg, "~", false);
-		final Vector<String> nTable = getTable("SYS.NETWORK", tableLines, data);
-
-		while (tokens.hasMoreTokens())
-		{
-			nTable.add(tokens.nextToken());
-		}
-	}
-
+	
 	private static void receiveAndCreateNodes() throws IOException
 	{
 		HRDBMSWorker.logger.debug("Got input stream.");
@@ -2901,51 +2186,6 @@ public class CatalogCode
 		sockOut.write("OKOKOKOK".getBytes("UTF-8"));
 	}
 
-	private static void receiveDevicesFromAllNodes() throws Exception
-	{
-		final Vector<String> nTable = getTable("SYS.NODES", tableLines, data);
-		String responses = "";
-		int i = 0;
-		for (final String row : nTable)
-		{
-			final StringTokenizer tokens = new StringTokenizer(row, ",", false);
-			final int id = Integer.parseInt(tokens.nextToken().substring(1).trim());
-			final String host = tokens.nextToken().trim();
-			final String type = tokens.nextToken().trim();
-			if (type.equals("W"))
-			{
-				if (i == 0)
-				{
-					responses += ConnectionManager.remoteGetDataDirs(0, id, host);
-					HRDBMSWorker.logger.debug("Received RMI response.");
-				}
-				else
-				{
-					responses += ("~" + ConnectionManager.remoteGetDataDirs(0, id, host));
-					HRDBMSWorker.logger.debug("Received RMI response.");
-				}
-				i++;
-			}
-		}
-
-		HRDBMSWorker.logger.debug("Done receiving responses from all worker nodes");
-
-		final StringTokenizer response = new StringTokenizer(responses, "~", false);
-		while (response.hasMoreTokens())
-		{
-			final String rsp = response.nextToken();
-			final StringTokenizer dirs = new StringTokenizer(rsp, ",", false);
-			final int fromID = Integer.parseInt(dirs.nextToken());
-			i = 0;
-			final Vector<String> dTable = getTable("SYS.DEVICES", tableLines, data);
-			while (dirs.hasMoreTokens())
-			{
-				dTable.add("(" + fromID + "," + i + "," + dirs.nextToken() + ",null,null)");
-				i++;
-			}
-		}
-	}
-
 	private static void sendCompletionChecks() throws IOException
 	{
 		for (final Socket sock : sockets.values())
@@ -2975,82 +2215,7 @@ public class CatalogCode
 			}
 		}
 	}
-
-	private static void sendDevicesToCoords() throws IOException
-	{
-		for (final Socket sock : sockets.values())
-		{
-			final OutputStream out = sock.getOutputStream();
-			final String msg = "SENDDEV ";
-			String msgPart = "";
-
-			final Vector<String> rows = getTable("SYS.DEVICES", tableLines, data);
-			int i = 0;
-			HRDBMSWorker.logger.debug("In sendDevicesToCoords(), DEVICES table has " + rows.size() + " rows");
-			for (final String row : rows)
-			{
-				if (i == 0)
-				{
-					msgPart += row;
-				}
-				else
-				{
-					msgPart += "~" + row;
-				}
-
-				i++;
-			}
-			HRDBMSWorker.logger.debug("Devices message is: " + msgPart);
-			final int size = msgPart.length();
-			HRDBMSWorker.logger.debug("Devices message length is: " + size);
-			out.write(msg.getBytes("UTF-8"));
-			final byte[] buff = new byte[4];
-			buff[0] = (byte)(size >> 24);
-			buff[1] = (byte)((size & 0x00FF0000) >> 16);
-			buff[2] = (byte)((size & 0x0000FF00) >> 8);
-			buff[3] = (byte)((size & 0x000000FF));
-			HRDBMSWorker.logger.debug("" + buff[0] + " " + buff[1] + " " + buff[2] + " " + buff[3]);
-			out.write(buff);
-			out.write(msgPart.getBytes("UTF-8"));
-		}
-	}
-
-	private static void sendNetworkToCoords() throws IOException
-	{
-		for (final Socket sock : sockets.values())
-		{
-			final OutputStream out = sock.getOutputStream();
-			final String msg = "SENDNET ";
-			String msgPart = "";
-
-			final Vector<String> rows = getTable("SYS.NETWORK", tableLines, data);
-			int i = 0;
-			for (final String row : rows)
-			{
-				if (i == 0)
-				{
-					msgPart += row;
-				}
-				else
-				{
-					msgPart += "~" + row;
-				}
-
-				i++;
-			}
-
-			final int size = msgPart.length();
-			out.write(msg.getBytes("UTF-8"));
-			final byte[] buff = new byte[4];
-			buff[0] = (byte)(size >> 24);
-			buff[1] = (byte)((size & 0x00FF0000) >> 16);
-			buff[2] = (byte)((size & 0x0000FF00) >> 8);
-			buff[3] = (byte)((size & 0x000000FF));
-			out.write(buff);
-			out.write(msgPart.getBytes("UTF-8"));
-		}
-	}
-
+	
 	private static void sendNodesToCoords() throws IOException
 	{
 		for (final Socket sock : sockets.values())
@@ -3160,16 +2325,6 @@ public class CatalogCode
 						out.println("\t\tputString(bb, \"" + token + "\");");
 					}
 				}
-				else if (type.equals("VARBINARY"))
-				{
-					// always assumes it varchar
-					if (!token.equals("null"))
-					{
-						out.println("\t\tbb.putInt(" + (token.length() + 4) + ");");
-						out.println("\t\tbb.putInt(" + token.length() + ");");
-						out.println("\t\tputString(bb, \"" + token + "\");");
-					}
-				}
 				else
 				{
 					HRDBMSWorker.logger.error("Unknown type: " + type);
@@ -3268,15 +2423,6 @@ public class CatalogCode
 					if (!token.equals("null"))
 					{
 						off -= (4 + token.length());
-					}
-				}
-				else if (type.equals("VARBINARY"))
-				{
-					out.println("\t\tbb.putInt(Page.BLOCK_SIZE - " + off + ");");
-					// always assumes it varchar
-					if (!token.equals("null"))
-					{
-						off -= (8 + token.length());
 					}
 				}
 				else

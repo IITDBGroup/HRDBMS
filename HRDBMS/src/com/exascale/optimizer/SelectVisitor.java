@@ -81,6 +81,13 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T> {
 	T visitSelectClause(@NotNull SelectParser.SelectClauseContext ctx);
 
 	/**
+	 * Visit a parse tree produced by {@link SelectParser#remainder}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitRemainder(@NotNull SelectParser.RemainderContext ctx);
+
+	/**
 	 * Visit a parse tree produced by {@link SelectParser#JoinP}.
 	 * @param ctx the parse tree
 	 * @return the visitor result
@@ -123,18 +130,18 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T> {
 	T visitTable2Part(@NotNull SelectParser.Table2PartContext ctx);
 
 	/**
-	 * Visit a parse tree produced by {@link SelectParser#dropView}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitDropView(@NotNull SelectParser.DropViewContext ctx);
-
-	/**
 	 * Visit a parse tree produced by {@link SelectParser#Col1Part}.
 	 * @param ctx the parse tree
 	 * @return the visitor result
 	 */
 	T visitCol1Part(@NotNull SelectParser.Col1PartContext ctx);
+
+	/**
+	 * Visit a parse tree produced by {@link SelectParser#dropView}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitDropView(@NotNull SelectParser.DropViewContext ctx);
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#singleTable}.
@@ -214,6 +221,13 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T> {
 	T visitDropTable(@NotNull SelectParser.DropTableContext ctx);
 
 	/**
+	 * Visit a parse tree produced by {@link SelectParser#groupExp}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitGroupExp(@NotNull SelectParser.GroupExpContext ctx);
+
+	/**
 	 * Visit a parse tree produced by {@link SelectParser#Table1Part}.
 	 * @param ctx the parse tree
 	 * @return the visitor result
@@ -254,6 +268,13 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T> {
 	 * @return the visitor result
 	 */
 	T visitIndexDef(@NotNull SelectParser.IndexDefContext ctx);
+
+	/**
+	 * Visit a parse tree produced by {@link SelectParser#load}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitLoad(@NotNull SelectParser.LoadContext ctx);
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#notNull}.
@@ -305,6 +326,13 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T> {
 	T visitUpdate(@NotNull SelectParser.UpdateContext ctx);
 
 	/**
+	 * Visit a parse tree produced by {@link SelectParser#groupDef}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitGroupDef(@NotNull SelectParser.GroupDefContext ctx);
+
+	/**
 	 * Visit a parse tree produced by {@link SelectParser#createTable}.
 	 * @param ctx the parse tree
 	 * @return the visitor result
@@ -317,6 +345,13 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T> {
 	 * @return the visitor result
 	 */
 	T visitNumericLiteral(@NotNull SelectParser.NumericLiteralContext ctx);
+
+	/**
+	 * Visit a parse tree produced by {@link SelectParser#nodeExp}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitNodeExp(@NotNull SelectParser.NodeExpContext ctx);
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#NullExp}.
@@ -375,18 +410,18 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T> {
 	T visitHavingClause(@NotNull SelectParser.HavingClauseContext ctx);
 
 	/**
-	 * Visit a parse tree produced by {@link SelectParser#SortKeyCol}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitSortKeyCol(@NotNull SelectParser.SortKeyColContext ctx);
-
-	/**
 	 * Visit a parse tree produced by {@link SelectParser#correlationClause}.
 	 * @param ctx the parse tree
 	 * @return the visitor result
 	 */
 	T visitCorrelationClause(@NotNull SelectParser.CorrelationClauseContext ctx);
+
+	/**
+	 * Visit a parse tree produced by {@link SelectParser#SortKeyCol}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitSortKeyCol(@NotNull SelectParser.SortKeyColContext ctx);
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#long2}.
@@ -424,11 +459,25 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T> {
 	T visitStringLiteral(@NotNull SelectParser.StringLiteralContext ctx);
 
 	/**
+	 * Visit a parse tree produced by {@link SelectParser#runstats}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitRunstats(@NotNull SelectParser.RunstatsContext ctx);
+
+	/**
 	 * Visit a parse tree produced by {@link SelectParser#PExpression}.
 	 * @param ctx the parse tree
 	 * @return the visitor result
 	 */
 	T visitPExpression(@NotNull SelectParser.PExpressionContext ctx);
+
+	/**
+	 * Visit a parse tree produced by {@link SelectParser#deviceExp}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitDeviceExp(@NotNull SelectParser.DeviceExpContext ctx);
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#Function}.
@@ -457,6 +506,13 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T> {
 	 * @return the visitor result
 	 */
 	T visitExpSelect(@NotNull SelectParser.ExpSelectContext ctx);
+
+	/**
+	 * Visit a parse tree produced by {@link SelectParser#rangeExp}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitRangeExp(@NotNull SelectParser.RangeExpContext ctx);
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#dataType}.

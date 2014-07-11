@@ -10,6 +10,7 @@ import com.exascale.compression.CompressedSocket;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MurmurHash;
+import com.exascale.tables.Transaction;
 
 public final class NetworkHashAndSendOperator extends NetworkSendOperator
 {
@@ -23,12 +24,12 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 	private boolean error = false;
 	private String errorText;
 
-	public NetworkHashAndSendOperator(ArrayList<String> hashCols, long numNodes, int id, int starting, MetaData meta)
+	public NetworkHashAndSendOperator(ArrayList<String> hashCols, long numNodes, int id, int starting, MetaData meta, Transaction tx) throws Exception
 	{
 		this.hashCols = hashCols;
-		if (numNodes > meta.getNumNodes())
+		if (numNodes > meta.getNumNodes(tx))
 		{
-			this.numNodes = meta.getNumNodes();
+			this.numNodes = meta.getNumNodes(tx);
 		}
 		else
 		{
@@ -65,11 +66,20 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 	@Override
 	public NetworkHashAndSendOperator clone()
 	{
-		final NetworkHashAndSendOperator retval = new NetworkHashAndSendOperator(hashCols, numNodes, id, starting, meta);
-		retval.node = this.node;
-		retval.numParents = numParents;
-		retval.numpSet = numpSet;
-		return retval;
+		try
+		{
+			Transaction tx = new Transaction(Transaction.ISOLATION_RR);
+			final NetworkHashAndSendOperator retval = new NetworkHashAndSendOperator(hashCols, numNodes, id, starting, meta, tx);
+			tx.commit();
+			retval.node = this.node;
+			retval.numParents = numParents;
+			retval.numpSet = numpSet;
+			return retval;
+		}
+		catch(Exception e)
+		{
+			return null;
+		}
 	}
 
 	@Override

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import com.exascale.managers.HRDBMSWorker;
+import com.exascale.tables.Transaction;
 
 public final class Phase5
 {
@@ -11,10 +12,12 @@ public final class Phase5
 
 	private final MetaData meta;
 	private final HashMap<Operator, Long> cCache = new HashMap<Operator, Long>();
+	private Transaction tx;
 
-	public Phase5(RootOperator root)
+	public Phase5(RootOperator root, Transaction tx)
 	{
 		this.root = root;
+		this.tx = tx;
 		meta = root.getMeta();
 	}
 
@@ -43,7 +46,7 @@ public final class Phase5
 
 		if (op instanceof AntiJoinOperator)
 		{
-			final long retval = (long)((1 - meta.likelihood(((AntiJoinOperator)op).getHSHM(), root)) * card(op.children().get(0)));
+			final long retval = (long)((1 - meta.likelihood(((AntiJoinOperator)op).getHSHM(), root, tx, op)) * card(op.children().get(0)));
 			cCache.put(op, retval);
 			return retval;
 		}
@@ -92,7 +95,7 @@ public final class Phase5
 
 		if (op instanceof HashJoinOperator)
 		{
-			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((HashJoinOperator)op).getHSHM(), root));
+			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((HashJoinOperator)op).getHSHM(), root, tx, op));
 			cCache.put(op, retval);
 			return retval;
 		}
@@ -117,7 +120,7 @@ public final class Phase5
 		if (op instanceof MultiOperator)
 		{
 			// return card(op.children().get(0));
-			final long groupCard = meta.getColgroupCard(((MultiOperator)op).getKeys(), root);
+			final long groupCard = meta.getColgroupCard(((MultiOperator)op).getKeys(), root, tx, op);
 			if (groupCard > card(op.children().get(0)))
 			{
 				final long retval = card(op.children().get(0));
@@ -132,7 +135,7 @@ public final class Phase5
 
 		if (op instanceof NestedLoopJoinOperator)
 		{
-			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((NestedLoopJoinOperator)op).getHSHM(), root));
+			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((NestedLoopJoinOperator)op).getHSHM(), root, tx, op));
 			cCache.put(op, retval);
 			return retval;
 		}
@@ -207,14 +210,14 @@ public final class Phase5
 
 		if (op instanceof SelectOperator)
 		{
-			final long retval = (long)(((SelectOperator)op).likelihood(root) * card(op.children().get(0)));
+			final long retval = (long)(((SelectOperator)op).likelihood(root, tx) * card(op.children().get(0)));
 			cCache.put(op, retval);
 			return retval;
 		}
 
 		if (op instanceof SemiJoinOperator)
 		{
-			final long retval = (long)(meta.likelihood(((SemiJoinOperator)op).getHSHM(), root) * card(op.children().get(0)));
+			final long retval = (long)(meta.likelihood(((SemiJoinOperator)op).getHSHM(), root, tx, op) * card(op.children().get(0)));
 			cCache.put(op, retval);
 			return retval;
 		}
@@ -276,7 +279,7 @@ public final class Phase5
 			{
 				if (op.children().size() == 0)
 				{
-					final long retval = (long)(meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable()) * meta.likelihood(hshm, root) * (1.0 / ((TableScanOperator)op).getNumNodes()));
+					final long retval = (long)(meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx) * meta.likelihood(hshm, root, tx, op) * (1.0 / ((TableScanOperator)op).getNumNodes()));
 					cCache.put(op, retval);
 					return retval;
 				}
@@ -293,10 +296,10 @@ public final class Phase5
 						double sum = 0;
 						for (final Operator x : op.children().get(0).children())
 						{
-							double l = meta.likelihood(((IndexOperator)x).getFilter(), root);
+							double l = meta.likelihood(((IndexOperator)x).getFilter(), root, tx, op);
 							for (final Filter f : ((IndexOperator)x).getSecondary())
 							{
-								l *= meta.likelihood(f, root);
+								l *= meta.likelihood(f, root, tx, op);
 							}
 
 							sum += l;
@@ -308,7 +311,7 @@ public final class Phase5
 						}
 
 						op = origOp;
-						final long retval = (long)(meta.likelihood(hshm, root) * sum * (1.0 / ((TableScanOperator)op).getNumNodes()) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable()));
+						final long retval = (long)(meta.likelihood(hshm, root, tx, op) * sum * (1.0 / ((TableScanOperator)op).getNumNodes()) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx));
 						cCache.put(op, retval);
 						return retval;
 					}
@@ -320,10 +323,10 @@ public final class Phase5
 							double sum = 0;
 							for (final Operator y : x.children())
 							{
-								double l = meta.likelihood(((IndexOperator)y).getFilter(), root);
+								double l = meta.likelihood(((IndexOperator)y).getFilter(), root, tx, op);
 								for (final Filter f : ((IndexOperator)y).getSecondary())
 								{
-									l *= meta.likelihood(f, root);
+									l *= meta.likelihood(f, root, tx, op);
 								}
 
 								sum += l;
@@ -338,7 +341,7 @@ public final class Phase5
 						}
 
 						op = origOp;
-						final long retval = (long)(meta.likelihood(hshm, root) * z * (1.0 / ((TableScanOperator)op).getNumNodes()) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable()));
+						final long retval = (long)(meta.likelihood(hshm, root, tx, op) * z * (1.0 / ((TableScanOperator)op).getNumNodes()) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx));
 						cCache.put(op, retval);
 						return retval;
 					}
@@ -347,7 +350,7 @@ public final class Phase5
 
 			if (op.children().size() == 0)
 			{
-				final long retval = (long)((1.0 / ((TableScanOperator)op).getNumNodes()) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable()));
+				final long retval = (long)((1.0 / ((TableScanOperator)op).getNumNodes()) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx));
 				cCache.put(op, retval);
 				return retval;
 			}
@@ -364,10 +367,10 @@ public final class Phase5
 					double sum = 0;
 					for (final Operator x : op.children().get(0).children())
 					{
-						double l = meta.likelihood(((IndexOperator)x).getFilter(), root);
+						double l = meta.likelihood(((IndexOperator)x).getFilter(), root, tx, op);
 						for (final Filter f : ((IndexOperator)x).getSecondary())
 						{
-							l *= meta.likelihood(f, root);
+							l *= meta.likelihood(f, root, tx, op);
 						}
 
 						sum += l;
@@ -379,7 +382,7 @@ public final class Phase5
 					}
 
 					op = origOp;
-					final long retval = (long)(sum * (1.0 / ((TableScanOperator)op).getNumNodes()) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable()));
+					final long retval = (long)(sum * (1.0 / ((TableScanOperator)op).getNumNodes()) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx));
 					cCache.put(op, retval);
 					return retval;
 				}
@@ -391,10 +394,10 @@ public final class Phase5
 						double sum = 0;
 						for (final Operator y : x.children())
 						{
-							double l = meta.likelihood(((IndexOperator)y).getFilter(), root);
+							double l = meta.likelihood(((IndexOperator)y).getFilter(), root, tx, op);
 							for (final Filter f : ((IndexOperator)y).getSecondary())
 							{
-								l *= meta.likelihood(f, root);
+								l *= meta.likelihood(f, root, tx, op);
 							}
 
 							sum += l;
@@ -409,7 +412,7 @@ public final class Phase5
 					}
 
 					op = origOp;
-					final long retval = (long)(z * (1.0 / ((TableScanOperator)op).getNumNodes()) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable()));
+					final long retval = (long)(z * (1.0 / ((TableScanOperator)op).getNumNodes()) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx));
 					cCache.put(op, retval);
 					return retval;
 				}
@@ -600,7 +603,7 @@ public final class Phase5
 		return clone;
 	}
 
-	private void compoundIndexes(TableScanOperator table)
+	private void compoundIndexes(TableScanOperator table) throws Exception
 	{
 		if (table.children().get(0) instanceof UnionOperator)
 		{
@@ -619,7 +622,7 @@ public final class Phase5
 			cols.addAll(index.getReferencedCols());
 		}
 
-		Index index = meta.getBestCompoundIndex(cols, table.getSchema(), table.getTable());
+		Index index = meta.getBestCompoundIndex(cols, table.getSchema(), table.getTable(), tx);
 		while (cols.size() > 0 && index != null)
 		{
 			for (final Operator op : table.children().get(0).children())
@@ -648,7 +651,7 @@ public final class Phase5
 			}
 
 			cols.removeAll(index.getCols());
-			index = meta.getBestCompoundIndex(cols, table.getSchema(), table.getTable());
+			index = meta.getBestCompoundIndex(cols, table.getSchema(), table.getTable(), tx);
 		}
 	}
 
@@ -770,7 +773,7 @@ public final class Phase5
 				//System.out.println(meta.likelihood(((HashJoinOperator)op).getHSHM(), root) * leftCard);
 				// System.out.println("Before multiplier: " +
 				// meta.likelihood(((HashJoinOperator)op).getHSHM(), root));
-				if (leftCard < rightCard && meta.likelihood(((HashJoinOperator)op).getHSHM(), root) * leftCard <= 1.0 / 400.0)
+				if (leftCard < rightCard && meta.likelihood(((HashJoinOperator)op).getHSHM(), root, tx, op) * leftCard <= 1.0 / 400.0)
 				{
 					retval.add(op);
 				}
@@ -808,7 +811,7 @@ public final class Phase5
 					//System.out.println(meta.likelihood(hshm, root) * leftCard);
 					// System.out.println("Before multiplier: " +
 					// meta.likelihood(hshm, root));
-					if (leftCard < rightCard && meta.likelihood(hshm, root) * leftCard <= 1.0 / 400.0)
+					if (leftCard < rightCard && meta.likelihood(hshm, root, tx, op) * leftCard <= 1.0 / 400.0)
 					{
 						retval.add(op);
 					}
@@ -847,7 +850,7 @@ public final class Phase5
 					//System.out.println(meta.likelihood(hshm, root) * leftCard);
 					// System.out.println("Before multiplier: " +
 					// meta.likelihood(hshm, root));
-					if (leftCard < rightCard && meta.likelihood(hshm, root) * leftCard <= 1.0 / 400.0)
+					if (leftCard < rightCard && meta.likelihood(hshm, root, tx, op) * leftCard <= 1.0 / 400.0)
 					{
 						retval.add(op);
 					}
@@ -886,7 +889,7 @@ public final class Phase5
 					//System.out.println(meta.likelihood(hshm, root) * leftCard);
 					// System.out.println("Before multiplier: " +
 					// meta.likelihood(hshm, root));
-					if (leftCard < rightCard && meta.likelihood(hshm, root) * leftCard <= 1.0 / 400.0)
+					if (leftCard < rightCard && meta.likelihood(hshm, root, tx, op) * leftCard <= 1.0 / 400.0)
 					{
 						retval.add(op);
 					}
@@ -973,7 +976,7 @@ public final class Phase5
 		}
 
 		final TableScanOperator table = getTables(op.children().get(1)).get(0);
-		final ArrayList<Index> indexes = meta.getIndexesForTable(table.getSchema(), table.getTable());
+		final ArrayList<Index> indexes = meta.getIndexesForTable(table.getSchema(), table.getTable(), tx);
 		final Index index = this.getIndexFor(indexes, cols);
 
 		// if index is already being used, set it to run delayed and return
@@ -1181,9 +1184,9 @@ public final class Phase5
 		}
 	}
 
-	private ArrayList<Operator> getJoins(Operator op)
+	private ArrayList<Operator> getJoins(Operator op) throws Exception
 	{
-		final ArrayList<Operator> retval = new ArrayList<Operator>(meta.getNumNodes());
+		final ArrayList<Operator> retval = new ArrayList<Operator>(meta.getNumNodes(tx));
 		if (op instanceof HashJoinOperator || op instanceof NestedLoopJoinOperator || op instanceof SemiJoinOperator || op instanceof AntiJoinOperator)
 		{
 			retval.add(op);
@@ -1214,7 +1217,7 @@ public final class Phase5
 		return retval;
 	}
 
-	private ArrayList<TableScanOperator> getTableScans(Operator op)
+	private ArrayList<TableScanOperator> getTableScans(Operator op) throws Exception
 	{
 		ArrayList<TableScanOperator> retval = null;
 		if (op instanceof TableScanOperator)
@@ -1224,7 +1227,7 @@ public final class Phase5
 			return retval;
 		}
 
-		retval = new ArrayList<TableScanOperator>(meta.getNumNodes());
+		retval = new ArrayList<TableScanOperator>(meta.getNumNodes(tx));
 		for (final Operator o : op.children())
 		{
 			retval.addAll(getTableScans(o));
@@ -1274,7 +1277,7 @@ public final class Phase5
 			reverseUpdateReferences(op.children().get(1), cols);
 
 			final TableScanOperator table = getTables(op.children().get(1)).get(0);
-			final ArrayList<Index> indexes = meta.getIndexesForTable(table.getSchema(), table.getTable());
+			final ArrayList<Index> indexes = meta.getIndexesForTable(table.getSchema(), table.getTable(), tx);
 			final Index index = this.getIndexFor(indexes, cols);
 			if (index == null)
 			{
@@ -1335,7 +1338,7 @@ public final class Phase5
 			HashMap<String, String> cols2Types = null;
 			try
 			{
-				cols2Types = meta.getCols2TypesForTable(table.getSchema(), table.getTable());
+				cols2Types = meta.getCols2TypesForTable(table.getSchema(), table.getTable(), tx);
 			}
 			catch (final Exception e)
 			{
@@ -1821,7 +1824,7 @@ public final class Phase5
 	{
 		final HashSet<HashMap<Filter, Filter>> hshm = cnf.getHSHM();
 		// System.out.println("HSHM is " + hshm);
-		final ArrayList<Index> available = meta.getIndexesForTable(schema, table);
+		final ArrayList<Index> available = meta.getIndexesForTable(schema, table, tx);
 		for (final HashMap<Filter, Filter> hm : (HashSet<HashMap<Filter, Filter>>)hshm.clone())
 		{
 			// System.out.println("Looking at " + hm);
@@ -1830,7 +1833,7 @@ public final class Phase5
 			double likely = 0;
 			for (final Filter f : hm.keySet())
 			{
-				final double l = meta.likelihood(f, root);
+				final double l = meta.likelihood(f, root, tx, tOp);
 				// System.out.println("Likelihood of " + f + " = " + l);
 				likely += l;
 			}
@@ -1864,7 +1867,7 @@ public final class Phase5
 
 						if (col.equals(col2))
 						{
-							likely *= meta.likelihood(f, root);
+							likely *= meta.likelihood(f, root, tx, tOp);
 						}
 					}
 				}
