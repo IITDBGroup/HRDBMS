@@ -47,7 +47,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	protected long start;
 	protected int node;
 	private final HashSet<ObjectAndField> printed = new HashSet<ObjectAndField>();
-	private Plan plan;
+	private transient Plan plan;
 	
 	public void setPlan(Plan plan)
 	{
@@ -176,6 +176,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 					for (final Operator op : children)
 					{
 						final NetworkSendOperator child = (NetworkSendOperator)op;
+						child.clearParent();
 						final CompressedSocket sock = new CompressedSocket(meta.getHostNameForNode(child.getNode()), WORKER_PORT);
 						socks.put(child, sock);
 						final OutputStream out = sock.getOutputStream();

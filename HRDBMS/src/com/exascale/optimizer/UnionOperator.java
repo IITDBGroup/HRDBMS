@@ -32,7 +32,7 @@ public final class UnionOperator implements Operator, Serializable
 	private volatile boolean inited = false;
 	private ArrayList<ReadThread> threads;
 	private boolean startDone = false;
-	private Plan plan;
+	private transient Plan plan;
 	private boolean estimateSet = false;
 	
 	public void setPlan(Plan plan)

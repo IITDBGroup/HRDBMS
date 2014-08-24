@@ -35,7 +35,10 @@ public class CheckpointManager extends HRDBMSThread
 			{
 				try
 				{
+					HRDBMSWorker.logger.debug("Checkpoint Manager is flushing all buffers");
 					BufferManager.flushAll();
+					LogManager.committed.clear();
+					LogManager.aborted.clear();
 				}
 				catch (final Exception e)
 				{

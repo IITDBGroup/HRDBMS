@@ -46,6 +46,11 @@ public final class MaxOperator implements AggregateOperator, Serializable
 			isDate = false;
 		}
 	}
+	
+	public void setInput(String col)
+	{
+		input = col;
+	}
 
 	@Override
 	public MaxOperator clone()
@@ -177,7 +182,7 @@ public final class MaxOperator implements AggregateOperator, Serializable
 		@Override
 		public Object getResult(ArrayList<Object> keys)
 		{
-			return maxes.get(keys);
+			return maxes.get(keys).get();
 		}
 
 		// @Parallel

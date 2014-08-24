@@ -2,7 +2,7 @@ package com.exascale.filesystem;
 
 import java.io.Serializable;
 
-public class RID implements Serializable
+public class RID implements Serializable, Comparable
 {
 	private int node = -1;
 	private int dev = -1;
@@ -17,8 +17,14 @@ public class RID implements Serializable
 		this.rec = rec;
 	}
 
-	public int compareTo(RID rhs)
+	public int compareTo(Object r)
 	{
+		if (!(r instanceof RID))
+		{
+			return -1;
+		}
+		
+		RID rhs = (RID)r;
 		if (node < rhs.node)
 		{
 			return -1;
@@ -117,5 +123,15 @@ public class RID implements Serializable
 	public void setRecord(int rec)
 	{
 		this.rec = rec;
+	}
+	
+	public String toString()
+	{
+		return node + ":" + dev + ":" + block + ":" + rec;
+	}
+	
+	public int hashCode()
+	{
+		return Integer.reverse(node) + Integer.reverse(dev) + Integer.reverse(block) + Integer.reverse(rec);
 	}
 }

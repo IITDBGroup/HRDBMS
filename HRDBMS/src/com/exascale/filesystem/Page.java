@@ -3,6 +3,7 @@ package com.exascale.filesystem;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import com.exascale.managers.BufferManager;
 import com.exascale.managers.FileManager;
@@ -19,13 +20,13 @@ public class Page
 	private long modifiedBy = -1;
 	private long timePinned = -1;
 	private long lsn;
-	private boolean readDone;
+	private AtomicBoolean readDone = new AtomicBoolean(false);
 
 	public Page()
 	{
 		try
 		{
-			this.contents = ByteBuffer.allocateDirect(BLOCK_SIZE);
+			this.contents = ByteBuffer.allocate(BLOCK_SIZE);
 		}
 		catch (final Throwable e)
 		{
@@ -34,7 +35,12 @@ public class Page
 			System.exit(1);
 		}
 		pins = new ConcurrentHashMap<Long, AtomicInteger>();
-		readDone = false;
+		readDone.set(false);
+	}
+	
+	public synchronized void setNotModified()
+	{
+		modifiedBy = -1;
 	}
 
 	public synchronized void assignToBlock(Block b, boolean log) throws IOException
@@ -49,7 +55,7 @@ public class Page
 			modifiedBy = -1;
 		}
 		blk = b;
-		readDone = false;
+		readDone.set(false);
 		FileManager.read(this, b, contents);
 		pins.clear();
 	}
@@ -66,25 +72,41 @@ public class Page
 
 	public synchronized byte get(int pos)
 	{
-		while (!readDone)
+		while (!readDone.get())
 		{
 		}
-		contents.position(pos);
-		return contents.get();
+		try
+		{
+			contents.position(pos);
+			return contents.get();
+		}
+		catch(Exception e)
+		{
+			HRDBMSWorker.logger.debug("Error reading from page " + blk + " trying to read 1 byte at offset " + pos);
+			throw e;
+		}
 	}
 
-	public synchronized void get(int off, byte[] buff)
+	public synchronized void get(int off, byte[] buff) throws Exception
 	{
-		while (!readDone)
+		while (!readDone.get())
 		{
 		}
-		contents.position(off);
-		contents.get(buff);
+		try
+		{
+			contents.position(off);
+			contents.get(buff);
+		}
+		catch(Exception e)
+		{
+			HRDBMSWorker.logger.debug("Error reading from page " + blk + " trying to read " + buff.length + " bytes at offset " + off);
+			throw e;
+		}
 	}
 
 	public synchronized double getDouble(int off)
 	{
-		while (!readDone)
+		while (!readDone.get())
 		{
 		}
 		contents.position(off);
@@ -93,7 +115,7 @@ public class Page
 
 	public synchronized float getFloat(int off)
 	{
-		while (!readDone)
+		while (!readDone.get())
 		{
 		}
 		contents.position(off);
@@ -102,7 +124,7 @@ public class Page
 
 	public synchronized int getInt(int pos)
 	{
-		while (!readDone)
+		while (!readDone.get())
 		{
 		}
 		contents.position(pos);
@@ -111,7 +133,7 @@ public class Page
 
 	public synchronized long getLong(int pos)
 	{
-		while (!readDone)
+		while (!readDone.get())
 		{
 		}
 		contents.position(pos);
@@ -120,7 +142,7 @@ public class Page
 
 	public synchronized short getShort(int off)
 	{
-		while (!readDone)
+		while (!readDone.get())
 		{
 		}
 		contents.position(off);
@@ -144,7 +166,7 @@ public class Page
 
 	public boolean isReady()
 	{
-		return readDone;
+		return readDone.get();
 	}
 
 	public void pin(long lsn, long txnum)
@@ -172,7 +194,7 @@ public class Page
 
 	public synchronized byte[] read(int off, int length)
 	{
-		while (!readDone)
+		while (!readDone.get())
 		{
 		}
 		final byte[] retval = new byte[length];
@@ -188,19 +210,19 @@ public class Page
 
 	public void setReady()
 	{
-		readDone = true;
+		readDone.set(true);
 	}
 
 	public void unpin(long txnum)
 	{
-		synchronized (pins)
-		{
-			pins.remove(txnum);
-		}
+		pins.remove(txnum);
 	}
 
 	public synchronized void write(int off, byte[] data, long txnum, long lsn)
 	{
+		while (!readDone.get())
+		{
+		}
 		if (lsn > 0)
 		{
 			this.lsn = lsn;

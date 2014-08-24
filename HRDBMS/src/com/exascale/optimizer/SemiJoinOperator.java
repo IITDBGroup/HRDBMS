@@ -63,7 +63,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 	private final Vector<Operator> clones = new Vector<Operator>();
 	private final Vector<AtomicBoolean> lockVector = new Vector<AtomicBoolean>();
 	private final ReentrantLock thisLock = new ReentrantLock();
-	private Plan plan;
+	private transient Plan plan;
 	
 	public void setPlan(Plan plan)
 	{
@@ -1382,6 +1382,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 				{
 					// synchronized(buckets)
 					bucketsLock.lock();
+					try
 					{
 						if (i < buckets.size())
 						{
@@ -1401,6 +1402,11 @@ public final class SemiJoinOperator implements Operator, Serializable
 							bucketsLock.unlock();
 							o = null;
 						}
+					}
+					catch(Exception e)
+					{
+						bucketsLock.unlock();
+						throw e;
 					}
 				}
 

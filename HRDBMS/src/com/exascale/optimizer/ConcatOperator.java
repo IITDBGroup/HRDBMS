@@ -21,14 +21,14 @@ public final class ConcatOperator implements Operator, Serializable
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
 	private TreeMap<Integer, String> pos2Col;
-	private final String col1;
-	private final String col2;
+	private String col1;
+	private String col2;
 	private final String name;
 	private final MetaData meta;
 	private int node;
-	private Plan plan;
-	private int colPos1;
-	private int colPos2;
+	private transient Plan plan;
+	private Integer colPos1;
+	private Integer colPos2;
 	
 	public void setPlan(Plan plan)
 	{
@@ -59,7 +59,63 @@ public final class ConcatOperator implements Operator, Serializable
 				pos2Col = (TreeMap<Integer, String>)child.getPos2Col().clone();
 				pos2Col.put(pos2Col.size(), name);
 				colPos1 = cols2Pos.get(col1);
+				if (colPos1 == null)
+				{
+					int count = 0;
+					if (col1.startsWith("."))
+					{
+						col1 = col1.substring(1);
+						for (String col3 : cols2Pos.keySet())
+						{
+							String orig = col3;
+							if (col3.contains("."))
+							{
+								col3 = col3.substring(col3.indexOf('.') + 1);
+							}
+							
+							if (col3.equals(col1))
+							{
+								col1 = orig;
+								count++;
+								colPos1 = cols2Pos.get(orig);
+							}
+							
+							if (count > 1)
+							{
+								throw new Exception("Ambiguous column: " + col1);
+							}
+						}
+					}
+				}
 				colPos2 = cols2Pos.get(col2);
+				if (colPos2 == null)
+				{
+					int count = 0;
+					if (col2.startsWith("."))
+					{
+						col2 = col2.substring(1);
+						for (String col3 : cols2Pos.keySet())
+						{
+							String orig = col3;
+							if (col3.contains("."))
+							{
+								col3 = col3.substring(col3.indexOf('.') + 1);
+							}
+							
+							if (col3.equals(col2))
+							{
+								col2 = orig;
+								count++;
+								colPos2 = cols2Pos.get(orig);
+							}
+							
+							if (count > 1)
+							{
+								throw new Exception("Ambiguous column: " + col2);
+							}
+						}
+					}
+				}
 			}
 		}
 		else

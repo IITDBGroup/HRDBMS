@@ -31,7 +31,7 @@ public final class CreateIndexOperator implements Operator, Serializable
 	private TreeMap<Integer, String> pos2Col;
 	private Operator parent;
 	private int node;
-	private Plan plan;
+	private transient Plan plan;
 	private String schema;
 	private String table;
 	private boolean done = false;
@@ -58,6 +58,16 @@ public final class CreateIndexOperator implements Operator, Serializable
 		this.index = index;
 		this.defs = defs;
 		this.unique = unique;
+	}
+	
+	public String getSchema()
+	{
+		return schema;
+	}
+	
+	public String getTable()
+	{
+		return table;
 	}
 
 	@Override

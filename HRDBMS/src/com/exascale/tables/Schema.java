@@ -1,11 +1,13 @@
 package com.exascale.tables;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import com.exascale.exceptions.LockAbortException;
@@ -57,8 +59,8 @@ public class Schema
 	private byte[][] nullArray;
 	private int[][] offsetArray;
 	private Page p;
-	private Map<Integer, Integer> colIDToIndex;
-	private Map<RID, Integer> rowIDToIndex;
+	private Map<Integer, Integer> colIDToIndex = new HashMap<Integer, Integer>();
+	private Map<RID, Integer> rowIDToIndex = new HashMap<RID, Integer>();
 	private Transaction tx;
 
 	public Schema(Map<Integer, DataType> map)
@@ -93,8 +95,14 @@ public class Schema
 		int i = 0;
 		while (i < after.length)
 		{
-			offsetArray[index][i] = -1;
 			after[i] = (byte)0xFF;
+			i++;
+		}
+		
+		i = 0;
+		while (i < colIDListSize)
+		{
+			offsetArray[index][i] = -1;
 			i++;
 		}
 
@@ -136,8 +144,30 @@ public class Schema
 
 	public FieldValue getField(int rowIndex, int colIndex) throws Exception
 	{
-		final DataType dt = colTypes.get(colIDs[colIndex]);
-		final int type = dt.getType();
+		DataType dt = null;
+		int type;
+		
+		try
+		{
+			dt = colTypes.get(colIDs[colIndex]);
+			type = dt.getType();
+		}
+		catch(Exception e)
+		{
+			HRDBMSWorker.logger.warn("Unable to retrieve field", e);
+			HRDBMSWorker.logger.warn("We are on row " + rowIndex);
+			HRDBMSWorker.logger.warn("Looking for colIndex " + colIndex);
+			HRDBMSWorker.logger.warn("The colIDs array is ");
+			int i = 0;
+			while (i < colIDs.length)
+			{
+				HRDBMSWorker.logger.warn("" + colIDs[i]);
+				i++;
+			}
+			
+			HRDBMSWorker.logger.warn("ColTypes is " + colTypes);
+			throw e;
+		}
 
 		if (type == DataType.BIGINT)
 		{
@@ -201,7 +231,19 @@ public class Schema
 
 	public Row getRow(RID id)
 	{
-		return new Row(rowIDToIndex.get(id));
+		try
+		{
+			Row row = new Row(rowIDToIndex.get(id));
+			return row;
+		}
+		catch(Exception e)
+		{
+			HRDBMSWorker.logger.debug("", e);
+			HRDBMSWorker.logger.debug("Failed to find a row by RID");
+			HRDBMSWorker.logger.debug("We were looking for " + id);
+			HRDBMSWorker.logger.debug("The page contains " + rowIDToIndex);
+			return null;
+		}
 	}
 
 	public RID insertRow(FieldValue[] vals) throws LockAbortException, UnsupportedEncodingException, IOException, RecNumOverflowException, Exception
@@ -238,8 +280,7 @@ public class Schema
 			}
 
 			final byte[] before = new byte[length];
-			p.buffer().position(off);
-			p.buffer().get(before);
+			p.get(off, before);
 			final LogRec rec = tx.insert(before, after, off, p.block()); // write
 																			// log
 																			// rec
@@ -283,7 +324,7 @@ public class Schema
 					return newPage.insertRow(vals);
 				}
 
-				blockNum = findPage(blockNum, length); // find blocks before
+				blockNum = findPage(blockNum, length); // find blocks after
 														// this num
 			}
 
@@ -402,7 +443,16 @@ public class Schema
 		freeSpaceListEntries = p.getInt(37);
 		int pos = 41;
 		int i = 0;
-		freeSpace = new FreeSpace[freeSpaceListEntries];
+		try
+		{
+			freeSpace = new FreeSpace[freeSpaceListEntries];
+		}
+		catch(Exception e)
+		{
+			HRDBMSWorker.logger.error("", e);
+			HRDBMSWorker.logger.error("Page = " + p.block().fileName() + ":" + p.block().number());
+			HRDBMSWorker.logger.error("freeSpaceListEntries = " + freeSpaceListEntries);
+		}
 		while (i < freeSpaceListEntries)
 		{
 			final int start = p.getInt(pos);
@@ -614,7 +664,17 @@ public class Schema
 
 	private Block addNewBlock(String fn, int[] colIDs) throws IOException, LockAbortException, Exception
 	{
-		final ByteBuffer buff = ByteBuffer.allocate(Page.BLOCK_SIZE);
+		final ByteBuffer oldBuff = ByteBuffer.allocate(Page.BLOCK_SIZE);
+		oldBuff.position(0);
+		int i = 0;
+		while (i < Page.BLOCK_SIZE)
+		{
+			oldBuff.putLong(-1);
+			i += 8;
+		}
+		final int newBlockNum = FileManager.addNewBlock(fn, oldBuff, tx);
+		
+		ByteBuffer buff = ByteBuffer.allocate(Page.BLOCK_SIZE);
 		buff.position(0);
 		buff.put(blockType);
 		buff.putInt(0); // nextRecNum
@@ -638,10 +698,26 @@ public class Schema
 		buff.putInt(0); // rowIDListSize - start of rowIDs
 		// null Array start
 		// offset array start
+		
+		Block bl = new Block(fn, newBlockNum);
+		LockManager.xLock(bl, tx.number());
+		tx.requestPage(bl);
+		Page p2 = null;
+		try
+		{
+			p2 = tx.getPage(bl);
+		}
+		catch(Exception e)
+		{
+			HRDBMSWorker.logger.error("", e);
+			throw e;
+		}
+		
+		InsertLogRec rec = tx.insert(oldBuff.array(), buff.array(), 0, bl);
+		p2.write(0, buff.array(), tx.number(), rec.lsn());
 
-		final int newBlockNum = FileManager.addNewBlock(fn, buff, tx);
 		addNewBlockToHeader(newBlockNum, colIDs[0]);
-		return new Block(fn, newBlockNum);
+		return bl;
 	}
 
 	// we just added a new block to the table, now register it in the header
@@ -683,7 +759,7 @@ public class Schema
 	{
 		if (freeSpace[0].getStart() < headSize)
 		{
-			if (freeSpace[0].getEnd() <= headSize)
+			if (freeSpace[0].getEnd() >= headSize)
 			{
 				freeSpace[0].setStart(headSize);
 				return;
@@ -774,7 +850,7 @@ public class Schema
 	private int findPage(int data) throws LockAbortException, Exception
 	{
 		Block blk = null;
-		final int i = 0;
+		int i = 0;
 		final String fn = p.block().fileName();
 		int block = -1;
 		while (i < HEADER_SIZE && block == -1)
@@ -789,6 +865,11 @@ public class Schema
 			}
 
 			block = hp.findPage(data);
+			if (block == 0)
+			{
+				return -1;
+			}
+			i++;
 		}
 
 		return block;
@@ -796,7 +877,8 @@ public class Schema
 
 	private int findPage(int after, int data) throws LockAbortException, Exception
 	{
-		final int i = after + 1;
+		after = after + 1;
+		int i = (after + 2) / (Page.BLOCK_SIZE / 4);
 		int block = -1;
 		while (i < HEADER_SIZE && block == -1)
 		{
@@ -805,7 +887,12 @@ public class Schema
 			{
 				return -1;
 			}
-			block = hp.findPage(data);
+			block = hp.findPage(data, after);
+			if (block == 0)
+			{
+				return -1;
+			}
+			i++;
 		}
 
 		return block;
@@ -814,7 +901,7 @@ public class Schema
 	private int findPage(int data, int colID, int colMarker) throws LockAbortException, Exception
 	{
 		Block blk = null;
-		final int i = 0;
+		int i = 0;
 		final String fn = p.block().fileName();
 		int block = -1;
 		while (i < HEADER_SIZE && block == -1)
@@ -828,6 +915,11 @@ public class Schema
 				return -1;
 			}
 			block = hp.findPage(data, colID, colMarker);
+			if (block == 0)
+			{
+				return -1;
+			}
+			i++;
 		}
 
 		return block;
@@ -835,7 +927,8 @@ public class Schema
 
 	private int findPage(int after, int data, int colID, int colMarker) throws LockAbortException, Exception
 	{
-		final int i = after + 1;
+		after = after + 1;
+		int i = (after + 1) / (Page.BLOCK_SIZE / 8);
 		int block = -1;
 		while (i < HEADER_SIZE && block == -1)
 		{
@@ -844,7 +937,12 @@ public class Schema
 			{
 				return -1;
 			}
-			block = hp.findPage(data, colID, colMarker);
+			block = hp.findPage(data, colID, colMarker, after);
+			if (block == 0)
+			{
+				return -1;
+			}
+			i++;
 		}
 
 		return block;
@@ -979,7 +1077,7 @@ public class Schema
 
 				if (off + length - 1 == fs.getEnd())
 				{
-					fs.setEnd(fs.getStart() - 1);
+					fs.setEnd(off - 1);
 					break;
 				}
 
@@ -1051,7 +1149,8 @@ public class Schema
 		System.arraycopy(ByteBuffer.allocate(4).putInt(this.nextRecNum).array(), 0, after, 0, 4);
 		// copy(after,4, ByteBuffer.allocate(4).putInt(before.length -
 		// 1).array()); //headEnd
-		System.arraycopy(ByteBuffer.allocate(4).putInt(before.length - 1).array(), 0, after, 4, 4);
+		System.arraycopy(ByteBuffer.allocate(4).putInt(before.length-1).array(), 0, after, 4, 4);
+		headEnd = before.length - 1;
 		// copy(after,8, ByteBuffer.allocate(4).putInt(this.dataStart).array());
 		// //dataStart
 		System.arraycopy(ByteBuffer.allocate(4).putInt(this.dataStart).array(), 0, after, 8, 4);
@@ -1060,9 +1159,9 @@ public class Schema
 		System.arraycopy(ByteBuffer.allocate(8).putLong(this.modTime).array(), 0, after, 12, 8);
 		// copy(after,32,
 		// ByteBuffer.allocate(4).putInt(freeSpaceListEntries).array());
-		System.arraycopy(ByteBuffer.allocate(4).putInt(freeSpaceListEntries).array(), 0, after, 32, 4);
+		System.arraycopy(ByteBuffer.allocate(4).putInt(freeSpaceListEntries).array(), 0, after, 36, 4);
 
-		int i = 36;
+		int i = 40;
 		for (final FreeSpace fs : freeSpace)
 		{
 			// copy(after, i,
@@ -1075,7 +1174,7 @@ public class Schema
 		}
 
 		// copy(after, 20, ByteBuffer.allocate(4).putInt(i).array());
-		System.arraycopy(ByteBuffer.allocate(4).putInt(i).array(), 0, after, 20, 4);
+		System.arraycopy(ByteBuffer.allocate(4).putInt(i+1).array(), 0, after, 24, 4); 
 		// copy(after, i, ByteBuffer.allocate(4).putInt(colIDListSize).array());
 		System.arraycopy(ByteBuffer.allocate(4).putInt(colIDListSize).array(), 0, after, i, 4);
 		i += 4;
@@ -1088,7 +1187,7 @@ public class Schema
 		}
 
 		// copy(after, 24, ByteBuffer.allocate(4).putInt(i).array());
-		System.arraycopy(ByteBuffer.allocate(4).putInt(i).array(), 0, after, 24, 4);
+		System.arraycopy(ByteBuffer.allocate(4).putInt(i+1).array(), 0, after, 28, 4);
 		// copy(after, i, ByteBuffer.allocate(4).putInt(rowIDListSize).array());
 		System.arraycopy(ByteBuffer.allocate(4).putInt(rowIDListSize).array(), 0, after, i, 4);
 		i += 4;
@@ -1109,9 +1208,8 @@ public class Schema
 			System.arraycopy(ByteBuffer.allocate(4).putInt(id.getRecNum()).array(), 0, after, i + 12, 4);
 			i += 16;
 		}
-
-		// copy(after, 16, ByteBuffer.allocate(4).putInt(i).array());
-		System.arraycopy(ByteBuffer.allocate(4).putInt(i).array(), 0, after, 16, 4);
+		
+		System.arraycopy(ByteBuffer.allocate(4).putInt(i+1).array(), 0, after, 20, 4); 
 
 		for (final byte[] row : nullArray)
 		{
@@ -1123,7 +1221,7 @@ public class Schema
 		}
 
 		// copy(after, 28, ByteBuffer.allocate(4).putInt(i).array());
-		System.arraycopy(ByteBuffer.allocate(4).putInt(i).array(), 0, after, 28, 4);
+		System.arraycopy(ByteBuffer.allocate(4).putInt(i+1).array(), 0, after, 32, 4);
 
 		for (final int[] row : offsetArray)
 		{
@@ -1270,13 +1368,18 @@ public class Schema
 
 			return 0;
 		}
+		
+		public String toString()
+		{
+			return "" + value;
+		}
 	}
 
 	public static class BinaryFV extends FieldValue
 	{
 		private byte[] value;
 
-		public BinaryFV(int row, int col, int len, Schema s)
+		public BinaryFV(int row, int col, int len, Schema s) throws Exception
 		{
 			super(row, col, s);
 
@@ -1285,6 +1388,11 @@ public class Schema
 				value = new byte[len];
 				s.p.get(off, value);
 			}
+		}
+		
+		public String toString()
+		{
+			return "" + value; //FIXME
 		}
 
 		@Override
@@ -1349,6 +1457,11 @@ public class Schema
 				this.value = val;
 			}
 		}
+		
+		public String toString()
+		{
+			return "" + value;
+		}
 
 		@Override
 		public MyDate getValue()
@@ -1393,7 +1506,7 @@ public class Schema
 		private final int length;
 		private byte[] bytes;
 
-		public DecimalFV(int row, int col, int length, int scale, Schema s)
+		public DecimalFV(int row, int col, int length, int scale, Schema s) throws Exception
 		{
 			super(row, col, s);
 			this.length = length;
@@ -1420,6 +1533,11 @@ public class Schema
 
 				value = new BigDecimal(temp, scale);
 			}
+		}
+		
+		public String toString()
+		{
+			return "" + value;
 		}
 
 		@Override
@@ -1483,6 +1601,11 @@ public class Schema
 			{
 				this.value = val;
 			}
+		}
+		
+		public String toString()
+		{
+			return "" + value;
 		}
 
 		@Override
@@ -1575,6 +1698,11 @@ public class Schema
 				value = s.p.getFloat(off);
 			}
 		}
+		
+		public String toString()
+		{
+			return "" + value;
+		}
 
 		@Override
 		public Float getValue()
@@ -1638,6 +1766,11 @@ public class Schema
 			{
 				this.value = val;
 			}
+		}
+		
+		public String toString()
+		{
+			return "" + value;
 		}
 
 		@Override
@@ -1756,6 +1889,11 @@ public class Schema
 				value = s.p.getShort(off);
 			}
 		}
+		
+		public String toString()
+		{
+			return "" + value;
+		}
 
 		@Override
 		public Short getValue()
@@ -1798,7 +1936,7 @@ public class Schema
 	{
 		private byte[] value;
 
-		public VarbinaryFV(int row, int col, Schema s)
+		public VarbinaryFV(int row, int col, Schema s) throws Exception
 		{
 			super(row, col, s);
 
@@ -1814,6 +1952,11 @@ public class Schema
 		public byte[] getValue()
 		{
 			return value;
+		}
+		
+		public String toString()
+		{
+			return "" + value; //FIXME
 		}
 
 		@Override
@@ -1898,6 +2041,11 @@ public class Schema
 				catch(Exception e)
 				{}
 			}
+		}
+		
+		public String toString()
+		{
+			return "" + value;
 		}
 
 		@Override

@@ -3,6 +3,7 @@ package com.exascale.logging;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.ArrayDeque;
 import java.util.Iterator;
 import java.util.LinkedList;
 import com.exascale.managers.HRDBMSWorker;
@@ -17,17 +18,20 @@ public class LogIterator implements Iterator<LogRec>
 
 	public LogIterator(String filename) throws IOException
 	{
-		synchronized (LogManager.noArchive) // disable archiving while we have
+		synchronized (LogManager.noArchiveLock) // disable archiving while we have
 											// an iterator open
 		{
 			LogManager.openIters++;
 			LogManager.noArchive = true;
 		}
 
-		final LinkedList<LogRec> log = LogManager.logs.get(filename);
-		if (log.size() > 0)
+		final ArrayDeque<LogRec> log = LogManager.logs.get(filename);
+		synchronized(log)
 		{
-			LogManager.flush(log.getLast().lsn(), filename);
+			if (log.size() > 0)
+			{
+				LogManager.flush(log.getLast().lsn(), filename);
+			}
 		}
 
 		fc = LogManager.getFile(filename);
@@ -51,7 +55,7 @@ public class LogIterator implements Iterator<LogRec>
 
 	public void close()
 	{
-		synchronized (LogManager.noArchive)
+		synchronized (LogManager.noArchiveLock)
 		{
 			LogManager.openIters--;
 

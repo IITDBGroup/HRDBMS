@@ -155,7 +155,14 @@ public final class Phase2
 		{
 			for (final ArrayList<Integer> nodeList : nodeLists)
 			{
-				t.addActiveNodeForParent(nodeList.get(t.getSingleNode()), o);
+				if (t.getSingleNode() == -1)
+				{
+					t.addActiveNodeForParent(-1, o);
+				}
+				else
+				{
+					t.addActiveNodeForParent(nodeList.get(t.getSingleNode()), o);
+				}
 			}
 			return;
 		}
@@ -291,14 +298,11 @@ public final class Phase2
 					{
 						// node is hash or range
 						// node is set or ALL
-						final ArrayList<Integer> nodeList = new ArrayList<Integer>(meta.getNumNodes(tx));
-						int i = 0;
-						while (i < meta.getNumNodes(tx))
+						ArrayList<Integer> nodeList = t.getNodeList();
+						if (nodeList.get(0) == MetaData.PartitionMetaData.NODE_ALL)
 						{
-							nodeList.add(i);
-							i++;
+							nodeList = MetaData.getNodesForTable(t.getSchema(), t.getTable(), tx);
 						}
-
 						final ArrayList<ArrayList<Integer>> nodeLists = new ArrayList<ArrayList<Integer>>(1);
 						nodeLists.add(nodeList);
 						setActiveNodes(t, filter, o, nodeLists);

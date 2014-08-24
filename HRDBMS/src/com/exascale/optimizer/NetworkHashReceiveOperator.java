@@ -39,6 +39,7 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 					for (final Operator op : children)
 					{
 						final NetworkSendOperator child = (NetworkSendOperator)op;
+						child.clearParent();
 						CompressedSocket sock = null;
 						try
 						{

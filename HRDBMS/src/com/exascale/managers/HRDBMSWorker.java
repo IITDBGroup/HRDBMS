@@ -9,6 +9,7 @@ import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.core.appender.FileAppender;
 import org.apache.logging.log4j.core.layout.PatternLayout;
 import com.exascale.misc.HParms;
+import com.exascale.optimizer.SQLParser;
 import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.StartCoordsThread;
 import com.exascale.threads.StartWorkersThread;
@@ -27,8 +28,6 @@ public class HRDBMSWorker
 	private static long bufferThread;
 	private static long logThread;
 	private static long resourceThread;
-	private static long checkpointThread;
-	private static long metaDataThread;
 	private static BlockingQueue<String> in = new LinkedBlockingQueue<String>(); // message
 																					// queue
 	private static AtomicLong THREAD_NUMBER = new AtomicLong(0);
@@ -103,6 +102,16 @@ public class HRDBMSWorker
 			logger.error("Could not load HParms", e);
 			System.exit(1);
 		}
+		
+		try
+		{
+			SQLParser bug = new SQLParser();
+		}
+		catch(Throwable e)
+		{
+			HRDBMSWorker.logger.fatal("Can't load SQLParser class", e);
+			System.exit(1);
+		}
 
 		/*
 		 * File f1 = new File("hrdbms.log"); f1.createNewFile(); PrintStream ps
@@ -117,22 +126,24 @@ public class HRDBMSWorker
 			threads[1] = addThread(startCoordinators());
 			waitOnThreads(threads, Thread.currentThread());
 			logger.info("Done starting all nodes.");
+			Thread.sleep(10000);
 		}
 
 		if (type == TYPE_MASTER || type == TYPE_COORD)
 		{
-			metaDataThread = addThread(new MetaDataManager());
+			addThread(new MetaDataManager());
 		}
 
 		new FileManager();
 		bufferThread = addThread(new BufferManager(true));
+		addThread(new XAManager());
+		connectionThread = addThread(new ConnectionManager());
 		logThread = addThread(new LogManager());
 		logger.info("Starting initialization of the Lock Manager.");
 		new LockManager();
 		logger.info("Lock Manager initialization complete.");
 		resourceThread = addThread(new ResourceManager());
-		connectionThread = addThread(new ConnectionManager());
-		checkpointThread = addThread(new CheckpointManager());
+		addThread(new CheckpointManager());
 		hibernate();
 	}
 
@@ -163,8 +174,11 @@ public class HRDBMSWorker
 					{
 						try
 						{
-							Thread.currentThread().wait();
-							break;
+							synchronized(Thread.currentThread())
+							{
+								Thread.currentThread().wait();
+								break;
+							}
 						}
 						catch (final InterruptedException e)
 						{
@@ -216,7 +230,7 @@ public class HRDBMSWorker
 		return new StartWorkersThread();
 	}
 
-	private static void terminateThread(long index)
+	public static void terminateThread(long index)
 	{
 		// if anyone is waiting on this thread, wait for Thread.getState() ==
 		// WAITING and notify them
@@ -228,7 +242,10 @@ public class HRDBMSWorker
 				while (thread.getState() != Thread.State.WAITING)
 				{
 				}
-				thread.notify();
+				synchronized(thread)
+				{
+					thread.notify();
+				}
 			}
 		}
 	}

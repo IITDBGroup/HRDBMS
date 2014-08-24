@@ -31,7 +31,7 @@ public class NetworkSendOperator implements Operator, Serializable
 	protected boolean started = false;
 	protected boolean numpSet = false;
 	private boolean cardSet = false;
-	private Plan plan;
+	private transient Plan plan;
 	
 	public void setPlan(Plan plan)
 	{

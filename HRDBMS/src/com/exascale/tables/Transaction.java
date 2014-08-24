@@ -2,6 +2,7 @@ package com.exascale.tables;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.exceptions.LockAbortException;
@@ -21,18 +22,21 @@ public class Transaction implements Serializable
 {
 	public static final int ISOLATION_RR = 0, ISOLATION_CS = 1, ISOLATION_UR = 2;
 	private static AtomicLong nextTxNum;
-	public static ConcurrentHashMap<Long, Long> txList = new ConcurrentHashMap<Long, Long>();
+	public static HashMap<Long, Long> txList = new HashMap<Long, Long>();
 	
 	static
 	{
 		try
 		{
-			nextTxNum = new AtomicLong(MetaData.myCoordNum());
+			nextTxNum = new AtomicLong(System.currentTimeMillis() * 1000);
+			while (nextTxNum.get() % MetaData.myCoordNum() != 0)
+			{
+				nextTxNum.getAndIncrement();
+			}
 		}
 		catch(Exception e)
 		{
-			HRDBMSWorker.logger.fatal("Exception during static initialization of Transaction", e);
-			System.exit(1);
+			HRDBMSWorker.logger.debug("", e);
 		}
 	}
 
@@ -47,9 +51,18 @@ public class Transaction implements Serializable
 
 	public Transaction(int level)
 	{
+		if (HRDBMSWorker.type == HRDBMSWorker.TYPE_WORKER)
+		{
+			Exception e = new Exception();
+			HRDBMSWorker.logger.fatal("A worker node asked for a new transaction number", e);
+			System.exit(1);
+		}
 		this.level = level;
 		txnum = nextTx();
-		txList.put(txnum, txnum);
+		synchronized(txList)
+		{
+			txList.put(txnum, txnum);
+		}
 		final LogRec rec = new StartLogRec(txnum);
 		LogManager.write(rec);
 	}
@@ -64,40 +77,75 @@ public class Transaction implements Serializable
 		Transaction tx = (Transaction)rhs;
 		return txnum == tx.txnum;
 	}
+	
+	public int hashCode()
+	{
+		return Long.valueOf(txnum).hashCode();
+	}
 
 	private static long nextTx()
 	{
 		return nextTxNum.getAndAdd(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("number_of_coords")));
 	}
 
-	public void commit() throws IOException
+	public void commit() throws Exception
 	{
-		BufferManager.unpinAll(txnum);
-		LogManager.commit(txnum);
-		LockManager.release(txnum);
-		txList.remove(txnum);
+		synchronized(txList)
+		{
+			if (txList.containsKey(txnum))
+			{
+				HRDBMSWorker.logger.debug("COMMIT: " + txnum);
+				BufferManager.unpinAll(txnum);
+				LogManager.commit(txnum);
+				LockManager.release(txnum);
+				txList.remove(txnum);
+			}
+		}
 	}
 	
 	public void tryCommit(String host) throws IOException
 	{
-		try
+		synchronized(txList)
 		{
-			LogManager.ready(txnum, host);
-		}
-		catch(Exception e)
-		{
-			LogManager.notReady(txnum);
-			throw new IOException();
+			if (txList.containsKey(txnum))
+			{
+				try
+				{
+					LogManager.ready(txnum, host);
+				}
+				catch(Exception e)
+				{
+					LogManager.notReady(txnum);
+					throw new IOException();
+				}
+			}
 		}
 	}
 
-	public DeleteLogRec delete(byte[] before, byte[] after, int off, Block b)
+	public DeleteLogRec delete(byte[] before, byte[] after, int off, Block b) throws Exception
 	{
+		synchronized(txList)
+		{
+			if (!txList.containsKey(txnum))
+			{
+				txList.put(txnum, txnum);
+				LogManager.writeStartRecIfNeeded(txnum);
+			}
+		}
 		return LogManager.delete(txnum, b, off, before, after);
 	}
 
 	public HeaderPage forceReadHeaderPage(Block b, int type) throws LockAbortException, Exception
 	{
+		synchronized(txList)
+		{
+			if (!txList.containsKey(txnum))
+			{
+				txList.put(txnum, txnum);
+				LogManager.writeStartRecIfNeeded(txnum);
+			}
+		}
+		
 		if (level == ISOLATION_RR || level == ISOLATION_CS)
 		{
 			LockManager.sLock(b, txnum);
@@ -120,8 +168,16 @@ public class Transaction implements Serializable
 		return level;
 	}
 
-	public InsertLogRec insert(byte[] before, byte[] after, int off, Block b)
+	public InsertLogRec insert(byte[] before, byte[] after, int off, Block b) throws Exception
 	{
+		synchronized(txList)
+		{
+			if (!txList.containsKey(txnum))
+			{
+				txList.put(txnum, txnum);
+				LogManager.writeStartRecIfNeeded(txnum);
+			}
+		}
 		return LogManager.insert(txnum, b, off, before, after);
 	}
 
@@ -132,6 +188,14 @@ public class Transaction implements Serializable
 
 	public void read(Block b, Schema schema) throws LockAbortException, Exception
 	{
+		synchronized(txList)
+		{
+			if (!txList.containsKey(txnum))
+			{
+				txList.put(txnum, txnum);
+				LogManager.writeStartRecIfNeeded(txnum);
+			}
+		}
 		if (level == ISOLATION_RR || level == ISOLATION_CS)
 		{
 			LockManager.sLock(b, txnum);
@@ -146,6 +210,14 @@ public class Transaction implements Serializable
 
 	public HeaderPage readHeaderPage(Block b, int type) throws LockAbortException, Exception
 	{
+		synchronized(txList)
+		{
+			if (!txList.containsKey(txnum))
+			{
+				txList.put(txnum, txnum);
+				LogManager.writeStartRecIfNeeded(txnum);
+			}
+		}
 		if (level == ISOLATION_RR || level == ISOLATION_CS)
 		{
 			LockManager.sLock(b, txnum);
@@ -170,13 +242,19 @@ public class Transaction implements Serializable
 		return retval;
 	}
 
-	public void requestPage(Block b)
+	public void requestPage(Block b) throws Exception
 	{
+		if (b.number() < 0)
+		{
+			Exception e = new Exception("Negative block number requested");
+			HRDBMSWorker.logger.debug("", e);
+			throw e;
+		}
 		while (true)
 		{
 			try
 			{
-				BufferManager.getInputQueue().put("REQUEST PAGE " + b.fileName() + "~" + b.number());
+				BufferManager.getInputQueue().put("REQUEST PAGE " + this.number() + "~" + b.fileName() + "~" + b.number());
 				break;
 			}
 			catch (final InterruptedException e)
@@ -186,9 +264,18 @@ public class Transaction implements Serializable
 		}
 	}
 
-	public void requestPages(Block[] bs)
+	public void requestPages(Block[] bs) throws Exception
 	{
-		String cmd = "REQUEST PAGES " + bs.length + "~";
+		for (Block b : bs)
+		{
+			if (b.number() < 0)
+			{
+				Exception e = new Exception("Negative block number requested");
+				HRDBMSWorker.logger.debug("", e);
+				throw e;
+			}
+		}
+		String cmd = "REQUEST PAGES " + this.number() + "~" + bs.length + "~";
 		for (final Block b : bs)
 		{
 			cmd += b.fileName() + "~" + b.number() + "~";
@@ -208,12 +295,19 @@ public class Transaction implements Serializable
 		}
 	}
 
-	public void rollback() throws IOException
+	public void rollback() throws Exception
 	{
-		BufferManager.unpinAll(txnum);
-		LogManager.rollback(txnum);
-		LockManager.release(txnum);
-		txList.remove(txnum);
+		synchronized(txList)
+		{
+			if (txList.containsKey(txnum))
+			{
+				HRDBMSWorker.logger.debug("ROLLBACK: " + txnum);
+				BufferManager.unpinAll(txnum);
+				LogManager.rollback(txnum);
+				LockManager.release(txnum);
+				txList.remove(txnum);
+			}
+		}
 	}
 
 	public void setIsolationLevel(int level)
@@ -228,6 +322,12 @@ public class Transaction implements Serializable
 
 	public Page getPage(Block b) throws Exception
 	{
+		if (b.number() < 0)
+		{
+			Exception e = new Exception("Negative block number requested");
+			HRDBMSWorker.logger.debug("", e);
+			throw e;
+		}
 		Page p = BufferManager.getPage(b);
 
 		int requests = 0;
@@ -252,7 +352,7 @@ public class Transaction implements Serializable
 			{
 				try
 				{
-					BufferManager.getInputQueue().put("REQUEST PAGE " + b.fileName() + "~" + b.number());
+					BufferManager.getInputQueue().put("REQUEST PAGE " + this.number() + "~" + b.fileName() + "~" + b.number());
 					break;
 				}
 				catch (final InterruptedException e)

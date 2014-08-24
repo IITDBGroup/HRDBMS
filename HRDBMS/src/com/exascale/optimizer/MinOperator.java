@@ -45,6 +45,11 @@ public final class MinOperator implements AggregateOperator, Serializable
 			this.isDate = false;
 		}
 	}
+	
+	public void setInput(String col)
+	{
+		input = col;
+	}
 
 	@Override
 	public MinOperator clone()
@@ -176,7 +181,7 @@ public final class MinOperator implements AggregateOperator, Serializable
 		@Override
 		public Object getResult(ArrayList<Object> keys)
 		{
-			return mins.get(keys);
+			return mins.get(keys).get();
 		}
 
 		// @Parallel

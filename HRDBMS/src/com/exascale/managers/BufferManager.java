@@ -47,13 +47,27 @@ public class BufferManager extends HRDBMSThread
 		referencedLookup = new TreeMap<Long, Block>();
 		unmodLookup = new TreeMap<Long, Block>();
 	}
-
-	public static synchronized int available()
+	
+	public static synchronized void throwAwayPage(String fn, int blockNum) throws Exception
 	{
-		return numAvailable;
+		Block b = new Block(fn, blockNum);
+		for (Page p : bp)
+		{
+			if (b.equals(p.block()))
+			{
+				p.setNotModified();
+				p.buffer().position(0);
+				int i = 0;
+				while (i < Page.BLOCK_SIZE)
+				{
+					p.buffer().putLong(-1);
+					i += 8;
+				}
+			}
+		}
 	}
 
-	public static void flushAll() throws IOException
+	public static synchronized void flushAll() throws IOException
 	{
 		for (final Page p : BufferManager.bp)
 		{
@@ -81,10 +95,19 @@ public class BufferManager extends HRDBMSThread
 			return null;
 		}
 
-		return bp[index];
+		Page retval = bp[index];
+		Block b2 = retval.block();
+		if (!b.equals(b2))
+		{
+			HRDBMSWorker.logger.fatal("The block " + b + " was requested, but the BufferManager is returning block " + b2);
+			System.exit(1);
+			return null;
+		}
+		
+		return retval;
 	}
 
-	public static synchronized void pin(Block b, long txnum) throws BufferPoolExhaustedException, IOException
+	public static synchronized void pin(Block b, long txnum) throws Exception
 	{
 		int index = findExistingPage(b);
 		if (index == -1)
@@ -110,12 +133,13 @@ public class BufferManager extends HRDBMSThread
 				pageLookup.remove(bp[index].block());
 			}
 			bp[index].assignToBlock(b, log);
+			if (pageLookup.containsKey(b))
+			{
+				Exception e = new Exception("About to put a duplicate page in the bufferpool");
+				HRDBMSWorker.logger.debug("", e);
+				throw e;
+			}
 			pageLookup.put(b, index);
-		}
-
-		if (!bp[index].isPinned())
-		{
-			numAvailable--;
 		}
 
 		if (bp[index].pinTime() != -1)
@@ -138,10 +162,6 @@ public class BufferManager extends HRDBMSThread
 	{
 		p.unpin(txnum);
 		myBuffers.multiRemove(txnum, p);
-		if (!p.isPinned())
-		{
-			numAvailable++;
-		}
 	}
 
 	public static synchronized void unpinAll(long txnum)
@@ -239,29 +259,43 @@ public class BufferManager extends HRDBMSThread
 
 	private void requestPage(String cmd)
 	{
-		cmd = cmd.substring((13));
-		final StringTokenizer tokens = new StringTokenizer(cmd, "~", false);
-		final long txnum = Long.parseLong(tokens.nextToken());
-		final String filename = tokens.nextToken();
-		final int number = Integer.parseInt(tokens.nextToken());
-		HRDBMSWorker.addThread(new IOThread(new Block(filename, number), txnum));
+		try
+		{
+			cmd = cmd.substring((13));
+			final StringTokenizer tokens = new StringTokenizer(cmd, "~", false);
+			final long txnum = Long.parseLong(tokens.nextToken());
+			final String filename = tokens.nextToken();
+			final int number = Integer.parseInt(tokens.nextToken());
+			HRDBMSWorker.addThread(new IOThread(new Block(filename, number), txnum));
+		}
+		catch(Exception e)
+		{
+			HRDBMSWorker.logger.warn("Error fetching pages", e);
+		}
 	}
 
 	private void requestPages(String cmd)
 	{
-		cmd = cmd.substring((14));
-		final StringTokenizer tokens = new StringTokenizer(cmd, "~", false);
-		final long txnum = Long.parseLong(tokens.nextToken());
-		final int numBlocks = Integer.parseInt(tokens.nextToken());
-		int i = 0;
-		final Block[] reqBlocks = new Block[numBlocks];
-		while (i < numBlocks)
+		try
 		{
-			final String filename = tokens.nextToken();
-			final int number = Integer.parseInt(tokens.nextToken());
-			reqBlocks[i] = new Block(filename, number);
-			i++;
+			cmd = cmd.substring((14));
+			final StringTokenizer tokens = new StringTokenizer(cmd, "~", false);
+			final long txnum = Long.parseLong(tokens.nextToken());
+			final int numBlocks = Integer.parseInt(tokens.nextToken());
+			int i = 0;
+			final Block[] reqBlocks = new Block[numBlocks];
+			while (i < numBlocks)
+			{
+				final String filename = tokens.nextToken();
+				final int number = Integer.parseInt(tokens.nextToken());
+				reqBlocks[i] = new Block(filename, number);
+				i++;
+			}
+			HRDBMSWorker.addThread(new IOThread(reqBlocks, txnum));
 		}
-		HRDBMSWorker.addThread(new IOThread(reqBlocks, txnum));
+		catch(Exception e)
+		{
+			HRDBMSWorker.logger.warn("Error fetching pages", e);
+		}
 	}
 }

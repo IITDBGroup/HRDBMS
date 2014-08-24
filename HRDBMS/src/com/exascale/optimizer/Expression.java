@@ -37,7 +37,7 @@ public class Expression
 		}
 		else
 		{
-			if (!rhs.literal.equals(literal))
+			if (!literal.equals(rhs.literal))
 			{
 				return false;
 			}
@@ -57,7 +57,7 @@ public class Expression
 		}
 		else
 		{
-			if (!rhs.column.equals(column))
+			if (!column.equals(rhs.column))
 			{
 				return false;
 			}
@@ -82,7 +82,7 @@ public class Expression
 		}
 		else
 		{
-			if (!rhs.function.equals(function))
+			if (!function.equals(rhs.function))
 			{
 				return false;
 			}
@@ -107,7 +107,7 @@ public class Expression
 		}
 		else
 		{
-			if (!rhs.lhs.equals(lhs))
+			if (!lhs.equals(rhs.lhs))
 			{
 				return false;
 			}
@@ -122,7 +122,7 @@ public class Expression
 		}
 		else
 		{
-			if (!rhs.rhs.equals(this.rhs))
+			if (!this.rhs.equals(rhs.rhs))
 			{
 				return false;
 			}
@@ -137,7 +137,7 @@ public class Expression
 		}
 		else
 		{
-			if (!rhs.op.equals(op))
+			if (!op.equals(rhs.op))
 			{
 				return false;
 			}
@@ -152,7 +152,7 @@ public class Expression
 		}
 		else
 		{
-			if (!rhs.list.equals(list))
+			if (!list.equals(rhs.list))
 			{
 				return false;
 			}

@@ -37,7 +37,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	private int node;
 	private int rightChildCard = 16;
 	private boolean cardSet = false;
-	private Plan plan;
+	private transient Plan plan;
 	
 	public void setPlan(Plan plan)
 	{

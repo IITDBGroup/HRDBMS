@@ -94,6 +94,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 					for (final Operator op : children)
 					{
 						final NetworkSendOperator child = (NetworkSendOperator)op;
+						child.clearParent();
 						CompressedSocket sock = null;
 						try
 						{

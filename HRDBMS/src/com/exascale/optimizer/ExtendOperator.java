@@ -35,7 +35,7 @@ public final class ExtendOperator implements Operator, Serializable
 	private BufferedLinkedBlockingQueue queue;
 	private volatile ArrayList<Integer> poses;
 	private volatile boolean startDone = false;
-	private Plan plan;
+	private transient Plan plan;
 	
 	public void setPlan(Plan plan)
 	{
@@ -154,9 +154,39 @@ public final class ExtendOperator implements Operator, Serializable
 		final FastStringTokenizer tokens = new FastStringTokenizer(prefix, ",", false);
 		while (tokens.hasMoreTokens())
 		{
-			final String temp = tokens.nextToken();
-			if (Character.isLetter(temp.charAt(0)) || (temp.charAt(0) == '_'))
+			String temp = tokens.nextToken();
+			if (Character.isLetter(temp.charAt(0)) || (temp.charAt(0) == '_') || temp.charAt(0) == '.')
 			{
+				Integer x = cols2Pos.get(temp);
+				if (x == null)
+				{
+					int count = 0;
+					if (temp.startsWith("."))
+					{
+						temp = temp.substring(1);
+					}
+					for (String col : cols2Pos.keySet())
+					{
+						String origCol = col;
+						if (col.contains("."))
+						{
+							col = col.substring(col.indexOf('.') + 1);
+							if (col.equals(temp))
+							{
+								count++;
+								if (count == 1)
+								{
+									temp = origCol;
+								}
+								else
+								{
+									return null;
+								}
+							}
+						}
+					}
+				}
+				
 				retval.add(temp);
 			}
 		}
@@ -299,7 +329,7 @@ public final class ExtendOperator implements Operator, Serializable
 		while (parseStack.size() > 0)
 		{
 			// System.out.println("Exec stack = " + execStack);
-			final String temp = parseStack.pop();
+			String temp = parseStack.pop();
 			// System.out.println("We popped " + temp);
 			if (temp.equals("*"))
 			{
@@ -334,7 +364,7 @@ public final class ExtendOperator implements Operator, Serializable
 			{
 				try
 				{
-					if (Character.isLetter(temp.charAt(0)) || (temp.charAt(0) == '_'))
+					if (Character.isLetter(temp.charAt(0)) || (temp.charAt(0) == '_') || temp.charAt(0) == '.')
 					{
 						Object field = null;
 						try
@@ -342,7 +372,35 @@ public final class ExtendOperator implements Operator, Serializable
 							// System.out.println("Fetching field " + temp +
 							// " from " + cols2Pos);
 							// System.out.println("Row is " + row);
-							final int x = cols2Pos.get(temp);
+							Integer x = cols2Pos.get(temp);
+							if (x == null)
+							{
+								int count = 0;
+								if (temp.startsWith("."))
+								{
+									temp = temp.substring(1);
+								}
+								for (String col : cols2Pos.keySet())
+								{
+									String origCol = col;
+									if (col.contains("."))
+									{
+										col = col.substring(col.indexOf('.') + 1);
+										if (col.equals(temp))
+										{
+											count++;
+											if (count == 1)
+											{
+												x = cols2Pos.get(origCol);
+											}
+											else
+											{
+												queue.put(new Exception("Column " + temp + " is ambiguous"));
+											}
+										}
+									}
+								}
+							}
 							p.add(x);
 							field = row.get(x);
 							// System.out.println("Fetched value is " + field);

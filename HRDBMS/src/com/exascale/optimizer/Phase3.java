@@ -300,7 +300,7 @@ public final class Phase3
 	{
 		if (op instanceof TableScanOperator)
 		{
-			if (op.getNode() == -1)
+			if (op.getNode() == -1 && !((TableScanOperator)op).getSchema().equals("SYS"))
 			{
 				final Operator parent = ((TableScanOperator)op).firstParent();
 				final CNFFilter cnf = ((TableScanOperator)op).getCNFForParent(parent);
@@ -683,7 +683,7 @@ public final class Phase3
 			}
 			else
 			{
-				if (pmetas.get(0).getNodeHash() != null && lefts.containsAll(pmetas.get(0).getNodeHash()) && pmetas.get(1).getNodeHash() != null && rights.containsAll(pmetas.get(1).getNodeHash()) && pmetas.get(0).getNodeGroupHash() != null & lefts.containsAll(pmetas.get(0).getNodeGroupHash()) && pmetas.get(1).getNodeGroupHash() != null && rights.containsAll(pmetas.get(1).getNodeGroupHash()))
+				if (pmetas.get(0).getNodeHash() != null && lefts.containsAll(pmetas.get(0).getNodeHash()) && pmetas.get(1).getNodeHash() != null && rights.containsAll(pmetas.get(1).getNodeHash()) && pmetas.get(0).getNodeGroupHash() != null && lefts.containsAll(pmetas.get(0).getNodeGroupHash()) && pmetas.get(1).getNodeGroupHash() != null && rights.containsAll(pmetas.get(1).getNodeGroupHash()))
 				{
 					pushAcross2(receive);
 					return true;
@@ -868,7 +868,7 @@ public final class Phase3
 			else
 			{
 				// System.out.println("Hash: is hash group");
-				if (pmetas.get(0).getNodeHash() != null && lefts.containsAll(pmetas.get(0).getNodeHash()) && pmetas.get(1).getNodeHash() != null && rights.containsAll(pmetas.get(1).getNodeHash()) && pmetas.get(0).getNodeGroupHash() != null & lefts.containsAll(pmetas.get(0).getNodeGroupHash()) && pmetas.get(1).getNodeGroupHash() != null && rights.containsAll(pmetas.get(1).getNodeGroupHash()))
+				if (pmetas.get(0).getNodeHash() != null && lefts.containsAll(pmetas.get(0).getNodeHash()) && pmetas.get(1).getNodeHash() != null && rights.containsAll(pmetas.get(1).getNodeHash()) && pmetas.get(0).getNodeGroupHash() != null && lefts.containsAll(pmetas.get(0).getNodeGroupHash()) && pmetas.get(1).getNodeGroupHash() != null && rights.containsAll(pmetas.get(1).getNodeGroupHash()))
 				{
 					// System.out.println("nodegroup and node hash equal");
 					pushAcross2(receive);
@@ -923,6 +923,11 @@ public final class Phase3
 				i++;
 			}
 
+			if (i == 0)
+			{
+				doIt = false;
+			}
+			
 			if (doIt)
 			{
 				for (String table : tables)
@@ -968,7 +973,7 @@ public final class Phase3
 		}
 
 		final long card = card(parent);
-		if (card > MAX_CARD_BEFORE_HASH)
+		if (card > MAX_CARD_BEFORE_HASH && parent.getKeys().size() > 0)
 		{
 			final ArrayList<String> cols2 = new ArrayList<String>(parent.getKeys());
 			final int starting = getStartingNode(card / MIN_CARD_BEFORE_HASH);
@@ -1058,6 +1063,11 @@ public final class Phase3
 			}
 			return true;
 		}
+		
+		if (parent.existsCountDistinct())
+		{
+			return false;
+		}
 
 		final ArrayList<Operator> children = receive.children();
 		final HashMap<Operator, Operator> send2Child = new HashMap<Operator, Operator>();
@@ -1086,11 +1096,6 @@ public final class Phase3
 		for (final Map.Entry entry : send2Child.entrySet())
 		{
 			pClone = parent.clone();
-			pClone.removeCountDistinct();
-			if (pClone.getOutputCols().size() == 0)
-			{
-				pClone.addCount("_P" + colSuffix++);
-			}
 			while (pClone.hasAvg())
 			{
 				final String avgCol = pClone.getAvgCol();
@@ -1337,7 +1342,7 @@ public final class Phase3
 			}
 			else
 			{
-				if (pmetas.get(0).getNodeHash() != null && lefts.containsAll(pmetas.get(0).getNodeHash()) && pmetas.get(1).getNodeHash() != null && rights.containsAll(pmetas.get(1).getNodeHash()) && pmetas.get(0).getNodeGroupHash() != null & lefts.containsAll(pmetas.get(0).getNodeGroupHash()) && pmetas.get(1).getNodeGroupHash() != null && rights.containsAll(pmetas.get(1).getNodeGroupHash()))
+				if (pmetas.get(0).getNodeHash() != null && lefts.containsAll(pmetas.get(0).getNodeHash()) && pmetas.get(1).getNodeHash() != null && rights.containsAll(pmetas.get(1).getNodeHash()) && pmetas.get(0).getNodeGroupHash() != null && lefts.containsAll(pmetas.get(0).getNodeGroupHash()) && pmetas.get(1).getNodeGroupHash() != null && rights.containsAll(pmetas.get(1).getNodeGroupHash()))
 				{
 					pushAcross2(receive);
 					return true;
@@ -1568,7 +1573,7 @@ public final class Phase3
 			}
 			else
 			{
-				if (pmetas.get(0).getNodeHash() != null && lefts.containsAll(pmetas.get(0).getNodeHash()) && pmetas.get(1).getNodeHash() != null && rights.containsAll(pmetas.get(1).getNodeHash()) && pmetas.get(0).getNodeGroupHash() != null & lefts.containsAll(pmetas.get(0).getNodeGroupHash()) && pmetas.get(1).getNodeGroupHash() != null && rights.containsAll(pmetas.get(1).getNodeGroupHash()))
+				if (pmetas.get(0).getNodeHash() != null && lefts.containsAll(pmetas.get(0).getNodeHash()) && pmetas.get(1).getNodeHash() != null && rights.containsAll(pmetas.get(1).getNodeHash()) && pmetas.get(0).getNodeGroupHash() != null && lefts.containsAll(pmetas.get(0).getNodeGroupHash()) && pmetas.get(1).getNodeGroupHash() != null && rights.containsAll(pmetas.get(1).getNodeGroupHash()))
 				{
 					pushAcross2(receive);
 					return true;

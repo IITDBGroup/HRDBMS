@@ -21,13 +21,13 @@ public final class DateMathOperator implements Operator, Serializable
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
 	private TreeMap<Integer, String> pos2Col;
-	private final String col;
+	private String col;
 	private final int type;
 	private final int offset;
 	private final String name;
 	private final MetaData meta;
 	private int node;
-	private Plan plan;
+	private transient Plan plan;
 	private int colPos;
 	private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 	private MySimpleDateFormat msdf = new MySimpleDateFormat("yyyy-MM-dd");
@@ -62,6 +62,35 @@ public final class DateMathOperator implements Operator, Serializable
 				pos2Col = (TreeMap<Integer, String>)child.getPos2Col().clone();
 				pos2Col.put(pos2Col.size(), name);
 				colPos = cols2Pos.get(col);
+				Integer colPos1 = cols2Pos.get(col);
+				if (colPos1 == null)
+				{
+					int count = 0;
+					if (col.startsWith("."))
+					{
+						col = col.substring(1);
+						for (String col3 : cols2Pos.keySet())
+						{
+							String orig = col3;
+							if (col3.contains("."))
+							{
+								col3 = col3.substring(col3.indexOf('.') + 1);
+							}
+							
+							if (col3.equals(col))
+							{
+								col = orig;
+								count++;
+								colPos1 = cols2Pos.get(orig);
+							}
+							
+							if (count > 1)
+							{
+								throw new Exception("Ambiguous column: " + col);
+							}
+						}
+					}
+				}
 			}
 		}
 		else
@@ -81,9 +110,16 @@ public final class DateMathOperator implements Operator, Serializable
 	@Override
 	public DateMathOperator clone()
 	{
-		final DateMathOperator retval = new DateMathOperator(col, type, offset, name, meta);
-		retval.node = node;
-		return retval;
+		try
+		{
+			final DateMathOperator retval = new DateMathOperator(col, type, offset, name, meta);
+			retval.node = node;
+			return retval;
+		}
+		catch(Exception e)
+		{
+			return null;
+		}
 	}
 
 	@Override

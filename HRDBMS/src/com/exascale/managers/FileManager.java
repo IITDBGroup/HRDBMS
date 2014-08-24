@@ -2,17 +2,25 @@ package com.exascale.managers;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.StringTokenizer;
 import javax.tools.JavaCompiler;
+import javax.tools.JavaFileObject;
+import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
+import com.exascale.logging.ExtendLogRec;
 import com.exascale.misc.CatalogCode;
 import com.exascale.threads.ReadThread;
 import com.exascale.tables.Transaction;
@@ -56,11 +64,61 @@ public class FileManager
 		synchronized (fc)
 		{
 			retval = (int)(fc.size() / Page.BLOCK_SIZE);
+			Block bl = new Block(fn, retval);
+			ExtendLogRec rec = LogManager.extend(tx.number(), bl);
+			LogManager.flush(rec.lsn());
 			data.position(0);
 			fc.write(data, fc.size());
 		}
 
 		return retval;
+	}
+	
+	public static void trim(String fn, int blockNum) throws Exception
+	{
+		HRDBMSWorker.logger.debug("Undoing extend of " + fn + ":" + blockNum);
+		final FileChannel fc = getFile(fn);
+		int retval = (int)(fc.size() / Page.BLOCK_SIZE) - 1;
+		if (retval > blockNum)
+		{
+			throw new Exception("Can't trim anything but the last block");
+		}
+		else if (retval == blockNum)
+		{
+			fc.truncate(fc.size() - Page.BLOCK_SIZE);
+			BufferManager.throwAwayPage(fn, blockNum);
+		}
+	}
+	
+	public static void redoExtend(Block bl) throws Exception
+	{
+		String fn = bl.fileName();
+		int blockNum = bl.number();
+		final FileChannel fc = getFile(fn);
+		int retval = (int)(fc.size() / Page.BLOCK_SIZE) - 1;
+		if (retval >= blockNum)
+		{
+			HRDBMSWorker.logger.debug("Went to redo extend of " + bl + " but nothing needed to be done");
+			return;
+		}
+		else if (retval == blockNum-1)
+		{
+			HRDBMSWorker.logger.debug("Needed to redo extend of " + bl);
+			ByteBuffer data = ByteBuffer.allocate(Page.BLOCK_SIZE);
+			int i = 0;
+			data.position(0);
+			while (i < Page.BLOCK_SIZE)
+			{
+				data.putLong(-1);
+				i += 8;
+			}
+			data.position(0);
+			fc.write(data, fc.size());
+		}
+		else
+		{
+			throw new Exception("Trying to redo an extend, but we are missing blocks prior to this one");
+		}
 	}
 
 	public static void createCatalog() throws Exception
@@ -70,12 +128,27 @@ public class FileManager
 		HRDBMSWorker.logger.debug("Done building source code.");
 		// compile source
 		HRDBMSWorker.logger.debug("Starting compilation.");
-		int result = -1;
+		boolean result = true;
 		try
 		{
 			final JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
-			final FileOutputStream javacOut = new FileOutputStream(new File("javac.out"), false);
-			result = compiler.run(System.in, javacOut, javacOut, "CatalogCreator.java");
+			final FileWriter javacOut = new FileWriter("javac.out");
+			//result = compiler.run(System.in, javacOut, javacOut, "CatalogCreator.java");
+			//javacOut.close();
+			
+			List<String> optionList = new ArrayList<String>();
+			// set compiler's classpath to be same as the runtime's
+			optionList.addAll(Arrays.asList("-classpath",System.getProperty("java.class.path")));
+			StandardJavaFileManager fileManager = compiler.getStandardFileManager(null, Locale.getDefault(), null);
+			File file1 = new File("CatalogCreator.java");
+			File []files = new File[]{file1} ;
+			Iterable<? extends JavaFileObject> jfos =
+			           fileManager.getJavaFileObjectsFromFiles(Arrays.asList(files));
+
+
+			JavaCompiler.CompilationTask task = compiler.getTask(javacOut, null, null, optionList, null, jfos);
+			result = task.call();
+			fileManager.close();
 			javacOut.close();
 		}
 		catch (final Exception e)
@@ -84,7 +157,7 @@ public class FileManager
 			HRDBMSWorker.logger.error("Exception is ", e);
 			System.exit(1);
 		}
-		if (result != 0)
+		if (!result)
 		{
 			HRDBMSWorker.logger.error("Failure compiling CatalogCreator. Catalog creation will abort.");
 			System.exit(1);
@@ -93,12 +166,16 @@ public class FileManager
 		// create CatalogCreator object and execute it
 		try
 		{
-			Class.forName("CatalogCreator").newInstance();
+			HRDBMSWorker.logger.debug("About to load CatalogCreator");
+			Class clazz = Class.forName("CatalogCreator");
+			HRDBMSWorker.logger.debug("About to instantiate CatalogCreator");
+			clazz.newInstance();
+			HRDBMSWorker.logger.debug("Done instantiating CatalogCreator");
 		}
-		catch (final Exception e)
+		catch (Throwable e)
 		{
-			HRDBMSWorker.logger.error("" + e.getClass());
-			System.exit(1);
+			HRDBMSWorker.logger.error("Error during CatalogCreator execution", e);
+			throw e;
 		}
 	}
 
@@ -114,7 +191,7 @@ public class FileManager
 		if (fc == null)
 		{
 			final File table = new File(filename);
-			final RandomAccessFile f = new RandomAccessFile(table, "rws");
+			final RandomAccessFile f = new RandomAccessFile(table, "rwd");
 			fc = f.getChannel();
 			openFiles.put(filename, fc);
 		}
@@ -155,7 +232,7 @@ public class FileManager
 
 	public static void write(Block b, ByteBuffer bb) throws IOException
 	{
-		bb.rewind();
+		bb.position(0);
 		final FileChannel fc = getFile(b.fileName());
 		fc.write(bb, b.number() * bb.capacity());
 	}

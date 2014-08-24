@@ -25,7 +25,7 @@ public class ArchiverThread extends HRDBMSThread
 	@Override
 	public void run()
 	{
-		synchronized (LogManager.noArchive)
+		synchronized (LogManager.noArchiveLock)
 		{
 			if (!LogManager.noArchive)
 			{
@@ -58,7 +58,17 @@ public class ArchiverThread extends HRDBMSThread
 
 							if (rec.type() == LogRec.NQCHECK)
 							{
-								final NQCheckLogRec r = (NQCheckLogRec)rec.rebuild();
+								NQCheckLogRec r = null;
+
+								try
+								{
+									r = (NQCheckLogRec)rec.rebuild();
+								}
+								catch(Exception e)
+								{
+									HRDBMSWorker.logger.error("", e);
+									return;
+								}
 								final HashSet<Long> list = r.getOpenTxs();
 
 								// find start of oldest tx
@@ -72,7 +82,7 @@ public class ArchiverThread extends HRDBMSThread
 									fc.position(fc.position() - 4 - size);
 									rec = new LogRec(fc);
 
-									if (rec.type() == LogRec.START || rec.type() == LogRec.PREPARE)
+									if (rec.type() == LogRec.START)
 									{
 										list.remove(rec.txnum());
 
@@ -93,15 +103,10 @@ public class ArchiverThread extends HRDBMSThread
 
 											final String archive = archiveDir + filename + "_startLSN_" + startLSN + ".log";
 											final File archiveLog = new File(archive);
-											final File activeLog = new File(filename);
-
-											activeLog.renameTo(archiveLog);
-											activeLog.createNewFile();
-											final FileChannel newActive = new RandomAccessFile(activeLog, "rws").getChannel();
-											final FileChannel newArchive = new RandomAccessFile(archiveLog, "rws").getChannel();
-											newArchive.transferTo(end, newArchive.size() - end, newActive);
-											LogManager.openFiles.put(filename, newActive);
-
+											final FileChannel newArchive = new RandomAccessFile(archiveLog, "rwd").getChannel();
+											fc.transferTo(0, fc.size(), newArchive);
+											fc.truncate(0);
+											newArchive.transferTo(end, newArchive.size() - end, fc);
 											newArchive.truncate(end);
 											newArchive.close();
 											this.terminate();

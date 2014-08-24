@@ -19,16 +19,20 @@ public final class ReorderOperator implements Operator, Serializable
 	private final MetaData meta;
 	private boolean nullOp = false;
 	private int node;
-	private Plan plan;
+	private transient Plan plan;
 	
 	public void setPlan(Plan plan)
 	{
 		this.plan = plan;
 	}
 
-	public ReorderOperator(ArrayList<String> order, MetaData meta)
+	public ReorderOperator(ArrayList<String> order, MetaData meta) throws Exception
 	{
 		this.order = order;
+		if (order.size() == 0)
+		{
+			throw new Exception("Reorder operator defined with 0 output columns");
+		}
 		this.meta = meta;
 	}
 
@@ -43,7 +47,7 @@ public final class ReorderOperator implements Operator, Serializable
 			{
 				pos2Col = child.getPos2Col();
 				new ArrayList<String>(pos2Col.values());
-				if (pos2Col.equals(order))
+				if (new ArrayList<String>(pos2Col.values()).equals(order))
 				{
 					cols2Types = child.getCols2Types();
 					cols2Pos = child.getCols2Pos();
@@ -83,9 +87,16 @@ public final class ReorderOperator implements Operator, Serializable
 	@Override
 	public ReorderOperator clone()
 	{
-		final ReorderOperator retval = new ReorderOperator(order, meta);
-		retval.node = node;
-		return retval;
+		try
+		{
+			final ReorderOperator retval = new ReorderOperator(order, meta);
+			retval.node = node;
+			return retval;
+		}
+		catch(Exception e)
+		{
+			return null;
+		}
 	}
 
 	@Override

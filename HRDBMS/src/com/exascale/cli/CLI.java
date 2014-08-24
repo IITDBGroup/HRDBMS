@@ -5,6 +5,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Scanner;
 
 public class CLI
@@ -31,6 +32,7 @@ public class CLI
 			String cmd = in.nextLine();
 			if (cmd.equalsIgnoreCase("QUIT"))
 			{
+				in.close();
 				return;
 			}
 			
@@ -143,12 +145,14 @@ public class CLI
 			Statement stmt = conn.createStatement();
 			ResultSet rs = stmt.executeQuery(cmd);
 			ResultSetMetaData meta = rs.getMetaData();
+			ArrayList<Integer> offsets = new ArrayList<Integer>();
 			int i = 1;
 			String line = "";
 			int colCount = meta.getColumnCount();
 			while (i <= colCount)
 			{
-				line += (meta.getColumnName(i) + "\t");
+				offsets.add(line.length());
+				line += (meta.getColumnName(i) + "    ");
 				i++;
 			}
 			
@@ -156,7 +160,7 @@ public class CLI
 			int len = line.length();
 			line = "";
 			i = 0;
-			while (i < len)
+			while (i < len-4)
 			{
 				line += '-';
 				i++;
@@ -169,7 +173,12 @@ public class CLI
 				i = 1;
 				while (i <= colCount)
 				{
-					line += (rs.getObject(i) + "\t");
+					line += " ";
+					while (line.length() < offsets.get(i-1))
+					{
+						line += " ";
+					}
+					line += (rs.getObject(i));
 					i++;
 				}
 			

@@ -45,6 +45,9 @@ public class SQLParser
 		this.tx = tx;
 	}
 	
+	public SQLParser()
+	{}
+	
 	public void authorize()
 	{
 		authorized = true;
@@ -61,6 +64,7 @@ public class SQLParser
 		SelectLexer lexer = new SelectLexer(input);
 		CommonTokenStream tokens = new CommonTokenStream(lexer);
 		SelectParser parser = new SelectParser(tokens);
+		parser.setErrorHandler(new BailErrorStrategy());
 		ParseTree tree = parser.select();
 		SelectVisitorImpl visitor = new SelectVisitorImpl();
 		SQLStatement stmt = (SQLStatement)visitor.visit(tree);
@@ -465,11 +469,6 @@ public class SQLParser
 			op = scan;
 		}
 		scan.getRID();
-		ArrayList<String> cols = new ArrayList<String>();
-		cols.add("_RID1");
-		cols.add("_RID2");
-		cols.add("_RID3");
-		cols.add("_RID4");
 		
 		ArrayList<String> buildList = new ArrayList<String>();
 		
@@ -520,11 +519,20 @@ public class SQLParser
 			throw new ParseException("The number of columns and/or data types do not match the columns being updated");
 		}
 		
-		cols.addAll(new HashSet<String>(buildList));
-		cols.addAll(MetaData.getIndexColsForTable(schema, tbl, tx));
-		ProjectOperator project = new ProjectOperator(cols, meta);
-		project.add(op);
-		op = project;
+		ArrayList<String> cols = new ArrayList<String>();
+		for (String col : op.getPos2Col().values())
+		{
+			cols.add(col);
+		}
+		
+		cols.add("_RID1");
+		cols.add("_RID2");
+		cols.add("_RID3");
+		cols.add("_RID4");
+		
+		ReorderOperator reorder = new ReorderOperator(cols, meta);
+		reorder.add(op);
+		op = reorder;
 		RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
 		retval.add(op);
 		new Phase1(retval, tx).optimize();
@@ -533,7 +541,9 @@ public class SQLParser
 		new Phase4(retval, tx).optimize();
 		new Phase5(retval, tx).optimize();
 		UpdateOperator uOp = new UpdateOperator(schema, tbl, update.getCols(), buildList, meta);
-		uOp.add(retval);
+		Operator child = retval.children().get(0);
+		retval.removeChild(child);
+		uOp.add(child);
 		return uOp;
 	}
 	
@@ -575,7 +585,9 @@ public class SQLParser
 			}
 			
 			Operator iOp = new InsertOperator(schema, tbl, meta);
-			iOp.add(retval);
+			Operator child = retval.children().get(0);
+			retval.removeChild(child);
+			iOp.add(child);
 			return iOp;
 		}
 		else
@@ -663,7 +675,9 @@ public class SQLParser
 		new Phase4(retval, tx).optimize();
 		new Phase5(retval, tx).optimize();
 		DeleteOperator dOp = new DeleteOperator(schema, tbl, meta);
-		dOp.add(retval);
+		Operator child = retval.children().get(0);
+		retval.removeChild(child);
+		dOp.add(child);
 		return dOp;
 	}
 	
@@ -1687,11 +1701,23 @@ public class SQLParser
 		{
 			OperatorTypeAndName exp1 = buildOperatorTreeFromExpression(exp.getLHS(), null);
 			OperatorTypeAndName exp2 = buildOperatorTreeFromExpression(exp.getRHS(), null);
-			if (exp1.getType() == TYPE_DATE)
+			Column col1 = null;
+			Column col2 = null;
+			if (exp1 == null)
+			{
+				col1 = exp.getLHS().getColumn();
+			}
+			
+			if (exp2 == null)
+			{
+				col2 = exp.getRHS().getColumn();
+			}
+			
+			if (exp1 != null && exp1.getType() == TYPE_DATE)
 			{
 				if (exp.getOp().equals("+"))
 				{
-					if (exp2.getType() == TYPE_DAYS)
+					if (exp2 != null && exp2.getType() == TYPE_DAYS)
 					{
 						GregorianCalendar cal = (GregorianCalendar)exp1.getOp();
 						cal.add(GregorianCalendar.DATE, (Integer)exp2.getOp());
@@ -1704,7 +1730,7 @@ public class SQLParser
 				}
 				else if (exp.getOp().equals("-"))
 				{
-					if (exp2.getType() == TYPE_DAYS)
+					if (exp2 != null && exp2.getType() == TYPE_DAYS)
 					{
 						GregorianCalendar cal = (GregorianCalendar)exp1.getOp();
 						cal.add(GregorianCalendar.DATE, -1 * (Integer)exp2.getOp());
@@ -1720,11 +1746,11 @@ public class SQLParser
 					throw new ParseException("Only the + and - operators are valid with type DATE");
 				}
 			}
-			else if (exp2.getType() == TYPE_DATE)
+			else if (exp2 != null && exp2.getType() == TYPE_DATE)
 			{
 				if (exp.getOp().equals("+"))
 				{
-					if (exp1.getType() == TYPE_DAYS)
+					if (exp1 != null && exp1.getType() == TYPE_DAYS)
 					{
 						GregorianCalendar cal = (GregorianCalendar)exp2.getOp();
 						cal.add(GregorianCalendar.DATE, (Integer)exp1.getOp());
@@ -1740,12 +1766,12 @@ public class SQLParser
 					throw new ParseException("Only a DATE can be added to type DAYS");
 				}
 			}
-			else if (exp1.getType() == TYPE_DAYS)
+			else if (exp1 != null && exp1.getType() == TYPE_DAYS)
 			{
 				//already handled DAYS + DATE
 				//so need to handle DAYS + col(DATE)
 				//and DAYS +/- DAYS
-				if (exp2.getType() == TYPE_DAYS)
+				if (exp2 != null && exp2.getType() == TYPE_DAYS)
 				{
 					if (exp.getOp().equals("+"))
 					{
@@ -1757,71 +1783,133 @@ public class SQLParser
 					}
 				}
 				
-				//externalize exp2
-				ArrayList<Object> row = new ArrayList<Object>();
-				row.add(exp2.getName());
-				row.add(exp2.getOp());
-				row.add(exp2.getType());
-				row.add(complexID++);
-				row.add(exp.getRHS());
-				row.add(exp2.getPrereq());
-				row.add(null);
-				row.add(false);
-				complex.add(row);
-				
-				if (name != null)
+				//externalize exp2 if not col
+				if (exp2 != null)
 				{
-					return new OperatorTypeAndName(new DateMathOperator(exp2.getName(), TYPE_DAYS, (Integer)exp1.getOp(), "." + name, meta), TYPE_INLINE, "." + name, (Integer)row.get(3));
+					ArrayList<Object> row = new ArrayList<Object>();
+					row.add(exp2.getName());
+					row.add(exp2.getOp());
+					row.add(exp2.getType());
+					row.add(complexID++);
+					row.add(exp.getRHS());
+					row.add(exp2.getPrereq());
+					row.add(null);
+					row.add(false);
+					complex.add(row);
+				
+					if (name != null)
+					{
+						return new OperatorTypeAndName(new DateMathOperator(exp2.getName(), TYPE_DAYS, (Integer)exp1.getOp(), "." + name, meta), TYPE_INLINE, "." + name, (Integer)row.get(3));
+					}
+					else
+					{
+						name = "._E" + suffix++;
+						return new OperatorTypeAndName(new DateMathOperator(exp2.getName(), TYPE_DAYS, (Integer)exp1.getOp(), name, meta), TYPE_INLINE, name, (Integer)row.get(3));
+					}
 				}
 				else
 				{
-					name = "._E" + suffix++;
-					return new OperatorTypeAndName(new DateMathOperator(exp2.getName(), TYPE_DAYS, (Integer)exp1.getOp(), name, meta), TYPE_INLINE, name, (Integer)row.get(3));
+					String colString2 = "";
+					if (col2.getTable() != null)
+					{
+						colString2 = col2.getTable();
+					}
+					colString2 += ("." + col2.getColumn());
+					if (name != null)
+					{
+						return new OperatorTypeAndName(new DateMathOperator(colString2, TYPE_DAYS, (Integer)exp1.getOp(), "." + name, meta), TYPE_INLINE, "." + name, -1);
+					}
+					else
+					{
+						name = "._E" + suffix++;
+						return new OperatorTypeAndName(new DateMathOperator(colString2, TYPE_DAYS, (Integer)exp1.getOp(), name, meta), TYPE_INLINE, name, -1);
+					}
 				}
 			}
-			else if (exp2.getType() == TYPE_DAYS)
+			else if (exp2 != null && exp2.getType() == TYPE_DAYS)
 			{
 				//already handled DATE +/- DAYS and DAYS +/- DAYS
 				//so need to handle col(DATE) +/- DAYS
-				//externalize exp1
-				ArrayList<Object> row = new ArrayList<Object>();
-				row.add(exp1.getName());
-				row.add(exp1.getOp());
-				row.add(exp1.getType());
-				row.add(complexID++);
-				row.add(exp.getLHS());
-				row.add(exp1.getPrereq());
-				row.add(null);
-				row.add(false);
-				complex.add(row);
+				//externalize exp1 if not col
 				
-				if (exp.getOp().equals("+"))
+				if (exp1 != null)
 				{
-					if (name != null)
+					ArrayList<Object> row = new ArrayList<Object>();
+					row.add(exp1.getName());
+					row.add(exp1.getOp());
+					row.add(exp1.getType());
+					row.add(complexID++);
+					row.add(exp.getLHS());
+					row.add(exp1.getPrereq());
+					row.add(null);
+					row.add(false);
+					complex.add(row);
+				
+					if (exp.getOp().equals("+"))
 					{
-						return new OperatorTypeAndName(new DateMathOperator(exp1.getName(), TYPE_DAYS, (Integer)exp2.getOp(), "." + name, meta), TYPE_INLINE, "." + name, (Integer)row.get(3));
+						if (name != null)
+						{
+							return new OperatorTypeAndName(new DateMathOperator(exp1.getName(), TYPE_DAYS, (Integer)exp2.getOp(), "." + name, meta), TYPE_INLINE, "." + name, (Integer)row.get(3));
+						}
+						else
+						{
+							name = "._E" + suffix++;
+							return new OperatorTypeAndName(new DateMathOperator(exp1.getName(), TYPE_DAYS, (Integer)exp2.getOp(), name, meta), TYPE_INLINE, name, (Integer)row.get(3));
+						}
+					}
+					else if (exp.getOp().equals("-"))
+					{
+						if (name != null)
+						{
+							return new OperatorTypeAndName(new DateMathOperator(exp1.getName(), TYPE_DAYS, -1 * (Integer)exp2.getOp(), "." + name, meta), TYPE_INLINE, "." + name, (Integer)row.get(3));
+						}
+						else
+						{
+							name = "._E" + suffix++;
+							return new OperatorTypeAndName(new DateMathOperator(exp1.getName(), TYPE_DAYS, -1 * (Integer)exp2.getOp(), name, meta), TYPE_INLINE, name, (Integer)row.get(3));
+						}
 					}
 					else
 					{
-						name = "._E" + suffix++;
-						return new OperatorTypeAndName(new DateMathOperator(exp1.getName(), TYPE_DAYS, (Integer)exp2.getOp(), name, meta), TYPE_INLINE, name, (Integer)row.get(3));
-					}
-				}
-				else if (exp.getOp().equals("-"))
-				{
-					if (name != null)
-					{
-						return new OperatorTypeAndName(new DateMathOperator(exp1.getName(), TYPE_DAYS, -1 * (Integer)exp2.getOp(), "." + name, meta), TYPE_INLINE, "." + name, (Integer)row.get(3));
-					}
-					else
-					{
-						name = "._E" + suffix++;
-						return new OperatorTypeAndName(new DateMathOperator(exp1.getName(), TYPE_DAYS, -1 * (Integer)exp2.getOp(), name, meta), TYPE_INLINE, name, (Integer)row.get(3));
+						throw new ParseException("Only the + and - operators are allowed with type DAYS");
 					}
 				}
 				else
 				{
-					throw new ParseException("Only the + and - operators are allowed with type DAYS");
+					String colString1 = "";
+					if (col1.getTable() != null)
+					{
+						colString1 = col1.getTable();
+					}
+					colString1 += ("." + col1.getColumn());
+					if (exp.getOp().equals("+"))
+					{
+						if (name != null)
+						{
+							return new OperatorTypeAndName(new DateMathOperator(colString1, TYPE_DAYS, (Integer)exp2.getOp(), "." + name, meta), TYPE_INLINE, "." + name, -1);
+						}
+						else
+						{
+							name = "._E" + suffix++;
+							return new OperatorTypeAndName(new DateMathOperator(colString1, TYPE_DAYS, (Integer)exp2.getOp(), name, meta), TYPE_INLINE, name, -1);
+						}
+					}
+					else if (exp.getOp().equals("-"))
+					{
+						if (name != null)
+						{
+							return new OperatorTypeAndName(new DateMathOperator(colString1, TYPE_DAYS, -1 * (Integer)exp2.getOp(), "." + name, meta), TYPE_INLINE, "." + name, -1);
+						}
+						else
+						{
+							name = "._E" + suffix++;
+							return new OperatorTypeAndName(new DateMathOperator(colString1, TYPE_DAYS, -1 * (Integer)exp2.getOp(), name, meta), TYPE_INLINE, name, -1);
+						}
+					}
+					else
+					{
+						throw new ParseException("Only the + and - operators are allowed with type DAYS");
+					}
 				}
 			}
 			
@@ -1829,85 +1917,178 @@ public class SQLParser
 			if (exp.getOp().equals("||"))
 			{
 				//string concatenation
-				//externalize both exp1 and exp2
-				ArrayList<Object> row = new ArrayList<Object>();
-				row.add(exp1.getName());
-				row.add(exp1.getOp());
-				row.add(exp1.getType());
-				row.add(complexID++);
-				row.add(exp.getLHS());
-				row.add(exp1.getPrereq());
-				row.add(null);
-				row.add(false);
-				complex.add(row);
-				int prereq1 = (Integer)row.get(3);
-				row = new ArrayList<Object>();
-				row.add(exp2.getName());
-				row.add(exp2.getOp());
-				row.add(exp2.getType());
-				row.add(complexID++);
-				row.add(exp.getRHS());
-				row.add(exp2.getPrereq());
-				row.add(null);
-				row.add(false);
-				complex.add(row);
-				int prereq2 = (Integer)row.get(3);
-				ArrayList<Object> bottom = getBottomRow(row);
-				bottom.remove(5);
-				bottom.add(5, prereq1);
+				//externalize both exp1 and exp2 if they are not cols
+				int prereq1 = -1;
+				int prereq2 = -1;
+				ArrayList<Object> row = null;
+				if (exp1 != null)
+				{
+					row = new ArrayList<Object>();
+					row.add(exp1.getName());
+					row.add(exp1.getOp());
+					row.add(exp1.getType());
+					row.add(complexID++);
+					row.add(exp.getLHS());
+					row.add(exp1.getPrereq());
+					row.add(null);
+					row.add(false);
+					complex.add(row);
+					prereq1 = (Integer)row.get(3);
+				}
 				
+				if (exp2 != null)
+				{
+					row = new ArrayList<Object>();
+					row.add(exp2.getName());
+					row.add(exp2.getOp());
+					row.add(exp2.getType());
+					row.add(complexID++);
+					row.add(exp.getRHS());
+					row.add(exp2.getPrereq());
+					row.add(null);
+					row.add(false);
+					complex.add(row);
+					prereq2 = (Integer)row.get(3);
+				}
+				
+				if (prereq2 == -1)
+				{
+					prereq2 = prereq1;
+				}
+				else if (prereq1 != -1)
+				{
+					ArrayList<Object> bottom = getBottomRow(row);
+					bottom.remove(5);
+					bottom.add(5, prereq1);
+				}
+				
+				String name1 = null;
+				String name2 = null;
+				if (exp1 != null)
+				{
+					name1 = exp1.getName();
+				}
+				else
+				{
+					name1 = "";
+					if (col1.getTable() != null)
+					{
+						name1 = col1.getTable();
+					}
+					name1 += ("." + col1.getColumn());
+				}
+				
+				if (exp2 != null)
+				{
+					name2 = exp2.getName();
+				}
+				else
+				{
+					name2 = "";
+					if (col2.getTable() != null)
+					{
+						name2 = col2.getTable();
+					}
+					name2 += ("." + col2.getColumn());
+				}
 				if (name != null)
 				{
-					return new OperatorTypeAndName(new ConcatOperator(exp1.getName(), exp2.getName(), "." + name, meta), TYPE_INLINE, "." + name, prereq2);
+					return new OperatorTypeAndName(new ConcatOperator(name1, name2, "." + name, meta), TYPE_INLINE, "." + name, prereq2);
 				}
 				else
 				{
 					name = "._E" + suffix++;
-					return new OperatorTypeAndName(new ConcatOperator(exp1.getName(), exp2.getName(), name, meta), TYPE_INLINE, name, prereq2);
+					return new OperatorTypeAndName(new ConcatOperator(name1, name2, name, meta), TYPE_INLINE, name, prereq2);
 				}
 			}
 			
 			// +,-,*, or /
-			if (!(exp1.getOp() instanceof ExtendOperator) && !(exp2.getOp() instanceof ExtendOperator))
+			if ((exp1 == null || !(exp1.getOp() instanceof ExtendOperator)) && (exp2 == null || !(exp2.getOp() instanceof ExtendOperator)))
 			{
 				//externalize both exp1 and exp2
 				ArrayList<Object> row = new ArrayList<Object>();
-				row.add(exp1.getName());
-				row.add(exp1.getOp());
-				row.add(exp1.getType());
-				row.add(complexID++);
-				row.add(exp.getLHS());
-				row.add(exp1.getPrereq());
-				row.add(null);
-				row.add(false);
-				complex.add(row);
-				int prereq1 = (Integer)row.get(3);
-				row = new ArrayList<Object>();
-				row.add(exp2.getName());
-				row.add(exp2.getOp());
-				row.add(exp2.getType());
-				row.add(complexID++);
-				row.add(exp.getRHS());
-				row.add(exp2.getPrereq());
-				row.add(null);
-				row.add(false);
-				complex.add(row);
-				int prereq2 = (Integer)row.get(3);
-				ArrayList<Object> bottom = getBottomRow(row);
-				bottom.remove(5);
-				bottom.add(5, prereq1);
+				int prereq1 = -1;
+				int prereq2 = -1;
+				if (exp1 != null)
+				{
+					row.add(exp1.getName());
+					row.add(exp1.getOp());
+					row.add(exp1.getType());
+					row.add(complexID++);
+					row.add(exp.getLHS());
+					row.add(exp1.getPrereq());
+					row.add(null);
+					row.add(false);
+					complex.add(row);
+					prereq1 = (Integer)row.get(3);
+				}
 				
+				if (exp2 != null)
+				{
+					row = new ArrayList<Object>();
+					row.add(exp2.getName());
+					row.add(exp2.getOp());
+					row.add(exp2.getType());
+					row.add(complexID++);
+					row.add(exp.getRHS());
+					row.add(exp2.getPrereq());
+					row.add(null);
+					row.add(false);
+					complex.add(row);
+					prereq2 = (Integer)row.get(3);
+				}
+				
+				if (prereq2 == -1)
+				{
+					prereq2 = prereq1;
+				}
+				else if (prereq1 != -1)
+				{
+					ArrayList<Object> bottom = getBottomRow(row);
+					bottom.remove(5);
+					bottom.add(5, prereq1);
+				}
+				
+				String name1 = null;;
+				String name2 = null;
+				if (exp1 != null)
+				{
+					name1 = exp1.getName();
+				}
+				else
+				{
+					name1 = "";
+					if (col1.getTable() != null)
+					{
+						name1 = col1.getTable();
+					}
+					name1 += ("." + col1.getColumn());
+				}
+				
+				if (exp2 != null)
+				{
+					name2 = exp2.getName();
+				}
+				else
+				{
+					name2 = "";
+					if (col2.getTable() != null)
+					{
+						name2 = col2.getTable();
+					}
+					name2 += ("." + col2.getColumn());
+				}
 				if (name != null)
 				{
-					return new OperatorTypeAndName(new ExtendOperator(exp.getOp() + "," + exp1.getName() + "," + exp2.getName(), "." + name, meta), TYPE_INLINE, "." + name, prereq2);
+					return new OperatorTypeAndName(new ExtendOperator(exp.getOp() + "," + name1 + "," + name2, "." + name, meta), TYPE_INLINE, "." + name, prereq2);
 				}
 				else
 				{
 					name = "._E" + suffix++;
-					return new OperatorTypeAndName(new ExtendOperator(exp.getOp() + "," + exp1.getName() + "," + exp2.getName(), name, meta), TYPE_INLINE, name, prereq2);
+					return new OperatorTypeAndName(new ExtendOperator(exp.getOp() + "," + name1 + "," + name2, name, meta), TYPE_INLINE, name, prereq2);
 				}
 			}
-			else if (exp1.getOp() instanceof ExtendOperator && exp2.getOp() instanceof ExtendOperator)
+			else if (exp1 != null && exp1.getOp() instanceof ExtendOperator && exp2 != null && exp2.getOp() instanceof ExtendOperator)
 			{
 				ExtendOperator combined = null;
 				if (name != null)
@@ -1943,82 +2124,125 @@ public class SQLParser
 				}
 				else
 				{
+					name = "._E" + suffix++;
 					return new OperatorTypeAndName(combined, TYPE_INLINE, name, myPrereq);
 				}
 			}
-			else if (exp1.getOp() instanceof ExtendOperator)
+			else if (exp1 != null && exp1.getOp() instanceof ExtendOperator)
 			{
 				ExtendOperator combined = null;
+				String name2 = null;
+				if (exp2 != null)
+				{
+					name2 = exp2.getName();
+				}
+				else
+				{
+					name2 = "";
+					if (col2.getTable() != null)
+					{
+						name2 = col2.getTable();
+					}
+					
+					name2 += ("." + col2.getColumn());
+				}
 				if (name != null)
 				{
-					combined = new ExtendOperator(exp.getOp() + "," + ((ExtendOperator)exp1.getOp()).getPrefix() + "," + exp2.getName(), "." + name, meta);
+					combined = new ExtendOperator(exp.getOp() + "," + ((ExtendOperator)exp1.getOp()).getPrefix() + "," + name2, "." + name, meta);
 				}
 				else
 				{
 					name = "._E" + suffix++;
-					combined = new ExtendOperator(exp.getOp() + "," + ((ExtendOperator)exp1.getOp()).getPrefix() + "," + exp2.getName(), name, meta);
+					combined = new ExtendOperator(exp.getOp() + "," + ((ExtendOperator)exp1.getOp()).getPrefix() + "," + name2, name, meta);
 				}
 				
 				//externalize exp2
-				ArrayList<Object> row = new ArrayList<Object>();
-				row.add(exp2.getName());
-				row.add(exp2.getOp());
-				row.add(exp2.getType());
-				row.add(complexID++);
-				row.add(exp.getRHS());
-				row.add(exp2.getPrereq());
-				row.add(null);
-				row.add(false);
-				complex.add(row);
-				ArrayList<Object> bottom = getBottomRow(row);
-				bottom.remove(5);
-				bottom.add(5, exp1.getPrereq());
+				int prereq = -1;
+				if (exp2 != null)
+				{
+					ArrayList<Object> row = new ArrayList<Object>();
+					row.add(exp2.getName());
+					row.add(exp2.getOp());
+					row.add(exp2.getType());
+					prereq = complexID++;
+					row.add(prereq);
+					row.add(exp.getRHS());
+					row.add(exp2.getPrereq());
+					row.add(null);
+					row.add(false);
+					complex.add(row);
+					ArrayList<Object> bottom = getBottomRow(row);
+					bottom.remove(5);
+					bottom.add(5, exp1.getPrereq());
+				}
 				
 				if (name != null)
 				{
-					return new OperatorTypeAndName(combined, TYPE_INLINE, "." + name, (Integer)row.get(3));
+					return new OperatorTypeAndName(combined, TYPE_INLINE, "." + name, prereq);
 				}
 				else
 				{
-					return new OperatorTypeAndName(combined, TYPE_INLINE, name, (Integer)row.get(3));
+					name = "._E" + suffix++;
+					return new OperatorTypeAndName(combined, TYPE_INLINE, name, prereq);
 				}
 			}
 			else
 			{
 				//exp2 instanceof ExtendOperator
 				ExtendOperator combined = null;
+				String name1 = null;
+				if (exp1 != null)
+				{
+					name1 = exp1.getName();
+				}
+				else
+				{
+					name1 = "";
+					if (col1.getTable() != null)
+					{
+						name1 = col1.getTable();
+					}
+					
+					name1 += ("." + col1.getColumn());
+				}
 				if (name != null)
 				{
-					combined = new ExtendOperator(exp.getOp() + "," + exp1.getName() + "," + ((ExtendOperator)exp2.getOp()).getPrefix(), "." + name, meta);
+					combined = new ExtendOperator(exp.getOp() + "," + name1 + "," + ((ExtendOperator)exp2.getOp()).getPrefix(), "." + name, meta);
 				}
 				else
 				{
 					name = "._E" + suffix++;
-					combined = new ExtendOperator(exp.getOp() + "," + exp1.getName() + "," + ((ExtendOperator)exp2.getOp()).getPrefix(), name, meta);
+					combined = new ExtendOperator(exp.getOp() + "," + name1 + "," + ((ExtendOperator)exp2.getOp()).getPrefix(), name, meta);
 				}
 				
 				//externalize exp1
-				ArrayList<Object> row = new ArrayList<Object>();
-				row.add(exp1.getName());
-				row.add(exp1.getOp());
-				row.add(exp1.getType());
-				row.add(complexID++);
-				row.add(exp.getLHS());
-				row.add(exp1.getPrereq());
-				row.add(null);
-				row.add(false);
-				complex.add(row);
-				ArrayList<Object> bottom = getBottomRow(row);
-				bottom.remove(5);
-				bottom.add(5, exp2.getPrereq());
+				int prereq = -1;
+				if (exp1 != null)
+				{
+					ArrayList<Object> row = new ArrayList<Object>();
+					row.add(exp1.getName());
+					row.add(exp1.getOp());
+					row.add(exp1.getType());
+					prereq = complexID++;
+					row.add(prereq);
+					row.add(exp.getLHS());
+					row.add(exp1.getPrereq());
+					row.add(null);
+					row.add(false);
+					complex.add(row);
+					ArrayList<Object> bottom = getBottomRow(row);
+					bottom.remove(5);
+					bottom.add(5, exp2.getPrereq());
+				}
 				
 				if (name != null)
 				{
-					return new OperatorTypeAndName(combined, TYPE_INLINE, "." + name, (Integer)row.get(3));
+					return new OperatorTypeAndName(combined, TYPE_INLINE, "." + name, prereq);
 				}
 				else
 				{
-					return new OperatorTypeAndName(combined, TYPE_INLINE, name, (Integer)row.get(3));
+					name = "._E" + suffix++;
+					return new OperatorTypeAndName(combined, TYPE_INLINE, name, prereq);
 				}
 			}
 		}
@@ -2053,10 +2277,10 @@ public class SQLParser
 	{
 		for (ArrayList<Object> row : complex)
 		{
-			if ((Boolean)row.get(7) == false && (Integer)row.get(2) != TYPE_GROUPBY && ((SubSelect)row.get(6)).equals(sub))
+			if ((Boolean)row.get(7) == false && (Integer)row.get(2) != TYPE_GROUPBY && (row.get(6) == null || ((SubSelect)row.get(6)).equals(sub)))
 			{
 				Object o = buildNGBExtend(op, row);
-				if (!(o instanceof Boolean))
+				if (o != null && !(o instanceof Boolean))
 				{
 					op = (Operator)o;
 				}
@@ -2076,12 +2300,24 @@ public class SQLParser
 			{
 				if (r.get(3).equals(row.get(5)))
 				{
-					Object o = addComplexColumn(r, op);
-					if (o instanceof Boolean)
+					try
 					{
-						return o;
+						Object o = addComplexColumn(r, op);
+					
+						if (o instanceof Boolean)
+						{
+							return o;
+						}
+						else
+						{
+							op = (Operator)o;
+							break;
+						}
 					}
-					break;
+					catch(Exception e)
+					{
+						return null;
+					}
 				}
 			}
 		}
@@ -2094,6 +2330,14 @@ public class SQLParser
 		if ((Integer)row.get(2) == TYPE_INLINE)
 		{
 			Operator o = (Operator)row.get(1);
+			try
+			{
+				o.add(op);
+			}
+			catch(Exception e)
+			{
+				throw new ParseException(e.getMessage());
+			}
 			row.remove(7);
 			row.add(true);
 			if (o instanceof YearOperator)
@@ -2184,15 +2428,7 @@ public class SQLParser
 				}
 			}
 			
-			try
-			{
-				o.add(op);
-				return o;
-			}
-			catch(Exception e)
-			{
-				throw new ParseException(e.getMessage());
-			}
+			return o;
 		}
 		else
 		{
@@ -2212,10 +2448,7 @@ public class SQLParser
 		}
 		
 		//handle groupBy
-		if (select.getGroupBy() != null)
-		{
-			op = buildOperatorTreeFromGroupBy(select.getGroupBy(), op);
-		}
+		op = buildOperatorTreeFromGroupBy(select.getGroupBy(), op);
 		
 		//handle extends that haven't been done
 		op = buildNGBExtends(op, select);
@@ -2242,18 +2475,29 @@ public class SQLParser
 	
 	private Operator buildOperatorTreeFromGroupBy(GroupBy groupBy, Operator op) throws ParseException
 	{
-		ArrayList<Column> cols = groupBy.getCols();
-		ArrayList<String> vStr = new ArrayList<String>(cols.size());
-		for (Column col : cols)
+		ArrayList<Column> cols;
+		ArrayList<String> vStr;
+		
+		if (groupBy != null)
 		{
-			String colString = "";
-			if (col.getTable() != null)
+			cols = groupBy.getCols();
+			vStr = new ArrayList<String>(cols.size());
+			for (Column col : cols)
 			{
-				colString += col.getTable();
-			}
+				String colString = "";
+				if (col.getTable() != null)
+				{
+					colString += col.getTable();
+				}
 			
-			colString += ("." + col.getColumn());
-			vStr.add(colString);
+				colString += ("." + col.getColumn());
+				vStr.add(colString);
+			}
+		}
+		else
+		{
+			cols = new ArrayList<Column>();
+			vStr = new ArrayList<String>();
 		}
 		
 		ArrayList<AggregateOperator> ops = new ArrayList<AggregateOperator>();
@@ -2265,7 +2509,8 @@ public class SQLParser
 				AggregateOperator agop = (AggregateOperator)row.get(1);
 				if (agop instanceof AvgOperator)
 				{
-					String col = agop.getInputColumn();
+					String col = getMatchingCol(op, agop.getInputColumn());
+					agop.setInput(col);
 					String type = op.getCols2Types().get(col);
 					
 					if (type == null)
@@ -2285,7 +2530,8 @@ public class SQLParser
 				{
 					if (!agop.getInputColumn().equals(agop.outputColumn()))
 					{
-						String col = agop.getInputColumn();
+						String col = getMatchingCol(op, agop.getInputColumn());
+						agop.setInput(col);
 						String type = op.getCols2Types().get(col);
 						
 						if (type == null)
@@ -2298,7 +2544,8 @@ public class SQLParser
 				{
 					if (!agop.getInputColumn().equals(agop.outputColumn()))
 					{
-						String col = agop.getInputColumn();
+						String col = getMatchingCol(op, agop.getInputColumn());
+						agop.setInput(col);
 						String type = op.getCols2Types().get(col);
 						
 						if (type == null)
@@ -2309,7 +2556,8 @@ public class SQLParser
 				}
 				else if (agop instanceof MaxOperator)
 				{
-					String col = agop.getInputColumn();
+					String col = getMatchingCol(op, agop.getInputColumn());
+					agop.setInput(col);
 					String type = op.getCols2Types().get(col);
 					
 					if (type == null)
@@ -2360,7 +2608,8 @@ public class SQLParser
 				}
 				else if (agop instanceof MinOperator)
 				{
-					String col = agop.getInputColumn();
+					String col = getMatchingCol(op, agop.getInputColumn());
+					agop.setInput(col);
 					String type = op.getCols2Types().get(col);
 					
 					if (type == null)
@@ -2411,7 +2660,8 @@ public class SQLParser
 				}
 				else if (agop instanceof SumOperator)
 				{
-					String col = agop.getInputColumn();
+					String col = getMatchingCol(op, agop.getInputColumn());
+					agop.setInput(col);
 					String type = op.getCols2Types().get(col);
 					
 					if (type == null)
@@ -2439,15 +2689,57 @@ public class SQLParser
 			}
 		}
 		
-		try
+		if (ops.size() > 0)
 		{
-			MultiOperator multi = new MultiOperator(ops, vStr, meta, false);
-			multi.add(op);
-			return multi;
+			try
+			{
+				MultiOperator multi = new MultiOperator(ops, vStr, meta, false);
+				multi.add(op);
+				return multi;
+			}
+			catch(Exception e)
+			{
+				throw new ParseException(e.getMessage());
+			}
 		}
-		catch(Exception e)
+		else
 		{
-			throw new ParseException(e.getMessage());
+			return op;
+		}
+	}
+	
+	private String getMatchingCol(Operator op, String col)
+	{
+		if (op.getCols2Pos().keySet().contains(col))
+		{
+			return col;
+		}
+		else
+		{
+			if (col.contains("."))
+			{
+				col = col.substring(col.indexOf('.') + 1);
+			}
+			
+			for (String col2 : op.getCols2Pos().keySet())
+			{
+				String col3 = null;
+				if (col2.contains("."))
+				{
+					col3 = col2.substring(col2.indexOf('.') + 1);
+				}
+				else
+				{
+					col3 = col2;
+				}
+				
+				if (col.equals(col3))
+				{
+					return col2;
+				}
+			}
+			
+			return col;
 		}
 	}
 	
@@ -2457,6 +2749,7 @@ public class SQLParser
 		{
 			ArrayList<String> cols = new ArrayList<String>();
 			ArrayList<SelectListEntry> selects = select.getSelectList();
+			boolean needsRename = false;
 			for (SelectListEntry entry : selects)
 			{
 				if (entry.isColumn())
@@ -2484,33 +2777,148 @@ public class SQLParser
 						{
 							if (row.get(4).equals(entry.getExpression()))
 							{
-								cols.add((String)row.get(0));
+								String name = (String)row.get(0);
+								if (name.indexOf('.') == 0)
+								{
+									name = name.substring(1);
+								}
+								cols.add(name);
 							}
 						}
 					}
 				}
 			}
 			
+			ArrayList<String> newCols = new ArrayList<String>();
+			ArrayList<String> olds = new ArrayList<String>();
+			ArrayList<String> news = new ArrayList<String>();
 			for (String col : cols)
 			{
+				String col2 = null;
+				SelectListEntry sle = null;
+				for (SelectListEntry entry : selects)
+				{
+					if (entry.isColumn())
+					{
+						Column c = entry.getColumn();
+						col2 = "";
+						if (c.getTable() != null)
+						{
+							col2 += c.getTable();
+						}
+						
+						col2 += ("." + c.getColumn());
+					}
+					else
+					{
+						if (entry.getName() != null)
+						{
+							col2 = "." + entry.getName();
+						}
+						else
+						{
+							break;
+						}
+					}
+					
+					if (col.equals(col2))
+					{
+						sle = entry;
+						break;
+					}
+				}
+				
 				Integer pos = op.getCols2Pos().get(col);
 				if (pos == null)
 				{
-					throw new ParseException("Column " + col + " was not found.");
+					//try without schema
+					//must only be 1 match
+					if (col.contains("."))
+					{
+						if (col.indexOf('.') != 0)
+						{
+							throw new ParseException("Column not found: " + col);
+						}
+						else
+						{
+							col = col.substring(1);
+						}
+					}
+					for (String col3 : op.getCols2Pos().keySet())
+					{
+						int matches = 0;
+						String u = col3.substring(col3.indexOf('.') + 1);
+						if (col.equals(u))
+						{
+							newCols.add(col3);
+							if (sle != null && sle.getName() != null && !sle.getName().equals(col3))
+							{
+								needsRename = true;
+								olds.add(col3);
+								news.add(sle.getName());
+							}
+							matches++;
+						}
+						
+						if (matches > 1)
+						{
+							throw new ParseException("Ambiguous acolumn: " + col);
+						}
+					}
+				}
+				else
+				{
+					newCols.add(col);
+					if (sle != null && sle.getName() != null && !sle.getName().equals(col))
+					{
+						needsRename = true;
+						olds.add(col);
+						news.add(sle.getName());
+					}
 				}
 			}
 			
-			ReorderOperator reorder = new ReorderOperator(cols, meta);
+			cols = newCols;
 			try
 			{
+				ReorderOperator reorder = new ReorderOperator(cols, meta);
 				reorder.add(op);
+				op = reorder;
 			}
 			catch(Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
 			
-			op = reorder;
+			if (needsRename)
+			{
+				RenameOperator rename = null;
+				try
+				{
+					rename = new RenameOperator(olds, news, meta);
+					rename.add(op);
+				}
+				catch(Exception e)
+				{
+					throw new ParseException(e.getMessage());
+				}
+				
+				op = rename;
+			}
+		}
+		else
+		{
+			ArrayList<String> cols = new ArrayList<String>(op.getPos2Col().values());
+			try
+			{
+				ReorderOperator reorder = new ReorderOperator(cols, meta);
+				reorder.add(op);
+				op = reorder;
+			}
+			catch(Exception e)
+			{
+				throw new ParseException(e.getMessage());
+			}
 		}
 		
 		if (!select.isSelectAll())
@@ -2629,11 +3037,12 @@ public class SQLParser
 	
 	private Operator buildOperatorTreeFromSearchCondition(SearchCondition search, Operator op) throws Exception
 	{
-		SearchClause clause = search.getClause();
 		if (search.getConnected() != null && search.getConnected().size() > 0)
 		{
 			convertToCNF(search);
 		}
+		
+		SearchClause clause = search.getClause();
 		
 		if (search.getConnected() != null && search.getConnected().size() > 0 && search.getConnected().get(0).isAnd())
 		{
@@ -3802,6 +4211,7 @@ public class SQLParser
 								j++;
 							}
 							
+							i++;
 							continue;
 						}
 						else
@@ -3820,6 +4230,7 @@ public class SQLParser
 								j++;
 							}
 							
+							i++;
 							continue;
 						}
 					}
@@ -4289,8 +4700,6 @@ public class SQLParser
 					{
 						o = "LI";
 					}
-					
-					i++;
 				}
 				try
 				{
@@ -4300,6 +4709,8 @@ public class SQLParser
 				{
 					throw new ParseException(e.getMessage());
 				}
+				
+				i++;
 			}
 			
 			try
@@ -4358,6 +4769,14 @@ public class SQLParser
 		if ((Integer)row.get(2) == TYPE_INLINE)
 		{
 			Operator o = (Operator)row.get(1);
+			try
+			{
+				o.add(op);
+			}
+			catch(Exception e)
+			{
+				throw new ParseException(e.getMessage());
+			}
 			row.remove(7);
 			row.add(true);
 			if (o instanceof YearOperator)
@@ -4448,15 +4867,7 @@ public class SQLParser
 				}
 			}
 			
-			try
-			{
-				o.add(op);
-				return o;
-			}
-			catch(Exception e)
-			{
-				throw new ParseException(e.getMessage());
-			}
+			return o;
 		}
 		else
 		{
@@ -4469,7 +4880,7 @@ public class SQLParser
 	{
 		String lhsType = null;
 		String rhsType = null;
-		if (Character.isDigit(lhs.charAt(0)))
+		if (Character.isDigit(lhs.charAt(0)) || lhs.charAt(0) == '-')
 		{
 			lhsType = "NUMBER";
 		}
@@ -4498,7 +4909,7 @@ public class SQLParser
 			}
 		}
 		
-		if (Character.isDigit(rhs.charAt(0)))
+		if (Character.isDigit(rhs.charAt(0)) || rhs.charAt(0) == '-')
 		{
 			rhsType = "NUMBER";
 		}
@@ -4545,7 +4956,7 @@ public class SQLParser
 	{
 		String lhsType = null;
 		String rhsType = null;
-		if (Character.isDigit(lhs.charAt(0)))
+		if (Character.isDigit(lhs.charAt(0)) || lhs.charAt(0) == '-')
 		{
 			lhsType = "NUMBER";
 		}
@@ -4574,7 +4985,7 @@ public class SQLParser
 			}
 		}
 		
-		if (Character.isDigit(rhs.charAt(0)))
+		if (Character.isDigit(rhs.charAt(0)) || rhs.charAt(0) == '-')
 		{
 			rhsType = "NUMBER";
 		}
@@ -4614,7 +5025,7 @@ public class SQLParser
 		}
 		else if (lhsType.equals("STRING") && rhsType.equals("STRING"))
 		{
-			if (op.equals("LI") || op.equals("NL"))
+			if (op.equals("LI") || op.equals("NL") || op.equals("E") || op.equals("NE"))
 			{
 				return;
 			}
@@ -4990,7 +5401,7 @@ public class SQLParser
 			return retval;
 		}
 		
-		return entry.getName();
+		return "." + entry.getName();
 	}
 	
 	private boolean ensuresOnlyOneRow(SubSelect sub)
@@ -5948,7 +6359,7 @@ public class SQLParser
 			}
 		}
 		
-		if (s.getConnected() != null & s.getConnected().size() > 0)
+		if (s.getConnected() != null && s.getConnected().size() > 0)
 		{
 			for (ConnectedSearchClause csc : s.getConnected())
 			{

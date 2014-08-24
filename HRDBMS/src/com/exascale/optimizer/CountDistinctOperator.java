@@ -26,6 +26,11 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 		this.output = output;
 		this.meta = meta;
 	}
+	
+	public void setInput(String col)
+	{
+		input = col;
+	}
 
 	@Override
 	public CountDistinctOperator clone()

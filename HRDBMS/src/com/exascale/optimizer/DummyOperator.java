@@ -19,7 +19,7 @@ public final class DummyOperator implements Operator, Serializable
 	private TreeMap<Integer, String> pos2Col;
 	private Operator parent;
 	private int node;
-	private Plan plan;
+	private transient Plan plan;
 	private int nextCalled = 0;
 	
 	public void setPlan(Plan plan)
@@ -59,7 +59,6 @@ public final class DummyOperator implements Operator, Serializable
 	@Override
 	public void close() throws Exception
 	{
-		child.close();
 	}
 
 	@Override

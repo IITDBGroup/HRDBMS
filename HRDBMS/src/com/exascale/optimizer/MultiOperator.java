@@ -38,7 +38,7 @@ public final class MultiOperator implements Operator, Serializable
 	private int childCard = 16 * 16;
 	private boolean cardSet = false;
 	private volatile boolean startDone = false;
-	private Plan plan;
+	private transient Plan plan;
 	
 	public void setPlan(Plan plan)
 	{
@@ -320,16 +320,17 @@ public final class MultiOperator implements Operator, Serializable
 		}
 	}
 
-	public void removeCountDistinct()
+	public boolean existsCountDistinct()
 	{
 		for (final AggregateOperator op : ops)
 		{
 			if (op instanceof CountDistinctOperator)
 			{
-				groupCols.add(((CountDistinctOperator)op).getInputColumn());
-				ops.remove(op);
+				return true;
 			}
 		}
+		
+		return false;
 	}
 
 	@Override
@@ -340,7 +341,7 @@ public final class MultiOperator implements Operator, Serializable
 
 	public void replaceAvgWithSumAndCount(HashMap<String, ArrayList<String>> old2New)
 	{
-		for (final AggregateOperator op : ops)
+		for (final AggregateOperator op : (ArrayList<AggregateOperator>)ops.clone())
 		{
 			if (op instanceof AvgOperator)
 			{

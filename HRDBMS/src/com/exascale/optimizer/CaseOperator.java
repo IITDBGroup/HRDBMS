@@ -29,7 +29,7 @@ public final class CaseOperator implements Operator, Serializable
 	private final ArrayList<String> origResults;
 	private final ArrayList<String> references = new ArrayList<String>();
 	private int node;
-	private Plan plan;
+	private transient Plan plan;
 	
 	public void setPlan(Plan plan)
 	{

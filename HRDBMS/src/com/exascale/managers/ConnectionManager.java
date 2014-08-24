@@ -89,7 +89,7 @@ public class ConnectionManager extends HRDBMSThread
 	{
 		final int port = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"));
 		HRDBMSWorker.logger.debug("In rmiCall(), creating connection to " + host + " on port " + port);
-		final Socket sock = new Socket(host, port);
+		final Socket sock = new CompressedSocket(host, port);
 		HRDBMSWorker.logger.debug("Connection successful.");
 		sock.getOutputStream().write(data);
 		HRDBMSWorker.logger.debug("Length of data sent: " + data.length);
@@ -101,6 +101,7 @@ public class ConnectionManager extends HRDBMSThread
 			HRDBMSWorker.logger.error("Error reading type in RMI response.");
 			final String value = new String(typeBytes, "UTF-8");
 			HRDBMSWorker.logger.debug("read " + num + " bytes. Expected 8.  Value was " + value);
+			sock.close();
 			throw new Exception("InvalidResponseTypeException");
 		}
 
@@ -111,6 +112,7 @@ public class ConnectionManager extends HRDBMSThread
 			if (in.read(eLen) != 4)
 			{
 				HRDBMSWorker.logger.error("Error reading RMI exception text size.");
+				sock.close();
 				throw new Exception("InvalidRMIExceptionTextSizeException");
 			}
 
@@ -119,6 +121,7 @@ public class ConnectionManager extends HRDBMSThread
 			if (in.read(text) != len)
 			{
 				HRDBMSWorker.logger.error("Error reading RMI exception text.");
+				sock.close();
 				throw new Exception("InvalidRMIExceptionTextException");
 			}
 
@@ -132,6 +135,7 @@ public class ConnectionManager extends HRDBMSThread
 			if (in.read(fromto) != 8)
 			{
 				HRDBMSWorker.logger.error("Error reading from/to info in RMI response.");
+				sock.close();
 				throw new Exception("InvalidRMIResponseHeaderException");
 			}
 
@@ -139,6 +143,7 @@ public class ConnectionManager extends HRDBMSThread
 			if (in.read(respLen) != 4)
 			{
 				HRDBMSWorker.logger.error("Error reading RMI response length.");
+				sock.close();
 				throw new Exception("InvalidRMIResponseTextSizeException");
 			}
 
@@ -147,6 +152,7 @@ public class ConnectionManager extends HRDBMSThread
 			if (in.read(response) != len)
 			{
 				HRDBMSWorker.logger.error("Error reading RMI response text.");
+				sock.close();
 				throw new Exception("InvalidRMIResponseTextException");
 			}
 
@@ -156,6 +162,7 @@ public class ConnectionManager extends HRDBMSThread
 		}
 		else
 		{
+			sock.close();
 			throw new Exception("InvalidResponseTypeException");
 		}
 	}

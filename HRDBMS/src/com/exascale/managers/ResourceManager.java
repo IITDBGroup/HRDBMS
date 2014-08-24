@@ -132,19 +132,20 @@ public final class ResourceManager extends HRDBMSThread
 	private static void setDirs(String list)
 	{
 		StringTokenizer tokens = new StringTokenizer(list, ",", false);
-		int i = 0;
 		while (tokens.hasMoreTokens())
 		{
 			tokens.nextToken();
-			i++;
 		}
 		TEMP_DIRS = new ArrayList<String>();
 		tokens = new StringTokenizer(list, ",", false);
-		i = 0;
 		while (tokens.hasMoreTokens())
 		{
-			TEMP_DIRS.add(tokens.nextToken());
-			i++;
+			String dir = tokens.nextToken();
+			if (!dir.endsWith("/"))
+			{
+				dir += "/";
+			}
+			TEMP_DIRS.add(dir);
 		}
 	}
 
@@ -243,7 +244,11 @@ public final class ResourceManager extends HRDBMSThread
 		// System.gc();
 		while (lowMem())
 		{
-			PlanCacheManager.reduce();
+			if (HRDBMSWorker.type != HRDBMSWorker.TYPE_WORKER)
+			{
+				PlanCacheManager.reduce();
+			}
+			
 			final ArrayList<ThreadPoolThread> threads = new ArrayList<ThreadPoolThread>(collections.size());
 			// /System.out.println(((Runtime.getRuntime().freeMemory() +
 			// maxMemory - Runtime.getRuntime().totalMemory()) * 100.0) /
@@ -679,15 +684,14 @@ public final class ResourceManager extends HRDBMSThread
 		private volatile ArrayList<Vector<FileChannel>> ifcsArrayList = new ArrayList<Vector<FileChannel>>(TEMP_DIRS.size());
 		private final ArrayList<Vector<Boolean>> locksArrayList = new ArrayList<Vector<Boolean>>(TEMP_DIRS.size());
 		public final ReadWriteLock lock = new ReentrantReadWriteLock();
-		private AtomicLong ctCount;
 		private final boolean indexed;
 		private volatile ReverseConcurrentHashMap valueIndex;
 		private volatile DiskBackedHashSet diskValueIndex;
 		private final long id;
 		private volatile boolean filesAllocated = false;
 		private int estimate;
-		private final Object IALock = new Boolean(false);
 		private volatile LongPrimitiveConcurrentHashMap index;
+		private ArrayList<RandomAccessFile> rafs = new ArrayList<RandomAccessFile>();
 
 		public DiskBackedHashMap(boolean indexed, int estimate)
 		{
@@ -719,7 +723,15 @@ public final class ResourceManager extends HRDBMSThread
 		public void clear()
 		{
 			lock.readLock().lock();
-			internal.clear();
+			try
+			{
+				internal.clear();
+			}
+			catch(Exception e)
+			{
+				lock.readLock().unlock();
+				throw e;
+			}
 			lock.readLock().unlock();
 			size.set(0);
 			if (valueIndex != null)
@@ -764,6 +776,16 @@ public final class ResourceManager extends HRDBMSThread
 					}
 
 					ifcsArrayList = null;
+				}
+				
+				if (rafs != null)
+				{
+					for (RandomAccessFile raf : rafs)
+					{
+						raf.close();
+					}
+					
+					rafs = null;
 				}
 
 				index = null;
@@ -1162,7 +1184,6 @@ public final class ResourceManager extends HRDBMSThread
 
 			it = null;
 			set = null;
-			ctCount = new AtomicLong(0);
 			for (final ThreadPoolThread t : threads)
 			{
 				t.start();
@@ -1294,12 +1315,16 @@ public final class ResourceManager extends HRDBMSThread
 							// RecordManagerFactory.createRecordManager("JDBM" +
 							// id + "_" + i, props );
 							// BTree tree = BTree.createInstance(recman);
-							final FileChannel ofc = new RandomAccessFile(TEMP_DIRS.get(i) + "DBHM" + id + ".tmp", "rw").getChannel();
+							RandomAccessFile raf = new RandomAccessFile(TEMP_DIRS.get(i) + "DBHM" + id + ".tmp", "rw");
+							rafs.add(raf);
+							final FileChannel ofc = raf.getChannel();
 							ofcs.add(ofc);
 							final AtomicLong ofcSize = new AtomicLong(1);
 							ofcSizes.add(ofcSize);
 							final Vector<FileChannel> ifcs = new Vector<FileChannel>();
-							ifcs.add(new RandomAccessFile(TEMP_DIRS.get(i) + "DBHM" + id + ".tmp", "r").getChannel());
+							raf = new RandomAccessFile(TEMP_DIRS.get(i) + "DBHM" + id + ".tmp", "r");
+							rafs.add(raf);
+							ifcs.add(raf.getChannel());
 							ifcsArrayList.add(ifcs);
 							final Vector<Boolean> locks = new Vector<Boolean>();
 							locks.add(false);
@@ -1412,12 +1437,16 @@ public final class ResourceManager extends HRDBMSThread
 							// RecordManagerFactory.createRecordManager("JDBM" +
 							// id + "_" + i, props );
 							// BTree tree = BTree.createInstance(recman)
-							final FileChannel ofc = new RandomAccessFile(TEMP_DIRS.get(i) + "DBHM" + id + ".tmp", "rw").getChannel();
+							RandomAccessFile raf = new RandomAccessFile(TEMP_DIRS.get(i) + "DBHM" + id + ".tmp", "rw");
+							rafs.add(raf);
+							final FileChannel ofc = raf.getChannel();
 							ofcs.add(ofc);
 							final AtomicLong ofcSize = new AtomicLong(1);
 							ofcSizes.add(ofcSize);
 							final Vector<FileChannel> ifcs = new Vector<FileChannel>();
-							ifcs.add(new RandomAccessFile(TEMP_DIRS.get(i) + "DBHM" + id + ".tmp", "r").getChannel());
+							raf = new RandomAccessFile(TEMP_DIRS.get(i) + "DBHM" + id + ".tmp", "r");
+							rafs.add(raf);
+							ifcs.add(raf.getChannel());
 							ifcsArrayList.add(ifcs);
 							final Vector<Boolean> locks = new Vector<Boolean>();
 							locks.add(false);
@@ -1545,7 +1574,6 @@ public final class ResourceManager extends HRDBMSThread
 
 			it = null;
 			set = null;
-			ctCount = new AtomicLong(0);
 			for (final ThreadPoolThread t : threads)
 			{
 				t.start();
@@ -1902,23 +1930,24 @@ public final class ResourceManager extends HRDBMSThread
 		private void remove(long index) throws Exception
 		{
 			lock.readLock().lock();
-			final ArrayList<Object> o = internal.remove(index);
-			if (o != null)
-			{
-				lock.readLock().unlock();
-				return;
-			}
-
 			try
 			{
+				final ArrayList<Object> o = internal.remove(index);
+				if (o != null)
+				{
+					lock.readLock().unlock();
+					return;
+				}
+
 				removeFromDisk(index);
+				lock.readLock().unlock();
 			}
-			catch (final Exception e)
+			catch(Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
+				lock.readLock().unlock();
 				throw e;
 			}
-			lock.readLock().unlock();
 		}
 
 		private long removeFromIndex(long keyVal) throws IOException

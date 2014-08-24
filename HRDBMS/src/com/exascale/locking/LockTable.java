@@ -1,5 +1,6 @@
 package com.exascale.locking;
 
+import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 import com.exascale.exceptions.LockAbortException;
 import com.exascale.filesystem.Block;
@@ -9,8 +10,8 @@ import com.exascale.misc.MultiHashMap;
 public class LockTable
 {
 	private static int MAX_TIME_SECS;
-	private static ConcurrentHashMap<Block, Integer> locks = new ConcurrentHashMap<Block, Integer>();
-	private static MultiHashMap<Block, Thread> waitList = new MultiHashMap<Block, Thread>();
+	public static ConcurrentHashMap<Block, Integer> locks = new ConcurrentHashMap<Block, Integer>();
+	public static MultiHashMap<Block, Thread> waitList = new MultiHashMap<Block, Thread>();
 	public static boolean blockSLocks = false;
 
 	public LockTable()
@@ -40,7 +41,10 @@ public class LockTable
 				while (hasXLock(b) && !waitingTooLong(time))
 				{
 					waitList.multiPut(b, Thread.currentThread());
-					Thread.currentThread().wait(MAX_TIME_SECS * 1000);
+					synchronized(Thread.currentThread())
+					{
+						Thread.currentThread().wait(MAX_TIME_SECS * 1000);
+					}
 				}
 
 				waitList.multiRemove(b, Thread.currentThread());
@@ -81,9 +85,13 @@ public class LockTable
 			else
 			{
 				locks.remove(b);
-				for (final Thread thread : waitList.get(b))
+				Vector<Thread> clone = (Vector<Thread>)waitList.get(b).clone();
+				for (final Thread thread : clone)
 				{
-					thread.notify();
+					synchronized(thread)
+					{
+						thread.notify();
+					}
 				}
 			}
 		}
@@ -99,7 +107,10 @@ public class LockTable
 				while (hasOtherSLocks(b) && !waitingTooLong(time))
 				{
 					waitList.multiPut(b, Thread.currentThread());
-					Thread.currentThread().wait(MAX_TIME_SECS * 1000);
+					synchronized(Thread.currentThread())
+					{
+						Thread.currentThread().wait(MAX_TIME_SECS * 1000);
+					}
 				}
 
 				waitList.multiRemove(b, Thread.currentThread());
@@ -123,7 +134,7 @@ public class LockTable
 		}
 		catch (final Exception e)
 		{
-			HRDBMSWorker.logger.error("Exception occurred trying to obtain xlock. LockAbortException will be thrown.", e);
+			HRDBMSWorker.logger.error("Exception occurred trying to obtain xlock on " + b.toString() + ". LockAbortException will be thrown.", e);
 			throw new LockAbortException();
 		}
 	}

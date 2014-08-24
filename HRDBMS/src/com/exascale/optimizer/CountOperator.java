@@ -27,6 +27,11 @@ public final class CountOperator implements AggregateOperator, Serializable
 		this.output = output;
 		this.meta = meta;
 	}
+	
+	public void setInput(String col)
+	{
+		input = col;
+	}
 
 	@Override
 	public CountOperator clone()

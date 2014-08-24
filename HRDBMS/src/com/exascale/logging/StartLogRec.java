@@ -6,6 +6,6 @@ public class StartLogRec extends LogRec
 {
 	public StartLogRec(long txnum)
 	{
-		super(LogRec.COMMIT, txnum, ByteBuffer.allocate(28));
+		super(LogRec.START, txnum, ByteBuffer.allocate(28));
 	}
 }

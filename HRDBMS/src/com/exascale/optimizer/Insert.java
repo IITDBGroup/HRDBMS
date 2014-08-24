@@ -34,7 +34,7 @@ public class Insert extends SQLStatement
 	
 	public boolean fromSelect()
 	{
-		return fromSelect();
+		return fromSelect;
 	}
 	
 	public FullSelect getSelect()

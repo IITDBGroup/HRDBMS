@@ -172,6 +172,32 @@ public class SelectBaseListener implements SelectListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
+	@Override public void enterIntegerSet(@NotNull SelectParser.IntegerSetContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitIntegerSet(@NotNull SelectParser.IntegerSetContext ctx) { }
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterAny(@NotNull SelectParser.AnyContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitAny(@NotNull SelectParser.AnyContext ctx) { }
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
 	@Override public void enterPrimary(@NotNull SelectParser.PrimaryContext ctx) { }
 	/**
 	 * {@inheritDoc}
@@ -205,6 +231,19 @@ public class SelectBaseListener implements SelectListener {
 	 * <p>The default implementation does nothing.</p>
 	 */
 	@Override public void exitSortKeyInt(@NotNull SelectParser.SortKeyIntContext ctx) { }
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterRealGroupExp(@NotNull SelectParser.RealGroupExpContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitRealGroupExp(@NotNull SelectParser.RealGroupExpContext ctx) { }
 
 	/**
 	 * {@inheritDoc}
@@ -257,6 +296,19 @@ public class SelectBaseListener implements SelectListener {
 	 * <p>The default implementation does nothing.</p>
 	 */
 	@Override public void exitDropView(@NotNull SelectParser.DropViewContext ctx) { }
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterColumnSet(@NotNull SelectParser.ColumnSetContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitColumnSet(@NotNull SelectParser.ColumnSetContext ctx) { }
 
 	/**
 	 * {@inheritDoc}
@@ -432,19 +484,6 @@ public class SelectBaseListener implements SelectListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void enterCommonTableExpression(@NotNull SelectParser.CommonTableExpressionContext ctx) { }
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation does nothing.</p>
-	 */
-	@Override public void exitCommonTableExpression(@NotNull SelectParser.CommonTableExpressionContext ctx) { }
-
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation does nothing.</p>
-	 */
 	@Override public void enterNestedTable(@NotNull SelectParser.NestedTableContext ctx) { }
 	/**
 	 * {@inheritDoc}
@@ -452,6 +491,19 @@ public class SelectBaseListener implements SelectListener {
 	 * <p>The default implementation does nothing.</p>
 	 */
 	@Override public void exitNestedTable(@NotNull SelectParser.NestedTableContext ctx) { }
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterCommonTableExpression(@NotNull SelectParser.CommonTableExpressionContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitCommonTableExpression(@NotNull SelectParser.CommonTableExpressionContext ctx) { }
 
 	/**
 	 * {@inheritDoc}
@@ -471,19 +523,6 @@ public class SelectBaseListener implements SelectListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void enterPrimaryKey(@NotNull SelectParser.PrimaryKeyContext ctx) { }
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation does nothing.</p>
-	 */
-	@Override public void exitPrimaryKey(@NotNull SelectParser.PrimaryKeyContext ctx) { }
-
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation does nothing.</p>
-	 */
 	@Override public void enterIndexDef(@NotNull SelectParser.IndexDefContext ctx) { }
 	/**
 	 * {@inheritDoc}
@@ -491,6 +530,19 @@ public class SelectBaseListener implements SelectListener {
 	 * <p>The default implementation does nothing.</p>
 	 */
 	@Override public void exitIndexDef(@NotNull SelectParser.IndexDefContext ctx) { }
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterPrimaryKey(@NotNull SelectParser.PrimaryKeyContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitPrimaryKey(@NotNull SelectParser.PrimaryKeyContext ctx) { }
 
 	/**
 	 * {@inheritDoc}
@@ -523,6 +575,19 @@ public class SelectBaseListener implements SelectListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
+	@Override public void enterIdentifier(@NotNull SelectParser.IdentifierContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitIdentifier(@NotNull SelectParser.IdentifierContext ctx) { }
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
 	@Override public void enterIsLiteral(@NotNull SelectParser.IsLiteralContext ctx) { }
 	/**
 	 * {@inheritDoc}
@@ -543,6 +608,19 @@ public class SelectBaseListener implements SelectListener {
 	 * <p>The default implementation does nothing.</p>
 	 */
 	@Override public void exitSelectExpression(@NotNull SelectParser.SelectExpressionContext ctx) { }
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterIsSingleTable(@NotNull SelectParser.IsSingleTableContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitIsSingleTable(@NotNull SelectParser.IsSingleTableContext ctx) { }
 
 	/**
 	 * {@inheritDoc}
@@ -575,13 +653,13 @@ public class SelectBaseListener implements SelectListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void enterIsSingleTable(@NotNull SelectParser.IsSingleTableContext ctx) { }
+	@Override public void enterRangeType(@NotNull SelectParser.RangeTypeContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void exitIsSingleTable(@NotNull SelectParser.IsSingleTableContext ctx) { }
+	@Override public void exitRangeType(@NotNull SelectParser.RangeTypeContext ctx) { }
 
 	/**
 	 * {@inheritDoc}
@@ -692,19 +770,6 @@ public class SelectBaseListener implements SelectListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void enterSubSelect(@NotNull SelectParser.SubSelectContext ctx) { }
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation does nothing.</p>
-	 */
-	@Override public void exitSubSelect(@NotNull SelectParser.SubSelectContext ctx) { }
-
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation does nothing.</p>
-	 */
 	@Override public void enterCrossJoin(@NotNull SelectParser.CrossJoinContext ctx) { }
 	/**
 	 * {@inheritDoc}
@@ -718,6 +783,19 @@ public class SelectBaseListener implements SelectListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
+	@Override public void enterSubSelect(@NotNull SelectParser.SubSelectContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitSubSelect(@NotNull SelectParser.SubSelectContext ctx) { }
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
 	@Override public void enterConcat(@NotNull SelectParser.ConcatContext ctx) { }
 	/**
 	 * {@inheritDoc}
@@ -725,6 +803,19 @@ public class SelectBaseListener implements SelectListener {
 	 * <p>The default implementation does nothing.</p>
 	 */
 	@Override public void exitConcat(@NotNull SelectParser.ConcatContext ctx) { }
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterSelecthow(@NotNull SelectParser.SelecthowContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitSelecthow(@NotNull SelectParser.SelecthowContext ctx) { }
 
 	/**
 	 * {@inheritDoc}
@@ -835,6 +926,32 @@ public class SelectBaseListener implements SelectListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
+	@Override public void enterRangeSet(@NotNull SelectParser.RangeSetContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitRangeSet(@NotNull SelectParser.RangeSetContext ctx) { }
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterRealNodeExp(@NotNull SelectParser.RealNodeExpContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitRealNodeExp(@NotNull SelectParser.RealNodeExpContext ctx) { }
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
 	@Override public void enterStringLiteral(@NotNull SelectParser.StringLiteralContext ctx) { }
 	/**
 	 * {@inheritDoc}
@@ -939,6 +1056,19 @@ public class SelectBaseListener implements SelectListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
+	@Override public void enterOperator(@NotNull SelectParser.OperatorContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitOperator(@NotNull SelectParser.OperatorContext ctx) { }
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
 	@Override public void enterRangeExp(@NotNull SelectParser.RangeExpContext ctx) { }
 	/**
 	 * {@inheritDoc}
@@ -959,6 +1089,19 @@ public class SelectBaseListener implements SelectListener {
 	 * <p>The default implementation does nothing.</p>
 	 */
 	@Override public void exitDataType(@NotNull SelectParser.DataTypeContext ctx) { }
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterHashExp(@NotNull SelectParser.HashExpContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitHashExp(@NotNull SelectParser.HashExpContext ctx) { }
 
 	/**
 	 * {@inheritDoc}

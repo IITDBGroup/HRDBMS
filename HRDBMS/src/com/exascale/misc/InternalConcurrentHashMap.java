@@ -1711,7 +1711,7 @@ public final class InternalConcurrentHashMap implements Serializable
 					if ((k = e.key) == key || (e.hash == hash && key == k))
 					{
 						final ArrayList<Object> v = e.value;
-						if (value == null || value == v || value == v)
+						if (value == null || value == v)
 						{
 							if (pred == null)
 							{

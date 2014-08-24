@@ -31,7 +31,7 @@ public final class RunstatsOperator implements Operator, Serializable
 	private TreeMap<Integer, String> pos2Col;
 	private Operator parent;
 	private int node;
-	private Plan plan;
+	private transient Plan plan;
 	private String schema;
 	private String table;
 	private boolean done = false;

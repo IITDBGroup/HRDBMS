@@ -47,7 +47,7 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	@Override
 	public String getUserName() throws SQLException
 	{
-		return null;
+		return "";
 	}
 
 	@Override

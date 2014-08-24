@@ -21,6 +21,8 @@ public interface AggregateOperator
 	public void setInputColumn(String col);
 
 	public void setNumGroups(int groups);
+	
+	public void setInput(String col);
 
 	public abstract class AggregateResultThread extends ThreadPoolThread
 	{

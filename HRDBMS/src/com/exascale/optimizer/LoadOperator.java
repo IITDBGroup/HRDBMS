@@ -27,11 +27,13 @@ import java.util.StringTokenizer;
 import java.util.TreeMap;
 import java.util.Vector;
 import java.util.concurrent.atomic.AtomicInteger;
+import com.exascale.compression.CompressedSocket;
 import com.exascale.filesystem.RID;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MultiHashMap;
 import com.exascale.misc.MyDate;
+import com.exascale.optimizer.MetaData.PartitionMetaData;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.HRDBMSThread;
@@ -45,7 +47,7 @@ public final class LoadOperator implements Operator, Serializable
 	private TreeMap<Integer, String> pos2Col;
 	private Operator parent;
 	private int node;
-	private Plan plan;
+	private transient Plan plan;
 	private String schema;
 	private String table;
 	private AtomicInteger num = new AtomicInteger(0);
@@ -60,6 +62,16 @@ public final class LoadOperator implements Operator, Serializable
 	public void setPlan(Plan plan)
 	{
 		this.plan = plan;
+	}
+	
+	public String getSchema()
+	{
+		return schema;
+	}
+	
+	public String getTable()
+	{
+		return table;
 	}
 	
 	public Plan getPlan()
@@ -225,6 +237,16 @@ public final class LoadOperator implements Operator, Serializable
 	@Override
 	public void start() throws Exception
 	{
+		if (replace)
+		{
+			MassDeleteOperator delete = new MassDeleteOperator(schema, table, meta);
+			delete.setPlan(plan);
+			delete.setTransaction(tx);
+			delete.start();
+			delete.next(this);
+			delete.close();
+		}
+		
 		TreeMap<Integer, String> pos2Cols = new MetaData().getPos2ColForTable(schema, table, tx);
 		HashMap<String, String> cols2Types = new MetaData().getCols2TypesForTable(schema, table, tx);
 		for (String col : pos2Cols.values())
@@ -302,23 +324,49 @@ public final class LoadOperator implements Operator, Serializable
 		done = true;
 	}
 	
-	private void flush(ArrayList<String> indexes) throws Exception
+	private FlushMasterThread flush(ArrayList<String> indexes) throws Exception
 	{
-		synchronized(map)
-		{
-			ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
-			for (Object o : map.getKeySet())
-			{
-				int node = (Integer)o;
-				Vector<ArrayList<Object>> list = map.get(node);
-				threads.add(new FlushThread(list, indexes, node));
-			}
+		FlushMasterThread master = new FlushMasterThread(indexes);
+		master.start();
+		return master;
+	}
+	
+	private class FlushMasterThread extends HRDBMSThread
+	{
+		private ArrayList<String> indexes;
+		private boolean ok;
 		
+		public FlushMasterThread(ArrayList<String> indexes)
+		{
+			this.indexes = indexes;
+		}
+		
+		public boolean getOK()
+		{
+			return ok;
+		}
+		
+		public void run()
+		{
+			ok = true;
+			ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
+			synchronized(map)
+			{
+				for (Object o : map.getKeySet())
+				{
+					int node = (Integer)o;
+					Vector<ArrayList<Object>> list = map.get(node);
+					threads.add(new FlushThread(list, indexes, node));
+				}
+			
+				map.clear();
+			}
+			
 			for (FlushThread thread : threads)
 			{
 				thread.start();
 			}
-		
+			
 			for (FlushThread thread : threads)
 			{
 				while (true)
@@ -334,11 +382,9 @@ public final class LoadOperator implements Operator, Serializable
 			
 				if (!thread.getOK())
 				{
-					throw new Exception("Error flushing inserts");
+					ok = false;
 				}
 			}
-		
-			map.clear();
 		}
 	}
 	
@@ -369,16 +415,19 @@ public final class LoadOperator implements Operator, Serializable
 		
 		public void run()
 		{
+			FlushMasterThread master = null;
 			try
 			{
 				TreeMap<Integer, String> pos2Col = MetaData.getPos2ColForTable(schema, table, tx);
 				HashMap<String, String> cols2Types = new MetaData().getCols2TypesForTable(schema, table, tx);
 				BufferedReader in = new BufferedReader(new FileReader(file));
 				Object o = next(in);
+				PartitionMetaData pmeta = new MetaData().new PartitionMetaData(schema, table, tx);
+				HashMap<String, Integer> cols2Pos = MetaData.getCols2PosForTable(schema, table, tx);
 				while (!(o instanceof DataEndMarker))
 				{
 					ArrayList<Object> row = (ArrayList<Object>)o;
-					cast(row, pos2Col, cols2Types);
+					num++;
 					for (Map.Entry entry : pos2Length.entrySet())
 					{
 						if (((String)row.get((Integer)entry.getKey())).length() > (Integer)entry.getValue())
@@ -387,20 +436,35 @@ public final class LoadOperator implements Operator, Serializable
 							return;
 						}
 					}
-					ArrayList<Integer> nodes = MetaData.determineNode(schema, table, row, tx);
+					ArrayList<Integer> nodes = MetaData.determineNode(schema, table, row, tx, pmeta, cols2Pos);
 					for (Integer node : nodes)
 					{
 						plan.addNode(node);
 						map.multiPut(node, row);
-						num++;
 					}
 					if (map.size() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes")))
 					{
-						flush(indexes);
+						if (master != null)
+						{
+							master.join();
+							if (!master.getOK())
+							{
+								throw new Exception("Error flushing inserts");
+							}
+						}
+						master = flush(indexes);
 					}
 					else if (map.totalSize() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_batch")))
 					{
-						flush(indexes);
+						if (master != null)
+						{
+							master.join();
+							if (!master.getOK())
+							{
+								throw new Exception("Error flushing inserts");
+							}
+						}
+						master = flush(indexes);
 					}
 				
 					o = next(in);
@@ -408,12 +472,26 @@ public final class LoadOperator implements Operator, Serializable
 			
 				if (map.totalSize() > 0)
 				{
-					flush(indexes);
+					if (master != null)
+					{
+						master.join();
+						if (!master.getOK())
+						{
+							throw new Exception("Error flushing inserts");
+						}
+					}
+					master = flush(indexes);
+					master.join();
+					if (!master.getOK())
+					{
+						throw new Exception("Error flushing inserts");
+					}
 				}
 			}
 			catch(Exception e)
 			{
 				ok = false;
+				HRDBMSWorker.logger.debug("", e);
 			}
 		}
 		
@@ -486,7 +564,7 @@ public final class LoadOperator implements Operator, Serializable
 			try
 			{
 				String hostname = new MetaData().getHostNameForNode(node, tx);
-				sock = new Socket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+				sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "INSERT          ".getBytes("UTF-8");
 				outMsg[8] = 0;
@@ -511,9 +589,8 @@ public final class LoadOperator implements Operator, Serializable
 				objOut.writeObject(new MetaData().getPartMeta(schema, table, tx));
 				objOut.flush();
 				out.flush();
-				objOut.close();
 				getConfirmation(sock);
-				out.close();
+				objOut.close();
 				sock.close();
 			}
 			catch(Exception e)
@@ -525,6 +602,7 @@ public final class LoadOperator implements Operator, Serializable
 				catch(Exception f)
 				{}
 				ok = false;
+				HRDBMSWorker.logger.debug("", e);
 			}
 		}
 		

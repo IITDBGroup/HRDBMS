@@ -6,7 +6,7 @@ public abstract class HRDBMSThread extends ThreadPoolThread
 {
 	protected String description;
 	private boolean wait = false;
-	private long index;
+	protected long index;
 
 	public String getDescription()
 	{

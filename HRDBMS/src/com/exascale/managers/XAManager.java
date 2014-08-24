@@ -8,16 +8,25 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Vector;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
+import com.exascale.compression.CompressedSocket;
 import com.exascale.logging.CommitLogRec;
 import com.exascale.logging.LogRec;
 import com.exascale.logging.PrepareLogRec;
 import com.exascale.logging.ReadyLogRec;
 import com.exascale.logging.RollbackLogRec;
+import com.exascale.logging.StartLogRec;
 import com.exascale.logging.XAAbortLogRec;
 import com.exascale.logging.XACommitLogRec;
+import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MultiHashMap;
+import com.exascale.optimizer.CreateIndexOperator;
+import com.exascale.optimizer.DeleteOperator;
 import com.exascale.optimizer.InsertOperator;
+import com.exascale.optimizer.LoadOperator;
 import com.exascale.optimizer.MassDeleteOperator;
 import com.exascale.optimizer.MetaData;
 import com.exascale.optimizer.NetworkReceiveOperator;
@@ -29,6 +38,7 @@ import com.exascale.optimizer.Phase3;
 import com.exascale.optimizer.Phase4;
 import com.exascale.optimizer.Phase5;
 import com.exascale.optimizer.SQLParser;
+import com.exascale.optimizer.UpdateOperator;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.ConnectionWorker;
@@ -36,9 +46,59 @@ import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.XAWorker;
 import com.exascale.optimizer.RootOperator;
 
-public class XAManager
+public class XAManager extends HRDBMSThread
 {
 	public static MultiHashMap<Transaction, Plan> txs = new MultiHashMap<Transaction, Plan>();
+	public static AtomicBoolean rP1 = new AtomicBoolean(false);
+	public static AtomicBoolean rP2 = new AtomicBoolean(false);
+	public static BlockingQueue<Object> in = new LinkedBlockingQueue<Object>();
+	
+	public XAManager()
+	{
+		HRDBMSWorker.logger.info("Starting initialization of the XA Manager.");
+		this.setWait(false);
+		this.description = "XA Manager";
+	}
+
+	@Override
+	public void run()
+	{
+		while (!rP1.get())
+		{
+			try
+			{
+				Thread.sleep(1000);
+			}
+			catch(Exception e)
+			{}
+		}
+		
+		while (in.size() > 0)
+		{
+			while (true)
+			{
+				try
+				{
+					String cmd = (String)in.take();
+					Long txnum = (Long)in.take();
+					ArrayList<Integer> nodes = (ArrayList<Integer>)in.take();
+					if (cmd.equals("COMMIT"))
+					{
+						this.phase2(txnum, nodes);
+					}
+					else
+					{
+						rollbackP2(txnum, nodes);
+					}
+					break;
+				}
+				catch(InterruptedException e)
+				{}
+			}
+		}
+		
+		rP2.set(true);
+	}
 	
 	public static XAWorker executeQuery(String sql, Transaction tx, ConnectionWorker conn) throws Exception
 	{
@@ -47,34 +107,63 @@ public class XAManager
 		{
 			throw new Exception("Not a select statement");
 		}
+		HRDBMSWorker.logger.debug("About to check plan cache");
 		Plan plan = PlanCacheManager.checkPlanCache(sql);
 		
 		if (plan == null)
 		{
+			HRDBMSWorker.logger.debug("Did not find plan in cache");
 			SQLParser parse = new SQLParser(sql, conn, tx);
+			HRDBMSWorker.logger.debug("Created SQL parser");
 			Operator op = parse.parse();
+			HRDBMSWorker.logger.debug("Parsing completed");
 			new Phase1((RootOperator)op, tx).optimize();
+			HRDBMSWorker.logger.debug("Phase 1 completed");
 			new Phase2((RootOperator)op, tx).optimize();
+			HRDBMSWorker.logger.debug("Phase 2 completed");
 			new Phase3((RootOperator)op, tx).optimize();
+			HRDBMSWorker.logger.debug("Phase 3 completed");
 			new Phase4((RootOperator)op, tx).optimize();
+			HRDBMSWorker.logger.debug("Phase 4 completed");
 			new Phase5((RootOperator)op, tx).optimize();
+			HRDBMSWorker.logger.debug("Phase 5 completed");
 			ArrayList<Operator> array = new ArrayList<Operator>(1);
 			array.add(op);
 			plan = new Plan(false, array);
 			
 			if (parse.doesNotUseCurrentSchema())
 			{
-				PlanCacheManager.addPlan(sql, plan);
+				PlanCacheManager.addPlan(sql, new Plan(plan));
 			}
+		}
+		else
+		{
+			HRDBMSWorker.logger.debug("Did find plan in cache");
 		}
 		
 		txs.multiPut(tx, plan);
+		String filename = HRDBMSWorker.getHParms().getProperty("log_dir");
+		if (!filename.endsWith("/"))
+		{
+			filename += "/";
+		}
+		filename += "xa.log";
+		StartLogRec start = new StartLogRec(tx.number());
+		LogManager.write(start, filename);
 		return new XAWorker(plan, tx, true);
 	}
 	
 	public static XAWorker executeCatalogQuery(Plan p, Transaction tx) throws Exception
 	{	
 		txs.multiPut(tx, p);
+		String filename = HRDBMSWorker.getHParms().getProperty("log_dir");
+		if (!filename.endsWith("/"))
+		{
+			filename += "/";
+		}
+		filename += "xa.log";
+		StartLogRec start = new StartLogRec(tx.number());
+		LogManager.write(start, filename);
 		return new XAWorker(p, tx, true);
 	}
 	
@@ -93,6 +182,14 @@ public class XAManager
 		array.add(op);
 		Plan plan = new Plan(false, array);
 		txs.multiPut(tx, plan);
+		String filename = HRDBMSWorker.getHParms().getProperty("log_dir");
+		if (!filename.endsWith("/"))
+		{
+			filename += "/";
+		}
+		filename += "xa.log";
+		StartLogRec start = new StartLogRec(tx.number());
+		LogManager.write(start, filename);
 		return new XAWorker(plan, tx, false);
 	}
 	
@@ -112,6 +209,14 @@ public class XAManager
 		array.add(op);
 		Plan plan = new Plan(false, array);
 		txs.multiPut(tx, plan);
+		String filename = HRDBMSWorker.getHParms().getProperty("log_dir");
+		if (!filename.endsWith("/"))
+		{
+			filename += "/";
+		}
+		filename += "xa.log";
+		StartLogRec start = new StartLogRec(tx.number());
+		LogManager.write(start, filename);
 		return new XAWorker(plan, tx, false);
 	}
 	
@@ -140,10 +245,16 @@ public class XAManager
 		sendPhase2s(tree, new Transaction(txnum));
 	}
 	
-	public static void rollback(long txnum, ArrayList<Integer> nodes)
+	public static void rollback(long txnum, ArrayList<Integer> nodes) throws Exception
 	{
 		ArrayList<Object> tree = makeTree(nodes);
 		sendRollbacks(tree, new Transaction(txnum));
+	}
+	
+	public static void rollbackP2(long txnum, ArrayList<Integer> nodes)
+	{
+		ArrayList<Object> tree = makeTree(nodes);
+		sendRollbacksP2(tree, new Transaction(txnum));
 	}
 	
 	public static void rollback(Transaction tx) throws Exception
@@ -151,7 +262,7 @@ public class XAManager
 		Vector<Plan> ps = txs.get(tx);
 		if (ps == null || ps.size() == 0)
 		{
-			throw new Exception("The XAManager does not own this transaction");
+			return;
 		}
 		
 		ArrayList<Integer> nodes = new ArrayList<Integer>();
@@ -170,7 +281,7 @@ public class XAManager
 		return new ArrayList<Integer>(set);
 	}
 	
-	private static void sendRollbacks(ArrayList<Object> tree, Transaction tx)
+	private static void sendRollbacks(ArrayList<Object> tree, Transaction tx) throws Exception
 	{
 		String filename = HRDBMSWorker.getHParms().getProperty("log_dir");
 		if (!filename.endsWith("/"))
@@ -178,8 +289,13 @@ public class XAManager
 			filename += "/";
 		}
 		filename += "xa.log";
+		if (LogManager.committed.containsKey(tx.number()))
+		{
+			throw new Exception("Can't abort a transaction that has already been committed");
+		}
 		LogRec rec = new XAAbortLogRec(tx.number(), toList(tree));
 		LogManager.write(rec, filename);
+		LogManager.aborted.put(tx.number(), tx.number());
 		try
 		{
 			LogManager.flush(rec.lsn(), filename);
@@ -201,6 +317,43 @@ public class XAManager
 			else
 			{
 				new SendRollbackThread((ArrayList<Object>)o, tx).start();
+			}
+		}
+	}
+	
+	private static void sendRollbacksP2(ArrayList<Object> tree, Transaction tx)
+	{
+		txs.remove(tx);
+		ArrayList<SendRollbackThread> threads = new ArrayList<SendRollbackThread>();
+		for (Object o : tree)
+		{
+			if (o instanceof Integer)
+			{
+				ArrayList<Object> list = new ArrayList<Object>(1);
+				list.add(o);
+				SendRollbackThread thread = new SendRollbackThread(list, tx);
+				threads.add(thread);
+				thread.start();
+			}
+			else
+			{
+				SendRollbackThread thread = new SendRollbackThread((ArrayList<Object>)o, tx);
+				threads.add(thread);
+				thread.start();
+			}
+		}
+		
+		for (SendRollbackThread thread : threads)
+		{
+			while (true)
+			{
+				try
+				{
+					thread.join();
+					break;
+				}
+				catch(InterruptedException e)
+				{}
 			}
 		}
 	}
@@ -233,9 +386,10 @@ public class XAManager
 		Socket sock = null;
 		try
 		{
-			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
+			Transaction tx2 = new Transaction(Transaction.ISOLATION_CS);
+			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx2);
 	
-			sock = new Socket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "LROLLBCK        ".getBytes("UTF-8");
 			outMsg[8] = 0;
@@ -249,12 +403,12 @@ public class XAManager
 			out.write(outMsg);
 			out.write(longToBytes(tx.number()));
 			ObjectOutputStream objOut = new ObjectOutputStream(out);
-			objOut.writeObject(convertToHosts(tree, tx));
+			objOut.writeObject(convertToHosts(tree, tx2));
+			tx2.commit();
 			objOut.flush();
 			out.flush();
-			objOut.close();
 			getConfirmation(sock);
-			out.close();
+			objOut.close();
 			sock.close();
 		}
 		catch(Exception e)
@@ -350,7 +504,7 @@ public class XAManager
 		return buff;
 	}
 	
-	private static void sendCommits(ArrayList<Object> tree, Transaction tx)
+	private static void sendCommits(ArrayList<Object> tree, Transaction tx) throws Exception
 	{
 		String filename = HRDBMSWorker.getHParms().getProperty("log_dir");
 		if (!filename.endsWith("/"))
@@ -423,8 +577,13 @@ public class XAManager
 		
 		if (allOK)
 		{
+			if (LogManager.aborted.containsKey(tx.number()))
+			{
+				throw new Exception("Can't commit a transaction that has already been aborted");
+			}
 			rec = new XACommitLogRec(tx.number(), toList(tree));
 			LogManager.write(rec, filename);
+			LogManager.committed.put(tx.number(), tx.number());
 			try
 			{
 				LogManager.flush(rec.lsn(), filename);
@@ -452,8 +611,13 @@ public class XAManager
 		}
 		else
 		{
+			if (LogManager.committed.containsKey(tx.number()))
+			{
+				throw new Exception("Can't abort a transaction that has already been committed");
+			}
 			rec = new XAAbortLogRec(tx.number(), toList(tree));
 			LogManager.write(rec, filename);
+			LogManager.aborted.put(tx.number(), tx.number());
 			try
 			{
 				LogManager.flush(rec.lsn(), filename);
@@ -483,17 +647,36 @@ public class XAManager
 	
 	private static void sendPhase2s(ArrayList<Object> tree, Transaction tx)
 	{
+		ArrayList<SendCommitThread> threads = new ArrayList<SendCommitThread>();
 		for (Object o : tree)
 		{
 			if (o instanceof Integer)
 			{
 				ArrayList<Object> list = new ArrayList<Object>(1);
 				list.add(o);
-				new SendCommitThread(list, tx).start();
+				SendCommitThread thread = new SendCommitThread(list, tx);
+				threads.add(thread);
+				thread.start();
 			}
 			else
 			{
-				new SendCommitThread((ArrayList<Object>)o, tx).start();
+				SendCommitThread thread = new SendCommitThread((ArrayList<Object>)o, tx);
+				threads.add(thread);
+				thread.start();
+			}
+		}
+		
+		for (SendCommitThread thread : threads)
+		{
+			while (true)
+			{
+				try
+				{
+					thread.join();
+					break;
+				}
+				catch(InterruptedException e)
+				{}
 			}
 		}
 	}
@@ -502,7 +685,7 @@ public class XAManager
 	{
 		try
 		{
-			Socket sock = new Socket(xa.getHost(), Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			Socket sock = new CompressedSocket(xa.getHost(), Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "CHECKTX         ".getBytes("UTF-8");
 			outMsg[8] = 0;
@@ -529,6 +712,7 @@ public class XAManager
 					if (temp == -1)
 					{
 						in.close();
+						sock.close();
 						throw new Exception();
 					}
 					else
@@ -539,6 +723,7 @@ public class XAManager
 				catch (final Exception e)
 				{
 					in.close();
+					sock.close();
 					throw new Exception();
 				}
 			}
@@ -620,7 +805,7 @@ public class XAManager
 			String host = new MetaData().getMyHostName(tx);
 			byte[] data = host.getBytes("UTF-8");
 			byte[] length = intToBytes(data.length);
-			sock = new Socket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "PREPARE         ".getBytes("UTF-8");
 			outMsg[8] = 0;
@@ -639,9 +824,8 @@ public class XAManager
 			objOut.writeObject(convertToHosts(tree, tx));
 			objOut.flush();
 			out.flush();
-			objOut.close();
 			getConfirmation(sock);
-			out.close();
+			objOut.close();
 			sock.close();
 			return true;
 		}
@@ -685,8 +869,9 @@ public class XAManager
 		Socket sock = null;
 		try
 		{
-			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
-			sock = new Socket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			Transaction tx2 = new Transaction(Transaction.ISOLATION_CS);
+			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx2);
+			sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "LCOMMIT         ".getBytes("UTF-8");
 			outMsg[8] = 0;
@@ -700,12 +885,12 @@ public class XAManager
 			out.write(outMsg);
 			out.write(longToBytes(tx.number()));
 			ObjectOutputStream objOut = new ObjectOutputStream(out);
-			objOut.writeObject(convertToHosts(tree, tx));
+			objOut.writeObject(convertToHosts(tree, tx2));
+			tx2.commit();
 			objOut.flush();
 			out.flush();
-			objOut.close();
 			getConfirmation(sock);
-			out.close();
+			objOut.close();
 			sock.close();
 		}
 		catch(Exception e)
@@ -732,7 +917,7 @@ public class XAManager
 	{
 		ArrayList<Object> retval = new ArrayList<Object>();
 		int i = 0;
-		while (i < retval.size())
+		while (i < tree.size())
 		{
 			Object obj = tree.get(i);
 			if (obj instanceof Integer)
@@ -864,7 +1049,10 @@ public class XAManager
 	{
 		if (o instanceof MassDeleteOperator)
 		{
-			return MetaData.getNodesForTable(((MassDeleteOperator)o).getSchema(), ((MassDeleteOperator)o).getTable(), tx);
+			Transaction tx2 = new Transaction(Transaction.ISOLATION_CS);
+			ArrayList<Integer> retval = MetaData.getNodesForTable(((MassDeleteOperator)o).getSchema(), ((MassDeleteOperator)o).getTable(), tx2);
+			tx2.commit();
+			return retval;
 		}
 		ArrayList<Integer> list = new ArrayList<Integer>();
 		if (o instanceof NetworkSendOperator)
@@ -881,10 +1069,69 @@ public class XAManager
 			list.addAll(getNodes(op, tx));
 		}
 		
-		if (o instanceof InsertOperator && list.isEmpty())
+		if (o instanceof InsertOperator)
 		{
-			((InsertOperator)o).getPlan().getTouchedNodes();
+			list.addAll(((InsertOperator)o).getPlan().getTouchedNodes());
 		}
+		
+		if (o instanceof DeleteOperator)
+		{
+			if (((DeleteOperator)o).getSchema().equals("SYS"))
+			{
+				Transaction tx2 = new Transaction(Transaction.ISOLATION_CS);
+				ArrayList<Object> rs = PlanCacheManager.getCoordNodes().setParms().execute(tx2);
+				ArrayList<Integer> coords = new ArrayList<Integer>();
+				for (Object r2 : rs)
+				{
+					if (!(r2 instanceof DataEndMarker))
+					{
+						coords.add((Integer)((ArrayList<Object>)r2).get(0));
+					}
+				}
+				
+				list.addAll(coords);
+				tx2.commit();
+			}
+		}
+		
+		if (o instanceof UpdateOperator)
+		{
+			if (((UpdateOperator)o).getSchema().equals("SYS"))
+			{
+				Transaction tx2 = new Transaction(Transaction.ISOLATION_CS);
+				ArrayList<Object> rs = PlanCacheManager.getCoordNodes().setParms().execute(tx2);
+				ArrayList<Integer> coords = new ArrayList<Integer>();
+				for (Object r2 : rs)
+				{
+					if (!(r2 instanceof DataEndMarker))
+					{
+						coords.add((Integer)((ArrayList<Object>)r2).get(0));
+					}
+				}
+				
+				list.addAll(coords);
+				tx2.commit();
+			}
+			
+			list.addAll(((UpdateOperator)o).getPlan().getTouchedNodes());
+		}
+		
+		if (o instanceof CreateIndexOperator)
+		{
+			Transaction tx2 = new Transaction(Transaction.ISOLATION_CS);
+			CreateIndexOperator op = (CreateIndexOperator)o;
+			list.addAll(MetaData.getNodesForTable(op.getSchema(), op.getTable(), tx2));
+			tx2.commit();
+		}
+		
+		if (o instanceof LoadOperator)
+		{
+			Transaction tx2 = new Transaction(Transaction.ISOLATION_CS);
+			LoadOperator op = (LoadOperator)o;
+			list.addAll(MetaData.getNodesForTable(op.getSchema(), op.getTable(), tx2));
+			tx2.commit();
+		}
+		
 		return list;
 	}
 	

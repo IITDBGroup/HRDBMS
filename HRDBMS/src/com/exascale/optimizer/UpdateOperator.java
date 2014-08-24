@@ -7,15 +7,21 @@ import java.io.Serializable;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.Vector;
 import java.util.concurrent.atomic.AtomicInteger;
+import com.exascale.compression.CompressedSocket;
 import com.exascale.filesystem.RID;
 import com.exascale.managers.HRDBMSWorker;
+import com.exascale.managers.PlanCacheManager;
+import com.exascale.managers.ResourceManager;
+import com.exascale.managers.ResourceManager.DiskBackedArray;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MultiHashMap;
+import com.exascale.optimizer.MetaData.PartitionMetaData;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.HRDBMSThread;
@@ -29,12 +35,13 @@ public final class UpdateOperator implements Operator, Serializable
 	private TreeMap<Integer, String> pos2Col;
 	private Operator parent;
 	private int node;
-	private Plan plan;
+	private transient Plan plan;
 	private String schema;
 	private String table;
 	private AtomicInteger num = new AtomicInteger(0);
 	private boolean done = false;
-	private MultiHashMap map = new MultiHashMap<Integer, UpdateSetAndRAIK>();
+	private MultiHashMap map = new MultiHashMap<Integer, RIDAndIndexKeys>();
+	private MultiHashMap map2 = new MultiHashMap<Integer, ArrayList<Object>>();
 	private Transaction tx;
 	private ArrayList<Column> cols;
 	private ArrayList<String> buildList;
@@ -51,6 +58,16 @@ public final class UpdateOperator implements Operator, Serializable
 		this.meta = meta;
 		this.cols = cols;
 		this.buildList = buildList;
+	}
+	
+	public Plan getPlan()
+	{
+		return plan;
+	}
+	
+	public String getSchema()
+	{
+		return schema;
 	}
 	
 	public void setTransaction(Transaction tx)
@@ -220,6 +237,7 @@ public final class UpdateOperator implements Operator, Serializable
 	@Override
 	public void start() throws Exception
 	{
+		child.start();
 		ArrayList<String> indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
 		HashMap<Integer, Integer> pos2Length = new HashMap<Integer, Integer>();
 		HashMap<String, Integer> cols2Pos = MetaData.getCols2PosForTable(schema, table, tx);
@@ -227,50 +245,124 @@ public final class UpdateOperator implements Operator, Serializable
 		HashMap<String, String> cols2Types = new MetaData().getCols2TypesForTable(schema, table, tx);
 		for (Map.Entry entry : new MetaData().getCols2TypesForTable(schema, table, tx).entrySet())
 		{
-			if (entry.getValue().equals("CHAR") && cols.contains(entry.getKey()))
+			if (entry.getValue().equals("CHAR"))
 			{
 				int length = MetaData.getLengthForCharCol(schema, table, (String)entry.getKey(), tx);
-				pos2Length.put(child.getCols2Pos().get(entry.getKey()), length);
+				pos2Length.put(cols2Pos.get(entry.getKey()), length);
 			}
 		}
+		
+		PartitionMetaData pmeta = new MetaData().new PartitionMetaData(schema, table, tx);
 		Object o = child.next(this);
+		DiskBackedArray dba = ResourceManager.newDiskBackedArray(10);
 		while (!(o instanceof DataEndMarker))
 		{
-			ArrayList<Object> row = (ArrayList<Object>)o;
-			cast(row, pos2Col, cols2Types);
-			for (Map.Entry entry : pos2Length.entrySet())
+			dba.add((ArrayList<Object>)o);
+			o = child.next(this);
+		}
+		
+		Iterator it = dba.iterator();
+		while (it.hasNext())
+		{
+			try
 			{
-				if (((String)row.get((Integer)entry.getKey())).length() > (Integer)entry.getValue())
+				ArrayList<Object> row = (ArrayList<Object>)it.next();
+				int node = (Integer)row.get(child.getCols2Pos().get("_RID1"));
+				int device = (Integer)row.get(child.getCols2Pos().get("_RID2"));
+				int block = (Integer)row.get(child.getCols2Pos().get("_RID3"));
+				int rec = (Integer)row.get(child.getCols2Pos().get("_RID4"));
+				ArrayList<ArrayList<Object>> indexKeys = new ArrayList<ArrayList<Object>>();
+				for (String index : indexes)
 				{
-					num.set(Integer.MIN_VALUE);
-					return;
+					ArrayList<Object> keys = new ArrayList<Object>();
+					ArrayList<String> cols = MetaData.getColsFromIndexFileName(index, tx);
+					for (String col : cols)
+					{
+						keys.add(row.get(child.getCols2Pos().get(col)));
+					}
+				
+					indexKeys.add(keys);
 				}
-			}
-			int node = (Integer)row.get(child.getCols2Pos().get("_RID1"));
-			int device = (Integer)row.get(child.getCols2Pos().get("_RID2"));
-			int block = (Integer)row.get(child.getCols2Pos().get("_RID3"));
-			int rec = (Integer)row.get(child.getCols2Pos().get("_RID4"));
-			ArrayList<ArrayList<Object>> indexKeys = new ArrayList<ArrayList<Object>>();
-			ArrayList<Object> updateSet = new ArrayList<Object>();
-			for (String col : buildList)
-			{
-				updateSet.add(row.get(child.getCols2Pos().get(col)));
-			}
-			for (String index : indexes)
-			{
-				ArrayList<Object> keys = new ArrayList<Object>();
-				ArrayList<String> cols = MetaData.getColsFromIndexFileName(index, tx);
-				for (String col : cols)
+			
+				RIDAndIndexKeys raik = new RIDAndIndexKeys(new RID(node, device, block, rec), indexKeys);
+				map.multiPut(node, raik);
+				
+				ArrayList<Object> row2 = new ArrayList<Object>();
+				for (String col : pos2Col.values())
 				{
-					keys.add(row.get(child.getCols2Pos().get(col)));
+					boolean contains = false;
+					int index = -1;
+					String col1 = col.substring(col.indexOf('.') + 1);
+					int i = 0;
+					for (Column col2 : cols)
+					{
+						if (col2.getColumn().equals(col1))
+						{
+							contains = true;
+							index = i;
+						}
+						
+						i++;
+					}
+					
+					if (!contains)
+					{
+						row2.add(row.get(child.getCols2Pos().get(col)));
+					}
+					else
+					{
+						String toGet = buildList.get(index);
+						Integer indx = child.getCols2Pos().get(toGet);
+						if (indx != null)
+						{
+							row2.add(row.get(indx));
+						}
+						else
+						{
+							if (toGet.contains("."))
+							{
+								toGet = toGet.substring(toGet.indexOf('.') + 1);
+							}
+							
+							for (Map.Entry entry : child.getCols2Pos().entrySet())
+							{
+								String temp = (String)entry.getKey();
+								if (temp.contains("."))
+								{
+									temp = temp.substring(temp.indexOf('.') + 1);
+								}
+								
+								if (temp.equals(toGet))
+								{
+									row2.add(row.get((Integer)entry.getValue()));
+									break;
+								}
+							}
+						}
+					}
 				}
 				
-				indexKeys.add(keys);
+				cast(row2, pos2Col, cols2Types);
+				for (Map.Entry entry : pos2Length.entrySet())
+				{
+					if (((String)row2.get((Integer)entry.getKey())).length() > (Integer)entry.getValue())
+					{
+						num.set(Integer.MIN_VALUE);
+						return;
+					}
+				}
+				ArrayList<Integer> nodes = MetaData.determineNode(schema, table, row2, tx, pmeta, cols2Pos);
+				for (Integer n : nodes)
+				{
+					plan.addNode(n);
+					map2.multiPut(n, row2);
+				}
 			}
-			
-			RIDAndIndexKeys raik = new RIDAndIndexKeys(new RID(node, device, block, rec), indexKeys);
-			UpdateSetAndRAIK entry = new UpdateSetAndRAIK(updateSet, raik);
-			map.multiPut(node, entry);
+			catch(Exception e)
+			{
+				HRDBMSWorker.logger.debug("", e);
+				throw e;
+			}
 			num.incrementAndGet();
 			if (map.size() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes")))
 			{
@@ -290,10 +382,9 @@ public final class UpdateOperator implements Operator, Serializable
 					return;
 				}
 			}
-			
-			o = child.next(this);
 		}
 		
+		dba.close();
 		if (map.totalSize() > 0)
 		{
 			flush(indexes);
@@ -302,14 +393,34 @@ public final class UpdateOperator implements Operator, Serializable
 		done = true;
 	}
 	
-	private void flush(ArrayList<String> indexes)
+	private void flush(ArrayList<String> indexes) throws Exception
 	{
 		ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
 		for (Object o : map.getKeySet())
 		{
 			int node = (Integer)o;
-			Vector<UpdateSetAndRAIK> list = map.get(node);
-			threads.add(new FlushThread(list, indexes));
+			Vector<RIDAndIndexKeys> list = map.get(node);
+			if (node == -1)
+			{
+				ArrayList<Object> rs = PlanCacheManager.getCoordNodes().setParms().execute(tx);
+				ArrayList<Integer> coords = new ArrayList<Integer>();
+				for (Object row : rs)
+				{
+					if (!(row instanceof DataEndMarker))
+					{
+						coords.add((Integer)((ArrayList<Object>)row).get(0));
+					}
+				}
+				
+				for (Integer coord : coords)
+				{
+					threads.add(new FlushThread(list, indexes, coord));
+				}
+			}
+			else
+			{
+				threads.add(new FlushThread(list, indexes, node));
+			}
 		}
 		
 		for (FlushThread thread : threads)
@@ -337,18 +448,54 @@ public final class UpdateOperator implements Operator, Serializable
 		}
 		
 		map.clear();
+		
+		ArrayList<FlushThread2> threads2 = new ArrayList<FlushThread2>();
+		for (Object o : map2.getKeySet())
+		{
+			int node = (Integer)o;
+			Vector<ArrayList<Object>> list = map2.get(node);
+			threads2.add(new FlushThread2(list, indexes, node));
+		}
+		
+		for (FlushThread2 thread : threads2)
+		{
+			thread.start();
+		}
+		
+		for (FlushThread2 thread : threads2)
+		{
+			while (true)
+			{
+				try
+				{
+					thread.join();
+					break;
+				}
+				catch(InterruptedException e)
+				{}
+			}
+			
+			if (!thread.getOK())
+			{
+				num.set(Integer.MIN_VALUE);
+			}
+		}
+		
+		map2.clear();
 	}
 	
 	private class FlushThread extends HRDBMSThread
 	{
-		private Vector<UpdateSetAndRAIK> list;
+		private Vector<RIDAndIndexKeys> list;
 		private ArrayList<String> indexes;
 		private boolean ok = true;
+		private int node;
 		
-		public FlushThread(Vector<UpdateSetAndRAIK> list, ArrayList<String> indexes)
+		public FlushThread(Vector<RIDAndIndexKeys> list, ArrayList<String> indexes, int node)
 		{
 			this.list = list;
 			this.indexes = indexes;
+			this.node = node;
 		}
 		
 		public boolean getOK()
@@ -358,15 +505,124 @@ public final class UpdateOperator implements Operator, Serializable
 		
 		public void run()
 		{
-			int node = list.get(0).getRAIK().getRID().getNode();
+			//send schema, table, tx, indexes, and list
+			Socket sock = null;
+			try
+			{
+				String hostname = new MetaData().getHostNameForNode(node, tx);
+				sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+				OutputStream out = sock.getOutputStream();
+				byte[] outMsg = "DELETE          ".getBytes("UTF-8");
+				outMsg[8] = 0;
+				outMsg[9] = 0;
+				outMsg[10] = 0;
+				outMsg[11] = 0;
+				outMsg[12] = 0;
+				outMsg[13] = 0;
+				outMsg[14] = 0;
+				outMsg[15] = 0;
+				out.write(outMsg);
+				out.write(longToBytes(tx.number()));
+				out.write(stringToBytes(schema));
+				out.write(stringToBytes(table));
+				ObjectOutputStream objOut = new ObjectOutputStream(out);
+				objOut.writeObject(indexes);
+				objOut.writeObject(list);
+				objOut.writeObject(MetaData.getKeys(indexes, tx));
+				objOut.writeObject(MetaData.getTypes(indexes, tx));
+				objOut.writeObject(MetaData.getOrders(indexes, tx));
+				objOut.flush();
+				out.flush();
+				getConfirmation(sock);
+				objOut.close();
+				sock.close();
+			}
+			catch(Exception e)
+			{
+				HRDBMSWorker.logger.debug("", e);
+				try
+				{
+					sock.close();
+				}
+				catch(Exception f)
+				{}
+				ok = false;
+			}
+		}
+		
+		private void getConfirmation(Socket sock) throws Exception
+		{
+			InputStream in = sock.getInputStream();
+			byte[] inMsg = new byte[2];
+			
+			int count = 0;
+			while (count < 2)
+			{
+				try
+				{
+					int temp = in.read(inMsg, count, 2 - count);
+					if (temp == -1)
+					{
+						in.close();
+						throw new Exception();
+					}
+					else
+					{
+						count += temp;
+					}
+				}
+				catch (final Exception e)
+				{
+					in.close();
+					throw new Exception();
+				}
+			}
+			
+			String inStr = new String(inMsg, "UTF-8");
+			if (!inStr.equals("OK"))
+			{
+				in.close();
+				throw new Exception();
+			}
+			
+			try
+			{
+				in.close();
+			}
+			catch(Exception e)
+			{}
+		}
+	}
+	
+	private class FlushThread2 extends HRDBMSThread
+	{
+		private Vector<ArrayList<Object>> list;
+		private ArrayList<String> indexes;
+		private boolean ok = true;
+		private int node;
+		
+		public FlushThread2(Vector<ArrayList<Object>> list, ArrayList<String> indexes, int node)
+		{
+			this.list = list;
+			this.indexes = indexes;
+			this.node = node;
+		}
+		
+		public boolean getOK()
+		{
+			return ok;
+		}
+		
+		public void run()
+		{
 			//send schema, table, tx, indexes, list, and cols2Pos
 			Socket sock = null;
 			try
 			{
 				String hostname = new MetaData().getHostNameForNode(node, tx);
-				sock = new Socket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+				sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				OutputStream out = sock.getOutputStream();
-				byte[] outMsg = "UPDATE          ".getBytes("UTF-8");
+				byte[] outMsg = "INSERT          ".getBytes("UTF-8");
 				outMsg[8] = 0;
 				outMsg[9] = 0;
 				outMsg[10] = 0;
@@ -386,12 +642,11 @@ public final class UpdateOperator implements Operator, Serializable
 				objOut.writeObject(MetaData.getTypes(indexes, tx));
 				objOut.writeObject(MetaData.getOrders(indexes, tx));
 				objOut.writeObject(new MetaData().getCols2PosForTable(schema, table, tx));
-				objOut.writeObject(cols);
+				objOut.writeObject(new MetaData().getPartMeta(schema, table, tx));
 				objOut.flush();
 				out.flush();
-				objOut.close();
 				getConfirmation(sock);
-				out.close();
+				objOut.close();
 				sock.close();
 			}
 			catch(Exception e)
@@ -403,6 +658,7 @@ public final class UpdateOperator implements Operator, Serializable
 				catch(Exception f)
 				{}
 				ok = false;
+				HRDBMSWorker.logger.debug("", e);
 			}
 		}
 		

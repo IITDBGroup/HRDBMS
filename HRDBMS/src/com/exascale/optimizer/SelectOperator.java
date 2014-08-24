@@ -22,7 +22,7 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 	private AtomicLong total = new AtomicLong(0);
 	private final ArrayList<String> references = new ArrayList<String>();
 	private int node;
-	private Plan plan;
+	private transient Plan plan;
 	
 	public void setPlan(Plan plan)
 	{

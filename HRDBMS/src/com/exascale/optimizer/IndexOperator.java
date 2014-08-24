@@ -20,7 +20,8 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 	private int device = -1;
 	private volatile boolean forceDone = false;
 	private volatile Boolean startCalled = false;
-	private Plan plan;
+	private DataEndMarker startCalledLock = new DataEndMarker();
+	private transient Plan plan;
 	
 	public void setPlan(Plan plan)
 	{
@@ -258,7 +259,7 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 	@Override
 	public void start() throws Exception
 	{
-		synchronized (startCalled)
+		synchronized (startCalledLock)
 		{
 			if (!startCalled)
 			{

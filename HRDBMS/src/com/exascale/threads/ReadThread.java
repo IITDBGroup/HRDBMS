@@ -6,6 +6,7 @@ import java.nio.channels.FileChannel;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
 import com.exascale.managers.FileManager;
+import com.exascale.managers.HRDBMSWorker;
 
 public class ReadThread extends HRDBMSThread
 {
@@ -32,8 +33,9 @@ public class ReadThread extends HRDBMSThread
 			final FileChannel fc = FileManager.getFile(b.fileName());
 			fc.read(bb, b.number() * bb.capacity());
 		}
-		catch (final IOException e)
+		catch (final Exception e)
 		{
+			HRDBMSWorker.logger.warn("I/O error occurred trying to read file: " + b.fileName() + ":" + b.number(), e);
 			this.terminate();
 			return;
 		}

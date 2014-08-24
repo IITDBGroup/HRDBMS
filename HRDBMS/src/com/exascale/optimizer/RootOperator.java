@@ -1,12 +1,13 @@
 package com.exascale.optimizer;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.TreeMap;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.tables.Plan;
 
-public final class RootOperator implements Operator
+public final class RootOperator implements Operator, Serializable
 {
 	private Operator child;
 	private HashMap<String, String> cols2Types;
@@ -15,7 +16,7 @@ public final class RootOperator implements Operator
 	private HashMap<String, Double> generated;
 	private int node;
 	private final MetaData meta;
-	private Plan plan;
+	private transient Plan plan;
 	
 	public void setPlan(Plan plan)
 	{

@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import com.exascale.managers.HRDBMSWorker;
+import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MurmurHash;
 import com.exascale.tables.Transaction;
 
@@ -23,7 +24,7 @@ public class CNFFilter implements Serializable
 
 	private volatile HashSet<HashMap<Filter, Filter>> hshm = null;
 
-	private final Boolean hshmLock = false;
+	private final DataEndMarker hshmLock = new DataEndMarker();
 
 	public CNFFilter()
 	{
@@ -39,62 +40,14 @@ public class CNFFilter implements Serializable
 	{
 		this.meta = meta;
 		this.cols2Pos = cols2Pos;
-
-		for (final HashMap<Filter, Filter> ored : clause)
-		{
-			final ArrayList<Filter> oredArray = new ArrayList<Filter>(ored.size());
-			final ArrayList<Double> scores = new ArrayList<Double>(ored.size());
-			for (final Filter filter : ored.keySet())
-			{
-				oredArray.add(filter);
-				scores.add(meta.likelihood(filter, tx, tree));
-			}
-
-			// sort oredArray and scores
-			reverseQuicksort(oredArray, scores);
-			filters.add(oredArray);
-		}
-
-		final ArrayList<Double> scores = new ArrayList<Double>(filters.size());
-		for (final ArrayList<Filter> ored : filters)
-		{
-			scores.add(meta.likelihood(ored, tx, tree));
-		}
-
-		// sort filters and scores
-		quicksort(filters, scores);
+		this.setHSHM(clause);
 	}
 
 	public CNFFilter(HashSet<HashMap<Filter, Filter>> clause, MetaData meta, HashMap<String, Integer> cols2Pos, HashMap<String, Double> generated, Transaction tx, Operator tree) throws Exception
 	{
 		this.meta = meta;
 		this.cols2Pos = cols2Pos;
-
-		for (final HashMap<Filter, Filter> ored : clause)
-		{
-			final ArrayList<Filter> oredArray = new ArrayList<Filter>(ored.size());
-			final ArrayList<Double> scores = new ArrayList<Double>(ored.size());
-			for (final Filter filter : ored.keySet())
-			{
-				oredArray.add(filter);
-				scores.add(meta.likelihood(filter, generated, tx, tree)); // more likely =
-																// better
-			}
-
-			// sort oredArray and scores
-			reverseQuicksort(oredArray, scores);
-			filters.add(oredArray);
-		}
-
-		final ArrayList<Double> scores = new ArrayList<Double>(filters.size());
-		for (final ArrayList<Filter> ored : filters)
-		{
-			scores.add(meta.likelihood(ored, generated, tx, tree)); // less likely =
-															// better
-		}
-
-		// sort filters and scores
-		quicksort(filters, scores);
+		this.setHSHM(clause);
 	}
 
 	public CNFFilter(HashSet<HashMap<Filter, Filter>> clause, MetaData meta, HashMap<String, Integer> cols2Pos, RootOperator op, Transaction tx) throws Exception

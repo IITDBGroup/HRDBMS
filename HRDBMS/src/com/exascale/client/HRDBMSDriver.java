@@ -9,6 +9,7 @@ import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.Properties;
 import java.util.logging.Logger;
+import com.exascale.compression.CompressedSocket;
 
 public class HRDBMSDriver implements Driver
 {
@@ -63,7 +64,7 @@ public class HRDBMSDriver implements Driver
 			Socket sock = null;
 			try
 			{
-				sock = new Socket(hostname, portNum);
+				sock = new CompressedSocket(hostname, portNum);
 			}
 			catch(Exception e)
 			{

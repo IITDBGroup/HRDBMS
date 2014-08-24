@@ -22,6 +22,11 @@ public final class AvgOperator implements AggregateOperator, Serializable
 		this.output = output;
 		this.meta = meta;
 	}
+	
+	public void setInput(String col)
+	{
+		input = col;
+	}
 
 	@Override
 	public AvgOperator clone()
@@ -116,7 +121,7 @@ public final class AvgOperator implements AggregateOperator, Serializable
 		@Override
 		public final void put(ArrayList<Object> row, ArrayList<Object> group)
 		{
-			final Double val = (Double)row.get(pos);
+			final Double val = ((Number)row.get(pos)).doubleValue();
 			final AtomicDouble ad = sums.get(group);
 			if (ad != null)
 			{

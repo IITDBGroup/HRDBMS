@@ -91,6 +91,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 					for (final Operator op : children)
 					{
 						final NetworkSendOperator child = (NetworkSendOperator)op;
+						child.clearParent();
 						final CompressedSocket sock = new CompressedSocket(meta.getHostNameForNode(child.getNode()), WORKER_PORT);
 						socks.put(child, sock);
 						final OutputStream out = sock.getOutputStream();

@@ -13,9 +13,14 @@ public class InsertLogRec extends LogRec
 	private byte[] before;
 	private byte[] after;
 
-	public InsertLogRec(long txnum, Block b, int off, byte[] before, byte[] after)
+	public InsertLogRec(long txnum, Block b, int off, byte[] before, byte[] after) throws Exception
 	{
 		super(LogRec.INSERT, txnum, ByteBuffer.allocate(28 + b.toString().length() + 12 + 2 * before.length));
+		if (before.length != after.length)
+		{
+			throw new Exception("Before and after images length do not match");
+		}
+		
 		this.b = b;
 		this.off = off;
 		this.before = before;
@@ -44,6 +49,12 @@ public class InsertLogRec extends LogRec
 	@Override
 	public void redo()
 	{
+		HRDBMSWorker.logger.debug("Redoing change at " + b + "@" + off + " for a length of " + before.length);
+		if (b.number() < 0)
+		{
+			Exception e = new Exception("Negative block number requested");
+			HRDBMSWorker.logger.debug("", e);
+		}
 		final String cmd = "REQUEST PAGE " + this.txnum() + "~" + b.toString();
 		while (true)
 		{
@@ -71,9 +82,11 @@ public class InsertLogRec extends LogRec
 	@Override
 	public void undo()
 	{
-		if (b.fileName().endsWith("SYS.NODESTATE.tbl"))
+		HRDBMSWorker.logger.debug("Undoing change at " + b + "@" + off + " for a length of " + before.length);
+		if (b.number() < 0)
 		{
-			return;
+			Exception e = new Exception("Negative block number requested");
+			HRDBMSWorker.logger.debug("", e);
 		}
 		
 		final String cmd = "REQUEST PAGE " + this.txnum() + "~" + b.toString();

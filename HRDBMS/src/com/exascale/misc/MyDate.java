@@ -66,6 +66,10 @@ public class MyDate implements Comparable, Serializable
 	@Override
 	public boolean equals(Object r)
 	{
+		if (r == null || !(r instanceof MyDate))
+		{
+			return false;
+		}
 		final MyDate rhs = (MyDate)r;
 		return (year == rhs.year && month == rhs.month && day == rhs.day);
 	}

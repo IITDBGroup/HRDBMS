@@ -73,7 +73,6 @@ public class HRDBMSResultSet implements ResultSet
 		cols2Pos = (HashMap<String, Integer>)in.readObject();
 		pos2Cols = (TreeMap<Integer, String>)in.readObject();
 		cols2Types = (HashMap<String, String>)in.readObject();
-		in.close();
 	}
 
 	@Override
@@ -123,6 +122,7 @@ public class HRDBMSResultSet implements ResultSet
 				read(num);
 				int size = bytesToInt(num);
 				byte[] data = new byte[size];
+				read(data);
 				Object obj = fromBytes(data);
 				rs.add(obj);
 				i--;
@@ -335,10 +335,13 @@ public class HRDBMSResultSet implements ResultSet
 		
 		if (firstRowIs - 1 + rs.size() < position)
 		{
-			Object row = rs.get(rs.size()-1);
-			if (row instanceof DataEndMarker)
+			if (rs.size() > 0)
 			{
-				return false;
+				Object row = rs.get(rs.size()-1);
+				if (row instanceof DataEndMarker)
+				{
+					return false;
+				}
 			}
 			
 			//call to get more data

@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import com.exascale.compression.CompressedSocket;
 import com.exascale.logging.LogRec;
 import com.exascale.logging.PrepareLogRec;
 import com.exascale.logging.XAAbortLogRec;
@@ -31,7 +32,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 	private TreeMap<Integer, String> pos2Col;
 	private Operator parent;
 	private int node;
-	private Plan plan;
+	private transient Plan plan;
 	private String schema;
 	private String table;
 	private AtomicInteger num = new AtomicInteger(0);
@@ -379,7 +380,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 			try
 			{
 				String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
-				sock = new Socket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+				sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "MDELETE         ".getBytes("UTF-8");
 				outMsg[8] = 0;
@@ -402,9 +403,10 @@ public final class MassDeleteOperator implements Operator, Serializable
 				objOut.writeObject(MetaData.getKeys(indexes, tx));
 				objOut.writeObject(MetaData.getTypes(indexes, tx));
 				objOut.writeObject(MetaData.getOrders(indexes, tx));
+				objOut.writeObject(MetaData.getPos2ColForTable(schema, table, tx));
+				objOut.writeObject(MetaData.getCols2TypesForTable(schema, table, tx));
 				objOut.flush();
 				out.flush();
-				objOut.close();
 				getConfirmation(sock);
 				int count = 4;
 				int off = 0;
@@ -415,7 +417,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 					if (temp == -1)
 					{
 						ok = false;
-						out.close();
+						objOut.close();
 						sock.close();
 					}
 					
@@ -423,7 +425,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 				}
 				
 				num = bytesToInt(numBytes);
-				out.close();
+				objOut.close();
 				sock.close();
 				ok = true;
 			}
@@ -436,6 +438,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 				}
 				catch(Exception f)
 				{}
+				HRDBMSWorker.logger.debug("", e);
 			}
 		}
 	}
@@ -490,7 +493,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 	{
 		ArrayList<Object> retval = new ArrayList<Object>();
 		int i = 0;
-		while (i < retval.size())
+		while (i < tree.size())
 		{
 			Object obj = tree.get(i);
 			if (obj instanceof Integer)
@@ -542,13 +545,6 @@ public final class MassDeleteOperator implements Operator, Serializable
 			in.close();
 			throw new Exception();
 		}
-		
-		try
-		{
-			in.close();
-		}
-		catch(Exception e)
-		{}
 	}
 
 	@Override

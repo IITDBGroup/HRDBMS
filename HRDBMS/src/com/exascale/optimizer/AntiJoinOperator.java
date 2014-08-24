@@ -62,8 +62,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 	private boolean cardSet = false;
 	private final Vector<Operator> clones = new Vector<Operator>();
 	private final Vector<AtomicBoolean> lockVector = new Vector<AtomicBoolean>();
-	private final ReentrantLock thisLock = new ReentrantLock();
-	private Plan plan;
+	private transient Plan plan;
 	
 	public void setPlan(Plan plan)
 	{
@@ -1029,7 +1028,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 											{
 												try
 												{
-													nlHash.join();
+													thread.join();
 													break;
 												}
 												catch (final InterruptedException e)
@@ -1388,6 +1387,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 				{
 					// synchronized(buckets)
 					bucketsLock.lock();
+					try
 					{
 						if (i < buckets.size())
 						{
@@ -1407,6 +1407,11 @@ public final class AntiJoinOperator implements Operator, Serializable
 							bucketsLock.unlock();
 							o = null;
 						}
+					}
+					catch(Exception e)
+					{
+						bucketsLock.unlock();
+						throw e;
 					}
 				}
 

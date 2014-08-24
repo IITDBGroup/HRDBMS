@@ -1496,9 +1496,10 @@ public final class Phase4
 			pushAcross(receive);
 			return true;
 		}
+
 		final MultiOperator parent = (MultiOperator)receive.parent();
 		final long card = card(parent);
-		if (card > MAX_CARD_BEFORE_HASH)
+		if (card > MAX_CARD_BEFORE_HASH && parent.getKeys().size() > 0)
 		{
 			final ArrayList<String> cols2 = new ArrayList<String>(parent.getKeys());
 			final int starting = getStartingNode(card / MIN_CARD_BEFORE_HASH);
@@ -1589,6 +1590,11 @@ public final class Phase4
 			cCache.clear();
 			return true;
 		}
+		
+		if (parent.existsCountDistinct())
+		{
+			return false;
+		}
 
 		final ArrayList<Operator> children = receive.children();
 		final HashMap<Operator, Operator> send2Child = new HashMap<Operator, Operator>();
@@ -1617,7 +1623,6 @@ public final class Phase4
 		for (final Map.Entry entry : send2Child.entrySet())
 		{
 			pClone = parent.clone();
-			pClone.removeCountDistinct();
 			if (pClone.getOutputCols().size() == 0)
 			{
 				pClone.addCount("_P" + Phase3.colSuffix++);
@@ -2789,7 +2794,7 @@ public final class Phase4
 				}
 				else if (op instanceof SortOperator)
 				{
-					if (!eligible.contains(op))
+					if (!eligible.contains(receive))
 					{
 						continue;
 					}
@@ -2802,7 +2807,7 @@ public final class Phase4
 				}
 				else if (op instanceof MultiOperator)
 				{
-					if (!eligible.contains(op))
+					if (!eligible.contains(receive))
 					{
 						continue;
 					}
@@ -2861,9 +2866,22 @@ public final class Phase4
 				else if (op instanceof UnionOperator)
 				{
 					final Operator parent = op.parent();
-					if (card(op.children().get(0)) + card(op.children().get(1)) <= MAX_LOCAL_LEFT_HASH && noLargeUpstreamJoins(op))
+					if (op.children().size() == 1)
 					{
 						continue;
+					}
+					if (noLargeUpstreamJoins(op))
+					{
+						long card = 0;
+						for (Operator child : op.children())
+						{
+							card += card(child);
+						}
+						
+						if (card <= MAX_LOCAL_LEFT_HASH)
+						{
+							continue;
+						}
 					}
 
 					if (!handleUnion(receive))
@@ -3042,7 +3060,7 @@ public final class Phase4
 				}
 				else if (op instanceof TopOperator)
 				{
-					if (!eligible.contains(op))
+					if (!eligible.contains(receive))
 					{
 						continue;
 					}

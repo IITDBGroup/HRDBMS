@@ -18,7 +18,7 @@ public final class ExtendObjectOperator implements Operator, Serializable
 	private final String name;
 	private final MetaData meta;
 	private int node;
-	private Plan plan;
+	private transient Plan plan;
 	private Object obj;
 	
 	public void setPlan(Plan plan)

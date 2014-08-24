@@ -74,7 +74,7 @@ public class StartCoordsThread extends HRDBMSThread
 
 					final String user = HRDBMSWorker.getHParms().getProperty("hrdbms_user");
 					HRDBMSWorker.logger.info("Starting coordinator " + host);
-					final String command1 = "java -Xmx" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -cp HRDBMS.jar:jsch-0.1.50.jar:log4j-api-2.0-beta8.jar:log4j-core-2.0-beta8.jar:. com.exascale.managers.HRDBMSWorker " + HRDBMSWorker.TYPE_COORD;
+					final String command1 = "java -Xmx" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -cp HRDBMS.jar:jsch-0.1.50.jar:log4j-api-2.0-beta8.jar:log4j-core-2.0-beta8.jar:antlr-4.2.1-complete.jar:. com.exascale.managers.HRDBMSWorker " + HRDBMSWorker.TYPE_COORD;
 					try
 					{
 
@@ -84,7 +84,7 @@ public class StartCoordsThread extends HRDBMSThread
 						final Session session = jsch.getSession(user, host, 22);
 						final UserInfo ui = new MyUserInfo();
 						session.setUserInfo(ui);
-						jsch.addIdentity(".ssh/id_dsa");
+						jsch.addIdentity(".ssh/id_rsa");
 						session.setConfig(config);
 						session.connect();
 
@@ -113,7 +113,8 @@ public class StartCoordsThread extends HRDBMSThread
 				line = in.readLine();
 			}
 			HRDBMSWorker.logger.debug("Start Coordinator is about to terminate.");
-			this.terminate();
+			HRDBMSWorker.getThreadList().remove(index);
+			HRDBMSWorker.terminateThread(index);
 			return;
 		}
 		catch (final Exception e)

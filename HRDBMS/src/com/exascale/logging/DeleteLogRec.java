@@ -13,9 +13,15 @@ public class DeleteLogRec extends LogRec
 	private byte[] before;
 	private byte[] after;
 
-	public DeleteLogRec(long txnum, Block b, int off, byte[] before, byte[] after)
+	public DeleteLogRec(long txnum, Block b, int off, byte[] before, byte[] after) throws Exception
 	{
-		super(LogRec.DELETE, txnum, ByteBuffer.allocate(28 + b.toString().length() + 8 + 2 * before.length));
+		super(LogRec.DELETE, txnum, ByteBuffer.allocate(32 + b.toString().length() + 8 + 2 * before.length));
+
+		if (before.length != after.length)
+		{
+			throw new Exception("Before and after images length do not match");
+		}
+		
 		this.b = b;
 		this.off = off;
 		this.before = before;
@@ -44,6 +50,12 @@ public class DeleteLogRec extends LogRec
 	@Override
 	public void redo()
 	{
+		HRDBMSWorker.logger.debug("Redoing change at " + b + "@" + off + " for a length of " + before.length);
+		if (b.number() < 0)
+		{
+			Exception e = new Exception("Negative block number requested");
+			HRDBMSWorker.logger.debug("", e);
+		}
 		final String cmd = "REQUEST PAGE " + this.txnum() + "~" + b.toString();
 		while (true)
 		{
@@ -71,10 +83,13 @@ public class DeleteLogRec extends LogRec
 	@Override
 	public void undo()
 	{
-		if (b.fileName().endsWith("SYS.NODESTATE.tbl"))
+		HRDBMSWorker.logger.debug("Undoing change at " + b + "@" + off + " for a length of " + before.length);
+		if (b.number() < 0)
 		{
-			return;
+			Exception e = new Exception("Negative block number requested");
+			HRDBMSWorker.logger.debug("", e);
 		}
+	
 		final String cmd = "REQUEST PAGE " + this.txnum() + "~" + b.toString();
 		while (true)
 		{

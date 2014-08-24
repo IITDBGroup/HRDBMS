@@ -29,7 +29,7 @@ public final class ExceptOperator implements Operator, Serializable
 	private int estimate = 16;
 	private volatile boolean inited = false;
 	private volatile boolean startDone = false;
-	private Plan plan;
+	private transient Plan plan;
 	private int childPos = -1;
 	private boolean estimateSet = false;
 	
@@ -95,6 +95,11 @@ public final class ExceptOperator implements Operator, Serializable
 		}
 		catch(Exception e)
 		{}
+		
+		for (Operator o : children)
+		{
+			o.close();
+		}
 	}
 
 	@Override

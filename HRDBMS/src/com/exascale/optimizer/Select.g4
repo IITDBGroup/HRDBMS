@@ -1,24 +1,32 @@
-grammar select;
+grammar Select;
 
 select : insert | update | delete | createTable | createIndex | createView | dropTable | dropIndex | dropView | load | runstats | (('WITH' commonTableExpression (',' commonTableExpression)*)? fullSelect) ;
 runstats : 'RUNSTATS ON' tableName ;
 insert : 'INSERT INTO' tableName (('FROM'? fullSelect) | ('VALUES(' expression (',' expression)* ')')) ;
-update : 'UPDATE' tableName 'SET' (columnName | colList) '=' expression whereClause? ;
+update : 'UPDATE' tableName 'SET' (columnName | colList) EQUALS expression whereClause? ;
 delete : 'DELETE FROM' tableName whereClause? ;
 createTable : 'CREATE TABLE' tableName '(' colDef (',' colDef)* (',' primaryKey)? ')' groupExp? nodeExp deviceExp ;
-groupExp : NONE | ('{' groupDef ('|' groupDef)* '}' (',' (HASH ',' '{' columnName ('|' columnName)* '}') | (RANGE ',' columnName ',' '{' rangeExp ('|' rangeExp)* '}'))?) ;
+groupExp : NONE | realGroupExp ;
+realGroupExp :  '{' groupDef ('|' groupDef)* '}' (',' (hashExp | rangeType))? ;
 groupDef : '{' INTEGER ('|' INTEGER)* '}' ;
-rangeExp : ANY* ;
-nodeExp : ANYTEXT | (ALL | ('{' INTEGER ('|' INTEGER)* '}') (',' (HASH ',' '{' columnName ('|' columnName)* '}') | (RANGE ',' columnName ',' '{' rangeExp ('|' rangeExp)* '}'))?) ;
-deviceExp : (ALL | ('{' INTEGER ('|' INTEGER)* '}') (',' (HASH ',' '{' columnName ('|' columnName)* '}') | (RANGE ',' columnName ',' '{' rangeExp ('|' rangeExp)* '}'))?) ;
+rangeExp : .*? ;
+nodeExp : ANYTEXT | realNodeExp ;
+realNodeExp : (ALL | integerSet) (',' (hashExp | rangeType))? ;
+integerSet :  '{' INTEGER ('|' INTEGER)* '}' ;
+hashExp : HASH ',' columnSet ;
+columnSet : '{' columnName ('|' columnName)* '}' ;
+rangeType : RANGE ',' columnName ',' rangeSet ;
+rangeSet : '{' rangeExp ('|' rangeExp)* '}' ;
+deviceExp : (ALL | integerSet) (',' (hashExp | rangeExp))? ; 
 dropTable : 'DROP TABLE' tableName ;
 createView : 'CREATE VIEW' tableName 'AS' fullSelect ;
 dropView : 'DROP VIEW' tableName ;
 createIndex : 'CREATE' UNIQUE? 'INDEX' tableName 'ON' tableName '(' indexDef (',' indexDef)* ')' ;
 dropIndex : 'DROP INDEX' tableName ;
-load : 'LOAD' (REPLACE | RESUME) 'INTO' tableName ('DELIMITER' ANY)? 'FROM' remainder ;
-remainder : ANY* EOF ;
-indexDef : columnName (dir=('ASC' | 'DESC'))? ;
+load : 'LOAD' (REPLACE | RESUME) 'INTO' tableName ('DELIMITER' any)? 'FROM' remainder ;
+any : . ;
+remainder : .* EOF ;
+indexDef : columnName (DIRECTION)? ;
 colDef : columnName dataType notNull? primary? ;
 primaryKey : 'PRIMARY KEY' '(' columnName (',' columnName)* ')' ;
 notNull : NOT NULL ;
@@ -27,14 +35,15 @@ dataType : char2 | int2 | long2 | date2 | float2 ;
 char2 : ('CHAR' | 'VARCHAR') '(' INTEGER ')' ;
 int2 : 'INTEGER' ;
 long2 : 'BIGINT' ;
-date2 : 'DATE' ;
+date2 : DATE ;
 float2 : 'FLOAT' | 'DOUBLE' ;
 colList : '(' columnName (',' columnName)* ')' ;
 commonTableExpression : IDENTIFIER ('(' columnName (',' columnName)* ')')? 'AS' '(' fullSelect ')' ;
 fullSelect : (subSelect	| '(' fullSelect ')') (connectedSelect)* (orderBy)? (fetchFirst)? ;
 connectedSelect : TABLECOMBINATION (subSelect | '(' fullSelect ')') ;
 subSelect : selectClause fromClause (whereClause)? (groupBy)? (havingClause)? (orderBy)? (fetchFirst)? ;
-selectClause : 'SELECT' (SELECTHOW)? (STAR | (selectListEntry (',' selectListEntry)*)) ;
+selectClause : 'SELECT' (selecthow)? (STAR | (selectListEntry (',' selectListEntry)*)) ;
+selecthow : ALL | DISTINCT ;
 selectListEntry : columnName ('AS')? (IDENTIFIER)?			# SelectColumn
 				| (expression ('AS')? (IDENTIFIER)?) 		# SelectExpression ;
 fromClause : 'FROM' tableReference (',' tableReference)* ;
@@ -60,14 +69,15 @@ columnName : IDENTIFIER						# Col1Part
 searchCondition : searchClause (connectedSearchClause)* ;
 connectedSearchClause : (AND | OR) searchClause ;
 searchClause : (NOT)? (predicate | ('(' searchCondition ')')) ;
-predicate : (expression OPERATOR expression)	# NormalPredicate 
+predicate : (expression operator expression)	# NormalPredicate 
 			| (expression NULLOPERATOR) 		# NullPredicate 
 			| 'EXISTS' '(' subSelect ')'        # ExistsPredicate ;
+operator : OPERATOR | EQUALS ;
 expression : expression op=(STAR | '/') expression				# MulDiv
 			| expression op=('+'| NEGATIVE) expression			# AddSub
 			| expression CONCAT expression						# Concat
-			| IDENTIFIER '(' expression (',' expression)* ')'	# Function
-			| COUNT '(' 'DISTINCT' expression ')'               # CountDistinct
+			| identifier '(' expression (',' expression)* ')'	# Function
+			| COUNT '(' DISTINCT expression ')'                 # CountDistinct
 			| '(' expression (',' expression)* ')'				# List
 			| COUNT '(' STAR ')'								# CountStar
 			| literal											# IsLiteral
@@ -75,6 +85,7 @@ expression : expression op=(STAR | '/') expression				# MulDiv
 			| '(' subSelect ')'									# ExpSelect
 			| '(' expression ')' 								# PExpression
 			| NULL												# NullExp;
+identifier : COUNT | DATE | IDENTIFIER ;
 literal : (NEGATIVE)? INTEGER ('.' INTEGER)?	# NumericLiteral
 			| STRING 							# StringLiteral ;
 
@@ -84,8 +95,8 @@ STAR : '*' ;
 COUNT : 'COUNT' ;
 CONCAT : '||' ;
 NEGATIVE : '-' ;
-OPERATOR : '='
-		| '<>'
+EQUALS : '=' ;
+OPERATOR : '<>'
 		| '!='
 		| '<='
 		| '<'
@@ -116,13 +127,10 @@ TABLECOMBINATION : 'UNION ALL'
 				| 'UNION'
 				| 'INTERSECT'
 				| 'EXCEPT' ;
-SELECTHOW : 'ALL'
-		| 'DISTINCT' ;
-IDENTIFIER : [A-Z]([A-Z] | [0-9] | '_')* ;
+DISTINCT : 'DISTINCT' ;
 INTEGER : [0-9]+ ;
 WS : [ \t\n\r]+ -> skip ;
 UNIQUE : 'UNIQUE' ;
-ANY : . ;
 REPLACE : 'REPLACE' ;
 RESUME : 'RESUME' ;
 NONE : 'NONE' ;
@@ -130,3 +138,6 @@ ALL : 'ALL' ;
 ANYTEXT : 'ANY' ;
 HASH : 'HASH' ;
 RANGE : 'RANGE' ;
+DATE : 'DATE' ;
+IDENTIFIER : [A-Z]([A-Z] | [0-9] | '_')* ;
+ANY : . ;

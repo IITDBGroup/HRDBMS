@@ -16,7 +16,7 @@ public class LogRec
 	private long timestamp;
 	protected final ByteBuffer buffer;
 
-	public static final int NQCHECK = 0, START = 1, COMMIT = 2, ROLLB = 3, INSERT = 4, DELETE = 5, PREPARE = 6, READY = 7, NOTREADY = 8, XACOMMIT = 9, XAABORT = 10;
+	public static final int NQCHECK = 0, START = 1, COMMIT = 2, ROLLB = 3, INSERT = 4, DELETE = 5, PREPARE = 6, READY = 7, NOTREADY = 8, XACOMMIT = 9, XAABORT = 10, EXTEND = 11;
 
 	public LogRec(FileChannel fc) throws IOException
 	{
@@ -58,7 +58,7 @@ public class LogRec
 		return lsn;
 	}
 
-	public LogRec rebuild()
+	public LogRec rebuild() throws Exception
 	{
 		if (type == INSERT)
 		{
@@ -82,6 +82,28 @@ public class LogRec
 			buffer.get(after);
 			final int off = buffer.getInt();
 			final InsertLogRec retval = new InsertLogRec(txnum, block, off, bytes, after);
+			retval.setLSN(lsn);
+			retval.setTimeStamp(timestamp);
+			return retval;
+		}
+		
+		if (type == EXTEND)
+		{
+			buffer.position(28);
+			byte[] bytes = new byte[buffer.getInt()];
+			buffer.get(bytes);
+			Block block;
+			try
+			{
+				block = new Block(new String(bytes, "UTF-8"));
+			}
+			catch (final Exception e)
+			{
+				HRDBMSWorker.logger.error("Error converting bytes to UTF-8 string in LogRec.rebuild().", e);
+				return null;
+			}
+			
+			ExtendLogRec retval = new ExtendLogRec(txnum, block);
 			retval.setLSN(lsn);
 			retval.setTimeStamp(timestamp);
 			return retval;

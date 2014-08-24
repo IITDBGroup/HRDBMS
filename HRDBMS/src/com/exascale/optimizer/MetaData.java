@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
+import com.exascale.compression.CompressedSocket;
 import com.exascale.exceptions.ParseException;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.PlanCacheManager;
@@ -81,7 +82,11 @@ public final class MetaData implements Serializable
 						coordID--;
 					}
 				}
+				
+				line = nodes.readLine();
 			}
+			
+			nodes.close();
 		}
 		catch(Exception e)
 		{
@@ -308,10 +313,6 @@ public final class MetaData implements Serializable
 	public static ArrayList<Integer> getNodesForTable(String schema, String table, Transaction tx) throws Exception
 	{
 		Object r = PlanCacheManager.getPartitioning().setParms(schema, table).execute(tx);
-		if (r instanceof DataEndMarker)
-		{
-			throw new Exception("Table not found");
-		}
 		
 		ArrayList<Object> row = (ArrayList<Object>)r;
 		String nodeGroupExp = (String)row.get(0);
@@ -341,7 +342,24 @@ public final class MetaData implements Serializable
 			while (tokens2.hasMoreTokens())
 			{
 				int node = Integer.parseInt(tokens2.nextToken());
-				retval.add(node);
+				if (node == -1)
+				{
+					ArrayList<Object> rs = PlanCacheManager.getCoordNodes().setParms().execute(tx);
+					ArrayList<Integer> coords = new ArrayList<Integer>();
+					for (Object r2 : rs)
+					{
+						if (!(r2 instanceof DataEndMarker))
+						{
+							coords.add((Integer)((ArrayList<Object>)r2).get(0));
+						}
+					}
+					
+					retval.addAll(coords);
+				}
+				else
+				{
+					retval.add(node);
+				}
 			}
 			
 			return new ArrayList<Integer>(retval);
@@ -367,8 +385,11 @@ public final class MetaData implements Serializable
 		
 		for (Object o : rs)
 		{
-			ArrayList<Object> row = (ArrayList<Object>)o;
-			retval.add(schema + "." + row.get(0) + ".indx");
+			if (!(o instanceof DataEndMarker))
+			{
+				ArrayList<Object> row = (ArrayList<Object>)o;
+				retval.add(schema + "." + row.get(0) + ".indx");
+			}
 		}
 		
 		return retval;
@@ -386,8 +407,11 @@ public final class MetaData implements Serializable
 			ArrayList<String> retRow = new ArrayList<String>();
 			for (Object o : rs)
 			{
-				ArrayList<Object> row = (ArrayList<Object>)o;
-				retRow.add(row.get(0) + "." + row.get(1));
+				if (!(o instanceof DataEndMarker))
+				{
+					ArrayList<Object> row = (ArrayList<Object>)o;
+					retRow.add(row.get(0) + "." + row.get(1));
+				}
 			}
 			retval.add(retRow);
 		}
@@ -406,21 +430,24 @@ public final class MetaData implements Serializable
 			ArrayList<String> retRow = new ArrayList<String>();
 			for (Object o : rs)
 			{
-				ArrayList<Object> row = (ArrayList<Object>)o;
-				String type = (String)row.get(0);
-				if (type.equals("BIGINT"))
+				if (!(o instanceof DataEndMarker))
 				{
-					type = "LONG";
+					ArrayList<Object> row = (ArrayList<Object>)o;
+					String type = (String)row.get(0);
+					if (type.equals("BIGINT"))
+					{
+						type = "LONG";
+					}
+					else if (type.equals("VARCHAR"))
+					{
+						type = "CHAR";
+					}
+					else if (type.equals("DOUBLE"))
+					{
+						type = "FLOAT";
+					}
+					retRow.add(type);
 				}
-				else if (type.equals("VARCHAR"))
-				{
-					type = "CHAR";
-				}
-				else if (type.equals("DOUBLE"))
-				{
-					type = "FLOAT";
-				}
-				retRow.add(type);
 			}
 			retval.add(retRow);
 		}
@@ -439,14 +466,17 @@ public final class MetaData implements Serializable
 			ArrayList<Boolean> retRow = new ArrayList<Boolean>();
 			for (Object o : rs)
 			{
-				ArrayList<Object> row = (ArrayList<Object>)o;
-				String ord = (String)row.get(0);
-				boolean order = true;
-				if (!ord.equals("A"))
+				if (!(o instanceof DataEndMarker))
 				{
-					order = false;
+					ArrayList<Object> row = (ArrayList<Object>)o;
+					String ord = (String)row.get(0);
+					boolean order = true;
+					if (!ord.equals("A"))
+					{
+						order = false;
+					}
+					retRow.add(order);
 				}
-				retRow.add(order);
 			}
 			retval.add(retRow);
 		}
@@ -460,8 +490,11 @@ public final class MetaData implements Serializable
 		ArrayList<String> retRow = new ArrayList<String>();
 		for (Object o : rs)
 		{
-			ArrayList<Object> row = (ArrayList<Object>)o;
-			retRow.add(table + "." + row.get(0));
+			if (!(o instanceof DataEndMarker))
+			{
+				ArrayList<Object> row = (ArrayList<Object>)o;
+				retRow.add(table + "." + row.get(0));
+			}
 		}
 		
 		return retRow;
@@ -476,17 +509,18 @@ public final class MetaData implements Serializable
 		ArrayList<String> retRow = new ArrayList<String>();
 		for (Object o : rs)
 		{
-			ArrayList<Object> row = (ArrayList<Object>)o;
-			retRow.add(row.get(0) + "." + row.get(1));
+			if (!(o instanceof DataEndMarker))
+			{
+				ArrayList<Object> row = (ArrayList<Object>)o;
+				retRow.add(row.get(0) + "." + row.get(1));
+			}
 		}
 		
 		return retRow;
 	}
 	
-	public static ArrayList<Integer> determineNode(String schema, String table, ArrayList<Object> row, Transaction tx) throws Exception
+	public static ArrayList<Integer> determineNode(String schema, String table, ArrayList<Object> row, Transaction tx, PartitionMetaData pmeta, HashMap<String, Integer> cols2Pos) throws Exception
 	{
-		PartitionMetaData pmeta = new MetaData().new PartitionMetaData(schema, table, tx);
-		HashMap<String, Integer> cols2Pos = MetaData.getCols2PosForTable(schema, table, tx);
 		if (pmeta.noNodeGroupSet())
 		{
 			if (pmeta.anyNode())
@@ -594,7 +628,11 @@ public final class MetaData implements Serializable
 		else
 		{
 			ArrayList<Integer> ngSet = null;
-			if (pmeta.nodeGroupIsHash())
+			if (pmeta.isSingleNodeGroupSet())
+			{
+				ngSet = pmeta.getNodeGroupHashMap().get(pmeta.getSingleNodeGroup());
+			}
+			else if (pmeta.nodeGroupIsHash())
 			{
 				ArrayList<String> nodeGroupHash = pmeta.getNodeGroupHash();
 				ArrayList<Object> partial = new ArrayList<Object>();
@@ -632,6 +670,12 @@ public final class MetaData implements Serializable
 			if (pmeta.anyNode())
 			{
 				return ngSet;
+			}
+			else if (pmeta.isSingleNodeSet())
+			{
+				ArrayList<Integer> retval = new ArrayList<Integer>();
+				retval.add(ngSet.get(pmeta.getSingleNode()));
+				return retval;
 			}
 			else if (pmeta.nodeIsHash())
 			{
@@ -719,7 +763,11 @@ public final class MetaData implements Serializable
 	{
 		String schema = pmeta.getTable();
 		String table = pmeta.getTable();
-		if (pmeta.deviceIsHash())
+		if (pmeta.isSingleDeviceSet())
+		{
+			return pmeta.getSingleDevice();
+		}
+		else if (pmeta.deviceIsHash())
 		{
 			ArrayList<String> devHash = pmeta.getDeviceHash();
 			ArrayList<Object> partial = new ArrayList<Object>();
@@ -830,6 +878,10 @@ public final class MetaData implements Serializable
 	
 	public static int getLengthForCharCol(String schema, String table, String col, Transaction tx) throws Exception
 	{
+		if (col.contains("."))
+		{
+			col = col.substring(col.indexOf('.') + 1);
+		}
 		return PlanCacheManager.getLength().setParms(schema, table, col).execute(tx);
 	}
 	
@@ -991,7 +1043,7 @@ public final class MetaData implements Serializable
 		{
 			Socket sock;
 			String hostname = new MetaData().getHostNameForNode(node, tx);
-			sock = new Socket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "NEWTABLE        ".getBytes("UTF-8");
 			outMsg[8] = 0;
@@ -1009,7 +1061,6 @@ public final class MetaData implements Serializable
 			objOut.writeObject(devices);
 			objOut.flush();
 			out.flush();
-			objOut.close();
 			sockets.add(sock);
 			
 			if (sockets.size() >= max)
@@ -1017,7 +1068,7 @@ public final class MetaData implements Serializable
 				sock = sockets.get(0);
 				out = sock.getOutputStream();
 				getConfirmation(sock);
-				out.close();
+				objOut.close();
 				sock.close();
 				sockets.remove(0);
 			}
@@ -1044,7 +1095,7 @@ public final class MetaData implements Serializable
 		{
 			Socket sock;
 			String hostname = new MetaData().getHostNameForNode(node, tx);
-			sock = new Socket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "NEWINDEX        ".getBytes("UTF-8");
 			outMsg[8] = 0;
@@ -1070,7 +1121,6 @@ public final class MetaData implements Serializable
 			objOut.writeObject(devices);
 			objOut.flush();
 			out.flush();
-			objOut.close();
 			sockets.add(sock);
 			
 			if (sockets.size() >= max)
@@ -1078,7 +1128,7 @@ public final class MetaData implements Serializable
 				sock = sockets.get(0);
 				out = sock.getOutputStream();
 				getConfirmation(sock);
-				out.close();
+				objOut.close();
 				sock.close();
 				sockets.remove(0);
 			}
@@ -1093,6 +1143,20 @@ public final class MetaData implements Serializable
 		}
 	}
 	
+	private static byte[] longToBytes(long val)
+	{
+		final byte[] buff = new byte[8];
+		buff[0] = (byte)(val >> 56);
+		buff[1] = (byte)((val & 0x00FF000000000000L) >> 48);
+		buff[2] = (byte)((val & 0x0000FF0000000000L) >> 40);
+		buff[3] = (byte)((val & 0x000000FF00000000L) >> 32);
+		buff[4] = (byte)((val & 0x00000000FF000000L) >> 24);
+		buff[5] = (byte)((val & 0x0000000000FF0000L) >> 16);
+		buff[6] = (byte)((val & 0x000000000000FF00L) >> 8);
+		buff[7] = (byte)((val & 0x00000000000000FFL));
+		return buff;
+	}
+	
 	private static void populateIndex(String schema, String index, String table, Transaction tx) throws Exception
 	{
 		String iFn = schema + "." + index + ".indx";
@@ -1104,43 +1168,52 @@ public final class MetaData implements Serializable
 		ArrayList<String> keys = new ArrayList<String>();
 		for (Object o : rs)
 		{
-			ArrayList<Object> row = (ArrayList<Object>)o;
-			keys.add(row.get(0) + "." + row.get(1));
+			if (!(o instanceof DataEndMarker))
+			{
+				ArrayList<Object> row = (ArrayList<Object>)o;
+				keys.add(row.get(0) + "." + row.get(1));
+			}
 		}
 		
 		rs = PlanCacheManager.getTypes().setParms(schema, index).execute(tx);
 		ArrayList<String> types = new ArrayList<String>();
 		for (Object o : rs)
 		{
-			ArrayList<Object> row = (ArrayList<Object>)o;
-			String type = (String)row.get(0);
-			if (type.equals("BIGINT"))
+			if (!(o instanceof DataEndMarker))
 			{
-				type = "LONG";
+				ArrayList<Object> row = (ArrayList<Object>)o;
+				String type = (String)row.get(0);
+				if (type.equals("BIGINT"))
+				{
+					type = "LONG";
+				}
+				else if (type.equals("VARCHAR"))
+				{
+					type = "CHAR";
+				}
+				else if (type.equals("DOUBLE"))
+				{
+					type = "FLOAT";
+				}
+				types.add(type);
 			}
-			else if (type.equals("VARCHAR"))
-			{
-				type = "CHAR";
-			}
-			else if (type.equals("DOUBLE"))
-			{
-				type = "FLOAT";
-			}
-			types.add(type);
 		}
 		
 		rs = PlanCacheManager.getOrders().setParms(schema, index).execute(tx);
 		ArrayList<Boolean> orders = new ArrayList<Boolean>();
 		for (Object o : rs)
 		{
-			ArrayList<Object> row = (ArrayList<Object>)o;
-			String ord = (String)row.get(0);
-			boolean order = true;
-			if (!ord.equals("A"))
+			if (!(o instanceof DataEndMarker))
 			{
-				order = false;
+				ArrayList<Object> row = (ArrayList<Object>)o;
+				String ord = (String)row.get(0);
+				boolean order = true;
+				if (!ord.equals("A"))
+				{
+					order = false;
+				}
+				orders.add(order);
 			}
-			orders.add(order);
 		}
 		
 		ArrayList<Integer> poses = new ArrayList<Integer>();
@@ -1160,7 +1233,7 @@ public final class MetaData implements Serializable
 		{
 			Socket sock;
 			String hostname = new MetaData().getHostNameForNode(node, tx);
-			sock = new Socket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "POPINDEX        ".getBytes("UTF-8");
 			outMsg[8] = 0;
@@ -1172,6 +1245,7 @@ public final class MetaData implements Serializable
 			outMsg[14] = 0;
 			outMsg[15] = 0;
 			out.write(outMsg);
+			out.write(longToBytes(tx.number()));
 			out.write(stringToBytes(iFn));
 			out.write(stringToBytes(tFn));
 			ObjectOutputStream objOut = new ObjectOutputStream(out);
@@ -1184,7 +1258,6 @@ public final class MetaData implements Serializable
 			objOut.writeObject(cols2Types);
 			objOut.flush();
 			out.flush();
-			objOut.close();
 			sockets.add(sock);
 			
 			if (sockets.size() >= max)
@@ -1192,7 +1265,7 @@ public final class MetaData implements Serializable
 				sock = sockets.get(0);
 				out = sock.getOutputStream();
 				getConfirmation(sock);
-				out.close();
+				objOut.close();
 				sock.close();
 				sockets.remove(0);
 			}
@@ -1300,9 +1373,60 @@ public final class MetaData implements Serializable
 		
 		HashMap<Integer, String> opPos2Types = new HashMap<Integer, String>();
 		i = 0;
-		while (i < buildList.size())
+		while (i < catalogPos2Col.size())
 		{
-			opPos2Types.put(i, op.getCols2Types().get(buildList.get(i)));
+			String col = catalogPos2Col.get(i);
+			boolean contains = false;
+			int index = -1;
+			String col1 = col.substring(col.indexOf('.') + 1);
+			int j = 0;
+			for (Column col2 : cols)
+			{
+				if (col2.getColumn().equals(col1))
+				{
+					contains = true;
+					index = j;
+				}
+				
+				j++;
+			}
+			
+			if (!contains)
+			{
+				opPos2Types.put(i, catalogPos2Types.get(i));
+			}
+			else
+			{
+				String toGet = buildList.get(index);
+				String type = op.getCols2Types().get(toGet);
+				if (type != null)
+				{
+					opPos2Types.put(i, type);
+				}
+				else
+				{
+					if (toGet.contains("."))
+					{
+						toGet = toGet.substring(toGet.indexOf('.') + 1);
+					}
+					
+					for (Map.Entry entry : op.getCols2Types().entrySet())
+					{
+						String temp = (String)entry.getKey();
+						if (temp.contains("."))
+						{
+							temp = temp.substring(temp.indexOf('.') + 1);
+						}
+						
+						if (temp.equals(toGet))
+						{
+							opPos2Types.put(i, (String)entry.getValue());
+							break;
+						}
+					}
+				}
+			}
+			
 			i++;
 		}
 		
@@ -1373,7 +1497,9 @@ public final class MetaData implements Serializable
 			return card;
 		}
 		catch(Exception e)
-		{}
+		{
+			HRDBMSWorker.logger.debug("", e);
+		}
 
 		if (generated.containsKey(col))
 		{
@@ -1461,34 +1587,37 @@ public final class MetaData implements Serializable
 			ArrayList<Object> rs = PlanCacheManager.getIndexIDsForTable().setParms(theSchema, theTable).execute(tx);
 			for (Object r : rs)
 			{
-				ArrayList<Object> row = (ArrayList<Object>)r;
-				int count = PlanCacheManager.getIndexColCount().setParms(tableID, (Integer)row.get(0)).execute(tx);
-				if (count == schemas.size())
+				if (!(r instanceof DataEndMarker))
 				{
-					boolean hasAllCols = true;
-					HashMap<String, Integer> cols2Pos = getCols2PosForTable(theSchema, theTable, tx);
-					for (String col : cols)
+					ArrayList<Object> row = (ArrayList<Object>)r;
+					int count = PlanCacheManager.getIndexColCount().setParms(tableID, (Integer)row.get(0)).execute(tx);
+					if (count == schemas.size())
 					{
-						int colID = cols2Pos.get(theTable + "." + col);
-						Object o = PlanCacheManager.getCheckIndexForCol().setParms(tableID, (Integer)row.get(0), colID).execute(tx);
-						if (o instanceof DataEndMarker)
+						boolean hasAllCols = true;
+						HashMap<String, Integer> cols2Pos = getCols2PosForTable(theSchema, theTable, tx);
+						for (String col : cols)
 						{
-							hasAllCols = false;
-							break;
+							int colID = cols2Pos.get(theTable + "." + col);
+							Object o = PlanCacheManager.getCheckIndexForCol().setParms(tableID, (Integer)row.get(0), colID).execute(tx);
+							if (o instanceof DataEndMarker)
+							{
+								hasAllCols = false;
+								break;
+							}
 						}
-					}
-					
-					if (hasAllCols)
-					{
-						Object o = PlanCacheManager.getIndexCard().setParms(tableID, (Integer)row.get(0)).execute(tx);
-						if (o instanceof DataEndMarker)
+						
+						if (hasAllCols)
 						{
-							continue;
-						}
-						else
-						{
-							ArrayList<Object> cardRow = (ArrayList<Object>)o;
-							return (Long)cardRow.get(0);
+							Object o = PlanCacheManager.getIndexCard().setParms(tableID, (Integer)row.get(0)).execute(tx);
+							if (o instanceof DataEndMarker)
+							{
+								continue;
+							}
+							else
+							{
+								ArrayList<Object> cardRow = (ArrayList<Object>)o;
+								return (Long)cardRow.get(0);
+							}
 						}
 					}
 				}
@@ -1508,6 +1637,11 @@ public final class MetaData implements Serializable
 	
 	public long getColgroupCard(ArrayList<String> cs, HashMap<String, Double> generated, Transaction tx, Operator tree) throws Exception
 	{
+		if (cs.size() == 0)
+		{
+			return 1;
+		}
+		
 		ArrayList<String> schemas = new ArrayList<String>();
 		ArrayList<String> tables = new ArrayList<String>();
 		ArrayList<String> cols = new ArrayList<String>();
@@ -1554,40 +1688,43 @@ public final class MetaData implements Serializable
 			}
 		}
 		
-		if (oneSchema && oneTable)
+		if (oneSchema && oneTable && theSchema != null && theTable != null)
 		{
 			int tableID = PlanCacheManager.getTableID().setParms(theSchema, theTable).execute(tx);
 			ArrayList<Object> rs = PlanCacheManager.getIndexIDsForTable().setParms(theSchema, theTable).execute(tx);
 			for (Object r : rs)
 			{
-				ArrayList<Object> row = (ArrayList<Object>)r;
-				int count = PlanCacheManager.getIndexColCount().setParms(tableID, (Integer)row.get(0)).execute(tx);
-				if (count == schemas.size())
+				if (!(r instanceof DataEndMarker))
 				{
-					boolean hasAllCols = true;
-					HashMap<String, Integer> cols2Pos = getCols2PosForTable(theSchema, theTable, tx);
-					for (String col : cols)
+					ArrayList<Object> row = (ArrayList<Object>)r;
+					int count = PlanCacheManager.getIndexColCount().setParms(tableID, (Integer)row.get(0)).execute(tx);
+					if (count == schemas.size())
 					{
-						int colID = cols2Pos.get(theTable + "." + col);
-						Object o = PlanCacheManager.getCheckIndexForCol().setParms(tableID, (Integer)row.get(0), colID).execute(tx);
-						if (o instanceof DataEndMarker)
+						boolean hasAllCols = true;
+						HashMap<String, Integer> cols2Pos = getCols2PosForTable(theSchema, theTable, tx);
+						for (String col : cols)
 						{
-							hasAllCols = false;
-							break;
+							int colID = cols2Pos.get(theTable + "." + col);
+							Object o = PlanCacheManager.getCheckIndexForCol().setParms(tableID, (Integer)row.get(0), colID).execute(tx);
+							if (o instanceof DataEndMarker)
+							{
+								hasAllCols = false;
+								break;
+							}
 						}
-					}
 					
-					if (hasAllCols)
-					{
-						Object o = PlanCacheManager.getIndexCard().setParms(tableID, (Integer)row.get(0)).execute(tx);
-						if (o instanceof DataEndMarker)
+						if (hasAllCols)
 						{
-							continue;
-						}
-						else
-						{
-							ArrayList<Object> cardRow = (ArrayList<Object>)o;
-							return (Long)cardRow.get(0);
+							Object o = PlanCacheManager.getIndexCard().setParms(tableID, (Integer)row.get(0)).execute(tx);
+							if (o instanceof DataEndMarker)
+							{
+								continue;
+							}
+							else
+							{
+								ArrayList<Object> cardRow = (ArrayList<Object>)o;
+								return (Long)cardRow.get(0);
+							}
 						}
 					}
 				}
@@ -1639,23 +1776,26 @@ public final class MetaData implements Serializable
 		ArrayList<Object> rs = PlanCacheManager.getCols2Types().setParms(schema, name).execute(tx);
 		for (Object r : rs)
 		{
-			ArrayList<Object> row = (ArrayList<Object>)r;
-			String col = name + "." + (String)row.get(0);
-			String type = (String)row.get(1);
-			if (type.equals("BIGINT"))
+			if (!(r instanceof DataEndMarker))
 			{
-				type = "LONG";
-			}
-			else if (type.equals("DOUBLE"))
-			{
-				type = "FLOAT";
-			}
-			else if (type.equals("VARCHAR"))
-			{
-				type = "CHAR";
-			}
+				ArrayList<Object> row = (ArrayList<Object>)r;
+				String col = name + "." + (String)row.get(0);
+				String type = (String)row.get(1);
+				if (type.equals("BIGINT"))
+				{
+					type = "LONG";
+				}
+				else if (type.equals("DOUBLE"))
+				{
+					type = "FLOAT";
+				}
+				else if (type.equals("VARCHAR"))
+				{
+					type = "CHAR";
+				}
 			
-			retval.put(col, type);
+				retval.put(col, type);
+			}
 		}
 
 		return retval;
@@ -1691,52 +1831,58 @@ public final class MetaData implements Serializable
 		ArrayList<Object> rs = PlanCacheManager.getIndexes().setParms(schema, table).execute(tx);
 		for (Object o : rs)
 		{
-			ArrayList<Object> row = (ArrayList<Object>)o;
-			ArrayList<Object> rs2 = PlanCacheManager.getKeys().setParms(schema, (String)row.get(1)).execute(tx);
-			//tabname, colname
-			ArrayList<String> keys = new ArrayList<String>();
-			for (Object o2 : rs2)
+			if (!(o instanceof DataEndMarker))
 			{
-				ArrayList<Object> row2 = (ArrayList<Object>)o2;
-				keys.add(row.get(0) + "." + row.get(1));
-			}
+				ArrayList<Object> row = (ArrayList<Object>)o;
+				ArrayList<Object> rs2 = PlanCacheManager.getKeys().setParms(schema, (String)row.get(0)).execute(tx);
+				//tabname, colname
+				ArrayList<String> keys = new ArrayList<String>();
+				for (Object o2 : rs2)
+				{
+					ArrayList<Object> row2 = (ArrayList<Object>)o2;
+					keys.add(row2.get(0) + "." + row2.get(1));
+				}
 			
-			rs2 = PlanCacheManager.getTypes().setParms(schema, (String)row.get(1)).execute(tx);
-			ArrayList<String> types = new ArrayList<String>();
-			for (Object o2 : rs2)
-			{
-				ArrayList<Object> row2 = (ArrayList<Object>)o2;
-				String type = (String)row.get(0);
-				if (type.equals("BIGINT"))
+				rs2 = PlanCacheManager.getTypes().setParms(schema, (String)row.get(0)).execute(tx);
+				ArrayList<String> types = new ArrayList<String>();
+				for (Object o2 : rs2)
 				{
-					type = "LONG";
+					ArrayList<Object> row2 = (ArrayList<Object>)o2;
+					String type = (String)row2.get(0);
+					if (type.equals("BIGINT"))
+					{
+						type = "LONG";
+					}
+					else if (type.equals("VARCHAR"))
+					{
+						type = "CHAR";
+					}
+					else if (type.equals("DOUBLE"))
+					{
+						type = "FLOAT";
+					}
+					types.add(type);
 				}
-				else if (type.equals("VARCHAR"))
-				{
-					type = "CHAR";
-				}
-				else if (type.equals("DOUBLE"))
-				{
-					type = "FLOAT";
-				}
-				types.add(type);
-			}
 			
-			rs2 = PlanCacheManager.getOrders().setParms(schema, (String)row.get(1)).execute(tx);
-			ArrayList<Boolean> orders = new ArrayList<Boolean>();
-			for (Object o2 : rs2)
-			{
-				ArrayList<Object> row2 = (ArrayList<Object>)o2;
-				String ord = (String)row.get(0);
-				boolean order = true;
-				if (!ord.equals("A"))
+				rs2 = PlanCacheManager.getOrders().setParms(schema, (String)row.get(0)).execute(tx);
+				ArrayList<Boolean> orders = new ArrayList<Boolean>();
+				for (Object o2 : rs2)
 				{
-					order = false;
+					if (!(o2 instanceof DataEndMarker))
+					{
+						ArrayList<Object> row2 = (ArrayList<Object>)o2;
+						String ord = (String)row2.get(0);
+						boolean order = true;
+						if (!ord.equals("A"))
+						{
+							order = false;
+						}
+						orders.add(order);
+					}
 				}
-				orders.add(order);
-			}
 			
-			retval.add(new Index(schema + "." + row.get(0) + ".indx", keys, types, orders));
+				retval.add(new Index(schema + "." + row.get(0) + ".indx", keys, types, orders));
+			}
 		}
 		
 		return retval;
@@ -1813,6 +1959,11 @@ public final class MetaData implements Serializable
 		{
 			for (Operator o : op.children())
 			{
+				if (o == null)
+				{
+					Exception e = new Exception("Operator contained null child.  Op is " + op + ". Children are " + op.children());
+					HRDBMSWorker.logger.debug("", e);
+				}
 				retval.addAll(getTables(o));
 			}
 			
@@ -1837,9 +1988,9 @@ public final class MetaData implements Serializable
 		}
 	}
 	
-	private boolean schemaIs(TableScanOperator t, String q)
+	private boolean tableIs(TableScanOperator t, String q)
 	{
-		return t.getSchema().equals(q);
+		return t.getTable().equals(q);
 	}
 	
 	private boolean aliasIs(TableScanOperator t, String q)
@@ -1847,9 +1998,9 @@ public final class MetaData implements Serializable
 		return t.getAlias().equals(q);
 	}
 	
-	private boolean containsCol(Operator op, String c)
+	private boolean containsCol(TableScanOperator op, String c)
 	{
-		Set<String> set = op.getCols2Pos().keySet();
+		Set<String> set = op.getTableCols2Pos().keySet();
 		for (String s : set)
 		{
 			if (s.contains("."))
@@ -1879,7 +2030,7 @@ public final class MetaData implements Serializable
 			{
 				if (containsCol(t, c))
 				{
-					if (schemaIs(t, qual) || aliasIs(t, qual))
+					if (tableIs(t, qual) || aliasIs(t, qual))
 					{
 						if (retSchema == null)
 						{
@@ -1903,7 +2054,7 @@ public final class MetaData implements Serializable
 			}
 			else
 			{
-				throw new Exception("Column not found when trying to figure out table " + col);
+				throw new Exception("Column not found when trying to figure out table for " + col);
 			}
 		}
 		else
@@ -2832,6 +2983,23 @@ public final class MetaData implements Serializable
 			if (op instanceof TableScanOperator)
 			{
 				op = ((TableScanOperator)op).parents().get(0);
+				if (op == null)
+				{
+					if (!tables.containsKey(oldOp))
+					{
+						tables.put(oldOp, t);
+						filters.put(oldOp, f);
+						retvals.put(oldOp, r);
+						return oldOp;
+					}
+					else
+					{
+						tables.get(oldOp).addAll(t);
+						filters.get(oldOp).addAll(f);
+						retvals.get(oldOp).putAll(r);
+						return oldOp;
+					}
+				}
 			}
 			else
 			{
@@ -3286,15 +3454,78 @@ public final class MetaData implements Serializable
 		public void run()
 		{
 			try
-			{
-				String sql = "INSERT INTO SYS.TABLESTATS SELECT " + tableID + ", COUNT(*) FROM " + schema + "." + table;
-				XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			{	
+				String sql = "SELECT COUNT(*) FROM " + schema + "." + table;
+				XAWorker worker = XAManager.executeQuery(sql, tx, null);
+				worker.start();
+				ArrayList<Object> cmd = new ArrayList<Object>(2);
+				cmd.add("NEXT");
+				cmd.add(1);
+				worker.in.put(cmd);
+				
+				Object obj = null;
+				while (true)
+				{
+					try
+					{
+						obj = worker.out.take();
+						break;
+					}
+					catch(InterruptedException e)
+					{}
+				}
+				
+				if (obj instanceof Exception)
+				{
+					cmd = new ArrayList<Object>(1);
+					cmd.add("CLOSE");
+					worker.in.put(cmd);
+					ok = false;
+					return;
+				}
+				
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				
+				if (obj instanceof DataEndMarker)
+				{
+					return;
+				}
+				
+				long card = (Long)((ArrayList<Object>)obj).get(0);
+				try
+				{
+					PlanCacheManager.getTableCard().setParms(schema, table).execute(tx);
+				}
+				catch(Exception e)
+				{
+					sql = "INSERT INTO SYS.TABLESTATS VALUES(" + tableID + "," + card + ")"; 
+					worker = XAManager.executeAuthorizedUpdate(sql, tx);
+					worker.start();
+					worker.join();
+					XAManager.commit(tx);
+					return;
+				}
+				sql = "UPDATE SYS.TABLESTATS SET CARD = " + card + " WHERE TABLEID = " + tableID;
+				worker = XAManager.executeAuthorizedUpdate(sql, tx);
 				worker.start();
 				worker.join();
+				XAManager.commit(tx);
 			}
 			catch(Exception e)
 			{
 				ok = false;
+				HRDBMSWorker.logger.debug("", e);
+				try
+				{
+					XAManager.rollback(tx);
+				}
+				catch(Exception f)
+				{
+					//BLACKLIST?
+					HRDBMSWorker.logger.debug("", f);
+				}
 			}
 		}
 		
@@ -3327,15 +3558,78 @@ public final class MetaData implements Serializable
 		public void run()
 		{
 			try
-			{
-				String sql = "INSERT INTO SYS.COLSTATS SELECT " + tableID + "," + colID + ", COUNT(DISTINCT " + col + ") FROM " + schema + "." + table;
-				XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			{	
+				String sql = "SELECT COUNT(DISTINCT " + col + ") FROM " + schema + "." + table;
+				XAWorker worker = XAManager.executeQuery(sql, tx, null);
+				worker.start();
+				ArrayList<Object> cmd = new ArrayList<Object>(2);
+				cmd.add("NEXT");
+				cmd.add(1);
+				worker.in.put(cmd);
+				
+				Object obj = null;
+				while (true)
+				{
+					try
+					{
+						obj = worker.out.take();
+						break;
+					}
+					catch(InterruptedException e)
+					{}
+				}
+				
+				if (obj instanceof Exception)
+				{
+					cmd = new ArrayList<Object>(1);
+					cmd.add("CLOSE");
+					worker.in.put(cmd);
+					ok = false;
+					return;
+				}
+				
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				
+				if (obj instanceof DataEndMarker)
+				{
+					return;
+				}
+				
+				long card = (Long)((ArrayList<Object>)obj).get(0);
+				try
+				{
+					PlanCacheManager.getColCard().setParms(schema, table, col).execute(tx);
+				}
+				catch(Exception e)
+				{
+					sql = "INSERT INTO SYS.COLSTATS VALUES(" + tableID + "," + colID + "," + card + ")"; 
+					worker = XAManager.executeAuthorizedUpdate(sql, tx);
+					worker.start();
+					worker.join();
+					XAManager.commit(tx);
+					return;
+				}
+				sql = "UPDATE SYS.COLSTATS SET CARD = " + card + " WHERE TABLEID = " + tableID + " AND COLID = " + colID;
+				worker = XAManager.executeAuthorizedUpdate(sql, tx);
 				worker.start();
 				worker.join();
+				XAManager.commit(tx);
 			}
 			catch(Exception e)
 			{
 				ok = false;
+				HRDBMSWorker.logger.debug("", e);
+				try
+				{
+					XAManager.rollback(tx);
+				}
+				catch(Exception f)
+				{
+					//BLACKLIST?
+					HRDBMSWorker.logger.debug("", f);
+				}
 			}
 		}
 		
@@ -3369,7 +3663,7 @@ public final class MetaData implements Serializable
 		{
 			try
 			{
-				String sql = "INSERT INTO SYS.INDEXSTATS SELECT " + tableID + "," + indexID + ", SELECT COUNT(*) FROM (SELECT DISTINCT " + keys.get(0);
+				String sql = "SELECT COUNT(*) FROM (SELECT DISTINCT " + keys.get(0);
 				int i = 1;
 				while (i < keys.size())
 				{
@@ -3377,13 +3671,75 @@ public final class MetaData implements Serializable
 					i++;
 				}
 				sql += (" FROM " + schema + "." + table + ")");
-				XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+				XAWorker worker = XAManager.executeQuery(sql, tx, null);
 				worker.start();
-				worker.join();
+				ArrayList<Object> cmd = new ArrayList<Object>(2);
+				cmd.add("NEXT");
+				cmd.add(1);
+				worker.in.put(cmd);
+				
+				Object obj2 = null;
+				while (true)
+				{
+					try
+					{
+						obj2 = worker.out.take();
+						break;
+					}
+					catch(InterruptedException e)
+					{}
+				}
+				
+				if (obj2 instanceof Exception)
+				{
+					cmd = new ArrayList<Object>(1);
+					cmd.add("CLOSE");
+					worker.in.put(cmd);
+					ok = false;
+					return;
+				}
+				
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				
+				if (obj2 instanceof DataEndMarker)
+				{
+					return;
+				}
+				
+				long card = (Long)((ArrayList<Object>)obj2).get(0);
+				Object obj = PlanCacheManager.getIndexCard().setParms(tableID, indexID).execute(tx);
+				if (obj instanceof DataEndMarker)
+				{
+					sql = "INSERT INTO SYS.INDEXSTATS VALUES(" + tableID + "," + indexID + "," + card + ")";
+					worker = XAManager.executeAuthorizedUpdate(sql, tx);
+					worker.start();
+					worker.join();
+					XAManager.commit(tx);
+				}
+				else
+				{
+					sql = "UPDATE SYS.INDEXSTATS SET NUMDISTINCT = " + card + " WHERE TABLEID = " + tableID + " AND INDEXID = " + indexID;
+					worker = XAManager.executeAuthorizedUpdate(sql, tx);
+					worker.start();
+					worker.join();
+					XAManager.commit(tx);
+				}
 			}
 			catch(Exception e)
 			{
 				ok = false;
+				HRDBMSWorker.logger.debug("", e);
+				try
+				{
+					XAManager.rollback(tx);
+				}
+				catch(Exception f)
+				{
+					//BLACKLIST?
+					HRDBMSWorker.logger.debug("", f);
+				}
 			}
 		}
 		
@@ -3492,11 +3848,25 @@ public final class MetaData implements Serializable
 						high = q3 = q2 = q1 = ((MyDate)row.get(0)).format();
 					}
 					
-					sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
-					worker = XAManager.executeAuthorizedUpdate(sql, tx);
-					worker.start();
-					worker.join();
-					return;
+					Object obj = PlanCacheManager.getDist().setParms(schema, table, col).execute(tx);
+					if (obj instanceof DataEndMarker)
+					{
+						sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
+						worker = XAManager.executeAuthorizedUpdate(sql, tx);
+						worker.start();
+						worker.join();
+						XAManager.commit(tx);
+						return;
+					}
+					else
+					{
+						sql = "UPDATE SYS.COLDIST SET (LOW, Q1, Q2, Q3, HIGH) = (" + low + "," + q1 + "," + q2 + "," + q3 + "," + high + ") WHERE TABLEID = " + tableID + " AND COLID = " + colID;
+						worker = XAManager.executeAuthorizedUpdate(sql, tx);
+						worker.start();
+						worker.join();
+						XAManager.commit(tx);
+						return;
+					}
 				}
 				else
 				{
@@ -3554,11 +3924,25 @@ public final class MetaData implements Serializable
 						high = q3 = q2 = ((MyDate)row.get(0)).format();
 					}
 					
-					sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
-					worker = XAManager.executeAuthorizedUpdate(sql, tx);
-					worker.start();
-					worker.join();
-					return;
+					Object obj = PlanCacheManager.getDist().setParms(schema, table, col).execute(tx);
+					if (obj instanceof DataEndMarker)
+					{
+						sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
+						worker = XAManager.executeAuthorizedUpdate(sql, tx);
+						worker.start();
+						worker.join();
+						XAManager.commit(tx);
+						return;
+					}
+					else
+					{
+						sql = "UPDATE SYS.COLDIST SET (LOW, Q1, Q2, Q3, HIGH) = (" + low + "," + q1 + "," + q2 + "," + q3 + "," + high + ") WHERE TABLEID = " + tableID + " AND COLID = " + colID;
+						worker = XAManager.executeAuthorizedUpdate(sql, tx);
+						worker.start();
+						worker.join();
+						XAManager.commit(tx);
+						return;
+					}
 				}
 				else
 				{
@@ -3616,11 +4000,25 @@ public final class MetaData implements Serializable
 						high = q3 = ((MyDate)row.get(0)).format();
 					}
 					
-					sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
-					worker = XAManager.executeAuthorizedUpdate(sql, tx);
-					worker.start();
-					worker.join();
-					return;
+					Object obj = PlanCacheManager.getDist().setParms(schema, table, col).execute(tx);
+					if (obj instanceof DataEndMarker)
+					{
+						sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
+						worker = XAManager.executeAuthorizedUpdate(sql, tx);
+						worker.start();
+						worker.join();
+						XAManager.commit(tx);
+						return;
+					}
+					else
+					{
+						sql = "UPDATE SYS.COLDIST SET (LOW, Q1, Q2, Q3, HIGH) = (" + low + "," + q1 + "," + q2 + "," + q3 + "," + high + ") WHERE TABLEID = " + tableID + " AND COLID = " + colID;
+						worker = XAManager.executeAuthorizedUpdate(sql, tx);
+						worker.start();
+						worker.join();
+						XAManager.commit(tx);
+						return;
+					}
 				}
 				else
 				{
@@ -3676,14 +4074,39 @@ public final class MetaData implements Serializable
 					high = ((MyDate)row.get(0)).format();
 				}
 					
-				sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
-				worker = XAManager.executeAuthorizedUpdate(sql, tx);
-				worker.start();
-				worker.join();
+				Object obj = PlanCacheManager.getDist().setParms(schema, table, col).execute(tx);
+				if (obj instanceof DataEndMarker)
+				{
+					sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
+					worker = XAManager.executeAuthorizedUpdate(sql, tx);
+					worker.start();
+					worker.join();
+					XAManager.commit(tx);
+					return;
+				}
+				else
+				{
+					sql = "UPDATE SYS.COLDIST SET (LOW, Q1, Q2, Q3, HIGH) = (" + low + "," + q1 + "," + q2 + "," + q3 + "," + high + ") WHERE TABLEID = " + tableID + " AND COLID = " + colID;
+					worker = XAManager.executeAuthorizedUpdate(sql, tx);
+					worker.start();
+					worker.join();
+					XAManager.commit(tx);
+					return;
+				}
 			}
 			catch(Exception e)
 			{
 				ok = false;
+				HRDBMSWorker.logger.debug("", e);
+				try
+				{
+					XAManager.rollback(tx);
+				}
+				catch(Exception f)
+				{
+					//BLACKLIST?
+					HRDBMSWorker.logger.debug("", f);
+				}
 			}
 		}
 		
@@ -3698,7 +4121,6 @@ public final class MetaData implements Serializable
 		Transaction tTx = new Transaction(Transaction.ISOLATION_UR);
 		int tableID = PlanCacheManager.getTableID().setParms(schema, table).execute(tx);
 		TableStatsThread tThread = new TableStatsThread(schema, table, tableID, tTx);
-		tThread.start();
 		TreeMap<Integer, String> pos2Col = getPos2ColForTable(schema, table, tx);
 		ArrayList<ColStatsThread> cThreads = new ArrayList<ColStatsThread>();
 		ArrayList<Transaction> cTxs = new ArrayList<Transaction>();
@@ -3709,11 +4131,6 @@ public final class MetaData implements Serializable
 			cTxs.add(ctx);
 			cThreads.add(new ColStatsThread(schema, table, pos2Col.get(i), tableID, i, ctx));
 			i++;
-		}
-		
-		for (ColStatsThread thread : cThreads)
-		{
-			thread.start();
 		}
 		
 		//indexes
@@ -3746,6 +4163,11 @@ public final class MetaData implements Serializable
 			iTxs.add(itx);
 		}
 		
+		tThread.start();
+		for (ColStatsThread thread : cThreads)
+		{
+			thread.start();
+		}
 		for (IndexStatsThread thread : iThreads)
 		{
 			thread.start();
@@ -3805,42 +4227,12 @@ public final class MetaData implements Serializable
 			}
 		} 
 		
-
-			
 		if (allOK)
-		{
-			tTx.commit();
-			for (Transaction ctx : cTxs)
-			{
-				ctx.commit();
-			}
-			for (Transaction itx : iTxs)
-			{
-				itx.commit();
-			}
-			for (Transaction cdtx : cdTxs)
-			{
-				cdtx.commit();
-			}
-			
+		{	
 			return;
 		}
 		else
 		{
-			tTx.rollback();
-			for (Transaction ctx : cTxs)
-			{
-				ctx.rollback();
-			}
-			for (Transaction itx : iTxs)
-			{
-				itx.rollback();
-			}
-			for (Transaction cdtx : cdTxs)
-			{
-				cdtx.rollback();
-			}
-			
 			throw new Exception("An error occurred during runstats processing");
 		}
 	}
@@ -3849,7 +4241,7 @@ public final class MetaData implements Serializable
 	{
 		private static final int NODEGROUP_NONE = -3;
 		private static final int NODE_ANY = -2;
-		private static final int NODE_ALL = -1;
+		public static final int NODE_ALL = -1;
 		private static final int DEVICE_ALL = -1;
 		private ArrayList<Integer> nodeGroupSet;
 		private ArrayList<String> nodeGroupHash;

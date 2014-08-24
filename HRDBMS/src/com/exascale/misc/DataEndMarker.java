@@ -1,6 +1,8 @@
 package com.exascale.misc;
 
-public final class DataEndMarker
+import java.io.Serializable;
+
+public final class DataEndMarker implements Serializable
 {
 
 }

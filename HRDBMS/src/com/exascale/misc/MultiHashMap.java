@@ -33,6 +33,7 @@ public class MultiHashMap<K, V>
 	public synchronized void clear()
 	{
 		map.clear();
+		size.set(0);
 	}
 
 	public Vector<V> get(K key)

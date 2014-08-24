@@ -1,6 +1,8 @@
 package com.exascale.optimizer;
 
 import java.util.ArrayList;
+import org.antlr.v4.runtime.CharStream;
+import org.antlr.v4.runtime.misc.Interval;
 import com.exascale.exceptions.ParseException;
 import com.exascale.misc.Utils;
 
@@ -64,7 +66,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 		{
 			arguments.add((Expression)visit(context));
 		}
-		return new Expression(new Function(ctx.IDENTIFIER().getText(), arguments));
+		return new Expression(new Function(ctx.identifier().getText(), arguments));
 	}
 	
 	public Expression visitCountDistinct(SelectParser.CountDistinctContext ctx)
@@ -91,7 +93,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 
 	public Predicate visitNormalPredicate(SelectParser.NormalPredicateContext ctx)
 	{
-		String op = ctx.OPERATOR().getText();
+		String op = ctx.operator().getText();
 		if (op.equals("="))
 		{
 			op = "E";
@@ -462,7 +464,12 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 
 	public SelectListEntry visitSelectExpression(SelectParser.SelectExpressionContext ctx)
 	{
-		return new SelectListEntry((Expression)visit(ctx.expression()), ctx.IDENTIFIER().getText());
+		String alias = null;
+		if (ctx.IDENTIFIER() != null)
+		{
+			alias = ctx.IDENTIFIER().getText();
+		}
+		return new SelectListEntry((Expression)visit(ctx.expression()), alias);
 	}
 
 	public SelectClause visitSelectClause(SelectParser.SelectClauseContext ctx)
@@ -470,9 +477,9 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 		boolean selectAll = true;
 		boolean selectStar = false;
 		ArrayList<SelectListEntry> selectList = new ArrayList<SelectListEntry>();
-		if (ctx.SELECTHOW() != null)
+		if (ctx.selecthow() != null)
 		{
-			if (!ctx.SELECTHOW().getText().equals("ALL"))
+			if (!ctx.selecthow().getText().equals("ALL"))
 			{
 				selectAll = false;
 			}
@@ -658,6 +665,14 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 		{
 			return (DropView)visit(ctx.dropView());
 		}
+		else if (ctx.load() != null)
+		{
+			return (Load)visit(ctx.load());
+		}
+		else if (ctx.runstats() != null)
+		{
+			return (Runstats)visit(ctx.runstats());
+		}
 		
 		ArrayList<CTE> ctes = new ArrayList<CTE>();
 
@@ -778,7 +793,12 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	{
 		TableName view = (TableName)visit(ctx.tableName());
 		FullSelect select = (FullSelect)visit(ctx.fullSelect());
-		return new CreateView(view, select, ctx.fullSelect().getText());
+		int a = ctx.fullSelect().start.getStartIndex();
+		int b = ctx.fullSelect().stop.getStopIndex();
+		Interval interval = new Interval(a,b);
+		CharStream input = ctx.fullSelect().start.getInputStream();
+		String text = input.getText(interval);
+		return new CreateView(view, select, text);
 	}
 	
 	public DropIndex visitDropIndex(SelectParser.DropIndexContext ctx)
@@ -800,9 +820,9 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	{
 		Column col = (Column)visit(ctx.columnName());
 		boolean dir = true;
-		if (ctx.dir != null)
+		if (ctx.DIRECTION() != null)
 		{
-			if (ctx.dir.getText().equals("DESC"))
+			if (ctx.DIRECTION().getText().equals("DESC"))
 			{
 				dir = false;
 			}
@@ -890,13 +910,16 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 		}
 		
 		String delimited = "|";
-		if (ctx.ANY() != null)
+		if (ctx.any() != null)
 		{
-			delimited = ctx.ANY().getText();
+			delimited = ctx.any().getText();
 		}
 		
 		TableName table = (TableName)visit(ctx.tableName());
 		String glob = ctx.remainder().getText();
+		int first = glob.indexOf('\'');
+		int second = glob.indexOf('\'', first+1);
+		glob = glob.substring(first + 1, second);
 		
 		return new Load(table, replace, delimited, glob);
 	}

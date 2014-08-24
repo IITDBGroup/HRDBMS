@@ -21,7 +21,7 @@ public final class RenameOperator implements Operator, Serializable
 	private final ArrayList<String> oldVals;
 	private final ArrayList<String> newVals;
 	private int node;
-	private Plan plan;
+	private transient Plan plan;
 	
 	public void setPlan(Plan plan)
 	{

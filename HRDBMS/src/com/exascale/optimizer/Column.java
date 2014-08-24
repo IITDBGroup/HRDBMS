@@ -1,6 +1,8 @@
 package com.exascale.optimizer;
 
-public class Column
+import java.io.Serializable;
+
+public class Column implements Serializable
 {
 	private String table;
 	private String column;

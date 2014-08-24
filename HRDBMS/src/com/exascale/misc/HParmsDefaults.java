@@ -45,7 +45,7 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("gpu_offload", "false");
 		retval.setProperty("temp_directories", "/home/hrdbms/");
 		retval.setProperty("queue_block_size", "256");
-		retval.setProperty("catalog_creation_tcp_wait_ms", "1000");
+		retval.setProperty("catalog_creation_tcp_wait_ms", "5000");
 		retval.setProperty("phase1_additional_pushdowns", "25");
 		retval.setProperty("max_neighbor_nodes", "100");
 		retval.setProperty("max_card_before_hash", "500000");
@@ -58,12 +58,13 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("prefetch_request_size", "80");
 		retval.setProperty("pages_in_advance", "40");
 		retval.setProperty("getpage_rerequest_attempts", "5");
-		retval.setProperty("getpage_attempts_before_rerequest", "10");
+		retval.setProperty("getpage_attempts_before_rerequest", "40");
 		retval.setProperty("getpage_fail_sleep_time_ms", "1");
 		retval.setProperty("archive_dir", "/home/hrdbms/");
 		retval.setProperty("hrdbms_user", "hrdbms");
 		retval.setProperty("Xmx_string", "64g");
 		retval.setProperty("number_of_coords", "1");
+		retval.setProperty("max_batch", "100000");
 		return retval;
 	}
 }

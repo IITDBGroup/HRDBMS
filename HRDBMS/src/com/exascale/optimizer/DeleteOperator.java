@@ -7,13 +7,18 @@ import java.io.Serializable;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.Vector;
 import java.util.concurrent.atomic.AtomicInteger;
+import com.exascale.compression.CompressedSocket;
 import com.exascale.filesystem.RID;
 import com.exascale.managers.HRDBMSWorker;
+import com.exascale.managers.PlanCacheManager;
+import com.exascale.managers.ResourceManager;
+import com.exascale.managers.ResourceManager.DiskBackedArray;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MultiHashMap;
 import com.exascale.tables.Plan;
@@ -29,7 +34,7 @@ public final class DeleteOperator implements Operator, Serializable
 	private TreeMap<Integer, String> pos2Col;
 	private Operator parent;
 	private int node;
-	private Plan plan;
+	private transient Plan plan;
 	private String schema;
 	private String table;
 	private AtomicInteger num = new AtomicInteger(0);
@@ -47,6 +52,11 @@ public final class DeleteOperator implements Operator, Serializable
 		this.schema = schema;
 		this.table = table;
 		this.meta = meta;
+	}
+	
+	public String getSchema()
+	{
+		return schema;
 	}
 	
 	public void setTransaction(Transaction tx)
@@ -216,30 +226,47 @@ public final class DeleteOperator implements Operator, Serializable
 	@Override
 	public void start() throws Exception
 	{
+		child.start();
 		ArrayList<String> indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
 		Object o = child.next(this);
+		DiskBackedArray dba = ResourceManager.newDiskBackedArray(10);
 		while (!(o instanceof DataEndMarker))
 		{
-			ArrayList<Object> row = (ArrayList<Object>)o;
-			int node = (Integer)row.get(child.getCols2Pos().get("_RID1"));
-			int device = (Integer)row.get(child.getCols2Pos().get("_RID2"));
-			int block = (Integer)row.get(child.getCols2Pos().get("_RID3"));
-			int rec = (Integer)row.get(child.getCols2Pos().get("_RID4"));
-			ArrayList<ArrayList<Object>> indexKeys = new ArrayList<ArrayList<Object>>();
-			for (String index : indexes)
+			dba.add((ArrayList<Object>)o);
+			o = child.next(this);
+		}
+		
+		Iterator it = dba.iterator();
+		while (it.hasNext())
+		{
+			try
 			{
-				ArrayList<Object> keys = new ArrayList<Object>();
-				ArrayList<String> cols = MetaData.getColsFromIndexFileName(index, tx);
-				for (String col : cols)
+				ArrayList<Object> row = (ArrayList<Object>)it.next();
+				int node = (Integer)row.get(child.getCols2Pos().get("_RID1"));
+				int device = (Integer)row.get(child.getCols2Pos().get("_RID2"));
+				int block = (Integer)row.get(child.getCols2Pos().get("_RID3"));
+				int rec = (Integer)row.get(child.getCols2Pos().get("_RID4"));
+				ArrayList<ArrayList<Object>> indexKeys = new ArrayList<ArrayList<Object>>();
+				for (String index : indexes)
 				{
-					keys.add(row.get(child.getCols2Pos().get(col)));
-				}
+					ArrayList<Object> keys = new ArrayList<Object>();
+					ArrayList<String> cols = MetaData.getColsFromIndexFileName(index, tx);
+					for (String col : cols)
+					{
+						keys.add(row.get(child.getCols2Pos().get(col)));
+					}
 				
-				indexKeys.add(keys);
-			}
+					indexKeys.add(keys);
+				}
 			
-			RIDAndIndexKeys raik = new RIDAndIndexKeys(new RID(node, device, block, rec), indexKeys);
-			map.multiPut(node, raik);
+				RIDAndIndexKeys raik = new RIDAndIndexKeys(new RID(node, device, block, rec), indexKeys);
+				map.multiPut(node, raik);
+			}
+			catch(Exception e)
+			{
+				HRDBMSWorker.logger.debug("", e);
+				throw e;
+			}
 			num.incrementAndGet();
 			if (map.size() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes")))
 			{
@@ -259,10 +286,9 @@ public final class DeleteOperator implements Operator, Serializable
 					return;
 				}
 			}
-			
-			o = child.next(this);
 		}
 		
+		dba.close();
 		if (map.totalSize() > 0)
 		{
 			flush(indexes);
@@ -271,14 +297,34 @@ public final class DeleteOperator implements Operator, Serializable
 		done = true;
 	}
 	
-	private void flush(ArrayList<String> indexes)
+	private void flush(ArrayList<String> indexes) throws Exception
 	{
 		ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
 		for (Object o : map.getKeySet())
 		{
 			int node = (Integer)o;
 			Vector<RIDAndIndexKeys> list = map.get(node);
-			threads.add(new FlushThread(list, indexes));
+			if (node == -1)
+			{
+				ArrayList<Object> rs = PlanCacheManager.getCoordNodes().setParms().execute(tx);
+				ArrayList<Integer> coords = new ArrayList<Integer>();
+				for (Object row : rs)
+				{
+					if (!(row instanceof DataEndMarker))
+					{
+						coords.add((Integer)((ArrayList<Object>)row).get(0));
+					}
+				}
+				
+				for (Integer coord : coords)
+				{
+					threads.add(new FlushThread(list, indexes, coord));
+				}
+			}
+			else
+			{
+				threads.add(new FlushThread(list, indexes, node));
+			}
 		}
 		
 		for (FlushThread thread : threads)
@@ -313,11 +359,13 @@ public final class DeleteOperator implements Operator, Serializable
 		private Vector<RIDAndIndexKeys> list;
 		private ArrayList<String> indexes;
 		private boolean ok = true;
+		private int node;
 		
-		public FlushThread(Vector<RIDAndIndexKeys> list, ArrayList<String> indexes)
+		public FlushThread(Vector<RIDAndIndexKeys> list, ArrayList<String> indexes, int node)
 		{
 			this.list = list;
 			this.indexes = indexes;
+			this.node = node;
 		}
 		
 		public boolean getOK()
@@ -327,13 +375,12 @@ public final class DeleteOperator implements Operator, Serializable
 		
 		public void run()
 		{
-			int node = list.get(0).getRID().getNode();
 			//send schema, table, tx, indexes, and list
 			Socket sock = null;
 			try
 			{
 				String hostname = new MetaData().getHostNameForNode(node, tx);
-				sock = new Socket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+				sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "DELETE          ".getBytes("UTF-8");
 				outMsg[8] = 0;
@@ -356,13 +403,13 @@ public final class DeleteOperator implements Operator, Serializable
 				objOut.writeObject(MetaData.getOrders(indexes, tx));
 				objOut.flush();
 				out.flush();
-				objOut.close();
 				getConfirmation(sock);
-				out.close();
+				objOut.close();
 				sock.close();
 			}
 			catch(Exception e)
 			{
+				HRDBMSWorker.logger.debug("", e);
 				try
 				{
 					sock.close();

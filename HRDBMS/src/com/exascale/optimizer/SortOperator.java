@@ -39,7 +39,7 @@ public final class SortOperator implements Operator, Serializable
 	private int node;
 	private int childCard = 16;
 	private boolean cardSet = false;
-	private Plan plan;
+	private transient Plan plan;
 	
 	public void setPlan(Plan plan)
 	{

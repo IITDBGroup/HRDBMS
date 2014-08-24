@@ -138,6 +138,7 @@ public class XAWorker extends HRDBMSThread
 			}
 			catch(Exception e)
 			{
+				HRDBMSWorker.logger.debug("", e);
 				updateCount = -1;
 				ex = e;
 			}

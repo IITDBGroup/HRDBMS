@@ -1,7 +1,6 @@
 package com.exascale.logging;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Iterator;
 import com.exascale.managers.HRDBMSWorker;
@@ -10,7 +9,6 @@ import com.exascale.managers.LogManager;
 public class ForwardLogIterator implements Iterator<LogRec>
 {
 	private long nextpos;
-	private final ByteBuffer sizeBuff = ByteBuffer.allocate(4);
 	private final FileChannel fc;
 
 	public ForwardLogIterator(String filename) throws IOException

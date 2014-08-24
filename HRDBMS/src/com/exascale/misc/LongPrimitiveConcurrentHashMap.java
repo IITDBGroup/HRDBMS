@@ -1710,7 +1710,7 @@ public final class LongPrimitiveConcurrentHashMap implements Serializable
 					if ((k = e.key) == key || (e.hash == hash && key == k))
 					{
 						final long v = e.value;
-						if (value == -1 || value == v || value == v)
+						if (value == -1 || value == v)
 						{
 							if (pred == null)
 							{

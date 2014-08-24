@@ -14,11 +14,43 @@ public final class Phase1
 	private boolean pushdownHadResults;
 	private final int ADDITIONAL_PUSHDOWNS = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("phase1_additional_pushdowns")); // 25
 	private Transaction tx;
+	private final Operator clone;
+	private final MetaData meta = new MetaData();
 
-	public Phase1(RootOperator root, Transaction tx)
+	public Phase1(RootOperator root, Transaction tx) throws Exception
 	{
 		this.root = root;
 		this.tx = tx;
+		this.clone = cloneTree(root);
+	}
+	
+	private Operator cloneTree(Operator op) throws Exception
+	{
+		final Operator clone = op.clone();
+		for (final Operator o : op.children())
+		{
+			try
+			{
+				final Operator child = cloneTree(o);
+				clone.add(child);
+				clone.setChildPos(op.getChildPos());
+				if (o instanceof TableScanOperator)
+				{
+					final CNFFilter cnf = ((TableScanOperator)o).getCNFForParent(op);
+					if (cnf != null)
+					{
+						((TableScanOperator)child).setCNFForParent(clone, cnf);
+					}
+				}
+			}
+			catch (final Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				throw e;
+			}
+		}
+
+		return clone;
 	}
 
 	public void optimize() throws Exception
@@ -194,7 +226,7 @@ public final class Phase1
 		{
 			for (final SelectOperator select : selects)
 			{
-				final double likelihood = select.likelihood(root, tx);
+				final double likelihood = meta.likelihood(new ArrayList<Filter>(select.getFilter()), tx, clone);
 				if (likelihood < minLikelihood)
 				{
 					minLikelihood = likelihood;
@@ -250,7 +282,7 @@ public final class Phase1
 				{
 					if (current.getCols2Pos().containsKey(filter.leftColumn()))
 					{
-						final double likelihood = select.likelihood(root, tx);
+						final double likelihood = meta.likelihood(new ArrayList<Filter>(select.getFilter()), tx, clone);
 						if (likelihood < minLikelihood)
 						{
 							minLikelihood = likelihood;
@@ -260,7 +292,7 @@ public final class Phase1
 
 					if (current.getCols2Pos().containsKey(filter.rightColumn()))
 					{
-						final double likelihood = select.likelihood(root, tx);
+						final double likelihood = meta.likelihood(new ArrayList<Filter>(select.getFilter()), tx, clone);
 						if (likelihood < minLikelihood)
 						{
 							minLikelihood = likelihood;
@@ -279,7 +311,7 @@ public final class Phase1
 
 		for (final SelectOperator select : selects)
 		{
-			final double likelihood = select.likelihood(root, tx);
+			final double likelihood = meta.likelihood(new ArrayList<Filter>(select.getFilter()), tx, clone);
 			if (likelihood < minLikelihood)
 			{
 				minLikelihood = likelihood;
@@ -405,19 +437,34 @@ public final class Phase1
 				try
 				{
 					final TableScanOperator table = (TableScanOperator)op;
-					final HashMap<String, Integer> cols2Pos = root.getMeta().getCols2PosForTable(table.getSchema(), table.getTable(), tx);
+					final HashMap<String, Integer> cols2Pos = table.getCols2Pos();
 					final ArrayList<String> needed = new ArrayList<String>(references.size());
 					for (final String col : references)
 					{
 						if (cols2Pos.containsKey(col))
 						{
-							needed.add(col);
+							if (table.getAlias() == null || table.getAlias().equals(""))
+							{
+								needed.add(col);
+							}
+							else
+							{
+								needed.add(table.getAlias() + "." + col.substring(col.indexOf('.') + 1));
+							}
 						}
 					}
 
 					if (needed.size() == 0)
 					{
-						needed.add(new ArrayList<String>(cols2Pos.keySet()).get(0));
+						if (table.getAlias() == null || table.getAlias().equals(""))
+						{
+							needed.add(new ArrayList<String>(cols2Pos.keySet()).get(0));
+						}
+						else
+						{
+							String col = new ArrayList<String>(cols2Pos.keySet()).get(0);
+							needed.add(table.getAlias() + "." + col.substring(col.indexOf('.') + 1));
+						}
 					}
 					table.setNeededCols(needed);
 				}

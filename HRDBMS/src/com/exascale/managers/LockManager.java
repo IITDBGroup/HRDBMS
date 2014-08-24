@@ -1,5 +1,6 @@
 package com.exascale.managers;
 
+import java.util.Vector;
 import com.exascale.exceptions.LockAbortException;
 import com.exascale.filesystem.Block;
 import com.exascale.locking.LockTable;
@@ -15,7 +16,8 @@ public class LockManager
 	{
 		synchronized (locks)
 		{
-			for (final Lock lock : locks.get(txnum))
+			Vector<Lock> clone = (Vector<Lock>)locks.get(txnum).clone();
+			for (final Lock lock : clone)
 			{
 				LockTable.unlock(lock.block());
 				locks.multiRemove(txnum, lock);
@@ -29,7 +31,7 @@ public class LockManager
 		{
 			for (final Lock l : locks.get(txnum))
 			{
-				if (l.block() == b)
+				if (l.block().equals(b))
 				{
 					return;
 				}

@@ -26,6 +26,8 @@ import java.util.Map.Entry;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
 import java.util.Vector;
+import com.exascale.compression.CompressedServerSocket;
+import com.exascale.compression.CompressedSocket;
 import com.exascale.filesystem.Page;
 import com.exascale.filesystem.RID;
 import com.exascale.managers.ConnectionManager;
@@ -98,7 +100,7 @@ public class CatalogCode
 		
 		//SYS.COLUMNS(COLID, TABLEID, NAME, TYPE, LENGTH, SCALE, PKPOS, NULL)
 		+ "SYS.COLUMNS(INT, INT, VARCHAR, VARCHAR, INT, INT, INT, VARCHAR)\n" 
-		+ "50\n" 
+		+ "53\n" 
 		+ "(0, 1, COLID, INT, 4, 0, -1, N)\n" 
 		+ "(1, 1, TABLEID, INT, 4, 0, 0, N)\n" 
 		+ "(2, 1, COLNAME, VARCHAR, 128, 0, 1, N)\n" 
@@ -226,7 +228,7 @@ public class CatalogCode
 		+ "0\n"
 		
 		+ "SYS.PARTITIONING(INT, VARCHAR, VARCHAR, VARCHAR)\n"
-		+ "12\n"
+		+ "13\n"
 		+ "(0, NONE, {-1}, {0})\n"
 		+ "(1, NONE, {-1}, {0})\n"
 		+ "(2, NONE, {-1}, {0})\n"
@@ -239,10 +241,10 @@ public class CatalogCode
 		+ "(9, NONE, {-1}, {0})\n"
 		+ "(10, NONE, {-1}, {0})\n"
 		+ "(11, NONE, {-1}, {0})\n"
-		+ "(12, NONE, {-1}, {0})"
+		+ "(12, NONE, {-1}, {0})\n"
 		
 		+ "SYS.INDEXSTATS(INT, INT, BIGINT)\n"
-		+ "0";
+		+ "0\n";
 
 		final PrintWriter out = new PrintWriter(new FileWriter("CatalogCreator.java", false));
 
@@ -413,10 +415,10 @@ public class CatalogCode
 		}
 	}
 
-	private static void buildIndexData(PrintWriter out, TreeMap<TextRowSorter, RID> keys2RID, int numKeys, String name) throws UnsupportedEncodingException
+	private static void buildIndexData(PrintWriter out, TreeMap<TextRowSorter, RID> keys2RID, int numKeys, String name, boolean unique) throws UnsupportedEncodingException
 	{
 		final ByteBuffer data = ByteBuffer.allocate(Page.BLOCK_SIZE);
-		buildIndexDataBuffer(keys2RID, numKeys, data);
+		buildIndexDataBuffer(keys2RID, numKeys, data, unique);
 		String fn = HRDBMSWorker.getHParms().getProperty("data_directories");
 		StringTokenizer tokens = new StringTokenizer(fn, ",", false);
 		fn = tokens.nextToken();
@@ -424,7 +426,7 @@ public class CatalogCode
 		{
 			fn += "/";
 		}
-		fn += (name + ".index");
+		fn += (name + ".indx");
 		final File index = new File(fn);
 		try
 		{
@@ -439,11 +441,18 @@ public class CatalogCode
 		}
 	}
 
-	private static void buildIndexDataBuffer(TreeMap<TextRowSorter, RID> keys2RID, int numKeys, ByteBuffer data) throws UnsupportedEncodingException
+	private static void buildIndexDataBuffer(TreeMap<TextRowSorter, RID> keys2RID, int numKeys, ByteBuffer data, boolean unique) throws UnsupportedEncodingException
 	{
 		data.position(0);
 		data.putInt(numKeys); // num key cols
-		data.put((byte)1); // unique
+		if (unique)
+		{
+			data.put((byte)1); // unique
+		}
+		else
+		{
+			data.put((byte)0); //not unique
+		}
 		data.position(9); // first free byte @ 5
 		data.putInt(Page.BLOCK_SIZE - 1); // last free byte
 
@@ -619,7 +628,7 @@ public class CatalogCode
 					i++;
 				}
 			}
-			else if (var.equals("!backupkkc!"))
+			else if (var.equals("!backupfkc!"))
 			{
 				long card;
 				
@@ -992,7 +1001,7 @@ public class CatalogCode
 			final StringTokenizer tokens = new StringTokenizer(cRow, ",", false);
 			tokens.nextToken();
 			
-			if (Integer.parseInt(tokens.nextToken()) == tableId)
+			if (Integer.parseInt(tokens.nextToken().trim()) == tableId)
 			{
 				num++;
 			}
@@ -1009,9 +1018,9 @@ public class CatalogCode
 		for (final String cRow : cTable)
 		{
 			final StringTokenizer tokens = new StringTokenizer(cRow, ",", false);
-			if (Integer.parseInt(tokens.nextToken()) == indexId)
+			if (Integer.parseInt(tokens.nextToken().trim().substring(1)) == indexId)
 			{
-				if (Integer.parseInt(tokens.nextToken()) == tableId)
+				if (Integer.parseInt(tokens.nextToken().trim()) == tableId)
 				{
 					num++;
 				}
@@ -1072,6 +1081,7 @@ public class CatalogCode
 			final int indexID = Integer.parseInt(iRowST.nextToken().substring(1).trim());
 			final String iName = iRowST.nextToken().trim();
 			final int tableID = Integer.parseInt(iRowST.nextToken().trim());
+			boolean unique = iRowST.nextToken().trim().substring(0, 1).equals("Y");
 			final int numKeys = numKeys(tableID, indexID);
 			String tName = null;
 
@@ -1177,13 +1187,13 @@ public class CatalogCode
 					}
 				}
 
-				keys2RIDs.put(keys, new RID(0, 0, 4097, rowNum));
+				keys2RIDs.put(keys, new RID(-1, 0, 4096, rowNum));
 				HRDBMSWorker.logger.debug("Adding key/RID pair.");
 				rowNum++;
 			}
 
 			HRDBMSWorker.logger.debug("Calling buildIndexData()");
-			buildIndexData(out, keys2RIDs, numKeys, "SYS." + tName + "." + iName);
+			buildIndexData(out, keys2RIDs, numKeys, "SYS." + iName, unique);
 		}
 	}
 
@@ -1222,7 +1232,7 @@ public class CatalogCode
 			}
 			else if (token.equals("BACKUPS"))
 			{
-				row += "!backup4kc!)";
+				row += "!backupfkc!)";
 			}
 			else if (token.equals("NODESTATE"))
 			{
@@ -1297,6 +1307,7 @@ public class CatalogCode
 		data.putInt(rid.getDevice());
 		data.putInt(rid.getBlockNum());
 		data.putInt(rid.getRecNum());
+		keyBytes.position(0);
 		data.put(keyBytes);
 		return data;
 	}
@@ -1318,13 +1329,13 @@ public class CatalogCode
 			
 			if (type.equals("C"))
 			{
-				final String row = "(" + coordId + "," + host + "," + type + "," + rack + ",null)";
+				final String row = "(" + coordId + "," + host + "," + type + "," + rack + ")";
 				nTable.add(row);
 				coordId--;
 			}
 			else if (type.equals("W"))
 			{
-				final String row = "(" + workerId + "," + host + "," + type + "," + rack + ",null)";
+				final String row = "(" + workerId + "," + host + "," + type + "," + rack + ")";
 				nTable.add(row);
 				workerId++;
 			}
@@ -1397,6 +1408,7 @@ public class CatalogCode
 		out.println("import com.exascale.tables.Schema;");
 		out.println("import java.io.IOException;");
 		out.println("import java.io.UnsupportedEncodingException;");
+		out.println("import java.util.StringTokenizer;");
 		out.println("");
 		out.println("public class CatalogCreator");
 		out.println("{");
@@ -1408,12 +1420,12 @@ public class CatalogCode
 		out.println("\tint i = 0;");
 		out.println("\tint j = 0;");
 		out.println("\tString base = HRDBMSWorker.getHParms().getProperty(\"data_directories\");");
-		out.println("StringTokenizer tokens = new StringTokenizer(base, \",\", false);");
-		out.println("base = tokens.nextToken();");
 		out.println("");
 		out.println("\tpublic CatalogCreator() throws IOException, UnsupportedEncodingException");
 		out.println("\t{");
-		out.println("\t\tHRDBMSWorker.logger.debug(\"CatalogCreator is starting.\");");
+		out.println("StringTokenizer tokens = new StringTokenizer(base, \",\", false);");
+		out.println("base = tokens.nextToken();");
+		out.println("HRDBMSWorker.logger.debug(\"CatalogCreator is starting\");");
 		out.println("\t\tif (!base.endsWith(\"/\"))");
 		out.println("\t\t{");
 		out.println("\t\t\tbase += \"/\";");
@@ -1463,7 +1475,7 @@ public class CatalogCode
 		out.println("\tpublic void createTable" + methodNum + "() throws IOException, UnsupportedEncodingException");
 		out.println("\t{");
 		methodNum++;
-		out.println("\t\tHRDBMSWorker.logger.debug(\"Starting creation of table " + name + "\");");
+		out.println("HRDBMSWorker.logger.debug(\"Starting creation of table " + name + "\");");
 		out.println("\t\tfn = base + (\"" + name + ".tbl\");");
 		out.println("");
 		out.println("\t\ttable = new File(fn);");
@@ -1472,7 +1484,7 @@ public class CatalogCode
 		out.println("\t\tfc = FileManager.getFile(fn);");
 		out.println("\t\tbb = ByteBuffer.allocate(Page.BLOCK_SIZE);");
 		out.println("\t\tbb.position(0);");
-		out.println("\t\tbb.putInt(0); //node 0");
+		out.println("\t\tbb.putInt(-1); //node -1");
 		out.println("\t\tbb.putInt(0); //device 0");
 		out.println("");
 		out.println("\t\tbb.putInt(Page.BLOCK_SIZE - (57 + " + dataSize + " + (16 * " + rows + ") + (5 * " + rows + " * " + cols + ") + (" + cols + " * 4))); //largest free size");
@@ -1488,7 +1500,7 @@ public class CatalogCode
 		out.println("\t\tbb.position(0);");
 		out.println("\t\tfc.write(bb);");
 		out.println("\t\t//done writing first header page");
-		out.println("\t\tHRDBMSWorker.logger.debug(\"Done writing first header page.\");");
+		out.println("HRDBMSWorker.logger.debug(\"Done writing first header page.\");");
 		out.println("");
 		// out.println("\t\t\ti = 0;");
 		// out.println("\t\t\tbb.position(0);");
@@ -1534,7 +1546,7 @@ public class CatalogCode
 		out.println("\t\ti = 0;");
 		out.println("\t\twhile (i < " + rows + ")");
 		out.println("\t\t{");
-		out.println("\t\t\tbb.putInt(0); //node 0");
+		out.println("\t\t\tbb.putInt(-1); //node -1");
 		out.println("\t\t\tbb.putInt(0); //device 0");
 		out.println("\t\t\tbb.putInt(4096); //block 4096");
 		out.println("\t\t\tbb.putInt(i); //record i");
@@ -1849,15 +1861,7 @@ public class CatalogCode
 					tokens2.nextToken();
 					if (id == Integer.parseInt(tokens2.nextToken().trim()))
 					{
-						if (tokens2.nextToken().trim().equals("Y"))
-						{
-							return actual.size();
-						}
-						else
-						{
-							HRDBMSWorker.logger.error("Non-unique index for table: " + table);
-							System.exit(1);
-						}
+						return actual.size();
 					}
 				}
 			}
@@ -2059,6 +2063,7 @@ public class CatalogCode
 
 		// key val
 		data.position(freeKeyOff + 13);
+		keyBytes.position(0);
 		data.put(keyBytes);
 
 		// next free val off
@@ -2100,6 +2105,7 @@ public class CatalogCode
 		data.putInt(lastFree - leaf.limit()); // new last free byte
 		data.position(lastFree - leaf.limit() + 1); // start of leaf record
 		final int downOff = data.position();
+		leaf.position(0);
 		data.put(leaf);
 
 		if (prevOff != 0)
@@ -2254,7 +2260,7 @@ public class CatalogCode
 
 	private static void writeData(PrintWriter out, Vector<String> table, int dataSize, Vector<String> types)
 	{
-		out.println("\t\tHRDBMSWorker.logger.debug(\"Writing table data.\");");
+		out.println("HRDBMSWorker.logger.debug(\"Writing table data.\");");
 		out.println("");
 		out.println("\t\ti = bb.position();");
 		out.println("\t\twhile (i < (Page.BLOCK_SIZE - " + dataSize + "))");
@@ -2343,7 +2349,7 @@ public class CatalogCode
 
 	private static void writeNullArray(PrintWriter out, Vector<String> table)
 	{
-		out.println("\t\tHRDBMSWorker.logger.debug(\"Writing null array.\");");
+		out.println("HRDBMSWorker.logger.debug(\"Writing null array.\");");
 		for (final String row : table)
 		{
 			final StringTokenizer tokens = new StringTokenizer(row, ",", false);

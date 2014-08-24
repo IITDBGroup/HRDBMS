@@ -29,7 +29,7 @@ public final class IntersectOperator implements Operator, Serializable
 	private int estimate = 16;
 	private volatile boolean inited = false;
 	private volatile boolean startDone = false;
-	private Plan plan;
+	private transient Plan plan;
 	private boolean estimateSet = false;
 	
 	public void setPlan(Plan plan)
@@ -74,6 +74,11 @@ public final class IntersectOperator implements Operator, Serializable
 		{
 			set.getArray().close();
 			set.close();
+		}
+		
+		for (Operator o : children)
+		{
+			o.close();
 		}
 	}
 
@@ -236,7 +241,6 @@ public final class IntersectOperator implements Operator, Serializable
 			}
 			else
 			{
-				Exception e = new Exception();
 				HRDBMSWorker.logger.error("IntersectOperator is inited more than once!");
 				throw new Exception("IntersectOperator is inited more than once!");
 			}

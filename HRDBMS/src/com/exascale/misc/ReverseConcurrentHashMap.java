@@ -1692,7 +1692,7 @@ public final class ReverseConcurrentHashMap implements Serializable
 					if ((k = e.key).equals(key) || (e.hash == hash && key.equals(k)))
 					{
 						final long v = e.value;
-						if (value == -1 || value == v || value == v)
+						if (value == -1 || value == v)
 						{
 							if (pred == null)
 							{

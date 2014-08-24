@@ -10,7 +10,6 @@ import java.sql.Statement;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
-import com.exascale.managers.HRDBMSWorker;
 
 public class HRDBMSStatement implements Statement
 {
@@ -198,7 +197,7 @@ public class HRDBMSStatement implements Statement
 			}
 		
 			sql = setParms(sql);
-			byte[] command = "EXECUTEQ".getBytes("UTF-8");
+			byte[] command = "EXECUTEQ        ".getBytes("UTF-8");
 			byte[] statement = sql.getBytes("UTF-8");
 			byte[] length = intToBytes(statement.length);
 			conn.out.write(command);
@@ -273,7 +272,7 @@ public class HRDBMSStatement implements Statement
 			String txt = new String(text, "UTF-8");
 			return new Exception(txt);
 		}
-		catch(Exception e)
+		catch(Throwable e)
 		{
 			throw new Exception("An error occurred on the server, but an exception occurred while trying to retrieve the error message.  A rollback has been performed.");
 		}
@@ -351,7 +350,7 @@ public class HRDBMSStatement implements Statement
 			}
 		
 			sql = setParms(sql);
-			byte[] command = "EXECUTEU".getBytes("UTF-8");
+			byte[] command = "EXECUTEU        ".getBytes("UTF-8");
 			byte[] statement = sql.getBytes("UTF-8");
 			byte[] length = intToBytes(statement.length);
 			conn.out.write(command);
@@ -525,7 +524,7 @@ public class HRDBMSStatement implements Statement
 				}
 			
 				sql = setParms(sql);
-				byte[] command = "EXECUTEQ".getBytes("UTF-8");
+				byte[] command = "EXECUTEQ        ".getBytes("UTF-8");
 				byte[] statement = sql.getBytes("UTF-8");
 				byte[] length = intToBytes(statement.length);
 				conn.out.write(command);
@@ -591,7 +590,7 @@ public class HRDBMSStatement implements Statement
 				}
 			
 				sql = setParms(sql);
-				byte[] command = "EXECUTEU".getBytes("UTF-8");
+				byte[] command = "EXECUTEU        ".getBytes("UTF-8");
 				byte[] statement = sql.getBytes("UTF-8");
 				byte[] length = intToBytes(statement.length);
 				conn.out.write(command);

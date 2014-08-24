@@ -23,7 +23,7 @@ public final class ProjectOperator implements Operator, Serializable
 	private int node;
 	private final ArrayList<Integer> pos2Get = new ArrayList<Integer>();
 	private volatile boolean startDone = false;
-	private Plan plan;
+	private transient Plan plan;
 	
 	public void setPlan(Plan plan)
 	{

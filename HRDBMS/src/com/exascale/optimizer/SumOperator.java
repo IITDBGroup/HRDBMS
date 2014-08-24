@@ -24,6 +24,11 @@ public final class SumOperator implements AggregateOperator, Serializable
 		this.meta = meta;
 		this.isInt = isInt;
 	}
+	
+	public void setInput(String col)
+	{
+		input = col;
+	}
 
 	@Override
 	public SumOperator clone()

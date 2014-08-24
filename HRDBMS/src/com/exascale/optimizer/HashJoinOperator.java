@@ -59,7 +59,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 	private final Vector<Operator> clones = new Vector<Operator>();
 	private final Vector<AtomicBoolean> lockVector = new Vector<AtomicBoolean>();
 	private final ReentrantLock thisLock = new ReentrantLock();
-	private Plan plan;
+	private transient Plan plan;
 	
 	public void setPlan(Plan plan)
 	{
@@ -117,9 +117,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					pos2Col.put(pos2Col.size(), (String)entry.getValue());
 				}
 				
-				Transaction tx = new Transaction(Transaction.ISOLATION_RR);
-				cnfFilters = new CNFFilter(f, meta, cols2Pos, tx, this);
-				tx.commit();
+				cnfFilters = new CNFFilter(f, meta, cols2Pos, null, this);
 				int i = 0;
 				while (i < lefts.size())
 				{
@@ -893,6 +891,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			{
 				// synchronized(buckets)
 				bucketsLock.lock();
+				try
 				{
 					if (i < buckets.size())
 					{
@@ -912,6 +911,11 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 						bucketsLock.unlock();
 						o = null;
 					}
+				}
+				catch(Exception e)
+				{
+					bucketsLock.unlock();
+					throw e;
 				}
 			}
 

@@ -120,7 +120,15 @@ public final class Phase5
 		if (op instanceof MultiOperator)
 		{
 			// return card(op.children().get(0));
-			final long groupCard = meta.getColgroupCard(((MultiOperator)op).getKeys(), root, tx, op);
+			long groupCard;
+			if (((MultiOperator)op).getKeys().size() == 0)
+			{
+				groupCard = 1;
+			}
+			else
+			{
+				groupCard = meta.getColgroupCard(((MultiOperator)op).getKeys(), root, tx, op);
+			}
 			if (groupCard > card(op.children().get(0)))
 			{
 				final long retval = card(op.children().get(0));
@@ -296,10 +304,10 @@ public final class Phase5
 						double sum = 0;
 						for (final Operator x : op.children().get(0).children())
 						{
-							double l = meta.likelihood(((IndexOperator)x).getFilter(), root, tx, op);
+							double l = meta.likelihood(((IndexOperator)x).getFilter(), root, tx, origOp);
 							for (final Filter f : ((IndexOperator)x).getSecondary())
 							{
-								l *= meta.likelihood(f, root, tx, op);
+								l *= meta.likelihood(f, root, tx, origOp);
 							}
 
 							sum += l;
@@ -323,10 +331,10 @@ public final class Phase5
 							double sum = 0;
 							for (final Operator y : x.children())
 							{
-								double l = meta.likelihood(((IndexOperator)y).getFilter(), root, tx, op);
+								double l = meta.likelihood(((IndexOperator)y).getFilter(), root, tx, origOp);
 								for (final Filter f : ((IndexOperator)y).getSecondary())
 								{
-									l *= meta.likelihood(f, root, tx, op);
+									l *= meta.likelihood(f, root, tx, origOp);
 								}
 
 								sum += l;
@@ -367,10 +375,10 @@ public final class Phase5
 					double sum = 0;
 					for (final Operator x : op.children().get(0).children())
 					{
-						double l = meta.likelihood(((IndexOperator)x).getFilter(), root, tx, op);
+						double l = meta.likelihood(((IndexOperator)x).getFilter(), root, tx, origOp);
 						for (final Filter f : ((IndexOperator)x).getSecondary())
 						{
-							l *= meta.likelihood(f, root, tx, op);
+							l *= meta.likelihood(f, root, tx, origOp);
 						}
 
 						sum += l;
@@ -394,10 +402,10 @@ public final class Phase5
 						double sum = 0;
 						for (final Operator y : x.children())
 						{
-							double l = meta.likelihood(((IndexOperator)y).getFilter(), root, tx, op);
+							double l = meta.likelihood(((IndexOperator)y).getFilter(), root, tx, origOp);
 							for (final Filter f : ((IndexOperator)y).getSecondary())
 							{
-								l *= meta.likelihood(f, root, tx, op);
+								l *= meta.likelihood(f, root, tx, origOp);
 							}
 
 							sum += l;
@@ -1654,7 +1662,15 @@ public final class Phase5
 		}
 		else if (op instanceof UnionOperator)
 		{
-			final long xl = card(op.children().get(0)) + card(op.children().get(1));
+			long xl;
+			if (op.children().size() == 2)
+			{
+				xl = card(op.children().get(0)) + card(op.children().get(1));
+			}
+			else
+			{
+				xl = card(op.children().get(0));
+			}
 			int x = 1;
 			if (xl > Integer.MAX_VALUE)
 			{
