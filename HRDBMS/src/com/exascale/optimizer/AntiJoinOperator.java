@@ -172,6 +172,11 @@ public final class AntiJoinOperator implements Operator, Serializable
 		{
 			clone.close();
 		}
+		
+		if (outBuffer != null)
+		{
+			outBuffer.close();
+		}
 	}
 
 	@Override

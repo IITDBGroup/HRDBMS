@@ -30,4 +30,9 @@ public class FreeSpace
 	{
 		startOffset = start;
 	}
+	
+	public String toString()
+	{
+		return "(" + startOffset + ", " + endOffset + ")";
+	}
 }

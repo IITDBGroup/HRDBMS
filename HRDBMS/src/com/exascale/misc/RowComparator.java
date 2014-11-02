@@ -23,78 +23,93 @@ public final class RowComparator implements Comparator
 	{
 		int result;
 
-		final ArrayList<Object> lhs = new ArrayList<Object>(types.size());
+		ArrayList<Object> lhs = new ArrayList<Object>(types.size());
+		ArrayList<Object> rhs = new ArrayList<Object>(types.size());
 		int i = 0;
-		while (i < types.size())
+		
+		if (arg0 instanceof ArrayList)
 		{
-			final String type = types.get(i);
-			if (type.equals("INT"))
-			{
-				lhs.add(Utils.parseInt(((String[])arg0)[i]));
-			}
-			else if (type.equals("FLOAT"))
-			{
-				lhs.add(Utils.parseDouble(((String[])arg0)[i]));
-			}
-			else if (type.equals("CHAR"))
-			{
-				lhs.add(((String[])arg0)[i]);
-			}
-			else if (type.equals("LONG"))
-			{
-				lhs.add(Utils.parseLong(((String[])arg0)[i]));
-			}
-			else if (type.equals("DATE"))
-			{
-				try
-				{
-					lhs.add(DateParser.parse(((String[])arg0)[i]));
-				}
-				catch (final Exception e)
-				{
-					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
-				}
-			}
-
-			i++;
+			lhs = (ArrayList<Object>)arg0;
 		}
-
-		final ArrayList<Object> rhs = new ArrayList<Object>(types.size());
-		i = 0;
-		while (i < types.size())
+		else
 		{
-			final String type = types.get(i);
-			if (type.equals("INT"))
+			while (i < types.size())
 			{
-				rhs.add(Utils.parseInt(((String[])arg1)[i]));
-			}
-			else if (type.equals("FLOAT"))
-			{
-				rhs.add(Utils.parseDouble(((String[])arg1)[i]));
-			}
-			else if (type.equals("CHAR"))
-			{
-				rhs.add(((String[])arg1)[i]);
-			}
-			else if (type.equals("LONG"))
-			{
-				rhs.add(Utils.parseLong(((String[])arg1)[i]));
-			}
-			else if (type.equals("DATE"))
-			{
-				try
+				final String type = types.get(i);
+				if (type.equals("INT"))
 				{
-					rhs.add(DateParser.parse(((String[])arg1)[i]));
+					lhs.add(Utils.parseInt(((String[])arg0)[i]));
 				}
-				catch (final Exception e)
+				else if (type.equals("FLOAT"))
 				{
-					HRDBMSWorker.logger.error("", e);
-					System.exit(1);
+					lhs.add(Utils.parseDouble(((String[])arg0)[i]));
 				}
-			}
+				else if (type.equals("CHAR"))
+				{
+					lhs.add(((String[])arg0)[i]);
+				}
+				else if (type.equals("LONG"))
+				{
+					lhs.add(Utils.parseLong(((String[])arg0)[i]));
+				}
+				else if (type.equals("DATE"))
+				{
+					try
+					{
+						lhs.add(DateParser.parse(((String[])arg0)[i]));
+					}
+					catch (final Exception e)
+					{
+						HRDBMSWorker.logger.error("", e);
+						System.exit(1);
+					}
+				}
 
-			i++;
+				i++;
+			}
+		}
+		
+		if (arg1 instanceof ArrayList)
+		{
+			rhs = (ArrayList<Object>)arg1;
+		}
+		else
+		{
+			i = 0;
+			while (i < types.size())
+			{
+				final String type = types.get(i);
+				if (type.equals("INT"))
+				{
+					rhs.add(Utils.parseInt(((String[])arg1)[i]));
+				}
+				else if (type.equals("FLOAT"))
+				{
+					rhs.add(Utils.parseDouble(((String[])arg1)[i]));
+				}
+				else if (type.equals("CHAR"))
+				{
+					rhs.add(((String[])arg1)[i]);
+				}
+				else if (type.equals("LONG"))
+				{
+					rhs.add(Utils.parseLong(((String[])arg1)[i]));
+				}
+				else if (type.equals("DATE"))
+				{
+					try
+					{
+						rhs.add(DateParser.parse(((String[])arg1)[i]));
+					}
+					catch (final Exception e)
+					{
+						HRDBMSWorker.logger.error("", e);
+						System.exit(1);
+					}
+				}
+
+				i++;
+			}
 		}
 
 		i = 0;

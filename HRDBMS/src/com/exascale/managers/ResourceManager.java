@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.RandomAccessFile;
+import java.io.StringWriter;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
@@ -176,10 +177,16 @@ public final class ResourceManager extends HRDBMSThread
 
 	public static void printOpenStructures()
 	{
-		for (final Map.Entry entry : creations.entrySet())
+		try
 		{
-			HRDBMSWorker.logger.debug(entry.getKey() + ": " + entry.getValue());
+			ArrayList<Map.Entry<Long, String>> clone = new ArrayList<Map.Entry<Long, String>>(creations.entrySet());
+			for (final Map.Entry entry : clone)
+			{
+				HRDBMSWorker.logger.debug(entry.getKey() + ": " + entry.getValue());
+			}
 		}
+		catch(Exception e)
+		{}
 	}
 
 	public static void waitForSync()
@@ -718,6 +725,10 @@ public final class ResourceManager extends HRDBMSThread
 			}
 
 			id = idGen.getAndIncrement();
+			//DEBUG
+			//Exception e = new Exception();
+			//HRDBMSWorker.logger.debug("Creating DBHM #" + id, e);
+			//printOpenStructures(); //DEBUG
 		}
 
 		public void clear()
@@ -752,7 +763,6 @@ public final class ResourceManager extends HRDBMSThread
 
 		public synchronized void close() throws IOException
 		{
-			// creations.remove(id);
 			if (filesAllocated)
 			{
 				if (ofcs != null)
@@ -794,14 +804,8 @@ public final class ResourceManager extends HRDBMSThread
 				{
 					if (!(new File(TEMP_DIR + "DBHM" + id + ".tmp").delete()))
 					{
-						// System.out.println("Delete of " + TEMP_DIR + "DBHM" +
-						// id + ".tmp failed");
-					}
-
-					if (!(new File(TEMP_DIR + "DBHMX" + id + ".tmp").delete()))
-					{
-						// System.out.println("Delete of " + TEMP_DIR + "DBHM" +
-						// id + ".tmp failed");
+						//HRDBMSWorker.logger.debug("Delete of " + TEMP_DIR + "DBHM" +
+						//id + ".tmp failed");
 					}
 				}
 			}
@@ -963,9 +967,11 @@ public final class ResourceManager extends HRDBMSThread
 			FileChannel retval = null;
 			try
 			{
-				retval = new RandomAccessFile(TEMP_DIRS.get(hash) + "DBHM" + id + ".tmp", "r").getChannel();
+				RandomAccessFile raf = new RandomAccessFile(TEMP_DIRS.get(hash) + "DBHM" + id + ".tmp", "r");
+				retval = raf.getChannel();
 				locks.add(true);
 				ifcs.add(retval);
+				rafs.add(raf);
 				i = 0;
 				while (!ifcs.get(i).equals(retval))
 				{
@@ -1297,6 +1303,7 @@ public final class ResourceManager extends HRDBMSThread
 				{
 					if (!filesAllocated)
 					{
+						//creations.put(id, ""); //DEBUG
 						int i = 0;
 						index = new LongPrimitiveConcurrentHashMap((int)(estimate * 1.5), 1.0f, cpus * 6);
 						// index = new ConcurrentHashMap<Long, Long>(estimate,
@@ -1414,6 +1421,7 @@ public final class ResourceManager extends HRDBMSThread
 				{
 					if (!filesAllocated)
 					{
+						//creations.put(id, ""); //DEBUG
 						int i = 0;
 						index = new LongPrimitiveConcurrentHashMap((int)(estimate * 1.5), 1.0f, cpus * 6);
 						while (i < TEMP_DIRS.size())

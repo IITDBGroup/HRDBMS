@@ -25,7 +25,7 @@ public final class SortOperator implements Operator, Serializable
 	private TreeMap<Integer, String> pos2Col;
 	private boolean startDone = false;
 	private boolean closeDone = false;
-	private final ArrayList<String> sortCols;
+	private ArrayList<String> sortCols;
 	private final ArrayList<Boolean> orders;
 	private volatile boolean sortComplete = false;
 	private SortThread sortThread;
@@ -65,11 +65,68 @@ public final class SortOperator implements Operator, Serializable
 			pos2Col = child.getPos2Col();
 			int i = 0;
 			sortPos = new int[sortCols.size()];
+			ArrayList<String> newSortCols = new ArrayList<String>();
 			for (final String sortCol : sortCols)
 			{
-				sortPos[i] = cols2Pos.get(sortCol);
+				try
+				{
+					Integer pos = cols2Pos.get(sortCol);
+					if (pos != null)
+					{
+						sortPos[i] = pos;
+						newSortCols.add(sortCol);
+					}
+					else
+					{
+						String sortCol2;
+						if (sortCol.contains("."))
+						{
+							sortCol2 = sortCol.substring(sortCol.indexOf('.') + 1);
+						}
+						else
+						{
+							sortCol2 = sortCol;
+						}
+						
+						int matches = 0;
+						for (String col : cols2Pos.keySet())
+						{
+							String col2;
+							if (col.contains("."))
+							{
+								col2 = col.substring(col.indexOf('.') + 1);
+							}
+							else
+							{
+								col2 = col;
+							}
+							
+							if (col2.equals(sortCol2))
+							{
+								matches++;
+								newSortCols.add(sortCol);
+								
+								if (matches == 1)
+								{
+									sortPos[i] = cols2Pos.get(col);
+								}
+								else
+								{
+									throw new Exception("Ambiguous column: " + sortCol);
+								}
+							}
+						}
+					}
+				}
+				catch(Exception e)
+				{
+					HRDBMSWorker.logger.debug("Could not find " + sortCol + " in " + cols2Pos);
+					throw e;
+				}
 				i++;
 			}
+			
+			sortCols = newSortCols;
 		}
 		else
 		{
@@ -105,6 +162,12 @@ public final class SortOperator implements Operator, Serializable
 		}
 
 		result.close();
+		
+		if (readBuffer != null)
+		{
+			readBuffer.close();
+		}
+		
 		isClosed = true;
 	}
 
@@ -532,7 +595,6 @@ public final class SortOperator implements Operator, Serializable
 				{
 					final long size = array.size();
 					long i = 0;
-					System.currentTimeMillis();
 					// long nullCount = 0; //DEBUG
 					while (i < size)
 					{
@@ -555,8 +617,6 @@ public final class SortOperator implements Operator, Serializable
 						readBuffer.put(row);
 
 						i++;
-
-						System.currentTimeMillis();
 					}
 
 					// System.out.println(nullCount + "/" + size +

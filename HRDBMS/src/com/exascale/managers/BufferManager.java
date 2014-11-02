@@ -1,7 +1,12 @@
 package com.exascale.managers;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
 import java.util.concurrent.BlockingQueue;
@@ -9,264 +14,168 @@ import java.util.concurrent.LinkedBlockingQueue;
 import com.exascale.exceptions.BufferPoolExhaustedException;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
-import com.exascale.filesystem.PageCleaner;
+import com.exascale.logging.DeleteLogRec;
+import com.exascale.logging.InsertLogRec;
+import com.exascale.logging.LogIterator;
+import com.exascale.logging.LogRec;
+import com.exascale.managers.FileManager.EndDelayThread;
 import com.exascale.misc.MultiHashMap;
 import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.IOThread;
 
-public class BufferManager extends HRDBMSThread
+public class BufferManager
 {
-	private static BlockingQueue<String> in = new LinkedBlockingQueue<String>();
-	public static Page[] bp;
-	private static int numAvailable;
-	public static int numNotTouched;
-	private static HashMap<Block, Integer> pageLookup;
-	private static TreeMap<Long, Block> referencedLookup;
-	public static TreeMap<Long, Block> unmodLookup;
-	private static boolean log;
-	private static MultiHashMap<Long, Page> myBuffers;
+	public static SubBufferManager[] managers;
 
 	public BufferManager(boolean log)
 	{
-		HRDBMSWorker.logger.info("Starting initialization of the Buffer Manager.");
-		BufferManager.log = log;
-		myBuffers = new MultiHashMap<Long, Page>();
-		numAvailable = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("bp_pages"));
-		numNotTouched = numAvailable;
-		this.setWait(true);
-		this.description = "Buffer Manager";
-		bp = new Page[numAvailable];
+		managers = new SubBufferManager[Runtime.getRuntime().availableProcessors() * 2];
 		int i = 0;
-		while (i < numAvailable)
+		while (i < managers.length)
 		{
-			bp[i] = new Page();
+			managers[i] = new SubBufferManager(log); 
 			i++;
 		}
-
-		pageLookup = new HashMap<Block, Integer>();
-		referencedLookup = new TreeMap<Long, Block>();
-		unmodLookup = new TreeMap<Long, Block>();
 	}
 	
-	public static synchronized void throwAwayPage(String fn, int blockNum) throws Exception
+	public static void throwAwayPage(String fn, int blockNum) throws Exception
 	{
 		Block b = new Block(fn, blockNum);
-		for (Page p : bp)
-		{
-			if (b.equals(p.block()))
-			{
-				p.setNotModified();
-				p.buffer().position(0);
-				int i = 0;
-				while (i < Page.BLOCK_SIZE)
-				{
-					p.buffer().putLong(-1);
-					i += 8;
-				}
-			}
-		}
+		int hash = (b.hashCode2() & 0x7FFFFFFF) % managers.length;
+		managers[hash].throwAwayPage(b);
 	}
 
-	public static synchronized void flushAll() throws IOException
+	public static void flushAll(FileChannel fc) throws Exception
 	{
-		for (final Page p : BufferManager.bp)
+		ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
+		int i = 0;
+		while (i < managers.length)
 		{
-			if (p.isModified() && (!p.isPinned()))
-			{
-				p.pin(p.pinTime(), -3);
-				FileManager.write(p.block(), p.buffer());
-
-				p.unpin(-3);
-			}
-		}
-	}
-
-	public static BlockingQueue<String> getInputQueue()
-	{
-		return in;
-	}
-
-	public static synchronized Page getPage(Block b)
-	{
-		final Integer index = pageLookup.get(b);
-
-		if (index == null)
-		{
-			return null;
-		}
-
-		Page retval = bp[index];
-		Block b2 = retval.block();
-		if (!b.equals(b2))
-		{
-			HRDBMSWorker.logger.fatal("The block " + b + " was requested, but the BufferManager is returning block " + b2);
-			System.exit(1);
-			return null;
+			threads.add(new FlushThread(managers[i], fc));
+			i++;
 		}
 		
-		return retval;
-	}
-
-	public static synchronized void pin(Block b, long txnum) throws Exception
-	{
-		int index = findExistingPage(b);
-		if (index == -1)
+		for (FlushThread thread : threads)
 		{
-			index = chooseUnpinnedPage();
-
-			if (numNotTouched > 0)
+			thread.start();
+		}
+		
+		Exception e = null;
+		HashSet<String> toForce = new HashSet<String>();
+		for (FlushThread thread : threads)
+		{
+			thread.join();
+			if (thread.getException() != null)
 			{
-				numNotTouched--;
+				e = thread.getException();
 			}
-
-			if (index == -1)
+			
+			toForce.addAll(thread.getToForce());
+		}
+		
+		ArrayList<EndDelayThread> threads2 = new ArrayList<EndDelayThread>();
+		for (String file : toForce)
+		{
+			threads2.add(FileManager.endDelay(file));
+		}
+		
+		boolean allOK = true;
+		for (EndDelayThread thread : threads2)
+		{
+			thread.join();
+			if (!thread.getOK())
 			{
-				HRDBMSWorker.logger.error("Buffer pool exhausted.");
-				throw new BufferPoolExhaustedException();
-			}
-
-			if (bp[index].block() != null)
-			{
-				referencedLookup.remove(bp[index].pinTime());
-				unmodLookup.remove(bp[index].pinTime());
-				bp[index].setPinTime(-1);
-				pageLookup.remove(bp[index].block());
-			}
-			bp[index].assignToBlock(b, log);
-			if (pageLookup.containsKey(b))
-			{
-				Exception e = new Exception("About to put a duplicate page in the bufferpool");
-				HRDBMSWorker.logger.debug("", e);
-				throw e;
-			}
-			pageLookup.put(b, index);
-		}
-
-		if (bp[index].pinTime() != -1)
-		{
-			referencedLookup.remove(bp[index].pinTime());
-			unmodLookup.remove(bp[index].pinTime());
-		}
-
-		final long lsn = LogManager.getLSN();
-		referencedLookup.put(lsn, b);
-		if (!bp[index].isModified())
-		{
-			unmodLookup.put(lsn, b);
-		}
-		bp[index].pin(lsn, txnum);
-		myBuffers.multiPut(txnum, bp[index]);
-	}
-
-	public static synchronized void unpin(Page p, long txnum)
-	{
-		p.unpin(txnum);
-		myBuffers.multiRemove(txnum, p);
-	}
-
-	public static synchronized void unpinAll(long txnum)
-	{
-		for (final Page p : myBuffers.get(txnum))
-		{
-			p.unpin(txnum);
-		}
-	}
-
-	public static synchronized void write(Page p, int off, byte[] data)
-	{
-		p.buffer().position(off);
-		p.buffer().put(data);
-		unmodLookup.remove(p.pinTime());
-	}
-
-	private static synchronized int chooseUnpinnedPage()
-	{
-		if (numNotTouched > 0)
-		{
-			return numAvailable - numNotTouched;
-		}
-
-		if (!unmodLookup.isEmpty())
-		{
-			for (final Block b : unmodLookup.values())
-			{
-				final int index = pageLookup.get(b);
-				if (!bp[index].isPinned())
-				{
-					return index;
-				}
+				allOK = false;
 			}
 		}
-
-		for (final Block b : referencedLookup.values())
+		
+		if (!allOK)
 		{
-			final int index = pageLookup.get(b);
-			if (!bp[index].isPinned())
+			throw new IOException();
+		}
+		
+		if (e != null)
+		{
+			throw e;
+		}
+	}
+	
+	public static class FlushThread extends HRDBMSThread
+	{
+		private SubBufferManager manager;
+		private FileChannel fc;
+		private Exception e = null;
+		private HashSet<String> toForce = new HashSet<String>();
+		
+		public FlushThread(SubBufferManager manager, FileChannel fc)
+		{
+			this.manager = manager;
+			this.fc = fc;
+		}
+		
+		public void run()
+		{
+			try
 			{
-				return index;
+				toForce = manager.flushAll(fc);
+			}
+			catch(Exception e)
+			{
+				this.e = e;
 			}
 		}
-
-		return -1;
+		
+		public HashSet<String> getToForce()
+		{
+			return toForce;
+		}
+		
+		public Exception getException()
+		{
+			return e;
+		}
 	}
 
-	private static synchronized int findExistingPage(Block b)
+	public static Page getPage(Block b)
 	{
-		final Integer temp = pageLookup.get(b);
-		if (temp == null)
-		{
-			return -1;
-		}
-
-		return temp.intValue();
+		int hash = (b.hashCode2() & 0x7FFFFFFF) % managers.length;
+		return managers[hash].getPage(b);
 	}
 
-	@Override
-	public void run()
+	public static void pin(Block b, long txnum) throws Exception
 	{
-		HRDBMSWorker.addThread(new PageCleaner());
-		HRDBMSWorker.logger.info("Buffer Manager initialization complete.");
-		try
-		{
-			while (true)
-			{
-				processCommand(in.take());
-			}
-		}
-		catch (final InterruptedException e)
-		{
-		}
+		int hash = (b.hashCode2() & 0x7FFFFFFF) % managers.length;
+		managers[hash].pin(b, txnum);
 	}
 
-	private void processCommand(String cmd)
+	public static void unpin(Page p, long txnum)
 	{
-		if (cmd.startsWith("REQUEST PAGES"))
+		int hash = (p.block().hashCode2() & 0x7FFFFFFF) % managers.length;
+		managers[hash].unpin(p, txnum);
+	}
+
+	public static void unpinAll(long txnum)
+	{
+		int i = 0;
+		while (i < managers.length)
 		{
-			requestPages(cmd);
-		}
-		else if (cmd.startsWith("REQUEST PAGE"))
-		{
-			requestPage(cmd);
-		}
-		else
-		{
-			HRDBMSWorker.logger.error("Unknown message received by the Buffer Manager: " + cmd);
-			in = null;
-			this.terminate();
-			return;
+			managers[i].unpinAll(txnum);
+			i++;
 		}
 	}
 
-	private void requestPage(String cmd)
+	public static void write(Page p, int off, byte[] data)
+	{
+		int hash = (p.block().hashCode2() & 0x7FFFFFFF) % managers.length;
+		managers[hash].write(p, off, data);
+	}
+
+	public static void requestPage(Block b, long txnum)
 	{
 		try
 		{
-			cmd = cmd.substring((13));
-			final StringTokenizer tokens = new StringTokenizer(cmd, "~", false);
-			final long txnum = Long.parseLong(tokens.nextToken());
-			final String filename = tokens.nextToken();
-			final int number = Integer.parseInt(tokens.nextToken());
-			HRDBMSWorker.addThread(new IOThread(new Block(filename, number), txnum));
+			int hash = (b.hashCode2() & 0x7FFFFFFF) % managers.length;
+			managers[hash].requestPage(b, txnum);
 		}
 		catch(Exception e)
 		{
@@ -274,24 +183,11 @@ public class BufferManager extends HRDBMSThread
 		}
 	}
 
-	private void requestPages(String cmd)
+	public static void requestPages(Block[] reqBlocks, long txnum)
 	{
 		try
 		{
-			cmd = cmd.substring((14));
-			final StringTokenizer tokens = new StringTokenizer(cmd, "~", false);
-			final long txnum = Long.parseLong(tokens.nextToken());
-			final int numBlocks = Integer.parseInt(tokens.nextToken());
-			int i = 0;
-			final Block[] reqBlocks = new Block[numBlocks];
-			while (i < numBlocks)
-			{
-				final String filename = tokens.nextToken();
-				final int number = Integer.parseInt(tokens.nextToken());
-				reqBlocks[i] = new Block(filename, number);
-				i++;
-			}
-			HRDBMSWorker.addThread(new IOThread(reqBlocks, txnum));
+			new IOThread(reqBlocks, txnum).start();
 		}
 		catch(Exception e)
 		{

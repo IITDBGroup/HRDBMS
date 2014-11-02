@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.tables.Plan;
@@ -20,7 +21,7 @@ public final class DummyOperator implements Operator, Serializable
 	private Operator parent;
 	private int node;
 	private transient Plan plan;
-	private int nextCalled = 0;
+	private AtomicInteger nextCalled = new AtomicInteger(0);
 	
 	public void setPlan(Plan plan)
 	{
@@ -33,6 +34,21 @@ public final class DummyOperator implements Operator, Serializable
 		cols2Types = new HashMap<String, String>();
 		cols2Pos = new HashMap<String, Integer>();
 		pos2Col = new TreeMap<Integer, String>();
+	}
+	
+	public void setCols2Pos(HashMap<String, Integer> cols2Pos)
+	{
+		this.cols2Pos = (HashMap<String, Integer>)cols2Pos.clone(); 
+	}
+	
+	public void setCols2Types(HashMap<String, String> cols2Types)
+	{
+		this.cols2Types = (HashMap<String, String>)cols2Types.clone();
+	}
+	
+	public void setPos2Col(TreeMap<Integer, String> pos2Col)
+	{
+		this.pos2Col = (TreeMap<Integer, String>)pos2Col.clone();
 	}
 
 	@Override
@@ -108,9 +124,8 @@ public final class DummyOperator implements Operator, Serializable
 	// @?Parallel
 	public Object next(Operator op) throws Exception
 	{
-		if (nextCalled == 0)
+		if (nextCalled.getAndIncrement() == 0)
 		{
-			nextCalled++;
 			return new ArrayList<Object>();
 		}
 		
@@ -120,7 +135,7 @@ public final class DummyOperator implements Operator, Serializable
 	@Override
 	public void nextAll(Operator op) throws Exception
 	{
-		nextCalled = 1;
+		nextCalled.set(1);
 	}
 
 	@Override
@@ -156,7 +171,7 @@ public final class DummyOperator implements Operator, Serializable
 	@Override
 	public void reset() throws Exception
 	{
-		nextCalled = 0;
+		nextCalled.set(0);
 	}
 
 	@Override

@@ -3245,7 +3245,7 @@ public class PlanCacheManager
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
-			cmd.add(1000000);
+			cmd.add(1000000000);
 			worker.in.put(cmd);
 			
 			ArrayList<Object> retval = new ArrayList<Object>();
@@ -3367,6 +3367,7 @@ public class PlanCacheManager
 	{
 		private Plan p;
 		private String schema;
+		private String table;
 		
 		public PartitioningPlan(Plan p)
 		{
@@ -3376,6 +3377,7 @@ public class PlanCacheManager
 		public PartitioningPlan setParms(String schema, String table) throws Exception
 		{
 			this.schema = schema;
+			this.table = table;
 			if (schema.equals("SYS"))
 			{
 				return this;
@@ -3427,7 +3429,7 @@ public class PlanCacheManager
 				worker.in.put(cmd);
 				tx.setIsolationLevel(iso);
 				
-				throw new Exception("Table not found");
+				throw new Exception("Table not found: " + schema + "." + table);
 			}
 			
 			if (obj instanceof Exception)
@@ -3771,7 +3773,7 @@ public class PlanCacheManager
 				throw (Exception)obj;
 			}
 			
-			Integer retval = (Integer)((ArrayList<Object>)obj).get(0);
+			Integer retval = ((Long)((ArrayList<Object>)obj).get(0)).intValue();
 			
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
@@ -5611,7 +5613,7 @@ public class PlanCacheManager
 					return 9;
 				}
 				
-				throw new Exception("Table not found");
+				throw new Exception("Table not found: " + schema + "." + name);
 			}
 			
 			int iso = tx.getIsolationLevel();

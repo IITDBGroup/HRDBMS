@@ -1,11 +1,11 @@
 grammar Select;
 
 select : insert | update | delete | createTable | createIndex | createView | dropTable | dropIndex | dropView | load | runstats | (('WITH' commonTableExpression (',' commonTableExpression)*)? fullSelect) ;
-runstats : 'RUNSTATS ON' tableName ;
-insert : 'INSERT INTO' tableName (('FROM'? fullSelect) | ('VALUES(' expression (',' expression)* ')')) ;
+runstats : 'RUNSTATS' 'ON' tableName ;
+insert : 'INSERT' 'INTO' tableName (('FROM'? fullSelect) | ('VALUES' '(' expression (',' expression)* ')')) ;
 update : 'UPDATE' tableName 'SET' (columnName | colList) EQUALS expression whereClause? ;
-delete : 'DELETE FROM' tableName whereClause? ;
-createTable : 'CREATE TABLE' tableName '(' colDef (',' colDef)* (',' primaryKey)? ')' groupExp? nodeExp deviceExp ;
+delete : 'DELETE' 'FROM' tableName whereClause? ;
+createTable : 'CREATE' 'TABLE' tableName '(' colDef (',' colDef)* (',' primaryKey)? ')' groupExp? nodeExp deviceExp ;
 groupExp : NONE | realGroupExp ;
 realGroupExp :  '{' groupDef ('|' groupDef)* '}' (',' (hashExp | rangeType))? ;
 groupDef : '{' INTEGER ('|' INTEGER)* '}' ;
@@ -18,19 +18,19 @@ columnSet : '{' columnName ('|' columnName)* '}' ;
 rangeType : RANGE ',' columnName ',' rangeSet ;
 rangeSet : '{' rangeExp ('|' rangeExp)* '}' ;
 deviceExp : (ALL | integerSet) (',' (hashExp | rangeExp))? ; 
-dropTable : 'DROP TABLE' tableName ;
-createView : 'CREATE VIEW' tableName 'AS' fullSelect ;
-dropView : 'DROP VIEW' tableName ;
+dropTable : 'DROP' 'TABLE' tableName ;
+createView : 'CREATE' 'VIEW' tableName 'AS' fullSelect ;
+dropView : 'DROP' 'VIEW' tableName ;
 createIndex : 'CREATE' UNIQUE? 'INDEX' tableName 'ON' tableName '(' indexDef (',' indexDef)* ')' ;
-dropIndex : 'DROP INDEX' tableName ;
+dropIndex : 'DROP' 'INDEX' tableName ;
 load : 'LOAD' (REPLACE | RESUME) 'INTO' tableName ('DELIMITER' any)? 'FROM' remainder ;
 any : . ;
 remainder : .* EOF ;
 indexDef : columnName (DIRECTION)? ;
 colDef : columnName dataType notNull? primary? ;
-primaryKey : 'PRIMARY KEY' '(' columnName (',' columnName)* ')' ;
+primaryKey : 'PRIMARY' 'KEY' '(' columnName (',' columnName)* ')' ;
 notNull : NOT NULL ;
-primary : 'PRIMARY KEY' ;
+primary : 'PRIMARY' 'KEY' ;
 dataType : char2 | int2 | long2 | date2 | float2 ;
 char2 : ('CHAR' | 'VARCHAR') '(' INTEGER ')' ;
 int2 : 'INTEGER' ;
@@ -55,13 +55,13 @@ tableReference : tableReference (JOINTYPE)? 'JOIN' tableReference 'ON' searchCon
 				| singleTable 																		# IsSingleTable ;
 singleTable : tableName (correlationClause)? ;
 whereClause : 'WHERE' searchCondition ;
-groupBy : 'GROUP BY' columnName (',' columnName)* ;
+groupBy : 'GROUP' 'BY' columnName (',' columnName)* ;
 havingClause : 'HAVING' searchCondition ;
-orderBy : 'ORDER BY' sortKey (',' sortKey)* ;
+orderBy : 'ORDER' 'BY' sortKey (',' sortKey)* ;
 sortKey : INTEGER (DIRECTION)?		# SortKeyInt 
 		| columnName (DIRECTION)?	# SortKeyCol ;
 correlationClause : ('AS')? IDENTIFIER ;
-fetchFirst : 'FETCH FIRST' (INTEGER)? ('ROW' | 'ROWS') 'ONLY' ;
+fetchFirst : 'FETCH' 'FIRST' (INTEGER)? ('ROW' | 'ROWS') 'ONLY' ;
 tableName : IDENTIFIER  					# Table1Part
 			| (IDENTIFIER '.' IDENTIFIER) 	# Table2Part ;
 columnName : IDENTIFIER						# Col1Part 
@@ -78,7 +78,7 @@ expression : expression op=(STAR | '/') expression				# MulDiv
 			| expression CONCAT expression						# Concat
 			| identifier '(' expression (',' expression)* ')'	# Function
 			| COUNT '(' DISTINCT expression ')'                 # CountDistinct
-			| '(' expression (',' expression)* ')'				# List
+			| '(' expression (',' expression)+ ')'				# List
 			| COUNT '(' STAR ')'								# CountStar
 			| literal											# IsLiteral
 			| columnName										# ColLiteral

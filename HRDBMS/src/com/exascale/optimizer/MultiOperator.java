@@ -27,7 +27,7 @@ public final class MultiOperator implements Operator, Serializable
 	private TreeMap<Integer, String> pos2Col;
 	private final MetaData meta;
 	private final ArrayList<AggregateOperator> ops;
-	private final ArrayList<String> groupCols;
+	private ArrayList<String> groupCols;
 	private static final int ATHREAD_QUEUE_SIZE = BufferedLinkedBlockingQueue.BLOCK_SIZE < 1000 ? 1000 : BufferedLinkedBlockingQueue.BLOCK_SIZE;
 	private volatile BufferedLinkedBlockingQueue inFlight;
 	private volatile BufferedLinkedBlockingQueue readBuffer;
@@ -62,27 +62,63 @@ public final class MultiOperator implements Operator, Serializable
 			op.registerParent(this);
 			if (child.getCols2Types() != null)
 			{
-				final HashMap<String, String> tempCols2Types = child.getCols2Types();
-				child.getCols2Pos();
-				cols2Types = new HashMap<String, String>();
-				cols2Pos = new HashMap<String, Integer>();
-				pos2Col = new TreeMap<Integer, String>();
-
-				int i = 0;
-				for (final String groupCol : groupCols)
+				try
 				{
-					cols2Types.put(groupCol, tempCols2Types.get(groupCol));
-					cols2Pos.put(groupCol, i);
-					pos2Col.put(i, groupCol);
-					i++;
+					final HashMap<String, String> tempCols2Types = child.getCols2Types();
+					child.getCols2Pos();
+					cols2Types = new HashMap<String, String>();
+					cols2Pos = new HashMap<String, Integer>();
+					pos2Col = new TreeMap<Integer, String>();
+
+					int i = 0;
+					ArrayList<String> newGroupCols = new ArrayList<String>();
+					for (final String groupCol : groupCols)
+					{
+						if (!groupCol.startsWith("."))
+						{
+							cols2Types.put(groupCol, tempCols2Types.get(groupCol));
+							cols2Pos.put(groupCol, i);
+							pos2Col.put(i, groupCol);
+							newGroupCols.add(groupCol);
+						}
+						else
+						{
+							int matches = 0;
+							for (String col : tempCols2Types.keySet())
+							{
+								String col2 = col.substring(col.indexOf('.'));
+								if (col2.equals(groupCol))
+								{
+									cols2Types.put(col, tempCols2Types.get(col));
+									cols2Pos.put(col, i);
+									pos2Col.put(i, col);
+									newGroupCols.add(col);
+									matches++;
+								}
+							}
+						
+							if (matches != 1)
+							{
+								HRDBMSWorker.logger.debug("Could not find " + groupCol + " in " + tempCols2Types.keySet());
+								throw new Exception("Column does not exist or is ambiguous: " + groupCol);
+							}
+						}
+						i++;
+					}
+
+					groupCols = newGroupCols;
+					for (final AggregateOperator op2 : ops)
+					{
+						cols2Types.put(op2.outputColumn(), op2.outputType());
+						cols2Pos.put(op2.outputColumn(), i);
+						pos2Col.put(i, op2.outputColumn());
+						i++;
+					}
 				}
-
-				for (final AggregateOperator op2 : ops)
+				catch(Exception e)
 				{
-					cols2Types.put(op2.outputColumn(), op2.outputType());
-					cols2Pos.put(op2.outputColumn(), i);
-					pos2Col.put(i, op2.outputColumn());
-					i++;
+					HRDBMSWorker.logger.debug("", e);
+					throw e;
 				}
 			}
 		}
@@ -149,6 +185,16 @@ public final class MultiOperator implements Operator, Serializable
 	public void close() throws Exception
 	{
 		child.close();
+		
+		if (inFlight != null)
+		{
+			inFlight.close();
+		}
+		
+		if (readBuffer != null)
+		{
+			readBuffer.close();
+		}
 	}
 
 	public String getAvgCol()
@@ -234,6 +280,14 @@ public final class MultiOperator implements Operator, Serializable
 		for (final AggregateOperator op : ops)
 		{
 			retval.add(op.getInputColumn());
+		}
+		
+		for (String col : groupCols)
+		{
+			if (!retval.contains(col))
+			{
+				retval.add(col);
+			}
 		}
 
 		return retval;
@@ -378,6 +432,10 @@ public final class MultiOperator implements Operator, Serializable
 		else
 		{
 			child.reset();
+			if (inFlight != null)
+			{
+				inFlight.close();
+			}
 			inFlight = new BufferedLinkedBlockingQueue(ATHREAD_QUEUE_SIZE);
 			readBuffer.clear();
 			if (sorted)
@@ -458,7 +516,7 @@ public final class MultiOperator implements Operator, Serializable
 			i++;
 		}
 
-		retval += "]";
+		retval += ("] group by " + groupCols);
 		return retval;
 	}
 
@@ -541,8 +599,7 @@ public final class MultiOperator implements Operator, Serializable
 
 			for (final ThreadPoolThread thread : threads)
 			{
-				// thread.start();
-				thread.run();
+				thread.start();
 			}
 		}
 	}
@@ -701,9 +758,18 @@ public final class MultiOperator implements Operator, Serializable
 							}
 						}
 
-						for (final int pos : groupPos)
+						try
 						{
-							groupKeys.add(row.get(pos));
+							for (final int pos : groupPos)
+							{
+								groupKeys.add(row.get(pos));
+							}
+						}
+						catch(Exception e)
+						{
+							HRDBMSWorker.logger.debug("Trying to group on " + groupCols);
+							HRDBMSWorker.logger.debug("Child.getCols2Pos() = " + child.getCols2Pos());
+							throw e;
 						}
 
 						groups.put(groupKeys, groupKeys);

@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -163,10 +164,10 @@ public final class TableScanOperator implements Operator, Serializable
 		this.schema = schema;
 		cols2Types = meta.getCols2TypesForTable(schema, name, tx);
 		cols2Pos = meta.getCols2PosForTable(schema, name, tx);
-		pos2Col = meta.getPos2ColForTable(schema, name, tx);
-		tableCols2Types = meta.getCols2TypesForTable(schema, name, tx);
-		tablePos2Col = meta.getPos2ColForTable(schema, name, tx);
-		tableCols2Pos = meta.getCols2PosForTable(schema, name, tx);
+		pos2Col = MetaData.cols2PosFlip(cols2Pos);
+		tableCols2Types = (HashMap<String, String>)cols2Types.clone();
+		tablePos2Col = (TreeMap<Integer, String>)pos2Col.clone();
+		tableCols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
 	}
 	
 	public TableScanOperator(String schema, String name, MetaData meta, HashMap<String, Integer> cols2Pos, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, TreeMap<Integer, String> tablePos2Col, HashMap<String, String> tableCols2Types, HashMap<String, Integer> tableCols2Pos) throws Exception
@@ -393,6 +394,19 @@ public final class TableScanOperator implements Operator, Serializable
 			{
 				HRDBMSWorker.logger.error("", e);
 				throw e;
+			}
+		}
+		
+		if (readBuffer != null)
+		{
+			readBuffer.close();
+		}
+		
+		if (readBuffers != null)
+		{
+			for (BufferedLinkedBlockingQueue readBuffer : readBuffers.values())
+			{
+				readBuffer.close();
 			}
 		}
 	}
@@ -1306,15 +1320,11 @@ public final class TableScanOperator implements Operator, Serializable
 		@Override
 		public final void run()
 		{
-			ArrayList<String> types = null;
 			CNFFilter filter = orderedFilters.get(parents.get(0));
-			if (types == null)
+			ArrayList<String> types = new ArrayList<String>(midPos2Col.size());
+			for (final Map.Entry entry : midPos2Col.entrySet())
 			{
-				types = new ArrayList<String>(midPos2Col.size());
-				for (final Map.Entry entry : midPos2Col.entrySet())
-				{
-					types.add(midCols2Types.get(entry.getValue()));
-				}
+				types.add(midCols2Types.get(entry.getValue()));
 			}
 
 			try
@@ -1322,7 +1332,8 @@ public final class TableScanOperator implements Operator, Serializable
 				if (in2 == null)
 				{
 					LockManager.sLock(new Block(in, -1), tx.number());
-					int numBlocks = (int)(FileManager.getFile(in).size() / Page.BLOCK_SIZE);
+					FileChannel xx = FileManager.getFile(in);
+					int numBlocks = FileManager.numBlocks.get(in);
 					if (numBlocks == 0)
 					{
 						throw new Exception("Unable to open file " + in);
@@ -1561,7 +1572,12 @@ public final class TableScanOperator implements Operator, Serializable
 								tx.requestPage(b);
 								tx.read(b, sch);
 							}
-							final Row r = sch.getRow(new RID(node, device, blockNum, recNum));
+							int node2 = node;
+							if (node2 < 0)
+							{
+								node2 = -1;
+							}
+							final Row r = sch.getRow(new RID(node2, device, blockNum, recNum));
 							final ArrayList<Object> row = new ArrayList<Object>(types.size());
 
 							int j = 0;
@@ -1584,7 +1600,7 @@ public final class TableScanOperator implements Operator, Serializable
 										}
 										else if (colNum == 0)
 										{
-											row.add(node);
+											row.add(node2);
 										}
 										else if (colNum == 1)
 										{
@@ -1684,10 +1700,10 @@ public final class TableScanOperator implements Operator, Serializable
 						else
 						{
 							filter = orderedFilters.get(parents.get(0));
-							filter.updateCols2Pos(child.getCols2Pos());
 
 							if (filter != null)
 							{
+								filter.updateCols2Pos(child.getCols2Pos());
 								if (!filter.passes((ArrayList<Object>)o))
 								{
 									o = child.next(TableScanOperator.this);

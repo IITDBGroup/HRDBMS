@@ -204,6 +204,11 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		{
 			o.close();
 		}
+		
+		if (outBuffer != null)
+		{
+			outBuffer.close();
+		}
 	}
 
 	@Override

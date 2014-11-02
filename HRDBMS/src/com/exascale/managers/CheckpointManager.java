@@ -1,6 +1,8 @@
 package com.exascale.managers;
 
 import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.channels.FileChannel;
 import java.util.HashSet;
 import com.exascale.logging.LogRec;
 import com.exascale.logging.NQCheckLogRec;
@@ -31,34 +33,22 @@ public class CheckpointManager extends HRDBMSThread
 			{
 			}
 
-			synchronized (Transaction.txList)
+			doCheckpoint();
+		}
+	}
+	
+	public void doCheckpoint()
+	{
+		//block all log writes
+		//go through log and archive anything that is not part of an open transaction
+		//rewrite current log
+		//for all blocks in bufferpool, if not pinned - flush, otherwise copy and rollback and flush
+		
+		synchronized (Transaction.txList)
+		{
+			try
 			{
-				try
-				{
-					HRDBMSWorker.logger.debug("Checkpoint Manager is flushing all buffers");
-					BufferManager.flushAll();
-					LogManager.committed.clear();
-					LogManager.aborted.clear();
-				}
-				catch (final Exception e)
-				{
-					HRDBMSWorker.logger.error("Error occurred while flushing the bufferpool in the Checkpoint Manager.", e);
-					this.terminate();
-					return;
-				}
-				LogRec rec = new NQCheckLogRec(new HashSet<Long>(Transaction.txList.keySet()));
-				LogManager.write(rec);
-				try
-				{
-					LogManager.flush(rec.lsn());
-				}
-				catch (final IOException e)
-				{
-					HRDBMSWorker.logger.error("Error flushing the log in Checkpoint Manager.", e);
-					this.terminate();
-					return;
-				}
-				
+				HRDBMSWorker.logger.debug("Checkpoint is starting");
 				if (HRDBMSWorker.type == HRDBMSWorker.TYPE_COORD || HRDBMSWorker.type == HRDBMSWorker.TYPE_MASTER)
 				{
 					String filename = HRDBMSWorker.getHParms().getProperty("log_dir");
@@ -67,24 +57,37 @@ public class CheckpointManager extends HRDBMSThread
 						filename += "/";
 					}
 					filename += "xa.log";
-					HashSet<Long> open = new HashSet<Long>();
-					for (Transaction tx : XAManager.txs.getKeySet())
-					{
-						open.add(tx.number());
-					}
-					rec = new NQCheckLogRec(open);
+					RandomAccessFile f = LogManager.archive(Transaction.txList.keySet(), filename);
+					FileChannel fc = LogManager.getFile(filename);
+					FileChannel fc2 = f.getChannel();
+					fc.truncate(0);
+					fc2.position(0);
+					fc.transferFrom(fc2, 0, fc2.size());
+					fc2.close();
+					f.close();
+					LogRec rec = new NQCheckLogRec(new HashSet<Long>(Transaction.txList.keySet()));
 					LogManager.write(rec, filename);
-					try
-					{
-						LogManager.flush(rec.lsn(), filename);
-					}
-					catch (final IOException e)
-					{
-						HRDBMSWorker.logger.error("Error flushing the log in Checkpoint Manager.", e);
-						this.terminate();
-						return;
-					}
+					LogManager.flush(rec.lsn(), filename);
 				}
+				RandomAccessFile f = LogManager.archive(Transaction.txList.keySet());
+				FileChannel fc2 = f.getChannel();
+				BufferManager.flushAll(fc2);
+				FileChannel fc = LogManager.getFile(LogManager.filename);
+				fc.truncate(0);
+				fc2.position(0);
+				fc.transferFrom(fc2, 0, fc2.size());
+				fc2.close();
+				f.close();
+				LogRec rec = new NQCheckLogRec(new HashSet<Long>(Transaction.txList.keySet()));
+				LogManager.write(rec);
+				LogManager.flush(rec.lsn());
+				HRDBMSWorker.logger.debug("Checkpoint is complete");
+			}
+			catch (final Exception e)
+			{
+				HRDBMSWorker.logger.error("Error occurred during checkpoint", e);
+				System.exit(1);
+				return;
 			}
 		}
 	}

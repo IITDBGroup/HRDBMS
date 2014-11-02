@@ -6,6 +6,7 @@ public class Block
 {
 	private final String filename;
 	private final int blknum;
+	private volatile String string;
 
 	public Block(String str)
 	{
@@ -68,7 +69,18 @@ public class Block
 	@Override
 	public int hashCode()
 	{
-		return toString().hashCode();
+		int hash = 17;
+		hash = hash * 23 + filename.hashCode();
+		hash = hash * 23 + blknum;
+		return hash;
+	}
+	
+	public int hashCode2()
+	{
+		int hash = 17;
+		hash = hash * 23 + blknum;
+		hash = hash * 23 + filename.hashCode();
+		return hash;
 	}
 
 	public int number()
@@ -79,6 +91,11 @@ public class Block
 	@Override
 	public String toString()
 	{
-		return filename + "~" + blknum;
+		if (string == null)
+		{
+			string = filename + "~" + blknum;
+		}
+		
+		return string;
 	}
 }

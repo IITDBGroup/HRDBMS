@@ -1,6 +1,10 @@
 package com.exascale.misc;
 
+import java.io.PrintWriter;
 import java.io.Serializable;
+import java.io.StringWriter;
+import java.util.ArrayList;
+import java.util.Vector;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import com.exascale.managers.HRDBMSWorker;
@@ -12,17 +16,27 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 	public static int BLOCK_SIZE;
 	private final ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal = new ConcurrentHashMap<Thread, ArrayAndIndex>(64 * ResourceManager.cpus, 1.0f);
 	private final ConcurrentHashMap<Thread, ArrayAndIndex> receives = new ConcurrentHashMap<Thread, ArrayAndIndex>(64 * ResourceManager.cpus, 1.0f);
-	private final ArrayBlockingQueue q;
+	private volatile ArrayBlockingQueue q;
+	private static Vector<ArrayBlockingQueue> free = new Vector<ArrayBlockingQueue>();
+	private static int RETRY_TIME;
 
 	static
 	{
 		HParms hparms = HRDBMSWorker.getHParms();
 		BLOCK_SIZE = Integer.parseInt(hparms.getProperty("queue_block_size")); // 256
+		RETRY_TIME = Integer.parseInt(hparms.getProperty("queue_flush_retry_timeout"));
 	}
 
 	public BufferedLinkedBlockingQueue(int cap)
 	{
-		q = new ArrayBlockingQueue(cap / BLOCK_SIZE);
+		try
+		{
+			q = free.remove(0);
+		}
+		catch(Exception e)
+		{
+			q = new ArrayBlockingQueue(cap / BLOCK_SIZE);
+		}
 	}
 
 	public void clear()
@@ -30,6 +44,16 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 		receives.clear();
 		threadLocal.clear();
 		q.clear();
+	}
+	
+	public void close()
+	{
+		ArrayBlockingQueue temp = q;
+		q = null;
+		receives.clear();
+		threadLocal.clear();
+		temp.clear();
+		free.add(temp);
 	}
 
 	public Object peek()
@@ -56,7 +80,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 			}
 		}
 
-		return oa.peek(q);
+		return oa.peek();
 	}
 
 	public void put(Object o) throws Exception
@@ -67,6 +91,13 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 			HRDBMSWorker.logger.error("Null object placed on queue", e);
 			throw e;
 		}
+		
+		if (o instanceof ArrayList && ((ArrayList)o).size() == 0)
+		{
+			HRDBMSWorker.logger.debug("ArrayList of size zero was placed on queue");
+			throw new Exception("ArrayList of size zero was placed on queue");
+		}
+		
 		ArrayAndIndex oa = threadLocal.get(Thread.currentThread());
 		if (oa == null)
 		{
@@ -74,10 +105,10 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 			threadLocal.put(Thread.currentThread(), oa);
 		}
 
-		oa.put(o, q, threadLocal);
+		oa.put(o, threadLocal);
 	}
 
-	public Object take()
+	public Object take() throws Exception
 	{
 		ArrayAndIndex oa = receives.get(Thread.currentThread());
 		if (oa == null)
@@ -98,13 +129,19 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 			}
 		}
 
-		return oa.take(q);
+		Object retval = oa.take();
+		if (retval == null)
+		{
+			throw new Exception("take() is returning a null value");
+		}
+		
+		return retval;
 	}
 
 	private final class ArrayAndIndex
 	{
 		private volatile Object[] oa;
-		private int index = 0;
+		private volatile int index = 0;
 
 		public ArrayAndIndex()
 		{
@@ -116,90 +153,114 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 			this.oa = oa;
 		}
 
-		private void flush(ArrayBlockingQueue q)
+		private synchronized void flush()
 		{
 			while (true)
 			{
 				try
 				{
-					synchronized (this.oa)
+					if (this.oa[0] != null)
 					{
-						if (this.oa[0] != null)
-						{
-							q.put(this.oa);
-							this.oa = new Object[BLOCK_SIZE];
-							this.index = 0;
-						}
+						q.put(this.oa);
+						this.oa = new Object[BLOCK_SIZE];
+						this.index = 0;
 					}
 
 					break;
 				}
-				catch (final InterruptedException e)
+				catch (final Exception e)
 				{
 				}
 			}
 		}
 
-		private void flushAll(ArrayBlockingQueue q, ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal)
+		private boolean flushAll(ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal, Object o)
 		{
-			for (final ArrayAndIndex oa : threadLocal.values())
+			synchronized(BufferedLinkedBlockingQueue.this)
 			{
-				if (oa != this)
+				synchronized(this)
 				{
-					while (true)
+					for (final ArrayAndIndex oa : threadLocal.values())
 					{
-						try
+						if (oa != this)
 						{
-							synchronized (oa)
+							while (true)
 							{
-								if (oa.oa[0] != null)
+								synchronized(oa)
 								{
-									q.put(oa.oa);
-									oa.oa = new Object[BLOCK_SIZE];
-									oa.index = 0;
+									if (oa.oa[0] != null)
+									{
+										if (!q.offer(oa.oa))
+										{
+											if (!(oa.oa[0] instanceof DataEndMarker))
+											{
+												HRDBMSWorker.logger.debug("FlushAll failed because we could not flush someone else's data");
+												return false;
+											}
+										}
+										oa.oa = new Object[BLOCK_SIZE];
+										oa.index = 0;
+									}
+									break;
 								}
 							}
-
-							break;
-						}
-						catch (final InterruptedException e)
-						{
 						}
 					}
-				}
-			}
 
-			while (true)
-			{
-				try
-				{
-					synchronized (this.oa)
+					while (true)
 					{
 						if (this.oa[0] != null)
 						{
-							q.put(this.oa);
-							int i = 0;
-							final Object[] temp = new Object[BLOCK_SIZE];
-							temp[0] = new DataEndMarker();
-							while (i < receives.size())
+							if (!q.offer(this.oa))
 							{
-								q.put(temp);
-								i++;
+								if (!(this.oa[0] instanceof DataEndMarker))
+								{
+									HRDBMSWorker.logger.debug("FlushAll failed because I could not flush my deata");
+									return false;
+								}
 							}
+					
 							this.oa = new Object[BLOCK_SIZE];
 							this.index = 0;
 						}
+					
+						Object[] temp = new Object[BLOCK_SIZE];
+						temp[0] = o;
+						if (!q.offer(temp))
+						{
+							if (!(temp[0] instanceof DataEndMarker))
+							{
+								HRDBMSWorker.logger.debug("FlushAll failed because I couldn't write my data that initiated the flushAll and it's not a DataEndMarker");
+								HRDBMSWorker.logger.debug("It is " + temp[0]);
+								return false;
+							}
+							
+							if (!(((Object[])q.peek())[0] instanceof DataEndMarker))
+							{
+								HRDBMSWorker.logger.debug("FlushAll failed because I have a DataEndMarker to write and the head of the queue is " + ((Object[])q.peek())[0]);
+								return false;
+							}
+						}
+					
+						int i = 0;
+						int safetyNet = receives.size();
+						while (i < safetyNet)
+						{
+							temp = new Object[BLOCK_SIZE];
+							temp[0] = new DataEndMarker();
+							q.offer(temp);
+							i++;
+						}
+				
+						break;
 					}
-
-					break;
-				}
-				catch (final InterruptedException e)
-				{
+			
+					return true;
 				}
 			}
 		}
 
-		private Object peek(ArrayBlockingQueue q)
+		private synchronized Object peek()
 		{
 			if (index < BLOCK_SIZE && oa[index] != null)
 			{
@@ -231,32 +292,73 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 			return oa[index++];
 		}
 
-		private void put(Object o, ArrayBlockingQueue q, ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal)
+		private void put(Object o, ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal)
 		{
-			synchronized (this.oa)
+			if (o instanceof DataEndMarker || o instanceof Exception)
 			{
-				oa[index++] = o;
-			}
-
-			if (o instanceof DataEndMarker)
-			{
-				flushAll(q, threadLocal);
+				while (true)
+				{
+					boolean ok = true;
+					ok = flushAll(threadLocal, o);
+					
+					if (ok)
+					{
+						break;
+					}
+					
+					try
+					{
+						Thread.sleep(RETRY_TIME);
+					}
+					catch(Exception e)
+					{}
+				}
 			}
 			else if (o instanceof AggregateThread && ((AggregateThread)o).isEnd())
 			{
-				flushAll(q, threadLocal);
+				while (true)
+				{
+					boolean ok = true;
+					ok = flushAll(threadLocal, o);
+					
+					if (ok)
+					{
+						break;
+					}
+					
+					try
+					{
+						Thread.sleep(RETRY_TIME);
+					}
+					catch(Exception e)
+					{}
+				}
 			}
-			else if (index == BLOCK_SIZE)
+			else
 			{
-				flush(q);
+				synchronized(this)
+				{
+					oa[index++] = o;
+				}
+				
+				if (index == BLOCK_SIZE)
+				{
+					flush();
+				}
 			}
 		}
 
-		private Object take(ArrayBlockingQueue q)
+		private synchronized Object take() throws Exception
 		{
 			if (index < BLOCK_SIZE && oa[index] != null)
 			{
-				return oa[index++];
+				Object retval = oa[index++];
+				if (retval == null)
+				{
+					throw new Exception("OA.take() returning null value first path");
+				}
+				
+				return retval;
 			}
 
 			index = 0;
@@ -273,11 +375,18 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 					}
 					catch (final Exception e)
 					{
+						HRDBMSWorker.logger.debug("", e);
 					}
 				}
 			}
 
-			return oa[index++];
+			Object retval = oa[index++];
+			if (retval == null)
+			{
+				throw new Exception("OA.take() returning null value second path");
+			}
+			
+			return retval;
 		}
 	}
 }

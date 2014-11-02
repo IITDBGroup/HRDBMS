@@ -35,4 +35,15 @@ public class Function
 	{
 		return distinct;
 	}
+	
+	public boolean equals(Object rhs)
+	{
+		if (!(rhs instanceof Function))
+		{
+			return false;
+		}
+		
+		Function r = (Function)rhs;
+		return name.equals(r.name) && args.equals(r.args) && distinct == r.distinct;
+	}
 }

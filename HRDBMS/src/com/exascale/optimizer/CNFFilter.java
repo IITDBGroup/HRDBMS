@@ -16,7 +16,7 @@ public class CNFFilter implements Serializable
 
 	private MetaData meta;
 
-	private HashMap<String, Integer> cols2Pos;
+	private volatile HashMap<String, Integer> cols2Pos;
 
 	private ArrayList<Object> partHash;
 

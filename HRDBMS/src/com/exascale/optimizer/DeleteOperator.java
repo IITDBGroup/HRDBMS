@@ -46,6 +46,11 @@ public final class DeleteOperator implements Operator, Serializable
 	{
 		this.plan = plan;
 	}
+	
+	public String getTable()
+	{
+		return table;
+	}
 
 	public DeleteOperator(String schema, String table, MetaData meta)
 	{
@@ -230,6 +235,9 @@ public final class DeleteOperator implements Operator, Serializable
 		ArrayList<String> indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
 		Object o = child.next(this);
 		DiskBackedArray dba = ResourceManager.newDiskBackedArray(10);
+		ArrayList<ArrayList<String>> keys = MetaData.getKeys(indexes, tx);
+		ArrayList<ArrayList<String>> types = MetaData.getTypes(indexes, tx);
+		ArrayList<ArrayList<Boolean>> orders = MetaData.getOrders(indexes, tx);
 		while (!(o instanceof DataEndMarker))
 		{
 			dba.add((ArrayList<Object>)o);
@@ -249,14 +257,14 @@ public final class DeleteOperator implements Operator, Serializable
 				ArrayList<ArrayList<Object>> indexKeys = new ArrayList<ArrayList<Object>>();
 				for (String index : indexes)
 				{
-					ArrayList<Object> keys = new ArrayList<Object>();
-					ArrayList<String> cols = MetaData.getColsFromIndexFileName(index, tx);
+					ArrayList<Object> keys2 = new ArrayList<Object>();
+					ArrayList<String> cols = MetaData.getColsFromIndexFileName(index, tx, keys, indexes);
 					for (String col : cols)
 					{
-						keys.add(row.get(child.getCols2Pos().get(col)));
+						keys2.add(row.get(child.getCols2Pos().get(col)));
 					}
 				
-					indexKeys.add(keys);
+					indexKeys.add(keys2);
 				}
 			
 				RIDAndIndexKeys raik = new RIDAndIndexKeys(new RID(node, device, block, rec), indexKeys);
@@ -270,7 +278,7 @@ public final class DeleteOperator implements Operator, Serializable
 			num.incrementAndGet();
 			if (map.size() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes")))
 			{
-				flush(indexes);
+				flush(indexes, keys, types, orders);
 				if (num.get() == Integer.MIN_VALUE)
 				{
 					done = true;
@@ -279,7 +287,7 @@ public final class DeleteOperator implements Operator, Serializable
 			}
 			else if (map.totalSize() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_batch")))
 			{
-				flush(indexes);
+				flush(indexes, keys, types, orders);
 				if (num.get() == Integer.MIN_VALUE)
 				{
 					done = true;
@@ -291,19 +299,19 @@ public final class DeleteOperator implements Operator, Serializable
 		dba.close();
 		if (map.totalSize() > 0)
 		{
-			flush(indexes);
+			flush(indexes, keys, types, orders);
 		}
 		
 		done = true;
 	}
 	
-	private void flush(ArrayList<String> indexes) throws Exception
+	private void flush(ArrayList<String> indexes, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders) throws Exception
 	{
 		ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
 		for (Object o : map.getKeySet())
 		{
 			int node = (Integer)o;
-			Vector<RIDAndIndexKeys> list = map.get(node);
+			Set<RIDAndIndexKeys> list = map.get(node);
 			if (node == -1)
 			{
 				ArrayList<Object> rs = PlanCacheManager.getCoordNodes().setParms().execute(tx);
@@ -318,12 +326,12 @@ public final class DeleteOperator implements Operator, Serializable
 				
 				for (Integer coord : coords)
 				{
-					threads.add(new FlushThread(list, indexes, coord));
+					threads.add(new FlushThread(list, indexes, coord, keys, types, orders));
 				}
 			}
 			else
 			{
-				threads.add(new FlushThread(list, indexes, node));
+				threads.add(new FlushThread(list, indexes, node, keys, types, orders));
 			}
 		}
 		
@@ -356,16 +364,22 @@ public final class DeleteOperator implements Operator, Serializable
 	
 	private class FlushThread extends HRDBMSThread
 	{
-		private Vector<RIDAndIndexKeys> list;
+		private Set<RIDAndIndexKeys> list;
 		private ArrayList<String> indexes;
 		private boolean ok = true;
 		private int node;
+		private ArrayList<ArrayList<String>> keys;
+		private ArrayList<ArrayList<String>> types;
+		private ArrayList<ArrayList<Boolean>> orders;
 		
-		public FlushThread(Vector<RIDAndIndexKeys> list, ArrayList<String> indexes, int node)
+		public FlushThread(Set<RIDAndIndexKeys> list, ArrayList<String> indexes, int node, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders)
 		{
 			this.list = list;
 			this.indexes = indexes;
 			this.node = node;
+			this.keys = keys;
+			this.types = types;
+			this.orders = orders;
 		}
 		
 		public boolean getOK()
@@ -397,10 +411,10 @@ public final class DeleteOperator implements Operator, Serializable
 				out.write(stringToBytes(table));
 				ObjectOutputStream objOut = new ObjectOutputStream(out);
 				objOut.writeObject(indexes);
-				objOut.writeObject(list);
-				objOut.writeObject(MetaData.getKeys(indexes, tx));
-				objOut.writeObject(MetaData.getTypes(indexes, tx));
-				objOut.writeObject(MetaData.getOrders(indexes, tx));
+				objOut.writeObject(new ArrayList(list));
+				objOut.writeObject(keys);
+				objOut.writeObject(types);
+				objOut.writeObject(orders);
 				objOut.flush();
 				out.flush();
 				getConfirmation(sock);

@@ -19,9 +19,7 @@ public class HParmsDefaults extends Properties
 			return retval;
 		}
 
-		retval = new HParmsDefaults();
-		retval.setProperty("page_cleaner_dirty_pct", "50");
-		retval.setProperty("page_cleaner_sleep_ms", "5000");
+		HParmsDefaults retval = new HParmsDefaults();
 		retval.setProperty("deadlock_timeout_secs", "60");
 		retval.setProperty("slock_block_sleep_ms", "1000");
 		retval.setProperty("bp_pages", "2097152");
@@ -30,7 +28,6 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("data_directories", "/home/hrdbms/");
 		retval.setProperty("log_dir", "/home/hrdbms");
 		retval.setProperty("log_clean_sleep_secs", "60");
-		retval.setProperty("target_log_size", "8589934592");
 		retval.setProperty("catalog_sync_port", "3233");
 		retval.setProperty("rm_sleep_time_ms", "10000");
 		retval.setProperty("low_mem_percent", "30");
@@ -57,14 +54,16 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("parallel_sort_min_rows", "50000");
 		retval.setProperty("prefetch_request_size", "80");
 		retval.setProperty("pages_in_advance", "40");
-		retval.setProperty("getpage_rerequest_attempts", "5");
-		retval.setProperty("getpage_attempts_before_rerequest", "40");
+		retval.setProperty("getpage_attempts", "60000");
 		retval.setProperty("getpage_fail_sleep_time_ms", "1");
 		retval.setProperty("archive_dir", "/home/hrdbms/");
 		retval.setProperty("hrdbms_user", "hrdbms");
 		retval.setProperty("Xmx_string", "64g");
 		retval.setProperty("number_of_coords", "1");
 		retval.setProperty("max_batch", "100000");
+		retval.setProperty("archive", "false");
+		retval.setProperty("queue_flush_retry_timeout", "1000");
+		HParmsDefaults.retval = retval;
 		return retval;
 	}
 }

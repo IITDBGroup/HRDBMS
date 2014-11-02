@@ -17,7 +17,7 @@ public class HRDBMSStatement implements Statement
 	private HRDBMSConnection conn;
 	private HRDBMSResultSet result;
 	private int updateCount = -1;
-	private int fetchSize = 100;
+	private int fetchSize = 30000;
 	protected ArrayList<Object> parms = new ArrayList<Object>();
 	private ArrayList<String> batch = new ArrayList<String>();
 	

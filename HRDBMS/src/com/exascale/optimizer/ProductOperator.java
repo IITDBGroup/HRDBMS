@@ -124,6 +124,11 @@ public final class ProductOperator extends JoinOperator implements Serializable
 		}
 
 		inBuffer.close();
+		
+		if (outBuffer != null)
+		{
+			outBuffer.close();
+		}
 	}
 
 	@Override

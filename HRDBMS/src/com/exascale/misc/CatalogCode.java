@@ -434,6 +434,7 @@ public class CatalogCode
 			final FileChannel fc = FileManager.getFile(fn);
 			data.position(0);
 			fc.write(data);
+			fc.force(false);
 		}
 		catch (final IOException e)
 		{
@@ -1518,6 +1519,7 @@ public class CatalogCode
 		// out.println("\t\t}");
 		out.println("\t\thead.position(0);");
 		out.println("\t\tfc.write(head);");
+		out.println("\t\tfc.force(false);");
 		out.println("");
 		out.println("\t\t//done writing header pages");
 		out.println("\t\tbb.position(0);");
@@ -2343,6 +2345,7 @@ public class CatalogCode
 
 		out.println("\t\tbb.position(0);");
 		out.println("\t\tfc.write(bb);");
+		out.println("\t\tfc.force(false);");
 		out.println("\t}");
 		out.println("");
 	}

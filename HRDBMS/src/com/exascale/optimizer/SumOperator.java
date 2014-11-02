@@ -194,7 +194,17 @@ public final class SumOperator implements AggregateOperator, Serializable
 			}
 			else
 			{
-				val = (Double)o;
+				try
+				{
+					val = (Double)o;
+				}
+				catch(Exception e)
+				{
+					HRDBMSWorker.logger.debug("Was expecting a numeric in position " + pos + " of " + row);
+					HRDBMSWorker.logger.debug("Cols2Pos is " + cols2Pos);
+					HRDBMSWorker.logger.debug("Input is " + input);
+					throw e;
+				}
 			}
 
 			final AtomicDouble ad = results.get(group);

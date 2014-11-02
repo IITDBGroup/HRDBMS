@@ -34,10 +34,11 @@ public class XAWorker extends HRDBMSThread
 	private final Plan p;
 	private final Transaction tx;
 	private final boolean result;
-	public ArrayBlockingQueue<Object> in = new ArrayBlockingQueue<Object>(ResourceManager.QUEUE_SIZE);
-	public ArrayBlockingQueue<Object> out = new ArrayBlockingQueue<Object>(ResourceManager.QUEUE_SIZE);
+	public volatile ArrayBlockingQueue<Object> in;
+	public volatile ArrayBlockingQueue<Object> out;
 	private int updateCount;
 	private Exception ex;
+	private static Vector<ArrayBlockingQueue> free = new Vector<ArrayBlockingQueue>();
 
 	public XAWorker(Plan p, Transaction tx, boolean result)
 	{
@@ -46,6 +47,23 @@ public class XAWorker extends HRDBMSThread
 		this.p = p;
 		this.tx = tx;
 		this.result = result;
+		try
+		{
+			in = free.remove(0);
+		}
+		catch(Exception e)
+		{
+			in = new ArrayBlockingQueue<Object>(ResourceManager.QUEUE_SIZE);
+		}
+		
+		try
+		{
+			out = free.remove(0);
+		}
+		catch(Exception e)
+		{
+			out = new ArrayBlockingQueue<Object>(ResourceManager.QUEUE_SIZE);
+		}
 	}
 	
 	public int getUpdateCount()
@@ -81,6 +99,12 @@ public class XAWorker extends HRDBMSThread
 						{
 							op.nextAll(op);
 							op.close();
+							in.clear();
+							out.clear();
+							free.add(in);
+							free.add(out);
+							in = null;
+							out = null;
 							this.terminate();
 							return;
 						}
@@ -98,22 +122,29 @@ public class XAWorker extends HRDBMSThread
 								try
 								{
 									Object obj = op.next(op);
+									out.put(obj);
 									if (obj instanceof DataEndMarker)
 									{
-										out.put(obj);
-										this.terminate();
-										return;
+										break;
 									}
-									out.put(obj);
 									howMany--;
 								}
 								catch(Exception e)
 								{
+									HRDBMSWorker.logger.debug("", e);
 									out.put(e);
 									op.nextAll(op);
 									op.close();
+									this.terminate();
+									return;
 								}
 							}
+						}
+						else
+						{
+							HRDBMSWorker.logger.debug("Unknown command received by XAWorker: " + text);
+							op.close();
+							this.terminate();
 						}
 					}
 					catch(InterruptedException e)
@@ -124,6 +155,7 @@ public class XAWorker extends HRDBMSThread
 			{
 				try
 				{
+					HRDBMSWorker.logger.debug("", e);
 					out.put(e);
 				}
 				catch(Exception f)
@@ -135,6 +167,14 @@ public class XAWorker extends HRDBMSThread
 			try
 			{
 				updateCount = p.executeNoResult();
+				in.clear();
+				out.clear();
+				free.add(in);
+				free.add(out);
+				in = null;
+				out = null;
+				this.terminate();
+				return;
 			}
 			catch(Exception e)
 			{

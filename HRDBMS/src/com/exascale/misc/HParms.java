@@ -22,8 +22,9 @@ public class HParms extends Properties
 		}
 
 		final HParmsDefaults defaults = HParmsDefaults.getHParmsDefaults();
-		retval = new HParms(defaults);
-		retval.load(new BufferedReader(new FileReader("hparms")));
+		HParms temp = new HParms(defaults);
+		temp.load(new BufferedReader(new FileReader("hparms")));
+		retval = temp;
 		return retval;
 	}
 }

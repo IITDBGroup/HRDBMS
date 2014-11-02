@@ -15,7 +15,7 @@ public final class ReorderOperator implements Operator, Serializable
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
 	private TreeMap<Integer, String> pos2Col;
-	private final ArrayList<String> order;
+	private ArrayList<String> order;
 	private final MetaData meta;
 	private boolean nullOp = false;
 	private int node;
@@ -46,6 +46,55 @@ public final class ReorderOperator implements Operator, Serializable
 			if (child.getCols2Types() != null)
 			{
 				pos2Col = child.getPos2Col();
+				
+				ArrayList<String> newOrder = new ArrayList<String>();
+				for (String col : order)
+				{
+					Integer pos = child.getCols2Pos().get(col);
+					if (pos != null)
+					{
+						newOrder.add(col);
+					}
+					else
+					{
+						int matches = 0;
+						String col2;
+						if (col.contains("."))
+						{
+							col2 = col.substring(col.indexOf('.') + 1);
+						}
+						else
+						{
+							col2 = col;
+						}
+						
+						for (String col3 : child.getCols2Pos().keySet())
+						{
+							String col4;
+							if (col3.contains("."))
+							{
+								col4 = col3.substring(col3.indexOf('.') + 1);
+							}
+							else
+							{
+								col4 = col3;
+							}
+							
+							if (col2.equals(col4))
+							{
+								matches++;
+								newOrder.add(col3);
+							}
+						}
+						
+						if (matches != 1)
+						{
+							throw new Exception("Column not found or ambiguous: " + col);
+						}
+					}
+				}
+				
+				order = newOrder;
 				new ArrayList<String>(pos2Col.values());
 				if (new ArrayList<String>(pos2Col.values()).equals(order))
 				{

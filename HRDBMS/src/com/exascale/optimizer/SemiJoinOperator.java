@@ -173,6 +173,11 @@ public final class SemiJoinOperator implements Operator, Serializable
 		{
 			o.close();
 		}
+		
+		if (outBuffer != null)
+		{
+			outBuffer.close();
+		}
 	}
 
 	@Override

@@ -28,6 +28,30 @@ public class Plan implements Serializable
 		this.reserved = reserved;
 		this.trees = trees;
 	}
+	
+	public int hashCode()
+	{
+		int hash = 17;
+		hash = hash * 23 + trees.hashCode();
+		hash = hash * 23 + touchedNodes.hashCode();
+		return hash;
+	}
+	
+	public boolean equals(Object rhs)
+	{
+		if (rhs == null)
+		{
+			return false;
+		}
+		
+		if (!(rhs instanceof Plan))
+		{
+			return false;
+		}
+		
+		Plan r = (Plan)rhs;
+		return trees.equals(r.trees) && touchedNodes.equals(r.touchedNodes);
+	}
 
 	public Plan(Plan p)
 	{

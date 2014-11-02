@@ -100,6 +100,11 @@ public final class ExceptOperator implements Operator, Serializable
 		{
 			o.close();
 		}
+		
+		if (buffer != null)
+		{
+			buffer.close();
+		}
 	}
 
 	@Override

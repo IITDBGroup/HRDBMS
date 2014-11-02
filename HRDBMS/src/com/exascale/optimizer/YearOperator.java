@@ -49,7 +49,6 @@ public final class YearOperator implements Operator, Serializable
 				cols2Pos.put(name, cols2Pos.size());
 				pos2Col = (TreeMap<Integer, String>)child.getPos2Col().clone();
 				pos2Col.put(pos2Col.size(), name);
-				colPos = cols2Pos.get(col);
 				Integer colPos1 = cols2Pos.get(col);
 				if (colPos1 == null)
 				{
@@ -79,6 +78,7 @@ public final class YearOperator implements Operator, Serializable
 						}
 					}
 				}
+				colPos = cols2Pos.get(col);
 			}
 		}
 		else

@@ -229,7 +229,7 @@ public class LogRec
 		return this;
 	}
 
-	public void redo()
+	public void redo() throws Exception
 	{
 	}
 
@@ -245,6 +245,11 @@ public class LogRec
 		this.timestamp = time;
 		buffer.position(20);
 		buffer.putLong(time);
+	}
+	
+	public long getTimeStamp()
+	{
+		return timestamp;
 	}
 
 	public int size()
@@ -262,7 +267,57 @@ public class LogRec
 		return type;
 	}
 
-	public void undo()
+	public void undo() throws Exception
 	{
+	}
+	
+	public int getOffset()
+	{
+		if (this instanceof InsertLogRec)
+		{
+			return ((InsertLogRec)this).getOffset();
+		}
+		
+		if (this instanceof DeleteLogRec)
+		{
+			return ((DeleteLogRec)this).getOffset();
+		}
+		
+		return -1;
+	}
+	
+	public int getEnd()
+	{
+		if (this instanceof InsertLogRec)
+		{
+			return ((InsertLogRec)this).getEnd();
+		}
+		
+		if (this instanceof DeleteLogRec)
+		{
+			return ((DeleteLogRec)this).getEnd();
+		}
+		
+		return -1;
+	}
+	
+	public boolean equals(Object rhs)
+	{
+		if (rhs == null)
+		{
+			return false;
+		}
+		
+		if (rhs instanceof LogRec)
+		{
+			return lsn == ((LogRec)rhs).lsn;
+		}
+		
+		return false;
+	}
+	
+	public int hashCode()
+	{
+		return new Long(lsn).hashCode();
 	}
 }

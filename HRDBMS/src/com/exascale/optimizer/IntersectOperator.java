@@ -80,6 +80,11 @@ public final class IntersectOperator implements Operator, Serializable
 		{
 			o.close();
 		}
+		
+		if (buffer != null)
+		{
+			buffer.close();
+		}
 	}
 
 	@Override

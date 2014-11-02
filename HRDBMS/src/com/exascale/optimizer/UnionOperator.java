@@ -88,6 +88,11 @@ public final class UnionOperator implements Operator, Serializable
 		{
 			child.close();
 		}
+		
+		if (buffer != null)
+		{
+			buffer.close();
+		}
 	}
 
 	@Override

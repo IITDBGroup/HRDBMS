@@ -15,7 +15,7 @@ public class InsertLogRec extends LogRec
 
 	public InsertLogRec(long txnum, Block b, int off, byte[] before, byte[] after) throws Exception
 	{
-		super(LogRec.INSERT, txnum, ByteBuffer.allocate(28 + b.toString().length() + 12 + 2 * before.length));
+		super(LogRec.INSERT, txnum, ByteBuffer.allocate(28 + b.toString().getBytes("UTF-8").length + 12 + 2 * before.length));
 		if (before.length != after.length)
 		{
 			throw new Exception("Before and after images length do not match");
@@ -28,11 +28,12 @@ public class InsertLogRec extends LogRec
 
 		final ByteBuffer buff = this.buffer();
 		buff.position(28);
-		final int blen = b.toString().length();
+		byte[] bbytes = b.toString().getBytes("UTF-8");
+		final int blen = bbytes.length;
 		buff.putInt(blen);
 		try
 		{
-			buff.put(b.toString().getBytes("UTF-8"));
+			buff.put(bbytes);
 		}
 		catch (final Exception e)
 		{
@@ -45,9 +46,34 @@ public class InsertLogRec extends LogRec
 		buff.put(after);
 		buff.putInt(off);
 	}
+	
+	public Block getBlock()
+	{
+		return b;
+	}
+	
+	public int getOffset()
+	{
+		return off;
+	}
+	
+	public int getEnd()
+	{
+		return off + before.length;
+	}
+	
+	public byte[] getBefore()
+	{
+		return before;
+	}
+	
+	public byte[] getAfter()
+	{
+		return after;
+	}
 
 	@Override
-	public void redo()
+	public void redo() throws Exception
 	{
 		HRDBMSWorker.logger.debug("Redoing change at " + b + "@" + off + " for a length of " + before.length);
 		if (b.number() < 0)
@@ -55,19 +81,8 @@ public class InsertLogRec extends LogRec
 			Exception e = new Exception("Negative block number requested");
 			HRDBMSWorker.logger.debug("", e);
 		}
-		final String cmd = "REQUEST PAGE " + this.txnum() + "~" + b.toString();
-		while (true)
-		{
-			try
-			{
-				BufferManager.getInputQueue().put(cmd);
-				break;
-			}
-			catch (final InterruptedException e)
-			{
-				continue;
-			}
-		}
+		
+		BufferManager.requestPage(b, txnum());
 
 		Page p = null;
 		while (p == null)
@@ -80,28 +95,16 @@ public class InsertLogRec extends LogRec
 	}
 
 	@Override
-	public void undo()
+	public void undo() throws Exception
 	{
-		HRDBMSWorker.logger.debug("Undoing change at " + b + "@" + off + " for a length of " + before.length);
+		//HRDBMSWorker.logger.debug("Undoing change at " + b + "@" + off + " for a length of " + before.length);
 		if (b.number() < 0)
 		{
 			Exception e = new Exception("Negative block number requested");
 			HRDBMSWorker.logger.debug("", e);
 		}
 		
-		final String cmd = "REQUEST PAGE " + this.txnum() + "~" + b.toString();
-		while (true)
-		{
-			try
-			{
-				BufferManager.getInputQueue().put(cmd);
-				break;
-			}
-			catch (final InterruptedException e)
-			{
-				continue;
-			}
-		}
+		BufferManager.requestPage(b, txnum());
 
 		Page p = null;
 		while (p == null)

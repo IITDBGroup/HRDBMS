@@ -44,6 +44,11 @@ public final class InsertOperator implements Operator, Serializable
 		this.plan = plan;
 	}
 	
+	public String getTable()
+	{
+		return table;
+	}
+	
 	public Plan getPlan()
 	{
 		return plan;
@@ -227,9 +232,13 @@ public final class InsertOperator implements Operator, Serializable
 		ArrayList<String> indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
 		HashMap<Integer, Integer> pos2Length = new HashMap<Integer, Integer>();
 		HashMap<String, Integer> cols2Pos = MetaData.getCols2PosForTable(schema, table, tx);
-		TreeMap<Integer, String> pos2Col = MetaData.getPos2ColForTable(schema, table, tx);
+		TreeMap<Integer, String> pos2Col = MetaData.cols2PosFlip(cols2Pos);
 		HashMap<String, String> cols2Types = new MetaData().getCols2TypesForTable(schema, table, tx);
-		for (Map.Entry entry : new MetaData().getCols2TypesForTable(schema, table, tx).entrySet())
+		PartitionMetaData spmd = new MetaData().getPartMeta(schema, table, tx);
+		ArrayList<ArrayList<String>> keys = MetaData.getKeys(indexes, tx);
+		ArrayList<ArrayList<String>> types = MetaData.getTypes(indexes, tx);
+		ArrayList<ArrayList<Boolean>> orders = MetaData.getOrders(indexes, tx);
+		for (Map.Entry entry : cols2Types.entrySet())
 		{
 			if (entry.getValue().equals("CHAR"))
 			{
@@ -240,6 +249,7 @@ public final class InsertOperator implements Operator, Serializable
 		
 		Object o = child.next(this);
 		PartitionMetaData pmeta = new MetaData().new PartitionMetaData(schema, table, tx);
+		int numNodes = MetaData.getNumNodes(tx);
 		while (!(o instanceof DataEndMarker))
 		{
 			ArrayList<Object> row = (ArrayList<Object>)o;
@@ -252,7 +262,7 @@ public final class InsertOperator implements Operator, Serializable
 					return;
 				}
 			}
-			ArrayList<Integer> nodes = MetaData.determineNode(schema, table, row, tx, pmeta, cols2Pos);
+			ArrayList<Integer> nodes = MetaData.determineNode(schema, table, row, tx, pmeta, cols2Pos, numNodes);
 			for (Integer node : nodes)
 			{
 				plan.addNode(node);
@@ -261,7 +271,7 @@ public final class InsertOperator implements Operator, Serializable
 			}
 			if (map.size() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes")))
 			{
-				flush(indexes);
+				flush(indexes, cols2Pos, spmd, keys, types, orders);
 				if (num.get() == Integer.MIN_VALUE)
 				{
 					done = true;
@@ -270,7 +280,7 @@ public final class InsertOperator implements Operator, Serializable
 			}
 			else if (map.totalSize() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_batch")))
 			{
-				flush(indexes);
+				flush(indexes, cols2Pos, spmd, keys, types, orders);
 				if (num.get() == Integer.MIN_VALUE)
 				{
 					done = true;
@@ -283,20 +293,20 @@ public final class InsertOperator implements Operator, Serializable
 		
 		if (map.totalSize() > 0)
 		{
-			flush(indexes);
+			flush(indexes, cols2Pos, spmd, keys, types, orders);
 		}
 		
 		done = true;
 	}
 	
-	private void flush(ArrayList<String> indexes)
+	private void flush(ArrayList<String> indexes, HashMap<String, Integer> cols2Pos, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders)
 	{
 		ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
 		for (Object o : map.getKeySet())
 		{
 			int node = (Integer)o;
-			Vector<ArrayList<Object>> list = map.get(node);
-			threads.add(new FlushThread(list, indexes, node));
+			Set<ArrayList<Object>> list = map.get(node);
+			threads.add(new FlushThread(list, indexes, node, cols2Pos, spmd, keys, types, orders));
 		}
 		
 		for (FlushThread thread : threads)
@@ -328,16 +338,26 @@ public final class InsertOperator implements Operator, Serializable
 	
 	private class FlushThread extends HRDBMSThread
 	{
-		private Vector<ArrayList<Object>> list;
+		private Set<ArrayList<Object>> list;
 		private ArrayList<String> indexes;
 		private boolean ok = true;
 		private int node;
+		private HashMap<String, Integer> cols2Pos;
+		private PartitionMetaData spmd;
+		private ArrayList<ArrayList<String>> keys;
+		private ArrayList<ArrayList<String>> types;
+		private ArrayList<ArrayList<Boolean>> orders;
 		
-		public FlushThread(Vector<ArrayList<Object>> list, ArrayList<String> indexes, int node)
+		public FlushThread(Set<ArrayList<Object>> list, ArrayList<String> indexes, int node, HashMap<String, Integer> cols2Pos, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders)
 		{
 			this.list = list;
 			this.indexes = indexes;
 			this.node = node;
+			this.cols2Pos = cols2Pos;
+			this.spmd = spmd;
+			this.keys = keys;
+			this.orders = orders;
+			this.types = types;
 		}
 		
 		public boolean getOK()
@@ -369,12 +389,12 @@ public final class InsertOperator implements Operator, Serializable
 				out.write(stringToBytes(table));
 				ObjectOutputStream objOut = new ObjectOutputStream(out);
 				objOut.writeObject(indexes);
-				objOut.writeObject(list);
-				objOut.writeObject(MetaData.getKeys(indexes, tx));
-				objOut.writeObject(MetaData.getTypes(indexes, tx));
-				objOut.writeObject(MetaData.getOrders(indexes, tx));
-				objOut.writeObject(new MetaData().getCols2PosForTable(schema, table, tx));
-				objOut.writeObject(new MetaData().getPartMeta(schema, table, tx));
+				objOut.writeObject(new ArrayList(list));
+				objOut.writeObject(keys);
+				objOut.writeObject(types);
+				objOut.writeObject(orders);
+				objOut.writeObject(cols2Pos);
+				objOut.writeObject(spmd);
 				objOut.flush();
 				out.flush();
 				getConfirmation(sock);

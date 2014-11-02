@@ -208,6 +208,7 @@ public final class CaseOperator implements Operator, Serializable
 					final Object obj = results.get(i);
 					if (obj instanceof String && ((String)obj).startsWith("\u0000"))
 					{
+						//TODO fix me colnames might not match exactly
 						((ArrayList<Object>)o).add(((ArrayList<Object>)o).get(cols2Pos.get(((String)obj).substring(1))));
 						return o;
 					}

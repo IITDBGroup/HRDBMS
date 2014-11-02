@@ -104,6 +104,11 @@ public final class ExtendOperator implements Operator, Serializable
 	public void close() throws Exception
 	{
 		child.close();
+		
+		if (queue != null)
+		{
+			queue.close();
+		}
 	}
 
 	@Override
@@ -487,7 +492,6 @@ public final class ExtendOperator implements Operator, Serializable
 		@Override
 		public void run()
 		{
-			HRDBMSWorker.logger.debug("GPUThread is starting");
 			final List<Kernel> jobs = new ArrayList<Kernel>(ResourceManager.CUDA_SIZE);
 			final ArrayList<Double> calced = new ArrayList<Double>();
 			int i = 0;

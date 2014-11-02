@@ -36,8 +36,8 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 	private TreeMap<Integer, String> pos2Col;
 	private final MetaData meta;
 	private volatile BufferedLinkedBlockingQueue outBuffer;
-	private final int NUM_RT_THREADS = 2 * ResourceManager.cpus;
-	private final int NUM_PTHREADS = 4 * ResourceManager.cpus;
+	private final int NUM_RT_THREADS = ResourceManager.cpus;
+	private final int NUM_PTHREADS = ResourceManager.cpus;
 	private final AtomicLong outCount = new AtomicLong(0);
 	private volatile boolean readersDone = false;
 	private ArrayList<String> lefts = new ArrayList<String>();
@@ -218,6 +218,11 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		for (final Operator o : clones)
 		{
 			o.close();
+		}
+		
+		if (outBuffer != null)
+		{
+			outBuffer.close();
 		}
 	}
 
@@ -985,14 +990,12 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 				}
 			}
 
-			HRDBMSWorker.logger.debug("HashJoinThread processed " + leftCount + " left rows and " + inCount + " right rows and generated " + outCount + " rows");
-
 			while (true)
 			{
 				try
 				{
 					outBuffer.put(new DataEndMarker());
-					HRDBMSWorker.logger.debug("Wrote data end marker to outBuffer");
+		
 					for (final DiskBackedHashMap bucket : buckets)
 					{
 						bucket.close();
@@ -1039,6 +1042,8 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 						{
 							HRDBMSWorker.logger.error("Row - " + lRow, e);
 							HRDBMSWorker.logger.error("Cols2Pos = " + childCols2Pos);
+							HRDBMSWorker.logger.error("Trying to get pos = " + pos);
+							HRDBMSWorker.logger.error("Children are " + HashJoinOperator.this.children.get(0) + " and " + HashJoinOperator.this.children.get(1));
 							outBuffer.put(e);
 							return;
 						}
@@ -1101,8 +1106,16 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					final ArrayList<Object> key = new ArrayList<Object>(rights.size());
 					for (final String col : rights)
 					{
-						final int pos = childCols2Pos.get(col);
-						key.add(((ArrayList<Object>)o).get(pos));
+						try
+						{
+							final int pos = childCols2Pos.get(col);
+							key.add(((ArrayList<Object>)o).get(pos));
+						}
+						catch(Exception e)
+						{
+							HRDBMSWorker.logger.debug("Failed to find " + col + " in " + childCols2Pos);
+							throw e;
+						}
 					}
 
 					final long hash = 0x0EFFFFFFFFFFFFFFL & hash(key);

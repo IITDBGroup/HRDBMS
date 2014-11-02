@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.StringTokenizer;
+import java.util.concurrent.ConcurrentHashMap;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
@@ -22,6 +23,7 @@ import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
 import com.exascale.logging.ExtendLogRec;
 import com.exascale.misc.CatalogCode;
+import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.ReadThread;
 import com.exascale.tables.Transaction;
 
@@ -29,6 +31,7 @@ public class FileManager
 {
 	private static File[] dirs;
 	private static Map<String, FileChannel> openFiles = new HashMap<String, FileChannel>();
+	public static ConcurrentHashMap<String, Integer> numBlocks = new ConcurrentHashMap<String, Integer>();
 
 	public FileManager()
 	{
@@ -61,32 +64,53 @@ public class FileManager
 		LockManager.xLock(new Block(fn, -1), tx.number());
 		final FileChannel fc = getFile(fn);
 		int retval;
+		retval = numBlocks.get(fn);
+		Block bl = new Block(fn, retval);
+		ExtendLogRec rec = LogManager.extend(tx.number(), bl);
+		LogManager.flush(rec.lsn());
+		data.position(0);
 		synchronized (fc)
 		{
-			retval = (int)(fc.size() / Page.BLOCK_SIZE);
-			Block bl = new Block(fn, retval);
-			ExtendLogRec rec = LogManager.extend(tx.number(), bl);
-			LogManager.flush(rec.lsn());
-			data.position(0);
-			fc.write(data, fc.size());
+			fc.write(data, retval * Page.BLOCK_SIZE);
+			fc.force(false);
 		}
+		numBlocks.put(fn, retval + 1);
+
+		return retval;
+	}
+	
+	public static int addNewBlockNoLog(String fn, ByteBuffer data, Transaction tx) throws Exception
+	{
+		LockManager.xLock(new Block(fn, -1), tx.number());
+		final FileChannel fc = getFile(fn);
+		int retval = numBlocks.get(fn);
+		
+		//write page to bufferpool
+		Block b = new Block(fn, retval);
+		int hash = (b.hashCode2() & 0x7FFFFFFF) % BufferManager.managers.length;
+		BufferManager.managers[hash].pinFromMemory(b, tx.number(), data);
+		numBlocks.put(fn, retval + 1);
 
 		return retval;
 	}
 	
 	public static void trim(String fn, int blockNum) throws Exception
 	{
-		HRDBMSWorker.logger.debug("Undoing extend of " + fn + ":" + blockNum);
+		//HRDBMSWorker.logger.debug("Undoing extend of " + fn + ":" + blockNum);
 		final FileChannel fc = getFile(fn);
-		int retval = (int)(fc.size() / Page.BLOCK_SIZE) - 1;
-		if (retval > blockNum)
+		synchronized(fc)
 		{
-			throw new Exception("Can't trim anything but the last block");
-		}
-		else if (retval == blockNum)
-		{
-			fc.truncate(fc.size() - Page.BLOCK_SIZE);
-			BufferManager.throwAwayPage(fn, blockNum);
+			int retval = (int)(fc.size() / Page.BLOCK_SIZE) - 1;
+			if (retval > blockNum)
+			{
+				throw new Exception("Can't trim anything but the last block");
+			}
+			else if (retval == blockNum)
+			{
+				fc.truncate(fc.size() - Page.BLOCK_SIZE);
+				BufferManager.throwAwayPage(fn, blockNum);
+				numBlocks.put(fn, retval);
+			}
 		}
 	}
 	
@@ -95,29 +119,34 @@ public class FileManager
 		String fn = bl.fileName();
 		int blockNum = bl.number();
 		final FileChannel fc = getFile(fn);
-		int retval = (int)(fc.size() / Page.BLOCK_SIZE) - 1;
-		if (retval >= blockNum)
+		synchronized(fc)
 		{
-			HRDBMSWorker.logger.debug("Went to redo extend of " + bl + " but nothing needed to be done");
-			return;
-		}
-		else if (retval == blockNum-1)
-		{
-			HRDBMSWorker.logger.debug("Needed to redo extend of " + bl);
-			ByteBuffer data = ByteBuffer.allocate(Page.BLOCK_SIZE);
-			int i = 0;
-			data.position(0);
-			while (i < Page.BLOCK_SIZE)
+			int retval = numBlocks.get(bl.fileName()) - 1;
+			if (retval >= blockNum)
 			{
-				data.putLong(-1);
-				i += 8;
+				HRDBMSWorker.logger.debug("Went to redo extend of " + bl + " but nothing needed to be done");
+				return;
 			}
-			data.position(0);
-			fc.write(data, fc.size());
-		}
-		else
-		{
-			throw new Exception("Trying to redo an extend, but we are missing blocks prior to this one");
+			else if (retval == blockNum-1)
+			{
+				HRDBMSWorker.logger.debug("Needed to redo extend of " + bl);
+				ByteBuffer data = ByteBuffer.allocate(Page.BLOCK_SIZE);
+				int i = 0;
+				data.position(0);
+				while (i < Page.BLOCK_SIZE)
+				{
+					data.putLong(-1);
+					i += 8;
+				}
+				data.position(0);
+				fc.write(data, blockNum * Page.BLOCK_SIZE);
+				fc.force(false);
+				numBlocks.put(bl.fileName(), blockNum+1);
+			}
+			else
+			{
+				throw new Exception("Trying to redo an extend, but we are missing blocks prior to this one");
+			}
 		}
 	}
 
@@ -171,6 +200,13 @@ public class FileManager
 			HRDBMSWorker.logger.debug("About to instantiate CatalogCreator");
 			clazz.newInstance();
 			HRDBMSWorker.logger.debug("Done instantiating CatalogCreator");
+			for (FileChannel fc : openFiles.values())
+			{
+				fc.force(false);
+				fc.close();
+			}
+			
+			openFiles.clear();
 		}
 		catch (Throwable e)
 		{
@@ -191,8 +227,9 @@ public class FileManager
 		if (fc == null)
 		{
 			final File table = new File(filename);
-			final RandomAccessFile f = new RandomAccessFile(table, "rwd");
+			final RandomAccessFile f = new RandomAccessFile(table, "rw");
 			fc = f.getChannel();
+			numBlocks.put(filename, (int)(fc.size() / Page.BLOCK_SIZE));
 			openFiles.put(filename, fc);
 		}
 
@@ -201,6 +238,11 @@ public class FileManager
 
 	public static void read(Page p, Block b, ByteBuffer bb) throws IOException
 	{
+		final FileChannel fc = FileManager.getFile(b.fileName());
+		if (b.number() > numBlocks.get(b.fileName()) + 1)
+		{
+			throw new IOException("Trying to read block " + b.number() + " from " + b.fileName() + " which doesn't exist");
+		}
 		HRDBMSWorker.addThread(new ReadThread(p, b, bb));
 	}
 
@@ -235,6 +277,14 @@ public class FileManager
 		bb.position(0);
 		final FileChannel fc = getFile(b.fileName());
 		fc.write(bb, b.number() * bb.capacity());
+		fc.force(false);
+	}
+	
+	public static void writeDelayed(Block b, ByteBuffer bb) throws IOException
+	{
+		bb.position(0);
+		final FileChannel fc = getFile(b.fileName());
+		fc.write(bb, b.number() * bb.capacity());
 	}
 
 	private static void setDirs(String list)
@@ -253,6 +303,42 @@ public class FileManager
 		{
 			dirs[i] = new File(tokens.nextToken());
 			i++;
+		}
+	}
+	
+	public static EndDelayThread endDelay(String file) throws Exception
+	{
+		EndDelayThread thread = new EndDelayThread(file);
+		thread.start();
+		return thread;
+	}
+	
+	public static class EndDelayThread extends HRDBMSThread
+	{
+		private String file;
+		private boolean ok = true;
+		
+		public EndDelayThread(String file)
+		{
+			this.file = file;
+		}
+		
+		public void run()
+		{
+			try
+			{
+				FileChannel fc = getFile(file);
+				fc.force(false);
+			}
+			catch(Exception e)
+			{
+				ok = false;
+			}
+		}
+		
+		public boolean getOK()
+		{
+			return ok;
 		}
 	}
 }

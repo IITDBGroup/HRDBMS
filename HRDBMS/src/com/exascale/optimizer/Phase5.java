@@ -279,6 +279,16 @@ public final class Phase5
 			cCache.put(op, retval);
 			return retval;
 		}
+		
+		if (op instanceof DummyOperator)
+		{
+			return 1;
+		}
+		
+		if (op instanceof DEMOperator)
+		{
+			return 0;
+		}
 
 		if (op instanceof TableScanOperator)
 		{
@@ -438,6 +448,20 @@ public final class Phase5
 		setCards(root);
 		addIndexesToJoins();
 		setNumParents(root);
+		setSpecificCoord(root);
+	}
+	
+	private void setSpecificCoord(Operator op) throws Exception
+	{
+		if (op.getNode() == -1)
+		{
+			op.setNode(MetaData.myCoordNum());
+		}
+		
+		for (Operator o : op.children())
+		{
+			setSpecificCoord(o);
+		}
 	}
 
 	private void addIndexesToJoins() throws Exception
@@ -521,6 +545,7 @@ public final class Phase5
 			try
 			{
 				o.add(io);
+				io.setNode(o.getNode());
 			}
 			catch (final Exception e)
 			{
@@ -537,10 +562,13 @@ public final class Phase5
 		try
 		{
 			intersect.add(o);
+			intersect.setNode(o.getNode());
 			final UnionOperator union = new UnionOperator(true, meta);
 			final IndexOperator io = new IndexOperator(index, meta);
 			union.add(io);
 			intersect.add(union);
+			union.setNode(intersect.getNode());
+			io.setNode(union.getNode());
 			parent.add(intersect);
 		}
 		catch (final Exception e)
@@ -564,6 +592,7 @@ public final class Phase5
 		try
 		{
 			sort.add(child);
+			sort.setNode(child.getNode());
 			table.add(sort);
 		}
 		catch (final Exception e)
@@ -1034,6 +1063,9 @@ public final class Phase5
 				union.add(io);
 				sort.add(union);
 				table.add(sort);
+				io.setNode(table.getNode());
+				sort.setNode(table.getNode());
+				union.setNode(table.getNode());
 			}
 			catch (final Exception e)
 			{
@@ -1955,10 +1987,12 @@ public final class Phase5
 					if (tOp.children().size() == 0)
 					{
 						tOp.add(union);
+						union.setNode(tOp.getNode());
 					}
 					else if (tOp.children().get(0) instanceof IntersectOperator)
 					{
 						tOp.children().get(0).add(union);
+						union.setNode(tOp.children().get(0).getNode());
 					}
 					else
 					{
@@ -1968,6 +2002,8 @@ public final class Phase5
 						tOp.removeChild(otherChild);
 						intersect.add(otherChild);
 						tOp.add(intersect);
+						intersect.setNode(tOp.getNode());
+						union.setNode(tOp.getNode());
 					}
 				}
 				catch (final Exception e)

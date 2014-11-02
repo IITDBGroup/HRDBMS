@@ -119,6 +119,11 @@ public class NetworkReceiveOperator implements Operator, Serializable
 		{
 			sock.close();
 		}
+		
+		if (outBuffer != null)
+		{
+			outBuffer.close();
+		}
 	}
 
 	@Override

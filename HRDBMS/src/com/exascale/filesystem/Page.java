@@ -2,12 +2,14 @@ package com.exascale.filesystem;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import com.exascale.managers.BufferManager;
 import com.exascale.managers.FileManager;
 import com.exascale.managers.HRDBMSWorker;
+import com.exascale.managers.LockManager;
 import com.exascale.managers.LogManager;
 
 public class Page
@@ -31,11 +33,41 @@ public class Page
 		catch (final Throwable e)
 		{
 			// System.out.println("Bufferpool manager failed to allocate pages for the bufferpool");
-			HRDBMSWorker.logger.error("Bufferpool manager failed to allocate pages for the bufferpool");
+			HRDBMSWorker.logger.error("Bufferpool manager failed to allocate pages for the bufferpool", e);
 			System.exit(1);
 		}
 		pins = new ConcurrentHashMap<Long, AtomicInteger>();
 		readDone.set(false);
+	}
+	
+	public Page clone()
+	{
+		Page p = new Page();
+		p.blk = blk;
+		p.contents.position(0);
+		p.contents.put(contents.array());
+		return p;
+	}
+	
+	public int hashCode()
+	{
+		return blk.hashCode();
+	}
+	
+	public boolean equals(Object rhs)
+	{
+		if (rhs == null)
+		{
+			return false;
+		}
+		
+		if (!(rhs instanceof Page))
+		{
+			return false;
+		}
+		
+		Page r = (Page)rhs;
+		return blk.equals(r.blk);
 	}
 	
 	public synchronized void setNotModified()
@@ -57,6 +89,32 @@ public class Page
 		blk = b;
 		readDone.set(false);
 		FileManager.read(this, b, contents);
+		pins.clear();
+	}
+	
+	public synchronized void assignToBlockFromMemory(Block b, boolean log, ByteBuffer data) throws IOException
+	{
+		FileChannel fc = FileManager.getFile(b.fileName());
+		if ((fc.size() / Page.BLOCK_SIZE - 1) >= b.number())
+		{
+			throw new IOException("Pinning a page to the bufferpool from memory but it already exists in the file");
+		}
+		
+		if (modifiedBy >= 0)
+		{
+			if (log)
+			{
+				LogManager.flush(lsn);
+			}
+			FileManager.write(blk, contents);
+			modifiedBy = -1;
+		}
+		blk = b;
+		readDone.set(true);
+		//FileManager.read(this, b, contents);
+		contents.clear();
+		contents.position(0);
+		contents.put(data.array());
 		pins.clear();
 	}
 
@@ -102,6 +160,16 @@ public class Page
 			HRDBMSWorker.logger.debug("Error reading from page " + blk + " trying to read " + buff.length + " bytes at offset " + off);
 			throw e;
 		}
+	}
+	
+	public synchronized void get(int off, int[] buff) throws Exception
+	{
+		while (!readDone.get())
+		{
+		}
+		
+		contents.position(off);
+		contents.asIntBuffer().get(buff);
 	}
 
 	public synchronized double getDouble(int off)
@@ -159,7 +227,7 @@ public class Page
 		return modifiedBy == txnum;
 	}
 
-	public boolean isPinned()
+	public synchronized boolean isPinned()
 	{
 		return pins.size() > 0;
 	}
@@ -169,7 +237,7 @@ public class Page
 		return readDone.get();
 	}
 
-	public void pin(long lsn, long txnum)
+	public synchronized void pin(long lsn, long txnum)
 	{
 		final AtomicInteger numPins = pins.get(txnum);
 		if (numPins == null)
@@ -213,12 +281,18 @@ public class Page
 		readDone.set(true);
 	}
 
-	public void unpin(long txnum)
+	public synchronized void unpin(long txnum)
 	{
 		pins.remove(txnum);
 	}
+	
+	public void writeDirect(int off, byte[] data)
+	{
+		contents.position(off);
+		contents.put(data);
+	}
 
-	public synchronized void write(int off, byte[] data, long txnum, long lsn)
+	public synchronized void write(int off, byte[] data, long txnum, long lsn) throws Exception
 	{
 		while (!readDone.get())
 		{
@@ -229,6 +303,15 @@ public class Page
 		}
 
 		this.modifiedBy = txnum;
+		
+		//LockManager.lock.lock();
+		//Long xTx = LockManager.xBlocksToTXs.get(this.blk);
+		//if (xTx == null || xTx.longValue() != txnum)
+		//{
+		//	Exception e = new Exception();
+		//	HRDBMSWorker.logger.debug("Tried to write to page without xLock", e);
+		//}
+		//LockManager.lock.unlock();
 		BufferManager.write(this, off, data);
 	}
 }

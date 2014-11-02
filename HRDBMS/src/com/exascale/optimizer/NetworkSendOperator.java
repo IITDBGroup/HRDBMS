@@ -277,20 +277,31 @@ public class NetworkSendOperator implements Operator, Serializable
 		}
 		catch(Exception e)
 		{
+			HRDBMSWorker.logger.debug("", e);
 			try
 			{
 				byte[] obj = toBytes(e);
 				out.write(obj);
 				out.flush();
+				out.close();
+				child.close();
 			}
 			catch(Exception f)
 			{
 				try
 				{
 					out.close();
+					child.close();
 				}
 				catch(Exception g)
-				{}
+				{
+					try
+					{
+						child.close();
+					}
+					catch(Exception h)
+					{}
+				}
 			}
 		}
 	}
@@ -307,6 +318,10 @@ public class NetworkSendOperator implements Operator, Serializable
 		if (v instanceof ArrayList)
 		{
 			val = (ArrayList<Object>)v;
+			if (val.size() == 0)
+			{
+				throw new Exception("Empty ArrayList in toBytes()");
+			}
 		}
 		else if (v instanceof Exception)
 		{

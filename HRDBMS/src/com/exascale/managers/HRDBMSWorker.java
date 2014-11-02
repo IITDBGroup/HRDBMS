@@ -5,9 +5,11 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.core.appender.FileAppender;
-import org.apache.logging.log4j.core.layout.PatternLayout;
+import org.apache.log4j.BasicConfigurator;
+import org.apache.log4j.FileAppender;
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
+import org.apache.log4j.PatternLayout;
 import com.exascale.misc.HParms;
 import com.exascale.optimizer.SQLParser;
 import com.exascale.threads.HRDBMSThread;
@@ -25,14 +27,15 @@ public class HRDBMSWorker
 	public static int type; // my type
 	private static ConcurrentHashMap<Long, HRDBMSThread> threadList = new ConcurrentHashMap<Long, HRDBMSThread>();
 	private static long connectionThread;
-	private static long bufferThread;
 	private static long logThread;
 	private static long resourceThread;
 	private static BlockingQueue<String> in = new LinkedBlockingQueue<String>(); // message
 																					// queue
 	private static AtomicLong THREAD_NUMBER = new AtomicLong(0);
 	private static ConcurrentHashMap<Long, ArrayList<Thread>> waitList = new ConcurrentHashMap<Long, ArrayList<Thread>>();
-	public static org.apache.logging.log4j.Logger logger = org.apache.logging.log4j.LogManager.getLogger("Log");
+	public static org.apache.log4j.Logger logger;
+	public static volatile CheckpointManager checkpoint;
+	private static FileAppender fa;
 
 	public static long addThread(HRDBMSThread thread)
 	{
@@ -42,11 +45,6 @@ public class HRDBMSWorker
 		threadList.put(retval, thread);
 		thread.start();
 		return retval;
-	}
-
-	public static long getBufferThread()
-	{
-		return bufferThread;
 	}
 
 	public static long getConnectionThread()
@@ -82,14 +80,12 @@ public class HRDBMSWorker
 
 	public static void main(String[] args) throws Exception
 	{
-		final org.apache.logging.log4j.Logger logger = org.apache.logging.log4j.LogManager.getLogger("Log");
-		final org.apache.logging.log4j.core.Logger coreLogger = (org.apache.logging.log4j.core.Logger)logger;
-		final org.apache.logging.log4j.core.LoggerContext context = coreLogger.getContext();
-		final org.apache.logging.log4j.core.config.BaseConfiguration conf = (org.apache.logging.log4j.core.config.BaseConfiguration)context.getConfiguration();
-		final FileAppender fa = FileAppender.createAppender("hrdbms.log", "false", "false", "FileLogger", "true", "false", "true", PatternLayout.createLayout("%d{ISO8601}\t%p\t%C{1}: %m%ex%n", conf, null, "UTF-8", "no"), null, "false", null, conf);
-		fa.start();
-		coreLogger.addAppender(fa);
-		coreLogger.setLevel(Level.ALL);
+		logger = Logger.getLogger("LOG");
+		BasicConfigurator.configure();
+		fa = new FileAppender(new PatternLayout("%d{ISO8601}\t%p\t%C{1}: %m%n"), "hrdbms.log"); 
+		fa.activateOptions();
+		logger.addAppender(fa);
+		logger.setLevel(Level.ALL);
 		logger.info("Starting HRDBMS.");
 
 		type = Integer.parseInt(args[0]);
@@ -135,15 +131,16 @@ public class HRDBMSWorker
 		}
 
 		new FileManager();
-		bufferThread = addThread(new BufferManager(true));
+		new BufferManager(true);
 		addThread(new XAManager());
 		connectionThread = addThread(new ConnectionManager());
+		checkpoint = new CheckpointManager();
+		addThread(checkpoint);
 		logThread = addThread(new LogManager());
 		logger.info("Starting initialization of the Lock Manager.");
 		new LockManager();
 		logger.info("Lock Manager initialization complete.");
 		resourceThread = addThread(new ResourceManager());
-		addThread(new CheckpointManager());
 		hibernate();
 	}
 

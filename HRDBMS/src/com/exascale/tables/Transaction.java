@@ -36,7 +36,12 @@ public class Transaction implements Serializable
 		}
 		catch(Exception e)
 		{
-			HRDBMSWorker.logger.debug("", e);
+			try
+			{
+				HRDBMSWorker.logger.debug("", e);
+			}
+			catch(Exception f)
+			{}
 		}
 	}
 
@@ -46,7 +51,12 @@ public class Transaction implements Serializable
 	
 	public Transaction(long txnum)
 	{
-		this.txnum = txnum;
+		synchronized(txList)
+		{
+			this.txnum = txnum;
+		}
+		
+		level = Transaction.ISOLATION_RR;
 	}
 
 	public Transaction(int level)
@@ -63,8 +73,16 @@ public class Transaction implements Serializable
 		{
 			txList.put(txnum, txnum);
 		}
-		final LogRec rec = new StartLogRec(txnum);
+		LogRec rec = new StartLogRec(txnum);
 		LogManager.write(rec);
+		String filename = HRDBMSWorker.getHParms().getProperty("log_dir");
+		if (!filename.endsWith("/"))
+		{
+			filename += "/";
+		}
+		filename += "xa.log";
+		rec = new StartLogRec(txnum);
+		LogManager.write(rec, filename);
 	}
 	
 	public boolean equals(Object rhs)
@@ -207,6 +225,22 @@ public class Transaction implements Serializable
 			LockManager.unlockSLock(b, txnum);
 		}
 	}
+	
+	public void read(Block b, Schema schema, boolean lock) throws LockAbortException, Exception
+	{
+		synchronized(txList)
+		{
+			if (!txList.containsKey(txnum))
+			{
+				txList.put(txnum, txnum);
+				LogManager.writeStartRecIfNeeded(txnum);
+			}
+		}
+		
+		LockManager.xLock(b, txnum);
+		final Page p = this.getPage(b);
+		schema.read(this, p);
+	}
 
 	public HeaderPage readHeaderPage(Block b, int type) throws LockAbortException, Exception
 	{
@@ -244,24 +278,15 @@ public class Transaction implements Serializable
 
 	public void requestPage(Block b) throws Exception
 	{
+		
 		if (b.number() < 0)
 		{
 			Exception e = new Exception("Negative block number requested");
 			HRDBMSWorker.logger.debug("", e);
 			throw e;
 		}
-		while (true)
-		{
-			try
-			{
-				BufferManager.getInputQueue().put("REQUEST PAGE " + this.number() + "~" + b.fileName() + "~" + b.number());
-				break;
-			}
-			catch (final InterruptedException e)
-			{
-				continue;
-			}
-		}
+		
+		BufferManager.requestPage(b, this.number());
 	}
 
 	public void requestPages(Block[] bs) throws Exception
@@ -275,24 +300,8 @@ public class Transaction implements Serializable
 				throw e;
 			}
 		}
-		String cmd = "REQUEST PAGES " + this.number() + "~" + bs.length + "~";
-		for (final Block b : bs)
-		{
-			cmd += b.fileName() + "~" + b.number() + "~";
-		}
-
-		while (true)
-		{
-			try
-			{
-				BufferManager.getInputQueue().put(cmd);
-				break;
-			}
-			catch (final InterruptedException e)
-			{
-				continue;
-			}
-		}
+		
+		BufferManager.requestPages(bs, this.number());
 	}
 
 	public void rollback() throws Exception
@@ -330,11 +339,10 @@ public class Transaction implements Serializable
 		}
 		Page p = BufferManager.getPage(b);
 
-		int requests = 0;
-		while (p == null && requests < Integer.parseInt(HRDBMSWorker.getHParms().getProperty("getpage_rerequest_attempts")))
+		if (p == null)
 		{
 			int sleeps = 0;
-			while (p == null && sleeps < Integer.parseInt(HRDBMSWorker.getHParms().getProperty("getpage_attempts_before_rerequest")))
+			while (p == null && sleeps < Integer.parseInt(HRDBMSWorker.getHParms().getProperty("getpage_attempts")))
 			{
 				try
 				{
@@ -347,20 +355,6 @@ public class Transaction implements Serializable
 				p = BufferManager.getPage(b);
 				sleeps++;
 			}
-
-			while (true)
-			{
-				try
-				{
-					BufferManager.getInputQueue().put("REQUEST PAGE " + this.number() + "~" + b.fileName() + "~" + b.number());
-					break;
-				}
-				catch (final InterruptedException e)
-				{
-				}
-			}
-
-			requests++;
 		}
 
 		if (p == null)

@@ -12,6 +12,7 @@ import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.io.Serializable;
 import java.net.Socket;
+import java.nio.ByteBuffer;
 import java.nio.file.FileSystems;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -21,16 +22,32 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
 import java.util.Vector;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicInteger; 
+import java.util.concurrent.atomic.AtomicLong;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.compress.CompressionCodec;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import com.exascale.compression.CompressedSocket;
 import com.exascale.filesystem.RID;
 import com.exascale.managers.HRDBMSWorker;
+import com.exascale.managers.PlanCacheManager;
+import com.exascale.mapred.ALOWritable;
+import com.exascale.mapred.LoadMapper;
+import com.exascale.mapred.LoadOutputFormat;
+import com.exascale.mapred.LoadReducer;
+import com.exascale.mapred.MyLongWritable;
+import com.exascale.misc.AtomicDouble;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.FastStringTokenizer;
 import com.exascale.misc.MultiHashMap;
 import com.exascale.misc.MyDate;
 import com.exascale.optimizer.MetaData.PartitionMetaData;
@@ -40,7 +57,7 @@ import com.exascale.threads.HRDBMSThread;
 
 public final class LoadOperator implements Operator, Serializable
 {
-	private Operator child;
+	private Operator child; 
 	private final MetaData meta;
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
@@ -51,13 +68,14 @@ public final class LoadOperator implements Operator, Serializable
 	private String schema;
 	private String table;
 	private AtomicInteger num = new AtomicInteger(0);
-	private boolean done = false;
-	private MultiHashMap map = new MultiHashMap<Integer, ArrayList<Object>>();
+	private volatile boolean done = false;
+	private MultiHashMap map = new MultiHashMap<Long, ArrayList<Object>>();
 	private Transaction tx;
 	private boolean replace;
 	private String delimiter;
 	private String glob;
-	private ArrayList<String> types = new ArrayList<String>();
+	private ArrayList<String> types2 = new ArrayList<String>();
+	private HashSet<Integer> touched = new HashSet<Integer>();
 	
 	public void setPlan(Plan plan)
 	{
@@ -247,23 +265,34 @@ public final class LoadOperator implements Operator, Serializable
 			delete.close();
 		}
 		
-		TreeMap<Integer, String> pos2Cols = new MetaData().getPos2ColForTable(schema, table, tx);
-		HashMap<String, String> cols2Types = new MetaData().getCols2TypesForTable(schema, table, tx);
-		for (String col : pos2Cols.values())
+		cols2Pos = new MetaData().getCols2PosForTable(schema, table, tx);
+		pos2Col = MetaData.cols2PosFlip(cols2Pos);
+		cols2Types = new MetaData().getCols2TypesForTable(schema, table, tx);
+	
+		for (String col : pos2Col.values())
 		{
-			types.add(cols2Types.get(col));
+			types2.add(cols2Types.get(col));
 		}
 		
 		ArrayList<String> indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
+		ArrayList<ArrayList<String>> keys = MetaData.getKeys(indexes, tx);
+		ArrayList<ArrayList<String>> types = MetaData.getTypes(indexes, tx);
+		ArrayList<ArrayList<Boolean>> orders = MetaData.getOrders(indexes, tx);
+		
 		HashMap<Integer, Integer> pos2Length = new HashMap<Integer, Integer>();
-		HashMap<String, Integer> cols2Pos = new MetaData().getCols2PosForTable(schema, table, tx);
-		for (Map.Entry entry : new MetaData().getCols2TypesForTable(schema, table, tx).entrySet())
+		for (Map.Entry entry : cols2Types.entrySet())
 		{
 			if (entry.getValue().equals("CHAR"))
 			{
 				int length = MetaData.getLengthForCharCol(schema, table, (String)entry.getKey(), tx);
 				pos2Length.put(cols2Pos.get(entry.getKey()), length);
 			}
+		}
+		
+		if (glob.startsWith("hdfs://"))
+		{
+			doHDFS(schema, table, tx, pos2Col, cols2Types, pos2Length, keys, types, orders, indexes);
+			return;
 		}
 		
 		//figure out what files to read from
@@ -285,9 +314,10 @@ public final class LoadOperator implements Operator, Serializable
 	    });
 	    
 	    ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
+	    PartitionMetaData spmd = new MetaData().getPartMeta(schema, table, tx);
 	    for (Path path : files)
 	    {
-	    	threads.add(new ReadThread(path.toFile(), pos2Length, indexes));
+	    	threads.add(new ReadThread(path.toFile(), pos2Length, indexes, cols2Pos, cols2Types, pos2Col, spmd, keys, types, orders));
 	    }
 	    
 	    for (ReadThread thread : threads)
@@ -324,9 +354,444 @@ public final class LoadOperator implements Operator, Serializable
 		done = true;
 	}
 	
-	private FlushMasterThread flush(ArrayList<String> indexes) throws Exception
+	private void doHDFS(String schema, String table, Transaction tx, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, HashMap<Integer, Integer> pos2Length, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes)
 	{
-		FlushMasterThread master = new FlushMasterThread(indexes);
+		try
+		{
+			//build LoadMetaData
+			MetaData md = new MetaData();
+			PartitionMetaData pmd = md.getPartMeta(schema, table, tx);
+			ArrayList<Object> rs = PlanCacheManager.getCoordNodes().setParms().execute(tx);
+			ArrayList<Integer> coordNodes = new ArrayList<Integer>();
+			for (Object r2 : rs)
+			{
+				if (!(r2 instanceof DataEndMarker))
+				{
+					coordNodes.add((Integer)((ArrayList<Object>)r2).get(0));
+				}
+			}
+			ArrayList<Object> rows = PlanCacheManager.getWorkerNodes().setParms().execute(tx);
+			ArrayList<Integer> workerNodes = new ArrayList<Integer>();
+			for (Object o : rows)
+			{
+				if (o instanceof ArrayList)
+				{
+					workerNodes.add((Integer)((ArrayList)o).get(0));
+				}
+			}
+			LoadMetaData ldmd = new LoadMetaData(workerNodes.size(), delimiter, pos2Col, cols2Types, pos2Length, pmd, workerNodes, coordNodes, tx.number(), keys, types, orders, indexes);
+			String key = schema + "." + table;
+			//send LoadMetaData everywhere
+			ArrayList<Object> tree = makeTree(workerNodes);
+			if (!sendLDMD(tree, key, ldmd, tx))
+			{
+				HRDBMSWorker.logger.debug("Load MetaData returned an error");
+				HRDBMSWorker.logger.debug("Sending DELLDMD");
+				tree = makeTree(workerNodes);
+				sendRemoveLDMD(tree, key, tx);
+				num.set(Integer.MIN_VALUE);
+				done = true;
+				return;
+			}
+			//build and start hadoop job
+			try
+			{
+				HRDBMSWorker.logger.debug("Load MetaData was successful");
+				Configuration conf = new Configuration();
+				conf.set("fs.hdfs.impl", org.apache.hadoop.hdfs.DistributedFileSystem.class.getName());
+				conf.set("fs.file.impl", org.apache.hadoop.fs.LocalFileSystem.class.getName());
+				conf.addResource(new org.apache.hadoop.fs.Path("/usr/local/hadoop-2.5.1/etc/hadoop/core-site.xml"));
+				conf.addResource(new org.apache.hadoop.fs.Path("/usr/local/hadoop-2.5.1/etc/hadoop/hdfs-site.xml"));
+				conf.addResource(new org.apache.hadoop.fs.Path("/usr/local/hadoop-2.5.1/etc/hadoop/yarn-site.xml"));
+				conf.set("hrdbms.port", HRDBMSWorker.getHParms().getProperty("port_number"));
+				String hrdbmsHome = System.getProperty("user.dir");
+				if (!hrdbmsHome.endsWith("/"))
+				{
+					hrdbmsHome += "/";
+				}
+				conf.set("hrdbms.home", hrdbmsHome);
+				conf.set("mapreduce.framework.name", "yarn");
+				conf.set("mapreduce.map.maxattempts", "1");
+				conf.set("mapreduce.reduce.maxattempts", "1");
+				conf.set("mapreduce.task.io.sort.mb", "512");
+				conf.set("mapreduce.task.io.sort.factor", "100");
+				//conf.set("mapreduce.reduce.shuffle.parallelcopies", "50");
+				conf.set("mapreduce.map.memory.mb", "1536");
+				conf.set("mapreduce.map.java.opts", "-Xmx1024M");
+				conf.set("mapreduce.reduce.memory.mb", "1536");
+				conf.set("mapreduce.reduce.java.opts", "-Xmx1280M");
+				conf.set("hrdbms.num.devices", "" + numDevicesPerNode());
+				Job job = new Job(conf);
+				job.setJarByClass(LoadMapper.class);
+				job.setJobName("Load " + schema + "." + table);
+				job.setMapperClass(LoadMapper.class);
+				job.setReducerClass(LoadReducer.class);
+				job.setOutputKeyClass(MyLongWritable.class);
+				job.setOutputValueClass(ALOWritable.class);
+				job.setMapOutputKeyClass(MyLongWritable.class);
+				job.setMapOutputValueClass(ALOWritable.class);
+				job.setNumReduceTasks(workerNodes.size() * numDevicesPerNode());
+				HRDBMSWorker.logger.debug("Asking for " + workerNodes.size() * numDevicesPerNode() + " reducers");
+				job.setOutputFormatClass(LoadOutputFormat.class);
+				job.setReduceSpeculativeExecution(false);
+				job.setMapSpeculativeExecution(false);
+				String glob2 = glob.substring(6);
+				FileInputFormat.addInputPath(job, new org.apache.hadoop.fs.Path(glob2));
+				HRDBMSWorker.logger.debug("Submitting MR job");
+				boolean allOK = job.waitForCompletion(true);
+				HRDBMSWorker.logger.debug("Sending DELLDMD");
+				tree = makeTree(workerNodes);
+				sendRemoveLDMD(tree, key, tx);
+				if (!allOK)
+				{
+					HRDBMSWorker.logger.debug("MR returned an error");
+					num.set(Integer.MIN_VALUE);
+				}
+				else
+				{
+					HRDBMSWorker.logger.debug("MR was successful");
+					num.set((int)job.getCounters().findCounter("org.apache.hadoop.mapred.Task$Counter", "MAP_INPUT_RECORDS").getValue());
+					if (num.get() == Integer.MIN_VALUE)
+					{
+						num.getAndIncrement();
+					}
+				}
+		
+				done = true;
+			}
+			catch(Throwable f)
+			{
+				HRDBMSWorker.logger.debug("An exception occurred while building and submitting the MR job", f);
+				tree = makeTree(workerNodes);
+				sendRemoveLDMD(tree, key, tx);
+				num.set(Integer.MIN_VALUE);
+				done = true;
+				return;
+			}
+		}
+		catch(Exception e)
+		{
+			HRDBMSWorker.logger.debug("An exception occurred prior to building the MR job", e);
+			num.set(Integer.MIN_VALUE);
+			done = true;
+		}
+	}
+	
+	private boolean sendLDMD(ArrayList<Object> tree, String key, LoadMetaData ldmd, Transaction tx)
+	{
+		boolean allOK = true;
+		ArrayList<SendLDMDThread> threads = new ArrayList<SendLDMDThread>();
+		for (Object o : tree)
+		{
+			if (o instanceof Integer)
+			{
+				ArrayList<Object> list = new ArrayList<Object>(1);
+				list.add(o);
+				SendLDMDThread thread = new SendLDMDThread(list, key, ldmd, tx);
+				threads.add(thread);
+			}
+			else
+			{
+				SendLDMDThread thread = new SendLDMDThread((ArrayList<Object>)o, key, ldmd, tx);
+				threads.add(thread);
+			}
+		}
+		
+		for (SendLDMDThread thread : threads)
+		{
+			thread.start();
+		}
+		
+		for (SendLDMDThread thread : threads)
+		{
+			while (true)
+			{
+				try
+				{
+					thread.join();
+					break;
+				}
+				catch(InterruptedException e)
+				{}
+			}
+			boolean ok = thread.getOK();
+			if (!ok)
+			{
+				allOK = false;
+			}
+		}
+		
+		return allOK;
+	}
+	
+	private static class SendLDMDThread extends HRDBMSThread
+	{
+		private ArrayList<Object> tree;
+		private String key;
+		private LoadMetaData ldmd;
+		private boolean ok;
+		private Transaction tx;
+		
+		public SendLDMDThread(ArrayList<Object> tree, String key, LoadMetaData ldmd, Transaction tx)
+		{
+			this.tree = tree;
+			this.key = key;
+			this.ldmd = ldmd;
+			this.tx = tx;
+		}
+		
+		public void run()
+		{
+			ok = doSendLDMD(tree, key, ldmd, tx);
+		}
+		
+		public boolean getOK()
+		{
+			return ok;
+		}
+	}
+	
+	private static boolean doSendLDMD(ArrayList<Object> tree, String key, LoadMetaData ldmd, Transaction tx)
+	{
+		Object obj = tree.get(0);
+		while (obj instanceof ArrayList)
+		{
+			obj = ((ArrayList)obj).get(0);
+		}
+		
+		Socket sock = null;
+		try
+		{
+			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
+			sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			OutputStream out = sock.getOutputStream();
+			byte[] outMsg = "SETLDMD         ".getBytes("UTF-8");
+			outMsg[8] = 0;
+			outMsg[9] = 0;
+			outMsg[10] = 0;
+			outMsg[11] = 0;
+			outMsg[12] = 0;
+			outMsg[13] = 0;
+			outMsg[14] = 0;
+			outMsg[15] = 0;
+			out.write(outMsg);
+			byte[] data = key.getBytes("UTF-8");
+			byte[] length = intToBytes(data.length);
+			out.write(length);
+			out.write(data);
+			ObjectOutputStream objOut = new ObjectOutputStream(out);
+			objOut.writeObject(convertToHosts(tree, tx));
+			objOut.writeObject(ldmd);
+			objOut.flush();
+			out.flush();
+			getConfirmation(sock);
+			objOut.close();
+			out.close();
+			sock.close();
+			return true;
+		}
+		catch(Exception e)
+		{
+			try
+			{
+				sock.close();
+			}
+			catch(Exception f)
+			{}
+			return false;
+		}
+	}
+	
+	private boolean sendRemoveLDMD(ArrayList<Object> tree, String key, Transaction tx)
+	{
+		boolean allOK = true;
+		ArrayList<SendRemoveLDMDThread> threads = new ArrayList<SendRemoveLDMDThread>();
+		for (Object o : tree)
+		{
+			if (o instanceof Integer)
+			{
+				ArrayList<Object> list = new ArrayList<Object>(1);
+				list.add(o);
+				SendRemoveLDMDThread thread = new SendRemoveLDMDThread(list, key, tx);
+				threads.add(thread);
+			}
+			else
+			{
+				SendRemoveLDMDThread thread = new SendRemoveLDMDThread((ArrayList<Object>)o, key, tx);
+				threads.add(thread);
+			}
+		}
+		
+		for (SendRemoveLDMDThread thread : threads)
+		{
+			thread.start();
+		}
+		
+		for (SendRemoveLDMDThread thread : threads)
+		{
+			while (true)
+			{
+				try
+				{
+					thread.join();
+					break;
+				}
+				catch(InterruptedException e)
+				{}
+			}
+			boolean ok = thread.getOK();
+			if (!ok)
+			{
+				allOK = false;
+			}
+		}
+		
+		return allOK;
+	}
+	
+	private static class SendRemoveLDMDThread extends HRDBMSThread
+	{
+		private ArrayList<Object> tree;
+		private String key;
+		private boolean ok;
+		private Transaction tx;
+		
+		public SendRemoveLDMDThread(ArrayList<Object> tree, String key, Transaction tx)
+		{
+			this.tree = tree;
+			this.key = key;
+			this.tx = tx;
+		}
+		
+		public void run()
+		{
+			ok = doSendRemoveLDMD(tree, key, tx);
+		}
+		
+		public boolean getOK()
+		{
+			return ok;
+		}
+	}
+	
+	private static boolean doSendRemoveLDMD(ArrayList<Object> tree, String key, Transaction tx)
+	{
+		Object obj = tree.get(0);
+		while (obj instanceof ArrayList)
+		{
+			obj = ((ArrayList)obj).get(0);
+		}
+		
+		Socket sock = null;
+		try
+		{
+			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
+			sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			OutputStream out = sock.getOutputStream();
+			byte[] outMsg = "DELLDMD         ".getBytes("UTF-8");
+			outMsg[8] = 0;
+			outMsg[9] = 0;
+			outMsg[10] = 0;
+			outMsg[11] = 0;
+			outMsg[12] = 0;
+			outMsg[13] = 0;
+			outMsg[14] = 0;
+			outMsg[15] = 0;
+			out.write(outMsg);
+			byte[] data = key.getBytes("UTF-8");
+			byte[] length = intToBytes(data.length);
+			out.write(length);
+			out.write(data);
+			ObjectOutputStream objOut = new ObjectOutputStream(out);
+			objOut.writeObject(convertToHosts(tree, tx));
+			objOut.flush();
+			out.flush();
+			getConfirmation(sock);
+			objOut.close();
+			out.close();
+			sock.close();
+			return true;
+		}
+		catch(Exception e)
+		{
+			try
+			{
+				sock.close();
+			}
+			catch(Exception f)
+			{}
+			return false;
+		}
+	}
+	
+	private static ArrayList<Object> convertToHosts(ArrayList<Object> tree, Transaction tx) throws Exception
+	{
+		ArrayList<Object> retval = new ArrayList<Object>();
+		int i = 0;
+		while (i < tree.size())
+		{
+			Object obj = tree.get(i);
+			if (obj instanceof Integer)
+			{
+				retval.add(new MetaData().getHostNameForNode((Integer)obj, tx));
+			}
+			else
+			{
+				retval.add(convertToHosts((ArrayList<Object>)obj, tx));
+			}
+			
+			i++;
+		}
+		
+		return retval;
+	}
+	
+	private static void getConfirmation(Socket sock) throws Exception
+	{
+		InputStream in = sock.getInputStream();
+		byte[] inMsg = new byte[2];
+		
+		int count = 0;
+		while (count < 2)
+		{
+			try
+			{
+				int temp = in.read(inMsg, count, 2 - count);
+				if (temp == -1)
+				{
+					in.close();
+					throw new Exception();
+				}
+				else
+				{
+					count += temp;
+				}
+			}
+			catch (final Exception e)
+			{
+				in.close();
+				throw new Exception();
+			}
+		}
+		
+		String inStr = new String(inMsg, "UTF-8");
+		if (!inStr.equals("OK"))
+		{
+			in.close();
+			throw new Exception();
+		}
+		
+		try
+		{
+			in.close();
+		}
+		catch(Exception e)
+		{}
+	}
+	
+	private FlushMasterThread flush(ArrayList<String> indexes, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders) throws Exception
+	{
+		FlushMasterThread master = new FlushMasterThread(indexes, spmd, keys, types, orders);
 		master.start();
 		return master;
 	}
@@ -335,10 +800,18 @@ public final class LoadOperator implements Operator, Serializable
 	{
 		private ArrayList<String> indexes;
 		private boolean ok;
+		private PartitionMetaData spmd;
+		private ArrayList<ArrayList<String>> keys;
+		private ArrayList<ArrayList<String>> types;
+		private ArrayList<ArrayList<Boolean>> orders;
 		
-		public FlushMasterThread(ArrayList<String> indexes)
+		public FlushMasterThread(ArrayList<String> indexes, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders)
 		{
 			this.indexes = indexes;
+			this.spmd = spmd;
+			this.keys = keys;
+			this.types = types;
+			this.orders = orders;
 		}
 		
 		public boolean getOK()
@@ -354,9 +827,9 @@ public final class LoadOperator implements Operator, Serializable
 			{
 				for (Object o : map.getKeySet())
 				{
-					int node = (Integer)o;
-					Vector<ArrayList<Object>> list = map.get(node);
-					threads.add(new FlushThread(list, indexes, node));
+					long key = (Long)o;
+					Set<ArrayList<Object>> list = map.get(key);
+					threads.add(new FlushThread(list, indexes, key, cols2Pos, spmd, keys, types, orders));
 				}
 			
 				map.clear();
@@ -395,12 +868,26 @@ public final class LoadOperator implements Operator, Serializable
 		private ArrayList<String> indexes;
 		private boolean ok = true;
 		private int num = 0;
+		private HashMap<String, Integer> cols2Pos;
+		private HashMap<String, String> cols2Types;
+		private TreeMap<Integer, String> pos2Col;
+		PartitionMetaData spmd;
+		private ArrayList<ArrayList<String>> keys;
+		private ArrayList<ArrayList<String>> types;
+		private ArrayList<ArrayList<Boolean>> orders;
 		
-		public ReadThread(File file, HashMap<Integer, Integer> pos2Length, ArrayList<String> indexes)
+		public ReadThread(File file, HashMap<Integer, Integer> pos2Length, ArrayList<String> indexes, HashMap<String, Integer> cols2Pos, HashMap<String, String> cols2Types, TreeMap<Integer, String> pos2Col, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders)
 		{
 			this.file = file;
 			this.pos2Length = pos2Length;
 			this.indexes = indexes;
+			this.cols2Pos = cols2Pos;
+			this.cols2Types = cols2Types;
+			this.pos2Col = pos2Col;
+			this.spmd = spmd;
+			this.keys = keys;
+			this.types = types;
+			this.orders = orders;
 		}
 		
 		public boolean getOK()
@@ -418,12 +905,10 @@ public final class LoadOperator implements Operator, Serializable
 			FlushMasterThread master = null;
 			try
 			{
-				TreeMap<Integer, String> pos2Col = MetaData.getPos2ColForTable(schema, table, tx);
-				HashMap<String, String> cols2Types = new MetaData().getCols2TypesForTable(schema, table, tx);
 				BufferedReader in = new BufferedReader(new FileReader(file));
 				Object o = next(in);
 				PartitionMetaData pmeta = new MetaData().new PartitionMetaData(schema, table, tx);
-				HashMap<String, Integer> cols2Pos = MetaData.getCols2PosForTable(schema, table, tx);
+				int numNodes = MetaData.getNumNodes(tx);
 				while (!(o instanceof DataEndMarker))
 				{
 					ArrayList<Object> row = (ArrayList<Object>)o;
@@ -436,11 +921,14 @@ public final class LoadOperator implements Operator, Serializable
 							return;
 						}
 					}
-					ArrayList<Integer> nodes = MetaData.determineNode(schema, table, row, tx, pmeta, cols2Pos);
+					ArrayList<Integer> nodes = MetaData.determineNode(schema, table, row, tx, pmeta, cols2Pos, numNodes);
+					int device = MetaData.determineDevice(row, pmeta, cols2Pos);
+					touched.addAll(nodes);
 					for (Integer node : nodes)
 					{
 						plan.addNode(node);
-						map.multiPut(node, row);
+						long key = (((long)node) << 32) + device;
+						map.multiPut(key, row);
 					}
 					if (map.size() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes")))
 					{
@@ -452,7 +940,7 @@ public final class LoadOperator implements Operator, Serializable
 								throw new Exception("Error flushing inserts");
 							}
 						}
-						master = flush(indexes);
+						master = flush(indexes, spmd, keys, types, orders);
 					}
 					else if (map.totalSize() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_batch")))
 					{
@@ -464,7 +952,7 @@ public final class LoadOperator implements Operator, Serializable
 								throw new Exception("Error flushing inserts");
 							}
 						}
-						master = flush(indexes);
+						master = flush(indexes, spmd, keys, types, orders);
 					}
 				
 					o = next(in);
@@ -480,7 +968,7 @@ public final class LoadOperator implements Operator, Serializable
 							throw new Exception("Error flushing inserts");
 						}
 					}
-					master = flush(indexes);
+					master = flush(indexes, spmd, keys, types, orders);
 					master.join();
 					if (!master.getOK())
 					{
@@ -509,7 +997,7 @@ public final class LoadOperator implements Operator, Serializable
 			while (tokens.hasMoreTokens())
 			{
 				String token = tokens.nextToken();
-				String type = types.get(i);
+				String type = types2.get(i);
 				i++;
 				
 				if (type.equals("CHAR"))
@@ -540,16 +1028,26 @@ public final class LoadOperator implements Operator, Serializable
 	
 	private class FlushThread extends HRDBMSThread
 	{
-		private Vector<ArrayList<Object>> list;
+		private Set<ArrayList<Object>> list;
 		private ArrayList<String> indexes;
 		private boolean ok = true;
-		private int node;
+		private long key;
+		private HashMap<String, Integer> cols2Pos;
+		private PartitionMetaData spmd;
+		private ArrayList<ArrayList<String>> keys;
+		private ArrayList<ArrayList<String>> types;
+		private ArrayList<ArrayList<Boolean>> orders;
 		
-		public FlushThread(Vector<ArrayList<Object>> list, ArrayList<String> indexes, int node)
+		public FlushThread(Set<ArrayList<Object>> list, ArrayList<String> indexes, long key, HashMap<String, Integer> cols2Pos, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders)
 		{
 			this.list = list;
 			this.indexes = indexes;
-			this.node = node;
+			this.key = key;
+			this.cols2Pos = cols2Pos;
+			this.spmd = spmd;
+			this.keys = keys;
+			this.types = types;
+			this.orders = orders;
 		}
 		
 		public boolean getOK()
@@ -563,10 +1061,12 @@ public final class LoadOperator implements Operator, Serializable
 			Socket sock = null;
 			try
 			{
+				int node = (int)(key >> 32);
+				int device = (int)(key & 0x00000000FFFFFFFF);
 				String hostname = new MetaData().getHostNameForNode(node, tx);
 				sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				OutputStream out = sock.getOutputStream();
-				byte[] outMsg = "INSERT          ".getBytes("UTF-8");
+				byte[] outMsg = "LOAD            ".getBytes("UTF-8");
 				outMsg[8] = 0;
 				outMsg[9] = 0;
 				outMsg[10] = 0;
@@ -577,16 +1077,17 @@ public final class LoadOperator implements Operator, Serializable
 				outMsg[15] = 0;
 				out.write(outMsg);
 				out.write(longToBytes(tx.number()));
+				out.write(intToBytes(device));
 				out.write(stringToBytes(schema));
 				out.write(stringToBytes(table));
+				out.write(rsToBytes(new ArrayList(list)));
 				ObjectOutputStream objOut = new ObjectOutputStream(out);
 				objOut.writeObject(indexes);
-				objOut.writeObject(list);
-				objOut.writeObject(MetaData.getKeys(indexes, tx));
-				objOut.writeObject(MetaData.getTypes(indexes, tx));
-				objOut.writeObject(MetaData.getOrders(indexes, tx));
-				objOut.writeObject(new MetaData().getCols2PosForTable(schema, table, tx));
-				objOut.writeObject(new MetaData().getPartMeta(schema, table, tx));
+				objOut.writeObject(keys);
+				objOut.writeObject(types);
+				objOut.writeObject(orders);
+				objOut.writeObject(cols2Pos);
+				objOut.writeObject(spmd);
 				objOut.flush();
 				out.flush();
 				getConfirmation(sock);
@@ -745,5 +1246,209 @@ public final class LoadOperator implements Operator, Serializable
 			
 			i++;
 		}
+	}
+	
+	private static ArrayList<Object> makeTree(ArrayList<Integer> nodes)
+	{
+		int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
+		if (nodes.size() <= max)
+		{
+			ArrayList<Object> retval = new ArrayList<Object>(nodes);
+			return retval;
+		}
+		
+		ArrayList<Object> retval = new ArrayList<Object>();
+		int i = 0;
+		while (i < max)
+		{
+			retval.add(nodes.get(i));
+			i++;
+		}
+		
+		int remaining = nodes.size() - i;
+		int perNode = remaining / max + 1;
+		
+		int j = 0;
+		while (i < nodes.size())
+		{
+			int first = (Integer)retval.get(j);
+			retval.remove(j);
+			ArrayList<Integer> list = new ArrayList<Integer>(perNode+1);
+			list.add(first);
+			int k = 0;
+			while (k < perNode && i < nodes.size())
+			{
+				list.add(nodes.get(i));
+				i++;
+				k++;
+			}
+			
+			retval.add(j, list);
+			j++;
+		}
+		
+		if (((ArrayList<Integer>)retval.get(0)).size() <= max)
+		{
+			return retval;
+		}
+		
+		//more than 2 tier
+		i = 0;
+		while (i < retval.size())
+		{
+			ArrayList<Integer> list = (ArrayList<Integer>)retval.remove(i);
+			retval.add(i, makeTree(list));
+			i++;
+		}
+		
+		return retval;
+	}
+	
+	private static int numDevicesPerNode()
+	{
+		String dirs = HRDBMSWorker.getHParms().getProperty("data_directories");
+		FastStringTokenizer tokens = new FastStringTokenizer(dirs, ",", false);
+		return tokens.allTokens().length;
+	}
+	
+	private static final byte[] rsToBytes(ArrayList<ArrayList<Object>> rows) throws Exception
+	{
+		final ArrayList<byte[]> results = new ArrayList<byte[]>(rows.size());
+		for (ArrayList<Object> val : rows)
+		{
+			int size = val.size() + 8;
+			final byte[] header = new byte[size];
+			int i = 8;
+			for (final Object o : val)
+			{
+				if (o instanceof Long)
+				{
+					header[i] = (byte)0;
+					size += 8;
+				}
+				else if (o instanceof Integer)
+				{
+					header[i] = (byte)1;
+					size += 4;
+				}
+				else if (o instanceof Double)
+				{
+					header[i] = (byte)2;
+					size += 8;
+				}
+				else if (o instanceof MyDate)
+				{
+					header[i] = (byte)3;
+					size += 8;
+				}
+				else if (o instanceof String)
+				{
+					header[i] = (byte)4;
+					size += (4 + ((String)o).length());
+				}
+				else if (o instanceof AtomicLong)
+				{
+					header[i] = (byte)6;
+					size += 8;
+				}
+				else if (o instanceof AtomicDouble)
+				{
+					header[i] = (byte)7;
+					size += 8;
+				}
+				else if (o instanceof ArrayList)
+				{
+					if (((ArrayList)o).size() != 0)
+					{
+						Exception e = new Exception("Non-zero size ArrayList in toBytes()");
+						throw e;
+					}
+					header[i] = (byte)8;
+				}
+				else
+				{
+					throw new Exception("Unknown type " + o.getClass() + " in toBytes()");
+				}
+
+				i++;
+			}
+
+			final byte[] retval = new byte[size];
+			// System.out.println("In toBytes(), row has " + val.size() +
+			// " columns, object occupies " + size + " bytes");
+			System.arraycopy(header, 0, retval, 0, header.length);
+			i = 8;
+			final ByteBuffer retvalBB = ByteBuffer.wrap(retval);
+			retvalBB.putInt(size - 4);
+			retvalBB.putInt(val.size());
+			retvalBB.position(header.length);
+			for (final Object o : val)
+			{
+				if (retval[i] == 0)
+				{
+					retvalBB.putLong((Long)o);
+				}
+				else if (retval[i] == 1)
+				{
+					retvalBB.putInt((Integer)o);
+				}
+				else if (retval[i] == 2)
+				{
+					retvalBB.putDouble((Double)o);
+				}
+				else if (retval[i] == 3)
+				{
+					retvalBB.putLong(((MyDate)o).getTime());
+				}
+				else if (retval[i] == 4)
+				{
+					byte[] temp = null;
+					try
+					{
+						temp = ((String)o).getBytes("UTF-8");
+					}
+					catch (final Exception e)
+					{
+						HRDBMSWorker.logger.error("", e);
+						throw e;
+					}
+					retvalBB.putInt(temp.length);
+					retvalBB.put(temp);
+				}
+				else if (retval[i] == 6)
+				{
+					retvalBB.putLong(((AtomicLong)o).get());
+				}
+				else if (retval[i] == 7)
+				{
+					retvalBB.putDouble(((AtomicDouble)o).get());
+				}
+				else if (retval[i] == 8)
+				{
+				}
+
+				i++;
+			}
+
+			results.add(retval);
+		}
+
+		int count = 0;
+		for (final byte[] ba : results)
+		{
+			count += ba.length;
+		}
+		final byte[] retval = new byte[count + 4];
+		ByteBuffer temp = ByteBuffer.allocate(4);
+		temp.asIntBuffer().put(results.size());
+		System.arraycopy(temp.array(), 0, retval, 0, 4);
+		int retvalPos = 4;
+		for (final byte[] ba : results)
+		{
+			System.arraycopy(ba, 0, retval, retvalPos, ba.length);
+			retvalPos += ba.length;
+		}
+
+		return retval;
 	}
 }

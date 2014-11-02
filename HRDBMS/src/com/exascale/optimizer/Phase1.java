@@ -55,7 +55,6 @@ public final class Phase1
 
 	public void optimize() throws Exception
 	{
-		System.currentTimeMillis();
 		reorderProducts(root);
 		// Driver.printTree(0, root); //DEBUG
 		do
@@ -231,41 +230,6 @@ public final class Phase1
 				{
 					minLikelihood = likelihood;
 					minSelect = select;
-				}
-				else if (likelihood == minLikelihood)
-				{
-					final ArrayList<Filter> filters = select.getFilter();
-					if (filters.size() == 1)
-					{
-						if (filters.get(0).leftIsColumn())
-						{
-							String t = root.getMeta().getTableForCol(filters.get(0).leftColumn(), select);
-							String schema = t.substring(0, t.indexOf('.'));
-							t = t.substring(t.indexOf('.') + 1);
-							if (t != null)
-							{
-								final PartitionMetaData pmeta = root.getMeta().getPartMeta(schema, t, tx);
-								if (pmeta.noNodeGroupSet() && pmeta.nodeIsHash() && pmeta.getNodeHash().contains(filters.get(0).leftColumn()))
-								{
-									minSelect = select;
-								}
-							}
-						}
-						else if (filters.get(0).rightIsColumn())
-						{
-							String t = root.getMeta().getTableForCol(filters.get(0).rightColumn(), select);
-							String schema = t.substring(0, t.indexOf('.'));
-							t = t.substring(t.indexOf('.') + 1);
-							if (t != null)
-							{
-								final PartitionMetaData pmeta = root.getMeta().getPartMeta(schema, t, tx);
-								if (pmeta.noNodeGroupSet() && pmeta.nodeIsHash() && pmeta.getNodeHash().contains(filters.get(0).rightColumn()))
-								{
-									minSelect = select;
-								}
-							}
-						}
-					}
 				}
 			}
 

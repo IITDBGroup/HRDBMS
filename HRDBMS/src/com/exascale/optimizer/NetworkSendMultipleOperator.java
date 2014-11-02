@@ -178,6 +178,7 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 		}
 		catch(Exception e)
 		{
+			HRDBMSWorker.logger.debug("", e);
 			byte[] obj = null;
 			try
 			{

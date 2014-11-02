@@ -12,17 +12,23 @@ import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
 import java.util.Vector;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedSocket;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
 import com.exascale.filesystem.RID;
+import com.exascale.logging.LogIterator;
 import com.exascale.logging.LogRec;
 import com.exascale.managers.FileManager;
 import com.exascale.managers.HRDBMSWorker;
@@ -36,6 +42,7 @@ import com.exascale.misc.HParms;
 import com.exascale.misc.MultiHashMap;
 import com.exascale.misc.MyDate;
 import com.exascale.optimizer.Index;
+import com.exascale.optimizer.LoadMetaData;
 import com.exascale.optimizer.MetaData;
 import com.exascale.optimizer.MetaData.PartitionMetaData;
 import com.exascale.optimizer.NetworkSendOperator;
@@ -57,6 +64,7 @@ public class ConnectionWorker extends HRDBMSThread
 	private boolean clientConnection = false;
 	private Transaction tx = null;
 	private XAWorker worker;
+	private static ConcurrentHashMap<String, LoadMetaData> ldmds = new ConcurrentHashMap<String, LoadMetaData>();
 
 	static
 	{
@@ -91,12 +99,48 @@ public class ConnectionWorker extends HRDBMSThread
 			while (true)
 			{
 				final byte[] cmd = new byte[8];
-				final InputStream in = sock.getInputStream();
-				final OutputStream out = sock.getOutputStream();
-				int num = in.read(cmd);
+				InputStream in = null;
+				try
+				{
+					in = sock.getInputStream();
+				}
+				catch(java.net.SocketException e)
+				{}
+				
+				OutputStream out = null;
+				int num = 0;
+				try
+				{
+					out = sock.getOutputStream();
+					num = in.read(cmd);
+				}
+				catch(Exception e)
+				{
+					if (worker != null)
+					{
+						ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+						cmd2.add("CLOSE");
+						while(true)
+						{
+							try
+							{
+								worker.in.put(cmd2);
+								break;
+							}
+							catch(Exception f)
+							{}
+						}
+					}
+					sock.close();
+					this.terminate();
+					return;
+				}
+				
 				if (num != 8 && num != -1)
 				{
 					HRDBMSWorker.logger.error("Connection worker received less than 8 bytes when reading a command.  Terminating!");
+					HRDBMSWorker.logger.error("Number of bytes received: " + num);
+					HRDBMSWorker.logger.error("Command = " + new String(cmd, "UTF-8"));
 					returnException("BadCommandException");
 					sock.close();
 					if (worker != null)
@@ -143,8 +187,7 @@ public class ConnectionWorker extends HRDBMSThread
 					this.terminate();
 					return;
 				}
-				HRDBMSWorker.logger.debug("Read " + num + " bytes");
-				HRDBMSWorker.logger.debug("From field received by connection worker.");
+				
 				num = in.read(toBytes);
 				if (num != 4)
 				{
@@ -160,8 +203,7 @@ public class ConnectionWorker extends HRDBMSThread
 					this.terminate();
 					return;
 				}
-				HRDBMSWorker.logger.debug("Read " + num + " bytes");
-				HRDBMSWorker.logger.debug("To field received by connection worker.");
+				
 				final int from = bytesToInt(fromBytes);
 				final int to = bytesToInt(toBytes);
 
@@ -276,6 +318,14 @@ public class ConnectionWorker extends HRDBMSThread
 					}
 					doCommit();
 				}
+				else if (command.equals("CHECKPNT"))
+				{
+					while (!XAManager.rP2.get())
+					{
+						Thread.sleep(1000);
+					}
+					checkpoint();
+				}
 				else if (command.equals("ROLLBACK"))
 				{
 					while (!XAManager.rP2.get())
@@ -388,6 +438,14 @@ public class ConnectionWorker extends HRDBMSThread
 					}
 					insert();
 				}
+				else if (command.equals("LOAD    "))
+				{
+					while (!XAManager.rP2.get())
+					{
+						Thread.sleep(1000);
+					}
+					load();
+				}
 				else if (command.equals("EXECUTEU"))
 				{
 					while (!XAManager.rP2.get())
@@ -420,6 +478,38 @@ public class ConnectionWorker extends HRDBMSThread
 					}
 					popIndex();
 				}
+				else if (command.equals("GETLDMD "))
+				{
+					while (!XAManager.rP2.get())
+					{
+						Thread.sleep(1000);
+					}
+					getLoadMetaData();
+				}
+				else if (command.equals("HADOOPLD"))
+				{
+					while (!XAManager.rP2.get())
+					{
+						Thread.sleep(1000);
+					}
+					hadoopLoad();
+				}
+				else if (command.equals("SETLDMD "))
+				{
+					while (!XAManager.rP2.get())
+					{
+						Thread.sleep(1000);
+					}
+					setLoadMetaData();
+				}
+				else if (command.equals("DELLDMD "))
+				{
+					while (!XAManager.rP2.get())
+					{
+						Thread.sleep(1000);
+					}
+					delLoadMetaData();
+				}
 				else
 				{
 					HRDBMSWorker.logger.error("Uknown command received by ConnectionWorker: " + command);
@@ -436,6 +526,12 @@ public class ConnectionWorker extends HRDBMSThread
 			}
 			catch (final Exception f)
 			{
+				try
+				{
+					sock.close();
+				}
+				catch(Exception g)
+				{}
 			}
 			HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
 			if (worker != null)
@@ -1198,6 +1294,22 @@ public class ConnectionWorker extends HRDBMSThread
 		
 		try
 		{
+			if (worker != null)
+			{
+				ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+				cmd2.add("CLOSE");
+				while (true)
+				{
+					try
+					{
+						worker.in.put(cmd2);
+						break;
+					}
+					catch(Exception g)
+					{}
+				}
+			}
+			
 			HRDBMSWorker.logger.debug("About to create XAWorker");
 			worker = XAManager.executeQuery(sql, tx, this);
 			HRDBMSWorker.logger.debug("XAWorker created");
@@ -1347,6 +1459,7 @@ public class ConnectionWorker extends HRDBMSThread
 					try
 					{
 						worker.in.put(cmd2);
+						worker = null;
 						break;
 					}
 					catch(Exception g)
@@ -1373,6 +1486,7 @@ public class ConnectionWorker extends HRDBMSThread
 				try
 				{
 					worker.in.put(cmd2);
+					worker = null;
 					break;
 				}
 				catch(Exception g)
@@ -1395,6 +1509,7 @@ public class ConnectionWorker extends HRDBMSThread
 			try
 			{
 				worker.in.put(al);
+				worker = null;
 				break;
 			}
 			catch(InterruptedException e)
@@ -2467,6 +2582,76 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 	}
 	
+	private void checkpoint()
+	{
+		ArrayList<Object> tree = null;
+		try
+		{
+			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
+			tree = (ArrayList<Object>)objIn.readObject();
+		}
+		catch(Exception e)
+		{
+			sendNo();
+			return;
+		}
+		
+		HRDBMSWorker.checkpoint.doCheckpoint();
+		
+		Object obj = tree.get(0);
+		while (obj instanceof ArrayList)
+		{
+			obj = ((ArrayList)obj).get(0);
+		}
+		
+		removeFromTree((String)obj, tree, null); //also delete parents if now empty
+		
+		ArrayList<SendCheckpointThread> threads = new ArrayList<SendCheckpointThread>();
+		for (Object o : tree)
+		{
+			threads.add(new SendCheckpointThread(o));
+		}
+		
+		for (SendCheckpointThread thread : threads)
+		{
+			thread.start();
+		}
+		
+		boolean allOK = true;
+		for (SendCheckpointThread thread : threads)
+		{
+			while (true)
+			{
+				try
+				{
+					thread.join();
+					break;
+				}
+				catch(InterruptedException e)
+				{}
+			}
+			if (!thread.sendOK())
+			{
+				allOK = false;
+			}
+		}
+		
+		if (allOK)
+		{
+			sendOK();
+		}
+		else
+		{
+			sendNo();
+			try
+			{
+				sock.close();
+			}
+			catch(Exception f)
+			{}
+		}
+	}
+	
 	private static class SendPrepareThread extends HRDBMSThread
 	{
 		private Object o;
@@ -2573,6 +2758,100 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 	}
 	
+	private static class SendCheckpointThread extends HRDBMSThread
+	{
+		private Object o;
+		private boolean sendOK;
+		
+		public SendCheckpointThread(Object o)
+		{
+			this.o = o;
+		}
+		
+		public boolean sendOK()
+		{
+			return sendOK;
+		}
+		
+		public void run()
+		{
+			if (o instanceof String)
+			{
+				Socket sock = null;
+				try
+				{
+					sock = new CompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					OutputStream out = sock.getOutputStream();
+					byte[] outMsg = "CHECKPNT        ".getBytes("UTF-8");
+					outMsg[8] = 0;
+					outMsg[9] = 0;
+					outMsg[10] = 0;
+					outMsg[11] = 0;
+					outMsg[12] = 0;
+					outMsg[13] = 0;
+					outMsg[14] = 0;
+					outMsg[15] = 0;
+					out.write(outMsg);
+					ObjectOutputStream objOut = new ObjectOutputStream(out);
+					ArrayList<Object> alo = new ArrayList<Object>(1);
+					alo.add(o);
+					objOut.writeObject(alo);
+					objOut.flush();
+					out.flush();
+					getConfirmation(sock);
+					objOut.close();
+					sock.close();
+				}
+				catch(Exception e)
+				{
+					sendOK = false;
+					return;
+				}
+				sendOK = true;
+			}
+			else if (((ArrayList<Object>)o).size() > 0)
+			{
+				Socket sock = null;
+				Object obj2 = ((ArrayList<Object>)o).get(0);
+				while (obj2 instanceof ArrayList)
+				{
+					obj2 = ((ArrayList<Object>)obj2).get(0);
+				}
+				
+				String hostname = (String)obj2;
+				try
+				{
+					sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					OutputStream out = sock.getOutputStream();
+					byte[] outMsg = "PREPARE         ".getBytes("UTF-8");
+					outMsg[8] = 0;
+					outMsg[9] = 0;
+					outMsg[10] = 0;
+					outMsg[11] = 0;
+					outMsg[12] = 0;
+					outMsg[13] = 0;
+					outMsg[14] = 0;
+					outMsg[15] = 0;
+					out.write(outMsg);
+					ObjectOutputStream objOut = new ObjectOutputStream(out);
+					objOut.writeObject((ArrayList<Object>)o);
+					objOut.flush();
+					out.flush();
+					getConfirmation(sock);
+					objOut.close();
+					sock.close();
+				}
+				catch(Exception e)
+				{
+					sendOK = false;
+					return;
+				}
+				
+				sendOK = true;
+			}
+		}
+	}
+	
 	private void checkTx()
 	{
 		byte[] data = new byte[8];
@@ -2604,7 +2883,7 @@ public class ConnectionWorker extends HRDBMSThread
 			filename += "/";
 		}
 		filename += "xa.log";
-		Iterator<LogRec> iter = LogManager.iterator(filename);
+		Iterator<LogRec> iter = LogManager.iterator(filename, false);
 		while (iter.hasNext())
 		{
 			LogRec rec = iter.next();
@@ -2624,6 +2903,8 @@ public class ConnectionWorker extends HRDBMSThread
 				}
 			}
 		}
+		
+		((LogIterator)iter).close();
 	}
 	
 	private void massDelete()
@@ -2857,7 +3138,8 @@ public class ConnectionWorker extends HRDBMSThread
 			try
 			{
 				LockManager.sLock(new Block(file.getAbsolutePath(), -1), tx.number());
-				numBlocks = (int)(FileManager.getFile(file.getAbsolutePath()).size() / Page.BLOCK_SIZE);
+				FileChannel xx = FileManager.getFile(file.getAbsolutePath());
+				numBlocks = FileManager.numBlocks.get(file.getAbsolutePath());
 			}
 			catch(Exception e)
 			{
@@ -2924,7 +3206,7 @@ public class ConnectionWorker extends HRDBMSThread
 				
 				try
 				{
-					tx.read(new Block(file.getAbsolutePath(), onPage++), sch);
+					tx.read(new Block(file.getAbsolutePath(), onPage++), sch, true);
 					RowIterator rit = sch.rowIterator();
 					while (rit.hasNext())
 					{
@@ -3118,7 +3400,7 @@ public class ConnectionWorker extends HRDBMSThread
 		ArrayList<ArrayList<String>> keys;
 		ArrayList<ArrayList<String>> types;
 		ArrayList<ArrayList<Boolean>> orders;
-		Vector<RIDAndIndexKeys> raiks = null;
+		ArrayList<RIDAndIndexKeys> raiks = null;
 		try
 		{
 			readNonCoord(txBytes);
@@ -3136,7 +3418,7 @@ public class ConnectionWorker extends HRDBMSThread
 			table = new String(tableData, "UTF-8");
 			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
 			indexes = (ArrayList<String>)objIn.readObject();
-			raiks = (Vector<RIDAndIndexKeys>)objIn.readObject();
+			raiks = (ArrayList<RIDAndIndexKeys>)objIn.readObject();
 			keys = (ArrayList<ArrayList<String>>)objIn.readObject();
 			types = (ArrayList<ArrayList<String>>)objIn.readObject();
 			orders = (ArrayList<ArrayList<Boolean>>)objIn.readObject();
@@ -3206,9 +3488,9 @@ public class ConnectionWorker extends HRDBMSThread
 		ArrayList<ArrayList<String>> types;
 		ArrayList<ArrayList<Boolean>> orders;
 		ArrayList<String> indexes;
-		Vector<RIDAndIndexKeys> raiks;
+		Set<RIDAndIndexKeys> raiks;
 		
-		public FlushDeleteThread(Vector<RIDAndIndexKeys> raiks, Transaction tx, String schema, String table, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes)
+		public FlushDeleteThread(Set<RIDAndIndexKeys> raiks, Transaction tx, String schema, String table, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes)
 		{
 			this.raiks = raiks;
 			this.tx = tx;
@@ -3236,7 +3518,8 @@ public class ConnectionWorker extends HRDBMSThread
 					map.multiPut(raik.getRID().getBlockNum(), raik);
 				}
 			
-				int num = raiks.get(0).getRID().getDevice();
+				Iterator<RIDAndIndexKeys> it = raiks.iterator();
+				int num = it.next().getRID().getDevice();
 				HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
 				Schema sch = new Schema(layout);
 				for (Object o : map.getKeySet())
@@ -3246,7 +3529,7 @@ public class ConnectionWorker extends HRDBMSThread
 					//delete every rid
 					Block toRequest = new Block(new MetaData().getDevicePath(num) + schema + "." + table + ".tbl", block);
 					tx.requestPage(toRequest);
-					tx.read(toRequest, sch);
+					tx.read(toRequest, sch, true);
 					for (Object o2 : map.get(block))
 					{
 						RIDAndIndexKeys raik = (RIDAndIndexKeys)o2;
@@ -3277,7 +3560,7 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 	}
 	
-	private FieldValue[] aloToFieldValues(ArrayList<Object> row)
+	private static FieldValue[] aloToFieldValues(ArrayList<Object> row)
 	{
 		FieldValue[] retval = new FieldValue[row.size()];
 		int i = 0;
@@ -3326,7 +3609,7 @@ public class ConnectionWorker extends HRDBMSThread
 		ArrayList<ArrayList<String>> keys;
 		ArrayList<ArrayList<String>> types;
 		ArrayList<ArrayList<Boolean>> orders;
-		Vector<ArrayList<Object>> list = null;
+		ArrayList<ArrayList<Object>> list = null;
 		HashMap<String, Integer> cols2Pos;
 		PartitionMetaData partMeta;
 		try
@@ -3345,12 +3628,12 @@ public class ConnectionWorker extends HRDBMSThread
 			table = new String(tableData, "UTF-8");
 			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
 			indexes = (ArrayList<String>)objIn.readObject();
-			list = (Vector<ArrayList<Object>>)objIn.readObject();
+			list = (ArrayList<ArrayList<Object>>)objIn.readObject();
 			keys = (ArrayList<ArrayList<String>>)objIn.readObject();
 			types = (ArrayList<ArrayList<String>>)objIn.readObject();
 			orders = (ArrayList<ArrayList<Boolean>>)objIn.readObject();
 			cols2Pos = (HashMap<String, Integer>)objIn.readObject();
-			partMeta = (PartitionMetaData)objIn.readObject();
+			partMeta = ((PartitionMetaData)objIn.readObject());
 		}
 		catch(Exception e)
 		{
@@ -3407,6 +3690,251 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 	}
 	
+	private void load()
+	{
+		byte[] txBytes = new byte[8];
+		long txNum = -1;
+		byte[] schemaLenBytes = new byte[4];
+		byte[] tableLenBytes = new byte[4];
+		int schemaLength = -1;
+		int tableLength = -1;
+		String schema = null;
+		String table = null;
+		byte[] schemaData = null;
+		byte[] tableData = null;
+		ArrayList<String> indexes;
+		ArrayList<ArrayList<String>> keys;
+		ArrayList<ArrayList<String>> types;
+		ArrayList<ArrayList<Boolean>> orders;
+		ArrayList<ArrayList<Object>> list = null;
+		HashMap<String, Integer> cols2Pos;
+		PartitionMetaData partMeta;
+		byte[] devBytes = new byte[4];
+		int device;
+		try
+		{
+			readNonCoord(txBytes);
+			txNum = bytesToLong(txBytes);
+			readNonCoord(devBytes);
+			device = bytesToInt(devBytes);
+			readNonCoord(schemaLenBytes);
+			schemaLength = bytesToInt(schemaLenBytes);
+			schemaData = new byte[schemaLength];
+			readNonCoord(schemaData);
+			schema = new String(schemaData, "UTF-8");
+			readNonCoord(tableLenBytes);
+			tableLength = bytesToInt(tableLenBytes);
+			tableData = new byte[tableLength];
+			readNonCoord(tableData);
+			table = new String(tableData, "UTF-8");
+			list = readRS();
+			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
+			indexes = (ArrayList<String>)objIn.readObject();
+			keys = (ArrayList<ArrayList<String>>)objIn.readObject();
+			types = (ArrayList<ArrayList<String>>)objIn.readObject();
+			orders = (ArrayList<ArrayList<Boolean>>)objIn.readObject();
+			cols2Pos = (HashMap<String, Integer>)objIn.readObject();
+			partMeta = ((PartitionMetaData)objIn.readObject());
+		}
+		catch(Exception e)
+		{
+			sendNo();
+			return;
+		}
+		
+		FlushLoadThread thread = new FlushLoadThread(list, new Transaction(txNum), schema, table, keys, types, orders, indexes, cols2Pos, device);
+		thread.run();	
+		boolean allOK = thread.getOK();
+		
+		if (allOK)
+		{
+			sendOK();
+			return;
+		}
+		else
+		{
+			sendNo();
+			return;
+		}
+	}
+	
+	private void hadoopLoad()
+	{
+		ArrayList<ArrayList<Object>> list;
+		PartitionMetaData partMeta;
+		HashMap<String, Integer> cols2Pos;
+		TreeMap<Integer, String> pos2Col;
+		long txNum;
+		String schema;
+		String table;
+		ArrayList<ArrayList<String>> keys;
+		ArrayList<ArrayList<String>> types;
+		ArrayList<ArrayList<Boolean>> orders;
+		ArrayList<String> indexes;
+		byte[] devBytes = new byte[4];
+		int device;
+		
+		try
+		{
+			InputStream in = sock.getInputStream();
+			readNonCoord(devBytes);
+			device = bytesToInt(devBytes);
+			byte[] length = new byte[4];
+			readNonCoord(length);
+			int len = bytesToInt(length);
+			byte[] data = new byte[len];
+			readNonCoord(data);
+			String tableName = new String(data, "UTF-8");
+			list = readRS();
+			LoadMetaData ldmd = ldmds.get(tableName);
+			partMeta = ldmd.pmd;
+			pos2Col = ldmd.pos2Col;
+			cols2Pos = new HashMap<String, Integer>();
+			for (Map.Entry entry : pos2Col.entrySet())
+			{
+				cols2Pos.put((String)entry.getValue(), (Integer)entry.getKey());
+			}
+			txNum = ldmd.txNum;
+			schema = tableName.substring(0, tableName.indexOf('.'));
+			table = tableName.substring(tableName.indexOf('.') + 1);
+			keys = ldmd.keys;
+			types = ldmd.types;
+			orders = ldmd.orders;
+			indexes = ldmd.indexes;
+		}
+		catch(Exception e)
+		{
+			sendNo();
+			return;
+		}
+		
+		FlushLoadThread thread = new FlushLoadThread(list, new Transaction(txNum), schema, table, keys, types, orders, indexes, cols2Pos, device);
+		thread.run();
+		
+		boolean allOK = thread.getOK();
+	
+		if (allOK)
+		{
+			sendOK();
+			return;
+		}
+		else
+		{
+			sendNo();
+			return;
+		}
+	}
+	
+	private ArrayList<ArrayList<Object>> readRS() throws Exception
+	{
+		byte[] numBytes = new byte[4];
+		readNonCoord(numBytes);
+		int num = bytesToInt(numBytes);
+		ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>(num);
+		int i = 0;
+		while (i < num)
+		{
+			readNonCoord(numBytes);
+			int size = bytesToInt(numBytes);
+			byte[] data = new byte[size];
+			readNonCoord(data);
+			retval.add((ArrayList<Object>)fromBytes(data));
+			i++;
+		}
+		
+		return retval;
+	}
+	
+	private static final Object fromBytes(byte[] val) throws Exception
+	{
+		final ByteBuffer bb = ByteBuffer.wrap(val);
+		final int numFields = bb.getInt();
+
+		if (numFields == 0)
+		{
+			return new ArrayList<Object>();
+		}
+
+		bb.position(bb.position() + numFields);
+		final byte[] bytes = bb.array();
+		if (bytes[4] == 5)
+		{
+			return new DataEndMarker();
+		}
+		final ArrayList<Object> retval = new ArrayList<Object>(numFields);
+		int i = 0;
+		while (i < numFields)
+		{
+			if (bytes[i + 4] == 0)
+			{
+				// long
+				final Long o = bb.getLong();
+				retval.add(o);
+			}
+			else if (bytes[i + 4] == 1)
+			{
+				// integer
+				final Integer o = bb.getInt();
+				retval.add(o);
+			}
+			else if (bytes[i + 4] == 2)
+			{
+				// double
+				final Double o = bb.getDouble();
+				retval.add(o);
+			}
+			else if (bytes[i + 4] == 3)
+			{
+				// date
+				final MyDate o = new MyDate(bb.getLong());
+				retval.add(o);
+			}
+			else if (bytes[i + 4] == 4)
+			{
+				// string
+				final int length = bb.getInt();
+				final byte[] temp = new byte[length];
+				bb.get(temp);
+				try
+				{
+					final String o = new String(temp, "UTF-8");
+					retval.add(o);
+				}
+				catch (final Exception e)
+				{
+					HRDBMSWorker.logger.error("", e);
+					throw e;
+				}
+			}
+			else if (bytes[i + 4] == 6)
+			{
+				// AtomicLong
+				final long o = bb.getLong();
+				retval.add(new AtomicLong(o));
+			}
+			else if (bytes[i + 4] == 7)
+			{
+				// AtomicDouble
+				final double o = bb.getDouble();
+				retval.add(new AtomicDouble(o));
+			}
+			else if (bytes[i + 4] == 8)
+			{
+				// Empty ArrayList
+				retval.add(new ArrayList<Object>());
+			}
+			else
+			{
+				HRDBMSWorker.logger.error("Unknown type in fromBytes()");
+				throw new Exception("Unknown type in fromBytes()");
+			}
+
+			i++;
+		}
+
+		return retval;
+	}
+	
 	private class FlushInsertThread extends HRDBMSThread
 	{
 		private Transaction tx;
@@ -3417,11 +3945,11 @@ public class ConnectionWorker extends HRDBMSThread
 		ArrayList<ArrayList<String>> types;
 		ArrayList<ArrayList<Boolean>> orders;
 		ArrayList<String> indexes;
-		Vector<ArrayList<Object>> list;
+		Set<ArrayList<Object>> list;
 		HashMap<String, Integer> cols2Pos;
 		int num;
 		
-		public FlushInsertThread(Vector<ArrayList<Object>> list, Transaction tx, String schema, String table, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes, HashMap<String, Integer> cols2Pos, int num)
+		public FlushInsertThread(Set<ArrayList<Object>> list, Transaction tx, String schema, String table, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes, HashMap<String, Integer> cols2Pos, int num)
 		{
 			this.list = list;
 			this.tx = tx;
@@ -3451,7 +3979,7 @@ public class ConnectionWorker extends HRDBMSThread
 				Schema sch = new Schema(layout);
 				Block toRequest = new Block(new MetaData().getDevicePath(num) + schema + "." + table + ".tbl", block);
 				tx.requestPage(toRequest);
-				tx.read(toRequest, sch);
+				tx.read(toRequest, sch, true);
 				ArrayList<RIDAndIndexKeys> raiks = new ArrayList<RIDAndIndexKeys>();
 				for (ArrayList<Object> row : list)
 				{
@@ -3464,7 +3992,17 @@ public class ConnectionWorker extends HRDBMSThread
 						ArrayList<Object> k = new ArrayList<Object>();
 						for (String col : key)
 						{
-							k.add(row.get(cols2Pos.get(col)));
+							try
+							{
+								k.add(row.get(cols2Pos.get(col)));
+							}
+							catch(Exception e)
+							{
+								HRDBMSWorker.logger.debug("Row is " + row);
+								HRDBMSWorker.logger.debug("Cols2Pos is " + cols2Pos);
+								HRDBMSWorker.logger.debug("Col is " + col);
+								throw e;
+							}
 						}
 						
 						indexKeys.add(k);
@@ -3496,6 +4034,168 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 	}
 	
+	private class FlushLoadThread extends HRDBMSThread
+	{
+		private Transaction tx;
+		private boolean ok = true;
+		String schema;
+		String table;
+		ArrayList<ArrayList<String>> keys;
+		ArrayList<ArrayList<String>> types;
+		ArrayList<ArrayList<Boolean>> orders;
+		ArrayList<String> indexes;
+		ArrayList<ArrayList<Object>> list;
+		HashMap<String, Integer> cols2Pos;
+		int num;
+		LinkedBlockingQueue<Object> queue = new LinkedBlockingQueue<Object>();
+		IndexWriterThread thread;
+		
+		public FlushLoadThread(ArrayList<ArrayList<Object>> list, Transaction tx, String schema, String table, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes, HashMap<String, Integer> cols2Pos, int num)
+		{
+			this.list = list;
+			this.tx = tx;
+			this.schema = schema;
+			this.table = table;
+			this.keys = keys;
+			this.types = types;
+			this.orders = orders;
+			this.indexes = indexes;
+			this.cols2Pos = cols2Pos;
+			this.num = num;
+		}
+		
+		public boolean getOK()
+		{
+			return ok;
+		}
+		
+		public void run()
+		{
+			try
+			{
+				ArrayList<Index> idxs = new ArrayList<Index>();
+				int i = 0;
+				for (String index : indexes)
+				{
+					Index idx = new Index(new MetaData().getDevicePath(num) + index, keys.get(i), types.get(i), orders.get(i));
+					idx.setTransaction(tx);
+					idx.open();
+					idxs.add(idx);
+					i++;
+				}
+				
+				thread = new IndexWriterThread(queue, idxs);
+				thread.start();
+				MetaData meta = new MetaData();
+				String file = meta.getDevicePath(num) + schema + "." + table + ".tbl";
+				//insert row and create RAIKS
+				FileChannel xx = FileManager.getFile(file);
+				int block = FileManager.numBlocks.get(file) - 1;
+				//request block
+				HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+				Schema sch = new Schema(layout);
+				Block toRequest = new Block(file, block);
+				tx.requestPage(toRequest);
+				tx.read(toRequest, sch, true);
+				ArrayList<RIDAndIndexKeys> raiks = new ArrayList<RIDAndIndexKeys>();
+				Collections.shuffle(list);
+				for (ArrayList<Object> row : list)
+				{
+					RID rid = sch.insertRowAppend(aloToFieldValues(row));
+					ArrayList<ArrayList<Object>> indexKeys = new ArrayList<ArrayList<Object>>();
+					i = 0;
+					for (String index : indexes)
+					{
+						ArrayList<String> key = keys.get(i);
+						ArrayList<Object> k = new ArrayList<Object>();
+						for (String col : key)
+						{
+							k.add(row.get(cols2Pos.get(col)));
+						}
+						
+						indexKeys.add(k);
+						i++;
+					}
+					
+					queue.add(new RIDAndIndexKeys(rid, indexKeys));
+					int newBlock = rid.getBlockNum();
+					if (newBlock != block)
+					{
+						block = newBlock;
+						sch.close();
+						sch = new Schema(layout);
+						toRequest = new Block(file, block);
+						tx.requestPage(toRequest);
+						tx.read(toRequest, sch, true);
+					}
+				}
+				
+				sch.close();
+				
+				//wait for index writer to finish
+				queue.add(new DataEndMarker());
+				thread.join();
+				if (!thread.getOK())
+				{
+					ok = false;
+				}
+			}
+			catch(Exception e)
+			{
+				ok = false;
+				HRDBMSWorker.logger.debug("", e);
+			}
+		}
+	}
+	
+	private static class IndexWriterThread extends HRDBMSThread
+	{
+		private LinkedBlockingQueue<Object> queue;
+		private ArrayList<Index> indexes;
+		private boolean ok = true;
+		
+		public IndexWriterThread(LinkedBlockingQueue<Object> queue, ArrayList<Index> indexes)
+		{
+			this.queue = queue;
+			this.indexes = indexes;
+		}
+		
+		public void run()
+		{
+			try
+			{
+				while (true)
+				{
+					Object obj = queue.take();
+				
+					if (obj instanceof DataEndMarker)
+					{
+						return;
+					}
+				
+					RIDAndIndexKeys raik = (RIDAndIndexKeys)obj;
+					//for each index, insert row based on rid and key values
+					int i = 0;
+					for (Index idx : indexes)
+					{
+						idx.insertNoLog(aloToFieldValues(raik.getIndexKeys().get(i)), raik.getRID());
+						i++;
+					}
+				}
+			}
+			catch(Exception e)
+			{
+				HRDBMSWorker.logger.debug("", e);
+				ok = false;
+			}
+		}
+		
+		public boolean getOK()
+		{
+			return ok;
+		}
+	}
+	
 	private void executeUpdate()
 	{
 		byte[] bLen = new byte[4];
@@ -3517,16 +4217,36 @@ public class ConnectionWorker extends HRDBMSThread
 		
 		try
 		{
+			if (worker != null)
+			{
+				ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+				cmd2.add("CLOSE");
+				while (true)
+				{
+					try
+					{
+						worker.in.put(cmd2);
+						worker = null;
+						break;
+					}
+					catch(Exception g)
+					{}
+				}
+			}
+			
 			worker = XAManager.executeUpdate(sql, tx, this);
 			HRDBMSWorker.addThread(worker);
 			worker.join();
 			int updateCount = worker.getUpdateCount();
+			
 			if (updateCount == -1)
 			{
 				sendNo();
 				returnExceptionToClient(worker.getException());
+				worker = null;
 				return;
 			}
+			worker = null;
 			this.sendOK();
 			sendInt(updateCount);
 		}
@@ -3535,74 +4255,118 @@ public class ConnectionWorker extends HRDBMSThread
 			HRDBMSWorker.logger.debug("", e);
 			this.sendNo();
 			returnExceptionToClient(e);
+			worker = null;
 		}
 	}
 	
-	private static void createTableHeader(String tbl, int cols, int device) throws Exception
+	public static class CreateTableThread extends HRDBMSThread
 	{
-		String fn = new MetaData().getDevicePath(device);
-		if (!fn.endsWith("/"))
+		private String tbl;
+		private int cols;
+		private int device;
+		private boolean ok = true;
+		private Exception e = null;
+		
+		public CreateTableThread(String tbl, int cols, int device)
 		{
-			fn += "/";
+			this.tbl = tbl;
+			this.cols = cols;
+			this.device = device;
 		}
-		fn += tbl;
+		
+		public void run()
+		{
+			try
+			{
+				createTableHeader(tbl, cols, device);
+			}
+			catch(Exception e)
+			{
+				this.e = e;
+				ok = false;
+			}
+		}
+		
+		public boolean getOK()
+		{
+			return ok;
+		}
+		
+		public Exception getException()
+		{
+			return e;
+		}
+		
+		private void createTableHeader(String tbl, int cols, int device) throws Exception
+		{
+			String fn = new MetaData().getDevicePath(device);
+			if (!fn.endsWith("/"))
+			{
+				fn += "/";
+			}
+			fn += tbl;
 
-		FileChannel fc = FileManager.getFile(fn);
-		if (fc.size() > 0)
-		{
-			fc.truncate(0);
+			FileChannel fc = FileManager.getFile(fn);
+			if (fc.size() > 0)
+			{
+				fc.truncate(0);
+			}
+			
+			FileManager.numBlocks.put(fn, 0);
+			ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
+			bb.position(0);
+			bb.putInt(MetaData.myNodeNum());
+			bb.putInt(device);
+			bb.putInt(Page.BLOCK_SIZE - (57 + (cols * 4)));
+		
+			int i = 12;
+			while (i < Page.BLOCK_SIZE)
+			{
+				bb.putInt(-1);
+				i += 4;
+			}
+		
+			bb.position(0);
+			fc.write(bb);
+		
+			ByteBuffer head = ByteBuffer.allocate(Page.BLOCK_SIZE * 4095);
+			i = 0;
+			while (i < Page.BLOCK_SIZE * 4095)
+			{
+				head.putLong(-1);
+				i += 8;
+			}
+			head.position(0);
+			fc.write(head);
+		
+			bb.position(0);
+			bb.put(Schema.TYPE_ROW);
+			bb.putInt(0); //next rec num
+			bb.putInt(56 + (cols * 4)); //headEnd
+			bb.putInt(Page.BLOCK_SIZE); //dataStart
+			bb.putLong(System.currentTimeMillis()); //modTime
+			bb.putInt(57 + (4 * cols)); //nullArray offset
+			bb.putInt(49); //colIDListOff
+			bb.putInt(53 + (4 * cols)); //rowIDListOff
+			bb.putInt(57 + (4 * cols)); // offset Array offset
+			bb.putInt(1); //freeSpaceListEntries
+			bb.putInt(57 + (cols * 4)); //free space start
+			bb.putInt(Page.BLOCK_SIZE - 1); //free space end
+			bb.putInt(cols); //colIDListSize
+			
+			i = 0;
+			while (i < cols)
+			{
+				bb.putInt(i);
+				i++;
+			}
+		
+			bb.putInt(0); //rowIDListSize
+			bb.position(0);
+			fc.write(bb);
+			fc.force(false);
+			FileManager.numBlocks.put(fn, (int)(fc.size() / Page.BLOCK_SIZE));
 		}
-		ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
-		bb.position(0);
-		bb.putInt(MetaData.myNodeNum());
-		bb.putInt(device);
-		bb.putInt(Page.BLOCK_SIZE - (57 + (cols * 4)));
-		
-		int i = 12;
-		while (i < Page.BLOCK_SIZE)
-		{
-			bb.putInt(-1);
-			i += 4;
-		}
-		
-		bb.position(0);
-		fc.write(bb);
-		
-		ByteBuffer head = ByteBuffer.allocate(Page.BLOCK_SIZE * 4095);
-		i = 0;
-		while (i < Page.BLOCK_SIZE * 4095)
-		{
-			head.putLong(-1);
-			i += 8;
-		}
-		head.position(0);
-		fc.write(head);
-		
-		bb.position(0);
-		bb.put(Schema.TYPE_ROW);
-		bb.putInt(0); //next rec num
-		bb.putInt(56 + (cols * 4)); //headEnd
-		bb.putInt(Page.BLOCK_SIZE); //dataStart
-		bb.putLong(System.currentTimeMillis()); //modTime
-		bb.putInt(57 + (4 * cols)); //nullArray offset
-		bb.putInt(49); //colIDListOff
-		bb.putInt(53 + (4 * cols)); //rowIDListOff
-		bb.putInt(57 + (4 * cols)); // offset Array offset
-		bb.putInt(1); //freeSpaceListEntries
-		bb.putInt(57 + (cols * 4)); //free space start
-		bb.putInt(Page.BLOCK_SIZE - 1); //free space end
-		bb.putInt(cols); //colIDListSize
-
-		i = 0;
-		while (i < cols)
-		{
-			bb.putInt(i);
-			i++;
-		}
-		
-		bb.putInt(0); //rowIDListSize
-		bb.position(0);
-		fc.write(bb);
 	}
 	
 	private void newTable()
@@ -3627,9 +4391,24 @@ public class ConnectionWorker extends HRDBMSThread
 			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
 			devices = (ArrayList<Integer>)objIn.readObject();
 			
+			ArrayList<CreateTableThread> threads = new ArrayList<CreateTableThread>();
 			for (int device : devices)
 			{
-				createTableHeader(fn, numCols, device);
+				threads.add(new CreateTableThread(fn, numCols, device));
+			}
+			
+			for (CreateTableThread thread : threads)
+			{
+				thread.start();
+			}
+			
+			for (CreateTableThread thread : threads)
+			{
+				thread.join();
+				if (!thread.getOK())
+				{
+					throw thread.getException();
+				}
 			}
 			
 			HRDBMSWorker.logger.debug("Sending OK");
@@ -3670,80 +4449,140 @@ public class ConnectionWorker extends HRDBMSThread
 			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
 			devices = (ArrayList<Integer>)objIn.readObject();
 			
+			ArrayList<CreateIndexThread> threads = new ArrayList<CreateIndexThread>();
 			for (int device : devices)
 			{
-				createIndexHeader(fn, numCols, device, unique);
+				threads.add(new CreateIndexThread(fn, numCols, device, unique));
+			}
+			
+			for (CreateIndexThread thread : threads)
+			{
+				thread.start();
+			}
+			
+			for (CreateIndexThread thread : threads)
+			{
+				thread.join();
+				if (!thread.getOK())
+				{
+					throw thread.getException();
+				}
 			}
 			
 			sendOK();
 		}
 		catch(Exception e)
 		{
+			HRDBMSWorker.logger.debug("", e);
 			sendNo();
 			return;
 		}
 	}
 	
-	private void createIndexHeader(String indx, int numCols, int device, int unique) throws Exception
+	public static class CreateIndexThread extends HRDBMSThread
 	{
-		String fn = new MetaData().getDevicePath(device);
-		if (!fn.endsWith("/"))
-		{
-			fn += "/";
-		}
-		fn += indx;
-
-		FileChannel fc = FileManager.getFile(fn);
-		if (fc.size() > 0)
-		{
-			fc.truncate(0);
-		}
-		ByteBuffer data = ByteBuffer.allocate(Page.BLOCK_SIZE);
+		private String indx;
+		private int numCols;
+		private int device;
+		private int unique;
+		private boolean ok = true;;
+		private Exception e;
 		
-		data.position(0);
-		data.putInt(numCols); // num key cols
-		if (unique != 0)
+		public CreateIndexThread(String indx, int numCols, int device, int unique)
 		{
-			data.put((byte)1); // unique
-		}
-		else
-		{
-			data.put((byte)0); //not unique
-		}
-		data.position(9); // first free byte @ 5
-		data.putInt(Page.BLOCK_SIZE - 1); // last free byte
-
-		data.put((byte)0); // not a leaf
-		// offset of next free value from start of record (13)
-		data.position(18);
-		data.putInt(0); // zero valid key values in this internal node
-		int i = 0;
-		while (i < 128)
-		{
-			data.putInt(0); // down block
-			data.putInt(0); // down offset
-			i++;
-		}
-
-		data.putInt(0); // no up block
-		data.putInt(0); // no up offset
-
-		// fill in first free val pointer
-		int pos = data.position();
-		data.position(14);
-		data.putInt(pos - 13);
-		data.position(5);
-		data.putInt(pos); // first free byte
-		data.position(pos);
-
-		while (pos < (Page.BLOCK_SIZE))
-		{
-			data.put((byte)2); // fill page out with 2s
-			pos++;
+			this.indx = indx;
+			this.numCols = numCols;
+			this.device = device;
+			this.unique = unique;
 		}
 		
-		data.position(0);
-		fc.write(data);
+		public void run()
+		{
+			try
+			{
+				createIndexHeader(indx, numCols, device, unique);
+			}
+			catch(Exception e)
+			{
+				this.e = e;
+				ok = false;
+			}
+		}
+		
+		public boolean getOK()
+		{
+			return ok;
+		}
+		
+		public Exception getException()
+		{
+			return e;
+		}
+		
+		private void createIndexHeader(String indx, int numCols, int device, int unique) throws Exception
+		{
+			String fn = new MetaData().getDevicePath(device);
+			if (!fn.endsWith("/"))
+			{
+				fn += "/";
+			}
+			fn += indx;
+
+			FileChannel fc = FileManager.getFile(fn);
+			if (fc.size() > 0)
+			{
+				fc.truncate(0);
+			}
+			FileManager.numBlocks.put(fn, 0);
+			ByteBuffer data = ByteBuffer.allocate(Page.BLOCK_SIZE);
+		
+			data.position(0);
+			data.putInt(numCols); // num key cols
+			if (unique != 0)
+			{
+				data.put((byte)1); // unique
+			}
+			else
+			{
+				data.put((byte)0); //not unique
+			}
+			data.position(9); // first free byte @ 5
+			data.putInt(Page.BLOCK_SIZE - 1); // last free byte
+
+			data.put((byte)0); // not a leaf
+			// offset of next free value from start of record (13)
+			data.position(18);
+			data.putInt(0); // zero valid key values in this internal node
+			int i = 0;
+			while (i < 128)
+			{
+				data.putInt(0); // down block
+				data.putInt(0); // down offset
+				i++;
+			}
+
+			data.putInt(0); // no up block
+			data.putInt(0); // no up offset
+
+			// fill in first free val pointer
+			int pos = data.position();
+			data.position(14);
+			data.putInt(pos - 13);
+			data.position(5);
+			data.putInt(pos); // first free byte
+			data.position(pos);
+
+			while (pos < (Page.BLOCK_SIZE))
+			{
+				data.put((byte)2); // fill page out with 2s
+				pos++;
+			}
+		
+			data.position(0);
+			fc.write(data);
+			fc.force(false);
+			FileManager.numBlocks.put(fn, (int)(fc.size() / Page.BLOCK_SIZE));
+		}
 	}
 	
 	private void popIndex()
@@ -3873,7 +4712,7 @@ public class ConnectionWorker extends HRDBMSThread
 				idx.setTransaction(tx);
 				idx.open();
 				LockManager.sLock(new Block(tFn, -1), tx.number());
-				int numBlocks = (int)(FileManager.getFile(tFn).size() / Page.BLOCK_SIZE);
+				int numBlocks = FileManager.numBlocks.get(tFn);
 				int i = Schema.HEADER_SIZE;
 				while (i < numBlocks)
 				{
@@ -3963,6 +4802,408 @@ public class ConnectionWorker extends HRDBMSThread
 			{
 				ok = false;
 				HRDBMSWorker.logger.debug("", e);
+			}
+		}
+	}
+	
+	private void getLoadMetaData() throws Exception
+	{
+		byte[] slBytes = new byte[4];
+		readNonCoord(slBytes);
+		int sLen = bytesToInt(slBytes);
+		byte[] data = new byte[sLen];
+		readNonCoord(data);
+		String schema = new String(data, "UTF-8");
+		readNonCoord(slBytes);
+		sLen = bytesToInt(slBytes);
+		data = new byte[sLen];
+		readNonCoord(data);
+		String table = new String(data, "UTF-8");
+		LoadMetaData ldmd = ldmds.get(schema + "." + table);
+		ObjectOutputStream objOut = new ObjectOutputStream(sock.getOutputStream());
+		//numNodes = (Integer)objIn.readObject();
+		//delimiter = (String)objIn.readObject();
+		//pos2Col = (TreeMap<Integer, String>)objIn.readObject();
+		//cols2Types = (HashMap<String, String>)objIn.readObject();
+		//pos2Length = (HashMap<Integer, Integer>)objIn.readObject();
+		//pmd = (PartitionMetaData)objIn.readObject();
+		objOut.writeObject(new Integer(ldmd.numNodes));
+		objOut.writeObject(ldmd.delimiter);
+		objOut.writeObject(ldmd.pos2Col);
+		objOut.writeObject(ldmd.cols2Types);
+		objOut.writeObject(ldmd.pos2Length);
+		objOut.writeObject(ldmd.pmd);
+		objOut.writeObject(ldmd.workerNodes);
+		objOut.writeObject(ldmd.coordNodes);
+		objOut.flush();
+		objOut.close();
+		sock.close();
+	}
+	
+	private void setLoadMetaData()
+	{
+		ArrayList<Object> tree = null;
+		byte[] keyLength = new byte[4];
+		int length;
+		byte[] data;
+		String key;
+		LoadMetaData ldmd = null;
+		try
+		{
+			readNonCoord(keyLength);
+			length = bytesToInt(keyLength);
+			data = new byte[length];
+			readNonCoord(data);
+			key = new String(data, "UTF-8");
+			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
+			tree = (ArrayList<Object>)objIn.readObject();
+			ldmd = (LoadMetaData)objIn.readObject();
+		}
+		catch(Exception e)
+		{
+			sendNo();
+			return;
+		}
+		
+		ldmds.put(key, ldmd);
+		
+		Object obj = tree.get(0);
+		while (obj instanceof ArrayList)
+		{
+			obj = ((ArrayList)obj).get(0);
+		}
+		
+		removeFromTree((String)obj, tree, null); //also delete parents if now empty
+		
+		ArrayList<SendLDMDThread> threads = new ArrayList<SendLDMDThread>();
+		for (Object o : tree)
+		{
+			threads.add(new SendLDMDThread(o, keyLength, data, ldmd));
+		}
+		
+		for (SendLDMDThread thread : threads)
+		{
+			thread.start();
+		}
+		
+		boolean allOK = true;
+		for (SendLDMDThread thread : threads)
+		{
+			while (true)
+			{
+				try
+				{
+					thread.join();
+					break;
+				}
+				catch(InterruptedException e)
+				{}
+			}
+			if (!thread.sendOK())
+			{
+				allOK = false;
+			}
+		}
+		
+		if (allOK)
+		{
+			sendOK();
+		}
+		else
+		{
+			sendNo();
+			try
+			{
+				sock.close();
+			}
+			catch(Exception f)
+			{}
+		}
+	}
+	
+	private static class SendLDMDThread extends HRDBMSThread
+	{
+		private Object o;
+		private boolean sendOK;
+		private byte[] lenBytes;
+		private byte[] data;
+		private LoadMetaData ldmd;
+		
+		public SendLDMDThread(Object o, byte[] lenBytes, byte[] data, LoadMetaData ldmd)
+		{
+			this.o = o;
+			this.lenBytes = lenBytes;
+			this.data = data;
+			this.ldmd = ldmd;
+		}
+		
+		public boolean sendOK()
+		{
+			return sendOK;
+		}
+		
+		public void run()
+		{
+			if (o instanceof String)
+			{
+				Socket sock = null;
+				try
+				{
+					sock = new CompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					OutputStream out = sock.getOutputStream();
+					byte[] outMsg = "SETLDMD         ".getBytes("UTF-8");
+					outMsg[8] = 0;
+					outMsg[9] = 0;
+					outMsg[10] = 0;
+					outMsg[11] = 0;
+					outMsg[12] = 0;
+					outMsg[13] = 0;
+					outMsg[14] = 0;
+					outMsg[15] = 0;
+					out.write(outMsg);
+					out.write(lenBytes);
+					out.write(data);
+					ObjectOutputStream objOut = new ObjectOutputStream(out);
+					ArrayList<Object> alo = new ArrayList<Object>(1);
+					alo.add(o);
+					objOut.writeObject(alo);
+					objOut.writeObject(ldmd);
+					objOut.flush();
+					out.flush();
+					getConfirmation(sock);
+					objOut.close();
+					sock.close();
+				}
+				catch(Exception e)
+				{
+					sendOK = false;
+					return;
+				}
+				sendOK = true;
+			}
+			else if (((ArrayList<Object>)o).size() > 0)
+			{
+				Socket sock = null;
+				Object obj2 = ((ArrayList<Object>)o).get(0);
+				while (obj2 instanceof ArrayList)
+				{
+					obj2 = ((ArrayList<Object>)obj2).get(0);
+				}
+				
+				String hostname = (String)obj2;
+				try
+				{
+					sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					OutputStream out = sock.getOutputStream();
+					byte[] outMsg = "SETLDMD         ".getBytes("UTF-8");
+					outMsg[8] = 0;
+					outMsg[9] = 0;
+					outMsg[10] = 0;
+					outMsg[11] = 0;
+					outMsg[12] = 0;
+					outMsg[13] = 0;
+					outMsg[14] = 0;
+					outMsg[15] = 0;
+					out.write(outMsg);
+					out.write(lenBytes);
+					out.write(data);
+					ObjectOutputStream objOut = new ObjectOutputStream(out);
+					objOut.writeObject((ArrayList<Object>)o);
+					objOut.writeObject(ldmd);
+					objOut.flush();
+					out.flush();
+					getConfirmation(sock);
+					objOut.close();
+					sock.close();
+				}
+				catch(Exception e)
+				{
+					sendOK = false;
+					return;
+				}
+				
+				sendOK = true;
+			}
+		}
+	}
+	
+	private void delLoadMetaData()
+	{
+		ArrayList<Object> tree = null;
+		byte[] keyLength = new byte[4];
+		int length;
+		byte[] data;
+		String key;
+		try
+		{
+			readNonCoord(keyLength);
+			length = bytesToInt(keyLength);
+			data = new byte[length];
+			readNonCoord(data);
+			key = new String(data, "UTF-8");
+			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
+			tree = (ArrayList<Object>)objIn.readObject();
+		}
+		catch(Exception e)
+		{
+			sendNo();
+			return;
+		}
+		
+		ldmds.remove(key);
+		
+		Object obj = tree.get(0);
+		while (obj instanceof ArrayList)
+		{
+			obj = ((ArrayList)obj).get(0);
+		}
+		
+		removeFromTree((String)obj, tree, null); //also delete parents if now empty
+		
+		ArrayList<SendRemoveLDMDThread> threads = new ArrayList<SendRemoveLDMDThread>();
+		for (Object o : tree)
+		{
+			threads.add(new SendRemoveLDMDThread(o, keyLength, data));
+		}
+		
+		for (SendRemoveLDMDThread thread : threads)
+		{
+			thread.start();
+		}
+		
+		boolean allOK = true;
+		for (SendRemoveLDMDThread thread : threads)
+		{
+			while (true)
+			{
+				try
+				{
+					thread.join();
+					break;
+				}
+				catch(InterruptedException e)
+				{}
+			}
+			if (!thread.sendOK())
+			{
+				allOK = false;
+			}
+		}
+		
+		if (allOK)
+		{
+			sendOK();
+		}
+		else
+		{
+			sendNo();
+			try
+			{
+				sock.close();
+			}
+			catch(Exception f)
+			{}
+		}
+	}
+	
+	private static class SendRemoveLDMDThread extends HRDBMSThread
+	{
+		private Object o;
+		private boolean sendOK;
+		private byte[] lenBytes;
+		private byte[] data;
+		
+		public SendRemoveLDMDThread(Object o, byte[] lenBytes, byte[] data)
+		{
+			this.o = o;
+			this.lenBytes = lenBytes;
+			this.data = data;
+		}
+		
+		public boolean sendOK()
+		{
+			return sendOK;
+		}
+		
+		public void run()
+		{
+			if (o instanceof String)
+			{
+				Socket sock = null;
+				try
+				{
+					sock = new CompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					OutputStream out = sock.getOutputStream();
+					byte[] outMsg = "DELLDMD         ".getBytes("UTF-8");
+					outMsg[8] = 0;
+					outMsg[9] = 0;
+					outMsg[10] = 0;
+					outMsg[11] = 0;
+					outMsg[12] = 0;
+					outMsg[13] = 0;
+					outMsg[14] = 0;
+					outMsg[15] = 0;
+					out.write(outMsg);
+					out.write(lenBytes);
+					out.write(data);
+					ObjectOutputStream objOut = new ObjectOutputStream(out);
+					ArrayList<Object> alo = new ArrayList<Object>(1);
+					alo.add(o);
+					objOut.writeObject(alo);
+					objOut.flush();
+					out.flush();
+					getConfirmation(sock);
+					objOut.close();
+					sock.close();
+				}
+				catch(Exception e)
+				{
+					sendOK = false;
+					return;
+				}
+				sendOK = true;
+			}
+			else if (((ArrayList<Object>)o).size() > 0)
+			{
+				Socket sock = null;
+				Object obj2 = ((ArrayList<Object>)o).get(0);
+				while (obj2 instanceof ArrayList)
+				{
+					obj2 = ((ArrayList<Object>)obj2).get(0);
+				}
+				
+				String hostname = (String)obj2;
+				try
+				{
+					sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					OutputStream out = sock.getOutputStream();
+					byte[] outMsg = "DELLDMD         ".getBytes("UTF-8");
+					outMsg[8] = 0;
+					outMsg[9] = 0;
+					outMsg[10] = 0;
+					outMsg[11] = 0;
+					outMsg[12] = 0;
+					outMsg[13] = 0;
+					outMsg[14] = 0;
+					outMsg[15] = 0;
+					out.write(outMsg);
+					out.write(lenBytes);
+					out.write(data);
+					ObjectOutputStream objOut = new ObjectOutputStream(out);
+					objOut.writeObject((ArrayList<Object>)o);
+					objOut.flush();
+					out.flush();
+					getConfirmation(sock);
+					objOut.close();
+					sock.close();
+				}
+				catch(Exception e)
+				{
+					sendOK = false;
+					return;
+				}
+				
+				sendOK = true;
 			}
 		}
 	}

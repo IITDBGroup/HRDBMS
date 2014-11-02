@@ -45,10 +45,18 @@ public final class UpdateOperator implements Operator, Serializable
 	private Transaction tx;
 	private ArrayList<Column> cols;
 	private ArrayList<String> buildList;
+	private ArrayList<ArrayList<String>> keys;
+	private ArrayList<ArrayList<String>> types;
+	private ArrayList<ArrayList<Boolean>> orders;
 	
 	public void setPlan(Plan plan)
 	{
 		this.plan = plan;
+	}
+	
+	public String getTable()
+	{
+		return table;
 	}
 
 	public UpdateOperator(String schema, String table, ArrayList<Column> cols, ArrayList<String> buildList, MetaData meta)
@@ -239,11 +247,15 @@ public final class UpdateOperator implements Operator, Serializable
 	{
 		child.start();
 		ArrayList<String> indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
+		keys = MetaData.getKeys(indexes, tx);
+		types = MetaData.getTypes(indexes, tx);
+		orders = MetaData.getOrders(indexes, tx);
 		HashMap<Integer, Integer> pos2Length = new HashMap<Integer, Integer>();
 		HashMap<String, Integer> cols2Pos = MetaData.getCols2PosForTable(schema, table, tx);
-		TreeMap<Integer, String> pos2Col = MetaData.getPos2ColForTable(schema, table, tx);
+		TreeMap<Integer, String> pos2Col = MetaData.cols2PosFlip(cols2Pos);
 		HashMap<String, String> cols2Types = new MetaData().getCols2TypesForTable(schema, table, tx);
-		for (Map.Entry entry : new MetaData().getCols2TypesForTable(schema, table, tx).entrySet())
+		PartitionMetaData spmd = new MetaData().getPartMeta(schema, table, tx);
+		for (Map.Entry entry : cols2Types.entrySet())
 		{
 			if (entry.getValue().equals("CHAR"))
 			{
@@ -262,6 +274,7 @@ public final class UpdateOperator implements Operator, Serializable
 		}
 		
 		Iterator it = dba.iterator();
+		int numNodes = MetaData.getNumNodes(tx);
 		while (it.hasNext())
 		{
 			try
@@ -274,14 +287,14 @@ public final class UpdateOperator implements Operator, Serializable
 				ArrayList<ArrayList<Object>> indexKeys = new ArrayList<ArrayList<Object>>();
 				for (String index : indexes)
 				{
-					ArrayList<Object> keys = new ArrayList<Object>();
-					ArrayList<String> cols = MetaData.getColsFromIndexFileName(index, tx);
+					ArrayList<Object> keys2 = new ArrayList<Object>();
+					ArrayList<String> cols = MetaData.getColsFromIndexFileName(index, tx, keys, indexes);
 					for (String col : cols)
 					{
-						keys.add(row.get(child.getCols2Pos().get(col)));
+						keys2.add(row.get(child.getCols2Pos().get(col)));
 					}
 				
-					indexKeys.add(keys);
+					indexKeys.add(keys2);
 				}
 			
 				RIDAndIndexKeys raik = new RIDAndIndexKeys(new RID(node, device, block, rec), indexKeys);
@@ -351,7 +364,7 @@ public final class UpdateOperator implements Operator, Serializable
 						return;
 					}
 				}
-				ArrayList<Integer> nodes = MetaData.determineNode(schema, table, row2, tx, pmeta, cols2Pos);
+				ArrayList<Integer> nodes = MetaData.determineNode(schema, table, row2, tx, pmeta, cols2Pos, numNodes);
 				for (Integer n : nodes)
 				{
 					plan.addNode(n);
@@ -366,7 +379,7 @@ public final class UpdateOperator implements Operator, Serializable
 			num.incrementAndGet();
 			if (map.size() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes")))
 			{
-				flush(indexes);
+				flush(indexes, spmd, cols2Pos);
 				if (num.get() == Integer.MIN_VALUE)
 				{
 					done = true;
@@ -375,7 +388,7 @@ public final class UpdateOperator implements Operator, Serializable
 			}
 			else if (map.totalSize() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_batch")))
 			{
-				flush(indexes);
+				flush(indexes, spmd, cols2Pos);
 				if (num.get() == Integer.MIN_VALUE)
 				{
 					done = true;
@@ -387,19 +400,19 @@ public final class UpdateOperator implements Operator, Serializable
 		dba.close();
 		if (map.totalSize() > 0)
 		{
-			flush(indexes);
+			flush(indexes, spmd, cols2Pos);
 		}
 		
 		done = true;
 	}
 	
-	private void flush(ArrayList<String> indexes) throws Exception
+	private void flush(ArrayList<String> indexes, PartitionMetaData spmd, HashMap<String, Integer> cols2Pos) throws Exception
 	{
 		ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
 		for (Object o : map.getKeySet())
 		{
 			int node = (Integer)o;
-			Vector<RIDAndIndexKeys> list = map.get(node);
+			Set<RIDAndIndexKeys> list = map.get(node);
 			if (node == -1)
 			{
 				ArrayList<Object> rs = PlanCacheManager.getCoordNodes().setParms().execute(tx);
@@ -453,8 +466,8 @@ public final class UpdateOperator implements Operator, Serializable
 		for (Object o : map2.getKeySet())
 		{
 			int node = (Integer)o;
-			Vector<ArrayList<Object>> list = map2.get(node);
-			threads2.add(new FlushThread2(list, indexes, node));
+			Set<ArrayList<Object>> list = map2.get(node);
+			threads2.add(new FlushThread2(list, indexes, node, cols2Pos, spmd));
 		}
 		
 		for (FlushThread2 thread : threads2)
@@ -486,12 +499,12 @@ public final class UpdateOperator implements Operator, Serializable
 	
 	private class FlushThread extends HRDBMSThread
 	{
-		private Vector<RIDAndIndexKeys> list;
+		private Set<RIDAndIndexKeys> list;
 		private ArrayList<String> indexes;
 		private boolean ok = true;
 		private int node;
 		
-		public FlushThread(Vector<RIDAndIndexKeys> list, ArrayList<String> indexes, int node)
+		public FlushThread(Set<RIDAndIndexKeys> list, ArrayList<String> indexes, int node)
 		{
 			this.list = list;
 			this.indexes = indexes;
@@ -527,10 +540,10 @@ public final class UpdateOperator implements Operator, Serializable
 				out.write(stringToBytes(table));
 				ObjectOutputStream objOut = new ObjectOutputStream(out);
 				objOut.writeObject(indexes);
-				objOut.writeObject(list);
-				objOut.writeObject(MetaData.getKeys(indexes, tx));
-				objOut.writeObject(MetaData.getTypes(indexes, tx));
-				objOut.writeObject(MetaData.getOrders(indexes, tx));
+				objOut.writeObject(new ArrayList(list));
+				objOut.writeObject(keys);
+				objOut.writeObject(types);
+				objOut.writeObject(orders);
 				objOut.flush();
 				out.flush();
 				getConfirmation(sock);
@@ -596,16 +609,20 @@ public final class UpdateOperator implements Operator, Serializable
 	
 	private class FlushThread2 extends HRDBMSThread
 	{
-		private Vector<ArrayList<Object>> list;
+		private Set<ArrayList<Object>> list;
 		private ArrayList<String> indexes;
 		private boolean ok = true;
 		private int node;
+		private HashMap<String, Integer> cols2Pos;
+		PartitionMetaData spmd;
 		
-		public FlushThread2(Vector<ArrayList<Object>> list, ArrayList<String> indexes, int node)
+		public FlushThread2(Set<ArrayList<Object>> list, ArrayList<String> indexes, int node, HashMap<String, Integer> cols2Pos, PartitionMetaData spmd)
 		{
 			this.list = list;
 			this.indexes = indexes;
 			this.node = node;
+			this.cols2Pos = cols2Pos;
+			this.spmd = spmd;
 		}
 		
 		public boolean getOK()
@@ -637,12 +654,12 @@ public final class UpdateOperator implements Operator, Serializable
 				out.write(stringToBytes(table));
 				ObjectOutputStream objOut = new ObjectOutputStream(out);
 				objOut.writeObject(indexes);
-				objOut.writeObject(list);
-				objOut.writeObject(MetaData.getKeys(indexes, tx));
-				objOut.writeObject(MetaData.getTypes(indexes, tx));
-				objOut.writeObject(MetaData.getOrders(indexes, tx));
-				objOut.writeObject(new MetaData().getCols2PosForTable(schema, table, tx));
-				objOut.writeObject(new MetaData().getPartMeta(schema, table, tx));
+				objOut.writeObject(new ArrayList(list));
+				objOut.writeObject(keys);
+				objOut.writeObject(types);
+				objOut.writeObject(orders);
+				objOut.writeObject(cols2Pos);
+				objOut.writeObject(spmd);
 				objOut.flush();
 				out.flush();
 				getConfirmation(sock);

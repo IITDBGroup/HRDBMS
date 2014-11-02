@@ -11,6 +11,7 @@ import org.antlr.v4.runtime.ANTLRInputStream;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
 import com.exascale.exceptions.ParseException;
+import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DateParser;
 import com.exascale.misc.MyDate;
 import com.exascale.misc.MySimpleDateFormat;
@@ -32,11 +33,14 @@ public class SQLParser
 	private boolean doesNotUseCurrentSchema = true;
 	private boolean authorized = false;
 	private Transaction tx;
-	
+	private int rewriteCounter = 0;
+
 	public static final int TYPE_INLINE = 0;
 	public static final int TYPE_GROUPBY = 1;
 	public static final int TYPE_DATE = 2;
 	public static final int TYPE_DAYS = 3;
+	public static final int TYPE_MONTHS = 4;
+	public static final int TYPE_YEARS = 5;
 
 	public SQLParser(String sql, ConnectionWorker connection, Transaction tx)
 	{
@@ -44,20 +48,65 @@ public class SQLParser
 		this.connection = connection;
 		this.tx = tx;
 	}
-	
+
 	public SQLParser()
-	{}
-	
+	{
+	}
+
 	public void authorize()
 	{
 		authorized = true;
 	}
-	
+
 	public boolean doesNotUseCurrentSchema()
 	{
 		return doesNotUseCurrentSchema;
 	}
-	
+
+	public static void printTree(Operator op, int indent)
+	{
+		String line = "";
+		int i = 0;
+		while (i < indent)
+		{
+			line += " ";
+			i++;
+		}
+
+		line += op;
+		HRDBMSWorker.logger.debug(line);
+
+		if (op.children().size() > 0)
+		{
+			line = "";
+			i = 0;
+			while (i < indent)
+			{
+				line += " ";
+				i++;
+			}
+
+			line += "(";
+			HRDBMSWorker.logger.debug(line);
+
+			for (Operator child : op.children())
+			{
+				printTree(child, indent + 3);
+			}
+
+			line = "";
+			i = 0;
+			while (i < indent)
+			{
+				line += " ";
+				i++;
+			}
+
+			line += ")";
+			HRDBMSWorker.logger.debug(line);
+		}
+	}
+
 	public Operator parse() throws Exception
 	{
 		ANTLRInputStream input = new ANTLRInputStream(sql.toString());
@@ -68,15 +117,16 @@ public class SQLParser
 		ParseTree tree = parser.select();
 		SelectVisitorImpl visitor = new SelectVisitorImpl();
 		SQLStatement stmt = (SQLStatement)visitor.visit(tree);
-		
+
 		if (stmt instanceof Select)
 		{
 			Operator op = buildOperatorTreeFromSelect((Select)stmt);
 			RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
 			retval.add(op);
+			printTree(op, 0); // DEBUG
 			return retval;
 		}
-		
+
 		if (stmt instanceof Insert)
 		{
 			Insert insert = (Insert)stmt;
@@ -88,7 +138,7 @@ public class SQLParser
 			Operator op = buildOperatorTreeFromInsert((Insert)stmt);
 			return op;
 		}
-		
+
 		if (stmt instanceof Update)
 		{
 			Update update = (Update)stmt;
@@ -100,7 +150,7 @@ public class SQLParser
 			Operator op = buildOperatorTreeFromUpdate((Update)stmt);
 			return op;
 		}
-		
+
 		if (stmt instanceof Delete)
 		{
 			Delete delete = (Delete)stmt;
@@ -112,13 +162,13 @@ public class SQLParser
 			Operator op = buildOperatorTreeFromDelete((Delete)stmt);
 			return op;
 		}
-		
+
 		if (stmt instanceof Runstats)
 		{
 			Operator op = buildOperatorTreeFromRunstats((Runstats)stmt);
 			return op;
 		}
-		
+
 		if (stmt instanceof CreateTable)
 		{
 			CreateTable createTable = (CreateTable)stmt;
@@ -130,7 +180,7 @@ public class SQLParser
 			Operator op = buildOperatorTreeFromCreateTable((CreateTable)stmt);
 			return op;
 		}
-		
+
 		if (stmt instanceof DropTable)
 		{
 			DropTable dropTable = (DropTable)stmt;
@@ -142,40 +192,40 @@ public class SQLParser
 			Operator op = buildOperatorTreeFromDropTable((DropTable)stmt);
 			return op;
 		}
-		
+
 		if (stmt instanceof CreateIndex)
 		{
 			Operator op = buildOperatorTreeFromCreateIndex((CreateIndex)stmt);
 			return op;
 		}
-		
+
 		if (stmt instanceof DropIndex)
 		{
 			Operator op = buildOperatorTreeFromDropIndex((DropIndex)stmt);
 			return op;
 		}
-		
+
 		if (stmt instanceof CreateView)
 		{
 			Operator op = buildOperatorTreeFromCreateView((CreateView)stmt);
 			return op;
 		}
-		
+
 		if (stmt instanceof DropView)
 		{
 			Operator op = buildOperatorTreeFromDropView((DropView)stmt);
 			return op;
 		}
-		
+
 		if (stmt instanceof Load)
 		{
 			Operator op = buildOperatorTreeFromLoad((Load)stmt);
 			return op;
 		}
-		
+
 		return null;
 	}
-	
+
 	private Operator buildOperatorTreeFromLoad(Load load) throws Exception
 	{
 		TableName table = load.getTable();
@@ -191,15 +241,15 @@ public class SQLParser
 			schema = table.getSchema();
 			tbl = table.getName();
 		}
-		
+
 		if (!meta.verifyTableExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table does not exist");
 		}
-		
+
 		return new LoadOperator(schema, tbl, load.isReplace(), load.getDelimiter(), load.getGlob(), meta);
 	}
-	
+
 	private Operator buildOperatorTreeFromCreateView(CreateView createView) throws Exception
 	{
 		buildOperatorTreeFromFullSelect(createView.getSelect());
@@ -216,15 +266,15 @@ public class SQLParser
 			schema = table.getSchema();
 			tbl = table.getName();
 		}
-		
+
 		if (meta.verifyTableExistence(schema, tbl, tx) || meta.verifyViewExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table or view already exists");
 		}
-		
+
 		return new CreateViewOperator(schema, tbl, createView.getText(), meta);
 	}
-	
+
 	private Operator buildOperatorTreeFromDropView(DropView dropView) throws Exception
 	{
 		TableName table = dropView.getView();
@@ -240,15 +290,15 @@ public class SQLParser
 			schema = table.getSchema();
 			tbl = table.getName();
 		}
-		
+
 		if (!meta.verifyViewExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table or view does not exist");
 		}
-		
+
 		return new DropViewOperator(schema, tbl, meta);
 	}
-	
+
 	private Operator buildOperatorTreeFromCreateIndex(CreateIndex createIndex) throws Exception
 	{
 		TableName table = createIndex.getTable();
@@ -264,23 +314,23 @@ public class SQLParser
 			schema = table.getSchema();
 			tbl = table.getName();
 		}
-		
+
 		if (!meta.verifyTableExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table does not exist");
 		}
-		
+
 		String index = createIndex.getIndex().getName();
 		if (createIndex.getIndex().getSchema() != null)
 		{
 			throw new ParseException("Schemas cannot be specified for index names");
 		}
-		
+
 		if (meta.verifyIndexExistence(schema, index, tx))
 		{
 			throw new ParseException("Index already exists");
 		}
-		
+
 		boolean unique = createIndex.getUnique();
 		ArrayList<IndexDef> indexDefs = createIndex.getCols();
 		for (IndexDef def : indexDefs)
@@ -295,10 +345,10 @@ public class SQLParser
 				throw new ParseException("Column " + col + " does not exist");
 			}
 		}
-		
+
 		return new CreateIndexOperator(schema, tbl, index, indexDefs, unique, meta);
 	}
-	
+
 	private Operator buildOperatorTreeFromDropIndex(DropIndex dropIndex) throws Exception
 	{
 		TableName table = dropIndex.getIndex();
@@ -314,15 +364,15 @@ public class SQLParser
 			schema = table.getSchema();
 			tbl = table.getName();
 		}
-		
+
 		if (!meta.verifyIndexExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Index does not exist");
 		}
-		
+
 		return new DropIndexOperator(schema, tbl, meta);
 	}
-	
+
 	private Operator buildOperatorTreeFromCreateTable(CreateTable createTable) throws Exception
 	{
 		TableName table = createTable.getTable();
@@ -338,12 +388,12 @@ public class SQLParser
 			schema = table.getSchema();
 			tbl = table.getName();
 		}
-		
+
 		if (meta.verifyTableExistence(schema, tbl, tx) || meta.verifyViewExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table or view already exists");
 		}
-		
+
 		ArrayList<ColDef> colDefs = createTable.getCols();
 		HashSet<String> colNames = new HashSet<String>();
 		HashSet<String> pks = new HashSet<String>();
@@ -354,23 +404,23 @@ public class SQLParser
 			{
 				throw new ParseException("Column names cannot be qualified with table names in a CREATE TABLE statement");
 			}
-			
+
 			if (!colNames.add(col))
 			{
 				throw new ParseException("CREATE TABLE statement had a duplicate column names");
 			}
-			
+
 			if (def.isNullable() && def.isPK())
 			{
 				throw new ParseException("A column cannot be nullable and part of the primary key");
 			}
-			
+
 			if (def.isPK())
 			{
 				pks.add(col);
 			}
 		}
-		
+
 		if (createTable.getPK() != null)
 		{
 			ArrayList<Column> cols = createTable.getPK().getCols();
@@ -381,14 +431,14 @@ public class SQLParser
 				{
 					throw new ParseException("Column names cannot be qualified with table names in a CREATE TABLE statement");
 				}
-				
+
 				pks.add(c);
 			}
 		}
-		
+
 		return new CreateTableOperator(schema, tbl, colDefs, new ArrayList<String>(pks), createTable.getNodeGroupExp(), createTable.getNodeExp(), createTable.getDeviceExp(), meta);
 	}
-	
+
 	private Operator buildOperatorTreeFromDropTable(DropTable dropTable) throws Exception
 	{
 		TableName table = dropTable.getTable();
@@ -404,15 +454,15 @@ public class SQLParser
 			schema = table.getSchema();
 			tbl = table.getName();
 		}
-		
+
 		if (!meta.verifyTableExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table does not exist");
 		}
-		
+
 		return new DropTableOperator(schema, tbl, meta);
 	}
-	
+
 	private Operator buildOperatorTreeFromRunstats(Runstats runstats) throws Exception
 	{
 		TableName table = runstats.getTable();
@@ -428,15 +478,18 @@ public class SQLParser
 			schema = table.getSchema();
 			tbl = table.getName();
 		}
-		
-		if (!meta.verifyTableExistence(schema, tbl, tx))
+
+		Transaction tx2 = new Transaction(Transaction.ISOLATION_RR);
+		if (!meta.verifyTableExistence(schema, tbl, tx2))
 		{
+			tx2.commit();
 			throw new ParseException("Table does not exist");
 		}
-		
+
+		tx2.commit();
 		return new RunstatsOperator(schema, tbl, meta);
 	}
-	
+
 	private Operator buildOperatorTreeFromUpdate(Update update) throws Exception
 	{
 		TableName table = update.getTable();
@@ -452,12 +505,12 @@ public class SQLParser
 			schema = table.getSchema();
 			tbl = table.getName();
 		}
-		
+
 		if (!meta.verifyTableExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table does not exist");
 		}
-		
+
 		TableScanOperator scan = new TableScanOperator(schema, tbl, meta, tx);
 		Operator op = null;
 		if (update.getWhere() != null)
@@ -469,9 +522,9 @@ public class SQLParser
 			op = scan;
 		}
 		scan.getRID();
-		
+
 		ArrayList<String> buildList = new ArrayList<String>();
-		
+
 		ArrayList<Expression> exps = null;
 		if (update.getExpression().isList())
 		{
@@ -494,7 +547,7 @@ public class SQLParser
 			{
 				throw new ParseException("Invalid expression in update statement");
 			}
-			
+
 			if (otan.getType() == this.TYPE_DATE)
 			{
 				SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
@@ -513,23 +566,23 @@ public class SQLParser
 				buildList.add(otan.getName());
 			}
 		}
-		
+
 		if (!MetaData.verifyUpdate(schema, tbl, update.getCols(), buildList, op, tx))
 		{
 			throw new ParseException("The number of columns and/or data types do not match the columns being updated");
 		}
-		
+
 		ArrayList<String> cols = new ArrayList<String>();
 		for (String col : op.getPos2Col().values())
 		{
 			cols.add(col);
 		}
-		
+
 		cols.add("_RID1");
 		cols.add("_RID2");
 		cols.add("_RID3");
 		cols.add("_RID4");
-		
+
 		ReorderOperator reorder = new ReorderOperator(cols, meta);
 		reorder.add(op);
 		op = reorder;
@@ -546,7 +599,7 @@ public class SQLParser
 		uOp.add(child);
 		return uOp;
 	}
-	
+
 	private Operator buildOperatorTreeFromInsert(Insert insert) throws Exception
 	{
 		TableName table = insert.getTable();
@@ -562,12 +615,12 @@ public class SQLParser
 			schema = table.getSchema();
 			tbl = table.getName();
 		}
-		
+
 		if (!meta.verifyTableExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table does not exist");
 		}
-		
+
 		if (insert.fromSelect())
 		{
 			Operator op = buildOperatorTreeFromFullSelect(insert.getSelect());
@@ -578,12 +631,12 @@ public class SQLParser
 			new Phase3(retval, tx).optimize();
 			new Phase4(retval, tx).optimize();
 			new Phase5(retval, tx).optimize();
-			
+
 			if (!MetaData.verifyInsert(schema, tbl, op, tx))
 			{
 				throw new ParseException("The number of columns and/or data types from the select portion do not match the table being inserted into");
 			}
-			
+
 			Operator iOp = new InsertOperator(schema, tbl, meta);
 			Operator child = retval.children().get(0);
 			retval.removeChild(child);
@@ -600,7 +653,7 @@ public class SQLParser
 				{
 					throw new ParseException("Invalid expression in insert statement");
 				}
-				
+
 				if (otan.getType() == this.TYPE_DATE)
 				{
 					SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
@@ -617,18 +670,18 @@ public class SQLParser
 					op = operator;
 				}
 			}
-			
+
 			if (!MetaData.verifyInsert(schema, tbl, op, tx))
 			{
 				throw new ParseException("The number of columns and/or data types from the select portion do not match the table being inserted into");
 			}
-			
+
 			Operator iOp = new InsertOperator(schema, tbl, meta);
 			iOp.add(op);
 			return iOp;
 		}
 	}
-	
+
 	private Operator buildOperatorTreeFromDelete(Delete delete) throws Exception
 	{
 		TableName table = delete.getTable();
@@ -644,17 +697,17 @@ public class SQLParser
 			schema = table.getSchema();
 			tbl = table.getName();
 		}
-		
+
 		if (!meta.verifyTableExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table does not exist");
 		}
-		
+
 		if (delete.getWhere() == null)
 		{
 			return new MassDeleteOperator(schema, tbl, meta);
 		}
-		
+
 		TableScanOperator scan = new TableScanOperator(schema, tbl, meta, tx);
 		Operator op = buildOperatorTreeFromWhere(delete.getWhere(), scan);
 		scan.getRID();
@@ -680,7 +733,7 @@ public class SQLParser
 		dOp.add(child);
 		return dOp;
 	}
-	
+
 	private Operator buildOperatorTreeFromSelect(Select select) throws Exception
 	{
 		if (select.getCTEs().size() > 0)
@@ -692,13 +745,13 @@ public class SQLParser
 		}
 		return buildOperatorTreeFromFullSelect(select.getFullSelect());
 	}
-	
+
 	private void importCTE(CTE cte, FullSelect select)
 	{
 		String name = cte.getName();
 		ArrayList<Column> cols = cte.getCols();
 		FullSelect cteSelect = cte.getSelect();
-		
+
 		if (select.getSubSelect() != null)
 		{
 			searchSubSelectForCTE(name, cols, cteSelect, select.getSubSelect());
@@ -707,7 +760,7 @@ public class SQLParser
 		{
 			searchFullSelectForCTE(name, cols, cteSelect, select.getFullSelect());
 		}
-		
+
 		for (ConnectedSelect cs : select.getConnected())
 		{
 			if (cs.getSub() != null)
@@ -720,12 +773,12 @@ public class SQLParser
 			}
 		}
 	}
-	
+
 	private void searchSubSelectForCTE(String name, ArrayList<Column> cols, FullSelect cteSelect, SubSelect select)
 	{
 		searchFromForCTE(name, cols, cteSelect, select.getFrom());
 	}
-	
+
 	private void searchFromForCTE(String name, ArrayList<Column> cols, FullSelect cteSelect, FromClause from)
 	{
 		for (TableReference table : from.getTables())
@@ -733,7 +786,7 @@ public class SQLParser
 			searchTableRefForCTE(name, cols, cteSelect, table);
 		}
 	}
-	
+
 	private void searchTableRefForCTE(String name, ArrayList<Column> cols, FullSelect cteSelect, TableReference table)
 	{
 		if (table.isSingleTable())
@@ -750,13 +803,13 @@ public class SQLParser
 			searchTableRefForCTE(name, cols, cteSelect, table.getRHS());
 		}
 	}
-	
+
 	private void searchSingleTableForCTE(String name, ArrayList<Column> cols, FullSelect cteSelect, SingleTable table, TableReference tref)
 	{
 		TableName tblName = table.getName();
 		if (tblName.getSchema() == null && tblName.getName().equals(name))
 		{
-			//found a match
+			// found a match
 			tref.removeSingleTable();
 			if (cols.size() > 0)
 			{
@@ -769,7 +822,7 @@ public class SQLParser
 			}
 		}
 	}
-	
+
 	private void searchFullSelectForCTE(String name, ArrayList<Column> cols, FullSelect cteSelect, FullSelect select)
 	{
 		if (select.getSubSelect() != null)
@@ -780,7 +833,7 @@ public class SQLParser
 		{
 			searchFullSelectForCTE(name, cols, cteSelect, select.getFullSelect());
 		}
-		
+
 		for (ConnectedSelect cs : select.getConnected())
 		{
 			if (cs.getSub() != null)
@@ -793,17 +846,17 @@ public class SQLParser
 			}
 		}
 	}
-	
+
 	private void verifyColumnsAreTheSame(Operator lhs, Operator rhs) throws ParseException
 	{
 		TreeMap<Integer, String> lhsPos2Col = lhs.getPos2Col();
 		TreeMap<Integer, String> rhsPos2Col = rhs.getPos2Col();
-		
+
 		if (lhsPos2Col.size() != rhsPos2Col.size())
 		{
 			throw new ParseException("Cannot combine table with different number of columns!");
 		}
-		
+
 		int i = 0;
 		for (String col : lhsPos2Col.values())
 		{
@@ -811,11 +864,11 @@ public class SQLParser
 			{
 				throw new ParseException("Column types do not match when combining tables!");
 			}
-			
+
 			i++;
 		}
 	}
-	
+
 	private Operator buildOperatorTreeFromFullSelect(FullSelect select) throws Exception
 	{
 		Operator op;
@@ -827,8 +880,8 @@ public class SQLParser
 		{
 			op = buildOperatorTreeFromFullSelect(select.getFullSelect());
 		}
-		
-		//handle connectedSelects
+
+		// handle connectedSelects
 		ArrayList<ConnectedSelect> connected = select.getConnected();
 		Operator lhs = op;
 		for (ConnectedSelect cs : connected)
@@ -842,7 +895,7 @@ public class SQLParser
 			{
 				rhs = buildOperatorTreeFromSubSelect(cs.getSub());
 			}
-			
+
 			verifyColumnsAreTheSame(lhs, rhs);
 			String combo = cs.getCombo();
 			if (combo.equals("UNION ALL"))
@@ -853,7 +906,7 @@ public class SQLParser
 					newOp.add(lhs);
 					newOp.add(rhs);
 				}
-				catch(Exception e)
+				catch (Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
@@ -867,7 +920,7 @@ public class SQLParser
 					newOp.add(lhs);
 					newOp.add(rhs);
 				}
-				catch(Exception e)
+				catch (Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
@@ -881,7 +934,7 @@ public class SQLParser
 					newOp.add(lhs);
 					newOp.add(rhs);
 				}
-				catch(Exception e)
+				catch (Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
@@ -895,7 +948,7 @@ public class SQLParser
 					newOp.add(lhs);
 					newOp.add(rhs);
 				}
-				catch(Exception e)
+				catch (Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
@@ -906,23 +959,23 @@ public class SQLParser
 				throw new ParseException("Unknown table combination type " + combo);
 			}
 		}
-		
+
 		op = lhs;
-		
-		//handle orderBy
+
+		// handle orderBy
 		if (select.getOrderBy() != null)
 		{
 			op = buildOperatorTreeFromOrderBy(select.getOrderBy(), op);
 		}
-		//handle fetchFirst
+		// handle fetchFirst
 		if (select.getFetchFirst() != null)
 		{
 			op = buildOperatorTreeFromFetchFirst(select.getFetchFirst(), op);
 		}
-		
+
 		return op;
 	}
-	
+
 	private Operator buildOperatorTreeFromFetchFirst(FetchFirst fetchFirst, Operator op) throws ParseException
 	{
 		try
@@ -931,12 +984,12 @@ public class SQLParser
 			top.add(op);
 			return top;
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
 			throw new ParseException(e.getMessage());
 		}
 	}
-	
+
 	private void getComplexColumns(SelectClause select, SubSelect sub) throws ParseException
 	{
 		ArrayList<SelectListEntry> selects = select.getSelectList();
@@ -944,24 +997,40 @@ public class SQLParser
 		{
 			if (!s.isColumn())
 			{
-				//complex column
+				// complex column
 				Expression exp = s.getExpression();
 				OperatorTypeAndName op = buildOperatorTreeFromExpression(exp, s.getName());
 				if (op.getType() == TYPE_DAYS)
 				{
 					throw new ParseException("A type of DAYS is not allowed for a column in a select list");
 				}
-				
+
+				if (op.getType() == TYPE_MONTHS)
+				{
+					throw new ParseException("A type of MONTHS is not allowed for a column in a select list");
+				}
+
+				if (op.getType() == TYPE_YEARS)
+				{
+					throw new ParseException("A type of YEARS is not allowed for a column in a select list");
+				}
+
 				if (op.getType() == TYPE_DATE)
 				{
 					SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 					String dateString = sdf.format(((GregorianCalendar)op.getOp()).getTime());
-					
+
 					if (s.getName() != null)
 					{
-						ExtendObjectOperator operator = new ExtendObjectOperator(DateParser.parse(dateString), "." + s.getName(), meta);
+						String sgetName = s.getName();
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+
+						ExtendObjectOperator operator = new ExtendObjectOperator(DateParser.parse(dateString), sgetName, meta);
 						ArrayList<Object> row = new ArrayList<Object>();
-						row.add("." + s.getName());
+						row.add(sgetName);
 						row.add(operator);
 						row.add(TYPE_INLINE);
 						row.add(complexID++);
@@ -989,7 +1058,7 @@ public class SQLParser
 				}
 				else
 				{
-					//colName, op, type, id, exp, prereq, sub, done
+					// colName, op, type, id, exp, prereq, sub, done
 					ArrayList<Object> row = new ArrayList<Object>();
 					row.add(op.getName());
 					row.add(op.getOp());
@@ -1004,14 +1073,14 @@ public class SQLParser
 			}
 		}
 	}
-	
+
 	private static final class OperatorTypeAndName
 	{
 		Object op;
 		int type;
 		String name;
 		int prereq;
-		
+
 		public OperatorTypeAndName(Object op, int type, String name, int prereq)
 		{
 			this.op = op;
@@ -1019,28 +1088,28 @@ public class SQLParser
 			this.name = name;
 			this.prereq = prereq;
 		}
-		
+
 		public String getName()
 		{
 			return name;
 		}
-		
+
 		public Object getOp()
 		{
 			return op;
 		}
-		
+
 		public int getType()
 		{
 			return type;
 		}
-		
+
 		public int getPrereq()
 		{
 			return prereq;
 		}
 	}
-	
+
 	private OperatorTypeAndName buildOperatorTreeFromExpression(Expression exp, String name) throws ParseException
 	{
 		if (exp.isLiteral())
@@ -1048,7 +1117,7 @@ public class SQLParser
 			Literal l = exp.getLiteral();
 			if (l.isNull())
 			{
-				//TODO
+				// TODO
 			}
 			else
 			{
@@ -1057,7 +1126,12 @@ public class SQLParser
 				{
 					if (name != null)
 					{
-						return new OperatorTypeAndName(new ExtendOperator(literal.toString(), "." + name, meta), TYPE_INLINE, "." + name, -1);
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new ExtendOperator(literal.toString(), sgetName, meta), TYPE_INLINE, sgetName, -1);
 					}
 					else
 					{
@@ -1069,7 +1143,12 @@ public class SQLParser
 				{
 					if (name != null)
 					{
-						return new OperatorTypeAndName(new ExtendObjectOperator(literal, "." + name, meta), TYPE_INLINE, "." + name, -1);
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new ExtendObjectOperator(literal, sgetName, meta), TYPE_INLINE, sgetName, -1);
 					}
 					else
 					{
@@ -1083,7 +1162,12 @@ public class SQLParser
 		{
 			if (name != null)
 			{
-				return new OperatorTypeAndName(new CountOperator("." + name, meta), TYPE_GROUPBY, "." + name, -1);
+				String sgetName = name;
+				if (!sgetName.contains("."))
+				{
+					sgetName = "." + sgetName;
+				}
+				return new OperatorTypeAndName(new CountOperator(sgetName, meta), TYPE_GROUPBY, sgetName, -1);
 			}
 			else
 			{
@@ -1122,11 +1206,21 @@ public class SQLParser
 					else
 					{
 						inputColumn += ".";
-					}	
-					inputColumn += input.getColumn();
+					}
+					String end = input.getColumn();
+					if (end.contains("."))
+					{
+						end = end.substring(end.indexOf('.') + 1);
+					}
+					inputColumn += end;
 					if (name != null)
 					{
-						return new OperatorTypeAndName(new MaxOperator(inputColumn, "." + name, meta, true), TYPE_GROUPBY, "." + name, -1);
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new MaxOperator(inputColumn, sgetName, meta, true), TYPE_GROUPBY, sgetName, -1);
 					}
 					else
 					{
@@ -1145,7 +1239,15 @@ public class SQLParser
 					{
 						throw new ParseException("The argument to MAX() cannot be of type DAYS");
 					}
-					
+					else if (retval.getType() == TYPE_MONTHS)
+					{
+						throw new ParseException("The argument to MAX() cannot be of type MONTHS");
+					}
+					else if (retval.getType() == TYPE_YEARS)
+					{
+						throw new ParseException("The argument to MAX() cannot be of type YEARS");
+					}
+
 					ArrayList<Object> row = new ArrayList<Object>();
 					row.add(retval.getName());
 					row.add(retval.getOp());
@@ -1156,10 +1258,15 @@ public class SQLParser
 					row.add(null);
 					row.add(false);
 					complex.add(row);
-					
+
 					if (name != null)
 					{
-						return new OperatorTypeAndName(new MaxOperator(retval.getName(), "." + name, meta, true), TYPE_GROUPBY, "." + name, (Integer)row.get(3));
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new MaxOperator(retval.getName(), sgetName, meta, true), TYPE_GROUPBY, sgetName, (Integer)row.get(3));
 					}
 					else
 					{
@@ -1192,10 +1299,21 @@ public class SQLParser
 					{
 						inputColumn += ".";
 					}
-					inputColumn += input.getColumn();
+
+					String end = input.getColumn();
+					if (end.contains("."))
+					{
+						end = end.substring(end.indexOf('.') + 1);
+					}
+					inputColumn += end;
 					if (name != null)
 					{
-						return new OperatorTypeAndName(new MinOperator(inputColumn, "." + name, meta, true), TYPE_GROUPBY, "." + name, -1);
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new MinOperator(inputColumn, sgetName, meta, true), TYPE_GROUPBY, sgetName, -1);
 					}
 					else
 					{
@@ -1214,7 +1332,15 @@ public class SQLParser
 					{
 						throw new ParseException("The argument to MIN() cannot be of type DAYS");
 					}
-					
+					else if (retval.getType() == TYPE_MONTHS)
+					{
+						throw new ParseException("The argument to MIN() cannot be of type MONTHS");
+					}
+					else if (retval.getType() == TYPE_YEARS)
+					{
+						throw new ParseException("The argument to MIN() cannot be of type YEARS");
+					}
+
 					ArrayList<Object> row = new ArrayList<Object>();
 					row.add(retval.getName());
 					row.add(retval.getOp());
@@ -1225,10 +1351,15 @@ public class SQLParser
 					row.add(null);
 					row.add(false);
 					complex.add(row);
-					
+
 					if (name != null)
 					{
-						return new OperatorTypeAndName(new MinOperator(retval.getName(), "." + name, meta, true), TYPE_GROUPBY, "." + name, (Integer)row.get(3));
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new MinOperator(retval.getName(), sgetName, meta, true), TYPE_GROUPBY, sgetName, (Integer)row.get(3));
 					}
 					else
 					{
@@ -1260,11 +1391,21 @@ public class SQLParser
 					else
 					{
 						inputColumn += ".";
-					}	
-					inputColumn += input.getColumn();
+					}
+					String end = input.getColumn();
+					if (end.contains("."))
+					{
+						end = end.substring(end.indexOf('.') + 1);
+					}
+					inputColumn += end;
 					if (name != null)
 					{
-						return new OperatorTypeAndName(new AvgOperator(inputColumn, "." + name, meta), TYPE_GROUPBY, "." + name, -1);
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new AvgOperator(inputColumn, sgetName, meta), TYPE_GROUPBY, sgetName, -1);
 					}
 					else
 					{
@@ -1283,7 +1424,15 @@ public class SQLParser
 					{
 						throw new ParseException("The argument to AVG() cannot be of type DAYS");
 					}
-					
+					else if (retval.getType() == TYPE_MONTHS)
+					{
+						throw new ParseException("The argument to AVG() cannot be of type MONTHS");
+					}
+					else if (retval.getType() == TYPE_YEARS)
+					{
+						throw new ParseException("The argument to AVG() cannot be of type YEARS");
+					}
+
 					ArrayList<Object> row = new ArrayList<Object>();
 					row.add(retval.getName());
 					row.add(retval.getOp());
@@ -1294,10 +1443,15 @@ public class SQLParser
 					row.add(null);
 					row.add(false);
 					complex.add(row);
-					
+
 					if (name != null)
 					{
-						return new OperatorTypeAndName(new AvgOperator(retval.getName(), "." + name, meta), TYPE_GROUPBY, "." + name, (Integer)row.get(3));
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new AvgOperator(retval.getName(), sgetName, meta), TYPE_GROUPBY, sgetName, (Integer)row.get(3));
 					}
 					else
 					{
@@ -1329,11 +1483,21 @@ public class SQLParser
 					else
 					{
 						inputColumn += ".";
-					}	
-					inputColumn += input.getColumn();
+					}
+					String end = input.getColumn();
+					if (end.contains("."))
+					{
+						end = end.substring(end.indexOf('.') + 1);
+					}
+					inputColumn += end;
 					if (name != null)
 					{
-						return new OperatorTypeAndName(new SumOperator(inputColumn, "." + name, meta, true), TYPE_GROUPBY, "." + name, -1);
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new SumOperator(inputColumn, sgetName, meta, true), TYPE_GROUPBY, sgetName, -1);
 					}
 					else
 					{
@@ -1352,7 +1516,15 @@ public class SQLParser
 					{
 						throw new ParseException("The argument to SUM() cannot be of type DAYS");
 					}
-					
+					else if (retval.getType() == TYPE_MONTHS)
+					{
+						throw new ParseException("The argument to SUM() cannot be of type MONTHS");
+					}
+					else if (retval.getType() == TYPE_YEARS)
+					{
+						throw new ParseException("The argument to SUM() cannot be of type YEARS");
+					}
+
 					ArrayList<Object> row = new ArrayList<Object>();
 					row.add(retval.getName());
 					row.add(retval.getOp());
@@ -1363,10 +1535,15 @@ public class SQLParser
 					row.add(null);
 					row.add(false);
 					complex.add(row);
-					
+
 					if (name != null)
 					{
-						return new OperatorTypeAndName(new SumOperator(retval.getName(), "." + name, meta, true), TYPE_GROUPBY, "." + name, (Integer)row.get(3));
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new SumOperator(retval.getName(), sgetName, meta, true), TYPE_GROUPBY, sgetName, (Integer)row.get(3));
 					}
 					else
 					{
@@ -1398,17 +1575,32 @@ public class SQLParser
 					else
 					{
 						inputColumn += ".";
-					}	
-					inputColumn += input.getColumn();
+					}
+					String end = input.getColumn();
+					if (end.contains("."))
+					{
+						end = end.substring(end.indexOf('.') + 1);
+					}
+					inputColumn += end;
 					if (name != null)
 					{
 						if (f.getDistinct())
 						{
-							return new OperatorTypeAndName(new CountDistinctOperator(inputColumn, "." + name, meta), TYPE_GROUPBY, "." + name, -1);
+							String sgetName = name;
+							if (!sgetName.contains("."))
+							{
+								sgetName = "." + sgetName;
+							}
+							return new OperatorTypeAndName(new CountDistinctOperator(inputColumn, sgetName, meta), TYPE_GROUPBY, sgetName, -1);
 						}
 						else
 						{
-							return new OperatorTypeAndName(new CountOperator(inputColumn, "." + name, meta), TYPE_GROUPBY, "." + name, -1);
+							String sgetName = name;
+							if (!sgetName.contains("."))
+							{
+								sgetName = "." + sgetName;
+							}
+							return new OperatorTypeAndName(new CountOperator(inputColumn, sgetName, meta), TYPE_GROUPBY, sgetName, -1);
 						}
 					}
 					else
@@ -1441,7 +1633,7 @@ public class SQLParser
 				{
 					throw new ParseException("DATE() requires a literal string argument");
 				}
-				
+
 				Object literal = arg.getLiteral().getValue();
 				if (!(literal instanceof String))
 				{
@@ -1456,7 +1648,7 @@ public class SQLParser
 					cal.setTime(date);
 					return new OperatorTypeAndName(cal, TYPE_DATE, "", -1);
 				}
-				catch(Exception e)
+				catch (Exception e)
 				{
 					throw new ParseException("Date is not in the proper format");
 				}
@@ -1473,7 +1665,7 @@ public class SQLParser
 				{
 					throw new ParseException("DAYS() requires a literal numeric argument");
 				}
-				
+
 				Object literal = arg.getLiteral().getValue();
 				if (literal instanceof Integer)
 				{
@@ -1488,6 +1680,60 @@ public class SQLParser
 					throw new ParseException("DAYS() requires a literal numeric argument");
 				}
 			}
+			else if (method.equals("MONTHS"))
+			{
+				ArrayList<Expression> args = f.getArgs();
+				if (args.size() != 1)
+				{
+					throw new ParseException("MONTHS() requires only 1 argument");
+				}
+				Expression arg = args.get(0);
+				if (!arg.isLiteral())
+				{
+					throw new ParseException("MONTHS() requires a literal numeric argument");
+				}
+
+				Object literal = arg.getLiteral().getValue();
+				if (literal instanceof Integer)
+				{
+					return new OperatorTypeAndName(literal, TYPE_MONTHS, "", -1);
+				}
+				else if (literal instanceof Long)
+				{
+					return new OperatorTypeAndName(new Integer(((Long)literal).intValue()), TYPE_MONTHS, "", -1);
+				}
+				else
+				{
+					throw new ParseException("MONTHS() requires a literal numeric argument");
+				}
+			}
+			else if (method.equals("YEARS"))
+			{
+				ArrayList<Expression> args = f.getArgs();
+				if (args.size() != 1)
+				{
+					throw new ParseException("YEARS() requires only 1 argument");
+				}
+				Expression arg = args.get(0);
+				if (!arg.isLiteral())
+				{
+					throw new ParseException("YEARS() requires a literal numeric argument");
+				}
+
+				Object literal = arg.getLiteral().getValue();
+				if (literal instanceof Integer)
+				{
+					return new OperatorTypeAndName(literal, TYPE_YEARS, "", -1);
+				}
+				else if (literal instanceof Long)
+				{
+					return new OperatorTypeAndName(new Integer(((Long)literal).intValue()), TYPE_YEARS, "", -1);
+				}
+				else
+				{
+					throw new ParseException("YEARS() requires a literal numeric argument");
+				}
+			}
 			else if (method.equals("YEAR"))
 			{
 				ArrayList<Expression> args = f.getArgs();
@@ -1496,7 +1742,7 @@ public class SQLParser
 					throw new ParseException("YEAR() requires only 1 argument");
 				}
 				Expression arg = args.get(0);
-				
+
 				if (arg.isColumn())
 				{
 					String colName = "";
@@ -1505,12 +1751,17 @@ public class SQLParser
 					{
 						colName += col.getTable();
 					}
-					
+
 					colName += ("." + col.getColumn());
-					
+
 					if (name != null)
 					{
-						return new OperatorTypeAndName(new YearOperator(colName, "." + name, meta), TYPE_INLINE, "." + name, -1);
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new YearOperator(colName, sgetName, meta), TYPE_INLINE, sgetName, -1);
 					}
 					else
 					{
@@ -1525,10 +1776,15 @@ public class SQLParser
 					{
 						GregorianCalendar cal = (GregorianCalendar)retval.getOp();
 						int literal = cal.get(GregorianCalendar.YEAR);
-						
+
 						if (name != null)
 						{
-							return new OperatorTypeAndName(new ExtendOperator(Integer.toString(literal), "." + name, meta), TYPE_INLINE, "." + name, -1);
+							String sgetName = name;
+							if (!sgetName.contains("."))
+							{
+								sgetName = "." + sgetName;
+							}
+							return new OperatorTypeAndName(new ExtendOperator(Integer.toString(literal), sgetName, meta), TYPE_INLINE, sgetName, -1);
 						}
 						else
 						{
@@ -1540,7 +1796,15 @@ public class SQLParser
 					{
 						throw new ParseException("YEAR() cannot be called with an argument of type DAYS");
 					}
-					
+					else if (retval.getType() == TYPE_MONTHS)
+					{
+						throw new ParseException("YEAR() cannot be called with an argument of type MONTHS");
+					}
+					else if (retval.getType() == TYPE_YEARS)
+					{
+						throw new ParseException("YEAR() cannot be called with an argument of type YEARS");
+					}
+
 					ArrayList<Object> row = new ArrayList<Object>();
 					row.add(retval.getName());
 					row.add(retval.getOp());
@@ -1551,10 +1815,15 @@ public class SQLParser
 					row.add(null);
 					row.add(false);
 					complex.add(row);
-					
+
 					if (name != null)
 					{
-						return new OperatorTypeAndName(new YearOperator(retval.getName(), "." + name, meta), TYPE_INLINE, "." + name, (Integer)row.get(3));
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new YearOperator(retval.getName(), sgetName, meta), TYPE_INLINE, sgetName, (Integer)row.get(3));
 					}
 					else
 					{
@@ -1581,7 +1850,7 @@ public class SQLParser
 				{
 					throw new ParseException("Argument 2 of SUBSTRING() must be a numeric literal");
 				}
-				
+
 				Object val = arg.getLiteral().getValue();
 				if (val instanceof Integer)
 				{
@@ -1603,7 +1872,7 @@ public class SQLParser
 				{
 					throw new ParseException("Argument 2 of SUBSTRING() must be a numeric literal");
 				}
-				
+
 				if (args.size() == 3)
 				{
 					int length;
@@ -1612,7 +1881,7 @@ public class SQLParser
 					{
 						throw new ParseException("Argument 3 of SUBSTRING() must be a numeric literal");
 					}
-					
+
 					val = arg.getLiteral().getValue();
 					if (val instanceof Integer)
 					{
@@ -1621,7 +1890,7 @@ public class SQLParser
 						{
 							throw new ParseException("Argument 3 of SUBSTRING() cannot be less than 0");
 						}
-						
+
 						end = start + length;
 					}
 					else if (val instanceof Long)
@@ -1631,7 +1900,7 @@ public class SQLParser
 						{
 							throw new ParseException("Argument 3 of SUBSTRING() cannot be less than 0");
 						}
-						
+
 						end = start + length;
 					}
 					else
@@ -1639,16 +1908,16 @@ public class SQLParser
 						throw new ParseException("Argument 3 of SUBSTRING() must be a numeric literal");
 					}
 				}
-				
+
 				arg = args.get(0);
 				if (arg.isLiteral() || arg.isFunction() || arg.isExpression())
 				{
 					OperatorTypeAndName retval = buildOperatorTreeFromExpression(arg, null);
-					if (retval.getType() == TYPE_DATE || retval.getType() == TYPE_DAYS)
+					if (retval.getType() == TYPE_DATE || retval.getType() == TYPE_DAYS || retval.getType() == TYPE_MONTHS || retval.getType() == TYPE_YEARS)
 					{
 						throw new ParseException("Argument 1 to SUBSTRING must be a string");
 					}
-					
+
 					ArrayList<Object> row = new ArrayList<Object>();
 					row.add(retval.getName());
 					row.add(retval.getOp());
@@ -1659,10 +1928,15 @@ public class SQLParser
 					row.add(null);
 					row.add(false);
 					complex.add(row);
-					
+
 					if (name != null)
 					{
-						return new OperatorTypeAndName(new SubstringOperator(retval.getName(), start, end, "." + name, meta), TYPE_INLINE, "." + name, (Integer)row.get(3));
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new SubstringOperator(retval.getName(), start, end, sgetName, meta), TYPE_INLINE, sgetName, (Integer)row.get(3));
 					}
 					else
 					{
@@ -1678,12 +1952,17 @@ public class SQLParser
 					{
 						colName += col.getTable();
 					}
-					
+
 					colName += ("." + col.getColumn());
-					
+
 					if (name != null)
 					{
-						return new OperatorTypeAndName(new SubstringOperator(colName, start, end, "." + name, meta), TYPE_INLINE, "." + name, -1);
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new SubstringOperator(colName, start, end, sgetName, meta), TYPE_INLINE, sgetName, -1);
 					}
 					else
 					{
@@ -1707,12 +1986,12 @@ public class SQLParser
 			{
 				col1 = exp.getLHS().getColumn();
 			}
-			
+
 			if (exp2 == null)
 			{
 				col2 = exp.getRHS().getColumn();
 			}
-			
+
 			if (exp1 != null && exp1.getType() == TYPE_DATE)
 			{
 				if (exp.getOp().equals("+"))
@@ -1723,9 +2002,21 @@ public class SQLParser
 						cal.add(GregorianCalendar.DATE, (Integer)exp2.getOp());
 						return new OperatorTypeAndName(cal, TYPE_DATE, "", -1);
 					}
+					else if (exp2 != null && exp2.getType() == TYPE_MONTHS)
+					{
+						GregorianCalendar cal = (GregorianCalendar)exp1.getOp();
+						cal.add(GregorianCalendar.MONTH, (Integer)exp2.getOp());
+						return new OperatorTypeAndName(cal, TYPE_DATE, "", -1);
+					}
+					else if (exp2 != null && exp2.getType() == TYPE_YEARS)
+					{
+						GregorianCalendar cal = (GregorianCalendar)exp1.getOp();
+						cal.add(GregorianCalendar.YEAR, (Integer)exp2.getOp());
+						return new OperatorTypeAndName(cal, TYPE_DATE, "", -1);
+					}
 					else
 					{
-						throw new ParseException("Only type DAYS can be added to a DATE");
+						throw new ParseException("Only types DAYS/MONTHS/YEARS can be added to a DATE");
 					}
 				}
 				else if (exp.getOp().equals("-"))
@@ -1736,9 +2027,21 @@ public class SQLParser
 						cal.add(GregorianCalendar.DATE, -1 * (Integer)exp2.getOp());
 						return new OperatorTypeAndName(cal, TYPE_DATE, "", -1);
 					}
+					else if (exp2 != null && exp2.getType() == TYPE_MONTHS)
+					{
+						GregorianCalendar cal = (GregorianCalendar)exp1.getOp();
+						cal.add(GregorianCalendar.MONTH, -1 * (Integer)exp2.getOp());
+						return new OperatorTypeAndName(cal, TYPE_DATE, "", -1);
+					}
+					else if (exp2 != null && exp2.getType() == TYPE_YEARS)
+					{
+						GregorianCalendar cal = (GregorianCalendar)exp1.getOp();
+						cal.add(GregorianCalendar.YEAR, -1 * (Integer)exp2.getOp());
+						return new OperatorTypeAndName(cal, TYPE_DATE, "", -1);
+					}
 					else
 					{
-						throw new ParseException("Only type DAYS can be substracted from a DATE");
+						throw new ParseException("Only type DAYS/MONTHS/YEARS can be substracted from a DATE");
 					}
 				}
 				else
@@ -1756,21 +2059,33 @@ public class SQLParser
 						cal.add(GregorianCalendar.DATE, (Integer)exp1.getOp());
 						return new OperatorTypeAndName(cal, TYPE_DATE, "", -1);
 					}
+					else if (exp1 != null && exp1.getType() == TYPE_MONTHS)
+					{
+						GregorianCalendar cal = (GregorianCalendar)exp2.getOp();
+						cal.add(GregorianCalendar.MONTH, (Integer)exp1.getOp());
+						return new OperatorTypeAndName(cal, TYPE_DATE, "", -1);
+					}
+					else if (exp1 != null && exp1.getType() == TYPE_YEARS)
+					{
+						GregorianCalendar cal = (GregorianCalendar)exp2.getOp();
+						cal.add(GregorianCalendar.YEAR, (Integer)exp1.getOp());
+						return new OperatorTypeAndName(cal, TYPE_DATE, "", -1);
+					}
 					else
 					{
-						throw new ParseException("Only type DAYS can be added to a DATE");
+						throw new ParseException("Only type DAYS/MONTHS/YEARS can be added to a DATE");
 					}
 				}
 				else
 				{
-					throw new ParseException("Only a DATE can be added to type DAYS");
+					throw new ParseException("Only a DATE can be added to type DAYS/MONTHS/YEARS");
 				}
 			}
 			else if (exp1 != null && exp1.getType() == TYPE_DAYS)
 			{
-				//already handled DAYS + DATE
-				//so need to handle DAYS + col(DATE)
-				//and DAYS +/- DAYS
+				// already handled DAYS + DATE
+				// so need to handle DAYS + col(DATE)
+				// and DAYS +/- DAYS
 				if (exp2 != null && exp2.getType() == TYPE_DAYS)
 				{
 					if (exp.getOp().equals("+"))
@@ -1782,8 +2097,8 @@ public class SQLParser
 						return new OperatorTypeAndName((Integer)exp1.getOp() - (Integer)exp2.getOp(), TYPE_DAYS, "", -1);
 					}
 				}
-				
-				//externalize exp2 if not col
+
+				// externalize exp2 if not col
 				if (exp2 != null)
 				{
 					ArrayList<Object> row = new ArrayList<Object>();
@@ -1796,10 +2111,15 @@ public class SQLParser
 					row.add(null);
 					row.add(false);
 					complex.add(row);
-				
+
 					if (name != null)
 					{
-						return new OperatorTypeAndName(new DateMathOperator(exp2.getName(), TYPE_DAYS, (Integer)exp1.getOp(), "." + name, meta), TYPE_INLINE, "." + name, (Integer)row.get(3));
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new DateMathOperator(exp2.getName(), TYPE_DAYS, (Integer)exp1.getOp(), sgetName, meta), TYPE_INLINE, sgetName, (Integer)row.get(3));
 					}
 					else
 					{
@@ -1817,7 +2137,12 @@ public class SQLParser
 					colString2 += ("." + col2.getColumn());
 					if (name != null)
 					{
-						return new OperatorTypeAndName(new DateMathOperator(colString2, TYPE_DAYS, (Integer)exp1.getOp(), "." + name, meta), TYPE_INLINE, "." + name, -1);
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new DateMathOperator(colString2, TYPE_DAYS, (Integer)exp1.getOp(), sgetName, meta), TYPE_INLINE, sgetName, -1);
 					}
 					else
 					{
@@ -1826,12 +2151,146 @@ public class SQLParser
 					}
 				}
 			}
+			else if (exp1 != null && exp1.getType() == TYPE_MONTHS)
+			{
+				if (exp2 != null && exp2.getType() == TYPE_MONTHS)
+				{
+					if (exp.getOp().equals("+"))
+					{
+						return new OperatorTypeAndName((Integer)exp1.getOp() + (Integer)exp2.getOp(), TYPE_MONTHS, "", -1);
+					}
+					else if (exp.getOp().equals("-"))
+					{
+						return new OperatorTypeAndName((Integer)exp1.getOp() - (Integer)exp2.getOp(), TYPE_MONTHS, "", -1);
+					}
+				}
+
+				// externalize exp2 if not col
+				if (exp2 != null)
+				{
+					ArrayList<Object> row = new ArrayList<Object>();
+					row.add(exp2.getName());
+					row.add(exp2.getOp());
+					row.add(exp2.getType());
+					row.add(complexID++);
+					row.add(exp.getRHS());
+					row.add(exp2.getPrereq());
+					row.add(null);
+					row.add(false);
+					complex.add(row);
+
+					if (name != null)
+					{
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new DateMathOperator(exp2.getName(), TYPE_MONTHS, (Integer)exp1.getOp(), sgetName, meta), TYPE_INLINE, sgetName, (Integer)row.get(3));
+					}
+					else
+					{
+						name = "._E" + suffix++;
+						return new OperatorTypeAndName(new DateMathOperator(exp2.getName(), TYPE_MONTHS, (Integer)exp1.getOp(), name, meta), TYPE_INLINE, name, (Integer)row.get(3));
+					}
+				}
+				else
+				{
+					String colString2 = "";
+					if (col2.getTable() != null)
+					{
+						colString2 = col2.getTable();
+					}
+					colString2 += ("." + col2.getColumn());
+					if (name != null)
+					{
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new DateMathOperator(colString2, TYPE_MONTHS, (Integer)exp1.getOp(), sgetName, meta), TYPE_INLINE, sgetName, -1);
+					}
+					else
+					{
+						name = "._E" + suffix++;
+						return new OperatorTypeAndName(new DateMathOperator(colString2, TYPE_MONTHS, (Integer)exp1.getOp(), name, meta), TYPE_INLINE, name, -1);
+					}
+				}
+			}
+			else if (exp1 != null && exp1.getType() == TYPE_YEARS)
+			{
+				if (exp2 != null && exp2.getType() == TYPE_YEARS)
+				{
+					if (exp.getOp().equals("+"))
+					{
+						return new OperatorTypeAndName((Integer)exp1.getOp() + (Integer)exp2.getOp(), TYPE_YEARS, "", -1);
+					}
+					else if (exp.getOp().equals("-"))
+					{
+						return new OperatorTypeAndName((Integer)exp1.getOp() - (Integer)exp2.getOp(), TYPE_YEARS, "", -1);
+					}
+				}
+
+				// externalize exp2 if not col
+				if (exp2 != null)
+				{
+					ArrayList<Object> row = new ArrayList<Object>();
+					row.add(exp2.getName());
+					row.add(exp2.getOp());
+					row.add(exp2.getType());
+					row.add(complexID++);
+					row.add(exp.getRHS());
+					row.add(exp2.getPrereq());
+					row.add(null);
+					row.add(false);
+					complex.add(row);
+
+					if (name != null)
+					{
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new DateMathOperator(exp2.getName(), TYPE_YEARS, (Integer)exp1.getOp(), sgetName, meta), TYPE_INLINE, sgetName, (Integer)row.get(3));
+					}
+					else
+					{
+						name = "._E" + suffix++;
+						return new OperatorTypeAndName(new DateMathOperator(exp2.getName(), TYPE_YEARS, (Integer)exp1.getOp(), name, meta), TYPE_INLINE, name, (Integer)row.get(3));
+					}
+				}
+				else
+				{
+					String colString2 = "";
+					if (col2.getTable() != null)
+					{
+						colString2 = col2.getTable();
+					}
+					colString2 += ("." + col2.getColumn());
+					if (name != null)
+					{
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new DateMathOperator(colString2, TYPE_YEARS, (Integer)exp1.getOp(), sgetName, meta), TYPE_INLINE, sgetName, -1);
+					}
+					else
+					{
+						name = "._E" + suffix++;
+						return new OperatorTypeAndName(new DateMathOperator(colString2, TYPE_YEARS, (Integer)exp1.getOp(), name, meta), TYPE_INLINE, name, -1);
+					}
+				}
+			}
 			else if (exp2 != null && exp2.getType() == TYPE_DAYS)
 			{
-				//already handled DATE +/- DAYS and DAYS +/- DAYS
-				//so need to handle col(DATE) +/- DAYS
-				//externalize exp1 if not col
-				
+				// already handled DATE +/- DAYS and DAYS +/- DAYS
+				// so need to handle col(DATE) +/- DAYS
+				// externalize exp1 if not col
+
 				if (exp1 != null)
 				{
 					ArrayList<Object> row = new ArrayList<Object>();
@@ -1844,12 +2303,17 @@ public class SQLParser
 					row.add(null);
 					row.add(false);
 					complex.add(row);
-				
+
 					if (exp.getOp().equals("+"))
 					{
 						if (name != null)
 						{
-							return new OperatorTypeAndName(new DateMathOperator(exp1.getName(), TYPE_DAYS, (Integer)exp2.getOp(), "." + name, meta), TYPE_INLINE, "." + name, (Integer)row.get(3));
+							String sgetName = name;
+							if (!sgetName.contains("."))
+							{
+								sgetName = "." + sgetName;
+							}
+							return new OperatorTypeAndName(new DateMathOperator(exp1.getName(), TYPE_DAYS, (Integer)exp2.getOp(), sgetName, meta), TYPE_INLINE, sgetName, (Integer)row.get(3));
 						}
 						else
 						{
@@ -1861,7 +2325,12 @@ public class SQLParser
 					{
 						if (name != null)
 						{
-							return new OperatorTypeAndName(new DateMathOperator(exp1.getName(), TYPE_DAYS, -1 * (Integer)exp2.getOp(), "." + name, meta), TYPE_INLINE, "." + name, (Integer)row.get(3));
+							String sgetName = name;
+							if (!sgetName.contains("."))
+							{
+								sgetName = "." + sgetName;
+							}
+							return new OperatorTypeAndName(new DateMathOperator(exp1.getName(), TYPE_DAYS, -1 * (Integer)exp2.getOp(), sgetName, meta), TYPE_INLINE, sgetName, (Integer)row.get(3));
 						}
 						else
 						{
@@ -1886,7 +2355,12 @@ public class SQLParser
 					{
 						if (name != null)
 						{
-							return new OperatorTypeAndName(new DateMathOperator(colString1, TYPE_DAYS, (Integer)exp2.getOp(), "." + name, meta), TYPE_INLINE, "." + name, -1);
+							String sgetName = name;
+							if (!sgetName.contains("."))
+							{
+								sgetName = "." + sgetName;
+							}
+							return new OperatorTypeAndName(new DateMathOperator(colString1, TYPE_DAYS, (Integer)exp2.getOp(), sgetName, meta), TYPE_INLINE, sgetName, -1);
 						}
 						else
 						{
@@ -1898,7 +2372,12 @@ public class SQLParser
 					{
 						if (name != null)
 						{
-							return new OperatorTypeAndName(new DateMathOperator(colString1, TYPE_DAYS, -1 * (Integer)exp2.getOp(), "." + name, meta), TYPE_INLINE, "." + name, -1);
+							String sgetName = name;
+							if (!sgetName.contains("."))
+							{
+								sgetName = "." + sgetName;
+							}
+							return new OperatorTypeAndName(new DateMathOperator(colString1, TYPE_DAYS, -1 * (Integer)exp2.getOp(), sgetName, meta), TYPE_INLINE, sgetName, -1);
 						}
 						else
 						{
@@ -1912,12 +2391,216 @@ public class SQLParser
 					}
 				}
 			}
-			
-			//neither exp1 or exp2 are of type DATE or DAYS
+			else if (exp2 != null && exp2.getType() == TYPE_MONTHS)
+			{
+				if (exp1 != null)
+				{
+					ArrayList<Object> row = new ArrayList<Object>();
+					row.add(exp1.getName());
+					row.add(exp1.getOp());
+					row.add(exp1.getType());
+					row.add(complexID++);
+					row.add(exp.getLHS());
+					row.add(exp1.getPrereq());
+					row.add(null);
+					row.add(false);
+					complex.add(row);
+
+					if (exp.getOp().equals("+"))
+					{
+						if (name != null)
+						{
+							String sgetName = name;
+							if (!sgetName.contains("."))
+							{
+								sgetName = "." + sgetName;
+							}
+							return new OperatorTypeAndName(new DateMathOperator(exp1.getName(), TYPE_MONTHS, (Integer)exp2.getOp(), sgetName, meta), TYPE_INLINE, sgetName, (Integer)row.get(3));
+						}
+						else
+						{
+							name = "._E" + suffix++;
+							return new OperatorTypeAndName(new DateMathOperator(exp1.getName(), TYPE_MONTHS, (Integer)exp2.getOp(), name, meta), TYPE_INLINE, name, (Integer)row.get(3));
+						}
+					}
+					else if (exp.getOp().equals("-"))
+					{
+						if (name != null)
+						{
+							String sgetName = name;
+							if (!sgetName.contains("."))
+							{
+								sgetName = "." + sgetName;
+							}
+							return new OperatorTypeAndName(new DateMathOperator(exp1.getName(), TYPE_MONTHS, -1 * (Integer)exp2.getOp(), sgetName, meta), TYPE_INLINE, sgetName, (Integer)row.get(3));
+						}
+						else
+						{
+							name = "._E" + suffix++;
+							return new OperatorTypeAndName(new DateMathOperator(exp1.getName(), TYPE_MONTHS, -1 * (Integer)exp2.getOp(), name, meta), TYPE_INLINE, name, (Integer)row.get(3));
+						}
+					}
+					else
+					{
+						throw new ParseException("Only the + and - operators are allowed with type MONTHS");
+					}
+				}
+				else
+				{
+					String colString1 = "";
+					if (col1.getTable() != null)
+					{
+						colString1 = col1.getTable();
+					}
+					colString1 += ("." + col1.getColumn());
+					if (exp.getOp().equals("+"))
+					{
+						if (name != null)
+						{
+							String sgetName = name;
+							if (!sgetName.contains("."))
+							{
+								sgetName = "." + sgetName;
+							}
+							return new OperatorTypeAndName(new DateMathOperator(colString1, TYPE_MONTHS, (Integer)exp2.getOp(), sgetName, meta), TYPE_INLINE, sgetName, -1);
+						}
+						else
+						{
+							name = "._E" + suffix++;
+							return new OperatorTypeAndName(new DateMathOperator(colString1, TYPE_MONTHS, (Integer)exp2.getOp(), name, meta), TYPE_INLINE, name, -1);
+						}
+					}
+					else if (exp.getOp().equals("-"))
+					{
+						if (name != null)
+						{
+							String sgetName = name;
+							if (!sgetName.contains("."))
+							{
+								sgetName = "." + sgetName;
+							}
+							return new OperatorTypeAndName(new DateMathOperator(colString1, TYPE_MONTHS, -1 * (Integer)exp2.getOp(), sgetName, meta), TYPE_INLINE, sgetName, -1);
+						}
+						else
+						{
+							name = "._E" + suffix++;
+							return new OperatorTypeAndName(new DateMathOperator(colString1, TYPE_MONTHS, -1 * (Integer)exp2.getOp(), name, meta), TYPE_INLINE, name, -1);
+						}
+					}
+					else
+					{
+						throw new ParseException("Only the + and - operators are allowed with type MONTHS");
+					}
+				}
+			}
+			else if (exp2 != null && exp2.getType() == TYPE_YEARS)
+			{
+				if (exp1 != null)
+				{
+					ArrayList<Object> row = new ArrayList<Object>();
+					row.add(exp1.getName());
+					row.add(exp1.getOp());
+					row.add(exp1.getType());
+					row.add(complexID++);
+					row.add(exp.getLHS());
+					row.add(exp1.getPrereq());
+					row.add(null);
+					row.add(false);
+					complex.add(row);
+
+					if (exp.getOp().equals("+"))
+					{
+						if (name != null)
+						{
+							String sgetName = name;
+							if (!sgetName.contains("."))
+							{
+								sgetName = "." + sgetName;
+							}
+							return new OperatorTypeAndName(new DateMathOperator(exp1.getName(), TYPE_YEARS, (Integer)exp2.getOp(), sgetName, meta), TYPE_INLINE, sgetName, (Integer)row.get(3));
+						}
+						else
+						{
+							name = "._E" + suffix++;
+							return new OperatorTypeAndName(new DateMathOperator(exp1.getName(), TYPE_YEARS, (Integer)exp2.getOp(), name, meta), TYPE_INLINE, name, (Integer)row.get(3));
+						}
+					}
+					else if (exp.getOp().equals("-"))
+					{
+						if (name != null)
+						{
+							String sgetName = name;
+							if (!sgetName.contains("."))
+							{
+								sgetName = "." + sgetName;
+							}
+							return new OperatorTypeAndName(new DateMathOperator(exp1.getName(), TYPE_YEARS, -1 * (Integer)exp2.getOp(), sgetName, meta), TYPE_INLINE, sgetName, (Integer)row.get(3));
+						}
+						else
+						{
+							name = "._E" + suffix++;
+							return new OperatorTypeAndName(new DateMathOperator(exp1.getName(), TYPE_YEARS, -1 * (Integer)exp2.getOp(), name, meta), TYPE_INLINE, name, (Integer)row.get(3));
+						}
+					}
+					else
+					{
+						throw new ParseException("Only the + and - operators are allowed with type YEARS");
+					}
+				}
+				else
+				{
+					String colString1 = "";
+					if (col1.getTable() != null)
+					{
+						colString1 = col1.getTable();
+					}
+					colString1 += ("." + col1.getColumn());
+					if (exp.getOp().equals("+"))
+					{
+						if (name != null)
+						{
+							String sgetName = name;
+							if (!sgetName.contains("."))
+							{
+								sgetName = "." + sgetName;
+							}
+							return new OperatorTypeAndName(new DateMathOperator(colString1, TYPE_YEARS, (Integer)exp2.getOp(), sgetName, meta), TYPE_INLINE, sgetName, -1);
+						}
+						else
+						{
+							name = "._E" + suffix++;
+							return new OperatorTypeAndName(new DateMathOperator(colString1, TYPE_YEARS, (Integer)exp2.getOp(), name, meta), TYPE_INLINE, name, -1);
+						}
+					}
+					else if (exp.getOp().equals("-"))
+					{
+						if (name != null)
+						{
+							String sgetName = name;
+							if (!sgetName.contains("."))
+							{
+								sgetName = "." + sgetName;
+							}
+							return new OperatorTypeAndName(new DateMathOperator(colString1, TYPE_YEARS, -1 * (Integer)exp2.getOp(), sgetName, meta), TYPE_INLINE, sgetName, -1);
+						}
+						else
+						{
+							name = "._E" + suffix++;
+							return new OperatorTypeAndName(new DateMathOperator(colString1, TYPE_YEARS, -1 * (Integer)exp2.getOp(), name, meta), TYPE_INLINE, name, -1);
+						}
+					}
+					else
+					{
+						throw new ParseException("Only the + and - operators are allowed with type YEARS");
+					}
+				}
+			}
+
+			// neither exp1 or exp2 are of type DATE or DAYS or MONTHS or YEARS
 			if (exp.getOp().equals("||"))
 			{
-				//string concatenation
-				//externalize both exp1 and exp2 if they are not cols
+				// string concatenation
+				// externalize both exp1 and exp2 if they are not cols
 				int prereq1 = -1;
 				int prereq2 = -1;
 				ArrayList<Object> row = null;
@@ -1935,7 +2618,7 @@ public class SQLParser
 					complex.add(row);
 					prereq1 = (Integer)row.get(3);
 				}
-				
+
 				if (exp2 != null)
 				{
 					row = new ArrayList<Object>();
@@ -1950,7 +2633,7 @@ public class SQLParser
 					complex.add(row);
 					prereq2 = (Integer)row.get(3);
 				}
-				
+
 				if (prereq2 == -1)
 				{
 					prereq2 = prereq1;
@@ -1961,7 +2644,7 @@ public class SQLParser
 					bottom.remove(5);
 					bottom.add(5, prereq1);
 				}
-				
+
 				String name1 = null;
 				String name2 = null;
 				if (exp1 != null)
@@ -1977,7 +2660,7 @@ public class SQLParser
 					}
 					name1 += ("." + col1.getColumn());
 				}
-				
+
 				if (exp2 != null)
 				{
 					name2 = exp2.getName();
@@ -1993,7 +2676,12 @@ public class SQLParser
 				}
 				if (name != null)
 				{
-					return new OperatorTypeAndName(new ConcatOperator(name1, name2, "." + name, meta), TYPE_INLINE, "." + name, prereq2);
+					String sgetName = name;
+					if (!sgetName.contains("."))
+					{
+						sgetName = "." + sgetName;
+					}
+					return new OperatorTypeAndName(new ConcatOperator(name1, name2, sgetName, meta), TYPE_INLINE, sgetName, prereq2);
 				}
 				else
 				{
@@ -2001,11 +2689,11 @@ public class SQLParser
 					return new OperatorTypeAndName(new ConcatOperator(name1, name2, name, meta), TYPE_INLINE, name, prereq2);
 				}
 			}
-			
+
 			// +,-,*, or /
 			if ((exp1 == null || !(exp1.getOp() instanceof ExtendOperator)) && (exp2 == null || !(exp2.getOp() instanceof ExtendOperator)))
 			{
-				//externalize both exp1 and exp2
+				// externalize both exp1 and exp2
 				ArrayList<Object> row = new ArrayList<Object>();
 				int prereq1 = -1;
 				int prereq2 = -1;
@@ -2022,7 +2710,7 @@ public class SQLParser
 					complex.add(row);
 					prereq1 = (Integer)row.get(3);
 				}
-				
+
 				if (exp2 != null)
 				{
 					row = new ArrayList<Object>();
@@ -2037,7 +2725,7 @@ public class SQLParser
 					complex.add(row);
 					prereq2 = (Integer)row.get(3);
 				}
-				
+
 				if (prereq2 == -1)
 				{
 					prereq2 = prereq1;
@@ -2048,8 +2736,9 @@ public class SQLParser
 					bottom.remove(5);
 					bottom.add(5, prereq1);
 				}
-				
-				String name1 = null;;
+
+				String name1 = null;
+				;
 				String name2 = null;
 				if (exp1 != null)
 				{
@@ -2064,7 +2753,7 @@ public class SQLParser
 					}
 					name1 += ("." + col1.getColumn());
 				}
-				
+
 				if (exp2 != null)
 				{
 					name2 = exp2.getName();
@@ -2080,7 +2769,12 @@ public class SQLParser
 				}
 				if (name != null)
 				{
-					return new OperatorTypeAndName(new ExtendOperator(exp.getOp() + "," + name1 + "," + name2, "." + name, meta), TYPE_INLINE, "." + name, prereq2);
+					String sgetName = name;
+					if (!sgetName.contains("."))
+					{
+						sgetName = "." + sgetName;
+					}
+					return new OperatorTypeAndName(new ExtendOperator(exp.getOp() + "," + name1 + "," + name2, sgetName, meta), TYPE_INLINE, sgetName, prereq2);
 				}
 				else
 				{
@@ -2093,20 +2787,25 @@ public class SQLParser
 				ExtendOperator combined = null;
 				if (name != null)
 				{
-					combined = new ExtendOperator(exp.getOp() + "," + ((ExtendOperator)exp1.getOp()).getPrefix() + "," + ((ExtendOperator)exp2.getOp()).getPrefix(), "." + name, meta);
+					String sgetName = name;
+					if (!sgetName.contains("."))
+					{
+						sgetName = "." + sgetName;
+					}
+					combined = new ExtendOperator(exp.getOp() + "," + ((ExtendOperator)exp1.getOp()).getPrefix() + "," + ((ExtendOperator)exp2.getOp()).getPrefix(), sgetName, meta);
 				}
 				else
 				{
 					name = "._E" + suffix++;
 					combined = new ExtendOperator(exp.getOp() + "," + ((ExtendOperator)exp1.getOp()).getPrefix() + "," + ((ExtendOperator)exp2.getOp()).getPrefix(), name, meta);
 				}
-				
+
 				int myPrereq = -1;
 				if (exp1.getPrereq() != -1)
 				{
 					myPrereq = exp1.getPrereq();
 				}
-				
+
 				if (exp2.getPrereq() != -1 && myPrereq == -1)
 				{
 					myPrereq = exp2.getPrereq();
@@ -2117,10 +2816,15 @@ public class SQLParser
 					bottom.remove(5);
 					bottom.add(5, exp2.getPrereq());
 				}
-				
+
 				if (name != null)
 				{
-					return new OperatorTypeAndName(combined, TYPE_INLINE, "." + name, myPrereq);
+					String sgetName = name;
+					if (!sgetName.contains("."))
+					{
+						sgetName = "." + sgetName;
+					}
+					return new OperatorTypeAndName(combined, TYPE_INLINE, sgetName, myPrereq);
 				}
 				else
 				{
@@ -2143,20 +2847,25 @@ public class SQLParser
 					{
 						name2 = col2.getTable();
 					}
-					
+
 					name2 += ("." + col2.getColumn());
 				}
 				if (name != null)
 				{
-					combined = new ExtendOperator(exp.getOp() + "," + ((ExtendOperator)exp1.getOp()).getPrefix() + "," + name2, "." + name, meta);
+					String sgetName = name;
+					if (!sgetName.contains("."))
+					{
+						sgetName = "." + sgetName;
+					}
+					combined = new ExtendOperator(exp.getOp() + "," + ((ExtendOperator)exp1.getOp()).getPrefix() + "," + name2, sgetName, meta);
 				}
 				else
 				{
 					name = "._E" + suffix++;
 					combined = new ExtendOperator(exp.getOp() + "," + ((ExtendOperator)exp1.getOp()).getPrefix() + "," + name2, name, meta);
 				}
-				
-				//externalize exp2
+
+				// externalize exp2
 				int prereq = -1;
 				if (exp2 != null)
 				{
@@ -2175,10 +2884,15 @@ public class SQLParser
 					bottom.remove(5);
 					bottom.add(5, exp1.getPrereq());
 				}
-				
+
 				if (name != null)
 				{
-					return new OperatorTypeAndName(combined, TYPE_INLINE, "." + name, prereq);
+					String sgetName = name;
+					if (!sgetName.contains("."))
+					{
+						sgetName = "." + sgetName;
+					}
+					return new OperatorTypeAndName(combined, TYPE_INLINE, sgetName, prereq);
 				}
 				else
 				{
@@ -2188,7 +2902,7 @@ public class SQLParser
 			}
 			else
 			{
-				//exp2 instanceof ExtendOperator
+				// exp2 instanceof ExtendOperator
 				ExtendOperator combined = null;
 				String name1 = null;
 				if (exp1 != null)
@@ -2202,20 +2916,25 @@ public class SQLParser
 					{
 						name1 = col1.getTable();
 					}
-					
+
 					name1 += ("." + col1.getColumn());
 				}
 				if (name != null)
 				{
-					combined = new ExtendOperator(exp.getOp() + "," + name1 + "," + ((ExtendOperator)exp2.getOp()).getPrefix(), "." + name, meta);
+					String sgetName = name;
+					if (!sgetName.contains("."))
+					{
+						sgetName = "." + sgetName;
+					}
+					combined = new ExtendOperator(exp.getOp() + "," + name1 + "," + ((ExtendOperator)exp2.getOp()).getPrefix(), sgetName, meta);
 				}
 				else
 				{
 					name = "._E" + suffix++;
 					combined = new ExtendOperator(exp.getOp() + "," + name1 + "," + ((ExtendOperator)exp2.getOp()).getPrefix(), name, meta);
 				}
-				
-				//externalize exp1
+
+				// externalize exp1
 				int prereq = -1;
 				if (exp1 != null)
 				{
@@ -2234,10 +2953,15 @@ public class SQLParser
 					bottom.remove(5);
 					bottom.add(5, exp2.getPrereq());
 				}
-				
+
 				if (name != null)
 				{
-					return new OperatorTypeAndName(combined, TYPE_INLINE, "." + name, prereq);
+					String sgetName = name;
+					if (!sgetName.contains("."))
+					{
+						sgetName = "." + sgetName;
+					}
+					return new OperatorTypeAndName(combined, TYPE_INLINE, sgetName, prereq);
 				}
 				else
 				{
@@ -2246,20 +2970,20 @@ public class SQLParser
 				}
 			}
 		}
-		
+
 		return null;
 	}
-	
+
 	private ArrayList<Object> getBottomRow(ArrayList<Object> row)
 	{
 		while ((Integer)row.get(5) != -1)
 		{
 			row = getRow((Integer)row.get(5));
 		}
-		
+
 		return row;
 	}
-	
+
 	private ArrayList<Object> getRow(int num)
 	{
 		for (ArrayList<Object> row : complex)
@@ -2269,10 +2993,10 @@ public class SQLParser
 				return row;
 			}
 		}
-		
+
 		return null;
 	}
-	
+
 	private Operator buildNGBExtends(Operator op, SubSelect sub) throws ParseException
 	{
 		for (ArrayList<Object> row : complex)
@@ -2286,16 +3010,16 @@ public class SQLParser
 				}
 			}
 		}
-		
+
 		return op;
 	}
-	
+
 	private Object buildNGBExtend(Operator op, ArrayList<Object> row) throws ParseException
 	{
-		//colName, op, type, id, exp, prereq, done
+		// colName, op, type, id, exp, prereq, done
 		if (!((Integer)row.get(5)).equals(-1))
 		{
-			//get the row
+			// get the row
 			for (ArrayList<Object> r : complex)
 			{
 				if (r.get(3).equals(row.get(5)))
@@ -2303,30 +3027,22 @@ public class SQLParser
 					try
 					{
 						Object o = addComplexColumn(r, op);
-					
-						if (o instanceof Boolean)
-						{
-							return o;
-						}
-						else
-						{
-							op = (Operator)o;
-							break;
-						}
+						op = (Operator)o;
+						break;
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						return null;
 					}
 				}
 			}
 		}
-				
+
 		if ((Boolean)row.get(7) == true)
 		{
 			return op;
 		}
-				
+
 		if ((Integer)row.get(2) == TYPE_INLINE)
 		{
 			Operator o = (Operator)row.get(1);
@@ -2334,8 +3050,9 @@ public class SQLParser
 			{
 				o.add(op);
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
+				HRDBMSWorker.logger.debug("", e);
 				throw new ParseException(e.getMessage());
 			}
 			row.remove(7);
@@ -2344,12 +3061,12 @@ public class SQLParser
 			{
 				String name = o.getReferences().get(0);
 				String type = op.getCols2Types().get(name);
-				
+
 				if (type == null)
 				{
 					throw new ParseException("A reference to column " + name + " was unable to be resolved.");
 				}
-				
+
 				if (!type.equals("DATE"))
 				{
 					throw new ParseException("The YEAR() function cannot be used on a non-DATE column");
@@ -2359,12 +3076,12 @@ public class SQLParser
 			{
 				String name = o.getReferences().get(0);
 				String type = op.getCols2Types().get(name);
-				
+
 				if (type == null)
 				{
 					throw new ParseException("A reference to column " + name + " was unable to be resolved.");
 				}
-				
+
 				if (!type.equals("CHAR"))
 				{
 					throw new ParseException("The SUBSTRING() function cannot be used on a non-character data");
@@ -2374,12 +3091,12 @@ public class SQLParser
 			{
 				String name = o.getReferences().get(0);
 				String type = op.getCols2Types().get(name);
-				
+
 				if (type == null)
 				{
 					throw new ParseException("A reference to column " + name + " was unable to be resolved.");
 				}
-				
+
 				if (!type.equals("DATE"))
 				{
 					throw new ParseException("A DATE was expected but a different data type was found");
@@ -2391,17 +3108,17 @@ public class SQLParser
 				String type1 = op.getCols2Types().get(name1);
 				String name2 = o.getReferences().get(1);
 				String type2 = op.getCols2Types().get(name2);
-				
+
 				if (type1 == null)
 				{
 					throw new ParseException("A reference to column " + name1 + " was unable to be resolved.");
 				}
-				
+
 				if (type2 == null)
 				{
 					throw new ParseException("A reference to column " + name2 + " was unable to be resolved.");
 				}
-				
+
 				if (!type1.equals("CHAR") || !type2.equals("CHAR"))
 				{
 					throw new ParseException("Concatenation is not supported for non-character data");
@@ -2412,12 +3129,13 @@ public class SQLParser
 				for (String name : o.getReferences())
 				{
 					String type = op.getCols2Types().get(name);
-					
+
 					if (type == null)
 					{
+						HRDBMSWorker.logger.debug("Could not find " + name + " in " + op.getCols2Types());
 						throw new ParseException("A reference to column " + name + " was unable to be resolved.");
 					}
-					
+
 					if (type.equals("INT") || type.equals("LONG") || type.equals("FLOAT"))
 					{
 					}
@@ -2427,16 +3145,16 @@ public class SQLParser
 					}
 				}
 			}
-			
+
 			return o;
 		}
 		else
 		{
-			//type group by
+			// type group by
 			return false;
 		}
 	}
-	
+
 	private Operator buildOperatorTreeFromSubSelect(SubSelect select) throws Exception
 	{
 		Operator op = buildOperatorTreeFromFrom(select.getFrom());
@@ -2446,38 +3164,41 @@ public class SQLParser
 		{
 			op = buildOperatorTreeFromWhere(select.getWhere(), op);
 		}
-		
-		//handle groupBy
-		op = buildOperatorTreeFromGroupBy(select.getGroupBy(), op);
-		
-		//handle extends that haven't been done
+
+		// handle groupBy
+		if (updateGroupByNeeded(select))
+		{
+			op = buildOperatorTreeFromGroupBy(select.getGroupBy(), op, select);
+		}
+
+		// handle extends that haven't been done
 		op = buildNGBExtends(op, select);
-		//handle having
+		// handle having
 		if (select.getHaving() != null)
 		{
 			op = buildOperatorTreeFromHaving(select.getHaving(), op);
 		}
-		//handle orderBy
+		// handle orderBy
 		if (select.getOrderBy() != null)
 		{
 			op = buildOperatorTreeFromOrderBy(select.getOrderBy(), op);
 		}
-		
+
 		op = buildOperatorTreeFromSelectClause(select.getSelect(), op);
-				
-		//handle fetchFirst
+
+		// handle fetchFirst
 		if (select.getFetchFirst() != null)
 		{
 			op = buildOperatorTreeFromFetchFirst(select.getFetchFirst(), op);
 		}
 		return op;
 	}
-	
-	private Operator buildOperatorTreeFromGroupBy(GroupBy groupBy, Operator op) throws ParseException
+
+	private Operator buildOperatorTreeFromGroupBy(GroupBy groupBy, Operator op, SubSelect select) throws ParseException
 	{
 		ArrayList<Column> cols;
 		ArrayList<String> vStr;
-		
+
 		if (groupBy != null)
 		{
 			cols = groupBy.getCols();
@@ -2489,7 +3210,7 @@ public class SQLParser
 				{
 					colString += col.getTable();
 				}
-			
+
 				colString += ("." + col.getColumn());
 				vStr.add(colString);
 			}
@@ -2499,12 +3220,12 @@ public class SQLParser
 			cols = new ArrayList<Column>();
 			vStr = new ArrayList<String>();
 		}
-		
+
 		ArrayList<AggregateOperator> ops = new ArrayList<AggregateOperator>();
 		for (ArrayList<Object> row : complex)
 		{
-			//colName, op, type, id, exp, prereq, done
-			if ((Integer)row.get(2) == TYPE_GROUPBY)
+			// colName, op, type, id, exp, prereq, done
+			if ((Boolean)row.get(7) == false && (Integer)row.get(2) == TYPE_GROUPBY && (row.get(6) == null || ((SubSelect)row.get(6)).equals(select)))
 			{
 				AggregateOperator agop = (AggregateOperator)row.get(1);
 				if (agop instanceof AvgOperator)
@@ -2512,12 +3233,12 @@ public class SQLParser
 					String col = getMatchingCol(op, agop.getInputColumn());
 					agop.setInput(col);
 					String type = op.getCols2Types().get(col);
-					
+
 					if (type == null)
 					{
 						throw new ParseException("Column " + col + " was referenced but not found");
 					}
-					
+
 					if (type.equals("INT") || type.equals("LONG") || type.equals("FLOAT"))
 					{
 					}
@@ -2533,7 +3254,7 @@ public class SQLParser
 						String col = getMatchingCol(op, agop.getInputColumn());
 						agop.setInput(col);
 						String type = op.getCols2Types().get(col);
-						
+
 						if (type == null)
 						{
 							throw new ParseException("Column " + col + " was referenced but not found");
@@ -2547,9 +3268,10 @@ public class SQLParser
 						String col = getMatchingCol(op, agop.getInputColumn());
 						agop.setInput(col);
 						String type = op.getCols2Types().get(col);
-						
+
 						if (type == null)
 						{
+							HRDBMSWorker.logger.debug("Could not find " + col + " in " + op.getCols2Types());
 							throw new ParseException("Column " + col + " was referenced but not found");
 						}
 					}
@@ -2559,12 +3281,12 @@ public class SQLParser
 					String col = getMatchingCol(op, agop.getInputColumn());
 					agop.setInput(col);
 					String type = op.getCols2Types().get(col);
-					
+
 					if (type == null)
 					{
 						throw new ParseException("Column " + col + " was referenced but not found");
 					}
-					
+
 					if (type.equals("INT"))
 					{
 						((MaxOperator)agop).setIsInt(true);
@@ -2611,12 +3333,12 @@ public class SQLParser
 					String col = getMatchingCol(op, agop.getInputColumn());
 					agop.setInput(col);
 					String type = op.getCols2Types().get(col);
-					
+
 					if (type == null)
 					{
 						throw new ParseException("Column " + col + " was referenced but not found");
 					}
-					
+
 					if (type.equals("INT"))
 					{
 						((MinOperator)agop).setIsInt(true);
@@ -2663,12 +3385,12 @@ public class SQLParser
 					String col = getMatchingCol(op, agop.getInputColumn());
 					agop.setInput(col);
 					String type = op.getCols2Types().get(col);
-					
+
 					if (type == null)
 					{
 						throw new ParseException("Column " + col + " was referenced but not found");
 					}
-					
+
 					if (type.equals("INT") || type.equals("LONG"))
 					{
 						((SumOperator)agop).setIsInt(true);
@@ -2682,13 +3404,13 @@ public class SQLParser
 						throw new ParseException("The argument to SUM() must be numeric");
 					}
 				}
-				
+
 				ops.add(agop);
 				row.remove(7);
 				row.add(true);
 			}
 		}
-		
+
 		if (ops.size() > 0)
 		{
 			try
@@ -2697,7 +3419,7 @@ public class SQLParser
 				multi.add(op);
 				return multi;
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
@@ -2707,7 +3429,7 @@ public class SQLParser
 			return op;
 		}
 	}
-	
+
 	private String getMatchingCol(Operator op, String col)
 	{
 		if (op.getCols2Pos().keySet().contains(col))
@@ -2720,7 +3442,7 @@ public class SQLParser
 			{
 				col = col.substring(col.indexOf('.') + 1);
 			}
-			
+
 			for (String col2 : op.getCols2Pos().keySet())
 			{
 				String col3 = null;
@@ -2732,17 +3454,17 @@ public class SQLParser
 				{
 					col3 = col2;
 				}
-				
+
 				if (col.equals(col3))
 				{
 					return col2;
 				}
 			}
-			
+
 			return col;
 		}
 	}
-	
+
 	private Operator buildOperatorTreeFromSelectClause(SelectClause select, Operator op) throws ParseException
 	{
 		if (!select.isSelectStar())
@@ -2760,7 +3482,7 @@ public class SQLParser
 					{
 						colName += col.getTable();
 					}
-					
+
 					colName += ("." + col.getColumn());
 					cols.add(colName);
 				}
@@ -2768,11 +3490,16 @@ public class SQLParser
 				{
 					if (entry.getName() != null)
 					{
-						cols.add("." + entry.getName());
+						String theName = entry.getName();
+						if (!theName.contains("."))
+						{
+							theName = "." + theName;
+						}
+						cols.add(theName);
 					}
 					else
 					{
-						//unnamed complex column
+						// unnamed complex column
 						for (ArrayList<Object> row : complex)
 						{
 							if (row.get(4).equals(entry.getExpression()))
@@ -2788,7 +3515,7 @@ public class SQLParser
 					}
 				}
 			}
-			
+
 			ArrayList<String> newCols = new ArrayList<String>();
 			ArrayList<String> olds = new ArrayList<String>();
 			ArrayList<String> news = new ArrayList<String>();
@@ -2806,33 +3533,38 @@ public class SQLParser
 						{
 							col2 += c.getTable();
 						}
-						
+
 						col2 += ("." + c.getColumn());
 					}
 					else
 					{
 						if (entry.getName() != null)
 						{
-							col2 = "." + entry.getName();
+							String theName = entry.getName();
+							if (!theName.contains("."))
+							{
+								theName = "." + theName;
+							}
+							col2 = theName;
 						}
 						else
 						{
 							break;
 						}
 					}
-					
+
 					if (col.equals(col2))
 					{
 						sle = entry;
 						break;
 					}
 				}
-				
+
 				Integer pos = op.getCols2Pos().get(col);
 				if (pos == null)
 				{
-					//try without schema
-					//must only be 1 match
+					// try without schema
+					// must only be 1 match
 					if (col.contains("."))
 					{
 						if (col.indexOf('.') != 0)
@@ -2859,7 +3591,7 @@ public class SQLParser
 							}
 							matches++;
 						}
-						
+
 						if (matches > 1)
 						{
 							throw new ParseException("Ambiguous acolumn: " + col);
@@ -2877,7 +3609,7 @@ public class SQLParser
 					}
 				}
 			}
-			
+
 			cols = newCols;
 			try
 			{
@@ -2885,11 +3617,11 @@ public class SQLParser
 				reorder.add(op);
 				op = reorder;
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
-			
+
 			if (needsRename)
 			{
 				RenameOperator rename = null;
@@ -2898,11 +3630,11 @@ public class SQLParser
 					rename = new RenameOperator(olds, news, meta);
 					rename.add(op);
 				}
-				catch(Exception e)
+				catch (Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
-				
+
 				op = rename;
 			}
 		}
@@ -2915,12 +3647,12 @@ public class SQLParser
 				reorder.add(op);
 				op = reorder;
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
 		}
-		
+
 		if (!select.isSelectAll())
 		{
 			UnionOperator distinct = new UnionOperator(true, meta);
@@ -2928,28 +3660,28 @@ public class SQLParser
 			{
 				distinct.add(op);
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
 			op = distinct;
 		}
-		
+
 		return op;
 	}
-	
+
 	private Operator buildOperatorTreeFromHaving(Having having, Operator op) throws Exception
 	{
 		SearchCondition search = having.getSearch();
 		return buildOperatorTreeFromSearchCondition(search, op);
 	}
-	
+
 	private Operator buildOperatorTreeFromOrderBy(OrderBy orderBy, Operator op) throws ParseException
 	{
 		ArrayList<SortKey> keys = orderBy.getKeys();
 		ArrayList<String> columns = new ArrayList<String>(keys.size());
 		ArrayList<Boolean> orders = new ArrayList<Boolean>(keys.size());
-		
+
 		for (SortKey key : keys)
 		{
 			String colStr = null;
@@ -2957,7 +3689,7 @@ public class SQLParser
 			{
 				Column col = key.getColumn();
 				if (col.getTable() != null)
-				{	
+				{
 					colStr = col.getTable() + "." + col.getColumn();
 					int matches = 0;
 					for (String c : op.getPos2Col().values())
@@ -2967,7 +3699,7 @@ public class SQLParser
 							matches++;
 						}
 					}
-					
+
 					if (matches == 0)
 					{
 						throw new ParseException("Column " + colStr + " does not exist!");
@@ -2985,65 +3717,67 @@ public class SQLParser
 					{
 						String p1 = c.substring(0, c.indexOf('.'));
 						String p2 = c.substring(c.indexOf('.') + 1);
-						
+
 						if (p2.equals(col.getColumn()))
 						{
 							matches++;
 							table = p1;
 						}
 					}
-					
+
 					if (matches == 0)
 					{
-						throw new ParseException("Column " + col.getColumn() + " does not exist");
+						printTree(op, 0);
+						throw new ParseException("Column " + col.getColumn() + " does not exist in " + op.getPos2Col());
 					}
 					else if (matches > 1)
 					{
 						throw new ParseException("Reference to column " + col.getColumn() + " is ambiguous!");
 					}
-					
+
 					colStr = table + "." + col.getColumn();
 				}
-				
+
 				columns.add(colStr);
 				orders.add(key.getDirection());
 			}
 			else
 			{
-				//handle numbered keys
+				// handle numbered keys
 				colStr = op.getPos2Col().get(new Integer(key.getNum()));
 				columns.add(colStr);
 				orders.add(key.getDirection());
 			}
 		}
-		
+
 		try
 		{
 			SortOperator sort = new SortOperator(columns, orders, meta);
 			sort.add(op);
 			return sort;
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
+			HRDBMSWorker.logger.debug("", e);
 			throw new ParseException(e.getMessage());
 		}
 	}
-	
+
 	private Operator buildOperatorTreeFromWhere(Where where, Operator op) throws Exception
 	{
 		SearchCondition search = where.getSearch();
 		return buildOperatorTreeFromSearchCondition(search, op);
 	}
-	
+
 	private Operator buildOperatorTreeFromSearchCondition(SearchCondition search, Operator op) throws Exception
 	{
 		if (search.getConnected() != null && search.getConnected().size() > 0)
 		{
 			convertToCNF(search);
 		}
-		
+
 		SearchClause clause = search.getClause();
-		
+
 		if (search.getConnected() != null && search.getConnected().size() > 0 && search.getConnected().get(0).isAnd())
 		{
 			if (search.getClause().getPredicate() == null)
@@ -3055,7 +3789,7 @@ public class SQLParser
 				ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
 				op = buildOperatorTreeFromSearchCondition(new SearchCondition(search.getClause(), cscs), op);
 			}
-			
+
 			for (ConnectedSearchClause csc : search.getConnected())
 			{
 				if (csc.getSearch().getPredicate() == null)
@@ -3068,10 +3802,10 @@ public class SQLParser
 					op = buildOperatorTreeFromSearchCondition(new SearchCondition(csc.getSearch(), cscs), op);
 				}
 			}
-			
+
 			return op;
 		}
-		
+
 		if (search.getConnected() == null || search.getConnected().size() == 0)
 		{
 			boolean negated = clause.getNegated();
@@ -3082,14 +3816,27 @@ public class SQLParser
 				{
 					if (isCorrelated(((ExistsPredicate)pred).getSelect()))
 					{
-						SearchCondition join = rewriteCorrelatedSubSelect(((ExistsPredicate)pred).getSelect(), op); //update select list and search conditions, and maybe group by
+						SearchCondition join = rewriteCorrelatedSubSelect(((ExistsPredicate)pred).getSelect()); // update
+																												// select
+																												// list
+																												// and
+																												// search
+																												// conditions,
+																												// and
+																												// maybe
+																												// group
+																												// by
 						if (negated)
 						{
-							return connectWithAntiJoin(op, buildOperatorTreeFromSubSelect(((ExistsPredicate)pred).getSelect()), join);
+							Operator op2 = buildOperatorTreeFromSubSelect(((ExistsPredicate)pred).getSelect());
+							op2 = addRename(op2, join);
+							return connectWithAntiJoin(op, op2, join);
 						}
 						else
 						{
-							return connectWithSemiJoin(op, buildOperatorTreeFromSubSelect(((ExistsPredicate)pred).getSelect()), join);
+							Operator op2 = buildOperatorTreeFromSubSelect(((ExistsPredicate)pred).getSelect());
+							op2 = addRename(op2, join);
+							return connectWithSemiJoin(op, op2, join);
 						}
 					}
 					else
@@ -3100,7 +3847,7 @@ public class SQLParser
 				Expression lhs = pred.getLHS();
 				String o = pred.getOp();
 				Expression rhs = pred.getRHS();
-				
+
 				if (o.equals("IN") || o.equals("NI"))
 				{
 					String lhsStr = null;
@@ -3112,7 +3859,7 @@ public class SQLParser
 							Literal literal = lhs.getLiteral();
 							if (literal.isNull())
 							{
-								//TODO
+								// TODO
 							}
 							Object value = literal.getValue();
 							if (value instanceof String)
@@ -3127,7 +3874,7 @@ public class SQLParser
 						else if (lhs.isColumn())
 						{
 							Column col = lhs.getColumn();
-							//is column unambiguous?
+							// is column unambiguous?
 							if (col.getTable() != null)
 							{
 								lhsStr = col.getTable() + "." + col.getColumn();
@@ -3139,7 +3886,7 @@ public class SQLParser
 										matches++;
 									}
 								}
-							
+
 								if (matches == 0)
 								{
 									throw new ParseException("Column " + lhsStr + " does not exist!");
@@ -3157,27 +3904,28 @@ public class SQLParser
 								{
 									String p1 = c.substring(0, c.indexOf('.'));
 									String p2 = c.substring(c.indexOf('.') + 1);
-								
+
 									if (p2.equals(col.getColumn()))
 									{
 										matches++;
 										table = p1;
 									}
 								}
-							
+
 								if (matches == 0)
 								{
-									//could be a complex column
+									// could be a complex column
 									for (ArrayList<Object> row : complex)
 									{
-										//colName, op, type, id, exp, prereq, done
+										// colName, op, type, id, exp, prereq,
+										// done
 										if (row.get(0).equals("." + col.getColumn()))
 										{
-											//its a match
+											// its a match
 											matches++;
 										}
 									}
-								
+
 									if (matches == 0)
 									{
 										throw new ParseException("Column " + col.getColumn() + " does not exist");
@@ -3186,17 +3934,18 @@ public class SQLParser
 									{
 										throw new ParseException("Column " + lhsStr + " is ambiguous!");
 									}
-								
+
 									for (ArrayList<Object> row : complex)
 									{
-										//colName, op, type, id, exp, prereq, done
+										// colName, op, type, id, exp, prereq,
+										// done
 										if (row.get(0).equals("." + col.getColumn()))
 										{
 											if (((Boolean)row.get(7)).equals(true))
 											{
 												throw new ParseException("Internal error during SQL parsing.  A WHERE clause was found referencing a complex column that was marked as done but was not available in the operator tree");
 											}
-										
+
 											op = addComplexColumn(row, op);
 										}
 									}
@@ -3205,7 +3954,7 @@ public class SQLParser
 								{
 									throw new ParseException("Reference to column " + col.getColumn() + " is ambiguous!");
 								}
-							
+
 								lhsStr = table + "." + col.getColumn();
 							}
 						}
@@ -3222,15 +3971,23 @@ public class SQLParser
 							SubSelect sub = lhs.getSelect();
 							if (isCorrelated(sub))
 							{
-								lhsStr = getOneCol(sub);
-								SearchCondition join = rewriteCorrelatedSubSelect(sub, op); //update select list and search conditions
+								// lhsStr = getOneCol(sub);
+								SearchCondition join = rewriteCorrelatedSubSelect(sub); // update
+																						// select
+																						// list
+																						// and
+																						// search
+																						// conditions
 								ProductOperator product = new ProductOperator(meta);
 								try
 								{
 									product.add(op);
-									product.add(buildOperatorTreeFromSubSelect(sub));
+									Operator op2 = buildOperatorTreeFromSubSelect(sub);
+									op2 = addRename(op2, join);
+									lhsStr = op2.getPos2Col().get(0);
+									product.add(op2);
 								}
-								catch(Exception e)
+								catch (Exception e)
 								{
 									throw new ParseException(e.getMessage());
 								}
@@ -3253,7 +4010,7 @@ public class SQLParser
 									extend.add(op);
 									extend.add(rhs2);
 								}
-								catch(Exception e)
+								catch (Exception e)
 								{
 									throw new ParseException(e.getMessage());
 								}
@@ -3263,32 +4020,43 @@ public class SQLParser
 						}
 						else
 						{
-							//check to see if complex already contains this expression
+							// check to see if complex already contains this
+							// expression
 							boolean found = false;
 							for (ArrayList<Object> row : complex)
 							{
-								//colName, op, type, id, exp, prereq, sub, done
+								// colName, op, type, id, exp, prereq, sub, done
 								if (row.get(4).equals(rhs))
 								{
 									if ((Boolean)row.get(7) == true)
 									{
-										//found it
+										// found it
 										found = true;
 										lhsStr = (String)row.get(0);
 										break;
 									}
 								}
 							}
-						
+
 							if (!found)
 							{
-								//if not, build it
+								// if not, build it
 								OperatorTypeAndName otan = buildOperatorTreeFromExpression(lhs, null);
 								if (otan.getType() == TYPE_DAYS)
 								{
 									throw new ParseException("A type of DAYS is not allowed for a predicate");
 								}
-							
+
+								if (otan.getType() == TYPE_MONTHS)
+								{
+									throw new ParseException("A type of MONTHS is not allowed for a predicate");
+								}
+
+								if (otan.getType() == TYPE_YEARS)
+								{
+									throw new ParseException("A type of YEARS is not allowed for a predicate");
+								}
+
 								if (otan.getType() == TYPE_DATE)
 								{
 									SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
@@ -3310,7 +4078,8 @@ public class SQLParser
 								}
 								else
 								{
-									//colName, op, type, id, exp, prereq, sub, done
+									// colName, op, type, id, exp, prereq, sub,
+									// done
 									ArrayList<Object> row = new ArrayList<Object>();
 									row.add(otan.getName());
 									row.add(otan.getOp());
@@ -3327,7 +4096,7 @@ public class SQLParser
 							}
 						}
 					}
-					
+
 					if (rhs.isLiteral())
 					{
 						throw new ParseException("A literal value cannot be used in this context");
@@ -3356,8 +4125,9 @@ public class SQLParser
 								SearchClause s = new SearchClause(p, false);
 								ConnectedSearchClause cs = new ConnectedSearchClause(s, false);
 								ss.add(cs);
+								i++;
 							}
-							
+
 							SearchCondition sc = new SearchCondition(s1, ss);
 							return buildOperatorTreeFromSearchCondition(sc, op);
 						}
@@ -3375,8 +4145,9 @@ public class SQLParser
 								SearchClause s = new SearchClause(p, false);
 								ConnectedSearchClause cs = new ConnectedSearchClause(s, true);
 								ss.add(cs);
+								i++;
 							}
-							
+
 							SearchCondition sc = new SearchCondition(s1, ss);
 							return buildOperatorTreeFromSearchCondition(sc, op);
 						}
@@ -3386,17 +4157,24 @@ public class SQLParser
 						SubSelect sub = rhs.getSelect();
 						if (isCorrelated(sub))
 						{
-							rhsStr = getOneCol(sub);
-							SearchCondition join = rewriteCorrelatedSubSelect(sub, op); //update select list and search conditions
+							// rhsStr = getOneCol(sub);
+							SearchCondition join = rewriteCorrelatedSubSelect(sub); // update
+																					// select
+																					// list
+																					// and
+																					// search
+																					// conditions
 							if ((o.equals("IN") && !negated) || (o.equals("NI") && negated))
 							{
 								Operator rhs2 = buildOperatorTreeFromSubSelect(sub);
+								rhs2 = addRename(rhs2, join);
+								rhsStr = rhs2.getPos2Col().get(0);
 								verifyTypes(lhsStr, op, rhsStr, rhs2);
 								try
 								{
 									op = connectWithSemiJoin(op, rhs2, join, new Filter(lhsStr, "E", rhsStr));
 								}
-								catch(Exception e)
+								catch (Exception e)
 								{
 									throw new ParseException(e.getMessage());
 								}
@@ -3404,23 +4182,25 @@ public class SQLParser
 							else
 							{
 								Operator rhs2 = buildOperatorTreeFromSubSelect(sub);
+								rhs2 = addRename(rhs2, join);
+								rhsStr = rhs2.getPos2Col().get(0);
 								verifyTypes(lhsStr, op, rhsStr, rhs2);
 								try
 								{
 									op = connectWithAntiJoin(op, rhs2, join, new Filter(lhsStr, "E", rhsStr));
 								}
-								catch(Exception e)
+								catch (Exception e)
 								{
 									throw new ParseException(e.getMessage());
 								}
 							}
-							
+
 							return op;
 						}
 						else
 						{
 							Operator rhs2 = buildOperatorTreeFromSubSelect(sub);
-							rhsStr = getOneCol(sub);
+							rhsStr = rhs2.getPos2Col().get(0);
 							verifyTypes(lhsStr, op, rhsStr, rhs2);
 							if ((o.equals("IN") && !negated) || (o.equals("NI") && negated))
 							{
@@ -3433,7 +4213,7 @@ public class SQLParser
 									join.add(rhs2);
 									return join;
 								}
-								catch(Exception e)
+								catch (Exception e)
 								{
 									throw new ParseException(e.getMessage());
 								}
@@ -3449,7 +4229,7 @@ public class SQLParser
 									join.add(rhs2);
 									return join;
 								}
-								catch(Exception e)
+								catch (Exception e)
 								{
 									throw new ParseException(e.getMessage());
 								}
@@ -3461,16 +4241,16 @@ public class SQLParser
 						throw new ParseException("An expression cannot be used in this context");
 					}
 				}
-				
+
 				String lhsStr = null;
 				String rhsStr = null;
-				
+
 				if (lhs.isLiteral())
 				{
 					Literal literal = lhs.getLiteral();
 					if (literal.isNull())
 					{
-						//TODO
+						// TODO
 					}
 					Object value = literal.getValue();
 					if (value instanceof String)
@@ -3485,7 +4265,7 @@ public class SQLParser
 				else if (lhs.isColumn())
 				{
 					Column col = lhs.getColumn();
-					//is column unambiguous?
+					// is column unambiguous?
 					if (col.getTable() != null)
 					{
 						lhsStr = col.getTable() + "." + col.getColumn();
@@ -3497,7 +4277,7 @@ public class SQLParser
 								matches++;
 							}
 						}
-						
+
 						if (matches == 0)
 						{
 							throw new ParseException("Column " + lhsStr + " does not exist!");
@@ -3515,27 +4295,27 @@ public class SQLParser
 						{
 							String p1 = c.substring(0, c.indexOf('.'));
 							String p2 = c.substring(c.indexOf('.') + 1);
-							
+
 							if (p2.equals(col.getColumn()))
 							{
 								matches++;
 								table = p1;
 							}
 						}
-						
+
 						if (matches == 0)
 						{
-							//could be a complex column
+							// could be a complex column
 							for (ArrayList<Object> row : complex)
 							{
-								//colName, op, type, id, exp, prereq, done
+								// colName, op, type, id, exp, prereq, done
 								if (row.get(0).equals("." + col.getColumn()))
 								{
-									//its a match
+									// its a match
 									matches++;
 								}
 							}
-							
+
 							if (matches == 0)
 							{
 								throw new ParseException("Column " + col.getColumn() + " does not exist");
@@ -3544,17 +4324,17 @@ public class SQLParser
 							{
 								throw new ParseException("Column " + lhsStr + " is ambiguous!");
 							}
-							
+
 							for (ArrayList<Object> row : complex)
 							{
-								//colName, op, type, id, exp, prereq, done
+								// colName, op, type, id, exp, prereq, done
 								if (row.get(0).equals("." + col.getColumn()))
 								{
 									if (((Boolean)row.get(7)).equals(true))
 									{
 										throw new ParseException("Internal error during SQL parsing.  A WHERE clause was found referencing a complex column that was marked as done but was not available in the operator tree");
 									}
-									
+
 									op = addComplexColumn(row, op);
 								}
 							}
@@ -3563,7 +4343,7 @@ public class SQLParser
 						{
 							throw new ParseException("Reference to column " + col.getColumn() + " is ambiguous!");
 						}
-						
+
 						lhsStr = table + "." + col.getColumn();
 					}
 				}
@@ -3580,15 +4360,23 @@ public class SQLParser
 					SubSelect sub = lhs.getSelect();
 					if (isCorrelated(sub))
 					{
-						lhsStr = getOneCol(sub);
-						SearchCondition join = rewriteCorrelatedSubSelect(sub, op); //update select list and search conditions
+						// lhsStr = getOneCol(sub);
+						SearchCondition join = rewriteCorrelatedSubSelect(sub); // update
+																				// select
+																				// list
+																				// and
+																				// search
+																				// conditions
 						ProductOperator product = new ProductOperator(meta);
 						try
 						{
 							product.add(op);
-							product.add(buildOperatorTreeFromSubSelect(sub));
+							Operator op2 = buildOperatorTreeFromSubSelect(sub);
+							op2 = addRename(op2, join);
+							lhsStr = op2.getPos2Col().get(0);
+							product.add(op2);
 						}
-						catch(Exception e)
+						catch (Exception e)
 						{
 							throw new ParseException(e.getMessage());
 						}
@@ -3611,7 +4399,7 @@ public class SQLParser
 							extend.add(op);
 							extend.add(rhs2);
 						}
-						catch(Exception e)
+						catch (Exception e)
 						{
 							throw new ParseException(e.getMessage());
 						}
@@ -3621,32 +4409,42 @@ public class SQLParser
 				}
 				else
 				{
-					//check to see if complex already contains this expression
+					// check to see if complex already contains this expression
 					boolean found = false;
 					for (ArrayList<Object> row : complex)
 					{
-						//colName, op, type, id, exp, prereq, sub, done
+						// colName, op, type, id, exp, prereq, sub, done
 						if (row.get(4).equals(rhs))
 						{
 							if ((Boolean)row.get(7) == true)
 							{
-								//found it
+								// found it
 								found = true;
 								lhsStr = (String)row.get(0);
 								break;
 							}
 						}
 					}
-					
+
 					if (!found)
 					{
-						//if not, build it
+						// if not, build it
 						OperatorTypeAndName otan = buildOperatorTreeFromExpression(lhs, null);
 						if (otan.getType() == TYPE_DAYS)
 						{
 							throw new ParseException("A type of DAYS is not allowed for a predicate");
 						}
-						
+
+						if (otan.getType() == TYPE_MONTHS)
+						{
+							throw new ParseException("A type of MONTHS is not allowed for a predicate");
+						}
+
+						if (otan.getType() == TYPE_YEARS)
+						{
+							throw new ParseException("A type of YEARS is not allowed for a predicate");
+						}
+
 						if (otan.getType() == TYPE_DATE)
 						{
 							SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
@@ -3668,7 +4466,7 @@ public class SQLParser
 						}
 						else
 						{
-							//colName, op, type, id, exp, prereq, sub, done
+							// colName, op, type, id, exp, prereq, sub, done
 							ArrayList<Object> row = new ArrayList<Object>();
 							row.add(otan.getName());
 							row.add(otan.getOp());
@@ -3684,14 +4482,14 @@ public class SQLParser
 						}
 					}
 				}
-				
-				//do the same for rhs
+
+				// do the same for rhs
 				if (rhs.isLiteral())
 				{
 					Literal literal = rhs.getLiteral();
 					if (literal.isNull())
 					{
-						//TODO
+						// TODO
 					}
 					Object value = literal.getValue();
 					if (value instanceof String)
@@ -3706,7 +4504,7 @@ public class SQLParser
 				else if (rhs.isColumn())
 				{
 					Column col = rhs.getColumn();
-					//is column unambiguous?
+					// is column unambiguous?
 					if (col.getTable() != null)
 					{
 						rhsStr = col.getTable() + "." + col.getColumn();
@@ -3718,7 +4516,7 @@ public class SQLParser
 								matches++;
 							}
 						}
-						
+
 						if (matches == 0)
 						{
 							throw new ParseException("Column " + rhsStr + " does not exist!");
@@ -3736,27 +4534,27 @@ public class SQLParser
 						{
 							String p1 = c.substring(0, c.indexOf('.'));
 							String p2 = c.substring(c.indexOf('.') + 1);
-							
+
 							if (p2.equals(col.getColumn()))
 							{
 								matches++;
 								table = p1;
 							}
 						}
-						
+
 						if (matches == 0)
 						{
-							//could be a complex column
+							// could be a complex column
 							for (ArrayList<Object> row : complex)
 							{
-								//colName, op, type, id, exp, prereq, done
+								// colName, op, type, id, exp, prereq, done
 								if (row.get(0).equals("." + col.getColumn()))
 								{
-									//its a match
+									// its a match
 									matches++;
 								}
 							}
-							
+
 							if (matches == 0)
 							{
 								throw new ParseException("Column " + col.getColumn() + " does not exist");
@@ -3765,17 +4563,17 @@ public class SQLParser
 							{
 								throw new ParseException("Column " + lhsStr + " is ambiguous!");
 							}
-							
+
 							for (ArrayList<Object> row : complex)
 							{
-								//colName, op, type, id, exp, prereq, done
+								// colName, op, type, id, exp, prereq, done
 								if (row.get(0).equals("." + col.getColumn()))
 								{
 									if (((Boolean)row.get(7)).equals(true))
 									{
 										throw new ParseException("Internal error during SQL parsing.  A WHERE clause was found referencing a complex column that was marked as done but was not available in the operator tree");
 									}
-									
+
 									op = addComplexColumn(row, op);
 								}
 							}
@@ -3784,7 +4582,7 @@ public class SQLParser
 						{
 							throw new ParseException("Reference to column " + col.getColumn() + " is ambiguous!");
 						}
-						
+
 						rhsStr = table + "." + col.getColumn();
 					}
 				}
@@ -3801,15 +4599,23 @@ public class SQLParser
 					SubSelect sub = rhs.getSelect();
 					if (isCorrelated(sub))
 					{
-						rhsStr = getOneCol(sub);
-						SearchCondition join = rewriteCorrelatedSubSelect(sub, op); //update select list and search conditions
+						// rhsStr = getOneCol(sub);
+						SearchCondition join = rewriteCorrelatedSubSelect(sub); // update
+																				// select
+																				// list
+																				// and
+																				// search
+																				// conditions
 						ProductOperator product = new ProductOperator(meta);
 						try
 						{
 							product.add(op);
-							product.add(buildOperatorTreeFromSubSelect(sub));
+							Operator op2 = buildOperatorTreeFromSubSelect(sub);
+							op2 = addRename(op2, join);
+							rhsStr = op2.getPos2Col().get(0);
+							product.add(op2);
 						}
-						catch(Exception e)
+						catch (Exception e)
 						{
 							throw new ParseException(e.getMessage());
 						}
@@ -3832,7 +4638,7 @@ public class SQLParser
 							extend.add(op);
 							extend.add(rhs2);
 						}
-						catch(Exception e)
+						catch (Exception e)
 						{
 							throw new ParseException(e.getMessage());
 						}
@@ -3842,32 +4648,42 @@ public class SQLParser
 				}
 				else
 				{
-					//check to see if complex already contains this expression
+					// check to see if complex already contains this expression
 					boolean found = false;
 					for (ArrayList<Object> row : complex)
 					{
-						//colName, op, type, id, exp, prereq, sub, done
+						// colName, op, type, id, exp, prereq, sub, done
 						if (row.get(4).equals(rhs))
 						{
 							if ((Boolean)row.get(7) == true)
 							{
-								//found it
+								// found it
 								found = true;
 								rhsStr = (String)row.get(0);
 								break;
 							}
 						}
 					}
-					
+
 					if (!found)
 					{
-						//if not, build it
+						// if not, build it
 						OperatorTypeAndName otan = buildOperatorTreeFromExpression(rhs, null);
 						if (otan.getType() == TYPE_DAYS)
 						{
 							throw new ParseException("A type of DAYS is not allowed for a predicate");
 						}
-						
+
+						if (otan.getType() == TYPE_MONTHS)
+						{
+							throw new ParseException("A type of MONTHS is not allowed for a predicate");
+						}
+
+						if (otan.getType() == TYPE_YEARS)
+						{
+							throw new ParseException("A type of YEARS is not allowed for a predicate");
+						}
+
 						if (otan.getType() == TYPE_DATE)
 						{
 							SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
@@ -3889,7 +4705,7 @@ public class SQLParser
 						}
 						else
 						{
-							//colName, op, type, id, exp, prereq, sub, done
+							// colName, op, type, id, exp, prereq, sub, done
 							ArrayList<Object> row = new ArrayList<Object>();
 							row.add(otan.getName());
 							row.add(otan.getOp());
@@ -3905,8 +4721,8 @@ public class SQLParser
 						}
 					}
 				}
-				
-				//add SelectOperator to top of tree
+
+				// add SelectOperator to top of tree
 				verifyTypes(lhsStr, o, rhsStr, op);
 				if (negated)
 				{
@@ -3949,28 +4765,28 @@ public class SQLParser
 					select.add(op);
 					return select;
 				}
-				catch(Exception e)
+				catch (Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
 			}
 			else
 			{
-				   SearchCondition s = clause.getSearch();
-				   if (!negated)
-				   {
-					   return buildOperatorTreeFromSearchCondition(s, op);
-				   }
-				   else
-				   {
-					   negateSearchCondition(s);
-					   return buildOperatorTreeFromSearchCondition(s, op);
-				   }
+				SearchCondition s = clause.getSearch();
+				if (!negated)
+				{
+					return buildOperatorTreeFromSearchCondition(s, op);
+				}
+				else
+				{
+					negateSearchCondition(s);
+					return buildOperatorTreeFromSearchCondition(s, op);
+				}
 			}
 		}
 		else
 		{
-			//ored
+			// ored
 			ArrayList<Filter> ors = new ArrayList<Filter>();
 			ArrayList<SearchClause> preds = new ArrayList<SearchClause>();
 			preds.add(search.getClause());
@@ -3978,7 +4794,7 @@ public class SQLParser
 			{
 				preds.add(csc.getSearch());
 			}
-			
+
 			int i = 0;
 			while (i < preds.size())
 			{
@@ -3992,7 +4808,7 @@ public class SQLParser
 				Expression lhs = pred.getLHS();
 				String o = pred.getOp();
 				Expression rhs = pred.getRHS();
-				
+
 				if (o.equals("IN") || o.equals("NI"))
 				{
 					String lhsStr = null;
@@ -4004,7 +4820,7 @@ public class SQLParser
 							Literal literal = lhs.getLiteral();
 							if (literal.isNull())
 							{
-								//TODO
+								// TODO
 							}
 							Object value = literal.getValue();
 							if (value instanceof String)
@@ -4019,7 +4835,7 @@ public class SQLParser
 						else if (lhs.isColumn())
 						{
 							Column col = lhs.getColumn();
-							//is column unambiguous?
+							// is column unambiguous?
 							if (col.getTable() != null)
 							{
 								lhsStr = col.getTable() + "." + col.getColumn();
@@ -4031,7 +4847,7 @@ public class SQLParser
 										matches++;
 									}
 								}
-							
+
 								if (matches == 0)
 								{
 									throw new ParseException("Column " + lhsStr + " does not exist!");
@@ -4049,27 +4865,28 @@ public class SQLParser
 								{
 									String p1 = c.substring(0, c.indexOf('.'));
 									String p2 = c.substring(c.indexOf('.') + 1);
-								
+
 									if (p2.equals(col.getColumn()))
 									{
 										matches++;
 										table = p1;
 									}
 								}
-							
+
 								if (matches == 0)
 								{
-									//could be a complex column
+									// could be a complex column
 									for (ArrayList<Object> row : complex)
 									{
-										//colName, op, type, id, exp, prereq, done
+										// colName, op, type, id, exp, prereq,
+										// done
 										if (row.get(0).equals("." + col.getColumn()))
 										{
-											//its a match
+											// its a match
 											matches++;
 										}
 									}
-								
+
 									if (matches == 0)
 									{
 										throw new ParseException("Column " + col.getColumn() + " does not exist");
@@ -4078,17 +4895,18 @@ public class SQLParser
 									{
 										throw new ParseException("Column " + lhsStr + " is ambiguous!");
 									}
-								
+
 									for (ArrayList<Object> row : complex)
 									{
-										//colName, op, type, id, exp, prereq, done
+										// colName, op, type, id, exp, prereq,
+										// done
 										if (row.get(0).equals("." + col.getColumn()))
 										{
 											if (((Boolean)row.get(7)).equals(true))
 											{
 												throw new ParseException("Internal error during SQL parsing.  A WHERE clause was found referencing a complex column that was marked as done but was not available in the operator tree");
 											}
-										
+
 											op = addComplexColumn(row, op);
 										}
 									}
@@ -4097,7 +4915,7 @@ public class SQLParser
 								{
 									throw new ParseException("Reference to column " + col.getColumn() + " is ambiguous!");
 								}
-							
+
 								lhsStr = table + "." + col.getColumn();
 							}
 						}
@@ -4115,32 +4933,43 @@ public class SQLParser
 						}
 						else
 						{
-							//check to see if complex already contains this expression
+							// check to see if complex already contains this
+							// expression
 							boolean found = false;
 							for (ArrayList<Object> row : complex)
 							{
-								//colName, op, type, id, exp, prereq, sub, done
+								// colName, op, type, id, exp, prereq, sub, done
 								if (row.get(4).equals(rhs))
 								{
 									if ((Boolean)row.get(7) == true)
 									{
-										//found it
+										// found it
 										found = true;
 										lhsStr = (String)row.get(0);
 										break;
 									}
 								}
 							}
-						
+
 							if (!found)
 							{
-								//if not, build it
+								// if not, build it
 								OperatorTypeAndName otan = buildOperatorTreeFromExpression(lhs, null);
 								if (otan.getType() == TYPE_DAYS)
 								{
 									throw new ParseException("A type of DAYS is not allowed for a predicate");
 								}
-							
+
+								if (otan.getType() == TYPE_MONTHS)
+								{
+									throw new ParseException("A type of MONTHS is not allowed for a predicate");
+								}
+
+								if (otan.getType() == TYPE_YEARS)
+								{
+									throw new ParseException("A type of YEARS is not allowed for a predicate");
+								}
+
 								if (otan.getType() == TYPE_DATE)
 								{
 									SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
@@ -4162,7 +4991,8 @@ public class SQLParser
 								}
 								else
 								{
-									//colName, op, type, id, exp, prereq, sub, done
+									// colName, op, type, id, exp, prereq, sub,
+									// done
 									ArrayList<Object> row = new ArrayList<Object>();
 									row.add(otan.getName());
 									row.add(otan.getOp());
@@ -4179,7 +5009,7 @@ public class SQLParser
 							}
 						}
 					}
-					
+
 					if (rhs.isLiteral())
 					{
 						throw new ParseException("A literal value cannot be used in this context");
@@ -4210,7 +5040,7 @@ public class SQLParser
 								preds.add(s);
 								j++;
 							}
-							
+
 							i++;
 							continue;
 						}
@@ -4229,7 +5059,7 @@ public class SQLParser
 								preds.add(s);
 								j++;
 							}
-							
+
 							i++;
 							continue;
 						}
@@ -4243,16 +5073,16 @@ public class SQLParser
 						throw new ParseException("An expression cannot be used in this context");
 					}
 				}
-				
+
 				String lhsStr = null;
 				String rhsStr = null;
-				
+
 				if (lhs.isLiteral())
 				{
 					Literal literal = lhs.getLiteral();
 					if (literal.isNull())
 					{
-						//TODO
+						// TODO
 					}
 					Object value = literal.getValue();
 					if (value instanceof String)
@@ -4267,7 +5097,7 @@ public class SQLParser
 				else if (lhs.isColumn())
 				{
 					Column col = lhs.getColumn();
-					//is column unambiguous?
+					// is column unambiguous?
 					if (col.getTable() != null)
 					{
 						lhsStr = col.getTable() + "." + col.getColumn();
@@ -4279,7 +5109,7 @@ public class SQLParser
 								matches++;
 							}
 						}
-						
+
 						if (matches == 0)
 						{
 							throw new ParseException("Column " + lhsStr + " does not exist!");
@@ -4297,27 +5127,27 @@ public class SQLParser
 						{
 							String p1 = c.substring(0, c.indexOf('.'));
 							String p2 = c.substring(c.indexOf('.') + 1);
-							
+
 							if (p2.equals(col.getColumn()))
 							{
 								matches++;
 								table = p1;
 							}
 						}
-						
+
 						if (matches == 0)
 						{
-							//could be a complex column
+							// could be a complex column
 							for (ArrayList<Object> row : complex)
 							{
-								//colName, op, type, id, exp, prereq, done
+								// colName, op, type, id, exp, prereq, done
 								if (row.get(0).equals("." + col.getColumn()))
 								{
-									//its a match
+									// its a match
 									matches++;
 								}
 							}
-							
+
 							if (matches == 0)
 							{
 								throw new ParseException("Column " + col.getColumn() + " does not exist");
@@ -4326,17 +5156,17 @@ public class SQLParser
 							{
 								throw new ParseException("Column " + lhsStr + " is ambiguous!");
 							}
-							
+
 							for (ArrayList<Object> row : complex)
 							{
-								//colName, op, type, id, exp, prereq, done
+								// colName, op, type, id, exp, prereq, done
 								if (row.get(0).equals("." + col.getColumn()))
 								{
 									if (((Boolean)row.get(7)).equals(true))
 									{
 										throw new ParseException("Internal error during SQL parsing.  A WHERE clause was found referencing a complex column that was marked as done but was not available in the operator tree");
 									}
-									
+
 									op = addComplexColumn(row, op);
 								}
 							}
@@ -4345,7 +5175,7 @@ public class SQLParser
 						{
 							throw new ParseException("Reference to column " + col.getColumn() + " is ambiguous!");
 						}
-						
+
 						lhsStr = table + "." + col.getColumn();
 					}
 				}
@@ -4381,7 +5211,7 @@ public class SQLParser
 							extend.add(op);
 							extend.add(rhs2);
 						}
-						catch(Exception e)
+						catch (Exception e)
 						{
 							throw new ParseException(e.getMessage());
 						}
@@ -4391,32 +5221,42 @@ public class SQLParser
 				}
 				else
 				{
-					//check to see if complex already contains this expression
+					// check to see if complex already contains this expression
 					boolean found = false;
 					for (ArrayList<Object> row : complex)
 					{
-						//colName, op, type, id, exp, prereq, sub, done
+						// colName, op, type, id, exp, prereq, sub, done
 						if (row.get(4).equals(rhs))
 						{
 							if ((Boolean)row.get(7) == true)
 							{
-								//found it
+								// found it
 								found = true;
 								lhsStr = (String)row.get(0);
 								break;
 							}
 						}
 					}
-					
+
 					if (!found)
 					{
-						//if not, build it
+						// if not, build it
 						OperatorTypeAndName otan = buildOperatorTreeFromExpression(lhs, null);
 						if (otan.getType() == TYPE_DAYS)
 						{
 							throw new ParseException("A type of DAYS is not allowed for a predicate");
 						}
-						
+
+						if (otan.getType() == TYPE_MONTHS)
+						{
+							throw new ParseException("A type of MONTHS is not allowed for a predicate");
+						}
+
+						if (otan.getType() == TYPE_YEARS)
+						{
+							throw new ParseException("A type of YEARS is not allowed for a predicate");
+						}
+
 						if (otan.getType() == TYPE_DATE)
 						{
 							SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
@@ -4438,7 +5278,7 @@ public class SQLParser
 						}
 						else
 						{
-							//colName, op, type, id, exp, prereq, sub, done
+							// colName, op, type, id, exp, prereq, sub, done
 							ArrayList<Object> row = new ArrayList<Object>();
 							row.add(otan.getName());
 							row.add(otan.getOp());
@@ -4454,14 +5294,14 @@ public class SQLParser
 						}
 					}
 				}
-				
-				//do the same for rhs
+
+				// do the same for rhs
 				if (rhs.isLiteral())
 				{
 					Literal literal = rhs.getLiteral();
 					if (literal.isNull())
 					{
-						//TODO
+						// TODO
 					}
 					Object value = literal.getValue();
 					if (value instanceof String)
@@ -4476,7 +5316,7 @@ public class SQLParser
 				else if (rhs.isColumn())
 				{
 					Column col = rhs.getColumn();
-					//is column unambiguous?
+					// is column unambiguous?
 					if (col.getTable() != null)
 					{
 						rhsStr = col.getTable() + "." + col.getColumn();
@@ -4488,7 +5328,7 @@ public class SQLParser
 								matches++;
 							}
 						}
-						
+
 						if (matches == 0)
 						{
 							throw new ParseException("Column " + rhsStr + " does not exist!");
@@ -4506,27 +5346,27 @@ public class SQLParser
 						{
 							String p1 = c.substring(0, c.indexOf('.'));
 							String p2 = c.substring(c.indexOf('.') + 1);
-							
+
 							if (p2.equals(col.getColumn()))
 							{
 								matches++;
 								table = p1;
 							}
 						}
-						
+
 						if (matches == 0)
 						{
-							//could be a complex column
+							// could be a complex column
 							for (ArrayList<Object> row : complex)
 							{
-								//colName, op, type, id, exp, prereq, done
+								// colName, op, type, id, exp, prereq, done
 								if (row.get(0).equals("." + col.getColumn()))
 								{
-									//its a match
+									// its a match
 									matches++;
 								}
 							}
-							
+
 							if (matches == 0)
 							{
 								throw new ParseException("Column " + col.getColumn() + " does not exist");
@@ -4535,17 +5375,17 @@ public class SQLParser
 							{
 								throw new ParseException("Column " + lhsStr + " is ambiguous!");
 							}
-							
+
 							for (ArrayList<Object> row : complex)
 							{
-								//colName, op, type, id, exp, prereq, done
+								// colName, op, type, id, exp, prereq, done
 								if (row.get(0).equals("." + col.getColumn()))
 								{
 									if (((Boolean)row.get(7)).equals(true))
 									{
 										throw new ParseException("Internal error during SQL parsing.  A WHERE clause was found referencing a complex column that was marked as done but was not available in the operator tree");
 									}
-									
+
 									op = addComplexColumn(row, op);
 								}
 							}
@@ -4554,7 +5394,7 @@ public class SQLParser
 						{
 							throw new ParseException("Reference to column " + col.getColumn() + " is ambiguous!");
 						}
-						
+
 						rhsStr = table + "." + col.getColumn();
 					}
 				}
@@ -4590,7 +5430,7 @@ public class SQLParser
 							extend.add(op);
 							extend.add(rhs2);
 						}
-						catch(Exception e)
+						catch (Exception e)
 						{
 							throw new ParseException(e.getMessage());
 						}
@@ -4600,32 +5440,42 @@ public class SQLParser
 				}
 				else
 				{
-					//check to see if complex already contains this expression
+					// check to see if complex already contains this expression
 					boolean found = false;
 					for (ArrayList<Object> row : complex)
 					{
-						//colName, op, type, id, exp, prereq, sub, done
+						// colName, op, type, id, exp, prereq, sub, done
 						if (row.get(4).equals(rhs))
 						{
 							if ((Boolean)row.get(7) == true)
 							{
-								//found it
+								// found it
 								found = true;
 								rhsStr = (String)row.get(0);
 								break;
 							}
 						}
 					}
-					
+
 					if (!found)
 					{
-						//if not, build it
+						// if not, build it
 						OperatorTypeAndName otan = buildOperatorTreeFromExpression(rhs, null);
 						if (otan.getType() == TYPE_DAYS)
 						{
 							throw new ParseException("A type of DAYS is not allowed for a predicate");
 						}
-						
+
+						if (otan.getType() == TYPE_MONTHS)
+						{
+							throw new ParseException("A type of MONTHS is not allowed for a predicate");
+						}
+
+						if (otan.getType() == TYPE_YEARS)
+						{
+							throw new ParseException("A type of YEARS is not allowed for a predicate");
+						}
+
 						if (otan.getType() == TYPE_DATE)
 						{
 							SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
@@ -4647,7 +5497,7 @@ public class SQLParser
 						}
 						else
 						{
-							//colName, op, type, id, exp, prereq, sub, done
+							// colName, op, type, id, exp, prereq, sub, done
 							ArrayList<Object> row = new ArrayList<Object>();
 							row.add(otan.getName());
 							row.add(otan.getOp());
@@ -4663,8 +5513,8 @@ public class SQLParser
 						}
 					}
 				}
-				
-				//add SelectOperator to top of tree
+
+				// add SelectOperator to top of tree
 				verifyTypes(lhsStr, o, rhsStr, op);
 				if (negated)
 				{
@@ -4705,27 +5555,27 @@ public class SQLParser
 				{
 					ors.add(new Filter(lhsStr, o, rhsStr));
 				}
-				catch(Exception e)
+				catch (Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
-				
+
 				i++;
 			}
-			
+
 			try
 			{
 				SelectOperator select = new SelectOperator(ors, meta);
 				select.add(op);
 				return select;
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
 		}
 	}
-	
+
 	private void negateSearchCondition(SearchCondition s)
 	{
 		if (s.getConnected() != null && s.getConnected().size() > 0)
@@ -4736,7 +5586,7 @@ public class SQLParser
 				clause.setAnd(!clause.isAnd());
 				clause.getSearch().setNegated(clause.getSearch().getNegated());
 			}
-			
+
 			return;
 		}
 		else
@@ -4744,13 +5594,13 @@ public class SQLParser
 			s.getClause().setNegated(!s.getClause().getNegated());
 		}
 	}
-	
+
 	private Operator addComplexColumn(ArrayList<Object> row, Operator op) throws ParseException
 	{
-		//colName, op, type, id, exp, prereq, done
+		// colName, op, type, id, exp, prereq, done
 		if (!((Integer)row.get(5)).equals(-1))
 		{
-			//get the row
+			// get the row
 			for (ArrayList<Object> r : complex)
 			{
 				if (r.get(3).equals(row.get(5)))
@@ -4760,12 +5610,12 @@ public class SQLParser
 				}
 			}
 		}
-		
+
 		if ((Boolean)row.get(7) == true)
 		{
 			return op;
 		}
-		
+
 		if ((Integer)row.get(2) == TYPE_INLINE)
 		{
 			Operator o = (Operator)row.get(1);
@@ -4773,7 +5623,7 @@ public class SQLParser
 			{
 				o.add(op);
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
@@ -4783,12 +5633,12 @@ public class SQLParser
 			{
 				String name = o.getReferences().get(0);
 				String type = op.getCols2Types().get(name);
-				
+
 				if (type == null)
 				{
 					throw new ParseException("A reference to column " + name + " was unable to be resolved.");
 				}
-				
+
 				if (!type.equals("DATE"))
 				{
 					throw new ParseException("The YEAR() function cannot be used on a non-DATE column");
@@ -4798,12 +5648,12 @@ public class SQLParser
 			{
 				String name = o.getReferences().get(0);
 				String type = op.getCols2Types().get(name);
-				
+
 				if (type == null)
 				{
 					throw new ParseException("A reference to column " + name + " was unable to be resolved.");
 				}
-				
+
 				if (!type.equals("CHAR"))
 				{
 					throw new ParseException("The SUBSTRING() function cannot be used on a non-character data");
@@ -4813,12 +5663,12 @@ public class SQLParser
 			{
 				String name = o.getReferences().get(0);
 				String type = op.getCols2Types().get(name);
-				
+
 				if (type == null)
 				{
 					throw new ParseException("A reference to column " + name + " was unable to be resolved.");
 				}
-				
+
 				if (!type.equals("DATE"))
 				{
 					throw new ParseException("A DATE was expected but a different data type was found");
@@ -4830,17 +5680,17 @@ public class SQLParser
 				String type1 = op.getCols2Types().get(name1);
 				String name2 = o.getReferences().get(1);
 				String type2 = op.getCols2Types().get(name2);
-				
+
 				if (type1 == null)
 				{
 					throw new ParseException("A reference to column " + name1 + " was unable to be resolved.");
 				}
-				
+
 				if (type2 == null)
 				{
 					throw new ParseException("A reference to column " + name2 + " was unable to be resolved.");
 				}
-				
+
 				if (!type1.equals("CHAR") || !type2.equals("CHAR"))
 				{
 					throw new ParseException("Concatenation is not supported for non-character data");
@@ -4851,12 +5701,13 @@ public class SQLParser
 				for (String name : o.getReferences())
 				{
 					String type = op.getCols2Types().get(name);
-					
+
 					if (type == null)
 					{
+						HRDBMSWorker.logger.debug("Looking for " + name + " in " + op.getCols2Types());
 						throw new ParseException("A reference to column " + name + " was unable to be resolved.");
 					}
-					
+
 					if (type.equals("INT") || type.equals("LONG") || type.equals("FLOAT"))
 					{
 					}
@@ -4866,16 +5717,16 @@ public class SQLParser
 					}
 				}
 			}
-			
+
 			return o;
 		}
 		else
 		{
-			//type group by
+			// type group by
 			throw new ParseException("A WHERE clause cannot refer to an aggregate column. This must be done in the HAVING clause.");
 		}
 	}
-	
+
 	private void verifyTypes(String lhs, Operator lOp, String rhs, Operator rOp) throws ParseException
 	{
 		String lhsType = null;
@@ -4888,14 +5739,48 @@ public class SQLParser
 		{
 			lhsType = "STRING";
 		}
-		else 
+		else
 		{
 			String type = lOp.getCols2Types().get(lhs);
 			if (type == null)
 			{
-				throw new ParseException("The column " + lhs + " was not found");
+				String newLHS;
+				if (lhs.contains("."))
+				{
+					newLHS = lhs.substring(lhs.indexOf(".") + 1);
+				}
+				else
+				{
+					newLHS = lhs;
+				}
+
+				int matches = 0;
+				for (String col : lOp.getCols2Types().keySet())
+				{
+					String col2;
+					if (col.contains("."))
+					{
+						col2 = col.substring(col.indexOf('.') + 1);
+					}
+					else
+					{
+						col2 = col;
+					}
+
+					if (col2.equals(lhs))
+					{
+						type = lOp.getCols2Types().get(col);
+						matches++;
+					}
+				}
+
+				if (matches != 1)
+				{
+					throw new ParseException("The column " + lhs + " was not found");
+				}
 			}
-			else if (type.equals("CHAR"))
+
+			if (type.equals("CHAR"))
 			{
 				lhsType = "STRING";
 			}
@@ -4908,7 +5793,7 @@ public class SQLParser
 				lhsType = type;
 			}
 		}
-		
+
 		if (Character.isDigit(rhs.charAt(0)) || rhs.charAt(0) == '-')
 		{
 			rhsType = "NUMBER";
@@ -4917,14 +5802,48 @@ public class SQLParser
 		{
 			rhsType = "STRING";
 		}
-		else 
+		else
 		{
 			String type = rOp.getCols2Types().get(rhs);
 			if (type == null)
 			{
-				throw new ParseException("The column " + rhs + " was not found");
+				String newRHS;
+				if (rhs.contains("."))
+				{
+					newRHS = rhs.substring(rhs.indexOf(".") + 1);
+				}
+				else
+				{
+					newRHS = rhs;
+				}
+
+				int matches = 0;
+				for (String col : rOp.getCols2Types().keySet())
+				{
+					String col2;
+					if (col.contains("."))
+					{
+						col2 = col.substring(col.indexOf('.') + 1);
+					}
+					else
+					{
+						col2 = col;
+					}
+
+					if (col2.equals(rhs))
+					{
+						type = rOp.getCols2Types().get(col);
+						matches++;
+					}
+				}
+
+				if (matches != 1)
+				{
+					throw new ParseException("The column " + rhs + " was not found");
+				}
 			}
-			else if (type.equals("CHAR"))
+
+			if (type.equals("CHAR"))
 			{
 				rhsType = "STRING";
 			}
@@ -4937,7 +5856,7 @@ public class SQLParser
 				rhsType = type;
 			}
 		}
-		
+
 		if (lhsType.equals("NUMBER") && rhsType.equals("NUMBER"))
 		{
 			return;
@@ -4951,7 +5870,7 @@ public class SQLParser
 			throw new ParseException("Invalid comparison between " + lhsType + " and " + rhsType);
 		}
 	}
-	
+
 	private void verifyTypes(String lhs, String op, String rhs, Operator o) throws ParseException
 	{
 		String lhsType = null;
@@ -4964,7 +5883,7 @@ public class SQLParser
 		{
 			lhsType = "STRING";
 		}
-		else 
+		else
 		{
 			String type = o.getCols2Types().get(lhs);
 			if (type == null)
@@ -4984,7 +5903,7 @@ public class SQLParser
 				lhsType = type;
 			}
 		}
-		
+
 		if (Character.isDigit(rhs.charAt(0)) || rhs.charAt(0) == '-')
 		{
 			rhsType = "NUMBER";
@@ -4993,11 +5912,13 @@ public class SQLParser
 		{
 			rhsType = "STRING";
 		}
-		else 
+		else
 		{
 			String type = o.getCols2Types().get(rhs);
 			if (type == null)
 			{
+				HRDBMSWorker.logger.debug("Looking for " + rhs + " in " + o.getCols2Types());
+				printTree(o, 0);
 				throw new ParseException("The column " + rhs + " was not found");
 			}
 			else if (type.equals("CHAR"))
@@ -5013,31 +5934,40 @@ public class SQLParser
 				rhsType = type;
 			}
 		}
-		
+
 		if (lhsType.equals("NUMBER") && rhsType.equals("NUMBER"))
 		{
 			if (op.equals("E") || op.equals("NE") || op.equals("G") || op.equals("GE") || op.equals("L") || op.equals("LE"))
 			{
 				return;
 			}
-			
+
 			throw new ParseException("Invalid operator for comparing 2 numbers: " + op);
 		}
 		else if (lhsType.equals("STRING") && rhsType.equals("STRING"))
 		{
-			if (op.equals("LI") || op.equals("NL") || op.equals("E") || op.equals("NE"))
+			if (op.equals("LI") || op.equals("NL") || op.equals("E") || op.equals("NE") || op.equals("G") || op.equals("GE") || op.equals("L") || op.equals("LE"))
 			{
 				return;
 			}
-			
+
 			throw new ParseException("Invalid operator for comparing 2 string: " + op);
+		}
+		else if (lhsType.equals("DATE") && rhsType.equals("DATE"))
+		{
+			if (op.equals("E") || op.equals("NE") || op.equals("G") || op.equals("GE") || op.equals("L") || op.equals("LE"))
+			{
+				return;
+			}
+
+			throw new ParseException("Invalid operator for comparing 2 dates: " + op);
 		}
 		else
 		{
 			throw new ParseException("Invalid comparison between " + lhsType + " and " + rhsType);
 		}
 	}
-	
+
 	private Operator buildOperatorTreeFromFrom(FromClause from) throws Exception
 	{
 		ArrayList<TableReference> tables = from.getTables();
@@ -5046,12 +5976,12 @@ public class SQLParser
 		{
 			ops.add(buildOperatorTreeFromTableReference(table));
 		}
-		
+
 		if (ops.size() == 1)
 		{
 			return ops.get(0);
 		}
-		
+
 		Operator top = ops.get(0);
 		ops.remove(0);
 		while (ops.size() > 0)
@@ -5062,17 +5992,17 @@ public class SQLParser
 				product.add(top);
 				product.add(ops.get(0));
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
 			ops.remove(0);
 			top = product;
 		}
-		
+
 		return top;
 	}
-	
+
 	private void checkSizeOfNewCols(ArrayList<Column> newCols, Operator op) throws ParseException
 	{
 		if (newCols.size() != op.getPos2Col().size())
@@ -5080,20 +6010,20 @@ public class SQLParser
 			throw new ParseException("The common table expression has the wrong number of columns!");
 		}
 	}
-	
+
 	private Operator buildOperatorTreeFromTableReference(TableReference table) throws Exception
 	{
 		if (table.isSingleTable())
 		{
 			return buildOperatorTreeFromSingleTable(table.getSingleTable());
 		}
-		
+
 		if (table.isSelect())
 		{
 			Operator op = buildOperatorTreeFromFullSelect(table.getSelect());
 			if (table.getSelect().getCols() != null && table.getSelect().getCols().size() > 0)
 			{
-				//rename cols
+				// rename cols
 				checkSizeOfNewCols(table.getSelect().getCols(), op);
 				ArrayList<String> original = new ArrayList<String>();
 				ArrayList<String> newCols = new ArrayList<String>();
@@ -5104,42 +6034,54 @@ public class SQLParser
 					{
 						original.add(col);
 						String newCol = col.substring(0, col.indexOf('.'));
-						newCol += ("." + table.getSelect().getCols().get(i));
+						String end = (table.getSelect().getCols().get(i)).getColumn();
+						if (!end.contains("."))
+						{
+							end = "." + end;
+						}
+
+						newCol += end;
 						newCols.add(newCol);
 						i++;
 					}
-					
+
 					try
 					{
 						RenameOperator rename = new RenameOperator(original, newCols, meta);
 						rename.add(op);
 						return rename;
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						throw new ParseException(e.getMessage());
 					}
 				}
 				else
 				{
-					//rename cols and table
+					// rename cols and table
 					int i = 0;
 					for (String col : op.getPos2Col().values())
 					{
 						original.add(col);
 						String newCol = table.getAlias();
-						newCol += ("." + table.getSelect().getCols().get(i));
+						String end = (table.getSelect().getCols().get(i)).getColumn();
+						if (!end.contains("."))
+						{
+							end = "." + end;
+						}
+
+						newCol += end;
 						newCols.add(newCol);
 						i++;
 					}
-					
+
 					try
 					{
 						RenameOperator rename = new RenameOperator(original, newCols, meta);
 						rename.add(op);
 						return rename;
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						throw new ParseException(e.getMessage());
 					}
@@ -5147,10 +6089,10 @@ public class SQLParser
 			}
 			else
 			{
-				//check for need to rename table
+				// check for need to rename table
 				if (table.getAlias() != null)
 				{
-					//rename table
+					// rename table
 					ArrayList<String> original = new ArrayList<String>();
 					ArrayList<String> newCols = new ArrayList<String>();
 					int i = 0;
@@ -5161,14 +6103,14 @@ public class SQLParser
 						newCols.add(table.getAlias() + "." + newCol);
 						i++;
 					}
-					
+
 					try
 					{
 						RenameOperator rename = new RenameOperator(original, newCols, meta);
 						rename.add(op);
 						return rename;
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						throw new ParseException(e.getMessage());
 					}
@@ -5179,11 +6121,11 @@ public class SQLParser
 				}
 			}
 		}
-		
+
 		Operator op1 = buildOperatorTreeFromTableReference(table.getLHS());
 		Operator op2 = buildOperatorTreeFromTableReference(table.getRHS());
 		String op = table.getOp();
-		
+
 		if (op.equals("CP"))
 		{
 			try
@@ -5197,12 +6139,12 @@ public class SQLParser
 				}
 				return product;
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
 		}
-		
+
 		if (op.equals("I"))
 		{
 			try
@@ -5215,57 +6157,57 @@ public class SQLParser
 				{
 					return handleAlias(table.getAlias(), o);
 				}
-			
+
 				return o;
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
 		}
-		
+
 		if (op.equals("L"))
 		{
-			//TODO
+			// TODO
 		}
-		
+
 		if (op.equals("R"))
 		{
-			//TODO
+			// TODO
 		}
-		
+
 		if (op.equals("F"))
 		{
-			//TODO
+			// TODO
 		}
-		
+
 		return null;
 	}
-	
+
 	private Operator handleAlias(String alias, Operator op) throws ParseException
 	{
 		ArrayList<String> original = new ArrayList<String>();
 		ArrayList<String> newCols = new ArrayList<String>();
-		
+
 		for (String col : op.getPos2Col().values())
 		{
 			original.add(col);
 			String newCol = alias + "." + col.substring(col.indexOf('.') + 1);
 			newCols.add(newCol);
 		}
-		
+
 		try
 		{
 			RenameOperator rename = new RenameOperator(original, newCols, meta);
 			rename.add(op);
 			return rename;
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
 			throw new ParseException(e.getMessage());
 		}
 	}
-	
+
 	private Operator buildOperatorTreeFromSingleTable(SingleTable table) throws Exception
 	{
 		TableName name = table.getName();
@@ -5279,23 +6221,23 @@ public class SQLParser
 		{
 			schema = name.getSchema();
 		}
-		
+
 		tblName = name.getName();
-		
+
 		if (!meta.verifyTableExistence(schema, tblName, tx))
 		{
 			if (!meta.verifyViewExistence(schema, tblName, tx))
 			{
 				throw new ParseException("Table or view " + schema + "." + tblName + " does not exist!");
 			}
-			
+
 			SQLParser viewParser = new SQLParser(meta.getViewSQL(schema, tblName, tx), connection, tx);
 			Operator op = null;
 			try
 			{
 				op = viewParser.parse();
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
@@ -5303,121 +6245,115 @@ public class SQLParser
 			{
 				doesNotUseCurrentSchema = false;
 			}
-			
+
 			Operator retval = op.children().get(0);
 			op.removeChild(retval);
 			return retval;
 		}
-		
+
 		TableScanOperator op = null;
 		try
 		{
 			op = new TableScanOperator(schema, tblName, meta, tx);
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
 			throw new ParseException(e.getMessage());
 		}
-		
+
 		if (table.getAlias() != null)
 		{
 			op.setAlias(table.getAlias());
 		}
-		
+
 		return op;
 	}
-	
+
 	private boolean isCorrelated(SubSelect select) throws Exception
 	{
 		try
 		{
 			buildOperatorTreeFromSubSelect(select);
 		}
-		catch(ParseException e)
+		catch (ParseException e)
 		{
 			String msg = e.getMessage();
-			if (msg.startsWith("Column ") && msg.endsWith(" does not exist!"))
+			if (msg.startsWith("Column ") && msg.endsWith(" does not exist"))
 			{
-				//delete any entries in complex with sub=select
+				// delete any entries in complex with sub=select
 				int i = 0;
 				while (i < complex.size())
 				{
 					ArrayList<Object> row = complex.get(i);
-					if (row.get(6).equals(select))
+					if (select.equals(row.get(6)))
 					{
 						complex.remove(i);
 						continue;
 					}
-					
+
 					i++;
 				}
 				return true;
 			}
-			
+
+			HRDBMSWorker.logger.debug("", e);
 			throw new ParseException(e.getMessage());
 		}
-		
-		//delete any entries in complex with sub=select
+
+		// delete any entries in complex with sub=select
 		int i = 0;
 		while (i < complex.size())
 		{
 			ArrayList<Object> row = complex.get(i);
-			if (row.get(6).equals(select))
+			if (select.equals(row.get(6)))
 			{
 				complex.remove(i);
 				continue;
 			}
-			
+
 			i++;
 		}
 		return false;
 	}
-	
-	private String getOneCol(SubSelect sub) throws ParseException
-	{
-		SelectClause select = sub.getSelect();
-		if (select.isSelectStar())
-		{
-			throw new ParseException("SELECT * is not allowed in a subselect that must return 1 column");
-		}
-		
-		ArrayList<SelectListEntry> list = select.getSelectList();
-		if (list.size() != 1)
-		{
-			throw new ParseException("A subselect was used in a context where it must return 1 column, but instead returns a different number of columns");
-		}
-		
-		SelectListEntry entry = list.get(0);
-		if (entry.isColumn())
-		{
-			String retval = "";
-			Column col = entry.getColumn();
-			if (col.getTable() != null)
-			{
-				retval += col.getTable();
-			}
-			
-			retval += ("." + col.getColumn());
-			return retval;
-		}
-		
-		return "." + entry.getName();
-	}
-	
+
+	/*
+	 * private String getOneCol(SubSelect sub) throws ParseException {
+	 * SelectClause select = sub.getSelect(); if (select.isSelectStar()) { throw
+	 * new ParseException(
+	 * "SELECT * is not allowed in a subselect that must return 1 column"); }
+	 * 
+	 * ArrayList<SelectListEntry> list = select.getSelectList(); if (list.size()
+	 * != 1) { throw new ParseException(
+	 * "A subselect was used in a context where it must return 1 column, but instead returns a different number of columns"
+	 * ); }
+	 * 
+	 * SelectListEntry entry = list.get(0); if (entry.isColumn()) { String
+	 * retval = ""; Column col = entry.getColumn(); if (col.getTable() != null)
+	 * { retval += col.getTable(); }
+	 * 
+	 * retval += ("." + col.getColumn()); return retval; }
+	 * 
+	 * String retval = entry.getName(); if (!retval.contains(".")) { retval =
+	 * "." + retval; }
+	 * 
+	 * return retval; }
+	 */
+
 	private boolean ensuresOnlyOneRow(SubSelect sub)
 	{
 		if (sub.getFetchFirst() != null && sub.getFetchFirst().getNumber() == 1)
 		{
 			return true;
 		}
-		
+
 		if (sub.getGroupBy() != null)
 		{
 			return false;
 		}
-		
-		//if we find a column in the select list that uses a aggregation function, return true
-		//else return false
+
+		// if we find a column in the select list that uses a aggregation
+		// function, return true
+		// else return false
 		SelectClause select = sub.getSelect();
 		ArrayList<SelectListEntry> list = select.getSelectList();
 		for (SelectListEntry entry : list)
@@ -5426,15 +6362,15 @@ public class SQLParser
 			{
 				return false;
 			}
-			
+
 			Expression exp = entry.getExpression();
 			if (exp.isCountStar())
 			{
 				return true;
 			}
-			
+
 			ArrayList<Expression> args = null;
-			
+
 			if (exp.isFunction())
 			{
 				Function f = exp.getFunction();
@@ -5443,7 +6379,7 @@ public class SQLParser
 				{
 					return true;
 				}
-				
+
 				args = f.getArgs();
 			}
 			else if (exp.isExpression())
@@ -5452,16 +6388,16 @@ public class SQLParser
 				args.add(exp.getLHS());
 				args.add(exp.getRHS());
 			}
-			
-			if (doesAggregation(args))
+
+			if (doesAggregation(args)) // NULL args?
 			{
 				return true;
 			}
 		}
-		
+
 		return false;
 	}
-	
+
 	private boolean doesAggregation(ArrayList<Expression> args)
 	{
 		for (Expression exp : args)
@@ -5471,19 +6407,19 @@ public class SQLParser
 				return true;
 			}
 		}
-		
+
 		return false;
 	}
-	
+
 	private boolean doesAggregation(Expression exp)
 	{
 		if (exp.isCountStar())
 		{
 			return true;
 		}
-		
+
 		ArrayList<Expression> args = null;
-		
+
 		if (exp.isFunction())
 		{
 			Function f = exp.getFunction();
@@ -5492,7 +6428,7 @@ public class SQLParser
 			{
 				return true;
 			}
-			
+
 			args = f.getArgs();
 		}
 		else if (exp.isExpression())
@@ -5501,10 +6437,10 @@ public class SQLParser
 			args.add(exp.getLHS());
 			args.add(exp.getRHS());
 		}
-		
+
 		return doesAggregation(args);
 	}
-	
+
 	private void convertToCNF(SearchCondition s)
 	{
 		SearchClause sc = s.getClause();
@@ -5512,7 +6448,7 @@ public class SQLParser
 		{
 			pushInwardAnyNegation(sc);
 		}
-		
+
 		if (s.getConnected() != null && s.getConnected().size() > 0)
 		{
 			for (ConnectedSearchClause csc : s.getConnected())
@@ -5523,12 +6459,12 @@ public class SQLParser
 				}
 			}
 		}
-		
+
 		if (isCNF(s))
 		{
 			return;
 		}
-		
+
 		if ((s.getConnected() == null || s.getConnected().size() == 0) && sc.getPredicate() == null)
 		{
 			SearchCondition s2 = sc.getSearch();
@@ -5537,16 +6473,16 @@ public class SQLParser
 			convertToCNF(s);
 			return;
 		}
-		
+
 		if (allPredicates(s))
 		{
-			//we must have mixed ands and ors
+			// we must have mixed ands and ors
 			ArrayList<SearchClause> preds = new ArrayList<SearchClause>();
 			SearchClause next = null;
 			ArrayList<ConnectedSearchClause> remainder = new ArrayList<ConnectedSearchClause>();
 			preds.add(sc);
 			boolean found = false;
-			
+
 			for (ConnectedSearchClause csc : s.getConnected())
 			{
 				if (found)
@@ -5554,7 +6490,7 @@ public class SQLParser
 					remainder.add(csc);
 					continue;
 				}
-				
+
 				if (csc.isAnd())
 				{
 					preds.add(csc.getSearch());
@@ -5565,7 +6501,7 @@ public class SQLParser
 					next = csc.getSearch();
 				}
 			}
-			
+
 			ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
 			for (SearchClause a : preds)
 			{
@@ -5575,7 +6511,7 @@ public class SQLParser
 				SearchCondition search = new SearchCondition(a, b);
 				searches.add(search);
 			}
-			
+
 			SearchCondition first = searches.remove(0);
 			ArrayList<ConnectedSearchClause> b = new ArrayList<ConnectedSearchClause>();
 			for (SearchCondition s2 : searches)
@@ -5583,30 +6519,30 @@ public class SQLParser
 				SearchClause sc2 = new SearchClause(s2, false);
 				b.add(new ConnectedSearchClause(sc2, true));
 			}
-			
+
 			SearchCondition s3 = new SearchCondition(new SearchClause(first, false), b);
 			s.setClause(new SearchClause(s3, false));
 			s.setConnected(remainder);
 			convertToCNF(s);
 			return;
 		}
-		
+
 		if (s.getConnected().get(0).isAnd())
 		{
-			//starts with and
+			// starts with and
 			if (sc.getPredicate() == null)
 			{
 				convertToCNF(sc.getSearch());
 			}
-			
+
 			if (s.getConnected().get(0).getSearch().getPredicate() == null)
 			{
 				convertToCNF(s.getConnected().get(0).getSearch().getSearch());
 			}
-			
+
 			if (sc.getPredicate() != null || (allPredicates(sc.getSearch()) && allAnd(sc.getSearch())))
 			{
-				//A is all anded predicates
+				// A is all anded predicates
 				ArrayList<SearchClause> A = new ArrayList<SearchClause>();
 				if (sc.getPredicate() != null)
 				{
@@ -5621,12 +6557,12 @@ public class SQLParser
 						A.add(csc.getSearch());
 					}
 				}
-				
-				//figure out what B is
+
+				// figure out what B is
 				SearchClause sc2 = s.getConnected().get(0).getSearch();
 				if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
 				{
-					//B is all anded predicates
+					// B is all anded predicates
 					if (sc2.getPredicate() != null)
 					{
 						A.add(sc2);
@@ -5640,7 +6576,7 @@ public class SQLParser
 							A.add(csc.getSearch());
 						}
 					}
-					
+
 					s.getConnected().remove(0);
 					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
 					SearchClause first = A.remove(0);
@@ -5648,14 +6584,14 @@ public class SQLParser
 					{
 						cscs.add(new ConnectedSearchClause(search, true));
 					}
-					
+
 					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
 					convertToCNF(s);
 					return;
 				}
 				else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
 				{
-					//B all ors
+					// B all ors
 					s.getConnected().remove(0);
 					SearchClause first = A.remove(0);
 					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
@@ -5663,7 +6599,7 @@ public class SQLParser
 					{
 						cscs.add(new ConnectedSearchClause(search, true));
 					}
-					
+
 					cscs.add(new ConnectedSearchClause(sc2, true));
 					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
 					convertToCNF(s);
@@ -5671,7 +6607,7 @@ public class SQLParser
 				}
 				else
 				{
-					//A AND B CNF
+					// A AND B CNF
 					s.getConnected().remove(0);
 					ArrayList<ConnectedSearchClause> cscs = sc2.getSearch().getConnected();
 					if (cscs == null)
@@ -5690,12 +6626,12 @@ public class SQLParser
 			}
 			else if (allPredicates(sc.getSearch()) && allOrs(sc.getSearch()))
 			{
-				//A all ored preds
-				//figure out what B is
+				// A all ored preds
+				// figure out what B is
 				SearchClause sc2 = s.getConnected().get(0).getSearch();
 				if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
 				{
-					//B is all anded predicates
+					// B is all anded predicates
 					SearchClause first = sc;
 					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
 					if (sc2.getPredicate() != null)
@@ -5706,7 +6642,7 @@ public class SQLParser
 						convertToCNF(s);
 						return;
 					}
-					
+
 					cscs.add(new ConnectedSearchClause(sc2.getSearch().getClause(), true));
 					if (sc2.getSearch().getConnected() != null)
 					{
@@ -5719,7 +6655,7 @@ public class SQLParser
 				}
 				else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
 				{
-					//B all ors
+					// B all ors
 					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
 					SearchClause first = sc;
 					cscs.add(new ConnectedSearchClause(sc2, true));
@@ -5730,7 +6666,7 @@ public class SQLParser
 				}
 				else
 				{
-					//A ors B CNF
+					// A ors B CNF
 					s.getConnected().remove(0);
 					ArrayList<ConnectedSearchClause> cscs = sc2.getSearch().getConnected();
 					if (cscs == null)
@@ -5746,20 +6682,19 @@ public class SQLParser
 			}
 			else
 			{
-				//A is CNF
-				//figure out what B is
+				// A is CNF
+				// figure out what B is
 				SearchClause sc2 = s.getConnected().get(0).getSearch();
 				if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
 				{
-					//A CNF B AND
+					// A CNF B AND
 					s.getConnected().remove(0);
 					ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
 					if (cscs == null)
 					{
 						cscs = new ArrayList<ConnectedSearchClause>();
 					}
-					
-					
+
 					if (sc2.getPredicate() != null)
 					{
 						cscs.add(new ConnectedSearchClause(sc2, true));
@@ -5767,27 +6702,27 @@ public class SQLParser
 						convertToCNF(s);
 						return;
 					}
-					
+
 					cscs.add(new ConnectedSearchClause(sc2.getSearch().getClause(), true));
 					if (sc2.getSearch().getConnected() != null)
 					{
 						cscs.addAll(sc2.getSearch().getConnected());
 					}
-					
+
 					sc.getSearch().setConnected(cscs);
 					convertToCNF(s);
 					return;
 				}
 				else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
 				{
-					//A CNF B OR
+					// A CNF B OR
 					s.getConnected().remove(0);
 					ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
 					if (cscs == null)
 					{
 						cscs = new ArrayList<ConnectedSearchClause>();
 					}
-					
+
 					sc.getSearch().setConnected(cscs);
 					cscs.add(new ConnectedSearchClause(sc2, true));
 					convertToCNF(s);
@@ -5795,7 +6730,7 @@ public class SQLParser
 				}
 				else
 				{
-					//A CNF B CNF
+					// A CNF B CNF
 					s.getConnected().remove(0);
 					ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
 					if (cscs == null)
@@ -5803,13 +6738,13 @@ public class SQLParser
 						cscs = new ArrayList<ConnectedSearchClause>();
 						sc.getSearch().setConnected(cscs);
 					}
-					
+
 					cscs.add(new ConnectedSearchClause(sc2.getSearch().getClause(), true));
 					if (sc2.getSearch().getConnected() != null)
 					{
 						cscs.addAll(sc2.getSearch().getConnected());
 					}
-					
+
 					convertToCNF(s);
 					return;
 				}
@@ -5817,20 +6752,20 @@ public class SQLParser
 		}
 		else
 		{
-			//starts with or
+			// starts with or
 			if (sc.getPredicate() == null)
 			{
 				convertToCNF(sc.getSearch());
 			}
-			
+
 			if (s.getConnected().get(0).getSearch().getPredicate() == null)
 			{
 				convertToCNF(s.getConnected().get(0).getSearch().getSearch());
 			}
-			
+
 			if (sc.getPredicate() != null || (allPredicates(sc.getSearch()) && allAnd(sc.getSearch())))
 			{
-				//A is all anded predicates
+				// A is all anded predicates
 				ArrayList<SearchClause> A = new ArrayList<SearchClause>();
 				if (sc.getPredicate() != null)
 				{
@@ -5845,12 +6780,12 @@ public class SQLParser
 						A.add(csc.getSearch());
 					}
 				}
-				
-				//figure out what B is
+
+				// figure out what B is
 				SearchClause sc2 = s.getConnected().get(0).getSearch();
 				if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
 				{
-					//B is all anded predicates
+					// B is all anded predicates
 					ArrayList<SearchClause> B = new ArrayList<SearchClause>();
 					if (sc2.getPredicate() != null)
 					{
@@ -5865,7 +6800,7 @@ public class SQLParser
 							B.add(csc.getSearch());
 						}
 					}
-					
+
 					ArrayList<SearchClause> searches = new ArrayList<SearchClause>();
 					for (SearchClause p1 : A)
 					{
@@ -5876,7 +6811,7 @@ public class SQLParser
 							searches.add(new SearchClause(new SearchCondition(p1, cscs), false));
 						}
 					}
-					
+
 					SearchClause first = searches.remove(0);
 					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
 					for (SearchClause search : searches)
@@ -5890,7 +6825,7 @@ public class SQLParser
 				}
 				else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
 				{
-					//B all ors
+					// B all ors
 					ArrayList<SearchClause> searches = new ArrayList<SearchClause>();
 					for (SearchClause a : A)
 					{
@@ -5898,7 +6833,7 @@ public class SQLParser
 						search.getSearch().getConnected().add(new ConnectedSearchClause(a, false));
 						searches.add(search);
 					}
-					
+
 					SearchClause first = searches.remove(0);
 					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
 					for (SearchClause search : searches)
@@ -5912,9 +6847,9 @@ public class SQLParser
 				}
 				else
 				{
-					//A AND B CNF
+					// A AND B CNF
 					s.getConnected().remove(0);
-					//build list of ored clauses in B
+					// build list of ored clauses in B
 					SearchCondition scond = sc2.getSearch();
 					ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
 					if (scond.getClause().getPredicate() != null)
@@ -5926,7 +6861,7 @@ public class SQLParser
 					{
 						searches.add(scond.getClause().getSearch());
 					}
-					
+
 					for (ConnectedSearchClause csc : scond.getConnected())
 					{
 						if (csc.getSearch().getPredicate() != null)
@@ -5939,7 +6874,7 @@ public class SQLParser
 							searches.add(csc.getSearch().getSearch());
 						}
 					}
-					
+
 					ArrayList<SearchCondition> AB = new ArrayList<SearchCondition>();
 					for (SearchClause a : A)
 					{
@@ -5950,14 +6885,14 @@ public class SQLParser
 							AB.add(ab);
 						}
 					}
-					
+
 					SearchClause first = new SearchClause(AB.remove(0), false);
 					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
 					for (SearchCondition ab : AB)
 					{
 						cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
 					}
-					
+
 					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
 					convertToCNF(s);
 					return;
@@ -5965,12 +6900,12 @@ public class SQLParser
 			}
 			else if (allPredicates(sc.getSearch()) && allOrs(sc.getSearch()))
 			{
-				//A all ored preds
-				//figure out what B is
+				// A all ored preds
+				// figure out what B is
 				SearchClause sc2 = s.getConnected().get(0).getSearch();
 				if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
 				{
-					//B is all anded predicates
+					// B is all anded predicates
 					ArrayList<SearchClause> B = new ArrayList<SearchClause>();
 					if (sc2.getPredicate() != null)
 					{
@@ -5985,7 +6920,7 @@ public class SQLParser
 							B.add(csc.getSearch());
 						}
 					}
-					
+
 					ArrayList<SearchClause> searches = new ArrayList<SearchClause>();
 					for (SearchClause b : B)
 					{
@@ -5993,7 +6928,7 @@ public class SQLParser
 						search.getSearch().getConnected().add(new ConnectedSearchClause(b, false));
 						searches.add(search);
 					}
-					
+
 					SearchClause first = searches.remove(0);
 					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
 					for (SearchClause search : searches)
@@ -6007,7 +6942,7 @@ public class SQLParser
 				}
 				else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
 				{
-					//B all ors
+					// B all ors
 					s.getConnected().remove(0);
 					ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
 					cscs.add(new ConnectedSearchClause(sc2.getSearch().getClause(), false));
@@ -6017,9 +6952,9 @@ public class SQLParser
 				}
 				else
 				{
-					//A ors B CNF
+					// A ors B CNF
 					s.getConnected().remove(0);
-					//build list of ored clauses in B
+					// build list of ored clauses in B
 					SearchCondition scond = sc2.getSearch();
 					ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
 					if (scond.getClause().getPredicate() != null)
@@ -6031,7 +6966,7 @@ public class SQLParser
 					{
 						searches.add(scond.getClause().getSearch());
 					}
-					
+
 					for (ConnectedSearchClause csc : scond.getConnected())
 					{
 						if (csc.getSearch().getPredicate() != null)
@@ -6044,7 +6979,7 @@ public class SQLParser
 							searches.add(csc.getSearch().getSearch());
 						}
 					}
-					
+
 					for (SearchCondition search : searches)
 					{
 						search.getConnected().add(new ConnectedSearchClause(sc.getSearch().getClause(), false));
@@ -6053,14 +6988,14 @@ public class SQLParser
 							search.getConnected().add(csc);
 						}
 					}
-					
+
 					SearchClause first = new SearchClause(searches.remove(0), false);
 					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
 					for (SearchCondition ab : searches)
 					{
 						cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
 					}
-					
+
 					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
 					convertToCNF(s);
 					return;
@@ -6068,12 +7003,12 @@ public class SQLParser
 			}
 			else
 			{
-				//A is CNF
-				//figure out what B is
+				// A is CNF
+				// figure out what B is
 				SearchClause sc2 = s.getConnected().get(0).getSearch();
 				if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
 				{
-					//A CNF B AND
+					// A CNF B AND
 					ArrayList<SearchClause> B = new ArrayList<SearchClause>();
 					if (sc2.getPredicate() != null)
 					{
@@ -6088,9 +7023,9 @@ public class SQLParser
 							B.add(csc.getSearch());
 						}
 					}
-					
+
 					s.getConnected().remove(0);
-					//build list of ored clauses in A
+					// build list of ored clauses in A
 					SearchCondition scond = sc.getSearch();
 					ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
 					if (scond.getClause().getPredicate() != null)
@@ -6102,7 +7037,7 @@ public class SQLParser
 					{
 						searches.add(scond.getClause().getSearch());
 					}
-					
+
 					for (ConnectedSearchClause csc : scond.getConnected())
 					{
 						if (csc.getSearch().getPredicate() != null)
@@ -6115,7 +7050,7 @@ public class SQLParser
 							searches.add(csc.getSearch().getSearch());
 						}
 					}
-					
+
 					ArrayList<SearchCondition> AB = new ArrayList<SearchCondition>();
 					for (SearchClause b : B)
 					{
@@ -6126,23 +7061,23 @@ public class SQLParser
 							AB.add(ab);
 						}
 					}
-					
+
 					SearchClause first = new SearchClause(AB.remove(0), false);
 					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
 					for (SearchCondition ab : AB)
 					{
 						cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
 					}
-					
+
 					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
 					convertToCNF(s);
 					return;
 				}
 				else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
 				{
-					//A CNF B OR
+					// A CNF B OR
 					s.getConnected().remove(0);
-					//build list of ored clauses in A
+					// build list of ored clauses in A
 					SearchCondition scond = sc.getSearch();
 					ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
 					if (scond.getClause().getPredicate() != null)
@@ -6154,7 +7089,7 @@ public class SQLParser
 					{
 						searches.add(scond.getClause().getSearch());
 					}
-					
+
 					for (ConnectedSearchClause csc : scond.getConnected())
 					{
 						if (csc.getSearch().getPredicate() != null)
@@ -6167,7 +7102,7 @@ public class SQLParser
 							searches.add(csc.getSearch().getSearch());
 						}
 					}
-					
+
 					for (SearchCondition search : searches)
 					{
 						search.getConnected().add(new ConnectedSearchClause(sc2.getSearch().getClause(), false));
@@ -6176,21 +7111,21 @@ public class SQLParser
 							search.getConnected().add(csc);
 						}
 					}
-					
+
 					SearchClause first = new SearchClause(searches.remove(0), false);
 					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
 					for (SearchCondition ab : searches)
 					{
 						cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
 					}
-					
+
 					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
 					convertToCNF(s);
 					return;
 				}
 				else
 				{
-					//A CNF B CNF
+					// A CNF B CNF
 					SearchCondition scond = sc.getSearch();
 					ArrayList<SearchCondition> A = new ArrayList<SearchCondition>();
 					if (scond.getClause().getPredicate() != null)
@@ -6202,7 +7137,7 @@ public class SQLParser
 					{
 						A.add(scond.getClause().getSearch());
 					}
-					
+
 					for (ConnectedSearchClause csc : scond.getConnected())
 					{
 						if (csc.getSearch().getPredicate() != null)
@@ -6215,7 +7150,7 @@ public class SQLParser
 							A.add(csc.getSearch().getSearch());
 						}
 					}
-					
+
 					scond = sc2.getSearch();
 					ArrayList<SearchCondition> B = new ArrayList<SearchCondition>();
 					if (scond.getClause().getPredicate() != null)
@@ -6227,7 +7162,7 @@ public class SQLParser
 					{
 						B.add(scond.getClause().getSearch());
 					}
-					
+
 					for (ConnectedSearchClause csc : scond.getConnected())
 					{
 						if (csc.getSearch().getPredicate() != null)
@@ -6240,7 +7175,7 @@ public class SQLParser
 							B.add(csc.getSearch().getSearch());
 						}
 					}
-					
+
 					ArrayList<SearchCondition> AB = new ArrayList<SearchCondition>();
 					for (SearchCondition a : A)
 					{
@@ -6252,14 +7187,14 @@ public class SQLParser
 							AB.add(ab);
 						}
 					}
-					
+
 					SearchClause first = new SearchClause(AB.remove(0), false);
 					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
 					for (SearchCondition ab : AB)
 					{
 						cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
 					}
-					
+
 					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
 					convertToCNF(s);
 					return;
@@ -6267,7 +7202,7 @@ public class SQLParser
 			}
 		}
 	}
-	
+
 	private boolean allAnd(SearchCondition s)
 	{
 		if (s.getConnected() != null && s.getConnected().size() > 0)
@@ -6280,10 +7215,10 @@ public class SQLParser
 				}
 			}
 		}
-		
+
 		return true;
 	}
-	
+
 	private boolean allOrs(SearchCondition s)
 	{
 		if (s.getConnected() != null && s.getConnected().size() > 0)
@@ -6296,17 +7231,17 @@ public class SQLParser
 				}
 			}
 		}
-		
+
 		return true;
 	}
-	
+
 	private boolean allPredicates(SearchCondition s)
 	{
 		if (s.getClause().getPredicate() == null)
 		{
 			return false;
 		}
-		
+
 		if (s.getConnected() != null && s.getConnected().size() > 0)
 		{
 			for (ConnectedSearchClause csc : s.getConnected())
@@ -6317,31 +7252,31 @@ public class SQLParser
 				}
 			}
 		}
-		
+
 		return true;
 	}
-	
+
 	private boolean isCNF(SearchCondition s)
 	{
 		SearchClause sc = s.getClause();
 		if (sc.getPredicate() != null && (s.getConnected() == null || s.getConnected().size() == 0))
 		{
-			//single predicate
+			// single predicate
 			return true;
 		}
-		
+
 		if (allOredPreds(s))
 		{
 			return true;
 		}
-		
+
 		if (sc.getPredicate() == null)
 		{
 			if (sc.getSearch().getClause().getPredicate() == null)
 			{
 				return false;
 			}
-			
+
 			if (sc.getSearch().getConnected() != null && sc.getSearch().getConnected().size() > 0)
 			{
 				for (ConnectedSearchClause csc : sc.getSearch().getConnected())
@@ -6350,7 +7285,7 @@ public class SQLParser
 					{
 						return false;
 					}
-					
+
 					if (csc.getSearch().getPredicate() == null)
 					{
 						return false;
@@ -6358,7 +7293,7 @@ public class SQLParser
 				}
 			}
 		}
-		
+
 		if (s.getConnected() != null && s.getConnected().size() > 0)
 		{
 			for (ConnectedSearchClause csc : s.getConnected())
@@ -6367,14 +7302,14 @@ public class SQLParser
 				{
 					return false;
 				}
-				
+
 				if (csc.getSearch().getPredicate() == null)
 				{
 					if (csc.getSearch().getSearch().getClause().getPredicate() == null)
 					{
 						return false;
 					}
-					
+
 					if (csc.getSearch().getSearch().getConnected() != null && csc.getSearch().getSearch().getConnected().size() > 0)
 					{
 						for (ConnectedSearchClause csc2 : csc.getSearch().getSearch().getConnected())
@@ -6383,7 +7318,7 @@ public class SQLParser
 							{
 								return false;
 							}
-							
+
 							if (csc2.getSearch().getPredicate() == null)
 							{
 								return false;
@@ -6393,10 +7328,10 @@ public class SQLParser
 				}
 			}
 		}
-		
+
 		return true;
 	}
-	
+
 	private boolean allOredPreds(SearchCondition s)
 	{
 		SearchClause sc = s.getClause();
@@ -6410,14 +7345,14 @@ public class SQLParser
 					allOredPreds = false;
 					break;
 				}
-				
+
 				if (csc.getSearch().getPredicate() == null)
 				{
 					allOredPreds = false;
 					break;
 				}
 			}
-			
+
 			if (allOredPreds)
 			{
 				return true;
@@ -6427,10 +7362,10 @@ public class SQLParser
 				return false;
 			}
 		}
-		
+
 		return false;
 	}
-	
+
 	private void pushInwardAnyNegation(SearchClause sc)
 	{
 		if (sc.getNegated())
@@ -6438,14 +7373,14 @@ public class SQLParser
 			negateSearchCondition(sc.getSearch());
 			sc.setNegated(false);
 		}
-		
+
 		SearchCondition s = sc.getSearch();
 		sc = s.getClause();
 		if (sc.getPredicate() == null)
 		{
 			pushInwardAnyNegation(sc);
 		}
-		
+
 		if (s.getConnected() != null && s.getConnected().size() > 0)
 		{
 			for (ConnectedSearchClause csc : s.getConnected())
@@ -6457,11 +7392,11 @@ public class SQLParser
 			}
 		}
 	}
-	
+
 	private Operator connectWithSemiJoin(Operator left, Operator right, SearchCondition join) throws ParseException
 	{
-		//assume join is already cnf
-		//and contains only columns
+		// assume join is already cnf
+		// and contains only columns
 		HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
 		HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
 		if (join.getClause().getPredicate() != null)
@@ -6469,7 +7404,7 @@ public class SQLParser
 			Column l = join.getClause().getPredicate().getLHS().getColumn();
 			Column r = join.getClause().getPredicate().getRHS().getColumn();
 			String o = join.getClause().getPredicate().getOp();
-			
+
 			if (join.getClause().getNegated())
 			{
 				if (o.equals("E"))
@@ -6503,32 +7438,32 @@ public class SQLParser
 				else if (o.equals("NL"))
 				{
 					o = "LI";
-				}	
+				}
 			}
-			
+
 			String lhs = "";
 			if (l.getTable() != null)
 			{
 				lhs += l.getTable();
 			}
-			
+
 			lhs += ("." + l.getColumn());
-			
+
 			String rhs = "";
 			if (r.getTable() != null)
 			{
 				rhs += r.getTable();
 			}
-			
 			rhs += ("." + r.getColumn());
-			
+			lhs = getMatchingCol(left, lhs);
+			rhs = getMatchingCol(right, rhs); 
 			try
 			{
 				verifyTypes(lhs, left, rhs, right);
 				Filter f = new Filter(lhs, o, rhs);
 				hm.put(f, f);
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
@@ -6539,7 +7474,7 @@ public class SQLParser
 			Column l = scond.getClause().getPredicate().getLHS().getColumn();
 			Column r = scond.getClause().getPredicate().getRHS().getColumn();
 			String o = scond.getClause().getPredicate().getOp();
-			
+
 			if (scond.getClause().getNegated())
 			{
 				if (o.equals("E"))
@@ -6573,42 +7508,42 @@ public class SQLParser
 				else if (o.equals("NL"))
 				{
 					o = "LI";
-				}	
+				}
 			}
-			
+
 			String lhs = "";
 			if (l.getTable() != null)
 			{
 				lhs += l.getTable();
 			}
-			
+
 			lhs += ("." + l.getColumn());
-			
+
 			String rhs = "";
 			if (r.getTable() != null)
 			{
 				rhs += r.getTable();
 			}
-			
 			rhs += ("." + r.getColumn());
-			
+			lhs = getMatchingCol(left, lhs);
+			rhs = getMatchingCol(right, rhs); 
 			try
 			{
 				verifyTypes(lhs, left, rhs, right);
 				Filter f = new Filter(lhs, o, rhs);
 				hm.put(f, f);
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
-			
+
 			for (ConnectedSearchClause csc : scond.getConnected())
 			{
 				l = csc.getSearch().getPredicate().getLHS().getColumn();
 				r = csc.getSearch().getPredicate().getRHS().getColumn();
 				o = csc.getSearch().getPredicate().getOp();
-				
+
 				if (csc.getSearch().getNegated())
 				{
 					if (o.equals("E"))
@@ -6642,40 +7577,40 @@ public class SQLParser
 					else if (o.equals("NL"))
 					{
 						o = "LI";
-					}	
+					}
 				}
-				
+
 				lhs = "";
 				if (l.getTable() != null)
 				{
 					lhs += l.getTable();
 				}
-				
+
 				lhs += ("." + l.getColumn());
-				
+
 				rhs = "";
 				if (r.getTable() != null)
 				{
 					rhs += r.getTable();
 				}
-				
 				rhs += ("." + r.getColumn());
-				
+				lhs = getMatchingCol(left, lhs);
+				rhs = getMatchingCol(right, rhs); 
 				try
 				{
 					verifyTypes(lhs, left, rhs, right);
 					Filter f = new Filter(lhs, o, rhs);
 					hm.put(f, f);
 				}
-				catch(Exception e)
+				catch (Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
 			}
 		}
-		
+
 		hshm.add(hm);
-		
+
 		if (join.getConnected() != null && join.getConnected().size() > 0)
 		{
 			for (ConnectedSearchClause sc : join.getConnected())
@@ -6686,7 +7621,7 @@ public class SQLParser
 					Column l = sc.getSearch().getPredicate().getLHS().getColumn();
 					Column r = sc.getSearch().getPredicate().getRHS().getColumn();
 					String o = sc.getSearch().getPredicate().getOp();
-					
+
 					if (sc.getSearch().getNegated())
 					{
 						if (o.equals("E"))
@@ -6720,32 +7655,32 @@ public class SQLParser
 						else if (o.equals("NL"))
 						{
 							o = "LI";
-						}	
+						}
 					}
-					
+
 					String lhs = "";
 					if (l.getTable() != null)
 					{
 						lhs += l.getTable();
 					}
-					
+
 					lhs += ("." + l.getColumn());
-					
+
 					String rhs = "";
 					if (r.getTable() != null)
 					{
 						rhs += r.getTable();
 					}
-					
 					rhs += ("." + r.getColumn());
-					
+					lhs = getMatchingCol(left, lhs);
+					rhs = getMatchingCol(right, rhs); 
 					try
 					{
 						verifyTypes(lhs, left, rhs, right);
 						Filter f = new Filter(lhs, o, rhs);
 						hm.put(f, f);
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						throw new ParseException(e.getMessage());
 					}
@@ -6756,7 +7691,7 @@ public class SQLParser
 					Column l = scond.getClause().getPredicate().getLHS().getColumn();
 					Column r = scond.getClause().getPredicate().getRHS().getColumn();
 					String o = scond.getClause().getPredicate().getOp();
-					
+
 					if (sc.getSearch().getNegated())
 					{
 						if (o.equals("E"))
@@ -6790,42 +7725,42 @@ public class SQLParser
 						else if (o.equals("NL"))
 						{
 							o = "LI";
-						}	
+						}
 					}
-					
+
 					String lhs = "";
 					if (l.getTable() != null)
 					{
 						lhs += l.getTable();
 					}
-					
+
 					lhs += ("." + l.getColumn());
-					
+
 					String rhs = "";
 					if (r.getTable() != null)
 					{
 						rhs += r.getTable();
 					}
-					
 					rhs += ("." + r.getColumn());
-					
+					lhs = getMatchingCol(left, lhs);
+					rhs = getMatchingCol(right, rhs); 
 					try
 					{
 						verifyTypes(lhs, left, rhs, right);
 						Filter f = new Filter(lhs, o, rhs);
 						hm.put(f, f);
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						throw new ParseException(e.getMessage());
 					}
-					
+
 					for (ConnectedSearchClause csc : scond.getConnected())
 					{
 						l = csc.getSearch().getPredicate().getLHS().getColumn();
 						r = csc.getSearch().getPredicate().getRHS().getColumn();
 						o = csc.getSearch().getPredicate().getOp();
-						
+
 						if (csc.getSearch().getNegated())
 						{
 							if (o.equals("E"))
@@ -6859,42 +7794,42 @@ public class SQLParser
 							else if (o.equals("NL"))
 							{
 								o = "LI";
-							}	
+							}
 						}
-						
+
 						lhs = "";
 						if (l.getTable() != null)
 						{
 							lhs += l.getTable();
 						}
-						
+
 						lhs += ("." + l.getColumn());
-						
+
 						rhs = "";
 						if (r.getTable() != null)
 						{
 							rhs += r.getTable();
 						}
-						
 						rhs += ("." + r.getColumn());
-						
+						lhs = getMatchingCol(left, lhs);
+						rhs = getMatchingCol(right, rhs); 
 						try
 						{
 							verifyTypes(lhs, left, rhs, right);
 							Filter f = new Filter(lhs, o, rhs);
 							hm.put(f, f);
 						}
-						catch(Exception e)
+						catch (Exception e)
 						{
 							throw new ParseException(e.getMessage());
 						}
 					}
 				}
-				
+
 				hshm.add(hm);
 			}
 		}
-		
+
 		try
 		{
 			SemiJoinOperator semi = new SemiJoinOperator(hshm, meta);
@@ -6902,16 +7837,16 @@ public class SQLParser
 			semi.add(right);
 			return semi;
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
 			throw new ParseException(e.getMessage());
 		}
 	}
-	
+
 	private Operator connectWithAntiJoin(Operator left, Operator right, SearchCondition join) throws ParseException
 	{
-		//assume join is already cnf
-		//and contains only columns
+		// assume join is already cnf
+		// and contains only columns
 		HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
 		HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
 		if (join.getClause().getPredicate() != null)
@@ -6919,7 +7854,7 @@ public class SQLParser
 			Column l = join.getClause().getPredicate().getLHS().getColumn();
 			Column r = join.getClause().getPredicate().getRHS().getColumn();
 			String o = join.getClause().getPredicate().getOp();
-			
+
 			if (join.getClause().getNegated())
 			{
 				if (o.equals("E"))
@@ -6953,32 +7888,32 @@ public class SQLParser
 				else if (o.equals("NL"))
 				{
 					o = "LI";
-				}	
+				}
 			}
-			
+
 			String lhs = "";
 			if (l.getTable() != null)
 			{
 				lhs += l.getTable();
 			}
-			
+
 			lhs += ("." + l.getColumn());
-			
+
 			String rhs = "";
 			if (r.getTable() != null)
 			{
 				rhs += r.getTable();
 			}
-			
 			rhs += ("." + r.getColumn());
-			
+			lhs = getMatchingCol(left, lhs);
+			rhs = getMatchingCol(right, rhs); 
 			try
 			{
 				verifyTypes(lhs, left, rhs, right);
 				Filter f = new Filter(lhs, o, rhs);
 				hm.put(f, f);
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
@@ -6989,7 +7924,7 @@ public class SQLParser
 			Column l = scond.getClause().getPredicate().getLHS().getColumn();
 			Column r = scond.getClause().getPredicate().getRHS().getColumn();
 			String o = scond.getClause().getPredicate().getOp();
-			
+
 			if (scond.getClause().getNegated())
 			{
 				if (o.equals("E"))
@@ -7023,42 +7958,42 @@ public class SQLParser
 				else if (o.equals("NL"))
 				{
 					o = "LI";
-				}	
+				}
 			}
-			
+
 			String lhs = "";
 			if (l.getTable() != null)
 			{
 				lhs += l.getTable();
 			}
-			
+
 			lhs += ("." + l.getColumn());
-			
+
 			String rhs = "";
 			if (r.getTable() != null)
 			{
 				rhs += r.getTable();
 			}
-			
 			rhs += ("." + r.getColumn());
-			
+			lhs = getMatchingCol(left, lhs);
+			rhs = getMatchingCol(right, rhs); 
 			try
 			{
 				verifyTypes(lhs, left, rhs, right);
 				Filter f = new Filter(lhs, o, rhs);
 				hm.put(f, f);
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
-			
+
 			for (ConnectedSearchClause csc : scond.getConnected())
 			{
 				l = csc.getSearch().getPredicate().getLHS().getColumn();
 				r = csc.getSearch().getPredicate().getRHS().getColumn();
 				o = csc.getSearch().getPredicate().getOp();
-				
+
 				if (csc.getSearch().getNegated())
 				{
 					if (o.equals("E"))
@@ -7092,40 +8027,40 @@ public class SQLParser
 					else if (o.equals("NL"))
 					{
 						o = "LI";
-					}	
+					}
 				}
-				
+
 				lhs = "";
 				if (l.getTable() != null)
 				{
 					lhs += l.getTable();
 				}
-				
+
 				lhs += ("." + l.getColumn());
-				
+
 				rhs = "";
 				if (r.getTable() != null)
 				{
 					rhs += r.getTable();
 				}
-				
 				rhs += ("." + r.getColumn());
-				
+				lhs = getMatchingCol(left, lhs);
+				rhs = getMatchingCol(right, rhs); 
 				try
 				{
 					verifyTypes(lhs, left, rhs, right);
 					Filter f = new Filter(lhs, o, rhs);
 					hm.put(f, f);
 				}
-				catch(Exception e)
+				catch (Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
 			}
 		}
-		
+
 		hshm.add(hm);
-		
+
 		if (join.getConnected() != null && join.getConnected().size() > 0)
 		{
 			for (ConnectedSearchClause sc : join.getConnected())
@@ -7136,7 +8071,7 @@ public class SQLParser
 					Column l = sc.getSearch().getPredicate().getLHS().getColumn();
 					Column r = sc.getSearch().getPredicate().getRHS().getColumn();
 					String o = sc.getSearch().getPredicate().getOp();
-					
+
 					if (sc.getSearch().getNegated())
 					{
 						if (o.equals("E"))
@@ -7170,32 +8105,32 @@ public class SQLParser
 						else if (o.equals("NL"))
 						{
 							o = "LI";
-						}	
+						}
 					}
-					
+
 					String lhs = "";
 					if (l.getTable() != null)
 					{
 						lhs += l.getTable();
 					}
-					
+
 					lhs += ("." + l.getColumn());
-					
+
 					String rhs = "";
 					if (r.getTable() != null)
 					{
 						rhs += r.getTable();
 					}
-					
 					rhs += ("." + r.getColumn());
-					
+					lhs = getMatchingCol(left, lhs);
+					rhs = getMatchingCol(right, rhs); 
 					try
 					{
 						verifyTypes(lhs, left, rhs, right);
 						Filter f = new Filter(lhs, o, rhs);
 						hm.put(f, f);
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						throw new ParseException(e.getMessage());
 					}
@@ -7206,7 +8141,7 @@ public class SQLParser
 					Column l = scond.getClause().getPredicate().getLHS().getColumn();
 					Column r = scond.getClause().getPredicate().getRHS().getColumn();
 					String o = scond.getClause().getPredicate().getOp();
-					
+
 					if (sc.getSearch().getNegated())
 					{
 						if (o.equals("E"))
@@ -7240,42 +8175,42 @@ public class SQLParser
 						else if (o.equals("NL"))
 						{
 							o = "LI";
-						}	
+						}
 					}
-					
+
 					String lhs = "";
 					if (l.getTable() != null)
 					{
 						lhs += l.getTable();
 					}
-					
+
 					lhs += ("." + l.getColumn());
-					
+
 					String rhs = "";
 					if (r.getTable() != null)
 					{
 						rhs += r.getTable();
 					}
-					
 					rhs += ("." + r.getColumn());
-					
+					lhs = getMatchingCol(left, lhs);
+					rhs = getMatchingCol(right, rhs); 
 					try
 					{
 						verifyTypes(lhs, left, rhs, right);
 						Filter f = new Filter(lhs, o, rhs);
 						hm.put(f, f);
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						throw new ParseException(e.getMessage());
 					}
-					
+
 					for (ConnectedSearchClause csc : scond.getConnected())
 					{
 						l = csc.getSearch().getPredicate().getLHS().getColumn();
 						r = csc.getSearch().getPredicate().getRHS().getColumn();
 						o = csc.getSearch().getPredicate().getOp();
-						
+
 						if (csc.getSearch().getNegated())
 						{
 							if (o.equals("E"))
@@ -7309,42 +8244,42 @@ public class SQLParser
 							else if (o.equals("NL"))
 							{
 								o = "LI";
-							}	
+							}
 						}
-						
+
 						lhs = "";
 						if (l.getTable() != null)
 						{
 							lhs += l.getTable();
 						}
-						
+
 						lhs += ("." + l.getColumn());
-						
+
 						rhs = "";
 						if (r.getTable() != null)
 						{
 							rhs += r.getTable();
 						}
-						
 						rhs += ("." + r.getColumn());
-						
+						lhs = getMatchingCol(left, lhs);
+						rhs = getMatchingCol(right, rhs); 
 						try
 						{
 							verifyTypes(lhs, left, rhs, right);
 							Filter f = new Filter(lhs, o, rhs);
 							hm.put(f, f);
 						}
-						catch(Exception e)
+						catch (Exception e)
 						{
 							throw new ParseException(e.getMessage());
 						}
 					}
 				}
-				
+
 				hshm.add(hm);
 			}
 		}
-		
+
 		try
 		{
 			AntiJoinOperator anti = new AntiJoinOperator(hshm, meta);
@@ -7352,16 +8287,16 @@ public class SQLParser
 			anti.add(right);
 			return anti;
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
 			throw new ParseException(e.getMessage());
 		}
 	}
-	
+
 	private Operator connectWithSemiJoin(Operator left, Operator right, SearchCondition join, Filter filter) throws ParseException
 	{
-		//assume join is already cnf
-		//and contains only columns
+		// assume join is already cnf
+		// and contains only columns
 		HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
 		HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
 		if (join.getClause().getPredicate() != null)
@@ -7369,7 +8304,7 @@ public class SQLParser
 			Column l = join.getClause().getPredicate().getLHS().getColumn();
 			Column r = join.getClause().getPredicate().getRHS().getColumn();
 			String o = join.getClause().getPredicate().getOp();
-			
+
 			if (join.getClause().getNegated())
 			{
 				if (o.equals("E"))
@@ -7403,32 +8338,32 @@ public class SQLParser
 				else if (o.equals("NL"))
 				{
 					o = "LI";
-				}	
+				}
 			}
-			
+
 			String lhs = "";
 			if (l.getTable() != null)
 			{
 				lhs += l.getTable();
 			}
-			
+
 			lhs += ("." + l.getColumn());
-			
+
 			String rhs = "";
 			if (r.getTable() != null)
 			{
 				rhs += r.getTable();
 			}
-			
 			rhs += ("." + r.getColumn());
-			
+			lhs = getMatchingCol(left, lhs);
+			rhs = getMatchingCol(right, rhs); 
 			try
 			{
 				verifyTypes(lhs, left, rhs, right);
 				Filter f = new Filter(lhs, o, rhs);
 				hm.put(f, f);
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
@@ -7439,7 +8374,7 @@ public class SQLParser
 			Column l = scond.getClause().getPredicate().getLHS().getColumn();
 			Column r = scond.getClause().getPredicate().getRHS().getColumn();
 			String o = scond.getClause().getPredicate().getOp();
-			
+
 			if (scond.getClause().getNegated())
 			{
 				if (o.equals("E"))
@@ -7473,42 +8408,42 @@ public class SQLParser
 				else if (o.equals("NL"))
 				{
 					o = "LI";
-				}	
+				}
 			}
-			
+
 			String lhs = "";
 			if (l.getTable() != null)
 			{
 				lhs += l.getTable();
 			}
-			
+
 			lhs += ("." + l.getColumn());
-			
+
 			String rhs = "";
 			if (r.getTable() != null)
 			{
 				rhs += r.getTable();
 			}
-			
 			rhs += ("." + r.getColumn());
-			
+			lhs = getMatchingCol(left, lhs);
+			rhs = getMatchingCol(right, rhs); 
 			try
 			{
 				verifyTypes(lhs, left, rhs, right);
 				Filter f = new Filter(lhs, o, rhs);
 				hm.put(f, f);
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
-			
+
 			for (ConnectedSearchClause csc : scond.getConnected())
 			{
 				l = csc.getSearch().getPredicate().getLHS().getColumn();
 				r = csc.getSearch().getPredicate().getRHS().getColumn();
 				o = csc.getSearch().getPredicate().getOp();
-				
+
 				if (csc.getSearch().getNegated())
 				{
 					if (o.equals("E"))
@@ -7542,40 +8477,40 @@ public class SQLParser
 					else if (o.equals("NL"))
 					{
 						o = "LI";
-					}	
+					}
 				}
-				
+
 				lhs = "";
 				if (l.getTable() != null)
 				{
 					lhs += l.getTable();
 				}
-				
+
 				lhs += ("." + l.getColumn());
-				
+
 				rhs = "";
 				if (r.getTable() != null)
 				{
 					rhs += r.getTable();
 				}
-				
 				rhs += ("." + r.getColumn());
-				
+				lhs = getMatchingCol(left, lhs);
+				rhs = getMatchingCol(right, rhs); 
 				try
 				{
 					verifyTypes(lhs, left, rhs, right);
 					Filter f = new Filter(lhs, o, rhs);
 					hm.put(f, f);
 				}
-				catch(Exception e)
+				catch (Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
 			}
 		}
-		
+
 		hshm.add(hm);
-		
+
 		if (join.getConnected() != null && join.getConnected().size() > 0)
 		{
 			for (ConnectedSearchClause sc : join.getConnected())
@@ -7586,7 +8521,7 @@ public class SQLParser
 					Column l = sc.getSearch().getPredicate().getLHS().getColumn();
 					Column r = sc.getSearch().getPredicate().getRHS().getColumn();
 					String o = sc.getSearch().getPredicate().getOp();
-					
+
 					if (sc.getSearch().getNegated())
 					{
 						if (o.equals("E"))
@@ -7620,32 +8555,32 @@ public class SQLParser
 						else if (o.equals("NL"))
 						{
 							o = "LI";
-						}	
+						}
 					}
-					
+
 					String lhs = "";
 					if (l.getTable() != null)
 					{
 						lhs += l.getTable();
 					}
-					
+
 					lhs += ("." + l.getColumn());
-					
+
 					String rhs = "";
 					if (r.getTable() != null)
 					{
 						rhs += r.getTable();
 					}
-					
 					rhs += ("." + r.getColumn());
-					
+					lhs = getMatchingCol(left, lhs);
+					rhs = getMatchingCol(right, rhs); 
 					try
 					{
 						verifyTypes(lhs, left, rhs, right);
 						Filter f = new Filter(lhs, o, rhs);
 						hm.put(f, f);
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						throw new ParseException(e.getMessage());
 					}
@@ -7656,7 +8591,7 @@ public class SQLParser
 					Column l = scond.getClause().getPredicate().getLHS().getColumn();
 					Column r = scond.getClause().getPredicate().getRHS().getColumn();
 					String o = scond.getClause().getPredicate().getOp();
-					
+
 					if (sc.getSearch().getNegated())
 					{
 						if (o.equals("E"))
@@ -7690,42 +8625,42 @@ public class SQLParser
 						else if (o.equals("NL"))
 						{
 							o = "LI";
-						}	
+						}
 					}
-					
+
 					String lhs = "";
 					if (l.getTable() != null)
 					{
 						lhs += l.getTable();
 					}
-					
+
 					lhs += ("." + l.getColumn());
-					
+
 					String rhs = "";
 					if (r.getTable() != null)
 					{
 						rhs += r.getTable();
 					}
-					
 					rhs += ("." + r.getColumn());
-					
+					lhs = getMatchingCol(left, lhs);
+					rhs = getMatchingCol(right, rhs); 
 					try
 					{
 						verifyTypes(lhs, left, rhs, right);
 						Filter f = new Filter(lhs, o, rhs);
 						hm.put(f, f);
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						throw new ParseException(e.getMessage());
 					}
-					
+
 					for (ConnectedSearchClause csc : scond.getConnected())
 					{
 						l = csc.getSearch().getPredicate().getLHS().getColumn();
 						r = csc.getSearch().getPredicate().getRHS().getColumn();
 						o = csc.getSearch().getPredicate().getOp();
-						
+
 						if (csc.getSearch().getNegated())
 						{
 							if (o.equals("E"))
@@ -7759,46 +8694,46 @@ public class SQLParser
 							else if (o.equals("NL"))
 							{
 								o = "LI";
-							}	
+							}
 						}
-						
+
 						lhs = "";
 						if (l.getTable() != null)
 						{
 							lhs += l.getTable();
 						}
-						
+
 						lhs += ("." + l.getColumn());
-						
+
 						rhs = "";
 						if (r.getTable() != null)
 						{
 							rhs += r.getTable();
 						}
-						
 						rhs += ("." + r.getColumn());
-						
+						lhs = getMatchingCol(left, lhs);
+						rhs = getMatchingCol(right, rhs); 
 						try
 						{
 							verifyTypes(lhs, left, rhs, right);
 							Filter f = new Filter(lhs, o, rhs);
 							hm.put(f, f);
 						}
-						catch(Exception e)
+						catch (Exception e)
 						{
 							throw new ParseException(e.getMessage());
 						}
 					}
 				}
-				
+
 				hshm.add(hm);
 			}
 		}
-		
+
 		hm = new HashMap<Filter, Filter>();
 		hm.put(filter, filter);
 		hshm.add(hm);
-		
+
 		try
 		{
 			SemiJoinOperator semi = new SemiJoinOperator(hshm, meta);
@@ -7806,16 +8741,16 @@ public class SQLParser
 			semi.add(right);
 			return semi;
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
 			throw new ParseException(e.getMessage());
 		}
 	}
-	
+
 	private Operator connectWithAntiJoin(Operator left, Operator right, SearchCondition join, Filter filter) throws ParseException
 	{
-		//assume join is already cnf
-		//and contains only columns
+		// assume join is already cnf
+		// and contains only columns
 		HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
 		HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
 		if (join.getClause().getPredicate() != null)
@@ -7823,7 +8758,7 @@ public class SQLParser
 			Column l = join.getClause().getPredicate().getLHS().getColumn();
 			Column r = join.getClause().getPredicate().getRHS().getColumn();
 			String o = join.getClause().getPredicate().getOp();
-			
+
 			if (join.getClause().getNegated())
 			{
 				if (o.equals("E"))
@@ -7857,32 +8792,32 @@ public class SQLParser
 				else if (o.equals("NL"))
 				{
 					o = "LI";
-				}	
+				}
 			}
-			
+
 			String lhs = "";
 			if (l.getTable() != null)
 			{
 				lhs += l.getTable();
 			}
-			
+
 			lhs += ("." + l.getColumn());
-			
+
 			String rhs = "";
 			if (r.getTable() != null)
 			{
 				rhs += r.getTable();
 			}
-			
 			rhs += ("." + r.getColumn());
-			
+			lhs = getMatchingCol(left, lhs);
+			rhs = getMatchingCol(right, rhs); 
 			try
 			{
 				verifyTypes(lhs, left, rhs, right);
 				Filter f = new Filter(lhs, o, rhs);
 				hm.put(f, f);
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
@@ -7893,7 +8828,7 @@ public class SQLParser
 			Column l = scond.getClause().getPredicate().getLHS().getColumn();
 			Column r = scond.getClause().getPredicate().getRHS().getColumn();
 			String o = scond.getClause().getPredicate().getOp();
-			
+
 			if (scond.getClause().getNegated())
 			{
 				if (o.equals("E"))
@@ -7927,42 +8862,42 @@ public class SQLParser
 				else if (o.equals("NL"))
 				{
 					o = "LI";
-				}	
+				}
 			}
-			
+
 			String lhs = "";
 			if (l.getTable() != null)
 			{
 				lhs += l.getTable();
 			}
-			
+
 			lhs += ("." + l.getColumn());
-			
+
 			String rhs = "";
 			if (r.getTable() != null)
 			{
 				rhs += r.getTable();
 			}
-			
 			rhs += ("." + r.getColumn());
-			
+			lhs = getMatchingCol(left, lhs);
+			rhs = getMatchingCol(right, rhs); 
 			try
 			{
 				verifyTypes(lhs, left, rhs, right);
 				Filter f = new Filter(lhs, o, rhs);
 				hm.put(f, f);
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
-			
+
 			for (ConnectedSearchClause csc : scond.getConnected())
 			{
 				l = csc.getSearch().getPredicate().getLHS().getColumn();
 				r = csc.getSearch().getPredicate().getRHS().getColumn();
 				o = csc.getSearch().getPredicate().getOp();
-				
+
 				if (csc.getSearch().getNegated())
 				{
 					if (o.equals("E"))
@@ -7996,40 +8931,40 @@ public class SQLParser
 					else if (o.equals("NL"))
 					{
 						o = "LI";
-					}	
+					}
 				}
-				
+
 				lhs = "";
 				if (l.getTable() != null)
 				{
 					lhs += l.getTable();
 				}
-				
+
 				lhs += ("." + l.getColumn());
-				
+
 				rhs = "";
 				if (r.getTable() != null)
 				{
 					rhs += r.getTable();
 				}
-				
 				rhs += ("." + r.getColumn());
-				
+				lhs = getMatchingCol(left, lhs);
+				rhs = getMatchingCol(right, rhs); 
 				try
 				{
 					verifyTypes(lhs, left, rhs, right);
 					Filter f = new Filter(lhs, o, rhs);
 					hm.put(f, f);
 				}
-				catch(Exception e)
+				catch (Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
 			}
 		}
-		
+
 		hshm.add(hm);
-		
+
 		if (join.getConnected() != null && join.getConnected().size() > 0)
 		{
 			for (ConnectedSearchClause sc : join.getConnected())
@@ -8040,7 +8975,7 @@ public class SQLParser
 					Column l = sc.getSearch().getPredicate().getLHS().getColumn();
 					Column r = sc.getSearch().getPredicate().getRHS().getColumn();
 					String o = sc.getSearch().getPredicate().getOp();
-					
+
 					if (sc.getSearch().getNegated())
 					{
 						if (o.equals("E"))
@@ -8074,32 +9009,32 @@ public class SQLParser
 						else if (o.equals("NL"))
 						{
 							o = "LI";
-						}	
+						}
 					}
-					
+
 					String lhs = "";
 					if (l.getTable() != null)
 					{
 						lhs += l.getTable();
 					}
-					
+
 					lhs += ("." + l.getColumn());
-					
+
 					String rhs = "";
 					if (r.getTable() != null)
 					{
 						rhs += r.getTable();
 					}
-					
 					rhs += ("." + r.getColumn());
-					
+					lhs = getMatchingCol(left, lhs);
+					rhs = getMatchingCol(right, rhs); 
 					try
 					{
 						verifyTypes(lhs, left, rhs, right);
 						Filter f = new Filter(lhs, o, rhs);
 						hm.put(f, f);
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						throw new ParseException(e.getMessage());
 					}
@@ -8110,7 +9045,7 @@ public class SQLParser
 					Column l = scond.getClause().getPredicate().getLHS().getColumn();
 					Column r = scond.getClause().getPredicate().getRHS().getColumn();
 					String o = scond.getClause().getPredicate().getOp();
-					
+
 					if (sc.getSearch().getNegated())
 					{
 						if (o.equals("E"))
@@ -8144,42 +9079,42 @@ public class SQLParser
 						else if (o.equals("NL"))
 						{
 							o = "LI";
-						}	
+						}
 					}
-					
+
 					String lhs = "";
 					if (l.getTable() != null)
 					{
 						lhs += l.getTable();
 					}
-					
+
 					lhs += ("." + l.getColumn());
-					
+
 					String rhs = "";
 					if (r.getTable() != null)
 					{
 						rhs += r.getTable();
 					}
-					
 					rhs += ("." + r.getColumn());
-					
+					lhs = getMatchingCol(left, lhs);
+					rhs = getMatchingCol(right, rhs); 
 					try
 					{
 						verifyTypes(lhs, left, rhs, right);
 						Filter f = new Filter(lhs, o, rhs);
 						hm.put(f, f);
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						throw new ParseException(e.getMessage());
 					}
-					
+
 					for (ConnectedSearchClause csc : scond.getConnected())
 					{
 						l = csc.getSearch().getPredicate().getLHS().getColumn();
 						r = csc.getSearch().getPredicate().getRHS().getColumn();
 						o = csc.getSearch().getPredicate().getOp();
-						
+
 						if (csc.getSearch().getNegated())
 						{
 							if (o.equals("E"))
@@ -8213,46 +9148,46 @@ public class SQLParser
 							else if (o.equals("NL"))
 							{
 								o = "LI";
-							}	
+							}
 						}
-						
+
 						lhs = "";
 						if (l.getTable() != null)
 						{
 							lhs += l.getTable();
 						}
-						
+
 						lhs += ("." + l.getColumn());
-						
+
 						rhs = "";
 						if (r.getTable() != null)
 						{
 							rhs += r.getTable();
 						}
-						
 						rhs += ("." + r.getColumn());
-						
+						lhs = getMatchingCol(left, lhs);
+						rhs = getMatchingCol(right, rhs); 
 						try
 						{
 							verifyTypes(lhs, left, rhs, right);
 							Filter f = new Filter(lhs, o, rhs);
 							hm.put(f, f);
 						}
-						catch(Exception e)
+						catch (Exception e)
 						{
 							throw new ParseException(e.getMessage());
 						}
 					}
 				}
-				
+
 				hshm.add(hm);
 			}
 		}
-		
+
 		hm = new HashMap<Filter, Filter>();
 		hm.put(filter, filter);
 		hshm.add(hm);
-		
+
 		try
 		{
 			AntiJoinOperator anti = new AntiJoinOperator(hshm, meta);
@@ -8260,26 +9195,29 @@ public class SQLParser
 			anti.add(right);
 			return anti;
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
 			throw new ParseException(e.getMessage());
 		}
 	}
-	
-	private SearchCondition rewriteCorrelatedSubSelect(SubSelect select, Operator op) throws ParseException
+
+	private SearchCondition rewriteCorrelatedSubSelect(SubSelect select) throws Exception
 	{
-		//update select list and search conditions and group by
-		SearchCondition retval = removeCorrelatedSearchCondition(select, op.getCols2Pos());
+		// update select list and search conditions and group by
+		FromClause from = select.getFrom();
+		Operator temp = buildOperatorTreeFromFrom(from);
+		SearchCondition retval = removeCorrelatedSearchCondition(select, temp.getCols2Pos());
 		updateSelectList(retval, select);
 		updateGroupBy(retval, select);
+		retval = retval.clone();
 		return retval;
 	}
-	
+
 	private SearchCondition removeCorrelatedSearchCondition(SubSelect select, HashMap<String, Integer> cols2Pos) throws ParseException
 	{
 		SearchCondition search = select.getWhere().getSearch();
 		convertToCNF(search);
-		//for the clause and any connected
+		// for the clause and any connected
 		ArrayList<ConnectedSearchClause> searches = new ArrayList<ConnectedSearchClause>();
 		ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
 		searches.add(new ConnectedSearchClause(search.getClause(), true));
@@ -8287,10 +9225,11 @@ public class SQLParser
 		{
 			searches.addAll(search.getConnected());
 		}
-		
+
 		for (ConnectedSearchClause csc : searches)
 		{
-			//if it's a predicate and contains a correlated column, add to retval
+			// if it's a predicate and contains a correlated column, add to
+			// retval
 			if (csc.getSearch().getPredicate() != null)
 			{
 				Predicate p = csc.getSearch().getPredicate();
@@ -8300,7 +9239,7 @@ public class SQLParser
 					{
 						throw new ParseException("Restriction: A correlated join condition in a correlated subquery can only refer to a column");
 					}
-					
+
 					cscs.add(csc);
 				}
 				else if (containsCorrelatedCol(p.getRHS(), cols2Pos))
@@ -8309,7 +9248,7 @@ public class SQLParser
 					{
 						throw new ParseException("Restriction: A correlated join condition in a correlated subquery can only refer to a column");
 					}
-					
+
 					String op = p.getOp();
 					if (op.equals("E"))
 					{
@@ -8337,7 +9276,7 @@ public class SQLParser
 					{
 						throw new ParseException("Restriction: A correlated join condition in a correlated subquery cannot use the LIKE operator");
 					}
-					
+
 					Predicate p2 = new Predicate(p.getRHS(), op, p.getLHS());
 					csc.setSearch(new SearchClause(p2, csc.getSearch().getNegated()));
 					cscs.add(csc);
@@ -8345,8 +9284,9 @@ public class SQLParser
 			}
 			else
 			{
-				//if it's a search condition, every predicate in the ored group must contain a correlated col
-				//add whole group to retval
+				// if it's a search condition, every predicate in the ored group
+				// must contain a correlated col
+				// add whole group to retval
 				boolean correlated = false;
 				SearchCondition s = csc.getSearch().getSearch();
 				Predicate p = s.getClause().getPredicate();
@@ -8358,7 +9298,7 @@ public class SQLParser
 				{
 					correlated = true;
 				}
-				
+
 				if (!correlated)
 				{
 					for (ConnectedSearchClause csc2 : s.getConnected())
@@ -8376,16 +9316,16 @@ public class SQLParser
 						}
 					}
 				}
-				
+
 				if (correlated)
 				{
-					//Verify that every predicate is correlated
+					// Verify that every predicate is correlated
 					p = s.getClause().getPredicate();
 					if (!containsCorrelatedCol(p.getLHS(), cols2Pos) && !containsCorrelatedCol(p.getRHS(), cols2Pos))
 					{
 						throw new ParseException("Restriction: In a correlated subquery all predicates in a list of logically ORed predicates must either be local or correlated");
 					}
-					
+
 					for (ConnectedSearchClause csc2 : s.getConnected())
 					{
 						p = csc2.getSearch().getPredicate();
@@ -8394,7 +9334,7 @@ public class SQLParser
 							throw new ParseException("Restriction: In a correlated subquery all predicates in a list of logically ORed predicates must either be local or correlated");
 						}
 					}
-					
+
 					ArrayList<ConnectedSearchClause> cscs2 = new ArrayList<ConnectedSearchClause>();
 					p = s.getClause().getPredicate();
 					if (containsCorrelatedCol(p.getLHS(), cols2Pos))
@@ -8403,16 +9343,16 @@ public class SQLParser
 						{
 							throw new ParseException("Restriction: A correlated join condition in a correlated subquery can only refer to a column");
 						}
-						
+
 						cscs2.add(new ConnectedSearchClause(s.getClause(), false));
 					}
-					else 
+					else
 					{
 						if (!p.getLHS().isColumn())
 						{
 							throw new ParseException("Restriction: A correlated join condition in a correlated subquery can only refer to a column");
 						}
-						
+
 						String op = p.getOp();
 						if (op.equals("E"))
 						{
@@ -8440,11 +9380,11 @@ public class SQLParser
 						{
 							throw new ParseException("Restriction: A correlated join condition in a correlated subquery cannot use the LIKE operator");
 						}
-						
+
 						Predicate p2 = new Predicate(p.getRHS(), op, p.getLHS());
 						cscs2.add(new ConnectedSearchClause(new SearchClause(p2, csc.getSearch().getNegated()), false));
 					}
-					
+
 					for (ConnectedSearchClause csc2 : s.getConnected())
 					{
 						p = csc2.getSearch().getPredicate();
@@ -8454,16 +9394,16 @@ public class SQLParser
 							{
 								throw new ParseException("Restriction: A correlated join condition in a correlated subquery can only refer to a column");
 							}
-							
+
 							cscs2.add(csc2);
 						}
-						else 
+						else
 						{
 							if (!p.getLHS().isColumn())
 							{
 								throw new ParseException("Restriction: A correlated join condition in a correlated subquery can only refer to a column");
 							}
-							
+
 							String op = p.getOp();
 							if (op.equals("E"))
 							{
@@ -8491,12 +9431,12 @@ public class SQLParser
 							{
 								throw new ParseException("Restriction: A correlated join condition in a correlated subquery cannot use the LIKE operator");
 							}
-							
+
 							Predicate p2 = new Predicate(p.getRHS(), op, p.getLHS());
 							cscs2.add(new ConnectedSearchClause(new SearchClause(p2, csc2.getSearch().getNegated()), false));
 						}
 					}
-					
+
 					SearchClause first = cscs2.remove(0).getSearch();
 					s.setClause(first);
 					s.setConnected(cscs2);
@@ -8504,21 +9444,28 @@ public class SQLParser
 				}
 			}
 		}
-		
-		//update search and build retval
+
+		// update search and build retval
 		for (ConnectedSearchClause csc : cscs)
 		{
 			searches.remove(csc);
 		}
 		
-		SearchClause first = searches.remove(0).getSearch();
-		search.setClause(first);
-		search.setConnected(searches);
-		
-		first = cscs.remove(0).getSearch();
+		if (searches.size() > 0)
+		{
+			SearchClause first = searches.remove(0).getSearch();
+			search.setClause(first);
+			search.setConnected(searches);
+		}
+		else
+		{
+			select.setWhere(null);
+		}
+
+		SearchClause first = cscs.remove(0).getSearch();
 		return new SearchCondition(first, cscs);
 	}
-	
+
 	private boolean containsCorrelatedCol(Expression exp, HashMap<String, Integer> cols2Pos) throws ParseException
 	{
 		if (exp.isColumn())
@@ -8532,15 +9479,49 @@ public class SQLParser
 			colString += ("." + col.getColumn());
 			if (cols2Pos.containsKey(colString))
 			{
-				return true;
+				return false;
 			}
 			else
 			{
-				return false;
+				if (colString.indexOf('.') != 0)
+				{
+					return true;
+				}
+				else
+				{
+					colString = colString.substring(1);
+				}
+
+				int matches = 0;
+				for (String c : cols2Pos.keySet())
+				{
+					if (c.contains("."))
+					{
+						c = c.substring(c.indexOf('.') + 1);
+					}
+
+					if (c.equals(colString))
+					{
+						matches++;
+					}
+				}
+
+				if (matches == 0)
+				{
+					return true;
+				}
+
+				if (matches == 1)
+				{
+					return false;
+				}
+
+				throw new ParseException("Ambiguous reference to " + colString);
 			}
 		}
-		
-		//if it contains a correlated column, it is a ParseException, otherwise return false
+
+		// if it contains a correlated column, it is a ParseException, otherwise
+		// return false
 		if (exp.isCountStar())
 		{
 			return false;
@@ -8565,7 +9546,7 @@ public class SQLParser
 					throw new ParseException("Restriction: A correlated join in a correlated subquery may only refer to columns");
 				}
 			}
-			
+
 			return false;
 		}
 		else if (exp.isList())
@@ -8577,7 +9558,7 @@ public class SQLParser
 					throw new ParseException("Restriction: A correlated join in a correlated subquery may only refer to columns");
 				}
 			}
-			
+
 			return false;
 		}
 		else if (exp.isLiteral())
@@ -8593,14 +9574,14 @@ public class SQLParser
 			return false;
 		}
 	}
-	
+
 	private boolean updateGroupByNeeded(SubSelect select)
 	{
 		if (select.getGroupBy() != null || select.getHaving() != null)
 		{
 			return true;
 		}
-		
+
 		SelectClause s = select.getSelect();
 		ArrayList<SelectListEntry> list = s.getSelectList();
 		for (SelectListEntry entry : list)
@@ -8609,14 +9590,14 @@ public class SQLParser
 			{
 				continue;
 			}
-			
+
 			Expression exp = entry.getExpression();
 			if (containsAggregation(exp))
 			{
 				return true;
 			}
 		}
-		
+
 		Where where = select.getWhere();
 		if (where != null)
 		{
@@ -8625,7 +9606,7 @@ public class SQLParser
 			{
 				return true;
 			}
-			
+
 			if (search.getConnected() != null && search.getConnected().size() > 0)
 			{
 				for (ConnectedSearchClause csc : search.getConnected())
@@ -8637,10 +9618,10 @@ public class SQLParser
 				}
 			}
 		}
-		
+
 		return false;
 	}
-	
+
 	private boolean containsAggregation(SearchClause clause)
 	{
 		if (clause.getPredicate() != null)
@@ -8650,21 +9631,21 @@ public class SQLParser
 			{
 				return true;
 			}
-			
+
 			if (containsAggregation(p.getRHS()))
 			{
 				return true;
 			}
-			
+
 			return false;
 		}
-		
+
 		SearchCondition search = clause.getSearch();
 		if (containsAggregation(search.getClause()))
 		{
 			return true;
 		}
-		
+
 		if (search.getConnected() != null && search.getConnected().size() > 0)
 		{
 			for (ConnectedSearchClause csc : search.getConnected())
@@ -8675,10 +9656,10 @@ public class SQLParser
 				}
 			}
 		}
-		
+
 		return false;
 	}
-	
+
 	private boolean containsAggregation(Expression exp)
 	{
 		if (exp.isColumn())
@@ -8695,12 +9676,12 @@ public class SQLParser
 			{
 				return true;
 			}
-			
+
 			if (containsAggregation(exp.getRHS()))
 			{
 				return true;
 			}
-			
+
 			return false;
 		}
 		else if (exp.isFunction())
@@ -8710,8 +9691,7 @@ public class SQLParser
 			{
 				return true;
 			}
-			
-			
+
 			for (Expression e : f.getArgs())
 			{
 				if (containsAggregation(e))
@@ -8719,7 +9699,7 @@ public class SQLParser
 					return true;
 				}
 			}
-			
+
 			return false;
 		}
 		else if (exp.isList())
@@ -8731,7 +9711,7 @@ public class SQLParser
 					return true;
 				}
 			}
-			
+
 			return false;
 		}
 		else if (exp.isLiteral())
@@ -8747,7 +9727,7 @@ public class SQLParser
 			return false;
 		}
 	}
-	
+
 	private void updateGroupBy(SearchCondition join, SubSelect select) throws ParseException
 	{
 		if (updateGroupByNeeded(select))
@@ -8756,14 +9736,14 @@ public class SQLParser
 			{
 				throw new ParseException("Restriction: A correlated subquery is not allowed if it involves aggregation and also contains correlated predicates that are not all anded together");
 			}
-			
-			//verify all predicates are also equijoins
+
+			// verify all predicates are also equijoins
 			if (!isAllEquals(join))
 			{
 				throw new ParseException("Restriction: Correlated subqueries with aggregation can only have equality operators on the correlated predicates");
 			}
-			
-			//if group by already exists, add to it
+
+			// if group by already exists, add to it
 			if (select.getGroupBy() != null)
 			{
 				GroupBy groupBy = select.getGroupBy();
@@ -8771,19 +9751,19 @@ public class SQLParser
 			}
 			else
 			{
-				//otherwise create it
+				// otherwise create it
 				select.setGroupBy(new GroupBy(getRightColumns(join)));
 			}
 		}
 	}
-	
+
 	private boolean isAllEquals(SearchCondition join)
 	{
 		if (!join.getClause().getPredicate().getOp().equals("E"))
 		{
 			return false;
 		}
-		
+
 		if (join.getConnected() != null && join.getConnected().size() > 0)
 		{
 			for (ConnectedSearchClause csc : join.getConnected())
@@ -8794,15 +9774,15 @@ public class SQLParser
 				}
 			}
 		}
-		
+
 		return true;
 	}
-	
+
 	private ArrayList<Column> getRightColumns(SearchCondition join)
 	{
 		ArrayList<Column> retval = new ArrayList<Column>();
 		retval.add(join.getClause().getPredicate().getRHS().getColumn());
-		
+
 		if (join.getConnected() != null && join.getConnected().size() > 0)
 		{
 			for (ConnectedSearchClause csc : join.getConnected())
@@ -8810,10 +9790,10 @@ public class SQLParser
 				retval.add(csc.getSearch().getPredicate().getRHS().getColumn());
 			}
 		}
-		
+
 		return retval;
 	}
-	
+
 	private void updateSelectList(SearchCondition join, SubSelect select)
 	{
 		ArrayList<Column> needed = new ArrayList<Column>();
@@ -8830,7 +9810,7 @@ public class SQLParser
 				needed.add(csc.getSearch().getPredicate().getRHS().getColumn());
 			}
 		}
-		
+
 		if (join.getConnected() != null && join.getConnected().size() > 0)
 		{
 			for (ConnectedSearchClause sc : join.getConnected())
@@ -8850,13 +9830,13 @@ public class SQLParser
 				}
 			}
 		}
-		
+
 		SelectClause sclause = select.getSelect();
 		if (sclause.isSelectStar())
 		{
 			return;
 		}
-		
+
 		ArrayList<SelectListEntry> list = sclause.getSelectList();
 		for (Column col : needed)
 		{
@@ -8869,32 +9849,149 @@ public class SQLParser
 			boolean found = false;
 			for (SelectListEntry entry : list)
 			{
-				if (entry.getName() != null && ("." + entry.getName()).equals(colName))
+				//do we already have this col
+				if (entry.getName() != null)
+				{
+					continue;
+				}
+				
+				if (!entry.isColumn())
+				{
+					continue;
+				}
+				
+				if (entry.getColumn().equals(col))
 				{
 					found = true;
-					break;
-				}
-				else if (entry.getName() == null && entry.isColumn())
-				{
-					String colName2 = "";
-					if (entry.getColumn().getTable() != null)
-					{
-						colName2 += entry.getColumn().getTable();
-					}
-					colName2 += ("." + entry.getColumn().getColumn());
-					
-					if (colName.equals(colName2))
-					{
-						found = true;
-						break;
-					}
 				}
 			}
-			
+
 			if (!found)
 			{
 				list.add(new SelectListEntry(col, null));
 			}
 		}
+	}
+
+	private Operator addRename(Operator op, SearchCondition join) throws Exception
+	{
+		ArrayList<String> olds = new ArrayList<String>();
+		ArrayList<String> news = new ArrayList<String>();
+
+		if (join.getClause().getPredicate() != null)
+		{
+			Column col = join.getClause().getPredicate().getRHS().getColumn();
+			String c = "";
+			if (col.getTable() != null)
+			{
+				c += col.getTable();
+			}
+			
+			c += ("." + col.getColumn());
+			olds.add(getMatchingCol(op, c));
+			String c2 = c.substring(0, c.indexOf('.') + 1);
+			c2 += ("_" + rewriteCounter);
+			c2 += c.substring(c.indexOf('.') + 1);
+			col.setColumn("_" + rewriteCounter++ + col.getColumn());
+			news.add(c2);
+		}
+		else
+		{
+			SearchCondition scond = join.getClause().getSearch();
+			Column col = scond.getClause().getPredicate().getRHS().getColumn();
+			String c = "";
+			if (col.getTable() != null)
+			{
+				c += col.getTable();
+			}
+			
+			c += ("." + col.getColumn());
+			olds.add(getMatchingCol(op, c));
+			String c2 = c.substring(0, c.indexOf('.') + 1);
+			c2 += ("_" + rewriteCounter);
+			c2 += c.substring(c.indexOf('.') + 1);
+			col.setColumn("_" + rewriteCounter++ + col.getColumn());
+			news.add(c2);
+			for (ConnectedSearchClause csc : scond.getConnected())
+			{
+				col = csc.getSearch().getPredicate().getRHS().getColumn();
+				c = "";
+				if (col.getTable() != null)
+				{
+					c += col.getTable();
+				}
+				
+				c += ("." + col.getColumn());
+				olds.add(getMatchingCol(op, c));
+				c2 = c.substring(0, c.indexOf('.') + 1);
+				c2 += ("_" + rewriteCounter);
+				c2 += c.substring(c.indexOf('.') + 1);
+				col.setColumn("_" + rewriteCounter++ + col.getColumn());
+				news.add(c2);
+			}
+		}
+
+		if (join.getConnected() != null && join.getConnected().size() > 0)
+		{
+			for (ConnectedSearchClause sc : join.getConnected())
+			{
+				if (sc.getSearch().getPredicate() != null)
+				{
+					Column col = sc.getSearch().getPredicate().getRHS().getColumn();
+					String c = "";
+					if (col.getTable() != null)
+					{
+						c += col.getTable();
+					}
+					
+					c += ("." + col.getColumn());
+					olds.add(getMatchingCol(op, c));
+					String c2 = c.substring(0, c.indexOf('.') + 1);
+					c2 += ("_" + rewriteCounter);
+					c2 += c.substring(c.indexOf('.') + 1);
+					col.setColumn("_" + rewriteCounter++ + col.getColumn());
+					news.add(c2);
+				}
+				else
+				{
+					SearchCondition scond = sc.getSearch().getSearch();
+					Column col = scond.getClause().getPredicate().getRHS().getColumn();
+					String c = "";
+					if (col.getTable() != null)
+					{
+						c += col.getTable();
+					}
+					
+					c += ("." + col.getColumn());
+					olds.add(getMatchingCol(op, c));
+					String c2 = c.substring(0, c.indexOf('.') + 1);
+					c2 += ("_" + rewriteCounter);
+					c2 += c.substring(c.indexOf('.') + 1);
+					col.setColumn("_" + rewriteCounter++ + col.getColumn());
+					news.add(c2);
+					for (ConnectedSearchClause csc : scond.getConnected())
+					{
+						col = csc.getSearch().getPredicate().getRHS().getColumn();
+						c = "";
+						if (col.getTable() != null)
+						{
+							c += col.getTable();
+						}
+						
+						c += ("." + col.getColumn());
+						olds.add(getMatchingCol(op, c));
+						c2 = c.substring(0, c.indexOf('.') + 1);
+						c2 += ("_" + rewriteCounter);
+						c2 += c.substring(c.indexOf('.') + 1);
+						col.setColumn("_" + rewriteCounter++ + col.getColumn());
+						news.add(c2);
+					}
+				}
+			}
+		}
+
+		Operator rename = new RenameOperator(olds, news, meta);
+		rename.add(op);
+		return rename;
 	}
 }

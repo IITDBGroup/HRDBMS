@@ -21,6 +21,11 @@ public class SubSelect
 		this.fetchFirst = fetchFirst;
 	}
 	
+	public void setWhere(Where where)
+	{
+		this.where = where;
+	}
+	
 	public void setGroupBy(GroupBy groupBy)
 	{
 		this.groupBy = groupBy;

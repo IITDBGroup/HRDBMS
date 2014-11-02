@@ -213,7 +213,11 @@ public final class MassDeleteOperator implements Operator, Serializable
 		ArrayList<Integer> nodes = MetaData.getNodesForTable(schema, table, tx);
 		ArrayList<Object> tree = makeTree(nodes);
 		//send all of them a mass delete message for this table with this transaction
-		boolean ok = sendMassDeletes(tree, tx);
+		ArrayList<String> indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
+		ArrayList<ArrayList<String>> keys = MetaData.getKeys(indexes, tx);
+		ArrayList<ArrayList<String>> types = MetaData.getTypes(indexes, tx);
+		ArrayList<ArrayList<Boolean>> orders = MetaData.getOrders(indexes, tx);
+		boolean ok = sendMassDeletes(tree, tx, MetaData.getCols2TypesForTable(schema, table, tx), MetaData.getPos2ColForTable(schema, table, tx), keys, types, orders, indexes);
 		//if anyone responds not ok tell next() to throw an exception
 		if (!ok)
 		{
@@ -281,7 +285,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 		return retval;
 	}
 	
-	private boolean sendMassDeletes(ArrayList<Object> tree, Transaction tx)
+	private boolean sendMassDeletes(ArrayList<Object> tree, Transaction tx, HashMap<String, String> cols2Types, TreeMap<Integer, String> pos2Col, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes)
 	{
 		//all of them should respond OK with delete count
 		boolean allOK = true;
@@ -292,12 +296,12 @@ public final class MassDeleteOperator implements Operator, Serializable
 			{
 				ArrayList<Object> list = new ArrayList<Object>(1);
 				list.add(o);
-				SendMassDeleteThread thread = new SendMassDeleteThread(list, tx);
+				SendMassDeleteThread thread = new SendMassDeleteThread(list, tx, cols2Types, pos2Col, keys, types, orders, indexes);
 				threads.add(thread);
 			}
 			else
 			{
-				SendMassDeleteThread thread = new SendMassDeleteThread((ArrayList<Object>)o, tx);
+				SendMassDeleteThread thread = new SendMassDeleteThread((ArrayList<Object>)o, tx, cols2Types, pos2Col, keys, types, orders, indexes);
 				threads.add(thread);
 			}
 		}
@@ -346,11 +350,23 @@ public final class MassDeleteOperator implements Operator, Serializable
 		private Transaction tx;
 		private boolean ok;
 		int num;
+		private HashMap<String, String> cols2Types;
+		private TreeMap<Integer, String> pos2Col;
+		private ArrayList<ArrayList<String>> keys;
+		private ArrayList<ArrayList<String>> types;
+		private ArrayList<ArrayList<Boolean>> orders;
+		private ArrayList<String> indexes;
 		
-		public SendMassDeleteThread(ArrayList<Object> tree, Transaction tx)
+		public SendMassDeleteThread(ArrayList<Object> tree, Transaction tx, HashMap<String, String> cols2Types, TreeMap<Integer, String> pos2Col, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes)
 		{
 			this.tree = tree;
 			this.tx = tx;
+			this.cols2Types = cols2Types;
+			this.pos2Col = pos2Col;
+			this.keys = keys;
+			this.types = types;
+			this.orders = orders;
+			this.indexes = indexes;
 		}
 		
 		public int getNum()
@@ -365,10 +381,10 @@ public final class MassDeleteOperator implements Operator, Serializable
 		
 		public void run()
 		{
-			sendMassDelete(tree, tx);
+			sendMassDelete(tree, tx, keys, types, orders, indexes);
 		}
 		
-		private void sendMassDelete(ArrayList<Object> tree, Transaction tx)
+		private void sendMassDelete(ArrayList<Object> tree, Transaction tx, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes)
 		{
 			Object obj = tree.get(0);
 			while (obj instanceof ArrayList)
@@ -398,13 +414,12 @@ public final class MassDeleteOperator implements Operator, Serializable
 				out.write(stringToBytes(table));
 				ObjectOutputStream objOut = new ObjectOutputStream(out);
 				objOut.writeObject(convertToHosts(tree, tx));
-				ArrayList<String> indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
 				objOut.writeObject(indexes);
-				objOut.writeObject(MetaData.getKeys(indexes, tx));
-				objOut.writeObject(MetaData.getTypes(indexes, tx));
-				objOut.writeObject(MetaData.getOrders(indexes, tx));
-				objOut.writeObject(MetaData.getPos2ColForTable(schema, table, tx));
-				objOut.writeObject(MetaData.getCols2TypesForTable(schema, table, tx));
+				objOut.writeObject(keys);
+				objOut.writeObject(types);
+				objOut.writeObject(orders);
+				objOut.writeObject(pos2Col);
+				objOut.writeObject(cols2Types);
 				objOut.flush();
 				out.flush();
 				getConfirmation(sock);

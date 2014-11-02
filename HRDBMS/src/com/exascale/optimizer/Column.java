@@ -18,6 +18,16 @@ public class Column implements Serializable
 		this.column = column;
 	}
 	
+	public void setTable(String table)
+	{
+		this.table = table;
+	}
+	
+	public void setColumn(String column)
+	{
+		this.column = column;
+	}
+	
 	public String getTable()
 	{
 		return table;

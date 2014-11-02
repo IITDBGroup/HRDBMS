@@ -297,6 +297,16 @@ public final class Phase4
 			cCache.put(op, retval);
 			return retval;
 		}
+		
+		if (op instanceof DummyOperator)
+		{
+			return 1;
+		}
+		
+		if (op instanceof DEMOperator)
+		{
+			return 0;
+		}
 
 		HRDBMSWorker.logger.error("Unknown operator in card() in Phase4: " + op.getClass());
 		throw new Exception("Unknown operator in card() in Phase4: " + op.getClass());
@@ -324,9 +334,9 @@ public final class Phase4
 			try
 			{
 				parent.removeChild(right);
-				parent.add(left);
 				parent.removeChild(left);
 				parent.add(right);
+				parent.add(left);
 			}
 			catch (final Exception e)
 			{
@@ -659,7 +669,7 @@ public final class Phase4
 		}
 
 		final NetworkReceiveOperator r = new NetworkReceiveOperator(meta);
-		r.setNode(-1);
+		r.setNode(grandParent.getNode());
 		for (final NetworkSendOperator send : sends2)
 		{
 			try
@@ -916,7 +926,7 @@ public final class Phase4
 		}
 
 		final NetworkReceiveOperator r = new NetworkReceiveOperator(meta);
-		r.setNode(-1);
+		r.setNode(grandParent.getNode());
 		for (final NetworkSendOperator send : sends2)
 		{
 			try
@@ -1029,7 +1039,7 @@ public final class Phase4
 			}
 
 			final NetworkReceiveOperator r = new NetworkReceiveOperator(meta);
-			r.setNode(-1);
+			r.setNode(grandParent.getNode());
 
 			for (final NetworkSendOperator send : sends2)
 			{
@@ -1232,7 +1242,7 @@ public final class Phase4
 		}
 
 		final NetworkReceiveOperator r = new NetworkReceiveOperator(meta);
-		r.setNode(-1);
+		r.setNode(grandParent.getNode());
 
 		for (final NetworkSendOperator send : sends2)
 		{
@@ -1304,7 +1314,7 @@ public final class Phase4
 			HRDBMSWorker.logger.error("", e);
 			throw e;
 		}
-		rr.setNode(-1);
+		rr.setNode(child.getNode());
 
 		final ArrayList<NetworkSendOperator> sends = new ArrayList<NetworkSendOperator>();
 		int i = 0;
@@ -1331,7 +1341,7 @@ public final class Phase4
 		}
 
 		final NetworkReceiveAndMergeOperator receive = new NetworkReceiveAndMergeOperator(op.getKeys(), op.getOrders(), meta);
-		receive.setNode(-1);
+		receive.setNode(parent.getNode());
 		for (final NetworkSendOperator send : sends)
 		{
 			receive.add(send);
@@ -1645,6 +1655,7 @@ public final class Phase4
 				try
 				{
 					extend.add(parent);
+					extend.setNode(parent.getNode());
 					grandParent.add(extend);
 				}
 				catch (final Exception e)
@@ -1695,6 +1706,7 @@ public final class Phase4
 				RenameOperator rename = null;
 				rename = new RenameOperator(oldCols, newCols, meta);
 				rename.add(pClone);
+				rename.setNode(pClone.getNode());
 
 				((Operator)entry.getKey()).add(rename);
 				receive.removeChild((Operator)entry.getKey());
@@ -1727,6 +1739,7 @@ public final class Phase4
 				{
 					final ReorderOperator order = new ReorderOperator(cols, meta);
 					order.add(grandParent);
+					order.setNode(grandParent.getNode());
 					orig.add(order);
 					grandParent = next;
 				}
@@ -1790,6 +1803,7 @@ public final class Phase4
 				receive.add((Operator)entry.getKey());
 			}
 			grandParent.add(receive);
+			receive.setNode(grandParent.getNode());
 		}
 		catch (final Exception e)
 		{
@@ -1935,6 +1949,7 @@ public final class Phase4
 					try
 					{
 						newSend.add(newReceive);
+						newReceive.setNode(newSend.getNode());
 						receive.add(newSend);
 					}
 					catch (final Exception e)
@@ -2866,10 +2881,7 @@ public final class Phase4
 				else if (op instanceof UnionOperator)
 				{
 					final Operator parent = op.parent();
-					if (op.children().size() == 1)
-					{
-						continue;
-					}
+					
 					if (noLargeUpstreamJoins(op))
 					{
 						long card = 0;
@@ -3314,7 +3326,7 @@ public final class Phase4
 		}
 
 		final NetworkReceiveOperator r = new NetworkReceiveOperator(meta);
-		r.setNode(-1);
+		r.setNode(grandParent.getNode());
 		for (final NetworkSendOperator send : sends2)
 		{
 			try
@@ -3541,7 +3553,7 @@ public final class Phase4
 		}
 
 		final NetworkReceiveOperator r = new NetworkReceiveOperator(meta);
-		r.setNode(-1);
+		r.setNode(grandParent.getNode());
 		for (final NetworkSendOperator send : sends2)
 		{
 			try
@@ -3571,6 +3583,16 @@ public final class Phase4
 	
 	private boolean handleUnion(NetworkReceiveOperator receive) throws Exception
 	{
+		if (receive.parent().children().size() == 1)
+		{
+			DEMOperator dummy = new DEMOperator(meta);
+			receive.parent().add(dummy);
+			dummy.setNode(receive.parent().getNode());
+			dummy.setCols2Pos(receive.parent().getCols2Pos());
+			dummy.setPos2Col(receive.parent().getPos2Col());
+			dummy.setCols2Types(receive.parent().getCols2Types());
+		}
+		
 		final Operator parent = receive.parent();
 		verify2ReceivesForHash(parent);
 		final Operator grandParent = parent.parent();
@@ -3768,7 +3790,7 @@ public final class Phase4
 		}
 
 		final NetworkReceiveOperator r = new NetworkReceiveOperator(meta);
-		r.setNode(-1);
+		r.setNode(grandParent.getNode());
 		for (final NetworkSendOperator send : sends2)
 		{
 			try
@@ -3891,7 +3913,7 @@ public final class Phase4
 			}
 
 			final NetworkReceiveOperator r = new NetworkReceiveOperator(meta);
-			r.setNode(-1);
+			r.setNode(grandParent.getNode());
 
 			for (final NetworkSendOperator send : sends2)
 			{
@@ -4047,7 +4069,7 @@ public final class Phase4
 		}
 
 		final NetworkReceiveOperator r = new NetworkReceiveOperator(meta);
-		r.setNode(-1);
+		r.setNode(grandParent.getNode());
 
 		for (final NetworkSendOperator send : sends2)
 		{
@@ -4166,10 +4188,10 @@ public final class Phase4
 			{
 				final Operator child = op.children().get(0);
 				op.removeChild(child);
-				final NetworkSendOperator send = new NetworkSendOperator(-1, meta);
+				final NetworkSendOperator send = new NetworkSendOperator(op.getNode(), meta);
 				send.add(child);
 				final NetworkReceiveOperator receive = new NetworkReceiveOperator(meta);
-				receive.setNode(-1);
+				receive.setNode(op.getNode());
 				receive.add(send);
 				op.add(receive);
 				cCache.clear();
@@ -4179,10 +4201,10 @@ public final class Phase4
 			{
 				final Operator child = op.children().get(1);
 				op.removeChild(child);
-				final NetworkSendOperator send = new NetworkSendOperator(-1, meta);
+				final NetworkSendOperator send = new NetworkSendOperator(op.getNode(), meta);
 				send.add(child);
 				final NetworkReceiveOperator receive = new NetworkReceiveOperator(meta);
-				receive.setNode(-1);
+				receive.setNode(op.getNode());
 				receive.add(send);
 				op.add(receive);
 				cCache.clear();
@@ -4206,7 +4228,7 @@ public final class Phase4
 				final NetworkSendOperator send = new NetworkSendOperator(-1, meta);
 				send.add(child);
 				final NetworkReceiveOperator receive = new NetworkReceiveOperator(meta);
-				receive.setNode(-1);
+				receive.setNode(op.getNode());
 				receive.add(send);
 				op.add(receive);
 				cCache.clear();
@@ -4218,7 +4240,7 @@ public final class Phase4
 				op.removeChild(child);
 				final int ID = id.getAndIncrement();
 				final NetworkSendRROperator send = new NetworkSendRROperator(ID, meta);
-				send.setNode(-1);
+				send.setNode(child.getNode());
 				send.add(child);
 
 				final long numNodes = card(child) / MAX_LOCAL_SORT + 1;
@@ -4240,7 +4262,7 @@ public final class Phase4
 				}
 
 				final NetworkReceiveOperator receive = new NetworkReceiveOperator(meta);
-				receive.setNode(-1);
+				receive.setNode(op.getNode());
 
 				for (final NetworkSendOperator send2 : sends)
 				{
@@ -4269,7 +4291,7 @@ public final class Phase4
 				final NetworkSendOperator send = new NetworkSendOperator(-1, meta);
 				send.add(child);
 				final NetworkReceiveOperator receive = new NetworkReceiveOperator(meta);
-				receive.setNode(-1);
+				receive.setNode(op.getNode());
 				receive.add(send);
 				op.add(receive);
 				cCache.clear();
@@ -4281,7 +4303,7 @@ public final class Phase4
 				op.removeChild(child);
 				final int ID = id.getAndIncrement();
 				final NetworkSendRROperator send = new NetworkSendRROperator(ID, meta);
-				send.setNode(-1);
+				send.setNode(child.getNode());
 				send.add(child);
 
 				final long numNodes = card(child) / MAX_LOCAL_SORT + 1;
@@ -4303,7 +4325,7 @@ public final class Phase4
 				}
 
 				final NetworkReceiveOperator receive = new NetworkReceiveOperator(meta);
-				receive.setNode(-1);
+				receive.setNode(op.getNode());
 
 				for (final NetworkSendOperator send2 : sends)
 				{

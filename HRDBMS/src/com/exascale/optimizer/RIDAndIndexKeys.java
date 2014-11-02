@@ -24,4 +24,28 @@ public class RIDAndIndexKeys implements Serializable
 	{
 		return indexKeys;
 	}
+	
+	public int hashCode()
+	{
+		int hash = 17;
+		hash = hash * 23 + rid.hashCode();
+		hash = hash * 23 + indexKeys.hashCode();
+		return hash;
+	}
+	
+	public boolean equals(Object rhs)
+	{
+		if (rhs == null)
+		{
+			return false;
+		}
+		
+		if (!(rhs instanceof RIDAndIndexKeys))
+		{
+			return false;
+		}
+		
+		RIDAndIndexKeys r = (RIDAndIndexKeys)rhs;
+		return rid.equals(r.rid) && indexKeys.equals(r.indexKeys);
+	}
 }

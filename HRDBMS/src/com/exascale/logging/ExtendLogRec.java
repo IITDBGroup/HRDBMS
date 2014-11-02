@@ -11,7 +11,7 @@ public class ExtendLogRec extends LogRec
 
 	public ExtendLogRec(long txnum, Block b) throws Exception
 	{
-		super(LogRec.EXTEND, txnum, ByteBuffer.allocate(32 + b.toString().length()));
+		super(LogRec.EXTEND, txnum, ByteBuffer.allocate(32 + b.toString().getBytes("UTF-8").length));
 		this.b = b;
 		
 		if (b.number() == 0)
@@ -21,11 +21,12 @@ public class ExtendLogRec extends LogRec
 
 		final ByteBuffer buff = this.buffer();
 		buff.position(28);
-		final int blen = b.toString().length();
+		byte[] bbytes = b.toString().getBytes("UTF-8");
+		final int blen = bbytes.length;
 		buff.putInt(blen);
 		try
 		{
-			buff.put(b.toString().getBytes("UTF-8"));
+			buff.put(bbytes);
 		}
 		catch (final Exception e)
 		{

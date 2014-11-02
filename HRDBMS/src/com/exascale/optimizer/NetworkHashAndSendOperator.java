@@ -196,7 +196,17 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 				{
 					throw (Exception)o;
 				}
-				final byte[] obj = toBytes(o);
+				final byte[] obj;
+				try
+				{
+					obj = toBytes(o);
+				}
+				catch(Exception e)
+				{
+					HRDBMSWorker.logger.debug("Received an empty array list to send from " + child);
+					throw e;
+				}
+				
 				final ArrayList<Object> key = new ArrayList<Object>(hashCols.size());
 				for (final String col : hashCols)
 				{
@@ -249,6 +259,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		}
 		catch(Exception e)
 		{
+			HRDBMSWorker.logger.debug("", e);
 			byte[] obj = null;
 			try
 			{

@@ -52,6 +52,62 @@ public class LogIterator implements Iterator<LogRec>
 			}
 		}
 	}
+	
+	public LogIterator(String filename, boolean flush) throws IOException
+	{
+		synchronized (LogManager.noArchiveLock) // disable archiving while we have
+											// an iterator open
+		{
+			LogManager.openIters++;
+			LogManager.noArchive = true;
+		}
+
+		fc = LogManager.getFile(filename);
+		synchronized (fc)
+		{
+			try
+			{
+				fc.position(fc.size() - 4); // trailing log rec size
+				sizeBuff.position(0);
+				fc.read(sizeBuff);
+				sizeBuff.position(0);
+				size = sizeBuff.getInt();
+				nextpos = fc.size() - 4 - size;
+			}
+			catch (final IllegalArgumentException e)
+			{
+				nextpos = -1;
+			}
+		}
+	}
+	
+	public LogIterator(String filename, boolean flush, FileChannel fc) throws IOException
+	{
+		synchronized (LogManager.noArchiveLock) // disable archiving while we have
+											// an iterator open
+		{
+			LogManager.openIters++;
+			LogManager.noArchive = true;
+		}
+
+		this.fc = fc;
+		synchronized (fc)
+		{
+			try
+			{
+				fc.position(fc.size() - 4); // trailing log rec size
+				sizeBuff.position(0);
+				fc.read(sizeBuff);
+				sizeBuff.position(0);
+				size = sizeBuff.getInt();
+				nextpos = fc.size() - 4 - size;
+			}
+			catch (final IllegalArgumentException e)
+			{
+				nextpos = -1;
+			}
+		}
+	}
 
 	public void close()
 	{

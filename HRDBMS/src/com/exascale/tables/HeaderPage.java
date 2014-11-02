@@ -4,6 +4,8 @@ import java.nio.ByteBuffer;
 import com.exascale.filesystem.Page;
 import com.exascale.logging.InsertLogRec;
 import com.exascale.managers.HRDBMSWorker;
+import com.exascale.managers.LockManager;
+import com.exascale.managers.LogManager;
 
 public class HeaderPage
 {
@@ -212,14 +214,24 @@ public class HeaderPage
 
 	public void updateColNum(int entryNum, int colID, Transaction tx) throws Exception
 	{
+		LockManager.xLock(p.block(), tx.number());
 		final byte[] before = ByteBuffer.allocate(4).putInt(p.getInt(entryNum * 8)).array();
 		final byte[] after = ByteBuffer.allocate(4).putInt(colID).array();
 		final InsertLogRec rec = tx.insert(before, after, entryNum * 8, p.block());
 		p.write(entryNum * 8, after, tx.number(), rec.lsn());
 	}
+	
+	public void updateColNumNoLog(int entryNum, int colID, Transaction tx) throws Exception
+	{
+		LockManager.xLock(p.block(), tx.number());
+		final byte[] after = ByteBuffer.allocate(4).putInt(colID).array();
+		long lsn = LogManager.getLSN();
+		p.write(entryNum * 8, after, tx.number(), lsn);
+	}
 
 	public void updateSize(int entryNum, int size, Transaction tx) throws Exception
 	{
+		LockManager.xLock(p.block(), tx.number());
 		final byte[] before = ByteBuffer.allocate(4).putInt(p.getInt(entryNum * 4)).array();
 		final byte[] after = ByteBuffer.allocate(4).putInt(size).array();
 		// LogManager.write(new InsertLogRec(txnum, p.block(), entryNum * 4,
@@ -228,11 +240,11 @@ public class HeaderPage
 		// txnum, LogManager.getLSN());
 		final InsertLogRec rec = tx.insert(before, after, entryNum * 4, p.block());
 		p.write(entryNum * 4, after, tx.number(), rec.lsn());
-		HRDBMSWorker.logger.debug("Updating header free space list by writing " + size + " to @" + entryNum*4);
 	}
 
 	public void updateSize(int entryNum, int size, Transaction tx, int colMarker) throws Exception
 	{
+		LockManager.xLock(p.block(), tx.number());
 		final byte[] before = ByteBuffer.allocate(4).putInt(p.getInt(entryNum * 8 + 4)).array();
 		final byte[] after = ByteBuffer.allocate(4).putInt(size).array();
 		// LogManager.write(new InsertLogRec(txnum, p.block(), entryNum * 8 + 4,
@@ -242,5 +254,21 @@ public class HeaderPage
 		// LogManager.getLSN());
 		final InsertLogRec rec = tx.insert(before, after, entryNum * 8 + 4, p.block());
 		p.write(entryNum * 8 + 4, after, tx.number(), rec.lsn());
+	}
+	
+	public void updateSizeNoLog(int entryNum, int size, Transaction tx) throws Exception
+	{
+		LockManager.xLock(p.block(), tx.number());
+		final byte[] after = ByteBuffer.allocate(4).putInt(size).array();
+		long lsn = LogManager.getLSN();
+		p.write(entryNum * 4, after, tx.number(), lsn);
+	}
+
+	public void updateSizeNoLog(int entryNum, int size, Transaction tx, int colMarker) throws Exception
+	{
+		LockManager.xLock(p.block(), tx.number());
+		final byte[] after = ByteBuffer.allocate(4).putInt(size).array();
+		long lsn = LogManager.getLSN();
+		p.write(entryNum * 8 + 4, after, tx.number(), lsn);
 	}
 }

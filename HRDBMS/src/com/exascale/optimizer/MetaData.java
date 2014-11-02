@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
@@ -90,8 +91,8 @@ public final class MetaData implements Serializable
 		}
 		catch(Exception e)
 		{
-			HRDBMSWorker.logger.fatal("Error during static metadata initialization", e);
-			System.exit(1);
+			//HRDBMSWorker.logger.fatal("Error during static metadata initialization", e);
+			//System.exit(1);
 		}
 	}
 	
@@ -121,6 +122,53 @@ public final class MetaData implements Serializable
 	public MetaData(ConnectionWorker connection)
 	{
 		this.connection = connection;
+	}
+	
+	public MetaData(String x) throws Exception
+	{
+		try
+		{
+			if (nodeTable.size() == 0)
+			{
+				synchronized(nodeTable)
+				{
+					if (nodeTable.size() == 0)
+					{
+						final BufferedReader nodes = new BufferedReader(new FileReader(new File(x + "nodes.cfg")));
+						String line = nodes.readLine();
+						int workerID = 0;
+						while (line != null)
+						{
+							final StringTokenizer tokens = new StringTokenizer(line, ",", false);
+							final String host = tokens.nextToken().trim();
+							String type = tokens.nextToken().trim().toUpperCase();
+							if (isMyIP(host))
+							{
+								myNode = workerID;
+								nodeTable.put(myNode, host);
+								workerID++;
+							}
+							else
+							{
+								if (type.equals("W"))
+								{
+									nodeTable.put(workerID, host);
+									workerID++;
+								}
+							}
+				
+							line = nodes.readLine();
+						}
+			
+						nodes.close();
+					}
+				}
+			}
+		}
+		catch(Exception e)
+		{
+			throw e;
+		}
 	}
 	
 	public MetaData()
@@ -500,26 +548,23 @@ public final class MetaData implements Serializable
 		return retRow;
 	}
 	
-	public static ArrayList<String> getColsFromIndexFileName(String index, Transaction tx) throws Exception
+	public static ArrayList<String> getColsFromIndexFileName(String index, Transaction tx, ArrayList<ArrayList<String>> keys, ArrayList<String> indexes) throws Exception
 	{
-		String schema = index.substring(0, index.indexOf('.'));
-		String name = index.substring(schema.length()+1, index.indexOf('.', schema.length() + 1));
-		ArrayList<Object> rs = PlanCacheManager.getKeys().setParms(schema, name).execute(tx);
-		//tabname, colname
-		ArrayList<String> retRow = new ArrayList<String>();
-		for (Object o : rs)
+		int i = 0;
+		for (String indx : indexes)
 		{
-			if (!(o instanceof DataEndMarker))
+			if (indx.equals(index))
 			{
-				ArrayList<Object> row = (ArrayList<Object>)o;
-				retRow.add(row.get(0) + "." + row.get(1));
+				return keys.get(i);
 			}
+			
+			i++;
 		}
 		
-		return retRow;
+		return null;
 	}
 	
-	public static ArrayList<Integer> determineNode(String schema, String table, ArrayList<Object> row, Transaction tx, PartitionMetaData pmeta, HashMap<String, Integer> cols2Pos) throws Exception
+	public static ArrayList<Integer> determineNode(String schema, String table, ArrayList<Object> row, Transaction tx, PartitionMetaData pmeta, HashMap<String, Integer> cols2Pos, int numNodes) throws Exception
 	{
 		if (pmeta.noNodeGroupSet())
 		{
@@ -573,7 +618,212 @@ public final class MetaData implements Serializable
 				if (pmeta.allNodes())
 				{
 					ArrayList<Integer> retval = new ArrayList<Integer>();
-					retval.add((int)(hash % new MetaData().getNumNodes(tx))); //LOOKOUT if we ever do dynamic # nodes
+					retval.add((int)(hash % numNodes)); //LOOKOUT if we ever do dynamic # nodes
+					return retval;
+				}
+				else
+				{
+					ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(pmeta.nodeSet().get((int)(hash % pmeta.nodeSet().size())));
+					return retval;
+				}
+			}
+			else
+			{
+				//range
+				String col = table + "." + pmeta.getNodeRangeCol();
+				Object obj = row.get(cols2Pos.get(col));
+				ArrayList<Object> ranges = pmeta.getNodeRanges();
+				int i = 0;
+				while (i < ranges.size())
+				{
+					if (((Comparable)obj).compareTo((Comparable)ranges.get(i)) <= 0)
+					{
+						if (pmeta.allNodes())
+						{
+							ArrayList<Integer> retval = new ArrayList<Integer>();
+							retval.add(i);
+							return retval;
+						}
+						else
+						{
+							ArrayList<Integer> retval = new ArrayList<Integer>();
+							retval.add(pmeta.nodeSet().get(i));
+							return retval;
+						}
+					}
+					
+					i++;
+				}
+				
+				if (pmeta.allNodes())
+				{
+					ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(i);
+					return retval;
+				}
+				else
+				{
+					ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(pmeta.nodeSet().get(i));
+					return retval;
+				}
+			}
+		}
+		else
+		{
+			ArrayList<Integer> ngSet = null;
+			if (pmeta.isSingleNodeGroupSet())
+			{
+				ngSet = pmeta.getNodeGroupHashMap().get(pmeta.getSingleNodeGroup());
+			}
+			else if (pmeta.nodeGroupIsHash())
+			{
+				ArrayList<String> nodeGroupHash = pmeta.getNodeGroupHash();
+				ArrayList<Object> partial = new ArrayList<Object>();
+				for (String col : nodeGroupHash)
+				{
+					partial.add(row.get(cols2Pos.get(table + "." + col)));
+				}
+				
+				long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+				ngSet = pmeta.getNodeGroupHashMap().get((int)(hash % pmeta.getNodeGroupHashMap().size()));
+			}
+			else
+			{
+				String col = table + "." + pmeta.getNodeGroupRangeCol();
+				Object obj = row.get(cols2Pos.get(col));
+				ArrayList<Object> ranges = pmeta.getNodeGroupRanges();
+				int i = 0;
+				while (i < ranges.size())
+				{
+					if (((Comparable)obj).compareTo((Comparable)ranges.get(i)) <= 0)
+					{
+						ngSet = pmeta.getNodeGroupHashMap().get(i);
+						break;
+					}
+					
+					i++;
+				}
+				
+				if (ngSet == null)
+				{
+					ngSet = pmeta.getNodeGroupHashMap().get(i);
+				}
+			}
+			
+			if (pmeta.anyNode())
+			{
+				return ngSet;
+			}
+			else if (pmeta.isSingleNodeSet())
+			{
+				ArrayList<Integer> retval = new ArrayList<Integer>();
+				retval.add(ngSet.get(pmeta.getSingleNode()));
+				return retval;
+			}
+			else if (pmeta.nodeIsHash())
+			{
+				ArrayList<String> nodeHash = pmeta.getNodeHash();
+				ArrayList<Object> partial = new ArrayList<Object>();
+				for (String col : nodeHash)
+				{
+					partial.add(row.get(cols2Pos.get(table + "." + col)));
+				}
+				
+				long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+				if (pmeta.allNodes())
+				{
+					ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(ngSet.get((int)(hash % ngSet.size())));
+					return retval;
+				}
+				else
+				{
+					ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(ngSet.get(pmeta.nodeSet().get((int)(hash % pmeta.nodeSet().size()))));
+					return retval;
+				}
+			}
+			else
+			{
+				//range
+				String col = table + "." + pmeta.getNodeRangeCol();
+				Object obj = row.get(cols2Pos.get(col));
+				ArrayList<Object> ranges = pmeta.getNodeRanges();
+				int i = 0;
+				while (i < ranges.size())
+				{
+					if (((Comparable)obj).compareTo((Comparable)ranges.get(i)) <= 0)
+					{
+						if (pmeta.allNodes())
+						{
+							ArrayList<Integer> retval = new ArrayList<Integer>();
+							retval.add(ngSet.get(i));
+							return retval;
+						}
+						else
+						{
+							ArrayList<Integer> retval = new ArrayList<Integer>();
+							retval.add(ngSet.get(pmeta.nodeSet().get(i)));
+							return retval;
+						}
+					}
+					
+					i++;
+				}
+				
+				if (pmeta.allNodes())
+				{
+					ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(ngSet.get(i));
+					return retval;
+				}
+				else
+				{
+					ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(ngSet.get(pmeta.nodeSet().get(i)));
+					return retval;
+				}
+			}
+		}
+	}
+	
+	public static ArrayList<Integer> determineNodeNoLookups(String schema, String table, ArrayList<Object> row, PartitionMetaData pmeta, HashMap<String, Integer> cols2Pos, int numNodes, ArrayList<Integer> workerNodes, ArrayList<Integer> coordNodes) throws Exception
+	{
+		if (pmeta.noNodeGroupSet())
+		{
+			if (pmeta.anyNode())
+			{
+				return workerNodes;
+			}
+			else if (pmeta.isSingleNodeSet())
+			{
+				if (pmeta.getSingleNode() == -1)
+				{
+					return coordNodes;
+				}
+				else
+				{
+					ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(pmeta.getSingleNode());
+					return retval;
+				}
+			}
+			else if (pmeta.nodeIsHash())
+			{
+				ArrayList<String> nodeHash = pmeta.getNodeHash();
+				ArrayList<Object> partial = new ArrayList<Object>();
+				for (String col : nodeHash)
+				{
+					partial.add(row.get(cols2Pos.get(table + "." + col)));
+				}
+				
+				long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+				if (pmeta.allNodes())
+				{
+					ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add((int)(hash % numNodes)); //LOOKOUT if we ever do dynamic # nodes
 					return retval;
 				}
 				else
@@ -773,7 +1023,16 @@ public final class MetaData implements Serializable
 			ArrayList<Object> partial = new ArrayList<Object>();
 			for (String col : devHash)
 			{
-				partial.add(row.get(cols2Pos.get(table + "." + col)));
+				try
+				{
+					partial.add(row.get(cols2Pos.get(table + "." + col)));
+				}
+				catch(Exception e)
+				{
+					HRDBMSWorker.logger.debug("Looking for " + table + "." + col);
+					HRDBMSWorker.logger.debug("Cols2Pos is " + cols2Pos);
+					HRDBMSWorker.logger.debug("Row is " + row);
+				}
 			}
 			
 			long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
@@ -929,7 +1188,7 @@ public final class MetaData implements Serializable
 		}
 		
 		buildIndex(schema, index, table, defs.size(), unique, tx);
-		populateIndex(schema, index, table, tx);
+		populateIndex(schema, index, table, tx, cols2Pos);
 	}
 	
 	public static void dropIndex(String schema, String index, Transaction tx) throws Exception
@@ -1157,7 +1416,7 @@ public final class MetaData implements Serializable
 		return buff;
 	}
 	
-	private static void populateIndex(String schema, String index, String table, Transaction tx) throws Exception
+	private static void populateIndex(String schema, String index, String table, Transaction tx, HashMap<String, Integer> cols2Pos) throws Exception
 	{
 		String iFn = schema + "." + index + ".indx";
 		String tFn = schema + "." + table + ".tbl";
@@ -1217,7 +1476,6 @@ public final class MetaData implements Serializable
 		}
 		
 		ArrayList<Integer> poses = new ArrayList<Integer>();
-		HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
 		for (String col : keys)
 		{
 			poses.add(cols2Pos.get(col));
@@ -1226,7 +1484,7 @@ public final class MetaData implements Serializable
 		ArrayList<Socket> sockets = new ArrayList<Socket>();
 		int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 		
-		TreeMap<Integer, String> pos2Col = getPos2ColForTable(schema, table, tx);
+		TreeMap<Integer, String> pos2Col = cols2PosFlip(cols2Pos);
 		HashMap<String, String> cols2Types = getCols2TypesForTable(schema, table, tx);
 		
 		for (int node : nodes)
@@ -1498,7 +1756,7 @@ public final class MetaData implements Serializable
 		}
 		catch(Exception e)
 		{
-			HRDBMSWorker.logger.debug("", e);
+			//HRDBMSWorker.logger.debug("", e);
 		}
 
 		if (generated.containsKey(col))
@@ -1688,9 +1946,21 @@ public final class MetaData implements Serializable
 			}
 		}
 		
+		int tableID = -1;
 		if (oneSchema && oneTable && theSchema != null && theTable != null)
 		{
-			int tableID = PlanCacheManager.getTableID().setParms(theSchema, theTable).execute(tx);
+			try
+			{
+				tableID = PlanCacheManager.getTableID().setParms(theSchema, theTable).execute(tx);
+			}
+			catch(Exception e)
+			{
+				oneSchema = false;
+			}
+		}
+		
+		if (oneSchema && oneTable && theSchema != null && theTable != null)
+		{
 			ArrayList<Object> rs = PlanCacheManager.getIndexIDsForTable().setParms(theSchema, theTable).execute(tx);
 			for (Object r : rs)
 			{
@@ -1817,7 +2087,14 @@ public final class MetaData implements Serializable
 
 	public String getHostNameForNode(int node, Transaction tx) throws Exception
 	{
-		return PlanCacheManager.getHostLookup().setParms(node).execute(tx);
+		if (node == -1)
+		{
+			return getMyHostName(tx);
+		}
+		else
+		{
+			return nodeTable.get(node);
+		}
 	}
 	
 	public String getHostNameForNode(int node)
@@ -1895,7 +2172,7 @@ public final class MetaData implements Serializable
 		return tokens.allTokens().length;
 	}
 
-	public int getNumNodes(Transaction tx) throws Exception
+	public static int getNumNodes(Transaction tx) throws Exception
 	{
 		return PlanCacheManager.getCountWorkerNodes().setParms().execute(tx);
 	}
@@ -1920,6 +2197,18 @@ public final class MetaData implements Serializable
 			}
 		}
 
+		return retval;
+	}
+	
+	public static TreeMap<Integer, String> cols2PosFlip(HashMap<String, Integer> cols2Pos)
+	{
+		final TreeMap<Integer, String> retval = new TreeMap<Integer, String>();
+
+		for (Map.Entry entry : cols2Pos.entrySet())
+		{
+			retval.put((Integer)entry.getValue(), (String)entry.getKey());
+		}
+		
 		return retval;
 	}
 
@@ -2054,7 +2343,8 @@ public final class MetaData implements Serializable
 			}
 			else
 			{
-				throw new Exception("Column not found when trying to figure out table for " + col);
+				//throw new Exception("Column not found when trying to figure out table for " + col);
+				return col; // TODO FIXME
 			}
 		}
 		else
@@ -3455,6 +3745,7 @@ public final class MetaData implements Serializable
 		{
 			try
 			{	
+				tx.setIsolationLevel(Transaction.ISOLATION_UR);
 				String sql = "SELECT COUNT(*) FROM " + schema + "." + table;
 				XAWorker worker = XAManager.executeQuery(sql, tx, null);
 				worker.start();
@@ -3494,24 +3785,60 @@ public final class MetaData implements Serializable
 				}
 				
 				long card = (Long)((ArrayList<Object>)obj).get(0);
-				try
+				Random random = new Random();
+				int updateCount = -1;
+				while (updateCount == -1)
 				{
-					PlanCacheManager.getTableCard().setParms(schema, table).execute(tx);
-				}
-				catch(Exception e)
-				{
-					sql = "INSERT INTO SYS.TABLESTATS VALUES(" + tableID + "," + card + ")"; 
+					try
+					{
+						PlanCacheManager.getTableCard().setParms(schema, table).execute(tx);
+					}
+					catch(Exception e)
+					{
+						sql = "INSERT INTO SYS.TABLESTATS VALUES(" + tableID + "," + card + ")"; 
+						worker = XAManager.executeAuthorizedUpdate(sql, tx);
+						worker.start();
+						worker.join();
+						updateCount = worker.getUpdateCount();
+						if (updateCount == -1)
+						{
+							XAManager.rollback(tx);
+							tx = new Transaction(Transaction.ISOLATION_UR);
+						}
+						else
+						{
+							XAManager.commit(tx);
+							return;
+						}
+						
+						Thread.sleep(random.nextInt(60000));
+						continue;
+					}
+					sql = "UPDATE SYS.TABLESTATS SET CARD = " + card + " WHERE TABLEID = " + tableID;
 					worker = XAManager.executeAuthorizedUpdate(sql, tx);
 					worker.start();
 					worker.join();
-					XAManager.commit(tx);
-					return;
+					updateCount = worker.getUpdateCount();
+					if (updateCount == -1)
+					{
+						XAManager.rollback(tx);
+						tx = new Transaction(Transaction.ISOLATION_UR);
+					}
+					else if (updateCount == 1)
+					{
+						XAManager.commit(tx);
+						return;
+					}
+					else
+					{
+						XAManager.rollback(tx);
+						HRDBMSWorker.logger.debug("The SQL statement: '" + sql + "' updated " + updateCount + " rows");
+						ok = false;
+						return;
+					}
+					
+					Thread.sleep(random.nextInt(60000));
 				}
-				sql = "UPDATE SYS.TABLESTATS SET CARD = " + card + " WHERE TABLEID = " + tableID;
-				worker = XAManager.executeAuthorizedUpdate(sql, tx);
-				worker.start();
-				worker.join();
-				XAManager.commit(tx);
 			}
 			catch(Exception e)
 			{
@@ -3559,6 +3886,7 @@ public final class MetaData implements Serializable
 		{
 			try
 			{	
+				tx.setIsolationLevel(Transaction.ISOLATION_UR);
 				String sql = "SELECT COUNT(DISTINCT " + col + ") FROM " + schema + "." + table;
 				XAWorker worker = XAManager.executeQuery(sql, tx, null);
 				worker.start();
@@ -3598,24 +3926,60 @@ public final class MetaData implements Serializable
 				}
 				
 				long card = (Long)((ArrayList<Object>)obj).get(0);
-				try
+				int updateCount = -1;
+				Random random = new Random();
+				while (updateCount == -1)
 				{
-					PlanCacheManager.getColCard().setParms(schema, table, col).execute(tx);
-				}
-				catch(Exception e)
-				{
-					sql = "INSERT INTO SYS.COLSTATS VALUES(" + tableID + "," + colID + "," + card + ")"; 
+					try
+					{
+						PlanCacheManager.getColCard().setParms(schema, table, col).execute(tx);
+					}
+					catch(Exception e)
+					{
+						sql = "INSERT INTO SYS.COLSTATS VALUES(" + tableID + "," + colID + "," + card + ")"; 
+						worker = XAManager.executeAuthorizedUpdate(sql, tx);
+						worker.start();
+						worker.join();
+						updateCount = worker.getUpdateCount();
+						if (updateCount == -1)
+						{
+							XAManager.rollback(tx);
+							tx = new Transaction(Transaction.ISOLATION_UR);
+						}
+						else
+						{
+							XAManager.commit(tx);
+							return;
+						}
+						
+						Thread.sleep(random.nextInt(60000));
+						continue;
+					}
+					sql = "UPDATE SYS.COLSTATS SET CARD = " + card + " WHERE TABLEID = " + tableID + " AND COLID = " + colID;
 					worker = XAManager.executeAuthorizedUpdate(sql, tx);
 					worker.start();
 					worker.join();
-					XAManager.commit(tx);
-					return;
+					updateCount = worker.getUpdateCount();
+					if (updateCount == -1)
+					{
+						XAManager.rollback(tx);
+						tx = new Transaction(Transaction.ISOLATION_UR);
+					}
+					else if (updateCount == 1)
+					{
+						XAManager.commit(tx);
+						return;
+					}
+					else
+					{
+						XAManager.rollback(tx);
+						HRDBMSWorker.logger.debug("The SQL statement: '" + sql + "' updated " + updateCount + " rows");
+						ok = false;
+						return;
+					}
+					
+					Thread.sleep(random.nextInt(60000));
 				}
-				sql = "UPDATE SYS.COLSTATS SET CARD = " + card + " WHERE TABLEID = " + tableID + " AND COLID = " + colID;
-				worker = XAManager.executeAuthorizedUpdate(sql, tx);
-				worker.start();
-				worker.join();
-				XAManager.commit(tx);
 			}
 			catch(Exception e)
 			{
@@ -3663,6 +4027,7 @@ public final class MetaData implements Serializable
 		{
 			try
 			{
+				tx.setIsolationLevel(Transaction.ISOLATION_UR);
 				String sql = "SELECT COUNT(*) FROM (SELECT DISTINCT " + keys.get(0);
 				int i = 1;
 				while (i < keys.size())
@@ -3709,22 +4074,58 @@ public final class MetaData implements Serializable
 				}
 				
 				long card = (Long)((ArrayList<Object>)obj2).get(0);
-				Object obj = PlanCacheManager.getIndexCard().setParms(tableID, indexID).execute(tx);
-				if (obj instanceof DataEndMarker)
+				int updateCount = -1;
+				Random random = new Random();
+				while (updateCount == -1)
 				{
-					sql = "INSERT INTO SYS.INDEXSTATS VALUES(" + tableID + "," + indexID + "," + card + ")";
-					worker = XAManager.executeAuthorizedUpdate(sql, tx);
-					worker.start();
-					worker.join();
-					XAManager.commit(tx);
-				}
-				else
-				{
-					sql = "UPDATE SYS.INDEXSTATS SET NUMDISTINCT = " + card + " WHERE TABLEID = " + tableID + " AND INDEXID = " + indexID;
-					worker = XAManager.executeAuthorizedUpdate(sql, tx);
-					worker.start();
-					worker.join();
-					XAManager.commit(tx);
+					Object obj = PlanCacheManager.getIndexCard().setParms(tableID, indexID).execute(tx);
+					if (obj instanceof DataEndMarker)
+					{
+						sql = "INSERT INTO SYS.INDEXSTATS VALUES(" + tableID + "," + indexID + "," + card + ")";
+						worker = XAManager.executeAuthorizedUpdate(sql, tx);
+						worker.start();
+						worker.join();
+						updateCount = worker.getUpdateCount();
+						if (updateCount == -1)
+						{
+							XAManager.rollback(tx);
+							tx = new Transaction(Transaction.ISOLATION_UR);
+						}
+						else
+						{
+							XAManager.commit(tx);
+							return;
+						}
+						
+						Thread.sleep(random.nextInt(60000));
+					}
+					else
+					{
+						sql = "UPDATE SYS.INDEXSTATS SET NUMDISTINCT = " + card + " WHERE TABLEID = " + tableID + " AND INDEXID = " + indexID;
+						worker = XAManager.executeAuthorizedUpdate(sql, tx);
+						worker.start();
+						worker.join();
+						updateCount = worker.getUpdateCount();
+						if (updateCount == -1)
+						{
+							XAManager.rollback(tx);
+							tx = new Transaction(Transaction.ISOLATION_UR);
+						}
+						else if (updateCount == 1)
+						{
+							XAManager.commit(tx);
+							return;
+						}
+						else
+						{
+							XAManager.rollback(tx);
+							HRDBMSWorker.logger.debug("The SQL statement: '" + sql + "' updated " + updateCount + " rows");
+							ok = false;
+							return;
+						}
+						
+						Thread.sleep(random.nextInt(60000));
+					}
 				}
 			}
 			catch(Exception e)
@@ -3775,15 +4176,18 @@ public final class MetaData implements Serializable
 		{
 			try
 			{
+				tx.setIsolationLevel(Transaction.ISOLATION_UR);
 				String type = PlanCacheManager.getColType().setParms(schema, table, col).execute(tx);
 				String sql = "SELECT " + col + " FROM " + schema + "." + table + " ORDER BY " + col + " ASC";
 				XAWorker worker = XAManager.executeQuery(sql, tx, null);
 				worker.start();
+				int x = 0;
 				ArrayList<Object> cmd = new ArrayList<Object>();
 				cmd.add("NEXT");
-				cmd.add(1000000);
+				cmd.add(100000);
 				worker.in.put(cmd);
 				Object o = worker.out.take();
+				x++;
 				if (o instanceof DataEndMarker)
 				{
 					throw new Exception("No data in table");
@@ -3821,6 +4225,15 @@ public final class MetaData implements Serializable
 				{
 					o = o2;
 					o2 = worker.out.take();
+					x++;
+					if (x == 100000)
+					{
+						cmd = new ArrayList<Object>();
+						cmd.add("NEXT");
+						cmd.add(100000);
+						worker.in.put(cmd);
+						x = 0;
+					}
 					i++;
 				}
 				
@@ -3848,24 +4261,61 @@ public final class MetaData implements Serializable
 						high = q3 = q2 = q1 = ((MyDate)row.get(0)).format();
 					}
 					
-					Object obj = PlanCacheManager.getDist().setParms(schema, table, col).execute(tx);
-					if (obj instanceof DataEndMarker)
+					cmd = new ArrayList<Object>(1);
+					cmd.add("CLOSE");
+					worker.in.put(cmd);
+					int updateCount = -1;
+					Random random = new Random();
+					while (updateCount == -1)
 					{
-						sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
-						worker = XAManager.executeAuthorizedUpdate(sql, tx);
-						worker.start();
-						worker.join();
-						XAManager.commit(tx);
-						return;
-					}
-					else
-					{
-						sql = "UPDATE SYS.COLDIST SET (LOW, Q1, Q2, Q3, HIGH) = (" + low + "," + q1 + "," + q2 + "," + q3 + "," + high + ") WHERE TABLEID = " + tableID + " AND COLID = " + colID;
-						worker = XAManager.executeAuthorizedUpdate(sql, tx);
-						worker.start();
-						worker.join();
-						XAManager.commit(tx);
-						return;
+						Object obj = PlanCacheManager.getDist().setParms(schema, table, col).execute(tx);
+						if (obj instanceof DataEndMarker)
+						{
+							sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
+							worker = XAManager.executeAuthorizedUpdate(sql, tx);
+							worker.start();
+							worker.join();
+							updateCount = worker.getUpdateCount();
+							if (updateCount == -1)
+							{
+								XAManager.rollback(tx);
+								tx = new Transaction(Transaction.ISOLATION_UR);
+							}
+							else
+							{
+								XAManager.commit(tx);
+								return;
+							}
+							
+							Thread.sleep(random.nextInt(60000));
+						}
+						else
+						{
+							sql = "UPDATE SYS.COLDIST SET (LOW, Q1, Q2, Q3, HIGH) = ('" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "') WHERE TABLEID = " + tableID + " AND COLID = " + colID;
+							worker = XAManager.executeAuthorizedUpdate(sql, tx);
+							worker.start();
+							worker.join();
+							updateCount = worker.getUpdateCount();
+							if (updateCount == -1)
+							{
+								XAManager.rollback(tx);
+								tx = new Transaction(Transaction.ISOLATION_UR);
+							}
+							else if (updateCount == 1)
+							{
+								XAManager.commit(tx);
+								return;
+							}
+							else
+							{
+								XAManager.rollback(tx);
+								HRDBMSWorker.logger.debug("The SQL statement: '" + sql + "' updated " + updateCount + " rows");
+								ok = false;
+								return;
+							}
+							
+							Thread.sleep(random.nextInt(60000));
+						}
 					}
 				}
 				else
@@ -3897,6 +4347,15 @@ public final class MetaData implements Serializable
 				{
 					o = o2;
 					o2 = worker.out.take();
+					x++;
+					if (x == 100000)
+					{
+						cmd = new ArrayList<Object>();
+						cmd.add("NEXT");
+						cmd.add(100000);
+						worker.in.put(cmd);
+						x = 0;
+					}
 					i++;
 				}
 				
@@ -3924,24 +4383,61 @@ public final class MetaData implements Serializable
 						high = q3 = q2 = ((MyDate)row.get(0)).format();
 					}
 					
-					Object obj = PlanCacheManager.getDist().setParms(schema, table, col).execute(tx);
-					if (obj instanceof DataEndMarker)
+					cmd = new ArrayList<Object>(1);
+					cmd.add("CLOSE");
+					worker.in.put(cmd);
+					int updateCount = -1;
+					Random random = new Random();
+					while (updateCount == -1)
 					{
-						sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
-						worker = XAManager.executeAuthorizedUpdate(sql, tx);
-						worker.start();
-						worker.join();
-						XAManager.commit(tx);
-						return;
-					}
-					else
-					{
-						sql = "UPDATE SYS.COLDIST SET (LOW, Q1, Q2, Q3, HIGH) = (" + low + "," + q1 + "," + q2 + "," + q3 + "," + high + ") WHERE TABLEID = " + tableID + " AND COLID = " + colID;
-						worker = XAManager.executeAuthorizedUpdate(sql, tx);
-						worker.start();
-						worker.join();
-						XAManager.commit(tx);
-						return;
+						Object obj = PlanCacheManager.getDist().setParms(schema, table, col).execute(tx);
+						if (obj instanceof DataEndMarker)
+						{
+							sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
+							worker = XAManager.executeAuthorizedUpdate(sql, tx);
+							worker.start();
+							worker.join();
+							updateCount = worker.getUpdateCount();
+							if (updateCount == -1)
+							{
+								XAManager.rollback(tx);
+								tx = new Transaction(Transaction.ISOLATION_UR);
+							}
+							else
+							{
+								XAManager.commit(tx);
+								return;
+							}
+							
+							Thread.sleep(random.nextInt(60000));
+						}
+						else
+						{
+							sql = "UPDATE SYS.COLDIST SET (LOW, Q1, Q2, Q3, HIGH) = ('" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "') WHERE TABLEID = " + tableID + " AND COLID = " + colID;
+							worker = XAManager.executeAuthorizedUpdate(sql, tx);
+							worker.start();
+							worker.join();
+							updateCount = worker.getUpdateCount();
+							if (updateCount == -1)
+							{
+								XAManager.rollback(tx);
+								tx = new Transaction(Transaction.ISOLATION_UR);
+							}
+							else if (updateCount == 1)
+							{
+								XAManager.commit(tx);
+								return;
+							}
+							else
+							{
+								XAManager.rollback(tx);
+								HRDBMSWorker.logger.debug("The SQL statement: '" + sql + "' updated " + updateCount + " rows");
+								ok = false;
+								return;
+							}
+							
+							Thread.sleep(random.nextInt(60000));
+						}
 					}
 				}
 				else
@@ -3973,6 +4469,15 @@ public final class MetaData implements Serializable
 				{
 					o = o2;
 					o2 = worker.out.take();
+					x++;
+					if (x == 100000)
+					{
+						cmd = new ArrayList<Object>();
+						cmd.add("NEXT");
+						cmd.add(100000);
+						worker.in.put(cmd);
+						x = 0;
+					}
 					i++;
 				}
 				
@@ -4000,24 +4505,61 @@ public final class MetaData implements Serializable
 						high = q3 = ((MyDate)row.get(0)).format();
 					}
 					
-					Object obj = PlanCacheManager.getDist().setParms(schema, table, col).execute(tx);
-					if (obj instanceof DataEndMarker)
+					cmd = new ArrayList<Object>(1);
+					cmd.add("CLOSE");
+					worker.in.put(cmd);
+					int updateCount = -1;
+					Random random = new Random();
+					while (updateCount == -1)
 					{
-						sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
-						worker = XAManager.executeAuthorizedUpdate(sql, tx);
-						worker.start();
-						worker.join();
-						XAManager.commit(tx);
-						return;
-					}
-					else
-					{
-						sql = "UPDATE SYS.COLDIST SET (LOW, Q1, Q2, Q3, HIGH) = (" + low + "," + q1 + "," + q2 + "," + q3 + "," + high + ") WHERE TABLEID = " + tableID + " AND COLID = " + colID;
-						worker = XAManager.executeAuthorizedUpdate(sql, tx);
-						worker.start();
-						worker.join();
-						XAManager.commit(tx);
-						return;
+						Object obj = PlanCacheManager.getDist().setParms(schema, table, col).execute(tx);
+						if (obj instanceof DataEndMarker)
+						{
+							sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
+							worker = XAManager.executeAuthorizedUpdate(sql, tx);
+							worker.start();
+							worker.join();
+							updateCount = worker.getUpdateCount();
+							if (updateCount == -1)
+							{
+								XAManager.rollback(tx);
+								tx = new Transaction(Transaction.ISOLATION_UR);
+							}
+							else
+							{
+								XAManager.commit(tx);
+								return;
+							}
+							
+							Thread.sleep(random.nextInt(60000));
+						}
+						else
+						{
+							sql = "UPDATE SYS.COLDIST SET (LOW, Q1, Q2, Q3, HIGH) = ('" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "') WHERE TABLEID = " + tableID + " AND COLID = " + colID;
+							worker = XAManager.executeAuthorizedUpdate(sql, tx);
+							worker.start();
+							worker.join();
+							updateCount = worker.getUpdateCount();
+							if (updateCount == -1)
+							{
+								XAManager.rollback(tx);
+								tx = new Transaction(Transaction.ISOLATION_UR);
+							}
+							else if (updateCount == 1)
+							{
+								XAManager.commit(tx);
+								return;
+							}
+							else
+							{
+								XAManager.rollback(tx);
+								HRDBMSWorker.logger.debug("The SQL statement: '" + sql + "' updated " + updateCount + " rows");
+								ok = false;
+								return;
+							}
+							
+							Thread.sleep(random.nextInt(60000));
+						}
 					}
 				}
 				else
@@ -4049,6 +4591,15 @@ public final class MetaData implements Serializable
 				{
 					o = o2;
 					o2 = worker.out.take();
+					x++;
+					if (x == 100000)
+					{
+						cmd = new ArrayList<Object>();
+						cmd.add("NEXT");
+						cmd.add(100000);
+						worker.in.put(cmd);
+						x = 0;
+					}
 					i++;
 				}
 				
@@ -4074,24 +4625,61 @@ public final class MetaData implements Serializable
 					high = ((MyDate)row.get(0)).format();
 				}
 					
-				Object obj = PlanCacheManager.getDist().setParms(schema, table, col).execute(tx);
-				if (obj instanceof DataEndMarker)
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				int updateCount = -1;
+				Random random = new Random();
+				while (updateCount == -1)
 				{
-					sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
-					worker = XAManager.executeAuthorizedUpdate(sql, tx);
-					worker.start();
-					worker.join();
-					XAManager.commit(tx);
-					return;
-				}
-				else
-				{
-					sql = "UPDATE SYS.COLDIST SET (LOW, Q1, Q2, Q3, HIGH) = (" + low + "," + q1 + "," + q2 + "," + q3 + "," + high + ") WHERE TABLEID = " + tableID + " AND COLID = " + colID;
-					worker = XAManager.executeAuthorizedUpdate(sql, tx);
-					worker.start();
-					worker.join();
-					XAManager.commit(tx);
-					return;
+					Object obj = PlanCacheManager.getDist().setParms(schema, table, col).execute(tx);
+					if (obj instanceof DataEndMarker)
+					{
+						sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
+						worker = XAManager.executeAuthorizedUpdate(sql, tx);
+						worker.start();
+						worker.join();
+						updateCount = worker.getUpdateCount();
+						if (updateCount == -1)
+						{
+							XAManager.rollback(tx);
+							tx = new Transaction(Transaction.ISOLATION_UR);
+						}
+						else
+						{
+							XAManager.commit(tx);
+							return;
+						}
+						
+						Thread.sleep(random.nextInt(60000));
+					}
+					else
+					{
+						sql = "UPDATE SYS.COLDIST SET (LOW, Q1, Q2, Q3, HIGH) = ('" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "') WHERE TABLEID = " + tableID + " AND COLID = " + colID;
+						worker = XAManager.executeAuthorizedUpdate(sql, tx);
+						worker.start();
+						worker.join();
+						updateCount = worker.getUpdateCount();
+						if (updateCount == -1)
+						{
+							XAManager.rollback(tx);
+							tx = new Transaction(Transaction.ISOLATION_UR);
+						}
+						else if (updateCount == 1)
+						{
+							XAManager.commit(tx);
+							return;
+						}
+						else
+						{
+							XAManager.rollback(tx);
+							HRDBMSWorker.logger.debug("The SQL statement: '" + sql + "' updated " + updateCount + " rows");
+							ok = false;
+							return;
+						}
+						
+						Thread.sleep(random.nextInt(60000));
+					}
 				}
 			}
 			catch(Exception e)
@@ -4119,9 +4707,9 @@ public final class MetaData implements Serializable
 	public static void runstats(String schema, String table, Transaction tx) throws Exception
 	{
 		Transaction tTx = new Transaction(Transaction.ISOLATION_UR);
-		int tableID = PlanCacheManager.getTableID().setParms(schema, table).execute(tx);
+		int tableID = PlanCacheManager.getTableID().setParms(schema, table).execute(tTx);
 		TableStatsThread tThread = new TableStatsThread(schema, table, tableID, tTx);
-		TreeMap<Integer, String> pos2Col = getPos2ColForTable(schema, table, tx);
+		TreeMap<Integer, String> pos2Col = getPos2ColForTable(schema, table, tTx);
 		ArrayList<ColStatsThread> cThreads = new ArrayList<ColStatsThread>();
 		ArrayList<Transaction> cTxs = new ArrayList<Transaction>();
 		int i = 0;
@@ -4136,7 +4724,7 @@ public final class MetaData implements Serializable
 		//indexes
 		ArrayList<IndexStatsThread> iThreads = new ArrayList<IndexStatsThread>();
 		ArrayList<Transaction> iTxs = new ArrayList<Transaction>();
-		ArrayList<Object> rs = PlanCacheManager.getIndexIDsForTable().setParms(schema, table).execute(tx);
+		ArrayList<Object> rs = PlanCacheManager.getIndexIDsForTable().setParms(schema, table).execute(tTx);
 		for (Object o : rs)
 		{
 			if (o instanceof DataEndMarker)
@@ -4146,7 +4734,7 @@ public final class MetaData implements Serializable
 			
 			ArrayList<Object> row = (ArrayList<Object>)o;
 			int indexID = (Integer)row.get(0);
-			ArrayList<Object> rs2 = PlanCacheManager.getKeysByID().setParms(tableID, indexID).execute(tx);
+			ArrayList<Object> rs2 = PlanCacheManager.getKeysByID().setParms(tableID, indexID).execute(tTx);
 			ArrayList<String> keys = new ArrayList<String>();
 			for (Object o2 : rs2)
 			{
@@ -4164,10 +4752,6 @@ public final class MetaData implements Serializable
 		}
 		
 		tThread.start();
-		for (ColStatsThread thread : cThreads)
-		{
-			thread.start();
-		}
 		for (IndexStatsThread thread : iThreads)
 		{
 			thread.start();
@@ -4185,16 +4769,26 @@ public final class MetaData implements Serializable
 		{
 			ArrayList<ColDistThread> cdThreads = new ArrayList<ColDistThread>();
 			i = 0;
-			long card = PlanCacheManager.getTableCard().setParms(schema, table).execute(tx);
+			long card = PlanCacheManager.getTableCard().setParms(schema, table).execute(cTxs.get(0));
 			while (i < pos2Col.size())
 			{
 				Transaction ctx = new Transaction(Transaction.ISOLATION_UR);
 				cdTxs.add(ctx);
-				cdThreads.add(new ColDistThread(schema, table, pos2Col.get(i), tableID, i, card, ctx));
+				String col = pos2Col.get(i);
+				if (col.contains("."))
+				{
+					col = col.substring(col.indexOf('.') + 1);
+				}
+				cdThreads.add(new ColDistThread(schema, table, col, tableID, i, card, ctx));
 				i++;
 			}
 			
 			for (ColDistThread thread : cdThreads)
+			{
+				thread.start();
+			}
+			
+			for (ColStatsThread thread : cThreads)
 			{
 				thread.start();
 			}
@@ -4207,14 +4801,14 @@ public final class MetaData implements Serializable
 					allOK = false;
 				}
 			}
-		}
-		
-		for (ColStatsThread thread : cThreads)
-		{
-			thread.join();
-			if (!thread.getOK())
+			
+			for (ColStatsThread thread : cThreads)
 			{
-				allOK = false;
+				thread.join();
+				if (!thread.getOK())
+				{
+					allOK = false;
+				}
 			}
 		}
 		
@@ -4229,6 +4823,7 @@ public final class MetaData implements Serializable
 		
 		if (allOK)
 		{	
+			PlanCacheManager.invalidate();
 			return;
 		}
 		else
@@ -4262,6 +4857,7 @@ public final class MetaData implements Serializable
 		private String schema;
 		private String table;
 		private Transaction tx;
+		private String ngExp, nExp, dExp;
 
 		public PartitionMetaData(String schema, String table, Transaction tx) throws Exception
 		{
@@ -4269,9 +4865,9 @@ public final class MetaData implements Serializable
 			this.table = table;
 			this.tx = tx;
 			ArrayList<Object> row = PlanCacheManager.getPartitioning().setParms(schema,  table).execute(tx);
-			final String ngExp = (String)row.get(0);
-			final String nExp = (String)row.get(1);
-			final String dExp = (String)row.get(2);
+			ngExp = (String)row.get(0);
+			nExp = (String)row.get(1);
+			dExp = (String)row.get(2);
 			setNGData(ngExp);
 			setNData(nExp);
 			setDData(dExp);
@@ -4282,6 +4878,9 @@ public final class MetaData implements Serializable
 			this.schema = schema;
 			this.table = table;
 			this.tx = tx;
+			this.ngExp = ngExp;
+			this.nExp = nExp;
+			this.dExp = dExp;
 			setNGData(ngExp);
 			setNData(nExp);
 			setDData(dExp);
