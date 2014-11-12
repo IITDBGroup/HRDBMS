@@ -23,12 +23,13 @@ import java.sql.Struct;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Executor;
+import com.exascale.compression.CompressedSocket;
 import com.exascale.managers.HRDBMSWorker;
 
 public class HRDBMSConnection implements Connection
 {
-	protected final BufferedInputStream in;
-	protected final BufferedOutputStream out;
+	protected BufferedInputStream in;
+	protected BufferedOutputStream out;
 	protected boolean autoCommit = true;
 	private boolean closed = false;
 	protected SQLWarning firstWarning = null;
@@ -38,10 +39,12 @@ public class HRDBMSConnection implements Connection
 	private Socket sock;
 	protected HRDBMSResultSet rs;
 	protected boolean txIsReadOnly = true;
+	int portNum;
 
-	public HRDBMSConnection(Socket sock, String user, String pwd) throws Exception
+	public HRDBMSConnection(Socket sock, String user, String pwd, int portNum) throws Exception
 	{
 		this.sock = sock;
+		this.portNum = portNum;
 		in = new BufferedInputStream(sock.getInputStream());
 		out = new BufferedOutputStream(sock.getOutputStream());
 		try
@@ -646,6 +649,117 @@ public class HRDBMSConnection implements Connection
 	private void clientHandshake() throws Exception
 	{
 		byte[] outMsg = "CLIENT          ".getBytes("UTF-8");
+		outMsg[8] = 0;
+		outMsg[9] = 0;
+		outMsg[10] = 0;
+		outMsg[11] = 0;
+		outMsg[12] = 0;
+		outMsg[13] = 0;
+		outMsg[14] = 0;
+		outMsg[15] = 0;
+		out.write(outMsg);
+		out.flush();
+		byte[] inMsg = new byte[2];
+		
+		int count = 0;
+		while (count < 2)
+		{
+			try
+			{
+				int temp = in.read(inMsg, count, 2 - count);
+				if (temp == -1)
+				{
+					throw new Exception();
+				}
+				else
+				{
+					count += temp;
+				}
+			}
+			catch (final Exception e)
+			{
+				throw new Exception();
+			}
+		}
+		
+		String inStr = new String(inMsg, "UTF-8");
+		if (inStr.equals("OK"))
+		{}
+		else if (inStr.equals("RD"))
+		{
+			//workload balancing redirect
+			count = 0;
+			inMsg = new byte[4];
+			while (count < 4)
+			{
+				try
+				{
+					int temp = in.read(inMsg, count, 4 - count);
+					if (temp == -1)
+					{
+						throw new Exception();
+					}
+					else
+					{
+						count += temp;
+					}
+				}
+				catch (final Exception e)
+				{
+					throw new Exception();
+				}
+			}
+			
+			int length = bytesToInt(inMsg);
+			
+			count = 0;
+			inMsg = new byte[length];
+			while (count < length)
+			{
+				try
+				{
+					int temp = in.read(inMsg, count, length - count);
+					if (temp == -1)
+					{
+						throw new Exception();
+					}
+					else
+					{
+						count += temp;
+					}
+				}
+				catch (final Exception e)
+				{
+					throw new Exception();
+				}
+			}
+			
+			String newHost = new String(inMsg, "UTF-8");
+			in.close();
+			out.close();
+			sock.close();
+			
+			this.sock = new CompressedSocket(newHost, portNum);
+			in = new BufferedInputStream(sock.getInputStream());
+			out = new BufferedOutputStream(sock.getOutputStream());
+			try
+			{
+				clientHandshake2();
+			}
+			catch(Exception e)
+			{
+				throw new SQLException("The handshake between the client and the server failed!");
+			}
+		}
+		else
+		{
+			throw new Exception();
+		}
+	}
+	
+	private void clientHandshake2() throws Exception
+	{
+		byte[] outMsg = "CLIENT2         ".getBytes("UTF-8");
 		outMsg[8] = 0;
 		outMsg[9] = 0;
 		outMsg[10] = 0;

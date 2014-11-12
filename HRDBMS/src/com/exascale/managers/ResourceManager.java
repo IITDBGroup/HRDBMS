@@ -1721,7 +1721,7 @@ public final class ResourceManager extends HRDBMSThread
 					else if (o instanceof String)
 					{
 						header[i] = (byte)4;
-						size += (4 + ((String)o).length());
+						size += (4 + ((String)o).getBytes("UTF-8").length);
 					}
 					else if (o instanceof AtomicLong)
 					{
@@ -2019,7 +2019,7 @@ public final class ResourceManager extends HRDBMSThread
 				else if (o instanceof String)
 				{
 					header[i] = (byte)4;
-					size += (4 + ((String)o).length());
+					size += (4 + ((String)o).getBytes("UTF-8").length);
 				}
 				else if (o instanceof AtomicLong)
 				{

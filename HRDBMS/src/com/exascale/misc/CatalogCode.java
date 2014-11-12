@@ -415,7 +415,7 @@ public class CatalogCode
 		}
 	}
 
-	private static void buildIndexData(PrintWriter out, TreeMap<TextRowSorter, RID> keys2RID, int numKeys, String name, boolean unique) throws UnsupportedEncodingException
+	private static void buildIndexData(PrintWriter out, TreeMap<TextRowSorter, RID> keys2RID, int numKeys, String name, boolean unique) throws Exception
 	{
 		final ByteBuffer data = ByteBuffer.allocate(Page.BLOCK_SIZE);
 		buildIndexDataBuffer(keys2RID, numKeys, data, unique);
@@ -427,18 +427,18 @@ public class CatalogCode
 			fn += "/";
 		}
 		fn += (name + ".indx");
-		final File index = new File(fn);
+
 		try
 		{
-			index.createNewFile();
 			final FileChannel fc = FileManager.getFile(fn);
 			data.position(0);
 			fc.write(data);
 			fc.force(false);
 		}
-		catch (final IOException e)
+		catch (final Exception e)
 		{
-			HRDBMSWorker.logger.debug("IOException while creating index: " + fn, e);
+			HRDBMSWorker.logger.debug("Exception while creating index: " + fn, e);
+			throw e;
 		}
 	}
 
@@ -1067,7 +1067,7 @@ public class CatalogCode
 		}
 	}
 
-	private static void createIndexes(PrintWriter out) throws UnsupportedEncodingException
+	private static void createIndexes(PrintWriter out) throws Exception
 	{
 		HRDBMSWorker.logger.debug("Entered createIndexes()");
 		final Vector<String> iTable = getTable("SYS.INDEXES", tableLines, data);
@@ -1194,7 +1194,15 @@ public class CatalogCode
 			}
 
 			HRDBMSWorker.logger.debug("Calling buildIndexData()");
-			buildIndexData(out, keys2RIDs, numKeys, "SYS." + iName, unique);
+			try
+			{
+				buildIndexData(out, keys2RIDs, numKeys, "SYS." + iName, unique);
+			}
+			catch(Exception e)
+			{
+				HRDBMSWorker.logger.debug("", e);
+				throw e;
+			}
 		}
 	}
 
@@ -1422,7 +1430,7 @@ public class CatalogCode
 		out.println("\tint j = 0;");
 		out.println("\tString base = HRDBMSWorker.getHParms().getProperty(\"data_directories\");");
 		out.println("");
-		out.println("\tpublic CatalogCreator() throws IOException, UnsupportedEncodingException");
+		out.println("\tpublic CatalogCreator() throws Exception, UnsupportedEncodingException");
 		out.println("\t{");
 		out.println("StringTokenizer tokens = new StringTokenizer(base, \",\", false);");
 		out.println("base = tokens.nextToken();");
@@ -1473,14 +1481,13 @@ public class CatalogCode
 
 	private static void createTableHeader(PrintWriter out, String name, int rows, int cols, int dataSize)
 	{
-		out.println("\tpublic void createTable" + methodNum + "() throws IOException, UnsupportedEncodingException");
+		out.println("\tpublic void createTable" + methodNum + "() throws Exception, UnsupportedEncodingException");
 		out.println("\t{");
 		methodNum++;
 		out.println("HRDBMSWorker.logger.debug(\"Starting creation of table " + name + "\");");
 		out.println("\t\tfn = base + (\"" + name + ".tbl\");");
 		out.println("");
 		out.println("\t\ttable = new File(fn);");
-		out.println("\t\ttable.createNewFile();");
 		out.println("");
 		out.println("\t\tfc = FileManager.getFile(fn);");
 		out.println("\t\tbb = ByteBuffer.allocate(Page.BLOCK_SIZE);");

@@ -1864,7 +1864,7 @@ public final class Index implements Serializable
 				{
 					size += 4;
 					String val = (String)keys[i].getValue();
-					size += val.length();
+					size += val.getBytes("UTF-8").length;
 				}
 				else
 				{
@@ -1900,10 +1900,11 @@ public final class Index implements Serializable
 				else if (type.equals("CHAR"))
 				{
 					String val = (String)keys[i].getValue();
-					bb.putInt(val.length());
+					byte[] bytes = val.getBytes("UTF-8");
+					bb.putInt(bytes.length);
 					try
 					{
-						bb.put(val.getBytes("UTF-8"));
+						bb.put(bytes);
 					}
 					catch(Exception e)
 					{
@@ -2478,7 +2479,7 @@ public final class Index implements Serializable
 						i++;
 					}
 				
-					int newNum = FileManager.addNewBlock(file, bb, tx);
+					int newNum = FileManager.addNewBlockNoLog(file, bb, tx);
 					Block bl = new Block(file, newNum);
 					LockManager.xLock(bl, tx.number());
 					tx.requestPage(bl);
@@ -5244,7 +5245,7 @@ public final class Index implements Serializable
 							i++;
 						}
 					
-						int newNum = FileManager.addNewBlock(file, bb, tx);
+						int newNum = FileManager.addNewBlockNoLog(file, bb, tx);
 						Block bl = new Block(file, newNum);
 						LockManager.xLock(bl, tx.number());
 						tx.requestPage(bl);
@@ -5312,7 +5313,7 @@ public final class Index implements Serializable
 							}
 						}
 						
-						line2.getInternalUp(true).replaceDownKey(bao, keyBytes);
+						line2.getInternalUp(true).replaceDownKeyNoLog(bao, keyBytes);
 					}
 				}
 			}

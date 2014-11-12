@@ -20,6 +20,7 @@ import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import com.exascale.filesystem.Block;
+import com.exascale.filesystem.CompressedRandomAccessFile;
 import com.exascale.filesystem.Page;
 import com.exascale.logging.ExtendLogRec;
 import com.exascale.misc.CatalogCode;
@@ -220,14 +221,14 @@ public class FileManager
 		return dirs;
 	}
 
-	public static synchronized FileChannel getFile(String filename) throws IOException
+	public static synchronized FileChannel getFile(String filename) throws Exception
 	{
 		FileChannel fc = openFiles.get(filename);
 
 		if (fc == null)
 		{
 			final File table = new File(filename);
-			final RandomAccessFile f = new RandomAccessFile(table, "rw");
+			final CompressedRandomAccessFile f = new CompressedRandomAccessFile(table, "rw");
 			fc = f.getChannel();
 			numBlocks.put(filename, (int)(fc.size() / Page.BLOCK_SIZE));
 			openFiles.put(filename, fc);
@@ -236,7 +237,7 @@ public class FileManager
 		return fc;
 	}
 
-	public static void read(Page p, Block b, ByteBuffer bb) throws IOException
+	public static void read(Page p, Block b, ByteBuffer bb) throws Exception
 	{
 		final FileChannel fc = FileManager.getFile(b.fileName());
 		if (b.number() > numBlocks.get(b.fileName()) + 1)
@@ -258,7 +259,7 @@ public class FileManager
 			fn += "/";
 		}
 
-		fn += "SYS.TABLES.tbl";
+		fn += "SYS.TABLES.tbl.0";
 
 		sysTables = new File(fn);
 
@@ -272,7 +273,7 @@ public class FileManager
 		}
 	}
 
-	public static void write(Block b, ByteBuffer bb) throws IOException
+	public static void write(Block b, ByteBuffer bb) throws Exception
 	{
 		bb.position(0);
 		final FileChannel fc = getFile(b.fileName());
@@ -280,7 +281,7 @@ public class FileManager
 		fc.force(false);
 	}
 	
-	public static void writeDelayed(Block b, ByteBuffer bb) throws IOException
+	public static void writeDelayed(Block b, ByteBuffer bb) throws Exception
 	{
 		bb.position(0);
 		final FileChannel fc = getFile(b.fileName());

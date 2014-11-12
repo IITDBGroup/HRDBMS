@@ -8,6 +8,7 @@ import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
+import java.lang.management.ManagementFactory;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -34,6 +35,7 @@ import com.exascale.managers.FileManager;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LockManager;
 import com.exascale.managers.LogManager;
+import com.exascale.managers.PlanCacheManager;
 import com.exascale.managers.XAManager;
 import com.exascale.misc.AtomicDouble;
 import com.exascale.misc.BufferedLinkedBlockingQueue;
@@ -54,6 +56,7 @@ import com.exascale.tables.Transaction;
 import com.exascale.tables.Schema.FieldValue;
 import com.exascale.tables.Schema.Row;
 import com.exascale.tables.Schema.RowIterator;
+import com.sun.management.OperatingSystemMXBean;
 
 public class ConnectionWorker extends HRDBMSThread
 {
@@ -309,6 +312,18 @@ public class ConnectionWorker extends HRDBMSThread
 						Thread.sleep(1000);
 					}
 					clientConnection();
+				}
+				else if (command.equals("CLIENT2 "))
+				{
+					while (!XAManager.rP2.get())
+					{
+						Thread.sleep(1000);
+					}
+					clientConnection2();
+				}
+				else if (command.equals("CAPACITY"))
+				{
+					capacity();
 				}
 				else if (command.equals("COMMIT  "))
 				{
@@ -640,9 +655,86 @@ public class ConnectionWorker extends HRDBMSThread
 			return;
 		}
 		try
-		{
-			sock.getOutputStream().write("OK".getBytes("UTF-8"));
-			sock.getOutputStream().flush();
+		{ 
+			@SuppressWarnings("restriction")
+			OperatingSystemMXBean osBean = ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
+			@SuppressWarnings("restriction")
+			int me = (int)(100 * osBean.getSystemCpuLoad());
+			Transaction tx2 = new Transaction(Transaction.ISOLATION_CS);
+			ArrayList<Object> rs = PlanCacheManager.getCoordNodes().setParms().execute(tx2);
+			ArrayList<Integer> coords = new ArrayList<Integer>();
+			for (Object r2 : rs)
+			{
+				if (!(r2 instanceof DataEndMarker))
+				{
+					coords.add((Integer)((ArrayList<Object>)r2).get(0));
+				}
+			}
+			
+			boolean imLow = true;
+			String lowHost = null;;
+			int low = 0;
+			for (int node : coords)
+			{
+				try
+				{
+					String hostname = new MetaData().getHostNameForNode(node, tx2);
+					CompressedSocket sock2 = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock2.setSoTimeout(5000 / coords.size());
+					OutputStream out = sock.getOutputStream();
+					byte[] outMsg = "CAPACITY        ".getBytes("UTF-8");
+					outMsg[8] = 0;
+					outMsg[9] = 0;
+					outMsg[10] = 0;
+					outMsg[11] = 0;
+					outMsg[12] = 0;
+					outMsg[13] = 0;
+					outMsg[14] = 0;
+					outMsg[15] = 0;
+					out.write(outMsg);
+					out.flush();
+					byte[] data = new byte[4];
+					sock2.getInputStream().read(data);
+					int val = bytesToInt(data);
+					if (imLow)
+					{
+						if (val < me)
+						{
+							imLow = false;
+							low = val;
+							lowHost = hostname;
+						}
+					}
+					else
+					{
+						if (val < low)
+						{
+							low = val;
+							lowHost = hostname;
+						}
+					}
+					sock2.close();
+				}
+				catch(Exception e){}
+			}
+			
+			tx2.commit();
+			
+			if (imLow)
+			{
+				sock.getOutputStream().write("OK".getBytes("UTF-8"));
+				sock.getOutputStream().flush();
+				clientConnection = true;
+			}
+			else
+			{
+				sock.getOutputStream().write("RD".getBytes("UTF-8"));
+				byte[] hostData = lowHost.getBytes("UTF-8");
+				sock.getOutputStream().write(intToBytes(hostData.length));
+				sock.getOutputStream().write(hostData);
+				sock.getOutputStream().flush();
+				sock.close();
+			}
 		}
 		catch(Exception e)
 		{
@@ -662,8 +754,60 @@ public class ConnectionWorker extends HRDBMSThread
 			{}
 			return;
 		}
-		
-		clientConnection = true;
+	}
+	
+	public void clientConnection2()
+	{
+		if (!LogManager.recoverDone.get())
+		{
+			try
+			{
+				sock.close();
+			}
+			catch(Exception e)
+			{}
+			return;
+		}
+		try
+		{ 
+			sock.getOutputStream().write("OK".getBytes("UTF-8"));
+			sock.getOutputStream().flush();
+			clientConnection = true;
+		}
+		catch(Exception e)
+		{
+			HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
+			try
+			{
+				sock.close();
+				if (worker != null)
+				{
+					ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+					cmd2.add("CLOSE");
+					worker.in.put(cmd2);
+				}
+				this.terminate();
+			}
+			catch(Exception f)
+			{}
+			return;
+		}
+	}
+	
+	public void capacity()
+	{
+		try
+		{
+			@SuppressWarnings("restriction")
+			OperatingSystemMXBean osBean = ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
+			@SuppressWarnings("restriction")
+			int me = (int)(100 * osBean.getSystemCpuLoad());
+			sock.getOutputStream().write(intToBytes(me));
+			sock.getOutputStream().flush();
+			sock.close();
+		}
+		catch(Exception e)
+		{}
 	}
 	
 	public void doCommit()
@@ -1775,7 +1919,7 @@ public class ConnectionWorker extends HRDBMSThread
 			else if (o instanceof String)
 			{
 				header[i] = (byte)4;
-				size += (4 + ((String)o).length());
+				size += (4 + ((String)o).getBytes("UTF-8").length);
 			}
 			else if (o instanceof AtomicLong)
 			{
@@ -3131,10 +3275,7 @@ public class ConnectionWorker extends HRDBMSThread
 		public void run()
 		{
 			int numBlocks = -1;
-			if (!file.exists())
-			{
-				return;
-			}
+			
 			try
 			{
 				LockManager.sLock(new Block(file.getAbsolutePath(), -1), tx.number());

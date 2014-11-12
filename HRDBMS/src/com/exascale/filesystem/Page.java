@@ -75,7 +75,7 @@ public class Page
 		modifiedBy = -1;
 	}
 
-	public synchronized void assignToBlock(Block b, boolean log) throws IOException
+	public synchronized void assignToBlock(Block b, boolean log) throws Exception
 	{
 		if (modifiedBy >= 0)
 		{
@@ -92,7 +92,7 @@ public class Page
 		pins.clear();
 	}
 	
-	public synchronized void assignToBlockFromMemory(Block b, boolean log, ByteBuffer data) throws IOException
+	public synchronized void assignToBlockFromMemory(Block b, boolean log, ByteBuffer data) throws Exception
 	{
 		FileChannel fc = FileManager.getFile(b.fileName());
 		if ((fc.size() / Page.BLOCK_SIZE - 1) >= b.number())

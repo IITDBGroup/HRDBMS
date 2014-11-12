@@ -388,7 +388,7 @@ public class NetworkSendOperator implements Operator, Serializable
 			else if (o instanceof String)
 			{
 				header[i] = (byte)4;
-				size += (4 + ((String)o).length());
+				size += (4 + ((String)o).getBytes("UTF-8").length);
 			}
 			else
 			{

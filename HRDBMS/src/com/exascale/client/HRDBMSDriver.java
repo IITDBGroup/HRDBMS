@@ -70,7 +70,7 @@ public class HRDBMSDriver implements Driver
 			{
 				throw new SQLException(e.getMessage());
 			}
-			return new HRDBMSConnection(sock, arg1.getProperty("user"), arg1.getProperty("password"));
+			return new HRDBMSConnection(sock, arg1.getProperty("user"), arg1.getProperty("password"), portNum);
 		}
 		catch (final Exception e)
 		{
