@@ -4,6 +4,15 @@ import org.apache.hadoop.io.LongWritable;
 
 public class MyLongWritable extends LongWritable
 {
+	private static int numWorkers;
+	private static int numDevices; 
+	
+	public static void setup(int numWorkers, int numDevices)
+	{
+		MyLongWritable.numWorkers = numWorkers;
+		MyLongWritable.numDevices = numDevices;
+	}
+	
 	public MyLongWritable()
 	{
 		super();
@@ -16,9 +25,7 @@ public class MyLongWritable extends LongWritable
 
 	public int hashCode()
 	{
-		int retval =  17;
-		retval = 22 * retval + (int)(super.get() >> 32);
-		retval = 22 * retval + (int)(super.get() & 0x00000000FFFFFFFF);
+		int retval = (int)(super.get() >> 32) * numDevices + (int)(super.get() & 0x00000000FFFFFFFF);
 		return retval;
 	}
 }

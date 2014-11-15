@@ -421,6 +421,7 @@ public final class LoadOperator implements Operator, Serializable
 				conf.set("mapreduce.reduce.memory.mb", "1536");
 				conf.set("mapreduce.reduce.java.opts", "-Xmx1280M");
 				conf.set("hrdbms.num.devices", "" + numDevicesPerNode());
+				conf.set("hrdbms.num.workers", "" + workerNodes.size());
 				Job job = new Job(conf);
 				job.setJarByClass(LoadMapper.class);
 				job.setJobName("Load " + schema + "." + table);

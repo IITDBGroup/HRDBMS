@@ -12,6 +12,14 @@ import java.lang.management.ManagementFactory;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.file.FileSystems;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.PathMatcher;
+import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
+import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -524,6 +532,14 @@ public class ConnectionWorker extends HRDBMSThread
 						Thread.sleep(1000);
 					}
 					delLoadMetaData();
+				}
+				else if (command.equals("DELFITBL"))
+				{
+					delFileTable();
+				}
+				else if (command.equals("DELFIIDX"))
+				{
+					delFileIndex();
 				}
 				else
 				{
@@ -1124,6 +1140,23 @@ public class ConnectionWorker extends HRDBMSThread
 		if (tx == null)
 		{
 			tx = new Transaction(Transaction.ISOLATION_CS);
+		}
+		
+		if (iso == Connection.TRANSACTION_NONE)
+		{
+			iso = Transaction.ISOLATION_UR;
+		}
+		else if (iso == Connection.TRANSACTION_REPEATABLE_READ)
+		{
+			iso = Transaction.ISOLATION_RR;
+		}
+		else if (iso == Connection.TRANSACTION_SERIALIZABLE)
+		{
+			iso = Transaction.ISOLATION_RR;
+		}
+		else
+		{
+			iso = Transaction.ISOLATION_CS;
 		}
 		tx.setIsolationLevel(iso);
 	}
@@ -5347,5 +5380,460 @@ public class ConnectionWorker extends HRDBMSThread
 				sendOK = true;
 			}
 		}
+	}
+	
+	private void delFileTable()
+	{
+		ArrayList<Object> tree = null;
+		ArrayList<String> tables = null;
+		try
+		{
+			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
+			tree = (ArrayList<Object>)objIn.readObject();
+			tables = (ArrayList<String>)objIn.readObject();
+		}
+		catch(Exception e)
+		{
+			sendNo();
+			return;
+		}
+		
+		ArrayList<String> paths = getDataPaths();
+		for (String path : paths)
+		{
+			try
+			{
+				ArrayList<String> files = getTableFilesInPath(path);
+				for (String file : files)
+				{
+					String table = file.substring(0, file.indexOf(".tbl"));
+					if (!tables.contains(table))
+					{
+						FileManager.removeFile(path + file);
+					}
+				}
+			}
+			catch(Exception e)
+			{
+				HRDBMSWorker.logger.debug("", e);
+				sendNo();
+			}
+		}
+		
+		Object obj = tree.get(0);
+		while (obj instanceof ArrayList)
+		{
+			obj = ((ArrayList)obj).get(0);
+		}
+		
+		removeFromTree((String)obj, tree, null); //also delete parents if now empty
+		
+		ArrayList<SendDelFiTThread> threads = new ArrayList<SendDelFiTThread>();
+		for (Object o : tree)
+		{
+			threads.add(new SendDelFiTThread(o, tables));
+		}
+		
+		for (SendDelFiTThread thread : threads)
+		{
+			thread.start();
+		}
+		
+		boolean allOK = true;
+		for (SendDelFiTThread thread : threads)
+		{
+			while (true)
+			{
+				try
+				{
+					thread.join();
+					break;
+				}
+				catch(InterruptedException e)
+				{}
+			}
+			if (!thread.sendOK())
+			{
+				allOK = false;
+			}
+		}
+		
+		if (allOK)
+		{
+			sendOK();
+		}
+		else
+		{
+			sendNo();
+			try
+			{
+				sock.close();
+			}
+			catch(Exception f)
+			{}
+		}
+	}
+	
+	private void delFileIndex()
+	{
+		ArrayList<Object> tree = null;
+		ArrayList<String> indexes = null;
+		try
+		{
+			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
+			tree = (ArrayList<Object>)objIn.readObject();
+			indexes = (ArrayList<String>)objIn.readObject();
+		}
+		catch(Exception e)
+		{
+			sendNo();
+			return;
+		}
+		
+		ArrayList<String> paths = getDataPaths();
+		for (String path : paths)
+		{
+			try
+			{
+				ArrayList<String> files = getIndexFilesInPath(path);
+				for (String file : files)
+				{
+					String index = file.substring(0, file.indexOf(".indx"));
+					if (!indexes.contains(index))
+					{
+						FileManager.removeFile(path + file);
+					}
+				}
+			}
+			catch(Exception e)
+			{
+				HRDBMSWorker.logger.debug("", e);
+				sendNo();
+			}
+		}
+		
+		Object obj = tree.get(0);
+		while (obj instanceof ArrayList)
+		{
+			obj = ((ArrayList)obj).get(0);
+		}
+		
+		removeFromTree((String)obj, tree, null); //also delete parents if now empty
+		
+		ArrayList<SendDelFiIThread> threads = new ArrayList<SendDelFiIThread>();
+		for (Object o : tree)
+		{
+			threads.add(new SendDelFiIThread(o, indexes));
+		}
+		
+		for (SendDelFiIThread thread : threads)
+		{
+			thread.start();
+		}
+		
+		boolean allOK = true;
+		for (SendDelFiIThread thread : threads)
+		{
+			while (true)
+			{
+				try
+				{
+					thread.join();
+					break;
+				}
+				catch(InterruptedException e)
+				{}
+			}
+			if (!thread.sendOK())
+			{
+				allOK = false;
+			}
+		}
+		
+		if (allOK)
+		{
+			sendOK();
+		}
+		else
+		{
+			sendNo();
+			try
+			{
+				sock.close();
+			}
+			catch(Exception f)
+			{}
+		}
+	}
+	
+	private static class SendDelFiTThread extends HRDBMSThread
+	{
+		private Object o;
+		private boolean sendOK;
+		private ArrayList<String> tables;
+		
+		public SendDelFiTThread(Object o, ArrayList<String> tables)
+		{
+			this.o = o;
+			this.tables = tables;
+		}
+		
+		public boolean sendOK()
+		{
+			return sendOK;
+		}
+		
+		public void run()
+		{
+			if (o instanceof String)
+			{
+				Socket sock = null;
+				try
+				{
+					sock = new CompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					OutputStream out = sock.getOutputStream();
+					byte[] outMsg = "DELFITBL        ".getBytes("UTF-8");
+					outMsg[8] = 0;
+					outMsg[9] = 0;
+					outMsg[10] = 0;
+					outMsg[11] = 0;
+					outMsg[12] = 0;
+					outMsg[13] = 0;
+					outMsg[14] = 0;
+					outMsg[15] = 0;
+					out.write(outMsg);
+					ObjectOutputStream objOut = new ObjectOutputStream(out);
+					ArrayList<Object> alo = new ArrayList<Object>(1);
+					alo.add(o);
+					objOut.writeObject(alo);
+					objOut.writeObject(tables);
+					objOut.flush();
+					out.flush();
+					getConfirmation(sock);
+					objOut.close();
+					sock.close();
+				}
+				catch(Exception e)
+				{
+					sendOK = false;
+					return;
+				}
+				sendOK = true;
+			}
+			else if (((ArrayList<Object>)o).size() > 0)
+			{
+				Socket sock = null;
+				Object obj2 = ((ArrayList<Object>)o).get(0);
+				while (obj2 instanceof ArrayList)
+				{
+					obj2 = ((ArrayList<Object>)obj2).get(0);
+				}
+				
+				String hostname = (String)obj2;
+				try
+				{
+					sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					OutputStream out = sock.getOutputStream();
+					byte[] outMsg = "DELFITBL        ".getBytes("UTF-8");
+					outMsg[8] = 0;
+					outMsg[9] = 0;
+					outMsg[10] = 0;
+					outMsg[11] = 0;
+					outMsg[12] = 0;
+					outMsg[13] = 0;
+					outMsg[14] = 0;
+					outMsg[15] = 0;
+					out.write(outMsg);
+					ObjectOutputStream objOut = new ObjectOutputStream(out);
+					objOut.writeObject((ArrayList<Object>)o);
+					objOut.writeObject(tables);
+					objOut.flush();
+					out.flush();
+					getConfirmation(sock);
+					objOut.close();
+					sock.close();
+				}
+				catch(Exception e)
+				{
+					sendOK = false;
+					return;
+				}
+				
+				sendOK = true;
+			}
+		}
+	}
+	
+	private static class SendDelFiIThread extends HRDBMSThread
+	{
+		private Object o;
+		private boolean sendOK;
+		private ArrayList<String> indexes;
+		
+		public SendDelFiIThread(Object o, ArrayList<String> indexes)
+		{
+			this.o = o;
+			this.indexes = indexes;
+		}
+		
+		public boolean sendOK()
+		{
+			return sendOK;
+		}
+		
+		public void run()
+		{
+			if (o instanceof String)
+			{
+				Socket sock = null;
+				try
+				{
+					sock = new CompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					OutputStream out = sock.getOutputStream();
+					byte[] outMsg = "DELFIIDX        ".getBytes("UTF-8");
+					outMsg[8] = 0;
+					outMsg[9] = 0;
+					outMsg[10] = 0;
+					outMsg[11] = 0;
+					outMsg[12] = 0;
+					outMsg[13] = 0;
+					outMsg[14] = 0;
+					outMsg[15] = 0;
+					out.write(outMsg);
+					ObjectOutputStream objOut = new ObjectOutputStream(out);
+					ArrayList<Object> alo = new ArrayList<Object>(1);
+					alo.add(o);
+					objOut.writeObject(alo);
+					objOut.writeObject(indexes);
+					objOut.flush();
+					out.flush();
+					getConfirmation(sock);
+					objOut.close();
+					sock.close();
+				}
+				catch(Exception e)
+				{
+					sendOK = false;
+					return;
+				}
+				sendOK = true;
+			}
+			else if (((ArrayList<Object>)o).size() > 0)
+			{
+				Socket sock = null;
+				Object obj2 = ((ArrayList<Object>)o).get(0);
+				while (obj2 instanceof ArrayList)
+				{
+					obj2 = ((ArrayList<Object>)obj2).get(0);
+				}
+				
+				String hostname = (String)obj2;
+				try
+				{
+					sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					OutputStream out = sock.getOutputStream();
+					byte[] outMsg = "DELFIIDX        ".getBytes("UTF-8");
+					outMsg[8] = 0;
+					outMsg[9] = 0;
+					outMsg[10] = 0;
+					outMsg[11] = 0;
+					outMsg[12] = 0;
+					outMsg[13] = 0;
+					outMsg[14] = 0;
+					outMsg[15] = 0;
+					out.write(outMsg);
+					ObjectOutputStream objOut = new ObjectOutputStream(out);
+					objOut.writeObject((ArrayList<Object>)o);
+					objOut.writeObject(indexes);
+					objOut.flush();
+					out.flush();
+					getConfirmation(sock);
+					objOut.close();
+					sock.close();
+				}
+				catch(Exception e)
+				{
+					sendOK = false;
+					return;
+				}
+				
+				sendOK = true;
+			}
+		}
+	}
+	
+	private static ArrayList<String> getDataPaths()
+	{
+		String paths = HRDBMSWorker.getHParms().getProperty("data_directories");
+		StringTokenizer tokens = new StringTokenizer(paths, ",", false);
+		ArrayList<String> retval = new ArrayList<String>();
+		while (tokens.hasMoreTokens())
+		{
+			String token = tokens.nextToken();
+			if (!token.endsWith("/"))
+			{
+				token += "/";
+			}
+			
+			retval.add(token);
+		}
+		
+		return retval;
+	}
+	
+	private static ArrayList<String> getTableFilesInPath(String path) throws Exception
+	{
+		final ArrayList<Path> files = new ArrayList<Path>();
+		final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + "*.*.tbl.*");
+	    Files.walkFileTree(Paths.get(path), new SimpleFileVisitor<Path>() {
+	        @Override
+	        public FileVisitResult visitFile(Path file, java.nio.file.attribute.BasicFileAttributes attrs) throws IOException {
+	            if (matcher.matches(file)) {
+	                files.add(file);
+	            }
+	            return FileVisitResult.CONTINUE;
+	        }
+
+	        @Override
+	        public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+	            return FileVisitResult.CONTINUE;
+	        }
+	    });
+	    
+	    ArrayList<String> retval = new ArrayList<String>();
+	    for (Path file : files)
+	    {
+	    	retval.add(file.toAbsolutePath().toString());
+	    }
+	    
+	    return retval;
+	}
+	
+	private static ArrayList<String> getIndexFilesInPath(String path) throws Exception
+	{
+		final ArrayList<Path> files = new ArrayList<Path>();
+		final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + "*.*.indx.*");
+	    Files.walkFileTree(Paths.get(path), new SimpleFileVisitor<Path>() {
+	        @Override
+	        public FileVisitResult visitFile(Path file, java.nio.file.attribute.BasicFileAttributes attrs) throws IOException {
+	            if (matcher.matches(file)) {
+	                files.add(file);
+	            }
+	            return FileVisitResult.CONTINUE;
+	        }
+
+	        @Override
+	        public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+	            return FileVisitResult.CONTINUE;
+	        }
+	    });
+	    
+	    ArrayList<String> retval = new ArrayList<String>();
+	    for (Path file : files)
+	    {
+	    	retval.add(file.toAbsolutePath().toString());
+	    }
+	    
+	    return retval;
 	}
 }

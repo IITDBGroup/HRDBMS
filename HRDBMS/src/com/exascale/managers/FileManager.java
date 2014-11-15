@@ -236,6 +236,19 @@ public class FileManager
 
 		return fc;
 	}
+	
+	public static synchronized void removeFile(String filename) throws Exception
+	{
+		FileChannel fc = openFiles.get(filename);
+		if (fc != null)
+		{
+			fc.close();
+			numBlocks.remove(filename);
+			openFiles.remove(filename);
+		}
+		
+		new File(filename).delete();
+	}
 
 	public static void read(Page p, Block b, ByteBuffer bb) throws Exception
 	{

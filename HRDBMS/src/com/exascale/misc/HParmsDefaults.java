@@ -63,6 +63,8 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("max_batch", "100000");
 		retval.setProperty("archive", "false");
 		retval.setProperty("queue_flush_retry_timeout", "1000");
+		retval.setProperty("statistics_refresh_target_days", "7");
+		retval.setProperty("old_file_cleanup_target_days", "7");
 		HParmsDefaults.retval = retval;
 		return retval;
 	}

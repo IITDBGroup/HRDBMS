@@ -3,6 +3,7 @@ package com.exascale.optimizer;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.misc.DataEndMarker;
@@ -23,6 +24,13 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 	private final ArrayList<String> references = new ArrayList<String>();
 	private int node;
 	private transient Plan plan;
+	private boolean hash = false;
+	boolean always = false;
+	private HashSet<Object> hashSet;
+	private String hashCol = null;
+	private int hashPos;
+	
+	private static int HASH_THRESHOLD = 10;
 	
 	public void setPlan(Plan plan)
 	{
@@ -34,6 +42,14 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 		this.filters = filters;
 		this.meta = meta;
 
+		boolean leftIsAllCol = true;
+		boolean leftIsAllLiteral = true;
+		boolean rightIsAllCol = true;
+		boolean rightIsAllLiteral = true;
+		boolean allEqual = true;
+		boolean leftAllSameCol = true;
+		boolean rightAllSameCol = true;
+	
 		for (final Filter filter : filters)
 		{
 			if (filter.leftIsColumn() && !references.contains(filter.leftColumn()))
@@ -44,6 +60,87 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 			if (filter.rightIsColumn() && !references.contains(filter.rightColumn()))
 			{
 				references.add(filter.rightColumn());
+			}
+			
+			if (filter.leftIsColumn())
+			{
+				leftIsAllLiteral = false;
+				if (hashCol == null)
+				{
+					hashCol = filter.leftColumn();
+				}
+				else
+				{
+					if (!filter.leftColumn().equals(hashCol))
+					{
+						leftAllSameCol = false;
+					}
+				}
+			}
+			else
+			{
+				leftIsAllCol = false;
+			}
+			
+			if (filter.rightIsColumn())
+			{
+				rightIsAllLiteral = false;
+				if (hashCol == null)
+				{
+					hashCol = filter.rightColumn();
+				}
+				else
+				{
+					if (!filter.rightColumn().equals(hashCol))
+					{
+						rightAllSameCol = false;
+					}
+				}
+			}
+			else
+			{
+				rightIsAllCol = false;
+			}
+			
+			if (!filter.op().equals("E"))
+			{
+				allEqual = false;
+			}
+			
+			if (filter.alwaysTrue())
+			{
+				always = true;
+			}
+		}
+		
+		if (!always && filters.size() > HASH_THRESHOLD && allEqual && leftIsAllCol && rightIsAllLiteral && leftAllSameCol)
+		{
+			hash = true;
+			hashSet = new HashSet<Object>();
+			for (Filter filter : filters)
+			{
+				Object obj = filter.rightLiteral();
+				if (obj instanceof Long)
+				{
+					obj = new Double((Long)obj);
+				}
+				
+				hashSet.add(obj);
+			}
+		}
+		else if (!always && filters.size() > HASH_THRESHOLD && allEqual && leftIsAllLiteral && rightIsAllCol && rightAllSameCol)
+		{
+			hash = true;
+			hashSet = new HashSet<Object>();
+			for (Filter filter : filters)
+			{
+				Object obj = filter.leftLiteral();
+				if (obj instanceof Long)
+				{
+					obj = new Double((Long)obj);
+				}
+				
+				hashSet.add(obj);
 			}
 		}
 	}
@@ -75,6 +172,11 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 			cols2Types = child.getCols2Types();
 			cols2Pos = child.getCols2Pos();
 			pos2Col = child.getPos2Col();
+			
+			if (hash)
+			{
+				hashPos = cols2Pos.get(hashCol);
+			}
 		}
 		else
 		{
@@ -178,12 +280,37 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 			{
 				throw (Exception)o;
 			}
-			for (final Filter filter : filters)
+			
+			if (always)
 			{
-				if (filter.passes((ArrayList<Object>)o, cols2Pos))
+				passed.getAndIncrement();
+				return o;
+			}
+			
+			if (hash)
+			{
+				ArrayList<Object> row = (ArrayList<Object>)o;
+				Object obj = row.get(hashPos);
+				if (obj instanceof Long)
+				{
+					obj = new Double((Long)obj);
+				}
+				
+				if (hashSet.contains(obj))
 				{
 					passed.getAndIncrement();
 					return o;
+				}
+			}
+			else
+			{
+				for (final Filter filter : filters)
+				{
+					if (filter.passes((ArrayList<Object>)o, cols2Pos))
+					{
+						passed.getAndIncrement();
+						return o;
+					}
 				}
 			}
 

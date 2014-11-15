@@ -40,6 +40,7 @@ public class LoadMapper extends Mapper<LongWritable, Text, MyLongWritable, ALOWr
 	private ArrayList<Integer> coordNodes;
 	private String portString;
 	private int numDevices;
+	private int numWorkers;
 	
 	public void setup(Context context) throws IOException
 	{
@@ -47,6 +48,8 @@ public class LoadMapper extends Mapper<LongWritable, Text, MyLongWritable, ALOWr
 		String jobName = context.getJobName();
 		portString = context.getConfiguration().get("hrdbms.port");
 		numDevices = Integer.parseInt(context.getConfiguration().get("hrdbms.num.devices"));
+		numWorkers = Integer.parseInt(context.getConfiguration().get("hrdbms.num.workers"));
+		MyLongWritable.setup(numWorkers, numDevices);
 		String tableName = jobName.substring(5);
 		schema = tableName.substring(0, tableName.indexOf('.'));
 		table = tableName.substring(tableName.indexOf('.') + 1);

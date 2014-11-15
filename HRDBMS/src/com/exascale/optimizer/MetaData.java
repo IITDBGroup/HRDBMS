@@ -3781,6 +3781,7 @@ public final class MetaData implements Serializable
 				
 				if (obj instanceof DataEndMarker)
 				{
+					ok = false;
 					return;
 				}
 				
@@ -3922,6 +3923,7 @@ public final class MetaData implements Serializable
 				
 				if (obj instanceof DataEndMarker)
 				{
+					ok = false;
 					return;
 				}
 				
@@ -4070,6 +4072,7 @@ public final class MetaData implements Serializable
 				
 				if (obj2 instanceof DataEndMarker)
 				{
+					ok = false;
 					return;
 				}
 				

@@ -141,6 +141,12 @@ public class HRDBMSWorker
 		new LockManager();
 		logger.info("Lock Manager initialization complete.");
 		resourceThread = addThread(new ResourceManager());
+		
+		if (type == TYPE_MASTER || type == TYPE_COORD)
+		{
+			addThread(new MaintenanceManager());
+		}
+		
 		hibernate();
 	}
 
