@@ -138,7 +138,7 @@ public class HRDBMSWorker
 		addThread(checkpoint);
 		logThread = addThread(new LogManager());
 		logger.info("Starting initialization of the Lock Manager.");
-		new LockManager();
+		addThread(new LockManager());
 		logger.info("Lock Manager initialization complete.");
 		resourceThread = addThread(new ResourceManager());
 		

@@ -1295,13 +1295,31 @@ public final class MetaData implements Serializable
 		String fn = schema + "." + table + ".tbl";
 		ArrayList<Integer> nodes = MetaData.getNodesForTable(schema, table, tx);
 		ArrayList<Integer> devices = MetaData.getDevicesForTable(schema, table, tx);
+		ArrayList<Object> tree = makeTree(nodes);
 		ArrayList<Socket> sockets = new ArrayList<Socket>();
 		int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 		
-		for (int node : nodes)
+		for (Object o : tree)
 		{
+			ArrayList<Object> list;
+			if (o instanceof Integer)
+			{
+				list = new ArrayList<Object>(1);
+				list.add(o);
+			}
+			else
+			{
+				list = (ArrayList<Object>)o;
+			}
+			
+			Object obj = tree.get(0);
+			while (obj instanceof ArrayList)
+			{
+				obj = ((ArrayList)obj).get(0);
+			}
+			
 			Socket sock;
-			String hostname = new MetaData().getHostNameForNode(node, tx);
+			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
 			sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "NEWTABLE        ".getBytes("UTF-8");
@@ -1318,6 +1336,7 @@ public final class MetaData implements Serializable
 			out.write(stringToBytes(fn));
 			ObjectOutputStream objOut = new ObjectOutputStream(out);
 			objOut.writeObject(devices);
+			objOut.writeObject(convertToHosts(tree, tx));
 			objOut.flush();
 			out.flush();
 			sockets.add(sock);
@@ -1342,18 +1361,114 @@ public final class MetaData implements Serializable
 		}
 	}
 	
+	private static ArrayList<Object> convertToHosts(ArrayList<Object> tree, Transaction tx) throws Exception
+	{
+		ArrayList<Object> retval = new ArrayList<Object>();
+		int i = 0;
+		while (i < tree.size())
+		{
+			Object obj = tree.get(i);
+			if (obj instanceof Integer)
+			{
+				retval.add(new MetaData().getHostNameForNode((Integer)obj, tx));
+			}
+			else
+			{
+				retval.add(convertToHosts((ArrayList<Object>)obj, tx));
+			}
+			
+			i++;
+		}
+		
+		return retval;
+	}
+	
+	private static ArrayList<Object> makeTree(ArrayList<Integer> nodes)
+	{
+		int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
+		if (nodes.size() <= max)
+		{
+			ArrayList<Object> retval = new ArrayList<Object>(nodes);
+			return retval;
+		}
+		
+		ArrayList<Object> retval = new ArrayList<Object>();
+		int i = 0;
+		while (i < max)
+		{
+			retval.add(nodes.get(i));
+			i++;
+		}
+		
+		int remaining = nodes.size() - i;
+		int perNode = remaining / max + 1;
+		
+		int j = 0;
+		while (i < nodes.size())
+		{
+			int first = (Integer)retval.get(j);
+			retval.remove(j);
+			ArrayList<Integer> list = new ArrayList<Integer>(perNode+1);
+			list.add(first);
+			int k = 0;
+			while (k < perNode && i < nodes.size())
+			{
+				list.add(nodes.get(i));
+				i++;
+				k++;
+			}
+			
+			retval.add(j, list);
+			j++;
+		}
+		
+		if (((ArrayList<Integer>)retval.get(0)).size() <= max)
+		{
+			return retval;
+		}
+		
+		//more than 2 tier
+		i = 0;
+		while (i < retval.size())
+		{
+			ArrayList<Integer> list = (ArrayList<Integer>)retval.remove(i);
+			retval.add(i, makeTree(list));
+			i++;
+		}
+		
+		return retval;
+	}
+	
 	private static void buildIndex(String schema, String index, String table, int numCols, boolean unique, Transaction tx) throws Exception
 	{
 		String fn = schema + "." + index + ".indx";
 		ArrayList<Integer> nodes = MetaData.getNodesForTable(schema, table, tx);
 		ArrayList<Integer> devices = MetaData.getDevicesForTable(schema, table, tx);
+		ArrayList<Object> tree = makeTree(nodes);
 		ArrayList<Socket> sockets = new ArrayList<Socket>();
 		int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 		
-		for (int node : nodes)
+		for (Object o : tree)
 		{
+			ArrayList<Object> list;
+			if (o instanceof Integer)
+			{
+				list = new ArrayList<Object>(1);
+				list.add(o);
+			}
+			else
+			{
+				list = (ArrayList<Object>)o;
+			}
+			
+			Object obj = tree.get(0);
+			while (obj instanceof ArrayList)
+			{
+				obj = ((ArrayList)obj).get(0);
+			}
+			
 			Socket sock;
-			String hostname = new MetaData().getHostNameForNode(node, tx);
+			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
 			sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "NEWINDEX        ".getBytes("UTF-8");
@@ -1378,6 +1493,7 @@ public final class MetaData implements Serializable
 			out.write(stringToBytes(fn));
 			ObjectOutputStream objOut = new ObjectOutputStream(out);
 			objOut.writeObject(devices);
+			objOut.writeObject(convertToHosts(tree, tx));
 			objOut.flush();
 			out.flush();
 			sockets.add(sock);
@@ -1481,16 +1597,34 @@ public final class MetaData implements Serializable
 			poses.add(cols2Pos.get(col));
 		}
 		
+		ArrayList<Object> tree = makeTree(nodes);
 		ArrayList<Socket> sockets = new ArrayList<Socket>();
 		int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 		
 		TreeMap<Integer, String> pos2Col = cols2PosFlip(cols2Pos);
 		HashMap<String, String> cols2Types = getCols2TypesForTable(schema, table, tx);
 		
-		for (int node : nodes)
+		for (Object o : tree)
 		{
+			ArrayList<Object> list;
+			if (o instanceof Integer)
+			{
+				list = new ArrayList<Object>(1);
+				list.add(o);
+			}
+			else
+			{
+				list = (ArrayList<Object>)o;
+			}
+			
+			Object obj = tree.get(0);
+			while (obj instanceof ArrayList)
+			{
+				obj = ((ArrayList)obj).get(0);
+			}
+			
 			Socket sock;
-			String hostname = new MetaData().getHostNameForNode(node, tx);
+			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
 			sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "POPINDEX        ".getBytes("UTF-8");
@@ -1514,6 +1648,7 @@ public final class MetaData implements Serializable
 			objOut.writeObject(poses);
 			objOut.writeObject(pos2Col);
 			objOut.writeObject(cols2Types);
+			objOut.writeObject(convertToHosts(tree, tx));
 			objOut.flush();
 			out.flush();
 			sockets.add(sock);
