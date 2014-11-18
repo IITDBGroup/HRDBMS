@@ -20,7 +20,7 @@ public class HParmsDefaults extends Properties
 		}
 
 		HParmsDefaults retval = new HParmsDefaults();
-		retval.setProperty("deadlock_timeout_secs", "60");
+		retval.setProperty("deadlock_check_secs", "60");
 		retval.setProperty("slock_block_sleep_ms", "1000");
 		retval.setProperty("bp_pages", "2097152");
 		retval.setProperty("checkpoint_freq_sec", "1800");
