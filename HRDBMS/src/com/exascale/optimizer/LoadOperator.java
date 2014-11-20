@@ -257,7 +257,7 @@ public final class LoadOperator implements Operator, Serializable
 	{
 		if (replace)
 		{
-			MassDeleteOperator delete = new MassDeleteOperator(schema, table, meta);
+			MassDeleteOperator delete = new MassDeleteOperator(schema, table, meta, false);
 			delete.setPlan(plan);
 			delete.setTransaction(tx);
 			delete.start();

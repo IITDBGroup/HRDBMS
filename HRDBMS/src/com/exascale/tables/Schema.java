@@ -1346,9 +1346,9 @@ public class Schema
 		}
 		this.modTime = System.currentTimeMillis();
 		updateNullArray(vals);
+		updateOffsets(vals, off);
 		updateRowIDs(rid);
 		this.nextRecNum = findNextFreeRecNum(nextRecNum);
-		updateOffsets(vals, off);
 		againUpdateFreeList(48 + (rowIDListSize * 16) + (freeSpaceListEntries * 8) + (colIDListSize * 4) + (5 * rowIDListSize * colIDListSize));
 
 		final byte[] before = new byte[48 + (rowIDListSize * 16) + (freeSpaceListEntries * 8) + (colIDListSize * 4) + (5 * rowIDListSize * colIDListSize)];

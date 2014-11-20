@@ -73,6 +73,7 @@ public final class RootOperator implements Operator, Serializable
 	@Override
 	public void close() throws Exception
 	{
+		child.nextAll(this);
 		child.close();
 	}
 

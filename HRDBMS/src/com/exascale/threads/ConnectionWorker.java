@@ -39,6 +39,7 @@ import com.exascale.filesystem.Page;
 import com.exascale.filesystem.RID;
 import com.exascale.logging.LogIterator;
 import com.exascale.logging.LogRec;
+import com.exascale.managers.BufferManager;
 import com.exascale.managers.FileManager;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LockManager;
@@ -3103,6 +3104,7 @@ public class ConnectionWorker extends HRDBMSThread
 		ArrayList<ArrayList<Boolean>> orders;
 		TreeMap<Integer, String> pos2Col;
 		HashMap<String, String> cols2Types;
+		boolean logged;
 		
 		try
 		{
@@ -3119,6 +3121,16 @@ public class ConnectionWorker extends HRDBMSThread
 			tableData = new byte[tableLength];
 			readNonCoord(tableData);
 			table = new String(tableData, "UTF-8");
+			byte[] flag = new byte[1];
+			readNonCoord(flag);
+			if (flag[0] == (byte)0)
+			{
+				logged = false;
+			}
+			else
+			{
+				logged = true;
+			}
 			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
 			tree = (ArrayList<Object>)objIn.readObject();
 			indexes = (ArrayList<String>)objIn.readObject();
@@ -3151,7 +3163,7 @@ public class ConnectionWorker extends HRDBMSThread
 				o2.add((String)o);
 				o = o2;
 			}
-			threads.add(new SendMassDeleteThread((ArrayList<Object>)o, tx, schema, table, keys, types, orders, indexes, pos2Col, cols2Types));
+			threads.add(new SendMassDeleteThread((ArrayList<Object>)o, tx, schema, table, keys, types, orders, indexes, pos2Col, cols2Types, logged));
 		}
 		
 		for (SendMassDeleteThread thread : threads)
@@ -3188,7 +3200,7 @@ public class ConnectionWorker extends HRDBMSThread
 				for (File dir : dirs)
 				{
 					File dir2 = new File(dir, schema + "." + table + ".tbl");
-					threads1.add(new MassDeleteThread(dir2, tx, indexes, keys, types, orders, pos2Col, cols2Types));
+					threads1.add(new MassDeleteThread(dir2, tx, indexes, keys, types, orders, pos2Col, cols2Types, logged));
 				}
 				
 				for (MassDeleteThread thread : threads1)
@@ -3282,8 +3294,9 @@ public class ConnectionWorker extends HRDBMSThread
 		private ArrayList<ArrayList<Boolean>> orders;
 		private TreeMap<Integer, String> pos2Col;
 		private HashMap<String, String> cols2Types;
+		private boolean logged;
 		
-		public MassDeleteThread(File file, Transaction tx, ArrayList<String> indexes, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types)
+		public MassDeleteThread(File file, Transaction tx, ArrayList<String> indexes, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, boolean logged)
 		{
 			this.file = file;
 			this.tx = tx;
@@ -3293,6 +3306,7 @@ public class ConnectionWorker extends HRDBMSThread
 			this.orders = orders;
 			this.pos2Col = pos2Col;
 			this.cols2Types = cols2Types;
+			this.logged = logged;
 		}
 		
 		public int getNum()
@@ -3307,92 +3321,114 @@ public class ConnectionWorker extends HRDBMSThread
 		
 		public void run()
 		{
-			int numBlocks = -1;
-			
-			try
+			if (logged)
 			{
-				LockManager.sLock(new Block(file.getAbsolutePath(), -1), tx.number());
-				FileChannel xx = FileManager.getFile(file.getAbsolutePath());
-				numBlocks = FileManager.numBlocks.get(file.getAbsolutePath());
-			}
-			catch(Exception e)
-			{
-				ok = false;
-				HRDBMSWorker.logger.debug("", e);
-				return;
-			}
-
-			HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
-			for (Map.Entry entry : pos2Col.entrySet())
-			{
-				String type = cols2Types.get(entry.getValue());
-				DataType value = null;
-				if (type.equals("INT"))
+				int numBlocks = -1;
+				
+				try
 				{
-					value = new DataType(DataType.INTEGER, 0, 0);
+					LockManager.sLock(new Block(file.getAbsolutePath(), -1), tx.number());
+					FileChannel xx = FileManager.getFile(file.getAbsolutePath());
+					numBlocks = FileManager.numBlocks.get(file.getAbsolutePath());
 				}
-				else if (type.equals("FLOAT"))
+				catch(Exception e)
 				{
-					value = new DataType(DataType.DOUBLE, 0, 0);
-				}
-				else if (type.equals("CHAR"))
-				{
-					value = new DataType(DataType.VARCHAR, 0, 0);
-				}
-				else if (type.equals("LONG"))
-				{
-					value = new DataType(DataType.BIGINT, 0, 0);
-				}
-				else if (type.equals("DATE"))
-				{
-					value = new DataType(DataType.DATE, 0, 0);
+					ok = false;
+					HRDBMSWorker.logger.debug("", e);
+					return;
 				}
 
-				layout.put((Integer)entry.getKey(), value);
-			}
-			Schema sch = new Schema(layout);
-			int onPage = Schema.HEADER_SIZE;
-			int lastRequested = Schema.HEADER_SIZE - 1;
-			int PREFETCH_REQUEST_SIZE = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("prefetch_request_size")); // 80
-			int PAGES_IN_ADVANCE = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pages_in_advance")); // 40
-			while (onPage < numBlocks)
-			{
-				if (lastRequested - onPage < PAGES_IN_ADVANCE)
+				HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+				for (Map.Entry entry : pos2Col.entrySet())
 				{
-					Block[] toRequest = new Block[lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1];
-					int i = 0;
-					while (i < toRequest.length)
+					String type = cols2Types.get(entry.getValue());
+					DataType value = null;
+					if (type.equals("INT"))
 					{
-						toRequest[i] = new Block(file.getAbsolutePath(), lastRequested + i + 1);
-						i++;
+						value = new DataType(DataType.INTEGER, 0, 0);
 					}
+					else if (type.equals("FLOAT"))
+					{
+						value = new DataType(DataType.DOUBLE, 0, 0);
+					}
+					else if (type.equals("CHAR"))
+					{
+						value = new DataType(DataType.VARCHAR, 0, 0);
+					}
+					else if (type.equals("LONG"))
+					{
+						value = new DataType(DataType.BIGINT, 0, 0);
+					}
+					else if (type.equals("DATE"))
+					{
+						value = new DataType(DataType.DATE, 0, 0);
+					}
+
+					layout.put((Integer)entry.getKey(), value);
+				}
+				Schema sch = new Schema(layout);
+				int onPage = Schema.HEADER_SIZE;
+				int lastRequested = Schema.HEADER_SIZE - 1;
+				int PREFETCH_REQUEST_SIZE = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("prefetch_request_size")); // 80
+				int PAGES_IN_ADVANCE = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pages_in_advance")); // 40
+				while (onPage < numBlocks)
+				{
+					if (lastRequested - onPage < PAGES_IN_ADVANCE)
+					{
+						Block[] toRequest = new Block[lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1];
+						int i = 0;
+						while (i < toRequest.length)
+						{
+							toRequest[i] = new Block(file.getAbsolutePath(), lastRequested + i + 1);
+							i++;
+						}
+						try
+						{
+							tx.requestPages(toRequest);
+						}
+						catch(Exception e)
+						{
+							ok = false;
+							return;
+						}
+						lastRequested += toRequest.length;
+					}
+				
 					try
 					{
-						tx.requestPages(toRequest);
+						tx.read(new Block(file.getAbsolutePath(), onPage++), sch, true);
+						RowIterator rit = sch.rowIterator();
+						while (rit.hasNext())
+						{
+							Row r = rit.next();
+							if (!r.getCol(0).exists())
+							{
+								continue;
+							}
+					
+							RID rid = r.getRID();
+							sch.deleteRow(rid);
+							num++;
+						}
 					}
 					catch(Exception e)
 					{
 						ok = false;
+						HRDBMSWorker.logger.debug("", e);
 						return;
 					}
-					lastRequested += toRequest.length;
 				}
-				
+			
 				try
 				{
-					tx.read(new Block(file.getAbsolutePath(), onPage++), sch, true);
-					RowIterator rit = sch.rowIterator();
-					while (rit.hasNext())
+					int i = 0;
+					for (String index : indexes)
 					{
-						Row r = rit.next();
-						if (!r.getCol(0).exists())
-						{
-							continue;
-						}
-					
-						RID rid = r.getRID();
-						sch.deleteRow(rid);
-						num++;
+						Index idx = new Index(new File(file.getParentFile().getAbsoluteFile(), index).getAbsolutePath(), keys.get(i), types.get(i), orders.get(i));
+						idx.setTransaction(tx);
+						idx.open();
+						idx.massDelete();
+						i++;
 					}
 				}
 				catch(Exception e)
@@ -3402,24 +3438,34 @@ public class ConnectionWorker extends HRDBMSThread
 					return;
 				}
 			}
-			
-			try
+			else
 			{
-				int i = 0;
-				for (String index : indexes)
+				//not logged 
+				try
 				{
-					Index idx = new Index(new File(file.getParentFile().getAbsoluteFile(), index).getAbsolutePath(), keys.get(i), types.get(i), orders.get(i));
-					idx.setTransaction(tx);
-					idx.open();
-					idx.massDelete();
-					i++;
+					LockManager.xLock(new Block(file.getAbsolutePath(), -1), tx.number());
+					BufferManager.invalidateFile(file.getAbsolutePath());
+					CreateTableThread thread = new CreateTableThread(file.getAbsolutePath(), pos2Col.size());
+					thread.run();
+				
+					int i = 0;
+					for (String index : indexes)
+					{
+						String fn = new File(file.getParentFile().getAbsoluteFile(), index).getAbsolutePath();
+						Index indx = new Index(fn, keys.get(i), types.get(i), orders.get(i));
+						boolean unique = indx.isUnique();
+						BufferManager.invalidateFile(fn);
+						CreateIndexThread thread2 = new CreateIndexThread(fn, keys.get(i).size(), unique);
+						thread2.run();
+						i++;
+					}
 				}
-			}
-			catch(Exception e)
-			{
-				ok = false;
-				HRDBMSWorker.logger.debug("", e);
-				return;
+				catch(Exception e)
+				{
+					ok = false;
+					HRDBMSWorker.logger.debug("", e);
+					return;
+				}
 			}
 		}
 	}
@@ -3438,8 +3484,9 @@ public class ConnectionWorker extends HRDBMSThread
 		ArrayList<String> indexes;
 		TreeMap<Integer, String> pos2Col;
 		HashMap<String, String> cols2Types;
+		boolean logged;
 		
-		public SendMassDeleteThread(ArrayList<Object> tree, Transaction tx, String schema, String table, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types)
+		public SendMassDeleteThread(ArrayList<Object> tree, Transaction tx, String schema, String table, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, boolean logged)
 		{
 			this.tree = tree;
 			this.tx = tx;
@@ -3451,6 +3498,7 @@ public class ConnectionWorker extends HRDBMSThread
 			this.indexes = indexes;
 			this.pos2Col = pos2Col;
 			this.cols2Types = cols2Types;
+			this.logged = logged;
 		}
 		
 		public int getNum()
@@ -3512,6 +3560,14 @@ public class ConnectionWorker extends HRDBMSThread
 				//write schema and table
 				out.write(stringToBytes(schema));
 				out.write(stringToBytes(table));
+				if (logged)
+				{
+					out.write(1);
+				}
+				else
+				{
+					out.write(0);
+				}
 				ObjectOutputStream objOut = new ObjectOutputStream(out);
 				objOut.writeObject(tree);
 				objOut.writeObject(indexes);
@@ -4448,6 +4504,30 @@ public class ConnectionWorker extends HRDBMSThread
 			this.device = device;
 		}
 		
+		public CreateTableThread(String fn, int cols)
+		{
+			this.cols = cols;
+			this.tbl = fn.substring(fn.lastIndexOf("/") + 1);
+			String devicePath = fn.substring(0, fn.lastIndexOf("/") + 1);
+			int i = 0;
+			while (true)
+			{
+				String path = new MetaData().getDevicePath(i);
+				if (!path.endsWith("/"))
+				{
+					path += "/";
+				}
+				
+				if (path.equals(devicePath))
+				{
+					this.device = i;
+					break;
+				}
+				
+				i++;
+			}
+		}
+		
 		public void run()
 		{
 			try
@@ -5134,6 +5214,41 @@ public class ConnectionWorker extends HRDBMSThread
 			this.numCols = numCols;
 			this.device = device;
 			this.unique = unique;
+		}
+		
+		public CreateIndexThread(String fn, int numCols, boolean unique)
+		{
+			this.indx = indx;
+			this.numCols = numCols;
+			this.device = device;
+			if (unique)
+			{
+				this.unique = 1;
+			}
+			else
+			{
+				this.unique = 0;
+			}
+			
+			this.indx = fn.substring(fn.lastIndexOf("/") + 1);
+			String devicePath = fn.substring(0, fn.lastIndexOf("/") + 1);
+			int i = 0;
+			while (true)
+			{
+				String path = new MetaData().getDevicePath(i);
+				if (!path.endsWith("/"))
+				{
+					path += "/";
+				}
+				
+				if (path.equals(devicePath))
+				{
+					this.device = i;
+					break;
+				}
+				
+				i++;
+			}
 		}
 		
 		public void run()

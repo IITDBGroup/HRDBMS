@@ -21,6 +21,7 @@ import java.util.StringTokenizer;
 import java.util.TreeMap;
 import com.exascale.compression.CompressedSocket;
 import com.exascale.exceptions.ParseException;
+import com.exascale.managers.BufferManager;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.PlanCacheManager;
 import com.exascale.managers.XAManager;
@@ -1200,12 +1201,18 @@ public final class MetaData implements Serializable
 		PlanCacheManager.getDeleteIndex().setParms(tableID, indexID).execute(tx);
 		PlanCacheManager.getDeleteIndexCol().setParms(tableID, indexID).execute(tx);
 		PlanCacheManager.getDeleteIndexStats().setParms(tableID, indexID).execute(tx);
+		BufferManager.invalidateFile(schema + "." + index + ".indx");
 		PlanCacheManager.invalidate();
 	}
 	
 	public static void dropTable(String schema, String table, Transaction tx) throws Exception
 	{
 		PlanCacheManager.invalidate();
+		ArrayList<String> rs = MetaData.getIndexFileNamesForTable(schema, table, tx);
+		for (String fn : rs)
+		{
+			BufferManager.invalidateFile(fn);
+		}
 		int id = PlanCacheManager.getTableID().setParms(schema, table).execute(tx);
 		PlanCacheManager.getDeleteTable().setParms(schema, table).execute(tx);
 		PlanCacheManager.getDeleteCols().setParms(id).execute(tx);
@@ -1216,13 +1223,34 @@ public final class MetaData implements Serializable
 		PlanCacheManager.getDeleteColDist().setParms(id).execute(tx);
 		PlanCacheManager.getDeletePartitioning().setParms(id).execute(tx);
 		PlanCacheManager.getMultiDeleteIndexStats().setParms(id).execute(tx);
+		BufferManager.invalidateFile(schema + "." + table + ".tbl");
 		PlanCacheManager.invalidate();
 	}
 	
 	public static void createTable(String schema, String table, ArrayList<ColDef> defs, ArrayList<String> pks, Transaction tx, String nodeGroupExp, String nodeExp, String deviceExp) throws Exception
 	{
 		//validate expressions
-		PartitionMetaData pmeta = new MetaData().new PartitionMetaData(schema, table, nodeGroupExp, nodeExp, deviceExp, tx);
+		HashMap<String, String> cols2Types = new HashMap<String, String>();
+		for (ColDef def : defs)
+		{
+			String name = def.getCol().getColumn();
+			String type = def.getType();
+			if (type.equals("LONG"))
+			{
+				type = "BIGINT";
+			}
+			else if (type.equals("FLOAT"))
+			{
+				type = "DOUBLE";
+			}
+			else if (type.startsWith("CHAR"))
+			{
+				type = "VARCHAR";
+			}
+			
+			cols2Types.put(name, type);
+		}
+		PartitionMetaData pmeta = new MetaData().new PartitionMetaData(schema, table, nodeGroupExp, nodeExp, deviceExp, tx, cols2Types);
 		//tables
 		//cols
 		//indexes
@@ -1260,7 +1288,6 @@ public final class MetaData implements Serializable
 			else if (type.startsWith("CHAR"))
 			{
 				length = Integer.parseInt(type.substring(5, type.length()-1));
-				type = "VARCHAR";
 				type = "VARCHAR";
 			}
 			
@@ -3213,6 +3240,41 @@ public final class MetaData implements Serializable
 		
 		return retval;
 	}
+	
+	private ArrayList<Object> convertRangeStringToObject(String set, String schema, String table, String rangeCol, Transaction tx, String type) throws Exception
+	{
+		ArrayList<Object> retval = new ArrayList<Object>();
+		StringTokenizer tokens = new StringTokenizer(set, "{}|");
+		while (tokens.hasMoreTokens())
+		{
+			String token = tokens.nextToken();
+			if (type.equals("INT"))
+			{
+				retval.add(Integer.parseInt(token));
+			}
+			else if (type.equals("BIGINT"))
+			{
+				retval.add(Long.parseLong(token));
+			}
+			else if (type.equals("DOUBLE"))
+			{
+				retval.add(Utils.parseDouble(token));
+			}
+			else if (type.equals("VARCHAR"))
+			{
+				retval.add(token);
+			}
+			else if (type.equals("DATE"))
+			{
+				int year = Integer.parseInt(token.substring(0, 4));
+				int month = Integer.parseInt(token.substring(5, 7));
+				int day = Integer.parseInt(token.substring(8, 10));
+				retval.add(new MyDate(year, month, day));
+			}
+		}
+		
+		return retval;
+	}
 
 	private Operator doWork(Operator op, HashMap<Operator, ArrayList<String>> tables, HashMap<Operator, ArrayList<ArrayList<Filter>>> filters, HashMap<Operator, HashMap<String, Double>> retvals, Transaction tx, Operator tree) throws Exception
 	{
@@ -5011,7 +5073,7 @@ public final class MetaData implements Serializable
 			setDData(dExp);
 		}
 		
-		public PartitionMetaData(String schema, String table, String ngExp, String nExp, String dExp, Transaction tx) throws Exception
+		public PartitionMetaData(String schema, String table, String ngExp, String nExp, String dExp, Transaction tx, HashMap<String, String> cols2Types) throws Exception
 		{
 			this.schema = schema;
 			this.table = table;
@@ -5019,9 +5081,9 @@ public final class MetaData implements Serializable
 			this.ngExp = ngExp;
 			this.nExp = nExp;
 			this.dExp = dExp;
-			setNGData(ngExp);
-			setNData(nExp);
-			setDData(dExp);
+			setNGData2(ngExp, cols2Types);
+			setNData2(nExp, cols2Types);
+			setDData2(dExp, cols2Types);
 		}
 		
 		public String getSchema()
@@ -5234,6 +5296,75 @@ public final class MetaData implements Serializable
 				deviceRange = convertRangeStringToObject(set, schema, table, deviceRangeCol, tx);
 			}
 		}
+		
+		private void setDData2(String exp, HashMap<String, String> cols2Types) throws Exception
+		{
+			final FastStringTokenizer tokens = new FastStringTokenizer(exp, ",", false);
+			final String first = tokens.nextToken();
+
+			if (first.equals("ALL"))
+			{
+				deviceSet = new ArrayList<Integer>(1);
+				deviceSet.add(DEVICE_ALL);
+				numDevices = MetaData.this.getNumDevices();
+			}
+			else
+			{
+				String set = first.substring(1);
+				set = set.substring(0, set.length() - 1);
+				final FastStringTokenizer tokens2 = new FastStringTokenizer(set, "|", false);
+				deviceSet = new ArrayList<Integer>(tokens2.allTokens().length);
+				numDevices = 0;
+				while (tokens2.hasMoreTokens())
+				{
+					int device = Integer.parseInt(tokens2.nextToken());
+					if (device >= MetaData.this.getNumDevices())
+					{
+						throw new Exception("Invalid device number: " + device);
+					}
+					deviceSet.add(device);
+					numDevices++;
+				}
+			}
+
+			if (numDevices == 1)
+			{
+				return;
+			}
+
+			final String type = tokens.nextToken();
+			if (type.equals("HASH"))
+			{
+				String set = tokens.nextToken().substring(1);
+				set = set.substring(0, set.length() - 1);
+				final FastStringTokenizer tokens2 = new FastStringTokenizer(set, "|", false);
+				deviceHash = new ArrayList<String>(tokens2.allTokens().length);
+				while (tokens2.hasMoreTokens())
+				{
+					deviceHash.add(tokens2.nextToken());
+				}
+			}
+			else if (type.equals("RANGE"))
+			{
+				deviceRangeCol = tokens.nextToken();
+				String set = tokens.nextToken().substring(1);
+				set = set.substring(0, set.length() - 1);
+				String type2 = cols2Types.get(deviceRangeCol);
+				if (type2 == null)
+				{
+					throw new Exception("Device range column does not exist");
+				}
+				deviceRange = convertRangeStringToObject(set, schema, table, deviceRangeCol, tx, type2);
+				if (deviceRange.size() != numDevices - 1)
+				{
+					throw new Exception("Wrong number of device ranges");
+				}
+			}
+			else
+			{
+				throw new Exception("Device type is not hash or range");
+			}
+		}
 
 		private void setNData(String exp) throws Exception
 		{
@@ -5263,7 +5394,7 @@ public final class MetaData implements Serializable
 				numNodes = 0;
 				while (tokens2.hasMoreTokens())
 				{
-					nodeSet.add(Utils.parseInt(tokens2.nextToken()));
+					nodeSet.add(Integer.parseInt(tokens2.nextToken()));
 					numNodes++;
 				}
 			}
@@ -5291,6 +5422,88 @@ public final class MetaData implements Serializable
 				String set = tokens.nextToken().substring(1);
 				set = set.substring(0, set.length() - 1);
 				nodeRange = convertRangeStringToObject(set, schema, table, nodeRangeCol, tx);
+			}
+		}
+		
+		private void setNData2(String exp, HashMap<String, String> cols2Types) throws Exception
+		{
+			final FastStringTokenizer tokens = new FastStringTokenizer(exp, ",", false);
+			final String first = tokens.nextToken();
+
+			if (first.equals("ANY"))
+			{
+				nodeSet = new ArrayList<Integer>(1);
+				nodeSet.add(NODE_ANY);
+				numNodes = 1;
+				return;
+			}
+
+			if (first.equals("ALL"))
+			{
+				nodeSet = new ArrayList<Integer>(1);
+				nodeSet.add(NODE_ALL);
+				numNodes = MetaData.this.getNumNodes(tx);
+			}
+			else
+			{
+				String set = first.substring(1);
+				set = set.substring(0, set.length() - 1);
+				final FastStringTokenizer tokens2 = new FastStringTokenizer(set, "|", false);
+				nodeSet = new ArrayList<Integer>(tokens2.allTokens().length);
+				numNodes = 0;
+				while (tokens2.hasMoreTokens())
+				{
+					int node = Integer.parseInt(tokens2.nextToken());
+					if (node >= MetaData.this.getNumNodes(tx))
+					{
+						throw new Exception("Invalid node number: " + node);
+					}
+					nodeSet.add(node);
+					numNodes++;
+				}
+			}
+
+			if (numNodes == 1)
+			{
+				return;
+			}
+
+			final String type = tokens.nextToken();
+			if (type.equals("HASH"))
+			{
+				String set = tokens.nextToken().substring(1);
+				set = set.substring(0, set.length() - 1);
+				final FastStringTokenizer tokens2 = new FastStringTokenizer(set, "|", false);
+				nodeHash = new ArrayList<String>(tokens2.allTokens().length);
+				while (tokens2.hasMoreTokens())
+				{
+					String col = tokens2.nextToken();
+					if (!cols2Types.containsKey(col))
+					{
+						throw new Exception("Hash column " + col + " does not exist!");
+					}
+					nodeHash.add(col);
+				}
+			}
+			else if (type.equals("RANGE"))
+			{
+				nodeRangeCol = tokens.nextToken();
+				String type2 = cols2Types.get(nodeRangeCol);
+				if (type2 == null)
+				{
+					throw new Exception("Node range column does not exist");
+				}
+				String set = tokens.nextToken().substring(1);
+				set = set.substring(0, set.length() - 1);
+				nodeRange = convertRangeStringToObject(set, schema, table, nodeRangeCol, tx, type2);
+				if (nodeRange.size() != numNodes - 1)
+				{
+					throw new Exception("Wrong number of node ranges");
+				}
+			}
+			else
+			{
+				throw new Exception("Node type is not hash or range");
 			}
 		}
 
@@ -5345,12 +5558,99 @@ public final class MetaData implements Serializable
 					nodeGroupHash.add(tokens2.nextToken());
 				}
 			}
-			else
+			else if (type.equals("RANGE"))
 			{
 				nodeGroupRangeCol = tokens.nextToken();
 				set = tokens.nextToken().substring(1);
 				set = set.substring(0, set.length() - 1);
 				nodeGroupRange = convertRangeStringToObject(set, schema, table, nodeGroupRangeCol, tx);
+			}
+			else
+			{
+				throw new Exception("Node group type was not range or hash");
+			}
+		}
+		
+		private void setNGData2(String exp, HashMap<String, String> cols2Types) throws Exception
+		{
+			if (exp.equals("NONE"))
+			{
+				nodeGroupSet = new ArrayList<Integer>(1);
+				nodeGroupSet.add(NODEGROUP_NONE);
+				return;
+			}
+
+			final FastStringTokenizer tokens = new FastStringTokenizer(exp, ",", false);
+			String set = tokens.nextToken().substring(1);
+			set = set.substring(0, set.length() - 1);
+			StringTokenizer tokens2 = new StringTokenizer(set, "{}", false);
+			nodeGroupSet = new ArrayList<Integer>();
+			numNodeGroups = 0;
+			int setNum = 0;
+			nodeGroupHashMap = new HashMap<Integer, ArrayList<Integer>>();
+			while (tokens2.hasMoreTokens())
+			{
+				String nodesInGroup = tokens2.nextToken();
+				nodeGroupSet.add(setNum);
+				numNodeGroups++;
+				
+				ArrayList<Integer> nodeListForGroup = new ArrayList<Integer>();
+				FastStringTokenizer tokens3 = new FastStringTokenizer(nodesInGroup, "|", false);
+				while (tokens3.hasMoreTokens())
+				{
+					String token = tokens3.nextToken();
+					int node = Integer.parseInt(token);
+					if (node >= MetaData.this.getNumNodes(tx))
+					{
+						throw new Exception("Invalid node number: " + node);
+					}
+					nodeListForGroup.add(node);
+				}
+				nodeGroupHashMap.put(setNum, nodeListForGroup);
+				setNum++;
+			}
+
+			if (numNodeGroups == 1)
+			{
+				return;
+			}
+
+			final String type = tokens.nextToken();
+			if (type.equals("HASH"))
+			{
+				set = tokens.nextToken().substring(1);
+				set = set.substring(0, set.length() - 1);
+				tokens2 = new StringTokenizer(set, "|", false);
+				nodeGroupHash = new ArrayList<String>();
+				while (tokens2.hasMoreTokens())
+				{
+					String col = tokens2.nextToken();
+					if (!cols2Types.containsKey(col))
+					{
+						throw new Exception("Hash column " + col + " does not exist");
+					}
+					nodeGroupHash.add(col);
+				}
+			}
+			else if (type.equals("RANGE"))
+			{
+				nodeGroupRangeCol = tokens.nextToken();
+				String type2 = cols2Types.get(nodeGroupRangeCol);
+				if (type2 == null)
+				{
+					throw new Exception("Node group range column does not exist");
+				}
+				set = tokens.nextToken().substring(1);
+				set = set.substring(0, set.length() - 1);
+				nodeGroupRange = convertRangeStringToObject(set, schema, table, nodeGroupRangeCol, tx, type2);
+				if (nodeGroupRange.size() != numNodeGroups - 1)
+				{
+					throw new Exception("Wrong number of node group ranges");
+				}
+			}
+			else
+			{
+				throw new Exception("Node group type was not range or hash");
 			}
 		}
 	}

@@ -57,17 +57,33 @@ public class SubBufferManager
 	
 	public synchronized void throwAwayPage(Block b) throws Exception
 	{
+		Page p = bp[pageLookup.get(b)];
+		p.setNotModified();
+		referencedLookup.remove(p.pinTime());
+		synchronized(unmodLookup)
+		{
+			unmodLookup.remove(p.pinTime());
+		}
+		p.setPinTime(-1);
+		pageLookup.remove(p.block());
+	}
+	
+	public synchronized void invalidateFile(String fn) throws Exception
+	{
 		for (Page p : bp)
 		{
-			if (b.equals(p.block()))
+			if (p.block() != null)
 			{
-				p.setNotModified();
-				p.buffer().position(0);
-				int i = 0;
-				while (i < Page.BLOCK_SIZE)
+				if (p.block().fileName().contains("/" + fn))
 				{
-					p.buffer().putLong(-1);
-					i += 8;
+					referencedLookup.remove(p.pinTime());
+					synchronized(unmodLookup)
+					{
+						unmodLookup.remove(p.pinTime());
+					}
+					p.setPinTime(-1);
+					pageLookup.remove(p.block());
+					p.assignToBlock(null, log);
 				}
 			}
 		}

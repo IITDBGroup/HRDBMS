@@ -44,6 +44,14 @@ public class BufferManager
 		int hash = (b.hashCode2() & 0x7FFFFFFF) % managers.length;
 		managers[hash].throwAwayPage(b);
 	}
+	
+	public static void invalidateFile(String fn) throws Exception
+	{
+		for (SubBufferManager manager : managers)
+		{
+			manager.invalidateFile(fn);
+		}
+	}
 
 	public static void flushAll(FileChannel fc) throws Exception
 	{

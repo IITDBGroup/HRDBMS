@@ -79,7 +79,7 @@ public final class Index implements Serializable
 		}
 	}
 	
-	private boolean isUnique() throws Exception
+	public boolean isUnique() throws Exception
 	{
 		if (isUniqueVar == null)
 		{

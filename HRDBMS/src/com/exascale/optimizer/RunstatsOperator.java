@@ -17,6 +17,7 @@ import com.exascale.logging.XAAbortLogRec;
 import com.exascale.logging.XACommitLogRec;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LogManager;
+import com.exascale.managers.PlanCacheManager;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Transaction;
@@ -131,6 +132,7 @@ public final class RunstatsOperator implements Operator, Serializable
 		{
 			done = true;
 			MetaData.runstats(schema, table, tx);
+			PlanCacheManager.invalidate();
 			return 1;
 		}
 		else

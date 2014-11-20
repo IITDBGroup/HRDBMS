@@ -38,6 +38,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 	private AtomicInteger num = new AtomicInteger(0);
 	private boolean done = false;
 	private Transaction tx;
+	private boolean logged = true;
 	
 	public void setPlan(Plan plan)
 	{
@@ -54,6 +55,14 @@ public final class MassDeleteOperator implements Operator, Serializable
 		this.meta = meta;
 		this.schema = schema;
 		this.table = table;
+	}
+	
+	public MassDeleteOperator(String schema, String table, MetaData meta, boolean logged)
+	{
+		this.meta = meta;
+		this.schema = schema;
+		this.table = table;
+		this.logged = logged;
 	}
 
 	@Override
@@ -217,7 +226,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 		ArrayList<ArrayList<String>> keys = MetaData.getKeys(indexes, tx);
 		ArrayList<ArrayList<String>> types = MetaData.getTypes(indexes, tx);
 		ArrayList<ArrayList<Boolean>> orders = MetaData.getOrders(indexes, tx);
-		boolean ok = sendMassDeletes(tree, tx, MetaData.getCols2TypesForTable(schema, table, tx), MetaData.getPos2ColForTable(schema, table, tx), keys, types, orders, indexes);
+		boolean ok = sendMassDeletes(tree, tx, MetaData.getCols2TypesForTable(schema, table, tx), MetaData.getPos2ColForTable(schema, table, tx), keys, types, orders, indexes, logged);
 		//if anyone responds not ok tell next() to throw an exception
 		if (!ok)
 		{
@@ -285,7 +294,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 		return retval;
 	}
 	
-	private boolean sendMassDeletes(ArrayList<Object> tree, Transaction tx, HashMap<String, String> cols2Types, TreeMap<Integer, String> pos2Col, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes)
+	private boolean sendMassDeletes(ArrayList<Object> tree, Transaction tx, HashMap<String, String> cols2Types, TreeMap<Integer, String> pos2Col, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes, boolean logged)
 	{
 		//all of them should respond OK with delete count
 		boolean allOK = true;
@@ -296,12 +305,12 @@ public final class MassDeleteOperator implements Operator, Serializable
 			{
 				ArrayList<Object> list = new ArrayList<Object>(1);
 				list.add(o);
-				SendMassDeleteThread thread = new SendMassDeleteThread(list, tx, cols2Types, pos2Col, keys, types, orders, indexes);
+				SendMassDeleteThread thread = new SendMassDeleteThread(list, tx, cols2Types, pos2Col, keys, types, orders, indexes, logged);
 				threads.add(thread);
 			}
 			else
 			{
-				SendMassDeleteThread thread = new SendMassDeleteThread((ArrayList<Object>)o, tx, cols2Types, pos2Col, keys, types, orders, indexes);
+				SendMassDeleteThread thread = new SendMassDeleteThread((ArrayList<Object>)o, tx, cols2Types, pos2Col, keys, types, orders, indexes, logged);
 				threads.add(thread);
 			}
 		}
@@ -356,8 +365,9 @@ public final class MassDeleteOperator implements Operator, Serializable
 		private ArrayList<ArrayList<String>> types;
 		private ArrayList<ArrayList<Boolean>> orders;
 		private ArrayList<String> indexes;
+		private boolean logged;
 		
-		public SendMassDeleteThread(ArrayList<Object> tree, Transaction tx, HashMap<String, String> cols2Types, TreeMap<Integer, String> pos2Col, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes)
+		public SendMassDeleteThread(ArrayList<Object> tree, Transaction tx, HashMap<String, String> cols2Types, TreeMap<Integer, String> pos2Col, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes, boolean logged)
 		{
 			this.tree = tree;
 			this.tx = tx;
@@ -367,6 +377,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 			this.types = types;
 			this.orders = orders;
 			this.indexes = indexes;
+			this.logged = logged;
 		}
 		
 		public int getNum()
@@ -412,6 +423,14 @@ public final class MassDeleteOperator implements Operator, Serializable
 				//write schema and table
 				out.write(stringToBytes(schema));
 				out.write(stringToBytes(table));
+				if (logged)
+				{
+					out.write((byte)1);
+				}
+				else
+				{
+					out.write((byte)0);
+				}
 				ObjectOutputStream objOut = new ObjectOutputStream(out);
 				objOut.writeObject(convertToHosts(tree, tx));
 				objOut.writeObject(indexes);

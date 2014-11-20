@@ -88,7 +88,10 @@ public class Page
 		}
 		blk = b;
 		readDone.set(false);
-		FileManager.read(this, b, contents);
+		if (b != null)
+		{
+			FileManager.read(this, b, contents);
+		}
 		pins.clear();
 	}
 	
