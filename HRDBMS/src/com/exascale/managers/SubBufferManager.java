@@ -137,14 +137,20 @@ public class SubBufferManager
 				InsertLogRec ins = (InsertLogRec)rec.rebuild();
 				Block b = ins.getBlock();
 				Page p = toRoll.get(b);
-				p.writeDirect(ins.getOffset(), ins.getBefore());
+				if (p != null)
+				{
+					p.writeDirect(ins.getOffset(), ins.getBefore());
+				}
 			}
 			else if (rec.type() == LogRec.DELETE)
 			{
 				DeleteLogRec del = (DeleteLogRec)rec.rebuild();
 				Block b = del.getBlock();
 				Page p = toRoll.get(b);
-				p.writeDirect(del.getOffset(), del.getBefore());
+				if (p != null)
+				{
+					p.writeDirect(del.getOffset(), del.getBefore());
+				}
 			}
 		}
 		

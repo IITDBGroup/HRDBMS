@@ -75,6 +75,10 @@ public final class RootOperator implements Operator, Serializable
 	{
 		child.nextAll(this);
 		child.close();
+		cols2Pos = null;
+		cols2Types = null;
+		pos2Col = null;
+		generated = null;
 	}
 
 	@Override

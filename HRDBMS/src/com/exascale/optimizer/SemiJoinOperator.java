@@ -44,7 +44,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 	private final AtomicLong outCount = new AtomicLong(0);
 	private final AtomicLong inCount = new AtomicLong(0);
 	private volatile boolean readersDone = false;
-	private final ArrayList<String> cols;
+	private ArrayList<String> cols;
 	private volatile BufferedLinkedBlockingQueue outBuffer;
 	private volatile ArrayList<Integer> poses;
 	private int childPos = -1;
@@ -55,13 +55,13 @@ public final class SemiJoinOperator implements Operator, Serializable
 	private final MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
 	private HashSet<HashMap<Filter, Filter>> hshm;
 	private int rightChildCard = 16;
-	private final ArrayList<DiskBackedHashMap> buckets = new ArrayList<DiskBackedHashMap>();
+	private ArrayList<DiskBackedHashMap> buckets = new ArrayList<DiskBackedHashMap>();
 	private final ReentrantLock bucketsLock = new ReentrantLock();
 	private final AtomicLong inCount2 = new AtomicLong(0);
 	private boolean alreadySorted = false;
 	private boolean cardSet = false;
-	private final Vector<Operator> clones = new Vector<Operator>();
-	private final Vector<AtomicBoolean> lockVector = new Vector<AtomicBoolean>();
+	private Vector<Operator> clones = new Vector<Operator>();
+	private Vector<AtomicBoolean> lockVector = new Vector<AtomicBoolean>();
 	private final ReentrantLock thisLock = new ReentrantLock();
 	private transient Plan plan;
 	
@@ -178,6 +178,18 @@ public final class SemiJoinOperator implements Operator, Serializable
 		{
 			outBuffer.close();
 		}
+		
+		cols2Pos = null;
+		cols2Types = null;
+		pos2Col = null;
+		cols = null;
+		poses = null;
+		f = null;
+		dynamicIndexes = null;
+		hshm = null;
+		buckets = null;
+		clones = null;
+		lockVector = null;
 	}
 
 	@Override

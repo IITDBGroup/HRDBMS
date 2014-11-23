@@ -53,6 +53,7 @@ public class HRDBMSConnection implements Connection
 		}
 		catch(Exception e)
 		{
+			e.printStackTrace();
 			throw new SQLException("The handshake between the client and the server failed!");
 		}
 	}
@@ -748,6 +749,7 @@ public class HRDBMSConnection implements Connection
 			}
 			catch(Exception e)
 			{
+				e.printStackTrace();
 				throw new SQLException("The handshake between the client and the server failed!");
 			}
 		}

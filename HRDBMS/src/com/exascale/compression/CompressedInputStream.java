@@ -43,7 +43,7 @@ public final class CompressedInputStream extends FilterInputStream
 								// inf... is valid
 	private int readPending; // number of bytes pending to read from underlying
 								// stream
-	private final byte[] byteBuf; // single byte buffer for read()
+	private byte[] byteBuf; // single byte buffer for read()
 	private boolean closed; // true if closed
 
 	/**
@@ -68,6 +68,8 @@ public final class CompressedInputStream extends FilterInputStream
 		{
 			closed = true;
 			super.close();
+			infBuf = null;
+			byteBuf = null;
 		}
 	}
 

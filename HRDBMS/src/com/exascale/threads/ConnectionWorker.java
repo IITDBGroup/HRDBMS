@@ -698,7 +698,7 @@ public class ConnectionWorker extends HRDBMSThread
 					String hostname = new MetaData().getHostNameForNode(node, tx2);
 					CompressedSocket sock2 = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock2.setSoTimeout(5000 / coords.size());
-					OutputStream out = sock.getOutputStream();
+					OutputStream out = sock2.getOutputStream();
 					byte[] outMsg = "CAPACITY        ".getBytes("UTF-8");
 					outMsg[8] = 0;
 					outMsg[9] = 0;
@@ -732,7 +732,10 @@ public class ConnectionWorker extends HRDBMSThread
 					}
 					sock2.close();
 				}
-				catch(Exception e){}
+				catch(Exception e)
+				{
+					HRDBMSWorker.logger.debug("", e);
+				}
 			}
 			
 			tx2.commit();
@@ -747,6 +750,7 @@ public class ConnectionWorker extends HRDBMSThread
 			{
 				sock.getOutputStream().write("RD".getBytes("UTF-8"));
 				byte[] hostData = lowHost.getBytes("UTF-8");
+				HRDBMSWorker.logger.debug("Redirecting to " + lowHost);
 				sock.getOutputStream().write(intToBytes(hostData.length));
 				sock.getOutputStream().write(hostData);
 				sock.getOutputStream().flush();

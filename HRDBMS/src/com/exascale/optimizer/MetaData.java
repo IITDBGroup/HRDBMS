@@ -1339,7 +1339,7 @@ public final class MetaData implements Serializable
 				list = (ArrayList<Object>)o;
 			}
 			
-			Object obj = tree.get(0);
+			Object obj = list.get(0);
 			while (obj instanceof ArrayList)
 			{
 				obj = ((ArrayList)obj).get(0);
@@ -1363,7 +1363,7 @@ public final class MetaData implements Serializable
 			out.write(stringToBytes(fn));
 			ObjectOutputStream objOut = new ObjectOutputStream(out);
 			objOut.writeObject(devices);
-			objOut.writeObject(convertToHosts(tree, tx));
+			objOut.writeObject(convertToHosts(list, tx));
 			objOut.flush();
 			out.flush();
 			sockets.add(sock);
@@ -1488,7 +1488,7 @@ public final class MetaData implements Serializable
 				list = (ArrayList<Object>)o;
 			}
 			
-			Object obj = tree.get(0);
+			Object obj = list.get(0);
 			while (obj instanceof ArrayList)
 			{
 				obj = ((ArrayList)obj).get(0);
@@ -1520,7 +1520,7 @@ public final class MetaData implements Serializable
 			out.write(stringToBytes(fn));
 			ObjectOutputStream objOut = new ObjectOutputStream(out);
 			objOut.writeObject(devices);
-			objOut.writeObject(convertToHosts(tree, tx));
+			objOut.writeObject(convertToHosts(list, tx));
 			objOut.flush();
 			out.flush();
 			sockets.add(sock);
@@ -1644,7 +1644,7 @@ public final class MetaData implements Serializable
 				list = (ArrayList<Object>)o;
 			}
 			
-			Object obj = tree.get(0);
+			Object obj = list.get(0);
 			while (obj instanceof ArrayList)
 			{
 				obj = ((ArrayList)obj).get(0);
@@ -1675,7 +1675,7 @@ public final class MetaData implements Serializable
 			objOut.writeObject(poses);
 			objOut.writeObject(pos2Col);
 			objOut.writeObject(cols2Types);
-			objOut.writeObject(convertToHosts(tree, tx));
+			objOut.writeObject(convertToHosts(list, tx));
 			objOut.flush();
 			out.flush();
 			sockets.add(sock);
@@ -1926,7 +1926,7 @@ public final class MetaData implements Serializable
 			return (generated.get(col).longValue());
 		}
 
-		HRDBMSWorker.logger.warn("Can't find cardinality for " + schema + "." + table + "."  + col);
+		//HRDBMSWorker.logger.warn("Can't find cardinality for " + schema + "." + table + "."  + col);
 		return 1000000;
 	}
 	
@@ -1949,7 +1949,7 @@ public final class MetaData implements Serializable
 			return (generated.get(col).longValue());
 		}
 
-		HRDBMSWorker.logger.warn("Can't find cardinality for " + schema + "." + table + "."  + col);
+		//HRDBMSWorker.logger.warn("Can't find cardinality for " + schema + "." + table + "."  + col);
 		return 1000000;
 	}
 
@@ -2383,7 +2383,7 @@ public final class MetaData implements Serializable
 		}
 		catch(Exception e)
 		{
-			HRDBMSWorker.logger.warn("No table card found for table " + schema + "." + table);
+			//HRDBMSWorker.logger.warn("No table card found for table " + schema + "." + table);
 			return 1000000;
 		}
 	}

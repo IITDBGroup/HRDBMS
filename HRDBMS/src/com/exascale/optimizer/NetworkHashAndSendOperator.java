@@ -14,12 +14,12 @@ import com.exascale.tables.Transaction;
 
 public final class NetworkHashAndSendOperator extends NetworkSendOperator
 {
-	private final ArrayList<String> hashCols;
+	private ArrayList<String> hashCols;
 	private int numNodes;
 	private int id;
 	private int starting;
-	private final ConcurrentHashMap<Integer, CompressedSocket> connections = new ConcurrentHashMap<Integer, CompressedSocket>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
-	private final ConcurrentHashMap<Integer, OutputStream> outs = new ConcurrentHashMap<Integer, OutputStream>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
+	private ConcurrentHashMap<Integer, CompressedSocket> connections = new ConcurrentHashMap<Integer, CompressedSocket>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
+	private ConcurrentHashMap<Integer, OutputStream> outs = new ConcurrentHashMap<Integer, OutputStream>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
 	private final ArrayList<Operator> parents = new ArrayList<Operator>();
 	private boolean error = false;
 	private String errorText;
@@ -95,6 +95,8 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 			{
 			}
 		}
+		
+		outs = null;
 
 		for (final CompressedSocket sock : connections.values())
 		{
@@ -106,6 +108,10 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 			{
 			}
 		}
+		
+		connections = null;
+		hashCols = null;
+		super.close();
 	}
 
 	public int getID()

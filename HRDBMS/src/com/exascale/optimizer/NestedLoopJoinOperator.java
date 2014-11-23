@@ -51,16 +51,16 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	private int node;
 	private boolean indexAccess = false;
 	private ArrayList<Index> dynamicIndexes;
-	private final ArrayList<ArrayList<Object>> queuedRows = new ArrayList<ArrayList<Object>>();
+	private ArrayList<ArrayList<Object>> queuedRows = new ArrayList<ArrayList<Object>>();
 	private final MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
 	private int rightChildCard = 16;
-	private final ArrayList<DiskBackedHashMap> buckets = new ArrayList<DiskBackedHashMap>();
-	private final ReentrantLock bucketsLock = new ReentrantLock();
+	private ArrayList<DiskBackedHashMap> buckets = new ArrayList<DiskBackedHashMap>();
+	private ReentrantLock bucketsLock = new ReentrantLock();
 	private final AtomicLong inCount2 = new AtomicLong(0);
 	private boolean alreadySorted = false;
 	private boolean cardSet = false;
-	private final Vector<Operator> clones = new Vector<Operator>();
-	private final Vector<AtomicBoolean> lockVector = new Vector<AtomicBoolean>();
+	private Vector<Operator> clones = new Vector<Operator>();
+	private Vector<AtomicBoolean> lockVector = new Vector<AtomicBoolean>();
 	private final ReentrantLock thisLock = new ReentrantLock();
 	private transient Plan plan;
 	
@@ -209,6 +209,18 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		{
 			outBuffer.close();
 		}
+		
+		cnfFilters = null;
+		f = null;
+		dynamicIndexes = null;
+		queuedRows = null;
+		buckets = null;
+		bucketsLock = null;
+		clones = null;
+		lockVector = null;
+		cols2Pos = null;
+		cols2Types = null;
+		pos2Col = null;
 	}
 
 	@Override

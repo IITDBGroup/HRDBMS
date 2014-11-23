@@ -183,6 +183,8 @@ public class XAWorker extends HRDBMSThread
 				ex = e;
 			}
 		}
+		
+		this.terminate();
 	}
 	
 	private void setPlanAndTransaction(Operator op)

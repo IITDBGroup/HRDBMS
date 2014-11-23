@@ -522,6 +522,20 @@ public class SQLParser
 			op = scan;
 		}
 		scan.getRID();
+		Operator op2;
+		if (op != scan)
+		{
+			op2 = scan.firstParent();
+			op2.removeChild(scan);
+			op2.add(scan);
+			while (op2 != op)
+			{
+				Operator op3 = op2.parent();
+				op3.removeChild(op2);
+				op3.add(op2);
+				op2 = op3;
+			}
+		}
 
 		ArrayList<String> buildList = new ArrayList<String>();
 
@@ -578,10 +592,10 @@ public class SQLParser
 			cols.add(col);
 		}
 
-		cols.add("_RID1");
-		cols.add("_RID2");
-		cols.add("_RID3");
-		cols.add("_RID4");
+		//cols.add("_RID1");
+		//cols.add("_RID2");
+		//cols.add("_RID3");
+		//cols.add("_RID4");
 
 		ReorderOperator reorder = new ReorderOperator(cols, meta);
 		reorder.add(op);

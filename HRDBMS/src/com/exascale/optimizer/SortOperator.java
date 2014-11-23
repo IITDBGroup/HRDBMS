@@ -26,7 +26,7 @@ public final class SortOperator implements Operator, Serializable
 	private boolean startDone = false;
 	private boolean closeDone = false;
 	private ArrayList<String> sortCols;
-	private final ArrayList<Boolean> orders;
+	private ArrayList<Boolean> orders;
 	private volatile boolean sortComplete = false;
 	private SortThread sortThread;
 	private volatile BufferedLinkedBlockingQueue readBuffer;
@@ -168,6 +168,11 @@ public final class SortOperator implements Operator, Serializable
 			readBuffer.close();
 		}
 		
+		sortCols = null;
+		orders = null;
+		cols2Pos = null;
+		cols2Types = null;
+		pos2Col = null;
 		isClosed = true;
 	}
 

@@ -95,8 +95,19 @@ public class NetworkSendOperator implements Operator, Serializable
 	@Override
 	public void close() throws Exception
 	{
-		out.close();
-		sock.close();
+		if (out != null)
+		{
+			out.close();
+		}
+		
+		if (sock != null)
+		{
+			sock.close();
+		}
+		
+		cols2Pos = null;
+		cols2Types = null;
+		pos2Col = null;
 	}
 
 	@Override

@@ -57,12 +57,12 @@ public final class CompressedOutputStream extends FilterOutputStream
 	private final int minCompressSize; // minimum packet size for compression
 	private final int bufSize; // buffer size
 
-	private final byte[] orgBuf; // original uncompressed data buffer
+	private byte[] orgBuf; // original uncompressed data buffer
 	private int orgLen; // number of bytes in orgBuf
 	private final Deflater deflater; // the zip deflater
-	private final byte[] defBuf; // deflated/compressed output data buffer
+	private byte[] defBuf; // deflated/compressed output data buffer
 	private int defLen; // number of bytes in defBuf
-	private final byte[] byteBuf = new byte[1]; // single byte buffer for
+	private byte[] byteBuf = new byte[1]; // single byte buffer for
 												// write(b)
 	private boolean closed; // true if closed
 
@@ -123,6 +123,9 @@ public final class CompressedOutputStream extends FilterOutputStream
 		{
 			closed = true;
 			super.close();
+			orgBuf = null;
+			defBuf = null;
+			byteBuf = null;
 		}
 	}
 

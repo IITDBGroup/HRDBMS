@@ -347,7 +347,7 @@ public final class Phase1
 					final Operator parent = op;
 					op = child;
 					final Operator grandParent = parent.parent();
-					((TableScanOperator)op).addFilter(((SelectOperator)parent).getFilter(), grandParent, grandParent.parent());
+					((TableScanOperator)op).addFilter(((SelectOperator)parent).getFilter(), grandParent, grandParent.parent(), tx);
 					parent.removeChild(op);
 					grandParent.removeChild(parent);
 					grandParent.add(op);

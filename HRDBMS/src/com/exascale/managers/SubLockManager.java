@@ -207,6 +207,7 @@ public class SubLockManager
 		
 		if (array == null)
 		{
+			lock.unlock();
 			return;
 		}
 		else

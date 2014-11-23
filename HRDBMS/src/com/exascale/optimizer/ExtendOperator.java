@@ -31,7 +31,7 @@ public final class ExtendOperator implements Operator, Serializable
 	private final String name;
 	private int node;
 	private FastStringTokenizer tokens;
-	private final ArrayDeque<String> master;
+	private ArrayDeque<String> master;
 	private BufferedLinkedBlockingQueue queue;
 	private volatile ArrayList<Integer> poses;
 	private volatile boolean startDone = false;
@@ -109,6 +109,13 @@ public final class ExtendOperator implements Operator, Serializable
 		{
 			queue.close();
 		}
+		
+		master = null;
+		queue = null;
+		poses = null;
+		cols2Pos = null;
+		cols2Types = null;
+		cols2Pos = null;
 	}
 
 	@Override

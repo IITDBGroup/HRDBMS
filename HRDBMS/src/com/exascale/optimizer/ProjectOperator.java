@@ -13,7 +13,7 @@ import com.exascale.tables.Plan;
 public final class ProjectOperator implements Operator, Serializable
 {
 	private Operator child;
-	private final ArrayList<String> cols;
+	private ArrayList<String> cols;
 	private final MetaData meta;
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
@@ -21,7 +21,7 @@ public final class ProjectOperator implements Operator, Serializable
 	private Operator parent;
 	private HashMap<String, Integer> childCols2Pos;
 	private int node;
-	private final ArrayList<Integer> pos2Get = new ArrayList<Integer>();
+	private ArrayList<Integer> pos2Get = new ArrayList<Integer>();
 	private volatile boolean startDone = false;
 	private transient Plan plan;
 	
@@ -98,6 +98,12 @@ public final class ProjectOperator implements Operator, Serializable
 	@Override
 	public void close() throws Exception
 	{
+		cols2Pos = null;
+		cols2Types = null;
+		pos2Col = null;
+		cols = null;
+		childCols2Pos = null;
+		pos2Get = null;
 		child.close();
 	}
 

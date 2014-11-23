@@ -16,10 +16,10 @@ public final class RenameOperator implements Operator, Serializable
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
 	private TreeMap<Integer, String> pos2Col;
-	private final HashMap<String, String> old2New = new HashMap<String, String>();
+	private HashMap<String, String> old2New = new HashMap<String, String>();
 	private final MetaData meta;
-	private final ArrayList<String> oldVals;
-	private final ArrayList<String> newVals;
+	private ArrayList<String> oldVals;
+	private ArrayList<String> newVals;
 	private int node;
 	private transient Plan plan;
 	
@@ -135,6 +135,12 @@ public final class RenameOperator implements Operator, Serializable
 	@Override
 	public void close() throws Exception
 	{
+		old2New = null;
+		oldVals = null;
+		newVals = null;
+		cols2Pos = null;
+		cols2Types = null;
+		pos2Col = null;
 		child.close();
 	}
 

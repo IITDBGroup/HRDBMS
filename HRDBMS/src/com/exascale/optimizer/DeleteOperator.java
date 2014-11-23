@@ -102,6 +102,10 @@ public final class DeleteOperator implements Operator, Serializable
 	@Override
 	public void close() throws Exception
 	{
+		cols2Pos = null;
+		cols2Types = null;
+		pos2Col = null;
+		map = null;
 		child.close();
 	}
 

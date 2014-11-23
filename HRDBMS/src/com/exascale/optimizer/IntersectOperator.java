@@ -76,6 +76,8 @@ public final class IntersectOperator implements Operator, Serializable
 			set.close();
 		}
 		
+		sets = null;
+		
 		for (Operator o : children)
 		{
 			o.close();
@@ -85,6 +87,10 @@ public final class IntersectOperator implements Operator, Serializable
 		{
 			buffer.close();
 		}
+		
+		cols2Pos = null;
+		cols2Types = null;
+		pos2Col = null;
 	}
 
 	@Override

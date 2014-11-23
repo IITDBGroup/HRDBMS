@@ -367,8 +367,8 @@ public final class ResourceManager extends HRDBMSThread
 
 	public static final class DiskBackedALOHashMap<V>
 	{
-		private final DiskBackedHashMap keys;
-		private final DiskBackedHashMap values;
+		private DiskBackedHashMap keys;
+		private DiskBackedHashMap values;
 
 		public DiskBackedALOHashMap(int size)
 		{
@@ -382,6 +382,8 @@ public final class ResourceManager extends HRDBMSThread
 			{
 				keys.close();
 				values.close();
+				keys = null;
+				values = null;
 			}
 			catch (final Exception e)
 			{
@@ -598,6 +600,7 @@ public final class ResourceManager extends HRDBMSThread
 		public void close() throws IOException
 		{
 			internal.close();
+			internal = null;
 		}
 
 		public boolean contains(Object val) throws Exception
@@ -681,15 +684,15 @@ public final class ResourceManager extends HRDBMSThread
 
 	public static final class DiskBackedHashMap extends DiskBackedCollection
 	{
-		private final InternalConcurrentHashMap internal;
+		private InternalConcurrentHashMap internal;
 
 		private final AtomicLong size = new AtomicLong(0);
 
 		private volatile ArrayList<FileChannel> ofcs = new ArrayList<FileChannel>(TEMP_DIRS.size());
 
-		private final ArrayList<AtomicLong> ofcSizes = new ArrayList<AtomicLong>(TEMP_DIRS.size());
+		private ArrayList<AtomicLong> ofcSizes = new ArrayList<AtomicLong>(TEMP_DIRS.size());
 		private volatile ArrayList<Vector<FileChannel>> ifcsArrayList = new ArrayList<Vector<FileChannel>>(TEMP_DIRS.size());
-		private final ArrayList<Vector<Boolean>> locksArrayList = new ArrayList<Vector<Boolean>>(TEMP_DIRS.size());
+		private ArrayList<Vector<Boolean>> locksArrayList = new ArrayList<Vector<Boolean>>(TEMP_DIRS.size());
 		public final ReadWriteLock lock = new ReentrantReadWriteLock();
 		private final boolean indexed;
 		private volatile ReverseConcurrentHashMap valueIndex;
@@ -808,16 +811,38 @@ public final class ResourceManager extends HRDBMSThread
 						//id + ".tmp failed");
 					}
 				}
+				
+				filesAllocated = false;
 			}
 
 			collections.remove(this);
 
-			internal.clear();
+			if (internal != null)
+			{
+				internal.clear();
+			}
 			if (indexed)
 			{
-				valueIndex.clear();
-				diskValueIndex.close();
+				if (valueIndex != null)
+				{
+					valueIndex.clear();
+				}
+				
+				if (diskValueIndex != null)
+				{
+					diskValueIndex.close();
+				}
 			}
+			
+			internal = null;
+			ofcs = null;
+			ofcSizes = null;
+			ifcsArrayList = null;
+			locksArrayList = null;
+			valueIndex = null;
+			diskValueIndex = null;
+			index = null;
+			rafs = null;
 		}
 
 		public boolean containsValue(Object val) throws Exception
@@ -2284,6 +2309,8 @@ public final class ResourceManager extends HRDBMSThread
 		public void close() throws IOException
 		{
 			internal.close();
+			internal = null;
+			internal2 = null;
 		}
 
 		public boolean contains(Object val) throws Exception

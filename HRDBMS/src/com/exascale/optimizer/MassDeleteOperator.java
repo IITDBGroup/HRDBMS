@@ -89,6 +89,9 @@ public final class MassDeleteOperator implements Operator, Serializable
 	@Override
 	public void close() throws Exception
 	{
+		cols2Pos = null;
+		cols2Types = null;
+		pos2Col = null;
 	}
 
 	@Override

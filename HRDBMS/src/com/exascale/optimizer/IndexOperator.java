@@ -73,6 +73,9 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 	public void close() throws Exception
 	{
 		index.close();
+		cols2Pos = null;
+		cols2Types = null;
+		pos2Col = null;
 	}
 
 	@Override

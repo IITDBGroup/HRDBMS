@@ -40,7 +40,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	protected HashMap<Operator, ObjectOutputStream> objOuts = new HashMap<Operator, ObjectOutputStream>();
 
 	protected BufferedLinkedBlockingQueue outBuffer;
-	private final ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
+	private ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
 	protected volatile boolean fullyStarted = false;
 	protected AtomicLong readCounter = new AtomicLong(0);
 	protected AtomicLong bytes = new AtomicLong(0);
@@ -104,26 +104,40 @@ public class NetworkReceiveOperator implements Operator, Serializable
 		{
 			objOut.close();
 		}
+		
+		objOuts = null;
 
 		for (final OutputStream out : outs.values())
 		{
 			out.close();
 		}
+		
+		outs = null;
 
 		for (final InputStream in : ins.values())
 		{
 			in.close();
 		}
+		
+		ins = null;
 
 		for (final CompressedSocket sock : socks.values())
 		{
 			sock.close();
 		}
 		
+		socks = null;
+		
 		if (outBuffer != null)
 		{
 			outBuffer.close();
 		}
+		
+		outBuffer = null;
+		cols2Types = null;
+		cols2Pos = null;
+		pos2Col = null;
+		threads = null;
 	}
 
 	@Override
@@ -549,7 +563,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 					try
 					{
 						thread.join();
-						HRDBMSWorker.logger.debug("NetworkReceiveOperator: " + ((bytes.get() / ((System.currentTimeMillis() - start) / 1000.0)) / (1024.0 * 1024.0)) + "MB/sec");
+						//HRDBMSWorker.logger.debug("NetworkReceiveOperator: " + ((bytes.get() / ((System.currentTimeMillis() - start) / 1000.0)) / (1024.0 * 1024.0)) + "MB/sec");
 						break;
 					}
 					catch (final InterruptedException e)

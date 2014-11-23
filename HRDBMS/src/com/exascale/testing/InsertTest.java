@@ -37,6 +37,38 @@ private static Connection conn;
 			}
 		}
 		
+		i = 0;
+		while (i < 30000)
+		{
+			stmt.executeUpdate("UPDATE JASON.TEST1 SET COL2 = " + random.nextInt() + " WHERE COL1 = " + i);
+			i++;
+			if (i % 100 == 0)
+			{
+				System.out.println(i);
+				
+				if (i % 10000 == 0)
+				{
+					conn.commit();
+				}
+			}
+		}
+		
+		i = 0;
+		while (i < 30000)
+		{
+			stmt.executeUpdate("DELETE FROM JASON.TEST1 WHERE COL1 = " + i);
+			i++;
+			if (i % 100 == 0)
+			{
+				System.out.println(i);
+				
+				if (i % 10000 == 0)
+				{
+					conn.commit();
+				}
+			}
+		}
+		
 		stmt.close();
 		conn.close();
 		long end = System.currentTimeMillis();

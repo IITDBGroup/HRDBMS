@@ -93,6 +93,11 @@ public final class UnionOperator implements Operator, Serializable
 		{
 			buffer.close();
 		}
+		
+		threads = null;
+		cols2Pos = null;
+		cols2Types = null;
+		pos2Col = null;
 	}
 
 	@Override

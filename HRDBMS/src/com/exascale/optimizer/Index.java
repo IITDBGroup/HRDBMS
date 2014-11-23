@@ -36,19 +36,19 @@ public final class Index implements Serializable
 {
 	private String fileName;
 
-	private final ArrayList<String> keys;
-	private final ArrayList<String> types;
-	private final ArrayList<Boolean> orders;
+	private ArrayList<String> keys;
+	private ArrayList<String> types;
+	private ArrayList<Boolean> orders;
 	private Filter f;
 	private ArrayList<Filter> secondary = new ArrayList<Filter>();
 	private boolean positioned = false;
-	private final ArrayListLong ridList = new ArrayListLong();
+	private ArrayListLong ridList = new ArrayListLong();
 	private String col;
 	private String op;
 	private ArrayList<Filter> terminates = new ArrayList<Filter>();
 	private IndexRecord line;
 	// private MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
-	private final HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
+	private HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
 	private int count = 0;
 	private boolean indexOnly = false;
 	private ArrayList<Integer> fetches = new ArrayList<Integer>();
@@ -411,6 +411,21 @@ public final class Index implements Serializable
 		{
 			queue.close();
 		}
+		
+		keys = null;
+		types = null;
+		orders = null;
+		fetches = null;
+		secondary = null;
+		fetchTypes = null;
+		iwt = null;
+		ridList = null;
+		terminates = null;row = null;
+		myPages = null;
+		line = null;
+		delayedConditions = null;
+		renames = null;
+		cols2Pos = null;
 	}
 
 	public boolean contains(String col)

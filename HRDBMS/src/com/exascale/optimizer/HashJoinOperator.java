@@ -52,12 +52,12 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 	private int node;
 	private boolean indexAccess = false;
 	private ArrayList<Index> dynamicIndexes;
-	private final ArrayList<ArrayList<Object>> queuedRows = new ArrayList<ArrayList<Object>>();
+	private ArrayList<ArrayList<Object>> queuedRows = new ArrayList<ArrayList<Object>>();
 	private final MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
 	private int rightChildCard = 16;
 	private boolean cardSet = false;
-	private final Vector<Operator> clones = new Vector<Operator>();
-	private final Vector<AtomicBoolean> lockVector = new Vector<AtomicBoolean>();
+	private Vector<Operator> clones = new Vector<Operator>();
+	private Vector<AtomicBoolean> lockVector = new Vector<AtomicBoolean>();
 	private final ReentrantLock thisLock = new ReentrantLock();
 	private transient Plan plan;
 	
@@ -224,6 +224,18 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		{
 			outBuffer.close();
 		}
+		
+		lefts = null;
+		rights = null;
+		cnfFilters = null;
+		f = null;
+		dynamicIndexes = null;
+		queuedRows = null;
+		clones = null;
+		lockVector = null;
+		cols2Pos = null;
+		cols2Types = null;
+		pos2Col = null;
 	}
 
 	@Override

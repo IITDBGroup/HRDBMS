@@ -16,8 +16,8 @@ import com.exascale.tables.Plan;
 public final class CaseOperator implements Operator, Serializable
 {
 	private final MetaData meta;
-	private final ArrayList<HashSet<HashMap<Filter, Filter>>> filters;
-	private final ArrayList<Object> results;
+	private ArrayList<HashSet<HashMap<Filter, Filter>>> filters;
+	private ArrayList<Object> results;
 	private Operator child = null;
 	private Operator parent;
 	private HashMap<String, String> cols2Types;
@@ -26,8 +26,8 @@ public final class CaseOperator implements Operator, Serializable
 	private final String name;
 	private final String type;
 	// private MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
-	private final ArrayList<String> origResults;
-	private final ArrayList<String> references = new ArrayList<String>();
+	private ArrayList<String> origResults;
+	private ArrayList<String> references = new ArrayList<String>();
 	private int node;
 	private transient Plan plan;
 	
@@ -143,6 +143,13 @@ public final class CaseOperator implements Operator, Serializable
 	@Override
 	public void close() throws Exception
 	{
+		filters = null;
+		results = null;
+		origResults = null;
+		references = null;
+		cols2Pos = null;
+		cols2Types = null;
+		pos2Col = null;
 		child.close();
 	}
 

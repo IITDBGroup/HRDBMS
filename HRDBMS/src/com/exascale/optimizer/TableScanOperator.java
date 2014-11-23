@@ -45,13 +45,13 @@ public final class TableScanOperator implements Operator, Serializable
 	private TreeMap<Integer, String> pos2Col = new TreeMap<Integer, String>();
 	private final String name;
 	private final String schema;
-	private final ArrayList<String> ins = new ArrayList<String>();
+	private ArrayList<String> ins = new ArrayList<String>();
 	private final ArrayList<Operator> parents = new ArrayList<Operator>();
 	public volatile BufferedLinkedBlockingQueue readBuffer;
 	private volatile HashMap<Operator, BufferedLinkedBlockingQueue> readBuffers = new HashMap<Operator, BufferedLinkedBlockingQueue>();
 	private boolean startDone = false;
 	private boolean optimize = false;
-	private final HashMap<Operator, HashSet<HashMap<Filter, Filter>>> filters = new HashMap<Operator, HashSet<HashMap<Filter, Filter>>>();
+	private HashMap<Operator, HashSet<HashMap<Filter, Filter>>> filters = new HashMap<Operator, HashSet<HashMap<Filter, Filter>>>();
 	HashMap<Operator, CNFFilter> orderedFilters = new HashMap<Operator, CNFFilter>();
 	private final MetaData meta;
 	private final HashMap<Operator, Operator> opParents = new HashMap<Operator, Operator>();
@@ -61,15 +61,15 @@ public final class TableScanOperator implements Operator, Serializable
 	private HashMap<String, String> midCols2Types;
 	private boolean set = false;
 	private PartitionMetaData partMeta;
-	private final HashMap<Operator, ArrayList<Integer>> activeDevices = new HashMap<Operator, ArrayList<Integer>>();
-	private final HashMap<Operator, ArrayList<Integer>> activeNodes = new HashMap<Operator, ArrayList<Integer>>();
+	private HashMap<Operator, ArrayList<Integer>> activeDevices = new HashMap<Operator, ArrayList<Integer>>();
+	private HashMap<Operator, ArrayList<Integer>> activeNodes = new HashMap<Operator, ArrayList<Integer>>();
 	private ArrayList<Integer> devices = new ArrayList<Integer>();
 	private int node;
 	private boolean phase2Done = false;
 	public HashMap<Integer, Operator> device2Child = new HashMap<Integer, Operator>();
-	private final ArrayList<Operator> children = new ArrayList<Operator>();
-	private final ArrayList<String> randomIns = new ArrayList<String>();
-	private final HashMap<String, Integer> ins2Device = new HashMap<String, Integer>();
+	private ArrayList<Operator> children = new ArrayList<Operator>();
+	private ArrayList<String> randomIns = new ArrayList<String>();
+	private HashMap<String, Integer> ins2Device = new HashMap<String, Integer>();
 	private boolean indexOnly = false;
 	private volatile boolean forceDone = false;
 	private static int PREFETCH_REQUEST_SIZE;
@@ -238,7 +238,7 @@ public final class TableScanOperator implements Operator, Serializable
 		list.add(i);
 	}
 
-	public void addFilter(ArrayList<Filter> filters, Operator op, Operator opParent) throws Exception
+	public void addFilter(ArrayList<Filter> filters, Operator op, Operator opParent, Transaction tx) throws Exception
 	{
 		opParents.put(opParent, op);
 
@@ -264,9 +264,9 @@ public final class TableScanOperator implements Operator, Serializable
 
 				f.add(map);
 				this.filters.put(op, f);
-				Transaction t = new Transaction(Transaction.ISOLATION_RR);
-				orderedFilters.put(op, new CNFFilter(f, meta, cols2Pos, t, this));
-				t.commit();
+				//Transaction t = new Transaction(Transaction.ISOLATION_RR);
+				orderedFilters.put(op, new CNFFilter(f, meta, cols2Pos, tx, this));
+				//t.commit();
 				return;
 			}
 		}
@@ -409,6 +409,27 @@ public final class TableScanOperator implements Operator, Serializable
 				readBuffer.close();
 			}
 		}
+		
+		ins = null;
+		neededPos = null;
+		activeDevices = null;
+		randomIns = null;
+		tablePos2Col = null;
+		readBuffers = null;
+		fetchPos = null;
+		activeNodes = null;
+		ins2Device = null;
+		tableCols2Pos = null;
+		filters = null;
+		midPos2Col = null;
+		devices = null;
+		tableCols2Types = null;
+		orderedFilters = null;
+		midCols2Types = null;
+		device2Child = null;
+		cols2Pos = null;
+		cols2Types = null;
+		pos2Col = null;
 	}
 
 	public boolean deviceIsHash()

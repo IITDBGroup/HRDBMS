@@ -116,6 +116,16 @@ public final class UpdateOperator implements Operator, Serializable
 	@Override
 	public void close() throws Exception
 	{
+		map = null;
+		map2 = null;
+		cols2Pos = null;
+		cols2Types = null;
+		pos2Col = null;
+		cols = null;
+		buildList = null;
+		keys = null;
+		types = null;
+		orders = null;
 		child.close();
 	}
 

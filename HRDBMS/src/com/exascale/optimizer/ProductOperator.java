@@ -129,6 +129,10 @@ public final class ProductOperator extends JoinOperator implements Serializable
 		{
 			outBuffer.close();
 		}
+		
+		cols2Pos = null;
+		cols2Types = null;
+		pos2Col = null;
 	}
 
 	@Override

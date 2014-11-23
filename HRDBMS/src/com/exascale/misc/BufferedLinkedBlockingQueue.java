@@ -14,8 +14,8 @@ import com.exascale.optimizer.MultiOperator.AggregateThread;
 public final class BufferedLinkedBlockingQueue implements Serializable
 {
 	public static int BLOCK_SIZE;
-	private final ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal = new ConcurrentHashMap<Thread, ArrayAndIndex>(64 * ResourceManager.cpus, 1.0f);
-	private final ConcurrentHashMap<Thread, ArrayAndIndex> receives = new ConcurrentHashMap<Thread, ArrayAndIndex>(64 * ResourceManager.cpus, 1.0f);
+	private ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal = new ConcurrentHashMap<Thread, ArrayAndIndex>(64 * ResourceManager.cpus, 1.0f);
+	private ConcurrentHashMap<Thread, ArrayAndIndex> receives = new ConcurrentHashMap<Thread, ArrayAndIndex>(64 * ResourceManager.cpus, 1.0f);
 	private volatile ArrayBlockingQueue q;
 	private static Vector<ArrayBlockingQueue> free = new Vector<ArrayBlockingQueue>();
 	private static int RETRY_TIME;
@@ -50,8 +50,10 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 	{
 		ArrayBlockingQueue temp = q;
 		q = null;
-		receives.clear();
-		threadLocal.clear();
+		///receives.clear();
+		//threadLocal.clear();
+		receives = null;
+		threadLocal = null;
 		temp.clear();
 		free.add(temp);
 	}
@@ -83,29 +85,36 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 		return oa.peek();
 	}
 
-	public void put(Object o) throws Exception
+	public void put(Object o)
 	{
-		if (o == null)
+		try
 		{
-			Exception e = new Exception("Null object placed on queue");
-			HRDBMSWorker.logger.error("Null object placed on queue", e);
-			throw e;
-		}
+			if (o == null)
+			{
+				Exception e = new Exception("Null object placed on queue");
+				HRDBMSWorker.logger.error("Null object placed on queue", e);
+				return;
+			}
 		
-		if (o instanceof ArrayList && ((ArrayList)o).size() == 0)
-		{
-			HRDBMSWorker.logger.debug("ArrayList of size zero was placed on queue");
-			throw new Exception("ArrayList of size zero was placed on queue");
-		}
+			if (o instanceof ArrayList && ((ArrayList)o).size() == 0)
+			{
+				HRDBMSWorker.logger.debug("ArrayList of size zero was placed on queue");
+				return;
+			}
 		
-		ArrayAndIndex oa = threadLocal.get(Thread.currentThread());
-		if (oa == null)
-		{
-			oa = new ArrayAndIndex();
-			threadLocal.put(Thread.currentThread(), oa);
-		}
+			ArrayAndIndex oa = threadLocal.get(Thread.currentThread());
+			if (oa == null)
+			{
+				oa = new ArrayAndIndex();
+				threadLocal.put(Thread.currentThread(), oa);
+			}
 
-		oa.put(o, threadLocal);
+			oa.put(o, threadLocal);
+		}
+		catch(Exception e)
+		{
+			HRDBMSWorker.logger.debug("", e);
+		}
 	}
 
 	public Object take() throws Exception

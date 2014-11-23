@@ -13,7 +13,7 @@ import com.exascale.tables.Transaction;
 public final class SelectOperator implements Operator, Cloneable, Serializable
 {
 	private final MetaData meta;
-	private final ArrayList<Filter> filters;
+	private ArrayList<Filter> filters;
 	private Operator child = null;
 	private Operator parent;
 	private HashMap<String, String> cols2Types;
@@ -21,7 +21,7 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 	private TreeMap<Integer, String> pos2Col;
 	private AtomicLong passed = new AtomicLong(0);
 	private AtomicLong total = new AtomicLong(0);
-	private final ArrayList<String> references = new ArrayList<String>();
+	private ArrayList<String> references = new ArrayList<String>();
 	private int node;
 	private transient Plan plan;
 	private boolean hash = false;
@@ -208,6 +208,12 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 	@Override
 	public void close() throws Exception
 	{
+		cols2Pos = null;
+		cols2Types = null;
+		pos2Col = null;
+		filters = null;
+		references = null;
+		hashSet = null;
 		child.close();
 	}
 

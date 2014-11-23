@@ -92,6 +92,8 @@ public final class ExceptOperator implements Operator, Serializable
 				set.getArray().close();
 				set.close();
 			}
+			
+			sets = null;
 		}
 		catch(Exception e)
 		{}
@@ -105,6 +107,10 @@ public final class ExceptOperator implements Operator, Serializable
 		{
 			buffer.close();
 		}
+		
+		cols2Pos = null;
+		cols2Types = null;
+		pos2Col = null;
 	}
 
 	@Override

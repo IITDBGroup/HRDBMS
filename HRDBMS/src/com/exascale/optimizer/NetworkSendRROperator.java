@@ -13,8 +13,8 @@ import com.exascale.misc.DataEndMarker;
 public final class NetworkSendRROperator extends NetworkSendOperator
 {
 	private final int id;
-	private final ConcurrentHashMap<Integer, CompressedSocket> connections = new ConcurrentHashMap<Integer, CompressedSocket>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
-	private final ConcurrentHashMap<Integer, OutputStream> outs = new ConcurrentHashMap<Integer, OutputStream>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
+	private ConcurrentHashMap<Integer, CompressedSocket> connections = new ConcurrentHashMap<Integer, CompressedSocket>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
+	private ConcurrentHashMap<Integer, OutputStream> outs = new ConcurrentHashMap<Integer, OutputStream>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
 	private final ArrayList<Operator> parents = new ArrayList<Operator>();
 	private boolean error;
 	private String errorText;
@@ -82,6 +82,10 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 			{
 			}
 		}
+		
+		connections = null;
+		outs = null;
+		super.close();
 	}
 
 	public int getID()

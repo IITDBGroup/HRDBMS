@@ -151,6 +151,10 @@ public final class ReorderOperator implements Operator, Serializable
 	@Override
 	public void close() throws Exception
 	{
+		cols2Pos = null;
+		cols2Types = null;
+		pos2Col = null;
+		order = null;
 		child.close();
 	}
 

@@ -26,7 +26,7 @@ public final class MultiOperator implements Operator, Serializable
 
 	private TreeMap<Integer, String> pos2Col;
 	private final MetaData meta;
-	private final ArrayList<AggregateOperator> ops;
+	private ArrayList<AggregateOperator> ops;
 	private ArrayList<String> groupCols;
 	private static final int ATHREAD_QUEUE_SIZE = BufferedLinkedBlockingQueue.BLOCK_SIZE < 1000 ? 1000 : BufferedLinkedBlockingQueue.BLOCK_SIZE;
 	private volatile BufferedLinkedBlockingQueue inFlight;
@@ -195,6 +195,12 @@ public final class MultiOperator implements Operator, Serializable
 		{
 			readBuffer.close();
 		}
+		
+		ops = null;
+		groupCols = null;
+		cols2Pos = null;
+		cols2Types = null;
+		pos2Col = null;
 	}
 
 	public String getAvgCol()
