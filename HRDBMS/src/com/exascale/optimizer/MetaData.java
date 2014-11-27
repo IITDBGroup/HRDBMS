@@ -2263,6 +2263,23 @@ public final class MetaData implements Serializable
 	{
 		return nodeTable.get(node);
 	}
+	
+	public static ArrayList<Boolean> getUnique(String schema, String table, Transaction tx) throws Exception
+	{
+		ArrayList<Boolean> retval = new ArrayList<Boolean>();
+		ArrayList<Object> rs = PlanCacheManager.getUnique().setParms(schema, table).execute(tx);
+		for (Object o : rs)
+		{
+			if (!(o instanceof DataEndMarker))
+			{
+				ArrayList<Object> row = (ArrayList<Object>)o;
+				boolean unique = (((String)row.get(1)).equals("Y"));
+				retval.add(unique);
+			}
+		}
+		
+		return retval;
+	}
 
 	public ArrayList<Index> getIndexesForTable(String schema, String table, Transaction tx) throws Exception
 	{

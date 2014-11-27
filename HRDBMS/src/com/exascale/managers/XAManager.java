@@ -241,6 +241,11 @@ public class XAManager extends HRDBMSThread
 				checkpoint = true;
 				checkpointNodes.addAll(getLoadNodes(p, tx));
 			}
+			else if (containsPop(p))
+			{
+				checkpoint = true;
+				checkpointNodes.addAll(getPopNodes(p, tx));
+			}
 		}
 		sendCommits(tree, tx);
 		
@@ -1022,7 +1027,27 @@ public class XAManager extends HRDBMSThread
 		{
 			Transaction tx2 = new Transaction(Transaction.ISOLATION_CS);
 			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx2);
-			sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			int i = 0;
+			while (i < 5)
+			{
+				try
+				{
+					sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					break;
+				}
+				catch(Exception e)
+				{
+					HRDBMSWorker.logger.debug(hostname, e);
+					Thread.sleep(5000);
+					i++;
+				}
+			}
+			
+			if (sock == null)
+			{
+				throw new Exception("Unable to connect to " + hostname + " after 5 tries");
+			}
+					
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "LCOMMIT         ".getBytes("UTF-8");
 			outMsg[8] = 0;
@@ -1209,9 +1234,32 @@ public class XAManager extends HRDBMSThread
 		return false;
 	}
 	
+	private static boolean containsPop(Plan p)
+	{
+		for (Operator o : p.getTrees())
+		{
+			if (containsPop(o))
+			{
+				return true;
+			}
+		}
+		
+		return false;
+	}
+	
 	private static boolean containsLoad(Operator o)
 	{
 		if (o instanceof LoadOperator)
+		{
+			return true;
+		}
+		
+		return false;
+	}
+	
+	private static boolean containsPop(Operator o)
+	{
+		if (o instanceof CreateIndexOperator)
 		{
 			return true;
 		}
@@ -1227,6 +1275,20 @@ public class XAManager extends HRDBMSThread
 			if (o instanceof LoadOperator)
 			{
 				retval.addAll(getLoadNodes(o, tx));
+			}
+		}
+		
+		return retval;
+	}
+	
+	private static ArrayList<Integer> getPopNodes(Plan p, Transaction tx) throws Exception
+	{
+		ArrayList<Integer> retval = new ArrayList<Integer>();
+		for (Operator o : p.getTrees())
+		{
+			if (o instanceof CreateIndexOperator)
+			{
+				retval.addAll(getPopNodes(o, tx));
 			}
 		}
 		
@@ -1329,6 +1391,16 @@ public class XAManager extends HRDBMSThread
 		ArrayList<Integer> retval = new ArrayList<Integer>();
 		Transaction tx2 = new Transaction(Transaction.ISOLATION_CS);
 		LoadOperator op = (LoadOperator)o;
+		retval.addAll(MetaData.getNodesForTable(op.getSchema(), op.getTable(), tx2));
+		tx2.commit();
+		return retval;
+	}
+	
+	private static ArrayList<Integer> getPopNodes(Operator o, Transaction tx) throws Exception
+	{
+		ArrayList<Integer> retval = new ArrayList<Integer>();
+		Transaction tx2 = new Transaction(Transaction.ISOLATION_CS);
+		CreateIndexOperator op = (CreateIndexOperator)o;
 		retval.addAll(MetaData.getNodesForTable(op.getSchema(), op.getTable(), tx2));
 		tx2.commit();
 		return retval;

@@ -7,6 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.PriorityBlockingQueue;
 import com.exascale.optimizer.MetaData;
 import com.exascale.tasks.DeleteFilesTask;
+import com.exascale.tasks.InitReorgTask;
 import com.exascale.tasks.InitRunstatsTask;
 import com.exascale.tasks.Task;
 import com.exascale.threads.HRDBMSThread;
@@ -16,18 +17,11 @@ public class MaintenanceManager extends HRDBMSThread
 	private MetaData meta = new MetaData();
 	private static PriorityBlockingQueue<Task> tasks = new PriorityBlockingQueue<Task>();
 	public static ConcurrentHashMap<String, String> failed = new ConcurrentHashMap<String, String>();
+	public static ConcurrentHashMap<String, String> reorgFailed = new ConcurrentHashMap<String, String>();
 	private transient static long busyTill = -1;
 	
 	public MaintenanceManager() throws Exception
 	{
-		long now = System.currentTimeMillis();
-		schedule(new InitRunstatsTask(), now + 24 * 60 * 60 * 1000);
-		
-		if (meta.myCoordNum() * -1 - 2 < 3)
-		{
-			schedule(new DeleteFilesTask(), now + Integer.parseInt(HRDBMSWorker.getHParms().getProperty("old_file_cleanup_target_days")) * 24 * 60 * 60 * 1000);
-		}
-		
 		try
 		{
 			Class.forName("com.exascale.client.HRDBMSDriver");
@@ -36,6 +30,15 @@ public class MaintenanceManager extends HRDBMSThread
 		{
 			HRDBMSWorker.logger.error("Unable to load HRDBMS driver!");
 			System.exit(1);
+		}
+		
+		long now = System.currentTimeMillis();
+		schedule(new InitRunstatsTask(), now + 24 * 60 * 60 * 1000);
+		schedule(new InitReorgTask(), now + 24 * 60 * 60 * 1000);
+		
+		if (meta.myCoordNum() * -1 - 2 < 3)
+		{
+			schedule(new DeleteFilesTask(), now + Integer.parseInt(HRDBMSWorker.getHParms().getProperty("old_file_cleanup_target_days")) * 24 * 60 * 60 * 1000);
 		}
 	}
 	

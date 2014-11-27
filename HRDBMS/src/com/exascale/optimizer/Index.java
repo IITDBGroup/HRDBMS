@@ -104,6 +104,21 @@ public final class Index implements Serializable
 		return isUniqueVar;
 	}
 	
+	public ArrayList<String> getKeys()
+	{
+		return keys;
+	}
+	
+	public ArrayList<String> getTypes()
+	{
+		return types;
+	}
+	
+	public ArrayList<Boolean> getOrders()
+	{
+		return orders;
+	}
+	
 	private boolean reallyViolatesUniqueConstraint(FieldValue[] keys) throws Exception
 	{
 		IndexRecord line2 = line;
@@ -224,6 +239,30 @@ public final class Index implements Serializable
 			if (!line.isTombstone())
 			{
 				line.markTombstone();
+			}
+			
+			line = line.nextRecord(true);
+		}
+	}
+	
+	public void massDeleteNoLog() throws Exception
+	{
+		seek(13);
+		line = new IndexRecord(fileName, offset, tx, true);
+		if (line.p.getInt(line.off + 5) == 0)
+		{
+			return;
+		}
+		while (!line.isLeaf())
+		{
+			line = line.getDown(0, true);
+		}
+		
+		while (!line.isNull())
+		{
+			if (!line.isTombstone())
+			{
+				line.markTombstoneNoLog();
 			}
 			
 			line = line.nextRecord(true);
@@ -1844,6 +1883,14 @@ public final class Index implements Serializable
 			after[0] = (byte)2;
 			DeleteLogRec rec = tx.delete(before, after, off+0, p.block());
 			p.write(off+0, after, tx.number(), rec.lsn());
+		}
+		
+		public void markTombstoneNoLog() throws Exception
+		{
+			byte[] after = new byte[1];
+			after[0] = (byte)2;
+			long lsn = LogManager.getLSN();
+			p.write(off+0, after, tx.number(), lsn);
 		}
 		
 		private int getPageFreeBytes()

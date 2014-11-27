@@ -316,16 +316,16 @@ public class LogManager extends HRDBMSThread
 		synchronized (noArchiveLock)
 		{
 			HashMap<BlockAndTransaction, ArrayList<LogRec>> toWrite = new HashMap<BlockAndTransaction, ArrayList<LogRec>>();
-			LinkedList<LogRec> ordered = new LinkedList<LogRec>();
+			TreeMap<LogRec, LogRec> ordered = new TreeMap<LogRec, LogRec>();
 			final FileChannel fc = getFile(fn);
-			synchronized (list)
+			synchronized (Transaction.txList)
 			{
 				while (list.size() > 0)
 				{
 					LogRec rec = list.getFirst();
 					if (rec.lsn() <= lsn)
 					{
-						ordered.add(rec);
+						ordered.put(rec, rec);
 						if (rec.type() == LogRec.INSERT)
 						{
 							InsertLogRec ins = (InsertLogRec)rec;
@@ -380,7 +380,6 @@ public class LogManager extends HRDBMSThread
 			try
 			{
 				//consolidate stuff in toWrite
-				HashSet<LogRec> fastRemove = new HashSet<LogRec>(ordered);
 				for (Map.Entry<BlockAndTransaction, ArrayList<LogRec>> entry: toWrite.entrySet())
 				{
 					ArrayList<LogRec> value = entry.getValue();
@@ -398,17 +397,17 @@ public class LogManager extends HRDBMSThread
 					}
 				
 					ArrayList<LogRec> recs = regions.generateLogRecs();
+					
 					for (LogRec rec : recs)
 					{
-						int index = ordered.indexOf(rec);
-						ordered.remove(index);
-						ordered.add(index, rec);
+						ordered.remove(rec);
+						ordered.put(rec, rec);
 					}
 				
 					recs = regions.generateRemovals();
 					for (LogRec rec : recs)
 					{
-						fastRemove.remove(rec);
+						ordered.remove(rec);
 					}
 				}
 				
@@ -416,25 +415,19 @@ public class LogManager extends HRDBMSThread
 				{
 					fc.position(fc.size());
 					int total = 0;
-					for (LogRec rec : ordered)
+					for (LogRec rec : ordered.keySet())
 					{
-						if (fastRemove.contains(rec))
-						{
-							total += (8 + rec.buffer().limit());
-						}
+						total += (8 + rec.buffer().limit());
 					}
 						
 					final ByteBuffer size = ByteBuffer.allocate(total);
 					size.position(0);
-					for (LogRec rec : ordered)
+					for (LogRec rec : ordered.keySet())
 					{
-						if (fastRemove.contains(rec))
-						{
-							size.putInt(rec.size());
-							rec.buffer().position(0);
-							size.put(rec.buffer());
-							size.putInt(rec.size());
-						}
+						size.putInt(rec.size());
+						rec.buffer().position(0);
+						size.put(rec.buffer());
+						size.putInt(rec.size());
 					}
 						
 					size.position(0);
@@ -505,7 +498,7 @@ public class LogManager extends HRDBMSThread
 		}
 		
 		LogRec last = null;
-		synchronized(list)
+		synchronized (Transaction.txList)
 		{
 			last = list.peekLast();
 		}
@@ -659,17 +652,14 @@ public class LogManager extends HRDBMSThread
 
 	public static long write(LogRec rec, String fn)
 	{
+		final ArrayDeque<LogRec> list = logs.get(fn);
 		synchronized (Transaction.txList)
 		{
 			rec.setTimeStamp(System.currentTimeMillis());
-			final ArrayDeque<LogRec> list = logs.get(fn);
 			long retval;
 			retval = getLSN();
 			rec.setLSN(retval);
-			synchronized (list)
-			{
-				list.add(rec);
-			}
+			list.add(rec);
 			return retval;
 		}
 	}
@@ -682,7 +672,7 @@ public class LogManager extends HRDBMSThread
 	public static void writeStartRecIfNeeded(long txnum)
 	{
 		ArrayDeque<LogRec> list = logs.get(filename);
-		synchronized(list)
+		synchronized (Transaction.txList)
 		{
 			for (LogRec rec : list)
 			{
@@ -717,7 +707,7 @@ public class LogManager extends HRDBMSThread
 	public static void writeStartRecIfNeeded(long txnum, String filename)
 	{
 		ArrayDeque<LogRec> list = logs.get(filename);
-		synchronized(list)
+		synchronized (Transaction.txList)
 		{
 			for (LogRec rec : list)
 			{
@@ -765,7 +755,7 @@ public class LogManager extends HRDBMSThread
 		while (fn != null)
 		{
 			final ArrayDeque<LogRec> list = logs.get(fn);
-			synchronized (list)
+			synchronized (Transaction.txList)
 			{
 				final Iterator<LogRec> iter = iterator(fn, false);
 				while (iter.hasNext())
@@ -1010,7 +1000,7 @@ public class LogManager extends HRDBMSThread
 				final ArrayDeque<LogRec> list = entry.getValue();
 				final String fn = entry.getKey();
 				LogRec last = null;
-				synchronized(list)
+				synchronized (Transaction.txList)
 				{
 					last = list.peekLast();
 				}
@@ -1109,7 +1099,7 @@ public class LogManager extends HRDBMSThread
 				if (list != null)
 				{
 					LogRec last = null;
-					synchronized(list)
+					synchronized (Transaction.txList)
 					{
 						last = list.peekLast();
 					}
@@ -1178,12 +1168,32 @@ public class LogManager extends HRDBMSThread
 				}
 				
 				fc2.position(0);
-				int total = 0;
+				long tot = 0;
 				for (LogRec rec : toKeep)
 				{
-					total += (8 + rec.buffer().limit());
+					tot += (8 + rec.buffer().limit());
 				}
-						
+					
+				int total = 0;
+				if (tot > Integer.MAX_VALUE)
+				{
+					for (LogRec rec : toKeep)
+					{
+						ByteBuffer bb = ByteBuffer.allocate(8 + rec.buffer().limit());
+						bb.putInt(rec.size());
+						rec.buffer().position(0);
+						bb.put(rec.buffer());
+						bb.putInt(rec.size());
+						bb.position(0);
+						fc2.write(bb);
+					}
+					
+					return f;
+				}
+				else
+				{
+					total = (int)tot;
+				}
 				final ByteBuffer size = ByteBuffer.allocate(total);
 				size.position(0);
 				for (LogRec rec : toKeep)

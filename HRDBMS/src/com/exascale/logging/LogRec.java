@@ -8,7 +8,7 @@ import java.util.HashSet;
 import com.exascale.filesystem.Block;
 import com.exascale.managers.HRDBMSWorker;
 
-public class LogRec
+public class LogRec implements Comparable<LogRec>
 {
 	private final int type;
 	private final long txnum;
@@ -319,5 +319,22 @@ public class LogRec
 	public int hashCode()
 	{
 		return new Long(lsn).hashCode();
+	}
+
+	@Override
+	public int compareTo(LogRec arg0)
+	{
+		if (lsn < arg0.lsn)
+		{
+			return -1;
+		}
+		else if (lsn > arg0.lsn)
+		{
+			return 1;
+		}
+		else
+		{
+			return 0;
+		}
 	}
 }

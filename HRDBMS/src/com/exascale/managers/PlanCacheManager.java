@@ -185,12 +185,16 @@ public class PlanCacheManager
 			colOrder.add("B.INDEXNAME");
 			reorder = new ReorderOperator(colOrder, meta);
 			reorder.add(hash);
+			orders = new ArrayList<Boolean>();
+			orders.add(true);
+			SortOperator sort = new SortOperator(colOrder, orders, meta);
+			sort.add(reorder);
 			root = new RootOperator(meta);
-			root.add(reorder);
+			root.add(sort);
 			trees = new ArrayList<Operator>();
 			trees.add(root);
 			p = new Plan(true, trees);
-			addPlan("SELECT INDEXNAME FROM SYS.TABLES A, SYS.INDEXES B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID", p);
+			addPlan("SELECT INDEXNAME FROM SYS.TABLES A, SYS.INDEXES B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID ORDER BY INDEXNAME", p);
 			
 			//getIndexColsForTable
 			meta = new MetaData();
@@ -352,7 +356,7 @@ public class PlanCacheManager
 			sortCols.add("C.POSITION");
 			ArrayList<Boolean> sortOrders = new ArrayList<Boolean>();
 			sortOrders.add(true);
-			SortOperator sort = new SortOperator(sortCols, sortOrders, meta);
+			sort = new SortOperator(sortCols, sortOrders, meta);
 			sort.add(hash3);
 			colOrder = new ArrayList<String>();
 			colOrder.add("B.TABNAME");
@@ -1487,6 +1491,65 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT LENGTH FROM SYS.TABLES A, SYS.COLUMNS B WHERE A.SCHEMA = ? AND B.TABNAME = ? AND A.TABLEID = B.TABLEID AND B.COLNAME = ?", p);
+			
+			//getUnique - get uniqueness?
+			keys = new ArrayList<String>();
+			types = new ArrayList<String>();
+			orders = new ArrayList<Boolean>();
+			keys.add("TABLES.SCHEMA");
+			keys.add("TABLES.TABNAME");
+			types.add("CHAR");
+			types.add("CHAR");
+			orders.add(true);
+			orders.add(true);
+			index = new Index("SYS.PKTABLES.indx", keys, types, orders);
+			iOp = new IndexOperator(index, meta);
+			iOp.setNode(-1);
+			iOp.setDevice(0);
+			tOp = new TableScanOperator("SYS", "TABLES", meta, tx);
+			devs = new ArrayList<Integer>();
+			devs.add(0);
+			tOp.addActiveDevices(devs);
+			tOp.setChildForDevice(0, iOp);
+			tOp.setAlias("A");
+			needed = new ArrayList<String>();
+			needed.add("A.TABLEID");
+			tOp.setNeededCols(needed);
+			tOp.setNode(-1);
+			tOp.setPhase2Done();
+			tOp.add(iOp);
+			tOp2 = new TableScanOperator("SYS", "INDEXES", meta, tx);
+			devs = new ArrayList<Integer>();
+			devs.add(0);
+			tOp2.addActiveDevices(devs);
+			tOp2.setAlias("B");
+			needed = new ArrayList<String>();
+			needed.add("B.TABLEID");
+			needed.add("B.INDEXNAME");
+			needed.add("B.UNIQUE");
+			tOp2.setNeededCols(needed);
+			tOp2.setNode(-1);
+			tOp2.setPhase2Done();
+			hash = new HashJoinOperator("A.TABLEID", "B.TABLEID", meta);
+			hash.add(tOp);
+			hash.add(tOp2);
+			colOrder = new ArrayList<String>();
+			colOrder.add("B.INDEXNAME");
+			colOrder.add("B.UNIQUE");
+			reorder = new ReorderOperator(colOrder, meta);
+			reorder.add(hash);
+			orders = new ArrayList<Boolean>();
+			orders.add(true);
+			ArrayList<String> sortOrder = new ArrayList<String>();
+			sortOrder.add("B.INDEXNAME");
+			sort = new SortOperator(sortOrder, orders, meta);
+			sort.add(reorder);
+			root = new RootOperator(meta);
+			root.add(sort);
+			trees = new ArrayList<Operator>();
+			trees.add(root);
+			p = new Plan(true, trees);
+			addPlan("SELECT INDEXNAME,UNIQUE FROM SYS.TABLES A, SYS.INDEXES B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID ORDER BY INDEXNAME", p);
 			tx.commit();
 			HRDBMSWorker.logger.debug(planCache.toString());
 		}
@@ -1816,7 +1879,12 @@ public class PlanCacheManager
 	
 	public static IndexPlan getIndexes()
 	{
-		return new IndexPlan(checkPlanCache("SELECT INDEXNAME FROM SYS.TABLES A, SYS.INDEXES B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID"));
+		return new IndexPlan(checkPlanCache("SELECT INDEXNAME FROM SYS.TABLES A, SYS.INDEXES B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID ORDER BY INDEXNAME"));
+	}
+	
+	public static UniquePlan getUnique()
+	{
+		return new UniquePlan(checkPlanCache("SELECT INDEXNAME,UNIQUE FROM SYS.TABLES A, SYS.INDEXES B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID ORDER BY INDEXNAME"));
 	}
 	
 	public static HostLookupPlan getHostLookup()
@@ -3161,6 +3229,185 @@ public class PlanCacheManager
 				else if (table.equals("BACKUPS"))
 				{
 					row.add("PKBACKUPS");
+					retval.add(row);
+				}
+				else throw new Exception("Table not found");
+				
+				return retval;
+			}
+			
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1000000);
+			worker.in.put(cmd);
+			
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch(InterruptedException e)
+				{}
+			}
+			
+			ArrayList<Object> retval = new ArrayList<Object>();
+			while (!(obj instanceof DataEndMarker))
+			{
+				if (obj instanceof Exception)
+				{
+					cmd = new ArrayList<Object>(1);
+					cmd.add("CLOSE");
+					worker.in.put(cmd);
+					tx.setIsolationLevel(iso);
+					throw (Exception)obj;
+				}
+				
+				retval.add(obj);
+				
+				while (true)
+				{
+					try
+					{
+						obj = worker.out.take();
+						break;
+					}
+					catch(InterruptedException e)
+					{}
+				}
+			}
+			
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return retval;
+		}
+	}
+	
+	public static class UniquePlan
+	{
+		private Plan p;
+		private String schema;
+		private String table;
+		
+		public UniquePlan(Plan p)
+		{
+			this.p = p;
+		}
+		
+		public UniquePlan setParms(String schema, String table) throws Exception
+		{
+			this.schema = schema;
+			this.table = table;
+			if (schema.equals("SYS"))
+			{
+				return this;
+			}
+			RootOperator root = (RootOperator)p.getTrees().get(0);
+			IndexOperator iOp = (IndexOperator)root.children().get(0).children().get(0).children().get(0).children().get(0);
+			Index index = iOp.getIndex();
+			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
+			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
+			return this;
+		}
+		
+		public ArrayList<Object> execute(Transaction tx) throws Exception
+		{
+			if (schema.equals("SYS"))
+			{
+				ArrayList<Object> retval = new ArrayList<Object>();
+				ArrayList<Object> row = new ArrayList<Object>();
+				if (table.equals("TABLES"))
+				{
+					row.add("PKTABLES");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("INDEXES"))
+				{
+					row.add("PKINDEXES");
+					row.add(true);
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("SKINDEXES");
+					row.add(false);
+					retval.add(row);
+				}
+				else if (table.equals("COLUMNS"))
+				{
+					row.add("PKCOLUMNS");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("INDEXCOLS"))
+				{
+					row.add("PKINDEXCOLS");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("TABLESTATS"))
+				{
+					row.add("PKTABLESTATS");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("COLSTATS"))
+				{
+					row.add("PKCOLSTATS");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("INDEXSTATS"))
+				{
+					row.add("PKINDEXSTATS");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("NODES"))
+				{
+					row.add("PKNODES");
+					row.add(true);
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("SKNODES");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("PARTITIONING"))
+				{
+					row.add("PKPARTITIONING");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("COLDIST"))
+				{
+					row.add("PKCOLDIST");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("NODESTATE"))
+				{
+					row.add("PKNODESTATE");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("VIEWS"))
+				{
+					row.add("PKVIEWS");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("BACKUPS"))
+				{
+					row.add("PKBACKUPS");
+					row.add(true);
 					retval.add(row);
 				}
 				else throw new Exception("Table not found");

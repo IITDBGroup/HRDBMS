@@ -49,6 +49,7 @@ import com.exascale.managers.XAManager;
 import com.exascale.misc.AtomicDouble;
 import com.exascale.misc.BufferedLinkedBlockingQueue;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.FastStringTokenizer;
 import com.exascale.misc.HParms;
 import com.exascale.misc.MultiHashMap;
 import com.exascale.misc.MyDate;
@@ -454,6 +455,14 @@ public class ConnectionWorker extends HRDBMSThread
 					}
 					delete();
 				}
+				else if (command.equals("UPDATE  "))
+				{
+					while (!XAManager.rP2.get())
+					{
+						Thread.sleep(1000);
+					}
+					update();
+				}
 				else if (command.equals("INSERT  "))
 				{
 					while (!XAManager.rP2.get())
@@ -541,6 +550,14 @@ public class ConnectionWorker extends HRDBMSThread
 				else if (command.equals("DELFIIDX"))
 				{
 					delFileIndex();
+				}
+				else if (command.equals("REORG   "))
+				{
+					while (!XAManager.rP2.get())
+					{
+						Thread.sleep(1000);
+					}
+					reorg();
 				}
 				else
 				{
@@ -3445,22 +3462,111 @@ public class ConnectionWorker extends HRDBMSThread
 			else
 			{
 				//not logged 
+				int numBlocks = -1;
+				
 				try
 				{
-					LockManager.xLock(new Block(file.getAbsolutePath(), -1), tx.number());
-					BufferManager.invalidateFile(file.getAbsolutePath());
-					CreateTableThread thread = new CreateTableThread(file.getAbsolutePath(), pos2Col.size());
-					thread.run();
+					LockManager.sLock(new Block(file.getAbsolutePath(), -1), tx.number());
+					FileChannel xx = FileManager.getFile(file.getAbsolutePath());
+					numBlocks = FileManager.numBlocks.get(file.getAbsolutePath());
+				}
+				catch(Exception e)
+				{
+					ok = false;
+					HRDBMSWorker.logger.debug("", e);
+					return;
+				}
+
+				HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+				for (Map.Entry entry : pos2Col.entrySet())
+				{
+					String type = cols2Types.get(entry.getValue());
+					DataType value = null;
+					if (type.equals("INT"))
+					{
+						value = new DataType(DataType.INTEGER, 0, 0);
+					}
+					else if (type.equals("FLOAT"))
+					{
+						value = new DataType(DataType.DOUBLE, 0, 0);
+					}
+					else if (type.equals("CHAR"))
+					{
+						value = new DataType(DataType.VARCHAR, 0, 0);
+					}
+					else if (type.equals("LONG"))
+					{
+						value = new DataType(DataType.BIGINT, 0, 0);
+					}
+					else if (type.equals("DATE"))
+					{
+						value = new DataType(DataType.DATE, 0, 0);
+					}
+
+					layout.put((Integer)entry.getKey(), value);
+				}
+				Schema sch = new Schema(layout);
+				int onPage = Schema.HEADER_SIZE;
+				int lastRequested = Schema.HEADER_SIZE - 1;
+				int PREFETCH_REQUEST_SIZE = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("prefetch_request_size")); // 80
+				int PAGES_IN_ADVANCE = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pages_in_advance")); // 40
+				while (onPage < numBlocks)
+				{
+					if (lastRequested - onPage < PAGES_IN_ADVANCE)
+					{
+						Block[] toRequest = new Block[lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1];
+						int i = 0;
+						while (i < toRequest.length)
+						{
+							toRequest[i] = new Block(file.getAbsolutePath(), lastRequested + i + 1);
+							i++;
+						}
+						try
+						{
+							tx.requestPages(toRequest);
+						}
+						catch(Exception e)
+						{
+							ok = false;
+							return;
+						}
+						lastRequested += toRequest.length;
+					}
 				
+					try
+					{
+						tx.read(new Block(file.getAbsolutePath(), onPage++), sch, true);
+						RowIterator rit = sch.rowIterator();
+						while (rit.hasNext())
+						{
+							Row r = rit.next();
+							if (!r.getCol(0).exists())
+							{
+								continue;
+							}
+					
+							RID rid = r.getRID();
+							sch.deleteRowNoLog(rid);
+							num++;
+						}
+					}
+					catch(Exception e)
+					{
+						ok = false;
+						HRDBMSWorker.logger.debug("", e);
+						return;
+					}
+				}
+			
+				try
+				{
 					int i = 0;
 					for (String index : indexes)
 					{
-						String fn = new File(file.getParentFile().getAbsoluteFile(), index).getAbsolutePath();
-						Index indx = new Index(fn, keys.get(i), types.get(i), orders.get(i));
-						boolean unique = indx.isUnique();
-						BufferManager.invalidateFile(fn);
-						CreateIndexThread thread2 = new CreateIndexThread(fn, keys.get(i).size(), unique);
-						thread2.run();
+						Index idx = new Index(new File(file.getParentFile().getAbsoluteFile(), index).getAbsolutePath(), keys.get(i), types.get(i), orders.get(i));
+						idx.setTransaction(tx);
+						idx.open();
+						idx.massDeleteNoLog();
 						i++;
 					}
 				}
@@ -3712,6 +3818,150 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 	}
 	
+	private void update()
+	{
+		byte[] txBytes = new byte[8];
+		long txNum = -1;
+		byte[] schemaLenBytes = new byte[4];
+		byte[] tableLenBytes = new byte[4];
+		int schemaLength = -1;
+		int tableLength = -1;
+		String schema = null;
+		String table = null;
+		byte[] schemaData = null;
+		byte[] tableData = null;
+		ArrayList<String> indexes;
+		ArrayList<ArrayList<String>> keys;
+		ArrayList<ArrayList<String>> types;
+		ArrayList<ArrayList<Boolean>> orders;
+		ArrayList<RIDAndIndexKeys> raiks = null;
+		ArrayList<ArrayList<Object>> list2;
+		HashMap<String, Integer> cols2Pos;
+		PartitionMetaData pmd;
+		try
+		{
+			readNonCoord(txBytes);
+			txNum = bytesToLong(txBytes);
+			tx = new Transaction(txNum);
+			readNonCoord(schemaLenBytes);
+			schemaLength = bytesToInt(schemaLenBytes);
+			schemaData = new byte[schemaLength];
+			readNonCoord(schemaData);
+			schema = new String(schemaData, "UTF-8");
+			readNonCoord(tableLenBytes);
+			tableLength = bytesToInt(tableLenBytes);
+			tableData = new byte[tableLength];
+			readNonCoord(tableData);
+			table = new String(tableData, "UTF-8");
+			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
+			indexes = (ArrayList<String>)objIn.readObject();
+			raiks = (ArrayList<RIDAndIndexKeys>)objIn.readObject();
+			keys = (ArrayList<ArrayList<String>>)objIn.readObject();
+			types = (ArrayList<ArrayList<String>>)objIn.readObject();
+			orders = (ArrayList<ArrayList<Boolean>>)objIn.readObject();
+			list2 = (ArrayList<ArrayList<Object>>)objIn.readObject();
+			cols2Pos = (HashMap<String, Integer>)objIn.readObject();
+			pmd = (PartitionMetaData)objIn.readObject();
+		}
+		catch(Exception e)
+		{
+			sendNo();
+			return;
+		}
+		
+		MultiHashMap<Integer, RIDAndIndexKeys> map = new MultiHashMap<Integer, RIDAndIndexKeys>();
+		for (RIDAndIndexKeys raik : raiks)
+		{
+			map.multiPut(raik.getRID().getDevice(), raik);
+		}
+		
+		ArrayList<FlushDeleteThread> threads = new ArrayList<FlushDeleteThread>();
+		for (Object o : map.getKeySet())
+		{
+			int device = (Integer)o;
+			threads.add(new FlushDeleteThread(map.get(device), tx, schema, table, keys, types, orders, indexes));
+		}
+		
+		for (FlushDeleteThread thread : threads)
+		{
+			thread.start();
+		}
+		
+		boolean allOK = true;
+		for (FlushDeleteThread thread : threads)
+		{
+			while (true)
+			{
+				try
+				{
+					thread.join();
+					break;
+				}
+				catch(InterruptedException e)
+				{}
+			}
+			if (!thread.getOK())
+			{
+				allOK = false;
+			}
+		}
+		
+		if (!allOK)
+		{
+			sendNo();
+		}
+		
+		if (list2 != null)
+		{
+			MultiHashMap<Integer, ArrayList<Object>> map2 = new MultiHashMap<Integer, ArrayList<Object>>();
+			for (ArrayList<Object> row : list2)
+			{
+				map2.multiPut(MetaData.determineDevice(row, pmd, cols2Pos), row);
+			}
+			
+			ArrayList<FlushInsertThread> threads2 = new ArrayList<FlushInsertThread>();
+			for (Object o : map2.getKeySet())
+			{
+				int device = (Integer)o;
+				threads2.add(new FlushInsertThread(map2.get(device), new Transaction(txNum), schema, table, keys, types, orders, indexes, cols2Pos, device));
+			}
+			
+			for (FlushInsertThread thread : threads2)
+			{
+				thread.start();
+			}
+			
+			for (FlushInsertThread thread : threads2)
+			{
+				while (true)
+				{
+					try
+					{
+						thread.join();
+						break;
+					}
+					catch(InterruptedException e)
+					{}
+				}
+				if (!thread.getOK())
+				{
+					allOK = false;
+				}
+			}
+		}
+		
+		if (allOK)
+		{
+			sendOK();
+			return;
+		}
+		else
+		{
+			sendNo();
+			return;
+		}
+	}
+	
 	private class FlushDeleteThread extends HRDBMSThread
 	{
 		private Transaction tx;
@@ -3792,6 +4042,19 @@ public class ConnectionWorker extends HRDBMSThread
 				HRDBMSWorker.logger.debug("", e);
 			}
 		}
+	}
+	
+	private static FieldValue[] toFVA(ArrayList<Object> row)
+	{
+		FieldValue[] retval = new FieldValue[row.size()];
+		int i = 0;
+		for (Object o : row)
+		{
+			retval[i] = (FieldValue)o;
+			i++;
+		}
+		
+		return retval;
 	}
 	
 	private static FieldValue[] aloToFieldValues(ArrayList<Object> row)
@@ -4387,11 +4650,19 @@ public class ConnectionWorker extends HRDBMSThread
 		private LinkedBlockingQueue<Object> queue;
 		private ArrayList<Index> indexes;
 		private boolean ok = true;
+		private boolean isFieldValues = false;
 		
 		public IndexWriterThread(LinkedBlockingQueue<Object> queue, ArrayList<Index> indexes)
 		{
 			this.queue = queue;
 			this.indexes = indexes;
+		}
+		
+		public IndexWriterThread(LinkedBlockingQueue<Object> queue, ArrayList<Index> indexes, boolean isFieldValues)
+		{
+			this.queue = queue;
+			this.indexes = indexes;
+			this.isFieldValues = isFieldValues;
 		}
 		
 		public void run()
@@ -4409,11 +4680,23 @@ public class ConnectionWorker extends HRDBMSThread
 				
 					RIDAndIndexKeys raik = (RIDAndIndexKeys)obj;
 					//for each index, insert row based on rid and key values
-					int i = 0;
-					for (Index idx : indexes)
+					if (!isFieldValues)
 					{
-						idx.insertNoLog(aloToFieldValues(raik.getIndexKeys().get(i)), raik.getRID());
-						i++;
+						int i = 0;
+						for (Index idx : indexes)
+						{
+							idx.insertNoLog(aloToFieldValues(raik.getIndexKeys().get(i)), raik.getRID());
+							i++;
+						}
+					}
+					else
+					{
+						int i = 0;
+						for (Index idx : indexes)
+						{
+							idx.insertNoLog(toFVA(raik.getIndexKeys().get(i)), raik.getRID());
+							i++;
+						}
 					}
 				}
 			}
@@ -4540,6 +4823,7 @@ public class ConnectionWorker extends HRDBMSThread
 			}
 			catch(Exception e)
 			{
+				HRDBMSWorker.logger.debug("", e);
 				this.e = e;
 				ok = false;
 			}
@@ -5263,6 +5547,7 @@ public class ConnectionWorker extends HRDBMSThread
 			}
 			catch(Exception e)
 			{
+				HRDBMSWorker.logger.debug("", e);
 				this.e = e;
 				ok = false;
 			}
@@ -5514,6 +5799,7 @@ public class ConnectionWorker extends HRDBMSThread
 				idx.setTransaction(tx);
 				idx.open();
 				LockManager.sLock(new Block(tFn, -1), tx.number());
+				FileManager.getFile(tFn);
 				int numBlocks = FileManager.numBlocks.get(tFn);
 				int i = Schema.HEADER_SIZE;
 				while (i < numBlocks)
@@ -5596,7 +5882,7 @@ public class ConnectionWorker extends HRDBMSThread
 							fva[x] = row.get(x);
 							x++;
 						}
-						idx.insert(fva, rid);
+						idx.insertNoLog(fva, rid);
 					}
 				}
 			}
@@ -6463,5 +6749,556 @@ public class ConnectionWorker extends HRDBMSThread
 	    }
 	    
 	    return retval;
+	}
+	
+	private void reorg()
+	{
+		ArrayList<Object> tree = null;
+		byte[] txBytes = new byte[8];
+		long txNum = -1;
+		byte[] schemaLenBytes = new byte[4];
+		byte[] schemaBytes;
+		String schema;
+		byte[] tableLenBytes = new byte[4];
+		byte[] tableBytes;
+		String table;
+		ArrayList<Index> indexes;
+		HashMap<String, String> cols2Types;
+		TreeMap<Integer, String> pos2Col;
+		ArrayList<Boolean> uniques;
+		try
+		{
+			readNonCoord(schemaLenBytes);
+			schemaBytes = new byte[bytesToInt(schemaLenBytes)];
+			readNonCoord(schemaBytes);
+			schema = new String(schemaBytes, "UTF-8");
+			readNonCoord(tableLenBytes);
+			tableBytes = new byte[bytesToInt(tableLenBytes)];
+			readNonCoord(tableBytes);
+			table = new String(tableBytes, "UTF-8");
+			readNonCoord(txBytes);
+			txNum = bytesToLong(txBytes);
+			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
+			tree = (ArrayList<Object>)objIn.readObject();
+			indexes = (ArrayList<Index>)objIn.readObject();
+			cols2Types = (HashMap<String, String>)objIn.readObject();
+			pos2Col = (TreeMap<Integer, String>)objIn.readObject();
+			uniques = (ArrayList<Boolean>)objIn.readObject();
+		}
+		catch(Exception e)
+		{
+			sendNo();
+			return;
+		}
+		
+		Object obj = tree.get(0);
+		while (obj instanceof ArrayList)
+		{
+			obj = ((ArrayList)obj).get(0);
+		}
+		
+		removeFromTree((String)obj, tree, null); //also delete parents if now empty
+		
+		ArrayList<SendReorgThread> threads = new ArrayList<SendReorgThread>();
+		for (Object o : tree)
+		{
+			threads.add(new SendReorgThread(o, tx, schemaLenBytes, schemaBytes, tableLenBytes, tableBytes, indexes, cols2Types, pos2Col, uniques));
+		}
+		
+		for (SendReorgThread thread : threads)
+		{
+			thread.start();
+		}
+		
+		Transaction tx = new Transaction(txNum);
+		boolean allOK = true;
+		try
+		{
+			doReorg(schema, table, indexes, tx, cols2Types, pos2Col, uniques);
+			tx.commit();
+		}
+		catch(Exception e)
+		{
+			try
+			{
+				tx.rollback();
+			}
+			catch(Exception f)
+			{}
+			allOK = false;
+		}
+		
+		for (SendReorgThread thread : threads)
+		{
+			while (true)
+			{
+				try
+				{
+					thread.join();
+					break;
+				}
+				catch(InterruptedException e)
+				{}
+			}
+			if (!thread.sendOK())
+			{
+				allOK = false;
+			}
+		}
+		
+		if (allOK)
+		{
+			sendOK();
+		}
+		else
+		{
+			sendNo();
+			try
+			{
+				sock.close();
+			}
+			catch(Exception f)
+			{}
+		}
+	}
+	
+	private static class SendReorgThread extends HRDBMSThread
+	{
+		private Object o;
+		private Transaction tx;
+		private boolean sendOK;
+		private byte[] schemaLenBytes;
+		private byte[] schemaBytes;
+		private byte[] tableLenBytes;
+		private byte[] tableBytes;
+		private ArrayList<Index> indexes;
+		private HashMap<String, String> cols2Types;
+		private TreeMap<Integer, String> pos2Col;
+		private ArrayList<Boolean> uniques;
+		
+		public SendReorgThread(Object o, Transaction tx, byte[] schemaLenBytes, byte[] schemaBytes, byte[] tableLenBytes, byte[] tableBytes, ArrayList<Index> indexes, HashMap<String, String> cols2Types, TreeMap<Integer, String> pos2Col, ArrayList<Boolean> uniques)
+		{
+			this.o = o;
+			this.tx = tx;
+			this.schemaLenBytes = schemaLenBytes;
+			this.schemaBytes = schemaBytes;
+			this.tableLenBytes = tableLenBytes;
+			this.tableBytes = tableBytes;
+			this.indexes = indexes;
+			this.cols2Types = cols2Types;
+			this.pos2Col = pos2Col;
+			this.uniques = uniques;
+		}
+		
+		public boolean sendOK()
+		{
+			return sendOK;
+		}
+		
+		public void run()
+		{
+			if (o instanceof String)
+			{
+				Socket sock = null;
+				try
+				{
+					sock = new CompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					OutputStream out = sock.getOutputStream();
+					byte[] outMsg = "REORG           ".getBytes("UTF-8");
+					outMsg[8] = 0;
+					outMsg[9] = 0;
+					outMsg[10] = 0;
+					outMsg[11] = 0;
+					outMsg[12] = 0;
+					outMsg[13] = 0;
+					outMsg[14] = 0;
+					outMsg[15] = 0;
+					out.write(outMsg);
+					out.write(schemaLenBytes);
+					out.write(schemaBytes);
+					out.write(tableLenBytes);
+					out.write(tableBytes);
+					out.write(longToBytes(tx.number()));
+					ObjectOutputStream objOut = new ObjectOutputStream(out);
+					ArrayList<Object> alo = new ArrayList<Object>(1);
+					alo.add(o);
+					objOut.writeObject(alo);
+					objOut.writeObject(indexes);
+					objOut.writeObject(cols2Types);
+					objOut.writeObject(pos2Col);
+					objOut.writeObject(uniques);
+					objOut.flush();
+					out.flush();
+					getConfirmation(sock);
+					objOut.close();
+					sock.close();
+				}
+				catch(Exception e)
+				{
+					sendOK = false;
+					return;
+				}
+				sendOK = true;
+			}
+			else if (((ArrayList<Object>)o).size() > 0)
+			{
+				Socket sock = null;
+				Object obj2 = ((ArrayList<Object>)o).get(0);
+				while (obj2 instanceof ArrayList)
+				{
+					obj2 = ((ArrayList<Object>)obj2).get(0);
+				}
+				
+				String hostname = (String)obj2;
+				try
+				{
+					sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					OutputStream out = sock.getOutputStream();
+					byte[] outMsg = "REORG           ".getBytes("UTF-8");
+					outMsg[8] = 0;
+					outMsg[9] = 0;
+					outMsg[10] = 0;
+					outMsg[11] = 0;
+					outMsg[12] = 0;
+					outMsg[13] = 0;
+					outMsg[14] = 0;
+					outMsg[15] = 0;
+					out.write(outMsg);
+					out.write(schemaLenBytes);
+					out.write(schemaBytes);
+					out.write(tableLenBytes);
+					out.write(tableBytes);
+					out.write(longToBytes(tx.number()));
+					ObjectOutputStream objOut = new ObjectOutputStream(out);
+					objOut.writeObject((ArrayList<Object>)o);
+					objOut.writeObject(indexes);
+					objOut.flush();
+					out.flush();
+					getConfirmation(sock);
+					objOut.close();
+					sock.close();
+				}
+				catch(Exception e)
+				{
+					sendOK = false;
+					return;
+				}
+				
+				sendOK = true;
+			}
+		}
+	}
+	
+	private void doReorg(String schema, String table, ArrayList<Index> indexes, Transaction tx, HashMap<String, String> cols2Types, TreeMap<Integer, String> pos2Col, ArrayList<Boolean> uniques) throws Exception
+	{
+		String dirList = HRDBMSWorker.getHParms().getProperty("data_directories");
+		FastStringTokenizer tokens = new FastStringTokenizer(dirList, ",", false);
+		String[] dirs = tokens.allTokens();
+		Exception e = null;
+		
+		ArrayList<ReorgThread> threads = new ArrayList<ReorgThread>();
+		boolean allOK = true;
+		for (String dir : dirs)
+		{
+			//threads.add(new ReorgThread(dir, schema, table, indexes, tx));
+			ReorgThread thread = new ReorgThread(dir, schema, table, indexes, tx, cols2Types, pos2Col, uniques);
+			thread.start();
+			thread.join();
+			if (!thread.getOK())
+			{
+				allOK = false;
+				e = thread.getException();
+				break;
+			}
+			tx.releaseLocksAndPins();
+		}
+		
+		//for (ReorgThread thread : threads)
+		//{
+		//	thread.start();
+		//}
+		
+		//for (ReorgThread thread : threads)
+		//{
+		//	thread.join();
+		//	if (!thread.getOK())
+		//	{
+		//		allOK = false;
+		//		e = thread.getException();
+		//	}
+		//}
+		
+		if (!allOK)
+		{
+			throw e;
+		}
+	}
+	
+	private static class ReorgThread extends HRDBMSThread
+	{
+		private String dir;
+		private String schema;
+		private String table;
+		private ArrayList<Index> indexes;
+		private Transaction tx;
+		private boolean ok = true;
+		private Exception e;
+		private HashMap<String, String> cols2Types;
+		private TreeMap<Integer, String> pos2Col;
+		private ArrayList<Boolean> uniques;
+		
+		public ReorgThread(String dir, String schema, String table, ArrayList<Index> indexes, Transaction tx, HashMap<String, String> cols2Types, TreeMap<Integer, String> pos2Col, ArrayList<Boolean> uniques)
+		{
+			this.dir = dir;
+			this.schema = schema;
+			this.table = table;
+			this.indexes = indexes;
+			this.tx = tx;
+			this.cols2Types = cols2Types;
+			this.pos2Col = pos2Col;
+			this.uniques = uniques;
+		}
+		
+		public void run()
+		{
+			try
+			{
+				String fn = dir;
+				if (!fn.endsWith("/"))
+				{
+					fn += "/";
+				}
+			
+				fn += (schema + "." + table + ".tbl");
+			
+				if (!FileManager.fileExists(fn))
+				{
+					return;
+				}
+			
+				HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
+				for (Map.Entry entry : pos2Col.entrySet())
+				{
+					cols2Pos.put((String)entry.getValue(), (Integer)entry.getKey());
+				}
+			
+				ArrayList<String> indexFNs = new ArrayList<String>();
+				for (Index index : indexes)
+				{
+					String temp = dir;
+					if (!temp.endsWith("/"))
+					{
+						temp += "/";
+					}
+				
+					temp += index.getFileName();
+					indexFNs.add(temp);
+				}
+			
+				Block tSize = new Block(fn, -1);
+				LockManager.xLock(tSize, tx.number());
+				FileManager.getFile(fn);
+				int blocks = FileManager.numBlocks.get(fn);
+				int i = 4096;
+				while (i < blocks)
+				{
+					LockManager.sLock(new Block(fn, i), tx.number());
+					i++;
+				}
+			
+				for (String fn2 : indexFNs)
+				{
+					Block iSize = new Block(fn2, -1);
+					LockManager.xLock(iSize, tx.number());
+					FileManager.getFile(fn2);
+					int blocks2 = FileManager.numBlocks.get(fn2);
+					i = 0;
+					while (i < blocks)
+					{
+						LockManager.sLock(new Block(fn2, i), tx.number());
+						i++;
+					}
+				}
+			
+				//create new table and index files
+				String newFN = fn + ".new";
+				CreateTableThread createT = new CreateTableThread(fn, pos2Col.size());
+				createT.run();
+				ArrayList<String> newIndexFNs = new ArrayList<String>();
+				i = 0;
+				for (String fn2 : indexFNs)
+				{
+					String temp = fn2 + ".new";
+					CreateIndexThread createI = new CreateIndexThread(fn2, indexes.get(i).getKeys().size(), uniques.get(i));
+					createI.run();
+					newIndexFNs.add(temp);
+					i++;
+				}
+			
+				HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+				for (Map.Entry entry : pos2Col.entrySet())
+				{
+					String type = cols2Types.get(entry.getValue());
+					DataType value = null;
+					if (type.equals("INT"))
+					{
+						value = new DataType(DataType.INTEGER, 0, 0);
+					}
+					else if (type.equals("FLOAT"))
+					{
+						value = new DataType(DataType.DOUBLE, 0, 0);
+					}
+					else if (type.equals("CHAR"))
+					{
+						value = new DataType(DataType.VARCHAR, 0, 0);
+					}
+					else if (type.equals("LONG"))
+					{
+						value = new DataType(DataType.BIGINT, 0, 0);
+					}
+					else if (type.equals("DATE"))
+					{
+						value = new DataType(DataType.DATE, 0, 0);
+					}
+
+					layout.put((Integer)entry.getKey(), value);
+				}
+
+				Schema sch = new Schema(layout);
+				int onPage = Schema.HEADER_SIZE;
+				int lastRequested = Schema.HEADER_SIZE - 1;
+				ArrayList<Index> idxs = new ArrayList<Index>();
+				i = 0;
+				for (String index : newIndexFNs)
+				{
+					Index idx = new Index(index, indexes.get(i).getKeys(), indexes.get(i).getTypes(), indexes.get(i).getOrders());
+					idx.setTransaction(tx);
+					idx.open();
+					idxs.add(idx);
+					i++;
+				}
+			
+				LinkedBlockingQueue<Object> queue = new LinkedBlockingQueue<Object>();
+				IndexWriterThread thread = new IndexWriterThread(queue, idxs, true);
+				thread.start();
+				//insert row and create RAIKS
+				FileChannel xx = FileManager.getFile(newFN);
+				int block = FileManager.numBlocks.get(newFN) - 1;
+				//request block
+				HashMap<Integer, DataType> layout2 = new HashMap<Integer, DataType>();
+				Schema sch2 = new Schema(layout);
+				Block toRequest2 = new Block(newFN, block);
+				tx.requestPage(toRequest2);
+				tx.read(toRequest2, sch2, true);
+				ArrayList<RIDAndIndexKeys> raiks = new ArrayList<RIDAndIndexKeys>();
+		
+				while (onPage < blocks)
+				{
+					if (lastRequested - onPage < PAGES_IN_ADVANCE)
+					{
+						Block[] toRequest = new Block[lastRequested + PREFETCH_REQUEST_SIZE < blocks ? PREFETCH_REQUEST_SIZE : blocks - lastRequested - 1];
+						i = 0;
+						while (i < toRequest.length)
+						{
+							toRequest[i] = new Block(fn, lastRequested + i + 1);
+							i++;
+						}
+						tx.requestPages(toRequest);
+						lastRequested += toRequest.length;
+					}
+
+					tx.read(new Block(fn, onPage++), sch);
+					RowIterator rit = sch.rowIterator();
+					while (rit.hasNext())
+					{
+						Row r = rit.next();
+						if (!r.getCol(0).exists())
+						{
+							continue;
+						}
+					
+						RID rid = sch2.insertRowAppend(r.getAllCols());
+						ArrayList<ArrayList<Object>> indexKeys = new ArrayList<ArrayList<Object>>();
+						i = 0;
+						for (Index index : idxs)
+						{
+							ArrayList<String> key = index.getKeys();
+							ArrayList<Object> k = new ArrayList<Object>();
+							for (String col : key)
+							{
+								k.add(r.getCol(cols2Pos.get(col))); 
+							}
+							
+							indexKeys.add(k);
+							i++;
+						}
+						
+						queue.add(new RIDAndIndexKeys(rid, indexKeys));
+						int newBlock = rid.getBlockNum();
+						if (newBlock != block)
+						{
+							block = newBlock;
+							sch2.close();
+							sch2 = new Schema(layout2);
+							toRequest2 = new Block(newFN, block);
+							tx.requestPage(toRequest2);
+							tx.read(toRequest2, sch2, true);
+						}
+					}
+				}
+			
+				sch2.close();
+			
+				//wait for index writer to finish
+				queue.add(new DataEndMarker());
+				thread.join();
+				if (!thread.getOK())
+				{
+					ok = false;
+				}
+			
+				HRDBMSWorker.checkpoint.doCheckpoint();
+			
+				i = 4096;
+				while (i < blocks)
+				{
+					LockManager.xLock(new Block(fn, i), tx.number());
+					i++;
+				}
+			
+				for (String fn2 : indexFNs)
+				{
+					int blocks2 = FileManager.numBlocks.get(fn2);
+					i = 0;
+					while (i < blocks)
+					{
+						LockManager.xLock(new Block(fn2, i), tx.number());
+						i++;
+					}
+				}
+			
+				FileManager.getFile(fn).copyFromFC(FileManager.getFile(newFN));
+			
+				for (String fn2 : indexFNs)
+				{
+					FileManager.getFile(fn2).copyFromFC(FileManager.getFile(fn2 + ".new"));
+				}
+			}
+			catch(Exception e)
+			{
+				HRDBMSWorker.logger.debug("", e);
+				ok = false;
+			}
+		}
+		
+		public boolean getOK()
+		{
+			return ok;
+		}
+		
+		public Exception getException()
+		{
+			return e;
+		}
 	}
 }

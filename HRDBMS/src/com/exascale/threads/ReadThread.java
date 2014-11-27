@@ -32,11 +32,11 @@ public class ReadThread extends HRDBMSThread
 		try
 		{
 			final FileChannel fc = FileManager.getFile(b.fileName());
-			if (b.number() * bb.capacity() >= fc.size())
-			{
-				HRDBMSWorker.logger.debug("Tried to read from " + b.fileName() + " at block = " + b.number() + " but it was past the range of the file");
-				ok = false;
-			}
+			//if (b.number() * bb.capacity() >= fc.size())
+			//{
+			//	HRDBMSWorker.logger.debug("Tried to read from " + b.fileName() + " at block = " + b.number() + " but it was past the range of the file");
+			//	ok = false;
+			//}
 			
 			fc.read(bb, b.number() * bb.capacity());
 		}

@@ -171,6 +171,16 @@ public class BufferManager
 			i++;
 		}
 	}
+	
+	public static void unpinAll2(long txnum)
+	{
+		int i = 0;
+		while (i < managers.length)
+		{
+			managers[i].unpinAll2(txnum);
+			i++;
+		}
+	}
 
 	public static void write(Page p, int off, byte[] data)
 	{

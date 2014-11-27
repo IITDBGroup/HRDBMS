@@ -79,11 +79,14 @@ public class Page
 	{
 		if (modifiedBy >= 0)
 		{
-			if (log)
+			if (b != null)
 			{
-				LogManager.flush(lsn);
+				if (log)
+				{
+					LogManager.flush(lsn);
+				}
+				FileManager.write(blk, contents);
 			}
-			FileManager.write(blk, contents);
 			modifiedBy = -1;
 		}
 		blk = b;

@@ -121,6 +121,18 @@ public class Transaction implements Serializable
 		}
 	}
 	
+	public void releaseLocksAndPins() throws Exception
+	{
+		synchronized(txList)
+		{
+			if (txList.containsKey(txnum))
+			{
+				BufferManager.unpinAll2(txnum);
+				LockManager.release(txnum);
+			}
+		}
+	}
+	
 	public void tryCommit(String host) throws IOException
 	{
 		synchronized(txList)

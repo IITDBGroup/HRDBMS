@@ -126,6 +126,48 @@ public class Schema
 		rec = tx.delete(before, after, off, p.block());
 		p.write(off, after, tx.number(), rec.lsn());
 	}
+	
+	public void deleteRowNoLog(RID id) throws LockAbortException, Exception
+	{
+		final int level = tx.getIsolationLevel();
+		if (level == Transaction.ISOLATION_CS || level == Transaction.ISOLATION_UR)
+		{
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			tx.read(p.block(), this);
+			tx.setIsolationLevel(level);
+		}
+
+		LockManager.xLock(p.block(), tx.number());
+		byte[] after;
+		int off;
+		final int index = rowIDToIndex.get(id);
+		off = offArrayOff + index * colIDListSize * 4;
+		after = new byte[colIDListSize * 4];
+		int i = 0;
+		while (i < after.length)
+		{
+			after[i] = (byte)0xFF;
+			i++;
+		}
+
+		i = 0;
+		while (i < colIDListSize)
+		{
+			offsetArray[index][i] = -1;
+			i++;
+		}
+
+		long lsn = LogManager.getLSN();
+		p.write(off, after, tx.number(), lsn);
+
+		// modification timestamp
+		off = 13;
+		after = new byte[8];
+		modTime = System.currentTimeMillis();
+		after = ByteBuffer.allocate(8).putLong(modTime).array();
+		lsn = LogManager.getLSN();
+		p.write(off, after, tx.number(), lsn);
+	}
 
 	public Col getCol(int id)
 	{

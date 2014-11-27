@@ -13,6 +13,8 @@ import java.nio.channels.WritableByteChannel;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import com.exascale.managers.BufferManager;
+import com.exascale.managers.FileManager;
 import com.exascale.managers.HRDBMSWorker;
 import net.jpountz.lz4.LZ4Compressor;
 import net.jpountz.lz4.LZ4Factory;
@@ -148,9 +150,9 @@ public class CompressedFileChannel extends FileChannel
 	@Override
 	public synchronized int read(ByteBuffer arg0, long arg1) throws IOException
 	{
-		if (arg0.array().length != 128 * 1024)
+		if (arg0.capacity() != 128 * 1024)
 		{
-			throw new IOException("Invalid read length of " + arg0.array().length);
+			throw new IOException("Invalid read length of " + arg0.capacity());
 		}
 		
 		int page = (int)(arg1 / (128 * 1024));
@@ -163,8 +165,8 @@ public class CompressedFileChannel extends FileChannel
 		offset += ((page % 3) * 128 * 1024);
 		if (block == bufferedBlock)
 		{
-			System.arraycopy(buffer, offset, arg0.array(), 0, arg0.array().length);
-			return arg0.array().length;
+			System.arraycopy(buffer, offset, arg0.array(), 0, arg0.capacity());
+			return arg0.capacity();
 		}
 		int actualBlocks = length / 3;
 		if (length % 3 != 0)
@@ -181,7 +183,7 @@ public class CompressedFileChannel extends FileChannel
 			fc.read(bb, 0);
 			byte[] target = new byte[128 * 1024 * 3]; //max 3 pages
 			int bytes = decomp.decompress(bb.array(), 0, (int)fc.size(), target, 0, 128 * 1024 * 3);
-			System.arraycopy(target, offset, arg0.array(), 0, arg0.array().length);
+			System.arraycopy(target, offset, arg0.array(), 0, arg0.capacity());
 			bufferedBlock = block;
 			buffer = target;
 			bufferSize = bytes / (128 * 1024);
@@ -195,13 +197,13 @@ public class CompressedFileChannel extends FileChannel
 			fc.read(bb, 0);
 			byte[] target = new byte[128 * 1024 * 3]; //3 pages
 			decomp.decompress(bb.array(), target);
-			System.arraycopy(target, offset, arg0.array(), 0, arg0.array().length);
+			System.arraycopy(target, offset, arg0.array(), 0, arg0.capacity());
 			bufferedBlock = block;
 			buffer = target;
 			bufferSize = 3;
 		}
 		
-		return arg0.array().length;
+		return arg0.capacity();
 	}
 
 	@Override
@@ -231,6 +233,7 @@ public class CompressedFileChannel extends FileChannel
 	@Override
 	public synchronized FileChannel truncate(long arg0) throws IOException
 	{
+		pos = arg0;
 		int desiredPages = (int)(arg0 / (128 * 1024));
 		int desiredBlocks = desiredPages / 3;
 		int actualBlocks = length / 3;
@@ -290,13 +293,13 @@ public class CompressedFileChannel extends FileChannel
 	public synchronized int write(ByteBuffer arg0) throws IOException
 	{
 		write(arg0, pos);
-		pos += arg0.array().length;
-		return arg0.array().length;
+		pos += arg0.capacity();
+		return arg0.capacity();
 	}
 	
 	private synchronized int multiPageWrite(ByteBuffer input, long offset) throws IOException
 	{
-		int pages = input.array().length / (128 * 1024);
+		int pages = input.capacity() / (128 * 1024);
 		int i = 0;
 		byte[] data = new byte[128 * 1024];
 		ByteBuffer bb;
@@ -308,14 +311,14 @@ public class CompressedFileChannel extends FileChannel
 			i++;
 		}
 		
-		return input.array().length;
+		return input.capacity();
 	}
 
 	@Override
 	public synchronized int write(ByteBuffer arg0, long arg1) throws IOException
 	{
 		//multi-page write
-		if (arg0.array().length > (128 * 1024))
+		if (arg0.capacity() > (128 * 1024))
 		{
 			return multiPageWrite(arg0, arg1);
 		}
@@ -330,7 +333,7 @@ public class CompressedFileChannel extends FileChannel
 		if (block == bufferedBlock)
 		{
 			//HRDBMSWorker.logger.debug("The block was buffered"); //DEBUG
-			System.arraycopy(arg0.array(), 0, buffer, offset, arg0.array().length);
+			System.arraycopy(arg0.array(), 0, buffer, offset, arg0.capacity());
 			if (offset == 128 * 1024 && bufferSize < 2)
 			{
 				bufferSize = 2;
@@ -361,7 +364,7 @@ public class CompressedFileChannel extends FileChannel
 				//{
 				//	flushModded();
 				//}
-				return arg0.array().length;
+				return arg0.capacity();
 			}
 			else
 			{
@@ -383,7 +386,7 @@ public class CompressedFileChannel extends FileChannel
 				//{
 				//	flushModded();
 				//}
-				return arg0.array().length;
+				return arg0.capacity();
 			}
 		}
 		
@@ -519,7 +522,7 @@ public class CompressedFileChannel extends FileChannel
 				length += 3;
 			}
 			
-			return arg0.array().length;
+			return arg0.capacity();
 		}
 		else if (highFileNum == block)
 		{
@@ -531,7 +534,7 @@ public class CompressedFileChannel extends FileChannel
 			fc.read(bb, 0);
 			byte[] target = new byte[128 * 1024 * 3]; //max 3 pages
 			int bytes = decomp.decompress(bb.array(), 0, (int)fc.size(), target, 0, 128 * 1024 * 3);
-			System.arraycopy(arg0.array(), 0, target, offset, arg0.array().length);
+			System.arraycopy(arg0.array(), 0, target, offset, arg0.capacity());
 			bufferedBlock = block;
 			buffer = target;
 			bufferSize = Math.max(bytes / (128 * 1024), (offset + 128 * 1024) / (128 * 1024));
@@ -556,7 +559,7 @@ public class CompressedFileChannel extends FileChannel
 			//{
 			//	flushModded();
 			//}
-			return arg0.array().length;
+			return arg0.capacity();
 		}
 		else
 		{
@@ -579,7 +582,7 @@ public class CompressedFileChannel extends FileChannel
 				HRDBMSWorker.logger.debug("HighFileNum = " + highFileNum);
 				throw e;
 			}
-			System.arraycopy(arg0.array(), 0, target, offset, arg0.array().length);
+			System.arraycopy(arg0.array(), 0, target, offset, arg0.capacity());
 			bufferedBlock = block;
 			buffer = target;
 			bufferSize = 3;
@@ -596,7 +599,7 @@ public class CompressedFileChannel extends FileChannel
 			//{
 			//	flushModded();
 			//}
-			return arg0.array().length;
+			return arg0.capacity();
 		}
 	}
 
@@ -703,5 +706,26 @@ public class CompressedFileChannel extends FileChannel
 			fcs.remove(entry.getKey());
 			fc.close();
 		}
+	}
+	
+	public synchronized void copyFromFC(CompressedFileChannel source) throws Exception
+	{
+		truncate(0);
+		BufferManager.invalidateFile(fn);
+		long size = source.size();
+		long offset = 0;
+		ByteBuffer bb = ByteBuffer.allocate(128 * 1024);
+		while (offset < size)
+		{
+			bb.position(0);
+			source.read(bb, offset);
+			bb.position(0);
+			write(bb, offset);
+			offset += bb.capacity();
+		}
+		
+		FileManager.numBlocks.put(fn, (int)(offset / (128 * 1024)));
+		FileManager.removeFile(source.fn);
+		BufferManager.invalidateFile(source.fn);
 	}
 }

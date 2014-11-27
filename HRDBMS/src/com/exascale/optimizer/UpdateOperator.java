@@ -423,6 +423,8 @@ public final class UpdateOperator implements Operator, Serializable
 		{
 			int node = (Integer)o;
 			Set<RIDAndIndexKeys> list = map.get(node);
+			Set<ArrayList<Object>> list2 = map2.get(node);
+			map2.remove(node);
 			if (node == -1)
 			{
 				ArrayList<Object> rs = PlanCacheManager.getCoordNodes().setParms().execute(tx);
@@ -437,16 +439,49 @@ public final class UpdateOperator implements Operator, Serializable
 				
 				for (Integer coord : coords)
 				{
-					threads.add(new FlushThread(list, indexes, coord));
+					threads.add(new FlushThread(list, indexes, coord, list2, cols2Pos, spmd));
 				}
 			}
 			else
 			{
-				threads.add(new FlushThread(list, indexes, node));
+				threads.add(new FlushThread(list, indexes, node, list2, cols2Pos, spmd));
 			}
 		}
 		
 		for (FlushThread thread : threads)
+		{
+			thread.start();
+		}
+		
+		ArrayList<FlushThread2> threads2 = new ArrayList<FlushThread2>();
+		for (Object o : map2.getKeySet())
+		{
+			int node = (Integer)o;
+			Set<ArrayList<Object>> list = map2.get(node);
+			if (node == -1)
+			{
+				ArrayList<Object> rs = PlanCacheManager.getCoordNodes().setParms().execute(tx);
+				ArrayList<Integer> coords = new ArrayList<Integer>();
+				for (Object row : rs)
+				{
+					if (!(row instanceof DataEndMarker))
+					{
+						coords.add((Integer)((ArrayList<Object>)row).get(0));
+					}
+				}
+				
+				for (Integer coord : coords)
+				{
+					threads2.add(new FlushThread2(list, indexes, coord, cols2Pos, spmd));
+				}
+			}
+			else
+			{
+				threads2.add(new FlushThread2(list, indexes, node, cols2Pos, spmd));
+			}
+		}
+		
+		for (FlushThread2 thread : threads2)
 		{
 			thread.start();
 		}
@@ -472,19 +507,6 @@ public final class UpdateOperator implements Operator, Serializable
 		
 		map.clear();
 		
-		ArrayList<FlushThread2> threads2 = new ArrayList<FlushThread2>();
-		for (Object o : map2.getKeySet())
-		{
-			int node = (Integer)o;
-			Set<ArrayList<Object>> list = map2.get(node);
-			threads2.add(new FlushThread2(list, indexes, node, cols2Pos, spmd));
-		}
-		
-		for (FlushThread2 thread : threads2)
-		{
-			thread.start();
-		}
-		
 		for (FlushThread2 thread : threads2)
 		{
 			while (true)
@@ -505,6 +527,8 @@ public final class UpdateOperator implements Operator, Serializable
 		}
 		
 		map2.clear();
+		
+		//TODO update global unique indexes here
 	}
 	
 	private class FlushThread extends HRDBMSThread
@@ -513,12 +537,18 @@ public final class UpdateOperator implements Operator, Serializable
 		private ArrayList<String> indexes;
 		private boolean ok = true;
 		private int node;
+		private Set<ArrayList<Object>> list2;
+		private HashMap<String, Integer> cols2Pos;
+		private PartitionMetaData pmd;
 		
-		public FlushThread(Set<RIDAndIndexKeys> list, ArrayList<String> indexes, int node)
+		public FlushThread(Set<RIDAndIndexKeys> list, ArrayList<String> indexes, int node, Set<ArrayList<Object>> list2, HashMap<String, Integer> cols2Pos, PartitionMetaData pmd)
 		{
 			this.list = list;
 			this.indexes = indexes;
 			this.node = node;
+			this.list2 = list2;
+			this.cols2Pos = cols2Pos;
+			this.pmd = pmd;
 		}
 		
 		public boolean getOK()
@@ -535,7 +565,7 @@ public final class UpdateOperator implements Operator, Serializable
 				String hostname = new MetaData().getHostNameForNode(node, tx);
 				sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				OutputStream out = sock.getOutputStream();
-				byte[] outMsg = "DELETE          ".getBytes("UTF-8");
+				byte[] outMsg = "UPDATE          ".getBytes("UTF-8");
 				outMsg[8] = 0;
 				outMsg[9] = 0;
 				outMsg[10] = 0;
@@ -554,6 +584,9 @@ public final class UpdateOperator implements Operator, Serializable
 				objOut.writeObject(keys);
 				objOut.writeObject(types);
 				objOut.writeObject(orders);
+				objOut.writeObject(new ArrayList(list2));
+				objOut.writeObject(cols2Pos);
+				objOut.writeObject(pmd);
 				objOut.flush();
 				out.flush();
 				getConfirmation(sock);

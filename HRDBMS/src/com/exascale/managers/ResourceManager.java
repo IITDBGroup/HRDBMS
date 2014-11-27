@@ -805,10 +805,13 @@ public final class ResourceManager extends HRDBMSThread
 
 				for (final String TEMP_DIR : TEMP_DIRS)
 				{
-					if (!(new File(TEMP_DIR + "DBHM" + id + ".tmp").delete()))
+					File file = new File(TEMP_DIR + "DBHM" + id + ".tmp");
+					if (!(file.delete()))
 					{
-						//HRDBMSWorker.logger.debug("Delete of " + TEMP_DIR + "DBHM" +
-						//id + ".tmp failed");
+						if (file.exists())
+						{
+							HRDBMSWorker.logger.debug("Delete of " + TEMP_DIR + "DBHM" + id + ".tmp failed");
+						}
 					}
 				}
 				

@@ -20,6 +20,7 @@ import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import com.exascale.filesystem.Block;
+import com.exascale.filesystem.CompressedFileChannel;
 import com.exascale.filesystem.CompressedRandomAccessFile;
 import com.exascale.filesystem.Page;
 import com.exascale.logging.ExtendLogRec;
@@ -221,15 +222,15 @@ public class FileManager
 		return dirs;
 	}
 
-	public static synchronized FileChannel getFile(String filename) throws Exception
+	public static synchronized CompressedFileChannel getFile(String filename) throws Exception
 	{
-		FileChannel fc = openFiles.get(filename);
+		CompressedFileChannel fc = (CompressedFileChannel)openFiles.get(filename);
 
 		if (fc == null)
 		{
 			final File table = new File(filename);
 			final CompressedRandomAccessFile f = new CompressedRandomAccessFile(table, "rw");
-			fc = f.getChannel();
+			fc = (CompressedFileChannel)f.getChannel();
 			numBlocks.put(filename, (int)(fc.size() / Page.BLOCK_SIZE));
 			openFiles.put(filename, fc);
 		}
@@ -237,17 +238,22 @@ public class FileManager
 		return fc;
 	}
 	
+	public static boolean fileExists(String filename)
+	{
+		File file = new File(filename + ".0");
+		return file.exists();
+	}
+	
 	public static synchronized void removeFile(String filename) throws Exception
 	{
 		FileChannel fc = openFiles.get(filename);
 		if (fc != null)
 		{
+			fc.truncate(0);
 			fc.close();
 			numBlocks.remove(filename);
 			openFiles.remove(filename);
 		}
-		
-		new File(filename).delete();
 	}
 
 	public static void read(Page p, Block b, ByteBuffer bb) throws Exception

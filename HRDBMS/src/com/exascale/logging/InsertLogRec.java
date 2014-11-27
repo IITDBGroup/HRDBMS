@@ -75,7 +75,7 @@ public class InsertLogRec extends LogRec
 	@Override
 	public void redo() throws Exception
 	{
-		HRDBMSWorker.logger.debug("Redoing change at " + b + "@" + off + " for a length of " + before.length);
+		//HRDBMSWorker.logger.debug("Redoing change at " + b + "@" + off + " for a length of " + before.length);
 		if (b.number() < 0)
 		{
 			Exception e = new Exception("Negative block number requested");

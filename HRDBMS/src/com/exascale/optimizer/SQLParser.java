@@ -3533,6 +3533,7 @@ public class SQLParser
 			ArrayList<String> newCols = new ArrayList<String>();
 			ArrayList<String> olds = new ArrayList<String>();
 			ArrayList<String> news = new ArrayList<String>();
+			HRDBMSWorker.logger.debug("Cols = " + cols);
 			for (String col : cols)
 			{
 				String col2 = null;
@@ -3563,7 +3564,21 @@ public class SQLParser
 						}
 						else
 						{
-							break;
+							for (ArrayList<Object> row : complex)
+							{
+								if (row.get(4).equals(entry.getExpression()))
+								{
+									col2 = (String)row.get(0);
+									if (col2.indexOf('.') == 0)
+									{
+										col2 = col2.substring(1);
+										if (col.equals(col2))
+										{
+											break;
+										}
+									}
+								}
+							}
 						}
 					}
 
@@ -3575,6 +3590,7 @@ public class SQLParser
 				}
 
 				Integer pos = op.getCols2Pos().get(col);
+				HRDBMSWorker.logger.debug("Cols2Pos = " + op.getCols2Pos());
 				if (pos == null)
 				{
 					// try without schema
@@ -3625,6 +3641,7 @@ public class SQLParser
 			}
 
 			cols = newCols;
+			HRDBMSWorker.logger.debug("After all the magic, cols = " + cols);
 			try
 			{
 				ReorderOperator reorder = new ReorderOperator(cols, meta);
@@ -9682,7 +9699,7 @@ public class SQLParser
 		}
 		else if (exp.isCountStar())
 		{
-			return false;
+			return true;
 		}
 		else if (exp.isExpression())
 		{

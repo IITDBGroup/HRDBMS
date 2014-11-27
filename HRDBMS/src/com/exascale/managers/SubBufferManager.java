@@ -417,6 +417,11 @@ public class SubBufferManager
 			p.unpin(txnum);
 		}
 	}
+	
+	public synchronized void unpinAll2(long txnum)
+	{
+		myBuffers.remove(txnum);
+	}
 
 	public void write(Page p, int off, byte[] data)
 	{

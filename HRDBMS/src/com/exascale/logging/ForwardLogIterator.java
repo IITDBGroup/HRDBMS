@@ -10,11 +10,13 @@ public class ForwardLogIterator implements Iterator<LogRec>
 {
 	private long nextpos;
 	private final FileChannel fc;
+	long fcSize;
 
 	public ForwardLogIterator(String filename) throws IOException
 	{
 		nextpos = 4;
 		fc = LogManager.getFile(filename);
+		fcSize = fc.size();
 	}
 
 	public void close()
@@ -24,15 +26,8 @@ public class ForwardLogIterator implements Iterator<LogRec>
 	@Override
 	public boolean hasNext()
 	{
-		try
-		{
-			return nextpos < fc.size();
-		}
-		catch (final IOException e)
-		{
-			HRDBMSWorker.logger.error("Error getting file size in ForwardLogIterator.hasNext().", e);
-			return false;
-		}
+
+		return nextpos < fcSize;
 	}
 
 	@Override

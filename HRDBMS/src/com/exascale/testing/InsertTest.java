@@ -37,6 +37,8 @@ private static Connection conn;
 			}
 		}
 		
+		long end1 = System.currentTimeMillis();
+		
 		i = 0;
 		while (i < 30000)
 		{
@@ -52,6 +54,8 @@ private static Connection conn;
 				}
 			}
 		}
+		
+		long end2 = System.currentTimeMillis();
 		
 		i = 0;
 		while (i < 30000)
@@ -71,10 +75,20 @@ private static Connection conn;
 		
 		stmt.close();
 		conn.close();
-		long end = System.currentTimeMillis();
-		long seconds = (end - start) / 1000;
-		long minutes = seconds / 60;
-		seconds -= (minutes*60);
-		System.out.println("Test took " + minutes + " minutes and " + seconds + " seconds.");
+		long end3 = System.currentTimeMillis();
+		long seconds1 = (end1 - start) / 1000;
+		long minutes1 = seconds1 / 60;
+		seconds1 -= (minutes1*60);
+		System.out.println("Insert test took " + minutes1 + " minutes and " + seconds1 + " seconds.");
+		
+		long seconds2 = (end2 - end1) / 1000;
+		long minutes2 = seconds2 / 60;
+		seconds2 -= (minutes2*60);
+		System.out.println("Update test took " + minutes2 + " minutes and " + seconds2 + " seconds.");
+		
+		long seconds3 = (end3 - end2) / 1000;
+		long minutes3 = seconds3 / 60;
+		seconds3 -= (minutes3*60);
+		System.out.println("Delete test took " + minutes3 + " minutes and " + seconds3 + " seconds.");
 	}
 }
