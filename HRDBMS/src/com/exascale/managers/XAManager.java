@@ -43,6 +43,7 @@ import com.exascale.optimizer.Phase5;
 import com.exascale.optimizer.SQLParser;
 import com.exascale.optimizer.UpdateOperator;
 import com.exascale.tables.Plan;
+import com.exascale.tables.SQL;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.ConnectionWorker;
 import com.exascale.threads.HRDBMSThread;
@@ -105,7 +106,7 @@ public class XAManager extends HRDBMSThread
 	
 	public static XAWorker executeQuery(String sql, Transaction tx, ConnectionWorker conn) throws Exception
 	{
-		String sql2 = sql.toUpperCase();
+		String sql2 = new SQL(sql).toString();
 		if (!(sql2.startsWith("SELECT") || sql2.startsWith("WITH")))
 		{
 			throw new Exception("Not a select statement");
@@ -156,10 +157,15 @@ public class XAManager extends HRDBMSThread
 	
 	public static XAWorker executeUpdate(String sql, Transaction tx, ConnectionWorker conn) throws Exception
 	{
-		String sql2 = sql.toUpperCase();
+		String sql2 = new SQL(sql).toString();
 		if (sql2.startsWith("SELECT") || sql2.startsWith("WITH"))
 		{
 			throw new Exception("SELECT statement is not allowed");
+		}
+		
+		if (sql2.startsWith("CREATE KEY/VALUE PAIR"))
+		{
+			sql2 = rewriteKeyValue(sql2);
 		}
 		
 		
@@ -172,9 +178,21 @@ public class XAManager extends HRDBMSThread
 		return new XAWorker(plan, tx, false);
 	}
 	
+	private static String rewriteKeyValue(String sql)
+	{
+		int headerSize = "CREATE KEY/VALUE PAIR ".length();
+		sql = sql.substring(headerSize);
+		String table = sql.substring(0, sql.indexOf('(')).trim();
+		sql = sql.substring(sql.indexOf('(') + 1);
+		String keyType = sql.substring(0, sql.indexOf(',')).trim();
+		sql = sql.substring(sql.indexOf(',') + 1);
+		String valType = sql.substring(0, sql.indexOf(')')).trim();
+		return "CREATE TABLE " + table + "(KEY " + keyType + " NOT NULL PRIMARY KEY, VAL " + valType + ") NONE ALL,HASH,{KEY} ALL,HASH,{KEY}";
+	}
+	
 	public static XAWorker executeAuthorizedUpdate(String sql, Transaction tx) throws Exception
 	{
-		String sql2 = sql.toUpperCase();
+		String sql2 = new SQL(sql).toString();
 		if (sql2.startsWith("SELECT") || sql2.startsWith("WITH"))
 		{
 			throw new Exception("SELECT statement is not allowed");

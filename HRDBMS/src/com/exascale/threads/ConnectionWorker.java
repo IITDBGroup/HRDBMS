@@ -1,9 +1,11 @@
 package com.exascale.threads;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
+import java.io.ObjectOutput;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
@@ -21,7 +23,10 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.sql.Connection;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Collections;
+import java.util.Date;
+import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -52,14 +57,21 @@ import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.FastStringTokenizer;
 import com.exascale.misc.HParms;
 import com.exascale.misc.MultiHashMap;
+import com.exascale.misc.MurmurHash;
 import com.exascale.misc.MyDate;
 import com.exascale.optimizer.Index;
+import com.exascale.optimizer.IndexOperator;
 import com.exascale.optimizer.LoadMetaData;
 import com.exascale.optimizer.MetaData;
+import com.exascale.optimizer.NetworkReceiveOperator;
+import com.exascale.optimizer.Operator;
+import com.exascale.optimizer.RootOperator;
+import com.exascale.optimizer.TableScanOperator;
 import com.exascale.optimizer.MetaData.PartitionMetaData;
 import com.exascale.optimizer.NetworkSendOperator;
 import com.exascale.optimizer.RIDAndIndexKeys;
 import com.exascale.tables.DataType;
+import com.exascale.tables.Plan;
 import com.exascale.tables.RIDChange;
 import com.exascale.tables.Schema;
 import com.exascale.tables.Transaction;
@@ -220,7 +232,47 @@ public class ConnectionWorker extends HRDBMSThread
 				final int from = bytesToInt(fromBytes);
 				final int to = bytesToInt(toBytes);
 
-				if (command.equals("RGETDATD"))
+				if (command.equals("GET     "))
+				{
+					while (!XAManager.rP2.get())
+					{
+						Thread.sleep(1000);
+					}
+					get();
+				}
+				else if (command.equals("REMOVE  "))
+				{
+					while (!XAManager.rP2.get())
+					{
+						Thread.sleep(1000);
+					}
+					remove();
+				}
+				else if (command.equals("REMOVE2 "))
+				{
+					while (!XAManager.rP2.get())
+					{
+						Thread.sleep(1000);
+					}
+					remove2();
+				}
+				else if (command.equals("PUT     "))
+				{
+					while (!XAManager.rP2.get())
+					{
+						Thread.sleep(1000);
+					}
+					put();
+				}
+				else if (command.equals("PUT2    "))
+				{
+					while (!XAManager.rP2.get())
+					{
+						Thread.sleep(1000);
+					}
+					put2();
+				}
+				else if (command.equals("RGETDATD"))
 				{
 					try
 					{
@@ -3619,22 +3671,6 @@ public class ConnectionWorker extends HRDBMSThread
 		public boolean getOK()
 		{
 			return ok;
-		}
-		
-		private byte[] stringToBytes(String string)
-		{
-			byte[] data = null;
-			try
-			{
-				data = string.getBytes("UTF-8");
-			}
-			catch(Exception e)
-			{}
-			byte[] len = intToBytes(data.length);
-			byte[] retval = new byte[data.length + len.length];
-			System.arraycopy(len, 0, retval, 0, len.length);
-			System.arraycopy(data, 0, retval, len.length, data.length);
-			return retval;
 		}
 		
 		public void run()
@@ -7299,6 +7335,762 @@ public class ConnectionWorker extends HRDBMSThread
 		public Exception getException()
 		{
 			return e;
+		}
+	}
+	
+	private void get()
+	{
+		byte[] tableLen = new byte[4];
+		byte[] tableBytes;
+		String table;
+		Object key;
+		try
+		{
+			readNonCoord(tableLen);
+			tableBytes = new byte[bytesToInt(tableLen)];
+			readNonCoord(tableBytes);
+			table = new String(tableBytes, "UTF-8");
+			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
+			key = (Object)objIn.readObject();;
+		}
+		catch(Exception e)
+		{
+			sendNo();
+			returnExceptionToClient(e);
+			return;
+		}
+		
+		try
+		{
+			Object retval = doGet(table, key);
+			sendOK();
+			byte[] retBytes = serialize(key);
+			sock.getOutputStream().write(retBytes);
+			sock.getOutputStream().flush();
+		}
+		catch(Exception e)
+		{
+			sendNo();
+			returnExceptionToClient(e);
+		}
+	}
+	
+	private byte[] serialize(Object o) throws Exception
+	{
+		ByteArrayOutputStream bos = new ByteArrayOutputStream();
+		ObjectOutput out = null;
+		out = new ObjectOutputStream(bos);   
+		out.writeObject(o);
+		byte[] retval = bos.toByteArray();
+		out.close();
+		bos.close();
+		return retval;
+	}
+	
+	private Object doGet(String name, Object key) throws Exception
+	{
+		//qualify table name if not qualified
+		MetaData meta = new MetaData(this);
+		if (!name.contains("."))
+		{
+			name = meta.getCurrentSchema() + "." + name;
+		}
+		
+		//build operator tree
+		String schema = name.substring(0, name.indexOf('.'));
+		String table = name.substring(name.indexOf('.') + 1);
+		Transaction tx = new Transaction(Long.MAX_VALUE);
+		tx.setIsolationLevel(Transaction.ISOLATION_UR);
+		ArrayList<String> keys = new ArrayList<String>();
+		ArrayList<String> types = new ArrayList<String>();
+		ArrayList<Boolean> orders = new ArrayList<Boolean>();
+		keys.add(table + ".KEY");
+		if (key instanceof Integer)
+		{
+			types.add("INT");
+		}
+		else if (key instanceof Long)
+		{
+			types.add("LONG");
+		}
+		else if (key instanceof Float)
+		{
+			types.add("FLOAT");
+			key = new Double((Float)key);
+		}
+		else if (key instanceof Double)
+		{
+			types.add("FLOAT");
+		}
+		else if (key instanceof String)
+		{
+			types.add("CHAR");
+		}
+		else if (key instanceof Date)
+		{
+			GregorianCalendar cal = new GregorianCalendar();
+			cal.setTime((Date)key);
+			types.add("DATE");
+			key = new MyDate(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH));
+		}
+		orders.add(true);
+		//determine node and device
+		ArrayList<Object> partial = new ArrayList<Object>();
+		partial.add(key);
+		long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+		int node = (int)(hash % MetaData.numWorkerNodes);
+		int device = (int)(hash % MetaData.getNumDevices());
+		Index index = new Index(schema + ".PK" + table + ".indx", keys, types, orders);
+		IndexOperator iOp = new IndexOperator(index, meta);
+		iOp.setNode(node);
+		iOp.setDevice(device);
+		TableScanOperator tOp = new TableScanOperator(schema, table, meta, tx);
+		ArrayList<Integer> devs = new ArrayList<Integer>();
+		devs.add(device);
+		tOp.addActiveDevices(devs);
+		tOp.setChildForDevice(device, iOp);
+		ArrayList<String> needed = new ArrayList<String>();
+		needed.add(table + ".VAL");
+		tOp.setNeededCols(needed);
+		tOp.setNode(node);
+		tOp.setPhase2Done();
+		tOp.add(iOp);
+		NetworkSendOperator send = new NetworkSendOperator(node, meta);
+		send.add(tOp);
+		NetworkReceiveOperator receive = new NetworkReceiveOperator(meta);
+		receive.setNode(MetaData.myNodeNum());
+		receive.add(send);
+		RootOperator root = new RootOperator(meta);
+		root.add(receive);
+		
+		//execute operator tree
+		root.start();
+		Object next = root.next();
+		if (next instanceof DataEndMarker)
+		{
+			root.close();
+			return null;
+		}
+		
+		if (next instanceof Exception)
+		{
+			root.close();
+			throw (Exception)next;
+		}
+		
+		ArrayList<Object> row = (ArrayList<Object>)next;
+		Object retval = row.get(0);
+		root.close();
+		return retval;
+	}
+	
+	private static long hash(Object key)
+	{
+		long eHash;
+		if (key == null)
+		{
+			eHash = 0;
+		}
+		else
+		{
+			eHash = MurmurHash.hash64(key.toString());
+		}
+
+		return eHash;
+	}
+	
+	private void remove()
+	{
+		byte[] tableLen = new byte[4];
+		byte[] tableBytes;
+		String table;
+		Object key;
+		try
+		{
+			readNonCoord(tableLen);
+			tableBytes = new byte[bytesToInt(tableLen)];
+			readNonCoord(tableBytes);
+			table = new String(tableBytes, "UTF-8");
+			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
+			key = (Object)objIn.readObject();
+		}
+		catch(Exception e)
+		{
+			sendNo();
+			returnExceptionToClient(e);
+			return;
+		}
+		
+		try
+		{
+			doRemove(table, key);
+			sendOK();
+		}
+		catch(Exception e)
+		{
+			sendNo();
+			returnExceptionToClient(e);
+		}
+	}
+	
+	private void doRemove(String name, Object key) throws Exception
+	{
+		//qualify table name if not qualified
+		MetaData meta = new MetaData(this);
+		if (!name.contains("."))
+		{
+			name = meta.getCurrentSchema() + "." + name;
+		}
+		
+		String schema = name.substring(0, name.indexOf('.'));
+		String table = name.substring(name.indexOf('.') + 1);
+		Transaction tx = new Transaction(Transaction.ISOLATION_CS);
+		/*
+		ArrayList<String> keys = new ArrayList<String>();
+		ArrayList<String> types = new ArrayList<String>();
+		ArrayList<Boolean> orders = new ArrayList<Boolean>();
+		keys.add(table + ".KEY");
+		if (key instanceof Integer)
+		{
+			types.add("INT");
+		}
+		else if (key instanceof Long)
+		{
+			types.add("LONG");
+		}
+		else if (key instanceof Float)
+		{
+			types.add("FLOAT");
+			key = new Double((Float)key);
+		}
+		else if (key instanceof Double)
+		{
+			types.add("FLOAT");
+		}
+		else if (key instanceof String)
+		{
+			types.add("CHAR");
+		}
+		else if (key instanceof Date)
+		{
+			GregorianCalendar cal = new GregorianCalendar();
+			cal.setTime((Date)key);
+			types.add("DATE");
+			key = new MyDate(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH));
+		}
+		orders.add(true);
+		*/
+		//determine node and device
+		ArrayList<Object> partial = new ArrayList<Object>();
+		partial.add(key);
+		long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+		int node = (int)(hash % MetaData.numWorkerNodes);
+		int device = (int)(hash % MetaData.getNumDevices());
+		SendRemove2Thread thread = new SendRemove2Thread(schema, table, node, device, key, tx);
+		thread.start();
+		tx.commit();
+		thread.join();
+		if (!thread.getOK())
+		{
+			throw thread.getException();
+		}
+	}
+	
+	private static class SendRemove2Thread extends HRDBMSThread
+	{
+		private String schema;
+		private String table;
+		private int node;
+		private int device;
+		private Object key;
+		private Transaction tx;
+		private boolean ok = true;
+		private Exception e;
+		
+		public SendRemove2Thread(String schema, String table, int node, int device, Object key, Transaction tx)
+		{
+			this.schema = schema;
+			this.table = table;
+			this.node = node;
+			this.device = device;
+			this.key = key;
+			this.tx = tx;
+		}
+		
+		public void run()
+		{
+			try
+			{
+				String host = new MetaData().getHostNameForNode(node);
+				Socket sock = new CompressedSocket(host, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+				OutputStream out = sock.getOutputStream();
+				byte[] outMsg = "REMOVE2         ".getBytes("UTF-8");
+				outMsg[8] = 0;
+				outMsg[9] = 0;
+				outMsg[10] = 0;
+				outMsg[11] = 0;
+				outMsg[12] = 0;
+				outMsg[13] = 0;
+				outMsg[14] = 0;
+				outMsg[15] = 0;
+				out.write(outMsg);
+				out.write(longToBytes(tx.number()));
+				out.write(stringToBytes(schema));
+				out.write(stringToBytes(table));
+				out.write(intToBytes(device));
+				ObjectOutputStream objOut = new ObjectOutputStream(out);
+				objOut.writeObject(key);
+				objOut.flush();
+				out.flush();
+				getConfirmation(sock);
+				objOut.close();
+				sock.close();
+			}
+			catch(Exception e)
+			{
+				ok = false;
+				this.e = e;
+			}
+		}
+		
+		public boolean getOK()
+		{
+			return ok;
+		}
+		
+		public Exception getException()
+		{
+			return e;
+		}
+	}
+	
+	private static byte[] stringToBytes(String string)
+	{
+		byte[] data = null;
+		try
+		{
+			data = string.getBytes("UTF-8");
+		}
+		catch(Exception e)
+		{}
+		byte[] len = intToBytes(data.length);
+		byte[] retval = new byte[data.length + len.length];
+		System.arraycopy(len, 0, retval, 0, len.length);
+		System.arraycopy(data, 0, retval, len.length, data.length);
+		return retval;
+	}
+	
+	private void remove2()
+	{
+		byte[] txBytes = new byte[8];
+		long txNum = -1;
+		byte[] schemaLenBytes = new byte[4];
+		byte[] tableLenBytes = new byte[4];
+		int schemaLength = -1;
+		int tableLength = -1;
+		String schema = null;
+		String table = null;
+		byte[] schemaData = null;
+		byte[] tableData = null;
+		byte[] deviceBytes = new byte[4];
+		int device;
+		Object key;
+		try
+		{
+			readNonCoord(txBytes);
+			txNum = bytesToLong(txBytes);
+			tx = new Transaction(txNum);
+			readNonCoord(schemaLenBytes);
+			schemaLength = bytesToInt(schemaLenBytes);
+			schemaData = new byte[schemaLength];
+			readNonCoord(schemaData);
+			schema = new String(schemaData, "UTF-8");
+			readNonCoord(tableLenBytes);
+			tableLength = bytesToInt(tableLenBytes);
+			tableData = new byte[tableLength];
+			readNonCoord(tableData);
+			table = new String(tableData, "UTF-8");
+			readNonCoord(deviceBytes);
+			device = bytesToInt(deviceBytes);
+			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
+			key = (Object)objIn.readObject();
+			
+			String fn = new MetaData().getDevicePath(device);
+			if (!fn.endsWith("/"))
+			{
+				fn += "/";
+			}
+			
+			fn += (schema + ".PK" + table + ".indx");
+			ArrayList<String> keys = new ArrayList<String>();
+			ArrayList<String> types = new ArrayList<String>();
+			ArrayList<Boolean> orders = new ArrayList<Boolean>();
+			keys.add(table + ".KEY");
+			FieldValue[] fva = new FieldValue[1];
+			if (key instanceof Integer)
+			{
+				types.add("INT");
+				fva[0] = new Schema.IntegerFV((Integer)key);
+			}
+			else if (key instanceof Long)
+			{
+				types.add("LONG");
+				fva[0] = new Schema.BigintFV((Long)key);
+			}
+			else if (key instanceof Float)
+			{
+				types.add("FLOAT");
+				fva[0] = new Schema.DoubleFV(new Double((Float)key));
+			}
+			else if (key instanceof Double)
+			{
+				types.add("FLOAT");
+				fva[0] = new Schema.DoubleFV((Double)key);
+			}
+			else if (key instanceof String)
+			{
+				types.add("CHAR");
+				fva[0] = new Schema.VarcharFV((String)key);
+			}
+			else if (key instanceof Date)
+			{
+				GregorianCalendar cal = new GregorianCalendar();
+				cal.setTime((Date)key);
+				types.add("DATE");
+				fva[0] = new Schema.DateFV(new MyDate(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH)));
+			}
+			orders.add(true);
+			Index index = new Index(fn, keys, types, orders);
+			index.setTransaction(tx);
+			index.open();
+			RID rid = index.get(fva);
+			if (rid == null)
+			{
+				sendOK();
+				return;
+			}
+			
+			HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+			Schema sch = new Schema(layout);
+			int block = rid.getBlockNum();
+			//request block
+			Block toRequest = new Block(new MetaData().getDevicePath(device) + schema + "." + table + ".tbl", block);
+			tx.requestPage(toRequest);
+			tx.read(toRequest, sch, true);
+			sch.deleteRow(rid);
+			
+			//for each index, delete row based on rid and key values
+			index.delete(fva, rid);
+			tx.commit();
+			sendOK();
+		}
+		catch(Exception e)
+		{
+			sendNo();
+		}
+	}
+	
+	private void put()
+	{
+		byte[] tableLen = new byte[4];
+		byte[] tableBytes;
+		String table;
+		Object key;
+		Object value;
+		try
+		{
+			readNonCoord(tableLen);
+			tableBytes = new byte[bytesToInt(tableLen)];
+			readNonCoord(tableBytes);
+			table = new String(tableBytes, "UTF-8");
+			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
+			key = (Object)objIn.readObject();
+			value = (Object)objIn.readObject();
+		}
+		catch(Exception e)
+		{
+			sendNo();
+			returnExceptionToClient(e);
+			return;
+		}
+		
+		try
+		{
+			doPut(table, key, value);
+			sendOK();
+		}
+		catch(Exception e)
+		{
+			sendNo();
+			returnExceptionToClient(e);
+		}
+	}
+	
+	private void doPut(String name, Object key, Object value) throws Exception
+	{
+		//qualify table name if not qualified
+		MetaData meta = new MetaData(this);
+		if (!name.contains("."))
+		{
+			name = meta.getCurrentSchema() + "." + name;
+		}
+		
+		String schema = name.substring(0, name.indexOf('.'));
+		String table = name.substring(name.indexOf('.') + 1);
+		Transaction tx = new Transaction(Transaction.ISOLATION_CS);
+		
+		//determine node and device
+		ArrayList<Object> partial = new ArrayList<Object>();
+		partial.add(key);
+		long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+		int node = (int)(hash % MetaData.numWorkerNodes);
+		int device = (int)(hash % MetaData.getNumDevices());
+		SendPut2Thread thread = new SendPut2Thread(schema, table, node, device, key, tx, value);
+		thread.start();
+		tx.commit();
+		thread.join();
+		if (!thread.getOK())
+		{
+			throw thread.getException();
+		}
+	}
+	
+	private static class SendPut2Thread extends HRDBMSThread
+	{
+		private String schema;
+		private String table;
+		private int node;
+		private int device;
+		private Object key;
+		private Object value;
+		private Transaction tx;
+		private boolean ok = true;
+		private Exception e;
+		
+		public SendPut2Thread(String schema, String table, int node, int device, Object key, Transaction tx, Object value)
+		{
+			this.schema = schema;
+			this.table = table;
+			this.node = node;
+			this.device = device;
+			this.key = key;
+			this.tx = tx;
+			this.value = value;
+		}
+		
+		public void run()
+		{
+			try
+			{
+				String host = new MetaData().getHostNameForNode(node);
+				Socket sock = new CompressedSocket(host, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+				OutputStream out = sock.getOutputStream();
+				byte[] outMsg = "PUT2            ".getBytes("UTF-8");
+				outMsg[8] = 0;
+				outMsg[9] = 0;
+				outMsg[10] = 0;
+				outMsg[11] = 0;
+				outMsg[12] = 0;
+				outMsg[13] = 0;
+				outMsg[14] = 0;
+				outMsg[15] = 0;
+				out.write(outMsg);
+				out.write(longToBytes(tx.number()));
+				out.write(stringToBytes(schema));
+				out.write(stringToBytes(table));
+				out.write(intToBytes(device));
+				ObjectOutputStream objOut = new ObjectOutputStream(out);
+				objOut.writeObject(key);
+				objOut.writeObject(value);
+				objOut.flush();
+				out.flush();
+				getConfirmation(sock);
+				objOut.close();
+				sock.close();
+			}
+			catch(Exception e)
+			{
+				ok = false;
+				this.e = e;
+			}
+		}
+		
+		public boolean getOK()
+		{
+			return ok;
+		}
+		
+		public Exception getException()
+		{
+			return e;
+		}
+	}
+	
+	private void put2()
+	{
+		byte[] txBytes = new byte[8];
+		long txNum = -1;
+		byte[] schemaLenBytes = new byte[4];
+		byte[] tableLenBytes = new byte[4];
+		int schemaLength = -1;
+		int tableLength = -1;
+		String schema = null;
+		String table = null;
+		byte[] schemaData = null;
+		byte[] tableData = null;
+		byte[] deviceBytes = new byte[4];
+		int device;
+		Object key;
+		Object value;
+		try
+		{
+			readNonCoord(txBytes);
+			txNum = bytesToLong(txBytes);
+			tx = new Transaction(txNum);
+			readNonCoord(schemaLenBytes);
+			schemaLength = bytesToInt(schemaLenBytes);
+			schemaData = new byte[schemaLength];
+			readNonCoord(schemaData);
+			schema = new String(schemaData, "UTF-8");
+			readNonCoord(tableLenBytes);
+			tableLength = bytesToInt(tableLenBytes);
+			tableData = new byte[tableLength];
+			readNonCoord(tableData);
+			table = new String(tableData, "UTF-8");
+			readNonCoord(deviceBytes);
+			device = bytesToInt(deviceBytes);
+			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
+			key = (Object)objIn.readObject();
+			value = (Object)objIn.readObject();
+			
+			String fn = new MetaData().getDevicePath(device);
+			if (!fn.endsWith("/"))
+			{
+				fn += "/";
+			}
+			
+			fn += (schema + ".PK" + table + ".indx");
+			ArrayList<String> keys = new ArrayList<String>();
+			ArrayList<String> types = new ArrayList<String>();
+			ArrayList<Boolean> orders = new ArrayList<Boolean>();
+			keys.add(table + ".KEY");
+			FieldValue[] fva = new FieldValue[1];
+			FieldValue[] fva2 = new FieldValue[2];
+			if (key instanceof Integer)
+			{
+				types.add("INT");
+				fva[0] = new Schema.IntegerFV((Integer)key);
+				fva2[0] = new Schema.IntegerFV((Integer)key);
+			}
+			else if (key instanceof Long)
+			{
+				types.add("LONG");
+				fva[0] = new Schema.BigintFV((Long)key);
+				fva2[0] = new Schema.BigintFV((Long)key);
+			}
+			else if (key instanceof Float)
+			{
+				types.add("FLOAT");
+				fva[0] = new Schema.DoubleFV(new Double((Float)key));
+				fva2[0] = new Schema.DoubleFV(new Double((Float)key));
+			}
+			else if (key instanceof Double)
+			{
+				types.add("FLOAT");
+				fva[0] = new Schema.DoubleFV((Double)key);
+				fva2[0] = new Schema.DoubleFV((Double)key);
+			}
+			else if (key instanceof String)
+			{
+				types.add("CHAR");
+				fva[0] = new Schema.VarcharFV((String)key);
+				fva2[0] = new Schema.VarcharFV((String)key);
+			}
+			else if (key instanceof Date)
+			{
+				GregorianCalendar cal = new GregorianCalendar();
+				cal.setTime((Date)key);
+				types.add("DATE");
+				fva[0] = new Schema.DateFV(new MyDate(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH)));
+				fva2[0] = new Schema.DateFV(new MyDate(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH)));
+			}
+			
+			if (value instanceof Integer)
+			{
+				fva2[1] = new Schema.IntegerFV((Integer)value);
+			}
+			else if (value instanceof Long)
+			{
+				fva2[1] = new Schema.BigintFV((Long)value);
+			}
+			else if (value instanceof Float)
+			{
+				fva2[1] = new Schema.DoubleFV(new Double((Float)value));
+			}
+			else if (value instanceof Double)
+			{
+				fva2[1] = new Schema.DoubleFV((Double)value);
+			}
+			else if (value instanceof String)
+			{
+				fva2[1] = new Schema.VarcharFV((String)value);
+			}
+			else if (value instanceof Date)
+			{
+				GregorianCalendar cal = new GregorianCalendar();
+				cal.setTime((Date)value);
+				fva2[1] = new Schema.DateFV(new MyDate(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH)));
+			}
+			orders.add(true);
+			Index index = new Index(fn, keys, types, orders);
+			index.setTransaction(tx);
+			index.open();
+			RID rid = index.get(fva);
+			if (rid == null)
+			{
+				//doesn't exist yet
+				//do insert
+				int block = Schema.HEADER_SIZE;
+				//request block
+				HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+				Schema sch = new Schema(layout);
+				Block toRequest = new Block(new MetaData().getDevicePath(device) + schema + "." + table + ".tbl", block);
+				tx.requestPage(toRequest);
+				tx.read(toRequest, sch, true);
+				rid = sch.insertRow(fva2);
+				index.insert(fva, rid);
+			}
+			else
+			{
+				//already exists
+				//do delete then insert
+				HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+				Schema sch = new Schema(layout);
+				int block = rid.getBlockNum();
+				//request block
+				Block toRequest = new Block(new MetaData().getDevicePath(device) + schema + "." + table + ".tbl", block);
+				tx.requestPage(toRequest);
+				tx.read(toRequest, sch, true);
+				sch.deleteRow(rid);
+				
+				//for each index, delete row based on rid and key values
+				index.delete(fva, rid);
+				
+				block = Schema.HEADER_SIZE;
+				//request block
+				toRequest = new Block(new MetaData().getDevicePath(device) + schema + "." + table + ".tbl", block);
+				tx.requestPage(toRequest);
+				tx.read(toRequest, sch, true);
+				rid = sch.insertRow(fva2);
+				index.insert(fva, rid);
+			}
+			
+			tx.commit();
+			sendOK();
+		}
+		catch(Exception e)
+		{
+			sendNo();
 		}
 	}
 }

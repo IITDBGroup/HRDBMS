@@ -1,5 +1,11 @@
 package com.exascale.client;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.ObjectInput;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutput;
+import java.io.ObjectOutputStream;
 import java.sql.BatchUpdateException;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -327,6 +333,63 @@ public class HRDBMSStatement implements Statement
 		{
 			throw new Exception();
 		}
+	}
+	
+	private Object receiveValue() throws Exception
+	{
+		byte[] inMsg = new byte[4];
+		
+		int count = 0;
+		while (count < 4)
+		{
+			try
+			{
+				int temp = conn.in.read(inMsg, count, 4 - count);
+				if (temp == -1)
+				{
+					throw new Exception("Unexpected EOF");
+				}
+				else
+				{
+					count += temp;
+				}
+			}
+			catch (final Exception e)
+			{
+				throw e;
+			}
+		}
+		
+		int length = bytesToInt(inMsg);
+		inMsg = new byte[length];
+		count = 0;
+		while (count < length)
+		{
+			try
+			{
+				int temp = conn.in.read(inMsg, count, length - count);
+				if (temp == -1)
+				{
+					throw new Exception("Unexpected EOF");
+				}
+				else
+				{
+					count += temp;
+				}
+			}
+			catch (final Exception e)
+			{
+				throw e;
+			}
+		}
+		
+		ByteArrayInputStream bis = new ByteArrayInputStream(inMsg);
+		ObjectInput in = null;
+		in = new ObjectInputStream(bis);
+		Object o = in.readObject();
+		in.close();
+		bis.close();
+		return o;
 	}
 	
 	private static byte[] intToBytes(int val)
@@ -957,5 +1020,148 @@ public class HRDBMSStatement implements Statement
 		}
 		
 		return bytesToInt(data);
+	}
+	
+	public Object get(String name, Object key) throws SQLException
+	{
+		try
+		{
+			byte[] command = "GET             ".getBytes("UTF-8");
+			byte[] from = stringToBytes(name);
+			byte[] keyBytes = serialize(key);
+			conn.out.write(command);
+			conn.out.write(from);
+			conn.out.write(keyBytes);
+			conn.out.flush();
+			
+			try
+			{
+				this.getConfirmation();
+				Object retval = receiveValue();
+				return retval;
+			}
+			catch(Exception e)
+			{
+				if (e instanceof SQLException)
+				{
+					throw e;
+				}
+				e = receiveException();
+				throw new SQLException(e.getMessage());
+			}
+		}
+		catch(Exception f)
+		{
+			if (f instanceof SQLException)
+			{
+				throw (SQLException)f;
+			}
+			
+			throw new SQLException("An error occurred while sending the request to the server.  The transaction will be rolled back.");
+		}
+	}
+	
+	public void put(String name, Object key, Object value) throws SQLException
+	{
+		try
+		{
+			byte[] command = "PUT             ".getBytes("UTF-8");
+			byte[] from = stringToBytes(name);
+			byte[] keyBytes = serialize(key);
+			byte[] valBytes = serialize(value);
+			conn.out.write(command);
+			conn.out.write(from);
+			conn.out.write(keyBytes);
+			conn.out.write(valBytes);
+			conn.out.flush();
+			
+			try
+			{
+				this.getConfirmation();
+			}
+			catch(Exception e)
+			{
+				if (e instanceof SQLException)
+				{
+					throw e;
+				}
+				e = receiveException();
+				throw new SQLException(e.getMessage());
+			}
+		}
+		catch(Exception f)
+		{
+			if (f instanceof SQLException)
+			{
+				throw (SQLException)f;
+			}
+			
+			throw new SQLException("An error occurred while sending the request to the server.  The transaction will be rolled back.");
+		}
+	}
+	
+	public void remove(String name, Object key) throws SQLException
+	{
+		try
+		{
+			byte[] command = "REMOVE          ".getBytes("UTF-8");
+			byte[] from = stringToBytes(name);
+			byte[] keyBytes = serialize(key);
+			conn.out.write(command);
+			conn.out.write(from);
+			conn.out.write(keyBytes);
+			conn.out.flush();
+			
+			try
+			{
+				this.getConfirmation();
+			}
+			catch(Exception e)
+			{
+				if (e instanceof SQLException)
+				{
+					throw e;
+				}
+				e = receiveException();
+				throw new SQLException(e.getMessage());
+			}
+		}
+		catch(Exception f)
+		{
+			if (f instanceof SQLException)
+			{
+				throw (SQLException)f;
+			}
+			
+			throw new SQLException("An error occurred while sending the request to the server.  The transaction will be rolled back.");
+		}
+	}
+	
+	private byte[] stringToBytes(String string)
+	{
+		byte[] data = null;
+		try
+		{
+			data = string.getBytes("UTF-8");
+		}
+		catch(Exception e)
+		{}
+		byte[] len = intToBytes(data.length);
+		byte[] retval = new byte[data.length + len.length];
+		System.arraycopy(len, 0, retval, 0, len.length);
+		System.arraycopy(data, 0, retval, len.length, data.length);
+		return retval;
+	}
+	
+	private byte[] serialize(Object o) throws Exception
+	{
+		ByteArrayOutputStream bos = new ByteArrayOutputStream();
+		ObjectOutput out = null;
+		out = new ObjectOutputStream(bos);   
+		out.writeObject(o);
+		byte[] retval = bos.toByteArray();
+		out.close();
+		bos.close();
+		return retval;
 	}
 }

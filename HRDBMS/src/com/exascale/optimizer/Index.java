@@ -221,6 +221,27 @@ public final class Index implements Serializable
 		line.markTombstone();
 	}
 	
+	public RID get(FieldValue[] keys) throws Exception
+	{
+		seek(13);
+		this.setEqualsPosMulti(keys);
+		if (!line.isLeaf())
+		{
+			return null;
+		}
+		while (line.isTombstone())
+		{
+			line = line.nextRecord(true);
+			
+			if (!line.keysMatch(keys))
+			{
+				return null;
+			}
+		}
+		
+		return line.getRid();
+	}
+	
 	public void massDelete() throws Exception
 	{
 		seek(13);

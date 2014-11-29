@@ -42,6 +42,7 @@ public final class MetaData implements Serializable
 	private static int myNode;
 	private static HashMap<Integer, String> nodeTable = new HashMap<Integer, String>();
 	private ConnectionWorker connection = null;
+	public static int numWorkerNodes = 0;
 	
 	static
 	{
@@ -63,6 +64,7 @@ public final class MetaData implements Serializable
 						myNode = workerID;
 						nodeTable.put(myNode, host);
 						workerID++;
+						numWorkerNodes++;
 					}
 					else
 					{
@@ -77,6 +79,7 @@ public final class MetaData implements Serializable
 					{
 						nodeTable.put(workerID, host);
 						workerID++;
+						numWorkerNodes++;
 					}
 					else
 					{
