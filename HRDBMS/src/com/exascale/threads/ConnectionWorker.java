@@ -1,15 +1,20 @@
 package com.exascale.threads;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutput;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.io.Reader;
+import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
+import java.io.Writer;
 import java.lang.management.ManagementFactory;
 import java.net.Socket;
 import java.nio.ByteBuffer;
@@ -38,6 +43,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import com.exascale.compression.CompressedSocket;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
@@ -50,6 +57,7 @@ import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LockManager;
 import com.exascale.managers.LogManager;
 import com.exascale.managers.PlanCacheManager;
+import com.exascale.managers.ResourceManager;
 import com.exascale.managers.XAManager;
 import com.exascale.misc.AtomicDouble;
 import com.exascale.misc.BufferedLinkedBlockingQueue;
@@ -90,6 +98,9 @@ public class ConnectionWorker extends HRDBMSThread
 	private Transaction tx = null;
 	private XAWorker worker;
 	private static ConcurrentHashMap<String, LoadMetaData> ldmds = new ConcurrentHashMap<String, LoadMetaData>();
+	private static final Pattern uptimePattern = Pattern.compile("^.*\\s+load\\s+average:\\s+([\\d\\.]+),\\s+([\\d\\.]+),\\s+([\\d\\.]+)$");
+	private static int maxLoad = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_load_average")); 
+	private static int criticalMem = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("critical_mem_percent"));
 
 	static
 	{
@@ -114,10 +125,90 @@ public class ConnectionWorker extends HRDBMSThread
 		buff[3] = (byte)((val & 0x000000FF));
 		return buff;
 	}
+	
+	public static double parseUptimeResult(String uptimeCmdResult) throws Exception 
+	{
+		Matcher m = uptimePattern.matcher(uptimeCmdResult);
+ 
+		if (m.matches()) {
+			double oneMinuteLoadAvg = Double.parseDouble(m.group(1));
+			double fiveMinuteloadAvg = Double.parseDouble(m.group(2));
+			double fifteenMinuteLoadAvg = Double.parseDouble(m.group(3));
+ 
+			return fifteenMinuteLoadAvg;
+		} else {
+			throw new Exception("Exception while parsing Uptime Result: ");
+		}
+	}
+	
+	public static String runUptimeCommand(String crunchifyCmd, boolean waitForResult) throws Exception
+	{
+		ProcessBuilder crunchifyProcessBuilder = null;
+ 
+		crunchifyProcessBuilder = new ProcessBuilder("/bin/bash", "-c", crunchifyCmd);
+		crunchifyProcessBuilder.redirectErrorStream(true);
+		Writer crunchifyWriter = null;
+		try {
+			Process process = crunchifyProcessBuilder.start();
+			if (waitForResult) {
+				InputStream crunchifyStream = process.getInputStream();
+ 
+				if (crunchifyStream != null) {
+					crunchifyWriter = new StringWriter();
+ 
+					char[] crunchifyBuffer = new char[2048];
+					try {
+						Reader crunchifyReader = new BufferedReader(new InputStreamReader(crunchifyStream, "UTF-8"));
+						int count;
+						while ((count = crunchifyReader.read(crunchifyBuffer)) != -1) {
+							crunchifyWriter.write(crunchifyBuffer, 0, count);
+						}
+					} finally {
+						crunchifyStream.close();
+					}
+					crunchifyWriter.toString();
+					crunchifyStream.close();
+				}
+			}
+		} catch (Exception e) 
+		{
+			throw e;
+		}
+		return crunchifyWriter.toString();
+	}
+	
+	private static boolean memoryOK()
+	{
+		return ((Runtime.getRuntime().freeMemory() + ResourceManager.maxMemory - Runtime.getRuntime().totalMemory()) * 100.0) / (ResourceManager.maxMemory * 1.0) > criticalMem;
+	}
 
 	@Override
 	public void run()
 	{
+		//check if there are enough available resources or not
+		try
+		{
+			while (true)
+			{
+				String uptimeCmd = "uptime";
+				String uptimeCmdResult = runUptimeCommand(uptimeCmd, true);
+				double load = parseUptimeResult(uptimeCmdResult);
+				if (load <= (maxLoad * 1.0))
+				{
+					if (memoryOK())
+					{
+						break;
+					}
+				}
+				
+				Thread.sleep(5000);
+			}
+		}
+		catch(Exception e)
+		{
+			HRDBMSWorker.logger.debug("", e);
+		}
+		
 		HRDBMSWorker.logger.debug("New connection worker is up and running");
 		try
 		{

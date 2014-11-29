@@ -73,7 +73,7 @@ public final class ResourceManager extends HRDBMSThread
 
 	public static final AtomicInteger objID = new AtomicInteger(0);
 
-	private static final long maxMemory;
+	public static final long maxMemory;
 
 	public static volatile AtomicInteger NO_OFFLOAD = new AtomicInteger(0);
 

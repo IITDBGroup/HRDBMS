@@ -284,7 +284,7 @@ public final class UpdateOperator implements Operator, Serializable
 		}
 		
 		Iterator it = dba.iterator();
-		int numNodes = MetaData.getNumNodes(tx);
+		int numNodes = MetaData.numWorkerNodes;
 		while (it.hasNext())
 		{
 			try

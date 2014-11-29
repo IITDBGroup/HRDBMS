@@ -1226,7 +1226,7 @@ public final class Phase5
 
 	private ArrayList<Operator> getJoins(Operator op) throws Exception
 	{
-		final ArrayList<Operator> retval = new ArrayList<Operator>(meta.getNumNodes(tx));
+		final ArrayList<Operator> retval = new ArrayList<Operator>(MetaData.numWorkerNodes);
 		if (op instanceof HashJoinOperator || op instanceof NestedLoopJoinOperator || op instanceof SemiJoinOperator || op instanceof AntiJoinOperator)
 		{
 			retval.add(op);
@@ -1267,7 +1267,7 @@ public final class Phase5
 			return retval;
 		}
 
-		retval = new ArrayList<TableScanOperator>(meta.getNumNodes(tx));
+		retval = new ArrayList<TableScanOperator>(MetaData.numWorkerNodes);
 		for (final Operator o : op.children())
 		{
 			retval.addAll(getTableScans(o));

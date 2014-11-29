@@ -318,7 +318,7 @@ public final class Phase3
 				final Operator parent = ((TableScanOperator)op).firstParent();
 				final CNFFilter cnf = ((TableScanOperator)op).getCNFForParent(parent);
 				parent.removeChild(op);
-				final Operator send = new NetworkSendOperator(getPositiveRandomInt() % meta.getNumNodes(tx), meta);
+				final Operator send = new NetworkSendOperator(getPositiveRandomInt() % MetaData.numWorkerNodes, meta);
 				op.setNode(send.getNode());
 				final Operator receive = new NetworkReceiveOperator(meta);
 				try
@@ -540,12 +540,12 @@ public final class Phase3
 
 	private int getStartingNode(long numNodes) throws Exception
 	{
-		if (numNodes >= meta.getNumNodes(tx))
+		if (numNodes >= MetaData.numWorkerNodes)
 		{
 			return 0;
 		}
 
-		final int range = (int)(meta.getNumNodes(tx) - numNodes);
+		final int range = (int)(MetaData.numWorkerNodes - numNodes);
 		return (int)(Math.random() * range);
 	}
 
@@ -569,7 +569,7 @@ public final class Phase3
 
 	private boolean handleAnti(NetworkReceiveOperator receive) throws Exception
 	{
-		if (meta.getNumNodes(tx) == 1)
+		if (MetaData.numWorkerNodes == 1)
 		{
 			pushAcross2(receive);
 			return true;
@@ -716,7 +716,7 @@ public final class Phase3
 	
 	private boolean handleUnion(NetworkReceiveOperator receive) throws Exception
 	{
-		if (meta.getNumNodes(tx) == 1)
+		if (MetaData.numWorkerNodes == 1)
 		{
 			pushAcross2(receive);
 			return true;
@@ -744,7 +744,7 @@ public final class Phase3
 
 	private boolean handleHash(NetworkReceiveOperator receive) throws Exception
 	{
-		if (meta.getNumNodes(tx) == 1)
+		if (MetaData.numWorkerNodes == 1)
 		{
 			pushAcross2(receive);
 			return true;
@@ -1035,7 +1035,7 @@ public final class Phase3
 
 			int i = 0;
 			final ArrayList<NetworkHashReceiveOperator> receives = new ArrayList<NetworkHashReceiveOperator>();
-			while (i < card / MIN_CARD_BEFORE_HASH && i < meta.getNumNodes(tx))
+			while (i < card / MIN_CARD_BEFORE_HASH && i < MetaData.numWorkerNodes)
 			{
 				final NetworkHashReceiveOperator hrec = new NetworkHashReceiveOperator(ID, meta);
 				hrec.setNode(i + starting);
@@ -1239,7 +1239,7 @@ public final class Phase3
 
 	private boolean handleNested(NetworkReceiveOperator receive) throws Exception
 	{
-		if (meta.getNumNodes(tx) == 1)
+		if (MetaData.numWorkerNodes == 1)
 		{
 			pushAcross2(receive);
 			return true;
@@ -1386,7 +1386,7 @@ public final class Phase3
 
 	private boolean handleProduct(NetworkReceiveOperator receive) throws Exception
 	{
-		if (meta.getNumNodes(tx) == 1)
+		if (MetaData.numWorkerNodes == 1)
 		{
 			pushAcross2(receive);
 			return true;
@@ -1470,7 +1470,7 @@ public final class Phase3
 
 	private boolean handleSemi(NetworkReceiveOperator receive) throws Exception
 	{
-		if (meta.getNumNodes(tx) == 1)
+		if (MetaData.numWorkerNodes == 1)
 		{
 			pushAcross2(receive);
 			return true;
@@ -1775,10 +1775,10 @@ public final class Phase3
 
 				if (i == numPerMiddle)
 				{
-					int node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
+					int node = Math.abs(ThreadLocalRandom.current().nextInt()) % MetaData.numWorkerNodes;
 					while (usedNodes.contains(node))
 					{
-						node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
+						node = Math.abs(ThreadLocalRandom.current().nextInt()) % MetaData.numWorkerNodes;
 					}
 					final NetworkSendOperator newSend = new NetworkSendOperator(node, meta);
 					try

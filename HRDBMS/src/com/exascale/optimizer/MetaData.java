@@ -2354,10 +2354,10 @@ public final class MetaData implements Serializable
 		return tokens.allTokens().length;
 	}
 
-	public static int getNumNodes(Transaction tx) throws Exception
-	{
-		return PlanCacheManager.getCountWorkerNodes().setParms().execute(tx);
-	}
+	//public static int getNumNodes(Transaction tx) throws Exception
+	//{
+	//	return PlanCacheManager.getCountWorkerNodes().setParms().execute(tx);
+	//}
 
 	public PartitionMetaData getPartMeta(String schema, String table, Transaction tx) throws Exception
 	{
@@ -5403,7 +5403,7 @@ public final class MetaData implements Serializable
 			{
 				nodeSet = new ArrayList<Integer>(1);
 				nodeSet.add(NODE_ALL);
-				numNodes = MetaData.this.getNumNodes(tx);
+				numNodes = MetaData.numWorkerNodes;
 			}
 			else
 			{
@@ -5462,7 +5462,7 @@ public final class MetaData implements Serializable
 			{
 				nodeSet = new ArrayList<Integer>(1);
 				nodeSet.add(NODE_ALL);
-				numNodes = MetaData.this.getNumNodes(tx);
+				numNodes = MetaData.numWorkerNodes;
 			}
 			else
 			{
@@ -5474,7 +5474,7 @@ public final class MetaData implements Serializable
 				while (tokens2.hasMoreTokens())
 				{
 					int node = Integer.parseInt(tokens2.nextToken());
-					if (node >= MetaData.this.getNumNodes(tx))
+					if (node >= MetaData.numWorkerNodes)
 					{
 						throw new Exception("Invalid node number: " + node);
 					}
@@ -5620,7 +5620,7 @@ public final class MetaData implements Serializable
 				{
 					String token = tokens3.nextToken();
 					int node = Integer.parseInt(token);
-					if (node >= MetaData.this.getNumNodes(tx))
+					if (node >= MetaData.numWorkerNodes)
 					{
 						throw new Exception("Invalid node number: " + node);
 					}

@@ -315,6 +315,10 @@ public final class LoadOperator implements Operator, Serializable
 	    
 	    ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
 	    PartitionMetaData spmd = new MetaData().getPartMeta(schema, table, tx);
+	    if (files.size() == 0)
+	    {
+	    	throw new Exception("Load input files were not found!");
+	    }
 	    for (Path path : files)
 	    {
 	    	threads.add(new ReadThread(path.toFile(), pos2Length, indexes, cols2Pos, cols2Types, pos2Col, spmd, keys, types, orders));
@@ -909,7 +913,7 @@ public final class LoadOperator implements Operator, Serializable
 				BufferedReader in = new BufferedReader(new FileReader(file));
 				Object o = next(in);
 				PartitionMetaData pmeta = new MetaData().new PartitionMetaData(schema, table, tx);
-				int numNodes = MetaData.getNumNodes(tx);
+				int numNodes = MetaData.numWorkerNodes;
 				while (!(o instanceof DataEndMarker))
 				{
 					ArrayList<Object> row = (ArrayList<Object>)o;

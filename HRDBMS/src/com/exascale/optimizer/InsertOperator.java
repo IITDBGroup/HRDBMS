@@ -253,7 +253,7 @@ public final class InsertOperator implements Operator, Serializable
 		
 		Object o = child.next(this);
 		PartitionMetaData pmeta = new MetaData().new PartitionMetaData(schema, table, tx);
-		int numNodes = MetaData.getNumNodes(tx);
+		int numNodes = MetaData.numWorkerNodes;
 		while (!(o instanceof DataEndMarker))
 		{
 			ArrayList<Object> row = (ArrayList<Object>)o;

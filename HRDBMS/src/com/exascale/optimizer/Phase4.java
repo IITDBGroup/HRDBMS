@@ -314,7 +314,7 @@ public final class Phase4
 
 	public void optimize() throws Exception
 	{
-		if (meta.getNumNodes(tx) > 1)
+		if (MetaData.numWorkerNodes > 1)
 		{
 			pushUpReceives();
 			redistributeSorts();
@@ -521,7 +521,7 @@ public final class Phase4
 
 		int i = starting;
 		ArrayList<Operator> receives = new ArrayList<Operator>();
-		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes(tx))
+		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < MetaData.numWorkerNodes)
 		{
 			final NetworkHashReceiveOperator receive2 = new NetworkHashReceiveOperator(ID, meta);
 			receive2.setNode(i);
@@ -612,7 +612,7 @@ public final class Phase4
 
 		i = starting;
 		receives = new ArrayList<Operator>();
-		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes(tx))
+		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < MetaData.numWorkerNodes)
 		{
 			final NetworkHashReceiveOperator receive2 = new NetworkHashReceiveOperator(ID, meta);
 			receive2.setNode(i);
@@ -778,7 +778,7 @@ public final class Phase4
 
 		int i = starting;
 		ArrayList<Operator> receives = new ArrayList<Operator>();
-		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes(tx))
+		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < MetaData.numWorkerNodes)
 		{
 			final NetworkHashReceiveOperator receive2 = new NetworkHashReceiveOperator(ID, meta);
 			receive2.setNode(i);
@@ -869,7 +869,7 @@ public final class Phase4
 
 		i = starting;
 		receives = new ArrayList<Operator>();
-		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes(tx))
+		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < MetaData.numWorkerNodes)
 		{
 			final NetworkHashReceiveOperator receive2 = new NetworkHashReceiveOperator(ID, meta);
 			receive2.setNode(i);
@@ -1318,7 +1318,7 @@ public final class Phase4
 
 		final ArrayList<NetworkSendOperator> sends = new ArrayList<NetworkSendOperator>();
 		int i = 0;
-		while (i < numNodes && starting + i < meta.getNumNodes(tx))
+		while (i < numNodes && starting + i < MetaData.numWorkerNodes)
 		{
 			try
 			{
@@ -1490,12 +1490,12 @@ public final class Phase4
 
 	private int getStartingNode(long numNodes) throws Exception
 	{
-		if (numNodes >= meta.getNumNodes(tx))
+		if (numNodes >= MetaData.numWorkerNodes)
 		{
 			return 0;
 		}
 
-		final int range = (int)(meta.getNumNodes(tx) - numNodes);
+		final int range = (int)(MetaData.numWorkerNodes - numNodes);
 		return (int)(Math.random() * range);
 	}
 
@@ -1547,7 +1547,7 @@ public final class Phase4
 
 			int i = 0;
 			final ArrayList<NetworkHashReceiveOperator> receives = new ArrayList<NetworkHashReceiveOperator>();
-			while (i < card / MIN_CARD_BEFORE_HASH && i < meta.getNumNodes(tx))
+			while (i < card / MIN_CARD_BEFORE_HASH && i < MetaData.numWorkerNodes)
 			{
 				final NetworkHashReceiveOperator hrec = new NetworkHashReceiveOperator(ID, meta);
 				hrec.setNode(i + starting);
@@ -1940,10 +1940,10 @@ public final class Phase4
 
 				if (i == numPerMiddle)
 				{
-					int node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
+					int node = Math.abs(ThreadLocalRandom.current().nextInt()) % MetaData.numWorkerNodes;
 					while (usedNodes.contains(node))
 					{
-						node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
+						node = Math.abs(ThreadLocalRandom.current().nextInt()) % MetaData.numWorkerNodes;
 					}
 					final NetworkSendOperator newSend = new NetworkSendOperator(node, meta);
 					try
@@ -2341,10 +2341,10 @@ public final class Phase4
 			}
 
 			NetworkHashReceiveOperator newReceive = new NetworkHashReceiveOperator(sends.get(0).getID(), meta);
-			int node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
+			int node = Math.abs(ThreadLocalRandom.current().nextInt()) % MetaData.numWorkerNodes;
 			while (usedNodes.contains(node))
 			{
-				node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
+				node = Math.abs(ThreadLocalRandom.current().nextInt()) % MetaData.numWorkerNodes;
 			}
 			newReceive.setNode(node);
 			receives2.add(newReceive);
@@ -2398,10 +2398,10 @@ public final class Phase4
 				if (j == numPerMiddle)
 				{
 					newReceive = new NetworkHashReceiveOperator(sends.get(0).getID(), meta);
-					node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
+					node = Math.abs(ThreadLocalRandom.current().nextInt()) % MetaData.numWorkerNodes;
 					while (usedNodes.contains(node))
 					{
-						node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
+						node = Math.abs(ThreadLocalRandom.current().nextInt()) % MetaData.numWorkerNodes;
 					}
 					newReceive.setNode(node);
 					receives2.add(newReceive);
@@ -2468,10 +2468,10 @@ public final class Phase4
 
 			final NetworkSendRROperator rr = (NetworkSendRROperator)receives.get(0).children().get(0);
 			NetworkHashReceiveOperator newReceive = new NetworkHashReceiveOperator(rr.getID(), meta);
-			int node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
+			int node = Math.abs(ThreadLocalRandom.current().nextInt()) % MetaData.numWorkerNodes;
 			while (usedNodes.contains(node))
 			{
-				node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
+				node = Math.abs(ThreadLocalRandom.current().nextInt()) % MetaData.numWorkerNodes;
 			}
 			newReceive.setNode(node);
 			receives2.add(newReceive);
@@ -2519,10 +2519,10 @@ public final class Phase4
 				if (j == numPerMiddle)
 				{
 					newReceive = new NetworkHashReceiveOperator(rr.getID(), meta);
-					node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
+					node = Math.abs(ThreadLocalRandom.current().nextInt()) % MetaData.numWorkerNodes;
 					while (usedNodes.contains(node))
 					{
-						node = Math.abs(ThreadLocalRandom.current().nextInt()) % meta.getNumNodes(tx);
+						node = Math.abs(ThreadLocalRandom.current().nextInt()) % MetaData.numWorkerNodes;
 					}
 					newReceive.setNode(node);
 					try
@@ -3178,7 +3178,7 @@ public final class Phase4
 
 		int i = starting;
 		ArrayList<Operator> receives = new ArrayList<Operator>();
-		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes(tx))
+		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < MetaData.numWorkerNodes)
 		{
 			final NetworkHashReceiveOperator receive2 = new NetworkHashReceiveOperator(ID, meta);
 			receive2.setNode(i);
@@ -3269,7 +3269,7 @@ public final class Phase4
 
 		i = starting;
 		receives = new ArrayList<Operator>();
-		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes(tx))
+		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < MetaData.numWorkerNodes)
 		{
 			final NetworkHashReceiveOperator receive2 = new NetworkHashReceiveOperator(ID, meta);
 			receive2.setNode(i);
@@ -3406,7 +3406,7 @@ public final class Phase4
 
 		int i = starting;
 		ArrayList<Operator> receives = new ArrayList<Operator>();
-		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes(tx))
+		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < MetaData.numWorkerNodes)
 		{
 			final NetworkHashReceiveOperator receive2 = new NetworkHashReceiveOperator(ID, meta);
 			receive2.setNode(i);
@@ -3496,7 +3496,7 @@ public final class Phase4
 
 		i = starting;
 		receives = new ArrayList<Operator>();
-		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes(tx))
+		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < MetaData.numWorkerNodes)
 		{
 			final NetworkHashReceiveOperator receive2 = new NetworkHashReceiveOperator(ID, meta);
 			receive2.setNode(i);
@@ -3643,7 +3643,7 @@ public final class Phase4
 
 		int i = starting;
 		ArrayList<Operator> receives = new ArrayList<Operator>();
-		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes(tx))
+		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < MetaData.numWorkerNodes)
 		{
 			final NetworkHashReceiveOperator receive2 = new NetworkHashReceiveOperator(ID, meta);
 			receive2.setNode(i);
@@ -3733,7 +3733,7 @@ public final class Phase4
 
 		i = starting;
 		receives = new ArrayList<Operator>();
-		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < meta.getNumNodes(tx))
+		while (i < (card / MIN_LOCAL_LEFT_HASH + 1) + starting && i < MetaData.numWorkerNodes)
 		{
 			final NetworkHashReceiveOperator receive2 = new NetworkHashReceiveOperator(ID, meta);
 			receive2.setNode(i);
@@ -4247,7 +4247,7 @@ public final class Phase4
 				final int starting = getStartingNode(numNodes);
 				final ArrayList<NetworkSendOperator> sends = new ArrayList<NetworkSendOperator>();
 				int i = 0;
-				while (i < numNodes && starting + i < meta.getNumNodes(tx))
+				while (i < numNodes && starting + i < MetaData.numWorkerNodes)
 				{
 					final NetworkHashReceiveOperator receive = new NetworkHashReceiveOperator(ID, meta);
 					receive.setNode(starting + i);
@@ -4310,7 +4310,7 @@ public final class Phase4
 				final int starting = getStartingNode(numNodes);
 				final ArrayList<NetworkSendOperator> sends = new ArrayList<NetworkSendOperator>();
 				int i = 0;
-				while (i < numNodes && starting + i < meta.getNumNodes(tx))
+				while (i < numNodes && starting + i < MetaData.numWorkerNodes)
 				{
 					final NetworkHashReceiveOperator receive = new NetworkHashReceiveOperator(ID, meta);
 					receive.setNode(starting + i);

@@ -27,9 +27,9 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 	public NetworkHashAndSendOperator(ArrayList<String> hashCols, long numNodes, int id, int starting, MetaData meta, Transaction tx) throws Exception
 	{
 		this.hashCols = hashCols;
-		if (numNodes > meta.getNumNodes(tx))
+		if (numNodes > MetaData.numWorkerNodes)
 		{
-			this.numNodes = meta.getNumNodes(tx);
+			this.numNodes = MetaData.numWorkerNodes;
 		}
 		else
 		{

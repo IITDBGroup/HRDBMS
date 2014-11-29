@@ -290,7 +290,7 @@ public final class Phase2
 					if (t.anyNode())
 					{
 						int i = Math.abs(ThreadLocalRandom.current().nextInt());
-						i = i % meta.getNumNodes(tx);
+						i = i % MetaData.numWorkerNodes;
 						t.addActiveNodeForParent(i, o);
 						setActiveDevices(t, filter, o);
 					}
