@@ -6,6 +6,7 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Properties;
 import java.util.Scanner;
 
 public class CLI
@@ -80,6 +81,18 @@ public class CLI
 		}
 	}
 	
+	private static boolean endWithIgnoreCase(String in, String cmp)
+	{
+		if (in.toUpperCase().endsWith(cmp.toUpperCase()))
+		{
+			return true;
+		}
+		else
+		{
+			return false;
+		}
+	}
+	
 	private static void connectTo(String cmd)
 	{
 		if (connected)
@@ -98,7 +111,12 @@ public class CLI
 		
 		try
 		{
-			conn = DriverManager.getConnection(cmd.substring(11));
+			Properties prop = new Properties();
+			if (endWithIgnoreCase(cmd, "FORCE"))
+			{
+				prop.setProperty("FORCE", "TRUE");
+			}
+			conn = DriverManager.getConnection(cmd.substring(11), prop);
 			conn.setAutoCommit(false);
 			connected = true;
 		}

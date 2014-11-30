@@ -724,6 +724,7 @@ public class CompressedFileChannel extends FileChannel
 			offset += bb.capacity();
 		}
 		
+		force(false);
 		FileManager.numBlocks.put(fn, (int)(offset / (128 * 1024)));
 		FileManager.removeFile(source.fn);
 		BufferManager.invalidateFile(source.fn);

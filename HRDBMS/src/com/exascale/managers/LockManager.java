@@ -44,48 +44,36 @@ public class LockManager extends HRDBMSThread
 			ArrayList<Vertice> starting = new ArrayList<Vertice>();
 			HashMap<Vertice, Vertice> vertices = new HashMap<Vertice, Vertice>();
 			HashMap<Thread, SubLockManager> threads2SLMs = new HashMap<Thread, SubLockManager>();
-		
-			for (SubLockManager manager : managers)
+			
+			while (true)
 			{
-				manager.lock.lock();
-				for (Map.Entry entry : manager.waitList.entrySet())
+				for (SubLockManager manager : managers)
 				{
-					for (Thread thread : (ArrayList<Thread>)entry.getValue())
+					manager.lock.lock();
+					//for all the threads that are waiting to lock blocks
+					for (Map.Entry entry : manager.waitList.entrySet())
 					{
-						Vertice vertice = new Vertice(manager.threads2Txs.get(thread), thread);
-						threads2SLMs.put(thread, manager);
-						if (!vertices.containsKey(vertice))
+						//for each thread
+						for (Thread thread : (ArrayList<Thread>)entry.getValue())
 						{
-							vertices.put(vertice, vertice);
-							starting.add(vertice);
-						}
-						else
-						{
-							vertice = vertices.get(vertice);
-							vertice.setThread(thread);
-						}
-					
-						Long targetTX = manager.xBlocksToTXs.get(entry.getKey());
-						if (targetTX != null)
-						{
-							//this xLock is what I am waiting on
-							Vertice vertice2 = new Vertice(targetTX);
-							if (!vertices.containsKey(vertice2))
+							Vertice vertice = new Vertice(manager.threads2Txs.get(thread), thread);
+							threads2SLMs.put(thread, manager);
+							if (!vertices.containsKey(vertice))
 							{
-								vertices.put(vertice2, vertice2);
+								vertices.put(vertice, vertice);
+								starting.add(vertice);
 							}
 							else
 							{
-								vertice2 = vertices.get(vertice2);
+								vertice = vertices.get(vertice);
+								vertice.addThread(thread); 
 							}
-						
-							vertice.addEdge(vertice2);
-						}
-						else
-						{
-							HashSet<Long> targetTXs = manager.sBlocksToTXs.get(entry.getKey());
-							for (Long txnum : targetTXs)
+					
+							//if there is an xLock on that block, we know what transaction we are waiting on
+							Long targetTX = manager.xBlocksToTXs.get(entry.getKey());
+							if (targetTX != null)
 							{
+								//this xLock is what I am waiting on
 								Vertice vertice2 = new Vertice(targetTX);
 								if (!vertices.containsKey(vertice2))
 								{
@@ -95,42 +83,76 @@ public class LockManager extends HRDBMSThread
 								{
 									vertice2 = vertices.get(vertice2);
 								}
-							
+						
+								//create an edge from me to them
 								vertice.addEdge(vertice2);
+							}
+							else
+							{
+								//otherwise I must be trying to get an xLock
+								//get the list of all TXs that have sLocks on this block
+								HashSet<Long> targetTXs = manager.sBlocksToTXs.get(entry.getKey());
+								for (Long txnum : targetTXs)
+								{
+									Vertice vertice2 = new Vertice(targetTX);
+									if (!vertices.containsKey(vertice2))
+									{
+										vertices.put(vertice2, vertice2);
+									}
+									else
+									{
+										vertice2 = vertices.get(vertice2);
+									}
+							
+									//add edges to all of those TXs
+									vertice.addEdge(vertice2);
+								}
 							}
 						}
 					}
 				}
-			}
 		
-			for (Vertice vertice : starting)
-			{
-				boolean cycle = checkForCycles(vertice);
-				if (cycle)
+				for (Vertice vertice : starting)
 				{
-					vertice.removeAllEdges();
-					Thread thread = vertice.getThread();
-					killed.put(thread, thread);
-					SubLockManager manager = threads2SLMs.get(vertice.getThread());
-					Long tx = manager.threads2Txs.remove(thread);
-					manager.txs2Threads.remove(tx);
-					Block b = manager.inverseWaitList.remove(thread);
-					ArrayList<Thread> threads = manager.waitList.get(b);
-					threads.remove(thread);
-					if (threads.size() == 0)
+					boolean cycle = checkForCycles(vertice);
+					if (cycle)
 					{
-						manager.waitList.remove(b);
+						vertice.removeAllEdges();
+						ArrayList<Thread> threads = vertice.getThreads();
+						for (Thread thread : threads)
+						{
+							killed.put(thread, thread);
+							SubLockManager manager = threads2SLMs.get(thread);
+							Long tx = manager.threads2Txs.remove(thread);
+							manager.txs2Threads.remove(tx);
+							Block b = manager.inverseWaitList.remove(thread);
+							ArrayList<Thread> threads2 = manager.waitList.get(b);
+							threads2.remove(thread);
+							if (threads2.size() == 0)
+							{
+								manager.waitList.remove(b);
+							}
+							synchronized(thread)
+							{
+								thread.notify();
+							}
+						}
 					}
-					synchronized(vertice.getThread())
+					else
 					{
-						vertice.getThread().notify();
+						for (SubLockManager manager : managers)
+						{
+							manager.lock.unlock();
+						}
+						
+						break;
 					}
 				}
-			}
 			
-			for (SubLockManager manager : managers)
-			{
-				manager.lock.unlock();
+				for (SubLockManager manager : managers)
+				{
+					manager.lock.unlock();
+				}
 			}
 		}
 	}
@@ -200,13 +222,13 @@ public class LockManager extends HRDBMSThread
 	private static class Vertice
 	{
 		private long txnum;
-		private Thread thread;
+		private HashSet<Thread> threads = new HashSet<Thread>();
 		private HashSet<Vertice> edges = new HashSet<Vertice>();
 		
 		public Vertice(Long txnum, Thread thread)
 		{
 			this.txnum = txnum;
-			this.thread = thread;
+			threads.add(thread);
 		}
 		
 		public Vertice(Long txnum)
@@ -214,9 +236,9 @@ public class LockManager extends HRDBMSThread
 			this.txnum = txnum;
 		}
 		
-		public void setThread(Thread thread)
+		public void addThread(Thread thread)
 		{
-			this.thread = thread;
+			threads.add(thread);
 		}
 		
 		public void addEdge(Vertice vertice)
@@ -229,9 +251,9 @@ public class LockManager extends HRDBMSThread
 			edges.clear();
 		}
 		
-		public Thread getThread()
+		public ArrayList<Thread> getThreads()
 		{
-			return thread;
+			return new ArrayList<Thread>(threads);
 		}
 		
 		public boolean equals(Object r)

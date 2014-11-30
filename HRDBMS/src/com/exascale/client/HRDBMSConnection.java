@@ -41,7 +41,7 @@ public class HRDBMSConnection implements Connection
 	protected boolean txIsReadOnly = true;
 	int portNum;
 
-	public HRDBMSConnection(Socket sock, String user, String pwd, int portNum) throws Exception
+	public HRDBMSConnection(Socket sock, String user, String pwd, int portNum, String force) throws Exception
 	{
 		this.sock = sock;
 		this.portNum = portNum;
@@ -49,7 +49,14 @@ public class HRDBMSConnection implements Connection
 		out = new BufferedOutputStream(sock.getOutputStream());
 		try
 		{
-			clientHandshake();
+			if (force.equals("TRUE"))
+			{
+				clientHandshake2();
+			}
+			else
+			{
+				clientHandshake();
+			}
 		}
 		catch(Exception e)
 		{
