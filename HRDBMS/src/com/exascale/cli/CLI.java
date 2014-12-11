@@ -115,6 +115,7 @@ public class CLI
 			if (endWithIgnoreCase(cmd, "FORCE"))
 			{
 				prop.setProperty("FORCE", "TRUE");
+				cmd = cmd.substring(0, cmd.length() - 6);
 			}
 			conn = DriverManager.getConnection(cmd.substring(11), prop);
 			conn.setAutoCommit(false);
