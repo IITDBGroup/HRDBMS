@@ -226,7 +226,7 @@ public class LoadMapper extends Mapper<LongWritable, Text, MyLongWritable, ALOWr
 	
 	private void getMetaData(String schema, String table) throws IOException
 	{
-		CompressedSocket sock = new CompressedSocket("localhost", Integer.parseInt(portString));
+		CompressedSocket sock = CompressedSocket.newCompressedSocket("localhost", Integer.parseInt(portString));
 		OutputStream out = sock.getOutputStream();
 		byte[] outMsg = "GETLDMD         ".getBytes("UTF-8");
 		outMsg[8] = 0;

@@ -67,6 +67,7 @@ import com.exascale.misc.HParms;
 import com.exascale.misc.MultiHashMap;
 import com.exascale.misc.MurmurHash;
 import com.exascale.misc.MyDate;
+import com.exascale.optimizer.Filter;
 import com.exascale.optimizer.Index;
 import com.exascale.optimizer.IndexOperator;
 import com.exascale.optimizer.LoadMetaData;
@@ -98,7 +99,6 @@ public class ConnectionWorker extends HRDBMSThread
 	private Transaction tx = null;
 	private XAWorker worker;
 	private static ConcurrentHashMap<String, LoadMetaData> ldmds = new ConcurrentHashMap<String, LoadMetaData>();
-	private static final Pattern uptimePattern = Pattern.compile("^.*\\s+load\\s+average:\\s+([\\d\\.]+),\\s+([\\d\\.]+),\\s+([\\d\\.]+)$");
 	private static int maxLoad = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_load_average")); 
 	private static int criticalMem = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("critical_mem_percent"));
 
@@ -128,17 +128,8 @@ public class ConnectionWorker extends HRDBMSThread
 	
 	public static double parseUptimeResult(String uptimeCmdResult) throws Exception 
 	{
-		Matcher m = uptimePattern.matcher(uptimeCmdResult);
- 
-		if (m.matches()) {
-			double oneMinuteLoadAvg = Double.parseDouble(m.group(1));
-			double fiveMinuteloadAvg = Double.parseDouble(m.group(2));
-			double fifteenMinuteLoadAvg = Double.parseDouble(m.group(3));
- 
-			return fifteenMinuteLoadAvg;
-		} else {
-			throw new Exception("Exception while parsing Uptime Result: ");
-		}
+		String load = uptimeCmdResult.substring(uptimeCmdResult.lastIndexOf(',') + 1).trim(); 
+		return Double.parseDouble(load);
 	}
 	
 	public static String runUptimeCommand(String crunchifyCmd, boolean waitForResult) throws Exception
@@ -186,30 +177,33 @@ public class ConnectionWorker extends HRDBMSThread
 	public void run()
 	{
 		//check if there are enough available resources or not
-		try
+		if (HRDBMSWorker.type == HRDBMSWorker.TYPE_MASTER || HRDBMSWorker.type == HRDBMSWorker.TYPE_COORD)
 		{
-			while (true)
+			try
 			{
-				String uptimeCmd = "uptime";
-				String uptimeCmdResult = runUptimeCommand(uptimeCmd, true);
-				double load = parseUptimeResult(uptimeCmdResult);
-				if (load <= (maxLoad * 1.0))
+				while (true)
 				{
-					if (memoryOK())
+					String uptimeCmd = "uptime";
+					String uptimeCmdResult = runUptimeCommand(uptimeCmd, true);
+					double load = parseUptimeResult(uptimeCmdResult);
+					if (load <= (maxLoad * 1.0))
 					{
-						break;
+						if (memoryOK())
+						{
+							break;
+						}
 					}
-				}
 				
-				Thread.sleep(5000);
+					Thread.sleep(5000);
+				}
+			}
+			catch(Exception e)
+			{
+				HRDBMSWorker.logger.debug("", e);
 			}
 		}
-		catch(Exception e)
-		{
-			HRDBMSWorker.logger.debug("", e);
-		}
 		
-		HRDBMSWorker.logger.debug("New connection worker is up and running");
+		//HRDBMSWorker.logger.debug("New connection worker is up and running");
 		try
 		{
 			while (true)
@@ -270,7 +264,7 @@ public class ConnectionWorker extends HRDBMSThread
 				}
 				else if (num == -1)
 				{
-					HRDBMSWorker.logger.debug("Received EOF when looking for a command.");
+					//HRDBMSWorker.logger.debug("Received EOF when looking for a command.");
 					sock.close();
 					if (worker != null)
 					{
@@ -282,8 +276,8 @@ public class ConnectionWorker extends HRDBMSThread
 					return;
 				}
 				final String command = new String(cmd, "UTF-8");
-				HRDBMSWorker.logger.debug("Received " + num + " bytes");
-				HRDBMSWorker.logger.debug("Command received by connection worker: " + command);
+				//HRDBMSWorker.logger.debug("Received " + num + " bytes");
+				HRDBMSWorker.logger.debug("Command: " + command);
 
 				final byte[] fromBytes = new byte[4];
 				final byte[] toBytes = new byte[4];
@@ -754,8 +748,8 @@ public class ConnectionWorker extends HRDBMSThread
 
 	private void closeConnection()
 	{
-		Exception f = new Exception();
-		HRDBMSWorker.logger.debug("Entered closeConnection(), trace =", f);
+		//Exception f = new Exception();
+		//HRDBMSWorker.logger.debug("Entered closeConnection(), trace =", f);
 		clientConnection = false;
 		if (tx != null)
 		{
@@ -837,26 +831,18 @@ public class ConnectionWorker extends HRDBMSThread
 			OperatingSystemMXBean osBean = ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
 			@SuppressWarnings("restriction")
 			int me = (int)(100 * osBean.getSystemCpuLoad());
-			Transaction tx2 = new Transaction(Transaction.ISOLATION_CS);
-			ArrayList<Object> rs = PlanCacheManager.getCoordNodes().setParms().execute(tx2);
-			ArrayList<Integer> coords = new ArrayList<Integer>();
-			for (Object r2 : rs)
-			{
-				if (!(r2 instanceof DataEndMarker))
-				{
-					coords.add((Integer)((ArrayList<Object>)r2).get(0));
-				}
-			}
+			
+			HashMap<Integer, String> coords = MetaData.getCoordMap();
 			
 			boolean imLow = true;
 			String lowHost = null;;
 			int low = 0;
-			for (int node : coords)
+			for (int node : coords.keySet())
 			{
 				try
 				{
-					String hostname = new MetaData().getHostNameForNode(node, tx2);
-					CompressedSocket sock2 = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					String hostname = coords.get(node);
+					CompressedSocket sock2 = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock2.setSoTimeout(5000 / coords.size());
 					OutputStream out = sock2.getOutputStream();
 					byte[] outMsg = "CAPACITY        ".getBytes("UTF-8");
@@ -897,8 +883,6 @@ public class ConnectionWorker extends HRDBMSThread
 					HRDBMSWorker.logger.debug("", e);
 				}
 			}
-			
-			tx2.commit();
 			
 			if (imLow)
 			{
@@ -2326,7 +2310,7 @@ public class ConnectionWorker extends HRDBMSThread
 				Socket sock = null;
 				try
 				{
-					sock = new CompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "LROLLBCK        ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -2369,7 +2353,7 @@ public class ConnectionWorker extends HRDBMSThread
 				String hostname = (String)obj2;
 				try
 				{
-					sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "LROLLBCK        ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -2449,13 +2433,14 @@ public class ConnectionWorker extends HRDBMSThread
 			}
 			catch (final Exception e)
 			{
-				throw new Exception();
+				throw e;
 			}
 		}
 		
 		String inStr = new String(inMsg, "UTF-8");
 		if (!inStr.equals("OK"))
 		{
+			HRDBMSWorker.logger.debug("In getConfirmation(), received " + inStr);
 			throw new Exception();
 		}
 	}
@@ -2587,7 +2572,7 @@ public class ConnectionWorker extends HRDBMSThread
 		Socket sock = null;
 		try
 		{
-			sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "LROLLBCK        ".getBytes("UTF-8");
 			outMsg[8] = 0;
@@ -2692,7 +2677,7 @@ public class ConnectionWorker extends HRDBMSThread
 				Socket sock = null;
 				try
 				{
-					sock = new CompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "LCOMMIT         ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -2735,7 +2720,7 @@ public class ConnectionWorker extends HRDBMSThread
 				String hostname = (String)obj2;
 				try
 				{
-					sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "LCOMMIT         ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -2791,7 +2776,7 @@ public class ConnectionWorker extends HRDBMSThread
 		Socket sock = null;
 		try
 		{
-			sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "LCOMMIT         ".getBytes("UTF-8");
 			outMsg[8] = 0;
@@ -3022,7 +3007,7 @@ public class ConnectionWorker extends HRDBMSThread
 				Socket sock = null;
 				try
 				{
-					sock = new CompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "PREPARE         ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -3066,7 +3051,7 @@ public class ConnectionWorker extends HRDBMSThread
 				String hostname = (String)obj2;
 				try
 				{
-					sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "PREPARE         ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -3122,7 +3107,7 @@ public class ConnectionWorker extends HRDBMSThread
 				Socket sock = null;
 				try
 				{
-					sock = new CompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "CHECKPNT        ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -3163,7 +3148,7 @@ public class ConnectionWorker extends HRDBMSThread
 				String hostname = (String)obj2;
 				try
 				{
-					sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "PREPARE         ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -3781,7 +3766,7 @@ public class ConnectionWorker extends HRDBMSThread
 			Socket sock = null;
 			try
 			{
-				sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+				sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "MDELETE         ".getBytes("UTF-8");
 				outMsg[8] = 0;
@@ -5063,7 +5048,7 @@ public class ConnectionWorker extends HRDBMSThread
 				Socket sock = null;
 				try
 				{
-					sock = new CompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "NEWTABLE        ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -5107,7 +5092,7 @@ public class ConnectionWorker extends HRDBMSThread
 				String hostname = (String)obj2;
 				try
 				{
-					sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "NEWTABLE        ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -5172,7 +5157,7 @@ public class ConnectionWorker extends HRDBMSThread
 				Socket sock = null;
 				try
 				{
-					sock = new CompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "NEWINDEX        ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -5217,7 +5202,7 @@ public class ConnectionWorker extends HRDBMSThread
 				String hostname = (String)obj2;
 				try
 				{
-					sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "NEWINDEX        ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -5297,7 +5282,7 @@ public class ConnectionWorker extends HRDBMSThread
 				Socket sock = null;
 				try
 				{
-					sock = new CompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "POPINDEX        ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -5349,7 +5334,7 @@ public class ConnectionWorker extends HRDBMSThread
 				String hostname = (String)obj2;
 				try
 				{
-					sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "POPINDEX        ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -6164,7 +6149,7 @@ public class ConnectionWorker extends HRDBMSThread
 				Socket sock = null;
 				try
 				{
-					sock = new CompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "SETLDMD         ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -6208,7 +6193,7 @@ public class ConnectionWorker extends HRDBMSThread
 				String hostname = (String)obj2;
 				try
 				{
-					sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "SETLDMD         ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -6347,7 +6332,7 @@ public class ConnectionWorker extends HRDBMSThread
 				Socket sock = null;
 				try
 				{
-					sock = new CompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "DELLDMD         ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -6390,7 +6375,7 @@ public class ConnectionWorker extends HRDBMSThread
 				String hostname = (String)obj2;
 				try
 				{
-					sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "DELLDMD         ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -6631,7 +6616,7 @@ public class ConnectionWorker extends HRDBMSThread
 				Socket sock = null;
 				try
 				{
-					sock = new CompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "DELFITBL        ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -6673,7 +6658,7 @@ public class ConnectionWorker extends HRDBMSThread
 				String hostname = (String)obj2;
 				try
 				{
-					sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "DELFITBL        ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -6729,7 +6714,7 @@ public class ConnectionWorker extends HRDBMSThread
 				Socket sock = null;
 				try
 				{
-					sock = new CompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "DELFIIDX        ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -6771,7 +6756,7 @@ public class ConnectionWorker extends HRDBMSThread
 				String hostname = (String)obj2;
 				try
 				{
-					sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "DELFIIDX        ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -7029,7 +7014,7 @@ public class ConnectionWorker extends HRDBMSThread
 				Socket sock = null;
 				try
 				{
-					sock = new CompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "REORG           ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -7079,7 +7064,7 @@ public class ConnectionWorker extends HRDBMSThread
 				String hostname = (String)obj2;
 				try
 				{
-					sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "REORG           ".getBytes("UTF-8");
 					outMsg[8] = 0;
@@ -7446,6 +7431,7 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 		catch(Exception e)
 		{
+			HRDBMSWorker.logger.debug("", e);
 			sendNo();
 			returnExceptionToClient(e);
 			return;
@@ -7455,27 +7441,17 @@ public class ConnectionWorker extends HRDBMSThread
 		{
 			Object retval = doGet(table, key);
 			sendOK();
-			byte[] retBytes = serialize(key);
-			sock.getOutputStream().write(retBytes);
+			ObjectOutputStream objOut = new ObjectOutputStream(sock.getOutputStream());
+			objOut.writeObject(retval);
+			objOut.flush();
 			sock.getOutputStream().flush();
 		}
 		catch(Exception e)
 		{
+			HRDBMSWorker.logger.debug("", e);
 			sendNo();
 			returnExceptionToClient(e);
 		}
-	}
-	
-	private byte[] serialize(Object o) throws Exception
-	{
-		ByteArrayOutputStream bos = new ByteArrayOutputStream();
-		ObjectOutput out = null;
-		out = new ObjectOutputStream(bos);   
-		out.writeObject(o);
-		byte[] retval = bos.toByteArray();
-		out.close();
-		bos.close();
-		return retval;
 	}
 	
 	private Object doGet(String name, Object key) throws Exception
@@ -7487,35 +7463,42 @@ public class ConnectionWorker extends HRDBMSThread
 			name = meta.getCurrentSchema() + "." + name;
 		}
 		
+		meta = new MetaData();
+		
 		//build operator tree
 		String schema = name.substring(0, name.indexOf('.'));
 		String table = name.substring(name.indexOf('.') + 1);
-		Transaction tx = new Transaction(Long.MAX_VALUE);
-		tx.setIsolationLevel(Transaction.ISOLATION_UR);
+		Transaction tx = new Transaction(Transaction.ISOLATION_UR);
 		ArrayList<String> keys = new ArrayList<String>();
 		ArrayList<String> types = new ArrayList<String>();
 		ArrayList<Boolean> orders = new ArrayList<Boolean>();
-		keys.add(table + ".KEY");
+		keys.add(table + ".KEY2");
+		String keyVal = null;
 		if (key instanceof Integer)
 		{
 			types.add("INT");
+			keyVal = ((Integer)key).toString();
 		}
 		else if (key instanceof Long)
 		{
 			types.add("LONG");
+			keyVal = ((Long)key).toString();
 		}
 		else if (key instanceof Float)
 		{
 			types.add("FLOAT");
 			key = new Double((Float)key);
+			keyVal = ((Float)key).toString();
 		}
 		else if (key instanceof Double)
 		{
 			types.add("FLOAT");
+			keyVal = ((Double)key).toString();
 		}
 		else if (key instanceof String)
 		{
 			types.add("CHAR");
+			keyVal = "'" + (String)key + "'";
 		}
 		else if (key instanceof Date)
 		{
@@ -7523,6 +7506,7 @@ public class ConnectionWorker extends HRDBMSThread
 			cal.setTime((Date)key);
 			types.add("DATE");
 			key = new MyDate(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH));
+			keyVal = "DATE('" + ((MyDate)key).toString() + "')";
 		}
 		orders.add(true);
 		//determine node and device
@@ -7535,7 +7519,15 @@ public class ConnectionWorker extends HRDBMSThread
 		IndexOperator iOp = new IndexOperator(index, meta);
 		iOp.setNode(node);
 		iOp.setDevice(device);
-		TableScanOperator tOp = new TableScanOperator(schema, table, meta, tx);
+		iOp.getIndex().setTransaction(tx);
+		iOp.getIndex().setCondition(new Filter(table + ".KEY2", "E", keyVal));
+		HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
+		cols2Pos.put(table + ".KEY2", 0);
+		cols2Pos.put(table + ".VAL", 1);
+		TreeMap<Integer, String> pos2Col = new TreeMap<Integer, String>();
+		pos2Col.put(0, table + ".KEY2");
+		pos2Col.put(1, table + ".VAL");
+		TableScanOperator tOp = new TableScanOperator(schema, table, meta, tx, true, cols2Pos, pos2Col);
 		ArrayList<Integer> devs = new ArrayList<Integer>();
 		devs.add(device);
 		tOp.addActiveDevices(devs);
@@ -7545,6 +7537,7 @@ public class ConnectionWorker extends HRDBMSThread
 		tOp.setNeededCols(needed);
 		tOp.setNode(node);
 		tOp.setPhase2Done();
+		tOp.setTransaction(tx);
 		tOp.add(iOp);
 		NetworkSendOperator send = new NetworkSendOperator(node, meta);
 		send.add(tOp);
@@ -7554,25 +7547,76 @@ public class ConnectionWorker extends HRDBMSThread
 		RootOperator root = new RootOperator(meta);
 		root.add(receive);
 		
-		//execute operator tree
-		root.start();
-		Object next = root.next();
-		if (next instanceof DataEndMarker)
+		Get2Thread thread = new Get2Thread(root);
+		thread.start();
+		tx.commitNoFlush();
+		thread.join();
+		if (!thread.getOK())
 		{
-			root.close();
-			return null;
+			throw thread.getException();
 		}
 		
-		if (next instanceof Exception)
+		return thread.getRetval();
+	}
+	
+	private static class Get2Thread extends HRDBMSThread
+	{
+		private RootOperator root;
+		private Object retval = null;
+		private boolean ok = true;
+		private Exception e;
+		
+		public Get2Thread(RootOperator root)
 		{
-			root.close();
-			throw (Exception)next;
+			this.root = root;
 		}
 		
-		ArrayList<Object> row = (ArrayList<Object>)next;
-		Object retval = row.get(0);
-		root.close();
-		return retval;
+		public boolean getOK()
+		{
+			return ok;
+		}
+		
+		public Exception getException()
+		{
+			return e;
+		}
+		
+		public Object getRetval()
+		{
+			return retval;
+		}
+		
+		public void run()
+		{
+			try
+			{
+				//execute operator tree
+				root.start();
+				Object next = root.next();
+				if (next instanceof DataEndMarker)
+				{
+					root.close();
+					return;
+				}
+			
+				if (next instanceof Exception)
+				{
+					root.close();
+					ok = false;
+					this.e = (Exception)next;
+					return;
+				}
+			
+				ArrayList<Object> row = (ArrayList<Object>)next;
+				retval = row.get(0);
+				root.close();
+			}
+			catch(Exception e)
+			{
+				ok = false;
+				this.e = e;
+			}
+		}
 	}
 	
 	private static long hash(Object key)
@@ -7607,6 +7651,7 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 		catch(Exception e)
 		{
+			HRDBMSWorker.logger.debug("", e);
 			sendNo();
 			returnExceptionToClient(e);
 			return;
@@ -7619,6 +7664,7 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 		catch(Exception e)
 		{
+			HRDBMSWorker.logger.debug("", e);
 			sendNo();
 			returnExceptionToClient(e);
 		}
@@ -7679,7 +7725,7 @@ public class ConnectionWorker extends HRDBMSThread
 		int device = (int)(hash % MetaData.getNumDevices());
 		SendRemove2Thread thread = new SendRemove2Thread(schema, table, node, device, key, tx);
 		thread.start();
-		tx.commit();
+		tx.commitNoFlush();
 		thread.join();
 		if (!thread.getOK())
 		{
@@ -7713,7 +7759,7 @@ public class ConnectionWorker extends HRDBMSThread
 			try
 			{
 				String host = new MetaData().getHostNameForNode(node);
-				Socket sock = new CompressedSocket(host, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+				Socket sock = CompressedSocket.newCompressedSocket(host, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "REMOVE2         ".getBytes("UTF-8");
 				outMsg[8] = 0;
@@ -7739,6 +7785,7 @@ public class ConnectionWorker extends HRDBMSThread
 			}
 			catch(Exception e)
 			{
+				HRDBMSWorker.logger.debug("", e);
 				ok = false;
 				this.e = e;
 			}
@@ -7786,6 +7833,7 @@ public class ConnectionWorker extends HRDBMSThread
 		byte[] deviceBytes = new byte[4];
 		int device;
 		Object key;
+		Transaction tx;
 		try
 		{
 			readNonCoord(txBytes);
@@ -7816,7 +7864,7 @@ public class ConnectionWorker extends HRDBMSThread
 			ArrayList<String> keys = new ArrayList<String>();
 			ArrayList<String> types = new ArrayList<String>();
 			ArrayList<Boolean> orders = new ArrayList<Boolean>();
-			keys.add(table + ".KEY");
+			keys.add(table + ".KEY2");
 			FieldValue[] fva = new FieldValue[1];
 			if (key instanceof Integer)
 			{
@@ -7854,29 +7902,41 @@ public class ConnectionWorker extends HRDBMSThread
 			Index index = new Index(fn, keys, types, orders);
 			index.setTransaction(tx);
 			index.open();
-			RID rid = index.get(fva);
-			if (rid == null)
+			try
 			{
-				sendOK();
+				RID rid = index.get(fva);
+				if (rid == null)
+				{
+					tx.commitNoFlush();
+					sendOK();
+					return;
+				}
+			
+				HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+				Schema sch = new Schema(layout);
+				int block = rid.getBlockNum();
+				//request block
+				Block toRequest = new Block(new MetaData().getDevicePath(device) + schema + "." + table + ".tbl", block);
+				tx.requestPage(toRequest);
+				tx.read(toRequest, sch, true);
+				sch.deleteRow(rid);
+			
+				//for each index, delete row based on rid and key values
+				index.delete(fva, rid);
+			}
+			catch(Exception e)
+			{
+				HRDBMSWorker.logger.debug("", e);
+				tx.rollback();
+				sendNo();
 				return;
 			}
-			
-			HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
-			Schema sch = new Schema(layout);
-			int block = rid.getBlockNum();
-			//request block
-			Block toRequest = new Block(new MetaData().getDevicePath(device) + schema + "." + table + ".tbl", block);
-			tx.requestPage(toRequest);
-			tx.read(toRequest, sch, true);
-			sch.deleteRow(rid);
-			
-			//for each index, delete row based on rid and key values
-			index.delete(fva, rid);
-			tx.commit();
+			tx.commitNoFlush();
 			sendOK();
 		}
 		catch(Exception e)
 		{
+			HRDBMSWorker.logger.debug("", e);
 			sendNo();
 		}
 	}
@@ -7900,6 +7960,7 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 		catch(Exception e)
 		{
+			HRDBMSWorker.logger.debug("", e);
 			sendNo();
 			returnExceptionToClient(e);
 			return;
@@ -7912,6 +7973,7 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 		catch(Exception e)
 		{
+			HRDBMSWorker.logger.debug("", e);
 			sendNo();
 			returnExceptionToClient(e);
 		}
@@ -7938,7 +8000,7 @@ public class ConnectionWorker extends HRDBMSThread
 		int device = (int)(hash % MetaData.getNumDevices());
 		SendPut2Thread thread = new SendPut2Thread(schema, table, node, device, key, tx, value);
 		thread.start();
-		tx.commit();
+		tx.commitNoFlush();
 		thread.join();
 		if (!thread.getOK())
 		{
@@ -7974,7 +8036,7 @@ public class ConnectionWorker extends HRDBMSThread
 			try
 			{
 				String host = new MetaData().getHostNameForNode(node);
-				Socket sock = new CompressedSocket(host, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+				Socket sock = CompressedSocket.newCompressedSocket(host, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "PUT2            ".getBytes("UTF-8");
 				outMsg[8] = 0;
@@ -8001,6 +8063,7 @@ public class ConnectionWorker extends HRDBMSThread
 			}
 			catch(Exception e)
 			{
+				HRDBMSWorker.logger.debug("", e);
 				ok = false;
 				this.e = e;
 			}
@@ -8033,6 +8096,7 @@ public class ConnectionWorker extends HRDBMSThread
 		int device;
 		Object key;
 		Object value;
+		Transaction tx;
 		try
 		{
 			readNonCoord(txBytes);
@@ -8064,7 +8128,7 @@ public class ConnectionWorker extends HRDBMSThread
 			ArrayList<String> keys = new ArrayList<String>();
 			ArrayList<String> types = new ArrayList<String>();
 			ArrayList<Boolean> orders = new ArrayList<Boolean>();
-			keys.add(table + ".KEY");
+			keys.add(table + ".KEY2");
 			FieldValue[] fva = new FieldValue[1];
 			FieldValue[] fva2 = new FieldValue[2];
 			if (key instanceof Integer)
@@ -8136,51 +8200,75 @@ public class ConnectionWorker extends HRDBMSThread
 			Index index = new Index(fn, keys, types, orders);
 			index.setTransaction(tx);
 			index.open();
-			RID rid = index.get(fva);
-			if (rid == null)
+			try
 			{
-				//doesn't exist yet
-				//do insert
-				int block = Schema.HEADER_SIZE;
-				//request block
-				HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
-				Schema sch = new Schema(layout);
-				Block toRequest = new Block(new MetaData().getDevicePath(device) + schema + "." + table + ".tbl", block);
-				tx.requestPage(toRequest);
-				tx.read(toRequest, sch, true);
-				rid = sch.insertRow(fva2);
-				index.insert(fva, rid);
+				RID rid = index.get(fva);
+				if (rid == null)
+				{
+					//doesn't exist yet
+					//do insert
+					int block = Schema.HEADER_SIZE;
+					//request block
+					HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+					Schema sch = new Schema(layout);
+					Block toRequest = new Block(new MetaData().getDevicePath(device) + schema + "." + table + ".tbl", block);
+					tx.requestPage(toRequest);
+					tx.read(toRequest, sch, true);
+			
+					rid = sch.insertRow(fva2);
+					index.insert(fva, rid);
+				}
+				else
+				{
+					//already exists
+					//do delete then insert
+					HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+					Schema sch = new Schema(layout);
+					int block = rid.getBlockNum();
+					//request block
+					Block toRequest = new Block(new MetaData().getDevicePath(device) + schema + "." + table + ".tbl", block);
+					tx.requestPage(toRequest);
+					tx.read(toRequest, sch, true);
+					sch.deleteRow(rid);
+				
+					//for each index, delete row based on rid and key values
+					index.delete(fva, rid);
+					
+					block = Schema.HEADER_SIZE;
+					//request block
+					toRequest = new Block(new MetaData().getDevicePath(device) + schema + "." + table + ".tbl", block);
+					tx.requestPage(toRequest);
+					tx.read(toRequest, sch, true);
+					RID newRid = sch.insertRow(fva2);
+					try
+					{
+						index.insert(fva, newRid);
+					}
+					catch(Exception e)
+					{
+						HRDBMSWorker.logger.debug("Index insert failed", e);
+						HRDBMSWorker.logger.debug("They old RID we deleted was " + rid);
+						HRDBMSWorker.logger.debug("The new RID we were trying to insert was " + newRid);
+						RID rid2 = index.get(fva);
+						HRDBMSWorker.logger.debug("An index get returns " + rid2);
+						throw e;
+					}
+				}
 			}
-			else
+			catch(Exception e)
 			{
-				//already exists
-				//do delete then insert
-				HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
-				Schema sch = new Schema(layout);
-				int block = rid.getBlockNum();
-				//request block
-				Block toRequest = new Block(new MetaData().getDevicePath(device) + schema + "." + table + ".tbl", block);
-				tx.requestPage(toRequest);
-				tx.read(toRequest, sch, true);
-				sch.deleteRow(rid);
-				
-				//for each index, delete row based on rid and key values
-				index.delete(fva, rid);
-				
-				block = Schema.HEADER_SIZE;
-				//request block
-				toRequest = new Block(new MetaData().getDevicePath(device) + schema + "." + table + ".tbl", block);
-				tx.requestPage(toRequest);
-				tx.read(toRequest, sch, true);
-				rid = sch.insertRow(fva2);
-				index.insert(fva, rid);
+				HRDBMSWorker.logger.debug("", e);
+				tx.rollback();
+				sendNo();
+				return;
 			}
 			
-			tx.commit();
+			tx.commitNoFlush();
 			sendOK();
 		}
 		catch(Exception e)
 		{
+			HRDBMSWorker.logger.debug("", e);
 			sendNo();
 		}
 	}

@@ -398,7 +398,7 @@ public final class DeleteOperator implements Operator, Serializable
 			try
 			{
 				String hostname = new MetaData().getHostNameForNode(node, tx);
-				sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+				sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "DELETE          ".getBytes("UTF-8");
 				outMsg[8] = 0;

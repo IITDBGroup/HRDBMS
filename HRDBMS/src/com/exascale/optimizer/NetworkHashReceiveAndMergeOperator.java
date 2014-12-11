@@ -98,7 +98,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 						CompressedSocket sock = null;
 						try
 						{
-							sock = new CompressedSocket(meta.getHostNameForNode(child.getNode()), WORKER_PORT);
+							sock = CompressedSocket.newCompressedSocket(meta.getHostNameForNode(child.getNode()), WORKER_PORT);
 						}
 						catch (final java.net.ConnectException e)
 						{

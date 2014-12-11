@@ -89,7 +89,7 @@ public class ConnectionManager extends HRDBMSThread
 	{
 		final int port = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"));
 		HRDBMSWorker.logger.debug("In rmiCall(), creating connection to " + host + " on port " + port);
-		final Socket sock = new CompressedSocket(host, port);
+		final Socket sock = CompressedSocket.newCompressedSocket(host, port);
 		HRDBMSWorker.logger.debug("Connection successful.");
 		sock.getOutputStream().write(data);
 		HRDBMSWorker.logger.debug("Length of data sent: " + data.length);
@@ -182,7 +182,7 @@ public class ConnectionManager extends HRDBMSThread
 					processMessage(msg);
 				}
 				final CompressedSocket sock = (CompressedSocket)server.accept();
-				HRDBMSWorker.logger.debug("Connection Manager accepted a connection.");
+				//HRDBMSWorker.logger.debug("Connection Manager accepted a connection.");
 				if (accepting)
 				{
 					HRDBMSWorker.addThread(new ConnectionWorker(sock));

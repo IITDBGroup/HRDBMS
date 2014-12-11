@@ -41,59 +41,41 @@ public class LockManager extends HRDBMSThread
 			catch(InterruptedException e)
 			{}
 		
-			ArrayList<Vertice> starting = new ArrayList<Vertice>();
-			HashMap<Vertice, Vertice> vertices = new HashMap<Vertice, Vertice>();
-			HashMap<Thread, SubLockManager> threads2SLMs = new HashMap<Thread, SubLockManager>();
-			
-			while (true)
+			try
 			{
-				for (SubLockManager manager : managers)
+				ArrayList<Vertice> starting = new ArrayList<Vertice>();
+				HashMap<Vertice, Vertice> vertices = new HashMap<Vertice, Vertice>();
+				HashMap<Thread, SubLockManager> threads2SLMs = new HashMap<Thread, SubLockManager>();
+				
+				while (true)
 				{
-					manager.lock.lock();
-					//for all the threads that are waiting to lock blocks
-					for (Map.Entry entry : manager.waitList.entrySet())
+					for (SubLockManager manager : managers)
 					{
-						//for each thread
-						for (Thread thread : (ArrayList<Thread>)entry.getValue())
+						manager.lock.lock();
+						//for all the threads that are waiting to lock blocks
+						for (Map.Entry entry : manager.waitList.entrySet())
 						{
-							Vertice vertice = new Vertice(manager.threads2Txs.get(thread), thread);
-							threads2SLMs.put(thread, manager);
-							if (!vertices.containsKey(vertice))
+							//for each thread
+							for (Thread thread : (ArrayList<Thread>)entry.getValue())
 							{
-								vertices.put(vertice, vertice);
-								starting.add(vertice);
-							}
-							else
-							{
-								vertice = vertices.get(vertice);
-								vertice.addThread(thread); 
-							}
-					
-							//if there is an xLock on that block, we know what transaction we are waiting on
-							Long targetTX = manager.xBlocksToTXs.get(entry.getKey());
-							if (targetTX != null)
-							{
-								//this xLock is what I am waiting on
-								Vertice vertice2 = new Vertice(targetTX);
-								if (!vertices.containsKey(vertice2))
+								Vertice vertice = new Vertice(manager.threads2Txs.get(thread), thread);
+								threads2SLMs.put(thread, manager);
+								if (!vertices.containsKey(vertice))
 								{
-									vertices.put(vertice2, vertice2);
+									vertices.put(vertice, vertice);
+									starting.add(vertice);
 								}
 								else
 								{
-									vertice2 = vertices.get(vertice2);
+									vertice = vertices.get(vertice);
+									vertice.addThread(thread); 
 								}
 						
-								//create an edge from me to them
-								vertice.addEdge(vertice2);
-							}
-							else
-							{
-								//otherwise I must be trying to get an xLock
-								//get the list of all TXs that have sLocks on this block
-								HashSet<Long> targetTXs = manager.sBlocksToTXs.get(entry.getKey());
-								for (Long txnum : targetTXs)
+								//if there is an xLock on that block, we know what transaction we are waiting on
+								Long targetTX = manager.xBlocksToTXs.get(entry.getKey());
+								if (targetTX != null)
 								{
+									//this xLock is what I am waiting on
 									Vertice vertice2 = new Vertice(targetTX);
 									if (!vertices.containsKey(vertice2))
 									{
@@ -104,54 +86,88 @@ public class LockManager extends HRDBMSThread
 										vertice2 = vertices.get(vertice2);
 									}
 							
-									//add edges to all of those TXs
+									//create an edge from me to them
 									vertice.addEdge(vertice2);
+								}
+								else
+								{
+									//otherwise I must be trying to get an xLock
+									//get the list of all TXs that have sLocks on this block
+									HashSet<Long> targetTXs = manager.sBlocksToTXs.get(entry.getKey());
+									for (Long txnum : targetTXs)
+									{
+										Vertice vertice2 = new Vertice(txnum);
+										if (!vertices.containsKey(vertice2))
+										{
+											vertices.put(vertice2, vertice2);
+										}
+										else
+										{
+											vertice2 = vertices.get(vertice2);
+										}
+								
+										//add edges to all of those TXs
+										vertice.addEdge(vertice2);
+									}
 								}
 							}
 						}
 					}
-				}
-		
-				for (Vertice vertice : starting)
-				{
-					boolean cycle = checkForCycles(vertice);
-					if (cycle)
+
+					boolean doBreak = true;
+					for (Vertice vertice : starting)
 					{
-						vertice.removeAllEdges();
-						ArrayList<Thread> threads = vertice.getThreads();
-						for (Thread thread : threads)
+						boolean cycle = checkForCycles(vertice);
+					
+						if (cycle)
 						{
-							killed.put(thread, thread);
-							SubLockManager manager = threads2SLMs.get(thread);
-							Long tx = manager.threads2Txs.remove(thread);
-							manager.txs2Threads.remove(tx);
-							Block b = manager.inverseWaitList.remove(thread);
-							ArrayList<Thread> threads2 = manager.waitList.get(b);
-							threads2.remove(thread);
-							if (threads2.size() == 0)
+							vertice.removeAllEdges();
+							ArrayList<Thread> threads = vertice.getThreads();
+							for (Thread thread : threads)
 							{
-								manager.waitList.remove(b);
+								killed.put(thread, thread);
+								SubLockManager manager = threads2SLMs.get(thread);
+								Long tx = manager.threads2Txs.remove(thread);
+								manager.txs2Threads.remove(tx);
+								Block b = manager.inverseWaitList.remove(thread);
+								ArrayList<Thread> threads2 = manager.waitList.get(b);
+								threads2.remove(thread);
+								if (threads2.size() == 0)
+								{
+									manager.waitList.remove(b);
+								}
+								synchronized(thread)
+								{
+									thread.notify();
+								}
 							}
-							synchronized(thread)
-							{
-								thread.notify();
-							}
+							
+							doBreak = false;
 						}
 					}
-					else
+				
+					for (SubLockManager manager : managers)
 					{
-						for (SubLockManager manager : managers)
-						{
-							manager.lock.unlock();
-						}
-						
+						manager.lock.unlock();
+					}
+					
+					if (doBreak)
+					{
 						break;
 					}
 				}
-			
+			}
+			catch (Exception e)
+			{
+				HRDBMSWorker.logger.fatal("Deadlock detection thread exception", e);
 				for (SubLockManager manager : managers)
 				{
-					manager.lock.unlock();
+					try
+					{
+						manager.lock.unlock();
+					}
+					catch(Exception f)
+					{}
 				}
 			}
 		}

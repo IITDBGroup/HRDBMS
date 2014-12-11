@@ -36,6 +36,23 @@ public class LogRec implements Comparable<LogRec>
 		lsn = buffer.getLong();
 		timestamp = buffer.getLong();
 	}
+	
+	public LogRec(FileChannel fc, boolean partial) throws IOException
+	{
+		//fc.position(fc.position() - 4); // leading size
+		//final ByteBuffer size = ByteBuffer.allocate(4);
+		//size.position(0);
+		//fc.read(size);
+		//size.position(0);
+		//final int sizeVal = size.getInt();
+		final ByteBuffer rec = ByteBuffer.allocate(12);
+		rec.position(0);
+		fc.read(rec);
+		buffer = rec;
+		buffer.position(0);
+		type = buffer.getInt();
+		txnum = buffer.getLong();
+	}
 
 	protected LogRec(int type, long txnum, ByteBuffer buffer)
 	{

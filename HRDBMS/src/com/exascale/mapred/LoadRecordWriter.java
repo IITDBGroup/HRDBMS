@@ -221,7 +221,7 @@ public class LoadRecordWriter extends RecordWriter
 		{
 			try
 			{
-				CompressedSocket sock = new CompressedSocket(hostname, Integer.parseInt(portString));
+				CompressedSocket sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(portString));
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "HADOOPLD        ".getBytes("UTF-8");
 				outMsg[8] = 0;

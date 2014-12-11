@@ -289,7 +289,7 @@ public class DeleteFilesTask extends Task
 			try
 			{
 				String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
-				sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+				sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "DELFITBL        ".getBytes("UTF-8");
 				outMsg[8] = 0;
@@ -355,7 +355,7 @@ public class DeleteFilesTask extends Task
 			try
 			{
 				String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
-				sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+				sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "DELFIIDX        ".getBytes("UTF-8");
 				outMsg[8] = 0;

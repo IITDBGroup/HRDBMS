@@ -10,14 +10,14 @@ import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LogManager;
 import com.exascale.tables.Transaction;
 
-public class LogIterator implements Iterator<LogRec>
+public class PartialLogIterator implements Iterator<LogRec>
 {
 	private long nextpos;
 	private final ByteBuffer sizeBuff = ByteBuffer.allocate(4);
 	private final FileChannel fc;
 	private int size;
 
-	public LogIterator(String filename) throws IOException
+	public PartialLogIterator(String filename) throws IOException
 	{
 		//synchronized (LogManager.noArchiveLock) // disable archiving while we have
 											// an iterator open
@@ -55,7 +55,7 @@ public class LogIterator implements Iterator<LogRec>
 		}
 	}
 	
-	public LogIterator(String filename, boolean flush) throws IOException
+	public PartialLogIterator(String filename, boolean flush) throws IOException
 	{
 		//synchronized (LogManager.noArchiveLock) // disable archiving while we have
 											// an iterator open
@@ -84,15 +84,15 @@ public class LogIterator implements Iterator<LogRec>
 		}
 	}
 	
-	public LogIterator(String filename, boolean flush, FileChannel fc) throws IOException
+	public PartialLogIterator(String filename, boolean flush, FileChannel fc) throws IOException
 	{
 		//synchronized (LogManager.noArchiveLock) // disable archiving while we have
 											// an iterator open
-		//synchronized(Transaction.txList)
-		//{
-		//	LogManager.openIters++;
-		//	LogManager.noArchive = true;
-		//}
+		synchronized(Transaction.txList)
+		{
+			LogManager.openIters++;
+			LogManager.noArchive = true;
+		}
 
 		this.fc = fc;
 		synchronized (fc)
@@ -142,7 +142,7 @@ public class LogIterator implements Iterator<LogRec>
 			synchronized (fc)
 			{
 				fc.position(nextpos);
-				retval = new LogRec(fc);
+				retval = new LogRec(fc, true);
 				try
 				{
 					fc.position(nextpos - 8);

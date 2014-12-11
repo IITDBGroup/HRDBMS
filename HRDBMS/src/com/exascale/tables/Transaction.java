@@ -108,16 +108,25 @@ public class Transaction implements Serializable
 
 	public void commit() throws Exception
 	{
+		LogManager.commit(txnum);
 		synchronized(txList)
 		{
-			if (txList.containsKey(txnum))
-			{
-				HRDBMSWorker.logger.debug("COMMIT: " + txnum);
-				BufferManager.unpinAll(txnum);
-				LogManager.commit(txnum);
-				LockManager.release(txnum);
-				txList.remove(txnum);
-			}
+			//HRDBMSWorker.logger.debug("COMMIT: " + txnum);
+			BufferManager.unpinAll(txnum);
+			LockManager.release(txnum);
+			txList.remove(txnum);
+		}
+	}
+	
+	public void commitNoFlush() throws Exception
+	{
+		LogManager.commitNoFlush(txnum);
+		synchronized(txList)
+		{
+			//HRDBMSWorker.logger.debug("COMMIT: " + txnum);
+			BufferManager.unpinAll(txnum);
+			LockManager.release(txnum);
+			txList.remove(txnum);
 		}
 	}
 	
@@ -125,30 +134,21 @@ public class Transaction implements Serializable
 	{
 		synchronized(txList)
 		{
-			if (txList.containsKey(txnum))
-			{
-				BufferManager.unpinAll2(txnum);
-				LockManager.release(txnum);
-			}
+			BufferManager.unpinAll2(txnum);
+			LockManager.release(txnum);
 		}
 	}
 	
 	public void tryCommit(String host) throws IOException
 	{
-		synchronized(txList)
+		try
 		{
-			if (txList.containsKey(txnum))
-			{
-				try
-				{
-					LogManager.ready(txnum, host);
-				}
-				catch(Exception e)
-				{
-					LogManager.notReady(txnum);
-					throw new IOException();
-				}
-			}
+			LogManager.ready(txnum, host);
+		}
+		catch(Exception e)
+		{
+			LogManager.notReady(txnum);
+			throw new IOException();
 		}
 	}
 
@@ -159,7 +159,8 @@ public class Transaction implements Serializable
 			if (!txList.containsKey(txnum))
 			{
 				txList.put(txnum, txnum);
-				LogManager.writeStartRecIfNeeded(txnum);
+				LogRec rec = new StartLogRec(txnum);
+				LogManager.write(rec);
 			}
 		}
 		return LogManager.delete(txnum, b, off, before, after);
@@ -167,15 +168,6 @@ public class Transaction implements Serializable
 
 	public HeaderPage forceReadHeaderPage(Block b, int type) throws LockAbortException, Exception
 	{
-		synchronized(txList)
-		{
-			if (!txList.containsKey(txnum))
-			{
-				txList.put(txnum, txnum);
-				LogManager.writeStartRecIfNeeded(txnum);
-			}
-		}
-		
 		if (level == ISOLATION_RR || level == ISOLATION_CS)
 		{
 			LockManager.sLock(b, txnum);
@@ -205,7 +197,8 @@ public class Transaction implements Serializable
 			if (!txList.containsKey(txnum))
 			{
 				txList.put(txnum, txnum);
-				LogManager.writeStartRecIfNeeded(txnum);
+				LogRec rec = new StartLogRec(txnum);
+				LogManager.write(rec);
 			}
 		}
 		return LogManager.insert(txnum, b, off, before, after);
@@ -218,14 +211,6 @@ public class Transaction implements Serializable
 
 	public void read(Block b, Schema schema) throws LockAbortException, Exception
 	{
-		synchronized(txList)
-		{
-			if (!txList.containsKey(txnum))
-			{
-				txList.put(txnum, txnum);
-				LogManager.writeStartRecIfNeeded(txnum);
-			}
-		}
 		if (level == ISOLATION_RR || level == ISOLATION_CS)
 		{
 			LockManager.sLock(b, txnum);
@@ -240,15 +225,6 @@ public class Transaction implements Serializable
 	
 	public void read(Block b, Schema schema, boolean lock) throws LockAbortException, Exception
 	{
-		synchronized(txList)
-		{
-			if (!txList.containsKey(txnum))
-			{
-				txList.put(txnum, txnum);
-				LogManager.writeStartRecIfNeeded(txnum);
-			}
-		}
-		
 		LockManager.xLock(b, txnum);
 		final Page p = this.getPage(b);
 		schema.read(this, p);
@@ -256,14 +232,6 @@ public class Transaction implements Serializable
 
 	public HeaderPage readHeaderPage(Block b, int type) throws LockAbortException, Exception
 	{
-		synchronized(txList)
-		{
-			if (!txList.containsKey(txnum))
-			{
-				txList.put(txnum, txnum);
-				LogManager.writeStartRecIfNeeded(txnum);
-			}
-		}
 		if (level == ISOLATION_RR || level == ISOLATION_CS)
 		{
 			LockManager.sLock(b, txnum);
@@ -320,14 +288,17 @@ public class Transaction implements Serializable
 	{
 		synchronized(txList)
 		{
-			if (txList.containsKey(txnum))
+			if (!txList.containsKey(txnum))
 			{
-				HRDBMSWorker.logger.debug("ROLLBACK: " + txnum);
-				BufferManager.unpinAll(txnum);
-				LogManager.rollback(txnum);
-				LockManager.release(txnum);
-				txList.remove(txnum);
+				txList.put(txnum, txnum);
+				LogRec rec = new StartLogRec(txnum);
+				LogManager.write(rec);
 			}
+			HRDBMSWorker.logger.debug("ROLLBACK: " + txnum);
+			LogManager.rollback(txnum);
+			BufferManager.unpinAll(txnum);
+			LockManager.release(txnum);
+			txList.remove(txnum);
 		}
 	}
 

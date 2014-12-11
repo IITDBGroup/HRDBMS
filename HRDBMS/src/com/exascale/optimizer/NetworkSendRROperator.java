@@ -178,7 +178,7 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 			}
 			catch(Exception e)
 			{}
-			Thread.sleep(60 * 1000);
+			//Thread.sleep(60 * 1000);
 		}
 		catch(Exception e)
 		{

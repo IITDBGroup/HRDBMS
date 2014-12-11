@@ -94,7 +94,16 @@ public class Schema
 		byte[] before;
 		byte[] after;
 		int off;
-		final int index = rowIDToIndex.get(id);
+		int index = -1;
+		try
+		{
+			index = rowIDToIndex.get(id);
+		}
+		catch(Exception e)
+		{
+			HRDBMSWorker.logger.debug("Looking for rid = " + id + " in " + rowIDToIndex, e);
+			throw e;
+		}
 		off = offArrayOff + index * colIDListSize * 4;
 		before = new byte[colIDListSize * 4];
 		p.get(off, before);

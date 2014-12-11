@@ -17,12 +17,13 @@ public final class CompressedServerSocket extends ServerSocket
 	public CompressedServerSocket(int port) throws IOException
 	{
 		super(port);
+		this.setReceiveBufferSize(64 * 1024 * 1024);
 	}
 
 	@Override
 	public Socket accept() throws IOException
 	{
-		final Socket socket = new CompressedSocket();
+		final Socket socket = CompressedSocket.newCompressedSocket();
 		implAccept(socket);
 		return socket;
 	}

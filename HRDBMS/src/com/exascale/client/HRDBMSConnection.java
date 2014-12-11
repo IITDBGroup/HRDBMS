@@ -747,7 +747,7 @@ public class HRDBMSConnection implements Connection
 			out.close();
 			sock.close();
 			
-			this.sock = new CompressedSocket(newHost, portNum);
+			this.sock = CompressedSocket.newCompressedSocket(newHost, portNum);
 			in = new BufferedInputStream(sock.getInputStream());
 			out = new BufferedOutputStream(sock.getOutputStream());
 			try

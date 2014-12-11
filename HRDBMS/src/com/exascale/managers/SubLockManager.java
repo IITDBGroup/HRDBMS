@@ -134,9 +134,10 @@ public class SubLockManager
 					threads2Txs.put(Thread.currentThread(), txnum);
 					txs2Threads.put(txnum, Thread.currentThread());
 					
-					lock.unlock();
 					synchronized(Thread.currentThread())
 					{
+						lock.unlock();
+
 						try
 						{
 							Thread.currentThread().wait();
@@ -145,13 +146,13 @@ public class SubLockManager
 						{}
 					}
 					
+					lock.lock();
 					if (LockManager.killed.containsKey(Thread.currentThread()))
 					{
 						LockManager.killed.remove(Thread.currentThread());
+						lock.unlock();
 						throw new LockAbortException();
 					}
-					
-					lock.lock();
 				}
 				else
 				{
@@ -288,9 +289,10 @@ public class SubLockManager
 					threads2Txs.put(Thread.currentThread(), txnum);
 					txs2Threads.put(txnum, Thread.currentThread());
 				
-					lock.unlock();
 					synchronized(Thread.currentThread())
 					{
+						lock.unlock();
+				
 						try
 						{
 							Thread.currentThread().wait();
@@ -299,13 +301,13 @@ public class SubLockManager
 						{}
 					}
 					
+					lock.lock();
 					if (LockManager.killed.containsKey(Thread.currentThread()))
 					{
 						LockManager.killed.remove(Thread.currentThread());
+						lock.unlock();
 						throw new LockAbortException();
 					}
-				
-					lock.lock();
 				}
 				else
 				{
@@ -357,9 +359,10 @@ public class SubLockManager
 						threads2Txs.put(Thread.currentThread(), txnum);
 						txs2Threads.put(txnum, Thread.currentThread());
 					
-						lock.unlock();
 						synchronized(Thread.currentThread())
 						{
+							lock.unlock();
+				
 							try
 							{
 								Thread.currentThread().wait();
@@ -368,13 +371,13 @@ public class SubLockManager
 							{}
 						}
 						
+						lock.lock();
 						if (LockManager.killed.containsKey(Thread.currentThread()))
 						{
 							LockManager.killed.remove(Thread.currentThread());
+							lock.unlock();
 							throw new LockAbortException();
 						}
-					
-						lock.lock();
 					}
 				}
 			}

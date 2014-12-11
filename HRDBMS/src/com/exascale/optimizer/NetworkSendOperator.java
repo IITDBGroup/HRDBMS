@@ -282,9 +282,9 @@ public class NetworkSendOperator implements Operator, Serializable
 			final byte[] obj = toBytes(o);
 			out.write(obj);
 			out.flush();
-			HRDBMSWorker.logger.debug("Wrote " + count + " rows");
+			//HRDBMSWorker.logger.debug("Wrote " + count + " rows");
 			child.close();
-			Thread.sleep(60 * 1000);
+			//Thread.sleep(60 * 1000); WHY was this here?
 		}
 		catch(Exception e)
 		{

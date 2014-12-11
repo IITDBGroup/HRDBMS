@@ -102,6 +102,30 @@ public class MultiHashMap<K, V>
 		}
 	}
 	
+	public synchronized V multiRemove(K key)
+	{
+		V retval = null;
+		if (map.containsKey(key))
+		{
+			final ConcurrentHashMap<V, V> vector = map.get(key);
+			for (V k : vector.keySet())
+			{
+				retval = k;
+				vector.remove(k);
+				break;
+			}
+
+			if (vector.size() == 0)
+			{
+				map.remove(vector);
+			}
+			
+			size.getAndDecrement();
+		}
+		
+		return retval;
+	}
+	
 	public void remove(K key)
 	{
 		map.remove(key);

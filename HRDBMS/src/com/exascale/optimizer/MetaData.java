@@ -100,6 +100,22 @@ public final class MetaData implements Serializable
 		}
 	}
 	
+	public static HashMap<Integer, String> getCoordMap()
+	{
+		HashMap<Integer, String> retval = new HashMap<Integer, String>();
+		for (Map.Entry entry : nodeTable.entrySet())
+		{
+			int node = (Integer)entry.getKey();
+			String host = (String)entry.getValue();
+			if (node < 0)
+			{
+				retval.put(node, host);
+			}
+		}
+		
+		return retval;
+	}
+	
 	public static int myNodeNum()
 	{
 		return myNode;
@@ -1350,7 +1366,7 @@ public final class MetaData implements Serializable
 			
 			Socket sock;
 			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
-			sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "NEWTABLE        ".getBytes("UTF-8");
 			outMsg[8] = 0;
@@ -1499,7 +1515,7 @@ public final class MetaData implements Serializable
 			
 			Socket sock;
 			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
-			sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "NEWINDEX        ".getBytes("UTF-8");
 			outMsg[8] = 0;
@@ -1655,7 +1671,7 @@ public final class MetaData implements Serializable
 			
 			Socket sock;
 			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
-			sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "POPINDEX        ".getBytes("UTF-8");
 			outMsg[8] = 0;

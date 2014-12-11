@@ -68,7 +68,7 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("old_file_cleanup_target_days", "7");
 		retval.setProperty("reorg_refresh_target_days", "7");
 		retval.setProperty("max_load_average", Integer.toString(100 * Runtime.getRuntime().availableProcessors())); 
-		retval.setProperty("critical_mem_percent", "10");
+		retval.setProperty("critical_mem_percent", "15");
 		HParmsDefaults.retval = retval;
 		return retval;
 	}

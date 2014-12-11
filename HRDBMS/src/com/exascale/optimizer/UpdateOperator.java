@@ -563,7 +563,7 @@ public final class UpdateOperator implements Operator, Serializable
 			try
 			{
 				String hostname = new MetaData().getHostNameForNode(node, tx);
-				sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+				sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "UPDATE          ".getBytes("UTF-8");
 				outMsg[8] = 0;
@@ -680,7 +680,7 @@ public final class UpdateOperator implements Operator, Serializable
 			try
 			{
 				String hostname = new MetaData().getHostNameForNode(node, tx);
-				sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+				sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "INSERT          ".getBytes("UTF-8");
 				outMsg[8] = 0;

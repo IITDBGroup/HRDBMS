@@ -3147,7 +3147,7 @@ public class PlanCacheManager
 				return this;
 			}
 			RootOperator root = (RootOperator)p.getTrees().get(0);
-			IndexOperator iOp = (IndexOperator)root.children().get(0).children().get(0).children().get(0).children().get(0);
+			IndexOperator iOp = (IndexOperator)root.children().get(0).children().get(0).children().get(0).children().get(0).children().get(0);
 			Index index = iOp.getIndex();
 			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
 			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));

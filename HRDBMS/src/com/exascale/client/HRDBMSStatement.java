@@ -335,63 +335,6 @@ public class HRDBMSStatement implements Statement
 		}
 	}
 	
-	private Object receiveValue() throws Exception
-	{
-		byte[] inMsg = new byte[4];
-		
-		int count = 0;
-		while (count < 4)
-		{
-			try
-			{
-				int temp = conn.in.read(inMsg, count, 4 - count);
-				if (temp == -1)
-				{
-					throw new Exception("Unexpected EOF");
-				}
-				else
-				{
-					count += temp;
-				}
-			}
-			catch (final Exception e)
-			{
-				throw e;
-			}
-		}
-		
-		int length = bytesToInt(inMsg);
-		inMsg = new byte[length];
-		count = 0;
-		while (count < length)
-		{
-			try
-			{
-				int temp = conn.in.read(inMsg, count, length - count);
-				if (temp == -1)
-				{
-					throw new Exception("Unexpected EOF");
-				}
-				else
-				{
-					count += temp;
-				}
-			}
-			catch (final Exception e)
-			{
-				throw e;
-			}
-		}
-		
-		ByteArrayInputStream bis = new ByteArrayInputStream(inMsg);
-		ObjectInput in = null;
-		in = new ObjectInputStream(bis);
-		Object o = in.readObject();
-		in.close();
-		bis.close();
-		return o;
-	}
-	
 	private static byte[] intToBytes(int val)
 	{
 		final byte[] buff = new byte[4];
@@ -1028,20 +971,22 @@ public class HRDBMSStatement implements Statement
 		{
 			byte[] command = "GET             ".getBytes("UTF-8");
 			byte[] from = stringToBytes(name);
-			byte[] keyBytes = serialize(key);
 			conn.out.write(command);
 			conn.out.write(from);
-			conn.out.write(keyBytes);
+			ObjectOutputStream objOut = new ObjectOutputStream(conn.out);
+			objOut.writeObject(key);
+			objOut.flush();
 			conn.out.flush();
 			
 			try
 			{
 				this.getConfirmation();
-				Object retval = receiveValue();
-				return retval;
+				ObjectInputStream objIn = new ObjectInputStream(conn.in);
+				return (Object)objIn.readObject();
 			}
 			catch(Exception e)
 			{
+				e.printStackTrace(); //DEBUG
 				if (e instanceof SQLException)
 				{
 					throw e;
@@ -1067,12 +1012,12 @@ public class HRDBMSStatement implements Statement
 		{
 			byte[] command = "PUT             ".getBytes("UTF-8");
 			byte[] from = stringToBytes(name);
-			byte[] keyBytes = serialize(key);
-			byte[] valBytes = serialize(value);
 			conn.out.write(command);
 			conn.out.write(from);
-			conn.out.write(keyBytes);
-			conn.out.write(valBytes);
+			ObjectOutputStream objOut = new ObjectOutputStream(conn.out);
+			objOut.writeObject(key);
+			objOut.writeObject(value);
+			objOut.flush();
 			conn.out.flush();
 			
 			try
@@ -1106,10 +1051,11 @@ public class HRDBMSStatement implements Statement
 		{
 			byte[] command = "REMOVE          ".getBytes("UTF-8");
 			byte[] from = stringToBytes(name);
-			byte[] keyBytes = serialize(key);
 			conn.out.write(command);
 			conn.out.write(from);
-			conn.out.write(keyBytes);
+			ObjectOutputStream objOut = new ObjectOutputStream(conn.out);
+			objOut.writeObject(key);
+			objOut.flush();
 			conn.out.flush();
 			
 			try
@@ -1118,6 +1064,7 @@ public class HRDBMSStatement implements Statement
 			}
 			catch(Exception e)
 			{
+				e.printStackTrace(); //DEBUG
 				if (e instanceof SQLException)
 				{
 					throw e;
@@ -1150,18 +1097,6 @@ public class HRDBMSStatement implements Statement
 		byte[] retval = new byte[data.length + len.length];
 		System.arraycopy(len, 0, retval, 0, len.length);
 		System.arraycopy(data, 0, retval, len.length, data.length);
-		return retval;
-	}
-	
-	private byte[] serialize(Object o) throws Exception
-	{
-		ByteArrayOutputStream bos = new ByteArrayOutputStream();
-		ObjectOutput out = null;
-		out = new ObjectOutputStream(bos);   
-		out.writeObject(o);
-		byte[] retval = bos.toByteArray();
-		out.close();
-		bos.close();
 		return retval;
 	}
 }

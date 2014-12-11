@@ -212,6 +212,11 @@ public final class Index implements Serializable
 		{
 			line = line.nextRecord(true);
 			
+			if (line.isNull())
+			{
+				return;
+			}
+			
 			if (!line.keysMatch(keys))
 			{
 				return;
@@ -229,13 +234,32 @@ public final class Index implements Serializable
 		{
 			return null;
 		}
-		while (line.isTombstone())
+		
+		if (!line.keysMatch(keys))
 		{
-			line = line.nextRecord(true);
-			
-			if (!line.keysMatch(keys))
+			return null;
+		}
+
+		if (line.isTombstone())
+		{
+			while (true)
 			{
-				return null;
+				line = line.nextRecord(true);
+			
+				if (line.isNull())
+				{
+					return null;
+				}
+			
+				if (!line.keysMatch(keys))
+				{
+					return null;
+				}
+			
+				if (!line.isTombstone)
+				{
+					break;
+				}
 			}
 		}
 		
@@ -346,6 +370,55 @@ public final class Index implements Serializable
 					if (!it.hasNext())
 					{
 						line = line.getDown(i, true);
+						break;
+					}
+				}
+				
+				i++;
+			}
+		}
+	}
+	
+	private final void setEqualsPosMulti(FieldValue[] vals, boolean xLock) throws Exception
+	{
+		if (xLock)
+		{
+			setEqualsPosMulti(vals);
+			return;
+		}
+		
+		//HRDBMSWorker.logger.debug("Searching " + fileName + " for " + search);
+		line = new IndexRecord(fileName, offset, tx);
+		if (line.p.getInt(line.off + 5) == 0)
+		{
+			return;
+		}
+		
+		while (!line.isLeaf())
+		{
+			//HRDBMSWorker.logger.debug("Line is " + line);
+			if (line.p.getInt(line.off + 5) == 0)
+			{
+				return;
+			}
+			
+			int i = 0;
+			Iterator it = line.internalIterator(types);
+			while (it.hasNext())
+			{
+				ArrayList<Object> k = (ArrayList<Object>)it.next();
+				//HRDBMSWorker.logger.debug("Saw internal key: " + k);
+				//if (((Comparable)val).compareTo(key) < 1)
+				if (compare(vals, k) < 1)
+				{
+					line = line.getDown(i);
+					break;
+				}
+				else
+				{
+					if (!it.hasNext())
+					{
+						line = line.getDown(i);
 						break;
 					}
 				}
@@ -3240,7 +3313,7 @@ public final class Index implements Serializable
 			rec = tx.insert(b1a, a1.array(), 5, p2.block());
 			p2.write(5, a1.array(), tx.number(), rec.lsn());
 			
-			IndexRecord newRec = new IndexRecord(file, p2.block().number(), 13, tx, true, p2);
+			IndexRecord newRec = new IndexRecord(file, p2.block().number(), 13, tx, true, p2); 
 			newRec.setChildUpPointers();
 			
 			if (b.number() == 0)
@@ -3725,6 +3798,8 @@ public final class Index implements Serializable
 								child.updateParentDownKey(keyBytes);
 							}
 						}
+						
+						return;
 					}
 					
 					//otherwise move record and then update in place
@@ -4258,6 +4333,8 @@ public final class Index implements Serializable
 								child.updateParentDownKeyNoLog(keyBytes);
 							}
 						}
+						
+						return;
 					}
 					
 					//otherwise move record and then update in place
@@ -5733,22 +5810,22 @@ public final class Index implements Serializable
 			}
 		}
 		
-		public IndexRecord(String file, int block, int offset, Transaction tx, Page p) throws Exception
-		{
-			this.file = file;
-			this.tx = tx;
-			this.p = p;
-			this.b = p.block();
-			off = offset;
-			keyOff = off + 9+128*8+8;
-			LockManager.sLock(b, tx.number());
-			isLeaf = (p.get(off+0) == 1);
-			if (p.get(off+0) == 2)
-			{
-				isLeaf = true;
-				isTombstone = true;
-			}
-		}
+		//public IndexRecord(String file, int block, int offset, Transaction tx, Page p) throws Exception
+		//{
+		//	this.file = file;
+		//	this.tx = tx;
+		//	this.p = p;
+		//	this.b = p.block();
+		//	off = offset;
+		//	keyOff = off + 9+128*8+8;
+		//	LockManager.sLock(b, tx.number());
+		//	isLeaf = (p.get(off+0) == 1);
+		//	if (p.get(off+0) == 2)
+		//	{
+		//		isLeaf = true;
+		//		isTombstone = true;
+		//	}
+		//}
 		
 		public IndexRecord(String file, int block, int offset, Transaction tx, boolean x) throws Exception
 		{
@@ -5789,6 +5866,10 @@ public final class Index implements Serializable
 			this.file = file;
 			this.tx = tx;
 			this.p = p;
+			if (p == null)
+			{
+				throw new Exception("NULL page in IndexRecord Constructor");
+			}
 			this.b = p.block();
 			off = offset;
 			keyOff = off + 9+128*8+8;
@@ -5805,7 +5886,7 @@ public final class Index implements Serializable
 			}
 		}
 		
-		private IndexRecord()
+		private IndexRecord() 
 		{}
 		
 		public ArrayList<Object> getKeys(ArrayList<String> types) throws Exception
@@ -5818,7 +5899,18 @@ public final class Index implements Serializable
 				o++; // skip null indicator
 				if (type.equals("INT"))
 				{
-					retval.add(p.getInt(o));
+					try
+					{
+						retval.add(p.getInt(o));
+					}
+					catch(Exception e)
+					{
+						HRDBMSWorker.logger.debug("", e);
+						HRDBMSWorker.logger.debug("Retval = " + retval);
+						HRDBMSWorker.logger.debug("p = " + p);
+						HRDBMSWorker.logger.debug("o = " + o);
+						throw e;
+					}
 					o += 4;
 				}
 				else if (type.equals("FLOAT"))
@@ -5886,7 +5978,7 @@ public final class Index implements Serializable
 			return (((long)p.getInt(off+33)) << 32) + p.getInt(off+37);
 		}
 		
-		public IndexRecord nextRecord() throws Exception
+		public IndexRecord nextRecord() throws Exception 
 		{
 			if (p.getInt(off+9) == 0 && p.getInt(off+13) == 0)
 			{
@@ -5944,17 +6036,17 @@ public final class Index implements Serializable
 			return new IndexRecord(file, p.getInt(off+9), p.getInt(off+13), tx, true);
 		}
 		
-		public IndexRecord getUp() throws Exception
-		{
-			if (p.getInt(off+17) == 0 && p.getInt(off+21) == 0)
-			{
-				IndexRecord retval = new IndexRecord();
-				retval.isNull = true;
-				return retval;
-			}
-			
-			return new IndexRecord(file, p.getInt(off+17), p.getInt(off+21), tx);
-		}
+		//public IndexRecord getUp() throws Exception
+		//{
+		//	if (p.getInt(off+17) == 0 && p.getInt(off+21) == 0)
+		//	{
+		//		IndexRecord retval = new IndexRecord();
+		//		retval.isNull = true;
+		//		return retval;
+		//	}
+		//	
+		//	return new IndexRecord(file, p.getInt(off+17), p.getInt(off+21), tx);
+		//}
 		
 		public IndexRecord getUp(boolean x) throws Exception
 		{

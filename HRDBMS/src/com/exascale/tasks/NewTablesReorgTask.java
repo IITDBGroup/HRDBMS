@@ -280,7 +280,7 @@ public class NewTablesReorgTask extends Task
 			try
 			{
 				String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
-				sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+				sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "REORG           ".getBytes("UTF-8");
 				outMsg[8] = 0;

@@ -154,7 +154,7 @@ public class SubBufferManager
 			}
 		}
 		
-		((LogIterator)iter).close();
+		//((LogIterator)iter).close();
 		
 		//for (Page p : toRoll.values())
 		//{

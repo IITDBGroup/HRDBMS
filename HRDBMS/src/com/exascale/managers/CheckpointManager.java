@@ -71,7 +71,7 @@ public class CheckpointManager extends HRDBMSThread
 				}
 				RandomAccessFile f = LogManager.archive(Transaction.txList.keySet());
 				FileChannel fc2 = f.getChannel();
-				BufferManager.flushAll(fc2);
+				BufferManager.flushAll(fc2); 
 				FileChannel fc = LogManager.getFile(LogManager.filename);
 				fc.truncate(0);
 				fc2.position(0);

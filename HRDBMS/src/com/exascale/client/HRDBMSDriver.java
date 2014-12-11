@@ -64,7 +64,7 @@ public class HRDBMSDriver implements Driver
 			Socket sock = null;
 			try
 			{
-				sock = new CompressedSocket(hostname, portNum);
+				sock = CompressedSocket.newCompressedSocket(hostname, portNum);
 			}
 			catch(Exception e)
 			{

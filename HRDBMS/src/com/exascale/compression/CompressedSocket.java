@@ -23,6 +23,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.net.SocketException;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Socket with compressing streams. Based on tentackles
@@ -42,9 +44,11 @@ public final class CompressedSocket extends Socket
 	 * 
 	 * @see Socket#Socket()
 	 */
-	public CompressedSocket()
+	public CompressedSocket() throws SocketException
 	{
 		super();
+		this.setSendBufferSize(64 * 1024 * 1024);
+		this.setReceiveBufferSize(64 * 1024 * 1024);
 	}
 
 	/**
@@ -62,6 +66,16 @@ public final class CompressedSocket extends Socket
 	public CompressedSocket(String host, int port) throws IOException
 	{
 		super(host, port);
+	}
+	
+	public static CompressedSocket newCompressedSocket(String host, int port) throws IOException
+	{
+		return new CompressedSocket(host, port);
+	}
+	
+	public static CompressedSocket newCompressedSocket() throws IOException
+	{
+		return new CompressedSocket();
 	}
 
 	@Override

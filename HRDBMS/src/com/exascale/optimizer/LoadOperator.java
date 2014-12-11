@@ -568,7 +568,7 @@ public final class LoadOperator implements Operator, Serializable
 		try
 		{
 			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
-			sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "SETLDMD         ".getBytes("UTF-8");
 			outMsg[8] = 0;
@@ -691,7 +691,7 @@ public final class LoadOperator implements Operator, Serializable
 		try
 		{
 			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
-			sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "DELLDMD         ".getBytes("UTF-8");
 			outMsg[8] = 0;
@@ -1069,7 +1069,7 @@ public final class LoadOperator implements Operator, Serializable
 				int node = (int)(key >> 32);
 				int device = (int)(key & 0x00000000FFFFFFFF);
 				String hostname = new MetaData().getHostNameForNode(node, tx);
-				sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+				sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "LOAD            ".getBytes("UTF-8");
 				outMsg[8] = 0;

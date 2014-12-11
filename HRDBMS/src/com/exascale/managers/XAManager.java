@@ -112,12 +112,12 @@ public class XAManager extends HRDBMSThread
 			throw new Exception("Not a select statement");
 		}
 		HRDBMSWorker.logger.debug("About to check plan cache");
-		Plan plan = PlanCacheManager.checkPlanCache(sql);
+		Plan plan = PlanCacheManager.checkPlanCache(sql2);
 		
 		if (plan == null)
 		{
 			HRDBMSWorker.logger.debug("Did not find plan in cache");
-			SQLParser parse = new SQLParser(sql, conn, tx);
+			SQLParser parse = new SQLParser(sql2, conn, tx);
 			HRDBMSWorker.logger.debug("Created SQL parser");
 			Operator op = parse.parse();
 			HRDBMSWorker.logger.debug("Parsing completed");
@@ -137,7 +137,7 @@ public class XAManager extends HRDBMSThread
 			
 			if (parse.doesNotUseCurrentSchema())
 			{
-				PlanCacheManager.addPlan(sql, new Plan(plan));
+				PlanCacheManager.addPlan(sql2, new Plan(plan));
 			}
 		}
 		else
@@ -169,7 +169,7 @@ public class XAManager extends HRDBMSThread
 		}
 		
 		
-		SQLParser parse = new SQLParser(sql, conn, tx);
+		SQLParser parse = new SQLParser(sql2, conn, tx);
 		Operator op = parse.parse();
 		ArrayList<Operator> array = new ArrayList<Operator>(1);
 		array.add(op);
@@ -187,7 +187,7 @@ public class XAManager extends HRDBMSThread
 		String keyType = sql.substring(0, sql.indexOf(',')).trim();
 		sql = sql.substring(sql.indexOf(',') + 1);
 		String valType = sql.substring(0, sql.indexOf(')')).trim();
-		return "CREATE TABLE " + table + "(KEY " + keyType + " NOT NULL PRIMARY KEY, VAL " + valType + ") NONE ALL,HASH,{KEY} ALL,HASH,{KEY}";
+		return "CREATE TABLE " + table + "(KEY2 " + keyType + " NOT NULL PRIMARY KEY, VAL " + valType + ") NONE ALL,HASH,{KEY2} ALL,HASH,{KEY2}";
 	}
 	
 	public static XAWorker executeAuthorizedUpdate(String sql, Transaction tx) throws Exception
@@ -199,7 +199,7 @@ public class XAManager extends HRDBMSThread
 		}
 		
 		
-		SQLParser parse = new SQLParser(sql, null, tx);
+		SQLParser parse = new SQLParser(sql2, null, tx);
 		parse.authorize();
 		Operator op = parse.parse();
 		String table = null;
@@ -433,7 +433,7 @@ public class XAManager extends HRDBMSThread
 			Transaction tx2 = new Transaction(Transaction.ISOLATION_CS);
 			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx2);
 	
-			sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "LROLLBCK        ".getBytes("UTF-8");
 			outMsg[8] = 0;
@@ -785,7 +785,7 @@ public class XAManager extends HRDBMSThread
 			Socket sock = null;
 			try
 			{
-				sock = new CompressedSocket(xa.getHost(), Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+				sock = CompressedSocket.newCompressedSocket(xa.getHost(), Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			}
 			catch(Exception e)
 			{
@@ -934,7 +934,7 @@ public class XAManager extends HRDBMSThread
 			String host = new MetaData().getMyHostName(tx);
 			byte[] data = host.getBytes("UTF-8");
 			byte[] length = intToBytes(data.length);
-			sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "PREPARE         ".getBytes("UTF-8");
 			outMsg[8] = 0;
@@ -982,7 +982,7 @@ public class XAManager extends HRDBMSThread
 		try
 		{
 			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
-			sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "CHECKPNT        ".getBytes("UTF-8");
 			outMsg[8] = 0;
@@ -1050,7 +1050,7 @@ public class XAManager extends HRDBMSThread
 			{
 				try
 				{
-					sock = new CompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					break;
 				}
 				catch(Exception e)

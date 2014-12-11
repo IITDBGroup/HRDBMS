@@ -81,6 +81,7 @@ public final class TableScanOperator implements Operator, Serializable
 	private HashMap<String, String> tableCols2Types;
 	private TreeMap<Integer, String> tablePos2Col;
 	private HashMap<String, Integer> tableCols2Pos;
+	private boolean releaseLocks = false;
 	
 	public boolean isGetRID()
 	{
@@ -168,6 +169,34 @@ public final class TableScanOperator implements Operator, Serializable
 		tableCols2Types = (HashMap<String, String>)cols2Types.clone();
 		tablePos2Col = (TreeMap<Integer, String>)pos2Col.clone();
 		tableCols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
+	}
+	
+	public TableScanOperator(String schema, String name, MetaData meta, Transaction tx, boolean releaseLocks) throws Exception
+	{
+		this.meta = meta;
+		this.name = name;
+		this.schema = schema;
+		cols2Types = meta.getCols2TypesForTable(schema, name, tx);
+		cols2Pos = meta.getCols2PosForTable(schema, name, tx);
+		pos2Col = MetaData.cols2PosFlip(cols2Pos);
+		tableCols2Types = (HashMap<String, String>)cols2Types.clone();
+		tablePos2Col = (TreeMap<Integer, String>)pos2Col.clone();
+		tableCols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
+		this.releaseLocks = releaseLocks;
+	}
+	
+	public TableScanOperator(String schema, String name, MetaData meta, Transaction tx, boolean releaseLocks, HashMap<String, Integer> cols2Pos, TreeMap<Integer, String> pos2Col) throws Exception
+	{
+		this.meta = meta;
+		this.name = name;
+		this.schema = schema;
+		cols2Types = MetaData.getCols2TypesForTable(schema, name, tx);
+		this.cols2Pos = cols2Pos;
+		this.pos2Col = pos2Col;
+		tableCols2Types = (HashMap<String, String>)cols2Types.clone();
+		tablePos2Col = (TreeMap<Integer, String>)pos2Col.clone();
+		tableCols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
+		this.releaseLocks = releaseLocks;
 	}
 	
 	public TableScanOperator(String schema, String name, MetaData meta, HashMap<String, Integer> cols2Pos, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, TreeMap<Integer, String> tablePos2Col, HashMap<String, String> tableCols2Types, HashMap<String, Integer> tableCols2Pos) throws Exception
@@ -408,6 +437,11 @@ public final class TableScanOperator implements Operator, Serializable
 			{
 				readBuffer.close();
 			}
+		}
+		
+		if (releaseLocks)
+		{
+			tx.releaseLocksAndPins();
 		}
 		
 		ins = null;
