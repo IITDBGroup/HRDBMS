@@ -491,12 +491,32 @@ public class HRDBMSResultSet implements ResultSet
 			return 0;
 		}
 		
-		if (!(col instanceof Short))
+		if (!(col instanceof Short) && !(col instanceof Integer) && !(col instanceof Long))
 		{
 			throw new SQLException("The column cannot be converted to a short");
 		}
 		
-		return (short)col;	
+		if (col instanceof Short)
+		{
+			return (short)col;
+		}
+		
+		if (col instanceof Integer)
+		{
+			if ((Integer)col > Short.MAX_VALUE || (Integer)col < Short.MIN_VALUE)
+			{
+				throw new SQLException("The column cannot be converted to a short");
+			}
+			
+			return ((Integer)col).shortValue();
+		}
+		
+		if ((Long)col > Short.MAX_VALUE || (Long)col < Short.MIN_VALUE)
+		{
+			throw new SQLException("The column cannot be converted to a short");
+		}
+		
+		return ((Integer)col).shortValue();
 	}
 
 	@Override
@@ -529,11 +549,18 @@ public class HRDBMSResultSet implements ResultSet
 			wasNull = true;
 			return 0;
 		}
-		if (!(col instanceof Integer || col instanceof Short))
+		if (!(col instanceof Integer || col instanceof Short || col instanceof Long))
 		{
 			throw new SQLException("The column cannot be converted to an integer");
 		}
 		
+		if (col instanceof Long)
+		{
+			if ((Long)col > Integer.MAX_VALUE || (Long)col < Integer.MIN_VALUE)
+			{
+				throw new SQLException("The column cannot be converted to an integer");
+			}
+		}
 		Number num = (Number)col;
 		return num.intValue();
 	}
@@ -832,12 +859,32 @@ public class HRDBMSResultSet implements ResultSet
 			return 0;
 		}
 		
-		if (!(col instanceof Short))
+		if (!(col instanceof Short) && !(col instanceof Integer) && !(col instanceof Long))
 		{
 			throw new SQLException("The column cannot be converted to a short");
 		}
 		
-		return (short)col;
+		if (col instanceof Short)
+		{
+			return (short)col;
+		}
+		
+		if (col instanceof Integer)
+		{
+			if ((Integer)col > Short.MAX_VALUE || (Integer)col < Short.MIN_VALUE)
+			{
+				throw new SQLException("The column cannot be converted to a short");
+			}
+			
+			return ((Integer)col).shortValue();
+		}
+		
+		if ((Long)col > Short.MAX_VALUE || (Long)col < Short.MIN_VALUE)
+		{
+			throw new SQLException("The column cannot be converted to a short");
+		}
+		
+		return ((Integer)col).shortValue();
 	}
 
 	@Override
@@ -877,9 +924,17 @@ public class HRDBMSResultSet implements ResultSet
 			return 0;
 		}
 		
-		if (!(col instanceof Integer || col instanceof Short))
+		if (!(col instanceof Integer || col instanceof Short || col instanceof Long))
 		{
 			throw new SQLException("The column cannot be converted to an integer");
+		}
+		
+		if (col instanceof Long)
+		{
+			if ((Long)col > Integer.MAX_VALUE || (Long)col < Integer.MIN_VALUE)
+			{
+				throw new SQLException("The column cannot be converted to an integer");
+			}
 		}
 		
 		Number num = (Number)col;
