@@ -10,6 +10,14 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
+import java.nio.file.FileSystems;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.PathMatcher;
+import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -41,49 +49,45 @@ public class CompressedFileChannel extends FileChannel
 	public CompressedFileChannel(File file) throws IOException
 	{
 		this.fn = file.getAbsolutePath();
-		int low = 0;
-		File f = new File(fn + "." + low);
-		if (!f.exists())
-		{
-			length = 0;
-			return;
-		}
+		int high = -1;
 		
-		int high = 44739242;
-		int mid = (high - low) / 2;
-		while (high != low)
-		{
-			if (high - low == 1)
-			{
-				f = new File(fn + "." + high);
-				if (f.exists())
-				{
-					low = high;
-				}
-				else
-				{
-					high = low;
-				}
-			}
-			else
-			{
-				f = new File(fn + "." + mid);
-				if (f.exists())
-				{
-					low = mid;
-				}
-				else
-				{
-					high = mid - 1;
-				}
-			}
-			
-			mid = ((high - low) / 2) + low;
-		}
+		final ArrayList<Path> files = new ArrayList<Path>();
+		final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + fn + ".*");
+	    Files.walkFileTree(Paths.get("/"), new SimpleFileVisitor<Path>() {
+	        @Override
+	        public FileVisitResult visitFile(Path file, java.nio.file.attribute.BasicFileAttributes attrs) throws IOException {
+	            if (matcher.matches(file)) {
+	                files.add(file);
+	            }
+	            return FileVisitResult.CONTINUE;
+	        }
+
+	        @Override
+	        public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+	            return FileVisitResult.CONTINUE;
+	        }
+	    });
+	    
+	    for (Path file2 : files)
+	    {
+	    	String s = file2.toString().substring(file2.toString().lastIndexOf('.') + 1);
+	    	int suffix = Integer.parseInt(s);
+	    	if (suffix > high)
+	    	{
+	    		high = suffix;
+	    	}
+	    }
+	    
+	    if (high == -1)
+	    {
+	    	length = 0;
+	    	HRDBMSWorker.logger.debug("Opened " + fn + " with length =  0");
+	    	return;
+	    }
 		
 		length = high + 1; //length in 3 page blocks
 		LZ4SafeDecompressor decomp = factory.safeDecompressor();
-		FileChannel fc = getFC(low);
+		FileChannel fc = getFC(high);
 		ByteBuffer bb = ByteBuffer.allocate((int)fc.size());
 		fc.read(bb, 0);
 		byte[] target = new byte[128 * 1024 * 3]; //max 3 pages
@@ -97,6 +101,8 @@ public class CompressedFileChannel extends FileChannel
 		{
 			length -= 1;
 		}
+		
+		HRDBMSWorker.logger.debug("Opened " + fn + " with length = " + length);
 	}
 
 	@Override
@@ -196,7 +202,17 @@ public class CompressedFileChannel extends FileChannel
 			ByteBuffer bb = ByteBuffer.allocate((int)(fc.size()));
 			fc.read(bb, 0);
 			byte[] target = new byte[128 * 1024 * 3]; //3 pages
-			decomp.decompress(bb.array(), target);
+			try
+			{
+				decomp.decompress(bb.array(), target);
+			}
+			catch(Exception e)
+			{
+				HRDBMSWorker.logger.debug("Block = " + block);
+				HRDBMSWorker.logger.debug("FC = " + fc);
+				HRDBMSWorker.logger.debug("FC.size() = " + fc.size());
+				throw e;
+			}
 			System.arraycopy(target, offset, arg0.array(), 0, arg0.capacity());
 			bufferedBlock = block;
 			buffer = target;
@@ -249,11 +265,12 @@ public class CompressedFileChannel extends FileChannel
 		int desiredHighFileNum = desiredBlocks - 1;
 		int actualHighFileNum = actualBlocks - 1;
 		
-		while (actualHighFileNum > desiredHighFileNum)
-		{
-			deleteFile(actualHighFileNum);
-			actualHighFileNum--;
-		}
+		//while (actualHighFileNum > desiredHighFileNum)
+		//{
+		//	deleteFile(actualHighFileNum);
+		//	actualHighFileNum--;
+		//}
+		deleteFiles(desiredHighFileNum);
 		
 		if (desiredPages % 3 != 0)
 		{
@@ -670,25 +687,51 @@ public class CompressedFileChannel extends FileChannel
 		}
 	}
 	
-	private void deleteFile(int suffix) throws IOException
+	private void deleteFiles(int highFile) throws IOException
 	{
-		if (bufferedBlock == suffix)
-		{
-			bufferedBlock = -1;
-			buffer = null;
-		}
+		final ArrayList<Path> files = new ArrayList<Path>();
+		final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + fn + ".*");
+	    Files.walkFileTree(Paths.get("/"), new SimpleFileVisitor<Path>() {
+	        @Override
+	        public FileVisitResult visitFile(Path file, java.nio.file.attribute.BasicFileAttributes attrs) throws IOException {
+	            if (matcher.matches(file)) {
+	                files.add(file);
+	            }
+	            return FileVisitResult.CONTINUE;
+	        }
+
+	        @Override
+	        public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+	            return FileVisitResult.CONTINUE;
+	        }
+	    });
+	    
+	    for (Path file : files)
+	    {
+	    	String s = file.toString().substring(file.toString().lastIndexOf('.') + 1);
+	    	int suffix = Integer.parseInt(s);
+	    	
+	    	if (suffix > highFile)
+	    	{
+	    		if (bufferedBlock == suffix)
+	    		{
+	    			bufferedBlock = -1;
+	    			buffer = null;
+	    		}
 		
-		FileChannel fc = fcs.get(suffix);
-		if (fc != null)
-		{
-			fc.close();
-			fcs.remove(suffix);
-		}
+	    		FileChannel fc = fcs.get(suffix);
+	    		if (fc != null)
+	    		{
+	    			fc.close();
+	    			fcs.remove(suffix);
+	    		}
 		
-		if (!new File(fn + "." + suffix).delete())
-		{
-			throw new IOException("Failed to delete file " + fn + "." + suffix + " during truncate() operation");
-		}
+	    		if (!new File(fn + "." + suffix).delete())
+	    		{
+	    			throw new IOException("Failed to delete file " + fn + "." + suffix + " during truncate() operation");
+	    		}
+	    	}
+	    }
 	}
 	
 	private void trimFCS() throws IOException

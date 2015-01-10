@@ -46,6 +46,21 @@ public class TableReference
 		this.alias = alias;
 	}
 	
+	public TableReference clone()
+	{
+		if (isSelect)
+		{
+			return new TableReference(select.clone(), alias);
+		}
+		
+		if (isSingleTable)
+		{
+			return new TableReference(table.clone());
+		}
+		
+		return new TableReference(lhs.clone(), op, rhs.clone(), search.clone(), alias);
+	}
+	
 	public boolean isSingleTable()
 	{
 		return isSingleTable;

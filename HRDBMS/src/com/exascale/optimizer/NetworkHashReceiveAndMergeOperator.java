@@ -7,8 +7,10 @@ import java.io.OutputStream;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeSet;
 import com.exascale.compression.CompressedSocket;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
@@ -227,119 +229,51 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 		}
 	}
 
-	private final class ReadThread extends ThreadPoolThread
+	private class ALOO
 	{
-		private final ArrayList<Operator> children;
-		private final HashMap<Operator, ArrayList<Object>> rows = new HashMap<Operator, ArrayList<Object>>();
-		private Map.Entry minEntry;
-
-		public ReadThread(ArrayList<Operator> children)
+		private ArrayList<Object> alo;
+		private Operator op;
+		
+		public ALOO(ArrayList<Object> alo, Operator op)
 		{
-			this.children = children;
+			this.alo = alo;
+			this.op = op;
 		}
-
-		@Override
-		public void run()
+		
+		public ArrayList<Object> getALO()
 		{
-			for (final Operator op : children)
-			{
-				try
-				{
-					final ArrayList<Object> row = readRow(op);
-					if (row != null)
-					{
-						rows.put(op, row);
-					}
-				}
-				catch(Exception e)
-				{
-					try
-					{
-						outBuffer.put(e);
-					}
-					catch(Exception f)
-					{}
-					return;
-				}
-			}
-
-			while (rows.size() > 0)
-			{
-				minEntry = null;
-				for (final Map.Entry entry : rows.entrySet())
-				{
-					if (minEntry == null)
-					{
-						minEntry = entry;
-					}
-					else
-					{
-						try
-						{
-							if (compare((ArrayList<Object>)entry.getValue(), (ArrayList<Object>)minEntry.getValue()) < 0)
-							{
-								minEntry = entry;
-							}
-						}
-						catch (final Exception e)
-						{
-							HRDBMSWorker.logger.error("", e);
-							try
-							{
-								outBuffer.put(e);
-							}
-							catch(Exception f)
-							{}
-							return;
-						}
-					}
-				}
-
-				while (true)
-				{
-					try
-					{
-						outBuffer.put(minEntry.getValue());
-						break;
-					}
-					catch (final Exception e)
-					{
-					}
-				}
-				try
-				{
-					final ArrayList<Object> row = readRow((Operator)minEntry.getKey());
-					if (row != null)
-					{
-						rows.put((Operator)minEntry.getKey(), row);
-					}
-					else
-					{
-						rows.remove(minEntry.getKey());
-					}
-				}
-				catch(Exception e)
-				{
-					try
-					{
-						outBuffer.put(e);
-					}
-					catch(Exception f)
-					{}
-					return;
-				}
-			}
+			return alo;
 		}
-
-		private int compare(ArrayList<Object> lhs, ArrayList<Object> rhs) throws Exception
+		
+		public Operator getOp()
 		{
-			int result;
+			return op;
+		}
+		
+		public boolean equals(Object o)
+		{
+			return this == o;
+		}
+	}
+	
+	private class MergeComparator implements Comparator<ALOO>
+	{
+		public int compare(ALOO l, ALOO r)
+		{
+			if (l == r)
+			{
+				return 0;
+			}
+			
+			ArrayList<Object> lhs = l.getALO();
+			ArrayList<Object> rhs = r.getALO();
+			int result = 0;
 			int i = 0;
 
 			for (final int pos : sortPos)
 			{
-				final Object lField = lhs.get(pos);
-				final Object rField = rhs.get(pos);
+				Object lField = lhs.get(pos);
+				Object rField = rhs.get(pos);
 
 				if (lField instanceof Integer)
 				{
@@ -363,7 +297,8 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 				}
 				else
 				{
-					throw new Exception("Unknown type in SortOperator.compare(): " + lField.getClass());
+					lField = null;
+					lField.toString();
 				}
 
 				if (orders.get(i))
@@ -391,8 +326,133 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 
 				i++;
 			}
+			
+			//can't return 0;
+			int lHash = l.op.hashCode();
+			int rHash = r.op.hashCode();
+			if (lHash < rHash)
+			{
+				return -1;
+			}
+			else if (lHash > rHash)
+			{
+				return 1;
+			}
+			else
+			{
+				//still can't return 0
+				lHash = l.alo.hashCode();
+				rHash = r.alo.hashCode();
+				if (lHash < rHash)
+				{
+					return -1;
+				}
+				else if (lHash > rHash)
+				{
+					return 1;
+				}
+				else
+				{
+					//still can't return 0
+					lHash = l.hashCode();
+					rHash = r.hashCode();
+					if (lHash < rHash)
+					{
+						return -1;
+					}
+					else if (lHash > rHash)
+					{
+						return 1;
+					}
+					else
+					{
+						//still can't return 0
+						l = null;
+						lHash = l.hashCode();
+						return 0;
+					}
+				}
+			}
+		}
+	}
 
-			return 0;
+	private final class ReadThread extends ThreadPoolThread
+	{
+		private final ArrayList<Operator> children;
+		//private final HashMap<Operator, ArrayList<Object>> rows = new HashMap<Operator, ArrayList<Object>>();
+		//private final TreeMap<ArrayList<Object>, Operator> rows = new TreeMap<ArrayList<Object>, Operator>(new MergeComparator());
+		private final TreeSet<ALOO> rows = new TreeSet<ALOO>(new MergeComparator());
+		private ALOO minEntry;
+
+		public ReadThread(ArrayList<Operator> children)
+		{
+			this.children = children;
+		}
+
+		@Override
+		public void run()
+		{
+			for (final Operator op : children)
+			{
+				try
+				{
+					final ArrayList<Object> row = readRow(op);
+					if (row != null)
+					{
+						rows.add(new ALOO(row, op));
+					}
+				}
+				catch(Exception e)
+				{
+					try
+					{
+						outBuffer.put(e);
+					}
+					catch(Exception f)
+					{}
+					return;
+				}
+			}
+
+			while (rows.size() > 0)
+			{
+				minEntry = rows.first();
+
+				while (true)
+				{
+					try
+					{
+						outBuffer.put(minEntry.getALO());
+						break;
+					}
+					catch (final Exception e)
+					{
+					}
+				}
+				try
+				{
+					final ArrayList<Object> row = readRow(minEntry.getOp());
+					if (row != null)
+					{
+						rows.remove(minEntry);
+						rows.add(new ALOO(row, minEntry.getOp()));
+					}
+					else
+					{
+						rows.remove(minEntry);
+					}
+				}
+				catch(Exception e)
+				{
+					try
+					{
+						outBuffer.put(e);
+					}
+					catch(Exception f)
+					{}
+					return;
+				}
+			}
 		}
 
 		private Object fromBytes(byte[] val) throws Exception

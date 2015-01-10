@@ -766,7 +766,12 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 	{
 		final ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>();
 		int i = 0;
-		ArrayList<Object> o = buckets.get(i).get(hash);
+		if (buckets.size() == 0)
+		{
+			return retval;
+		}
+		DiskBackedHashMap dbhm = buckets.get(i);
+		ArrayList<Object> o = dbhm.get(hash);
 		while (o != null)
 		{
 			retval.add(o);

@@ -47,10 +47,8 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("phase1_additional_pushdowns", "25");
 		retval.setProperty("max_neighbor_nodes", "100");
 		retval.setProperty("max_card_before_hash", "500000");
-		retval.setProperty("min_card_for_hash", "250000");
 		retval.setProperty("max_local_no_hash_product", "1000000");
 		retval.setProperty("max_local_left_hash", "1000000");
-		retval.setProperty("min_local_left_hash", "500000");
 		retval.setProperty("max_local_sort", "1000000");
 		retval.setProperty("parallel_sort_min_rows", "50000");
 		retval.setProperty("prefetch_request_size", "80");
@@ -69,6 +67,7 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("reorg_refresh_target_days", "7");
 		retval.setProperty("max_load_average", Integer.toString(100 * Runtime.getRuntime().availableProcessors())); 
 		retval.setProperty("critical_mem_percent", "15");
+		retval.setProperty("stack_size", "2M");
 		HParmsDefaults.retval = retval;
 		return retval;
 	}

@@ -21,6 +21,18 @@ public class SortKey
 		this.direction = direction;
 	}
 	
+	public SortKey clone()
+	{
+		if (isCol)
+		{
+			return new SortKey(col.clone(), direction);
+		}
+		else
+		{
+			return new SortKey(num, direction);
+		}
+	}
+	
 	public boolean isColumn()
 	{
 		return isCol;

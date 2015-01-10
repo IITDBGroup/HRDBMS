@@ -38,7 +38,7 @@ public class ReadThread extends HRDBMSThread
 			//	ok = false;
 			//}
 			
-			fc.read(bb, b.number() * bb.capacity());
+			fc.read(bb, ((long)b.number()) * bb.capacity());
 		}
 		catch (final Exception e)
 		{

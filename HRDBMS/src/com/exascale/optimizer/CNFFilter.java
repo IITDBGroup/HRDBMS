@@ -36,23 +36,23 @@ public class CNFFilter implements Serializable
 		this.setHSHM(clause);
 	}
 
-	public CNFFilter(HashSet<HashMap<Filter, Filter>> clause, MetaData meta, HashMap<String, Integer> cols2Pos, Transaction tx, Operator tree) throws Exception
+	public CNFFilter(HashSet<HashMap<Filter, Filter>> clause, MetaData meta, HashMap<String, Integer> cols2Pos, Operator tree) throws Exception
 	{
 		this.meta = meta;
 		this.cols2Pos = cols2Pos;
 		this.setHSHM(clause);
 	}
 
-	public CNFFilter(HashSet<HashMap<Filter, Filter>> clause, MetaData meta, HashMap<String, Integer> cols2Pos, HashMap<String, Double> generated, Transaction tx, Operator tree) throws Exception
+	public CNFFilter(HashSet<HashMap<Filter, Filter>> clause, MetaData meta, HashMap<String, Integer> cols2Pos, HashMap<String, Double> generated, Operator tree) throws Exception
 	{
 		this.meta = meta;
 		this.cols2Pos = cols2Pos;
 		this.setHSHM(clause);
 	}
 
-	public CNFFilter(HashSet<HashMap<Filter, Filter>> clause, MetaData meta, HashMap<String, Integer> cols2Pos, RootOperator op, Transaction tx) throws Exception
+	public CNFFilter(HashSet<HashMap<Filter, Filter>> clause, MetaData meta, HashMap<String, Integer> cols2Pos, RootOperator op) throws Exception
 	{
-		this(clause, meta, cols2Pos, op.getGenerated(), tx, op);
+		this(clause, meta, cols2Pos, op.getGenerated(), op);
 	}
 
 	public static void quicksort(ArrayList main, ArrayList<Double> scores)
@@ -267,6 +267,24 @@ public class CNFFilter implements Serializable
 
 		return retval;
 	}
+	
+	private static boolean areEquivalent(String l, String r)
+	{
+		String lhs = l;
+		String rhs = r;
+		
+		if (lhs.contains("."))
+		{
+			lhs = lhs.substring(lhs.indexOf('.') + 1);
+		}
+		
+		if (rhs.contains("."))
+		{
+			rhs = rhs.substring(rhs.indexOf('.') + 1);
+		}
+		
+		return lhs.equals(rhs);
+	}
 
 	public boolean hashFiltersPartitions(ArrayList<String> hashCols)
 	{
@@ -284,26 +302,32 @@ public class CNFFilter implements Serializable
 					final Filter f = filter.get(0);
 					if (f.op().equals("E"))
 					{
-						if (f.leftIsColumn() && f.leftColumn().equals(hashCol) && !f.rightIsColumn())
+						if (f.leftIsColumn() && !f.rightIsColumn())
 						{
-							if (partHash == null)
+							if (areEquivalent(f.leftColumn(), hashCol))
 							{
-								partHash = new ArrayList<Object>();
+								if (partHash == null)
+								{
+									partHash = new ArrayList<Object>();
+								}
+								retval = true;
+								partHash.add(f.rightLiteral());
+								break;
 							}
-							retval = true;
-							partHash.add(f.rightLiteral());
-							break;
 						}
 
-						if (!f.leftIsColumn() && f.rightIsColumn() && f.rightColumn().equals(hashCol))
+						if (!f.leftIsColumn() && f.rightIsColumn())
 						{
-							if (partHash == null)
+							if (areEquivalent(f.rightColumn(), hashCol))
 							{
-								partHash = new ArrayList<Object>();
+								if (partHash == null)
+								{
+									partHash = new ArrayList<Object>();
+								}
+								retval = true;
+								partHash.add(f.leftLiteral());
+								break;
 							}
-							retval = true;
-							partHash.add(f.leftLiteral());
-							break;
 						}
 					}
 				}
@@ -359,26 +383,32 @@ public class CNFFilter implements Serializable
 				final Filter f = filter.get(0);
 				if (f.op().equals("L") || f.op().equals("LE") || f.op().equals("E") || f.op().equals("G") || f.op().equals("GE"))
 				{
-					if (f.leftIsColumn() && f.leftColumn().equals(col) && !f.rightIsColumn())
+					if (f.leftIsColumn() && !f.rightIsColumn())
 					{
-						if (rangeFilters == null)
+						if (areEquivalent(f.leftColumn(), col))
 						{
-							rangeFilters = new ArrayList<Filter>();
-						}
+							if (rangeFilters == null)
+							{
+								rangeFilters = new ArrayList<Filter>();
+							}
 
-						rangeFilters.add(f);
-						retval = true;
+							rangeFilters.add(f);
+							retval = true;
+						}
 					}
 
-					if (!f.leftIsColumn() && f.rightIsColumn() && f.rightColumn().equals(col))
+					if (!f.leftIsColumn() && f.rightIsColumn())
 					{
-						if (rangeFilters == null)
+						if (areEquivalent(f.rightColumn(), col))
 						{
-							rangeFilters = new ArrayList<Filter>();
-						}
+							if (rangeFilters == null)
+							{
+								rangeFilters = new ArrayList<Filter>();
+							}
 
-						rangeFilters.add(f);
-						retval = true;
+							rangeFilters.add(f);
+							retval = true;
+						}
 					}
 				}
 			}

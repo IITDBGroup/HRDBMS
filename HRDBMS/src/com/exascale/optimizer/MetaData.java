@@ -1227,11 +1227,6 @@ public final class MetaData implements Serializable
 	public static void dropTable(String schema, String table, Transaction tx) throws Exception
 	{
 		PlanCacheManager.invalidate();
-		ArrayList<String> rs = MetaData.getIndexFileNamesForTable(schema, table, tx);
-		for (String fn : rs)
-		{
-			BufferManager.invalidateFile(fn);
-		}
 		int id = PlanCacheManager.getTableID().setParms(schema, table).execute(tx);
 		PlanCacheManager.getDeleteTable().setParms(schema, table).execute(tx);
 		PlanCacheManager.getDeleteCols().setParms(id).execute(tx);
@@ -1378,6 +1373,7 @@ public final class MetaData implements Serializable
 			outMsg[14] = 0;
 			outMsg[15] = 0;
 			out.write(outMsg);
+			out.write(longToBytes(tx.number()));
 			out.write(intToBytes(numCols));
 			out.write(stringToBytes(fn));
 			ObjectOutputStream objOut = new ObjectOutputStream(out);
@@ -1527,6 +1523,7 @@ public final class MetaData implements Serializable
 			outMsg[14] = 0;
 			outMsg[15] = 0;
 			out.write(outMsg);
+			out.write(longToBytes(tx.number()));
 			out.write(intToBytes(numCols));
 			if (unique)
 			{
@@ -1953,10 +1950,11 @@ public final class MetaData implements Serializable
 	{
 		String c = col.substring(col.indexOf('.') + 1);
 		String ST = getTableForCol(col, tree);
-		String schema = ST.substring(0, ST.indexOf('.'));
-		String table = ST.substring(ST.indexOf('.') + 1);
+		
 		try
 		{
+			String schema = ST.substring(0, ST.indexOf('.'));
+			String table = ST.substring(ST.indexOf('.') + 1);
 			long card = PlanCacheManager.getColCard().setParms(schema, table, c).execute(tx);
 			return card;
 		}
@@ -2088,6 +2086,18 @@ public final class MetaData implements Serializable
 		{
 			cols.add(c.substring(c.indexOf('.') + 1));
 			String ST = getTableForCol(c, tree);
+			if (ST == null)
+			{
+				int i = 0;
+				long card = 1;
+				while (i < cs.size())
+				{
+					card *= 1000000;
+					i++;
+				}
+				
+				return card;
+			}
 			schemas.add(ST.substring(0, ST.indexOf('.')));
 			tables.add(ST.substring(ST.indexOf('.') + 1));
 		}
@@ -2541,8 +2551,7 @@ public final class MetaData implements Serializable
 			}
 			else
 			{
-				//throw new Exception("Column not found when trying to figure out table for " + col);
-				return col; // TODO FIXME
+				return null;
 			}
 		}
 		else
@@ -2575,7 +2584,7 @@ public final class MetaData implements Serializable
 			}
 			else
 			{
-				return ".";
+				return null;
 			}
 		}
 	}
@@ -2650,10 +2659,17 @@ public final class MetaData implements Serializable
 		{
 			String left = filter.leftColumn();
 			String leftST = getTableForCol(left, tree);
-			String leftSchema = leftST.substring(0, leftST.indexOf('.'));
-			String leftTable = leftST.substring(leftST.indexOf('.') + 1);
-			String leftCol = left.substring(left.indexOf('.') + 1);
-			leftCard = getCard(leftSchema, leftTable, leftCol, generated, tx);
+			if (leftST == null)
+			{
+				leftCard = 1000000;
+			}
+			else
+			{
+				String leftSchema = leftST.substring(0, leftST.indexOf('.'));
+				String leftTable = leftST.substring(leftST.indexOf('.') + 1);
+				String leftCol = left.substring(left.indexOf('.') + 1);
+				leftCard = getCard(leftSchema, leftTable, leftCol, generated, tx);
+			}
 		}
 
 		if (filter.rightIsColumn())
@@ -2661,10 +2677,17 @@ public final class MetaData implements Serializable
 			// figure out number of possible values for right side
 			String right = filter.rightColumn();
 			String rightST = getTableForCol(right, tree);
-			String rightSchema = rightST.substring(0, rightST.indexOf('.'));
-			String rightTable = rightST.substring(rightST.indexOf('.') + 1);
-			String rightCol = right.substring(right.indexOf('.') + 1);
-			rightCard = getCard(rightSchema, rightTable, rightCol, generated, tx);
+			if (rightST == null)
+			{
+				rightCard = 1000000;
+			}
+			else
+			{
+				String rightSchema = rightST.substring(0, rightST.indexOf('.'));
+				String rightTable = rightST.substring(rightST.indexOf('.') + 1);
+				String rightCol = right.substring(right.indexOf('.') + 1);
+				rightCard = getCard(rightSchema, rightTable, rightCol, generated, tx);
+			}
 		}
 
 		final String op = filter.op();
@@ -2944,10 +2967,17 @@ public final class MetaData implements Serializable
 		{
 			String left = filter.leftColumn();
 			String leftST = getTableForCol(left, tree);
-			String leftSchema = leftST.substring(0, leftST.indexOf('.'));
-			String leftTable = leftST.substring(leftST.indexOf('.') + 1);
-			String leftCol = left.substring(left.indexOf('.') + 1);
-			leftCard = getCard(leftSchema, leftTable, leftCol, generated, tx);
+			if (leftST == null)
+			{
+				leftCard = 1000000;
+			}
+			else
+			{
+				String leftSchema = leftST.substring(0, leftST.indexOf('.'));
+				String leftTable = leftST.substring(leftST.indexOf('.') + 1);
+				String leftCol = left.substring(left.indexOf('.') + 1);
+				leftCard = getCard(leftSchema, leftTable, leftCol, generated, tx);
+			}
 		}
 
 		if (filter.rightIsColumn())
@@ -2955,10 +2985,17 @@ public final class MetaData implements Serializable
 			// figure out number of possible values for right side
 			String right = filter.rightColumn();
 			String rightST = getTableForCol(right, tree);
-			String rightSchema = rightST.substring(0, rightST.indexOf('.'));
-			String rightTable = rightST.substring(rightST.indexOf('.') + 1);
-			String rightCol = right.substring(right.indexOf('.') + 1);
-			rightCard = getCard(rightSchema, rightTable, rightCol, generated, tx);
+			if (rightST == null)
+			{
+				rightCard = 1000000;
+			}
+			else
+			{
+				String rightSchema = rightST.substring(0, rightST.indexOf('.'));
+				String rightTable = rightST.substring(rightST.indexOf('.') + 1);
+				String rightCol = right.substring(right.indexOf('.') + 1);
+				rightCard = getCard(rightSchema, rightTable, rightCol, generated, tx);
+			}
 		}
 
 		final String op = filter.op();
@@ -3235,9 +3272,21 @@ public final class MetaData implements Serializable
 	{
 		if (x >= y)
 		{
-			return x;
+			if (x <= 0)
+			{
+				return 1;
+			}
+			else
+			{
+				return x;
+			}
 		}
 
+		if (y <= 0)
+		{
+			return 1;
+		}
+		
 		return y;
 	}
 
@@ -3577,11 +3626,20 @@ public final class MetaData implements Serializable
 	private ArrayList<MyDate> getDateQuartiles(String col, Transaction tx, Operator tree) throws Exception
 	{
 		// SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+		ArrayList<MyDate> retval = new ArrayList<MyDate>(5);
 		String c = col.substring(col.indexOf('.') + 1);
 		String ST = getTableForCol(col, tree);
+		if (ST == null)
+		{
+			retval.add(new MyDate(1960, 1, 1));
+			retval.add(new MyDate(2000, 1, 1));
+			retval.add(new MyDate(2020, 1, 1));
+			retval.add(new MyDate(2040, 1, 1));
+			retval.add(new MyDate(2060, 1, 1));
+			return retval;
+		}
 		String schema = ST.substring(0, ST.indexOf('.'));
 		String table = ST.substring(ST.indexOf('.') + 1);
-		ArrayList<MyDate> retval = new ArrayList<MyDate>(5);
 		Object o = PlanCacheManager.getDist().setParms(schema, table, c).execute(tx);
 		if (o instanceof DataEndMarker)
 		{
@@ -3615,11 +3673,20 @@ public final class MetaData implements Serializable
 
 	private ArrayList<Double> getDoubleQuartiles(String col, Transaction tx, Operator tree) throws Exception
 	{
+		ArrayList<Double> retval = new ArrayList<Double>(5);
 		String c = col.substring(col.indexOf('.') + 1);
 		String ST = getTableForCol(col, tree);
+		if (ST == null)
+		{
+			retval.add(Double.MIN_VALUE);
+			retval.add(Double.MIN_VALUE / 2);
+			retval.add(0D);
+			retval.add(Double.MAX_VALUE / 2);
+			retval.add(Double.MAX_VALUE);
+			return retval;
+		}
 		String schema = ST.substring(0, ST.indexOf('.'));
 		String table = ST.substring(ST.indexOf('.') + 1);
-		ArrayList<Double> retval = new ArrayList<Double>(5);
 		Object o = PlanCacheManager.getDist().setParms(schema, table, c).execute(tx);
 		if (o instanceof DataEndMarker)
 		{
@@ -3674,15 +3741,23 @@ public final class MetaData implements Serializable
 
 	private ArrayList<String> getStringQuartiles(String col, Transaction tx, Operator tree) throws Exception
 	{
+		ArrayList<String> retval = new ArrayList<String>(5);
 		String c = col.substring(col.indexOf('.') + 1);
 		String ST = getTableForCol(col, tree);
+		if (ST == null)
+		{
+			retval.add("A");
+			retval.add("N");
+			retval.add("Z");
+			retval.add("n");
+			retval.add("z");
+			return retval;
+		}
 		String schema = ST.substring(0, ST.indexOf('.'));
 		String table = ST.substring(ST.indexOf('.') + 1);
-		ArrayList<String> retval = new ArrayList<String>(5);
 		Object o = PlanCacheManager.getDist().setParms(schema, table, c).execute(tx);
 		if (o instanceof DataEndMarker)
 		{
-
 			retval.add("A");
 			retval.add("N");
 			retval.add("Z");
@@ -3791,22 +3866,22 @@ public final class MetaData implements Serializable
 
 		if (quartiles.get(1).compareTo(val) > -1)
 		{
-			return 0.75 + 0.25 * ((stringToLong(quartiles.get(1)) - stringToLong(val)) / (stringToLong(quartiles.get(1)) - stringToLong(quartiles.get(0))));
+			return 0.75 + 0.25 * ((stringToDouble(quartiles.get(1)) - stringToDouble(val)) / (stringToDouble(quartiles.get(1)) - stringToDouble(quartiles.get(0))));
 		}
 
 		if (quartiles.get(2).compareTo(val) > -1)
 		{
-			return 0.5 + 0.25 * ((stringToLong(quartiles.get(2)) - stringToLong(val)) / (stringToLong(quartiles.get(2)) - stringToLong(quartiles.get(1))));
+			return 0.5 + 0.25 * ((stringToDouble(quartiles.get(2)) - stringToDouble(val)) / (stringToDouble(quartiles.get(2)) - stringToDouble(quartiles.get(1))));
 		}
 
 		if (quartiles.get(3).compareTo(val) > -1)
 		{
-			return 0.25 + 0.25 * ((stringToLong(quartiles.get(3)) - stringToLong(val)) / (stringToLong(quartiles.get(3)) - stringToLong(quartiles.get(2))));
+			return 0.25 + 0.25 * ((stringToDouble(quartiles.get(3)) - stringToDouble(val)) / (stringToDouble(quartiles.get(3)) - stringToDouble(quartiles.get(2))));
 		}
 
 		if (quartiles.get(4).compareTo(val) > -1)
 		{
-			return 0.25 * ((stringToLong(quartiles.get(4)) - stringToLong(val)) / (stringToLong(quartiles.get(4)) - stringToLong(quartiles.get(3))));
+			return 0.25 * ((stringToDouble(quartiles.get(4)) - stringToDouble(val)) / (stringToDouble(quartiles.get(4)) - stringToDouble(quartiles.get(3))));
 		}
 
 		return 0;
@@ -3899,22 +3974,22 @@ public final class MetaData implements Serializable
 
 		if (quartiles.get(3).compareTo(val) < 1)
 		{
-			return 0.75 + 0.25 * ((stringToLong(val) - stringToLong(quartiles.get(3))) / (stringToLong(quartiles.get(4)) - stringToLong(quartiles.get(3))));
+			return 0.75 + 0.25 * ((stringToDouble(val) - stringToDouble(quartiles.get(3))) / (stringToDouble(quartiles.get(4)) - stringToDouble(quartiles.get(3))));
 		}
 
 		if (quartiles.get(2).compareTo(val) < 1)
 		{
-			return 0.5 + 0.25 * ((stringToLong(val) - stringToLong(quartiles.get(2))) / (stringToLong(quartiles.get(3)) - stringToLong(quartiles.get(2))));
+			return 0.5 + 0.25 * ((stringToDouble(val) - stringToDouble(quartiles.get(2))) / (stringToDouble(quartiles.get(3)) - stringToDouble(quartiles.get(2))));
 		}
 
 		if (quartiles.get(1).compareTo(val) < 1)
 		{
-			return 0.25 + 0.25 * ((stringToLong(val) - stringToLong(quartiles.get(1))) / (stringToLong(quartiles.get(2)) - stringToLong(quartiles.get(1))));
+			return 0.25 + 0.25 * ((stringToDouble(val) - stringToDouble(quartiles.get(1))) / (stringToDouble(quartiles.get(2)) - stringToDouble(quartiles.get(1))));
 		}
 
 		if (quartiles.get(0).compareTo(val) < 1)
 		{
-			return 0.25 * ((stringToLong(val) - stringToLong(quartiles.get(0))) / (stringToLong(quartiles.get(1)) - stringToLong(quartiles.get(0))));
+			return 0.25 * ((stringToDouble(val) - stringToDouble(quartiles.get(0))) / (stringToDouble(quartiles.get(1)) - stringToDouble(quartiles.get(0))));
 		}
 
 		return 0;
@@ -3944,14 +4019,14 @@ public final class MetaData implements Serializable
 		return false;
 	}
 
-	private long stringToLong(String val)
+	private double stringToDouble(String val)
 	{
 		int i = 0;
-		long retval = 0;
-		while (i < 15 && i < val.length())
+		double retval = 0;
+		while (i < 16 && i < val.length())
 		{
-			final int point = val.charAt(i) & 0x0000000F;
-			retval += (((long)point) << (56 - (i * 4)));
+			final int point = val.charAt(i);
+			retval += (point * Math.pow(2.0, 240 - (i * 16)));
 			i++;
 		}
 
@@ -5471,6 +5546,10 @@ public final class MetaData implements Serializable
 				nodeSet = new ArrayList<Integer>(1);
 				nodeSet.add(NODE_ANY);
 				numNodes = 1;
+				if (nodeGroupSet.get(0) != PartitionMetaData.NODEGROUP_NONE)
+				{
+					throw new Exception("Can't use nodegroups with a table using ANY node partitioning");
+				}
 				return;
 			}
 

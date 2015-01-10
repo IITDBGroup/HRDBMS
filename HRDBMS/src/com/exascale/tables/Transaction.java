@@ -12,6 +12,7 @@ import com.exascale.logging.DeleteLogRec;
 import com.exascale.logging.InsertLogRec;
 import com.exascale.logging.LogRec;
 import com.exascale.logging.StartLogRec;
+import com.exascale.logging.TruncateLogRec;
 import com.exascale.managers.BufferManager;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LockManager;
@@ -202,6 +203,20 @@ public class Transaction implements Serializable
 			}
 		}
 		return LogManager.insert(txnum, b, off, before, after);
+	}
+	
+	public TruncateLogRec truncate(Block b) throws Exception
+	{
+		synchronized(txList)
+		{
+			if (!txList.containsKey(txnum))
+			{
+				txList.put(txnum, txnum);
+				LogRec rec = new StartLogRec(txnum);
+				LogManager.write(rec);
+			}
+		}
+		return LogManager.truncate(txnum, b);
 	}
 
 	public long number()

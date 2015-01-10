@@ -15,4 +15,15 @@ public class OrderBy
 	{
 		return keys;
 	}
+	
+	public OrderBy clone()
+	{
+		ArrayList<SortKey> newKeys = new ArrayList<SortKey>();
+		for (SortKey key : keys)
+		{
+			newKeys.add(key.clone());
+		}
+		
+		return new OrderBy(newKeys);
+	}
 }

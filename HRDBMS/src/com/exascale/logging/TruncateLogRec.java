@@ -5,19 +5,14 @@ import com.exascale.filesystem.Block;
 import com.exascale.managers.FileManager;
 import com.exascale.managers.HRDBMSWorker;
 
-public class ExtendLogRec extends LogRec
+public class TruncateLogRec extends LogRec
 {
 	private Block b;
 
-	public ExtendLogRec(long txnum, Block b) throws Exception
+	public TruncateLogRec(long txnum, Block b) throws Exception
 	{
 		super(LogRec.EXTEND, txnum, ByteBuffer.allocate(32 + b.toString().getBytes("UTF-8").length));
 		this.b = b;
-		
-		if (b.number() == 0)
-		{
-			throw new Exception("Can't write an extend log record for page 0: " + b.toString());
-		}
 
 		final ByteBuffer buff = this.buffer();
 		buff.position(28);
@@ -30,7 +25,7 @@ public class ExtendLogRec extends LogRec
 		}
 		catch (final Exception e)
 		{
-			HRDBMSWorker.logger.error("Error converting bytes to UTF-8 string in ExtendLogRec constructor.", e);
+			HRDBMSWorker.logger.error("Error converting bytes to UTF-8 string in TruncateLogRec constructor.", e);
 			return;
 		}
 	}
@@ -42,24 +37,11 @@ public class ExtendLogRec extends LogRec
 	
 	public void redo()
 	{
-		try
-		{
-			FileManager.redoExtend(b);
-		}
-		catch(Exception e)
-		{
-			HRDBMSWorker.logger.fatal("", e);
-			System.exit(1);
-		}
+		
 	}
 	
 	public void undo()
 	{
-		try
-		{
-			FileManager.trim(b.fileName(), b.number());
-		}
-		catch(Exception e)
-		{}
+		
 	}
 }

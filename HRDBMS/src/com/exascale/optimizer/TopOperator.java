@@ -20,7 +20,7 @@ public final class TopOperator implements Operator, Serializable
 	private final AtomicLong remaining;
 	private int node;
 	private volatile boolean demSent = false;
-	private Plan plan;
+	private transient Plan plan;
 	
 	public void setPlan(Plan plan)
 	{

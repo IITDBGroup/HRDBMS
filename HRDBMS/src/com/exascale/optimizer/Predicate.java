@@ -1,5 +1,8 @@
 package com.exascale.optimizer;
 
+import com.exascale.exceptions.ParseException;
+import com.exascale.managers.HRDBMSWorker;
+
 public class Predicate
 {
 	private Expression lhs;
@@ -9,11 +12,29 @@ public class Predicate
 	protected Predicate()
 	{}
 	
-	public Predicate(Expression lhs, String op, Expression rhs)
+	public Predicate(Expression lhs, String op, Expression rhs) 
 	{
 		this.lhs = lhs;
 		this.op = op;
 		this.rhs = rhs;
+	}
+	
+	public Predicate clone()
+	{
+		Expression lClone = null;
+		Expression rClone = null;
+		
+		if (lhs != null)
+		{
+			lClone = lhs.clone();
+		}
+		
+		if (rhs != null)
+		{
+			rClone = rhs.clone();
+		}
+		
+		return new Predicate(lClone, op, rClone);
 	}
 	
 	public Expression getLHS()

@@ -443,10 +443,10 @@ public final class Phase5
 
 	public void optimize() throws Exception
 	{
-		addIndexesToTableScans();
-		turnOffDistinctUnion(root, false);
+		//addIndexesToTableScans();
+		//turnOffDistinctUnion(root, false);
 		setCards(root);
-		addIndexesToJoins();
+		//addIndexesToJoins();
 		setNumParents(root);
 		setSpecificCoord(root);
 	}

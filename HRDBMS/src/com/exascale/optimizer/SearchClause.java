@@ -10,7 +10,7 @@ public class SearchClause
 	{
 		if (predicate != null)
 		{
-			return new SearchClause(predicate, negated);
+			return new SearchClause(predicate.clone(), negated);
 		}
 		else
 		{

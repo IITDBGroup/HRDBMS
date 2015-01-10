@@ -15,4 +15,15 @@ public class GroupBy
 	{
 		return cols;
 	}
+	
+	public GroupBy clone()
+	{
+		ArrayList<Column> newCols = new ArrayList<Column>();
+		for (Column col : cols)
+		{
+			newCols.add(col.clone());
+		}
+		
+		return new GroupBy(newCols);
+	}
 }

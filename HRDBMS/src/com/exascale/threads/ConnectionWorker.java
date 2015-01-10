@@ -35,6 +35,7 @@ import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
@@ -69,6 +70,7 @@ import com.exascale.misc.MurmurHash;
 import com.exascale.misc.MyDate;
 import com.exascale.optimizer.Filter;
 import com.exascale.optimizer.Index;
+import com.exascale.optimizer.Index.IndexRecord;
 import com.exascale.optimizer.IndexOperator;
 import com.exascale.optimizer.LoadMetaData;
 import com.exascale.optimizer.MetaData;
@@ -101,6 +103,7 @@ public class ConnectionWorker extends HRDBMSThread
 	private static ConcurrentHashMap<String, LoadMetaData> ldmds = new ConcurrentHashMap<String, LoadMetaData>();
 	private static int maxLoad = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_load_average")); 
 	private static int criticalMem = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("critical_mem_percent"));
+	private Random random = new Random();
 
 	static
 	{
@@ -3211,6 +3214,7 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 		filename += "xa.log";
 		Iterator<LogRec> iter = LogManager.iterator(filename, false);
+		boolean sent = false;
 		while (iter.hasNext())
 		{
 			LogRec rec = iter.next();
@@ -3219,19 +3223,56 @@ public class ConnectionWorker extends HRDBMSThread
 				if (rec.type() == LogRec.XACOMMIT)
 				{
 					sendOK();
+					sent = true;
+					break;
 				}
 				else if (rec.type() == LogRec.XAABORT)
 				{
 					sendNo();
+					sent = true;
+					break;
 				}
 				else if (rec.type() == LogRec.PREPARE)
 				{
 					sendNo();
+					sent = true;
+					break;
 				}
 			}
 		}
 		
 		((LogIterator)iter).close();
+		
+		if (!sent)
+		{
+			iter = LogManager.archiveIterator(filename, false);
+			sent = false;
+			while (iter.hasNext())
+			{
+				LogRec rec = iter.next();
+				if (rec.txnum() == txnum)
+				{
+					if (rec.type() == LogRec.XACOMMIT)
+					{
+						sendOK();
+						sent = true;
+						break;
+					}
+					else if (rec.type() == LogRec.XAABORT)
+					{
+						sendNo();
+						sent = true;
+						break;
+					}
+					else if (rec.type() == LogRec.PREPARE)
+					{
+						sendNo();
+						sent = true;
+						break;
+					}
+				}
+			}
+		}
 	}
 	
 	private void massDelete()
@@ -4582,11 +4623,25 @@ public class ConnectionWorker extends HRDBMSThread
 			try
 			{
 				//insert row and create RAIKS
-				int block = Schema.HEADER_SIZE;
+				String tfn = new MetaData().getDevicePath(num) + schema + "." + table + ".tbl";
+				FileManager.getFile(tfn);
+				int maxPlus = FileManager.numBlocks.get(tfn) - (Schema.HEADER_SIZE + 1);
+				int block = 4096;
+				try
+				{
+					block = Schema.HEADER_SIZE + random.nextInt(maxPlus + 1);
+				}
+				catch(Exception e)
+				{
+					HRDBMSWorker.logger.debug("tfn = " + tfn);
+					HRDBMSWorker.logger.debug("FileManager says " + FileManager.numBlocks.get(tfn));
+					HRDBMSWorker.logger.debug("maxPlus = " + maxPlus);
+					throw e;
+				}
 				//request block
 				HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
 				Schema sch = new Schema(layout);
-				Block toRequest = new Block(new MetaData().getDevicePath(num) + schema + "." + table + ".tbl", block);
+				Block toRequest = new Block(tfn, block);
 				tx.requestPage(toRequest);
 				tx.read(toRequest, sch, true);
 				ArrayList<RIDAndIndexKeys> raiks = new ArrayList<RIDAndIndexKeys>();
@@ -4895,17 +4950,20 @@ public class ConnectionWorker extends HRDBMSThread
 		private int device;
 		private boolean ok = true;
 		private Exception e = null;
+		Transaction tx;
 		
-		public CreateTableThread(String tbl, int cols, int device)
+		public CreateTableThread(String tbl, int cols, int device, Transaction tx)
 		{
 			this.tbl = tbl;
 			this.cols = cols;
 			this.device = device;
+			this.tx = tx;
 		}
 		
-		public CreateTableThread(String fn, int cols)
+		public CreateTableThread(String fn, int cols, Transaction tx)
 		{
 			this.cols = cols;
+			this.tx = tx;
 			this.tbl = fn.substring(fn.lastIndexOf("/") + 1);
 			String devicePath = fn.substring(0, fn.lastIndexOf("/") + 1);
 			int i = 0;
@@ -4931,7 +4989,7 @@ public class ConnectionWorker extends HRDBMSThread
 		{
 			try
 			{
-				createTableHeader(tbl, cols, device);
+				createTableHeader(tbl, cols, device, tx);
 			}
 			catch(Exception e)
 			{
@@ -4951,7 +5009,7 @@ public class ConnectionWorker extends HRDBMSThread
 			return e;
 		}
 		
-		private void createTableHeader(String tbl, int cols, int device) throws Exception
+		private void createTableHeader(String tbl, int cols, int device, Transaction tx) throws Exception
 		{
 			String fn = new MetaData().getDevicePath(device);
 			if (!fn.endsWith("/"))
@@ -4965,7 +5023,12 @@ public class ConnectionWorker extends HRDBMSThread
 			{
 				fc.truncate(0);
 			}
-			
+			if (tx != null)
+			{
+				tx.truncate(new Block(fn, 0));
+				tx.commit();
+			}
+			BufferManager.invalidateFile(fn);
 			FileManager.numBlocks.put(fn, 0);
 			ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
 			bb.position(0);
@@ -5031,14 +5094,16 @@ public class ConnectionWorker extends HRDBMSThread
 		ArrayList<Integer> devices;
 		Object o;
 		boolean ok = true;
+		Transaction tx;
 		
-		public SendHierNewTableThread(byte[] ncBytes, byte[] fnLenBytes, byte[] fnBytes, ArrayList<Integer> devices, Object o)
+		public SendHierNewTableThread(byte[] ncBytes, byte[] fnLenBytes, byte[] fnBytes, ArrayList<Integer> devices, Object o, Transaction tx)
 		{
 			this.ncBytes = ncBytes;
 			this.fnLenBytes = fnLenBytes;
 			this.fnBytes = fnBytes;
 			this.devices = devices;
 			this.o = o;
+			this.tx = tx;
 		}
 		
 		public void run()
@@ -5060,6 +5125,7 @@ public class ConnectionWorker extends HRDBMSThread
 					outMsg[14] = 0;
 					outMsg[15] = 0;
 					out.write(outMsg);
+					out.write(longToBytes(tx.number()));
 					out.write(ncBytes);
 					out.write(fnLenBytes);
 					out.write(fnBytes);
@@ -5104,6 +5170,7 @@ public class ConnectionWorker extends HRDBMSThread
 					outMsg[14] = 0;
 					outMsg[15] = 0;
 					out.write(outMsg);
+					out.write(longToBytes(tx.number()));
 					out.write(ncBytes);
 					out.write(fnLenBytes);
 					out.write(fnBytes);
@@ -5139,8 +5206,9 @@ public class ConnectionWorker extends HRDBMSThread
 		ArrayList<Integer> devices;
 		Object o;
 		boolean ok = true;
+		Transaction tx;
 		
-		public SendHierNewIndexThread(byte[] ncBytes, byte[] uBytes, byte[] fnLenBytes, byte[] fnBytes, ArrayList<Integer> devices, Object o)
+		public SendHierNewIndexThread(byte[] ncBytes, byte[] uBytes, byte[] fnLenBytes, byte[] fnBytes, ArrayList<Integer> devices, Object o, Transaction tx)
 		{
 			this.ncBytes = ncBytes;
 			this.uBytes = uBytes;
@@ -5148,6 +5216,7 @@ public class ConnectionWorker extends HRDBMSThread
 			this.fnBytes = fnBytes;
 			this.devices = devices;
 			this.o = o;
+			this.tx = tx;
 		}
 		
 		public void run()
@@ -5169,6 +5238,7 @@ public class ConnectionWorker extends HRDBMSThread
 					outMsg[14] = 0;
 					outMsg[15] = 0;
 					out.write(outMsg);
+					out.write(longToBytes(tx.number()));
 					out.write(ncBytes);
 					out.write(uBytes);
 					out.write(fnLenBytes);
@@ -5214,6 +5284,7 @@ public class ConnectionWorker extends HRDBMSThread
 					outMsg[14] = 0;
 					outMsg[15] = 0;
 					out.write(outMsg);
+					out.write(longToBytes(tx.number()));
 					out.write(ncBytes);
 					out.write(uBytes);
 					out.write(fnLenBytes);
@@ -5390,9 +5461,13 @@ public class ConnectionWorker extends HRDBMSThread
 		int numCols;
 		ArrayList<Integer> devices;
 		ArrayList<Object> tree;
+		Transaction tx;
+		byte[] txBytes = new byte[8];
 		
 		try
 		{
+			readNonCoord(txBytes);
+			tx = new Transaction(bytesToLong(txBytes));
 			readNonCoord(ncBytes);
 			numCols = bytesToInt(ncBytes);
 			readNonCoord(fnLenBytes);
@@ -5407,7 +5482,7 @@ public class ConnectionWorker extends HRDBMSThread
 			ArrayList<CreateTableThread> threads = new ArrayList<CreateTableThread>();
 			for (int device : devices)
 			{
-				threads.add(new CreateTableThread(fn, numCols, device));
+				threads.add(new CreateTableThread(fn, numCols, device, tx));
 			}
 			
 			for (CreateTableThread thread : threads)
@@ -5427,7 +5502,7 @@ public class ConnectionWorker extends HRDBMSThread
 			ArrayList<SendHierNewTableThread> threads2 = new ArrayList<SendHierNewTableThread>();
 			for (Object o : tree)
 			{
-				threads2.add(new SendHierNewTableThread(ncBytes, fnLenBytes, fnBytes, devices, o));
+				threads2.add(new SendHierNewTableThread(ncBytes, fnLenBytes, fnBytes, devices, o, tx));
 			}
 			
 			for (SendHierNewTableThread thread : threads2)
@@ -5500,9 +5575,13 @@ public class ConnectionWorker extends HRDBMSThread
 		int unique;
 		ArrayList<Integer> devices;
 		ArrayList<Object> tree;
+		Transaction tx;
+		byte[] txBytes = new byte[8];
 		
 		try
 		{
+			readNonCoord(txBytes);
+			tx = new Transaction(bytesToLong(txBytes));
 			readNonCoord(ncBytes);
 			numCols = bytesToInt(ncBytes);
 			readNonCoord(uBytes);
@@ -5519,7 +5598,7 @@ public class ConnectionWorker extends HRDBMSThread
 			ArrayList<CreateIndexThread> threads = new ArrayList<CreateIndexThread>();
 			for (int device : devices)
 			{
-				threads.add(new CreateIndexThread(fn, numCols, device, unique));
+				threads.add(new CreateIndexThread(fn, numCols, device, unique, tx));
 			}
 			
 			for (CreateIndexThread thread : threads)
@@ -5539,7 +5618,7 @@ public class ConnectionWorker extends HRDBMSThread
 			ArrayList<SendHierNewIndexThread> threads2 = new ArrayList<SendHierNewIndexThread>();	
 			for (Object o : tree)
 			{
-				threads2.add(new SendHierNewIndexThread(ncBytes, uBytes, fnLenBytes, fnBytes, devices, o));
+				threads2.add(new SendHierNewIndexThread(ncBytes, uBytes, fnLenBytes, fnBytes, devices, o, tx));
 			}
 
 			for (SendHierNewIndexThread thread : threads2)
@@ -5607,20 +5686,23 @@ public class ConnectionWorker extends HRDBMSThread
 		private int unique;
 		private boolean ok = true;;
 		private Exception e;
+		Transaction tx;
 		
-		public CreateIndexThread(String indx, int numCols, int device, int unique)
+		public CreateIndexThread(String indx, int numCols, int device, int unique, Transaction tx)
 		{
 			this.indx = indx;
 			this.numCols = numCols;
 			this.device = device;
 			this.unique = unique;
+			this.tx = tx;
 		}
 		
-		public CreateIndexThread(String fn, int numCols, boolean unique)
+		public CreateIndexThread(String fn, int numCols, boolean unique, Transaction tx)
 		{
 			this.indx = indx;
 			this.numCols = numCols;
 			this.device = device;
+			this.tx = tx;
 			if (unique)
 			{
 				this.unique = 1;
@@ -5655,7 +5737,7 @@ public class ConnectionWorker extends HRDBMSThread
 		{
 			try
 			{
-				createIndexHeader(indx, numCols, device, unique);
+				createIndexHeader(indx, numCols, device, unique, tx);
 			}
 			catch(Exception e)
 			{
@@ -5675,7 +5757,7 @@ public class ConnectionWorker extends HRDBMSThread
 			return e;
 		}
 		
-		private void createIndexHeader(String indx, int numCols, int device, int unique) throws Exception
+		private void createIndexHeader(String indx, int numCols, int device, int unique, Transaction tx) throws Exception
 		{
 			String fn = new MetaData().getDevicePath(device);
 			if (!fn.endsWith("/"))
@@ -5689,6 +5771,12 @@ public class ConnectionWorker extends HRDBMSThread
 			{
 				fc.truncate(0);
 			}
+			if (tx != null)
+			{
+				tx.truncate(new Block(fn, 0));
+				tx.commit();
+			}
+			BufferManager.invalidateFile(fn);
 			FileManager.numBlocks.put(fn, 0);
 			ByteBuffer data = ByteBuffer.allocate(Page.BLOCK_SIZE);
 		
@@ -6810,8 +6898,15 @@ public class ConnectionWorker extends HRDBMSThread
 	private static ArrayList<String> getTableFilesInPath(String path) throws Exception
 	{
 		final ArrayList<Path> files = new ArrayList<Path>();
-		final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + "*.*.tbl.*");
-	    Files.walkFileTree(Paths.get(path), new SimpleFileVisitor<Path>() {
+		String search = path;
+		if (!search.endsWith("/"))
+		{
+			search += "/";
+		}
+		
+		search += "*.*.tbl.*";
+		final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + search);
+	    Files.walkFileTree(Paths.get("/"), new SimpleFileVisitor<Path>() {
 	        @Override
 	        public FileVisitResult visitFile(Path file, java.nio.file.attribute.BasicFileAttributes attrs) throws IOException {
 	            if (matcher.matches(file)) {
@@ -6838,8 +6933,15 @@ public class ConnectionWorker extends HRDBMSThread
 	private static ArrayList<String> getIndexFilesInPath(String path) throws Exception
 	{
 		final ArrayList<Path> files = new ArrayList<Path>();
-		final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + "*.*.indx.*");
-	    Files.walkFileTree(Paths.get(path), new SimpleFileVisitor<Path>() {
+		String search = path;
+		if (!search.endsWith("/"))
+		{
+			search += "/";
+		}
+		
+		search += "*.*.indx.*";
+		final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + search);
+	    Files.walkFileTree(Paths.get("/"), new SimpleFileVisitor<Path>() {
 	        @Override
 	        public FileVisitResult visitFile(Path file, java.nio.file.attribute.BasicFileAttributes attrs) throws IOException {
 	            if (matcher.matches(file)) {
@@ -7234,14 +7336,14 @@ public class ConnectionWorker extends HRDBMSThread
 			
 				//create new table and index files
 				String newFN = fn + ".new";
-				CreateTableThread createT = new CreateTableThread(fn, pos2Col.size());
+				CreateTableThread createT = new CreateTableThread(fn, pos2Col.size(), null);
 				createT.run();
 				ArrayList<String> newIndexFNs = new ArrayList<String>();
 				i = 0;
 				for (String fn2 : indexFNs)
 				{
 					String temp = fn2 + ".new";
-					CreateIndexThread createI = new CreateIndexThread(fn2, indexes.get(i).getKeys().size(), uniques.get(i));
+					CreateIndexThread createI = new CreateIndexThread(fn2, indexes.get(i).getKeys().size(), uniques.get(i), null);
 					createI.run();
 					newIndexFNs.add(temp);
 					i++;
@@ -7380,6 +7482,7 @@ public class ConnectionWorker extends HRDBMSThread
 			
 				for (String fn2 : indexFNs)
 				{
+					FileManager.getFile(fn2);
 					int blocks2 = FileManager.numBlocks.get(fn2);
 					i = 0;
 					while (i < blocks)
@@ -7904,8 +8007,8 @@ public class ConnectionWorker extends HRDBMSThread
 			index.open();
 			try
 			{
-				RID rid = index.get(fva);
-				if (rid == null)
+				IndexRecord line = index.get(fva);
+				if (line == null)
 				{
 					tx.commitNoFlush();
 					sendOK();
@@ -7914,6 +8017,7 @@ public class ConnectionWorker extends HRDBMSThread
 			
 				HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
 				Schema sch = new Schema(layout);
+				RID rid = line.getRid();
 				int block = rid.getBlockNum();
 				//request block
 				Block toRequest = new Block(new MetaData().getDevicePath(device) + schema + "." + table + ".tbl", block);
@@ -7991,6 +8095,7 @@ public class ConnectionWorker extends HRDBMSThread
 		String schema = name.substring(0, name.indexOf('.'));
 		String table = name.substring(name.indexOf('.') + 1);
 		Transaction tx = new Transaction(Transaction.ISOLATION_CS);
+		Transaction tx2 = new Transaction(Transaction.ISOLATION_CS);
 		
 		//determine node and device
 		ArrayList<Object> partial = new ArrayList<Object>();
@@ -7998,9 +8103,10 @@ public class ConnectionWorker extends HRDBMSThread
 		long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
 		int node = (int)(hash % MetaData.numWorkerNodes);
 		int device = (int)(hash % MetaData.getNumDevices());
-		SendPut2Thread thread = new SendPut2Thread(schema, table, node, device, key, tx, value);
+		SendPut2Thread thread = new SendPut2Thread(schema, table, node, device, key, tx, value, tx2);
 		thread.start();
 		tx.commitNoFlush();
+		tx2.commitNoFlush();
 		thread.join();
 		if (!thread.getOK())
 		{
@@ -8019,8 +8125,9 @@ public class ConnectionWorker extends HRDBMSThread
 		private Transaction tx;
 		private boolean ok = true;
 		private Exception e;
+		private Transaction tx2;
 		
-		public SendPut2Thread(String schema, String table, int node, int device, Object key, Transaction tx, Object value)
+		public SendPut2Thread(String schema, String table, int node, int device, Object key, Transaction tx, Object value, Transaction tx2)
 		{
 			this.schema = schema;
 			this.table = table;
@@ -8029,6 +8136,7 @@ public class ConnectionWorker extends HRDBMSThread
 			this.key = key;
 			this.tx = tx;
 			this.value = value;
+			this.tx2 = tx2;
 		}
 		
 		public void run()
@@ -8049,6 +8157,7 @@ public class ConnectionWorker extends HRDBMSThread
 				outMsg[15] = 0;
 				out.write(outMsg);
 				out.write(longToBytes(tx.number()));
+				out.write(longToBytes(tx2.number()));
 				out.write(stringToBytes(schema));
 				out.write(stringToBytes(table));
 				out.write(intToBytes(device));
@@ -8097,10 +8206,13 @@ public class ConnectionWorker extends HRDBMSThread
 		Object key;
 		Object value;
 		Transaction tx;
+		Transaction tx2;
 		try
 		{
 			readNonCoord(txBytes);
 			txNum = bytesToLong(txBytes);
+			readNonCoord(txBytes);
+			tx2 = new Transaction(bytesToLong(txBytes));
 			tx = new Transaction(txNum);
 			readNonCoord(schemaLenBytes);
 			schemaLength = bytesToInt(schemaLenBytes);
@@ -8202,57 +8314,67 @@ public class ConnectionWorker extends HRDBMSThread
 			index.open();
 			try
 			{
-				RID rid = index.get(fva);
-				if (rid == null)
+				IndexRecord line = index.get(fva);
+				if (line == null)
 				{
 					//doesn't exist yet
 					//do insert
-					int block = Schema.HEADER_SIZE;
+					String tfn = new MetaData().getDevicePath(device) + schema + "." + table + ".tbl";
+					int maxPlus = FileManager.numBlocks.get(tfn) - (Schema.HEADER_SIZE + 1);
+					FileManager.getFile(tfn);
+					int block = Schema.HEADER_SIZE + random.nextInt(maxPlus + 1);
 					//request block
 					HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
 					Schema sch = new Schema(layout);
-					Block toRequest = new Block(new MetaData().getDevicePath(device) + schema + "." + table + ".tbl", block);
+					Block toRequest = new Block(tfn, block);
 					tx.requestPage(toRequest);
 					tx.read(toRequest, sch, true);
 			
-					rid = sch.insertRow(fva2);
+					RID rid = sch.insertRow(fva2);
 					index.insert(fva, rid);
+					tx.commitNoFlush();
+					sendOK();
 				}
 				else
 				{
 					//already exists
-					//do delete then insert
 					HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
 					Schema sch = new Schema(layout);
-					int block = rid.getBlockNum();
-					//request block
-					Block toRequest = new Block(new MetaData().getDevicePath(device) + schema + "." + table + ".tbl", block);
-					tx.requestPage(toRequest);
-					tx.read(toRequest, sch, true);
-					sch.deleteRow(rid);
-				
-					//for each index, delete row based on rid and key values
-					index.delete(fva, rid);
+					String tfn = new MetaData().getDevicePath(device) + schema + "." + table + ".tbl";
 					
-					block = Schema.HEADER_SIZE;
+					RID rid = line.getRid();
+					
+					FileManager.getFile(tfn);
+					int maxPlus = FileManager.numBlocks.get(tfn) - (Schema.HEADER_SIZE + 1);
+					int block = Schema.HEADER_SIZE + random.nextInt(maxPlus + 1);
 					//request block
-					toRequest = new Block(new MetaData().getDevicePath(device) + schema + "." + table + ".tbl", block);
+					Block toRequest = new Block(tfn, block);
 					tx.requestPage(toRequest);
 					tx.read(toRequest, sch, true);
 					RID newRid = sch.insertRow(fva2);
 					try
 					{
-						index.insert(fva, newRid);
+						//index.insert(fva, newRid);
+						line.replaceRid(newRid);
+						tx.commitNoFlush();
+						sendOK();
 					}
 					catch(Exception e)
 					{
 						HRDBMSWorker.logger.debug("Index insert failed", e);
 						HRDBMSWorker.logger.debug("They old RID we deleted was " + rid);
 						HRDBMSWorker.logger.debug("The new RID we were trying to insert was " + newRid);
-						RID rid2 = index.get(fva);
-						HRDBMSWorker.logger.debug("An index get returns " + rid2);
 						throw e;
 					}
+					
+					block = rid.getBlockNum();
+					//request block
+					toRequest = new Block(new MetaData().getDevicePath(device) + schema + "." + table + ".tbl", block);
+					tx2.requestPage(toRequest);
+					tx2.read(toRequest, sch, true);
+					sch.deleteRow(rid);
+					tx2.commitNoFlush();
+					//index.delete(fva, rid);
 				}
 			}
 			catch(Exception e)
@@ -8262,9 +8384,6 @@ public class ConnectionWorker extends HRDBMSThread
 				sendNo();
 				return;
 			}
-			
-			tx.commitNoFlush();
-			sendOK();
 		}
 		catch(Exception e)
 		{

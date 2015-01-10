@@ -19,6 +19,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 	private volatile ArrayBlockingQueue q;
 	private static Vector<ArrayBlockingQueue> free = new Vector<ArrayBlockingQueue>();
 	private static int RETRY_TIME;
+	private volatile boolean closed = false;
 
 	static
 	{
@@ -39,15 +40,16 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 		}
 	}
 
-	public void clear()
+	public synchronized void clear()
 	{
 		receives.clear();
 		threadLocal.clear();
 		q.clear();
 	}
 	
-	public void close()
+	public synchronized void close()
 	{
+		closed = true;
 		ArrayBlockingQueue temp = q;
 		q = null;
 		///receives.clear();
@@ -60,33 +62,60 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 
 	public Object peek()
 	{
-		ArrayAndIndex oa = receives.get(Thread.currentThread());
-		if (oa == null)
+		if (closed)
 		{
-			while (true)
+			return null;
+		}
+		
+		try
+		{
+			ArrayAndIndex oa = receives.get(Thread.currentThread());
+			if (oa == null)
 			{
-				try
+				while (true)
 				{
-					final Object[] os = (Object[])q.poll();
-					if (os == null)
+					try
 					{
-						return null;
+						final Object[] os = (Object[])q.poll();
+						if (os == null)
+						{
+							return null;
+						}
+						oa = new ArrayAndIndex(os);
+						receives.put(Thread.currentThread(), oa);
+						break;
 					}
-					oa = new ArrayAndIndex(os);
-					receives.put(Thread.currentThread(), oa);
-					break;
-				}
-				catch (final Exception e)
-				{
+					catch (final Exception e)
+					{
+						if (closed)
+						{
+							return null;
+						}
+						
+						throw e;
+					}
 				}
 			}
-		}
 
-		return oa.peek();
+			return oa.peek();
+		}
+		catch(Exception e)
+		{
+			if (closed)
+			{
+				return null;
+			}
+			
+			throw e;
+		}
 	}
 
 	public void put(Object o)
 	{
+		if (closed)
+		{
+			return;
+		}
 		try
 		{
 			if (o == null)
@@ -113,38 +142,56 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 		}
 		catch(Exception e)
 		{
+			if (closed)
+			{
+				return;
+			}
+			
 			HRDBMSWorker.logger.debug("", e);
+			throw e;
 		}
 	}
 
 	public Object take() throws Exception
 	{
-		ArrayAndIndex oa = receives.get(Thread.currentThread());
-		if (oa == null)
+		try
 		{
-			while (true)
+			ArrayAndIndex oa = receives.get(Thread.currentThread());
+			if (oa == null)
 			{
-				try
+				while (true)
 				{
-					final Object[] os = (Object[])q.take();
-					// Object[] os = take2();
-					oa = new ArrayAndIndex(os);
-					receives.put(Thread.currentThread(), oa);
-					break;
-				}
-				catch (final Exception e)
-				{
+					try
+					{
+						final Object[] os = (Object[])q.take();
+						// Object[] os = take2();
+						oa = new ArrayAndIndex(os);
+						receives.put(Thread.currentThread(), oa);
+						break;
+					}
+					catch (final Exception e)
+					{
+					}
 				}
 			}
-		}
 
-		Object retval = oa.take();
-		if (retval == null)
-		{
-			throw new Exception("take() is returning a null value");
-		}
+			Object retval = oa.take();
+			if (retval == null)
+			{
+				throw new Exception("take() is returning a null value");
+			}
 		
-		return retval;
+			return retval;
+		}
+		catch(Exception e)
+		{
+			if (closed)
+			{
+				return null;
+			}
+			
+			throw e;
+		}
 	}
 
 	private final class ArrayAndIndex

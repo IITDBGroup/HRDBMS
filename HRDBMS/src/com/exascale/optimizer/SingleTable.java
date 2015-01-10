@@ -16,6 +16,11 @@ public class SingleTable
 		this.alias = alias;
 	}
 	
+	public SingleTable clone()
+	{
+		return new SingleTable(table.clone(), alias);
+	}
+	
 	public TableName getName()
 	{
 		return table;

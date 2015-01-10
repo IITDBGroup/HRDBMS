@@ -13,4 +13,9 @@ public class ExistsPredicate extends Predicate
 	{
 		return select;
 	}
+	
+	public Predicate clone()
+	{
+		return new ExistsPredicate(select.clone());
+	}
 }

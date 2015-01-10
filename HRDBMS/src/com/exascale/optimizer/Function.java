@@ -21,6 +21,22 @@ public class Function
 		this.distinct = distinct;
 	}
 	
+	public Function clone()
+	{
+		if (args == null)
+		{
+			return new Function(name, args, distinct);
+		}
+		
+		ArrayList<Expression> newArgs = new ArrayList<Expression>();
+		for (Expression e : args)
+		{
+			newArgs.add(e.clone());
+		}
+		
+		return new Function(name, newArgs, distinct);
+	}
+	
 	public String getName()
 	{
 		return name;

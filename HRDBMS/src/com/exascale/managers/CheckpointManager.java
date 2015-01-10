@@ -57,7 +57,7 @@ public class CheckpointManager extends HRDBMSThread
 						filename += "/";
 					}
 					filename += "xa.log";
-					RandomAccessFile f = LogManager.archive(Transaction.txList.keySet(), filename);
+					RandomAccessFile f = LogManager.archive(Transaction.txList.keySet(), filename, true);
 					FileChannel fc = LogManager.getFile(filename);
 					FileChannel fc2 = f.getChannel();
 					fc.truncate(0);

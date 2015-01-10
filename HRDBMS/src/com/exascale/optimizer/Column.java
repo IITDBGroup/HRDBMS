@@ -18,6 +18,11 @@ public class Column implements Serializable
 		this.column = column;
 	}
 	
+	public Column clone()
+	{
+		return new Column(table, column);
+	}
+	
 	public void setTable(String table)
 	{
 		this.table = table;

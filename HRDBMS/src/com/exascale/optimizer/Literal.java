@@ -19,6 +19,16 @@ public class Literal
 		isNull = true;
 	}
 	
+	public Literal clone()
+	{
+		if (isNull)
+		{
+			return new Literal();
+		}
+		
+		return new Literal(value);
+	}
+	
 	public Object getValue()
 	{
 		return value;

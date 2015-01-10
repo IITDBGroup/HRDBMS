@@ -294,7 +294,7 @@ public final class TableScanOperator implements Operator, Serializable
 				f.add(map);
 				this.filters.put(op, f);
 				//Transaction t = new Transaction(Transaction.ISOLATION_RR);
-				orderedFilters.put(op, new CNFFilter(f, meta, cols2Pos, tx, this));
+				orderedFilters.put(op, new CNFFilter(f, meta, cols2Pos, this));
 				//t.commit();
 				return;
 			}
@@ -308,9 +308,7 @@ public final class TableScanOperator implements Operator, Serializable
 
 		f.add(map);
 		this.filters.put(op, f);
-		Transaction t = new Transaction(Transaction.ISOLATION_RR);
-		orderedFilters.put(op, new CNFFilter(f, meta, cols2Pos, t, this));
-		t.commit();
+		orderedFilters.put(op, new CNFFilter(f, meta, cols2Pos, this));
 	}
 
 	public boolean allDevices()
@@ -407,6 +405,7 @@ public final class TableScanOperator implements Operator, Serializable
 			retval.setAlias(alias);
 		}
 		retval.getRID = getRID;
+		retval.tx = tx;
 		return retval;
 	}
 
@@ -491,7 +490,14 @@ public final class TableScanOperator implements Operator, Serializable
 
 	public Operator firstParent()
 	{
-		return parents.get(0);
+		if (parents.size() > 0)
+		{
+			return parents.get(0);
+		}
+		else
+		{
+			return null;
+		}
 	}
 
 	@Override
@@ -1177,7 +1183,16 @@ public final class TableScanOperator implements Operator, Serializable
 	@Override
 	public String toString()
 	{
-		String retval = "TableScanOperator(" + node + ":" + devices + "): " + schema + "." + name;
+		String table2 = null;
+		if (alias == null || alias.equals(""))
+		{
+			table2 = name;
+		}
+		else
+		{
+			table2 = alias;
+		}
+		String retval = "TableScanOperator(" + node + ":" + devices + "): " + schema + "." + table2;
 		for (final Map.Entry entry : orderedFilters.entrySet())
 		{
 			retval += (", (" + entry.getKey().toString() + ", " + entry.getValue().toString()) + ")";

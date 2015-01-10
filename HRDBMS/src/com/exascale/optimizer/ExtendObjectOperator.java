@@ -59,7 +59,7 @@ public final class ExtendObjectOperator implements Operator, Serializable
 		}
 		else
 		{
-			throw new Exception("ExtendDateOperator only supports 1 child.");
+			throw new Exception("ExtendObjectOperator only supports 1 child.");
 		}
 	}
 
@@ -181,7 +181,7 @@ public final class ExtendObjectOperator implements Operator, Serializable
 		}
 		else
 		{
-			throw new Exception("ExtendDateOperator only supports 1 parent.");
+			throw new Exception("ExtendObjectOperator only supports 1 parent.");
 		}
 	}
 
@@ -227,6 +227,6 @@ public final class ExtendObjectOperator implements Operator, Serializable
 	@Override
 	public String toString()
 	{
-		return "ExtendDateOperator";
+		return "ExtendObjectOperator";
 	}
 }

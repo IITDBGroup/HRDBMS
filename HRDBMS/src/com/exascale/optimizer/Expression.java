@@ -170,6 +170,47 @@ public class Expression
 		
 		return true;
 	}
+	
+	public Expression clone()
+	{
+		if (isLiteral)
+		{
+			return new Expression(literal.clone());
+		}
+		
+		if (isColumn)
+		{
+			return new Expression(column.clone());
+		}
+		
+		if (isCountStar)
+		{
+			return new Expression();
+		}
+		
+		if (isFunction)
+		{
+			return new Expression(function.clone());
+		}
+		
+		if (isSelect)
+		{
+			return new Expression(select.clone());
+		}
+		
+		if (isList)
+		{
+			ArrayList<Expression> newList = new ArrayList<Expression>();
+			for (Expression e : list)
+			{
+				newList.add(e.clone());
+			}
+			
+			return new Expression(newList);
+		}
+		
+		return new Expression(lhs.clone(), op, rhs.clone());
+	}
 
 	public Expression(Literal literal)
 	{

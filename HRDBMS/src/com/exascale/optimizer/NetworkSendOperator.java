@@ -260,7 +260,7 @@ public class NetworkSendOperator implements Operator, Serializable
 	}
 
 	@Override
-	public synchronized void start()
+	public synchronized void start() throws Exception
 	{
 		try
 		{

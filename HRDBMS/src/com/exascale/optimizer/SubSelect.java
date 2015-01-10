@@ -21,6 +21,53 @@ public class SubSelect
 		this.fetchFirst = fetchFirst;
 	}
 	
+	public SubSelect clone()
+	{
+		SelectClause selectClone = null;
+		FromClause fromClone = null;
+		Where whereClone = null;
+		GroupBy groupByClone = null;
+		Having havingClone = null;
+		OrderBy orderByClone = null;
+		FetchFirst fetchFirstClone = null;
+		if (select != null)
+		{
+			selectClone = select.clone();
+		}
+		
+		if (from != null)
+		{
+			fromClone = from.clone();
+		}
+		
+		if (where != null)
+		{
+			whereClone = where.clone();
+		}
+		
+		if (groupBy != null)
+		{
+			groupByClone = groupBy.clone();
+		}
+		
+		if (having != null)
+		{
+			havingClone = having.clone();
+		}
+		
+		if (orderBy != null)
+		{
+			orderByClone = orderBy.clone();
+		}
+		
+		if (fetchFirst != null)
+		{
+			fetchFirstClone = fetchFirst.clone();
+		}
+		
+		return new SubSelect(selectClone, fromClone, whereClone, groupByClone, havingClone, orderByClone, fetchFirstClone);
+	}
+	
 	public void setWhere(Where where)
 	{
 		this.where = where;

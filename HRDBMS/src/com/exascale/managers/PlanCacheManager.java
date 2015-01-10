@@ -5380,7 +5380,9 @@ public class PlanCacheManager
 		
 		public void execute(Transaction tx) throws Exception
 		{
-			String sql = "INSERT INTO SYS.VIEWS VALUES(" + id + ",'" + schema + "','" + table + "','" + text + "')"; 
+			String textCopy = text.replace("'", "\\'");
+			String sql = "INSERT INTO SYS.VIEWS VALUES(" + id + ",'" + schema + "','" + table + "','" + textCopy + "')";
+			HRDBMSWorker.logger.debug(sql);
 			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 			worker.start();
 			worker.join();

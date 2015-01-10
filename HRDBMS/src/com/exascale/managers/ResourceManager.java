@@ -599,8 +599,11 @@ public final class ResourceManager extends HRDBMSThread
 
 		public void close() throws IOException
 		{
-			internal.close();
-			internal = null;
+			if (internal != null)
+			{
+				internal.close();
+				internal = null;
+			}
 		}
 
 		public boolean contains(Object val) throws Exception

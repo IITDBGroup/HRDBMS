@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.misc.Interval;
 import com.exascale.exceptions.ParseException;
+import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.Utils;
 
 public class SelectVisitorImpl extends SelectBaseVisitor<Object>
@@ -13,7 +14,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	{
 		String retval = ctx.STRING().getText();
 		retval = retval.substring(1, retval.length() - 1);
-		return new Literal(retval);
+		return new Literal(retval.replace("\\'", "'"));
 	}
 
 	public Literal visitNumericLiteral(SelectParser.NumericLiteralContext ctx)

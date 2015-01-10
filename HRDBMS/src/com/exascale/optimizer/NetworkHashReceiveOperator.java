@@ -120,6 +120,6 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 	@Override
 	public String toString()
 	{
-		return "NetworkHashReceiveOperator(" + node + ")";
+		return "NetworkHashReceiveOperator(" + node + ") ID = " + ID;
 	}
 }

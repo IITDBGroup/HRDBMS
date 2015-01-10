@@ -13,4 +13,9 @@ public class FetchFirst
 	{
 		return num;
 	}
+	
+	public FetchFirst clone()
+	{
+		return new FetchFirst(num);
+	}
 }

@@ -296,7 +296,7 @@ public class FileManager
 	{
 		bb.position(0);
 		final FileChannel fc = getFile(b.fileName());
-		fc.write(bb, b.number() * bb.capacity());
+		fc.write(bb, ((long)b.number()) * bb.capacity());
 		fc.force(false);
 	}
 	
@@ -304,7 +304,7 @@ public class FileManager
 	{
 		bb.position(0);
 		final FileChannel fc = getFile(b.fileName());
-		fc.write(bb, b.number() * bb.capacity());
+		fc.write(bb, ((long)b.number()) * bb.capacity());
 	}
 
 	private static void setDirs(String list)

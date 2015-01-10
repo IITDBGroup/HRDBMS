@@ -55,25 +55,47 @@ public final class Phase1
 
 	public void optimize() throws Exception
 	{
-		reorderProducts(root);
+		HRDBMSWorker.logger.debug("Upon entering P1:"); //DEBUG
+		printTree(root, 0); //DEBUG
 		// Driver.printTree(0, root); //DEBUG
+		do
+		{
+			pushdownHadResults = false;
+			pushDownSelects2(root);
+		} while (pushdownHadResults);
+		int i = 0;
+		while (i < ADDITIONAL_PUSHDOWNS)
+		{
+			pushDownSelects2(root);
+			i++;
+		}
+		
+		HRDBMSWorker.logger.debug("Immediately prior to reorderProducts()"); //DEBUG
+		printTree(root, 0); //DEBUG
+		reorderProducts(root);
+		HRDBMSWorker.logger.debug("After reorderProducts()"); //DEBUG
+		printTree(root, 0); //DEBUG
+		
 		do
 		{
 			pushdownHadResults = false;
 			pushDownSelects(root);
 		} while (pushdownHadResults);
-		int i = 0;
+		i = 0;
 		while (i < ADDITIONAL_PUSHDOWNS)
 		{
 			pushDownSelects(root);
 			i++;
 		}
+		
 		// Driver.printTree(0, root); //DEBUG
 		combineProductsAndSelects(root);
+		HRDBMSWorker.logger.debug("After combine...");
+		printTree(root, 0); //DEBUG
 		// Driver.printTree(0, root); //DEBUG
-		removeDuplicateTables();
+		//removeDuplicateTables();
 		// Driver.printTree(0, root); //DEBUG
-		pushUpSelects(root);
+		//pushUpSelects(root);
 		// Driver.printTree(0, root); //DEBUG
 		do
 		{
@@ -90,6 +112,41 @@ public final class Phase1
 		}
 
 		pushDownProjects();
+		removeUnneededOps(root);
+		
+		HRDBMSWorker.logger.debug("Upon exiting P1:"); //DEBUG
+		printTree(root, 0); //DEBUG
+	}
+	
+	private void removeUnneededOps(Operator op) throws Exception
+	{
+		if (!(op instanceof MultiOperator))
+		{
+			for (Operator o : op.children())
+			{
+				removeUnneededOps(o);
+			}
+			
+			return;
+		}
+		
+		MultiOperator mop = (MultiOperator)op;
+		Operator child = mop.children().get(0);
+		if (child instanceof ReorderOperator || child instanceof ProjectOperator || child instanceof SortOperator)
+		{
+			mop.removeChild(child);
+			Operator grandChild = child.children().get(0);
+			child.removeChild(grandChild);
+			mop.add(grandChild);
+			removeUnneededOps(mop);
+		}
+		else
+		{
+			for (Operator o : mop.children())
+			{
+				removeUnneededOps(o);
+			}
+		}
 	}
 
 	private void combineProductsAndSelects(Operator op) throws Exception
@@ -158,7 +215,7 @@ public final class Phase1
 				op.removeChild(selectChild);
 				final Operator selectParent = op.parent();
 				selectParent.removeChild(op);
-				if (selectChild instanceof ProductOperator)
+				if (selectChild instanceof JoinOperator)
 				{
 					selectParent.add(join);
 					combineProductsAndSelects(join);
@@ -215,30 +272,208 @@ public final class Phase1
 
 		return retval;
 	}
+	
+	private String getTable(Operator op)
+	{
+		if (op instanceof TableScanOperator)
+		{
+			return ((TableScanOperator)op).getSchema() + "." + ((TableScanOperator)op).getTable();
+		}
+		else
+		{
+			HashSet<String> retval = new HashSet<String>();
+			for (Operator o : op.children())
+			{
+				String ret = getTable(o);
+				if (ret == null)
+				{
+					return null;
+				}
+				else
+				{
+					retval.add(ret);
+				}
+			}
+			
+			if (retval.size() == 1)
+			{
+				return (String)retval.toArray()[0];
+			}
+			else
+			{
+				return null;
+			}
+		}
+	}
 
 	private SelectOperator getMostPromisingSelect(ArrayList<SelectOperator> selects, ArrayList<Operator> subtrees, Operator current) throws Exception
 	{
 		double minLikelihood = Double.MAX_VALUE;
+		double minColocated = Double.MAX_VALUE;
 		SelectOperator minSelect = null;
+		SelectOperator minSelect2 = null;
 
 		if (current == null)
 		{
-			for (final SelectOperator select : selects)
+			HRDBMSWorker.logger.debug("Current is null");
+			HashSet<SubtreePair> pairs = new HashSet<SubtreePair>();
+			outer: for (final SelectOperator select : selects)
 			{
-				final double likelihood = meta.likelihood(new ArrayList<Filter>(select.getFilter()), tx, clone);
+				double likelihood = meta.likelihood(new ArrayList<Filter>(select.getFilter()), tx, clone);
+				ArrayList<Filter> filters = select.getFilter();
+				Operator left = null;
+				Operator right = null;
+				ArrayList<String> lefts = new ArrayList<String>();
+				ArrayList<String> rights = new ArrayList<String>();
+				for (Filter filter : filters)
+				{
+					if (filter.leftIsColumn() && filter.rightIsColumn())
+					{
+						left = getSubtreeForCol(filter.leftColumn(), subtrees);
+						right = getSubtreeForCol(filter.rightColumn(), subtrees);
+						
+						SubtreePair pair = new SubtreePair(left, right);
+						if (pairs.contains(pair))
+						{
+							continue outer;
+						}
+						else
+						{
+							pairs.add(pair);
+						}
+						
+						if (filters.size() == 1 && filter.op().equals("E"))
+						{
+							lefts.add(filter.leftColumn());
+							rights.add(filter.rightColumn());
+						}
+						
+						likelihood *= (card(left) * card(right));
+						break;
+					}
+				}
+				
+				if (left != null)
+				{
+					for (SelectOperator s2 : selects)
+					{
+						if (s2 != select)
+						{
+							ArrayList<Filter> filters2 = s2.getFilter();
+							Operator l2 = null;
+							Operator r2 = null;
+							for (Filter f2 : filters2)
+							{
+								if (f2.leftIsColumn() && f2.rightIsColumn())
+								{
+									l2 = getSubtreeForCol(f2.leftColumn(), subtrees);
+									r2 = getSubtreeForCol(f2.rightColumn(), subtrees);
+									if ((l2 == left && r2 == right) || (l2 == right && r2 == left))
+									{
+										if (l2 == left && r2 == right)
+										{
+											if (filters2.size() == 1 && f2.op().equals("E") && lefts.size() > 0)
+											{
+												lefts.add(f2.leftColumn());
+												rights.add(f2.rightColumn());
+											}
+											else
+											{
+												lefts.clear();
+												rights.clear();
+											}
+										}
+										else
+										{
+											if (filters2.size() == 1 && f2.op().equals("E") && lefts.size() > 0)
+											{
+												rights.add(f2.leftColumn());
+												lefts.add(f2.rightColumn());
+											}
+											else
+											{
+												lefts.clear();
+												rights.clear();
+											}
+										}
+										likelihood *= meta.likelihood(new ArrayList<Filter>(s2.getFilter()), tx, clone);
+										break;
+									}
+								}
+							}
+						}
+					}
+				}
+				
+				if (lefts.size() > 0 && rights.size() > 0)
+				{
+					String leftTable = getTable(left);
+					String rightTable = getTable(right);
+					
+					if (leftTable != null && rightTable != null)
+					{
+						String lschema = leftTable.substring(0, leftTable.indexOf('.'));
+						String ltable = leftTable.substring(leftTable.indexOf('.') + 1);
+						String rschema = rightTable.substring(0, rightTable.indexOf('.'));
+						String rtable = rightTable.substring(rightTable.indexOf('.') + 1);
+						PartitionMetaData lpmd = meta.getPartMeta(lschema, ltable, tx);
+						PartitionMetaData rpmd = meta.getPartMeta(rschema, rtable, tx);
+						
+						if (lpmd.noNodeGroupSet() && rpmd.noNodeGroupSet())
+						{
+							if (lpmd.getNodeHash() != null && lefts.containsAll(lpmd.getNodeHash()) && rpmd.getNodeHash() != null && rights.containsAll(rpmd.getNodeHash()))
+							{
+								if (likelihood < minColocated)
+								{
+									minColocated = likelihood;
+									minSelect2 = select;
+								}
+							}
+						}
+						else
+						{
+							if (lpmd.getNodeHash() != null && lefts.containsAll(lpmd.getNodeHash()) && rpmd.getNodeHash() != null && rights.containsAll(rpmd.getNodeHash()) && lpmd.getNodeGroupHash() != null && lefts.containsAll(lpmd.getNodeGroupHash()) && rpmd.getNodeGroupHash() != null && rights.containsAll(rpmd.getNodeGroupHash()))
+							{
+								if (likelihood < minColocated)
+								{
+									minColocated = likelihood;
+									minSelect2 = select;
+								}
+							}
+						}
+					}
+				}
+			
+				HRDBMSWorker.logger.debug("Estimated join cardinality = " + likelihood); //DEBUG
+				
 				if (likelihood < minLikelihood)
 				{
 					minLikelihood = likelihood;
 					minSelect = select;
 				}
 			}
+			
+			if (minColocated <= minLikelihood * 2)
+			{
+				HRDBMSWorker.logger.debug("Chose " + minColocated); //DEBUG
+				minSelect = minSelect2;
+			}
+			else
+			{
+				HRDBMSWorker.logger.debug("Chose " + minLikelihood); //DEBUG
+			}
 
 			selects.remove(minSelect);
 			return minSelect;
 		}
 
-		for (final SelectOperator select : selects)
+		HRDBMSWorker.logger.debug("Current is not null");
+		HashSet<SubtreePair> pairs = new HashSet<SubtreePair>();
+		outer2: for (final SelectOperator select : selects)
 		{
+			double likelihood = Double.MAX_VALUE;
+			Operator left = null;
+			Operator right = null;
 			final ArrayList<Filter> filters = select.getFilter();
 			for (final Filter filter : filters)
 			{
@@ -246,36 +481,69 @@ public final class Phase1
 				{
 					if (current.getCols2Pos().containsKey(filter.leftColumn()))
 					{
-						final double likelihood = meta.likelihood(new ArrayList<Filter>(select.getFilter()), tx, clone);
-						if (likelihood < minLikelihood)
+						likelihood = meta.likelihood(new ArrayList<Filter>(select.getFilter()), tx, clone);
+						left = getSubtreeForCol(filter.leftColumn(), subtrees);
+						right = getSubtreeForCol(filter.rightColumn(), subtrees);
+						SubtreePair pair = new SubtreePair(left, right);
+						if (pairs.contains(pair))
 						{
-							minLikelihood = likelihood;
-							minSelect = select;
+							continue outer2;
 						}
-					}
-
-					if (current.getCols2Pos().containsKey(filter.rightColumn()))
-					{
-						final double likelihood = meta.likelihood(new ArrayList<Filter>(select.getFilter()), tx, clone);
-						if (likelihood < minLikelihood)
+						else
 						{
-							minLikelihood = likelihood;
-							minSelect = select;
+							pairs.add(pair);
+						}
+						likelihood *= (card(left) * card(right));
+					}
+					else if (current.getCols2Pos().containsKey(filter.rightColumn()))
+					{
+						likelihood = meta.likelihood(new ArrayList<Filter>(select.getFilter()), tx, clone);
+						left = getSubtreeForCol(filter.leftColumn(), subtrees);
+						right = getSubtreeForCol(filter.rightColumn(), subtrees);
+						SubtreePair pair = new SubtreePair(left, right);
+						if (pairs.contains(pair))
+						{
+							continue outer2;
+						}
+						else
+						{
+							pairs.add(pair);
+						}
+						likelihood *= (card(left) * card(right));
+					}
+					
+					break;
+				}
+			}
+			
+			if (left != null)
+			{
+				for (SelectOperator s2 : selects)
+				{
+					if (s2 != select)
+					{
+						ArrayList<Filter> filters2 = s2.getFilter();
+						Operator l2 = null;
+						Operator r2 = null;
+						for (Filter f2 : filters2)
+						{
+							if (f2.leftIsColumn() && f2.rightIsColumn())
+							{
+								l2 = getSubtreeForCol(f2.leftColumn(), subtrees);
+								r2 = getSubtreeForCol(f2.rightColumn(), subtrees);
+								if ((l2 == left && r2 == right) || (l2 == right && r2 == left))
+								{
+									likelihood *= meta.likelihood(new ArrayList<Filter>(s2.getFilter()), tx, clone);
+									break;
+								}
+							}
 						}
 					}
 				}
 			}
-		}
-
-		if (minSelect != null)
-		{
-			selects.remove(minSelect);
-			return minSelect;
-		}
-
-		for (final SelectOperator select : selects)
-		{
-			final double likelihood = meta.likelihood(new ArrayList<Filter>(select.getFilter()), tx, clone);
+			
+			HRDBMSWorker.logger.debug("Estimated join cardinality = " + likelihood); //DEBUG
+			
 			if (likelihood < minLikelihood)
 			{
 				minLikelihood = likelihood;
@@ -283,8 +551,185 @@ public final class Phase1
 			}
 		}
 
+		if (minSelect != null)
+		{
+			HRDBMSWorker.logger.debug("Chose " + minLikelihood); //DEBUG
+			selects.remove(minSelect);
+			return minSelect;
+		}
+
+		pairs.clear();
+		outer3: for (final SelectOperator select : selects)
+		{
+			double likelihood = meta.likelihood(new ArrayList<Filter>(select.getFilter()), tx, clone);
+			ArrayList<Filter> filters = select.getFilter();
+			Operator left = null;
+			Operator right = null;
+			ArrayList<String> lefts = new ArrayList<String>();
+			ArrayList<String> rights = new ArrayList<String>();
+			for (Filter filter : filters)
+			{
+				if (filter.leftIsColumn() && filter.rightIsColumn())
+				{
+					left = getSubtreeForCol(filter.leftColumn(), subtrees);
+					right = getSubtreeForCol(filter.rightColumn(), subtrees);
+					SubtreePair pair = new SubtreePair(left, right);
+					if (pairs.contains(pair))
+					{
+						continue outer3;
+					}
+					else
+					{
+						pairs.add(pair);
+					}
+					
+					if (filters.size() == 1 && filter.op().equals("E"))
+					{
+						lefts.add(filter.leftColumn());
+						rights.add(filter.rightColumn());
+					}
+					
+					likelihood *= (card(left) * card(right));
+					break;
+				}
+			}
+			
+			if (left != null)
+			{
+				for (SelectOperator s2 : selects)
+				{
+					if (s2 != select)
+					{
+						ArrayList<Filter> filters2 = s2.getFilter();
+						Operator l2 = null;
+						Operator r2 = null;
+						for (Filter f2 : filters2)
+						{
+							if (f2.leftIsColumn() && f2.rightIsColumn())
+							{
+								l2 = getSubtreeForCol(f2.leftColumn(), subtrees);
+								r2 = getSubtreeForCol(f2.rightColumn(), subtrees);
+								if ((l2 == left && r2 == right) || (l2 == right && r2 == left))
+								{
+									if (l2 == left && r2 == right)
+									{
+										if (filters2.size() == 1 && f2.op().equals("E") && lefts.size() > 0)
+										{
+											lefts.add(f2.leftColumn());
+											rights.add(f2.rightColumn());
+										}
+										else
+										{
+											lefts.clear();
+											rights.clear();
+										}
+									}
+									else
+									{
+										if (filters2.size() == 1 && f2.op().equals("E") && lefts.size() > 0)
+										{
+											rights.add(f2.leftColumn());
+											lefts.add(f2.rightColumn());
+										}
+										else
+										{
+											lefts.clear();
+											rights.clear();
+										}
+									}
+									likelihood *= meta.likelihood(new ArrayList<Filter>(s2.getFilter()), tx, clone);
+									break;
+								}
+							}
+						}
+					}
+				}
+			}
+			
+			if (lefts.size() > 0 && rights.size() > 0)
+			{
+				String leftTable = getTable(left);
+				String rightTable = getTable(right);
+				
+				if (leftTable != null && rightTable != null)
+				{
+					String lschema = leftTable.substring(0, leftTable.indexOf('.'));
+					String ltable = leftTable.substring(leftTable.indexOf('.') + 1);
+					String rschema = rightTable.substring(0, rightTable.indexOf('.'));
+					String rtable = rightTable.substring(rightTable.indexOf('.') + 1);
+					PartitionMetaData lpmd = meta.getPartMeta(lschema, ltable, tx);
+					PartitionMetaData rpmd = meta.getPartMeta(rschema, rtable, tx);
+					
+					if (lpmd.noNodeGroupSet() && rpmd.noNodeGroupSet())
+					{
+						if (lpmd.getNodeHash() != null && lefts.containsAll(lpmd.getNodeHash()) && rpmd.getNodeHash() != null && rights.containsAll(rpmd.getNodeHash()))
+						{
+							if (likelihood < minColocated)
+							{
+								minColocated = likelihood;
+								minSelect2 = select;
+							}
+						}
+					}
+					else
+					{
+						if (lpmd.getNodeHash() != null && lefts.containsAll(lpmd.getNodeHash()) && rpmd.getNodeHash() != null && rights.containsAll(rpmd.getNodeHash()) && lpmd.getNodeGroupHash() != null && lefts.containsAll(lpmd.getNodeGroupHash()) && rpmd.getNodeGroupHash() != null && rights.containsAll(rpmd.getNodeGroupHash()))
+						{
+							if (likelihood < minColocated)
+							{
+								minColocated = likelihood;
+								minSelect2 = select;
+							}
+						}
+					}
+				}
+			}
+			
+			HRDBMSWorker.logger.debug("Estimated join cardinality = " + likelihood); //DEBUG
+			
+			if (likelihood < minLikelihood)
+			{
+				minLikelihood = likelihood;
+				minSelect = select;
+			}
+		}
+		
+		if (minColocated <= minLikelihood * 2)
+		{
+			HRDBMSWorker.logger.debug("Chose " + minColocated); //DEBUG
+			minSelect = minSelect2;
+		}
+		else
+		{
+			HRDBMSWorker.logger.debug("Chose " + minLikelihood); //DEBUG
+		}
+
 		selects.remove(minSelect);
 		return minSelect;
+	}
+	
+	private class SubtreePair
+	{
+		private Operator left;
+		private Operator right;
+		
+		public SubtreePair(Operator left, Operator right)
+		{
+			this.left = left;
+			this.right = right;
+		}
+		
+		public int hashCode()
+		{
+			return left.hashCode() + right.hashCode();
+		}
+		
+		public boolean equals(Object o)
+		{
+			SubtreePair rhs = (SubtreePair)o;
+			
+			return (this.left == rhs.left && this.right == rhs.right) || (this.left == rhs.right && this.right == rhs.left);
+		}
 	}
 
 	private void getReferences(Operator o, HashSet<String> references)
@@ -621,6 +1066,159 @@ public final class Phase1
 			}
 		}
 	}
+	
+	private void pushDownSelects2(Operator op) throws Exception
+	{
+		if (op instanceof SelectOperator)
+		{
+			SelectOperator sop = (SelectOperator)op;
+			ArrayList<Filter> filters = sop.getFilter();
+			
+			for (Filter filter : filters)
+			{
+				if (filter.leftIsColumn() && filter.rightIsColumn())
+				{
+					String ltable = meta.getTableForCol(filter.leftColumn(), root);
+					String rtable = meta.getTableForCol(filter.rightColumn(), root);
+					
+					if (ltable != null && rtable != null && ltable.contains(".") && rtable.contains(".") && ltable.length() > 2 && rtable.length() > 2 && ltable.equals(rtable))
+					{}
+					else
+					{
+						Operator child = op.children().get(0);
+						if (child instanceof ProductOperator)
+						{
+							int i = 0;
+							while (i < op.children().size())
+							{
+								child = op.children().get(i);
+								pushDownSelects2(child);
+								i++;
+							}
+						
+							return;
+						}
+					}
+				}
+			}
+			
+			final ArrayList<Operator> children = op.children();
+			Operator child = null;
+			// SelectOperators only have 1 child
+			for (final Operator o : children)
+			{
+				child = o;
+			}
+
+			// look at opportunity to push down across child
+			if (child instanceof TableScanOperator)
+			{
+				return;
+			}
+
+			int i = 0;
+			while (i < child.children().size())
+			// for (Operator grandChild : grandChildren)
+			{
+				final Operator grandChild = child.children().get(i);
+				// can I push down to be a parent of this operator?
+				final ArrayList<String> references = ((SelectOperator)op).getReferences();
+				if (child instanceof RenameOperator)
+				{
+					((RenameOperator)child).reverseUpdateReferences(references);
+				}
+
+				if (child instanceof HashJoinOperator)
+				{
+					((HashJoinOperator)child).reverseUpdateReferences(references, i);
+				}
+
+				final HashMap<String, Integer> gcCols2Pos = grandChild.getCols2Pos();
+				boolean ok = true;
+				for (final String reference : references)
+				{
+					if (!gcCols2Pos.containsKey(reference))
+					{
+						// System.out.println("Choosing not to push down " + op
+						// + " because " + grandChild + " cols2Pos is " +
+						// gcCols2Pos + " which does not contain " + reference);
+						ok = false;
+						break;
+					}
+				}
+
+				if (ok)
+				{
+					final Operator parent = op.parent();
+
+					if (parent != null)
+					{
+						parent.removeChild(op);
+						op.removeChild(child);
+					}
+
+					Operator newOp = null;
+					if (child instanceof RenameOperator)
+					{
+						// revereseUpdate must create a new SelectOperator
+						newOp = ((RenameOperator)child).reverseUpdateSelectOperator((SelectOperator)op);
+					}
+					else if (child instanceof HashJoinOperator)
+					{
+						newOp = ((HashJoinOperator)child).reverseUpdateSelectOperator((SelectOperator)op, i);
+					}
+					else
+					{
+						newOp = ((SelectOperator)op).clone();
+					}
+
+					child.removeChild(grandChild);
+					try
+					{
+						newOp.add(grandChild);
+						child.add(newOp);
+
+						if (parent != null)
+						{
+							parent.add(child);
+						}
+					}
+					catch (final Exception e)
+					{
+						HRDBMSWorker.logger.error("", e);
+						throw e;
+					}
+
+					if (!(child instanceof SelectOperator))
+					{
+						pushdownHadResults = true;
+					}
+
+					pushDownSelects2(newOp);
+				}
+				else
+				{
+					final Operator selectChild = op.children().get(0);
+					if (selectChild != null)
+					{
+						pushDownSelects2(selectChild);
+					}
+				}
+
+				i++;
+			}
+		}
+		else
+		{
+			int i = 0;
+			while (i < op.children().size())
+			{
+				final Operator child = op.children().get(i);
+				pushDownSelects2(child);
+				i++;
+			}
+		}
+	}
 
 	private void pushUpSelects(Operator op) throws Exception
 	{
@@ -883,11 +1481,14 @@ public final class Phase1
 		final ArrayList<SelectOperator> selectsCopy = (ArrayList<SelectOperator>)selects.clone();
 
 		Operator newProd = null;
+		ArrayList<SelectOperator> delay = new ArrayList<SelectOperator>();
 		while (selectsCopy.size() > 0)
 		{
 			final SelectOperator select = getMostPromisingSelect(selectsCopy, subtrees, newProd);
 			final ArrayList<Filter> filters = select.getFilter();
 			int i = 0;
+			Operator theLeft = null;
+			Operator theRight = null;
 			while (i < filters.size())
 			{
 				final Filter filter = filters.get(i);
@@ -899,6 +1500,12 @@ public final class Phase1
 					{
 						left = getSubtreeForCol(filter.leftColumn(), subtrees);
 						right = getSubtreeForCol(filter.rightColumn(), subtrees);
+						if (filter.op().equals("E") && card(left) < card(right))
+						{
+							Operator temp = left;
+							left = right;
+							right = temp;
+						}
 					}
 					else
 					{
@@ -913,29 +1520,91 @@ public final class Phase1
 							left = getSubtreeForCol(filter.rightColumn(), subtrees);
 						}
 					}
-
-					if (left == null || right == null || left.equals(right))
+					
+					if (left == null || right == null)
+					{
+						theLeft = null;
+						break;
+					}
+					
+					if (left == right)
 					{
 						i++;
 						continue;
 					}
 
-					newProd = new ProductOperator(select.getMeta());
-					newProd.add(left);
-					newProd.add(right);
-					subtrees.remove(left);
-					subtrees.remove(right);
-					subtrees.add(newProd);
-					break;
+					if (theLeft != null && theRight != null && !((left == theLeft && right == theRight) || (left == theRight && right == theLeft)))
+					{
+						theLeft = null;
+						break;
+					}
+					
+					if (theLeft == null)
+					{
+						theLeft = left;
+						theRight = right;
+					}
 				}
 
 				i++;
 			}
+			
+			if (theLeft == null)
+			{
+				delay.add(select);
+			}
+			else
+			{
+				newProd = new ProductOperator(select.getMeta());
+				newProd.add(theLeft);
+				newProd.add(theRight);
+				subtrees.remove(theLeft);
+				subtrees.remove(theRight);
+				Operator temp = select.clone();
+				temp.add(newProd);
+				newProd = temp;
+				
+				for (SelectOperator s2 : (ArrayList<SelectOperator>)selectsCopy.clone())
+				{
+					if (s2 != select)
+					{
+						ArrayList<Filter> f2s = s2.getFilter();
+						boolean ok = true;
+						for (Filter f2 : f2s)
+						{
+							if (f2.leftIsColumn())
+							{
+								if (!newProd.getCols2Pos().keySet().contains(f2.leftColumn()))
+								{
+									ok = false;
+									break;
+								}
+							}
+							
+							if (f2.rightIsColumn())
+							{
+								if (!newProd.getCols2Pos().keySet().contains(f2.rightColumn()))
+								{
+									ok = false;
+									break;
+								}
+							}
+						}
+						
+						if (ok)
+						{
+							temp = s2.clone();
+							temp.add(newProd);
+							newProd = temp;
+							selectsCopy.remove(s2);
+						}
+					}
+				}
+				
+				subtrees.add(newProd);
+			}
 		}
 
-		// if only 1 in subtrees, just stick selects on top and attach to the
-		// rest of the top
-		// else product remaining subtrees and then do that
 		while (subtrees.size() > 1)
 		{
 			newProd = new ProductOperator(subtrees.get(0).getMeta());
@@ -946,16 +1615,22 @@ public final class Phase1
 			subtrees.add(newProd);
 		}
 
-		for (final SelectOperator select : selects)
-		{
-			select.add(subtrees.get(0));
-			subtrees.remove(0);
-			subtrees.add(select);
-		}
+		//for (final SelectOperator select : selects)
+		//{
+		//	select.add(subtrees.get(0));
+		//	subtrees.remove(0);
+		//	subtrees.add(select);
+		//}
 
 		// everything needs to be removed and readded for all the operators in
 		// the rest of the top
-		onTop.add(subtrees.get(0));
+		Operator next = subtrees.get(0);
+		for (SelectOperator sop : delay)
+		{
+			sop.add(next);
+			next = sop;
+		}
+		onTop.add(next);
 		Operator o = onTop.parent();
 		if (o != null)
 		{
@@ -1010,6 +1685,238 @@ public final class Phase1
 		for (final Operator child : children)
 		{
 			replaceTableScanOperators(child, tables);
+		}
+	}
+	
+	public long card(Operator op) throws Exception
+	{
+		if (op instanceof AntiJoinOperator)
+		{
+			return (long)((1 - meta.likelihood(((AntiJoinOperator)op).getHSHM(), root, tx, op)) * card(op.children().get(0)));
+		}
+
+		if (op instanceof CaseOperator)
+		{
+			return card(op.children().get(0));
+		}
+		
+		if (op instanceof ConcatOperator)
+		{
+			return card(op.children().get(0));
+		}
+		
+		if (op instanceof DateMathOperator)
+		{
+			return card(op.children().get(0));
+		}
+		
+		if (op instanceof ExceptOperator)
+		{
+			return card(op.children().get(0));
+		}
+
+		if (op instanceof ExtendOperator)
+		{
+			return card(op.children().get(0));
+		}
+		
+		if (op instanceof ExtendObjectOperator)
+		{
+			return card(op.children().get(0));
+		}
+
+		if (op instanceof HashJoinOperator)
+		{
+			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((HashJoinOperator)op).getHSHM(), root, tx, op));
+			return retval;
+		}
+		
+		if (op instanceof IntersectOperator)
+		{
+			long lCard = card(op.children().get(0));
+			long rCard = card(op.children().get(1));
+			
+			if (lCard <= rCard)
+			{
+				return lCard;
+			}
+			else
+			{
+				return rCard;
+			}
+		}
+
+		if (op instanceof MultiOperator)
+		{
+			// return card(op.children().get(0));
+			final long groupCard = meta.getColgroupCard(((MultiOperator)op).getKeys(), root, tx, op);
+			if (groupCard > card(op.children().get(0)))
+			{
+				return card(op.children().get(0));
+			}
+
+			return groupCard;
+		}
+
+		if (op instanceof NestedLoopJoinOperator)
+		{
+			return (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((NestedLoopJoinOperator)op).getHSHM(), root, tx, op));
+		}
+
+		if (op instanceof NetworkReceiveOperator)
+		{
+			long retval = 0;
+			for (final Operator o : op.children())
+			{
+				retval += card(o);
+			}
+
+			return retval;
+		}
+
+		if (op instanceof NetworkHashAndSendOperator)
+		{
+			return card(op.children().get(0)) / ((NetworkHashAndSendOperator)op).parents().size();
+		}
+
+		if (op instanceof NetworkSendRROperator)
+		{
+			return card(op.children().get(0)) / ((NetworkSendRROperator)op).parents().size();
+		}
+
+		if (op instanceof NetworkSendOperator)
+		{
+			return card(op.children().get(0));
+		}
+
+		if (op instanceof ProductOperator)
+		{
+			return card(op.children().get(0)) * card(op.children().get(1));
+		}
+
+		if (op instanceof ProjectOperator)
+		{
+			return card(op.children().get(0));
+		}
+
+		if (op instanceof RenameOperator)
+		{
+			return card(op.children().get(0));
+		}
+
+		if (op instanceof ReorderOperator)
+		{
+			return card(op.children().get(0));
+		}
+
+		if (op instanceof RootOperator)
+		{
+			return card(op.children().get(0));
+		}
+
+		if (op instanceof SelectOperator)
+		{
+			return (long)(((SelectOperator)op).likelihood(root, tx) * card(op.children().get(0)));
+		}
+
+		if (op instanceof SemiJoinOperator)
+		{
+			return (long)(meta.likelihood(((SemiJoinOperator)op).getHSHM(), root, tx, op) * card(op.children().get(0)));
+		}
+
+		if (op instanceof SortOperator)
+		{
+			return card(op.children().get(0));
+		}
+
+		if (op instanceof SubstringOperator)
+		{
+			return card(op.children().get(0));
+		}
+
+		if (op instanceof TopOperator)
+		{
+			final long retval = ((TopOperator)op).getRemaining();
+			final long retval2 = card(op.children().get(0));
+
+			if (retval2 < retval)
+			{
+				return retval2;
+			}
+			else
+			{
+				return retval;
+			}
+		}
+
+		if (op instanceof UnionOperator)
+		{
+			long retval = 0;
+			for (final Operator o : op.children())
+			{
+				retval += card(o);
+			}
+
+			return retval;
+		}
+
+		if (op instanceof YearOperator)
+		{
+			return card(op.children().get(0));
+		}
+
+		if (op instanceof TableScanOperator)
+		{
+			PartitionMetaData pmd = meta.getPartMeta(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx);
+			int numNodes = pmd.getNumNodes();
+			return (long)((1.0 / numNodes) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx));
+		}
+
+		HRDBMSWorker.logger.error("Unknown operator in card() in Phase1: " + op.getClass());
+		throw new Exception("Unknown operator in card() in Phase1: " + op.getClass());
+	}
+	
+	public static void printTree(Operator op, int indent)
+	{
+		String line = "";
+		int i = 0;
+		while (i < indent)
+		{
+			line += " ";
+			i++;
+		}
+
+		line += op;
+		HRDBMSWorker.logger.debug(line);
+
+		if (op.children().size() > 0)
+		{
+			line = "";
+			i = 0;
+			while (i < indent)
+			{
+				line += " ";
+				i++;
+			}
+
+			line += "(";
+			HRDBMSWorker.logger.debug(line);
+
+			for (Operator child : op.children())
+			{
+				printTree(child, indent + 3);
+			}
+
+			line = "";
+			i = 0;
+			while (i < indent)
+			{
+				line += " ";
+				i++;
+			}
+
+			line += ")";
+			HRDBMSWorker.logger.debug(line);
 		}
 	}
 }

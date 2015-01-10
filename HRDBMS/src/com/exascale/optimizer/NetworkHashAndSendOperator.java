@@ -24,7 +24,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 	private boolean error = false;
 	private String errorText;
 
-	public NetworkHashAndSendOperator(ArrayList<String> hashCols, long numNodes, int id, int starting, MetaData meta, Transaction tx) throws Exception
+	public NetworkHashAndSendOperator(ArrayList<String> hashCols, long numNodes, int id, int starting, MetaData meta) throws Exception
 	{
 		this.hashCols = hashCols;
 		if (numNodes > MetaData.numWorkerNodes)
@@ -38,6 +38,11 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		this.id = id;
 		this.starting = starting;
 		this.meta = meta;
+	}
+	
+	public ArrayList<String> getHashCols()
+	{
+		return hashCols;
 	}
 
 	@Override
@@ -68,9 +73,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 	{
 		try
 		{
-			Transaction tx = new Transaction(Transaction.ISOLATION_RR);
-			final NetworkHashAndSendOperator retval = new NetworkHashAndSendOperator(hashCols, numNodes, id, starting, meta, tx);
-			tx.commit();
+			final NetworkHashAndSendOperator retval = new NetworkHashAndSendOperator(hashCols, numNodes, id, starting, meta);
 			retval.node = this.node;
 			retval.numParents = numParents;
 			retval.numpSet = numpSet;
@@ -185,8 +188,15 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 	}
 
 	@Override
-	public synchronized void start() 
+	public synchronized void start() throws Exception
 	{
+		if (numNodes != numParents)
+		{
+			HRDBMSWorker.logger.debug("Wrong number of parents " + this);
+			HRDBMSWorker.logger.debug("Expected " + numNodes + " during optimization");
+			HRDBMSWorker.logger.debug("But found " + numParents + " at runtime");
+			throw new Exception("NetworkHashAndSendOperator does not have the correct number of parents");
+		}
 		try
 		{
 			if (error)
@@ -306,7 +316,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 	@Override
 	public String toString()
 	{
-		return "NetworkHashAndSendOperator(" + node + ")";
+		return "NetworkHashAndSendOperator(" + node + ") " + hashCols + " ID = " + id;
 	}
 
 	private long hash(Object key)

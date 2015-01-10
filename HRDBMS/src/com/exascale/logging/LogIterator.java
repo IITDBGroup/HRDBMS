@@ -142,6 +142,7 @@ public class LogIterator implements Iterator<LogRec>
 			synchronized (fc)
 			{
 				fc.position(nextpos);
+				//HRDBMSWorker.logger.debug("Reading log rec at position = " + nextpos);
 				retval = new LogRec(fc);
 				try
 				{

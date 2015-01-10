@@ -116,28 +116,36 @@ public class XAManager extends HRDBMSThread
 		
 		if (plan == null)
 		{
-			HRDBMSWorker.logger.debug("Did not find plan in cache");
-			SQLParser parse = new SQLParser(sql2, conn, tx);
-			HRDBMSWorker.logger.debug("Created SQL parser");
-			Operator op = parse.parse();
-			HRDBMSWorker.logger.debug("Parsing completed");
-			new Phase1((RootOperator)op, tx).optimize();
-			HRDBMSWorker.logger.debug("Phase 1 completed");
-			new Phase2((RootOperator)op, tx).optimize();
-			HRDBMSWorker.logger.debug("Phase 2 completed");
-			new Phase3((RootOperator)op, tx).optimize();
-			HRDBMSWorker.logger.debug("Phase 3 completed");
-			new Phase4((RootOperator)op, tx).optimize();
-			HRDBMSWorker.logger.debug("Phase 4 completed");
-			new Phase5((RootOperator)op, tx).optimize();
-			HRDBMSWorker.logger.debug("Phase 5 completed");
-			ArrayList<Operator> array = new ArrayList<Operator>(1);
-			array.add(op);
-			plan = new Plan(false, array);
-			
-			if (parse.doesNotUseCurrentSchema())
+			try
 			{
-				PlanCacheManager.addPlan(sql2, new Plan(plan));
+				HRDBMSWorker.logger.debug("Did not find plan in cache");
+				SQLParser parse = new SQLParser(sql2, conn, tx);
+				HRDBMSWorker.logger.debug("Created SQL parser");
+				Operator op = parse.parse();
+				HRDBMSWorker.logger.debug("Parsing completed");
+				new Phase1((RootOperator)op, tx).optimize();
+				HRDBMSWorker.logger.debug("Phase 1 completed");
+				new Phase2((RootOperator)op, tx).optimize();
+				HRDBMSWorker.logger.debug("Phase 2 completed");
+				new Phase3((RootOperator)op, tx).optimize();
+				HRDBMSWorker.logger.debug("Phase 3 completed");
+				new Phase4((RootOperator)op, tx).optimize();  
+				HRDBMSWorker.logger.debug("Phase 4 completed");
+				new Phase5((RootOperator)op, tx).optimize();
+				HRDBMSWorker.logger.debug("Phase 5 completed");
+				ArrayList<Operator> array = new ArrayList<Operator>(1);
+				array.add(op);
+				plan = new Plan(false, array);
+			
+				if (parse.doesNotUseCurrentSchema())
+				{
+					PlanCacheManager.addPlan(sql2, new Plan(plan));
+				}
+			}
+			catch(Throwable e)
+			{
+				HRDBMSWorker.logger.debug("Error in executeQuery", e);
+				throw e;
 			}
 		}
 		else
@@ -432,8 +440,28 @@ public class XAManager extends HRDBMSThread
 		{
 			Transaction tx2 = new Transaction(Transaction.ISOLATION_CS);
 			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx2);
+			
+			int i = 0;
+			while (i < 5)
+			{
+				try
+				{
+					sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					break;
+				}
+				catch(Exception e)
+				{
+					HRDBMSWorker.logger.debug(hostname, e);
+					Thread.sleep(5000);
+					i++;
+				}
+			}
+			
+			if (sock == null)
+			{
+				throw new Exception("Unable to connect to " + hostname + " after 5 tries");
+			}
 	
-			sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "LROLLBCK        ".getBytes("UTF-8");
 			outMsg[8] = 0;
@@ -783,14 +811,25 @@ public class XAManager extends HRDBMSThread
 		try
 		{
 			Socket sock = null;
-			try
+			int i = 0;
+			while (i < 5)
 			{
-				sock = CompressedSocket.newCompressedSocket(xa.getHost(), Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+				try
+				{
+					sock = CompressedSocket.newCompressedSocket(xa.getHost(), Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					break;
+				}
+				catch(Exception e)
+				{
+					HRDBMSWorker.logger.debug(xa.getHost(), e);
+					Thread.sleep(5000);
+					i++;
+				}
 			}
-			catch(Exception e)
+			
+			if (sock == null)
 			{
-				HRDBMSWorker.logger.debug("Failed to connect to XA Manager " + xa.getHost());
-				throw e;
+				throw new Exception("Unable to connect to " + xa.getHost() + " after 5 tries");
 			}
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "CHECKTX         ".getBytes("UTF-8");
@@ -1153,7 +1192,7 @@ public class XAManager extends HRDBMSThread
 			catch (final Exception e)
 			{
 				in.close();
-				throw new Exception();
+				throw e;
 			}
 		}
 		

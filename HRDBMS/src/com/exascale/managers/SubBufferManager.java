@@ -253,7 +253,7 @@ public class SubBufferManager
 					p.setNotModified();
 					synchronized(unmodLookup)
 					{
-						unmodLookup.put(LogManager.getLSN(), p.block());
+						unmodLookup.put(p.pinTime(), p.block());
 					}
 				}
 				catch(Exception e)

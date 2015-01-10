@@ -13,4 +13,9 @@ public class Having
 	{
 		return search;
 	}
+	
+	public Having clone()
+	{
+		return new Having(search.clone());
+	}
 }

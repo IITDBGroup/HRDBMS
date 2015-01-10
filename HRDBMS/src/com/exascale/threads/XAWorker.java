@@ -81,7 +81,14 @@ public class XAWorker extends HRDBMSThread
 	{
 		for (Operator tree : p.getTrees())
 		{
-			setPlanAndTransaction(tree);
+			try
+			{
+				setPlanAndTransaction(tree);
+			}
+			catch(Exception e)
+			{
+				HRDBMSWorker.logger.debug("", e);
+			}
 		}
 		
 		if (result)
@@ -187,8 +194,12 @@ public class XAWorker extends HRDBMSThread
 		this.terminate();
 	}
 	
-	private void setPlanAndTransaction(Operator op)
+	private void setPlanAndTransaction(Operator op) throws Exception
 	{
+		if (tx == null)
+		{
+			throw new Exception("Null tx in setPlanAndTransaction");
+		}
 		if (op instanceof TableScanOperator)
 		{
 			((TableScanOperator)op).setTransaction(tx);

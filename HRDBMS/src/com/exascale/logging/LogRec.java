@@ -16,16 +16,21 @@ public class LogRec implements Comparable<LogRec>
 	private long timestamp;
 	protected final ByteBuffer buffer;
 
-	public static final int NQCHECK = 0, START = 1, COMMIT = 2, ROLLB = 3, INSERT = 4, DELETE = 5, PREPARE = 6, READY = 7, NOTREADY = 8, XACOMMIT = 9, XAABORT = 10, EXTEND = 11;
+	public static final int NQCHECK = 0, START = 1, COMMIT = 2, ROLLB = 3, INSERT = 4, DELETE = 5, PREPARE = 6, READY = 7, NOTREADY = 8, XACOMMIT = 9, XAABORT = 10, EXTEND = 11, TRUNCATE = 12;
 
 	public LogRec(FileChannel fc) throws IOException
 	{
-		fc.position(fc.position() - 4); // leading size
+		long orig = fc.position();
+		fc.position(orig - 4); // leading size
 		final ByteBuffer size = ByteBuffer.allocate(4);
 		size.position(0);
 		fc.read(size);
 		size.position(0);
 		final int sizeVal = size.getInt();
+		if (sizeVal < 28)
+		{
+			throw new IOException("Too short log rec of length " + sizeVal + " original position = " + orig);
+		}
 		final ByteBuffer rec = ByteBuffer.allocate(sizeVal);
 		rec.position(0);
 		fc.read(rec);
@@ -121,6 +126,28 @@ public class LogRec implements Comparable<LogRec>
 			}
 			
 			ExtendLogRec retval = new ExtendLogRec(txnum, block);
+			retval.setLSN(lsn);
+			retval.setTimeStamp(timestamp);
+			return retval;
+		}
+		
+		if (type == TRUNCATE)
+		{
+			buffer.position(28);
+			byte[] bytes = new byte[buffer.getInt()];
+			buffer.get(bytes);
+			Block block;
+			try
+			{
+				block = new Block(new String(bytes, "UTF-8"));
+			}
+			catch (final Exception e)
+			{
+				HRDBMSWorker.logger.error("Error converting bytes to UTF-8 string in LogRec.rebuild().", e);
+				return null;
+			}
+			
+			TruncateLogRec retval = new TruncateLogRec(txnum, block);
 			retval.setLSN(lsn);
 			retval.setTimeStamp(timestamp);
 			return retval;

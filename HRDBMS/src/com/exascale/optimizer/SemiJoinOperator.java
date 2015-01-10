@@ -278,6 +278,11 @@ public final class SemiJoinOperator implements Operator, Serializable
 				break;
 			}
 		}
+		
+		if (x == null)
+		{
+			return null;
+		}
 
 		if (op.getCols2Pos().keySet().contains(x.leftColumn()))
 		{
@@ -1336,7 +1341,17 @@ public final class SemiJoinOperator implements Operator, Serializable
 		{
 			final ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>();
 			int i = 0;
-			ArrayList<Object> o = buckets.get(i).get(hash);
+			if (buckets.size() == 0)
+			{
+				return retval;
+			}
+			DiskBackedHashMap dbhm = buckets.get(i);
+			//DiskBackedHashMap dbhm = buckets.get(i);
+			//if (dbhm == null)
+			//{
+			//	return retval;
+			//}
+			ArrayList<Object> o = dbhm.get(hash);
 			while (o != null)
 			{
 				retval.add(o);

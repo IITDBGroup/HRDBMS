@@ -24,6 +24,8 @@ public final class Phase2
 	{
 		setPartitionMetaData(root);
 		updateTree(root);
+		HRDBMSWorker.logger.debug("Exiting P2: ");
+		Phase1.printTree(root, 0);
 	}
 
 	private ArrayList<Integer> determineHashMapEntries(TableScanOperator t, CNFFilter filter) throws Exception

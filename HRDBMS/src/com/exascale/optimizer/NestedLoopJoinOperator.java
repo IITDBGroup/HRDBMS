@@ -114,9 +114,8 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 					cols2Pos.put((String)entry.getValue(), cols2Pos.size());
 					pos2Col.put(pos2Col.size(), (String)entry.getValue());
 				}
-				Transaction tx = new Transaction(Transaction.ISOLATION_RR);
-				cnfFilters = new CNFFilter(f, meta, cols2Pos, tx, this);
-				tx.commit();
+				
+				cnfFilters = new CNFFilter(f, meta, cols2Pos, this);
 			}
 		}
 		else
@@ -278,6 +277,11 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			{
 				break;
 			}
+		}
+		
+		if (x == null)
+		{
+			return null;
 		}
 
 		if (op.getCols2Pos().keySet().contains(x.leftColumn()))
@@ -1231,7 +1235,12 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		{
 			final ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>();
 			int i = 0;
-			ArrayList<Object> o = buckets.get(i).get(hash);
+			if (buckets.size() == 0)
+			{
+				return retval;
+			}
+			DiskBackedHashMap dbhm = buckets.get(i);
+			ArrayList<Object> o = dbhm.get(hash);
 			while (o != null)
 			{
 				retval.add(o);

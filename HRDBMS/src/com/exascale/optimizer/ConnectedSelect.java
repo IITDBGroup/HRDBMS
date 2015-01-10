@@ -18,6 +18,16 @@ public class ConnectedSelect
 		this.full = full;
 	}
 	
+	public ConnectedSelect clone()
+	{
+		if (sub != null)
+		{
+			return new ConnectedSelect(sub.clone(), combo);
+		}
+		
+		return new ConnectedSelect(full.clone(), combo);
+	}
+	
 	public FullSelect getFull()
 	{
 		return full;

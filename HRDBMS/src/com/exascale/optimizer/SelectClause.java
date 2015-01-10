@@ -15,6 +15,24 @@ public class SelectClause
 		this.selectList = selectList;
 	}
 	
+	public SelectClause clone()
+	{
+		ArrayList<SelectListEntry> newList = new ArrayList<SelectListEntry>();
+		if (selectList != null)
+		{
+			for (SelectListEntry entry : selectList)
+			{
+				newList.add(entry.clone());
+			}
+		}
+		else
+		{
+			newList = null;
+		}
+		
+		return new SelectClause(selectAll, selectStar, selectList);
+	}
+	
 	public ArrayList<SelectListEntry> getSelectList()
 	{
 		return selectList;

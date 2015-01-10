@@ -15,4 +15,15 @@ public class FromClause
 	{
 		return tables;
 	}
+	
+	public FromClause clone()
+	{
+		ArrayList<TableReference> newTables = new ArrayList<TableReference>();
+		for (TableReference t : tables)
+		{
+			newTables.add(t.clone());
+		}
+		
+		return new FromClause(newTables);
+	}
 }

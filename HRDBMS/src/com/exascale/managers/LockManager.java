@@ -11,6 +11,8 @@ import java.util.concurrent.locks.ReentrantLock;
 import com.exascale.exceptions.LockAbortException;
 import com.exascale.filesystem.Block;
 import com.exascale.misc.MultiHashMap;
+import com.exascale.optimizer.Index;
+import com.exascale.tables.Transaction;
 import com.exascale.threads.HRDBMSThread;
 
 public class LockManager extends HRDBMSThread
@@ -303,6 +305,16 @@ public class LockManager extends HRDBMSThread
 			i++;
 		}
 	}
+	
+	//public static void releaseUnusedXLocks(Transaction tx, Index index)
+	//{
+	//	int i = 0;
+	//	while (i < managers.length)
+	//	{
+	///		managers[i].releaseUnusedXLocks(tx, index);
+	//		i++;
+	//	}
+	//}
 
 	public static void sLock(Block b, long txnum) throws LockAbortException
 	{

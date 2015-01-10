@@ -13,4 +13,9 @@ public class Where
 	{
 		return search;
 	}
+	
+	public Where clone()
+	{
+		return new Where(search.clone());
+	}
 }

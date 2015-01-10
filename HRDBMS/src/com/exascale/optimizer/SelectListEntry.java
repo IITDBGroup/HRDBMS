@@ -21,6 +21,18 @@ public class SelectListEntry
 		isCol = false;
 	}
 	
+	public SelectListEntry clone()
+	{
+		if (isCol)
+		{
+			return new SelectListEntry(col.clone(), name);
+		}
+		else
+		{
+			return new SelectListEntry(exp.clone(), name);
+		}
+	}
+	
 	public boolean isColumn()
 	{
 		return isCol;

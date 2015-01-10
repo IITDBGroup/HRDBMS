@@ -16,6 +16,11 @@ public class TableName
 		this.name = name;
 	}
 	
+	public TableName clone()
+	{
+		return new TableName(schema, name);
+	}
+	
 	public String getSchema()
 	{
 		return schema;
