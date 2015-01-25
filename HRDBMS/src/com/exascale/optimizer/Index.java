@@ -67,6 +67,53 @@ public final class Index implements Serializable
 	private volatile Boolean isUniqueVar = null;
 	public HashMap<Block, Page> myPages = new HashMap<Block, Page>();
 	//public HashSet<Block> changedBlocks = new HashSet<Block>();
+	
+	public boolean equals(Object obj)
+	{
+		if (obj == null || !(obj instanceof Index))
+		{
+			return false;
+		}
+		
+		Index rhs = (Index)obj;
+		boolean retval = keys.equals(rhs.keys) && types.equals(rhs.types) && orders.equals(rhs.orders);
+		if (!retval)
+		{
+			return false;
+		}
+		
+		if (!fileName.startsWith("/") && !rhs.fileName.startsWith("/"))
+		{
+			return fileName.equals(rhs.fileName);
+		}
+		
+		if (fileName.startsWith("/") && rhs.fileName.startsWith("/"))
+		{
+			return fileName.equals(rhs.fileName);
+		}
+		
+		String l = null;
+		String r = null;
+		if (fileName.contains("/"))
+		{
+			l = fileName.substring(fileName.lastIndexOf('/') + 1);
+		}
+		else
+		{
+			l = fileName;
+		}
+		
+		if (rhs.fileName.contains("/"))
+		{
+			r = rhs.fileName.substring(rhs.fileName.lastIndexOf('/') + 1);
+		}
+		else
+		{
+			r = rhs.fileName;
+		}
+		
+		return l.equals(r);
+	}
 
 	public Index(String fileName, ArrayList<String> keys, ArrayList<String> types, ArrayList<Boolean> orders)
 	{
@@ -608,11 +655,6 @@ public final class Index implements Serializable
 	public boolean contains(String col)
 	{
 		return keys.contains(col);
-	}
-
-	public ArrayList<String> getCols()
-	{
-		return keys;
 	}
 
 	public Filter getCondition()
@@ -1254,7 +1296,7 @@ public final class Index implements Serializable
 		}
 		else if (type.equals("FLOAT"))
 		{
-			return Utils.parseDouble(val);
+			return Double.parseDouble(val);
 		}
 		else if (type.equals("CHAR"))
 		{
@@ -3753,8 +3795,13 @@ public final class Index implements Serializable
 							o += 4;
 							byte[] bytes = new byte[length];
 							//bb.get(o, bytes);
-							bb.get(bytes, o, bytes.length);
-							o += length;
+							int i = 0;
+							while (i < length)
+							{
+								bytes[i] = bb.get(o);
+								o++;
+								i++;
+							}
 							try
 							{
 								newKey.add(new String(bytes, "UTF-8"));
@@ -4309,8 +4356,13 @@ public final class Index implements Serializable
 							o += 4;
 							byte[] bytes = new byte[length];
 							//bb.get(o, bytes);
-							bb.get(bytes, o, bytes.length);
-							o += length;
+							int i = 0;
+							while (i < length)
+							{
+								bytes[i] = bb.get(o);
+								o++;
+								i++;
+							}
 							try
 							{
 								newKey.add(new String(bytes, "UTF-8"));
@@ -4975,13 +5027,20 @@ public final class Index implements Serializable
 				}
 				else if (type.equals("CHAR"))
 				{
+					int length = -1;
 					try
 					{
-						int length = bb.getInt(o);
+						length = bb.getInt(o);
 						o += 4;
 						byte[] bytes = new byte[length];
-						bb.get(bytes, o, length);
-						o += length;
+						//read into bytes from bb @ offset o for length length
+						int i = 0;
+						while (i < length)
+						{
+							bytes[i] = bb.get(o);
+							o++;
+							i++;
+						}
 						retval.add(new String(bytes, "UTF-8"));
 					}
 					catch(Exception e)
@@ -4992,6 +5051,8 @@ public final class Index implements Serializable
 							HRDBMSWorker.logger.error("" + b);
 						}
 						HRDBMSWorker.logger.error("Types = " + types);
+						HRDBMSWorker.logger.error("Length = " + length);
+						HRDBMSWorker.logger.error("Offset = " + o);
 						HRDBMSWorker.logger.error("", e);
 						throw e;
 					}

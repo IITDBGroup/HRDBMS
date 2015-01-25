@@ -256,6 +256,7 @@ public final class ProjectOperator implements Operator, Serializable
 	@Override
 	public void start() throws Exception
 	{
+		HRDBMSWorker.logger.debug("ProjectOperator starting with cols = " + cols + " and child cols = " + child.getCols2Pos().keySet());
 		startDone = true;
 		child.start();
 		for (final String col : pos2Col.values())

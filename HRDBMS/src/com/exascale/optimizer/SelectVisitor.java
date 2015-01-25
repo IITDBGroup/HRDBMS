@@ -389,6 +389,13 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T> {
 	T visitNumericLiteral(@NotNull SelectParser.NumericLiteralContext ctx);
 
 	/**
+	 * Visit a parse tree produced by {@link SelectParser#CaseExp}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitCaseExp(@NotNull SelectParser.CaseExpContext ctx);
+
+	/**
 	 * Visit a parse tree produced by {@link SelectParser#nodeExp}.
 	 * @param ctx the parse tree
 	 * @return the visitor result
@@ -471,6 +478,13 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T> {
 	 * @return the visitor result
 	 */
 	T visitSortKeyCol(@NotNull SelectParser.SortKeyColContext ctx);
+
+	/**
+	 * Visit a parse tree produced by {@link SelectParser#caseCase}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitCaseCase(@NotNull SelectParser.CaseCaseContext ctx);
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#long2}.

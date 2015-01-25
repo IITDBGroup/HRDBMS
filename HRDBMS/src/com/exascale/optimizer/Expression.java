@@ -18,6 +18,9 @@ public class Expression
 	private SubSelect select;
 	private ArrayList<Expression> list;
 	private boolean isList;
+	private ArrayList<Case> cases;
+	private Expression defaultResult;
+	private boolean isCase;
 	
 	public boolean equals(Object o)
 	{
@@ -41,6 +44,41 @@ public class Expression
 			{
 				return false;
 			}
+		}
+		
+		if (cases == null)
+		{
+			if (rhs.cases != null)
+			{
+				return false;
+			}
+		}
+		else
+		{
+			if (!cases.equals(rhs.cases))
+			{
+				return false;
+			}
+		}
+		
+		if (defaultResult == null)
+		{
+			if (rhs.defaultResult != null)
+			{
+				return false;
+			}
+		}
+		else
+		{
+			if (!defaultResult.equals(rhs.defaultResult))
+			{
+				return false;
+			}
+		}
+		
+		if (isCase != rhs.isCase)
+		{
+			return false;
 		}
 		
 		if (rhs.isLiteral != isLiteral)
@@ -209,6 +247,17 @@ public class Expression
 			return new Expression(newList);
 		}
 		
+		if (isCase)
+		{
+			ArrayList<Case> newCases = new ArrayList<Case>();
+			for (Case c : cases)
+			{
+				newCases.add(c.clone());
+			}
+			
+			return new Expression(newCases, defaultResult.clone());
+		}
+		
 		return new Expression(lhs.clone(), op, rhs.clone());
 	}
 
@@ -221,6 +270,7 @@ public class Expression
 		isFunction = false;
 		isSelect = false;
 		isList = false;
+		isCase = false;
 	}
 	
 	public Expression(Column column)
@@ -232,6 +282,7 @@ public class Expression
 		isFunction = false;
 		isSelect = false;
 		isList = false;
+		isCase = false;
 	}
 	
 	public Expression()
@@ -242,6 +293,7 @@ public class Expression
 		isFunction = false;
 		isSelect = false;
 		isList = false;
+		isCase = false;
 	}
 	
 	public Expression(Function function)
@@ -253,6 +305,7 @@ public class Expression
 		isFunction = true;
 		isSelect = false;
 		isList = false;
+		isCase = false;
 	}
 	
 	public Expression(Expression lhs, String op, Expression rhs)
@@ -266,6 +319,7 @@ public class Expression
 		isFunction = false;
 		isSelect = false;
 		isList = false;
+		isCase = false;
 	}
 	
 	public Expression(SubSelect select)
@@ -277,6 +331,7 @@ public class Expression
 		isFunction = false;
 		isSelect = true;
 		isList = false;
+		isCase = false;
 	}
 	
 	public Expression(ArrayList<Expression> list)
@@ -288,11 +343,30 @@ public class Expression
 		isFunction = false;
 		isSelect = false;
 		isList = true;
+		isCase = false;
+	}
+	
+	public Expression(ArrayList<Case> cases, Expression defaultResult)
+	{
+		this.cases = cases;
+		this.defaultResult = defaultResult;
+		isLiteral = false;
+		isColumn = false;
+		isCountStar = false;
+		isFunction = false;
+		isSelect = false;
+		isList = false;
+		isCase = true;
 	}
 	
 	public boolean isExpression()
 	{
-		return isLiteral == false && isColumn == false && isCountStar == false && isFunction == false && isSelect == false && isList == false;
+		return isLiteral == false && isColumn == false && isCountStar == false && isFunction == false && isSelect == false && isList == false && isCase == false;
+	}
+	
+	public boolean isCase()
+	{
+		return isCase;
 	}
 	
 	public boolean isLiteral()
@@ -338,6 +412,16 @@ public class Expression
 	public Function getFunction()
 	{
 		return function;
+	}
+	
+	public ArrayList<Case> getCases()
+	{
+		return cases;
+	}
+	
+	public Expression getDefault()
+	{
+		return defaultResult;
 	}
 	
 	public Expression getLHS()

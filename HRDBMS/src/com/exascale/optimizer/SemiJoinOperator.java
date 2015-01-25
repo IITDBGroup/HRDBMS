@@ -601,6 +601,11 @@ public final class SemiJoinOperator implements Operator, Serializable
 	{
 		this.node = node;
 	}
+	
+	public boolean getIndexAccess()
+	{
+		return indexAccess;
+	}
 
 	public boolean setRightChildCard(int card)
 	{

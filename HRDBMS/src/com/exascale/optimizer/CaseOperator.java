@@ -24,7 +24,7 @@ public final class CaseOperator implements Operator, Serializable
 	private HashMap<String, Integer> cols2Pos;
 	private TreeMap<Integer, String> pos2Col;
 	private final String name;
-	private final String type;
+	private String type;
 	// private MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
 	private ArrayList<String> origResults;
 	private ArrayList<String> references = new ArrayList<String>();
@@ -86,7 +86,7 @@ public final class CaseOperator implements Operator, Serializable
 			{
 				if (val1.contains("."))
 				{
-					this.results.add(Utils.parseDouble(val1));
+					this.results.add(Double.parseDouble(val1));
 				}
 				else
 				{
@@ -121,6 +121,39 @@ public final class CaseOperator implements Operator, Serializable
 		else
 		{
 			throw new Exception("CaseOperator only supports 1 child.");
+		}
+	}
+	
+	public void setType(String type)
+	{
+		this.type = type;
+		if (cols2Types != null)
+		{
+			cols2Types.put(name, type);
+		}
+	}
+	
+	public void setFilters(ArrayList<HashSet<HashMap<Filter, Filter>>> filters)
+	{
+		this.filters = filters;
+		
+		for (final HashSet<HashMap<Filter, Filter>> filter : filters)
+		{
+			for (final HashMap<Filter, Filter> f : filter)
+			{
+				for (final Filter f2 : f.keySet())
+				{
+					if (f2.leftIsColumn())
+					{
+						references.add(f2.leftColumn());
+					}
+
+					if (f2.rightIsColumn())
+					{
+						references.add(f2.rightColumn());
+					}
+				}
+			}
 		}
 	}
 
@@ -212,32 +245,92 @@ public final class CaseOperator implements Operator, Serializable
 			{
 				if (passesCase((ArrayList<Object>)o, cols2Pos, aCase))
 				{
-					final Object obj = results.get(i);
+					Object obj = results.get(i);
 					if (obj instanceof String && ((String)obj).startsWith("\u0000"))
 					{
-						//TODO fix me colnames might not match exactly
-						((ArrayList<Object>)o).add(((ArrayList<Object>)o).get(cols2Pos.get(((String)obj).substring(1))));
+						obj = getColumn(((String)obj).substring(1), (ArrayList<Object>)o);
+						if (obj instanceof Integer && type.equals("LONG"))
+						{
+							((ArrayList<Object>)o).add(new Long((Integer)obj));
+						}
+						else if (obj instanceof Integer && type.equalsIgnoreCase("FLOAT"))
+						{
+							((ArrayList<Object>)o).add(new Double((Integer)obj));
+						}
+						else if (obj instanceof Long && type.equals("FLOAT"))
+						{
+							((ArrayList<Object>)o).add(new Double((Long)obj));
+						}
+						else
+						{
+							((ArrayList<Object>)o).add(obj);
+						}
 						return o;
 					}
 					else
 					{
-						((ArrayList<Object>)o).add(obj);
+						if (obj instanceof Integer && type.equals("LONG"))
+						{
+							((ArrayList<Object>)o).add(new Long((Integer)obj));
+						}
+						else if (obj instanceof Integer && type.equalsIgnoreCase("FLOAT"))
+						{
+							((ArrayList<Object>)o).add(new Double((Integer)obj));
+						}
+						else if (obj instanceof Long && type.equals("FLOAT"))
+						{
+							((ArrayList<Object>)o).add(new Double((Long)obj));
+						}
+						else
+						{
+							((ArrayList<Object>)o).add(obj);
+						}
 						return o;
 					}
 				}
 				i++;
 			}
 
-			final Object obj = results.get(i);
+			Object obj = results.get(i);
 			if (obj instanceof String && ((String)obj).startsWith("\u0000"))
 			{
-				// column lookup
-				((ArrayList<Object>)o).add(((ArrayList<Object>)o).get(cols2Pos.get(((String)obj).substring(1))));
+				obj = getColumn(((String)obj).substring(1), (ArrayList<Object>)o);
+				if (obj instanceof Integer && type.equals("LONG"))
+				{
+					((ArrayList<Object>)o).add(new Long((Integer)obj));
+				}
+				else if (obj instanceof Integer && type.equalsIgnoreCase("FLOAT"))
+				{
+					((ArrayList<Object>)o).add(new Double((Integer)obj));
+				}
+				else if (obj instanceof Long && type.equals("FLOAT"))
+				{
+					((ArrayList<Object>)o).add(new Double((Long)obj));
+				}
+				else
+				{
+					((ArrayList<Object>)o).add(obj);
+				}
 				return o;
 			}
 			else
 			{
-				((ArrayList<Object>)o).add(obj);
+				if (obj instanceof Integer && type.equals("LONG"))
+				{
+					((ArrayList<Object>)o).add(new Long((Integer)obj));
+				}
+				else if (obj instanceof Integer && type.equalsIgnoreCase("FLOAT"))
+				{
+					((ArrayList<Object>)o).add(new Double((Integer)obj));
+				}
+				else if (obj instanceof Long && type.equals("FLOAT"))
+				{
+					((ArrayList<Object>)o).add(new Double((Long)obj));
+				}
+				else
+				{
+					((ArrayList<Object>)o).add(obj);
+				}
 				return o;
 			}
 		}
@@ -247,6 +340,53 @@ public final class CaseOperator implements Operator, Serializable
 		}
 
 		return o;
+	}
+	
+	private Object getColumn(String name, ArrayList<Object> row) throws Exception
+	{
+		Integer pos = cols2Pos.get(name);
+		if (pos != null)
+		{
+			return row.get(pos);
+		}
+		
+		if (name.indexOf('.') > 0)
+		{
+			throw new Exception("Column " + name + " not found in CaseOperator");
+		}
+		
+		if (name.startsWith("."))
+		{
+			name = name.substring(1);
+		}
+		
+		int matches = 0;
+		for (Map.Entry entry : cols2Pos.entrySet())
+		{
+			String name2 =(String)entry.getKey();
+			if (name2.contains("."))
+			{
+				name2 = name2.substring(name2.indexOf('.') + 1);
+			}
+			
+			if (name.equals(name2))
+			{
+				matches++;
+				pos = (Integer)entry.getValue();
+			}
+		}
+		
+		if (matches == 0)
+		{
+			throw new Exception("Column " + name + " not found in CaseOperator");
+		}
+		
+		if (matches > 1)
+		{
+			throw new Exception("Column " + name + " is ambiguous in CaseOperator");
+		}
+		
+		return row.get(pos);
 	}
 
 	@Override
@@ -321,7 +461,7 @@ public final class CaseOperator implements Operator, Serializable
 	@Override
 	public String toString()
 	{
-		return "CaseOperator";
+		return "CaseOperator: filters = " + filters + " results = " + origResults;
 	}
 
 	private boolean passesCase(ArrayList<Object> row, HashMap<String, Integer> cols2Pos, HashSet<HashMap<Filter, Filter>> ands) throws Exception
@@ -356,5 +496,15 @@ public final class CaseOperator implements Operator, Serializable
 		}
 
 		return false;
+	}
+	
+	public String getType()
+	{
+		return type;
+	}
+	
+	public ArrayList<Object> getResults()
+	{
+		return results;
 	}
 }

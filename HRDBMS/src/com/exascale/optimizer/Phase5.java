@@ -95,8 +95,18 @@ public final class Phase5
 
 		if (op instanceof HashJoinOperator)
 		{
-			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((HashJoinOperator)op).getHSHM(), root, tx, op));
-			cCache.put(op, retval);
+			HashSet<HashMap<Filter, Filter>> hshm = ((HashJoinOperator)op).getHSHM();
+			double max = -1;
+			for (HashMap<Filter, Filter> hm : hshm)
+			{
+				double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
+				if (temp > max)
+				{
+					max = temp;
+				}
+			}
+			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * max);
+			cCache.put(op,  retval);
 			return retval;
 		}
 		
@@ -143,7 +153,17 @@ public final class Phase5
 
 		if (op instanceof NestedLoopJoinOperator)
 		{
-			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((NestedLoopJoinOperator)op).getHSHM(), root, tx, op));
+			HashSet<HashMap<Filter, Filter>> hshm = ((NestedLoopJoinOperator)op).getHSHM();
+			double max = -1;
+			for (HashMap<Filter, Filter> hm : hshm)
+			{
+				double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
+				if (temp > max)
+				{
+					max = temp;
+				}
+			}
+			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * max);
 			cCache.put(op, retval);
 			return retval;
 		}
@@ -443,12 +463,13 @@ public final class Phase5
 
 	public void optimize() throws Exception
 	{
-		//addIndexesToTableScans();
-		//turnOffDistinctUnion(root, false);
+		addIndexesToTableScans();
+		addIndexesToJoins();
+		turnOffDistinctUnion(root, false);
 		setCards(root);
-		//addIndexesToJoins();
 		setNumParents(root);
 		setSpecificCoord(root);
+		//Phase1.printTree(root, 0);
 	}
 	
 	private void setSpecificCoord(Operator op) throws Exception
@@ -473,6 +494,10 @@ public final class Phase5
 		final ArrayList<Operator> joins4 = hasIndex(joins3);
 		for (final Operator j : joins4)
 		{
+			if (containsIndexAccess(j))
+			{
+				continue;
+			}
 			// System.out.println("Using index for " + j);
 			if (j instanceof HashJoinOperator)
 			{
@@ -490,6 +515,73 @@ public final class Phase5
 			{
 				((AntiJoinOperator)j).setDynamicIndex(getDynamicIndex(j));
 			}
+		}
+	}
+	
+	private boolean containsIndexAccess(Operator op)
+	{
+		if (op instanceof JoinOperator)
+		{
+			if (((JoinOperator)op).getIndexAccess())
+			{
+				return true;
+			}
+			
+			for (Operator o : op.children())
+			{
+				if (containsIndexAccess(o))
+				{
+					return true;
+				}
+			}
+			
+			return false;
+		}
+		else if (op instanceof SemiJoinOperator)
+		{
+			if (((SemiJoinOperator)op).getIndexAccess())
+			{
+				return true;
+			}
+			
+			for (Operator o : op.children())
+			{
+				if (containsIndexAccess(o))
+				{
+					return true;
+				}
+			}
+			
+			return false;
+		}
+		else if (op instanceof AntiJoinOperator)
+		{
+			if (((AntiJoinOperator)op).getIndexAccess())
+			{
+				return true;
+			}
+			
+			for (Operator o : op.children())
+			{
+				if (containsIndexAccess(o))
+				{
+					return true;
+				}
+			}
+			
+			return false;
+		}
+		else
+		{
+			for (Operator o : op.children())
+			{
+				if (containsIndexAccess(o))
+				{
+					return true;
+				}
+			}
+			
+			return false;
 		}
 	}
 
@@ -670,7 +762,7 @@ public final class Phase5
 				}
 
 				final IndexOperator index2 = (IndexOperator)op.children().get(0);
-				if (index.getCols().containsAll(index2.getReferencedCols()))
+				if (index.getKeys().containsAll(index2.getReferencedCols()))
 				{
 					if (!index.getFileName().equals(index2.getFileName()))
 					{
@@ -687,7 +779,7 @@ public final class Phase5
 				}
 			}
 
-			cols.removeAll(index.getCols());
+			cols.removeAll(index.getKeys());
 			index = meta.getBestCompoundIndex(cols, table.getSchema(), table.getTable(), tx);
 		}
 	}
@@ -800,7 +892,7 @@ public final class Phase5
 			if (op instanceof HashJoinOperator)
 			{
 				long leftCard = card(op.children().get(0));
-				final long rightCard = card(op.children().get(1));
+				long rightCard = card(op.children().get(1));
 				// System.out.println("Right card = " + rightCard);
 				if (leftCard == 0)
 				{
@@ -810,7 +902,7 @@ public final class Phase5
 				//System.out.println(meta.likelihood(((HashJoinOperator)op).getHSHM(), root) * leftCard);
 				// System.out.println("Before multiplier: " +
 				// meta.likelihood(((HashJoinOperator)op).getHSHM(), root));
-				if (leftCard < rightCard && meta.likelihood(((HashJoinOperator)op).getHSHM(), root, tx, op) * leftCard <= 1.0 / 400.0)
+				if (leftCard < rightCard && meta.likelihood(((HashJoinOperator)op).getHSHM(), root, tx, op) * leftCard <= (1.0 / 400.0))
 				{
 					retval.add(op);
 				}
@@ -825,119 +917,79 @@ public final class Phase5
 			else if (op instanceof NestedLoopJoinOperator)
 			{
 				final HashSet<HashMap<Filter, Filter>> hshm = ((NestedLoopJoinOperator)op).getHSHM();
-				boolean doIt = true;
-				for (final HashMap<Filter, Filter> hm : hshm)
+				long leftCard = card(op.children().get(0));
+				long rightCard = card(op.children().get(1));
+				if (leftCard == 0)
 				{
-					if (hm.size() > 1)
-					{
-						doIt = false;
-						break;
-					}
+					leftCard = 1;
 				}
-
-				if (doIt)
+				// System.out.println("Left card = " + leftCard);
+				//System.out.println(meta.likelihood(hshm, root) * leftCard);
+				// System.out.println("Before multiplier: " +
+				// meta.likelihood(hshm, root));
+				if (leftCard < rightCard && meta.likelihood(hshm, root, tx, op) * leftCard <= (1.0 / 400.0))
 				{
-					final long rightCard = card(op.children().get(1));
-					// System.out.println("Right card = " + rightCard);
-					long leftCard = card(op.children().get(0));
-					if (leftCard == 0)
-					{
-						leftCard = 1;
-					}
-					// System.out.println("Left card = " + leftCard);
-					//System.out.println(meta.likelihood(hshm, root) * leftCard);
-					// System.out.println("Before multiplier: " +
-					// meta.likelihood(hshm, root));
-					if (leftCard < rightCard && meta.likelihood(hshm, root, tx, op) * leftCard <= 1.0 / 400.0)
-					{
-						retval.add(op);
-					}
-					// else if (memoryUsageTooHigh(op.children().get(1),
-					// op.children().get(0)))
-					// {
-					// retval.add(op);
-					// System.out.println("Memory usage too high for hash table. "
-					// + op);
-					// }
+					retval.add(op);
 				}
+				// else if (memoryUsageTooHigh(op.children().get(1),
+				// op.children().get(0)))
+				// {
+				// retval.add(op);
+				// System.out.println("Memory usage too high for hash table. "
+				// + op);
+				// }
 			}
 			else if (op instanceof SemiJoinOperator)
 			{
 				final HashSet<HashMap<Filter, Filter>> hshm = ((SemiJoinOperator)op).getHSHM();
-				boolean doIt = true;
-				for (final HashMap<Filter, Filter> hm : hshm)
+				// System.out.println("Right card = " + rightCard);
+				long leftCard = card(op.children().get(0));
+				long rightCard = card(op.children().get(1));
+				if (leftCard == 0)
 				{
-					if (hm.size() > 1)
-					{
-						doIt = false;
-						break;
-					}
+					leftCard = 1;
 				}
-
-				if (doIt)
+				// System.out.println("Left card = " + leftCard);
+				//System.out.println(meta.likelihood(hshm, root) * leftCard);
+				// System.out.println("Before multiplier: " +
+				// meta.likelihood(hshm, root));
+				if (leftCard < rightCard && meta.likelihood(hshm, root, tx, op) * leftCard <= (1.0 / 400.0))
 				{
-					final long rightCard = card(op.children().get(1));
-					// System.out.println("Right card = " + rightCard);
-					long leftCard = card(op.children().get(0));
-					if (leftCard == 0)
-					{
-						leftCard = 1;
-					}
-					// System.out.println("Left card = " + leftCard);
-					//System.out.println(meta.likelihood(hshm, root) * leftCard);
-					// System.out.println("Before multiplier: " +
-					// meta.likelihood(hshm, root));
-					if (leftCard < rightCard && meta.likelihood(hshm, root, tx, op) * leftCard <= 1.0 / 400.0)
-					{
-						retval.add(op);
-					}
-					// else if (memoryUsageTooHigh(op.children().get(1),
-					// op.children().get(0)))
-					// {
-					// retval.add(op);
-					// System.out.println("Memory usage too high for hash table. "
-					// + op);
-					// }
+					retval.add(op);
 				}
+				// else if (memoryUsageTooHigh(op.children().get(1),
+				// op.children().get(0)))
+				// {
+				// retval.add(op);
+				// System.out.println("Memory usage too high for hash table. "
+				// + op);
+				// }
 			}
 			else if (op instanceof AntiJoinOperator)
 			{
 				final HashSet<HashMap<Filter, Filter>> hshm = ((AntiJoinOperator)op).getHSHM();
-				boolean doIt = true;
-				for (final HashMap<Filter, Filter> hm : hshm)
+				//System.out.println("Right card = " + rightCard);
+				long leftCard = card(op.children().get(0));
+				long rightCard = card(op.children().get(1));
+				if (leftCard == 0)
 				{
-					if (hm.size() > 1)
-					{
-						doIt = false;
-						break;
-					}
+					leftCard = 1;
 				}
-
-				if (doIt)
+				// System.out.println("Left card = " + leftCard);
+				//System.out.println(meta.likelihood(hshm, root) * leftCard);
+				// System.out.println("Before multiplier: " +
+				// meta.likelihood(hshm, root));
+				if (leftCard < rightCard && meta.likelihood(hshm, root, tx, op) * leftCard <= (1.0 / 400.0))
 				{
-					final long rightCard = card(op.children().get(1));
-					// System.out.println("Right card = " + rightCard);
-					long leftCard = card(op.children().get(0));
-					if (leftCard == 0)
-					{
-						leftCard = 1;
-					}
-					// System.out.println("Left card = " + leftCard);
-					//System.out.println(meta.likelihood(hshm, root) * leftCard);
-					// System.out.println("Before multiplier: " +
-					// meta.likelihood(hshm, root));
-					if (leftCard < rightCard && meta.likelihood(hshm, root, tx, op) * leftCard <= 1.0 / 400.0)
-					{
-						retval.add(op);
-					}
-					// else if (memoryUsageTooHigh(op.children().get(1),
-					// op.children().get(0)))
-					// {
-					// retval.add(op);
-					// System.out.println("Memory usage too high for hash table. "
-					// + op);
-					// }
+					retval.add(op);
 				}
+				// else if (memoryUsageTooHigh(op.children().get(1),
+				// op.children().get(0)))
+				// {
+				// retval.add(op);
+				// System.out.println("Memory usage too high for hash table. "
+				// + op);
+				// }
 			}
 		}
 
@@ -949,11 +1001,27 @@ public final class Phase5
 		final HashMap<String, Index> retval = new HashMap<String, Index>();
 		if (op instanceof IndexOperator)
 		{
-			final Index index = ((IndexOperator)op).getIndex();
-			final ArrayList<String> cols = index.getCols();
-			for (final String col : cols)
+			if (!(op.parent() instanceof UnionOperator) || op.parent().children().size() == 1)
 			{
-				retval.put(col, index);
+				final Index index = ((IndexOperator)op).getIndex();
+				final ArrayList<String> cols = index.getKeys();
+				for (final String col : cols)
+				{
+					if (retval.containsKey(col))
+					{
+						Index currentIndex = retval.get(col);
+						int currentI = currentIndex.getKeys().indexOf(col);
+						int newI = index.getKeys().indexOf(col);
+						if (newI < currentI)
+						{
+							retval.put(col, index);
+						}
+					}
+					else
+					{
+						retval.put(col, index);
+					}
+				}
 			}
 
 			return retval;
@@ -1016,26 +1084,14 @@ public final class Phase5
 		final ArrayList<Index> indexes = meta.getIndexesForTable(table.getSchema(), table.getTable(), tx);
 		final Index index = this.getIndexFor(indexes, cols);
 
-		// if index is already being used, set it to run delayed and return
-		// else add new index into operator tree, set it to run delayed and
-		// return
 		if (table.children().size() > 0)
 		{
 			for (final Operator o : table.children())
 			{
-				Index i = getIndexForJoin(o, index.getFileName());
-				if (i != null)
-				{
-					retval.add(i);
-					i.runDelayed();
-				}
-				else
-				{
-					i = index.clone();
-					addIndexForJoin(o, i);
-					retval.add(i);
-					i.runDelayed();
-				}
+				Index i = index.clone();
+				addIndexForJoin(o, i);
+				retval.add(i);
+				i.runDelayed();
 
 				if (rename)
 				{
@@ -1079,18 +1135,74 @@ public final class Phase5
 
 		return retval;
 	}
+	
+	private boolean containsExpensiveOp(Operator op)
+	{
+		if (op instanceof TableScanOperator)
+		{
+			return false;
+		}
+		
+		if (op instanceof AntiJoinOperator || op instanceof ExceptOperator || op instanceof HashJoinOperator || op instanceof IntersectOperator || op instanceof MultiOperator || op instanceof NestedLoopJoinOperator || op instanceof ProductOperator || op instanceof SemiJoinOperator || op instanceof SortOperator || (op instanceof UnionOperator && ((UnionOperator)op).isDistinct()))
+		{
+			return true;
+		}
+		
+		for (Operator o : op.children())
+		{
+			if (containsExpensiveOp(o))
+			{
+				return true;
+			}
+		}
+		
+		return false;
+	}
 
-	private ArrayList<Operator> getEligibleJoins(HashSet<Operator> joins)
+	private ArrayList<Operator> getEligibleJoins(HashSet<Operator> joins) throws Exception
 	{
 		final ArrayList<Operator> retval = new ArrayList<Operator>();
 		for (final Operator op : joins)
 		{
-			final ArrayList<TableScanOperator> tables = getTables(op.children().get(1));
-			if (tables.size() == 1 && tables.get(0).getNode() == op.getNode())
+			if (containsExpensiveOp(op.children().get(1)))
 			{
-				if (!interveningSend(op, tables.get(0)) && !interveningTop(op, tables.get(0)))
+				continue;
+			}
+			HashSet<HashMap<Filter, Filter>> hshm = null;
+			if (op instanceof HashJoinOperator)
+			{
+				hshm = ((HashJoinOperator)op).getHSHM();
+			}
+			else if (op instanceof NestedLoopJoinOperator)
+			{
+				hshm = ((NestedLoopJoinOperator)op).getHSHM();
+			}
+			else if (op instanceof SemiJoinOperator)
+			{
+				hshm = ((SemiJoinOperator)op).getHSHM();
+			}
+			else
+			{
+				hshm = ((AntiJoinOperator)op).getHSHM();
+			}
+			boolean ok = true;
+			for (HashMap<Filter, Filter> hm : hshm)
+			{
+				if (hm.size() > 1)
 				{
-					retval.add(op);
+					ok = false;
+					break;
+				}
+			}
+			if (ok)
+			{
+				final ArrayList<TableScanOperator> tables = getTables(op.children().get(1));
+				if (tables.size() == 1 && tables.get(0).getNode() == op.getNode())
+				{
+					if (!interveningSend(op, tables.get(0)) && !interveningTop(op, tables.get(0)))
+					{
+						retval.add(op);
+					}
 				}
 			}
 		}
@@ -1118,20 +1230,24 @@ public final class Phase5
 
 	private Index getIndexFor(ArrayList<Index> indexes, ArrayList<String> cols)
 	{
-		for (final Index index : indexes)
+		skip2: for (Index index : indexes)
 		{
-			if (cols.contains(index.getCols().get(0)) && index.getCols().containsAll(cols))
+			ArrayList<String> clone = (ArrayList<String>)cols.clone();
+			for (String key : index.getKeys())
 			{
-				return index;
+				if (!cols.contains(key))
+				{
+					continue skip2;
+				}
+				
+				clone.remove(key);
+				if (clone.size() == 0)
+				{
+					break;
+				}
 			}
-		}
-
-		for (final Index index : indexes)
-		{
-			if (index.getCols().containsAll(cols))
-			{
-				return index;
-			}
+			
+			return index;
 		}
 
 		return null;
@@ -1162,7 +1278,7 @@ public final class Phase5
 	{
 		for (final Index index : indexes)
 		{
-			if (index.startsWith(col1) || index.startsWith(col2) && index.getCols().contains(col1) && index.getCols().contains(col2))
+			if (index.startsWith(col1) || index.startsWith(col2) && index.getKeys().contains(col1) && index.getKeys().contains(col2))
 			{
 				return index;
 			}
@@ -1279,7 +1395,7 @@ public final class Phase5
 	private ArrayList<Operator> hasIndex(ArrayList<Operator> joins) throws Exception
 	{
 		final ArrayList<Operator> retval = new ArrayList<Operator>();
-		for (final Operator op : joins)
+		skip: for (final Operator op : joins)
 		{
 			HashSet<HashMap<Filter, Filter>> hshm = null;
 			if (op instanceof HashJoinOperator)
@@ -1303,20 +1419,48 @@ public final class Phase5
 			for (final HashMap<Filter, Filter> hm : hshm)
 			{
 				final Filter f = (Filter)new ArrayList(hm.keySet()).get(0);
+				if (f.op().equals("NE"))
+				{
+					continue skip;
+				}
+				
+				if (f.op().equals("NL"))
+				{
+					continue skip;
+				}
+				
+				if (f.op().equals("LI"))
+				{
+					continue skip;
+				}
+				
 				if (op.children().get(1).getCols2Pos().keySet().contains(f.leftColumn()))
 				{
 					cols.add(f.leftColumn());
+					if (op.children().get(1).getCols2Pos().keySet().contains(f.rightColumn()))
+					{
+						continue skip;
+					}
+						
 				}
-
-				if (op.children().get(1).getCols2Pos().keySet().contains(f.rightColumn()))
+				else if (op.children().get(1).getCols2Pos().keySet().contains(f.rightColumn()))
 				{
 					cols.add(f.rightColumn());
+				}
+				else
+				{
+					continue skip;
 				}
 			}
 
 			reverseUpdateReferences(op.children().get(1), cols);
 
-			final TableScanOperator table = getTables(op.children().get(1)).get(0);
+			final ArrayList<TableScanOperator> tables = getTables(op.children().get(1));
+			if (tables.size() > 1)
+			{
+				continue skip;
+			}
+			TableScanOperator table = tables.get(0);
 			final ArrayList<Index> indexes = meta.getIndexesForTable(table.getSchema(), table.getTable(), tx);
 			final Index index = this.getIndexFor(indexes, cols);
 			if (index == null)
@@ -1372,7 +1516,7 @@ public final class Phase5
 				references.add(col);
 			}
 		}
-		if (index.getIndex().getCols().containsAll(references))
+		if (index.getIndex().getKeys().containsAll(references))
 		{
 			// index only access
 			HashMap<String, String> cols2Types = null;
@@ -1884,6 +2028,36 @@ public final class Phase5
 				final double l = meta.likelihood(f, root, tx, tOp);
 				// System.out.println("Likelihood of " + f + " = " + l);
 				likely += l;
+				if (f.op().equals("NE"))
+				{
+					likely += 1;
+				}
+				
+				if (f.op().equals("NL"))
+				{
+					likely += 1;
+				}
+				
+				if (f.op().equals("LI"))
+				{
+					if (!f.leftIsColumn())
+					{
+						String literal = (String)f.leftLiteral();
+						if (literal.startsWith("%"))
+						{
+							likely += 1;
+						}
+					}
+					
+					if (!f.rightIsColumn())
+					{
+						String literal = (String)f.rightLiteral();
+						if (literal.startsWith("%"))
+						{
+							likely += 1;
+						}
+					}
+				}
 			}
 
 			if (hm.size() == 1)
@@ -1916,27 +2090,53 @@ public final class Phase5
 						if (col.equals(col2))
 						{
 							likely *= meta.likelihood(f, root, tx, tOp);
+							if (f.op().equals("NE"))
+							{
+								likely += 1;
+							}
+							
+							if (f.op().equals("NL"))
+							{
+								likely += 1;
+							}
+							
+							if (f.op().equals("LI"))
+							{
+								if (!f.leftIsColumn())
+								{
+									String literal = (String)f.leftLiteral();
+									if (literal.startsWith("%"))
+									{
+										likely += 1;
+									}
+								}
+								
+								if (!f.rightIsColumn())
+								{
+									String literal = (String)f.rightLiteral();
+									if (literal.startsWith("%"))
+									{
+										likely += 1;
+									}
+								}
+							}
 						}
 					}
 				}
 			}
 
-			if (likely > (3.0 / 20.0))
-			{
-				// System.out.println("Does not filter enough");
-				continue;
-			}
-
 			for (final Filter f : hm.keySet())
 			{
 				Index index = null;
-				String column = null;
+				String lcolumn = null;
+				String rcolumn = null;
 				if (f.leftIsColumn())
 				{
-					column = f.leftColumn();
+					lcolumn = f.leftColumn();
 					if (f.rightIsColumn())
 					{
-						index = getIndexFor(available, f.leftColumn(), f.rightColumn());
+						rcolumn = f.rightColumn();
+						//index = getIndexFor(available, f.leftColumn(), f.rightColumn());
 					}
 					else
 					{
@@ -1945,7 +2145,7 @@ public final class Phase5
 				}
 				else
 				{
-					column = f.rightColumn();
+					lcolumn = f.rightColumn();
 					index = getIndexFor(available, f.rightColumn());
 				}
 
@@ -1954,21 +2154,50 @@ public final class Phase5
 					// System.out.println("There is no matching index for " +
 					// f);
 					doIt = false;
-					if (f.leftIsColumn() && f.rightIsColumn())
-					{
-						HRDBMSWorker.logger.info("Wanted to use index on " + f.leftColumn() + " and " + f.rightColumn() + " but none existed.");
+					
+					if (rcolumn == null)
+					{		
+						//if (likely > (12.0 / 53.0) || !f.op().equals("E"))
+						if (likely > (1.0 / 10.0))
+						{
+						}
+						else
+						{
+							HRDBMSWorker.logger.debug("Wanted to use an index on " + lcolumn + " but none existed");
+						}
 					}
-					else
-					{
-						HRDBMSWorker.logger.info("Wanted to use index on " + column + " but none existed.");
-					}
+					
 					break;
 				}
 				else
 				{
-					index = index.clone();
-					indexes.add(index);
-					index.setCondition(f);
+					//determine if this index is better than a tablescan
+					if (rcolumn == null)
+					{
+						if (index.getKeys().get(0).equals(lcolumn))
+						{	
+							//if (likely > (12.0 / 53.0) || !f.op().equals("E"))
+							if (likely > (1.0 / 10.0))
+							{
+								doIt = false;
+							}
+						}
+						else
+						{
+							doIt = false;
+						}
+					}
+					else
+					{
+						doIt = false;
+					}
+					
+					if (doIt)
+					{
+						index = index.clone();
+						indexes.add(index);
+						index.setCondition(f);
+					}
 				}
 			}
 
@@ -2016,5 +2245,50 @@ public final class Phase5
 
 		cnf.setHSHM(hshm);
 		// cCache.clear();
+	}
+	
+	public void printTree(Operator op, int indent) throws Exception
+	{
+		String line = "";
+		int i = 0;
+		while (i < indent)
+		{
+			line += " ";
+			i++;
+		}
+
+		line += "(" + card(op) + ") ";
+		line += op;
+		HRDBMSWorker.logger.debug(line);
+
+		if (op.children().size() > 0)
+		{
+			line = "";
+			i = 0;
+			while (i < indent)
+			{
+				line += " ";
+				i++;
+			}
+
+			line += "(";
+			HRDBMSWorker.logger.debug(line);
+
+			for (Operator child : op.children())
+			{
+				printTree(child, indent + 3);
+			}
+
+			line = "";
+			i = 0;
+			while (i < indent)
+			{
+				line += " ";
+				i++;
+			}
+
+			line += ")";
+			HRDBMSWorker.logger.debug(line);
+		}
 	}
 }

@@ -21,8 +21,10 @@ import java.util.StringTokenizer;
 import java.util.TreeMap;
 import com.exascale.compression.CompressedSocket;
 import com.exascale.exceptions.ParseException;
+import com.exascale.filesystem.Block;
 import com.exascale.managers.BufferManager;
 import com.exascale.managers.HRDBMSWorker;
+import com.exascale.managers.LockManager;
 import com.exascale.managers.PlanCacheManager;
 import com.exascale.managers.XAManager;
 import com.exascale.misc.DataEndMarker;
@@ -265,11 +267,15 @@ public final class MetaData implements Serializable
 		for (final Index index : indexes)
 		{
 			int count = 0;
-			for (final String col : index.getCols())
+			for (final String col : index.getKeys())
 			{
 				if (cols.contains(col))
 				{
 					count++;
+				}
+				else
+				{
+					break;
 				}
 			}
 
@@ -277,6 +283,30 @@ public final class MetaData implements Serializable
 			{
 				maxCount = count;
 				maxIndex = index;
+			}
+		}
+		
+		if (maxCount == cols.size())
+		{
+			for (Index index : indexes)
+			{
+				int count = 0;
+				for (String col : index.getKeys())
+				{
+					if (cols.contains(col))
+					{
+						count++;
+					}
+					else
+					{
+						break;
+					}
+				}
+				
+				if (count == maxCount && index.getKeys().size() == maxCount)
+				{
+					return index;
+				}
 			}
 		}
 
@@ -2694,6 +2724,19 @@ public final class MetaData implements Serializable
 
 		if (op.equals("E"))
 		{
+			if (filter.leftIsColumn() && filter.rightIsColumn())
+			{
+				final double retval = 1.0 / smaller(leftCard, rightCard);
+				if (retval < 0)
+				{
+					Exception e = new Exception();
+					HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
+					System.exit(1);
+				}
+
+				return retval;
+			}
+			
 			final double retval = 1.0 / bigger(leftCard, rightCard);
 			if (retval < 0)
 			{
@@ -2707,6 +2750,19 @@ public final class MetaData implements Serializable
 
 		if (op.equals("NE"))
 		{
+			if (filter.leftIsColumn() && filter.rightIsColumn())
+			{
+				final double retval = 1.0 - (1.0 / smaller(leftCard, rightCard));
+				if (retval < 0)
+				{
+					Exception e = new Exception();
+					HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
+					System.exit(1);
+				}
+
+				return retval;
+			}
+			
 			final double retval = 1.0 - 1.0 / bigger(leftCard, rightCard);
 			if (retval < 0)
 			{
@@ -3002,6 +3058,19 @@ public final class MetaData implements Serializable
 
 		if (op.equals("E"))
 		{
+			if (filter.leftIsColumn() && filter.rightIsColumn())
+			{
+				final double retval = 1.0 / smaller(leftCard, rightCard);
+				if (retval < 0)
+				{
+					Exception e = new Exception();
+					HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
+					System.exit(1);
+				}
+
+				return retval;
+			}
+			
 			final double retval = 1.0 / bigger(leftCard, rightCard);
 			if (retval < 0)
 			{
@@ -3014,6 +3083,19 @@ public final class MetaData implements Serializable
 
 		if (op.equals("NE"))
 		{
+			if (filter.leftIsColumn() && filter.rightIsColumn())
+			{
+				final double retval = 1.0 - (1.0 / smaller(leftCard, rightCard));
+				if (retval < 0)
+				{
+					Exception e = new Exception();
+					HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
+					System.exit(1);
+				}
+
+				return retval;
+			}
+			
 			final double retval = 1.0 - 1.0 / bigger(leftCard, rightCard);
 			if (retval < 0)
 			{
@@ -3289,6 +3371,28 @@ public final class MetaData implements Serializable
 		
 		return y;
 	}
+	
+	private long smaller(long x, long y)
+	{
+		if (x <= y)
+		{
+			if (x <= 0)
+			{
+				return 1;
+			}
+			else
+			{
+				return x;
+			}
+		}
+
+		if (y <= 0)
+		{
+			return 1;
+		}
+		
+		return y;
+	}
 
 	private ArrayList<Object> convertRangeStringToObject(String set, String schema, String table, String rangeCol, Transaction tx) throws Exception
 	{
@@ -3308,7 +3412,7 @@ public final class MetaData implements Serializable
 			}
 			else if (type.equals("DOUBLE"))
 			{
-				retval.add(Utils.parseDouble(token));
+				retval.add(Double.parseDouble(token));
 			}
 			else if (type.equals("VARCHAR"))
 			{
@@ -3343,7 +3447,7 @@ public final class MetaData implements Serializable
 			}
 			else if (type.equals("DOUBLE"))
 			{
-				retval.add(Utils.parseDouble(token));
+				retval.add(Double.parseDouble(token));
 			}
 			else if (type.equals("VARCHAR"))
 			{
@@ -3702,7 +3806,7 @@ public final class MetaData implements Serializable
 			for (Object obj : (ArrayList<Object>)o)
 			{
 				String val = (String)obj;
-				retval.add(Utils.parseDouble(val));
+				retval.add(Double.parseDouble(val));
 			}
 		}
 		
@@ -4123,6 +4227,7 @@ public final class MetaData implements Serializable
 						Thread.sleep(random.nextInt(60000));
 						continue;
 					}
+					
 					sql = "UPDATE SYS.TABLESTATS SET CARD = " + card + " WHERE TABLEID = " + tableID;
 					worker = XAManager.executeAuthorizedUpdate(sql, tx);
 					worker.start();
@@ -4265,6 +4370,7 @@ public final class MetaData implements Serializable
 						Thread.sleep(random.nextInt(60000));
 						continue;
 					}
+					
 					sql = "UPDATE SYS.COLSTATS SET CARD = " + card + " WHERE TABLEID = " + tableID + " AND COLID = " + colID;
 					worker = XAManager.executeAuthorizedUpdate(sql, tx);
 					worker.start();
@@ -4286,10 +4392,10 @@ public final class MetaData implements Serializable
 						HRDBMSWorker.logger.debug("The SQL statement: '" + sql + "' updated " + updateCount + " rows");
 						ok = false;
 						return;
-					}
-					
-					Thread.sleep(random.nextInt(60000));
+					}	
 				}
+					
+				Thread.sleep(random.nextInt(60000));
 			}
 			catch(Exception e)
 			{
@@ -4389,6 +4495,8 @@ public final class MetaData implements Serializable
 				Random random = new Random();
 				while (updateCount == -1)
 				{
+					LockManager.xLock(new Block("/data1/SYS.INDEXSTATS.tbl", 4097), tx.number());
+					LockManager.xLock(new Block("/data1/SYS.PKINDEXSTATS.indx", 0), tx.number());
 					Object obj = PlanCacheManager.getIndexCard().setParms(tableID, indexID).execute(tx);
 					if (obj instanceof DataEndMarker)
 					{

@@ -811,7 +811,7 @@ public class Filter implements Cloneable, Serializable
 		{
 			if (val1.contains("."))
 			{
-				fVal1 = Utils.parseDouble(val1);
+				fVal1 = Double.parseDouble(val1);
 			}
 			else
 			{
@@ -843,7 +843,7 @@ public class Filter implements Cloneable, Serializable
 		{
 			if (val2.contains("."))
 			{
-				fVal2 = Utils.parseDouble(val2);
+				fVal2 = Double.parseDouble(val2);
 			}
 			else
 			{

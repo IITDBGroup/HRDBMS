@@ -1,5 +1,4 @@
 package com.exascale.optimizer;
-
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.misc.NotNull;
 import org.antlr.v4.runtime.tree.ErrorNode;
@@ -718,6 +717,19 @@ public class SelectBaseListener implements SelectListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
+	@Override public void enterCaseExp(@NotNull SelectParser.CaseExpContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitCaseExp(@NotNull SelectParser.CaseExpContext ctx) { }
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
 	@Override public void enterNodeExp(@NotNull SelectParser.NodeExpContext ctx) { }
 	/**
 	 * {@inheritDoc}
@@ -868,6 +880,19 @@ public class SelectBaseListener implements SelectListener {
 	 * <p>The default implementation does nothing.</p>
 	 */
 	@Override public void exitSortKeyCol(@NotNull SelectParser.SortKeyColContext ctx) { }
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterCaseCase(@NotNull SelectParser.CaseCaseContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitCaseCase(@NotNull SelectParser.CaseCaseContext ctx) { }
 
 	/**
 	 * {@inheritDoc}

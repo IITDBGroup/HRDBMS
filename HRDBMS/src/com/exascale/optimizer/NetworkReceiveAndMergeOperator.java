@@ -17,6 +17,7 @@ import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MyDate;
 import com.exascale.threads.ThreadPoolThread;
+import com.exascale.misc.BinomialHeap;
 
 public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator implements Operator, Serializable
 {
@@ -239,10 +240,12 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 		}
 	}
 	
-	private class MergeComparator implements Comparator<ALOO>
+	private class MergeComparator implements Comparator<Object>
 	{
-		public int compare(ALOO l, ALOO r)
+		public int compare(Object l2, Object r2)
 		{
+			ALOO l = (ALOO)l2;
+			ALOO r = (ALOO)r2;
 			if (l == r)
 			{
 				return 0;
@@ -310,52 +313,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 				i++;
 			}
 			
-			//can't return 0;
-			int lHash = l.op.hashCode();
-			int rHash = r.op.hashCode();
-			if (lHash < rHash)
-			{
-				return -1;
-			}
-			else if (lHash > rHash)
-			{
-				return 1;
-			}
-			else
-			{
-				//still can't return 0
-				lHash = l.alo.hashCode();
-				rHash = r.alo.hashCode();
-				if (lHash < rHash)
-				{
-					return -1;
-				}
-				else if (lHash > rHash)
-				{
-					return 1;
-				}
-				else
-				{
-					//still can't return 0
-					lHash = l.hashCode();
-					rHash = r.hashCode();
-					if (lHash < rHash)
-					{
-						return -1;
-					}
-					else if (lHash > rHash)
-					{
-						return 1;
-					}
-					else
-					{
-						//still can't return 0
-						l = null;
-						lHash = l.hashCode();
-						return 0;
-					}
-				}
-			}
+			return 0;
 		}
 	}
 
@@ -364,7 +322,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 		private final ArrayList<Operator> children;
 		//private final HashMap<Operator, ArrayList<Object>> rows = new HashMap<Operator, ArrayList<Object>>();
 		//private final TreeMap<ArrayList<Object>, Operator> rows = new TreeMap<ArrayList<Object>, Operator>(new MergeComparator());
-		private final TreeSet<ALOO> rows = new TreeSet<ALOO>(new MergeComparator());
+		private final BinomialHeap<ALOO> rows = new BinomialHeap<ALOO>(new MergeComparator());
 		private ALOO minEntry;
 
 		public ReadThread(ArrayList<Operator> children)
@@ -382,7 +340,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 					final ArrayList<Object> row = readRow(op);
 					if (row != null)
 					{
-						rows.add(new ALOO(row, op));
+						rows.insert(new ALOO(row, op));
 					}
 				}
 				catch(Exception e)
@@ -399,7 +357,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 
 			while (rows.size() > 0)
 			{
-				minEntry = rows.first();
+				minEntry = rows.extractMin();
 
 				while (true)
 				{
@@ -417,12 +375,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 					final ArrayList<Object> row = readRow(minEntry.getOp());
 					if (row != null)
 					{
-						rows.remove(minEntry);
-						rows.add(new ALOO(row, minEntry.getOp()));
-					}
-					else
-					{
-						rows.remove(minEntry);
+						rows.insert(new ALOO(row, minEntry.getOp()));
 					}
 				}
 				catch(Exception e)

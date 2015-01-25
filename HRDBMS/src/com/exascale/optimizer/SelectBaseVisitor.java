@@ -449,6 +449,14 @@ public class SelectBaseVisitor<T> extends AbstractParseTreeVisitor<T> implements
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
+	@Override public T visitCaseExp(@NotNull SelectParser.CaseExpContext ctx) { return visitChildren(ctx); }
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation returns the result of calling
+	 * {@link #visitChildren} on {@code ctx}.</p>
+	 */
 	@Override public T visitNodeExp(@NotNull SelectParser.NodeExpContext ctx) { return visitChildren(ctx); }
 
 	/**
@@ -538,6 +546,14 @@ public class SelectBaseVisitor<T> extends AbstractParseTreeVisitor<T> implements
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
 	@Override public T visitSortKeyCol(@NotNull SelectParser.SortKeyColContext ctx) { return visitChildren(ctx); }
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation returns the result of calling
+	 * {@link #visitChildren} on {@code ctx}.</p>
+	 */
+	@Override public T visitCaseCase(@NotNull SelectParser.CaseCaseContext ctx) { return visitChildren(ctx); }
 
 	/**
 	 * {@inheritDoc}

@@ -93,7 +93,17 @@ public final class Phase3
 
 		if (op instanceof HashJoinOperator)
 		{
-			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((HashJoinOperator)op).getHSHM(), root, tx, op));
+			HashSet<HashMap<Filter, Filter>> hshm = ((HashJoinOperator)op).getHSHM();
+			double max = -1;
+			for (HashMap<Filter, Filter> hm : hshm)
+			{
+				double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
+				if (temp > max)
+				{
+					max = temp;
+				}
+			}
+			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * max); 
 			return retval;
 		}
 		
@@ -126,7 +136,18 @@ public final class Phase3
 
 		if (op instanceof NestedLoopJoinOperator)
 		{
-			return (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((NestedLoopJoinOperator)op).getHSHM(), root, tx, op));
+			HashSet<HashMap<Filter, Filter>> hshm = ((NestedLoopJoinOperator)op).getHSHM();
+			double max = -1;
+			for (HashMap<Filter, Filter> hm : hshm)
+			{
+				double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
+				if (temp > max)
+				{
+					max = temp;
+				}
+			}
+			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * max); 
+			return retval;
 		}
 
 		if (op instanceof NetworkReceiveOperator)
@@ -261,8 +282,8 @@ public final class Phase3
 		removeLocalSendReceive(root);
 		clearOpParents(root);
 		cleanupOrderedFilters(root);
-		HRDBMSWorker.logger.debug("Upon exiting P3:");
-		Phase1.printTree(root, 0);
+		//HRDBMSWorker.logger.debug("Upon exiting P3:");
+		//Phase1.printTree(root, 0);
 	}
 
 	private void assignNodes(Operator op, int node) throws Exception
@@ -734,20 +755,7 @@ public final class Phase3
 			}
 			else
 			{
-				if (pmetas.get(0).getNodeHash() != null && containsAll(lefts, pmetas.get(0).getNodeHash(), pmetas.get(0)) && pmetas.get(1).getNodeHash() != null && containsAll(rights, pmetas.get(1).getNodeHash(), pmetas.get(1)) && pmetas.get(0).getNodeGroupHash() != null && containsAll(lefts, pmetas.get(0).getNodeGroupHash(), pmetas.get(0)) && pmetas.get(1).getNodeGroupHash() != null && containsAll(rights, pmetas.get(1).getNodeGroupHash(), pmetas.get(1)))
-				{
-					pushAcross2(receive);
-					return true;
-				}
-				else if (pmetas.get(0).getNodeHash() != null && containsAll(rights, pmetas.get(0).getNodeHash(), pmetas.get(0)) && pmetas.get(1).getNodeHash() != null && containsAll(lefts, pmetas.get(1).getNodeHash(), pmetas.get(1)) && pmetas.get(0).getNodeGroupHash() != null && containsAll(rights, pmetas.get(0).getNodeGroupHash(), pmetas.get(0)) && pmetas.get(1).getNodeGroupHash() != null && containsAll(lefts, pmetas.get(1).getNodeGroupHash(), pmetas.get(1)))
-				{
-					pushAcross2(receive);
-					return true;
-				}
-				else
-				{
-					return false;
-				}
+				return false;
 			}
 		}
 	}
@@ -908,11 +916,11 @@ public final class Phase3
 		//	pushAcross2(receive);
 		//	return true;
 		//}
-		HRDBMSWorker.logger.debug(receive.parent());
+		//HRDBMSWorker.logger.debug(receive.parent());
 
 		if (isAllAny(receive.parent().children().get(0)) && isAllAny(receive.parent().children().get(1)))
 		{
-			HRDBMSWorker.logger.debug("Both are any");
+			//HRDBMSWorker.logger.debug("Both are any");
 			if (containsNoSend(receive.parent().children().get(0)) && containsNoSend(receive.parent().children().get(1)))
 			{
 				final ArrayList<TableScanOperator> left = getTableOperators(receive.parent().children().get(0));
@@ -936,7 +944,7 @@ public final class Phase3
 		
 		if (isAllAny(receive))
 		{
-			HRDBMSWorker.logger.debug("1 is any");
+			//HRDBMSWorker.logger.debug("1 is any");
 			if (!containsNoSend(receive))
 			{
 				return false;
@@ -1000,7 +1008,7 @@ public final class Phase3
 		}
 		else
 		{
-			HRDBMSWorker.logger.debug("None are any");
+			//HRDBMSWorker.logger.debug("None are any");
 			final HashJoinOperator parent = (HashJoinOperator)receive.parent();
 			if (!containsNoSend(parent.children().get(0)) || !containsNoSend(parent.children().get(1)))
 			{
@@ -1065,23 +1073,7 @@ public final class Phase3
 			}
 			else
 			{
-				// System.out.println("Hash: is hash group");
-				if (pmetas.get(0).getNodeHash() != null && containsAll(lefts, pmetas.get(0).getNodeHash(), pmetas.get(0)) && pmetas.get(1).getNodeHash() != null && containsAll(rights, pmetas.get(1).getNodeHash(), pmetas.get(1)) && pmetas.get(0).getNodeGroupHash() != null && containsAll(lefts, pmetas.get(0).getNodeGroupHash(), pmetas.get(0)) && pmetas.get(1).getNodeGroupHash() != null && containsAll(rights, pmetas.get(1).getNodeGroupHash(), pmetas.get(1)))
-				{
-					// System.out.println("nodegroup and node hash equal");
-					pushAcross2(receive);
-					return true;
-				}
-				else if (pmetas.get(0).getNodeHash() != null && containsAll(rights, pmetas.get(0).getNodeHash(), pmetas.get(0)) && pmetas.get(1).getNodeHash() != null && containsAll(lefts, pmetas.get(1).getNodeHash(), pmetas.get(1)) && pmetas.get(0).getNodeGroupHash() != null && containsAll(rights, pmetas.get(0).getNodeGroupHash(), pmetas.get(0)) && pmetas.get(1).getNodeGroupHash() != null && containsAll(lefts, pmetas.get(1).getNodeGroupHash(), pmetas.get(1)))
-				{
-					// System.out.println("nodegroup and node hash equal");
-					pushAcross2(receive);
-					return true;
-				}
-				else
-				{
-					return false;
-				}
+				return false;
 			}
 		}
 	}
@@ -1554,7 +1546,7 @@ public final class Phase3
 	{
 		for (ArrayList<String> hash : current)
 		{
-			if (toHash.containsAll(hash) && hash.size() > 0)
+			if (toHash.equals(hash) && hash.size() > 0)
 			{
 				return false;
 			}
@@ -1914,20 +1906,7 @@ public final class Phase3
 			}
 			else
 			{
-				if (pmetas.get(0).getNodeHash() != null && containsAll(lefts, pmetas.get(0).getNodeHash(), pmetas.get(0)) && pmetas.get(1).getNodeHash() != null && containsAll(rights, pmetas.get(1).getNodeHash(), pmetas.get(1)) && pmetas.get(0).getNodeGroupHash() != null && containsAll(lefts, pmetas.get(0).getNodeGroupHash(), pmetas.get(0)) && pmetas.get(1).getNodeGroupHash() != null && containsAll(rights, pmetas.get(1).getNodeGroupHash(), pmetas.get(1)))
-				{
-					pushAcross2(receive);
-					return true;
-				}
-				else if (pmetas.get(0).getNodeHash() != null && containsAll(rights, pmetas.get(0).getNodeHash(), pmetas.get(0)) && pmetas.get(1).getNodeHash() != null && containsAll(lefts, pmetas.get(1).getNodeHash(), pmetas.get(1)) && pmetas.get(0).getNodeGroupHash() != null && containsAll(rights, pmetas.get(0).getNodeGroupHash(), pmetas.get(0)) && pmetas.get(1).getNodeGroupHash() != null && containsAll(lefts, pmetas.get(1).getNodeGroupHash(), pmetas.get(1)))
-				{
-					pushAcross2(receive);
-					return true;
-				}
-				else
-				{
-					return false;
-				}
+				return false;
 			}
 		}
 	}
@@ -2041,10 +2020,10 @@ public final class Phase3
 		//	return true;
 		//}
 
-		HRDBMSWorker.logger.debug("Handle semi");
+		//HRDBMSWorker.logger.debug("Handle semi");
 		if (isAllAny(receive.parent().children().get(0)) && isAllAny(receive.parent().children().get(1)))
 		{
-			HRDBMSWorker.logger.debug("Both are any");
+			//HRDBMSWorker.logger.debug("Both are any");
 			if (containsNoSend(receive.parent().children().get(0)) && containsNoSend(receive.parent().children().get(1)))
 			{
 				final ArrayList<TableScanOperator> left = getTableOperators(receive.parent().children().get(0));
@@ -2068,7 +2047,7 @@ public final class Phase3
 		
 		if (isAllAny(receive))
 		{
-			HRDBMSWorker.logger.debug("1 is any");
+			//HRDBMSWorker.logger.debug("1 is any");
 			if (!containsNoSend(receive))
 			{
 				return false;
@@ -2137,11 +2116,11 @@ public final class Phase3
 		}
 		else
 		{
-			HRDBMSWorker.logger.debug("None are any");
+			//HRDBMSWorker.logger.debug("None are any");
 			final SemiJoinOperator parent = (SemiJoinOperator)receive.parent();
 			if (!containsNoSend(parent.children().get(0)) || !containsNoSend(parent.children().get(1)))
 			{
-				HRDBMSWorker.logger.debug("Both sides must not have sends, but at least 1 of them does");
+				//HRDBMSWorker.logger.debug("Both sides must not have sends, but at least 1 of them does");
 				return false;
 			}
 			final ArrayList<String> lefts = parent.getLefts();
@@ -2153,14 +2132,14 @@ public final class Phase3
 				String temp = meta.getTableForCol(lefts.get(i), parent);
 				if (temp == null)
 				{
-					HRDBMSWorker.logger.debug("Could not figure out table for " + lefts.get(i));
+					//HRDBMSWorker.logger.debug("Could not figure out table for " + lefts.get(i));
 					return false;
 				}
 				tables.add(temp);
 				temp = meta.getTableForCol(rights.get(i), parent);
 				if (temp == null)
 				{
-					HRDBMSWorker.logger.debug("Could not figure out table for " + rights.get(i));
+					//HRDBMSWorker.logger.debug("Could not figure out table for " + rights.get(i));
 					return false;
 				}
 				tables.add(temp);
@@ -2169,7 +2148,7 @@ public final class Phase3
 
 			if (tables.size() != 2)
 			{
-				HRDBMSWorker.logger.debug("More than 2 tables");
+				//HRDBMSWorker.logger.debug("More than 2 tables");
 				return false;
 			}
 
@@ -2186,11 +2165,11 @@ public final class Phase3
 
 			if (pmetas.get(0).noNodeGroupSet() && pmetas.get(1).noNodeGroupSet())
 			{
-				HRDBMSWorker.logger.debug("No node groups");
-				HRDBMSWorker.logger.debug("Lefts = " + lefts);
-				HRDBMSWorker.logger.debug("Rights = " + rights);
-				HRDBMSWorker.logger.debug("Lhash = " + lhash);
-				HRDBMSWorker.logger.debug("Rhash = " + rhash);
+				//HRDBMSWorker.logger.debug("No node groups");
+				//HRDBMSWorker.logger.debug("Lefts = " + lefts);
+				//HRDBMSWorker.logger.debug("Rights = " + rights);
+				//HRDBMSWorker.logger.debug("Lhash = " + lhash);
+				//HRDBMSWorker.logger.debug("Rhash = " + rhash);
 				if (!needsRehash(lhash, lefts) && !needsRehash(rhash, rights))
 				{
 					pushAcross2(receive);
@@ -2203,26 +2182,13 @@ public final class Phase3
 				}
 				else
 				{
-					HRDBMSWorker.logger.debug("Returning false");
+					//HRDBMSWorker.logger.debug("Returning false");
 					return false;
 				}
 			}
 			else
 			{
-				if (pmetas.get(0).getNodeHash() != null && containsAll(lefts, pmetas.get(0).getNodeHash(), pmetas.get(0)) && pmetas.get(1).getNodeHash() != null && containsAll(rights, pmetas.get(1).getNodeHash(), pmetas.get(1)) && pmetas.get(0).getNodeGroupHash() != null && containsAll(lefts, pmetas.get(0).getNodeGroupHash(), pmetas.get(0)) && pmetas.get(1).getNodeGroupHash() != null && containsAll(rights, pmetas.get(1).getNodeGroupHash(), pmetas.get(1)))
-				{
-					pushAcross2(receive);
-					return true;
-				}
-				else if (pmetas.get(0).getNodeHash() != null && containsAll(rights, pmetas.get(0).getNodeHash(), pmetas.get(0)) && pmetas.get(1).getNodeHash() != null && containsAll(lefts, pmetas.get(1).getNodeHash(), pmetas.get(1)) && pmetas.get(0).getNodeGroupHash() != null && containsAll(rights, pmetas.get(0).getNodeGroupHash(), pmetas.get(0)) && pmetas.get(1).getNodeGroupHash() != null && containsAll(lefts, pmetas.get(1).getNodeGroupHash(), pmetas.get(1)))
-				{
-					pushAcross2(receive);
-					return true;
-				}
-				else
-				{
-					return false;
-				}
+				return false;
 			}
 		}
 	}
@@ -2741,7 +2707,7 @@ public final class Phase3
 					if (op instanceof SelectOperator || op instanceof YearOperator || op instanceof SubstringOperator || op instanceof ProjectOperator || op instanceof ExtendOperator || op instanceof RenameOperator || op instanceof ReorderOperator || op instanceof CaseOperator || op instanceof ExtendObjectOperator || op instanceof DateMathOperator || op instanceof ConcatOperator)
 					{
 						pushAcross(receive);
-						HRDBMSWorker.logger.debug("Push across");
+						//HRDBMSWorker.logger.debug("Push across");
 						//Phase1.printTree(root, 0);
 						workToDo = true;
 					}
@@ -2754,13 +2720,13 @@ public final class Phase3
 						workToDo = true;
 						if (!handleSort(receive))
 						{
-							HRDBMSWorker.logger.debug("Sort false");
+							//HRDBMSWorker.logger.debug("Sort false");
 							//Phase1.printTree(root, 0);
 							break;
 						}
 						else
 						{
-							HRDBMSWorker.logger.debug("Sort true");
+							//HRDBMSWorker.logger.debug("Sort true");
 							//Phase1.printTree(root, 0);
 						}
 					}
@@ -2796,13 +2762,13 @@ public final class Phase3
 							if (!handleMulti(receive))
 							{
 								completed.add(receive);
-								HRDBMSWorker.logger.debug("Multi false");
+								//HRDBMSWorker.logger.debug("Multi false");
 								//Phase1.printTree(root, 0);
 								break;
 							}
 							else
 							{
-								HRDBMSWorker.logger.debug("Multi true");
+								//HRDBMSWorker.logger.debug("Multi true");
 								//Phase1.printTree(root, 0);
 							}
 						}
@@ -2818,7 +2784,7 @@ public final class Phase3
 							break;
 						}
 						workToDo = true;
-						HRDBMSWorker.logger.debug("Product");
+						//HRDBMSWorker.logger.debug("Product");
 						//Phase1.printTree(root, 0);
 					}
 					else if (op instanceof HashJoinOperator)
@@ -2828,7 +2794,7 @@ public final class Phase3
 							break;
 						}
 						workToDo = true;
-						HRDBMSWorker.logger.debug("Hash join");
+						//HRDBMSWorker.logger.debug("Hash join");
 						//Phase1.printTree(root, 0);
 					}
 					else if (op instanceof NestedLoopJoinOperator)
@@ -2838,7 +2804,7 @@ public final class Phase3
 							break;
 						}
 						workToDo = true;
-						HRDBMSWorker.logger.debug("Nested loop");
+						//HRDBMSWorker.logger.debug("Nested loop");
 						//Phase1.printTree(root, 0);
 					}
 					else if (op instanceof SemiJoinOperator)
@@ -2848,7 +2814,7 @@ public final class Phase3
 							break;
 						}
 						workToDo = true;
-						HRDBMSWorker.logger.debug("Semi");
+						//HRDBMSWorker.logger.debug("Semi");
 						//Phase1.printTree(root, 0);
 					}
 					else if (op instanceof AntiJoinOperator)
@@ -2858,7 +2824,7 @@ public final class Phase3
 							break;
 						}
 						workToDo = true;
-						HRDBMSWorker.logger.debug("Anti");
+						//HRDBMSWorker.logger.debug("Anti");
 						//Phase1.printTree(root, 0);
 					}
 					else if (op instanceof TopOperator)
@@ -2869,13 +2835,13 @@ public final class Phase3
 							completed.add(receive);
 							if (!handleTop(receive))
 							{
-								HRDBMSWorker.logger.debug("Top false");
+								//HRDBMSWorker.logger.debug("Top false");
 								//Phase1.printTree(root, 0);
 								break;
 							}
 							else
 							{
-								HRDBMSWorker.logger.debug("Top true");
+								//HRDBMSWorker.logger.debug("Top true");
 								//Phase1.printTree(root, 0);
 							}
 						}

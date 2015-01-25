@@ -18,6 +18,52 @@ public class SearchClause
 		}
 	}
 	
+	public boolean equals(Object o)
+	{
+		if (!(o instanceof SearchClause))
+		{
+			return false;
+		}
+		
+		SearchClause rhs = (SearchClause)o;
+		if (negated != rhs.negated)
+		{
+			return false;
+		}
+		
+		if (predicate == null)
+		{
+			if (rhs.predicate != null)
+			{
+				return false;
+			}
+		}
+		else
+		{
+			if (!predicate.equals(rhs.predicate))
+			{
+				return false;
+			}
+		}
+		
+		if (condition == null)
+		{
+			if (rhs.condition != null)
+			{
+				return false;
+			}
+		}
+		else
+		{
+			if (!condition.equals(rhs.condition))
+			{
+				return false;
+			}
+		}
+		
+		return true;
+	}
+	
 	public SearchClause(Predicate predicate, boolean negated)
 	{
 		this.predicate = predicate;

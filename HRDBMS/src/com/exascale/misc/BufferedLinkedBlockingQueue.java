@@ -271,7 +271,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 							{
 								if (!(this.oa[0] instanceof DataEndMarker))
 								{
-									HRDBMSWorker.logger.debug("FlushAll failed because I could not flush my deata");
+									HRDBMSWorker.logger.debug("FlushAll failed because I could not flush my data");
 									return false;
 								}
 							}
@@ -291,9 +291,19 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 								return false;
 							}
 							
-							if (!(((Object[])q.peek())[0] instanceof DataEndMarker))
+							Object[] temp2 = ((Object[])q.peek());
+							if (temp2 == null)
 							{
-								HRDBMSWorker.logger.debug("FlushAll failed because I have a DataEndMarker to write and the head of the queue is " + ((Object[])q.peek())[0]);
+								return false;
+							}
+							if (!(temp2[0] instanceof DataEndMarker))
+							{
+								try
+								{
+									HRDBMSWorker.logger.debug("FlushAll failed because I have a DataEndMarker to write and the head of the queue is " + ((Object[])q.peek())[0]);
+								}
+								catch(Exception e)
+								{}
 								return false;
 							}
 						}

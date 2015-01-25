@@ -107,7 +107,17 @@ public final class Phase4
 
 		if (op instanceof HashJoinOperator)
 		{
-			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((HashJoinOperator)op).getHSHM(), root, tx, op));
+			HashSet<HashMap<Filter, Filter>> hshm = ((HashJoinOperator)op).getHSHM();
+			double max = -1;
+			for (HashMap<Filter, Filter> hm : hshm)
+			{
+				double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
+				if (temp > max)
+				{
+					max = temp;
+				}
+			}
+			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * max); 
 			cCache.put(op, retval);
 			return retval;
 		}
@@ -147,8 +157,18 @@ public final class Phase4
 
 		if (op instanceof NestedLoopJoinOperator)
 		{
-			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((NestedLoopJoinOperator)op).getHSHM(), root, tx, op));
-			cCache.put(op, retval);
+			HashSet<HashMap<Filter, Filter>> hshm = ((NestedLoopJoinOperator)op).getHSHM();
+			double max = -1;
+			for (HashMap<Filter, Filter> hm : hshm)
+			{
+				double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
+				if (temp > max)
+				{
+					max = temp;
+				}
+			}
+			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * max);
+			cCache.put(op,  retval);
 			return retval;
 		}
 
@@ -317,15 +337,15 @@ public final class Phase4
 		redistributeSorts();
 		removeLocalSendReceive(root);
 		removeDuplicateReorders(root);
-		HRDBMSWorker.logger.debug("Before removing hashes");
-		Phase1.printTree(root, 0);
+		//HRDBMSWorker.logger.debug("Before removing hashes");
+		//Phase1.printTree(root, 0);
 		removeUnneededHash();
 		//HRDBMSWorker.logger.debug("After removing unneeded hashing");
 		//Phase1.printTree(root, 0);
 		clearOpParents(root);
 		cleanupOrderedFilters(root);
-		HRDBMSWorker.logger.debug("Exiting P4:"); 
-		Phase1.printTree(root, 0);
+		//HRDBMSWorker.logger.debug("Exiting P4:"); 
+		//Phase1.printTree(root, 0);
 	}
 	
 	private ArrayList<TableScanOperator> getTables(Operator op)
@@ -348,7 +368,8 @@ public final class Phase4
 	private void removeUnneededHash() throws Exception
 	{
 		ArrayList<TableScanOperator> tables = getTables(root);
-		for (TableScanOperator table : tables)
+		HashSet<TableScanOperator> temp = new HashSet<TableScanOperator>(tables);
+		for (TableScanOperator table : temp)
 		{
 			if (table.noNodeGroupSet() && table.allNodes() && table.nodeIsHash())
 			{
@@ -374,8 +395,8 @@ public final class Phase4
 						}
 					}
 				}
-				HRDBMSWorker.logger.debug("Looking at " + table);
-				HRDBMSWorker.logger.debug("Original hash is " + current);
+				//HRDBMSWorker.logger.debug("Looking at " + table);
+				//HRDBMSWorker.logger.debug("Original hash is " + current);
 				Operator up = table.firstParent();
 				doneWithTable: while (true)
 				{
@@ -395,14 +416,14 @@ public final class Phase4
 									current.add(index, newName);
 								}
 							}
-							HRDBMSWorker.logger.debug("Current has changed to " + current);
+							//HRDBMSWorker.logger.debug("Current has changed to " + current);
 						}
 						
 						if (up instanceof MultiOperator)
 						{
 							//take things out of current except for ones that are also in the group by
 							current.retainAll(((MultiOperator)up).getKeys());
-							HRDBMSWorker.logger.debug("Current has changed to " + current);
+							//HRDBMSWorker.logger.debug("Current has changed to " + current);
 						}
 						
 						if (up instanceof RootOperator)
@@ -417,9 +438,9 @@ public final class Phase4
 					{
 						if (((NetworkHashAndSendOperator)up).parents().size() == MetaData.numWorkerNodes)
 						{
-							if (((NetworkHashAndSendOperator)up).getHashCols().containsAll(current) && current.size() > 0)
+							if (((NetworkHashAndSendOperator)up).getHashCols().equals(current) && current.size() > 0)
 							{
-								HRDBMSWorker.logger.debug("Removing " + up);
+								//HRDBMSWorker.logger.debug("Removing " + up);
 								//remove sends and receives
 								Operator grandParent = null;
 								for (Operator parent : (ArrayList<Operator>)((NetworkHashAndSendOperator)up).parents().clone())
@@ -451,9 +472,9 @@ public final class Phase4
 							}
 							else
 							{
-								HRDBMSWorker.logger.debug("Hashes don't match: " + up);
+								//HRDBMSWorker.logger.debug("Hashes don't match: " + up);
 								current = (ArrayList<String>)((NetworkHashAndSendOperator)up).getHashCols().clone();
-								HRDBMSWorker.logger.debug("Current has changed to " + current);
+								//HRDBMSWorker.logger.debug("Current has changed to " + current);
 								//set up to the parent that is on my node
 								for (Operator parent : ((NetworkHashAndSendOperator)up).parents())
 								{
@@ -466,14 +487,14 @@ public final class Phase4
 						}
 						else
 						{
-							HRDBMSWorker.logger.debug("Hash and send does not use all nodes. Size = " + ((NetworkHashAndSendOperator)up).parents().size());
-							HRDBMSWorker.logger.debug(up);
+							//HRDBMSWorker.logger.debug("Hash and send does not use all nodes. Size = " + ((NetworkHashAndSendOperator)up).parents().size());
+							//HRDBMSWorker.logger.debug(up);
 							break;
 						}
 					}
 					else
 					{
-						HRDBMSWorker.logger.debug("Not a hash and send: " + up);
+						//HRDBMSWorker.logger.debug("Not a hash and send: " + up);
 						break;
 					}
 				}

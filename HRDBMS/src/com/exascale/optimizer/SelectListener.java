@@ -602,6 +602,17 @@ public interface SelectListener extends ParseTreeListener {
 	void exitNumericLiteral(@NotNull SelectParser.NumericLiteralContext ctx);
 
 	/**
+	 * Enter a parse tree produced by {@link SelectParser#CaseExp}.
+	 * @param ctx the parse tree
+	 */
+	void enterCaseExp(@NotNull SelectParser.CaseExpContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link SelectParser#CaseExp}.
+	 * @param ctx the parse tree
+	 */
+	void exitCaseExp(@NotNull SelectParser.CaseExpContext ctx);
+
+	/**
 	 * Enter a parse tree produced by {@link SelectParser#nodeExp}.
 	 * @param ctx the parse tree
 	 */
@@ -732,6 +743,17 @@ public interface SelectListener extends ParseTreeListener {
 	 * @param ctx the parse tree
 	 */
 	void exitSortKeyCol(@NotNull SelectParser.SortKeyColContext ctx);
+
+	/**
+	 * Enter a parse tree produced by {@link SelectParser#caseCase}.
+	 * @param ctx the parse tree
+	 */
+	void enterCaseCase(@NotNull SelectParser.CaseCaseContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link SelectParser#caseCase}.
+	 * @param ctx the parse tree
+	 */
+	void exitCaseCase(@NotNull SelectParser.CaseCaseContext ctx);
 
 	/**
 	 * Enter a parse tree produced by {@link SelectParser#long2}.

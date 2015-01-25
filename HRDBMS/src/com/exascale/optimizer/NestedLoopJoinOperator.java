@@ -63,6 +63,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	private Vector<AtomicBoolean> lockVector = new Vector<AtomicBoolean>();
 	private final ReentrantLock thisLock = new ReentrantLock();
 	private transient Plan plan;
+	private AtomicLong inCount = new AtomicLong(0);
 	
 	public void setPlan(Plan plan)
 	{
@@ -543,6 +544,11 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	{
 		indexAccess = true;
 		this.dynamicIndexes = indexes;
+	}
+	
+	public boolean getIndexAccess()
+	{
+		return indexAccess;
 	}
 
 	@Override
@@ -1150,6 +1156,8 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			}
 			catch(Exception e)
 			{}
+			
+			HRDBMSWorker.logger.debug(NestedLoopJoinOperator.this + " received " + inCount.get() + " left rows and " + inCount2.get() + " right rows and output " + outCount.get() + " rows");
 		}
 	}
 
@@ -1663,6 +1671,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				// @Parallel
 				while (!(o instanceof DataEndMarker))
 				{
+					inCount.incrementAndGet();
 					final ArrayList<Object> lRow = (ArrayList<Object>)o;
 					long i = 0;
 					while (true)
@@ -1781,6 +1790,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				Object o = child.next(NestedLoopJoinOperator.this);
 				while (!(o instanceof DataEndMarker))
 				{
+					inCount2.incrementAndGet();
 					inBuffer.add((ArrayList<Object>)o);
 					o = child.next(NestedLoopJoinOperator.this);
 				}

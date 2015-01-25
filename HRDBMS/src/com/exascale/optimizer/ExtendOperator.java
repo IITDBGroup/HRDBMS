@@ -169,6 +169,12 @@ public final class ExtendOperator implements Operator, Serializable
 			String temp = tokens.nextToken();
 			if (Character.isLetter(temp.charAt(0)) || (temp.charAt(0) == '_') || temp.charAt(0) == '.')
 			{
+				if (cols2Pos == null)
+				{
+					retval.add(temp);
+					continue;
+				}
+				
 				Integer x = cols2Pos.get(temp);
 				if (x == null)
 				{
@@ -447,7 +453,7 @@ public final class ExtendOperator implements Operator, Serializable
 					}
 					else
 					{
-						final double d = Utils.parseDouble(temp);
+						final double d = Double.parseDouble(temp);
 						// System.out.println("Parsed a literal numeric value and got "
 						// + d);
 						execStack.push(d);

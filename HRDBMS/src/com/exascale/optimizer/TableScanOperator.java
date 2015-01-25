@@ -204,9 +204,9 @@ public final class TableScanOperator implements Operator, Serializable
 		this.meta = meta;
 		this.name = name;
 		this.schema = schema;
-		this.cols2Types = cols2Types;
-		this.cols2Pos = cols2Pos;
-		this.pos2Col = pos2Col;
+		this.cols2Types = (HashMap<String, String>)cols2Types.clone();
+		this.cols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
+		this.pos2Col = (TreeMap<Integer, String>)pos2Col.clone();
 		this.tableCols2Types = tableCols2Types;
 		this.tablePos2Col = tablePos2Col;
 		this.tableCols2Pos = tableCols2Pos;
@@ -484,6 +484,20 @@ public final class TableScanOperator implements Operator, Serializable
 		}
 		else
 		{
+			if (alias != null && !alias.equals(""))
+			{
+				if (!alias.equals(((TableScanOperator)rhs).alias))
+				{
+					return false;
+				}
+			}
+			else
+			{
+				if (((TableScanOperator)rhs).alias != null && !((TableScanOperator)rhs).alias.equals(""))
+				{
+					return false;
+				}
+			}
 			return (schema.equals(((TableScanOperator)rhs).schema) && name.equals(((TableScanOperator)rhs).name) && node == ((TableScanOperator)rhs).node);
 		}
 	}
@@ -1111,10 +1125,13 @@ public final class TableScanOperator implements Operator, Serializable
 	@Override
 	public synchronized void start() throws Exception
 	{
+		//HRDBMSWorker.logger.debug("Starting " + TableScanOperator.this);
 		if (!startDone)
 		{
+			//HRDBMSWorker.logger.debug(TableScanOperator.this + " did need to be started");
 			startDone = true;
 
+			//HRDBMSWorker.logger.debug(TableScanOperator.this + " had " + children.size() + " children to start");
 			for (final Operator o : children)
 			{
 				try
@@ -1132,9 +1149,11 @@ public final class TableScanOperator implements Operator, Serializable
 			{
 				final String in = schema + "." + name + ".tbl";
 				ins.add(in);
+				//HRDBMSWorker.logger.debug(TableScanOperator.this + " had 0 devices");
 			}
 			else
 			{
+				//HRDBMSWorker.logger.debug(TableScanOperator.this + " had " + devices.size() + " devices");
 				for (final int device : devices)
 				{
 					if (children.size() == 0)
@@ -1166,6 +1185,7 @@ public final class TableScanOperator implements Operator, Serializable
 
 			if (!optimize)
 			{
+				//HRDBMSWorker.logger.debug("WARNING: " + TableScanOperator.this + " had " + parents.size() + " parents");
 				for (final Operator parent : parents)
 				{
 					readBuffers.put(parent, new BufferedLinkedBlockingQueue(ResourceManager.QUEUE_SIZE));
@@ -1327,6 +1347,7 @@ public final class TableScanOperator implements Operator, Serializable
 		{
 			try
 			{
+				//HRDBMSWorker.logger.debug("Going to start " + ins.size() + " ReaderThreads for ins for " + TableScanOperator.this);
 				for (final String in : ins)
 				{
 					final ReaderThread read = new ReaderThread(in);
@@ -1334,6 +1355,7 @@ public final class TableScanOperator implements Operator, Serializable
 					reads.add(read);
 				}
 
+				//HRDBMSWorker.logger.debug("Going to start " + randomIns.size() + " ReaderThreads for randomIns for " + TableScanOperator.this);
 				for (final String in : randomIns)
 				{
 					final ReaderThread read = new ReaderThread(in, true);
@@ -1390,6 +1412,7 @@ public final class TableScanOperator implements Operator, Serializable
 		@Override
 		public final void run()
 		{
+			//HRDBMSWorker.logger.debug("ReaderThread for " + TableScanOperator.this + " has started");
 			CNFFilter filter = orderedFilters.get(parents.get(0));
 			ArrayList<String> types = new ArrayList<String>(midPos2Col.size());
 			for (final Map.Entry entry : midPos2Col.entrySet())
@@ -1402,10 +1425,14 @@ public final class TableScanOperator implements Operator, Serializable
 				if (in2 == null)
 				{
 					LockManager.sLock(new Block(in, -1), tx.number());
+					//HRDBMSWorker.logger.debug("About to open " + in + " for " + TableScanOperator.this);
 					FileChannel xx = FileManager.getFile(in);
+					//HRDBMSWorker.logger.debug("Opened " + in + " for " + TableScanOperator.this);
 					int numBlocks = FileManager.numBlocks.get(in);
+					//HRDBMSWorker.logger.debug(in + " has " + numBlocks + " blocks");
 					if (numBlocks == 0)
 					{
+						//HRDBMSWorker.logger.debug("Unable to open file " + in);
 						throw new Exception("Unable to open file " + in);
 					}
 					HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();

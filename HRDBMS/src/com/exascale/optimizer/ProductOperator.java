@@ -164,6 +164,11 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	{
 		return null;
 	}
+	
+	public boolean getIndexAccess()
+	{
+		return false;
+	}
 
 	@Override
 	public MetaData getMeta()

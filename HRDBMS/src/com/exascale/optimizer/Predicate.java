@@ -19,6 +19,17 @@ public class Predicate
 		this.rhs = rhs;
 	}
 	
+	public boolean equals(Object o)
+	{
+		if (!(o instanceof Predicate))
+		{
+			return false;
+		}
+		
+		Predicate rhs2 = (Predicate)o;
+		return lhs.equals(rhs2.lhs) && op.equals(rhs2.op) && rhs.equals(rhs2.rhs);
+	}
+	
 	public Predicate clone()
 	{
 		Expression lClone = null;

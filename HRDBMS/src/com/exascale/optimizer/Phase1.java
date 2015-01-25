@@ -55,8 +55,8 @@ public final class Phase1
 
 	public void optimize() throws Exception
 	{
-		HRDBMSWorker.logger.debug("Upon entering P1:"); //DEBUG
-		printTree(root, 0); //DEBUG
+		//HRDBMSWorker.logger.debug("Upon entering P1:"); //DEBUG
+		//printTree(root, 0); //DEBUG
 		// Driver.printTree(0, root); //DEBUG
 		do
 		{
@@ -70,11 +70,11 @@ public final class Phase1
 			i++;
 		}
 		
-		HRDBMSWorker.logger.debug("Immediately prior to reorderProducts()"); //DEBUG
-		printTree(root, 0); //DEBUG
+		//HRDBMSWorker.logger.debug("Immediately prior to reorderProducts()"); //DEBUG
+		//printTree(root, 0); //DEBUG
 		reorderProducts(root);
-		HRDBMSWorker.logger.debug("After reorderProducts()"); //DEBUG
-		printTree(root, 0); //DEBUG
+		//HRDBMSWorker.logger.debug("After reorderProducts()"); //DEBUG
+		//printTree(root, 0); //DEBUG
 		
 		do
 		{
@@ -90,8 +90,8 @@ public final class Phase1
 		
 		// Driver.printTree(0, root); //DEBUG
 		combineProductsAndSelects(root);
-		HRDBMSWorker.logger.debug("After combine...");
-		printTree(root, 0); //DEBUG
+		//HRDBMSWorker.logger.debug("After combine...");
+		//printTree(root, 0); //DEBUG
 		// Driver.printTree(0, root); //DEBUG
 		//removeDuplicateTables();
 		// Driver.printTree(0, root); //DEBUG
@@ -114,8 +114,105 @@ public final class Phase1
 		pushDownProjects();
 		removeUnneededOps(root);
 		
-		HRDBMSWorker.logger.debug("Upon exiting P1:"); //DEBUG
-		printTree(root, 0); //DEBUG
+		projectForSemiAnti(root);
+		
+		//HRDBMSWorker.logger.debug("Upon exiting P1:"); //DEBUG
+		//printTree(root, 0); //DEBUG
+	}
+	
+	private void projectForSemiAnti(Operator op) throws Exception
+	{
+		if (op instanceof SemiJoinOperator)
+		{
+			HashSet<HashMap<Filter, Filter>> hshm = ((SemiJoinOperator)op).getHSHM();
+			HashSet<String> cols = new HashSet<String>();
+			for (HashMap<Filter, Filter> hm : hshm)
+			{
+				for (Filter f : hm.keySet())
+				{
+					if (f.leftIsColumn())
+					{
+						String l = f.leftColumn();
+						cols.add(l);
+					}
+					
+					if (f.rightIsColumn())
+					{
+						String r = f.rightColumn();
+						cols.add(r);
+					}
+				}
+			}
+			
+			ArrayList<String> toProject = new ArrayList<String>();
+			for (String col : cols)
+			{
+				if (op.children().get(1).getCols2Pos().keySet().contains(col))
+				{
+					toProject.add(col);
+				}
+			}
+			
+			if (toProject.size() < op.children().get(1).getCols2Pos().size())
+			{
+				ProjectOperator project = new ProjectOperator(toProject, meta);
+				Operator right = op.children().get(1);
+				op.removeChild(right);
+				project.add(right);
+				op.add(project);
+			}
+		}
+		else if (op instanceof AntiJoinOperator)
+		{
+			HashSet<HashMap<Filter, Filter>> hshm = ((AntiJoinOperator)op).getHSHM();
+			HashSet<String> cols = new HashSet<String>();
+			for (HashMap<Filter, Filter> hm : hshm)
+			{
+				for (Filter f : hm.keySet())
+				{
+					if (f.leftIsColumn())
+					{
+						String l = f.leftColumn();
+						cols.add(l);
+					}
+					
+					if (f.rightIsColumn())
+					{
+						String r = f.rightColumn();
+						cols.add(r);
+					}
+				}
+			}
+			
+			ArrayList<String> toProject = new ArrayList<String>();
+			for (String col : cols)
+			{
+				if (op.children().get(1).getCols2Pos().keySet().contains(col))
+				{
+					toProject.add(col);
+				}
+			}
+			
+			if (toProject.size() < op.children().get(1).getCols2Pos().size())
+			{
+				ProjectOperator project = new ProjectOperator(toProject, meta);
+				Operator right = op.children().get(1);
+				op.removeChild(right);
+				project.add(right);
+				op.add(project);
+			}
+		}
+		else if (op instanceof TableScanOperator)
+		{
+			return;
+		}
+		else
+		{
+			for (Operator o : op .children())
+			{
+				projectForSemiAnti(o);
+			}
+		}
 	}
 	
 	private void removeUnneededOps(Operator op) throws Exception
@@ -315,7 +412,7 @@ public final class Phase1
 
 		if (current == null)
 		{
-			HRDBMSWorker.logger.debug("Current is null");
+			//HRDBMSWorker.logger.debug("Current is null");
 			HashSet<SubtreePair> pairs = new HashSet<SubtreePair>();
 			outer: for (final SelectOperator select : selects)
 			{
@@ -421,18 +518,7 @@ public final class Phase1
 						
 						if (lpmd.noNodeGroupSet() && rpmd.noNodeGroupSet())
 						{
-							if (lpmd.getNodeHash() != null && lefts.containsAll(lpmd.getNodeHash()) && rpmd.getNodeHash() != null && rights.containsAll(rpmd.getNodeHash()))
-							{
-								if (likelihood < minColocated)
-								{
-									minColocated = likelihood;
-									minSelect2 = select;
-								}
-							}
-						}
-						else
-						{
-							if (lpmd.getNodeHash() != null && lefts.containsAll(lpmd.getNodeHash()) && rpmd.getNodeHash() != null && rights.containsAll(rpmd.getNodeHash()) && lpmd.getNodeGroupHash() != null && lefts.containsAll(lpmd.getNodeGroupHash()) && rpmd.getNodeGroupHash() != null && rights.containsAll(rpmd.getNodeGroupHash()))
+							if (lpmd.getNodeHash() != null && lefts.equals(lpmd.getNodeHash()) && rpmd.getNodeHash() != null && rights.equals(rpmd.getNodeHash()))
 							{
 								if (likelihood < minColocated)
 								{
@@ -444,7 +530,7 @@ public final class Phase1
 					}
 				}
 			
-				HRDBMSWorker.logger.debug("Estimated join cardinality = " + likelihood); //DEBUG
+				//HRDBMSWorker.logger.debug("Estimated join cardinality = " + likelihood); //DEBUG
 				
 				if (likelihood < minLikelihood)
 				{
@@ -455,19 +541,19 @@ public final class Phase1
 			
 			if (minColocated <= minLikelihood * 2)
 			{
-				HRDBMSWorker.logger.debug("Chose " + minColocated); //DEBUG
+				//HRDBMSWorker.logger.debug("Chose " + minColocated); //DEBUG
 				minSelect = minSelect2;
 			}
 			else
 			{
-				HRDBMSWorker.logger.debug("Chose " + minLikelihood); //DEBUG
+				//HRDBMSWorker.logger.debug("Chose " + minLikelihood); //DEBUG
 			}
 
 			selects.remove(minSelect);
 			return minSelect;
 		}
 
-		HRDBMSWorker.logger.debug("Current is not null");
+		//HRDBMSWorker.logger.debug("Current is not null");
 		HashSet<SubtreePair> pairs = new HashSet<SubtreePair>();
 		outer2: for (final SelectOperator select : selects)
 		{
@@ -542,7 +628,7 @@ public final class Phase1
 				}
 			}
 			
-			HRDBMSWorker.logger.debug("Estimated join cardinality = " + likelihood); //DEBUG
+			//HRDBMSWorker.logger.debug("Estimated join cardinality = " + likelihood); //DEBUG
 			
 			if (likelihood < minLikelihood)
 			{
@@ -553,7 +639,7 @@ public final class Phase1
 
 		if (minSelect != null)
 		{
-			HRDBMSWorker.logger.debug("Chose " + minLikelihood); //DEBUG
+			//HRDBMSWorker.logger.debug("Chose " + minLikelihood); //DEBUG
 			selects.remove(minSelect);
 			return minSelect;
 		}
@@ -662,18 +748,7 @@ public final class Phase1
 					
 					if (lpmd.noNodeGroupSet() && rpmd.noNodeGroupSet())
 					{
-						if (lpmd.getNodeHash() != null && lefts.containsAll(lpmd.getNodeHash()) && rpmd.getNodeHash() != null && rights.containsAll(rpmd.getNodeHash()))
-						{
-							if (likelihood < minColocated)
-							{
-								minColocated = likelihood;
-								minSelect2 = select;
-							}
-						}
-					}
-					else
-					{
-						if (lpmd.getNodeHash() != null && lefts.containsAll(lpmd.getNodeHash()) && rpmd.getNodeHash() != null && rights.containsAll(rpmd.getNodeHash()) && lpmd.getNodeGroupHash() != null && lefts.containsAll(lpmd.getNodeGroupHash()) && rpmd.getNodeGroupHash() != null && rights.containsAll(rpmd.getNodeGroupHash()))
+						if (lpmd.getNodeHash() != null && lefts.equals(lpmd.getNodeHash()) && rpmd.getNodeHash() != null && rights.equals(rpmd.getNodeHash()))
 						{
 							if (likelihood < minColocated)
 							{
@@ -685,7 +760,7 @@ public final class Phase1
 				}
 			}
 			
-			HRDBMSWorker.logger.debug("Estimated join cardinality = " + likelihood); //DEBUG
+			//HRDBMSWorker.logger.debug("Estimated join cardinality = " + likelihood); //DEBUG
 			
 			if (likelihood < minLikelihood)
 			{
@@ -696,12 +771,12 @@ public final class Phase1
 		
 		if (minColocated <= minLikelihood * 2)
 		{
-			HRDBMSWorker.logger.debug("Chose " + minColocated); //DEBUG
+			//HRDBMSWorker.logger.debug("Chose " + minColocated); //DEBUG
 			minSelect = minSelect2;
 		}
 		else
 		{
-			HRDBMSWorker.logger.debug("Chose " + minLikelihood); //DEBUG
+			//HRDBMSWorker.logger.debug("Chose " + minLikelihood); //DEBUG
 		}
 
 		selects.remove(minSelect);
@@ -751,6 +826,11 @@ public final class Phase1
 			}
 		}
 
+		HRDBMSWorker.logger.debug("Can't find subtree for column " + col + " in...");
+		for (Operator op : subtrees)
+		{
+			HRDBMSWorker.logger.debug(op.getCols2Pos().keySet());
+		}
 		return null;
 	}
 
@@ -834,10 +914,6 @@ public final class Phase1
 		}
 
 		final ArrayList<Operator> leaves = getLeaves(root);
-		final HashSet hs = new HashSet();
-		hs.addAll(leaves);
-		leaves.clear();
-		leaves.addAll(hs);
 
 		for (final Operator op : leaves)
 		{
@@ -1727,7 +1803,17 @@ public final class Phase1
 
 		if (op instanceof HashJoinOperator)
 		{
-			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((HashJoinOperator)op).getHSHM(), root, tx, op));
+			HashSet<HashMap<Filter, Filter>> hshm = ((HashJoinOperator)op).getHSHM();
+			double max = -1;
+			for (HashMap<Filter, Filter> hm : hshm)
+			{
+				double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
+				if (temp > max)
+				{
+					max = temp;
+				}
+			}
+			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * max); 
 			return retval;
 		}
 		
@@ -1760,7 +1846,18 @@ public final class Phase1
 
 		if (op instanceof NestedLoopJoinOperator)
 		{
-			return (long)(card(op.children().get(0)) * card(op.children().get(1)) * meta.likelihood(((NestedLoopJoinOperator)op).getHSHM(), root, tx, op));
+			HashSet<HashMap<Filter, Filter>> hshm = ((NestedLoopJoinOperator)op).getHSHM();
+			double max = -1;
+			for (HashMap<Filter, Filter> hm : hshm)
+			{
+				double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
+				if (temp > max)
+				{
+					max = temp;
+				}
+			}
+			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * max); 
+			return retval;
 		}
 
 		if (op instanceof NetworkReceiveOperator)

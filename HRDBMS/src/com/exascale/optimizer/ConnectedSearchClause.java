@@ -16,6 +16,17 @@ public class ConnectedSearchClause
 		this.and = and;
 	}
 	
+	public boolean equals(Object o)
+	{
+		if (!(o instanceof ConnectedSearchClause))
+		{
+			return false;
+		}
+		
+		ConnectedSearchClause rhs = (ConnectedSearchClause)o;
+		return and == rhs.and && search.equals(rhs.search);
+	}
+	
 	public SearchClause getSearch()
 	{
 		return search;

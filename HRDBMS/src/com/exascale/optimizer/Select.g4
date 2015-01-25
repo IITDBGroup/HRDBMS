@@ -84,7 +84,9 @@ expression : expression op=(STAR | '/') expression				# MulDiv
 			| columnName										# ColLiteral
 			| '(' subSelect ')'									# ExpSelect
 			| '(' expression ')' 								# PExpression
-			| NULL												# NullExp;
+			| NULL												# NullExp
+			| 'CASE' caseCase (caseCase)* 'ELSE' expression 'END' ('CASE')? #CaseExp;
+caseCase : 'WHEN' searchCondition 'THEN' expression;
 identifier : COUNT | DATE | IDENTIFIER ;
 literal : (NEGATIVE)? INTEGER ('.' INTEGER)?	# NumericLiteral
 			| STRING 							# StringLiteral ;

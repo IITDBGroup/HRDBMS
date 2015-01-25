@@ -42,7 +42,7 @@ public final class RowComparator implements Comparator
 				}
 				else if (type.equals("FLOAT"))
 				{
-					lhs.add(Utils.parseDouble(((String[])arg0)[i]));
+					lhs.add(Double.parseDouble(((String[])arg0)[i]));
 				}
 				else if (type.equals("CHAR"))
 				{
@@ -85,7 +85,7 @@ public final class RowComparator implements Comparator
 				}
 				else if (type.equals("FLOAT"))
 				{
-					rhs.add(Utils.parseDouble(((String[])arg1)[i]));
+					rhs.add(Double.parseDouble(((String[])arg1)[i]));
 				}
 				else if (type.equals("CHAR"))
 				{

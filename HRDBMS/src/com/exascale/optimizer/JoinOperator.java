@@ -60,4 +60,6 @@ public abstract class JoinOperator implements Operator
 	public abstract HashSet<HashMap<Filter, Filter>> getHSHMFilter();
 
 	public abstract ArrayList<String> getJoinForChild(Operator op);
+	
+	public abstract boolean getIndexAccess();
 }

@@ -18,4 +18,9 @@ public class ExistsPredicate extends Predicate
 	{
 		return new ExistsPredicate(select.clone());
 	}
+	
+	public boolean equals(Object o)
+	{
+		return false;
+	}
 }

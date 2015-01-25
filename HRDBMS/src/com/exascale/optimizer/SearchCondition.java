@@ -21,6 +21,50 @@ public class SearchCondition
 		return new SearchCondition(search.clone(), c);
 	}
 	
+	public boolean equals(Object o)
+	{
+		if (!(o instanceof SearchCondition))
+		{
+			return false;
+		}
+		
+		SearchCondition rhs = (SearchCondition)o;
+		if (search.equals(rhs.search))
+		{
+			if (connected == null || connected.size() == 0)
+			{
+				if (rhs.connected == null || rhs.connected.size() == 0)
+				{
+					return true;
+				}
+				else
+				{
+					return false;
+				}
+			}
+			else
+			{
+				if (rhs.connected == null || rhs.connected.size() == 0)
+				{
+					return false;
+				}
+				
+				if (connected.equals(rhs.connected))
+				{
+					return true;
+				}
+				else
+				{
+					return false;
+				}
+			}
+		}
+		else
+		{
+			return false;
+		}
+	}
+	
 	public SearchCondition(SearchClause search, ArrayList<ConnectedSearchClause> connected)
 	{
 		this.search = search;

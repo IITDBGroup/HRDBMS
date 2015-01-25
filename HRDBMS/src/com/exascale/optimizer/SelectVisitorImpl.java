@@ -22,7 +22,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 		String number = ctx.getText();
 		if (number.indexOf('.') != -1)
 		{
-			return new Literal(Utils.parseDouble(number));
+			return new Literal(Double.parseDouble(number));
 		}
 		else
 		{
@@ -68,6 +68,21 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 			arguments.add((Expression)visit(context));
 		}
 		return new Expression(new Function(ctx.identifier().getText(), arguments));
+	}
+	
+	public Expression visitCaseExp(SelectParser.CaseExpContext ctx)
+	{
+		ArrayList<Case> cases = new ArrayList<Case>(ctx.caseCase().size());
+		for (SelectParser.CaseCaseContext context : ctx.caseCase())
+		{
+			cases.add((Case)visit(context));
+		}
+		return new Expression(cases, (Expression)visit(ctx.expression()));
+	}
+	
+	public Case visitCaseCase(SelectParser.CaseCaseContext ctx)
+	{
+		return new Case((SearchCondition)visit(ctx.searchCondition()), (Expression)visit(ctx.expression()));
 	}
 	
 	public Expression visitCountDistinct(SelectParser.CountDistinctContext ctx)

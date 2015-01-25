@@ -88,6 +88,11 @@ public final class AntiJoinOperator implements Operator, Serializable
 		this.cols.add(col);
 		this.meta = meta;
 	}
+	
+	public boolean getIndexAccess()
+	{
+		return indexAccess;
+	}
 
 	private AntiJoinOperator(ArrayList<String> cols, HashSet<HashMap<Filter, Filter>> f, MetaData meta)
 	{

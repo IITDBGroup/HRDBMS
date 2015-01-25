@@ -595,6 +595,11 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 	{
 		childPos = pos;
 	}
+	
+	public boolean getIndexAccess()
+	{
+		return indexAccess;
+	}
 
 	public void setDynamicIndex(ArrayList<Index> indexes)
 	{
@@ -1006,6 +1011,8 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					}
 				}
 			}
+			
+			HRDBMSWorker.logger.debug("Hash join operator " + HashJoinOperator.this + " processed " + leftCount + " left rows and " + inCount + " right rows and output " + outCount + " rows");
 
 			while (true)
 			{
