@@ -226,6 +226,7 @@ public final class ResourceManager extends HRDBMSThread
 				i++;
 			}
 
+			boolean didSomething = false;
 			for (final ThreadPoolThread rt : threads)
 			{
 				while (true)
@@ -233,6 +234,10 @@ public final class ResourceManager extends HRDBMSThread
 					try
 					{
 						rt.join();
+						if (((ImportThread)rt).didSomething())
+						{
+							didSomething = true;
+						}
 						// System.out.println(((Runtime.getRuntime().freeMemory()
 						// + maxMemory - Runtime.getRuntime().totalMemory()) *
 						// 100.0) / (maxMemory * 1.0) + "% free");
@@ -243,14 +248,26 @@ public final class ResourceManager extends HRDBMSThread
 					}
 				}
 			}
+			
+			if (!didSomething)
+			{
+				return;
+			}
 		}
 	}
 
 	private static void handleLowMem()
 	{
 		// System.gc();
+		long time = System.currentTimeMillis();
 		while (lowMem())
 		{
+			long now = System.currentTimeMillis();
+			if (now - time > (5 * 60 * 1000))
+			{
+				System.gc();
+			}
+			
 			if (HRDBMSWorker.type != HRDBMSWorker.TYPE_WORKER)
 			{
 				PlanCacheManager.reduce();
@@ -346,13 +363,18 @@ public final class ResourceManager extends HRDBMSThread
 			if (highMem() && hasBeenLowMem)
 			{
 				handleHighMem();
+				hasBeenLowMem = false;
 			}
 			else if (lowMem())
 			{
-				lowMem = true;
-				hasBeenLowMem = true;
-				handleLowMem();
-				lowMem = false;
+				System.gc();
+				if (lowMem())
+				{
+					lowMem = true;
+					hasBeenLowMem = true;
+					handleLowMem();
+					lowMem = false;
+				}
 			}
 
 			try
@@ -1128,7 +1150,7 @@ public final class ResourceManager extends HRDBMSThread
 			return fromBytes(object.array());
 		}
 
-		public final void importResources() throws IOException
+		public final boolean importResources() throws IOException
 		{
 			if (NO_OFFLOAD.get() != 0)
 			{
@@ -1139,12 +1161,12 @@ public final class ResourceManager extends HRDBMSThread
 				catch (final Exception e)
 				{
 				}
-				return;
+				return false;
 			}
 
 			if (index == null)
 			{
-				return;
+				return false;
 			}
 
 			lock.writeLock().lock();
@@ -1171,7 +1193,7 @@ public final class ResourceManager extends HRDBMSThread
 				catch (final Exception e)
 				{
 				}
-				return;
+				return false;
 			}
 
 			// System.out.println("Going to reduce " + num2Cut + "/" + size +
@@ -1245,6 +1267,7 @@ public final class ResourceManager extends HRDBMSThread
 			}
 
 			lock.writeLock().unlock();
+			return true;
 		}
 
 		public final void put(Long key, ArrayList<Object> val) throws Exception
@@ -2493,6 +2516,7 @@ public final class ResourceManager extends HRDBMSThread
 	private static final class ImportThread extends ThreadPoolThread
 	{
 		private volatile DiskBackedCollection collection;
+		private boolean didSomething = false;
 
 		public ImportThread(DiskBackedCollection collection)
 		{
@@ -2504,12 +2528,17 @@ public final class ResourceManager extends HRDBMSThread
 		{
 			try
 			{
-				((DiskBackedHashMap)collection).importResources();
+				didSomething = ((DiskBackedHashMap)collection).importResources();
 			}
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
 			}
+		}
+		
+		public boolean didSomething()
+		{
+			return didSomething;
 		}
 	}
 
