@@ -1,12 +1,14 @@
 package com.exascale.optimizer;
 
-public class ColDef
+import java.io.Serializable;
+
+public class ColDef implements Serializable
 {
-	private Column col;
-	private String type;
-	private boolean nullable;
-	private boolean pk;
-	
+	private final Column col;
+	private final String type;
+	private final boolean nullable;
+	private final boolean pk;
+
 	public ColDef(Column col, String type, boolean nullable, boolean pk)
 	{
 		this.col = col;
@@ -14,22 +16,22 @@ public class ColDef
 		this.nullable = nullable;
 		this.pk = pk;
 	}
-	
+
 	public Column getCol()
 	{
 		return col;
 	}
-	
+
 	public String getType()
 	{
 		return type;
 	}
-	
+
 	public boolean isNullable()
 	{
 		return nullable;
 	}
-	
+
 	public boolean isPK()
 	{
 		return pk;

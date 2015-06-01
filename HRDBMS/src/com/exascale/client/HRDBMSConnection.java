@@ -2,7 +2,9 @@ package com.exascale.client;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.sql.Array;
 import java.sql.Blob;
 import java.sql.CallableStatement;
@@ -23,8 +25,6 @@ import java.sql.Struct;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Executor;
-import com.exascale.compression.CompressedSocket;
-import com.exascale.managers.HRDBMSWorker;
 
 public class HRDBMSConnection implements Connection
 {
@@ -58,11 +58,37 @@ public class HRDBMSConnection implements Connection
 				clientHandshake();
 			}
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
 			e.printStackTrace();
 			throw new SQLException("The handshake between the client and the server failed!");
 		}
+	}
+
+	private static byte[] intToBytes(int val)
+	{
+		final byte[] buff = new byte[4];
+		buff[0] = (byte)(val >> 24);
+		buff[1] = (byte)((val & 0x00FF0000) >> 16);
+		buff[2] = (byte)((val & 0x0000FF00) >> 8);
+		buff[3] = (byte)((val & 0x000000FF));
+		return buff;
+	}
+
+	@Override
+	public void abort(Executor executor) throws SQLException
+	{
+		if (executor == null)
+		{
+			throw new SQLException("Abort() was called with a null executor");
+		}
+
+		if (closed)
+		{
+			return;
+		}
+
+		this.close();
 	}
 
 	@Override
@@ -106,12 +132,12 @@ public class HRDBMSConnection implements Connection
 		}
 
 		sendCommit();
-		
+
 		if (rs != null)
 		{
 			rs.close();
 		}
-		
+
 		txIsReadOnly = true;
 	}
 
@@ -246,6 +272,18 @@ public class HRDBMSConnection implements Connection
 		}
 
 		return new HRDBMSDatabaseMetaData(this);
+	}
+
+	@Override
+	public int getNetworkTimeout() throws SQLException
+	{
+		return 0;
+	}
+
+	@Override
+	public String getSchema() throws SQLException
+	{
+		return getSchemaFromServer();
 	}
 
 	@Override
@@ -415,7 +453,7 @@ public class HRDBMSConnection implements Connection
 		{
 			rs.close();
 		}
-		
+
 		txIsReadOnly = true;
 	}
 
@@ -472,6 +510,12 @@ public class HRDBMSConnection implements Connection
 	}
 
 	@Override
+	public void setNetworkTimeout(Executor executor, int milliseconds) throws SQLException
+	{
+		throw new SQLFeatureNotSupportedException();
+	}
+
+	@Override
 	public void setReadOnly(boolean arg0) throws SQLException
 	{
 		if (closed || openTransaction)
@@ -492,6 +536,17 @@ public class HRDBMSConnection implements Connection
 	public Savepoint setSavepoint(String arg0) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
+	}
+
+	@Override
+	public void setSchema(String schema) throws SQLException
+	{
+		if (closed)
+		{
+			throw new SQLException("setTransactionIsolation() called on closed connection");
+		}
+
+		sendSetSchema(schema);
 	}
 
 	@Override
@@ -525,138 +580,15 @@ public class HRDBMSConnection implements Connection
 		throw new SQLException(this + " is not a wrapper.");
 	}
 
-	@Override
-	public void setSchema(String schema) throws SQLException
+	private int bytesToInt(byte[] val)
 	{
-		if (closed)
-		{
-			throw new SQLException("setTransactionIsolation() called on closed connection");
-		}
-		
-		sendSetSchema(schema);
+		final int ret = java.nio.ByteBuffer.wrap(val).getInt();
+		return ret;
 	}
 
-	@Override
-	public String getSchema() throws SQLException
-	{
-		return getSchemaFromServer();
-	}
-
-	@Override
-	public void abort(Executor executor) throws SQLException
-	{
-		if (executor == null)
-		{
-			throw new SQLException("Abort() was called with a null executor");
-		}
-		
-		if (closed)
-		{
-			return;
-		}
-		
-		this.close();
-	}
-
-	@Override
-	public void setNetworkTimeout(Executor executor, int milliseconds) throws SQLException
-	{
-		throw new SQLFeatureNotSupportedException();
-	}
-
-	@Override
-	public int getNetworkTimeout() throws SQLException
-	{
-		return 0;
-	}
-	
-	private void sendClose()
-	{
-		try
-		{
-			byte[] outMsg = "CLOSE           ".getBytes("UTF-8");
-			outMsg[8] = 0;
-			outMsg[9] = 0;
-			outMsg[10] = 0;
-			outMsg[11] = 0;
-			outMsg[12] = 0;
-			outMsg[13] = 0;
-			outMsg[14] = 0;
-			outMsg[15] = 0;
-			out.write(outMsg);
-			out.flush();
-		}
-		catch(Exception e)
-		{}
-		this.openTransaction = false;
-	}
-	
-	private void sendCommit() throws SQLException
-	{
-		try
-		{
-			byte[] outMsg = "COMMIT          ".getBytes("UTF-8");
-			outMsg[8] = 0;
-			outMsg[9] = 0;
-			outMsg[10] = 0;
-			outMsg[11] = 0;
-			outMsg[12] = 0;
-			outMsg[13] = 0;
-			outMsg[14] = 0;
-			outMsg[15] = 0;
-			out.write(outMsg);
-			out.flush();
-			getConfirmation();
-		}
-		catch(Exception e)
-		{
-			sendRollback();
-			this.openTransaction = false;
-			throw new SQLException("Commit failed! A rollback was performed.");
-		}
-		
-		this.openTransaction = false;
-	}
-	
-	private void sendRollback() throws SQLException
-	{
-		try
-		{
-			byte[] outMsg = "ROLLBACK        ".getBytes("UTF-8");
-			outMsg[8] = 0;
-			outMsg[9] = 0;
-			outMsg[10] = 0;
-			outMsg[11] = 0;
-			outMsg[12] = 0;
-			outMsg[13] = 0;
-			outMsg[14] = 0;
-			outMsg[15] = 0;
-			out.write(outMsg);
-			out.flush();
-			getConfirmation();
-			this.openTransaction = false;
-		}
-		catch(Exception e)
-		{
-			this.openTransaction = false;
-			closed = true;
-			try
-			{
-				in.close();
-				out.close();
-				sock.close();
-			}
-			catch (final Exception f)
-			{
-			}
-			
-			throw new SQLException("Rollback failed!  Disconnecting from the server to force a rollback.");
-		}
-	}
-	
 	private void clientHandshake() throws Exception
 	{
-		byte[] outMsg = "CLIENT          ".getBytes("UTF-8");
+		byte[] outMsg = "CLIENT          ".getBytes(StandardCharsets.UTF_8);
 		outMsg[8] = 0;
 		outMsg[9] = 0;
 		outMsg[10] = 0;
@@ -668,7 +600,7 @@ public class HRDBMSConnection implements Connection
 		out.write(outMsg);
 		out.flush();
 		byte[] inMsg = new byte[2];
-		
+
 		int count = 0;
 		while (count < 2)
 		{
@@ -689,13 +621,14 @@ public class HRDBMSConnection implements Connection
 				throw new Exception();
 			}
 		}
-		
-		String inStr = new String(inMsg, "UTF-8");
+
+		String inStr = new String(inMsg, StandardCharsets.UTF_8);
 		if (inStr.equals("OK"))
-		{}
+		{
+		}
 		else if (inStr.equals("RD"))
 		{
-			//workload balancing redirect
+			// workload balancing redirect
 			count = 0;
 			inMsg = new byte[4];
 			while (count < 4)
@@ -717,9 +650,9 @@ public class HRDBMSConnection implements Connection
 					throw new Exception();
 				}
 			}
-			
+
 			int length = bytesToInt(inMsg);
-			
+
 			count = 0;
 			inMsg = new byte[length];
 			while (count < length)
@@ -741,20 +674,23 @@ public class HRDBMSConnection implements Connection
 					throw new Exception();
 				}
 			}
-			
-			String newHost = new String(inMsg, "UTF-8");
+
+			String newHost = new String(inMsg, StandardCharsets.UTF_8);
 			in.close();
 			out.close();
 			sock.close();
-			
-			this.sock = CompressedSocket.newCompressedSocket(newHost, portNum);
+
+			this.sock = new Socket();
+			this.sock.setReceiveBufferSize(262144);
+			this.sock.setSendBufferSize(262144);
+			this.sock.connect(new InetSocketAddress(newHost, portNum));
 			in = new BufferedInputStream(sock.getInputStream());
 			out = new BufferedOutputStream(sock.getOutputStream());
 			try
 			{
 				clientHandshake2();
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				e.printStackTrace();
 				throw new SQLException("The handshake between the client and the server failed!");
@@ -765,10 +701,10 @@ public class HRDBMSConnection implements Connection
 			throw new Exception();
 		}
 	}
-	
+
 	private void clientHandshake2() throws Exception
 	{
-		byte[] outMsg = "CLIENT2         ".getBytes("UTF-8");
+		byte[] outMsg = "CLIENT2         ".getBytes(StandardCharsets.UTF_8);
 		outMsg[8] = 0;
 		outMsg[9] = 0;
 		outMsg[10] = 0;
@@ -781,11 +717,11 @@ public class HRDBMSConnection implements Connection
 		out.flush();
 		getConfirmation();
 	}
-	
+
 	private void getConfirmation() throws Exception
 	{
 		byte[] inMsg = new byte[2];
-		
+
 		int count = 0;
 		while (count < 2)
 		{
@@ -806,110 +742,19 @@ public class HRDBMSConnection implements Connection
 				throw new Exception();
 			}
 		}
-		
-		String inStr = new String(inMsg, "UTF-8");
+
+		String inStr = new String(inMsg, StandardCharsets.UTF_8);
 		if (!inStr.equals("OK"))
 		{
 			throw new Exception();
 		}
 	}
-	
-	private void sendIsolationLevel(int level)
-	{
-		try
-		{
-			byte[] outMsg = "ISOLATIO            ".getBytes("UTF-8");
-			outMsg[8] = 0;
-			outMsg[9] = 0;
-			outMsg[10] = 0;
-			outMsg[11] = 0;
-			outMsg[12] = 0;
-			outMsg[13] = 0;
-			outMsg[14] = 0;
-			outMsg[15] = 0;
-			//append integer
-			byte[] bInt = intToBytes(level);
-			outMsg[16] = bInt[0];
-			outMsg[17] = bInt[1];
-			outMsg[18] = bInt[2];
-			outMsg[19] = bInt[3];
-			out.write(outMsg);
-			out.flush();
-		}
-		catch(Exception e)
-		{	
-		}
-	}
-	
-	private static byte[] intToBytes(int val)
-	{
-		final byte[] buff = new byte[4];
-		buff[0] = (byte)(val >> 24);
-		buff[1] = (byte)((val & 0x00FF0000) >> 16);
-		buff[2] = (byte)((val & 0x0000FF00) >> 8);
-		buff[3] = (byte)((val & 0x000000FF));
-		return buff;
-	}
-	
-	private boolean testConnection()
-	{
-		try
-		{
-			byte[] outMsg = "TEST            ".getBytes("UTF-8");
-			outMsg[8] = 0;
-			outMsg[9] = 0;
-			outMsg[10] = 0;
-			outMsg[11] = 0;
-			outMsg[12] = 0;
-			outMsg[13] = 0;
-			outMsg[14] = 0;
-			outMsg[15] = 0;
-			out.write(outMsg);
-			out.flush();
-			getConfirmation();
-		}
-		catch(Exception e)
-		{	
-			return false;
-		}
-		
-		return true;
-	}
-	
-	private void sendSetSchema(String schema) throws SQLException
-	{
-		try
-		{
-			byte[] outMsg = "SETSCHMA        ".getBytes("UTF-8");
-			outMsg[8] = 0;
-			outMsg[9] = 0;
-			outMsg[10] = 0;
-			outMsg[11] = 0;
-			outMsg[12] = 0;
-			outMsg[13] = 0;
-			outMsg[14] = 0;
-			outMsg[15] = 0;
-			byte[] string = schema.getBytes("UTF-8");
-			byte[] length = intToBytes(string.length);
-			byte[] outMsg2 = new byte[20+string.length];
-			System.arraycopy(outMsg, 0, outMsg2, 0, 16);
-			System.arraycopy(length, 0, outMsg2, 16, 4);
-			System.arraycopy(string, 0, outMsg2, 20, string.length);
-			out.write(outMsg2);
-			out.flush();
-			getConfirmation();
-		}
-		catch(Exception e)
-		{	
-			throw new SQLException("SetSchema() failed.  Reason: " + e.getMessage());
-		}
-	}
-	
+
 	private String getSchemaFromServer() throws SQLException
 	{
 		try
 		{
-			byte[] outMsg = "GETSCHMA        ".getBytes("UTF-8");
+			byte[] outMsg = "GETSCHMA        ".getBytes(StandardCharsets.UTF_8);
 			outMsg[8] = 0;
 			outMsg[9] = 0;
 			outMsg[10] = 0;
@@ -922,22 +767,16 @@ public class HRDBMSConnection implements Connection
 			out.flush();
 			return getString();
 		}
-		catch(Exception e)
-		{	
+		catch (Exception e)
+		{
 			throw new SQLException("GetSchema() failed.  Reason: " + e.getMessage());
 		}
 	}
-	
-	private int bytesToInt(byte[] val)
-	{
-		final int ret = java.nio.ByteBuffer.wrap(val).getInt();
-		return ret;
-	}
-	
+
 	private String getString() throws Exception
 	{
 		byte[] inMsg = new byte[4];
-		
+
 		int count = 0;
 		while (count < 4)
 		{
@@ -958,9 +797,9 @@ public class HRDBMSConnection implements Connection
 				throw new Exception();
 			}
 		}
-		
+
 		int length = this.bytesToInt(inMsg);
-		
+
 		inMsg = new byte[length];
 		count = 0;
 		while (count < length)
@@ -982,8 +821,174 @@ public class HRDBMSConnection implements Connection
 				throw new Exception();
 			}
 		}
-		
-		String inStr = new String(inMsg, "UTF-8");
+
+		String inStr = new String(inMsg, StandardCharsets.UTF_8);
 		return inStr;
+	}
+
+	private void sendClose()
+	{
+		try
+		{
+			byte[] outMsg = "CLOSE           ".getBytes(StandardCharsets.UTF_8);
+			outMsg[8] = 0;
+			outMsg[9] = 0;
+			outMsg[10] = 0;
+			outMsg[11] = 0;
+			outMsg[12] = 0;
+			outMsg[13] = 0;
+			outMsg[14] = 0;
+			outMsg[15] = 0;
+			out.write(outMsg);
+			out.flush();
+		}
+		catch (Exception e)
+		{
+		}
+		this.openTransaction = false;
+	}
+
+	private void sendCommit() throws SQLException
+	{
+		try
+		{
+			byte[] outMsg = "COMMIT          ".getBytes(StandardCharsets.UTF_8);
+			outMsg[8] = 0;
+			outMsg[9] = 0;
+			outMsg[10] = 0;
+			outMsg[11] = 0;
+			outMsg[12] = 0;
+			outMsg[13] = 0;
+			outMsg[14] = 0;
+			outMsg[15] = 0;
+			out.write(outMsg);
+			out.flush();
+			getConfirmation();
+		}
+		catch (Exception e)
+		{
+			sendRollback();
+			this.openTransaction = false;
+			throw new SQLException("Commit failed! A rollback was performed.");
+		}
+
+		this.openTransaction = false;
+	}
+
+	private void sendIsolationLevel(int level)
+	{
+		try
+		{
+			byte[] outMsg = "ISOLATIO            ".getBytes(StandardCharsets.UTF_8);
+			outMsg[8] = 0;
+			outMsg[9] = 0;
+			outMsg[10] = 0;
+			outMsg[11] = 0;
+			outMsg[12] = 0;
+			outMsg[13] = 0;
+			outMsg[14] = 0;
+			outMsg[15] = 0;
+			// append integer
+			byte[] bInt = intToBytes(level);
+			outMsg[16] = bInt[0];
+			outMsg[17] = bInt[1];
+			outMsg[18] = bInt[2];
+			outMsg[19] = bInt[3];
+			out.write(outMsg);
+			out.flush();
+		}
+		catch (Exception e)
+		{
+		}
+	}
+
+	private void sendRollback() throws SQLException
+	{
+		try
+		{
+			byte[] outMsg = "ROLLBACK        ".getBytes(StandardCharsets.UTF_8);
+			outMsg[8] = 0;
+			outMsg[9] = 0;
+			outMsg[10] = 0;
+			outMsg[11] = 0;
+			outMsg[12] = 0;
+			outMsg[13] = 0;
+			outMsg[14] = 0;
+			outMsg[15] = 0;
+			out.write(outMsg);
+			out.flush();
+			getConfirmation();
+			this.openTransaction = false;
+		}
+		catch (Exception e)
+		{
+			this.openTransaction = false;
+			closed = true;
+			try
+			{
+				in.close();
+				out.close();
+				sock.close();
+			}
+			catch (final Exception f)
+			{
+			}
+
+			throw new SQLException("Rollback failed!  Disconnecting from the server to force a rollback.");
+		}
+	}
+
+	private void sendSetSchema(String schema) throws SQLException
+	{
+		try
+		{
+			byte[] outMsg = "SETSCHMA        ".getBytes(StandardCharsets.UTF_8);
+			outMsg[8] = 0;
+			outMsg[9] = 0;
+			outMsg[10] = 0;
+			outMsg[11] = 0;
+			outMsg[12] = 0;
+			outMsg[13] = 0;
+			outMsg[14] = 0;
+			outMsg[15] = 0;
+			byte[] string = schema.getBytes(StandardCharsets.UTF_8);
+			byte[] length = intToBytes(string.length);
+			byte[] outMsg2 = new byte[20 + string.length];
+			System.arraycopy(outMsg, 0, outMsg2, 0, 16);
+			System.arraycopy(length, 0, outMsg2, 16, 4);
+			System.arraycopy(string, 0, outMsg2, 20, string.length);
+			out.write(outMsg2);
+			out.flush();
+			getConfirmation();
+		}
+		catch (Exception e)
+		{
+			throw new SQLException("SetSchema() failed.  Reason: " + e.getMessage());
+		}
+	}
+
+	private boolean testConnection()
+	{
+		try
+		{
+			byte[] outMsg = "TEST            ".getBytes(StandardCharsets.UTF_8);
+			outMsg[8] = 0;
+			outMsg[9] = 0;
+			outMsg[10] = 0;
+			outMsg[11] = 0;
+			outMsg[12] = 0;
+			outMsg[13] = 0;
+			outMsg[14] = 0;
+			outMsg[15] = 0;
+			out.write(outMsg);
+			out.flush();
+			getConfirmation();
+		}
+		catch (Exception e)
+		{
+			return false;
+		}
+
+		return true;
 	}
 }

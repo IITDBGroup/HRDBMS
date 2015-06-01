@@ -1,12 +1,15 @@
 package com.exascale.optimizer;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
@@ -18,35 +21,61 @@ import com.exascale.threads.ThreadPoolThread;
 
 public final class ProductOperator extends JoinOperator implements Serializable
 {
-	private final ArrayList<Operator> children = new ArrayList<Operator>(2);
+	private static sun.misc.Unsafe unsafe;
+
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
+
+	private ArrayList<Operator> children = new ArrayList<Operator>(2);
 
 	private Operator parent;
-
 	private HashMap<String, String> cols2Types;
-
 	private HashMap<String, Integer> cols2Pos;
 	private TreeMap<Integer, String> pos2Col;
-	private final MetaData meta;
-	private volatile BufferedLinkedBlockingQueue outBuffer;
-	private volatile DiskBackedArray inBuffer;
-	private final int NUM_RT_THREADS = 4 * ResourceManager.cpus;
-	private final int NUM_PTHREADS = 4 * ResourceManager.cpus;
-	private final AtomicLong outCount = new AtomicLong(0);
-	private volatile boolean readersDone = false;
+	private transient final MetaData meta;
+	private transient volatile BufferedLinkedBlockingQueue outBuffer;
+	private transient volatile DiskBackedArray inBuffer;
+	private transient int NUM_RT_THREADS;
+	private transient int NUM_PTHREADS;
+	// private final AtomicLong outCount = new AtomicLong(0);
+	private transient volatile boolean readersDone;
 	private int childPos = -1;
 	private int node;
+
 	private int rightChildCard = 16;
+
 	private boolean cardSet = false;
-	private transient Plan plan;
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
-	}
 
 	public ProductOperator(MetaData meta)
 	{
 		this.meta = meta;
+	}
+
+	public static ProductOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		ProductOperator value = (ProductOperator)unsafe.allocateInstance(ProductOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.children = OperatorUtils.deserializeALOp(in, prev);
+		value.parent = OperatorUtils.deserializeOperator(in, prev);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.childPos = OperatorUtils.readInt(in);
+		value.node = OperatorUtils.readInt(in);
+		value.rightChildCard = OperatorUtils.readInt(in);
+		value.cardSet = OperatorUtils.readBool(in);
+		return value;
 	}
 
 	@Override
@@ -124,12 +153,12 @@ public final class ProductOperator extends JoinOperator implements Serializable
 		}
 
 		inBuffer.close();
-		
+
 		if (outBuffer != null)
 		{
 			outBuffer.close();
 		}
-		
+
 		cols2Pos = null;
 		cols2Types = null;
 		pos2Col = null;
@@ -160,14 +189,15 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	}
 
 	@Override
-	public ArrayList<String> getJoinForChild(Operator op)
-	{
-		return null;
-	}
-	
 	public boolean getIndexAccess()
 	{
 		return false;
+	}
+
+	@Override
+	public ArrayList<String> getJoinForChild(Operator op)
+	{
+		return null;
 	}
 
 	@Override
@@ -275,6 +305,29 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	}
 
 	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(58, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		OperatorUtils.serializeALOp(children, out, prev);
+		parent.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.writeInt(childPos, out);
+		OperatorUtils.writeInt(node, out);
+		OperatorUtils.writeInt(rightChildCard, out);
+		OperatorUtils.writeBool(cardSet, out);
+	}
+
+	@Override
 	public void setChildPos(int pos)
 	{
 		childPos = pos;
@@ -284,6 +337,11 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	public void setNode(int node)
 	{
 		this.node = node;
+	}
+
+	@Override
+	public void setPlan(Plan plan)
+	{
 	}
 
 	public boolean setRightChildCard(int card)
@@ -302,6 +360,9 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	public void start() throws Exception
 	{
 		inBuffer = ResourceManager.newDiskBackedArray(rightChildCard);
+		NUM_RT_THREADS = 4 * ResourceManager.cpus;
+		NUM_PTHREADS = 4 * ResourceManager.cpus;
+		readersDone = false;
 
 		for (final Operator child : children)
 		{
@@ -387,8 +448,9 @@ public final class ProductOperator extends JoinOperator implements Serializable
 					inBuffer.close();
 					break;
 				}
-				catch(Exception e)
-				{}
+				catch (Exception e)
+				{
+				}
 				try
 				{
 					inBuffer.close();
@@ -448,7 +510,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 						out.addAll(lRow);
 						out.addAll(rRow);
 						outBuffer.put(out);
-						outCount.incrementAndGet();
+						// outCount.incrementAndGet();
 					}
 
 					o = left.next(ProductOperator.this);
@@ -461,8 +523,9 @@ public final class ProductOperator extends JoinOperator implements Serializable
 				{
 					outBuffer.put(e);
 				}
-				catch(Exception f)
-				{}
+				catch (Exception f)
+				{
+				}
 				return;
 			}
 		}
@@ -490,8 +553,9 @@ public final class ProductOperator extends JoinOperator implements Serializable
 				{
 					outBuffer.put(e);
 				}
-				catch(Exception f)
-				{}
+				catch (Exception f)
+				{
+				}
 				return;
 			}
 		}

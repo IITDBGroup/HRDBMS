@@ -3,35 +3,75 @@ package com.exascale.mapred;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CharsetEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import org.apache.hadoop.io.IntWritable;
+import java.util.Arrays;
 import org.apache.hadoop.io.Writable;
-import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MyDate;
 
 public class ALOWritable implements Writable
 {
+	private static Charset cs = StandardCharsets.UTF_8;
+	private static sun.misc.Unsafe unsafe;
+	private static long offset;
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+			final Field fieldToUpdate = String.class.getDeclaredField("value");
+			// get unsafe offset to this field
+			offset = unsafe.objectFieldOffset(fieldToUpdate);
+		}
+		catch (final Exception e)
+		{
+			unsafe = null;
+		}
+	}
 	private ArrayList<Object> array;
-	
+	private final CharsetDecoder cd = cs.newDecoder();
+
+	private final CharsetEncoder ce = cs.newEncoder();
+
 	public ArrayList<Object> get()
 	{
 		return array;
 	}
-	
-	public void set(ArrayList<Object> array)
-	{
-		this.array = array;
-	}
-	
+
 	@Override
 	public void readFields(DataInput arg0) throws IOException
 	{
-		int size = arg0.readInt();
-		byte[] data = new byte[size];
-		arg0.readFully(data);
-		array = (ArrayList<Object>)fromBytes(data);
+		try
+		{
+			int size = arg0.readInt();
+			byte[] data = new byte[size];
+			arg0.readFully(data);
+			array = (ArrayList<Object>)fromBytes(data);
+		}
+		catch (Exception e)
+		{
+			if (e instanceof IOException)
+			{
+				throw (IOException)e;
+			}
+			else
+			{
+				throw new IOException(e.getMessage());
+			}
+		}
+	}
+
+	public void set(ArrayList<Object> array)
+	{
+		this.array = array;
 	}
 
 	@Override
@@ -40,8 +80,100 @@ public class ALOWritable implements Writable
 		arg0.write(toBytes(array));
 	}
 
+	private Object fromBytes(byte[] val) throws Exception
+	{
+		final ByteBuffer bb = ByteBuffer.wrap(val);
+		final int numFields = bb.getInt();
+
+		if (numFields < 0)
+		{
+			throw new IOException("Negative number of fields in fromBytes()");
+		}
+
+		bb.position(bb.position() + numFields);
+		final byte[] bytes = bb.array();
+		if (bytes[4] == 5)
+		{
+			return new DataEndMarker();
+		}
+		if (bytes[4] == 10)
+		{
+			final int length = bb.getInt();
+			final byte[] temp = new byte[length];
+			bb.get(temp);
+			try
+			{
+				final String o = new String(temp, StandardCharsets.UTF_8);
+				return new Exception(o);
+			}
+			catch (final Exception e)
+			{
+				throw e;
+			}
+		}
+		final ArrayList<Object> retval = new ArrayList<Object>(numFields);
+		int i = 0;
+		while (i < numFields)
+		{
+			if (bytes[i + 4] == 0)
+			{
+				// long
+				final Long o = bb.getLong();
+				retval.add(o);
+			}
+			else if (bytes[i + 4] == 1)
+			{
+				// integer
+				final Integer o = bb.getInt();
+				retval.add(o);
+			}
+			else if (bytes[i + 4] == 2)
+			{
+				// double
+				final Double o = bb.getDouble();
+				retval.add(o);
+			}
+			else if (bytes[i + 4] == 3)
+			{
+				// date
+				final MyDate o = new MyDate(bb.getLong());
+				retval.add(o);
+			}
+			else if (bytes[i + 4] == 4)
+			{
+				// string
+				final int length = bb.getInt();
+				final byte[] temp = new byte[length];
+				final char[] ca = new char[length];
+				bb.get(temp);
+				// final String o = new String(temp, StandardCharsets.UTF_8);
+				String value = (String)unsafe.allocateInstance(String.class);
+				int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(temp, 0, length, ca);
+				if (clen == ca.length)
+				{
+					unsafe.putObject(value, offset, ca);
+				}
+				else
+				{
+					char[] v = Arrays.copyOf(ca, clen);
+					unsafe.putObject(value, offset, v);
+				}
+				retval.add(value);
+			}
+			else
+			{
+				throw new IOException("Unknown type " + bytes[i + 4] + " in fromBytes()");
+			}
+
+			i++;
+		}
+
+		return retval;
+	}
+
 	protected byte[] toBytes(Object v) throws IOException
 	{
+		ArrayList<byte[]> bytes = null;
 		ArrayList<Object> val = null;
 		if (v instanceof ArrayList)
 		{
@@ -57,14 +189,15 @@ public class ALOWritable implements Writable
 			byte[] data = null;
 			try
 			{
-				data = e.getMessage().getBytes("UTF-8");
+				data = e.getMessage().getBytes(StandardCharsets.UTF_8);
 			}
-			catch(Exception f)
-			{}
-			
+			catch (Exception f)
+			{
+			}
+
 			int dataLen = data.length;
 			int recLen = 9 + dataLen;
-			ByteBuffer bb = ByteBuffer.allocate(recLen+4);
+			ByteBuffer bb = ByteBuffer.allocate(recLen + 4);
 			bb.position(0);
 			bb.putInt(recLen);
 			bb.putInt(1);
@@ -116,7 +249,21 @@ public class ALOWritable implements Writable
 			else if (o instanceof String)
 			{
 				header[i] = (byte)4;
-				size += (4 + ((String)o).getBytes("UTF-8").length);
+				// byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
+				byte[] ba = new byte[((String)o).length() << 2];
+				char[] value = (char[])unsafe.getObject(o, offset);
+				int blen = ((sun.nio.cs.ArrayEncoder)ce).encode(value, 0, value.length, ba);
+				byte[] b = Arrays.copyOf(ba, blen);
+				size += (4 + b.length);
+				if (bytes == null)
+				{
+					bytes = new ArrayList<byte[]>();
+					bytes.add(b);
+				}
+				else
+				{
+					bytes.add(b);
+				}
 			}
 			else
 			{
@@ -135,6 +282,7 @@ public class ALOWritable implements Writable
 		retvalBB.putInt(size - 4);
 		retvalBB.putInt(val.size());
 		retvalBB.position(header.length);
+		int x = 0;
 		for (final Object o : val)
 		{
 			if (retval[i] == 0)
@@ -155,103 +303,10 @@ public class ALOWritable implements Writable
 			}
 			else if (retval[i] == 4)
 			{
-				byte[] temp = null;
-				try
-				{
-					temp = ((String)o).getBytes("UTF-8");
-				}
-				catch (final Exception e)
-				{
-					throw e;
-				}
+				byte[] temp = bytes.get(x);
+				x++;
 				retvalBB.putInt(temp.length);
 				retvalBB.put(temp);
-			}
-
-			i++;
-		}
-
-		return retval;
-	}
-	
-	private Object fromBytes(byte[] val) throws IOException
-	{
-		final ByteBuffer bb = ByteBuffer.wrap(val);
-		final int numFields = bb.getInt();
-
-		if (numFields < 0)
-		{
-			throw new IOException("Negative number of fields in fromBytes()");
-		}
-
-		bb.position(bb.position() + numFields);
-		final byte[] bytes = bb.array();
-		if (bytes[4] == 5)
-		{
-			return new DataEndMarker();
-		}
-		if (bytes[4] == 10)
-		{
-			final int length = bb.getInt();
-			final byte[] temp = new byte[length];
-			bb.get(temp);
-			try
-			{
-				final String o = new String(temp, "UTF-8");
-				return new Exception(o);
-			}
-			catch (final Exception e)
-			{
-				throw e;
-			}
-		}
-		final ArrayList<Object> retval = new ArrayList<Object>(numFields);
-		int i = 0;
-		while (i < numFields)
-		{
-			if (bytes[i + 4] == 0)
-			{
-				// long
-				final Long o = bb.getLong();
-				retval.add(o);
-			}
-			else if (bytes[i + 4] == 1)
-			{
-				// integer
-				final Integer o = bb.getInt();
-				retval.add(o);
-			}
-			else if (bytes[i + 4] == 2)
-			{
-				// double
-				final Double o = bb.getDouble();
-				retval.add(o);
-			}
-			else if (bytes[i + 4] == 3)
-			{
-				// date
-				final MyDate o = new MyDate(bb.getLong());
-				retval.add(o);
-			}
-			else if (bytes[i + 4] == 4)
-			{
-				// string
-				final int length = bb.getInt();
-				final byte[] temp = new byte[length];
-				bb.get(temp);
-				try
-				{
-					final String o = new String(temp, "UTF-8");
-					retval.add(o);
-				}
-				catch (final Exception e)
-				{
-					throw e;
-				}
-			}
-			else
-			{
-				throw new IOException("Unknown type " + bytes[i + 4] + " in fromBytes()");
 			}
 
 			i++;

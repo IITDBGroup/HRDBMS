@@ -1,16 +1,20 @@
 package com.exascale.optimizer;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CharsetEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.concurrent.locks.LockSupport;
-import com.exascale.exceptions.LockAbortException;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
 import com.exascale.filesystem.RID;
@@ -24,96 +28,69 @@ import com.exascale.managers.ResourceManager;
 import com.exascale.misc.ArrayListLong;
 import com.exascale.misc.BufferedLinkedBlockingQueue;
 import com.exascale.misc.DataEndMarker;
-import com.exascale.misc.DateParser;
-import com.exascale.misc.FastStringTokenizer;
 import com.exascale.misc.MyDate;
 import com.exascale.misc.RowComparator;
-import com.exascale.misc.Utils;
-import com.exascale.tables.Schema.FieldValue;
 import com.exascale.tables.Schema;
+import com.exascale.tables.Schema.FieldValue;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.ThreadPoolThread;
 
 public final class Index implements Serializable
 {
-	private String fileName;
+	private static Charset cs = StandardCharsets.UTF_8;
 
+	private static long soffset;
+	private static sun.misc.Unsafe unsafe;
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+			final Field fieldToUpdate = String.class.getDeclaredField("value");
+			// get unsafe offset to this field
+			soffset = unsafe.objectFieldOffset(fieldToUpdate);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
+	private String fileName;
 	private ArrayList<String> keys;
 	private ArrayList<String> types;
 	private ArrayList<Boolean> orders;
 	private Filter f;
 	private ArrayList<Filter> secondary = new ArrayList<Filter>();
 	private boolean positioned = false;
-	private ArrayListLong ridList = new ArrayListLong();
-	private String col;
-	private String op;
-	private ArrayList<Filter> terminates = new ArrayList<Filter>();
-	private IndexRecord line;
+	private transient ArrayListLong ridList;
+	private transient String col;
+	private transient String op;
+	private transient ArrayList<Filter> terminates;
+	private transient IndexRecord line;
 	// private MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
 	private HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
-	private int count = 0;
 	private boolean indexOnly = false;
 	private ArrayList<Integer> fetches = new ArrayList<Integer>();
 	private ArrayList<String> fetchTypes = new ArrayList<String>();
-	private ArrayList<Object> row;
+	private transient ArrayList<Object> row;
 	private volatile boolean delayed = false;
 	private ArrayList<Filter> delayedConditions;
 	private HashMap<String, String> renames;
-	private BufferedLinkedBlockingQueue queue;
-	private IndexWriterThread iwt;
-	private volatile Thread lastThread = null;
+	private transient BufferedLinkedBlockingQueue queue;
+	private transient IndexWriterThread iwt;
+	private transient volatile Thread lastThread = null;
 	private long offset = 13;
 	private Transaction tx;
 	private volatile Boolean isUniqueVar = null;
 	public HashMap<Block, Page> myPages = new HashMap<Block, Page>();
-	//public HashSet<Block> changedBlocks = new HashSet<Block>();
-	
-	public boolean equals(Object obj)
-	{
-		if (obj == null || !(obj instanceof Index))
-		{
-			return false;
-		}
-		
-		Index rhs = (Index)obj;
-		boolean retval = keys.equals(rhs.keys) && types.equals(rhs.types) && orders.equals(rhs.orders);
-		if (!retval)
-		{
-			return false;
-		}
-		
-		if (!fileName.startsWith("/") && !rhs.fileName.startsWith("/"))
-		{
-			return fileName.equals(rhs.fileName);
-		}
-		
-		if (fileName.startsWith("/") && rhs.fileName.startsWith("/"))
-		{
-			return fileName.equals(rhs.fileName);
-		}
-		
-		String l = null;
-		String r = null;
-		if (fileName.contains("/"))
-		{
-			l = fileName.substring(fileName.lastIndexOf('/') + 1);
-		}
-		else
-		{
-			l = fileName;
-		}
-		
-		if (rhs.fileName.contains("/"))
-		{
-			r = rhs.fileName.substring(rhs.fileName.lastIndexOf('/') + 1);
-		}
-		else
-		{
-			r = rhs.fileName;
-		}
-		
-		return l.equals(r);
-	}
+	private CharsetDecoder cd = cs.newDecoder();
+	private CharsetEncoder ce = cs.newEncoder();
+
+	private RowComparator rc;
+
+	public HashMap<Block, HashMap<Integer, ArrayList<Object>>> cache = new HashMap<Block, HashMap<Integer, ArrayList<Object>>>();
 
 	public Index(String fileName, ArrayList<String> keys, ArrayList<String> types, ArrayList<Boolean> orders)
 	{
@@ -127,425 +104,91 @@ public final class Index implements Serializable
 			cols2Pos.put(key, i);
 			i++;
 		}
+
+		rc = new RowComparator(orders, types);
 	}
-	
-	public boolean isUnique() throws Exception
+
+	public static Index deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
 	{
-		if (isUniqueVar == null)
+		Index value = (Index)unsafe.allocateInstance(Index.class);
+		int type = OperatorUtils.getType(in);
+		if (type == 0)
 		{
-			Block b = new Block(fileName, 0);
-			LockManager.sLock(b, tx.number());
-			tx.requestPage(b);
-			Page p = null;
-			try
-			{
-				p = tx.getPage(b);
-			}
-			catch(Exception e)
-			{
-				HRDBMSWorker.logger.error("", e);
-				throw e;
-			}
-		
-			boolean val = p.get(4) == 1;
-			isUniqueVar = new Boolean(val);
-		}
-		
-		return isUniqueVar;
-	}
-	
-	public ArrayList<String> getKeys()
-	{
-		return keys;
-	}
-	
-	public ArrayList<String> getTypes()
-	{
-		return types;
-	}
-	
-	public ArrayList<Boolean> getOrders()
-	{
-		return orders;
-	}
-	
-	private boolean reallyViolatesUniqueConstraint(FieldValue[] keys) throws Exception
-	{
-		IndexRecord line2 = line;
-		while (!line2.isNull() && line2.keysMatch(keys))
-		{
-			if (!line2.isTombstone())
-			{
-				return true;
-			}
-			
-			line2 = line2.nextRecord();
-		}
-		
-		return false;
-	}
-	
-	public void insert(FieldValue[] keys, RID rid) throws Exception
-	{
-		seek(13);
-		this.setEqualsPosMulti(keys);
-		if (line.isLeaf() && line.keysMatch(keys))
-		{
-			if (isUnique() && reallyViolatesUniqueConstraint(keys))
-			{
-				HRDBMSWorker.logger.debug("Unique constraint violation for keys: " + keys);
-				throw new Exception("Violates unique constraint - " + fileName);
-			}
-		}
-		if (line.isLeaf())
-		{
-			line = line.getUp(true);
-		}
-		if (line.containsRoom())
-		{
-			BlockAndOffset blockAndOffset = line.writeNewLeaf(keys, rid);
-			line.addDown(keys, blockAndOffset);
-		}
-		else
-		{
-			line.split();
-			seek(13);
-			this.setEqualsPosMulti(keys);
-			line = line.getUp(true);
-			BlockAndOffset blockAndOffset = line.writeNewLeaf(keys, rid);
-			line.addDown(keys, blockAndOffset);
-		}
-		
-		//LockManager.releaseUnusedXLocks(tx, this);
-	}
-	
-	public void insertNoLog(FieldValue[] keys, RID rid) throws Exception
-	{
-		seek(13);
-		this.setEqualsPosMulti(keys);
-		if (line.isLeaf() && line.keysMatch(keys))
-		{
-			if (isUnique() && reallyViolatesUniqueConstraint(keys))
-			{
-				HRDBMSWorker.logger.debug("Unique constraint violation for keys: " + keys);
-				throw new Exception("Violates unique constraint");
-			}
-		}
-		
-		if (line.isLeaf())
-		{
-			line = line.getUp(true);
-		}
-		if (line.containsRoom())
-		{
-			BlockAndOffset blockAndOffset = line.writeNewLeafNoLog(keys, rid);
-			line.addDownNoLog(keys, blockAndOffset);
-		}
-		else
-		{
-			line.splitNoLog();
-			seek(13);
-			this.setEqualsPosMulti(keys);
-			line = line.getUp(true);
-			BlockAndOffset blockAndOffset = line.writeNewLeafNoLog(keys, rid);
-			line.addDownNoLog(keys, blockAndOffset);
-		}
-	}
-	
-	public void delete(FieldValue[] keys, RID rid) throws Exception
-	{
-		seek(13);
-		this.setEqualsPosMulti(keys);
-		if (!line.isLeaf())
-		{
-			//LockManager.releaseUnusedXLocks(tx, this);
-			return;
-		}
-		while (!line.getRid().equals(rid) || line.isTombstone())
-		{
-			line = line.nextRecord(true);
-			
-			if (line.isNull())
-			{
-				//LockManager.releaseUnusedXLocks(tx, this);
-				return;
-			}
-			
-			if (!line.keysMatch(keys))
-			{
-				//LockManager.releaseUnusedXLocks(tx, this);
-				return;
-			}
-		}
-		
-		line.markTombstone();
-		//LockManager.releaseUnusedXLocks(tx, this);
-	}
-	
-	public void replace(FieldValue[] keys, RID oldRid, RID newRid) throws Exception
-	{
-		seek(13);
-		this.setEqualsPosMulti(keys);
-		if (!line.isLeaf())
-		{
-			//LockManager.releaseUnusedXLocks(tx, this);
-			return;
-		}
-		while (!line.getRid().equals(oldRid) || line.isTombstone())
-		{
-			line = line.nextRecord(true);
-			
-			if (line.isNull())
-			{
-				//LockManager.releaseUnusedXLocks(tx, this);
-				return;
-			}
-			
-			if (!line.keysMatch(keys))
-			{
-				//LockManager.releaseUnusedXLocks(tx, this);
-				return;
-			}
-		}
-		
-		line.replaceRid(newRid);
-		//LockManager.releaseUnusedXLocks(tx, this);
-	}
-	
-	public IndexRecord get(FieldValue[] keys) throws Exception
-	{
-		seek(13);
-		this.setEqualsPosMulti(keys);
-		if (!line.isLeaf())
-		{
-			return null;
-		}
-		
-		if (!line.keysMatch(keys))
-		{
-			return null;
+			return (Index)OperatorUtils.readReference(in, prev);
 		}
 
-		if (line.isTombstone())
+		if (type != 64)
 		{
-			while (true)
-			{
-				line = line.nextRecord(true);
-			
-				if (line.isNull())
-				{
-					return null;
-				}
-			
-				if (!line.keysMatch(keys))
-				{
-					return null;
-				}
-			
-				if (!line.isTombstone)
-				{
-					break;
-				}
-			}
+			throw new Exception("Corrupted stream. Expected type 64 but received " + type);
 		}
-		
-		return line;
+
+		prev.put(OperatorUtils.readLong(in), value);
+		value.fileName = OperatorUtils.readString(in, prev);
+		value.keys = OperatorUtils.deserializeALS(in, prev);
+		value.types = OperatorUtils.deserializeALS(in, prev);
+		value.orders = OperatorUtils.deserializeALB(in, prev);
+		value.f = OperatorUtils.deserializeFilter(in, prev);
+		value.secondary = OperatorUtils.deserializeALF(in, prev);
+		value.positioned = OperatorUtils.readBool(in);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.indexOnly = OperatorUtils.readBool(in);
+		value.fetches = OperatorUtils.deserializeALI(in, prev);
+		value.fetchTypes = OperatorUtils.deserializeALS(in, prev);
+		value.delayed = OperatorUtils.readBool(in);
+		value.delayedConditions = OperatorUtils.deserializeALF(in, prev);
+		value.renames = OperatorUtils.deserializeStringHM(in, prev);
+		value.offset = OperatorUtils.readLong(in);
+		value.tx = new Transaction(OperatorUtils.readLong(in));
+		value.isUniqueVar = OperatorUtils.readBoolClass(in, prev);
+		value.myPages = new HashMap<Block, Page>();
+		value.rc = new RowComparator(value.orders, value.types);
+		value.cache = new HashMap<Block, HashMap<Integer, ArrayList<Object>>>();
+		value.cd = cs.newDecoder();
+		value.ce = cs.newEncoder();
+		return value;
 	}
-	
-	public void massDelete() throws Exception
+
+	// public HashSet<Block> changedBlocks = new HashSet<Block>();
+	// private static long MAX_PAGES;
+
+	// static
+	// {
+	// MAX_PAGES =
+	// (Long.parseLong(HRDBMSWorker.getHParms().getProperty("bp_pages")) /
+	// MetaData.getNumDevices()) / 15;
+	// }
+
+	private static FieldValue[] aloToFieldValues(ArrayList<Object> row)
 	{
-		seek(13);
-		line = new IndexRecord(fileName, offset, tx, true);
-		if (line.p.getInt(line.off + 5) == 0)
-		{
-			//LockManager.releaseUnusedXLocks(tx, this);
-			return;
-		}
-		while (!line.isLeaf())
-		{
-			line = line.getDown(0, true);
-		}
-		
-		while (!line.isNull())
-		{
-			if (!line.isTombstone())
-			{
-				line.markTombstone();
-			}
-			
-			line = line.nextRecord(true);
-		}
-		
-		//LockManager.releaseUnusedXLocks(tx, this);
-	}
-	
-	public void massDeleteNoLog() throws Exception
-	{
-		seek(13);
-		line = new IndexRecord(fileName, offset, tx, true);
-		if (line.p.getInt(line.off + 5) == 0)
-		{
-			return;
-		}
-		while (!line.isLeaf())
-		{
-			line = line.getDown(0, true);
-		}
-		
-		while (!line.isNull())
-		{
-			if (!line.isTombstone())
-			{
-				line.markTombstoneNoLog();
-			}
-			
-			line = line.nextRecord(true);
-		}
-	}
-	
-	private static final class BlockAndOffset
-	{
-		private int block;
-		private int offset;
-		
-		public BlockAndOffset(int block, int offset)
-		{
-			this.block = block;
-			this.offset = offset;
-		}
-		
-		public int block()
-		{
-			return block;
-		}
-		
-		public int offset()
-		{
-			return offset;
-		}
-	}
-	
-	private final void setEqualsPosMulti(FieldValue[] vals) throws Exception
-	{
-		//HRDBMSWorker.logger.debug("Searching " + fileName + " for " + search);
-		line = new IndexRecord(fileName, offset, tx, true);
-		if (line.p.getInt(line.off + 5) == 0)
-		{
-			return;
-		}
-		
-		while (!line.isLeaf())
-		{
-			//HRDBMSWorker.logger.debug("Line is " + line);
-			if (line.p.getInt(line.off + 5) == 0)
-			{
-				return;
-			}
-			
-			int i = 0;
-			Iterator it = line.internalIterator(types);
-			while (it.hasNext())
-			{
-				ArrayList<Object> k = (ArrayList<Object>)it.next();
-				//HRDBMSWorker.logger.debug("Saw internal key: " + k);
-				//if (((Comparable)val).compareTo(key) < 1)
-				if (compare(vals, k) < 1)
-				{
-					line = line.getDown(i, true);
-					break;
-				}
-				else
-				{
-					if (!it.hasNext())
-					{
-						line = line.getDown(i, true);
-						break;
-					}
-				}
-				
-				i++;
-			}
-		}
-	}
-	
-	private final void setEqualsPosMulti(FieldValue[] vals, boolean xLock) throws Exception
-	{
-		if (xLock)
-		{
-			setEqualsPosMulti(vals);
-			return;
-		}
-		
-		//HRDBMSWorker.logger.debug("Searching " + fileName + " for " + search);
-		line = new IndexRecord(fileName, offset, tx);
-		if (line.p.getInt(line.off + 5) == 0)
-		{
-			return;
-		}
-		
-		while (!line.isLeaf())
-		{
-			//HRDBMSWorker.logger.debug("Line is " + line);
-			if (line.p.getInt(line.off + 5) == 0)
-			{
-				return;
-			}
-			
-			int i = 0;
-			Iterator it = line.internalIterator(types);
-			while (it.hasNext())
-			{
-				ArrayList<Object> k = (ArrayList<Object>)it.next();
-				//HRDBMSWorker.logger.debug("Saw internal key: " + k);
-				//if (((Comparable)val).compareTo(key) < 1)
-				if (compare(vals, k) < 1)
-				{
-					line = line.getDown(i);
-					break;
-				}
-				else
-				{
-					if (!it.hasNext())
-					{
-						line = line.getDown(i);
-						break;
-					}
-				}
-				
-				i++;
-			}
-		}
-	}
-	
-	private final int compare(FieldValue[] vals, ArrayList<Object> r)
-	{
-		RowComparator rc = new RowComparator(orders, types);
-		ArrayList<Object> lhs = new ArrayList<Object>();
+		FieldValue[] retval = new FieldValue[row.size()];
 		int i = 0;
-		for (FieldValue val : vals)
+		for (Object o : row)
 		{
-			lhs.add(val.getValue());
+			if (o instanceof Integer)
+			{
+				retval[i] = new Schema.IntegerFV((Integer)o);
+			}
+			else if (o instanceof Long)
+			{
+				retval[i] = new Schema.BigintFV((Long)o);
+			}
+			else if (o instanceof Double)
+			{
+				retval[i] = new Schema.DoubleFV((Double)o);
+			}
+			else if (o instanceof MyDate)
+			{
+				retval[i] = new Schema.DateFV((MyDate)o);
+			}
+			else if (o instanceof String)
+			{
+				retval[i] = new Schema.VarcharFV((String)o);
+			}
+
 			i++;
 		}
-		
-		return rc.compare(lhs, r);
-	}
-	
-	private final int compare(ArrayList<Object> vals, ArrayList<Object> r)
-	{
-		RowComparator rc = new RowComparator(orders, types);
-		return rc.compare(vals, r);
-	}
-	
-	public void setTransaction(Transaction tx)
-	{
-		this.tx = tx;
-		//HRDBMSWorker.logger.debug(this + " just had its transaction set to " + tx);
-	}
-	
-	private void seek(int off)
-	{
-		offset = off;
+
+		return retval;
 	}
 
 	public void addSecondaryFilter(Filter filter)
@@ -635,7 +278,7 @@ public final class Index implements Serializable
 		{
 			queue.close();
 		}
-		
+
 		keys = null;
 		types = null;
 		orders = null;
@@ -644,7 +287,8 @@ public final class Index implements Serializable
 		fetchTypes = null;
 		iwt = null;
 		ridList = null;
-		terminates = null;row = null;
+		terminates = null;
+		row = null;
 		myPages = null;
 		line = null;
 		delayedConditions = null;
@@ -655,6 +299,124 @@ public final class Index implements Serializable
 	public boolean contains(String col)
 	{
 		return keys.contains(col);
+	}
+
+	public void delete(FieldValue[] keys, RID rid) throws Exception
+	{
+		seek(13);
+		this.setEqualsPosMulti(keys);
+		if (!line.isLeaf())
+		{
+			// LockManager.releaseUnusedXLocks(tx, this);
+			return;
+		}
+		while (!line.getRid().equals(rid) || line.isTombstone())
+		{
+			line = line.nextRecord(true);
+
+			if (line.isNull())
+			{
+				// LockManager.releaseUnusedXLocks(tx, this);
+				return;
+			}
+
+			if (!line.keysMatch(keys))
+			{
+				// LockManager.releaseUnusedXLocks(tx, this);
+				return;
+			}
+		}
+
+		line.markTombstone();
+		// LockManager.releaseUnusedXLocks(tx, this);
+	}
+
+	@Override
+	public boolean equals(Object obj)
+	{
+		if (obj == null || !(obj instanceof Index))
+		{
+			return false;
+		}
+
+		Index rhs = (Index)obj;
+		boolean retval = keys.equals(rhs.keys) && types.equals(rhs.types) && orders.equals(rhs.orders);
+		if (!retval)
+		{
+			return false;
+		}
+
+		if (!fileName.startsWith("/") && !rhs.fileName.startsWith("/"))
+		{
+			return fileName.equals(rhs.fileName);
+		}
+
+		if (fileName.startsWith("/") && rhs.fileName.startsWith("/"))
+		{
+			return fileName.equals(rhs.fileName);
+		}
+
+		String l = null;
+		String r = null;
+		if (fileName.contains("/"))
+		{
+			l = fileName.substring(fileName.lastIndexOf('/') + 1);
+		}
+		else
+		{
+			l = fileName;
+		}
+
+		if (rhs.fileName.contains("/"))
+		{
+			r = rhs.fileName.substring(rhs.fileName.lastIndexOf('/') + 1);
+		}
+		else
+		{
+			r = rhs.fileName;
+		}
+
+		return l.equals(r);
+	}
+
+	public IndexRecord get(FieldValue[] keys) throws Exception
+	{
+		seek(13);
+		this.setEqualsPosMulti(keys);
+		if (!line.isLeaf())
+		{
+			return null;
+		}
+
+		if (!line.keysMatch(keys))
+		{
+			return null;
+		}
+
+		if (line.isTombstone())
+		{
+			while (true)
+			{
+				line = line.nextRecord(true);
+
+				if (line.isNull())
+				{
+					return null;
+				}
+
+				if (!line.keysMatch(keys))
+				{
+					return null;
+				}
+
+				if (!line.isTombstone)
+				{
+					break;
+				}
+			}
+		}
+
+		return line;
 	}
 
 	public Filter getCondition()
@@ -670,6 +432,16 @@ public final class Index implements Serializable
 	public Filter getFilter()
 	{
 		return f;
+	}
+
+	public ArrayList<String> getKeys()
+	{
+		return keys;
+	}
+
+	public ArrayList<Boolean> getOrders()
+	{
+		return orders;
 	}
 
 	public ArrayList<String> getReferencedCols()
@@ -715,6 +487,154 @@ public final class Index implements Serializable
 		return secondary;
 	}
 
+	public ArrayList<String> getTypes()
+	{
+		return types;
+	}
+
+	public void insert(FieldValue[] keys, RID rid) throws Exception
+	{
+		seek(13);
+		this.setEqualsPosMulti(keys);
+		if (line.isLeaf() && line.keysMatch(keys))
+		{
+			if (isUnique() && reallyViolatesUniqueConstraint(keys))
+			{
+				HRDBMSWorker.logger.debug("Unique constraint violation on " + fileName);
+				throw new Exception("Violates unique constraint - " + fileName);
+			}
+		}
+		if (line.isLeaf())
+		{
+			line = line.getUp(true);
+		}
+		if (line.containsRoom())
+		{
+			BlockAndOffset blockAndOffset = line.writeNewLeaf(keys, rid);
+			line.addDown(keys, blockAndOffset);
+		}
+		else
+		{
+			line.split();
+			seek(13);
+			this.setEqualsPosMulti(keys);
+			line = line.getUp(true);
+			BlockAndOffset blockAndOffset = line.writeNewLeaf(keys, rid);
+			line.addDown(keys, blockAndOffset);
+		}
+
+		// LockManager.releaseUnusedXLocks(tx, this);
+	}
+
+	public void insertNoLog(FieldValue[] keys, RID rid) throws Exception
+	{
+		seek(13);
+		this.setEqualsPosMulti(keys);
+		if (line.isLeaf() && line.keysMatch(keys))
+		{
+			if (isUnique() && reallyViolatesUniqueConstraint(keys))
+			{
+				HRDBMSWorker.logger.debug("Unique constraint violation");
+				throw new Exception("Violates unique constraint");
+			}
+		}
+
+		if (line.isLeaf())
+		{
+			line = line.getUp(true);
+		}
+		if (line.containsRoom())
+		{
+			BlockAndOffset blockAndOffset = line.writeNewLeafNoLog(keys, rid);
+			line.addDownNoLog(keys, blockAndOffset);
+		}
+		else
+		{
+			line.splitNoLog();
+			seek(13);
+			this.setEqualsPosMulti(keys);
+			line = line.getUp(true);
+			BlockAndOffset blockAndOffset = line.writeNewLeafNoLog(keys, rid);
+			line.addDownNoLog(keys, blockAndOffset);
+		}
+	}
+
+	public boolean isUnique() throws Exception
+	{
+		if (isUniqueVar == null)
+		{
+			Block b = new Block(fileName, 0);
+			LockManager.sLock(b, tx.number());
+			tx.requestPage(b);
+			Page p = null;
+			try
+			{
+				p = tx.getPage(b);
+			}
+			catch (Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				throw e;
+			}
+
+			boolean val = p.get(4) == 1;
+			isUniqueVar = new Boolean(val);
+		}
+
+		return isUniqueVar;
+	}
+
+	public void massDelete() throws Exception
+	{
+		seek(13);
+		line = new IndexRecord(fileName, offset, tx, true);
+		if (line.p.getInt(line.off + 5) == 0)
+		{
+			// LockManager.releaseUnusedXLocks(tx, this);
+			return;
+		}
+		while (!line.isLeaf())
+		{
+			line = line.getDown(0, true);
+		}
+
+		while (!line.isNull())
+		{
+			if (!line.isTombstone())
+			{
+				line.markTombstone();
+			}
+
+			line = line.nextRecord(true);
+		}
+
+		// LockManager.releaseUnusedXLocks(tx, this);
+	}
+
+	public void massDeleteNoLog() throws Exception
+	{
+		seek(13);
+		line = new IndexRecord(fileName, offset, tx, true);
+		if (line.p.getInt(line.off + 5) == 0)
+		{
+			return;
+		}
+		while (!line.isLeaf())
+		{
+			line = line.getDown(0, true);
+		}
+
+		while (!line.isNull())
+		{
+			if (!line.isTombstone())
+			{
+				line.markTombstoneNoLog();
+			}
+
+			line = line.nextRecord(true);
+		}
+	}
+
 	public Object next() throws Exception
 	{
 		if (lastThread == null)
@@ -742,6 +662,8 @@ public final class Index implements Serializable
 		if (!positioned)
 		{
 			queue = new BufferedLinkedBlockingQueue(ResourceManager.QUEUE_SIZE);
+			ridList = new ArrayListLong();
+			terminates = new ArrayList<Filter>();
 			try
 			{
 				line = new IndexRecord(fileName, offset, tx);
@@ -758,7 +680,7 @@ public final class Index implements Serializable
 					iwt.start();
 				}
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
 				throw e;
@@ -782,13 +704,17 @@ public final class Index implements Serializable
 				return o;
 			}
 		}
-		
+
 		if (o instanceof Exception)
 		{
 			throw (Exception)o;
 		}
 		return o;
 
+	}
+
+	public void open()
+	{
 	}
 
 	public void open(int device, MetaData meta) throws Exception
@@ -811,9 +737,35 @@ public final class Index implements Serializable
 		// System.out.println("Index is opened delayed");
 		// }
 	}
-	
-	public void open()
+
+	public void replace(FieldValue[] keys, RID oldRid, RID newRid) throws Exception
 	{
+		seek(13);
+		this.setEqualsPosMulti(keys);
+		if (!line.isLeaf())
+		{
+			// LockManager.releaseUnusedXLocks(tx, this);
+			return;
+		}
+		while (!line.getRid().equals(oldRid) || line.isTombstone())
+		{
+			line = line.nextRecord(true);
+
+			if (line.isNull())
+			{
+				// LockManager.releaseUnusedXLocks(tx, this);
+				return;
+			}
+
+			if (!line.keysMatch(keys))
+			{
+				// LockManager.releaseUnusedXLocks(tx, this);
+				return;
+			}
+		}
+
+		line.replaceRid(newRid);
+		// LockManager.releaseUnusedXLocks(tx, this);
 	}
 
 	public synchronized void reset() throws Exception
@@ -858,6 +810,37 @@ public final class Index implements Serializable
 	public void runDelayed()
 	{
 		delayed = true;
+	}
+
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(64, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		OperatorUtils.writeString(fileName, out, prev);
+		OperatorUtils.serializeALS(keys, out, prev);
+		OperatorUtils.serializeALS(types, out, prev);
+		OperatorUtils.serializeALB(orders, out, prev);
+		OperatorUtils.serializeFilter(f, out, prev);
+		OperatorUtils.serializeALF(secondary, out, prev);
+		OperatorUtils.writeBool(positioned, out);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.writeBool(indexOnly, out);
+		OperatorUtils.serializeALI(fetches, out, prev);
+		OperatorUtils.serializeALS(fetchTypes, out, prev);
+		OperatorUtils.writeBool(delayed, out);
+		OperatorUtils.serializeALF(delayedConditions, out, prev);
+		OperatorUtils.serializeStringHM(renames, out, prev);
+		OperatorUtils.writeLong(offset, out);
+		OperatorUtils.writeLong(tx.number(), out); // Notice type
+		OperatorUtils.writeBoolClass(isUniqueVar, out, prev);
+		// recreate myPages
 	}
 
 	public void setCondition(Filter f)
@@ -919,6 +902,13 @@ public final class Index implements Serializable
 	public void setRenames(HashMap<String, String> renames)
 	{
 		this.renames = renames;
+	}
+
+	public void setTransaction(Transaction tx)
+	{
+		this.tx = tx;
+		// HRDBMSWorker.logger.debug(this + " just had its transaction set to "
+		// + tx);
 	}
 
 	public boolean startsWith(String col)
@@ -1204,7 +1194,7 @@ public final class Index implements Serializable
 							// setFirstPosition();
 						}
 					}
-					else if (op.equals("NL"))
+					else if (op2.equals("NL"))
 					{
 						// setFirstPosition();
 					}
@@ -1227,13 +1217,31 @@ public final class Index implements Serializable
 		}
 	}
 
+	private final int compare(ArrayList<Object> vals, ArrayList<Object> r)
+	{
+		RowComparator rc = new RowComparator(orders, types);
+		return rc.compare(vals, r);
+	}
+
+	private final int compare(FieldValue[] vals, ArrayList<Object> r)
+	{
+		// RowComparator rc = new RowComparator(orders, types);
+		ArrayList<Object> lhs = new ArrayList<Object>(vals.length);
+		for (FieldValue val : vals)
+		{
+			lhs.add(val.getValue());
+		}
+
+		return rc.compare(lhs, r);
+	}
+
 	private boolean currentKeySatisfies() throws Exception
 	{
 		if (line.isNull())
 		{
 			return false;
 		}
-		
+
 		if (line.isTombstone())
 		{
 			return false;
@@ -1288,48 +1296,14 @@ public final class Index implements Serializable
 		return out;
 	}
 
-	private Object getObject(String val, String type) throws Exception
+	private long getPartialRid()
 	{
-		if (type.equals("INT"))
-		{
-			return Utils.parseLong(val);
-		}
-		else if (type.equals("FLOAT"))
-		{
-			return Double.parseDouble(val);
-		}
-		else if (type.equals("CHAR"))
-		{
-			return val;
-		}
-		else if (type.equals("LONG"))
-		{
-			return Utils.parseLong(val);
-		}
-		else if (type.equals("DATE"))
-		{
-			try
-			{
-				return DateParser.parse(val);
-			}
-			catch (final Exception e)
-			{
-				HRDBMSWorker.logger.error("", e);
-				throw e;
-			}
-		}
-
-		return null;
+		return line.getPartialRid();
 	}
 
 	private String getPrefix(Object x)
 	{
 		return ((String)x).substring(0, ((String)x).indexOf("%"));
-	}
-
-	private long getPartialRid()
-	{
-		return line.getPartialRid();
 	}
 
 	private boolean marksEnd() throws Exception
@@ -1373,11 +1347,32 @@ public final class Index implements Serializable
 		retval += x;
 		return retval;
 	}
-	
+
+	private boolean reallyViolatesUniqueConstraint(FieldValue[] keys) throws Exception
+	{
+		IndexRecord line2 = line;
+		while (!line2.isNull() && line2.keysMatch(keys))
+		{
+			if (!line2.isTombstone())
+			{
+				return true;
+			}
+
+			line2 = line2.nextRecord();
+		}
+
+		return false;
+	}
+
+	private void seek(int off)
+	{
+		offset = off;
+	}
+
 	private final void setEqualsPos(Object val) throws Exception
 	{
 		line = new IndexRecord(fileName, offset, tx);
-		
+
 		while (!line.isLeaf())
 		{
 			int i = 0;
@@ -1404,181 +1399,159 @@ public final class Index implements Serializable
 					line = line.getDown(i);
 					break;
 				}
-				
+
+				i++;
+			}
+		}
+	}
+
+	private final void setEqualsPosMulti(FieldValue[] vals) throws Exception
+	{
+		// HRDBMSWorker.logger.debug("Searching " + fileName + " for " +
+		// search);
+		line = new IndexRecord(fileName, offset, tx, true);
+		if (line.p.getInt(line.off + 5) == 0)
+		{
+			return;
+		}
+
+		while (!line.isLeaf())
+		{
+			// HRDBMSWorker.logger.debug("Line is " + line);
+			if (line.p.getInt(line.off + 5) == 0)
+			{
+				return;
+			}
+
+			int i = 0;
+			Iterator it = line.internalIterator(types);
+			while (it.hasNext())
+			{
+				ArrayList<Object> k = (ArrayList<Object>)it.next();
+				// HRDBMSWorker.logger.debug("Saw internal key: " + k);
+				// if (((Comparable)val).compareTo(key) < 1)
+				if (compare(vals, k) < 1)
+				{
+					line = line.getDown(i, true);
+					break;
+				}
+				else
+				{
+					if (!it.hasNext())
+					{
+						line = line.getDown(i, true);
+						break;
+					}
+				}
+
+				i++;
+			}
+		}
+	}
+
+	private final void setEqualsPosMulti(FieldValue[] vals, boolean xLock) throws Exception
+	{
+		if (xLock)
+		{
+			setEqualsPosMulti(vals);
+			return;
+		}
+
+		// HRDBMSWorker.logger.debug("Searching " + fileName + " for " +
+		// search);
+		line = new IndexRecord(fileName, offset, tx);
+		if (line.p.getInt(line.off + 5) == 0)
+		{
+			return;
+		}
+
+		while (!line.isLeaf())
+		{
+			// HRDBMSWorker.logger.debug("Line is " + line);
+			if (line.p.getInt(line.off + 5) == 0)
+			{
+				return;
+			}
+
+			int i = 0;
+			Iterator it = line.internalIterator(types);
+			while (it.hasNext())
+			{
+				ArrayList<Object> k = (ArrayList<Object>)it.next();
+				// HRDBMSWorker.logger.debug("Saw internal key: " + k);
+				// if (((Comparable)val).compareTo(key) < 1)
+				if (compare(vals, k) < 1)
+				{
+					line = line.getDown(i);
+					break;
+				}
+				else
+				{
+					if (!it.hasNext())
+					{
+						line = line.getDown(i);
+						break;
+					}
+				}
+
 				i++;
 			}
 		}
 	}
 
 	/*
-	private final void setEqualsPos(Object val)
-	{
-		int count = 0;
-		try
-		{
-			line = in.readLine();
-			count++;
-			long oldOff = -1;
-			int i = -1;
-			FastStringTokenizer tokens = null;
-			while (true)
-			{
-				while (!line.equals("\u0000"))
-				{
-					tokens = new FastStringTokenizer(line, "|", false);
-					i = 0;
-					// System.out.println("Col = " + col);
-					while (i < keys.indexOf(col))
-					{
-						tokens.nextToken();
-						i++;
-					}
-					final String keyVal = tokens.nextToken();
-					i++;
+	 * private final void setEqualsPos(Object val) { int count = 0; try { line =
+	 * in.readLine(); count++; long oldOff = -1; int i = -1; FastStringTokenizer
+	 * tokens = null; while (true) { while (!line.equals("\u0000")) { tokens =
+	 * new FastStringTokenizer(line, "|", false); i = 0; //
+	 * System.out.println("Col = " + col); while (i < keys.indexOf(col)) {
+	 * tokens.nextToken(); i++; } final String keyVal = tokens.nextToken(); i++;
+	 * 
+	 * final String type = types.get(keys.indexOf(col)); Object key = null; try
+	 * { key = getObject(keyVal, type); } catch (final Exception e) {
+	 * System.out.println("Error parsing value in Index.");
+	 * System.out.println("Line is " + line); System.out.println("File is " +
+	 * in); System.exit(1); } if (orders.get(0)) { if (key instanceof Double) {
+	 * if (val instanceof Long) { val = ((Long)val).doubleValue(); } else if
+	 * (val instanceof Integer) { val = ((Integer)val).doubleValue(); } } else
+	 * if (key instanceof Long) { if (val instanceof Integer) { val =
+	 * ((Integer)val).longValue(); } }
+	 * 
+	 * if (((Comparable)key).compareTo(val) < 0) { while (i < keys.size()) {
+	 * tokens.nextToken(); i++; }
+	 * 
+	 * try { oldOff = Utils.parseLong(tokens.nextToken()); } catch (final
+	 * Exception e) { HRDBMSWorker.logger.error("", e);
+	 * System.out.println("Ran out of tokens reading line " + line);
+	 * System.exit(1); } } else if (((Comparable)key).compareTo(val) == 0) { if
+	 * (keys.size() == 1) { while (i < keys.size()) { tokens.nextToken(); i++; }
+	 * 
+	 * oldOff = Utils.parseLong(tokens.nextToken()); } break; } else { break; }
+	 * } else { if (((Comparable)key).compareTo(val) > 0) { while (i <
+	 * keys.size()) { tokens.nextToken(); i++; }
+	 * 
+	 * oldOff = Utils.parseLong(tokens.nextToken()); } else if
+	 * (((Comparable)key).compareTo(val) == 0) { if (keys.size() == 1) { while
+	 * (i < keys.size()) { tokens.nextToken(); i++; }
+	 * 
+	 * oldOff = Utils.parseLong(tokens.nextToken()); } break; } else { break; }
+	 * }
+	 * 
+	 * line = in.readLine(); count++; }
+	 * 
+	 * if (oldOff == -1) { while (i < keys.size()) { tokens.nextToken(); i++; }
+	 * 
+	 * oldOff = Utils.parseLong(tokens.nextToken()); }
+	 * 
+	 * if (oldOff >= 0) { break; } in.seek(-1 * oldOff); line = in.readLine();
+	 * oldOff = -1; count++; if (count > 500) { System.out.println(count +
+	 * " rows have been read trying to find starting position based on " + val +
+	 * " in index " + fileName); } } } catch (final Exception e) {
+	 * HRDBMSWorker.logger.error("", e); System.exit(1); }
+	 * 
+	 * // System.out.println("First line is " + line); }
+	 */
 
-					final String type = types.get(keys.indexOf(col));
-					Object key = null;
-					try
-					{
-						key = getObject(keyVal, type);
-					}
-					catch (final Exception e)
-					{
-						System.out.println("Error parsing value in Index.");
-						System.out.println("Line is " + line);
-						System.out.println("File is " + in);
-						System.exit(1);
-					}
-					if (orders.get(0))
-					{
-						if (key instanceof Double)
-						{
-							if (val instanceof Long)
-							{
-								val = ((Long)val).doubleValue();
-							}
-							else if (val instanceof Integer)
-							{
-								val = ((Integer)val).doubleValue();
-							}
-						}
-						else if (key instanceof Long)
-						{
-							if (val instanceof Integer)
-							{
-								val = ((Integer)val).longValue();
-							}
-						}
-
-						if (((Comparable)key).compareTo(val) < 0)
-						{
-							while (i < keys.size())
-							{
-								tokens.nextToken();
-								i++;
-							}
-
-							try
-							{
-								oldOff = Utils.parseLong(tokens.nextToken());
-							}
-							catch (final Exception e)
-							{
-								HRDBMSWorker.logger.error("", e);
-								System.out.println("Ran out of tokens reading line " + line);
-								System.exit(1);
-							}
-						}
-						else if (((Comparable)key).compareTo(val) == 0)
-						{
-							if (keys.size() == 1)
-							{
-								while (i < keys.size())
-								{
-									tokens.nextToken();
-									i++;
-								}
-
-								oldOff = Utils.parseLong(tokens.nextToken());
-							}
-							break;
-						}
-						else
-						{
-							break;
-						}
-					}
-					else
-					{
-						if (((Comparable)key).compareTo(val) > 0)
-						{
-							while (i < keys.size())
-							{
-								tokens.nextToken();
-								i++;
-							}
-
-							oldOff = Utils.parseLong(tokens.nextToken());
-						}
-						else if (((Comparable)key).compareTo(val) == 0)
-						{
-							if (keys.size() == 1)
-							{
-								while (i < keys.size())
-								{
-									tokens.nextToken();
-									i++;
-								}
-
-								oldOff = Utils.parseLong(tokens.nextToken());
-							}
-							break;
-						}
-						else
-						{
-							break;
-						}
-					}
-
-					line = in.readLine();
-					count++;
-				}
-
-				if (oldOff == -1)
-				{
-					while (i < keys.size())
-					{
-						tokens.nextToken();
-						i++;
-					}
-
-					oldOff = Utils.parseLong(tokens.nextToken());
-				}
-
-				if (oldOff >= 0)
-				{
-					break;
-				}
-				in.seek(-1 * oldOff);
-				line = in.readLine();
-				oldOff = -1;
-				count++;
-				if (count > 500)
-				{
-					System.out.println(count + " rows have been read trying to find starting position based on " + val + " in index " + fileName);
-				}
-			}
-		}
-		catch (final Exception e)
-		{
-			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
-		}
-
-		// System.out.println("First line is " + line);
-	}
-	*/
-	
 	private final void setFirstPosition() throws Exception
 	{
 		line = new IndexRecord(fileName, offset, tx);
@@ -1587,40 +1560,16 @@ public final class Index implements Serializable
 			line = line.getDown(0);
 		}
 	}
-	
+
 	/*
-	private final void setFirstPosition()
-	{
-		try
-		{
-			line = in.readLine();
-			long off = -1;
-			final FastStringTokenizer tokens = new FastStringTokenizer("", "|", false);
-			while (true)
-			{
-				tokens.reuse(line, "|", false);
-				int i = 0;
-				while (i < keys.size())
-				{
-					tokens.nextToken();
-					i++;
-				}
-				off = Utils.parseLong(tokens.nextToken());
-				if (off >= 0)
-				{
-					break;
-				}
-				in.seek(-1 * off);
-				line = in.readLine();
-			}
-		}
-		catch (final Exception e)
-		{
-			HRDBMSWorker.logger.error("", e);
-			System.exit(1);
-		}
-	}
-*/
+	 * private final void setFirstPosition() { try { line = in.readLine(); long
+	 * off = -1; final FastStringTokenizer tokens = new FastStringTokenizer("",
+	 * "|", false); while (true) { tokens.reuse(line, "|", false); int i = 0;
+	 * while (i < keys.size()) { tokens.nextToken(); i++; } off =
+	 * Utils.parseLong(tokens.nextToken()); if (off >= 0) { break; } in.seek(-1
+	 * * off); line = in.readLine(); } } catch (final Exception e) {
+	 * HRDBMSWorker.logger.error("", e); System.exit(1); } }
+	 */
 
 	private final void setStartingPos() throws Exception
 	{
@@ -1643,7 +1592,7 @@ public final class Index implements Serializable
 			orig = f.leftOrig();
 			switchOp();
 		}
-		
+
 		if (op.equals("E") && secondary.size() > 0 && (secondary.size() + 1) == keys.size())
 		{
 			boolean multiPos = true;
@@ -1653,11 +1602,11 @@ public final class Index implements Serializable
 				{
 					if (f2.leftIsColumn() && !f2.rightIsColumn())
 					{
-						
+
 					}
 					else if (f2.rightIsColumn() && !f2.leftIsColumn())
 					{
-						
+
 					}
 					else
 					{
@@ -1671,7 +1620,7 @@ public final class Index implements Serializable
 					break;
 				}
 			}
-			
+
 			try
 			{
 				if (multiPos)
@@ -1680,7 +1629,7 @@ public final class Index implements Serializable
 					ArrayList<Filter> combined = new ArrayList<Filter>();
 					combined.add(f);
 					combined.addAll(secondary);
-				
+
 					int i = 0;
 					while (i < keys.size())
 					{
@@ -1706,7 +1655,7 @@ public final class Index implements Serializable
 									{
 										pos.add(val);
 									}
-								
+
 									found = true;
 									break;
 								}
@@ -1730,27 +1679,27 @@ public final class Index implements Serializable
 									{
 										pos.add(val);
 									}
-								
+
 									found = true;
 									break;
 								}
 							}
 						}
-					
+
 						if (!found)
 						{
 							throw new Exception("Trying to do multi-col position in index, but could not find column " + keys.get(i));
 						}
-					
+
 						i++;
 					}
-				
+
 					FieldValue[] vals = aloToFieldValues(pos);
 					Index.this.setEqualsPosMulti(vals, false);
 					return;
 				}
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				if (f.leftIsColumn())
 				{
@@ -1765,7 +1714,7 @@ public final class Index implements Serializable
 					orig = f.leftOrig();
 					switchOp();
 				}
-				
+
 				terminates.clear();
 			}
 		}
@@ -1917,39 +1866,6 @@ public final class Index implements Serializable
 			// System.out.println("Terminating conditions are " + terminates);
 		}
 	}
-	
-	private static FieldValue[] aloToFieldValues(ArrayList<Object> row)
-	{
-		FieldValue[] retval = new FieldValue[row.size()];
-		int i = 0;
-		for (Object o : row)
-		{
-			if (o instanceof Integer)
-			{
-				retval[i] = new Schema.IntegerFV((Integer)o);
-			}
-			else if (o instanceof Long)
-			{
-				retval[i] = new Schema.BigintFV((Long)o);
-			}
-			else if (o instanceof Double)
-			{
-				retval[i] = new Schema.DoubleFV((Double)o);
-			}
-			else if (o instanceof MyDate)
-			{
-				retval[i] = new Schema.DateFV((MyDate)o);
-			}
-			else if (o instanceof String)
-			{
-				retval[i] = new Schema.VarcharFV((String)o);
-			}
-			
-			i++;
-		}
-		
-		return retval;
-	}
 
 	private void switchOp()
 	{
@@ -1983,110 +1899,6 @@ public final class Index implements Serializable
 		}
 	}
 
-	private final class IndexWriterThread extends ThreadPoolThread
-	{
-		private final ArrayList<String> keys;
-
-		public IndexWriterThread(ArrayList<String> keys)
-		{
-			this.keys = keys;
-		}
-
-		@Override
-		public final void run()
-		{
-			while (true)
-			{
-				if (!indexOnly)
-				{
-					try
-					{
-						while (!currentKeySatisfies())
-						{
-							if (marksEnd())
-							{
-								queue.put(new DataEndMarker());
-								return;
-							}
-
-							line = line.nextRecord();
-						}
-
-						final ArrayList<Object> al = new ArrayList<Object>(1);
-						al.add(getPartialRid());
-						queue.put(al);
-
-						line = line.nextRecord();
-					}
-					catch (final Exception e)
-					{
-						HRDBMSWorker.logger.error("", e);
-						try
-						{
-							queue.put(e); 
-						}
-						catch(Exception f)
-						{}
-						return;
-					}
-				}
-				else
-				{
-					row = new ArrayList<Object>(fetches.size());
-					try
-					{
-						while (!currentKeySatisfies())
-						{
-							if (marksEnd())
-							{
-								queue.put(new DataEndMarker());
-								return;
-							}
-
-							line = line.nextRecord();
-						}
-
-						ridList.add(getPartialRid());
-						ArrayList<Object> keys = line.getKeys(types);
-						for (final int pos : fetches)
-						{
-							final Object val = keys.get(pos);
-							row.add(val);
-						}
-
-						line = line.nextRecord();
-					}
-					catch (final Exception e)
-					{
-						HRDBMSWorker.logger.error("", e);
-						try
-						{
-							queue.put(e);
-						}
-						catch(Exception f)
-						{}
-						return;
-					}
-					try
-					{
-						queue.put(row.clone());
-					}
-					catch(Exception e)
-					{
-						HRDBMSWorker.logger.error("", e);
-						try
-						{
-							queue.put(e);
-						}
-						catch(Exception f)
-						{}
-						return;
-					}
-				}
-			}
-		}
-	}
-	
 	public class IndexRecord
 	{
 		private String file;
@@ -2095,29 +1907,111 @@ public final class Index implements Serializable
 		private Block b;
 		private boolean isNull = false;
 		private int off;
-		//private int prevBlock, prevOff, nextBlock, nextOff, upBlock, upOff, node, device, blockNum, recNum;
+		// private int prevBlock, prevOff, nextBlock, nextOff, upBlock, upOff,
+		// node, device, blockNum, recNum;
 		private boolean isLeaf = false;;
 		private int keyOff;
-		//private int numKeys;
+		// private int numKeys;
 		private boolean isTombstone = false;
-		
-		public String toString()
+
+		public IndexRecord(String file, int block, int offset, Transaction tx) throws Exception
 		{
-			return "IsNull = " + isNull + "; IsLeaf = " + isLeaf + "; Block = " + b + ";";
+			this.file = file;
+			this.tx = tx;
+			b = new Block(file, block);
+			off = offset;
+			keyOff = off + 9 + 128 * 8 + 8;
+			LockManager.sLock(b, tx.number());
+			tx.requestPage(b);
+			try
+			{
+				p = tx.getPage(b);
+			}
+			catch (Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				throw e;
+			}
+
+			isLeaf = (p.get(off + 0) == 1);
+			if (p.get(off + 0) == 2)
+			{
+				isLeaf = true;
+				isTombstone = true;
+			}
 		}
-		
+
+		public IndexRecord(String file, int block, int offset, Transaction tx, boolean x) throws Exception
+		{
+			this.file = file;
+			this.tx = tx;
+			b = new Block(file, block);
+			p = myPages.get(b);
+			off = offset;
+			keyOff = off + 9 + 128 * 8 + 8;
+
+			if (p == null)
+			{
+				LockManager.xLock(b, tx.number());
+				tx.requestPage(b);
+				try
+				{
+					p = tx.getPage(b);
+				}
+				catch (Exception e)
+				{
+					HRDBMSWorker.logger.error("", e);
+					throw e;
+				}
+
+				myPages.put(b, p);
+			}
+
+			isLeaf = (p.get(off + 0) == 1);
+			if (p.get(off + 0) == 2)
+			{
+				isLeaf = true;
+				isTombstone = true;
+			}
+		}
+
+		public IndexRecord(String file, int block, int offset, Transaction tx, boolean x, Page p) throws Exception
+		{
+			this.file = file;
+			this.tx = tx;
+			this.p = p;
+			if (p == null)
+			{
+				throw new Exception("NULL page in IndexRecord Constructor");
+			}
+			this.b = p.block();
+			off = offset;
+			keyOff = off + 9 + 128 * 8 + 8;
+			if (myPages.get(b) == null)
+			{
+				LockManager.xLock(b, tx.number());
+				myPages.put(b, p);
+			}
+			isLeaf = (p.get(off + 0) == 1);
+			if (p.get(off + 0) == 2)
+			{
+				isLeaf = true;
+				isTombstone = true;
+			}
+		}
+
 		public IndexRecord(String file, long offset, Transaction tx) throws Exception
 		{
 			this.file = file;
 			this.tx = tx;
 			b = new Block(file, (int)(offset / Page.BLOCK_SIZE));
-			off = (int)(offset % Page.BLOCK_SIZE);
-			keyOff = off + 9+128*8+8;
+			off = (int)(offset & (Page.BLOCK_SIZE - 1));
+			keyOff = off + 9 + 128 * 8 + 8;
 			try
 			{
 				LockManager.sLock(b, tx.number());
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				HRDBMSWorker.logger.debug(this + " has tx = " + tx);
 				throw e;
@@ -2127,29 +2021,29 @@ public final class Index implements Serializable
 			{
 				p = tx.getPage(b);
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
 				throw e;
 			}
-			
-			isLeaf = (p.get(off+0) == 1);
-			if (p.get(off+0) == 2)
+
+			isLeaf = (p.get(off + 0) == 1);
+			if (p.get(off + 0) == 2)
 			{
 				isLeaf = true;
 				isTombstone = true;
 			}
 		}
-		
+
 		public IndexRecord(String file, long offset, Transaction tx, boolean x) throws Exception
 		{
 			this.file = file;
 			this.tx = tx;
 			b = new Block(file, (int)(offset / Page.BLOCK_SIZE));
 			p = myPages.get(b);
-			off = (int)(offset % Page.BLOCK_SIZE);
-			keyOff = off + 9+128*8+8;
-			
+			off = (int)(offset & (Page.BLOCK_SIZE - 1));
+			keyOff = off + 9 + 128 * 8 + 8;
+
 			if (p == null)
 			{
 				LockManager.xLock(b, tx.number());
@@ -2158,50 +2052,163 @@ public final class Index implements Serializable
 				{
 					p = tx.getPage(b);
 				}
-				catch(Exception e)
+				catch (Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
 					throw e;
 				}
-				
+
 				myPages.put(b, p);
 			}
-			
-			isLeaf = (p.get(off+0) == 1);
-			if (p.get(off+0) == 2)
+
+			isLeaf = (p.get(off + 0) == 1);
+			if (p.get(off + 0) == 2)
 			{
 				isLeaf = true;
 				isTombstone = true;
 			}
 		}
-		
+
+		private IndexRecord()
+		{
+		}
+
 		public boolean containsRoom()
 		{
 			int numKeys = p.getInt(off + 5);
 			return numKeys < 128;
 		}
-		
+
+		public ArrayList<Object> getKeys(ArrayList<String> types) throws Exception
+		{
+			int o = off + 41;
+			ArrayList<Object> retval = new ArrayList<Object>(types.size());
+			// TODO null
+			for (String type : types)
+			{
+				o++; // skip null indicator
+				if (type.equals("INT"))
+				{
+					try
+					{
+						retval.add(p.getInt(o));
+					}
+					catch (Exception e)
+					{
+						HRDBMSWorker.logger.debug("", e);
+						HRDBMSWorker.logger.debug("Retval = " + retval);
+						HRDBMSWorker.logger.debug("p = " + p);
+						HRDBMSWorker.logger.debug("o = " + o);
+						throw e;
+					}
+					o += 4;
+				}
+				else if (type.equals("FLOAT"))
+				{
+					retval.add(p.getDouble(o));
+					o += 8;
+				}
+				else if (type.equals("CHAR"))
+				{
+					int length = p.getInt(o);
+					o += 4;
+					byte[] buff = new byte[length];
+					try
+					{
+						p.get(o, buff);
+					}
+					catch (Exception e)
+					{
+						HRDBMSWorker.logger.debug("Trying to read string of length " + buff.length + " in index " + this.file);
+						throw e;
+					}
+					try
+					{
+						String value = (String)unsafe.allocateInstance(String.class);
+						char[] ca = new char[buff.length];
+						int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(buff, 0, buff.length, ca);
+						if (clen == ca.length)
+						{
+							unsafe.putObject(value, soffset, ca);
+						}
+						else
+						{
+							char[] v = Arrays.copyOf(ca, clen);
+							unsafe.putObject(value, soffset, v);
+						}
+						retval.add(value);
+					}
+					catch (Exception e)
+					{
+						HRDBMSWorker.logger.error("", e);
+						throw e;
+					}
+					o += length;
+				}
+				else if (type.equals("LONG"))
+				{
+					retval.add(p.getLong(o));
+					o += 8;
+				}
+				else if (type.equals("DATE"))
+				{
+					retval.add(new MyDate(p.getLong(o)));
+					o += 8;
+				}
+				else
+				{
+					HRDBMSWorker.logger.error("Unknown type in IndexRecord.getKeys(): " + type);
+					throw new Exception("Unknown type in IndexRecord.getKeys(): " + type);
+				}
+			}
+
+			return retval;
+		}
+
+		public long getPartialRid()
+		{
+			return (((long)p.getInt(off + 33)) << 32) + p.getInt(off + 37);
+		}
+
+		public RID getRid()
+		{
+			return new RID(p.getInt(off + 25), p.getInt(off + 29), p.getInt(off + 33), p.getInt(off + 37));
+		}
+
+		public InternalIterator internalIterator(ArrayList<String> types)
+		{
+			return new InternalIterator(types, p.getInt(off + 5));
+		}
+
+		public boolean isLeaf()
+		{
+			return isLeaf;
+		}
+
+		public boolean isNull()
+		{
+			return isNull;
+		}
+
+		public boolean isTombstone()
+		{
+			return isTombstone;
+		}
+
 		public boolean keysMatch(FieldValue[] keys) throws Exception
 		{
 			ArrayList<Object> r = getKeys(types);
 			ArrayList<Object> lhs = new ArrayList<Object>();
 
-			int i = 0;
 			for (FieldValue val : keys)
 			{
 				lhs.add(val.getValue());
-				i++;
 			}
-			
-			RowComparator rc = new RowComparator(orders, types);
+
+			// RowComparator rc = new RowComparator(orders, types);
 			return rc.compare(lhs, r) == 0;
 		}
-		
-		public RID getRid()
-		{
-			return new RID(p.getInt(off+25), p.getInt(off+29), p.getInt(off+33), p.getInt(off+37));
-		}
-		
+
 		public void replaceRid(RID rid) throws Exception
 		{
 			ByteBuffer bb = ByteBuffer.allocate(16);
@@ -2210,183 +2217,55 @@ public final class Index implements Serializable
 			bb.putInt(rid.getBlockNum());
 			bb.putInt(rid.getRecNum());
 			byte[] before = new byte[16];
-			p.get(off+25, before);
-			InsertLogRec rec = tx.insert(before, bb.array(), off+25, p.block());
-			p.write(off+25, bb.array(), tx.number(), rec.lsn());
-			//changedBlocks.add(p.block());
+			p.get(off + 25, before);
+			InsertLogRec rec = tx.insert(before, bb.array(), off + 25, p.block());
+			p.write(off + 25, bb.array(), tx.number(), rec.lsn());
+			// changedBlocks.add(p.block());
 		}
-		
-		private IndexRecord getDown(int num) throws Exception
+
+		public void setNext(IndexRecord ir) throws Exception
 		{
-			int block = p.getInt(off+9+num*8);
-			int o = p.getInt(off+13+num*8);
-			if (o < 0)
-			{
-				HRDBMSWorker.logger.debug("Error trying to get down pointer #" + num + " from index record " + this);
-			}
-			return new IndexRecord(file, block, o, tx);
+			int block = ir.b.number();
+			int o = ir.off;
+			setNext(new BlockAndOffset(block, o));
 		}
-		
-		private IndexRecord getDown(int num, boolean x) throws Exception
+
+		public void setNextNoLog(IndexRecord ir) throws Exception
 		{
-			if (!x)
-			{
-				return getDown(num);
-			}
-			
-			int block = p.getInt(off+9+num*8);
-			int o = p.getInt(off+13+num*8);
-			return new IndexRecord(file, block, o, tx, true);
+			int block = ir.b.number();
+			int o = ir.off;
+			setNextNoLog(new BlockAndOffset(block, o));
 		}
-		
-		private void markTombstone() throws Exception
+
+		public void setPrev(IndexRecord ir) throws Exception
 		{
-			byte[] before = new byte[1];
-			byte[] after = new byte[1];
-			before[0] = p.get(off+0);
-			after[0] = (byte)2;
-			DeleteLogRec rec = tx.delete(before, after, off+0, p.block());
-			p.write(off+0, after, tx.number(), rec.lsn());
-			//changedBlocks.add(p.block());
+			int block = ir.b.number();
+			int o = ir.off;
+			setPrev(new BlockAndOffset(block, o));
 		}
-		
-		private void markTombstoneNoLog() throws Exception
+
+		public void setPrevNoLog(IndexRecord ir) throws Exception
 		{
-			byte[] after = new byte[1];
-			after[0] = (byte)2;
-			long lsn = LogManager.getLSN();
-			p.write(off+0, after, tx.number(), lsn);
-			//changedBlocks.add(p.block());
+			int block = ir.b.number();
+			int o = ir.off;
+			setPrevNoLog(new BlockAndOffset(block, o));
 		}
-		
-		private int getPageFreeBytes()
+
+		public void setUpNoLog(IndexRecord ir) throws Exception
 		{
-			int firstFree = p.getInt(5);
-			int lastFree = p.getInt(9);
-			return lastFree - firstFree + 1;
+			int block = ir.b.number();
+			int o = ir.off;
+			setUpNoLog(new BlockAndOffset(block, o));
 		}
-		
-		private byte[] genKeyBytes(FieldValue[] keys) throws Exception
+
+		@Override
+		public String toString()
 		{
-			int size = keys.length;
-			int i = 0;
-			for (String type : types)
-			{
-				if (type.equals("INT"))
-				{
-					size += 4;
-				}
-				else if (type.equals("LONG"))
-				{
-					size += 8;
-				}
-				else if (type.equals("FLOAT"))
-				{
-					size += 8;
-				}
-				else if (type.equals("DATE"))
-				{
-					size += 8;
-				}
-				else if (type.equals("CHAR"))
-				{
-					size += 4;
-					String val = (String)keys[i].getValue();
-					size += val.getBytes("UTF-8").length;
-				}
-				else
-				{
-					HRDBMSWorker.logger.error("Unknown type in IndexRecord.genKeyBytes(): " + type);
-					throw new Exception("Unknown type in IndexRecord.genKeyBytes(): " + type);
-				}
-				
-				i++;
-			}
-			
-			ByteBuffer bb = ByteBuffer.allocate(size);
-			i = 0;
-			bb.position(0);
-			for (String type : types)
-			{
-				bb.put((byte)0); //not null;
-				if (type.equals("INT"))
-				{
-					bb.putInt(((Integer)keys[i].getValue()));
-				}
-				else if (type.equals("LONG"))
-				{
-					bb.putLong(((Long)keys[i].getValue()));
-				}
-				else if (type.equals("FLOAT"))
-				{
-					bb.putDouble(((Double)keys[i].getValue()));
-				}
-				else if (type.equals("DATE"))
-				{
-					bb.putLong(((MyDate)keys[i].getValue()).getTime());
-				}
-				else if (type.equals("CHAR"))
-				{
-					String val = (String)keys[i].getValue();
-					byte[] bytes = val.getBytes("UTF-8");
-					bb.putInt(bytes.length);
-					try
-					{
-						bb.put(bytes);
-					}
-					catch(Exception e)
-					{
-						HRDBMSWorker.logger.error("", e);
-						throw e;
-					}
-				}
-				
-				i++;
-			}
-			
-			return bb.array();
+			return "IsNull = " + isNull + "; IsLeaf = " + isLeaf + "; Block = " + b + ";";
 		}
-		
-		private void updateParentDownKey(byte[] keyBytes) throws Exception
-		{
-			IndexRecord up = getInternalUp(true);
-			if (!up.isNull())
-			{
-				byte[] highKey = up.getDownKey(this.getBlockAndOffset());
-				ArrayList<Object> keyBytesRow = convertBytesToRow(keyBytes);
-				ArrayList<Object> highKeyRow = convertBytesToRow(highKey);
-				RowComparator rc = new RowComparator(orders, types);
-				
-				if (rc.compare(keyBytesRow, highKeyRow) > 0)
-				{
-					up.replaceDownKey(this.getBlockAndOffset(), keyBytes);
-					up = getInternalUp(true);
-					up.updateParentDownKey(keyBytes);
-				}
-			}
-		}
-		
-		private void updateParentDownKeyNoLog(byte[] keyBytes) throws Exception
-		{
-			IndexRecord up = getInternalUp(true);
-			if (!up.isNull())
-			{
-				byte[] highKey = up.getDownKey(this.getBlockAndOffset());
-				ArrayList<Object> keyBytesRow = convertBytesToRow(keyBytes);
-				ArrayList<Object> highKeyRow = convertBytesToRow(highKey);
-				RowComparator rc = new RowComparator(orders, types);
-				
-				if (rc.compare(keyBytesRow, highKeyRow) > 0)
-				{
-					up.replaceDownKeyNoLog(this.getBlockAndOffset(), keyBytes);
-					up = getInternalUp(true);
-					up.updateParentDownKeyNoLog(keyBytes);
-				}
-			}
-		}
-		
+
 		private void addDown(FieldValue[] keys, BlockAndOffset bao) throws Exception
-		{	
+		{
 			ArrayList<Object> lhs = new ArrayList<Object>();
 			int i = 0;
 			for (FieldValue val : keys)
@@ -2394,37 +2273,41 @@ public final class Index implements Serializable
 				lhs.add(val.getValue());
 				i++;
 			}
-			
-			//generate key bytes
+
+			// generate key bytes
 			byte[] keyBytes = genKeyBytes(keys);
-			
-			//can we just add this to the existing record?
+
+			// can we just add this to the existing record?
 			int freeBytes = this.getPageFreeBytes();
-			
+
 			if (keyBytes.length <= freeBytes)
 			{
+				HashMap<Integer, ArrayList<Object>> internalKeyCache = cache.get(b);
+				if (internalKeyCache != null)
+				{
+					internalKeyCache.clear();
+				}
 				updateParentDownKey(keyBytes);
-				//increment numKeys by 1
+				// increment numKeys by 1
 				byte[] before = new byte[4];
-				p.get(off+5, before);
+				p.get(off + 5, before);
 				ByteBuffer after = ByteBuffer.allocate(4);
 				after.position(0);
-				after.putInt(p.getInt(off + 5)+1);
-				InsertLogRec rec = tx.insert(before,  after.array(), off+5, p.block());
-				p.write(off+5, after.array(), tx.number(), rec.lsn());
-				//changedBlocks.add(p.block());
-				
-				//insert new keyBytes
-				int offset = off+1041; //first key bytes
+				after.putInt(p.getInt(off + 5) + 1);
+				InsertLogRec rec = tx.insert(before, after.array(), off + 5, p.block());
+				p.write(off + 5, after.array(), tx.number(), rec.lsn());
+				// changedBlocks.add(p.block());
+
+				// insert new keyBytes
+				int offset = off + 1041; // first key bytes
 				i = 0;
-				while (i < p.getInt(off + 5)-1)
+				while (i < p.getInt(off + 5) - 1)
 				{
-					int j = 0;
-					ArrayList<Object> rhs = new ArrayList<Object>();
 					int start = offset;
+					ArrayList<Object> rhs = new ArrayList<Object>(types.size());
 					for (String type : types)
 					{
-						offset++; //skip null marker
+						offset++; // skip null marker
 						if (type.equals("INT"))
 						{
 							rhs.add(p.getInt(offset));
@@ -2452,51 +2335,61 @@ public final class Index implements Serializable
 							byte[] bytes = new byte[length];
 							p.get(offset, bytes);
 							offset += length;
-							rhs.add(new String(bytes, "UTF-8"));
+							String value = (String)unsafe.allocateInstance(String.class);
+							char[] ca = new char[bytes.length];
+							int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(bytes, 0, bytes.length, ca);
+							if (clen == ca.length)
+							{
+								unsafe.putObject(value, soffset, ca);
+							}
+							else
+							{
+								char[] v = Arrays.copyOf(ca, clen);
+								unsafe.putObject(value, soffset, v);
+							}
+							rhs.add(value);
 						}
 						else
 						{
 							HRDBMSWorker.logger.error("Unknown data type in IndexRecord.addDown(): " + type);
 							throw new Exception("Unknown data type in IndexRecord.addDown(): " + type);
 						}
-						
-						j++;
 					}
-					
-					RowComparator rc = new RowComparator(orders, types);
+
+					// RowComparator rc = new RowComparator(orders, types);
 					if (rc.compare(lhs, rhs) < 0)
 					{
-						//it goes here
-						//figure out number of bytes to move from start
+						// it goes here
+						// figure out number of bytes to move from start
 						int firstFree = p.getInt(5);
 						int num2Move = firstFree - start;
 						byte[] toMove = new byte[num2Move];
 						byte[] bef = new byte[num2Move];
 						p.get(start, toMove);
-						p.get(start+keyBytes.length, bef);
-						rec = tx.insert(bef, toMove, start+keyBytes.length, p.block());
-						p.write(start+keyBytes.length, toMove, tx.number(), rec.lsn());
+						p.get(start + keyBytes.length, bef);
+						rec = tx.insert(bef, toMove, start + keyBytes.length, p.block());
+						p.write(start + keyBytes.length, toMove, tx.number(), rec.lsn());
 						bef = new byte[keyBytes.length];
 						p.get(start, bef);
 						rec = tx.insert(bef, keyBytes, start, p.block());
 						p.write(start, keyBytes, tx.number(), rec.lsn());
-						//changedBlocks.add(p.block());
+						// changedBlocks.add(p.block());
 						break;
 					}
-					
+
 					i++;
 				}
-				
-				if (i == p.getInt(off + 5)-1)
+
+				if (i == p.getInt(off + 5) - 1)
 				{
 					byte[] bef = new byte[keyBytes.length];
 					p.get(offset, bef);
 					rec = tx.insert(bef, keyBytes, offset, p.block());
 					p.write(offset, keyBytes, tx.number(), rec.lsn());
-					//changedBlocks.add(p.block());
+					// changedBlocks.add(p.block());
 				}
-				
-				//update free space
+
+				// update free space
 				int firstFree = p.getInt(5);
 				firstFree += keyBytes.length;
 				byte[] bef = new byte[4];
@@ -2512,12 +2405,12 @@ public final class Index implements Serializable
 				aft.putInt(firstFree);
 				rec = tx.insert(bef, aft.array(), 14, p.block());
 				p.write(14, aft.array(), tx.number(), rec.lsn());
-				//changedBlocks.add(p.block());
-				
-				//insert new down pointer
-				if (i == p.getInt(off + 5)-1)
+				// changedBlocks.add(p.block());
+
+				// insert new down pointer
+				if (i == p.getInt(off + 5) - 1)
 				{
-					int downOffset = off+9 + 8 * (p.getInt(off + 5)-1);
+					int downOffset = off + 9 + 8 * (p.getInt(off + 5) - 1);
 					bef = new byte[8];
 					p.get(downOffset, bef);
 					aft = ByteBuffer.allocate(8);
@@ -2526,18 +2419,18 @@ public final class Index implements Serializable
 					aft.putInt(bao.offset());
 					rec = tx.insert(bef, aft.array(), downOffset, p.block());
 					p.write(downOffset, aft.array(), tx.number(), rec.lsn());
-					//changedBlocks.add(p.block());
+					// changedBlocks.add(p.block());
 				}
 				else
 				{
-					int downOffset = off+9 + 8 * i;
-					int num2Move = (127-i)*8;
+					int downOffset = off + 9 + 8 * i;
+					int num2Move = (127 - i) << 3;
 					bef = new byte[num2Move];
 					byte[] a = new byte[num2Move];
-					p.get(downOffset+8, bef);
+					p.get(downOffset + 8, bef);
 					p.get(downOffset, a);
-					rec = tx.insert(bef, a, downOffset+8, p.block());
-					p.write(downOffset+8, a, tx.number(), rec.lsn());
+					rec = tx.insert(bef, a, downOffset + 8, p.block());
+					p.write(downOffset + 8, a, tx.number(), rec.lsn());
 					bef = new byte[8];
 					p.get(downOffset, bef);
 					aft = ByteBuffer.allocate(8);
@@ -2546,16 +2439,16 @@ public final class Index implements Serializable
 					aft.putInt(bao.offset());
 					rec = tx.insert(bef, aft.array(), downOffset, p.block());
 					p.write(downOffset, aft.array(), tx.number(), rec.lsn());
-					//changedBlocks.add(p.block());
+					// changedBlocks.add(p.block());
 				}
-				
-				//attach previous and next and up
-				if (i == p.getInt(off + 5)-1) 
+
+				// attach previous and next and up
+				if (i == p.getInt(off + 5) - 1)
 				{
 					int pb;
 					int po;
 					IndexRecord pr;
-					
+
 					if (i == 0)
 					{
 						pr = new IndexRecord();
@@ -2563,8 +2456,8 @@ public final class Index implements Serializable
 					}
 					else
 					{
-						pb = p.getInt(off+9 + (p.getInt(off + 5)-2) * 8);
-						po = p.getInt(off+13 + (p.getInt(off + 5)-2) * 8);
+						pb = p.getInt(off + 9 + (p.getInt(off + 5) - 2) * 8);
+						po = p.getInt(off + 13 + (p.getInt(off + 5) - 2) * 8);
 						pr = new IndexRecord(file, pb, po, tx, true);
 					}
 					IndexRecord nr;
@@ -2595,13 +2488,13 @@ public final class Index implements Serializable
 					{
 						curr.setNext(new BlockAndOffset(0, 0));
 					}
-						
+
 					curr.setUp(this);
 				}
 				else
 				{
-					int nb = p.getInt(off+9 + (i+1) * 8);
-					int no = p.getInt(off+13 + (i+1) * 8);
+					int nb = p.getInt(off + 9 + (i + 1) * 8);
+					int no = p.getInt(off + 13 + (i + 1) * 8);
 					IndexRecord nr = new IndexRecord(file, nb, no, tx, true);
 					IndexRecord pr = nr.prevRecord(true);
 					IndexRecord curr = new IndexRecord(file, bao.block(), bao.offset(), tx, true);
@@ -2616,7 +2509,7 @@ public final class Index implements Serializable
 					{
 						curr.setPrev(new BlockAndOffset(0, 0));
 					}
-					
+
 					curr.setUp(this);
 				}
 			}
@@ -2624,7 +2517,7 @@ public final class Index implements Serializable
 			{
 				if (p.getInt(9) != Page.BLOCK_SIZE - 1 && p.block().number() != 0)
 				{
-					//no room to extend internal record with a new key
+					// no room to extend internal record with a new key
 					ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
 					i = 0;
 					while (i < Page.BLOCK_SIZE)
@@ -2632,7 +2525,7 @@ public final class Index implements Serializable
 						bb.put((byte)2);
 						i++;
 					}
-				
+
 					int newNum = FileManager.addNewBlock(file, bb, tx);
 					Block bl = new Block(file, newNum);
 					LockManager.xLock(bl, tx.number());
@@ -2642,13 +2535,13 @@ public final class Index implements Serializable
 					{
 						p2 = tx.getPage(bl);
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
 						throw e;
 					}
-				
-					//move current index record to start of new page
+
+					// move current index record to start of new page
 					int numBytes = p.getInt(5);
 					byte[] bytes = new byte[numBytes];
 					p.get(0, bytes);
@@ -2660,16 +2553,16 @@ public final class Index implements Serializable
 					p2.get(9, bef);
 					ByteBuffer aft = ByteBuffer.allocate(4);
 					aft.position(0);
-					aft.putInt(Page.BLOCK_SIZE-1);
+					aft.putInt(Page.BLOCK_SIZE - 1);
 					rec = tx.insert(bef, aft.array(), 9, p2.block());
 					p2.write(9, aft.array(), tx.number(), rec.lsn());
-					//changedBlocks.add(p2.block());
-				
-					//redirect pointer from parent
+					// changedBlocks.add(p2.block());
+
+					// redirect pointer from parent
 					IndexRecord parent = this.getInternalUp(true);
 					IndexRecord newInternal = new IndexRecord(file, bl.number(), 13, tx, true, p2);
 					newInternal.setChildUpPointers();
-				
+
 					parent.replaceDownPointer(this.getBlockAndOffset(), newInternal.getBlockAndOffset());
 					newInternal.addDown(keys, bao);
 				}
@@ -2678,19 +2571,19 @@ public final class Index implements Serializable
 					split();
 					seek(13);
 					setEqualsPosMulti(keys);
-					
+
 					if (line.isLeaf())
 					{
 						line = line.getUp(true);
 					}
-					
+
 					line.addDown(keys, bao);
 				}
 			}
 		}
-		
+
 		private void addDownNoLog(FieldValue[] keys, BlockAndOffset bao) throws Exception
-		{	
+		{
 			ArrayList<Object> lhs = new ArrayList<Object>();
 			int i = 0;
 			for (FieldValue val : keys)
@@ -2698,35 +2591,40 @@ public final class Index implements Serializable
 				lhs.add(val.getValue());
 				i++;
 			}
-			
-			//generate key bytes
+
+			// generate key bytes
 			byte[] keyBytes = genKeyBytes(keys);
-			
-			//can we just add this to the existing record?
+
+			// can we just add this to the existing record?
 			int freeBytes = this.getPageFreeBytes();
-			
+
 			if (keyBytes.length <= freeBytes)
 			{
+				HashMap<Integer, ArrayList<Object>> internalKeyCache = cache.get(b);
+				if (internalKeyCache != null)
+				{
+					internalKeyCache.clear();
+				}
 				updateParentDownKeyNoLog(keyBytes);
-				//increment numKeys by 1
+				// increment numKeys by 1
 				ByteBuffer after = ByteBuffer.allocate(4);
 				after.position(0);
-				after.putInt(p.getInt(off + 5)+1);
+				after.putInt(p.getInt(off + 5) + 1);
 				long lsn = LogManager.getLSN();
-				p.write(off+5, after.array(), tx.number(), lsn);
-				//changedBlocks.add(p.block());
-				
-				//insert new keyBytes
-				int offset = off+1041; //first key bytes
+				p.write(off + 5, after.array(), tx.number(), lsn);
+				// changedBlocks.add(p.block());
+
+				// insert new keyBytes
+				int offset = off + 1041; // first key bytes
 				i = 0;
-				while (i < p.getInt(off + 5)-1)
+				int x = p.getInt(off + 5) - 1;
+				while (i < x)
 				{
-					int j = 0;
 					ArrayList<Object> rhs = new ArrayList<Object>();
 					int start = offset;
 					for (String type : types)
 					{
-						offset++; //skip null marker
+						offset++; // skip null marker
 						if (type.equals("INT"))
 						{
 							rhs.add(p.getInt(offset));
@@ -2754,45 +2652,55 @@ public final class Index implements Serializable
 							byte[] bytes = new byte[length];
 							p.get(offset, bytes);
 							offset += length;
-							rhs.add(new String(bytes, "UTF-8"));
+							String value = (String)unsafe.allocateInstance(String.class);
+							char[] ca = new char[bytes.length];
+							int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(bytes, 0, bytes.length, ca);
+							if (clen == ca.length)
+							{
+								unsafe.putObject(value, soffset, ca);
+							}
+							else
+							{
+								char[] v = Arrays.copyOf(ca, clen);
+								unsafe.putObject(value, soffset, v);
+							}
+							rhs.add(value);
 						}
 						else
 						{
 							HRDBMSWorker.logger.error("Unknown data type in IndexRecord.addDown(): " + type);
 							throw new Exception("Unknown data type in IndexRecord.addDown(): " + type);
 						}
-						
-						j++;
 					}
-					
-					RowComparator rc = new RowComparator(orders, types);
+
+					// RowComparator rc = new RowComparator(orders, types);
 					if (rc.compare(lhs, rhs) < 0)
 					{
-						//it goes here
-						//figure out number of bytes to move from start
+						// it goes here
+						// figure out number of bytes to move from start
 						int firstFree = p.getInt(5);
 						int num2Move = firstFree - start;
 						byte[] toMove = new byte[num2Move];
 						p.get(start, toMove);
 						lsn = LogManager.getLSN();
-						p.write(start+keyBytes.length, toMove, tx.number(), lsn);
+						p.write(start + keyBytes.length, toMove, tx.number(), lsn);
 						lsn = LogManager.getLSN();
 						p.write(start, keyBytes, tx.number(), lsn);
-						//changedBlocks.add(p.block());
+						// changedBlocks.add(p.block());
 						break;
 					}
-					
+
 					i++;
 				}
-				
-				if (i == p.getInt(off + 5)-1)
+
+				if (i == p.getInt(off + 5) - 1)
 				{
 					lsn = LogManager.getLSN();
 					p.write(offset, keyBytes, tx.number(), lsn);
-					//changedBlocks.add(p.block());
+					// changedBlocks.add(p.block());
 				}
-				
-				//update free space
+
+				// update free space
 				int firstFree = p.getInt(5);
 				firstFree += keyBytes.length;
 				ByteBuffer aft = ByteBuffer.allocate(4);
@@ -2805,44 +2713,44 @@ public final class Index implements Serializable
 				aft.putInt(firstFree);
 				lsn = LogManager.getLSN();
 				p.write(14, aft.array(), tx.number(), lsn);
-				//changedBlocks.add(p.block());
-				
-				//insert new down pointer
-				if (i == p.getInt(off + 5)-1)
+				// changedBlocks.add(p.block());
+
+				// insert new down pointer
+				if (i == p.getInt(off + 5) - 1)
 				{
-					int downOffset = off+9 + 8 * (p.getInt(off + 5)-1);
+					int downOffset = off + 9 + 8 * (p.getInt(off + 5) - 1);
 					aft = ByteBuffer.allocate(8);
 					aft.position(0);
 					aft.putInt(bao.block());
 					aft.putInt(bao.offset());
 					lsn = LogManager.getLSN();
 					p.write(downOffset, aft.array(), tx.number(), lsn);
-					//changedBlocks.add(p.block());
+					// changedBlocks.add(p.block());
 				}
 				else
 				{
-					int downOffset = off+9 + 8 * i;
-					int num2Move = (127-i)*8;
+					int downOffset = off + 9 + 8 * i;
+					int num2Move = (127 - i) << 3;
 					byte[] a = new byte[num2Move];
 					p.get(downOffset, a);
 					lsn = LogManager.getLSN();
-					p.write(downOffset+8, a, tx.number(), lsn);
+					p.write(downOffset + 8, a, tx.number(), lsn);
 					aft = ByteBuffer.allocate(8);
 					aft.position(0);
 					aft.putInt(bao.block());
 					aft.putInt(bao.offset());
 					lsn = LogManager.getLSN();
 					p.write(downOffset, aft.array(), tx.number(), lsn);
-					//changedBlocks.add(p.block());
+					// changedBlocks.add(p.block());
 				}
-				
-				//attach previous and next and up
-				if (i == p.getInt(off + 5)-1) 
+
+				// attach previous and next and up
+				if (i == p.getInt(off + 5) - 1)
 				{
 					int pb;
 					int po;
 					IndexRecord pr;
-					
+
 					if (i == 0)
 					{
 						pr = new IndexRecord();
@@ -2850,8 +2758,8 @@ public final class Index implements Serializable
 					}
 					else
 					{
-						pb = p.getInt(off+9 + (p.getInt(off + 5)-2) * 8);
-						po = p.getInt(off+13 + (p.getInt(off + 5)-2) * 8);
+						pb = p.getInt(off + 9 + (p.getInt(off + 5) - 2) * 8);
+						po = p.getInt(off + 13 + (p.getInt(off + 5) - 2) * 8);
 						pr = new IndexRecord(file, pb, po, tx, true);
 					}
 					IndexRecord nr;
@@ -2882,13 +2790,13 @@ public final class Index implements Serializable
 					{
 						curr.setNextNoLog(new BlockAndOffset(0, 0));
 					}
-						
+
 					curr.setUpNoLog(this);
 				}
 				else
 				{
-					int nb = p.getInt(off+9 + (i+1) * 8);
-					int no = p.getInt(off+13 + (i+1) * 8);
+					int nb = p.getInt(off + 9 + (i + 1) * 8);
+					int no = p.getInt(off + 13 + (i + 1) * 8);
 					IndexRecord nr = new IndexRecord(file, nb, no, tx, true);
 					IndexRecord pr = nr.prevRecord(true);
 					IndexRecord curr = new IndexRecord(file, bao.block(), bao.offset(), tx, true);
@@ -2903,7 +2811,7 @@ public final class Index implements Serializable
 					{
 						curr.setPrevNoLog(new BlockAndOffset(0, 0));
 					}
-					
+
 					curr.setUpNoLog(this);
 				}
 			}
@@ -2911,7 +2819,7 @@ public final class Index implements Serializable
 			{
 				if (p.getInt(9) != Page.BLOCK_SIZE - 1 && p.block().number() != 0)
 				{
-					//no room to extend internal record with a new key
+					// no room to extend internal record with a new key
 					ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
 					i = 0;
 					while (i < Page.BLOCK_SIZE)
@@ -2919,7 +2827,7 @@ public final class Index implements Serializable
 						bb.put((byte)2);
 						i++;
 					}
-				
+
 					int newNum = FileManager.addNewBlockNoLog(file, bb, tx);
 					Block bl = new Block(file, newNum);
 					LockManager.xLock(bl, tx.number());
@@ -2929,13 +2837,13 @@ public final class Index implements Serializable
 					{
 						p2 = tx.getPage(bl);
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
 						throw e;
 					}
-				
-					//move current index record to start of new page
+
+					// move current index record to start of new page
 					int numBytes = p.getInt(5);
 					byte[] bytes = new byte[numBytes];
 					p.get(0, bytes);
@@ -2943,16 +2851,16 @@ public final class Index implements Serializable
 					p2.write(0, bytes, tx.number(), lsn);
 					ByteBuffer aft = ByteBuffer.allocate(4);
 					aft.position(0);
-					aft.putInt(Page.BLOCK_SIZE-1);
+					aft.putInt(Page.BLOCK_SIZE - 1);
 					lsn = LogManager.getLSN();
 					p2.write(9, aft.array(), tx.number(), lsn);
-					//changedBlocks.add(p2.block());
-				
-					//redirect pointer from parent
+					// changedBlocks.add(p2.block());
+
+					// redirect pointer from parent
 					IndexRecord parent = this.getInternalUp(true);
 					IndexRecord newInternal = new IndexRecord(file, bl.number(), 13, tx, true, p2);
 					newInternal.setChildUpPointersNoLog();
-				
+
 					parent.replaceDownPointerNoLog(this.getBlockAndOffset(), newInternal.getBlockAndOffset());
 					newInternal.addDownNoLog(keys, bao);
 				}
@@ -2961,798 +2869,17 @@ public final class Index implements Serializable
 					splitNoLog();
 					seek(13);
 					setEqualsPosMulti(keys);
-					
+
 					if (line.isLeaf())
 					{
 						line = line.getUp(true);
 					}
-					
+
 					line.addDownNoLog(keys, bao);
 				}
 			}
 		}
-		
-		private BlockAndOffset getBlockAndOffset()
-		{
-			return new BlockAndOffset(b.number(), off);
-		}
-		
-		private void replaceDownPointer(BlockAndOffset oldPtr, BlockAndOffset newPtr) throws Exception
-		{
-			int o = off + 9;
-			while (true)
-			{
-				int bNum = p.getInt(o);
-				int oNum = p.getInt(o+4);
-				
-				if (bNum == oldPtr.block() && oNum == oldPtr.offset())
-				{
-					//replace it
-					byte[] before = new byte[8];
-					p.get(o, before);
-					ByteBuffer after = ByteBuffer.allocate(8);
-					after.position(0);
-					after.putInt(newPtr.block());
-					after.putInt(newPtr.offset());
-					InsertLogRec rec = tx.insert(before, after.array(), o, p.block());
-					p.write(o, after.array(), tx.number(), rec.lsn());
-					//changedBlocks.add(p.block());
-					return;
-				}
-				
-				o += 8;
-			}
-		}
-		
-		private void replaceDownPointerNoLog(BlockAndOffset oldPtr, BlockAndOffset newPtr) throws Exception
-		{
-			int o = off + 9;
-			while (true)
-			{
-				int bNum = p.getInt(o);
-				int oNum = p.getInt(o+4);
-				
-				if (bNum == oldPtr.block() && oNum == oldPtr.offset())
-				{
-					//replace it
-					ByteBuffer after = ByteBuffer.allocate(8);
-					after.position(0);
-					after.putInt(newPtr.block());
-					after.putInt(newPtr.offset());
-					long lsn = LogManager.getLSN();
-					p.write(o, after.array(), tx.number(), lsn);
-					//changedBlocks.add(p.block());
-					return;
-				}
-				
-				o += 8;
-			}
-		}
-		
-		private void setNext(BlockAndOffset bao) throws Exception
-		{
-			byte[] before = new byte[8];
-			p.get(off+9, before);
-			ByteBuffer after = ByteBuffer.allocate(8);
-			after.position(0);
-			after.putInt(bao.block());
-			after.putInt(bao.offset());
-			after.position(0);
-			InsertLogRec rec = tx.insert(before, after.array(), off+9, p.block());
-			p.write(off+9, after.array(), tx.number(), rec.lsn());
-			//changedBlocks.add(p.block());
-		}
-		
-		private void setNextNoLog(BlockAndOffset bao) throws Exception
-		{
-			ByteBuffer after = ByteBuffer.allocate(8);
-			after.position(0);
-			after.putInt(bao.block());
-			after.putInt(bao.offset());
-			after.position(0);
-			long lsn = LogManager.getLSN();
-			p.write(off+9, after.array(), tx.number(), lsn);
-			//changedBlocks.add(p.block());
-		}
-		
-		private void setUp(BlockAndOffset bao) throws Exception
-		{
-			byte[] before = new byte[8];
-			p.get(off+17, before);
-			ByteBuffer after = ByteBuffer.allocate(8);
-			after.position(0);
-			after.putInt(bao.block);
-			after.putInt(bao.offset);
-			after.position(0);
-			InsertLogRec rec = tx.insert(before, after.array(), off+17, p.block());
-			p.write(off+17, after.array(), tx.number(), rec.lsn());
-			//changedBlocks.add(p.block());
-		}
-		
-		private void setUp(IndexRecord ir) throws Exception
-		{
-			int block = ir.b.number();
-			int o = ir.off;
-			setUp(new BlockAndOffset(block, o));
-		}
-		
-		private void setUpNoLog(BlockAndOffset bao) throws Exception
-		{
-			ByteBuffer after = ByteBuffer.allocate(8);
-			after.position(0);
-			after.putInt(bao.block);
-			after.putInt(bao.offset);
-			after.position(0);
-			long lsn = LogManager.getLSN();
-			p.write(off+17, after.array(), tx.number(), lsn);
-			//changedBlocks.add(p.block());
-		}
-		
-		public void setUpNoLog(IndexRecord ir) throws Exception
-		{
-			int block = ir.b.number();
-			int o = ir.off;
-			setUpNoLog(new BlockAndOffset(block, o));
-		}
-		
-		private void setUpInternal(BlockAndOffset bao) throws Exception
-		{
-			byte[] before = new byte[8];
-			p.get(off+9+128*8, before);
-			ByteBuffer after = ByteBuffer.allocate(8);
-			after.position(0);
-			after.putInt(bao.block);
-			after.putInt(bao.offset);
-			after.position(0);
-			InsertLogRec rec = tx.insert(before, after.array(), off+9+128*8, p.block());
-			p.write(off+9+128*8, after.array(), tx.number(), rec.lsn());
-			//changedBlocks.add(p.block());
-		}
-		
-		private void setUpInternal(IndexRecord ir) throws Exception
-		{
-			int block = ir.b.number();
-			int o = ir.off;
-			setUpInternal(new BlockAndOffset(block, o));
-		}
-		
-		private void setUpInternalNoLog(BlockAndOffset bao) throws Exception
-		{
-			ByteBuffer after = ByteBuffer.allocate(8);
-			after.position(0);
-			after.putInt(bao.block);
-			after.putInt(bao.offset);
-			after.position(0);
-			long lsn = LogManager.getLSN();
-			p.write(off+9+128*8, after.array(), tx.number(), lsn);
-			//changedBlocks.add(p.block());
-		}
-		
-		private void setUpInternalNoLog(IndexRecord ir) throws Exception
-		{
-			int block = ir.b.number();
-			int o = ir.off;
-			setUpInternalNoLog(new BlockAndOffset(block, o));
-		}
-		
-		public void setNext(IndexRecord ir) throws Exception
-		{
-			int block = ir.b.number();
-			int o = ir.off;
-			setNext(new BlockAndOffset(block, o));
-		}
-		
-		public void setNextNoLog(IndexRecord ir) throws Exception
-		{
-			int block = ir.b.number();
-			int o = ir.off;
-			setNextNoLog(new BlockAndOffset(block, o));
-		}
-		
-		private void splitNoLog() throws Exception
-		{
-			//create a new internal record that has high half of keys and down pointers
-			ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
-			int i = 0;
-			while (i < Page.BLOCK_SIZE)
-			{
-				bb.asLongBuffer().put(0x0202020202020202L);
-				i += 8;
-			}
-			
-			int newNum = FileManager.addNewBlockNoLog(file, bb, tx);
-			Block bl = new Block(file, newNum);
-			LockManager.xLock(bl, tx.number());
-			tx.requestPage(bl);
-			Page p2 = null;
-			try
-			{
-				p2 = tx.getPage(bl);
-			}
-			catch(Exception e)
-			{
-				HRDBMSWorker.logger.error("", e);
-				throw e;
-			}
-			
-			int numBytes = p.getInt(5);
-			byte[] bytes = new byte[numBytes];
-			p.get(0, bytes);
-			long lsn = LogManager.getLSN();
-			p2.write(0, bytes, tx.number(), lsn);
-			
-			//move down pointers
-			int nks = p.getInt(off+5);
-			int lowKeys = nks / 2;
-			int highKeys = nks - lowKeys;
-			byte[] after = new byte[highKeys*8];
-			p.get(off+9+lowKeys*8, after);
-			byte[] before = new byte[highKeys*8];
-			lsn = LogManager.getLSN();
-			p2.write(22, after, tx.number(), lsn);
-			Arrays.fill(before, (byte)0);
-			lsn = LogManager.getLSN();
-			p.write(off+9+lowKeys*8, before, tx.number(), lsn);
-			//changedBlocks.add(p.block());
-			
-			before = new byte[lowKeys*8];
-			Arrays.fill(before, (byte)0);
-			lsn = LogManager.getLSN();
-			p2.write(off+9+highKeys*8, before, tx.number(), lsn);
-			//changedBlocks.add(p2.block());
-			
-			i = 0;
-			int o = off+9+128*8+8;
-			int p1HKS = -1;
-			while (i < lowKeys)
-			{
-				if (i == lowKeys - 1)
-				{
-					p1HKS = o;
-				}
-				for (String type : types)
-				{
-					o++; //null indicator
-					
-					if (type.equals("INT"))
-					{
-						o += 4;
-					}
-					else if (type.equals("LONG"))
-					{
-						o += 8;
-					}
-					else if (type.equals("FLOAT"))
-					{
-						o += 8;
-					}
-					else if (type.equals("DATE"))
-					{
-						o += 8;
-					}
-					else if (type.equals("CHAR"))
-					{
-						o += p.getInt(o);
-						o += 4;
-					}
-					else
-					{
-						HRDBMSWorker.logger.error("Unknown type in IndexRecord.split(): " + type);
-						throw new Exception("Unknown type in IndexRecord.split(): " + type);
-					}
-				}
-				
-				i++;
-			}
-			
-			byte[] p1HighKey = new byte[o - p1HKS];
-			p.get(p1HKS, p1HighKey);
-			//we are now positioned at the start of the keys that have to get moved from the current page to the new one
-			int start = o;
-			i = 0;
-			int p2HKS = -1;
-			while (i < highKeys)
-			{
-				if (i == highKeys - 1)
-				{
-					p2HKS = o;
-				}
-				for (String type : types)
-				{
-					o++; //null indicator
-					
-					if (type.equals("INT"))
-					{
-						o += 4;
-					}
-					else if (type.equals("LONG"))
-					{
-						o += 8;
-					}
-					else if (type.equals("FLOAT"))
-					{
-						o += 8;
-					}
-					else if (type.equals("DATE"))
-					{
-						o += 8;
-					}
-					else if (type.equals("CHAR"))
-					{
-						o += p.getInt(o);
-						o += 4;
-					}
-					else
-					{
-						HRDBMSWorker.logger.error("Unknown type in IndexRecord.split(): " + type);
-						throw new Exception("Unknown type in IndexRecord.split(): " + type);
-					}
-				}
-				
-				i++;
-			}
-			
-			byte[] p2HighKey = new byte[o - p2HKS];
-			p.get(p2HKS, p2HighKey);
-			int end = o;
-			int length = end - start;
-			byte[] oldPageKeys = new byte[length];
-			p.get(start, oldPageKeys);
-			byte[] blank = new byte[length];
-			Arrays.fill(blank, (byte)0);
-			lsn = LogManager.getLSN();
-			p.write(start, blank, tx.number(), lsn);
-			lsn = LogManager.getLSN();
-			p2.write(30+128*8, oldPageKeys, tx.number(), lsn); //blank high keys in p2?
-			
-			int firstFreeByte = p.getInt(5);
-			firstFreeByte -= length;
-			ByteBuffer a1 = ByteBuffer.allocate(4);
-			a1.position(0);
-			a1.putInt(firstFreeByte);
-			lsn = LogManager.getLSN();
-			p.write(5, a1.array(), tx.number(), lsn);
-			
-			firstFreeByte = p.getInt(14);
-			firstFreeByte -= length;
-			a1 = ByteBuffer.allocate(8);
-			a1.position(0);
-			a1.putInt(firstFreeByte);
-			a1.putInt(lowKeys);
-			lsn = LogManager.getLSN();
-			p.write(14, a1.array(), tx.number(), lsn);
-			//changedBlocks.add(p.block());
-			
-			a1 = ByteBuffer.allocate(17);
-			a1.position(0);
-			a1.putInt(30+128*8+length);
-			a1.putInt(Page.BLOCK_SIZE-1);
-			a1.put((byte)0);
-			a1.putInt(17+128*8+length);
-			a1.putInt(highKeys);
-			lsn = LogManager.getLSN();
-			p2.write(5, a1.array(), tx.number(), lsn);
-			//changedBlocks.add(p2.block());
-			
-			IndexRecord newRec = new IndexRecord(file, p2.block().number(), 13, tx, true, p2);
-			newRec.setChildUpPointersNoLog();
-			
-			if (b.number() == 0)
-			{
-				//we are splitting the root
-				//move the root to a new page
-				bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
-				i = 0;
-				while (i < Page.BLOCK_SIZE)
-				{
-					bb.put((byte)2);
-					i++;
-				}
-				
-				newNum = FileManager.addNewBlockNoLog(file, bb, tx);
-				Block bl2 = new Block(file, newNum);
-				LockManager.xLock(bl2, tx.number());
-				tx.requestPage(bl2);
-				Page p3 = null;
-				try
-				{
-					p3 = tx.getPage(bl2);
-				}
-				catch(Exception e)
-				{
-					HRDBMSWorker.logger.error("", e);
-					throw e;
-				}
-				
-				firstFreeByte = p.getInt(5);
-				byte[] a1a = new byte[firstFreeByte];
-				p.get(0, a1a);
-				lsn = LogManager.getLSN();
-				p3.write(0, a1a, tx.number(), lsn);
-				a1 = ByteBuffer.allocate(4);
-				a1.position(0);
-				a1.putInt(Page.BLOCK_SIZE-1);
-				lsn = LogManager.getLSN();
-				p3.write(9, a1.array(), tx.number(), lsn);
-				//changedBlocks.add(p3.block());
-				
-				newRec = new IndexRecord(file, p3.block().number(), 13, tx, true, p3);
-				newRec.setChildUpPointersNoLog();
-				
-				//write new root 
-				a1 = ByteBuffer.allocate(25+128*8 + p1HighKey.length + p2HighKey.length);
-				a1.position(0);
-				a1.putInt(30+128*8 + p1HighKey.length + p2HighKey.length);
-				a1.putInt(p.getInt(9));
-				a1.put((byte)0);
-				a1.putInt(17+128*8 + p1HighKey.length + p2HighKey.length);
-				a1.putInt(2);
-				a1.putInt(bl2.number());
-				a1.putInt(13);
-				a1.putInt(bl.number());
-				a1.putInt(13);
-				i = 2;
-				while (i < 129)
-				{
-					a1.putLong(0);
-					i++;
-				}
-				a1.put(p1HighKey);
-				a1.put(p2HighKey);
-				lsn = LogManager.getLSN();
-				p.write(5, a1.array(), tx.number(), lsn);
-				//changedBlocks.add(p.block());
-				
-				newRec = new IndexRecord(file, 0, 13, tx, true, p);
-				newRec.setChildUpPointersNoLog();
-			}
-			else
-			{
-				IndexRecord up = getInternalUp(true);
-				p2HighKey = up.getDownKey(this.getBlockAndOffset());
-				up.replaceDownKeyNoLog(this.getBlockAndOffset(), p1HighKey);
-				up = getInternalUp(true);
-				up.addInternalDownNoLog(new BlockAndOffset(bl.number(), 13), p2HighKey);
-			}
-		}
-		
-		private void split() throws Exception
-		{
-			//create a new internal record that has high half of keys and down pointers
-			ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
-			int i = 0;
-			while (i < Page.BLOCK_SIZE)
-			{
-				bb.put((byte)2);
-				i++;
-			}
-			
-			int newNum = FileManager.addNewBlock(file, bb, tx);
-			Block bl = new Block(file, newNum);
-			LockManager.xLock(bl, tx.number());
-			tx.requestPage(bl);
-			Page p2 = null;
-			try
-			{
-				p2 = tx.getPage(bl);
-			}
-			catch(Exception e)
-			{
-				HRDBMSWorker.logger.error("", e);
-				throw e;
-			}
-			
-			int numBytes = p.getInt(5);
-			byte[] bytes = new byte[numBytes];
-			p.get(0, bytes);
-			byte[] bef = new byte[numBytes];
-			p2.get(0, bef);
-			InsertLogRec rec = tx.insert(bef, bytes, 0, p2.block());
-			p2.write(0, bytes, tx.number(), rec.lsn());
-			
-			//move down pointers
-			int nks = p.getInt(off+5);
-			int lowKeys = nks / 2;
-			int highKeys = nks - lowKeys;
-			byte[] after = new byte[highKeys*8];
-			p.get(off+9+lowKeys*8, after);
-			byte[] before = new byte[highKeys*8];
-			p2.get(22, before);
-			rec = tx.insert(before, after, 22, p2.block());
-			p2.write(22, after, tx.number(), rec.lsn());
-			Arrays.fill(before, (byte)0);
-			rec = tx.insert(after, before, off+9+lowKeys*8, p.block());
-			p.write(off+9+lowKeys*8, before, tx.number(), rec.lsn());
-			//changedBlocks.add(p.block());
-			
-			after = new byte[lowKeys*8];
-			before = new byte[lowKeys*8];
-			Arrays.fill(before, (byte)0);
-			p2.get(off+9+highKeys*8, after);
-			rec = tx.insert(after, before, off+9+highKeys*8, p2.block());
-			p2.write(off+9+highKeys*8, before, tx.number(), rec.lsn());
-			//changedBlocks.add(p2.block());
-			
-			i = 0;
-			int o = off+9+128*8+8;
-			int p1HKS = -1;
-			while (i < lowKeys)
-			{
-				if (i == lowKeys - 1)
-				{
-					p1HKS = o;
-				}
-				for (String type : types)
-				{
-					o++; //null indicator
-					
-					if (type.equals("INT"))
-					{
-						o += 4;
-					}
-					else if (type.equals("LONG"))
-					{
-						o += 8;
-					}
-					else if (type.equals("FLOAT"))
-					{
-						o += 8;
-					}
-					else if (type.equals("DATE"))
-					{
-						o += 8;
-					}
-					else if (type.equals("CHAR"))
-					{
-						o += p.getInt(o);
-						o += 4;
-					}
-					else
-					{
-						HRDBMSWorker.logger.error("Unknown type in IndexRecord.split(): " + type);
-						throw new Exception("Unknown type in IndexRecord.split(): " + type);
-					}
-				}
-				
-				i++;
-			}
-			
-			byte[] p1HighKey = new byte[o - p1HKS];
-			p.get(p1HKS, p1HighKey);
-			//we are now positioned at the start of the keys that have to get moved from the current page to the new one
-			int start = o;
-			i = 0;
-			int p2HKS = -1;
-			while (i < highKeys)
-			{
-				if (i == highKeys - 1)
-				{
-					p2HKS = o;
-				}
-				for (String type : types)
-				{
-					o++; //null indicator
-					
-					if (type.equals("INT"))
-					{
-						o += 4;
-					}
-					else if (type.equals("LONG"))
-					{
-						o += 8;
-					}
-					else if (type.equals("FLOAT"))
-					{
-						o += 8;
-					}
-					else if (type.equals("DATE"))
-					{
-						o += 8;
-					}
-					else if (type.equals("CHAR"))
-					{
-						o += p.getInt(o);
-						o += 4;
-					}
-					else
-					{
-						HRDBMSWorker.logger.error("Unknown type in IndexRecord.split(): " + type);
-						throw new Exception("Unknown type in IndexRecord.split(): " + type);
-					}
-				}
-				
-				i++;
-			}
-			
-			byte[] p2HighKey = new byte[o - p2HKS];
-			p.get(p2HKS, p2HighKey);
-			int end = o;
-			int length = end - start;
-			byte[] oldPageKeys = new byte[length];
-			p.get(start, oldPageKeys);
-			byte[] blank = new byte[length];
-			Arrays.fill(blank, (byte)0);
-			rec = tx.insert(oldPageKeys, blank, start, p.block());
-			p.write(start, blank, tx.number(), rec.lsn());
-			byte[] newPage = new byte[length];
-			p2.get(30+128*8, newPage);
-			rec = tx.insert(newPage, oldPageKeys, 30+128*8, p2.block());
-			p2.write(30+128*8, oldPageKeys, tx.number(), rec.lsn());
-			
-			int firstFreeByte = p.getInt(5);
-			ByteBuffer b1 = ByteBuffer.allocate(4);
-			b1.position(0);
-			b1.putInt(firstFreeByte);
-			firstFreeByte -= length;
-			ByteBuffer a1 = ByteBuffer.allocate(4);
-			a1.position(0);
-			a1.putInt(firstFreeByte);
-			rec = tx.insert(b1.array(), a1.array(), 5, p.block());
-			p.write(5, a1.array(), tx.number(), rec.lsn());
-			
-			firstFreeByte = p.getInt(14);
-			b1 = ByteBuffer.allocate(8);
-			b1.position(0);
-			b1.putInt(firstFreeByte);
-			b1.putInt(p.getInt(18));
-			firstFreeByte -= length;
-			a1 = ByteBuffer.allocate(8);
-			a1.position(0);
-			a1.putInt(firstFreeByte);
-			a1.putInt(lowKeys);
-			rec = tx.insert(b1.array(), a1.array(), 14, p.block());
-			p.write(14, a1.array(), tx.number(), rec.lsn());
-			//changedBlocks.add(p.block());
-			
-			byte[] b1a = new byte[17];
-			p2.get(5, b1a);
-			a1 = ByteBuffer.allocate(17);
-			a1.position(0);
-			a1.putInt(30+128*8+length);
-			a1.putInt(Page.BLOCK_SIZE-1);
-			a1.put((byte)0);
-			a1.putInt(17+128*8+length);
-			a1.putInt(highKeys);
-			rec = tx.insert(b1a, a1.array(), 5, p2.block());
-			p2.write(5, a1.array(), tx.number(), rec.lsn());
-			//changedBlocks.add(p2.block());
-			
-			IndexRecord newRec = new IndexRecord(file, p2.block().number(), 13, tx, true, p2); 
-			newRec.setChildUpPointers();
-			
-			if (b.number() == 0)
-			{
-				//we are splitting the root
-				//move the root to a new page
-				bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
-				i = 0;
-				while (i < Page.BLOCK_SIZE)
-				{
-					bb.put((byte)2);
-					i++;
-				}
-				
-				newNum = FileManager.addNewBlock(file, bb, tx);
-				Block bl2 = new Block(file, newNum);
-				LockManager.xLock(bl2, tx.number());
-				tx.requestPage(bl2);
-				Page p3 = null;
-				try
-				{
-					p3 = tx.getPage(bl2);
-				}
-				catch(Exception e)
-				{
-					HRDBMSWorker.logger.error("", e);
-					throw e;
-				}
-				
-				firstFreeByte = p.getInt(5);
-				byte[] a1a = new byte[firstFreeByte];
-				p.get(0, a1a);
-				b1a = new byte[firstFreeByte];
-				p3.get(0, b1a);
-				rec = tx.insert(b1a, a1a, 0, p3.block());
-				p3.write(0, a1a, tx.number(), rec.lsn());
-				b1a = new byte[4];
-				p3.get(9, b1a);
-				a1 = ByteBuffer.allocate(4);
-				a1.position(0);
-				a1.putInt(Page.BLOCK_SIZE-1);
-				rec = tx.insert(b1a, a1.array(), 9, p3.block());
-				p3.write(9, a1.array(), tx.number(), rec.lsn());
-				//changedBlocks.add(p3.block());
-				
-				newRec = new IndexRecord(file, p3.block().number(), 13, tx, true, p3);
-				newRec.setChildUpPointers();
-				
-				//write new root 
-				b1a = new byte[25+128*8 + p1HighKey.length + p2HighKey.length]; 
-				p.get(5, b1a);
-				a1 = ByteBuffer.allocate(25+128*8 + p1HighKey.length + p2HighKey.length);
-				a1.position(0);
-				a1.putInt(30+128*8 + p1HighKey.length + p2HighKey.length);
-				a1.putInt(p.getInt(9));
-				a1.put((byte)0);
-				a1.putInt(17+128*8 + p1HighKey.length + p2HighKey.length);
-				a1.putInt(2);
-				a1.putInt(bl2.number());
-				a1.putInt(13);
-				a1.putInt(bl.number());
-				a1.putInt(13);
-				i = 2;
-				while (i < 129)
-				{
-					a1.putLong(0);
-					i++;
-				}
-				a1.put(p1HighKey);
-				a1.put(p2HighKey);
-				rec = tx.insert(b1a, a1.array(), 5, p.block());
-				p.write(5, a1.array(), tx.number(), rec.lsn());
-				//changedBlocks.add(p.block());
-				
-				newRec = new IndexRecord(file, 0, 13, tx, true, p);
-				newRec.setChildUpPointers();
-			}
-			else
-			{
-				IndexRecord up = getInternalUp(true);
-				p2HighKey = up.getDownKey(this.getBlockAndOffset());
-				up.replaceDownKey(this.getBlockAndOffset(), p1HighKey);
-				up = getInternalUp(true);
-				up.addInternalDown(new BlockAndOffset(bl.number(), 13), p2HighKey);
-			}
-		}
-		
-		private void setChildUpPointers() throws Exception
-		{
-			int o = 22;
-			int i = 0;
-			int nks = p.getInt(18);
-			while (i < nks)
-			{
-				int block = p.getInt(o);
-				o += 4;
-				int offset = p.getInt(o);
-				o += 4;
-				IndexRecord rec = new IndexRecord(file, block, offset, tx, true);
-				if (rec.isLeaf())
-				{
-					rec.setUp(this);
-				}
-				else
-				{
-					rec.setUpInternal(this);
-				}
-				i++;
-			}
-		}
-		
-		private void setChildUpPointersNoLog() throws Exception
-		{
-			int o = 22;
-			int i = 0;
-			int nks = p.getInt(18);
-			while (i < nks)
-			{
-				int block = p.getInt(o);
-				o += 4;
-				int offset = p.getInt(o);
-				o += 4;
-				IndexRecord rec = new IndexRecord(file, block, offset, tx, true);
-				if (rec.isLeaf())
-				{
-					rec.setUpNoLog(this);
-				}
-				else
-				{
-					rec.setUpInternalNoLog(this);
-				}
-				i++;
-			}
-		}
-		
+
 		private void addInternalDown(BlockAndOffset bao, byte[] keyBytes) throws Exception
 		{
 			if (this.containsRoom())
@@ -3760,8 +2887,13 @@ public final class Index implements Serializable
 				int available = p.getInt(9) - p.getInt(5) + 1;
 				if (keyBytes.length <= available)
 				{
-					//update record in place
-					RowComparator rc = new RowComparator(orders, types);
+					HashMap<Integer, ArrayList<Object>> internalKeyCache = cache.get(b);
+					if (internalKeyCache != null)
+					{
+						internalKeyCache.clear();
+					}
+					// update record in place
+					// RowComparator rc = new RowComparator(orders, types);
 					ArrayList<Object> newKey = new ArrayList<Object>();
 					ByteBuffer bb = ByteBuffer.wrap(keyBytes);
 					int o = 0;
@@ -3777,7 +2909,7 @@ public final class Index implements Serializable
 						else if (type.equals("LONG"))
 						{
 							newKey.add(bb.getLong(o));
-							o+= 8;
+							o += 8;
 						}
 						else if (type.equals("FLOAT"))
 						{
@@ -3794,7 +2926,7 @@ public final class Index implements Serializable
 							int length = bb.getInt(o);
 							o += 4;
 							byte[] bytes = new byte[length];
-							//bb.get(o, bytes);
+							// bb.get(o, bytes);
 							int i = 0;
 							while (i < length)
 							{
@@ -3804,9 +2936,21 @@ public final class Index implements Serializable
 							}
 							try
 							{
-								newKey.add(new String(bytes, "UTF-8"));
+								String value = (String)unsafe.allocateInstance(String.class);
+								char[] ca = new char[bytes.length];
+								int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(bytes, 0, bytes.length, ca);
+								if (clen == ca.length)
+								{
+									unsafe.putObject(value, soffset, ca);
+								}
+								else
+								{
+									char[] v = Arrays.copyOf(ca, clen);
+									unsafe.putObject(value, soffset, v);
+								}
+								newKey.add(value);
 							}
-							catch(Exception e)
+							catch (Exception e)
 							{
 								HRDBMSWorker.logger.error("", e);
 								throw e;
@@ -3817,12 +2961,12 @@ public final class Index implements Serializable
 							HRDBMSWorker.logger.error("Unknown type in IndexRecord.addInternalDown(): " + type);
 							throw new Exception("Unknown type in IndexRecord.addInternalDown(): " + type);
 						}
-						
+
 						j++;
 					}
 					int i = 0;
-					int numKeys = p.getInt(off+5);
-					o = off+9+129*8;
+					int numKeys = p.getInt(off + 5);
+					o = off + 9 + 129 * 8;
 					int goesHere = -1;
 					while (i < numKeys)
 					{
@@ -3840,7 +2984,7 @@ public final class Index implements Serializable
 							else if (type.equals("LONG"))
 							{
 								row.add(p.getLong(o));
-								o+= 8;
+								o += 8;
 							}
 							else if (type.equals("FLOAT"))
 							{
@@ -3861,9 +3005,21 @@ public final class Index implements Serializable
 								o += length;
 								try
 								{
-									row.add(new String(bytes, "UTF-8"));
+									String value = (String)unsafe.allocateInstance(String.class);
+									char[] ca = new char[bytes.length];
+									int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(bytes, 0, bytes.length, ca);
+									if (clen == ca.length)
+									{
+										unsafe.putObject(value, soffset, ca);
+									}
+									else
+									{
+										char[] v = Arrays.copyOf(ca, clen);
+										unsafe.putObject(value, soffset, v);
+									}
+									row.add(value);
 								}
-								catch(Exception e)
+								catch (Exception e)
 								{
 									HRDBMSWorker.logger.error("", e);
 									throw e;
@@ -3874,75 +3030,75 @@ public final class Index implements Serializable
 								HRDBMSWorker.logger.error("Unknown type in IndexRecord.addInternalDown(): " + type);
 								throw new Exception("Unknown type in IndexRecord.addInternalDown(): " + type);
 							}
-							
+
 							j++;
 						}
-						
+
 						if (rc.compare(newKey, row) < 0)
 						{
-							//the new key goes in position i
+							// the new key goes in position i
 							break;
 						}
-						
+
 						i++;
 					}
-					
+
 					if (i == numKeys)
 					{
 						goesHere = o;
 					}
-					
-					//key goes in position i @ offset goesHere
+
+					// key goes in position i @ offset goesHere
 					int firstFree = p.getInt(5);
 					ByteBuffer bef = ByteBuffer.allocate(4);
 					bef.position(0);
 					bef.putInt(firstFree);
 					ByteBuffer aft = ByteBuffer.allocate(4);
 					aft.position(0);
-					aft.putInt(firstFree+keyBytes.length);
+					aft.putInt(firstFree + keyBytes.length);
 					InsertLogRec rec = tx.insert(bef.array(), aft.array(), 5, p.block());
 					p.write(5, aft.array(), tx.number(), rec.lsn());
-					
+
 					byte[] ba = new byte[8];
 					p.get(14, ba);
 					aft = ByteBuffer.allocate(8);
 					aft.position(0);
-					aft.putInt(firstFree+keyBytes.length-13);
-					aft.putInt(numKeys+1);
+					aft.putInt(firstFree + keyBytes.length - 13);
+					aft.putInt(numKeys + 1);
 					rec = tx.insert(ba, aft.array(), 14, p.block());
 					p.write(14, aft.array(), tx.number(), rec.lsn());
-					//changedBlocks.add(p.block());
-					
-					int toMove = numKeys * 8 - i * 8;
+					// changedBlocks.add(p.block());
+
+					int toMove = (numKeys << 3) - (i << 3);
 					if (toMove > 0)
 					{
 						ba = new byte[toMove];
-						p.get(off+9+(i+1)*8, ba);
+						p.get(off + 9 + (i + 1) * 8, ba);
 						byte[] aa = new byte[toMove];
-						p.get(off+9+i*8, aa);
-						rec = tx.insert(ba, aa, off+9+(i+1)*8, p.block());
-						p.write(off+9+(i+1)*8, aa, tx.number(), rec.lsn());
-						//changedBlocks.add(p.block());
+						p.get(off + 9 + (i << 3), aa);
+						rec = tx.insert(ba, aa, off + 9 + (i + 1) * 8, p.block());
+						p.write(off + 9 + (i + 1) * 8, aa, tx.number(), rec.lsn());
+						// changedBlocks.add(p.block());
 					}
-						
+
 					ba = new byte[8];
-					p.get(off+9+i*8, ba);
+					p.get(off + 9 + (i << 3), ba);
 					aft = ByteBuffer.allocate(8);
 					aft.position(0);
 					aft.putInt(bao.block());
 					aft.putInt(bao.offset());
-					rec = tx.insert(ba, aft.array(), off+9+i*8, p.block());
-					p.write(off+9+i*8, aft.array(), tx.number(), rec.lsn());
-					//changedBlocks.add(p.block());
-					
+					rec = tx.insert(ba, aft.array(), off + 9 + i * 8, p.block());
+					p.write(off + 9 + i * 8, aft.array(), tx.number(), rec.lsn());
+					// changedBlocks.add(p.block());
+
 					if (i == numKeys)
 					{
-						//nothing to move
+						// nothing to move
 						byte[] before = new byte[keyBytes.length];
 						p.get(goesHere, before);
 						rec = tx.insert(before, keyBytes, goesHere, p.block());
 						p.write(goesHere, keyBytes, tx.number(), rec.lsn());
-						//changedBlocks.add(p.block());
+						// changedBlocks.add(p.block());
 					}
 					else
 					{
@@ -3978,28 +3134,29 @@ public final class Index implements Serializable
 								{
 									HRDBMSWorker.logger.error("Unknown type in IndexRecord.addInternalDown(): " + type);
 									throw new Exception("Unknown type in IndexRecord.addInternalDown(): " + type);
-								}			
+								}
 							}
-							
+
 							j++;
 						}
-						
-						//move data from goesHere <-> o by keyBytes.length bytes
+
+						// move data from goesHere <-> o by keyBytes.length
+						// bytes
 						toMove = o - goesHere;
 						byte[] before = new byte[toMove];
 						p.get(goesHere + keyBytes.length, before);
 						byte[] after = new byte[toMove];
 						p.get(goesHere, after);
-						rec = tx.insert(before, after, goesHere+keyBytes.length, p.block());
-						p.write(goesHere+keyBytes.length, after, tx.number(), rec.lsn());
-						
+						rec = tx.insert(before, after, goesHere + keyBytes.length, p.block());
+						p.write(goesHere + keyBytes.length, after, tx.number(), rec.lsn());
+
 						before = new byte[keyBytes.length];
 						p.get(goesHere, before);
 						rec = tx.insert(before, keyBytes, goesHere, p.block());
 						p.write(goesHere, keyBytes, tx.number(), rec.lsn());
-						//changedBlocks.add(p.block());
+						// changedBlocks.add(p.block());
 					}
-					
+
 					IndexRecord down = new IndexRecord(file, bao.block(), bao.offset(), tx, true);
 					if (down.isLeaf())
 					{
@@ -4012,10 +3169,11 @@ public final class Index implements Serializable
 				}
 				else
 				{
-					//check if this is the root
+					// check if this is the root
 					if (b.number() == 0)
 					{
-						//split and add and fix up and possibly reset down key in root
+						// split and add and fix up and possibly reset down key
+						// in root
 						split();
 						int lstart = 22 + 129 * 8;
 						int o = lstart;
@@ -4049,7 +3207,7 @@ public final class Index implements Serializable
 								throw new Exception("Unknown type in IndexRecord.addInternalDown(): " + type);
 							}
 						}
-						
+
 						int rstart = o;
 						for (String type : types)
 						{
@@ -4081,44 +3239,44 @@ public final class Index implements Serializable
 								throw new Exception("Unknown type in IndexRecord.addInternalDown(): " + type);
 							}
 						}
-						
-						byte[] lKey = new byte[rstart-lstart];
+
+						byte[] lKey = new byte[rstart - lstart];
 						p.get(lstart, lKey);
-						byte[] rKey = new byte[o-rstart];
+						byte[] rKey = new byte[o - rstart];
 						p.get(rstart, rKey);
 						ArrayList<Object> leftRow = this.convertBytesToRow(lKey);
 						ArrayList<Object> row = convertBytesToRow(keyBytes);
-						RowComparator rc = new RowComparator(orders, types);
-						
+						// RowComparator rc = new RowComparator(orders, types);
+
 						if (rc.compare(leftRow, row) <= 0)
 						{
-							//add and fix up
+							// add and fix up
 							IndexRecord child = this.getDown(0);
 							child.addInternalDown(bao, keyBytes);
 						}
 						else
 						{
 							ArrayList<Object> rightRow = convertBytesToRow(rKey);
-							
+
 							if (rc.compare(row, rightRow) <= 0)
 							{
-								//add and fix up
+								// add and fix up
 								IndexRecord child = this.getDown(1);
 								child.addInternalDown(bao, keyBytes);
 							}
 							else
 							{
-								//add and fix up
+								// add and fix up
 								IndexRecord child = this.getDown(1);
 								child.addInternalDown(bao, keyBytes);
 								child.updateParentDownKey(keyBytes);
 							}
 						}
-						
+
 						return;
 					}
-					
-					//otherwise move record and then update in place
+
+					// otherwise move record and then update in place
 					if (p.getInt(9) != Page.BLOCK_SIZE - 1)
 					{
 						ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
@@ -4128,7 +3286,7 @@ public final class Index implements Serializable
 							bb.put((byte)2);
 							i++;
 						}
-					
+
 						int newNum = FileManager.addNewBlock(file, bb, tx);
 						Block bl = new Block(file, newNum);
 						LockManager.xLock(bl, tx.number());
@@ -4138,12 +3296,12 @@ public final class Index implements Serializable
 						{
 							p2 = tx.getPage(bl);
 						}
-						catch(Exception e)
+						catch (Exception e)
 						{
 							HRDBMSWorker.logger.error("", e);
 							throw e;
 						}
-					
+
 						int length = p.getInt(5);
 						byte[] before = new byte[length];
 						p2.get(0, before);
@@ -4151,16 +3309,16 @@ public final class Index implements Serializable
 						p.get(0, after);
 						InsertLogRec rec = tx.insert(before, after, 0, p2.block());
 						p2.write(0, after, tx.number(), rec.lsn());
-					
+
 						before = new byte[4];
 						p2.get(9, before);
 						ByteBuffer aft = ByteBuffer.allocate(4);
 						aft.position(0);
-						aft.putInt(Page.BLOCK_SIZE-1);
+						aft.putInt(Page.BLOCK_SIZE - 1);
 						rec = tx.insert(before, aft.array(), 9, p2.block());
 						p2.write(9, aft.array(), tx.number(), rec.lsn());
-						//changedBlocks.add(p2.block());
-					
+						// changedBlocks.add(p2.block());
+
 						IndexRecord parent = getInternalUp(true);
 						parent.replaceDownPointer(this.getBlockAndOffset(), new BlockAndOffset(bl.number(), 13));
 						IndexRecord moved = new IndexRecord(file, bl.number(), 13, tx, true, p2);
@@ -4173,8 +3331,8 @@ public final class Index implements Serializable
 						byte[] myHigh = getHighKey();
 						ArrayList<Object> myHighRow = convertBytesToRow(myHigh);
 						ArrayList<Object> row = convertBytesToRow(keyBytes);
-						
-						RowComparator rc = new RowComparator(orders, types);
+
+						// RowComparator rc = new RowComparator(orders, types);
 						if (rc.compare(row, myHighRow) <= 0)
 						{
 							addInternalDown(bao, keyBytes);
@@ -4189,10 +3347,11 @@ public final class Index implements Serializable
 			}
 			else
 			{
-				//if this is the root
+				// if this is the root
 				if (b.number() == 0)
 				{
-					//split and add and fix up and possibly reset down key in root
+					// split and add and fix up and possibly reset down key in
+					// root
 					split();
 					int lstart = 22 + 129 * 8;
 					int o = lstart;
@@ -4226,7 +3385,7 @@ public final class Index implements Serializable
 							throw new Exception("Unknown type in IndexRecord.addInternalDown(): " + type);
 						}
 					}
-					
+
 					int rstart = o;
 					for (String type : types)
 					{
@@ -4258,34 +3417,34 @@ public final class Index implements Serializable
 							throw new Exception("Unknown type in IndexRecord.addInternalDown(): " + type);
 						}
 					}
-					
-					byte[] lKey = new byte[rstart-lstart];
+
+					byte[] lKey = new byte[rstart - lstart];
 					p.get(lstart, lKey);
-					byte[] rKey = new byte[o-rstart];
+					byte[] rKey = new byte[o - rstart];
 					p.get(rstart, rKey);
 					ArrayList<Object> leftRow = this.convertBytesToRow(lKey);
 					ArrayList<Object> row = convertBytesToRow(keyBytes);
-					RowComparator rc = new RowComparator(orders, types);
-					
+					// RowComparator rc = new RowComparator(orders, types);
+
 					if (rc.compare(row, leftRow) <= 0)
 					{
-						//add and fix up
+						// add and fix up
 						IndexRecord child = this.getDown(0);
 						child.addInternalDown(bao, keyBytes);
 					}
 					else
 					{
 						ArrayList<Object> rightRow = convertBytesToRow(rKey);
-						
+
 						if (rc.compare(row, rightRow) <= 0)
 						{
-							//add and fix up
+							// add and fix up
 							IndexRecord child = this.getDown(1);
 							child.addInternalDown(bao, keyBytes);
 						}
 						else
 						{
-							//add and fix up
+							// add and fix up
 							IndexRecord child = this.getDown(1);
 							child.addInternalDown(bao, keyBytes);
 							child.updateParentDownKey(keyBytes);
@@ -4297,10 +3456,10 @@ public final class Index implements Serializable
 					split();
 					byte[] myHigh = getHighKey();
 					ArrayList<Object> myHighRow = convertBytesToRow(myHigh);
-					
+
 					ArrayList<Object> row = convertBytesToRow(keyBytes);
-					
-					RowComparator rc = new RowComparator(orders, types);
+
+					// RowComparator rc = new RowComparator(orders, types);
 					if (rc.compare(row, myHighRow) <= 0)
 					{
 						addInternalDown(bao, keyBytes);
@@ -4313,7 +3472,7 @@ public final class Index implements Serializable
 				}
 			}
 		}
-		
+
 		private void addInternalDownNoLog(BlockAndOffset bao, byte[] keyBytes) throws Exception
 		{
 			if (this.containsRoom())
@@ -4321,8 +3480,13 @@ public final class Index implements Serializable
 				int available = p.getInt(9) - p.getInt(5) + 1;
 				if (keyBytes.length <= available)
 				{
-					//update record in place
-					RowComparator rc = new RowComparator(orders, types);
+					HashMap<Integer, ArrayList<Object>> internalKeyCache = cache.get(b);
+					if (internalKeyCache != null)
+					{
+						internalKeyCache.clear();
+					}
+					// update record in place
+					// RowComparator rc = new RowComparator(orders, types);
 					ArrayList<Object> newKey = new ArrayList<Object>();
 					ByteBuffer bb = ByteBuffer.wrap(keyBytes);
 					int o = 0;
@@ -4338,7 +3502,7 @@ public final class Index implements Serializable
 						else if (type.equals("LONG"))
 						{
 							newKey.add(bb.getLong(o));
-							o+= 8;
+							o += 8;
 						}
 						else if (type.equals("FLOAT"))
 						{
@@ -4355,7 +3519,7 @@ public final class Index implements Serializable
 							int length = bb.getInt(o);
 							o += 4;
 							byte[] bytes = new byte[length];
-							//bb.get(o, bytes);
+							// bb.get(o, bytes);
 							int i = 0;
 							while (i < length)
 							{
@@ -4365,9 +3529,21 @@ public final class Index implements Serializable
 							}
 							try
 							{
-								newKey.add(new String(bytes, "UTF-8"));
+								String value = (String)unsafe.allocateInstance(String.class);
+								char[] ca = new char[bytes.length];
+								int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(bytes, 0, bytes.length, ca);
+								if (clen == ca.length)
+								{
+									unsafe.putObject(value, soffset, ca);
+								}
+								else
+								{
+									char[] v = Arrays.copyOf(ca, clen);
+									unsafe.putObject(value, soffset, v);
+								}
+								newKey.add(value);
 							}
-							catch(Exception e)
+							catch (Exception e)
 							{
 								HRDBMSWorker.logger.error("", e);
 								throw e;
@@ -4378,12 +3554,12 @@ public final class Index implements Serializable
 							HRDBMSWorker.logger.error("Unknown type in IndexRecord.addInternalDown(): " + type);
 							throw new Exception("Unknown type in IndexRecord.addInternalDown(): " + type);
 						}
-						
+
 						j++;
 					}
 					int i = 0;
-					int numKeys = p.getInt(off+5);
-					o = off+9+129*8;
+					int numKeys = p.getInt(off + 5);
+					o = off + 9 + 129 * 8;
 					int goesHere = -1;
 					while (i < numKeys)
 					{
@@ -4401,7 +3577,7 @@ public final class Index implements Serializable
 							else if (type.equals("LONG"))
 							{
 								row.add(p.getLong(o));
-								o+= 8;
+								o += 8;
 							}
 							else if (type.equals("FLOAT"))
 							{
@@ -4422,9 +3598,21 @@ public final class Index implements Serializable
 								o += length;
 								try
 								{
-									row.add(new String(bytes, "UTF-8"));
+									String value = (String)unsafe.allocateInstance(String.class);
+									char[] ca = new char[bytes.length];
+									int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(bytes, 0, bytes.length, ca);
+									if (clen == ca.length)
+									{
+										unsafe.putObject(value, soffset, ca);
+									}
+									else
+									{
+										char[] v = Arrays.copyOf(ca, clen);
+										unsafe.putObject(value, soffset, v);
+									}
+									row.add(value);
 								}
-								catch(Exception e)
+								catch (Exception e)
 								{
 									HRDBMSWorker.logger.error("", e);
 									throw e;
@@ -4435,59 +3623,59 @@ public final class Index implements Serializable
 								HRDBMSWorker.logger.error("Unknown type in IndexRecord.addInternalDown(): " + type);
 								throw new Exception("Unknown type in IndexRecord.addInternalDown(): " + type);
 							}
-							
+
 							j++;
 						}
-						
+
 						if (rc.compare(newKey, row) < 0)
 						{
-							//the new key goes in position i
+							// the new key goes in position i
 							break;
 						}
-						
+
 						i++;
 					}
-					
+
 					if (i == numKeys)
 					{
 						goesHere = o;
 					}
-					
-					//key goes in position i @ offset goesHere
+
+					// key goes in position i @ offset goesHere
 					int firstFree = p.getInt(5);
 					ByteBuffer aft = ByteBuffer.allocate(4);
 					aft.position(0);
-					aft.putInt(firstFree+keyBytes.length);
+					aft.putInt(firstFree + keyBytes.length);
 					long lsn = LogManager.getLSN();
 					p.write(5, aft.array(), tx.number(), lsn);
-					
+
 					aft = ByteBuffer.allocate(8);
 					aft.position(0);
-					aft.putInt(firstFree+keyBytes.length-13);
-					aft.putInt(p.getInt(18)+1);
+					aft.putInt(firstFree + keyBytes.length - 13);
+					aft.putInt(p.getInt(18) + 1);
 					lsn = LogManager.getLSN();
 					p.write(14, aft.array(), tx.number(), lsn);
-					
+
 					int toMove = numKeys * 8 - i * 8;
 					if (toMove > 0)
 					{
 						byte[] aa = new byte[toMove];
-						p.get(off+9+i*8, aa);
+						p.get(off + 9 + i * 8, aa);
 						lsn = LogManager.getLSN();
-						p.write(off+9+(i+1)*8, aa, tx.number(), lsn);
+						p.write(off + 9 + (i + 1) * 8, aa, tx.number(), lsn);
 					}
-						
+
 					aft = ByteBuffer.allocate(8);
 					aft.position(0);
 					aft.putInt(bao.block());
 					aft.putInt(bao.offset());
 					lsn = LogManager.getLSN();
-					p.write(off+9+i*8, aft.array(), tx.number(), lsn);
-					//changedBlocks.add(p.block());
-					
+					p.write(off + 9 + i * 8, aft.array(), tx.number(), lsn);
+					// changedBlocks.add(p.block());
+
 					if (i == numKeys)
 					{
-						//nothing to move
+						// nothing to move
 						lsn = LogManager.getLSN();
 						p.write(goesHere, keyBytes, tx.number(), lsn);
 					}
@@ -4525,24 +3713,25 @@ public final class Index implements Serializable
 								{
 									HRDBMSWorker.logger.error("Unknown type in IndexRecord.addInternalDown(): " + type);
 									throw new Exception("Unknown type in IndexRecord.addInternalDown(): " + type);
-								}			
+								}
 							}
-							
+
 							j++;
 						}
-						
-						//move data from goesHere <-> o by keyBytes.length bytes
+
+						// move data from goesHere <-> o by keyBytes.length
+						// bytes
 						toMove = o - goesHere;
 						byte[] after = new byte[toMove];
 						p.get(goesHere, after);
 						lsn = LogManager.getLSN();
-						p.write(goesHere+keyBytes.length, after, tx.number(), lsn);
-						
+						p.write(goesHere + keyBytes.length, after, tx.number(), lsn);
+
 						lsn = LogManager.getLSN();
 						p.write(goesHere, keyBytes, tx.number(), lsn);
-						//changedBlocks.add(p.block());
+						// changedBlocks.add(p.block());
 					}
-					
+
 					IndexRecord down = new IndexRecord(file, bao.block(), bao.offset(), tx, true);
 					if (down.isLeaf())
 					{
@@ -4555,10 +3744,11 @@ public final class Index implements Serializable
 				}
 				else
 				{
-					//check if this is the root
+					// check if this is the root
 					if (b.number() == 0)
 					{
-						//split and add and fix up and possibly reset down key in root
+						// split and add and fix up and possibly reset down key
+						// in root
 						splitNoLog();
 						int lstart = 22 + 129 * 8;
 						int o = lstart;
@@ -4592,7 +3782,7 @@ public final class Index implements Serializable
 								throw new Exception("Unknown type in IndexRecord.addInternalDown(): " + type);
 							}
 						}
-						
+
 						int rstart = o;
 						for (String type : types)
 						{
@@ -4624,44 +3814,44 @@ public final class Index implements Serializable
 								throw new Exception("Unknown type in IndexRecord.addInternalDown(): " + type);
 							}
 						}
-						
-						byte[] lKey = new byte[rstart-lstart];
+
+						byte[] lKey = new byte[rstart - lstart];
 						p.get(lstart, lKey);
-						byte[] rKey = new byte[o-rstart];
+						byte[] rKey = new byte[o - rstart];
 						p.get(rstart, rKey);
 						ArrayList<Object> leftRow = this.convertBytesToRow(lKey);
 						ArrayList<Object> row = convertBytesToRow(keyBytes);
-						RowComparator rc = new RowComparator(orders, types);
-						
+						// RowComparator rc = new RowComparator(orders, types);
+
 						if (rc.compare(leftRow, row) <= 0)
 						{
-							//add and fix up
+							// add and fix up
 							IndexRecord child = this.getDown(0);
 							child.addInternalDownNoLog(bao, keyBytes);
 						}
 						else
 						{
 							ArrayList<Object> rightRow = convertBytesToRow(rKey);
-							
+
 							if (rc.compare(row, rightRow) <= 0)
 							{
-								//add and fix up
+								// add and fix up
 								IndexRecord child = this.getDown(1);
 								child.addInternalDownNoLog(bao, keyBytes);
 							}
 							else
 							{
-								//add and fix up
+								// add and fix up
 								IndexRecord child = this.getDown(1);
 								child.addInternalDownNoLog(bao, keyBytes);
 								child.updateParentDownKeyNoLog(keyBytes);
 							}
 						}
-						
+
 						return;
 					}
-					
-					//otherwise move record and then update in place
+
+					// otherwise move record and then update in place
 					if (p.getInt(9) != Page.BLOCK_SIZE - 1)
 					{
 						ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
@@ -4671,7 +3861,7 @@ public final class Index implements Serializable
 							bb.put((byte)2);
 							i++;
 						}
-					
+
 						int newNum = FileManager.addNewBlockNoLog(file, bb, tx);
 						Block bl = new Block(file, newNum);
 						LockManager.xLock(bl, tx.number());
@@ -4681,25 +3871,25 @@ public final class Index implements Serializable
 						{
 							p2 = tx.getPage(bl);
 						}
-						catch(Exception e)
+						catch (Exception e)
 						{
 							HRDBMSWorker.logger.error("", e);
 							throw e;
 						}
-					
+
 						int length = p.getInt(5);
 						byte[] after = new byte[length];
 						p.get(0, after);
 						long lsn = LogManager.getLSN();
 						p2.write(0, after, tx.number(), lsn);
-					
+
 						ByteBuffer aft = ByteBuffer.allocate(4);
 						aft.position(0);
-						aft.putInt(Page.BLOCK_SIZE-1);
+						aft.putInt(Page.BLOCK_SIZE - 1);
 						lsn = LogManager.getLSN();
 						p2.write(9, aft.array(), tx.number(), lsn);
-						//changedBlocks.add(p2.block());
-					
+						// changedBlocks.add(p2.block());
+
 						IndexRecord parent = getInternalUp(true);
 						parent.replaceDownPointerNoLog(this.getBlockAndOffset(), new BlockAndOffset(bl.number(), 13));
 						IndexRecord moved = new IndexRecord(file, bl.number(), 13, tx, true, p2);
@@ -4712,8 +3902,8 @@ public final class Index implements Serializable
 						byte[] myHigh = getHighKey();
 						ArrayList<Object> myHighRow = convertBytesToRow(myHigh);
 						ArrayList<Object> row = convertBytesToRow(keyBytes);
-						
-						RowComparator rc = new RowComparator(orders, types);
+
+						// RowComparator rc = new RowComparator(orders, types);
 						if (rc.compare(row, myHighRow) <= 0)
 						{
 							addInternalDownNoLog(bao, keyBytes);
@@ -4728,10 +3918,11 @@ public final class Index implements Serializable
 			}
 			else
 			{
-				//if this is the root
+				// if this is the root
 				if (b.number() == 0)
 				{
-					//split and add and fix up and possibly reset down key in root
+					// split and add and fix up and possibly reset down key in
+					// root
 					splitNoLog();
 					int lstart = 22 + 129 * 8;
 					int o = lstart;
@@ -4765,7 +3956,7 @@ public final class Index implements Serializable
 							throw new Exception("Unknown type in IndexRecord.addInternalDown(): " + type);
 						}
 					}
-					
+
 					int rstart = o;
 					for (String type : types)
 					{
@@ -4797,34 +3988,34 @@ public final class Index implements Serializable
 							throw new Exception("Unknown type in IndexRecord.addInternalDown(): " + type);
 						}
 					}
-					
-					byte[] lKey = new byte[rstart-lstart];
+
+					byte[] lKey = new byte[rstart - lstart];
 					p.get(lstart, lKey);
-					byte[] rKey = new byte[o-rstart];
+					byte[] rKey = new byte[o - rstart];
 					p.get(rstart, rKey);
 					ArrayList<Object> leftRow = this.convertBytesToRow(lKey);
 					ArrayList<Object> row = convertBytesToRow(keyBytes);
-					RowComparator rc = new RowComparator(orders, types);
-					
+					// RowComparator rc = new RowComparator(orders, types);
+
 					if (rc.compare(row, leftRow) <= 0)
 					{
-						//add and fix up
+						// add and fix up
 						IndexRecord child = this.getDown(0);
 						child.addInternalDownNoLog(bao, keyBytes);
 					}
 					else
 					{
 						ArrayList<Object> rightRow = convertBytesToRow(rKey);
-						
+
 						if (rc.compare(row, rightRow) <= 0)
 						{
-							//add and fix up
+							// add and fix up
 							IndexRecord child = this.getDown(1);
 							child.addInternalDownNoLog(bao, keyBytes);
 						}
 						else
 						{
-							//add and fix up
+							// add and fix up
 							IndexRecord child = this.getDown(1);
 							child.addInternalDownNoLog(bao, keyBytes);
 							child.updateParentDownKeyNoLog(keyBytes);
@@ -4836,10 +4027,10 @@ public final class Index implements Serializable
 					splitNoLog();
 					byte[] myHigh = getHighKey();
 					ArrayList<Object> myHighRow = convertBytesToRow(myHigh);
-					
+
 					ArrayList<Object> row = convertBytesToRow(keyBytes);
-					
-					RowComparator rc = new RowComparator(orders, types);
+
+					// RowComparator rc = new RowComparator(orders, types);
 					if (rc.compare(row, myHighRow) <= 0)
 					{
 						addInternalDownNoLog(bao, keyBytes);
@@ -4852,151 +4043,7 @@ public final class Index implements Serializable
 				}
 			}
 		}
-		
-		private IndexRecord getNextSibling() throws Exception
-		{
-			IndexRecord up = getInternalUp(true);
-			return up.getKeyAfter(new BlockAndOffset(this.b.number(), this.off));
-		}
-		
-		private IndexRecord getKeyAfter(BlockAndOffset bao) throws Exception
-		{
-			int o = 22;
-			int i = 0;
-			while (true)
-			{
-				int block = p.getInt(o);
-				o += 4;
-				int offset = p.getInt(o);
-				o += 4;
-				
-				if (block == bao.block() && offset == bao.offset())
-				{
-					return new IndexRecord(file, p.getInt(o), p.getInt(o+4), tx, true);
-				}
-			}
-		}
-		
-	/*	private IndexRecord getDownMatchingKey(byte[] keyBytes) throws Exception
-		{
-			int o = off+9+129*8;
-			int i = 0;
-			while (true)
-			{
-				int start = o;
-				for (String type : types)
-				{
-					o++;
-					if (type.equals("INT"))
-					{
-						o += 4;
-					}
-					else if (type.equals("LONG"))
-					{
-						o += 8;
-					}
-					else if (type.equals("FLOAT"))
-					{
-						o += 8;
-					}
-					else if (type.equals("DATE"))
-					{
-						o += 8;
-					}
-					else if (type.equals("CHAR"))
-					{
-						int length = p.getInt(o);
-						o += (4+length);
-					}
-					else
-					{
-						HRDBMSWorker.logger.error("Unknown type in IndexRecord.getDownMatchingKey(): " + type);
-						throw new Exception("Unknown type in IndexRecord.getDownMatchingKey(): " + type);
-					}
-				}
-				
-				int length = o - start;
-				if (length == keyBytes.length)
-				{
-					byte[] lhs = new byte[length];
-					p.get(start, lhs);
-					if (Arrays.equals(lhs, keyBytes))
-					{
-						//found the match
-						return this.getDown(i, true);
-					}
-				}
-				
-				i++;
-			}
-		} */
-		
-		private byte[] getHighKey() throws Exception
-		{
-			int nks = p.getInt(off+5);
-			int o = off+9+129*8;
-			int i = 0;
-			int p1HKS = -1;
-			while (i < nks)
-			{
-				if (i == nks - 1)
-				{
-					p1HKS = o;
-				}
-				for (String type : types)
-				{
-					o++; //null indicator
-					
-					if (type.equals("INT"))
-					{
-						o += 4;
-					}
-					else if (type.equals("LONG"))
-					{
-						o += 8;
-					}
-					else if (type.equals("FLOAT"))
-					{
-						o += 8;
-					}
-					else if (type.equals("DATE"))
-					{
-						o += 8;
-					}
-					else if (type.equals("CHAR"))
-					{
-						o += p.getInt(o);
-						o += 4;
-					}
-					else
-					{
-						HRDBMSWorker.logger.error("Unknown type in IndexRecord.getHighKey(): " + type);
-						throw new Exception("Unknown type in IndexRecord.getHighKey(): " + type);
-					}
-				}
-				
-				i++;
-			}
-			
-			byte[] p1HighKey = new byte[o - p1HKS];
-			p.get(p1HKS, p1HighKey);
-			return p1HighKey;
-		}
-		
-		/*private IndexRecord getRecordAfter(BlockAndOffset bao) throws Exception
-		{
-			int o = off+9;
-			while (true)
-			{
-				if (p.getInt(o) == bao.block() && p.getInt(o+4) == bao.offset())
-				{
-					return new IndexRecord(file, p.getInt(o+8), p.getInt(o+12), tx, true);
-				}
-				
-				o += 8;
-			}
-		}*/
-		
+
 		private ArrayList<Object> convertBytesToRow(byte[] keyBytes) throws Exception
 		{
 			ByteBuffer bb = ByteBuffer.wrap(keyBytes);
@@ -5033,7 +4080,7 @@ public final class Index implements Serializable
 						length = bb.getInt(o);
 						o += 4;
 						byte[] bytes = new byte[length];
-						//read into bytes from bb @ offset o for length length
+						// read into bytes from bb @ offset o for length length
 						int i = 0;
 						while (i < length)
 						{
@@ -5041,9 +4088,21 @@ public final class Index implements Serializable
 							o++;
 							i++;
 						}
-						retval.add(new String(bytes, "UTF-8"));
+						String value = (String)unsafe.allocateInstance(String.class);
+						char[] ca = new char[bytes.length];
+						int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(bytes, 0, bytes.length, ca);
+						if (clen == ca.length)
+						{
+							unsafe.putObject(value, soffset, ca);
+						}
+						else
+						{
+							char[] v = Arrays.copyOf(ca, clen);
+							unsafe.putObject(value, soffset, v);
+						}
+						retval.add(value);
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						HRDBMSWorker.logger.error("Key bytes are: ");
 						for (byte b : keyBytes)
@@ -5058,104 +4117,148 @@ public final class Index implements Serializable
 					}
 				}
 			}
-			
+
 			return retval;
 		}
-		
-		private byte[] getKeyBytesByIndex(int index) throws Exception
+
+		private IndexRecord firstChild() throws Exception
 		{
-			int o = off+9;
+			return new IndexRecord(file, p.getInt(22), p.getInt(26), tx, true);
+		}
+
+		private byte[] genKeyBytes(FieldValue[] keys) throws Exception
+		{
+			int size = keys.length;
 			int i = 0;
-			while (i < index)
-			{
-				for (String type : types)
-				{
-					o++;
-					if (type.equals("INT"))
-					{
-						o += 4;
-					}
-					else if (type.equals("LONG"))
-					{
-						o += 8;
-					}
-					else if (type.equals("FLOAT"))
-					{
-						o += 8;
-					}
-					else if (type.equals("DATE"))
-					{
-						o += 8;
-					}
-					else if (type.equals("CHAR"))
-					{
-						int length = p.getInt(o);
-						o += (4+length);
-					}
-					else
-					{
-						HRDBMSWorker.logger.error("Unknown type in IndexRecord.getKeyBytesByIndex(): " + type);
-						throw new Exception("Unknown type in IndexRecord.getKeyBytesByIndex(): " + type);
-					}
-				}
-				
-				i++;
-			}
-			
-			int start = o;
+			ArrayList<byte[]> bytes = new ArrayList<byte[]>();
 			for (String type : types)
 			{
-				o++;
 				if (type.equals("INT"))
 				{
-					o += 4;
+					size += 4;
 				}
 				else if (type.equals("LONG"))
 				{
-					o += 8;
+					size += 8;
 				}
 				else if (type.equals("FLOAT"))
 				{
-					o += 8;
+					size += 8;
 				}
 				else if (type.equals("DATE"))
 				{
-					o += 8;
+					size += 8;
 				}
 				else if (type.equals("CHAR"))
 				{
-					int length = p.getInt(o);
-					o += (4+length);
+					size += 4;
+					String val = (String)keys[i].getValue();
+					// byte[] data = val.getBytes("UTF-8");
+					byte[] ba = new byte[val.length() << 2];
+					char[] value = (char[])unsafe.getObject(val, soffset);
+					int blen = ((sun.nio.cs.ArrayEncoder)ce).encode(value, 0, value.length, ba);
+					byte[] data = Arrays.copyOf(ba, blen);
+					size += data.length;
+					bytes.add(data);
 				}
 				else
 				{
-					HRDBMSWorker.logger.error("Unknown type in IndexRecord.getKeyBytesByIndex(): " + type);
-					throw new Exception("Unknown type in IndexRecord.getKeyBytesByIndex(): " + type);
+					HRDBMSWorker.logger.error("Unknown type in IndexRecord.genKeyBytes(): " + type);
+					throw new Exception("Unknown type in IndexRecord.genKeyBytes(): " + type);
 				}
+
+				i++;
 			}
-			
-			byte[] retval = new byte[o-start];
-			p.get(start, retval);
-			return retval;
+
+			ByteBuffer bb = ByteBuffer.allocate(size);
+			i = 0;
+			bb.position(0);
+			int j = 0;
+			for (String type : types)
+			{
+				bb.put((byte)0); // not null;
+				if (type.equals("INT"))
+				{
+					bb.putInt(((Integer)keys[i].getValue()));
+				}
+				else if (type.equals("LONG"))
+				{
+					bb.putLong(((Long)keys[i].getValue()));
+				}
+				else if (type.equals("FLOAT"))
+				{
+					bb.putDouble(((Double)keys[i].getValue()));
+				}
+				else if (type.equals("DATE"))
+				{
+					bb.putLong(((MyDate)keys[i].getValue()).getTime());
+				}
+				else if (type.equals("CHAR"))
+				{
+					byte[] data = bytes.get(j++);
+					bb.putInt(data.length);
+					try
+					{
+						bb.put(data);
+					}
+					catch (Exception e)
+					{
+						HRDBMSWorker.logger.error("", e);
+						throw e;
+					}
+				}
+
+				i++;
+			}
+
+			return bb.array();
 		}
-		
+
+		private BlockAndOffset getBlockAndOffset()
+		{
+			return new BlockAndOffset(b.number(), off);
+		}
+
+		private IndexRecord getDown(int num) throws Exception
+		{
+			int block = p.getInt(off + 9 + num * 8);
+			int o = p.getInt(off + 13 + num * 8);
+			if (o < 0)
+			{
+				HRDBMSWorker.logger.debug("Error trying to get down pointer #" + num + " from index record " + this);
+			}
+			return new IndexRecord(file, block, o, tx);
+		}
+
+		private IndexRecord getDown(int num, boolean x) throws Exception
+		{
+			if (!x)
+			{
+				return getDown(num);
+			}
+
+			int block = p.getInt(off + 9 + num * 8);
+			int o = p.getInt(off + 13 + num * 8);
+			return new IndexRecord(file, block, o, tx, true);
+		}
+
 		private byte[] getDownKey(BlockAndOffset bao) throws Exception
 		{
-			int o = off+9;
+			int o = off + 9;
 			int i = 0;
 			while (true)
 			{
-				if (p.getInt(o) == bao.block() && p.getInt(o+4) == bao.offset())
+				if (p.getInt(o) == bao.block() && p.getInt(o + 4) == bao.offset())
 				{
-					//found the match
+					// found the match
 					break;
 				}
-				
+
 				o += 8;
 				i++;
 			}
-			
-			o = off+9+129*8;
+
+			o = off + 9 + 129 * 8;
 			int j = 0;
 			int start = -1;
 			while (j <= i)
@@ -5194,44 +4297,32 @@ public final class Index implements Serializable
 						throw new Exception("Unknown type in IndexRecord.replaceDownKey(): " + type);
 					}
 				}
-				
+
 				j++;
 			}
-			
+
 			int currentLength = o - start;
 			byte[] retval = new byte[currentLength];
 			p.get(start, retval);
 			return retval;
 		}
-		
-		private void replaceDownKey(BlockAndOffset bao, byte[] keyBytes) throws Exception
+
+		private byte[] getHighKey() throws Exception
 		{
-			int o = off+9;
+			int nks = p.getInt(off + 5);
+			int o = off + 9 + 129 * 8;
 			int i = 0;
-			while (true)
+			int p1HKS = -1;
+			while (i < nks)
 			{
-				if (p.getInt(o) == bao.block() && p.getInt(o+4) == bao.offset())
+				if (i == nks - 1)
 				{
-					//found the match
-					break;
-				}
-				
-				o += 8;
-				i++;
-			}
-			
-			o = off+9+129*8;
-			int j = 0;
-			int start = -1;
-			while (j <= i)
-			{
-				if (j == i)
-				{
-					start = o;
+					p1HKS = o;
 				}
 				for (String type : types)
 				{
-					o++;
+					o++; // null indicator
+
 					if (type.equals("INT"))
 					{
 						o += 4;
@@ -5240,1213 +4331,83 @@ public final class Index implements Serializable
 					{
 						o += 8;
 					}
-					else if (type.equals("DATE"))
+					else if (type.equals("FLOAT"))
 					{
 						o += 8;
 					}
-					else if (type.equals("FLOAT"))
+					else if (type.equals("DATE"))
 					{
 						o += 8;
 					}
 					else if (type.equals("CHAR"))
 					{
-						int length = p.getInt(o);
-						o += (4 + length);
-					}
-					else
-					{
-						HRDBMSWorker.logger.error("Unknown type in IndexRecord.replaceDownKey(): " + type);
-						throw new Exception("Unknown type in IndexRecord.replaceDownKey(): " + type);
-					}
-				}
-				
-				j++;
-			}
-			
-			//positioned at start of keyBytes after the one that needs to change
-			//start contains position of start of keyBytes that needs to change
-			int currentLength = o - start;
-			if (currentLength == keyBytes.length)
-			{
-				//lay directly over it
-				byte[] before = new byte[currentLength];
-				p.get(start, before);
-				InsertLogRec rec = tx.insert(before, keyBytes, start, p.block());
-				p.write(start, keyBytes, tx.number(), rec.lsn());
-				//changedBlocks.add(p.block());
-			}
-			else if (keyBytes.length < currentLength)
-			{
-				//put new keyBytes in place
-				byte[] before = new byte[keyBytes.length];
-				p.get(start, before);
-				InsertLogRec rec = tx.insert(before, keyBytes, start, p.block());
-				p.write(start, keyBytes, tx.number(), rec.lsn());
-				//changedBlocks.add(p.block());
-				
-				int moveForward = currentLength - keyBytes.length;
-				start = o;
-				int numKeys = p.getInt(off+5);
-				while (j < numKeys)
-				{
-					for (String type : types)
-					{
-						o++;
-						if (type.equals("INT"))
-						{
-							o += 4;
-						}
-						else if (type.equals("LONG"))
-						{
-							o += 8;
-						}
-						else if (type.equals("DATE"))
-						{
-							o += 8;
-						}
-						else if (type.equals("FLOAT"))
-						{
-							o += 8;
-						}
-						else if (type.equals("CHAR"))
-						{
-							int length = p.getInt(o);
-							o += (4 + length);
-						}
-						else
-						{
-							HRDBMSWorker.logger.error("Unknown type in IndexRecord.replaceDownKey(): " + type);
-							throw new Exception("Unknown type in IndexRecord.replaceDownKey(): " + type);
-						}
-					}
-					
-					j++;
-				}
-				
-				int toMove = o - start;
-				if (toMove > 0)
-				{
-					before = new byte[toMove];
-					p.get(start-moveForward, before);
-					byte[] after = new byte[toMove];
-					p.get(start, after);
-					rec = tx.insert(before, after, start-moveForward, p.block());
-					p.write(start-moveForward, after, tx.number(), rec.lsn());
-				}
-					
-				int firstFree = p.getInt(5);
-				ByteBuffer bef = ByteBuffer.allocate(4);
-				bef.position(0);
-				bef.putInt(firstFree);
-				ByteBuffer a = ByteBuffer.allocate(4);
-				a.position(0);
-				a.putInt(firstFree-moveForward);
-				rec = tx.insert(bef.array(), a.array(), 5, p.block());
-				p.write(5, a.array(), tx.number(), rec.lsn());
-				bef.position(0);
-				bef.putInt(p.getInt(14));
-				a.position(0);
-				a.putInt(firstFree-moveForward-13);
-				rec = tx.insert(bef.array(), a.array(), 14, p.block());
-				p.write(14, a.array(), tx.number(), rec.lsn());
-				//changedBlocks.add(p.block());
-			}
-			else
-			{
-				//we need to expand this record
-				int expand = keyBytes.length - currentLength;
-				//do we have this much room available?
-				int available = p.getInt(9) - p.getInt(5) + 1;
-				
-				if (expand <= available)
-				{
-					//we have room
-					//make room for new keyBytes
-					int start2 = o;
-					int numKeys = p.getInt(off+5);
-					while (j < numKeys)
-					{
-						for (String type : types)
-						{
-							o++;
-							if (type.equals("INT"))
-							{
-								o += 4;
-							}
-							else if (type.equals("LONG"))
-							{
-								o += 8;
-							}
-							else if (type.equals("DATE"))
-							{
-								o += 8;
-							}
-							else if (type.equals("FLOAT"))
-							{
-								o += 8;
-							}
-							else if (type.equals("CHAR"))
-							{
-								int length = p.getInt(o);
-								o += (4 + length);
-							}
-							else
-							{
-								HRDBMSWorker.logger.error("Unknown type in IndexRecord.replaceDownKey(): " + type);
-								throw new Exception("Unknown type in IndexRecord.replaceDownKey(): " + type);
-							}
-						}
-						
-						j++;
-					}
-					
-					int toMove = o - start2;
-					if (toMove > 0)
-					{
-						byte[] before = new byte[toMove];
-						p.get(start2+expand, before);
-						byte[] after = new byte[toMove];
-						p.get(start2, after);
-						InsertLogRec rec = tx.insert(before, after, start2+expand, p.block());
-						p.write(start2+expand, after, tx.number(), rec.lsn());
-					}
-					
-					//put new keyBytes in place
-					byte[] before = new byte[keyBytes.length];
-					p.get(start, before);
-					InsertLogRec rec = tx.insert(before, keyBytes, start, p.block());
-					p.write(start, keyBytes, tx.number(), rec.lsn());
-						
-					int firstFree = p.getInt(5);
-					ByteBuffer bef = ByteBuffer.allocate(4);
-					bef.position(0);
-					bef.putInt(firstFree);
-					ByteBuffer a = ByteBuffer.allocate(4);
-					a.position(0);
-					a.putInt(firstFree+expand);
-					rec = tx.insert(bef.array(), a.array(), 5, p.block());
-					p.write(5, a.array(), tx.number(), rec.lsn());
-					bef.position(0);
-					bef.putInt(p.getInt(14));
-					a.position(0);
-					a.putInt(firstFree+expand-13);
-					rec = tx.insert(bef.array(), a.array(), 14, p.block());
-					p.write(14, a.array(), tx.number(), rec.lsn());
-					//changedBlocks.add(p.block());
-				}
-				else
-				{
-					//we need to move this internal node to a new page, update the parent down pointer, and recall method
-					if (p.getInt(9) != Page.BLOCK_SIZE - 1)
-					{
-						ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
-						i = 0;
-						while (i < Page.BLOCK_SIZE)
-						{
-							bb.put((byte)2);
-							i++;
-						}
-					
-						int newNum = FileManager.addNewBlock(file, bb, tx);
-						Block bl = new Block(file, newNum);
-						LockManager.xLock(bl, tx.number());
-						tx.requestPage(bl);
-						Page p2 = null;
-						try
-						{
-							p2 = tx.getPage(bl);
-						}
-						catch(Exception e)
-						{
-							HRDBMSWorker.logger.error("", e);
-							throw e;
-						}
-					
-						int length = p.getInt(5);
-						byte[] before = new byte[length];
-						p2.get(0, before);
-						byte[] after = new byte[length];
-						p.get(0, after);
-						InsertLogRec rec = tx.insert(before, after, 0, p2.block());
-						p2.write(0, after, tx.number(), rec.lsn());
-					
-						before = new byte[4];
-						p2.get(9, before);
-						ByteBuffer a = ByteBuffer.allocate(4);
-						a.position(0);
-						a.putInt(Page.BLOCK_SIZE-1);
-						rec = tx.insert(before, a.array(), 9, p2.block());
-						p2.write(9, a.array(), tx.number(), rec.lsn());
-						//changedBlocks.add(p2.block());
-					
-						IndexRecord parent = getInternalUp(true);
-						parent.replaceDownPointer(this.getBlockAndOffset(), new BlockAndOffset(bl.number(), 13));
-						parent = getInternalUp(true);
-						parent.replaceDownKey(bao, keyBytes);
-						IndexRecord newRec = new IndexRecord(file, p2.block().number(), 13, tx, true, p2);
-						newRec.setChildUpPointers();
-					}
-					else
-					{
-						//need to split first
-						split();
-						IndexRecord line2 = new IndexRecord(fileName, 0, 13, tx, true);
-						ArrayList<Object> row = convertBytesToRow(keyBytes);
-
-						while (line2.b.number() != bao.block() || line2.off != bao.offset())
-						{
-							i = 0;
-							Iterator it = line2.internalIterator(types);
-							while (it.hasNext())
-							{
-								ArrayList<Object> k = (ArrayList<Object>)it.next();
-								//HRDBMSWorker.logger.debug("Saw internal key: " + k);
-								//if (((Comparable)val).compareTo(key) < 1)
-								if (compare(row, k) < 1)
-								{
-									line2 = line2.getDown(i);
-									break;
-								}
-								else
-								{
-									if (!it.hasNext())
-									{
-										line2 = line2.getDown(i);
-										break;
-									}
-								}
-								
-								i++;
-							}
-						}
-						
-						line2.getInternalUp(true).replaceDownKey(bao, keyBytes);
-					}
-				}
-			}
-		}
-		
-		private void replaceDownKeyNoLog(BlockAndOffset bao, byte[] keyBytes) throws Exception
-		{
-			int o = off+9;
-			int i = 0;
-			while (true)
-			{
-				if (p.getInt(o) == bao.block() && p.getInt(o+4) == bao.offset())
-				{
-					//found the match
-					break;
-				}
-				
-				o += 8;
-				i++;
-			}
-			
-			o = off+9+129*8;
-			int j = 0;
-			int start = -1;
-			while (j <= i)
-			{
-				if (j == i)
-				{
-					start = o;
-				}
-				for (String type : types)
-				{
-					o++;
-					if (type.equals("INT"))
-					{
+						o += p.getInt(o);
 						o += 4;
 					}
-					else if (type.equals("LONG"))
-					{
-						o += 8;
-					}
-					else if (type.equals("DATE"))
-					{
-						o += 8;
-					}
-					else if (type.equals("FLOAT"))
-					{
-						o += 8;
-					}
-					else if (type.equals("CHAR"))
-					{
-						int length = p.getInt(o);
-						o += (4 + length);
-					}
 					else
 					{
-						HRDBMSWorker.logger.error("Unknown type in IndexRecord.replaceDownKey(): " + type);
-						throw new Exception("Unknown type in IndexRecord.replaceDownKey(): " + type);
+						HRDBMSWorker.logger.error("Unknown type in IndexRecord.getHighKey(): " + type);
+						throw new Exception("Unknown type in IndexRecord.getHighKey(): " + type);
 					}
 				}
-				
-				j++;
-			}
-			
-			//positioned at start of keyBytes after the one that needs to change
-			//start contains position of start of keyBytes that needs to change
-			int currentLength = o - start;
-			if (currentLength == keyBytes.length)
-			{
-				//lay directly over it
-				long lsn = LogManager.getLSN();
-				p.write(start, keyBytes, tx.number(), lsn);
-				//changedBlocks.add(p.block());
-			}
-			else if (keyBytes.length < currentLength)
-			{
-				//put new keyBytes in place
-				long lsn = LogManager.getLSN();
-				p.write(start, keyBytes, tx.number(), lsn);
-				//changedBlocks.add(p.block());
-				
-				int moveForward = currentLength - keyBytes.length;
-				start = o;
-				int numKeys = p.getInt(off+5);
-				while (j < numKeys)
-				{
-					for (String type : types)
-					{
-						o++;
-						if (type.equals("INT"))
-						{
-							o += 4;
-						}
-						else if (type.equals("LONG"))
-						{
-							o += 8;
-						}
-						else if (type.equals("DATE"))
-						{
-							o += 8;
-						}
-						else if (type.equals("FLOAT"))
-						{
-							o += 8;
-						}
-						else if (type.equals("CHAR"))
-						{
-							int length = p.getInt(o);
-							o += (4 + length);
-						}
-						else
-						{
-							HRDBMSWorker.logger.error("Unknown type in IndexRecord.replaceDownKey(): " + type);
-							throw new Exception("Unknown type in IndexRecord.replaceDownKey(): " + type);
-						}
-					}
-					
-					j++;
-				}
-				
-				int toMove = o - start;
-				if (toMove > 0)
-				{
-					byte[] after = new byte[toMove];
-					p.get(start, after);
-					lsn = LogManager.getLSN();
-					p.write(start-moveForward, after, tx.number(), lsn);
-				}
-					
-				int firstFree = p.getInt(5);
-				ByteBuffer a = ByteBuffer.allocate(4);
-				a.position(0);
-				a.putInt(firstFree-moveForward);
-				lsn = LogManager.getLSN();
-				p.write(5, a.array(), tx.number(), lsn);
-				a.position(0);
-				a.putInt(firstFree-moveForward-13);
-				lsn = LogManager.getLSN();
-				p.write(14, a.array(), tx.number(), lsn);
-				//changedBlocks.add(p.block());
-			}
-			else
-			{
-				//we need to expand this record
-				int expand = keyBytes.length - currentLength;
-				//do we have this much room available?
-				int available = p.getInt(9) - p.getInt(5) + 1;
-				
-				if (expand <= available)
-				{
-					//we have room
-					//make room for new keyBytes
-					int start2 = o;
-					int numKeys = p.getInt(off+5);
-					while (j < numKeys)
-					{
-						for (String type : types)
-						{
-							o++;
-							if (type.equals("INT"))
-							{
-								o += 4;
-							}
-							else if (type.equals("LONG"))
-							{
-								o += 8;
-							}
-							else if (type.equals("DATE"))
-							{
-								o += 8;
-							}
-							else if (type.equals("FLOAT"))
-							{
-								o += 8;
-							}
-							else if (type.equals("CHAR"))
-							{
-								int length = p.getInt(o);
-								o += (4 + length);
-							}
-							else
-							{
-								HRDBMSWorker.logger.error("Unknown type in IndexRecord.replaceDownKey(): " + type);
-								throw new Exception("Unknown type in IndexRecord.replaceDownKey(): " + type);
-							}
-						}
-						
-						j++;
-					}
-					
-					int toMove = o - start2;
-					if (toMove > 0)
-					{
-						byte[] after = new byte[toMove];
-						p.get(start2, after);
-						long lsn = LogManager.getLSN();
-						p.write(start2+expand, after, tx.number(), lsn);
-					}
-					
-					//put new keyBytes in place
-					long lsn = LogManager.getLSN();
-					p.write(start, keyBytes, tx.number(), lsn);
-						
-					int firstFree = p.getInt(5);
-					ByteBuffer a = ByteBuffer.allocate(4);
-					a.position(0);
-					a.putInt(firstFree+expand);
-					lsn = LogManager.getLSN();
-					p.write(5, a.array(), tx.number(), lsn);
-					a.position(0);
-					a.putInt(firstFree+expand-13);
-					lsn = LogManager.getLSN();
-					p.write(14, a.array(), tx.number(), lsn);
-					//changedBlocks.add(p.block());
-				}
-				else
-				{
-					//we need to move this internal node to a new page, update the parent down pointer, and recall method
-					if (p.getInt(9) != Page.BLOCK_SIZE - 1)
-					{
-						ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
-						i = 0;
-						while (i < Page.BLOCK_SIZE)
-						{
-							bb.put((byte)2);
-							i++;
-						}
-					
-						int newNum = FileManager.addNewBlockNoLog(file, bb, tx);
-						Block bl = new Block(file, newNum);
-						LockManager.xLock(bl, tx.number());
-						tx.requestPage(bl);
-						Page p2 = null;
-						try
-						{
-							p2 = tx.getPage(bl);
-						}
-						catch(Exception e)
-						{
-							HRDBMSWorker.logger.error("", e);
-							throw e;
-						}
-					
-						int length = p.getInt(5);
-						byte[] after = new byte[length];
-						p.get(0, after);
-						long lsn = LogManager.getLSN();
-						p2.write(0, after, tx.number(), lsn);
-					
-						ByteBuffer a = ByteBuffer.allocate(4);
-						a.position(0);
-						a.putInt(Page.BLOCK_SIZE-1);
-						lsn = LogManager.getLSN();
-						p2.write(9, a.array(), tx.number(), lsn);
-						//changedBlocks.add(p2.block());
-					
-						IndexRecord parent = getInternalUp(true);
-						parent.replaceDownPointerNoLog(this.getBlockAndOffset(), new BlockAndOffset(bl.number(), 13));
-						parent = getInternalUp(true);
-						parent.replaceDownKeyNoLog(bao, keyBytes);
-						IndexRecord newRec = new IndexRecord(file, p2.block().number(), 13, tx, true, p2);
-						newRec.setChildUpPointersNoLog();
-					}
-					else
-					{
-						//need to split first
-						splitNoLog();
-						IndexRecord line2 = new IndexRecord(fileName, 0, 13, tx, true);
-						ArrayList<Object> row = convertBytesToRow(keyBytes);
 
-						while (line2.b.number() != bao.block() || line2.off != bao.offset())
-						{
-							i = 0;
-							Iterator it = line2.internalIterator(types);
-							while (it.hasNext())
-							{
-								ArrayList<Object> k = (ArrayList<Object>)it.next();
-								//HRDBMSWorker.logger.debug("Saw internal key: " + k);
-								//if (((Comparable)val).compareTo(key) < 1)
-								if (compare(row, k) < 1)
-								{
-									line2 = line2.getDown(i);
-									break;
-								}
-								else
-								{
-									if (!it.hasNext())
-									{
-										line2 = line2.getDown(i);
-										break;
-									}
-								}
-								
-								i++;
-							}
-						}
-						
-						line2.getInternalUp(true).replaceDownKeyNoLog(bao, keyBytes);
-					}
-				}
-			}
-		}
-		
-		private BlockAndOffset writeNewLeafNoLog(FieldValue[] keys, RID rid) throws Exception
-		{
-			int firstFree = p.getInt(5);
-			int lastFree = p.getInt(9);
-			byte[] keyBytes = this.genKeyBytes(keys);
-			int length = 41 + keyBytes.length;
-			int freeLength = lastFree - firstFree + 1;
-			
-			if (length + keyBytes.length <= freeLength && b.number() != 0) 
-			{
-				//do it on this page
-				int leafOff = lastFree - length + 1;
-				ByteBuffer after = ByteBuffer.allocate(length);
-				after.position(0);
-				after.put((byte)1); //leaf
-				after.putLong(0); //prev pointer filled in later
-				after.putLong(0); //next pointer filled in later
-				after.putLong(0); //up pointer filled in later
-				after.putInt(rid.getNode());
-				after.putInt(rid.getDevice());
-				after.putInt(rid.getBlockNum());
-				after.putInt(rid.getRecNum());
-				after.put(keyBytes);
-				long lsn = LogManager.getLSN();
-				p.write(leafOff, after.array(), tx.number(), lsn);
-				after = ByteBuffer.allocate(4);
-				after.position(0);
-				after.putInt(leafOff - 1);
-				lsn = LogManager.getLSN();
-				p.write(9, after.array(), tx.number(), lsn);
-				//changedBlocks.add(p.block());
-				return new BlockAndOffset(b.number(), leafOff);
-			}
-			
-			LockManager.sLock(new Block(file, -1), tx.number());
-			int i = 1;
-			int numBlocks = FileManager.numBlocks.get(file);
-			while (i < numBlocks)
-			{
-				Block bl = new Block(file, i);
-				LockManager.xLock(bl, tx.number());
-				tx.requestPage(bl);
-				Page p2 = null;
-				try
-				{
-					p2 = tx.getPage(bl);
-				}
-				catch(Exception e)
-				{
-					HRDBMSWorker.logger.error("", e);
-					throw e;
-				}
-				
-				firstFree = p2.getInt(5);
-				lastFree = p2.getInt(9);
-				freeLength = lastFree - firstFree + 1;
-				
-				if (length + keyBytes.length <= freeLength)
-				{
-					//do it on this page
-					IndexRecord dummy = new IndexRecord(file, bl.number(), 13, tx, true, p2);
-					return dummy.writeNewLeafNoLog(keys, rid);
-				}
-				
 				i++;
 			}
-			
-			//need to add new page
-			ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
-			i = 0;
-			while (i < Page.BLOCK_SIZE)
-			{
-				bb.put((byte)2);
-				i++;
-			}
-			
-			int newNum = FileManager.addNewBlockNoLog(file, bb, tx);
-			Block bl = new Block(file, newNum);
-			LockManager.xLock(bl, tx.number());
-			tx.requestPage(bl);
-			Page p2 = null;
-			try
-			{
-				p2 = tx.getPage(bl);
-			}
-			catch(Exception e)
-			{
-				HRDBMSWorker.logger.error("", e);
-				throw e;
-			}
-			
-			//copy first 5 bytes
-			byte[] bytes = new byte[5];
-			p.get(0, bytes);
-			long lsn = LogManager.getLSN();
-			p2.write(0, bytes, tx.number(), lsn);
-			
-			//fill in remainder of header and dummy internal node
-			ByteBuffer aft = ByteBuffer.allocate(25+128*8);
-			aft.position(0);
-			aft.putInt(30+128*8);
-			aft.putInt(Page.BLOCK_SIZE-1);
-			aft.put((byte)0); //internal
-			aft.putInt(17+128*8);
-			i = 0;
-			while (i < 128)
-			{
-				aft.putLong(0); //dummy down pointers
-				i++;
-			}
-			
-			aft.putLong(0); //dummy up pointer
-			
-			lsn = LogManager.getLSN();
-			p2.write(5, aft.array(), tx.number(), lsn);
-			//changedBlocks.add(p2.block());
-			
-			IndexRecord dummy = new IndexRecord(file, bl.number(), 13, tx, true, p2);
-			return dummy.writeNewLeafNoLog(keys, rid);
+
+			byte[] p1HighKey = new byte[o - p1HKS];
+			p.get(p1HKS, p1HighKey);
+			return p1HighKey;
 		}
-		
-		private BlockAndOffset writeNewLeaf(FieldValue[] keys, RID rid) throws Exception
-		{
-			int firstFree = p.getInt(5);
-			int lastFree = p.getInt(9);
-			byte[] keyBytes = this.genKeyBytes(keys);
-			int length = 41 + keyBytes.length;
-			int freeLength = lastFree - firstFree + 1;
-			
-			if (length + keyBytes.length <= freeLength && b.number() != 0) 
-			{
-				//do it on this page
-				int leafOff = lastFree - length + 1;
-				byte[] before = new byte[length];
-				p.get(leafOff, before);
-				ByteBuffer after = ByteBuffer.allocate(length);
-				after.position(0);
-				after.put((byte)1); //leaf
-				after.putLong(0); //prev pointer filled in later
-				after.putLong(0); //next pointer filled in later
-				after.putLong(0); //up pointer filled in later
-				after.putInt(rid.getNode());
-				after.putInt(rid.getDevice());
-				after.putInt(rid.getBlockNum());
-				after.putInt(rid.getRecNum());
-				after.put(keyBytes);
-				InsertLogRec rec = tx.insert(before, after.array(), leafOff, p.block());
-				p.write(leafOff, after.array(), tx.number(), rec.lsn());
-				before = new byte[4];
-				p.get(9, before);
-				after = ByteBuffer.allocate(4);
-				after.position(0);
-				after.putInt(leafOff - 1);
-				rec = tx.insert(before,  after.array(), 9, p.block());
-				p.write(9, after.array(), tx.number(), rec.lsn());
-				//changedBlocks.add(p.block());
-				return new BlockAndOffset(b.number(), leafOff);
-			}
-			
-			LockManager.sLock(new Block(file, -1), tx.number());
-			int i = 1;
-			int numBlocks = FileManager.numBlocks.get(file);
-			while (i < numBlocks)
-			{
-				Block bl = new Block(file, i);
-				LockManager.xLock(bl, tx.number());
-				tx.requestPage(bl);
-				Page p2 = null;
-				try
-				{
-					p2 = tx.getPage(bl);
-				}
-				catch(Exception e)
-				{
-					HRDBMSWorker.logger.error("", e);
-					throw e;
-				}
-				
-				firstFree = p2.getInt(5);
-				lastFree = p2.getInt(9);
-				freeLength = lastFree - firstFree + 1;
-				
-				if (length + keyBytes.length <= freeLength)
-				{
-					//do it on this page
-					IndexRecord dummy = new IndexRecord(file, bl.number(), 13, tx, true, p2);
-					return dummy.writeNewLeaf(keys, rid);
-				}
-				
-				i++;
-			}
-			
-			//need to add new page
-			ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
-			i = 0;
-			while (i < Page.BLOCK_SIZE)
-			{
-				bb.put((byte)2);
-				i++;
-			}
-			
-			int newNum = FileManager.addNewBlock(file, bb, tx);
-			Block bl = new Block(file, newNum);
-			LockManager.xLock(bl, tx.number());
-			tx.requestPage(bl);
-			Page p2 = null;
-			try
-			{
-				p2 = tx.getPage(bl);
-			}
-			catch(Exception e)
-			{
-				HRDBMSWorker.logger.error("", e);
-				throw e;
-			}
-			
-			//copy first 5 bytes
-			byte[] bytes = new byte[5];
-			p.get(0, bytes);
-			byte[] bef = new byte[5];
-			p2.get(0, bef);
-			InsertLogRec rec = tx.insert(bef, bytes, 0, p2.block());
-			p2.write(0, bytes, tx.number(), rec.lsn());
-			
-			//fill in remainder of header and dummy internal node
-			bef = new byte[25+128*8];
-			p2.get(5, bef);
-			ByteBuffer aft = ByteBuffer.allocate(25+128*8);
-			aft.position(0);
-			aft.putInt(30+128*8);
-			aft.putInt(Page.BLOCK_SIZE-1);
-			aft.put((byte)0); //internal
-			aft.putInt(17+128*8);
-			i = 0;
-			while (i < 128)
-			{
-				aft.putLong(0); //dummy down pointers
-				i++;
-			}
-			
-			aft.putLong(0); //dummy up pointer
-			
-			rec = tx.insert(bef, aft.array(), 5, p2.block());
-			p2.write(5, aft.array(), tx.number(), rec.lsn());
-			//changedBlocks.add(p2.block());
-			
-			IndexRecord dummy = new IndexRecord(file, bl.number(), 13, tx, true, p2);
-			return dummy.writeNewLeaf(keys, rid);
-		}
-		
-		public void setPrev(IndexRecord ir) throws Exception
-		{
-			int block = ir.b.number();
-			int o = ir.off;
-			setPrev(new BlockAndOffset(block, o));
-		}
-		
-		public void setPrevNoLog(IndexRecord ir) throws Exception
-		{
-			int block = ir.b.number();
-			int o = ir.off;
-			setPrevNoLog(new BlockAndOffset(block, o));
-		}
-		
-		private void setPrev(BlockAndOffset bao) throws Exception
-		{
-			byte[] before = new byte[8];
-			p.get(off+1, before);
-			ByteBuffer after = ByteBuffer.allocate(8);
-			after.position(0);
-			after.putInt(bao.block());
-			after.putInt(bao.offset());
-			after.position(0);
-			InsertLogRec rec = tx.insert(before, after.array(), off+1, p.block());
-			p.write(off+1, after.array(), tx.number(), rec.lsn());
-			//changedBlocks.add(p.block());
-		}
-		
-		private void setPrevNoLog(BlockAndOffset bao) throws Exception
-		{
-			ByteBuffer after = ByteBuffer.allocate(8);
-			after.position(0);
-			after.putInt(bao.block());
-			after.putInt(bao.offset());
-			after.position(0);
-			long lsn = LogManager.getLSN();
-			p.write(off+1, after.array(), tx.number(), lsn);
-			//changedBlocks.add(p.block());
-		}
-		
-		/*private void insertAfter(BlockAndOffset bao) throws Exception
-		{
-			IndexRecord next = new IndexRecord(file, p.getInt(off+9), p.getInt(off+13), tx, true);
-			this.setNext(bao);
-			if (!next.isNull())
-			{
-				next.setPrev(bao);
-			}
-		}
-		
-		private void insertAfterNoLog(BlockAndOffset bao) throws Exception
-		{
-			IndexRecord next = new IndexRecord(file, p.getInt(off+9), p.getInt(off+13), tx, true);
-			this.setNextNoLog(bao);
-			if (!next.isNull())
-			{
-				next.setPrevNoLog(bao);
-			}
-		}*/
-		
-		public IndexRecord(String file, int block, int offset, Transaction tx) throws Exception
-		{
-			this.file = file;
-			this.tx = tx;
-			b = new Block(file, block);
-			off = offset;
-			keyOff = off + 9+128*8+8;
-			LockManager.sLock(b, tx.number());
-			tx.requestPage(b);
-			try
-			{
-				p = tx.getPage(b);
-			}
-			catch(Exception e)
-			{
-				HRDBMSWorker.logger.error("", e);
-				throw e;
-			}
-			
-			isLeaf = (p.get(off+0) == 1);
-			if (p.get(off+0) == 2)
-			{
-				isLeaf = true;
-				isTombstone = true;
-			}
-		}
-		
-		//public IndexRecord(String file, int block, int offset, Transaction tx, Page p) throws Exception
-		//{
-		//	this.file = file;
-		//	this.tx = tx;
-		//	this.p = p;
-		//	this.b = p.block();
-		//	off = offset;
-		//	keyOff = off + 9+128*8+8;
-		//	LockManager.sLock(b, tx.number());
-		//	isLeaf = (p.get(off+0) == 1);
-		//	if (p.get(off+0) == 2)
-		//	{
-		//		isLeaf = true;
-		//		isTombstone = true;
-		//	}
-		//}
-		
-		public IndexRecord(String file, int block, int offset, Transaction tx, boolean x) throws Exception
-		{
-			this.file = file;
-			this.tx = tx;
-			b = new Block(file, block);
-			p = myPages.get(b);
-			off = offset;
-			keyOff = off + 9+128*8+8;
-			
-			if (p == null)
-			{
-				LockManager.xLock(b, tx.number());
-				tx.requestPage(b);
-				try
-				{
-					p = tx.getPage(b);
-				}
-				catch(Exception e)
-				{
-					HRDBMSWorker.logger.error("", e);
-					throw e;
-				}
-				
-				myPages.put(b, p);
-			}
-			
-			isLeaf = (p.get(off+0) == 1);
-			if (p.get(off+0) == 2)
-			{
-				isLeaf = true;
-				isTombstone = true;
-			}
-		}
-		
-		public IndexRecord(String file, int block, int offset, Transaction tx, boolean x, Page p) throws Exception
-		{
-			this.file = file;
-			this.tx = tx;
-			this.p = p;
-			if (p == null)
-			{
-				throw new Exception("NULL page in IndexRecord Constructor");
-			}
-			this.b = p.block();
-			off = offset;
-			keyOff = off + 9+128*8+8;
-			if (myPages.get(b) == null)
-			{
-				LockManager.xLock(b, tx.number());
-				myPages.put(b, p);
-			}
-			isLeaf = (p.get(off+0) == 1);
-			if (p.get(off+0) == 2)
-			{
-				isLeaf = true;
-				isTombstone = true;
-			}
-		}
-		
-		private IndexRecord() 
-		{}
-		
-		public ArrayList<Object> getKeys(ArrayList<String> types) throws Exception
-		{
-			int o = off+41;
-			ArrayList<Object> retval = new ArrayList<Object>(types.size());
-			//TODO null
-			for (String type : types)
-			{
-				o++; // skip null indicator
-				if (type.equals("INT"))
-				{
-					try
-					{
-						retval.add(p.getInt(o));
-					}
-					catch(Exception e)
-					{
-						HRDBMSWorker.logger.debug("", e);
-						HRDBMSWorker.logger.debug("Retval = " + retval);
-						HRDBMSWorker.logger.debug("p = " + p);
-						HRDBMSWorker.logger.debug("o = " + o);
-						throw e;
-					}
-					o += 4;
-				}
-				else if (type.equals("FLOAT"))
-				{
-					retval.add(p.getDouble(o));
-					o += 8;
-				}
-				else if (type.equals("CHAR"))
-				{
-					int length = p.getInt(o);
-					o += 4;
-					byte[] buff = new byte[length];
-					try
-					{
-						p.get(o, buff);
-					}
-					catch(Exception e)
-					{
-						HRDBMSWorker.logger.debug("Trying to read string of length " + buff.length + " in index " + this.file);
-						throw e;
-					}
-					try
-					{
-						retval.add(new String(buff, "UTF-8"));
-					}
-					catch(Exception e)
-					{
-						HRDBMSWorker.logger.error("", e);
-						throw e;
-					}
-					o += length;
-				}
-				else if (type.equals("LONG"))
-				{
-					retval.add(p.getLong(o));
-					o += 8;
-				}
-				else if (type.equals("DATE"))
-				{
-					retval.add(new MyDate(p.getLong(o)));
-					o += 8;
-				}
-				else
-				{
-					HRDBMSWorker.logger.error("Unknown type in IndexRecord.getKeys(): " + type);
-					throw new Exception("Unknown type in IndexRecord.getKeys(): " + type);
-				}
-			}
-			
-			return retval;
-		}
-		
-		public boolean isNull()
-		{
-			return isNull;
-		}
-		
-		public boolean isTombstone()
-		{
-			return isTombstone;
-		}
-		
-		public long getPartialRid()
-		{
-			return (((long)p.getInt(off+33)) << 32) + p.getInt(off+37);
-		}
-		
-		private IndexRecord nextRecord() throws Exception 
-		{
-			if (p.getInt(off+9) == 0 && p.getInt(off+13) == 0)
-			{
-				IndexRecord retval = new IndexRecord();
-				retval.isNull = true;
-				return retval;
-			}
-			
-			return new IndexRecord(file, p.getInt(off+9), p.getInt(off+13), tx);
-		}
-		
-		private IndexRecord prevRecord() throws Exception
-		{
-			if (p.getInt(off+1) == 0 && p.getInt(off+5) == 0)
-			{
-				IndexRecord retval = new IndexRecord();
-				retval.isNull = true;
-				return retval;
-			}
-			
-			return new IndexRecord(file, p.getInt(off+1), p.getInt(off+5), tx);
-		}
-		
-		private IndexRecord prevRecord(boolean x) throws Exception
-		{
-			if (!x)
-			{
-				return prevRecord();
-			}
-			
-			if (p.getInt(off+1) == 0 && p.getInt(off+5) == 0)
-			{
-				IndexRecord retval = new IndexRecord();
-				retval.isNull = true;
-				return retval;
-			}
-			
-			return new IndexRecord(file, p.getInt(off+1), p.getInt(off+5), tx, true);
-		}
-		
-		private IndexRecord nextRecord(boolean x) throws Exception
-		{
-			if (!x)
-			{
-				return nextRecord();
-			}
-			
-			if (p.getInt(off+9) == 0 && p.getInt(off+13) == 0)
-			{
-				IndexRecord retval = new IndexRecord();
-				retval.isNull = true;
-				return retval;
-			}
-			
-			return new IndexRecord(file, p.getInt(off+9), p.getInt(off+13), tx, true);
-		}
-		
-		//public IndexRecord getUp() throws Exception
-		//{
-		//	if (p.getInt(off+17) == 0 && p.getInt(off+21) == 0)
-		//	{
-		//		IndexRecord retval = new IndexRecord();
-		//		retval.isNull = true;
-		//		return retval;
-		//	}
-		//	
-		//	return new IndexRecord(file, p.getInt(off+17), p.getInt(off+21), tx);
-		//}
-		
-		private IndexRecord getUp(boolean x) throws Exception
-		{
-			if (p.getInt(off+17) == 0 && p.getInt(off+21) == 0)
-			{
-				IndexRecord retval = new IndexRecord();
-				retval.isNull = true;
-				return retval;
-			}
-			
-			if (x)
-			{
-				return new IndexRecord(file, p.getInt(off+17), p.getInt(off+21), tx, true);
-			}
-			else
-			{
-				return new IndexRecord(file, p.getInt(off+17), p.getInt(off+21), tx);
-			}
-		}
-		
-		private IndexRecord getInternalUp(boolean x) throws Exception
-		{
-			if (p.getInt(off+9+128*8) == 0 && p.getInt(off+13+128*8) == 0)
-			{
-				IndexRecord retval = new IndexRecord();
-				retval.isNull = true;
-				return retval;
-			}
-			
-			if (x)
-			{
-				return new IndexRecord(file, p.getInt(off+9+128*8), p.getInt(off+13+128*8), tx, true);
-			}
-			else
-			{
-				return new IndexRecord(file, p.getInt(off+9+128*8), p.getInt(off+13+128*8), tx);
-			}
-		}
-		
-		public boolean isLeaf()
-		{
-			return isLeaf;
-		}
-		
+
 		private ArrayList<Object> getInternalKeys(ArrayList<String> types) throws Exception
 		{
 			try
 			{
-				ArrayList<Object> retval = new ArrayList<Object>(types.size());
+				HashMap<Integer, ArrayList<Object>> internalKeyCache = cache.get(b);
+				ArrayList<Object> retval = null;
+				if (internalKeyCache != null)
+				{
+					retval = internalKeyCache.get(keyOff);
+				}
+				if (myPages.containsKey(b) && retval != null)
+				{
+					for (String type : types)
+					{
+						keyOff++; // skip null indicator
+						if (type.equals("INT"))
+						{
+							keyOff += 4;
+						}
+						else if (type.equals("FLOAT"))
+						{
+							keyOff += 8;
+						}
+						else if (type.equals("CHAR"))
+						{
+							int length = p.getInt(keyOff);
+							keyOff += 4;
+							keyOff += length;
+						}
+						else if (type.equals("LONG"))
+						{
+							keyOff += 8;
+						}
+						else if (type.equals("DATE"))
+						{
+							keyOff += 8;
+						}
+						else
+						{
+							HRDBMSWorker.logger.error("Unknown type in IndexRecord.getInternalKeys(): " + type);
+							throw new Exception("Unknown type in IndexRecord.getInternalKeys(): " + type);
+						}
+					}
+
+					return retval;
+				}
+
+				retval = new ArrayList<Object>(types.size());
+				int orig = keyOff;
 				for (String type : types)
 				{
 					keyOff++; // skip null indicator
@@ -6468,9 +4429,21 @@ public final class Index implements Serializable
 						p.get(keyOff, buff);
 						try
 						{
-							retval.add(new String(buff, "UTF-8"));
+							String value = (String)unsafe.allocateInstance(String.class);
+							char[] ca = new char[buff.length];
+							int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(buff, 0, buff.length, ca);
+							if (clen == ca.length)
+							{
+								unsafe.putObject(value, soffset, ca);
+							}
+							else
+							{
+								char[] v = Arrays.copyOf(ca, clen);
+								unsafe.putObject(value, soffset, v);
+							}
+							retval.add(value);
 						}
-						catch(Exception e)
+						catch (Exception e)
 						{
 							HRDBMSWorker.logger.error("", e);
 							throw e;
@@ -6493,33 +4466,1986 @@ public final class Index implements Serializable
 						throw new Exception("Unknown type in IndexRecord.getInternalKeys(): " + type);
 					}
 				}
-			
+
+				if (internalKeyCache != null)
+				{
+					internalKeyCache.put(orig, retval);
+				}
+				else
+				{
+					internalKeyCache = new HashMap<Integer, ArrayList<Object>>();
+					internalKeyCache.put(orig, retval);
+					cache.put(b, internalKeyCache);
+				}
 				return retval;
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				HRDBMSWorker.logger.debug("IndexRecord with error has offset = " + off);
 				throw e;
 			}
 		}
-		
-		public InternalIterator internalIterator(ArrayList<String> types)
+
+		private IndexRecord getInternalUp(boolean x) throws Exception
 		{
-			return new InternalIterator(types, p.getInt(off+5));
+			if (p.getInt(off + 9 + 128 * 8) == 0 && p.getInt(off + 13 + 128 * 8) == 0)
+			{
+				IndexRecord retval = new IndexRecord();
+				retval.isNull = true;
+				return retval;
+			}
+
+			if (x)
+			{
+				return new IndexRecord(file, p.getInt(off + 9 + 128 * 8), p.getInt(off + 13 + 128 * 8), tx, true);
+			}
+			else
+			{
+				return new IndexRecord(file, p.getInt(off + 9 + 128 * 8), p.getInt(off + 13 + 128 * 8), tx);
+			}
 		}
-		
+
+		private IndexRecord getKeyAfter(BlockAndOffset bao) throws Exception
+		{
+			int o = 22;
+			int i = 0;
+			int nks = p.getInt(18);
+			while (true)
+			{
+				int block = p.getInt(o);
+				o += 4;
+				int offset = p.getInt(o);
+				o += 4;
+				i++;
+
+				if (block == bao.block() && offset == bao.offset())
+				{
+					if (i < nks)
+					{
+						return new IndexRecord(file, p.getInt(o), p.getInt(o + 4), tx, true);
+					}
+					else
+					{
+						IndexRecord sibling = getNextSibling();
+						return sibling.firstChild();
+					}
+				}
+			}
+		}
+
+		private IndexRecord getNextSibling() throws Exception
+		{
+			IndexRecord up = getInternalUp(true);
+			return up.getKeyAfter(new BlockAndOffset(this.b.number(), this.off));
+		}
+
+		private int getPageFreeBytes()
+		{
+			int firstFree = p.getInt(5);
+			int lastFree = p.getInt(9);
+			return lastFree - firstFree + 1;
+		}
+
+		private IndexRecord getUp(boolean x) throws Exception
+		{
+			if (p.getInt(off + 17) == 0 && p.getInt(off + 21) == 0)
+			{
+				IndexRecord retval = new IndexRecord();
+				retval.isNull = true;
+				return retval;
+			}
+
+			if (x)
+			{
+				return new IndexRecord(file, p.getInt(off + 17), p.getInt(off + 21), tx, true);
+			}
+			else
+			{
+				return new IndexRecord(file, p.getInt(off + 17), p.getInt(off + 21), tx);
+			}
+		}
+
+		private void markTombstone() throws Exception
+		{
+			byte[] before = new byte[1];
+			byte[] after = new byte[1];
+			before[0] = p.get(off + 0);
+			after[0] = (byte)2;
+			DeleteLogRec rec = tx.delete(before, after, off + 0, p.block());
+			p.write(off + 0, after, tx.number(), rec.lsn());
+			// changedBlocks.add(p.block());
+		}
+
+		/*
+		 * private IndexRecord getDownMatchingKey(byte[] keyBytes) throws
+		 * Exception { int o = off+9+129*8; int i = 0; while (true) { int start
+		 * = o; for (String type : types) { o++; if (type.equals("INT")) { o +=
+		 * 4; } else if (type.equals("LONG")) { o += 8; } else if
+		 * (type.equals("FLOAT")) { o += 8; } else if (type.equals("DATE")) { o
+		 * += 8; } else if (type.equals("CHAR")) { int length = p.getInt(o); o
+		 * += (4+length); } else { HRDBMSWorker.logger.error(
+		 * "Unknown type in IndexRecord.getDownMatchingKey(): " + type); throw
+		 * new Exception("Unknown type in IndexRecord.getDownMatchingKey(): " +
+		 * type); } }
+		 * 
+		 * int length = o - start; if (length == keyBytes.length) { byte[] lhs =
+		 * new byte[length]; p.get(start, lhs); if (Arrays.equals(lhs,
+		 * keyBytes)) { //found the match return this.getDown(i, true); } }
+		 * 
+		 * i++; } }
+		 */
+
+		private void markTombstoneNoLog() throws Exception
+		{
+			byte[] after = new byte[1];
+			after[0] = (byte)2;
+			long lsn = LogManager.getLSN();
+			p.write(off + 0, after, tx.number(), lsn);
+			// changedBlocks.add(p.block());
+		}
+
+		/*
+		 * private IndexRecord getRecordAfter(BlockAndOffset bao) throws
+		 * Exception { int o = off+9; while (true) { if (p.getInt(o) ==
+		 * bao.block() && p.getInt(o+4) == bao.offset()) { return new
+		 * IndexRecord(file, p.getInt(o+8), p.getInt(o+12), tx, true); }
+		 * 
+		 * o += 8; } }
+		 */
+
+		private IndexRecord nextRecord() throws Exception
+		{
+			if (p.getInt(off + 9) == 0 && p.getInt(off + 13) == 0)
+			{
+				IndexRecord retval = new IndexRecord();
+				retval.isNull = true;
+				return retval;
+			}
+
+			return new IndexRecord(file, p.getInt(off + 9), p.getInt(off + 13), tx);
+		}
+
+		private IndexRecord nextRecord(boolean x) throws Exception
+		{
+			if (!x)
+			{
+				return nextRecord();
+			}
+
+			if (p.getInt(off + 9) == 0 && p.getInt(off + 13) == 0)
+			{
+				IndexRecord retval = new IndexRecord();
+				retval.isNull = true;
+				return retval;
+			}
+
+			return new IndexRecord(file, p.getInt(off + 9), p.getInt(off + 13), tx, true);
+		}
+
+		private IndexRecord prevRecord() throws Exception
+		{
+			if (p.getInt(off + 1) == 0 && p.getInt(off + 5) == 0)
+			{
+				IndexRecord retval = new IndexRecord();
+				retval.isNull = true;
+				return retval;
+			}
+
+			return new IndexRecord(file, p.getInt(off + 1), p.getInt(off + 5), tx);
+		}
+
+		private IndexRecord prevRecord(boolean x) throws Exception
+		{
+			if (!x)
+			{
+				return prevRecord();
+			}
+
+			if (p.getInt(off + 1) == 0 && p.getInt(off + 5) == 0)
+			{
+				IndexRecord retval = new IndexRecord();
+				retval.isNull = true;
+				return retval;
+			}
+
+			return new IndexRecord(file, p.getInt(off + 1), p.getInt(off + 5), tx, true);
+		}
+
+		private void replaceDownKey(BlockAndOffset bao, byte[] keyBytes) throws Exception
+		{
+			HashMap<Integer, ArrayList<Object>> internalKeyCache = cache.get(b);
+			if (internalKeyCache != null)
+			{
+				internalKeyCache.clear();
+			}
+			int o = off + 9;
+			int i = 0;
+			while (true)
+			{
+				if (p.getInt(o) == bao.block() && p.getInt(o + 4) == bao.offset())
+				{
+					// found the match
+					break;
+				}
+
+				o += 8;
+				i++;
+			}
+
+			o = off + 9 + 129 * 8;
+			int j = 0;
+			int start = -1;
+			while (j <= i)
+			{
+				if (j == i)
+				{
+					start = o;
+				}
+				for (String type : types)
+				{
+					o++;
+					if (type.equals("INT"))
+					{
+						o += 4;
+					}
+					else if (type.equals("LONG"))
+					{
+						o += 8;
+					}
+					else if (type.equals("DATE"))
+					{
+						o += 8;
+					}
+					else if (type.equals("FLOAT"))
+					{
+						o += 8;
+					}
+					else if (type.equals("CHAR"))
+					{
+						int length = p.getInt(o);
+						o += (4 + length);
+					}
+					else
+					{
+						HRDBMSWorker.logger.error("Unknown type in IndexRecord.replaceDownKey(): " + type);
+						throw new Exception("Unknown type in IndexRecord.replaceDownKey(): " + type);
+					}
+				}
+
+				j++;
+			}
+
+			// positioned at start of keyBytes after the one that needs to
+			// change
+			// start contains position of start of keyBytes that needs to change
+			int currentLength = o - start;
+			if (currentLength == keyBytes.length)
+			{
+				// lay directly over it
+				byte[] before = new byte[currentLength];
+				p.get(start, before);
+				InsertLogRec rec = tx.insert(before, keyBytes, start, p.block());
+				p.write(start, keyBytes, tx.number(), rec.lsn());
+				// changedBlocks.add(p.block());
+			}
+			else if (keyBytes.length < currentLength)
+			{
+				// put new keyBytes in place
+				byte[] before = new byte[keyBytes.length];
+				p.get(start, before);
+				InsertLogRec rec = tx.insert(before, keyBytes, start, p.block());
+				p.write(start, keyBytes, tx.number(), rec.lsn());
+				// changedBlocks.add(p.block());
+
+				int moveForward = currentLength - keyBytes.length;
+				start = o;
+				int numKeys = p.getInt(off + 5);
+				while (j < numKeys)
+				{
+					for (String type : types)
+					{
+						o++;
+						if (type.equals("INT"))
+						{
+							o += 4;
+						}
+						else if (type.equals("LONG"))
+						{
+							o += 8;
+						}
+						else if (type.equals("DATE"))
+						{
+							o += 8;
+						}
+						else if (type.equals("FLOAT"))
+						{
+							o += 8;
+						}
+						else if (type.equals("CHAR"))
+						{
+							int length = p.getInt(o);
+							o += (4 + length);
+						}
+						else
+						{
+							HRDBMSWorker.logger.error("Unknown type in IndexRecord.replaceDownKey(): " + type);
+							throw new Exception("Unknown type in IndexRecord.replaceDownKey(): " + type);
+						}
+					}
+
+					j++;
+				}
+
+				int toMove = o - start;
+				if (toMove > 0)
+				{
+					before = new byte[toMove];
+					p.get(start - moveForward, before);
+					byte[] after = new byte[toMove];
+					p.get(start, after);
+					rec = tx.insert(before, after, start - moveForward, p.block());
+					p.write(start - moveForward, after, tx.number(), rec.lsn());
+				}
+
+				int firstFree = p.getInt(5);
+				ByteBuffer bef = ByteBuffer.allocate(4);
+				bef.position(0);
+				bef.putInt(firstFree);
+				ByteBuffer a = ByteBuffer.allocate(4);
+				a.position(0);
+				a.putInt(firstFree - moveForward);
+				rec = tx.insert(bef.array(), a.array(), 5, p.block());
+				p.write(5, a.array(), tx.number(), rec.lsn());
+				bef.position(0);
+				bef.putInt(p.getInt(14));
+				a.position(0);
+				a.putInt(firstFree - moveForward - 13);
+				rec = tx.insert(bef.array(), a.array(), 14, p.block());
+				p.write(14, a.array(), tx.number(), rec.lsn());
+				// changedBlocks.add(p.block());
+			}
+			else
+			{
+				// we need to expand this record
+				int expand = keyBytes.length - currentLength;
+				// do we have this much room available?
+				int available = p.getInt(9) - p.getInt(5) + 1;
+
+				if (expand <= available)
+				{
+					// we have room
+					// make room for new keyBytes
+					int start2 = o;
+					int numKeys = p.getInt(off + 5);
+					while (j < numKeys)
+					{
+						for (String type : types)
+						{
+							o++;
+							if (type.equals("INT"))
+							{
+								o += 4;
+							}
+							else if (type.equals("LONG"))
+							{
+								o += 8;
+							}
+							else if (type.equals("DATE"))
+							{
+								o += 8;
+							}
+							else if (type.equals("FLOAT"))
+							{
+								o += 8;
+							}
+							else if (type.equals("CHAR"))
+							{
+								int length = p.getInt(o);
+								o += (4 + length);
+							}
+							else
+							{
+								HRDBMSWorker.logger.error("Unknown type in IndexRecord.replaceDownKey(): " + type);
+								throw new Exception("Unknown type in IndexRecord.replaceDownKey(): " + type);
+							}
+						}
+
+						j++;
+					}
+
+					int toMove = o - start2;
+					if (toMove > 0)
+					{
+						byte[] before = new byte[toMove];
+						p.get(start2 + expand, before);
+						byte[] after = new byte[toMove];
+						p.get(start2, after);
+						InsertLogRec rec = tx.insert(before, after, start2 + expand, p.block());
+						p.write(start2 + expand, after, tx.number(), rec.lsn());
+					}
+
+					// put new keyBytes in place
+					byte[] before = new byte[keyBytes.length];
+					p.get(start, before);
+					InsertLogRec rec = tx.insert(before, keyBytes, start, p.block());
+					p.write(start, keyBytes, tx.number(), rec.lsn());
+
+					int firstFree = p.getInt(5);
+					ByteBuffer bef = ByteBuffer.allocate(4);
+					bef.position(0);
+					bef.putInt(firstFree);
+					ByteBuffer a = ByteBuffer.allocate(4);
+					a.position(0);
+					a.putInt(firstFree + expand);
+					rec = tx.insert(bef.array(), a.array(), 5, p.block());
+					p.write(5, a.array(), tx.number(), rec.lsn());
+					bef.position(0);
+					bef.putInt(p.getInt(14));
+					a.position(0);
+					a.putInt(firstFree + expand - 13);
+					rec = tx.insert(bef.array(), a.array(), 14, p.block());
+					p.write(14, a.array(), tx.number(), rec.lsn());
+					// changedBlocks.add(p.block());
+				}
+				else
+				{
+					// we need to move this internal node to a new page, update
+					// the parent down pointer, and recall method
+					if (p.getInt(9) != Page.BLOCK_SIZE - 1)
+					{
+						ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
+						i = 0;
+						while (i < Page.BLOCK_SIZE)
+						{
+							bb.put((byte)2);
+							i++;
+						}
+
+						int newNum = FileManager.addNewBlock(file, bb, tx);
+						Block bl = new Block(file, newNum);
+						LockManager.xLock(bl, tx.number());
+						tx.requestPage(bl);
+						Page p2 = null;
+						try
+						{
+							p2 = tx.getPage(bl);
+						}
+						catch (Exception e)
+						{
+							HRDBMSWorker.logger.error("", e);
+							throw e;
+						}
+
+						int length = p.getInt(5);
+						byte[] before = new byte[length];
+						p2.get(0, before);
+						byte[] after = new byte[length];
+						p.get(0, after);
+						InsertLogRec rec = tx.insert(before, after, 0, p2.block());
+						p2.write(0, after, tx.number(), rec.lsn());
+
+						before = new byte[4];
+						p2.get(9, before);
+						ByteBuffer a = ByteBuffer.allocate(4);
+						a.position(0);
+						a.putInt(Page.BLOCK_SIZE - 1);
+						rec = tx.insert(before, a.array(), 9, p2.block());
+						p2.write(9, a.array(), tx.number(), rec.lsn());
+						// changedBlocks.add(p2.block());
+
+						IndexRecord parent = getInternalUp(true);
+						parent.replaceDownPointer(this.getBlockAndOffset(), new BlockAndOffset(bl.number(), 13));
+						parent = getInternalUp(true);
+						parent.replaceDownKey(bao, keyBytes);
+						IndexRecord newRec = new IndexRecord(file, p2.block().number(), 13, tx, true, p2);
+						newRec.setChildUpPointers();
+					}
+					else
+					{
+						// need to split first
+						split();
+						IndexRecord line2 = new IndexRecord(fileName, 0, 13, tx, true);
+						ArrayList<Object> row = convertBytesToRow(keyBytes);
+
+						while (line2.b.number() != bao.block() || line2.off != bao.offset())
+						{
+							i = 0;
+							Iterator it = line2.internalIterator(types);
+							while (it.hasNext())
+							{
+								ArrayList<Object> k = (ArrayList<Object>)it.next();
+								// HRDBMSWorker.logger.debug("Saw internal key: "
+								// + k);
+								// if (((Comparable)val).compareTo(key) < 1)
+								if (compare(row, k) < 1)
+								{
+									line2 = line2.getDown(i);
+									break;
+								}
+								else
+								{
+									if (!it.hasNext())
+									{
+										line2 = line2.getDown(i);
+										break;
+									}
+								}
+
+								i++;
+							}
+						}
+
+						line2.getInternalUp(true).replaceDownKey(bao, keyBytes);
+					}
+				}
+			}
+		}
+
+		private void replaceDownKeyNoLog(BlockAndOffset bao, byte[] keyBytes) throws Exception
+		{
+			HashMap<Integer, ArrayList<Object>> internalKeyCache = cache.get(b);
+			if (internalKeyCache != null)
+			{
+				internalKeyCache.clear();
+			}
+			int o = off + 9;
+			int i = 0;
+			while (true)
+			{
+				if (p.getInt(o) == bao.block() && p.getInt(o + 4) == bao.offset())
+				{
+					// found the match
+					break;
+				}
+
+				o += 8;
+				i++;
+			}
+
+			o = off + 9 + 129 * 8;
+			int j = 0;
+			int start = -1;
+			while (j <= i)
+			{
+				if (j == i)
+				{
+					start = o;
+				}
+				for (String type : types)
+				{
+					o++;
+					if (type.equals("INT"))
+					{
+						o += 4;
+					}
+					else if (type.equals("LONG"))
+					{
+						o += 8;
+					}
+					else if (type.equals("DATE"))
+					{
+						o += 8;
+					}
+					else if (type.equals("FLOAT"))
+					{
+						o += 8;
+					}
+					else if (type.equals("CHAR"))
+					{
+						int length = p.getInt(o);
+						o += (4 + length);
+					}
+					else
+					{
+						HRDBMSWorker.logger.error("Unknown type in IndexRecord.replaceDownKey(): " + type);
+						throw new Exception("Unknown type in IndexRecord.replaceDownKey(): " + type);
+					}
+				}
+
+				j++;
+			}
+
+			// positioned at start of keyBytes after the one that needs to
+			// change
+			// start contains position of start of keyBytes that needs to change
+			int currentLength = o - start;
+			if (currentLength == keyBytes.length)
+			{
+				// lay directly over it
+				long lsn = LogManager.getLSN();
+				p.write(start, keyBytes, tx.number(), lsn);
+				// changedBlocks.add(p.block());
+			}
+			else if (keyBytes.length < currentLength)
+			{
+				// put new keyBytes in place
+				long lsn = LogManager.getLSN();
+				p.write(start, keyBytes, tx.number(), lsn);
+				// changedBlocks.add(p.block());
+
+				int moveForward = currentLength - keyBytes.length;
+				start = o;
+				int numKeys = p.getInt(off + 5);
+				while (j < numKeys)
+				{
+					for (String type : types)
+					{
+						o++;
+						if (type.equals("INT"))
+						{
+							o += 4;
+						}
+						else if (type.equals("LONG"))
+						{
+							o += 8;
+						}
+						else if (type.equals("DATE"))
+						{
+							o += 8;
+						}
+						else if (type.equals("FLOAT"))
+						{
+							o += 8;
+						}
+						else if (type.equals("CHAR"))
+						{
+							int length = p.getInt(o);
+							o += (4 + length);
+						}
+						else
+						{
+							HRDBMSWorker.logger.error("Unknown type in IndexRecord.replaceDownKey(): " + type);
+							throw new Exception("Unknown type in IndexRecord.replaceDownKey(): " + type);
+						}
+					}
+
+					j++;
+				}
+
+				int toMove = o - start;
+				if (toMove > 0)
+				{
+					byte[] after = new byte[toMove];
+					p.get(start, after);
+					lsn = LogManager.getLSN();
+					p.write(start - moveForward, after, tx.number(), lsn);
+				}
+
+				int firstFree = p.getInt(5);
+				ByteBuffer a = ByteBuffer.allocate(4);
+				a.position(0);
+				a.putInt(firstFree - moveForward);
+				lsn = LogManager.getLSN();
+				p.write(5, a.array(), tx.number(), lsn);
+				a.position(0);
+				a.putInt(firstFree - moveForward - 13);
+				lsn = LogManager.getLSN();
+				p.write(14, a.array(), tx.number(), lsn);
+				// changedBlocks.add(p.block());
+			}
+			else
+			{
+				// we need to expand this record
+				int expand = keyBytes.length - currentLength;
+				// do we have this much room available?
+				int available = p.getInt(9) - p.getInt(5) + 1;
+
+				if (expand <= available)
+				{
+					// we have room
+					// make room for new keyBytes
+					int start2 = o;
+					int numKeys = p.getInt(off + 5);
+					while (j < numKeys)
+					{
+						for (String type : types)
+						{
+							o++;
+							if (type.equals("INT"))
+							{
+								o += 4;
+							}
+							else if (type.equals("LONG"))
+							{
+								o += 8;
+							}
+							else if (type.equals("DATE"))
+							{
+								o += 8;
+							}
+							else if (type.equals("FLOAT"))
+							{
+								o += 8;
+							}
+							else if (type.equals("CHAR"))
+							{
+								int length = p.getInt(o);
+								o += (4 + length);
+							}
+							else
+							{
+								HRDBMSWorker.logger.error("Unknown type in IndexRecord.replaceDownKey(): " + type);
+								throw new Exception("Unknown type in IndexRecord.replaceDownKey(): " + type);
+							}
+						}
+
+						j++;
+					}
+
+					int toMove = o - start2;
+					if (toMove > 0)
+					{
+						byte[] after = new byte[toMove];
+						p.get(start2, after);
+						long lsn = LogManager.getLSN();
+						p.write(start2 + expand, after, tx.number(), lsn);
+					}
+
+					// put new keyBytes in place
+					long lsn = LogManager.getLSN();
+					p.write(start, keyBytes, tx.number(), lsn);
+
+					int firstFree = p.getInt(5);
+					ByteBuffer a = ByteBuffer.allocate(4);
+					a.position(0);
+					a.putInt(firstFree + expand);
+					lsn = LogManager.getLSN();
+					p.write(5, a.array(), tx.number(), lsn);
+					a.position(0);
+					a.putInt(firstFree + expand - 13);
+					lsn = LogManager.getLSN();
+					p.write(14, a.array(), tx.number(), lsn);
+					// changedBlocks.add(p.block());
+				}
+				else
+				{
+					// we need to move this internal node to a new page, update
+					// the parent down pointer, and recall method
+					if (p.getInt(9) != Page.BLOCK_SIZE - 1)
+					{
+						ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
+						i = 0;
+						while (i < Page.BLOCK_SIZE)
+						{
+							bb.put((byte)2);
+							i++;
+						}
+
+						int newNum = FileManager.addNewBlockNoLog(file, bb, tx);
+						Block bl = new Block(file, newNum);
+						LockManager.xLock(bl, tx.number());
+						tx.requestPage(bl);
+						Page p2 = null;
+						try
+						{
+							p2 = tx.getPage(bl);
+						}
+						catch (Exception e)
+						{
+							HRDBMSWorker.logger.error("", e);
+							throw e;
+						}
+
+						int length = p.getInt(5);
+						byte[] after = new byte[length];
+						p.get(0, after);
+						long lsn = LogManager.getLSN();
+						p2.write(0, after, tx.number(), lsn);
+
+						ByteBuffer a = ByteBuffer.allocate(4);
+						a.position(0);
+						a.putInt(Page.BLOCK_SIZE - 1);
+						lsn = LogManager.getLSN();
+						p2.write(9, a.array(), tx.number(), lsn);
+						// changedBlocks.add(p2.block());
+
+						IndexRecord parent = getInternalUp(true);
+						parent.replaceDownPointerNoLog(this.getBlockAndOffset(), new BlockAndOffset(bl.number(), 13));
+						parent = getInternalUp(true);
+						parent.replaceDownKeyNoLog(bao, keyBytes);
+						IndexRecord newRec = new IndexRecord(file, p2.block().number(), 13, tx, true, p2);
+						newRec.setChildUpPointersNoLog();
+					}
+					else
+					{
+						// need to split first
+						splitNoLog();
+						IndexRecord line2 = new IndexRecord(fileName, 0, 13, tx, true);
+						ArrayList<Object> row = convertBytesToRow(keyBytes);
+
+						while (line2.b.number() != bao.block() || line2.off != bao.offset())
+						{
+							i = 0;
+							Iterator it = line2.internalIterator(types);
+							while (it.hasNext())
+							{
+								ArrayList<Object> k = (ArrayList<Object>)it.next();
+								// HRDBMSWorker.logger.debug("Saw internal key: "
+								// + k);
+								// if (((Comparable)val).compareTo(key) < 1)
+								if (compare(row, k) < 1)
+								{
+									line2 = line2.getDown(i);
+									break;
+								}
+								else
+								{
+									if (!it.hasNext())
+									{
+										line2 = line2.getDown(i);
+										break;
+									}
+								}
+
+								i++;
+							}
+						}
+
+						line2.getInternalUp(true).replaceDownKeyNoLog(bao, keyBytes);
+					}
+				}
+			}
+		}
+
+		private void replaceDownPointer(BlockAndOffset oldPtr, BlockAndOffset newPtr) throws Exception
+		{
+			int o = off + 9;
+			while (true)
+			{
+				int bNum = p.getInt(o);
+				int oNum = p.getInt(o + 4);
+
+				if (bNum == oldPtr.block() && oNum == oldPtr.offset())
+				{
+					// replace it
+					byte[] before = new byte[8];
+					p.get(o, before);
+					ByteBuffer after = ByteBuffer.allocate(8);
+					after.position(0);
+					after.putInt(newPtr.block());
+					after.putInt(newPtr.offset());
+					InsertLogRec rec = tx.insert(before, after.array(), o, p.block());
+					p.write(o, after.array(), tx.number(), rec.lsn());
+					// changedBlocks.add(p.block());
+					return;
+				}
+
+				o += 8;
+			}
+		}
+
+		private void replaceDownPointerNoLog(BlockAndOffset oldPtr, BlockAndOffset newPtr) throws Exception
+		{
+			int o = off + 9;
+			while (true)
+			{
+				int bNum = p.getInt(o);
+				int oNum = p.getInt(o + 4);
+
+				if (bNum == oldPtr.block() && oNum == oldPtr.offset())
+				{
+					// replace it
+					ByteBuffer after = ByteBuffer.allocate(8);
+					after.position(0);
+					after.putInt(newPtr.block());
+					after.putInt(newPtr.offset());
+					long lsn = LogManager.getLSN();
+					p.write(o, after.array(), tx.number(), lsn);
+					// changedBlocks.add(p.block());
+					return;
+				}
+
+				o += 8;
+			}
+		}
+
+		private void setChildUpPointers() throws Exception
+		{
+			int o = 22;
+			int i = 0;
+			int nks = p.getInt(18);
+			while (i < nks)
+			{
+				int block = p.getInt(o);
+				o += 4;
+				int offset = p.getInt(o);
+				o += 4;
+				IndexRecord rec = new IndexRecord(file, block, offset, tx, true);
+				if (rec.isLeaf())
+				{
+					rec.setUp(this);
+				}
+				else
+				{
+					rec.setUpInternal(this);
+				}
+				i++;
+			}
+		}
+
+		private void setChildUpPointersNoLog() throws Exception
+		{
+			int o = 22;
+			int i = 0;
+			int nks = p.getInt(18);
+			while (i < nks)
+			{
+				int block = p.getInt(o);
+				o += 4;
+				int offset = p.getInt(o);
+				o += 4;
+				IndexRecord rec = new IndexRecord(file, block, offset, tx, true);
+				if (rec.isLeaf())
+				{
+					rec.setUpNoLog(this);
+				}
+				else
+				{
+					rec.setUpInternalNoLog(this);
+				}
+				i++;
+			}
+		}
+
+		/*
+		 * private void insertAfter(BlockAndOffset bao) throws Exception {
+		 * IndexRecord next = new IndexRecord(file, p.getInt(off+9),
+		 * p.getInt(off+13), tx, true); this.setNext(bao); if (!next.isNull()) {
+		 * next.setPrev(bao); } }
+		 * 
+		 * private void insertAfterNoLog(BlockAndOffset bao) throws Exception {
+		 * IndexRecord next = new IndexRecord(file, p.getInt(off+9),
+		 * p.getInt(off+13), tx, true); this.setNextNoLog(bao); if
+		 * (!next.isNull()) { next.setPrevNoLog(bao); } }
+		 */
+
+		private void setNext(BlockAndOffset bao) throws Exception
+		{
+			byte[] before = new byte[8];
+			p.get(off + 9, before);
+			ByteBuffer after = ByteBuffer.allocate(8);
+			after.position(0);
+			after.putInt(bao.block());
+			after.putInt(bao.offset());
+			after.position(0);
+			InsertLogRec rec = tx.insert(before, after.array(), off + 9, p.block());
+			p.write(off + 9, after.array(), tx.number(), rec.lsn());
+			// changedBlocks.add(p.block());
+		}
+
+		// public IndexRecord(String file, int block, int offset, Transaction
+		// tx, Page p) throws Exception
+		// {
+		// this.file = file;
+		// this.tx = tx;
+		// this.p = p;
+		// this.b = p.block();
+		// off = offset;
+		// keyOff = off + 9+128*8+8;
+		// LockManager.sLock(b, tx.number());
+		// isLeaf = (p.get(off+0) == 1);
+		// if (p.get(off+0) == 2)
+		// {
+		// isLeaf = true;
+		// isTombstone = true;
+		// }
+		// }
+
+		private void setNextNoLog(BlockAndOffset bao) throws Exception
+		{
+			ByteBuffer after = ByteBuffer.allocate(8);
+			after.position(0);
+			after.putInt(bao.block());
+			after.putInt(bao.offset());
+			after.position(0);
+			long lsn = LogManager.getLSN();
+			p.write(off + 9, after.array(), tx.number(), lsn);
+			// changedBlocks.add(p.block());
+		}
+
+		private void setPrev(BlockAndOffset bao) throws Exception
+		{
+			byte[] before = new byte[8];
+			p.get(off + 1, before);
+			ByteBuffer after = ByteBuffer.allocate(8);
+			after.position(0);
+			after.putInt(bao.block());
+			after.putInt(bao.offset());
+			after.position(0);
+			InsertLogRec rec = tx.insert(before, after.array(), off + 1, p.block());
+			p.write(off + 1, after.array(), tx.number(), rec.lsn());
+			// changedBlocks.add(p.block());
+		}
+
+		private void setPrevNoLog(BlockAndOffset bao) throws Exception
+		{
+			ByteBuffer after = ByteBuffer.allocate(8);
+			after.position(0);
+			after.putInt(bao.block());
+			after.putInt(bao.offset());
+			after.position(0);
+			long lsn = LogManager.getLSN();
+			p.write(off + 1, after.array(), tx.number(), lsn);
+			// changedBlocks.add(p.block());
+		}
+
+		private void setUp(BlockAndOffset bao) throws Exception
+		{
+			byte[] before = new byte[8];
+			p.get(off + 17, before);
+			ByteBuffer after = ByteBuffer.allocate(8);
+			after.position(0);
+			after.putInt(bao.block);
+			after.putInt(bao.offset);
+			after.position(0);
+			InsertLogRec rec = tx.insert(before, after.array(), off + 17, p.block());
+			p.write(off + 17, after.array(), tx.number(), rec.lsn());
+			// changedBlocks.add(p.block());
+		}
+
+		private void setUp(IndexRecord ir) throws Exception
+		{
+			int block = ir.b.number();
+			int o = ir.off;
+			setUp(new BlockAndOffset(block, o));
+		}
+
+		private void setUpInternal(BlockAndOffset bao) throws Exception
+		{
+			byte[] before = new byte[8];
+			p.get(off + 9 + 128 * 8, before);
+			ByteBuffer after = ByteBuffer.allocate(8);
+			after.position(0);
+			after.putInt(bao.block);
+			after.putInt(bao.offset);
+			after.position(0);
+			InsertLogRec rec = tx.insert(before, after.array(), off + 9 + 128 * 8, p.block());
+			p.write(off + 9 + 128 * 8, after.array(), tx.number(), rec.lsn());
+			// changedBlocks.add(p.block());
+		}
+
+		private void setUpInternal(IndexRecord ir) throws Exception
+		{
+			int block = ir.b.number();
+			int o = ir.off;
+			setUpInternal(new BlockAndOffset(block, o));
+		}
+
+		private void setUpInternalNoLog(BlockAndOffset bao) throws Exception
+		{
+			ByteBuffer after = ByteBuffer.allocate(8);
+			after.position(0);
+			after.putInt(bao.block);
+			after.putInt(bao.offset);
+			after.position(0);
+			long lsn = LogManager.getLSN();
+			p.write(off + 9 + 128 * 8, after.array(), tx.number(), lsn);
+			// changedBlocks.add(p.block());
+		}
+
+		private void setUpInternalNoLog(IndexRecord ir) throws Exception
+		{
+			int block = ir.b.number();
+			int o = ir.off;
+			setUpInternalNoLog(new BlockAndOffset(block, o));
+		}
+
+		private void setUpNoLog(BlockAndOffset bao) throws Exception
+		{
+			ByteBuffer after = ByteBuffer.allocate(8);
+			after.position(0);
+			after.putInt(bao.block);
+			after.putInt(bao.offset);
+			after.position(0);
+			long lsn = LogManager.getLSN();
+			p.write(off + 17, after.array(), tx.number(), lsn);
+			// changedBlocks.add(p.block());
+		}
+
+		private void split() throws Exception
+		{
+			HashMap<Integer, ArrayList<Object>> internalKeyCache = cache.get(b);
+			if (internalKeyCache != null)
+			{
+				internalKeyCache.clear();
+			}
+			// create a new internal record that has high half of keys and down
+			// pointers
+			ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
+			int i = 0;
+			while (i < Page.BLOCK_SIZE)
+			{
+				bb.put((byte)2);
+				i++;
+			}
+
+			int newNum = FileManager.addNewBlock(file, bb, tx);
+			Block bl = new Block(file, newNum);
+			LockManager.xLock(bl, tx.number());
+			tx.requestPage(bl);
+			Page p2 = null;
+			try
+			{
+				p2 = tx.getPage(bl);
+			}
+			catch (Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				throw e;
+			}
+
+			int numBytes = p.getInt(5);
+			byte[] bytes = new byte[numBytes];
+			p.get(0, bytes);
+			byte[] bef = new byte[numBytes];
+			p2.get(0, bef);
+			InsertLogRec rec = tx.insert(bef, bytes, 0, p2.block());
+			p2.write(0, bytes, tx.number(), rec.lsn());
+
+			// move down pointers
+			int nks = p.getInt(off + 5);
+			int lowKeys = nks >> 1;
+			int highKeys = nks - lowKeys;
+			byte[] after = new byte[highKeys * 8];
+			p.get(off + 9 + lowKeys * 8, after);
+			byte[] before = new byte[highKeys * 8];
+			p2.get(22, before);
+			rec = tx.insert(before, after, 22, p2.block());
+			p2.write(22, after, tx.number(), rec.lsn());
+			Arrays.fill(before, (byte)0);
+			rec = tx.insert(after, before, off + 9 + lowKeys * 8, p.block());
+			p.write(off + 9 + lowKeys * 8, before, tx.number(), rec.lsn());
+			// changedBlocks.add(p.block());
+
+			after = new byte[lowKeys * 8];
+			before = new byte[lowKeys * 8];
+			Arrays.fill(before, (byte)0);
+			p2.get(off + 9 + highKeys * 8, after);
+			rec = tx.insert(after, before, off + 9 + highKeys * 8, p2.block());
+			p2.write(off + 9 + highKeys * 8, before, tx.number(), rec.lsn());
+			// changedBlocks.add(p2.block());
+
+			i = 0;
+			int o = off + 9 + 128 * 8 + 8;
+			int p1HKS = -1;
+			while (i < lowKeys)
+			{
+				if (i == lowKeys - 1)
+				{
+					p1HKS = o;
+				}
+				for (String type : types)
+				{
+					o++; // null indicator
+
+					if (type.equals("INT"))
+					{
+						o += 4;
+					}
+					else if (type.equals("LONG"))
+					{
+						o += 8;
+					}
+					else if (type.equals("FLOAT"))
+					{
+						o += 8;
+					}
+					else if (type.equals("DATE"))
+					{
+						o += 8;
+					}
+					else if (type.equals("CHAR"))
+					{
+						o += p.getInt(o);
+						o += 4;
+					}
+					else
+					{
+						HRDBMSWorker.logger.error("Unknown type in IndexRecord.split(): " + type);
+						throw new Exception("Unknown type in IndexRecord.split(): " + type);
+					}
+				}
+
+				i++;
+			}
+
+			byte[] p1HighKey = new byte[o - p1HKS];
+			p.get(p1HKS, p1HighKey);
+			// we are now positioned at the start of the keys that have to get
+			// moved from the current page to the new one
+			int start = o;
+			i = 0;
+			int p2HKS = -1;
+			while (i < highKeys)
+			{
+				if (i == highKeys - 1)
+				{
+					p2HKS = o;
+				}
+				for (String type : types)
+				{
+					o++; // null indicator
+
+					if (type.equals("INT"))
+					{
+						o += 4;
+					}
+					else if (type.equals("LONG"))
+					{
+						o += 8;
+					}
+					else if (type.equals("FLOAT"))
+					{
+						o += 8;
+					}
+					else if (type.equals("DATE"))
+					{
+						o += 8;
+					}
+					else if (type.equals("CHAR"))
+					{
+						o += p.getInt(o);
+						o += 4;
+					}
+					else
+					{
+						HRDBMSWorker.logger.error("Unknown type in IndexRecord.split(): " + type);
+						throw new Exception("Unknown type in IndexRecord.split(): " + type);
+					}
+				}
+
+				i++;
+			}
+
+			byte[] p2HighKey = new byte[o - p2HKS];
+			p.get(p2HKS, p2HighKey);
+			int end = o;
+			int length = end - start;
+			byte[] oldPageKeys = new byte[length];
+			p.get(start, oldPageKeys);
+			byte[] blank = new byte[length];
+			Arrays.fill(blank, (byte)0);
+			rec = tx.insert(oldPageKeys, blank, start, p.block());
+			p.write(start, blank, tx.number(), rec.lsn());
+			byte[] newPage = new byte[length];
+			p2.get(30 + 128 * 8, newPage);
+			rec = tx.insert(newPage, oldPageKeys, 30 + 128 * 8, p2.block());
+			p2.write(30 + 128 * 8, oldPageKeys, tx.number(), rec.lsn());
+
+			int firstFreeByte = p.getInt(5);
+			ByteBuffer b1 = ByteBuffer.allocate(4);
+			b1.position(0);
+			b1.putInt(firstFreeByte);
+			firstFreeByte -= length;
+			ByteBuffer a1 = ByteBuffer.allocate(4);
+			a1.position(0);
+			a1.putInt(firstFreeByte);
+			rec = tx.insert(b1.array(), a1.array(), 5, p.block());
+			p.write(5, a1.array(), tx.number(), rec.lsn());
+
+			firstFreeByte = p.getInt(14);
+			b1 = ByteBuffer.allocate(8);
+			b1.position(0);
+			b1.putInt(firstFreeByte);
+			b1.putInt(p.getInt(18));
+			firstFreeByte -= length;
+			a1 = ByteBuffer.allocate(8);
+			a1.position(0);
+			a1.putInt(firstFreeByte);
+			a1.putInt(lowKeys);
+			rec = tx.insert(b1.array(), a1.array(), 14, p.block());
+			p.write(14, a1.array(), tx.number(), rec.lsn());
+			// changedBlocks.add(p.block());
+
+			byte[] b1a = new byte[17];
+			p2.get(5, b1a);
+			a1 = ByteBuffer.allocate(17);
+			a1.position(0);
+			a1.putInt(30 + 128 * 8 + length);
+			a1.putInt(Page.BLOCK_SIZE - 1);
+			a1.put((byte)0);
+			a1.putInt(17 + 128 * 8 + length);
+			a1.putInt(highKeys);
+			rec = tx.insert(b1a, a1.array(), 5, p2.block());
+			p2.write(5, a1.array(), tx.number(), rec.lsn());
+			// changedBlocks.add(p2.block());
+
+			IndexRecord newRec = new IndexRecord(file, p2.block().number(), 13, tx, true, p2);
+			newRec.setChildUpPointers();
+
+			if (b.number() == 0)
+			{
+				// we are splitting the root
+				// move the root to a new page
+				bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
+				i = 0;
+				while (i < Page.BLOCK_SIZE)
+				{
+					bb.put((byte)2);
+					i++;
+				}
+
+				newNum = FileManager.addNewBlock(file, bb, tx);
+				Block bl2 = new Block(file, newNum);
+				LockManager.xLock(bl2, tx.number());
+				tx.requestPage(bl2);
+				Page p3 = null;
+				try
+				{
+					p3 = tx.getPage(bl2);
+				}
+				catch (Exception e)
+				{
+					HRDBMSWorker.logger.error("", e);
+					throw e;
+				}
+
+				firstFreeByte = p.getInt(5);
+				byte[] a1a = new byte[firstFreeByte];
+				p.get(0, a1a);
+				b1a = new byte[firstFreeByte];
+				p3.get(0, b1a);
+				rec = tx.insert(b1a, a1a, 0, p3.block());
+				p3.write(0, a1a, tx.number(), rec.lsn());
+				b1a = new byte[4];
+				p3.get(9, b1a);
+				a1 = ByteBuffer.allocate(4);
+				a1.position(0);
+				a1.putInt(Page.BLOCK_SIZE - 1);
+				rec = tx.insert(b1a, a1.array(), 9, p3.block());
+				p3.write(9, a1.array(), tx.number(), rec.lsn());
+				// changedBlocks.add(p3.block());
+
+				newRec = new IndexRecord(file, p3.block().number(), 13, tx, true, p3);
+				newRec.setChildUpPointers();
+
+				// write new root
+				b1a = new byte[25 + 128 * 8 + p1HighKey.length + p2HighKey.length];
+				p.get(5, b1a);
+				a1 = ByteBuffer.allocate(25 + 128 * 8 + p1HighKey.length + p2HighKey.length);
+				a1.position(0);
+				a1.putInt(30 + 128 * 8 + p1HighKey.length + p2HighKey.length);
+				a1.putInt(p.getInt(9));
+				a1.put((byte)0);
+				a1.putInt(17 + 128 * 8 + p1HighKey.length + p2HighKey.length);
+				a1.putInt(2);
+				a1.putInt(bl2.number());
+				a1.putInt(13);
+				a1.putInt(bl.number());
+				a1.putInt(13);
+				i = 2;
+				while (i < 129)
+				{
+					a1.putLong(0);
+					i++;
+				}
+				a1.put(p1HighKey);
+				a1.put(p2HighKey);
+				rec = tx.insert(b1a, a1.array(), 5, p.block());
+				p.write(5, a1.array(), tx.number(), rec.lsn());
+				// changedBlocks.add(p.block());
+
+				newRec = new IndexRecord(file, 0, 13, tx, true, p);
+				newRec.setChildUpPointers();
+			}
+			else
+			{
+				IndexRecord up = getInternalUp(true);
+				p2HighKey = up.getDownKey(this.getBlockAndOffset());
+				up.replaceDownKey(this.getBlockAndOffset(), p1HighKey);
+				up = getInternalUp(true);
+				up.addInternalDown(new BlockAndOffset(bl.number(), 13), p2HighKey);
+			}
+		}
+
+		// public IndexRecord getUp() throws Exception
+		// {
+		// if (p.getInt(off+17) == 0 && p.getInt(off+21) == 0)
+		// {
+		// IndexRecord retval = new IndexRecord();
+		// retval.isNull = true;
+		// return retval;
+		// }
+		//
+		// return new IndexRecord(file, p.getInt(off+17), p.getInt(off+21), tx);
+		// }
+
+		private void splitNoLog() throws Exception
+		{
+			HashMap<Integer, ArrayList<Object>> internalKeyCache = cache.get(b);
+			if (internalKeyCache != null)
+			{
+				internalKeyCache.clear();
+			}
+			// create a new internal record that has high half of keys and down
+			// pointers
+			ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
+			int i = 0;
+			while (i < Page.BLOCK_SIZE)
+			{
+				bb.asLongBuffer().put(0x0202020202020202L);
+				i += 8;
+			}
+
+			int newNum = FileManager.addNewBlockNoLog(file, bb, tx);
+			Block bl = new Block(file, newNum);
+			LockManager.xLock(bl, tx.number());
+			tx.requestPage(bl);
+			Page p2 = null;
+			try
+			{
+				p2 = tx.getPage(bl);
+			}
+			catch (Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				throw e;
+			}
+
+			int numBytes = p.getInt(5);
+			byte[] bytes = new byte[numBytes];
+			p.get(0, bytes);
+			long lsn = LogManager.getLSN();
+			p2.write(0, bytes, tx.number(), lsn);
+
+			// move down pointers
+			int nks = p.getInt(off + 5);
+			int lowKeys = nks >> 1;
+			int highKeys = nks - lowKeys;
+			byte[] after = new byte[highKeys * 8];
+			p.get(off + 9 + lowKeys * 8, after);
+			byte[] before = new byte[highKeys * 8];
+			lsn = LogManager.getLSN();
+			p2.write(22, after, tx.number(), lsn);
+			Arrays.fill(before, (byte)0);
+			lsn = LogManager.getLSN();
+			p.write(off + 9 + lowKeys * 8, before, tx.number(), lsn);
+			// changedBlocks.add(p.block());
+
+			before = new byte[lowKeys * 8];
+			Arrays.fill(before, (byte)0);
+			lsn = LogManager.getLSN();
+			p2.write(off + 9 + highKeys * 8, before, tx.number(), lsn);
+			// changedBlocks.add(p2.block());
+
+			i = 0;
+			int o = off + 9 + 128 * 8 + 8;
+			int p1HKS = -1;
+			while (i < lowKeys)
+			{
+				if (i == lowKeys - 1)
+				{
+					p1HKS = o;
+				}
+				for (String type : types)
+				{
+					o++; // null indicator
+
+					if (type.equals("INT"))
+					{
+						o += 4;
+					}
+					else if (type.equals("LONG"))
+					{
+						o += 8;
+					}
+					else if (type.equals("FLOAT"))
+					{
+						o += 8;
+					}
+					else if (type.equals("DATE"))
+					{
+						o += 8;
+					}
+					else if (type.equals("CHAR"))
+					{
+						o += p.getInt(o);
+						o += 4;
+					}
+					else
+					{
+						HRDBMSWorker.logger.error("Unknown type in IndexRecord.split(): " + type);
+						throw new Exception("Unknown type in IndexRecord.split(): " + type);
+					}
+				}
+
+				i++;
+			}
+
+			byte[] p1HighKey = new byte[o - p1HKS];
+			p.get(p1HKS, p1HighKey);
+			// we are now positioned at the start of the keys that have to get
+			// moved from the current page to the new one
+			int start = o;
+			i = 0;
+			int p2HKS = -1;
+			while (i < highKeys)
+			{
+				if (i == highKeys - 1)
+				{
+					p2HKS = o;
+				}
+				for (String type : types)
+				{
+					o++; // null indicator
+
+					if (type.equals("INT"))
+					{
+						o += 4;
+					}
+					else if (type.equals("LONG"))
+					{
+						o += 8;
+					}
+					else if (type.equals("FLOAT"))
+					{
+						o += 8;
+					}
+					else if (type.equals("DATE"))
+					{
+						o += 8;
+					}
+					else if (type.equals("CHAR"))
+					{
+						o += p.getInt(o);
+						o += 4;
+					}
+					else
+					{
+						HRDBMSWorker.logger.error("Unknown type in IndexRecord.split(): " + type);
+						throw new Exception("Unknown type in IndexRecord.split(): " + type);
+					}
+				}
+
+				i++;
+			}
+
+			byte[] p2HighKey = new byte[o - p2HKS];
+			p.get(p2HKS, p2HighKey);
+			int end = o;
+			int length = end - start;
+			byte[] oldPageKeys = new byte[length];
+			p.get(start, oldPageKeys);
+			byte[] blank = new byte[length];
+			Arrays.fill(blank, (byte)0);
+			lsn = LogManager.getLSN();
+			p.write(start, blank, tx.number(), lsn);
+			lsn = LogManager.getLSN();
+			p2.write(30 + 128 * 8, oldPageKeys, tx.number(), lsn); // blank high
+			// keys in
+			// p2?
+
+			int firstFreeByte = p.getInt(5);
+			firstFreeByte -= length;
+			ByteBuffer a1 = ByteBuffer.allocate(4);
+			a1.position(0);
+			a1.putInt(firstFreeByte);
+			lsn = LogManager.getLSN();
+			p.write(5, a1.array(), tx.number(), lsn);
+
+			firstFreeByte = p.getInt(14);
+			firstFreeByte -= length;
+			a1 = ByteBuffer.allocate(8);
+			a1.position(0);
+			a1.putInt(firstFreeByte);
+			a1.putInt(lowKeys);
+			lsn = LogManager.getLSN();
+			p.write(14, a1.array(), tx.number(), lsn);
+			// changedBlocks.add(p.block());
+
+			a1 = ByteBuffer.allocate(17);
+			a1.position(0);
+			a1.putInt(30 + 128 * 8 + length);
+			a1.putInt(Page.BLOCK_SIZE - 1);
+			a1.put((byte)0);
+			a1.putInt(17 + 128 * 8 + length);
+			a1.putInt(highKeys);
+			lsn = LogManager.getLSN();
+			p2.write(5, a1.array(), tx.number(), lsn);
+			// changedBlocks.add(p2.block());
+
+			IndexRecord newRec = new IndexRecord(file, p2.block().number(), 13, tx, true, p2);
+			newRec.setChildUpPointersNoLog();
+
+			if (b.number() == 0)
+			{
+				// we are splitting the root
+				// move the root to a new page
+				bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
+				i = 0;
+				while (i < Page.BLOCK_SIZE)
+				{
+					bb.put((byte)2);
+					i++;
+				}
+
+				newNum = FileManager.addNewBlockNoLog(file, bb, tx);
+				Block bl2 = new Block(file, newNum);
+				LockManager.xLock(bl2, tx.number());
+				tx.requestPage(bl2);
+				Page p3 = null;
+				try
+				{
+					p3 = tx.getPage(bl2);
+				}
+				catch (Exception e)
+				{
+					HRDBMSWorker.logger.error("", e);
+					throw e;
+				}
+
+				firstFreeByte = p.getInt(5);
+				byte[] a1a = new byte[firstFreeByte];
+				p.get(0, a1a);
+				lsn = LogManager.getLSN();
+				p3.write(0, a1a, tx.number(), lsn);
+				a1 = ByteBuffer.allocate(4);
+				a1.position(0);
+				a1.putInt(Page.BLOCK_SIZE - 1);
+				lsn = LogManager.getLSN();
+				p3.write(9, a1.array(), tx.number(), lsn);
+				// changedBlocks.add(p3.block());
+
+				newRec = new IndexRecord(file, p3.block().number(), 13, tx, true, p3);
+				newRec.setChildUpPointersNoLog();
+
+				// write new root
+				a1 = ByteBuffer.allocate(25 + 128 * 8 + p1HighKey.length + p2HighKey.length);
+				a1.position(0);
+				a1.putInt(30 + 128 * 8 + p1HighKey.length + p2HighKey.length);
+				a1.putInt(p.getInt(9));
+				a1.put((byte)0);
+				a1.putInt(17 + 128 * 8 + p1HighKey.length + p2HighKey.length);
+				a1.putInt(2);
+				a1.putInt(bl2.number());
+				a1.putInt(13);
+				a1.putInt(bl.number());
+				a1.putInt(13);
+				i = 2;
+				while (i < 129)
+				{
+					a1.putLong(0);
+					i++;
+				}
+				a1.put(p1HighKey);
+				a1.put(p2HighKey);
+				lsn = LogManager.getLSN();
+				p.write(5, a1.array(), tx.number(), lsn);
+				// changedBlocks.add(p.block());
+
+				newRec = new IndexRecord(file, 0, 13, tx, true, p);
+				newRec.setChildUpPointersNoLog();
+			}
+			else
+			{
+				IndexRecord up = getInternalUp(true);
+				p2HighKey = up.getDownKey(this.getBlockAndOffset());
+				up.replaceDownKeyNoLog(this.getBlockAndOffset(), p1HighKey);
+				up = getInternalUp(true);
+				up.addInternalDownNoLog(new BlockAndOffset(bl.number(), 13), p2HighKey);
+			}
+		}
+
+		private void updateParentDownKey(byte[] keyBytes) throws Exception
+		{
+			IndexRecord up = getInternalUp(true);
+			if (!up.isNull())
+			{
+				byte[] highKey = up.getDownKey(this.getBlockAndOffset());
+				ArrayList<Object> keyBytesRow = convertBytesToRow(keyBytes);
+				ArrayList<Object> highKeyRow = convertBytesToRow(highKey);
+				// RowComparator rc = new RowComparator(orders, types);
+
+				if (rc.compare(keyBytesRow, highKeyRow) > 0)
+				{
+					up.replaceDownKey(this.getBlockAndOffset(), keyBytes);
+					up = getInternalUp(true);
+					up.updateParentDownKey(keyBytes);
+				}
+			}
+		}
+
+		private void updateParentDownKeyNoLog(byte[] keyBytes) throws Exception
+		{
+			IndexRecord up = getInternalUp(true);
+			if (!up.isNull())
+			{
+				byte[] highKey = up.getDownKey(this.getBlockAndOffset());
+				ArrayList<Object> keyBytesRow = convertBytesToRow(keyBytes);
+				ArrayList<Object> highKeyRow = convertBytesToRow(highKey);
+				// RowComparator rc = new RowComparator(orders, types);
+
+				if (rc.compare(keyBytesRow, highKeyRow) > 0)
+				{
+					up.replaceDownKeyNoLog(this.getBlockAndOffset(), keyBytes);
+					up = getInternalUp(true);
+					up.updateParentDownKeyNoLog(keyBytes);
+				}
+			}
+		}
+
+		private BlockAndOffset writeNewLeaf(FieldValue[] keys, RID rid) throws Exception
+		{
+			int firstFree = p.getInt(5);
+			int lastFree = p.getInt(9);
+			byte[] keyBytes = this.genKeyBytes(keys);
+			int length = 41 + keyBytes.length;
+			int freeLength = lastFree - firstFree + 1;
+
+			if (length + keyBytes.length <= freeLength && b.number() != 0)
+			{
+				// do it on this page
+				int leafOff = lastFree - length + 1;
+				byte[] before = new byte[length];
+				p.get(leafOff, before);
+				ByteBuffer after = ByteBuffer.allocate(length);
+				after.position(0);
+				after.put((byte)1); // leaf
+				after.putLong(0); // prev pointer filled in later
+				after.putLong(0); // next pointer filled in later
+				after.putLong(0); // up pointer filled in later
+				after.putInt(rid.getNode());
+				after.putInt(rid.getDevice());
+				after.putInt(rid.getBlockNum());
+				after.putInt(rid.getRecNum());
+				after.put(keyBytes);
+				InsertLogRec rec = tx.insert(before, after.array(), leafOff, p.block());
+				p.write(leafOff, after.array(), tx.number(), rec.lsn());
+				before = new byte[4];
+				p.get(9, before);
+				after = ByteBuffer.allocate(4);
+				after.position(0);
+				after.putInt(leafOff - 1);
+				rec = tx.insert(before, after.array(), 9, p.block());
+				p.write(9, after.array(), tx.number(), rec.lsn());
+				// changedBlocks.add(p.block());
+				return new BlockAndOffset(b.number(), leafOff);
+			}
+
+			LockManager.sLock(new Block(file, -1), tx.number());
+			int i = 1;
+			int numBlocks = FileManager.numBlocks.get(file);
+			while (i < numBlocks)
+			{
+				Block bl = new Block(file, i);
+				LockManager.xLock(bl, tx.number());
+				tx.requestPage(bl);
+				Page p2 = null;
+				try
+				{
+					p2 = tx.getPage(bl);
+				}
+				catch (Exception e)
+				{
+					HRDBMSWorker.logger.error("", e);
+					throw e;
+				}
+
+				firstFree = p2.getInt(5);
+				lastFree = p2.getInt(9);
+				freeLength = lastFree - firstFree + 1;
+
+				if (length + keyBytes.length <= freeLength)
+				{
+					// do it on this page
+					IndexRecord dummy = new IndexRecord(file, bl.number(), 13, tx, true, p2);
+					return dummy.writeNewLeaf(keys, rid);
+				}
+
+				i++;
+			}
+
+			// need to add new page
+			ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
+			i = 0;
+			while (i < Page.BLOCK_SIZE)
+			{
+				bb.put((byte)2);
+				i++;
+			}
+
+			int newNum = FileManager.addNewBlock(file, bb, tx);
+			Block bl = new Block(file, newNum);
+			LockManager.xLock(bl, tx.number());
+			tx.requestPage(bl);
+			Page p2 = null;
+			try
+			{
+				p2 = tx.getPage(bl);
+			}
+			catch (Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				throw e;
+			}
+
+			// copy first 5 bytes
+			byte[] bytes = new byte[5];
+			p.get(0, bytes);
+			byte[] bef = new byte[5];
+			p2.get(0, bef);
+			InsertLogRec rec = tx.insert(bef, bytes, 0, p2.block());
+			p2.write(0, bytes, tx.number(), rec.lsn());
+
+			// fill in remainder of header and dummy internal node
+			bef = new byte[25 + 128 * 8];
+			p2.get(5, bef);
+			ByteBuffer aft = ByteBuffer.allocate(25 + 128 * 8);
+			aft.position(0);
+			aft.putInt(30 + 128 * 8);
+			aft.putInt(Page.BLOCK_SIZE - 1);
+			aft.put((byte)0); // internal
+			aft.putInt(17 + 128 * 8);
+			i = 0;
+			while (i < 128)
+			{
+				aft.putLong(0); // dummy down pointers
+				i++;
+			}
+
+			aft.putLong(0); // dummy up pointer
+
+			rec = tx.insert(bef, aft.array(), 5, p2.block());
+			p2.write(5, aft.array(), tx.number(), rec.lsn());
+			// changedBlocks.add(p2.block());
+
+			IndexRecord dummy = new IndexRecord(file, bl.number(), 13, tx, true, p2);
+			return dummy.writeNewLeaf(keys, rid);
+		}
+
+		private BlockAndOffset writeNewLeafNoLog(FieldValue[] keys, RID rid) throws Exception
+		{
+			int firstFree = p.getInt(5);
+			int lastFree = p.getInt(9);
+			byte[] keyBytes = this.genKeyBytes(keys);
+			int length = 41 + keyBytes.length;
+			int freeLength = lastFree - firstFree + 1;
+
+			if (length + keyBytes.length <= freeLength && b.number() != 0)
+			{
+				// do it on this page
+				int leafOff = lastFree - length + 1;
+				ByteBuffer after = ByteBuffer.allocate(length);
+				after.position(0);
+				after.put((byte)1); // leaf
+				after.putLong(0); // prev pointer filled in later
+				after.putLong(0); // next pointer filled in later
+				after.putLong(0); // up pointer filled in later
+				after.putInt(rid.getNode());
+				after.putInt(rid.getDevice());
+				after.putInt(rid.getBlockNum());
+				after.putInt(rid.getRecNum());
+				after.put(keyBytes);
+				long lsn = LogManager.getLSN();
+				p.write(leafOff, after.array(), tx.number(), lsn);
+				after = ByteBuffer.allocate(4);
+				after.position(0);
+				after.putInt(leafOff - 1);
+				lsn = LogManager.getLSN();
+				p.write(9, after.array(), tx.number(), lsn);
+				// changedBlocks.add(p.block());
+				return new BlockAndOffset(b.number(), leafOff);
+			}
+
+			LockManager.sLock(new Block(file, -1), tx.number());
+			int i = 1;
+			int numBlocks = FileManager.numBlocks.get(file);
+			while (i < numBlocks)
+			{
+				Block bl = new Block(file, i);
+				LockManager.xLock(bl, tx.number());
+				tx.requestPage(bl);
+				Page p2 = null;
+				try
+				{
+					p2 = tx.getPage(bl);
+				}
+				catch (Exception e)
+				{
+					HRDBMSWorker.logger.error("", e);
+					throw e;
+				}
+
+				firstFree = p2.getInt(5);
+				lastFree = p2.getInt(9);
+				freeLength = lastFree - firstFree + 1;
+
+				if (length + keyBytes.length <= freeLength)
+				{
+					// do it on this page
+					IndexRecord dummy = new IndexRecord(file, bl.number(), 13, tx, true, p2);
+					return dummy.writeNewLeafNoLog(keys, rid);
+				}
+
+				i++;
+			}
+
+			// need to add new page
+			ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
+			i = 0;
+			while (i < Page.BLOCK_SIZE)
+			{
+				bb.put((byte)2);
+				i++;
+			}
+
+			int newNum = FileManager.addNewBlockNoLog(file, bb, tx);
+			Block bl = new Block(file, newNum);
+			LockManager.xLock(bl, tx.number());
+			tx.requestPage(bl);
+			Page p2 = null;
+			try
+			{
+				p2 = tx.getPage(bl);
+			}
+			catch (Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				throw e;
+			}
+
+			// copy first 5 bytes
+			byte[] bytes = new byte[5];
+			p.get(0, bytes);
+			long lsn = LogManager.getLSN();
+			p2.write(0, bytes, tx.number(), lsn);
+
+			// fill in remainder of header and dummy internal node
+			ByteBuffer aft = ByteBuffer.allocate(25 + 128 * 8);
+			aft.position(0);
+			aft.putInt(30 + 128 * 8);
+			aft.putInt(Page.BLOCK_SIZE - 1);
+			aft.put((byte)0); // internal
+			aft.putInt(17 + 128 * 8);
+			i = 0;
+			while (i < 128)
+			{
+				aft.putLong(0); // dummy down pointers
+				i++;
+			}
+
+			aft.putLong(0); // dummy up pointer
+
+			lsn = LogManager.getLSN();
+			p2.write(5, aft.array(), tx.number(), lsn);
+			// changedBlocks.add(p2.block());
+
+			IndexRecord dummy = new IndexRecord(file, bl.number(), 13, tx, true, p2);
+			return dummy.writeNewLeafNoLog(keys, rid);
+		}
+
 		private class InternalIterator implements Iterator
 		{
-			private ArrayList<String> types;
-			private int numKeys;
+			private final ArrayList<String> types;
+			private final int numKeys;
 			private int index = 0;
-			
+
 			public InternalIterator(ArrayList<String> types, int numKeys)
 			{
 				this.types = types;
 				this.numKeys = numKeys;
 			}
-			
+
 			@Override
 			public boolean hasNext()
 			{
@@ -6534,7 +6460,7 @@ public final class Index implements Serializable
 					index++;
 					return getInternalKeys(types);
 				}
-				catch(Exception e)
+				catch (Exception e)
 				{
 					return null;
 				}
@@ -6543,6 +6469,144 @@ public final class Index implements Serializable
 			@Override
 			public void remove()
 			{
+			}
+		}
+	}
+
+	private static final class BlockAndOffset
+	{
+		private final int block;
+		private final int offset;
+
+		public BlockAndOffset(int block, int offset)
+		{
+			this.block = block;
+			this.offset = offset;
+		}
+
+		public int block()
+		{
+			return block;
+		}
+
+		public int offset()
+		{
+			return offset;
+		}
+	}
+
+	private final class IndexWriterThread extends ThreadPoolThread
+	{
+		public IndexWriterThread(ArrayList<String> keys)
+		{
+		}
+
+		@Override
+		public final void run()
+		{
+			while (true)
+			{
+				if (!indexOnly)
+				{
+					try
+					{
+						while (!currentKeySatisfies())
+						{
+							if (marksEnd())
+							{
+								queue.put(new DataEndMarker());
+								return;
+							}
+
+							line = line.nextRecord();
+							// count++;
+							// if (count >= MAX_PAGES)
+							// {
+							// tx.checkpoint(fileName, line.b);
+							// count = 0;
+							// }
+						}
+
+						final ArrayList<Object> al = new ArrayList<Object>(1);
+						al.add(getPartialRid());
+						queue.put(al);
+
+						line = line.nextRecord();
+						// count++;
+						// if (count >= MAX_PAGES)
+						// {
+						// tx.checkpoint(fileName, line.b);
+						// count = 0;
+						// }
+					}
+					catch (final Exception e)
+					{
+						HRDBMSWorker.logger.error("", e);
+						try
+						{
+							queue.put(e);
+						}
+						catch (Exception f)
+						{
+						}
+						return;
+					}
+				}
+				else
+				{
+					row = new ArrayList<Object>(fetches.size());
+					try
+					{
+						while (!currentKeySatisfies())
+						{
+							if (marksEnd())
+							{
+								queue.put(new DataEndMarker());
+								return;
+							}
+
+							line = line.nextRecord();
+						}
+
+						ridList.add(getPartialRid());
+						ArrayList<Object> keys = line.getKeys(types);
+						for (final int pos : fetches)
+						{
+							final Object val = keys.get(pos);
+							row.add(val);
+						}
+
+						line = line.nextRecord();
+					}
+					catch (final Exception e)
+					{
+						HRDBMSWorker.logger.error("", e);
+						try
+						{
+							queue.put(e);
+						}
+						catch (Exception f)
+						{
+						}
+						return;
+					}
+					try
+					{
+						queue.put(row.clone());
+					}
+					catch (Exception e)
+					{
+						HRDBMSWorker.logger.error("", e);
+						try
+						{
+							queue.put(e);
+						}
+						catch (Exception f)
+						{
+						}
+						return;
+					}
+				}
 			}
 		}
 	}

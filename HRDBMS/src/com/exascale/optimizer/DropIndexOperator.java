@@ -1,51 +1,27 @@
 package com.exascale.optimizer;
 
-import java.io.InputStream;
-import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
-import java.net.Socket;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
+import java.util.IdentityHashMap;
 import java.util.TreeMap;
-import java.util.concurrent.atomic.AtomicInteger;
-import com.exascale.logging.LogRec;
-import com.exascale.logging.PrepareLogRec;
-import com.exascale.logging.XAAbortLogRec;
-import com.exascale.logging.XACommitLogRec;
-import com.exascale.managers.HRDBMSWorker;
-import com.exascale.managers.LogManager;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Transaction;
-import com.exascale.threads.HRDBMSThread;
 
 public final class DropIndexOperator implements Operator, Serializable
 {
-	private Operator child;
 	private final MetaData meta;
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
 	private TreeMap<Integer, String> pos2Col;
 	private Operator parent;
 	private int node;
-	private transient Plan plan;
-	private String schema;
-	private String table;
+	private final String schema;
+	private final String table;
 	private boolean done = false;
 	private Transaction tx;
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
-	}
-	
-	public void setTransaction(Transaction tx)
-	{
-		this.tx = tx;
-	}
 
 	public DropIndexOperator(String schema, String table, MetaData meta)
 	{
@@ -176,6 +152,12 @@ public final class DropIndexOperator implements Operator, Serializable
 	}
 
 	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		throw new Exception("Trying to call serialize on drop index operator");
+	}
+
+	@Override
 	public void setChildPos(int pos)
 	{
 	}
@@ -187,10 +169,20 @@ public final class DropIndexOperator implements Operator, Serializable
 	}
 
 	@Override
+	public void setPlan(Plan plan)
+	{
+	}
+
+	public void setTransaction(Transaction tx)
+	{
+		this.tx = tx;
+	}
+
+	@Override
 	public void start() throws Exception
 	{
 	}
-	
+
 	@Override
 	public String toString()
 	{

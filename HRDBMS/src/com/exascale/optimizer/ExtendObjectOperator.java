@@ -1,8 +1,12 @@
 package com.exascale.optimizer;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.TreeMap;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MyDate;
@@ -10,27 +14,52 @@ import com.exascale.tables.Plan;
 
 public final class ExtendObjectOperator implements Operator, Serializable
 {
+	private static sun.misc.Unsafe unsafe;
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
 	private Operator child;
 	private Operator parent;
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
 	private TreeMap<Integer, String> pos2Col;
-	private final String name;
-	private final MetaData meta;
+	private String name;
+	private transient final MetaData meta;
+
 	private int node;
-	private transient Plan plan;
+
 	private Object obj;
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
-	}
 
 	public ExtendObjectOperator(Object obj, String name, MetaData meta)
 	{
 		this.obj = obj;
 		this.meta = meta;
 		this.name = name;
+	}
+
+	public static ExtendObjectOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		ExtendObjectOperator value = (ExtendObjectOperator)unsafe.allocateInstance(ExtendObjectOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.child = OperatorUtils.deserializeOperator(in, prev);
+		value.parent = OperatorUtils.deserializeOperator(in, prev);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.name = OperatorUtils.readString(in, prev);
+		value.node = OperatorUtils.readInt(in);
+		value.obj = OperatorUtils.readObject(in, prev);
+		return value;
 	}
 
 	@Override
@@ -144,7 +173,7 @@ public final class ExtendObjectOperator implements Operator, Serializable
 		{
 			return o;
 		}
-		
+
 		if (o instanceof Exception)
 		{
 			throw (Exception)o;
@@ -208,6 +237,28 @@ public final class ExtendObjectOperator implements Operator, Serializable
 	}
 
 	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(26, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		child.serialize(out, prev);
+		parent.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.writeString(name, out, prev);
+		OperatorUtils.writeInt(node, out);
+		OperatorUtils.writeObject(obj, out, prev);
+	}
+
+	@Override
 	public void setChildPos(int pos)
 	{
 	}
@@ -216,6 +267,11 @@ public final class ExtendObjectOperator implements Operator, Serializable
 	public void setNode(int node)
 	{
 		this.node = node;
+	}
+
+	@Override
+	public void setPlan(Plan plan)
+	{
 	}
 
 	@Override

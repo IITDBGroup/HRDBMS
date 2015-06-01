@@ -30,27 +30,27 @@ import java.util.zip.Inflater;
 
 /**
  * Stream to read compressed data from the underlying input stream.<br>
- * 
+ *
  * Counterpart to CompressedOutputStream.
  */
 public final class CompressedInputStream extends FilterInputStream
 {
 
 	private byte[] infBuf; // buffer holding compressed data for the inflater
-							// (size is dynamically adapted)
+	// (size is dynamically adapted)
 	private final Inflater inflater; // zip inflater
 	private boolean compressed; // true if current packet is compressed and
-								// inf... is valid
+	// inf... is valid
 	private int readPending; // number of bytes pending to read from underlying
-								// stream
+	// stream
 	private byte[] byteBuf; // single byte buffer for read()
 	private boolean closed; // true if closed
 
 	/**
 	 * Creates a new compressed input stream.<br>
-	 * 
+	 *
 	 * The buffersize adapts dynamically to the packet size.
-	 * 
+	 *
 	 * @param in
 	 *            the underlying input stream
 	 */
@@ -75,7 +75,7 @@ public final class CompressedInputStream extends FilterInputStream
 
 	/**
 	 * Returns the closed state.
-	 * 
+	 *
 	 * @return true if closed
 	 */
 	public boolean isClosed()
@@ -85,7 +85,7 @@ public final class CompressedInputStream extends FilterInputStream
 
 	/**
 	 * Reads the next uncompressed byte of data from the input stream.
-	 * 
+	 *
 	 * @return the next byte of data, or <code>-1</code> if the end of the
 	 *         stream is reached.
 	 * @exception IOException
@@ -101,7 +101,7 @@ public final class CompressedInputStream extends FilterInputStream
 	/**
 	 * Reads up to <code>len</code> uncompressed bytes of data from this input
 	 * stream into an array of bytes.
-	 * 
+	 *
 	 * @param b
 	 *            the buffer into which the data is read.
 	 * @param off
@@ -111,7 +111,7 @@ public final class CompressedInputStream extends FilterInputStream
 	 * @return the total number of bytes read into the buffer, or
 	 *         <code>-1</code> if there is no more data because the end of the
 	 *         stream has been reached.
-	 * 
+	 *
 	 * @exception IOException
 	 *                if an I/O error occurs.
 	 */
@@ -220,7 +220,7 @@ public final class CompressedInputStream extends FilterInputStream
 
 	/**
 	 * Reads the header of the next packet.
-	 * 
+	 *
 	 * @return true if next packet loaded, false if end of stream
 	 */
 	private boolean readHeader() throws IOException

@@ -4,13 +4,13 @@ import java.util.ArrayList;
 
 public class CreateTable extends SQLStatement
 {
-	private TableName table;
-	private ArrayList<ColDef> cols;
-	private PrimaryKey pk;
-	private String nodeGroupExp;
-	private String nodeExp;
-	private String deviceExp;
-	
+	private final TableName table;
+	private final ArrayList<ColDef> cols;
+	private final PrimaryKey pk;
+	private final String nodeGroupExp;
+	private final String nodeExp;
+	private final String deviceExp;
+
 	public CreateTable(TableName table, ArrayList<ColDef> cols, PrimaryKey pk, String nodeGroupExp, String nodeExp, String deviceExp)
 	{
 		this.table = table;
@@ -20,34 +20,34 @@ public class CreateTable extends SQLStatement
 		this.nodeExp = nodeExp;
 		this.deviceExp = deviceExp;
 	}
-	
-	public TableName getTable()
-	{
-		return table;
-	}
-	
+
 	public ArrayList<ColDef> getCols()
 	{
 		return cols;
 	}
-	
-	public PrimaryKey getPK()
+
+	public String getDeviceExp()
 	{
-		return pk;
+		return deviceExp;
 	}
-	
-	public String getNodeGroupExp()
-	{
-		return nodeGroupExp;
-	}
-	
+
 	public String getNodeExp()
 	{
 		return nodeExp;
 	}
-	
-	public String getDeviceExp()
+
+	public String getNodeGroupExp()
 	{
-		return deviceExp;
+		return nodeGroupExp;
+	}
+
+	public PrimaryKey getPK()
+	{
+		return pk;
+	}
+
+	public TableName getTable()
+	{
+		return table;
 	}
 }

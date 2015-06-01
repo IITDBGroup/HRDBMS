@@ -9,11 +9,6 @@ public class SQL
 		internal = toUpperCaseExceptQuoted(sql);
 		internal = removeExcessWhitespace(internal);
 	}
-	
-	public String toString()
-	{
-		return internal;
-	}
 
 	@Override
 	public boolean equals(Object rhs)
@@ -38,6 +33,12 @@ public class SQL
 		return internal.hashCode();
 	}
 
+	@Override
+	public String toString()
+	{
+		return internal;
+	}
+
 	private String removeExcessWhitespace(String in)
 	{
 		String out = in.replace('\t', ' ');
@@ -47,7 +48,8 @@ public class SQL
 		int i = 0;
 		int whitespaceCount = 0;
 		String out2 = "";
-		while (i < out.length())
+		final int length = out.length();
+		while (i < length)
 		{
 			if (out.charAt(i) != ' ')
 			{
@@ -78,7 +80,8 @@ public class SQL
 		int i = 0;
 		boolean quoted = false;
 		int quoteType = 0;
-		while (i < in.length())
+		final int length = in.length();
+		while (i < length)
 		{
 			if ((in.charAt(i) != '\'' && in.charAt(i) != '"') || (in.charAt(i) == '\'' && quoteType == 2) || (in.charAt(i) == '"' && quoteType == 1))
 			{

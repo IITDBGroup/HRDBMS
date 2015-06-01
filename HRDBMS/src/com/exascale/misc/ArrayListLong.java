@@ -2,6 +2,7 @@ package com.exascale.misc;
 
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.ConcurrentModificationException;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -15,7 +16,7 @@ import java.util.RandomAccess;
  * methods to manipulate the size of the array that is used internally to store
  * the list. (This class is roughly equivalent to <tt>Vector</tt>, except that
  * it is unsynchronized.)
- * 
+ *
  * <p>
  * The <tt>size</tt>, <tt>isEmpty</tt>, <tt>get</tt>, <tt>set</tt>,
  * <tt>iterator</tt>, and <tt>listIterator</tt> operations run in constant time.
@@ -23,7 +24,7 @@ import java.util.RandomAccess;
  * adding n elements requires O(n) time. All of the other operations run in
  * linear time (roughly speaking). The constant factor is low compared to that
  * for the <tt>LinkedList</tt> implementation.
- * 
+ *
  * <p>
  * Each <tt>ArrayListLong</tt> instance has a <i>capacity</i>. The capacity is
  * the size of the array used to store the elements in the list. It is always at
@@ -31,13 +32,13 @@ import java.util.RandomAccess;
  * its capacity grows automatically. The details of the growth policy are not
  * specified beyond the fact that adding an element has constant amortized time
  * cost.
- * 
+ *
  * <p>
  * An application can increase the capacity of an <tt>ArrayListLong</tt>
  * instance before adding a large number of elements using the
  * <tt>ensureCapacity</tt> operation. This may reduce the amount of incremental
  * reallocation.
- * 
+ *
  * <p>
  * <strong>Note that this implementation is not synchronized.</strong> If
  * multiple threads access an <tt>ArrayListLong</tt> instance concurrently, and
@@ -47,16 +48,16 @@ import java.util.RandomAccess;
  * array; merely setting the value of an element is not a structural
  * modification.) This is typically accomplished by synchronizing on some object
  * that naturally encapsulates the list.
- * 
+ *
  * If no such object exists, the list should be "wrapped" using the
  * {@link Collections#synchronizedList Collections.synchronizedList} method.
  * This is best done at creation time, to prevent accidental unsynchronized
  * access to the list:
- * 
+ *
  * <pre>
  *   List list = Collections.synchronizedList(new ArrayListLong(...));
  * </pre>
- * 
+ *
  * <p>
  * <a name="fail-fast"/> The iterators returned by this class's
  * {@link #iterator() iterator} and {@link #listIterator(int) listIterator}
@@ -67,7 +68,7 @@ import java.util.RandomAccess;
  * {@link ConcurrentModificationException}. Thus, in the face of concurrent
  * modification, the iterator fails quickly and cleanly, rather than risking
  * arbitrary, non-deterministic behavior at an undetermined time in the future.
- * 
+ *
  * <p>
  * Note that the fail-fast behavior of an iterator cannot be guaranteed as it
  * is, generally speaking, impossible to make any hard guarantees in the
@@ -76,11 +77,11 @@ import java.util.RandomAccess;
  * would be wrong to write a program that depended on this exception for its
  * correctness: <i>the fail-fast behavior of iterators should be used only to
  * detect bugs.</i>
- * 
+ *
  * <p>
  * This class is a member of the <a href="{@docRoot}
  * /../technotes/guides/collections/index.html"> Java Collections Framework</a>.
- * 
+ *
  * @author Josh Bloch
  * @author Neal Gafter
  * @see Collection
@@ -105,28 +106,28 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	private static final long[] EMPTY_ELEMENTDATA = {};
 
 	/**
-	 * The array buffer into which the elements of the ArrayListLong are stored.
-	 * The capacity of the ArrayListLong is the length of this array buffer. Any
-	 * empty ArrayListLong with elementData == EMPTY_ELEMENTDATA will be
-	 * expanded to DEFAULT_CAPACITY when the first element is added.
-	 */
-	private transient long[] elementData;
-
-	/**
-	 * The size of the ArrayListLong (the number of elements it contains).
-	 * 
-	 * @serial
-	 */
-	private int size;
-
-	private int modCount = 0;
-
-	/**
 	 * The maximum size of array to allocate. Some VMs reserve some header words
 	 * in an array. Attempts to allocate larger arrays may result in
 	 * OutOfMemoryError: Requested array size exceeds VM limit
 	 */
 	private static final int MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8;
+
+	/**
+	 * The array buffer into which the elements of the ArrayListLong are stored.
+	 * The capacity of the ArrayListLong is the length of this array buffer. Any
+	 * empty ArrayListLong with elementData == EMPTY_ELEMENTDATA will be
+	 * expanded to DEFAULT_CAPACITY when the first element is added.
+	 */
+	private long[] elementData;
+
+	/**
+	 * The size of the ArrayListLong (the number of elements it contains).
+	 *
+	 * @serial
+	 */
+	private int size;
+
+	private int modCount = 0;
 
 	/**
 	 * Constructs an empty list with an initial capacity of ten.
@@ -139,7 +140,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 
 	/**
 	 * Constructs an empty list with the specified initial capacity.
-	 * 
+	 *
 	 * @param initialCapacity
 	 *            the initial capacity of the list
 	 * @throws IllegalArgumentException
@@ -158,7 +159,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	/**
 	 * Constructs a list containing the elements of the specified collection, in
 	 * the order they are returned by the collection's iterator.
-	 * 
+	 *
 	 * @param c
 	 *            the collection whose elements are to be placed into this list
 	 * @throws NullPointerException
@@ -183,7 +184,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	 * Inserts the specified element at the specified position in this list.
 	 * Shifts the element currently at that position (if any) and any subsequent
 	 * elements to the right (adds one to their indices).
-	 * 
+	 *
 	 * @param index
 	 *            index at which the specified element is to be inserted
 	 * @param element
@@ -203,7 +204,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 
 	/**
 	 * Appends the specified element to the end of this list.
-	 * 
+	 *
 	 * @param e
 	 *            element to be appended to this list
 	 * @return <tt>true</tt> (as specified by {@link Collection#add})
@@ -222,7 +223,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	 * specified collection is modified while the operation is in progress.
 	 * (This implies that the behavior of this call is undefined if the
 	 * specified collection is this list, and this list is nonempty.)
-	 * 
+	 *
 	 * @param c
 	 *            collection containing elements to be added to this list
 	 * @return <tt>true</tt> if this list changed as a result of the call
@@ -252,7 +253,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	/**
 	 * Returns a shallow copy of this <tt>ArrayListLong</tt> instance. (The
 	 * elements themselves are not copied.)
-	 * 
+	 *
 	 * @return a clone of this <tt>ArrayListLong</tt> instance
 	 */
 	@Override
@@ -278,7 +279,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	 * formally, returns <tt>true</tt> if and only if this list contains at
 	 * least one element <tt>e</tt> such that
 	 * <tt>(o==null&nbsp;?&nbsp;e==null&nbsp;:&nbsp;o.equals(e))</tt>.
-	 * 
+	 *
 	 * @param o
 	 *            element whose presence in this list is to be tested
 	 * @return <tt>true</tt> if this list contains the specified element
@@ -292,7 +293,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	 * Increases the capacity of this <tt>ArrayListLong</tt> instance, if
 	 * necessary, to ensure that it can hold at least the number of elements
 	 * specified by the minimum capacity argument.
-	 * 
+	 *
 	 * @param minCapacity
 	 *            the desired minimum capacity
 	 */
@@ -313,7 +314,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 
 	/**
 	 * Returns the element at the specified position in this list.
-	 * 
+	 *
 	 * @param index
 	 *            index of the element to return
 	 * @return the element at the specified position in this list
@@ -348,7 +349,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 
 	/**
 	 * Returns <tt>true</tt> if this list contains no elements.
-	 * 
+	 *
 	 * @return <tt>true</tt> if this list contains no elements
 	 */
 	public boolean isEmpty()
@@ -358,10 +359,10 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 
 	/**
 	 * Returns an iterator over the elements in this list in proper sequence.
-	 * 
+	 *
 	 * <p>
 	 * The returned iterator is <a href="#fail-fast"><i>fail-fast</i></a>.
-	 * 
+	 *
 	 * @return an iterator over the elements in this list in proper sequence
 	 */
 	@Override
@@ -394,7 +395,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	/**
 	 * Removes the element at the specified position in this list. Shifts any
 	 * subsequent elements to the left (subtracts one from their indices).
-	 * 
+	 *
 	 * @param index
 	 *            the index of the element to be removed
 	 * @return the element that was removed from the list
@@ -427,7 +428,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	 * (if such an element exists). Returns <tt>true</tt> if this list contained
 	 * the specified element (or equivalently, if this list changed as a result
 	 * of the call).
-	 * 
+	 *
 	 * @param o
 	 *            element to be removed from this list, if present
 	 * @return <tt>true</tt> if this list contained the specified element
@@ -448,7 +449,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	/**
 	 * Replaces the element at the specified position in this list with the
 	 * specified element.
-	 * 
+	 *
 	 * @param index
 	 *            index of the element to replace
 	 * @param element
@@ -468,7 +469,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 
 	/**
 	 * Returns the number of elements in this list.
-	 * 
+	 *
 	 * @return the number of elements in this list
 	 */
 	public int size()
@@ -479,15 +480,15 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	/**
 	 * Returns an array containing all of the elements in this list in proper
 	 * sequence (from first to last element).
-	 * 
+	 *
 	 * <p>
 	 * The returned array will be "safe" in that no references to it are
 	 * maintained by this list. (In other words, this method must allocate a new
 	 * array). The caller is thus free to modify the returned array.
-	 * 
+	 *
 	 * <p>
 	 * This method acts as bridge between array-based and collection-based APIs.
-	 * 
+	 *
 	 * @return an array containing all of the elements in this list in proper
 	 *         sequence
 	 */
@@ -549,7 +550,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	/**
 	 * Increases the capacity to ensure that it can hold at least the number of
 	 * elements specified by the minimum capacity argument.
-	 * 
+	 *
 	 * @param minCapacity
 	 *            the desired minimum capacity
 	 */
@@ -602,55 +603,6 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 		if (index > size || index < 0)
 		{
 			throw new IndexOutOfBoundsException(outOfBoundsMsg(index));
-		}
-	}
-
-	/**
-	 * Reconstitute the <tt>ArrayListLong</tt> instance from a stream (that is,
-	 * deserialize it).
-	 */
-	private void readObject(java.io.ObjectInputStream s) throws java.io.IOException, ClassNotFoundException
-	{
-		elementData = EMPTY_ELEMENTDATA;
-
-		// Read in size, and any hidden stuff
-		s.defaultReadObject();
-
-		// Read in capacity
-		s.readInt(); // ignored
-
-		if (size > 0)
-		{
-			// be like clone(), allocate array based upon size not capacity
-			ensureCapacityInternal(size);
-
-			elementData = (long[])s.readObject();
-		}
-	}
-
-	/**
-	 * Save the state of the <tt>ArrayListLong</tt> instance to a stream (that
-	 * is, serialize it).
-	 * 
-	 * @serialData The length of the array backing the <tt>ArrayListLong</tt>
-	 *             instance is emitted (int), followed by all of its elements
-	 *             (each an <tt>Object</tt>) in the proper order.
-	 */
-	private void writeObject(java.io.ObjectOutputStream s) throws java.io.IOException
-	{
-		// Write out element count, and any hidden stuff
-		final int expectedModCount = modCount;
-		s.defaultWriteObject();
-
-		// Write out size as capacity for behavioural compatibility with clone()
-		s.writeInt(size);
-
-		// Write out all elements in the proper order.
-		s.writeObject(elementData);
-
-		if (modCount != expectedModCount)
-		{
-			throw new ConcurrentModificationException();
 		}
 	}
 

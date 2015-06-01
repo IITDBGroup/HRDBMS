@@ -3,8 +3,8 @@ package com.exascale.tables;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.HashMap;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import com.exascale.exceptions.LockAbortException;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
@@ -24,7 +24,7 @@ public class Transaction implements Serializable
 	public static final int ISOLATION_RR = 0, ISOLATION_CS = 1, ISOLATION_UR = 2;
 	private static AtomicLong nextTxNum;
 	public static HashMap<Long, Long> txList = new HashMap<Long, Long>();
-	
+
 	static
 	{
 		try
@@ -35,30 +35,22 @@ public class Transaction implements Serializable
 				nextTxNum.getAndIncrement();
 			}
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
 			try
 			{
 				HRDBMSWorker.logger.debug("", e);
 			}
-			catch(Exception f)
-			{}
+			catch (Exception f)
+			{
+			}
 		}
 	}
+
+	public static ReentrantReadWriteLock txListLock = new ReentrantReadWriteLock();
 
 	private final long txnum;
-
 	public int level;
-	
-	public Transaction(long txnum)
-	{
-		synchronized(txList)
-		{
-			this.txnum = txnum;
-		}
-		
-		level = Transaction.ISOLATION_RR;
-	}
 
 	public Transaction(int level)
 	{
@@ -70,10 +62,11 @@ public class Transaction implements Serializable
 		}
 		this.level = level;
 		txnum = nextTx();
-		synchronized(txList)
+		Transaction.txListLock.writeLock().lock();
 		{
 			txList.put(txnum, txnum);
 		}
+		Transaction.txListLock.writeLock().unlock();
 		LogRec rec = new StartLogRec(txnum);
 		LogManager.write(rec);
 		String filename = HRDBMSWorker.getHParms().getProperty("log_dir");
@@ -85,21 +78,16 @@ public class Transaction implements Serializable
 		rec = new StartLogRec(txnum);
 		LogManager.write(rec, filename);
 	}
-	
-	public boolean equals(Object rhs)
+
+	public Transaction(long txnum)
 	{
-		if (rhs == null || !(rhs instanceof Transaction))
+		Transaction.txListLock.readLock().lock();
 		{
-			return false;
+			this.txnum = txnum;
 		}
-		
-		Transaction tx = (Transaction)rhs;
-		return txnum == tx.txnum;
-	}
-	
-	public int hashCode()
-	{
-		return Long.valueOf(txnum).hashCode();
+		Transaction.txListLock.readLock().unlock();
+
+		level = Transaction.ISOLATION_RR;
 	}
 
 	private static long nextTx()
@@ -107,64 +95,120 @@ public class Transaction implements Serializable
 		return nextTxNum.getAndAdd(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("number_of_coords")));
 	}
 
+	public void checkpoint() throws Exception
+	{
+		BufferManager.unpinAll(txnum);
+	}
+
+	public void checkpoint(int lt, String tFn) throws Exception
+	{
+		// LogManager.commit(txnum);
+		// synchronized(txList)
+		// {
+		// HRDBMSWorker.logger.debug("COMMIT: " + txnum);
+		BufferManager.unpinAllLessThan(txnum, lt, tFn);
+		// LockManager.release(txnum);
+		// txList.remove(txnum);
+		// }
+	}
+
+	public void checkpoint(int lt, String tFn, boolean flag) throws Exception
+	{
+		// LogManager.commit(txnum);
+		// synchronized(txList)
+		// {
+		// HRDBMSWorker.logger.debug("COMMIT: " + txnum);
+		BufferManager.unpinAllLessThan(txnum, lt, tFn, flag);
+		// LockManager.release(txnum);
+		// txList.remove(txnum);
+		// }
+	}
+
+	public void checkpoint(String prefix) throws Exception
+	{
+		BufferManager.unpinMyDevice(txnum, prefix);
+	}
+
+	public void checkpoint(String iFn, Block inUse) throws Exception
+	{
+		BufferManager.unpinAllExcept(txnum, iFn, inUse);
+	}
+
 	public void commit() throws Exception
 	{
 		LogManager.commit(txnum);
-		synchronized(txList)
+		Transaction.txListLock.writeLock().lock();
 		{
-			//HRDBMSWorker.logger.debug("COMMIT: " + txnum);
-			BufferManager.unpinAll(txnum);
-			LockManager.release(txnum);
-			txList.remove(txnum);
+			try
+			{
+				// HRDBMSWorker.logger.debug("COMMIT: " + txnum);
+				BufferManager.unpinAll(txnum);
+				LockManager.release(txnum);
+				txList.remove(txnum);
+			}
+			catch (Exception e)
+			{
+				Transaction.txListLock.writeLock().unlock();
+				throw e;
+			}
 		}
+		Transaction.txListLock.writeLock().unlock();
 	}
-	
+
 	public void commitNoFlush() throws Exception
 	{
 		LogManager.commitNoFlush(txnum);
-		synchronized(txList)
+		Transaction.txListLock.writeLock().lock();
 		{
-			//HRDBMSWorker.logger.debug("COMMIT: " + txnum);
-			BufferManager.unpinAll(txnum);
-			LockManager.release(txnum);
-			txList.remove(txnum);
+			try
+			{
+				// HRDBMSWorker.logger.debug("COMMIT: " + txnum);
+				BufferManager.unpinAll(txnum);
+				LockManager.release(txnum);
+				txList.remove(txnum);
+			}
+			catch (Exception e)
+			{
+				Transaction.txListLock.writeLock().unlock();
+				throw e;
+			}
 		}
-	}
-	
-	public void releaseLocksAndPins() throws Exception
-	{
-		synchronized(txList)
-		{
-			BufferManager.unpinAll2(txnum);
-			LockManager.release(txnum);
-		}
-	}
-	
-	public void tryCommit(String host) throws IOException
-	{
-		try
-		{
-			LogManager.ready(txnum, host);
-		}
-		catch(Exception e)
-		{
-			LogManager.notReady(txnum);
-			throw new IOException();
-		}
+		Transaction.txListLock.writeLock().unlock();
 	}
 
 	public DeleteLogRec delete(byte[] before, byte[] after, int off, Block b) throws Exception
 	{
-		synchronized(txList)
+		Transaction.txListLock.writeLock().lock();
 		{
-			if (!txList.containsKey(txnum))
+			try
 			{
-				txList.put(txnum, txnum);
-				LogRec rec = new StartLogRec(txnum);
-				LogManager.write(rec);
+				if (!txList.containsKey(txnum))
+				{
+					txList.put(txnum, txnum);
+					LogRec rec = new StartLogRec(txnum);
+					LogManager.write(rec);
+				}
+			}
+			catch (Exception e)
+			{
+				Transaction.txListLock.writeLock().unlock();
+				throw e;
 			}
 		}
+		Transaction.txListLock.writeLock().unlock();
 		return LogManager.delete(txnum, b, off, before, after);
+	}
+
+	@Override
+	public boolean equals(Object rhs)
+	{
+		if (rhs == null || !(rhs instanceof Transaction))
+		{
+			return false;
+		}
+
+		Transaction tx = (Transaction)rhs;
+		return txnum == tx.txnum;
 	}
 
 	public HeaderPage forceReadHeaderPage(Block b, int type) throws LockAbortException, Exception
@@ -191,32 +235,70 @@ public class Transaction implements Serializable
 		return level;
 	}
 
+	public Page getPage(Block b) throws Exception
+	{
+		if (b.number() < 0)
+		{
+			Exception e = new Exception("Negative block number requested: " + b.number());
+			HRDBMSWorker.logger.debug("", e);
+			throw e;
+		}
+		Page p = BufferManager.getPage(b);
+
+		if (p == null)
+		{
+			int sleeps = 0;
+			final int attempts = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("getpage_attempts"));
+			while (p == null && sleeps < attempts)
+			{
+				try
+				{
+					Thread.sleep(Long.parseLong(HRDBMSWorker.getHParms().getProperty("getpage_fail_sleep_time_ms")));
+				}
+				catch (final InterruptedException e)
+				{
+				}
+
+				p = BufferManager.getPage(b);
+				sleeps++;
+			}
+		}
+
+		if (p == null)
+		{
+			throw new Exception("Unable to retrieve page " + b.fileName() + ":" + b.number());
+		}
+
+		return p;
+	}
+
+	@Override
+	public int hashCode()
+	{
+		return Long.valueOf(txnum).hashCode();
+	}
+
 	public InsertLogRec insert(byte[] before, byte[] after, int off, Block b) throws Exception
 	{
-		synchronized(txList)
+		Transaction.txListLock.writeLock().lock();
 		{
-			if (!txList.containsKey(txnum))
+			try
 			{
-				txList.put(txnum, txnum);
-				LogRec rec = new StartLogRec(txnum);
-				LogManager.write(rec);
+				if (!txList.containsKey(txnum))
+				{
+					txList.put(txnum, txnum);
+					LogRec rec = new StartLogRec(txnum);
+					LogManager.write(rec);
+				}
+			}
+			catch (Exception e)
+			{
+				Transaction.txListLock.writeLock().unlock();
+				throw e;
 			}
 		}
+		Transaction.txListLock.writeLock().unlock();
 		return LogManager.insert(txnum, b, off, before, after);
-	}
-	
-	public TruncateLogRec truncate(Block b) throws Exception
-	{
-		synchronized(txList)
-		{
-			if (!txList.containsKey(txnum))
-			{
-				txList.put(txnum, txnum);
-				LogRec rec = new StartLogRec(txnum);
-				LogManager.write(rec);
-			}
-		}
-		return LogManager.truncate(txnum, b);
 	}
 
 	public long number()
@@ -237,7 +319,7 @@ public class Transaction implements Serializable
 			LockManager.unlockSLock(b, txnum);
 		}
 	}
-	
+
 	public void read(Block b, Schema schema, boolean lock) throws LockAbortException, Exception
 	{
 		LockManager.xLock(b, txnum);
@@ -271,16 +353,34 @@ public class Transaction implements Serializable
 		return retval;
 	}
 
+	public void releaseLocksAndPins() throws Exception
+	{
+		Transaction.txListLock.writeLock().lock();
+		{
+			try
+			{
+				BufferManager.unpinAll(txnum);
+				LockManager.release(txnum);
+			}
+			catch (Exception e)
+			{
+				Transaction.txListLock.writeLock().unlock();
+				throw e;
+			}
+		}
+		Transaction.txListLock.writeLock().unlock();
+	}
+
 	public void requestPage(Block b) throws Exception
 	{
-		
+
 		if (b.number() < 0)
 		{
-			Exception e = new Exception("Negative block number requested");
+			Exception e = new Exception("Negative block number requested: " + b.number());
 			HRDBMSWorker.logger.debug("", e);
 			throw e;
 		}
-		
+
 		BufferManager.requestPage(b, this.number());
 	}
 
@@ -290,31 +390,40 @@ public class Transaction implements Serializable
 		{
 			if (b.number() < 0)
 			{
-				Exception e = new Exception("Negative block number requested");
+				Exception e = new Exception("Negative block number requested: " + b.number());
 				HRDBMSWorker.logger.debug("", e);
 				throw e;
 			}
 		}
-		
+
 		BufferManager.requestPages(bs, this.number());
 	}
 
 	public void rollback() throws Exception
 	{
-		synchronized(txList)
+		Transaction.txListLock.writeLock().lock();
 		{
-			if (!txList.containsKey(txnum))
+			try
 			{
-				txList.put(txnum, txnum);
-				LogRec rec = new StartLogRec(txnum);
-				LogManager.write(rec);
+				if (!txList.containsKey(txnum))
+				{
+					txList.put(txnum, txnum);
+					LogRec rec = new StartLogRec(txnum);
+					LogManager.write(rec);
+				}
+				HRDBMSWorker.logger.debug("ROLLBACK: " + txnum);
+				LogManager.rollback(txnum);
+				BufferManager.unpinAll(txnum);
+				LockManager.release(txnum);
+				txList.remove(txnum);
 			}
-			HRDBMSWorker.logger.debug("ROLLBACK: " + txnum);
-			LogManager.rollback(txnum);
-			BufferManager.unpinAll(txnum);
-			LockManager.release(txnum);
-			txList.remove(txnum);
+			catch (Exception e)
+			{
+				Transaction.txListLock.writeLock().unlock();
+				throw e;
+			}
 		}
+		Transaction.txListLock.writeLock().unlock();
 	}
 
 	public void setIsolationLevel(int level)
@@ -322,44 +431,44 @@ public class Transaction implements Serializable
 		this.level = level;
 	}
 
+	public TruncateLogRec truncate(Block b) throws Exception
+	{
+		Transaction.txListLock.writeLock().lock();
+		{
+			try
+			{
+				if (!txList.containsKey(txnum))
+				{
+					txList.put(txnum, txnum);
+					LogRec rec = new StartLogRec(txnum);
+					LogManager.write(rec);
+				}
+			}
+			catch (Exception e)
+			{
+				Transaction.txListLock.writeLock().unlock();
+				throw e;
+			}
+		}
+		Transaction.txListLock.writeLock().unlock();
+		return LogManager.truncate(txnum, b);
+	}
+
+	public void tryCommit(String host) throws IOException
+	{
+		try
+		{
+			LogManager.ready(txnum, host);
+		}
+		catch (Exception e)
+		{
+			LogManager.notReady(txnum);
+			throw new IOException();
+		}
+	}
+
 	public void unpin(Page p)
 	{
 		BufferManager.unpin(p, txnum);
-	}
-
-	public Page getPage(Block b) throws Exception
-	{
-		if (b.number() < 0)
-		{
-			Exception e = new Exception("Negative block number requested");
-			HRDBMSWorker.logger.debug("", e);
-			throw e;
-		}
-		Page p = BufferManager.getPage(b);
-
-		if (p == null)
-		{
-			int sleeps = 0;
-			while (p == null && sleeps < Integer.parseInt(HRDBMSWorker.getHParms().getProperty("getpage_attempts")))
-			{
-				try
-				{
-					Thread.sleep(Long.parseLong(HRDBMSWorker.getHParms().getProperty("getpage_fail_sleep_time_ms")));
-				}
-				catch (final InterruptedException e)
-				{
-				}
-
-				p = BufferManager.getPage(b);
-				sleeps++;
-			}
-		}
-
-		if (p == null)
-		{
-			throw new Exception("Unable to retrieve page " + b.fileName() + ":" + b.number());
-		}
-
-		return p;
 	}
 }

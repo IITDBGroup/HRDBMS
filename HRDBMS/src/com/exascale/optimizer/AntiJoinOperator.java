@@ -1,16 +1,20 @@
 package com.exascale.optimizer;
 
-import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.Vector;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 import com.exascale.managers.HRDBMSWorker;
@@ -27,47 +31,57 @@ import com.exascale.threads.ThreadPoolThread;
 
 public final class AntiJoinOperator implements Operator, Serializable
 {
-	private final ArrayList<Operator> children = new ArrayList<Operator>(2);
+	private static sun.misc.Unsafe unsafe;
+
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
+
+	private ArrayList<Operator> children = new ArrayList<Operator>(2);
 
 	private Operator parent;
 
 	private HashMap<String, String> cols2Types;
 
 	private HashMap<String, Integer> cols2Pos;
-
 	private TreeMap<Integer, String> pos2Col;
-
-	private final MetaData meta;
-	private volatile DiskBackedArray inBuffer;
-	private int NUM_RT_THREADS = 6 * ResourceManager.cpus;
-	private final int NUM_PTHREADS = 6 * ResourceManager.cpus;
-	private final AtomicLong outCount = new AtomicLong(0);
-	private final AtomicLong inCount = new AtomicLong(0);
-	private volatile boolean readersDone = false;
+	private MetaData meta;
+	private transient volatile DiskBackedArray inBuffer;
+	private transient int NUM_RT_THREADS;
+	private transient int NUM_PTHREADS;
+	// private final AtomicLong outCount = new AtomicLong(0);
+	// private final AtomicLong inCount = new AtomicLong(0);
+	private transient volatile boolean readersDone;
 	private ArrayList<String> cols;
-	private volatile BufferedLinkedBlockingQueue outBuffer;
+	private transient volatile BufferedLinkedBlockingQueue outBuffer;
 	private volatile ArrayList<Integer> poses;
 	int childPos = -1;
 	private HashSet<HashMap<Filter, Filter>> f = null;
 	private int node;
 	private boolean indexAccess = false;
 	private ArrayList<Index> dynamicIndexes;
-	private final MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
-	private HashSet<HashMap<Filter, Filter>> hshm;
+	private transient MySimpleDateFormat sdf;
+	private transient HashSet<HashMap<Filter, Filter>> hshm;
 	private int rightChildCard = 16;
-	private ArrayList<DiskBackedHashMap> buckets = new ArrayList<DiskBackedHashMap>();
-	private final ReentrantLock bucketsLock = new ReentrantLock();
-	private final AtomicLong inCount2 = new AtomicLong(0);
+	private transient ArrayList<DiskBackedHashMap> buckets;
+	private transient ReentrantLock bucketsLock;
+	// private final AtomicLong inCount2 = new AtomicLong(0);
 	private boolean alreadySorted = false;
 	private boolean cardSet = false;
-	private Vector<Operator> clones = new Vector<Operator>();
-	private Vector<AtomicBoolean> lockVector = new Vector<AtomicBoolean>();
-	private transient Plan plan;
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
-	}
+
+	private transient Vector<Operator> clones;
+
+	private transient Vector<AtomicBoolean> lockVector;
 
 	public AntiJoinOperator(ArrayList<String> cols, MetaData meta)
 	{
@@ -88,17 +102,182 @@ public final class AntiJoinOperator implements Operator, Serializable
 		this.cols.add(col);
 		this.meta = meta;
 	}
-	
-	public boolean getIndexAccess()
-	{
-		return indexAccess;
-	}
 
 	private AntiJoinOperator(ArrayList<String> cols, HashSet<HashMap<Filter, Filter>> f, MetaData meta)
 	{
 		this.cols = cols;
 		this.f = f;
 		this.meta = meta;
+	}
+
+	public static AntiJoinOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		AntiJoinOperator value = (AntiJoinOperator)unsafe.allocateInstance(AntiJoinOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.children = OperatorUtils.deserializeALOp(in, prev);
+		value.parent = OperatorUtils.deserializeOperator(in, prev);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.meta = new MetaData();
+		value.cols = OperatorUtils.deserializeALS(in, prev);
+		value.poses = OperatorUtils.deserializeALI(in, prev);
+		value.childPos = OperatorUtils.readInt(in);
+		value.f = OperatorUtils.deserializeHSHM(in, prev);
+		value.node = OperatorUtils.readInt(in);
+		value.indexAccess = OperatorUtils.readBool(in);
+		value.dynamicIndexes = OperatorUtils.deserializeALIndx(in, prev);
+		value.rightChildCard = OperatorUtils.readInt(in);
+		value.alreadySorted = OperatorUtils.readBool(in);
+		value.cardSet = OperatorUtils.readBool(in);
+		return value;
+	}
+
+	private static final byte[] toBytes(Object v) throws Exception
+	{
+		ArrayList<byte[]> bytes = null;
+		ArrayList<Object> val;
+		if (v instanceof ArrayList)
+		{
+			val = (ArrayList<Object>)v;
+		}
+		else
+		{
+			final byte[] retval = new byte[9];
+			retval[0] = 0;
+			retval[1] = 0;
+			retval[2] = 0;
+			retval[3] = 5;
+			retval[4] = 0;
+			retval[5] = 0;
+			retval[6] = 0;
+			retval[7] = 1;
+			retval[8] = 5;
+			return retval;
+		}
+
+		int size = val.size() + 8;
+		final byte[] header = new byte[size];
+		int i = 8;
+		for (final Object o : val)
+		{
+			if (o instanceof Long)
+			{
+				header[i] = (byte)0;
+				size += 8;
+			}
+			else if (o instanceof Integer)
+			{
+				header[i] = (byte)1;
+				size += 4;
+			}
+			else if (o instanceof Double)
+			{
+				header[i] = (byte)2;
+				size += 8;
+			}
+			else if (o instanceof MyDate)
+			{
+				header[i] = (byte)3;
+				size += 8;
+			}
+			else if (o instanceof String)
+			{
+				header[i] = (byte)4;
+				byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
+				size += (4 + b.length);
+
+				if (bytes == null)
+				{
+					bytes = new ArrayList<byte[]>();
+					bytes.add(b);
+				}
+				else
+				{
+					bytes.add(b);
+				}
+			}
+			// else if (o instanceof AtomicLong)
+			// {
+			// header[i] = (byte)6;
+			// size += 8;
+			// }
+			// else if (o instanceof AtomicBigDecimal)
+			// {
+			// header[i] = (byte)7;
+			// size += 8;
+			// }
+			else if (o instanceof ArrayList)
+			{
+				if (((ArrayList)o).size() != 0)
+				{
+					Exception e = new Exception("Non-zero size ArrayList in toBytes()");
+					HRDBMSWorker.logger.error("Non-zero size ArrayList in toBytes()", e);
+					throw e;
+				}
+				header[i] = (byte)8;
+			}
+			else
+			{
+				HRDBMSWorker.logger.error("Unknown type " + o.getClass() + " in toBytes()");
+				HRDBMSWorker.logger.error(o);
+				throw new Exception("Unknown type " + o.getClass() + " in toBytes()");
+			}
+
+			i++;
+		}
+
+		final byte[] retval = new byte[size];
+		// System.out.println("In toBytes(), row has " + val.size() +
+		// " columns, object occupies " + size + " bytes");
+		System.arraycopy(header, 0, retval, 0, header.length);
+		i = 8;
+		final ByteBuffer retvalBB = ByteBuffer.wrap(retval);
+		retvalBB.putInt(size - 4);
+		retvalBB.putInt(val.size());
+		retvalBB.position(header.length);
+		int x = 0;
+		for (final Object o : val)
+		{
+			if (retval[i] == 0)
+			{
+				retvalBB.putLong((Long)o);
+			}
+			else if (retval[i] == 1)
+			{
+				retvalBB.putInt((Integer)o);
+			}
+			else if (retval[i] == 2)
+			{
+				retvalBB.putDouble((Double)o);
+			}
+			else if (retval[i] == 3)
+			{
+				retvalBB.putLong(((MyDate)o).getTime());
+			}
+			else if (retval[i] == 4)
+			{
+				byte[] temp = bytes.get(x);
+				x++;
+				retvalBB.putInt(temp.length);
+				retvalBB.put(temp);
+			}
+			// else if (retval[i] == 6)
+			// {
+			// retvalBB.putLong(((AtomicLong)o).get());
+			// }
+			// else if (retval[i] == 7)
+			// {
+			// retvalBB.putDouble(((AtomicBigDecimal)o).get().doubleValue());
+			// }
+			else if (retval[i] == 8)
+			{
+			}
+
+			i++;
+		}
+
+		return retval;
 	}
 
 	@Override
@@ -177,12 +356,12 @@ public final class AntiJoinOperator implements Operator, Serializable
 		{
 			clone.close();
 		}
-		
+
 		if (outBuffer != null)
 		{
 			outBuffer.close();
 		}
-		
+
 		cols2Types = null;
 		cols2Pos = null;
 		f = null;
@@ -244,6 +423,11 @@ public final class AntiJoinOperator implements Operator, Serializable
 		return retval;
 	}
 
+	public boolean getIndexAccess()
+	{
+		return indexAccess;
+	}
+
 	public ArrayList<String> getJoinForChild(Operator op)
 	{
 		if (cols.size() > 0)
@@ -282,7 +466,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 				break;
 			}
 		}
-		
+
 		if (x == null)
 		{
 			return null;
@@ -584,6 +768,36 @@ public final class AntiJoinOperator implements Operator, Serializable
 	}
 
 	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(1, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		OperatorUtils.serializeALOp(children, out, prev);
+		parent.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		// create new meta on receive side
+		OperatorUtils.serializeALS(cols, out, prev);
+		OperatorUtils.serializeALI(poses, out, prev);
+		OperatorUtils.writeInt(childPos, out);
+		OperatorUtils.serializeHSHM(f, out, prev);
+		OperatorUtils.writeInt(node, out);
+		OperatorUtils.writeBool(indexAccess, out);
+		OperatorUtils.serializeALIndx(dynamicIndexes, out, prev);
+		OperatorUtils.writeInt(rightChildCard, out);
+		OperatorUtils.writeBool(alreadySorted, out);
+		OperatorUtils.writeBool(cardSet, out);
+	}
+
+	@Override
 	public void setChildPos(int pos)
 	{
 		childPos = pos;
@@ -599,6 +813,11 @@ public final class AntiJoinOperator implements Operator, Serializable
 	public void setNode(int node)
 	{
 		this.node = node;
+	}
+
+	@Override
+	public void setPlan(Plan plan)
+	{
 	}
 
 	public boolean setRightChildCard(int card)
@@ -735,6 +954,15 @@ public final class AntiJoinOperator implements Operator, Serializable
 	@Override
 	public void start() throws Exception
 	{
+		NUM_RT_THREADS = 6 * ResourceManager.cpus;
+		NUM_PTHREADS = 6 * ResourceManager.cpus;
+		readersDone = false;
+		sdf = new MySimpleDateFormat("yyyy-MM-dd");
+		buckets = new ArrayList<DiskBackedHashMap>();
+		bucketsLock = new ReentrantLock();
+		clones = new Vector<Operator>();
+		lockVector = new Vector<AtomicBoolean>();
+
 		if (!indexAccess)
 		{
 			for (final Operator child : children)
@@ -917,7 +1145,8 @@ public final class AntiJoinOperator implements Operator, Serializable
 		synchronized (clones)
 		{
 			int i = 0;
-			while (i < clones.size())
+			final int size = clones.size();
+			while (i < size)
 			{
 				final Operator o = clones.get(i);
 				if (clone == o)
@@ -936,7 +1165,8 @@ public final class AntiJoinOperator implements Operator, Serializable
 		synchronized (clones)
 		{
 			int i = 0;
-			while (i < lockVector.size())
+			final int size = lockVector.size();
+			while (i < size)
 			{
 				final AtomicBoolean lock = lockVector.get(i);
 				if (!lock.get())
@@ -1240,8 +1470,9 @@ public final class AntiJoinOperator implements Operator, Serializable
 				{
 					nlHash.close();
 				}
-				catch(Exception e)
-				{}
+				catch (Exception e)
+				{
+				}
 			}
 
 			// System.out.println("AntiJoinOperator output " + outCount.get() +
@@ -1259,13 +1490,14 @@ public final class AntiJoinOperator implements Operator, Serializable
 					HRDBMSWorker.logger.error("", e);
 				}
 			}
-			
+
 			try
 			{
 				inBuffer.close();
 			}
-			catch(Exception e)
-			{}
+			catch (Exception e)
+			{
+			}
 		}
 	}
 
@@ -1316,7 +1548,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 				// @Parallel
 				while (!(o instanceof DataEndMarker))
 				{
-					inCount2.incrementAndGet();
+					// inCount2.incrementAndGet();
 
 					// if (count % 10000 == 0)
 					// {
@@ -1341,40 +1573,31 @@ public final class AntiJoinOperator implements Operator, Serializable
 				{
 					outBuffer.put(e);
 				}
-				catch(Exception f)
-				{}
+				catch (Exception f)
+				{
+				}
 				return;
 			}
 		}
 
-		private final ArrayList<ArrayList<Object>> getCandidates(long hash) throws Exception
+		private final ArrayList<Object> getCandidate(long hash, int pos) throws Exception
 		{
-			final ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>();
-			int i = 0;
-			if (buckets.size() == 0)
+			int size = buckets.size();
+			if (size == 0)
 			{
-				return retval;
-			}
-			DiskBackedHashMap dbhm = buckets.get(i);
-			ArrayList<Object> o = dbhm.get(hash);
-			while (o != null)
-			{
-				retval.add(o);
-				i++;
-				if (i < buckets.size())
-				{
-					o = buckets.get(i).get(hash);
-				}
-				else
-				{
-					o = null;
-				}
+				return null;
 			}
 
-			return retval;
+			if (pos >= size)
+			{
+				return null;
+			}
+
+			DiskBackedHashMap dbhm = buckets.get(pos);
+			return dbhm.get(hash);
 		}
 
-		private long hash(Object key)
+		private long hash(Object key) throws Exception
 		{
 			long eHash;
 			if (key == null)
@@ -1383,7 +1606,16 @@ public final class AntiJoinOperator implements Operator, Serializable
 			}
 			else
 			{
-				eHash = MurmurHash.hash64(key.toString());
+				if (key instanceof ArrayList)
+				{
+					byte[] data = toBytes(key);
+					eHash = MurmurHash.hash64(data, data.length);
+				}
+				else
+				{
+					byte[] data = key.toString().getBytes(StandardCharsets.UTF_8);
+					eHash = MurmurHash.hash64(data, data.length);
+				}
 			}
 
 			return eHash;
@@ -1403,6 +1635,31 @@ public final class AntiJoinOperator implements Operator, Serializable
 			}
 
 			int i = 0;
+			int min = -1;
+			int max = buckets.size() - 1;
+			while (max - min >= 4)
+			{
+				boolean exists = buckets.get(((max - min) >> 1) + min).exists(hash);
+				if (!exists)
+				{
+					max = ((max - min) >> 1) + min - 1;
+				}
+				else
+				{
+					min = ((max - min) >> 1) + min;
+				}
+			}
+
+			// if (max - min == 1)
+			// {
+			// Object o = buckets.get(max).get(hash);
+			// if (o != null)
+			// {
+			// min = max;
+			// }
+			// }
+
+			i = min + 1;
 			Object o = 0;
 			while (o != null)
 			{
@@ -1413,7 +1670,9 @@ public final class AntiJoinOperator implements Operator, Serializable
 					{
 						o = buckets.get(i);
 					}
+
 					o = ((DiskBackedHashMap)o).putIfAbsent(hash, row);
+
 				}
 				else
 				{
@@ -1440,7 +1699,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 							o = null;
 						}
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						bucketsLock.unlock();
 						throw e;
@@ -1521,8 +1780,9 @@ public final class AntiJoinOperator implements Operator, Serializable
 				{
 					outBuffer.put(e);
 				}
-				catch(Exception f)
-				{}
+				catch (Exception f)
+				{
+				}
 				return;
 			}
 		}
@@ -1729,8 +1989,9 @@ public final class AntiJoinOperator implements Operator, Serializable
 					{
 						outBuffer.put(e);
 					}
-					catch(Exception f)
-					{}
+					catch (Exception f)
+					{
+					}
 					return;
 				}
 			}
@@ -1795,6 +2056,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 					}
 				}
 				final ArrayList<Object> obj = new ArrayList<Object>();
+				ArrayList<Object> key = new ArrayList<Object>(1);
 				// @Parallel
 				while (!(o instanceof DataEndMarker))
 				{
@@ -1812,17 +2074,24 @@ public final class AntiJoinOperator implements Operator, Serializable
 					{
 						if (nlHash != null)
 						{
-							final ArrayList<Object> key = new ArrayList<Object>(1);
+							key.clear();
 							key.add(lRow.get(pos));
 							final long hash = 0x0EFFFFFFFFFFFFFFL & nlHash.hash(key);
 							boolean passed = false;
-							for (final ArrayList<Object> rRow : nlHash.getCandidates(hash))
+							int i = 0;
+							ArrayList<Object> rRow = nlHash.getCandidate(hash, i);
+							// for (final ArrayList<Object> rRow :
+							// nlHash.getCandidates(hash))
+							while (rRow != null)
 							{
 								if (cnf.passes(lRow, rRow))
 								{
 									passed = true;
 									break;
 								}
+
+								i++;
+								rRow = nlHash.getCandidate(hash, i);
 							}
 
 							if (passed)
@@ -1831,11 +2100,12 @@ public final class AntiJoinOperator implements Operator, Serializable
 							}
 
 							outBuffer.put(lRow);
-							final long count = outCount.incrementAndGet();
-							if (count % 100000 == 0)
-							{
-								HRDBMSWorker.logger.debug("AntiJoinOperator has output " + count + " rows");
-							}
+							// final long count = outCount.incrementAndGet();
+							// if (count % 100000 == 0)
+							// {
+							// HRDBMSWorker.logger.debug("AntiJoinOperator has output "
+							// + count + " rows");
+							// }
 							break;
 						}
 
@@ -1850,7 +2120,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 							{
 								// System.out.println("Call completed successfully");
 								outBuffer.put(lRow);
-								outCount.getAndIncrement();
+								// outCount.getAndIncrement();
 								// if (count % 10000 == 0)
 								// {
 								// System.out.println("AntiJoinOperator has output "
@@ -1884,7 +2154,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 								if (readersDone)
 								{
 									outBuffer.put(lRow);
-									outCount.getAndIncrement();
+									// outCount.getAndIncrement();
 								}
 							}
 							else
@@ -1904,7 +2174,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 										if (!first.passes(lRow, rRow, tempC2P))
 										{
 											outBuffer.put(lRow);
-											outCount.getAndIncrement();
+											// outCount.getAndIncrement();
 
 											passed = true;
 										}
@@ -1917,7 +2187,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 								}
 
 								outBuffer.put(lRow);
-								outCount.getAndIncrement();
+								// outCount.getAndIncrement();
 							}
 						}
 					}
@@ -1932,8 +2202,9 @@ public final class AntiJoinOperator implements Operator, Serializable
 				{
 					outBuffer.put(e);
 				}
-				catch(Exception f)
-				{}
+				catch (Exception f)
+				{
+				}
 				return;
 			}
 		}
@@ -1951,7 +2222,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 				while (!(o instanceof DataEndMarker))
 				{
 					inBuffer.add((ArrayList<Object>)o);
-					inCount.getAndIncrement();
+					// inCount.getAndIncrement();
 					// if (count % 10000 == 0)
 					// {
 					// System.out.println("AntiJoinOperator has read " + count +
@@ -1967,8 +2238,9 @@ public final class AntiJoinOperator implements Operator, Serializable
 				{
 					outBuffer.put(e);
 				}
-				catch(Exception f)
-				{}
+				catch (Exception f)
+				{
+				}
 				return;
 			}
 		}

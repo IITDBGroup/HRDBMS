@@ -1,5 +1,6 @@
 package com.exascale.client;
 
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.sql.Connection;
 import java.sql.Driver;
@@ -9,7 +10,6 @@ import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.Properties;
 import java.util.logging.Logger;
-import com.exascale.compression.CompressedSocket;
 
 public class HRDBMSDriver implements Driver
 {
@@ -33,7 +33,7 @@ public class HRDBMSDriver implements Driver
 		{
 			return false;
 		}
-		
+
 		return true;
 	}
 
@@ -56,17 +56,20 @@ public class HRDBMSDriver implements Driver
 			{
 				portNum = Integer.parseInt(port);
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				throw new SQLException("Invalid port number!");
 			}
-			
+
 			Socket sock = null;
 			try
 			{
-				sock = CompressedSocket.newCompressedSocket(hostname, portNum);
+				sock = new Socket();
+				sock.setReceiveBufferSize(262144);
+				sock.setSendBufferSize(262144);
+				sock.connect(new InetSocketAddress(hostname, portNum));
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				throw new SQLException(e.getMessage());
 			}
@@ -91,6 +94,12 @@ public class HRDBMSDriver implements Driver
 	}
 
 	@Override
+	public Logger getParentLogger() throws SQLFeatureNotSupportedException
+	{
+		throw new SQLFeatureNotSupportedException();
+	}
+
+	@Override
 	public DriverPropertyInfo[] getPropertyInfo(String arg0, Properties arg1) throws SQLException
 	{
 		return new DriverPropertyInfo[0];
@@ -100,12 +109,6 @@ public class HRDBMSDriver implements Driver
 	public boolean jdbcCompliant()
 	{
 		return false;
-	}
-
-	@Override
-	public Logger getParentLogger() throws SQLFeatureNotSupportedException
-	{
-		throw new SQLFeatureNotSupportedException();
 	}
 
 }

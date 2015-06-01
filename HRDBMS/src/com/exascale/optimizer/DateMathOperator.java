@@ -1,11 +1,16 @@
 package com.exascale.optimizer;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.TreeMap;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
@@ -16,26 +21,36 @@ import com.exascale.tables.Plan;
 
 public final class DateMathOperator implements Operator, Serializable
 {
+	private static sun.misc.Unsafe unsafe;
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
 	private Operator child;
 	private Operator parent;
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
 	private TreeMap<Integer, String> pos2Col;
 	private String col;
-	private final int type;
-	private final int offset;
-	private final String name;
-	private final MetaData meta;
+	private int type;
+	private int offset;
+	private String name;
+	private transient final MetaData meta;
 	private int node;
-	private transient Plan plan;
 	private int colPos;
-	private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-	private MySimpleDateFormat msdf = new MySimpleDateFormat("yyyy-MM-dd");
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
-	}
+
+	private transient SimpleDateFormat sdf;
+
+	private transient MySimpleDateFormat msdf;
 
 	public DateMathOperator(String col, int type, int offset, String name, MetaData meta)
 	{
@@ -44,6 +59,24 @@ public final class DateMathOperator implements Operator, Serializable
 		this.offset = offset;
 		this.meta = meta;
 		this.name = name;
+	}
+
+	public static DateMathOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		DateMathOperator value = (DateMathOperator)unsafe.allocateInstance(DateMathOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.child = OperatorUtils.deserializeOperator(in, prev);
+		value.parent = OperatorUtils.deserializeOperator(in, prev);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.col = OperatorUtils.readString(in, prev);
+		value.type = OperatorUtils.readInt(in);
+		value.offset = OperatorUtils.readInt(in);
+		value.name = OperatorUtils.readString(in, prev);
+		value.node = OperatorUtils.readInt(in);
+		value.colPos = OperatorUtils.readInt(in);
+		return value;
 	}
 
 	@Override
@@ -76,14 +109,14 @@ public final class DateMathOperator implements Operator, Serializable
 							{
 								col3 = col3.substring(col3.indexOf('.') + 1);
 							}
-							
+
 							if (col3.equals(col))
 							{
 								col = orig;
 								count++;
 								colPos1 = cols2Pos.get(orig);
 							}
-							
+
 							if (count > 1)
 							{
 								throw new Exception("Ambiguous column: " + col);
@@ -116,7 +149,7 @@ public final class DateMathOperator implements Operator, Serializable
 			retval.node = node;
 			return retval;
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
 			return null;
 		}
@@ -188,7 +221,7 @@ public final class DateMathOperator implements Operator, Serializable
 		{
 			return o;
 		}
-		
+
 		if (o instanceof Exception)
 		{
 			throw (Exception)o;
@@ -201,7 +234,7 @@ public final class DateMathOperator implements Operator, Serializable
 			Date date = sdf.parse(msdf.format(mDate));
 			GregorianCalendar cal = new GregorianCalendar();
 			cal.setTime(date);
-			cal.add(GregorianCalendar.DATE, offset);
+			cal.add(Calendar.DATE, offset);
 			row.add(DateParser.parse(sdf.format(cal.getTime())));
 		}
 		else
@@ -262,7 +295,37 @@ public final class DateMathOperator implements Operator, Serializable
 	@Override
 	public void reset() throws Exception
 	{
+		if (sdf == null)
+		{
+			sdf = new SimpleDateFormat("yyyy-MM-dd");
+			msdf = new MySimpleDateFormat("yyyy-MM-dd");
+		}
 		child.reset();
+	}
+
+	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(22, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		child.serialize(out, prev);
+		parent.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.writeString(col, out, prev);
+		OperatorUtils.writeInt(type, out);
+		OperatorUtils.writeInt(offset, out);
+		OperatorUtils.writeString(name, out, prev);
+		OperatorUtils.writeInt(node, out);
+		OperatorUtils.writeInt(colPos, out);
 	}
 
 	@Override
@@ -277,8 +340,15 @@ public final class DateMathOperator implements Operator, Serializable
 	}
 
 	@Override
+	public void setPlan(Plan plan)
+	{
+	}
+
+	@Override
 	public void start() throws Exception
 	{
+		sdf = new SimpleDateFormat("yyyy-MM-dd");
+		msdf = new MySimpleDateFormat("yyyy-MM-dd");
 		child.start();
 	}
 

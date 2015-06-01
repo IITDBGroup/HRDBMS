@@ -1,8 +1,12 @@
 package com.exascale.optimizer;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.TreeMap;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
@@ -10,7 +14,21 @@ import com.exascale.tables.Plan;
 
 public final class IndexOperator implements Operator, Cloneable, Serializable
 {
-	private final MetaData meta;
+	private static sun.misc.Unsafe unsafe;
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
+	private MetaData meta;
 	private Operator parent;
 	private HashMap<String, String> cols2Types = new HashMap<String, String>();
 	private HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
@@ -18,15 +36,11 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 	private int node;
 	protected Index index;
 	private int device = -1;
-	private volatile boolean forceDone = false;
-	private volatile Boolean startCalled = false;
+	private transient volatile boolean forceDone;
+
+	private volatile boolean startCalled = false;
+
 	private DataEndMarker startCalledLock = new DataEndMarker();
-	private transient Plan plan;
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
-	}
 
 	public IndexOperator(Index index, MetaData meta)
 	{
@@ -36,6 +50,23 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 		cols2Types.put(col, "LONG");
 		cols2Pos.put(col, 0);
 		pos2Col.put(0, col);
+	}
+
+	public static IndexOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		IndexOperator value = (IndexOperator)unsafe.allocateInstance(IndexOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.meta = new MetaData();
+		value.parent = OperatorUtils.deserializeOperator(in, prev);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.node = OperatorUtils.readInt(in);
+		value.index = Index.deserialize(in, prev);
+		value.device = OperatorUtils.readInt(in);
+		value.startCalled = OperatorUtils.readBool(in);
+		value.startCalledLock = new DataEndMarker();
+		return value;
 	}
 
 	@Override
@@ -155,7 +186,7 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 			{
 				throw (Exception)o;
 			}
-			
+
 			return o;
 		}
 		else
@@ -223,6 +254,30 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 	}
 
 	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(30, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		// recreate meta
+		parent.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.writeInt(node, out);
+		index.serialize(out, prev);
+		OperatorUtils.writeInt(device, out);
+		OperatorUtils.writeBool(startCalled, out);
+		// recreate startCalledLock
+	}
+
+	@Override
 	public void setChildPos(int pos)
 	{
 	}
@@ -260,8 +315,14 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 	}
 
 	@Override
+	public void setPlan(Plan plan)
+	{
+	}
+
+	@Override
 	public void start() throws Exception
 	{
+		forceDone = false;
 		synchronized (startCalledLock)
 		{
 			if (!startCalled)

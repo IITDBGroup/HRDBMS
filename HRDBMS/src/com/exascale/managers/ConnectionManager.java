@@ -2,10 +2,11 @@ package com.exascale.managers;
 
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.LinkedBlockingQueue;
-import com.exascale.compression.CompressedServerSocket;
-import com.exascale.compression.CompressedSocket;
 import com.exascale.threads.ConnectionWorker;
 import com.exascale.threads.HRDBMSThread;
 
@@ -32,7 +33,8 @@ public class ConnectionManager extends HRDBMSThread
 		final byte[] fromBytes = intToBytes(from);
 		final byte[] toBytes = intToBytes(to);
 		final byte[] data = formCall2Args(cmd, fromBytes, toBytes);
-		HRDBMSWorker.logger.debug("About to make RGETDATD RMI call to host " + host + " with data: " + data);
+		// HRDBMSWorker.logger.debug("About to make RGETDATD RMI call to host "
+		// + host + " with data: " + data);
 		final String result = rmiCall(data, host);
 		return result;
 	}
@@ -45,11 +47,14 @@ public class ConnectionManager extends HRDBMSThread
 
 	private static byte[] formCall2Args(String cmd, byte[] arg1, byte[] arg2) throws UnsupportedEncodingException
 	{
-		final byte[] cmdBytes = cmd.getBytes("UTF-8");
+		final byte[] cmdBytes = cmd.getBytes(StandardCharsets.UTF_8);
+		final int size = cmdBytes.length;
+		final int size1 = arg1.length;
+		final int size2 = arg2.length;
 		final byte[] retval = new byte[cmdBytes.length + arg1.length + arg2.length];
 		int i = 0;
 		int j = 0;
-		while (i < cmdBytes.length)
+		while (i < size)
 		{
 			retval[j] = cmdBytes[i];
 			i++;
@@ -57,7 +62,7 @@ public class ConnectionManager extends HRDBMSThread
 		}
 
 		i = 0;
-		while (i < arg1.length)
+		while (i < size1)
 		{
 			retval[j] = arg1[i];
 			i++;
@@ -65,7 +70,7 @@ public class ConnectionManager extends HRDBMSThread
 		}
 
 		i = 0;
-		while (i < arg2.length)
+		while (i < size2)
 		{
 			retval[j] = arg2[i];
 			i++;
@@ -89,7 +94,11 @@ public class ConnectionManager extends HRDBMSThread
 	{
 		final int port = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"));
 		HRDBMSWorker.logger.debug("In rmiCall(), creating connection to " + host + " on port " + port);
-		final Socket sock = CompressedSocket.newCompressedSocket(host, port);
+		// final Socket sock = new Socket();
+		Socket sock = new Socket();
+		sock.setReceiveBufferSize(262144);
+		sock.setSendBufferSize(262144);
+		sock.connect(new InetSocketAddress(host, port));
 		HRDBMSWorker.logger.debug("Connection successful.");
 		sock.getOutputStream().write(data);
 		HRDBMSWorker.logger.debug("Length of data sent: " + data.length);
@@ -99,13 +108,13 @@ public class ConnectionManager extends HRDBMSThread
 		if (num != 8)
 		{
 			HRDBMSWorker.logger.error("Error reading type in RMI response.");
-			final String value = new String(typeBytes, "UTF-8");
+			final String value = new String(typeBytes, StandardCharsets.UTF_8);
 			HRDBMSWorker.logger.debug("read " + num + " bytes. Expected 8.  Value was " + value);
 			sock.close();
 			throw new Exception("InvalidResponseTypeException");
 		}
 
-		final String type = new String(typeBytes, "UTF-8");
+		final String type = new String(typeBytes, StandardCharsets.UTF_8);
 		if (type.equals("EXCEPT  "))
 		{
 			final byte[] eLen = new byte[4];
@@ -125,7 +134,7 @@ public class ConnectionManager extends HRDBMSThread
 				throw new Exception("InvalidRMIExceptionTextException");
 			}
 
-			final String e = new String(text, "UTF-8");
+			final String e = new String(text, StandardCharsets.UTF_8);
 			sock.close();
 			throw new Exception(e);
 		}
@@ -156,7 +165,7 @@ public class ConnectionManager extends HRDBMSThread
 				throw new Exception("InvalidRMIResponseTextException");
 			}
 
-			final String r = new String(response, "UTF-8");
+			final String r = new String(response, StandardCharsets.UTF_8);
 			sock.close();
 			return r;
 		}
@@ -172,7 +181,9 @@ public class ConnectionManager extends HRDBMSThread
 	{
 		try
 		{
-			final CompressedServerSocket server = new CompressedServerSocket(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			final ServerSocket server = new ServerSocket();
+			server.setReceiveBufferSize(262144);
+			server.bind(new InetSocketAddress(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 			HRDBMSWorker.logger.info("Connection Manager initialization complete.");
 			while (true)
 			{
@@ -181,8 +192,9 @@ public class ConnectionManager extends HRDBMSThread
 				{
 					processMessage(msg);
 				}
-				final CompressedSocket sock = (CompressedSocket)server.accept();
-				//HRDBMSWorker.logger.debug("Connection Manager accepted a connection.");
+				final Socket sock = server.accept();
+				sock.setSendBufferSize(262144);
+				// HRDBMSWorker.logger.debug("Connection Manager accepted a connection.");
 				if (accepting)
 				{
 					HRDBMSWorker.addThread(new ConnectionWorker(sock));

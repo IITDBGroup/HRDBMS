@@ -6,7 +6,14 @@ public class SearchCondition
 {
 	private SearchClause search;
 	private ArrayList<ConnectedSearchClause> connected;
-	
+
+	public SearchCondition(SearchClause search, ArrayList<ConnectedSearchClause> connected)
+	{
+		this.search = search;
+		this.connected = connected;
+	}
+
+	@Override
 	public SearchCondition clone()
 	{
 		ArrayList<ConnectedSearchClause> c = new ArrayList<ConnectedSearchClause>();
@@ -17,17 +24,18 @@ public class SearchCondition
 				c.add(csc.clone());
 			}
 		}
-		
+
 		return new SearchCondition(search.clone(), c);
 	}
-	
+
+	@Override
 	public boolean equals(Object o)
 	{
 		if (!(o instanceof SearchCondition))
 		{
 			return false;
 		}
-		
+
 		SearchCondition rhs = (SearchCondition)o;
 		if (search.equals(rhs.search))
 		{
@@ -48,7 +56,7 @@ public class SearchCondition
 				{
 					return false;
 				}
-				
+
 				if (connected.equals(rhs.connected))
 				{
 					return true;
@@ -64,28 +72,22 @@ public class SearchCondition
 			return false;
 		}
 	}
-	
-	public SearchCondition(SearchClause search, ArrayList<ConnectedSearchClause> connected)
-	{
-		this.search = search;
-		this.connected = connected;
-	}
-	
+
 	public SearchClause getClause()
 	{
 		return search;
 	}
-	
-	public void setClause(SearchClause search)
-	{
-		this.search = search;
-	}
-	
+
 	public ArrayList<ConnectedSearchClause> getConnected()
 	{
 		return connected;
 	}
-	
+
+	public void setClause(SearchClause search)
+	{
+		this.search = search;
+	}
+
 	public void setConnected(ArrayList<ConnectedSearchClause> connected)
 	{
 		this.connected = connected;

@@ -23,17 +23,19 @@ public final class RowComparator implements Comparator
 	{
 		int result;
 
-		ArrayList<Object> lhs = new ArrayList<Object>(types.size());
-		ArrayList<Object> rhs = new ArrayList<Object>(types.size());
+		final int size = types.size();
+		ArrayList<Object> lhs = null;
+		ArrayList<Object> rhs = null;
 		int i = 0;
-		
+
 		if (arg0 instanceof ArrayList)
 		{
 			lhs = (ArrayList<Object>)arg0;
 		}
 		else
 		{
-			while (i < types.size())
+			lhs = new ArrayList<Object>(size);
+			while (i < size)
 			{
 				final String type = types.get(i);
 				if (type.equals("INT"))
@@ -68,15 +70,16 @@ public final class RowComparator implements Comparator
 				i++;
 			}
 		}
-		
+
 		if (arg1 instanceof ArrayList)
 		{
 			rhs = (ArrayList<Object>)arg1;
 		}
 		else
 		{
+			rhs = new ArrayList<Object>(size);
 			i = 0;
-			while (i < types.size())
+			while (i < size)
 			{
 				final String type = types.get(i);
 				if (type.equals("INT"))
@@ -113,7 +116,7 @@ public final class RowComparator implements Comparator
 		}
 
 		i = 0;
-		while (i < types.size())
+		while (i < size)
 		{
 			final Object lField = lhs.get(i);
 			final Object rField = rhs.get(i);

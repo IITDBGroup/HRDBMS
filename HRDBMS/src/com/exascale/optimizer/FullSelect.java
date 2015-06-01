@@ -4,13 +4,13 @@ import java.util.ArrayList;
 
 public class FullSelect
 {
-	private SubSelect sub;
-	private FullSelect full;
-	private ArrayList<ConnectedSelect> connected;
-	private OrderBy orderBy;
-	private FetchFirst fetchFirst;
+	private final SubSelect sub;
+	private final FullSelect full;
+	private final ArrayList<ConnectedSelect> connected;
+	private final OrderBy orderBy;
+	private final FetchFirst fetchFirst;
 	private ArrayList<Column> cols;
-	
+
 	public FullSelect(SubSelect sub, FullSelect full, ArrayList<ConnectedSelect> connected, OrderBy orderBy, FetchFirst fetchFirst)
 	{
 		this.sub = sub;
@@ -19,7 +19,13 @@ public class FullSelect
 		this.orderBy = orderBy;
 		this.fetchFirst = fetchFirst;
 	}
-	
+
+	public void addCols(ArrayList<Column> cols)
+	{
+		this.cols = cols;
+	}
+
+	@Override
 	public FullSelect clone()
 	{
 		SubSelect subClone = null;
@@ -27,17 +33,17 @@ public class FullSelect
 		ArrayList<ConnectedSelect> connectedClone = null;
 		OrderBy orderByClone = null;
 		FetchFirst fetchFirstClone = null;
-		
+
 		if (sub != null)
 		{
 			subClone = sub.clone();
 		}
-		
+
 		if (full != null)
 		{
 			fullClone = full.clone();
 		}
-		
+
 		if (connected != null)
 		{
 			connectedClone = new ArrayList<ConnectedSelect>();
@@ -46,19 +52,19 @@ public class FullSelect
 				connectedClone.add(c.clone());
 			}
 		}
-		
+
 		if (orderBy != null)
 		{
 			orderByClone = orderBy.clone();
 		}
-		
+
 		if (fetchFirst != null)
 		{
 			fetchFirstClone = fetchFirst.clone();
 		}
-		
+
 		FullSelect retval = new FullSelect(subClone, fullClone, connectedClone, orderByClone, fetchFirstClone);
-		
+
 		if (cols != null)
 		{
 			retval.cols = new ArrayList<Column>();
@@ -67,42 +73,37 @@ public class FullSelect
 				retval.cols.add(c.clone());
 			}
 		}
-		
+
 		return retval;
 	}
-	
-	public SubSelect getSubSelect()
+
+	public ArrayList<Column> getCols()
 	{
-		return sub;
+		return cols;
 	}
-	
-	public FullSelect getFullSelect()
-	{
-		return full;
-	}
-	
-	public OrderBy getOrderBy()
-	{
-		return orderBy;
-	}
-	
-	public FetchFirst getFetchFirst()
-	{
-		return fetchFirst;
-	}
-	
+
 	public ArrayList<ConnectedSelect> getConnected()
 	{
 		return connected;
 	}
-	
-	public void addCols(ArrayList<Column> cols)
+
+	public FetchFirst getFetchFirst()
 	{
-		this.cols = cols;
+		return fetchFirst;
 	}
-	
-	public ArrayList<Column> getCols()
+
+	public FullSelect getFullSelect()
 	{
-		return cols;
+		return full;
+	}
+
+	public OrderBy getOrderBy()
+	{
+		return orderBy;
+	}
+
+	public SubSelect getSubSelect()
+	{
+		return sub;
 	}
 }

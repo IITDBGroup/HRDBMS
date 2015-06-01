@@ -1,9 +1,13 @@
 package com.exascale.optimizer;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DateParser;
 import com.exascale.misc.FastStringTokenizer;
@@ -12,6 +16,20 @@ import com.exascale.misc.Utils;
 
 public class Filter implements Cloneable, Serializable
 {
+	private static sun.misc.Unsafe unsafe;
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
 	private String val1; // string
 	private String op;
 	private String val2; // string
@@ -27,8 +45,10 @@ public class Filter implements Cloneable, Serializable
 	private volatile int posVal2 = -1;
 	private boolean always = false;
 	private boolean alwaysVal = false;
+
 	// private MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
 	private String orig1;
+
 	private String orig2;
 
 	public Filter(String val1, String op, String val2) throws Exception
@@ -48,6 +68,70 @@ public class Filter implements Cloneable, Serializable
 	{
 	}
 
+	public static Filter deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		Filter value = (Filter)unsafe.allocateInstance(Filter.class);
+		int type = OperatorUtils.getType(in);
+		if (type == 0)
+		{
+			return (Filter)OperatorUtils.readReference(in, prev);
+		}
+
+		if (type == 69)
+		{
+			return null;
+		}
+
+		if (type != 65)
+		{
+			throw new Exception("Corrupted stream. Expected type 65 but received " + type);
+		}
+
+		prev.put(OperatorUtils.readLong(in), value);
+		value.val1 = OperatorUtils.readString(in, prev);
+		value.op = OperatorUtils.readString(in, prev);
+		value.val2 = OperatorUtils.readString(in, prev);
+		value.dVal1 = OperatorUtils.readDate(in, prev);
+		value.dVal2 = OperatorUtils.readDate(in, prev);
+		value.lVal1 = OperatorUtils.readLongClass(in, prev);
+		value.lVal2 = OperatorUtils.readLongClass(in, prev);
+		value.fVal1 = OperatorUtils.readDoubleClass(in, prev);
+		value.fVal2 = OperatorUtils.readDoubleClass(in, prev);
+		value.colVal1 = OperatorUtils.readString(in, prev);
+		value.colVal2 = OperatorUtils.readString(in, prev);
+		value.posVal1 = OperatorUtils.readInt(in);
+		value.posVal2 = OperatorUtils.readInt(in);
+		value.always = OperatorUtils.readBool(in);
+		value.alwaysVal = OperatorUtils.readBool(in);
+		value.orig1 = OperatorUtils.readString(in, prev);
+		value.orig2 = OperatorUtils.readString(in, prev);
+		return value;
+	}
+
+	public static Filter deserializeKnown(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		Filter value = (Filter)unsafe.allocateInstance(Filter.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.val1 = OperatorUtils.readString(in, prev);
+		value.op = OperatorUtils.readString(in, prev);
+		value.val2 = OperatorUtils.readString(in, prev);
+		value.dVal1 = OperatorUtils.readDate(in, prev);
+		value.dVal2 = OperatorUtils.readDate(in, prev);
+		value.lVal1 = OperatorUtils.readLongClass(in, prev);
+		value.lVal2 = OperatorUtils.readLongClass(in, prev);
+		value.fVal1 = OperatorUtils.readDoubleClass(in, prev);
+		value.fVal2 = OperatorUtils.readDoubleClass(in, prev);
+		value.colVal1 = OperatorUtils.readString(in, prev);
+		value.colVal2 = OperatorUtils.readString(in, prev);
+		value.posVal1 = OperatorUtils.readInt(in);
+		value.posVal2 = OperatorUtils.readInt(in);
+		value.always = OperatorUtils.readBool(in);
+		value.alwaysVal = OperatorUtils.readBool(in);
+		value.orig1 = OperatorUtils.readString(in, prev);
+		value.orig2 = OperatorUtils.readString(in, prev);
+		return value;
+	}
+
 	public boolean alwaysFalse()
 	{
 		return (always && (!alwaysVal));
@@ -61,6 +145,10 @@ public class Filter implements Cloneable, Serializable
 	@Override
 	public boolean equals(Object rhs)
 	{
+		if (rhs == null)
+		{
+			return false;
+		}
 		final Filter r = (Filter)rhs;
 		if (orig1.equals(r.orig1) && op.equals(r.op) && orig2.equals(r.orig2))
 		{
@@ -113,7 +201,12 @@ public class Filter implements Cloneable, Serializable
 	@Override
 	public int hashCode()
 	{
-		return orig1.hashCode() + op.hashCode() + orig2.hashCode();
+		int hash = 23;
+		hash = hash * 31 + orig1.hashCode();
+		hash = hash * 31 + op.hashCode();
+		hash = hash * 31 + orig2.hashCode();
+		return hash;
+		// return orig1.hashCode() + op.hashCode() + orig2.hashCode();
 	}
 
 	public String leftColumn()
@@ -664,6 +757,36 @@ public class Filter implements Cloneable, Serializable
 		return orig2;
 	}
 
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(65, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		OperatorUtils.writeString(val1, out, prev);
+		OperatorUtils.writeString(op, out, prev);
+		OperatorUtils.writeString(val2, out, prev);
+		OperatorUtils.writeDate(dVal1, out, prev);
+		OperatorUtils.writeDate(dVal2, out, prev);
+		OperatorUtils.writeLongClass(lVal1, out, prev);
+		OperatorUtils.writeLongClass(lVal2, out, prev);
+		OperatorUtils.writeDoubleClass(fVal1, out, prev);
+		OperatorUtils.writeDoubleClass(fVal2, out, prev);
+		OperatorUtils.writeString(colVal1, out, prev);
+		OperatorUtils.writeString(colVal2, out, prev);
+		OperatorUtils.writeInt(posVal1, out);
+		OperatorUtils.writeInt(posVal2, out);
+		OperatorUtils.writeBool(always, out);
+		OperatorUtils.writeBool(alwaysVal, out);
+		OperatorUtils.writeString(orig1, out, prev);
+		OperatorUtils.writeString(orig2, out, prev);
+	}
+
 	@Override
 	public String toString()
 	{
@@ -717,29 +840,29 @@ public class Filter implements Cloneable, Serializable
 		if (op.equals("LI"))
 		{
 			return ((String)lhs).matches(((String)rhs).replaceAll("%", ".*")); // TODO
-																				// replace
-																				// special
-																				// characters
-																				// first
-																				// and
-																				// check
-																				// usage
-																				// of
-																				// \
+			// replace
+			// special
+			// characters
+			// first
+			// and
+			// check
+			// usage
+			// of
+			// \
 		}
 
 		if (op.equals("NL"))
 		{
 			return (!((String)lhs).matches(((String)rhs).replaceAll("%", ".*"))); // TODO
-																					// replace
-																					// special
-																					// characters
-																					// first
-																					// and
-																					// check
-																					// usage
-																					// of
-																					// \
+			// replace
+			// special
+			// characters
+			// first
+			// and
+			// check
+			// usage
+			// of
+			// \
 		}
 
 		throw new Exception("Unknown op type in Filter");
@@ -923,7 +1046,7 @@ public class Filter implements Cloneable, Serializable
 	}
 
 	@Override
-	protected Filter clone() 
+	protected Filter clone()
 	{
 		try
 		{

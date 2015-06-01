@@ -4,18 +4,14 @@ import java.util.ArrayList;
 
 public class FromClause
 {
-	private ArrayList<TableReference> tables;
-	
+	private final ArrayList<TableReference> tables;
+
 	public FromClause(ArrayList<TableReference> tables)
 	{
 		this.tables = tables;
 	}
-	
-	public ArrayList<TableReference> getTables()
-	{
-		return tables;
-	}
-	
+
+	@Override
 	public FromClause clone()
 	{
 		ArrayList<TableReference> newTables = new ArrayList<TableReference>();
@@ -23,7 +19,12 @@ public class FromClause
 		{
 			newTables.add(t.clone());
 		}
-		
+
 		return new FromClause(newTables);
+	}
+
+	public ArrayList<TableReference> getTables()
+	{
+		return tables;
 	}
 }

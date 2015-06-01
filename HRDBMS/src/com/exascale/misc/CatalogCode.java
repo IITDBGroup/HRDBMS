@@ -26,11 +26,8 @@ import java.util.Map.Entry;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
 import java.util.Vector;
-import com.exascale.compression.CompressedServerSocket;
-import com.exascale.compression.CompressedSocket;
 import com.exascale.filesystem.Page;
 import com.exascale.filesystem.RID;
-import com.exascale.managers.ConnectionManager;
 import com.exascale.managers.FileManager;
 import com.exascale.managers.HRDBMSWorker;
 
@@ -50,13 +47,15 @@ public class CatalogCode
 	private static int methodNum = 0;
 
 	public static void buildCode() throws Exception
-	{ 
+	{
 		HRDBMSWorker.logger.debug("Starting build of catalog java code.");
 		if (HRDBMSWorker.type == HRDBMSWorker.TYPE_COORD)
 		{
 			final int port = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("catalog_sync_port"));
 			HRDBMSWorker.logger.debug("Attempting to listen on port " + port);
-			listen = new ServerSocket(port);
+			listen = new ServerSocket();
+			listen.setReceiveBufferSize(262144);
+			listen.bind(new InetSocketAddress(port));
 			HRDBMSWorker.logger.debug("ServerSocket created.  Now attempting accept()");
 			final Socket listenSock = listen.accept();
 			HRDBMSWorker.logger.debug("Accepted connection on port " + port);
@@ -74,177 +73,78 @@ public class CatalogCode
 			HRDBMSWorker.logger.debug("Initial handshake on catalog sync port successful.");
 		}
 
-		final String in = 
-		//SYS.TABLES(ID, SCHEMA, NAME, TYPE)
-		"SYS.TABLES(INT, VARCHAR, VARCHAR, VARCHAR)\n"
-		+ "13\n" 
-		+ "(0, SYS, TABLES, R)\n" 
-		+ "(1, SYS, COLUMNS, R)\n" 
-		+ "(2, SYS, INDEXES, R)\n" 
-		+ "(3, SYS, INDEXCOLS, R)\n" 
-		+ "(4, SYS, VIEWS, R)\n"  
-		+ "(5, SYS, TABLESTATS, R)\n"  
-		+ "(6, SYS, NODES, R)\n" 
-		+ "(7, SYS, COLSTATS, R)\n" 
-		+ "(8, SYS, COLDIST, R)\n" 
-		+ "(9, SYS, BACKUPS, R)\n" 
-		+ "(10, SYS, NODESTATE, R)\n"
-		+ "(11, SYS, PARTITIONING, R)\n"
-		+ "(12, SYS, INDEXSTATS, R)\n"
-		
-		+ "SYS.BACKUPS(INT, INT, INT)\n" 
-		+ "0\n"
-		
-		+ "SYS.NODESTATE(INT, VARCHAR)\n" 
-		+ "0\n"
-		
-		//SYS.COLUMNS(COLID, TABLEID, NAME, TYPE, LENGTH, SCALE, PKPOS, NULL)
-		+ "SYS.COLUMNS(INT, INT, VARCHAR, VARCHAR, INT, INT, INT, VARCHAR)\n" 
-		+ "53\n" 
-		+ "(0, 1, COLID, INT, 4, 0, -1, N)\n" 
-		+ "(1, 1, TABLEID, INT, 4, 0, 0, N)\n" 
-		+ "(2, 1, COLNAME, VARCHAR, 128, 0, 1, N)\n" 
-		+ "(3, 1, COLTYPE, VARCHAR, 16, 0, -1, N)\n" 
-		+ "(4, 1, LENGTH, INT, 4, 0, -1, N)\n" 
-		+ "(5, 1, SCALE, INT, 4, 0, -1, N)\n"
-		+ "(6, 1, PKPOS, INT, 4, 0, -1, N)\n" 
-		+ "(7, 1, NULLABLE, VARCHAR, 1, 0, -1, N)\n"
-		
-		+ "(0, 0, TABLEID, INT, 4, 0, -1, N)\n" 
-		+ "(1, 0, SCHEMA, VARCHAR, 128, 0, 0, N)\n" 
-		+ "(2, 0, TABNAME, VARCHAR, 128, 0, 1, N)\n"  
-		+ "(3, 0, TYPE, VARCHAR, 1, 0, -1, N)\n" 
-		
-		+ "(0, 2, INDEXID, INT, 4, 0, -1, N)\n" 
-		+ "(1, 2, INDEXNAME, VARCHAR, 128, 0, 1, N)\n" 
-		+ "(2, 2, TABLEID, INT, 4, 0, 0, N)\n" 
-		+ "(3, 2, UNIQUE, VARCHAR, 1, 0, -1, N)\n" 
-		
-		+ "(0, 3, INDEXID, INT, 4, 0, 1, N)\n" 
-		+ "(1, 3, TABLEID, INT, 4, 0, 0, N)\n" 
-		+ "(2, 3, COLID, INT, 4, 0, 2, N)\n" 
-		+ "(3, 3, POSITION, INT, 4, 0, -1, N)\n" 
-		+ "(4, 3, ORDER, VARCHAR, 1, 0, -1, N)\n"
-		
-		+ "(0, 4, VIEWID, INT, 4, 0, -1, N)\n" 
-		+ "(1, 4, SCHEMA, VARCHAR, 128, 0, 0, N)\n" 
-		+ "(2, 4, NAME, VARCHAR, 128, 0, 1, N)\n" 
-		+ "(3, 4, TEXT, VARCHAR, 32768, 0, -1, N)\n" 
-		
-		+ "(0, 5, TABLEID, INT, 4, 0, 0, N)\n" 
-		+ "(1, 5, CARD, BIGINT, 8, 0, -1, N)\n"
-		
-		+ "(0, 6, NODEID, INT, 4, 0, -1, N)\n" 
-		+ "(1, 6, HOSTNAME, VARCHAR, 128, 0, 0, N)\n" 
-		+ "(2, 6, TYPE, VARCHAR, 1, 0, -1, N)\n" 
-		+ "(3, 6, RACK, VARCHAR, 128, 0, -1, N)\n"
-		
-		+ "(0, 7, TABLEID, INT, 4, 0, 0, N)\n" 
-		+ "(1, 7, COLID, INT, 4, 0, 1, N)\n" 
-		+ "(2, 7, CARD, BIGINT, 8, 0, -1, N)\n"
-		
-		+ "(0, 8, TABLEID, INT, 4, 0, 0, N)\n" 
-		+ "(1, 8, COLID, INT, 4, 0, 1, N)\n"
-		+ "(2, 8, LOW, VARCHAR, 4096, 0, -1, N)\n"
-		+ "(3, 8, Q1, VARCHAR, 4096, 0, -1, N)\n"
-		+ "(4, 8, Q2, VARCHAR, 4096, 0, -1, N)\n"
-		+ "(5, 8, Q3, VARCHAR, 4096, 0, -1, N)\n"
-		+ "(6, 8, HIGH, VARCHAR, 4096, 0, -1, N)\n"
-		
-		+ "(0, 9, FIRST, INT, 4, 0, 0, N)\n" 
-		+ "(1, 9, SECOND, INT, 4, 0, -1, N)\n" 
-		+ "(2, 9, THIRD, INT, 4, 0, -1, N)\n"
-		
-		+ "(0, 10, NODE, INT, 4, 0, 0, N)\n" 
-		+ "(1, 10, STATE, VARCHAR, 1, 0, -1, N)\n"
-		
-		+ "(0, 11, TABLEID, INT, 4, 0, 0, N)\n"
-		+ "(1, 11, GROUPEXP, VARCHAR, 8192, 0, -1, N)\n"
-		+ "(2, 11, NODEEXP, VARCHAR, 8192, 0, -1, N)\n"
-		+ "(3, 11, DEVICEEXP, VARCHAR, 8192, 0, -1, N)\n"
-		
-		+ "(0, 12, TABLEID, INT, 4, 0, 0, N)\n"
-		+ "(1, 12, INDEXID, INT, 4, 0, 1, N)\n"
-		+ "(2, 12, NUMDISTINCT, BIGINT, 8, 0, -1, N)\n"
-		
-		+ "SYS.VIEWS(INT, VARCHAR, VARCHAR, VARCHAR)\n" 
-		+ "0\n" 
-		
-		+ "SYS.INDEXES(INT, VARCHAR, INT, VARCHAR)\n" 
-		+ "15\n" 
-		+ "(0, PKTABLES, 0, Y)\n" 
-		+ "(0, PKCOLUMNS, 1, Y)\n" 
-		+ "(0, PKINDEXES, 2, Y)\n" 
-		+ "(0, PKINDEXCOLS, 3, Y)\n" 
-		+ "(0, PKVIEWS, 4, Y)\n"  
-		+ "(0, PKTABLESTATS, 5, Y)\n" 
-		+ "(0, PKNODES, 6, Y)\n" 
-		+ "(0, PKCOLSTATS, 7, Y)\n" 
-		+ "(0, PKCOLDIST, 8, Y)\n" 
-		+ "(0, PKBACKUPS, 9, Y)\n" 
-		+ "(0, PKNODESTATE, 10, Y)\n"
-		+ "(0, PKPARTITIONING, 11, Y)\n"
-		+ "(0, PKINDEXSTATS, 12, Y)\n"
-		+ "(1, SKNODES, 6, Y)\n"
-		+ "(1, SKINDEXES, 2, N)\n"
-		
-		+ "SYS.INDEXCOLS(INT, INT, INT, INT, VARCHAR)\n" 
-		+ "24\n" 
-		+ "(0, 0, 1, 0, A)\n" //TABLES(SCHEMA, NAME) 
-		+ "(0, 0, 2, 1, A)\n" 
-		+ "(0, 1, 1, 0, A)\n" //COLUMNS(TABLEID, COLNAME)
-		+ "(0, 1, 2, 1, A)\n" 
-		+ "(0, 2, 1, 1, A)\n" //INDEXES(TABLEID, INDEXNAME)
-		+ "(0, 2, 2, 0, A)\n" 
-		+ "(0, 3, 0, 1, A)\n" //INDEXCOLS(TABLE, INDEX, COL)
-		+ "(0, 3, 1, 0, A)\n" 
-		+ "(0, 3, 2, 2, A)\n" 
-		+ "(0, 4, 1, 0, A)\n" //VIEWS(SCHEMA, NAME)
-		+ "(0, 4, 2, 1, A)\n" 
-		+ "(0, 5, 0, 0, A)\n" //TABLESTATS(ID) 
-		+ "(0, 6, 1, 0, A)\n" //NODES(HOSTNAME) 
-		+ "(0, 7, 0, 0, A)\n" //COLSTATS(TABLE, COL) 
-		+ "(0, 7, 1, 1, A)\n" 
-		+ "(0, 8, 0, 0, A)\n" //COLDIST(TABLE, COL)
-		+ "(0, 8, 1, 1, A)\n"
-		+ "(0, 9, 0, 0, A)\n" //BACKUPS(FIRST) 
-		+ "(0, 10, 0, 0, A)\n" //NODESTATE(NODE)
-		+ "(0, 11, 0, 0, A)\n" //PARTITIONING(TABLE)
-		+ "(0, 12, 0, 0, A)\n" //INDEXSTATS(TABLE, INDEX)
-		+ "(0, 12, 1, 1, A)\n"
-		+ "(1, 6, 0, 0, A)\n" //NODES(NODEID)
-		+ "(1, 2, 1, 0, A)\n" //INDEXES(INDEXNAME)
-		
-		+ "SYS.TABLESTATS(INT, BIGINT)\n" 
-		+ "0\n" 
-		
-		+ "SYS.NODES(INT, VARCHAR, VARCHAR, VARCHAR)\n" 
-		+ "0\n" 
-		
-		+ "SYS.COLSTATS(INT, INT, BIGINT)\n" 
-		+ "0\n" 
-		
-		+ "SYS.COLDIST(INT, INT, VARCHAR, VARCHAR, VARCHAR, VARCHAR, VARCHAR)\n" 
-		+ "0\n"
-		
-		+ "SYS.PARTITIONING(INT, VARCHAR, VARCHAR, VARCHAR)\n"
-		+ "13\n"
-		+ "(0, NONE, {-1}, {0})\n"
-		+ "(1, NONE, {-1}, {0})\n"
-		+ "(2, NONE, {-1}, {0})\n"
-		+ "(3, NONE, {-1}, {0})\n"
-		+ "(4, NONE, {-1}, {0})\n"
-		+ "(5, NONE, {-1}, {0})\n"
-		+ "(6, NONE, {-1}, {0})\n"
-		+ "(7, NONE, {-1}, {0})\n"
-		+ "(8, NONE, {-1}, {0})\n"
-		+ "(9, NONE, {-1}, {0})\n"
-		+ "(10, NONE, {-1}, {0})\n"
-		+ "(11, NONE, {-1}, {0})\n"
-		+ "(12, NONE, {-1}, {0})\n"
-		
-		+ "SYS.INDEXSTATS(INT, INT, BIGINT)\n"
-		+ "0\n";
+		final String in =
+				// SYS.TABLES(ID, SCHEMA, NAME, TYPE)
+		"SYS.TABLES(INT, VARCHAR, VARCHAR, VARCHAR)\n" + "13\n" + "(0, SYS, TABLES, R)\n" + "(1, SYS, COLUMNS, R)\n" + "(2, SYS, INDEXES, R)\n" + "(3, SYS, INDEXCOLS, R)\n" + "(4, SYS, VIEWS, R)\n" + "(5, SYS, TABLESTATS, R)\n" + "(6, SYS, NODES, R)\n" + "(7, SYS, COLSTATS, R)\n" + "(8, SYS, COLDIST, R)\n" + "(9, SYS, BACKUPS, R)\n" + "(10, SYS, NODESTATE, R)\n" + "(11, SYS, PARTITIONING, R)\n" + "(12, SYS, INDEXSTATS, R)\n"
+
+		+ "SYS.BACKUPS(INT, INT, INT)\n" + "0\n"
+
+		+ "SYS.NODESTATE(INT, VARCHAR)\n" + "0\n"
+
+		// SYS.COLUMNS(COLID, TABLEID, NAME, TYPE, LENGTH, SCALE, PKPOS, NULL)
+		+ "SYS.COLUMNS(INT, INT, VARCHAR, VARCHAR, INT, INT, INT, VARCHAR)\n" + "53\n" + "(0, 1, COLID, INT, 4, 0, -1, N)\n" + "(1, 1, TABLEID, INT, 4, 0, 0, N)\n" + "(2, 1, COLNAME, VARCHAR, 128, 0, 1, N)\n" + "(3, 1, COLTYPE, VARCHAR, 16, 0, -1, N)\n" + "(4, 1, LENGTH, INT, 4, 0, -1, N)\n" + "(5, 1, SCALE, INT, 4, 0, -1, N)\n" + "(6, 1, PKPOS, INT, 4, 0, -1, N)\n" + "(7, 1, NULLABLE, VARCHAR, 1, 0, -1, N)\n"
+
+		+ "(0, 0, TABLEID, INT, 4, 0, -1, N)\n" + "(1, 0, SCHEMA, VARCHAR, 128, 0, 0, N)\n" + "(2, 0, TABNAME, VARCHAR, 128, 0, 1, N)\n" + "(3, 0, TYPE, VARCHAR, 1, 0, -1, N)\n"
+
+		+ "(0, 2, INDEXID, INT, 4, 0, -1, N)\n" + "(1, 2, INDEXNAME, VARCHAR, 128, 0, 1, N)\n" + "(2, 2, TABLEID, INT, 4, 0, 0, N)\n" + "(3, 2, UNIQUE, VARCHAR, 1, 0, -1, N)\n"
+
+		+ "(0, 3, INDEXID, INT, 4, 0, 1, N)\n" + "(1, 3, TABLEID, INT, 4, 0, 0, N)\n" + "(2, 3, COLID, INT, 4, 0, 2, N)\n" + "(3, 3, POSITION, INT, 4, 0, -1, N)\n" + "(4, 3, ORDER, VARCHAR, 1, 0, -1, N)\n"
+
+		+ "(0, 4, VIEWID, INT, 4, 0, -1, N)\n" + "(1, 4, SCHEMA, VARCHAR, 128, 0, 0, N)\n" + "(2, 4, NAME, VARCHAR, 128, 0, 1, N)\n" + "(3, 4, TEXT, VARCHAR, 32768, 0, -1, N)\n"
+
+		+ "(0, 5, TABLEID, INT, 4, 0, 0, N)\n" + "(1, 5, CARD, BIGINT, 8, 0, -1, N)\n"
+
+		+ "(0, 6, NODEID, INT, 4, 0, -1, N)\n" + "(1, 6, HOSTNAME, VARCHAR, 128, 0, 0, N)\n" + "(2, 6, TYPE, VARCHAR, 1, 0, -1, N)\n" + "(3, 6, RACK, VARCHAR, 128, 0, -1, N)\n"
+
+		+ "(0, 7, TABLEID, INT, 4, 0, 0, N)\n" + "(1, 7, COLID, INT, 4, 0, 1, N)\n" + "(2, 7, CARD, BIGINT, 8, 0, -1, N)\n"
+
+		+ "(0, 8, TABLEID, INT, 4, 0, 0, N)\n" + "(1, 8, COLID, INT, 4, 0, 1, N)\n" + "(2, 8, LOW, VARCHAR, 4096, 0, -1, N)\n" + "(3, 8, Q1, VARCHAR, 4096, 0, -1, N)\n" + "(4, 8, Q2, VARCHAR, 4096, 0, -1, N)\n" + "(5, 8, Q3, VARCHAR, 4096, 0, -1, N)\n" + "(6, 8, HIGH, VARCHAR, 4096, 0, -1, N)\n"
+
+		+ "(0, 9, FIRST, INT, 4, 0, 0, N)\n" + "(1, 9, SECOND, INT, 4, 0, -1, N)\n" + "(2, 9, THIRD, INT, 4, 0, -1, N)\n"
+
+		+ "(0, 10, NODE, INT, 4, 0, 0, N)\n" + "(1, 10, STATE, VARCHAR, 1, 0, -1, N)\n"
+
+		+ "(0, 11, TABLEID, INT, 4, 0, 0, N)\n" + "(1, 11, GROUPEXP, VARCHAR, 8192, 0, -1, N)\n" + "(2, 11, NODEEXP, VARCHAR, 8192, 0, -1, N)\n" + "(3, 11, DEVICEEXP, VARCHAR, 8192, 0, -1, N)\n"
+
+		+ "(0, 12, TABLEID, INT, 4, 0, 0, N)\n" + "(1, 12, INDEXID, INT, 4, 0, 1, N)\n" + "(2, 12, NUMDISTINCT, BIGINT, 8, 0, -1, N)\n"
+
+		+ "SYS.VIEWS(INT, VARCHAR, VARCHAR, VARCHAR)\n" + "0\n"
+
+		+ "SYS.INDEXES(INT, VARCHAR, INT, VARCHAR)\n" + "15\n" + "(0, PKTABLES, 0, Y)\n" + "(0, PKCOLUMNS, 1, Y)\n" + "(0, PKINDEXES, 2, Y)\n" + "(0, PKINDEXCOLS, 3, Y)\n" + "(0, PKVIEWS, 4, Y)\n" + "(0, PKTABLESTATS, 5, Y)\n" + "(0, PKNODES, 6, Y)\n" + "(0, PKCOLSTATS, 7, Y)\n" + "(0, PKCOLDIST, 8, Y)\n" + "(0, PKBACKUPS, 9, Y)\n" + "(0, PKNODESTATE, 10, Y)\n" + "(0, PKPARTITIONING, 11, Y)\n" + "(0, PKINDEXSTATS, 12, Y)\n" + "(1, SKNODES, 6, Y)\n" + "(1, SKINDEXES, 2, N)\n"
+
+		+ "SYS.INDEXCOLS(INT, INT, INT, INT, VARCHAR)\n" + "24\n" + "(0, 0, 1, 0, A)\n" // TABLES(SCHEMA,
+		// NAME)
+		+ "(0, 0, 2, 1, A)\n" + "(0, 1, 1, 0, A)\n" // COLUMNS(TABLEID,
+		// COLNAME)
+		+ "(0, 1, 2, 1, A)\n" + "(0, 2, 1, 1, A)\n" // INDEXES(TABLEID,
+		// INDEXNAME)
+		+ "(0, 2, 2, 0, A)\n" + "(0, 3, 0, 1, A)\n" // INDEXCOLS(TABLE,
+		// INDEX, COL)
+		+ "(0, 3, 1, 0, A)\n" + "(0, 3, 2, 2, A)\n" + "(0, 4, 1, 0, A)\n" // VIEWS(SCHEMA,
+		// NAME)
+		+ "(0, 4, 2, 1, A)\n" + "(0, 5, 0, 0, A)\n" // TABLESTATS(ID)
+		+ "(0, 6, 1, 0, A)\n" // NODES(HOSTNAME)
+		+ "(0, 7, 0, 0, A)\n" // COLSTATS(TABLE, COL)
+		+ "(0, 7, 1, 1, A)\n" + "(0, 8, 0, 0, A)\n" // COLDIST(TABLE,
+		// COL)
+		+ "(0, 8, 1, 1, A)\n" + "(0, 9, 0, 0, A)\n" // BACKUPS(FIRST)
+		+ "(0, 10, 0, 0, A)\n" // NODESTATE(NODE)
+		+ "(0, 11, 0, 0, A)\n" // PARTITIONING(TABLE)
+		+ "(0, 12, 0, 0, A)\n" // INDEXSTATS(TABLE, INDEX)
+		+ "(0, 12, 1, 1, A)\n" + "(1, 6, 0, 0, A)\n" // NODES(NODEID)
+		+ "(1, 2, 1, 0, A)\n" // INDEXES(INDEXNAME)
+
+		+ "SYS.TABLESTATS(INT, BIGINT)\n" + "0\n"
+
+				+ "SYS.NODES(INT, VARCHAR, VARCHAR, VARCHAR)\n" + "0\n"
+
+				+ "SYS.COLSTATS(INT, INT, BIGINT)\n" + "0\n"
+
+				+ "SYS.COLDIST(INT, INT, VARCHAR, VARCHAR, VARCHAR, VARCHAR, VARCHAR)\n" + "0\n"
+
+				+ "SYS.PARTITIONING(INT, VARCHAR, VARCHAR, VARCHAR)\n" + "13\n" + "(0, NONE, {-1}, {0})\n" + "(1, NONE, {-1}, {0})\n" + "(2, NONE, {-1}, {0})\n" + "(3, NONE, {-1}, {0})\n" + "(4, NONE, {-1}, {0})\n" + "(5, NONE, {-1}, {0})\n" + "(6, NONE, {-1}, {0})\n" + "(7, NONE, {-1}, {0})\n" + "(8, NONE, {-1}, {0})\n" + "(9, NONE, {-1}, {0})\n" + "(10, NONE, {-1}, {0})\n" + "(11, NONE, {-1}, {0})\n" + "(12, NONE, {-1}, {0})\n"
+
+				+ "SYS.INDEXSTATS(INT, INT, BIGINT)\n" + "0\n";
 
 		final PrintWriter out = new PrintWriter(new FileWriter("CatalogCreator.java", false));
 
@@ -452,7 +352,7 @@ public class CatalogCode
 		}
 		else
 		{
-			data.put((byte)0); //not unique
+			data.put((byte)0); // not unique
 		}
 		data.position(9); // first free byte @ 5
 		data.putInt(Page.BLOCK_SIZE - 1); // last free byte
@@ -632,7 +532,7 @@ public class CatalogCode
 			else if (var.equals("!backupfkc!"))
 			{
 				long card;
-				
+
 				card = getFullKeyCard("SYS.BACKUPS");
 				if (card != -1)
 				{
@@ -679,7 +579,7 @@ public class CatalogCode
 			else if (var.equals("!columnfkc!"))
 			{
 				long card;
-				
+
 				card = getFullKeyCard("SYS.COLUMNS");
 				if (card != -1)
 				{
@@ -895,7 +795,7 @@ public class CatalogCode
 			else if (var.equals("!coldistfkc!"))
 			{
 				long card;
-				
+
 				card = getFullKeyCard("SYS.COLDIST");
 				if (card != -1)
 				{
@@ -990,45 +890,6 @@ public class CatalogCode
 				i++;
 			}
 		}
-	}
-	
-	private static int numCols(int tableId)
-	{
-		final Vector<String> cTable = getTable("SYS.COLUMNS", tableLines, data);
-		
-		int num = 0;
-		for (final String cRow : cTable)
-		{
-			final StringTokenizer tokens = new StringTokenizer(cRow, ",", false);
-			tokens.nextToken();
-			
-			if (Integer.parseInt(tokens.nextToken().trim()) == tableId)
-			{
-				num++;
-			}
-		}
-		
-		return num;
-	}
-	
-	private static int numKeys(int tableId, int indexId)
-	{
-		final Vector<String> cTable = getTable("SYS.INDEXCOLS", tableLines, data);
-		
-		int num = 0;
-		for (final String cRow : cTable)
-		{
-			final StringTokenizer tokens = new StringTokenizer(cRow, ",", false);
-			if (Integer.parseInt(tokens.nextToken().trim().substring(1)) == indexId)
-			{
-				if (Integer.parseInt(tokens.nextToken().trim()) == tableId)
-				{
-					num++;
-				}
-			}
-		}
-		
-		return num;
 	}
 
 	private static void createColStatVars()
@@ -1198,7 +1059,7 @@ public class CatalogCode
 			{
 				buildIndexData(out, keys2RIDs, numKeys, "SYS." + iName, unique);
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 				throw e;
@@ -1335,7 +1196,7 @@ public class CatalogCode
 			final String rack = tokens.nextToken().trim();
 			racks.add(rack);
 			final Vector<String> nTable = getTable("SYS.NODES", tableLines, data);
-			
+
 			if (type.equals("C"))
 			{
 				final String row = "(" + coordId + "," + host + "," + type + "," + rack + ")";
@@ -1359,6 +1220,8 @@ public class CatalogCode
 				final int port = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("catalog_sync_port"));
 				HRDBMSWorker.logger.debug("Attempting to create connection to " + host + " on port " + port);
 				final Socket sock = new Socket();
+				sock.setReceiveBufferSize(262144);
+				sock.setSendBufferSize(262144);
 				HRDBMSWorker.logger.debug("Socket created.");
 				while (true)
 				{
@@ -1656,122 +1519,6 @@ public class CatalogCode
 		}
 	}
 
-	/*private static int getAvgLen(String table, int colIndex)
-	{
-		final Vector<String> t = getTable(table, tableLines, data);
-		final Vector<String> types = getTypes(table);
-
-		int total = 0;
-		int num = 0;
-		for (final String row : t)
-		{
-			final StringTokenizer tokens = new StringTokenizer(row, ",", false);
-			int j = 0;
-			while (j < colIndex)
-			{
-				tokens.nextToken();
-				j++;
-			}
-
-			String token = tokens.nextToken().trim();
-
-			if (token.startsWith("("))
-			{
-				token = token.substring(1);
-			}
-
-			if (token.endsWith(")"))
-			{
-				token = token.substring(0, token.length() - 1);
-			}
-
-			if (token.startsWith("!"))
-			{
-				final Long val = vars.get(token);
-
-				if (val == null)
-				{
-					token = "null";
-				}
-				else
-				{
-					token = val.toString();
-				}
-			}
-
-			if (token.equals("null"))
-			{
-				continue;
-			}
-
-			final String type = types.get(colIndex);
-			if (type.equals("INT"))
-			{
-				total += 4;
-			}
-			else if (type.equals("BIGINT"))
-			{
-				total += 8;
-			}
-			else if (type.equals("VARCHAR"))
-			{
-				total += (4 + token.length());
-			}
-			else if (type.equals("VARBINARY"))
-			{
-				total += (8 + token.length());
-			}
-			else
-			{
-				HRDBMSWorker.logger.error("Unknown type: " + type);
-				System.exit(1);
-			}
-
-			num++;
-		}
-
-		if (num == 0)
-		{
-			return 0;
-		}
-		else
-		{
-			return total / num;
-		}
-	}*/
-
-	/*private static int getColIndexForIndex(String table, int pos)
-	{
-		Vector<String> t = getTable("SYS.TABLES", tableLines, data);
-
-		for (final String row : t)
-		{
-			final StringTokenizer tokens = new StringTokenizer(row, ",", false);
-			final int id = Integer.parseInt(tokens.nextToken().trim().substring(1));
-			tokens.nextToken();
-			if (tokens.nextToken().trim().equals(table.substring(table.indexOf(".") + 1)))
-			{
-				t = getTable("SYS.INDEXCOLS", tableLines, data);
-				for (final String r : t)
-				{
-					final StringTokenizer tokens2 = new StringTokenizer(r, ",", false);
-					tokens2.nextToken();
-					if (id == Integer.parseInt(tokens2.nextToken().trim()))
-					{
-						final int colid = Integer.parseInt(tokens2.nextToken().trim());
-
-						if (Integer.parseInt(tokens2.nextToken().trim()) == pos)
-						{
-							return colid;
-						}
-					}
-				}
-			}
-		}
-
-		return -1;
-	}*/
-
 	private static int getCompositeColCard(String table, int[] colIndexes, int depth)
 	{
 		HRDBMSWorker.logger.debug("Entering getCompositeColCard().");
@@ -1878,6 +1625,60 @@ public class CatalogCode
 
 		return -1;
 	}
+
+	/*
+	 * private static int getAvgLen(String table, int colIndex) { final
+	 * Vector<String> t = getTable(table, tableLines, data); final
+	 * Vector<String> types = getTypes(table);
+	 *
+	 * int total = 0; int num = 0; for (final String row : t) { final
+	 * StringTokenizer tokens = new StringTokenizer(row, ",", false); int j = 0;
+	 * while (j < colIndex) { tokens.nextToken(); j++; }
+	 *
+	 * String token = tokens.nextToken().trim();
+	 *
+	 * if (token.startsWith("(")) { token = token.substring(1); }
+	 *
+	 * if (token.endsWith(")")) { token = token.substring(0, token.length() -
+	 * 1); }
+	 *
+	 * if (token.startsWith("!")) { final Long val = vars.get(token);
+	 *
+	 * if (val == null) { token = "null"; } else { token = val.toString(); } }
+	 *
+	 * if (token.equals("null")) { continue; }
+	 *
+	 * final String type = types.get(colIndex); if (type.equals("INT")) { total
+	 * += 4; } else if (type.equals("BIGINT")) { total += 8; } else if
+	 * (type.equals("VARCHAR")) { total += (4 + token.length()); } else if
+	 * (type.equals("VARBINARY")) { total += (8 + token.length()); } else {
+	 * HRDBMSWorker.logger.error("Unknown type: " + type); System.exit(1); }
+	 *
+	 * num++; }
+	 *
+	 * if (num == 0) { return 0; } else { return total / num; } }
+	 */
+
+	/*
+	 * private static int getColIndexForIndex(String table, int pos) {
+	 * Vector<String> t = getTable("SYS.TABLES", tableLines, data);
+	 *
+	 * for (final String row : t) { final StringTokenizer tokens = new
+	 * StringTokenizer(row, ",", false); final int id =
+	 * Integer.parseInt(tokens.nextToken().trim().substring(1));
+	 * tokens.nextToken(); if
+	 * (tokens.nextToken().trim().equals(table.substring(table.indexOf(".") +
+	 * 1))) { t = getTable("SYS.INDEXCOLS", tableLines, data); for (final String
+	 * r : t) { final StringTokenizer tokens2 = new StringTokenizer(r, ",",
+	 * false); tokens2.nextToken(); if (id ==
+	 * Integer.parseInt(tokens2.nextToken().trim())) { final int colid =
+	 * Integer.parseInt(tokens2.nextToken().trim());
+	 *
+	 * if (Integer.parseInt(tokens2.nextToken().trim()) == pos) { return colid;
+	 * } } } } }
+	 *
+	 * return -1; }
+	 */
 
 	private static int getNodePreferLocal(int primary, String priRack, HashMap<Integer, String> nodes2Rack, HashMap<Integer, Integer> nodes2NumTables)
 	{
@@ -2045,22 +1846,6 @@ public class CatalogCode
 		return null;
 	}
 
-	private static Vector<String> getTypes(String table)
-	{
-		int i = 0;
-		for (final String line : tableLines)
-		{
-			if (line.startsWith(table + "("))
-			{
-				return colTypes.get(i);
-			}
-
-			i++;
-		}
-
-		return null;
-	}
-
 	private static void indexPut(ByteBuffer data, ByteBuffer keyBytes, RID rid)
 	{
 		data.position(14); // offset of first free key value
@@ -2119,16 +1904,55 @@ public class CatalogCode
 
 		if (prevOff != 0)
 		{
-			data.position(prevOff+13); //next pointer in previous leaf
+			data.position(prevOff + 13); // next pointer in previous leaf
 			data.putInt(downOff);
 		}
-		
+
 		// down pointer
 		data.position(pointerOff);
 		data.putInt(0); // block 0
 		data.putInt(downOff); // offset
 	}
-	
+
+	private static int numCols(int tableId)
+	{
+		final Vector<String> cTable = getTable("SYS.COLUMNS", tableLines, data);
+
+		int num = 0;
+		for (final String cRow : cTable)
+		{
+			final StringTokenizer tokens = new StringTokenizer(cRow, ",", false);
+			tokens.nextToken();
+
+			if (Integer.parseInt(tokens.nextToken().trim()) == tableId)
+			{
+				num++;
+			}
+		}
+
+		return num;
+	}
+
+	private static int numKeys(int tableId, int indexId)
+	{
+		final Vector<String> cTable = getTable("SYS.INDEXCOLS", tableLines, data);
+
+		int num = 0;
+		for (final String cRow : cTable)
+		{
+			final StringTokenizer tokens = new StringTokenizer(cRow, ",", false);
+			if (Integer.parseInt(tokens.nextToken().trim().substring(1)) == indexId)
+			{
+				if (Integer.parseInt(tokens.nextToken().trim()) == tableId)
+				{
+					num++;
+				}
+			}
+		}
+
+		return num;
+	}
+
 	private static void receiveAndCreateNodes() throws IOException
 	{
 		HRDBMSWorker.logger.debug("Got input stream.");
@@ -2230,7 +2054,7 @@ public class CatalogCode
 			}
 		}
 	}
-	
+
 	private static void sendNodesToCoords() throws IOException
 	{
 		for (final Socket sock : sockets.values())

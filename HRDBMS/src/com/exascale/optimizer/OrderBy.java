@@ -4,18 +4,14 @@ import java.util.ArrayList;
 
 public class OrderBy
 {
-	private ArrayList<SortKey> keys;
-	
+	private final ArrayList<SortKey> keys;
+
 	public OrderBy(ArrayList<SortKey> keys)
 	{
 		this.keys = keys;
 	}
-	
-	public ArrayList<SortKey> getKeys()
-	{
-		return keys;
-	}
-	
+
+	@Override
 	public OrderBy clone()
 	{
 		ArrayList<SortKey> newKeys = new ArrayList<SortKey>();
@@ -23,7 +19,12 @@ public class OrderBy
 		{
 			newKeys.add(key.clone());
 		}
-		
+
 		return new OrderBy(newKeys);
+	}
+
+	public ArrayList<SortKey> getKeys()
+	{
+		return keys;
 	}
 }

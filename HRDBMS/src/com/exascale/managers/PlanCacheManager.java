@@ -1,11 +1,8 @@
 package com.exascale.managers;
 
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.optimizer.AggregateOperator;
 import com.exascale.optimizer.CountOperator;
@@ -15,13 +12,13 @@ import com.exascale.optimizer.Index;
 import com.exascale.optimizer.IndexOperator;
 import com.exascale.optimizer.MaxOperator;
 import com.exascale.optimizer.MetaData;
+import com.exascale.optimizer.MultiOperator;
 import com.exascale.optimizer.Operator;
 import com.exascale.optimizer.ReorderOperator;
 import com.exascale.optimizer.RootOperator;
 import com.exascale.optimizer.SelectOperator;
 import com.exascale.optimizer.SortOperator;
 import com.exascale.optimizer.TableScanOperator;
-import com.exascale.optimizer.MultiOperator;
 import com.exascale.tables.Plan;
 import com.exascale.tables.SQL;
 import com.exascale.tables.Transaction;
@@ -29,9 +26,11 @@ import com.exascale.threads.XAWorker;
 
 public class PlanCacheManager
 {
-	private static ConcurrentHashMap<SQL, Plan> planCache = new ConcurrentHashMap<SQL, Plan>();
-	private static ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+	private static ConcurrentHashMap<SQL, Plan> planCache = new ConcurrentHashMap<SQL, Plan>(16, 0.75f, 6 * ResourceManager.cpus);
+	// private static ReentrantReadWriteLock lock = new
+	// ReentrantReadWriteLock();
 	private static Integer numWorkers = null;
+	private static volatile boolean addPlan = true;
 
 	// Plans have creation timestamp and reserved flag
 
@@ -39,8 +38,8 @@ public class PlanCacheManager
 	{
 		try
 		{
-			//add catalog plans
-			//getHostLookup
+			// add catalog plans
+			// getHostLookup
 			Transaction tx = new Transaction(Transaction.ISOLATION_RR);
 			MetaData meta = new MetaData();
 			ArrayList<String> keys = new ArrayList<String>();
@@ -70,8 +69,8 @@ public class PlanCacheManager
 			trees.add(root);
 			Plan p = new Plan(true, trees);
 			addPlan("SELECT HOSTNAME FROM SYS.NODES WHERE NODEID = ?", p);
-			
-			//getWorkerNodes
+
+			// getWorkerNodes
 			meta = new MetaData();
 			tOp = new TableScanOperator("SYS", "NODES", meta, tx);
 			devs = new ArrayList<Integer>();
@@ -90,8 +89,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT NODEID FROM SYS.NODES WHERE NODEID >= 0", p);
-			
-			//getCoordNodes
+
+			// getCoordNodes
 			meta = new MetaData();
 			tOp = new TableScanOperator("SYS", "NODES", meta, tx);
 			devs = new ArrayList<Integer>();
@@ -110,8 +109,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT NODEID FROM SYS.NODES WHERE NODEID < -1", p);
-			
-			//getCountWorkerNodes
+
+			// getCountWorkerNodes
 			meta = new MetaData();
 			tOp = new TableScanOperator("SYS", "NODES", meta, tx);
 			devs = new ArrayList<Integer>();
@@ -139,8 +138,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT COUNT(*) FROM SYS.NODES WHERE NODEID >= 0", p);
-			
-			//getIndexes
+
+			// getIndexes
 			meta = new MetaData();
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
@@ -195,8 +194,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT INDEXNAME FROM SYS.TABLES A, SYS.INDEXES B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID ORDER BY INDEXNAME", p);
-			
-			//getIndexColsForTable
+
+			// getIndexColsForTable
 			meta = new MetaData();
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
@@ -263,8 +262,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT COLNAME FROM SYS.TABLES A, SYS.INDEXCOLS B, SYS.COLUMNS C WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID AND B.TABLEID = C.TABLEID AND B.COLID = C.COLID", p);
-			
-			//getKeys
+
+			// getKeys
 			meta = new MetaData();
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
@@ -369,8 +368,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT TABNAME, COLNAME FROM SYS.INDEXES A, SYS.TABLES B, SYS.INDEXCOLS C, SYS.COLUMNS D WHERE A.INDEXNAME = ? AND B.SCHEMA = ? AND A.TABLEID = B.TABLEID AND A.TABLEID = C.TABLEID AND A.INDEXID = C.INDEXID AND C.TABLEID = D.TABLEID AND C.COLID = D.COLID", p);
-			
-			//getKeysByID
+
+			// getKeysByID
 			meta = new MetaData();
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
@@ -435,8 +434,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT COLNAME FROM SYS.INDEXCOLS A, SYS.COLUMNS B WHERE A.TABLEID = B.TABLEID A.COLID = B.COLID AND A.TABLEID = ? AND A.INDEXID = ?", p);
-			
-			//getTypes
+
+			// getTypes
 			meta = new MetaData();
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
@@ -539,8 +538,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT COLTYPE FROM SYS.INDEXES A, SYS.TABLES B, SYS.INDEXCOLS C, SYS.COLUMNS D WHERE A.INDEXNAME = ? AND B.SCHEMA = ? AND A.TABLEID = B.TABLEID AND A.TABLEID = C.TABLEID AND A.INDEXID = C.INDEXID AND C.TABLEID = D.TABLEID AND C.COLID = D.COLID", p);
-			
-			//getOrders
+
+			// getOrders
 			meta = new MetaData();
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
@@ -627,8 +626,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT ORDER FROM SYS.INDEXES A, SYS.TABLES B, SYS.INDEXCOLS C WHERE A.INDEXNAME = ? AND B.SCHEMA = ? AND A.TABLEID = B.TABLEID AND A.TABLEID = C.TABLEID AND A.INDEXID = C.INDEXID", p);
-			
-			//getColCard
+
+			// getColCard
 			meta = new MetaData();
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
@@ -698,8 +697,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT CARD FROM SYS.TABLES A, SYS.COLUMNS B, SYS.COLSTATS C WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID AND B.COLNAME = ? AND B.TABLEID = C.TABLEID AND B.COLID = C.COLID", p);
-			
-			//getIndexIDsForTable
+
+			// getIndexIDsForTable
 			meta = new MetaData();
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
@@ -750,8 +749,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT INDEXID FROM SYS.TABLES A, SYS.INDEXES B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID", p);
-			
-			//getPartitioning
+
+			// getPartitioning
 			meta = new MetaData();
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
@@ -806,8 +805,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT GROUPEXP, NODEEXP, DEVICEEXP FROM SYS.TABLES A, SYS.PARTITIONING B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID", p);
-			
-			//getIndexColCount
+
+			// getIndexColCount
 			meta = new MetaData();
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
@@ -853,8 +852,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT COUNT(*) FROM SYS.INDEXCOLS WHERE TABLEID = ? AND INDEXID = ?", p);
-			
-			//getNextTableID
+
+			// getNextTableID
 			meta = new MetaData();
 			tOp = new TableScanOperator("SYS", "TABLES", meta, tx);
 			devs = new ArrayList<Integer>();
@@ -880,8 +879,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT MAX(TABLEID) FROM SYS.TABLES", p);
-			
-			//getNextViewID
+
+			// getNextViewID
 			meta = new MetaData();
 			tOp = new TableScanOperator("SYS", "VIEWS", meta, tx);
 			devs = new ArrayList<Integer>();
@@ -907,8 +906,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT MAX(VIEWID) FROM SYS.VIEWS", p);
-			
-			//getCheckIndexForCol
+
+			// getCheckIndexForCol
 			meta = new MetaData();
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
@@ -945,8 +944,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT TABLEID, INDEXID, COLID FROM SYS.INDEXCOLS WHERE TABLEID = ? AND INDEXID = ? AND COLID = ?", p);
-			
-			//getIndexCard
+
+			// getIndexCard
 			meta = new MetaData();
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
@@ -978,8 +977,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT NUMDISTINCT FROM SYS.INDEXSTATS WHERE TABLEID = ? AND INDEXID = ?", p);
-			
-			//getCols2Pos
+
+			// getCols2Pos
 			meta = new MetaData();
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
@@ -1032,8 +1031,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT COLNAME, COLID FROM SYS.TABLES A, SYS.COLUMNS B WHERE A.SCHEMA = ? AND B.TABNAME = ? AND A.TABLEID = B.TABLEID", p);
-			
-			//getTableCard
+
+			// getTableCard
 			meta = new MetaData();
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
@@ -1084,8 +1083,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT CARD FROM SYS.TABLES A, SYS.TABLESTATS B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID", p);
-			
-			//getColType
+
+			// getColType
 			meta = new MetaData();
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
@@ -1139,8 +1138,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT COLTYPE FROM SYS.TABLES A, SYS.COLUMNS B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID AND B.COLNAME = ?", p);
-			
-			//getColDist
+
+			// getColDist
 			meta = new MetaData();
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
@@ -1218,8 +1217,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT LOW, Q1, Q2, Q3, HIGH FROM SYS.TABLES A, SYS.COLUMNS B, SYS.COLDIST C WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID AND B.COLNAME = ? AND B.TABLEID = C.TABLEID AND B.COLID = C.COLID", p);
-			
-			//getVerifyTableExist
+
+			// getVerifyTableExist
 			meta = new MetaData();
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
@@ -1251,8 +1250,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT TABLEID FROM SYS.TABLES WHERE SCHEMA = ? AND TABNAME = ?", p);
-			
-			//getVerifyViewExist
+
+			// getVerifyViewExist
 			meta = new MetaData();
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
@@ -1284,8 +1283,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT TEXT FROM SYS.VIEWS WHERE SCHEMA = ? AND NAME = ?", p);
-			
-			//getNextIndexID
+
+			// getNextIndexID
 			meta = new MetaData();
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
@@ -1326,8 +1325,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT MAX(INDEXID) FROM SYS.INDEXES WHERE TABLEID = ?", p);
-			
-			//getVerifyIndexExist
+
+			// getVerifyIndexExist
 			meta = new MetaData();
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
@@ -1382,8 +1381,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT TABLEID, INDEXID FROM SYS.TABLES A, SYS.INDEXES B WHERE A.SCHEMA = ? AND A.TABLEID = B.TABLEID AND B.INDEXNAME = ?", p);
-			
-			//getCols2Types
+
+			// getCols2Types
 			meta = new MetaData();
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
@@ -1436,8 +1435,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT COLNAME, COLTYPE FROM SYS.TABLES A, SYS.COLUMNS B WHERE A.SCHEMA = ? AND B.TABNAME = ? AND A.TABLEID = B.TABLEID", p);
-			
-			//getLength
+
+			// getLength
 			meta = new MetaData();
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
@@ -1491,8 +1490,8 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT LENGTH FROM SYS.TABLES A, SYS.COLUMNS B WHERE A.SCHEMA = ? AND B.TABNAME = ? AND A.TABLEID = B.TABLEID AND B.COLNAME = ?", p);
-			
-			//getUnique - get uniqueness?
+
+			// getUnique - get uniqueness?
 			keys = new ArrayList<String>();
 			types = new ArrayList<String>();
 			orders = new ArrayList<Boolean>();
@@ -1551,9 +1550,10 @@ public class PlanCacheManager
 			p = new Plan(true, trees);
 			addPlan("SELECT INDEXNAME,UNIQUE FROM SYS.TABLES A, SYS.INDEXES B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID ORDER BY INDEXNAME", p);
 			tx.commit();
-			HRDBMSWorker.logger.debug(planCache.toString());
+			addPlan = false;
+			// HRDBMSWorker.logger.debug(planCache.toString());
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
 			HRDBMSWorker.logger.fatal("Exception during catalog plan creation", e);
 			System.exit(1);
@@ -1562,44 +1562,302 @@ public class PlanCacheManager
 
 	public static void addPlan(String sql, Plan p)
 	{
-		lock.readLock().lock();
-		try
+		if (addPlan)
 		{
-			planCache.put(new SQL(sql), p);
+			// lock.readLock().lock();
+			try
+			{
+				planCache.put(new SQL(sql), p);
+			}
+			catch (Exception e)
+			{
+				// lock.readLock().unlock();
+				throw e;
+			}
+			// lock.readLock().unlock();
 		}
-		catch(Exception e)
-		{
-			lock.readLock().unlock();
-			throw e;
-		}
-		lock.readLock().unlock();
 	}
 
 	public static Plan checkPlanCache(String sql)
 	{
-		lock.readLock().lock();
+		// lock.readLock().lock();
 		try
 		{
 			final Plan plan = planCache.get(new SQL(sql));
 			if (plan == null)
 			{
-				lock.readLock().unlock();
+				// lock.readLock().unlock();
 				return null;
 			}
-		
-			lock.readLock().unlock();
+
+			// lock.readLock().unlock();
 			return new Plan(plan);
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
-			lock.readLock().unlock();
+			// lock.readLock().unlock();
 			throw e;
 		}
 	}
-	
+
+	public static CheckIndexForColPlan getCheckIndexForCol()
+	{
+		return new CheckIndexForColPlan(checkPlanCache("SELECT TABLEID, INDEXID, COLID FROM SYS.INDEXCOLS WHERE TABLEID = ? AND INDEXID = ? AND COLID = ?"));
+	}
+
+	public static ColCardPlan getColCard()
+	{
+		return new ColCardPlan(checkPlanCache("SELECT CARD FROM SYS.TABLES A, SYS.COLUMNS B, SYS.COLSTATS C WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID AND B.COLNAME = ? AND B.TABLEID = C.TABLEID AND B.COLID = C.COLID"));
+	}
+
+	public static Cols2PosPlan getCols2PosForTable()
+	{
+		return new Cols2PosPlan(checkPlanCache("SELECT COLNAME, COLID FROM SYS.TABLES A, SYS.COLUMNS B WHERE A.SCHEMA = ? AND B.TABNAME = ? AND A.TABLEID = B.TABLEID"));
+	}
+
+	public static Cols2TypesPlan getCols2Types()
+	{
+		return new Cols2TypesPlan(checkPlanCache("SELECT COLNAME, COLTYPE FROM SYS.TABLES A, SYS.COLUMNS B WHERE A.SCHEMA = ? AND B.TABNAME = ? AND A.TABLEID = B.TABLEID"));
+	}
+
+	public static ColTypePlan getColType()
+	{
+		return new ColTypePlan(checkPlanCache("SELECT COLTYPE FROM SYS.TABLES A, SYS.COLUMNS B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID AND B.COLNAME = ?"));
+	}
+
+	public static CoordNodesPlan getCoordNodes()
+	{
+		return new CoordNodesPlan(checkPlanCache("SELECT NODEID FROM SYS.NODES WHERE NODEID < -1"));
+	}
+
+	public static CountWorkerNodesPlan getCountWorkerNodes()
+	{
+		return new CountWorkerNodesPlan(checkPlanCache("SELECT COUNT(*) FROM SYS.NODES WHERE NODEID >= 0"));
+	}
+
+	public static DeleteColDistPlan getDeleteColDist()
+	{
+		return new DeleteColDistPlan();
+	}
+
+	public static DeleteColsPlan getDeleteCols()
+	{
+		return new DeleteColsPlan();
+	}
+
+	public static DeleteColStatsPlan getDeleteColStats()
+	{
+		return new DeleteColStatsPlan();
+	}
+
+	public static DeleteIndexPlan getDeleteIndex()
+	{
+		return new DeleteIndexPlan();
+	}
+
+	public static DeleteIndexColPlan getDeleteIndexCol()
+	{
+		return new DeleteIndexColPlan();
+	}
+
+	public static DeleteIndexStatsPlan getDeleteIndexStats()
+	{
+		return new DeleteIndexStatsPlan();
+	}
+
+	public static DeletePartitioningPlan getDeletePartitioning()
+	{
+		return new DeletePartitioningPlan();
+	}
+
+	public static DeleteTablePlan getDeleteTable()
+	{
+		return new DeleteTablePlan();
+	}
+
+	public static DeleteTableStatsPlan getDeleteTableStats()
+	{
+		return new DeleteTableStatsPlan();
+	}
+
+	public static DeleteViewPlan getDeleteView()
+	{
+		return new DeleteViewPlan();
+	}
+
+	public static DistPlan getDist()
+	{
+		return new DistPlan(checkPlanCache("SELECT LOW, Q1, Q2, Q3, HIGH FROM SYS.TABLES A, SYS.COLUMNS B, SYS.COLDIST C WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID AND B.COLNAME = ? AND B.TABLEID = C.TABLEID AND B.COLID = C.COLID"));
+	}
+
+	public static HostLookupPlan getHostLookup()
+	{
+		return new HostLookupPlan(checkPlanCache("SELECT HOSTNAME FROM SYS.NODES WHERE NODEID = ?"));
+	}
+
+	public static IndexCardPlan getIndexCard()
+	{
+		return new IndexCardPlan(checkPlanCache("SELECT NUMDISTINCT FROM SYS.INDEXSTATS WHERE TABLEID = ? AND INDEXID = ?"));
+	}
+
+	public static IndexColCountPlan getIndexColCount()
+	{
+		return new IndexColCountPlan(checkPlanCache("SELECT COUNT(*) FROM SYS.INDEXCOLS WHERE TABLEID = ? AND INDEXID = ?"));
+	}
+
+	public static IndexColsForTablePlan getIndexColsForTable()
+	{
+		return new IndexColsForTablePlan(checkPlanCache("SELECT COLNAME FROM SYS.TABLES A, SYS.INDEXCOLS B, SYS.COLUMNS C WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID AND B.TABLEID = C.TABLEID AND B.COLID = C.COLID"));
+	}
+
+	public static IndexPlan getIndexes()
+	{
+		return new IndexPlan(checkPlanCache("SELECT INDEXNAME FROM SYS.TABLES A, SYS.INDEXES B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID ORDER BY INDEXNAME"));
+	}
+
+	public static IndexIDsForTablePlan getIndexIDsForTable()
+	{
+		return new IndexIDsForTablePlan(checkPlanCache("SELECT INDEXID FROM SYS.TABLES A, SYS.INDEXES B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID"));
+	}
+
+	public static InsertColPlan getInsertCol()
+	{
+		return new InsertColPlan();
+	}
+
+	public static InsertIndexPlan getInsertIndex()
+	{
+		return new InsertIndexPlan();
+	}
+
+	public static InsertIndexColPlan getInsertIndexCol()
+	{
+		return new InsertIndexColPlan();
+	}
+
+	public static InsertPartitionPlan getInsertPartition()
+	{
+		return new InsertPartitionPlan();
+	}
+
+	public static InsertTablePlan getInsertTable()
+	{
+		return new InsertTablePlan();
+	}
+
+	public static InsertViewPlan getInsertView()
+	{
+		return new InsertViewPlan();
+	}
+
+	public static KeysPlan getKeys()
+	{
+		return new KeysPlan(checkPlanCache("SELECT TABNAME, COLNAME FROM SYS.INDEXES A, SYS.TABLES B, SYS.INDEXCOLS C, SYS.COLUMNS D WHERE A.INDEXNAME = ? AND B.SCHEMA = ? AND A.TABLEID = B.TABLEID AND A.TABLEID = C.TABLEID AND A.INDEXID = C.INDEXID AND C.TABLEID = D.TABLEID AND C.COLID = D.COLID"));
+	}
+
+	public static KeysByIDPlan getKeysByID()
+	{
+		return new KeysByIDPlan(checkPlanCache("SELECT COLNAME FROM SYS.INDEXCOLS A, SYS.COLUMNS B WHERE A.TABLEID = B.TABLEID A.COLID = B.COLID AND A.TABLEID = ? AND A.INDEXID = ?"));
+	}
+
+	public static LengthPlan getLength()
+	{
+		return new LengthPlan(checkPlanCache("SELECT LENGTH FROM SYS.TABLES A, SYS.COLUMNS B WHERE A.SCHEMA = ? AND B.TABNAME = ? AND A.TABLEID = B.TABLEID AND B.COLNAME = ?"));
+	}
+
+	public static MultiDeleteIndexColsPlan getMultiDeleteIndexCols()
+	{
+		return new MultiDeleteIndexColsPlan();
+	}
+
+	public static MultiDeleteIndexesPlan getMultiDeleteIndexes()
+	{
+		return new MultiDeleteIndexesPlan();
+	}
+
+	public static MultiDeleteIndexStatsPlan getMultiDeleteIndexStats()
+	{
+		return new MultiDeleteIndexStatsPlan();
+	}
+
+	public static NextIndexIDPlan getNextIndexID()
+	{
+		return new NextIndexIDPlan(checkPlanCache("SELECT MAX(INDEXID) FROM SYS.INDEXES WHERE TABLEID = ?"));
+	}
+
+	public static NextTableIDPlan getNextTableID()
+	{
+		return new NextTableIDPlan(checkPlanCache("SELECT MAX(TABLEID) FROM SYS.TABLES"));
+	}
+
+	public static NextViewIDPlan getNextViewID()
+	{
+		return new NextViewIDPlan(checkPlanCache("SELECT MAX(VIEWID) FROM SYS.VIEWS"));
+	}
+
+	public static OrdersPlan getOrders()
+	{
+		return new OrdersPlan(checkPlanCache("SELECT ORDER FROM SYS.INDEXES A, SYS.TABLES B, SYS.INDEXCOLS C WHERE A.INDEXNAME = ? AND B.SCHEMA = ? AND A.TABLEID = B.TABLEID AND A.TABLEID = C.TABLEID AND A.INDEXID = C.INDEXID"));
+	}
+
+	public static PartitioningPlan getPartitioning()
+	{
+		return new PartitioningPlan(checkPlanCache("SELECT GROUPEXP, NODEEXP, DEVICEEXP FROM SYS.TABLES A, SYS.PARTITIONING B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID"));
+	}
+
+	public static TableAndIndexIDPlan getTableAndIndexID()
+	{
+		return new TableAndIndexIDPlan(checkPlanCache("SELECT TABLEID, INDEXID FROM SYS.TABLES A, SYS.INDEXES B WHERE A.SCHEMA = ? AND A.TABLEID = B.TABLEID AND B.INDEXNAME = ?"));
+	}
+
+	public static TableCardPlan getTableCard()
+	{
+		return new TableCardPlan(checkPlanCache("SELECT CARD FROM SYS.TABLES A, SYS.TABLESTATS B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID"));
+	}
+
+	public static TableIDPlan getTableID()
+	{
+		return new TableIDPlan(checkPlanCache("SELECT TABLEID FROM SYS.TABLES WHERE SCHEMA = ? AND TABNAME = ?"));
+	}
+
+	public static TypesPlan getTypes()
+	{
+		return new TypesPlan(checkPlanCache("SELECT COLTYPE FROM SYS.INDEXES A, SYS.TABLES B, SYS.INDEXCOLS C, SYS.COLUMNS D WHERE A.INDEXNAME = ? AND B.SCHEMA = ? AND A.TABLEID = B.TABLEID AND A.TABLEID = C.TABLEID AND A.INDEXID = C.INDEXID AND C.TABLEID = D.TABLEID AND C.COLID = D.COLID"));
+	}
+
+	public static UniquePlan getUnique()
+	{
+		return new UniquePlan(checkPlanCache("SELECT INDEXNAME,UNIQUE FROM SYS.TABLES A, SYS.INDEXES B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID ORDER BY INDEXNAME"));
+	}
+
+	public static VerifyIndexPlan getVerifyIndexExist()
+	{
+		return new VerifyIndexPlan(checkPlanCache("SELECT TABLEID, INDEXID FROM SYS.TABLES A, SYS.INDEXES B WHERE A.SCHEMA = ? AND A.TABLEID = B.TABLEID AND B.INDEXNAME = ?"));
+	}
+
+	public static VerifyTableExistPlan getVerifyTableExist()
+	{
+		return new VerifyTableExistPlan(checkPlanCache("SELECT TABLEID FROM SYS.TABLES WHERE SCHEMA = ? AND TABNAME = ?"));
+	}
+
+	public static VerifyViewExistPlan getVerifyViewExist()
+	{
+		return new VerifyViewExistPlan(checkPlanCache("SELECT TEXT FROM SYS.VIEWS WHERE SCHEMA = ? AND NAME = ?"));
+	}
+
+	public static ViewSQLPlan getViewSQL()
+	{
+		return new ViewSQLPlan(checkPlanCache("SELECT TEXT FROM SYS.VIEWS WHERE SCHEMA = ? AND NAME = ?"));
+	}
+
+	public static WorkerNodesPlan getWorkerNodes()
+	{
+		return new WorkerNodesPlan(checkPlanCache("SELECT NODEID FROM SYS.NODES WHERE NODEID >= 0"));
+	}
+
 	public static void invalidate()
 	{
-		lock.writeLock().lock();
+		// lock.writeLock().lock();
 		for (Map.Entry entry : planCache.entrySet())
 		{
 			Plan p = (Plan)entry.getValue();
@@ -1608,12 +1866,12 @@ public class PlanCacheManager
 				planCache.remove(entry.getKey());
 			}
 		}
-		lock.writeLock().unlock();
+		// lock.writeLock().unlock();
 	}
 
 	public static void reduce()
 	{
-		lock.readLock().lock();
+		// lock.readLock().lock();
 		double avg = 0;
 		long num = -1;
 		for (final Plan p : planCache.values())
@@ -1643,2428 +1901,22 @@ public class PlanCacheManager
 				}
 			}
 		}
-		
-		lock.readLock().unlock();
+
+		// lock.readLock().unlock();
 	}
-	
-	public static CoordNodesPlan getCoordNodes()
-	{
-		return new CoordNodesPlan(checkPlanCache("SELECT NODEID FROM SYS.NODES WHERE NODEID < -1"));
-	}
-	
-	public static LengthPlan getLength()
-	{
-		return new LengthPlan(checkPlanCache("SELECT LENGTH FROM SYS.TABLES A, SYS.COLUMNS B WHERE A.SCHEMA = ? AND B.TABNAME = ? AND A.TABLEID = B.TABLEID AND B.COLNAME = ?"));
-	}
-	
-	public static Cols2TypesPlan getCols2Types()
-	{
-		return new Cols2TypesPlan(checkPlanCache("SELECT COLNAME, COLTYPE FROM SYS.TABLES A, SYS.COLUMNS B WHERE A.SCHEMA = ? AND B.TABNAME = ? AND A.TABLEID = B.TABLEID"));
-	}
-	
-	public static VerifyIndexPlan getVerifyIndexExist()
-	{
-		return new VerifyIndexPlan(checkPlanCache("SELECT TABLEID, INDEXID FROM SYS.TABLES A, SYS.INDEXES B WHERE A.SCHEMA = ? AND A.TABLEID = B.TABLEID AND B.INDEXNAME = ?"));
-	}
-	
-	public static TableAndIndexIDPlan getTableAndIndexID()
-	{
-		return new TableAndIndexIDPlan(checkPlanCache("SELECT TABLEID, INDEXID FROM SYS.TABLES A, SYS.INDEXES B WHERE A.SCHEMA = ? AND A.TABLEID = B.TABLEID AND B.INDEXNAME = ?"));
-	}
-	
-	public static NextIndexIDPlan getNextIndexID()
-	{
-		return new NextIndexIDPlan(checkPlanCache("SELECT MAX(INDEXID) FROM SYS.INDEXES WHERE TABLEID = ?"));
-	}
-	
-	public static ViewSQLPlan getViewSQL()
-	{
-		return new ViewSQLPlan(checkPlanCache("SELECT TEXT FROM SYS.VIEWS WHERE SCHEMA = ? AND NAME = ?"));
-	}
-	
-	public static VerifyViewExistPlan getVerifyViewExist()
-	{
-		return new VerifyViewExistPlan(checkPlanCache("SELECT TEXT FROM SYS.VIEWS WHERE SCHEMA = ? AND NAME = ?"));
-	}
-	
-	public static TableIDPlan getTableID()
-	{
-		return new TableIDPlan(checkPlanCache("SELECT TABLEID FROM SYS.TABLES WHERE SCHEMA = ? AND TABNAME = ?"));
-	}
-	
-	public static VerifyTableExistPlan getVerifyTableExist()
-	{
-		return new VerifyTableExistPlan(checkPlanCache("SELECT TABLEID FROM SYS.TABLES WHERE SCHEMA = ? AND TABNAME = ?"));
-	}
-	
-	public static NextTableIDPlan getNextTableID()
-	{
-		return new NextTableIDPlan(checkPlanCache("SELECT MAX(TABLEID) FROM SYS.TABLES"));
-	}
-	
-	public static NextViewIDPlan getNextViewID()
-	{
-		return new NextViewIDPlan(checkPlanCache("SELECT MAX(VIEWID) FROM SYS.VIEWS"));
-	}
-	
-	public static InsertIndexPlan getInsertIndex()
-	{
-		return new InsertIndexPlan();
-	}
-	
-	public static InsertPartitionPlan getInsertPartition()
-	{
-		return new InsertPartitionPlan();
-	}
-	
-	public static InsertColPlan getInsertCol()
-	{
-		return new InsertColPlan();
-	}
-	
-	public static InsertViewPlan getInsertView()
-	{
-		return new InsertViewPlan();
-	}
-	
-	public static DeleteViewPlan getDeleteView()
-	{
-		return new DeleteViewPlan();
-	}
-	
-	public static InsertIndexColPlan getInsertIndexCol()
-	{
-		return new InsertIndexColPlan();
-	}
-	
-	public static DeleteIndexPlan getDeleteIndex()
-	{
-		return new DeleteIndexPlan();
-	}
-	
-	public static DeleteIndexColPlan getDeleteIndexCol()
-	{
-		return new DeleteIndexColPlan();
-	}
-	
-	public static DeleteIndexStatsPlan getDeleteIndexStats()
-	{
-		return new DeleteIndexStatsPlan();
-	}
-	
-	public static DeleteTablePlan getDeleteTable()
-	{
-		return new DeleteTablePlan();
-	}
-	
-	public static DeleteColsPlan getDeleteCols()
-	{
-		return new DeleteColsPlan();
-	}
-	
-	public static MultiDeleteIndexesPlan getMultiDeleteIndexes()
-	{
-		return new MultiDeleteIndexesPlan();
-	}
-	
-	public static MultiDeleteIndexColsPlan getMultiDeleteIndexCols()
-	{
-		return new MultiDeleteIndexColsPlan();
-	}
-	
-	public static DeleteTableStatsPlan getDeleteTableStats()
-	{
-		return new DeleteTableStatsPlan();
-	}
-	
-	public static DeleteColStatsPlan getDeleteColStats()
-	{
-		return new DeleteColStatsPlan();
-	}
-	
-	public static DeleteColDistPlan getDeleteColDist()
-	{
-		return new DeleteColDistPlan();
-	}
-	
-	public static DeletePartitioningPlan getDeletePartitioning()
-	{
-		return new DeletePartitioningPlan();
-	}
-	
-	public static MultiDeleteIndexStatsPlan getMultiDeleteIndexStats()
-	{
-		return new MultiDeleteIndexStatsPlan();
-	}
-	
-	public static InsertTablePlan getInsertTable()
-	{
-		return new InsertTablePlan();
-	}
-	
-	public static KeysByIDPlan getKeysByID()
-	{
-		return new KeysByIDPlan(checkPlanCache("SELECT COLNAME FROM SYS.INDEXCOLS A, SYS.COLUMNS B WHERE A.TABLEID = B.TABLEID A.COLID = B.COLID AND A.TABLEID = ? AND A.INDEXID = ?"));
-	}
-	
-	public static DistPlan getDist()
-	{
-		return new DistPlan(checkPlanCache("SELECT LOW, Q1, Q2, Q3, HIGH FROM SYS.TABLES A, SYS.COLUMNS B, SYS.COLDIST C WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID AND B.COLNAME = ? AND B.TABLEID = C.TABLEID AND B.COLID = C.COLID"));
-	}
-	
-	public static ColTypePlan getColType()
-	{
-		return new ColTypePlan(checkPlanCache("SELECT COLTYPE FROM SYS.TABLES A, SYS.COLUMNS B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID AND B.COLNAME = ?"));
-	}
-	
-	public static TableCardPlan getTableCard()
-	{
-		return new TableCardPlan(checkPlanCache("SELECT CARD FROM SYS.TABLES A, SYS.TABLESTATS B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID"));
-	}
-	
-	public static CountWorkerNodesPlan getCountWorkerNodes()
-	{
-		return new CountWorkerNodesPlan(checkPlanCache("SELECT COUNT(*) FROM SYS.NODES WHERE NODEID >= 0"));
-	}
-	
-	public static Cols2PosPlan getCols2PosForTable()
-	{
-		return new Cols2PosPlan(checkPlanCache("SELECT COLNAME, COLID FROM SYS.TABLES A, SYS.COLUMNS B WHERE A.SCHEMA = ? AND B.TABNAME = ? AND A.TABLEID = B.TABLEID"));
-	}
-	
-	public static IndexCardPlan getIndexCard()
-	{
-		return new IndexCardPlan(checkPlanCache("SELECT NUMDISTINCT FROM SYS.INDEXSTATS WHERE TABLEID = ? AND INDEXID = ?"));
-	}
-	
-	public static CheckIndexForColPlan getCheckIndexForCol()
-	{
-		return new CheckIndexForColPlan(checkPlanCache("SELECT TABLEID, INDEXID, COLID FROM SYS.INDEXCOLS WHERE TABLEID = ? AND INDEXID = ? AND COLID = ?"));
-	}
-	
-	public static IndexColCountPlan getIndexColCount()
-	{
-		return new IndexColCountPlan(checkPlanCache("SELECT COUNT(*) FROM SYS.INDEXCOLS WHERE TABLEID = ? AND INDEXID = ?"));
-	}
-	
-	public static IndexIDsForTablePlan getIndexIDsForTable()
-	{
-		return new IndexIDsForTablePlan(checkPlanCache("SELECT INDEXID FROM SYS.TABLES A, SYS.INDEXES B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID"));
-	}
-	
-	public static ColCardPlan getColCard()
-	{
-		return new ColCardPlan(checkPlanCache("SELECT CARD FROM SYS.TABLES A, SYS.COLUMNS B, SYS.COLSTATS C WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID AND B.COLNAME = ? AND B.TABLEID = C.TABLEID AND B.COLID = C.COLID"));
-	}
-	
-	public static IndexColsForTablePlan getIndexColsForTable()
-	{
-		return new IndexColsForTablePlan(checkPlanCache("SELECT COLNAME FROM SYS.TABLES A, SYS.INDEXCOLS B, SYS.COLUMNS C WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID AND B.TABLEID = C.TABLEID AND B.COLID = C.COLID"));
-	}
-	
-	public static KeysPlan getKeys()
-	{
-		return new KeysPlan(checkPlanCache("SELECT TABNAME, COLNAME FROM SYS.INDEXES A, SYS.TABLES B, SYS.INDEXCOLS C, SYS.COLUMNS D WHERE A.INDEXNAME = ? AND B.SCHEMA = ? AND A.TABLEID = B.TABLEID AND A.TABLEID = C.TABLEID AND A.INDEXID = C.INDEXID AND C.TABLEID = D.TABLEID AND C.COLID = D.COLID"));
-	}
-	
-	public static TypesPlan getTypes()
-	{
-		return new TypesPlan(checkPlanCache("SELECT COLTYPE FROM SYS.INDEXES A, SYS.TABLES B, SYS.INDEXCOLS C, SYS.COLUMNS D WHERE A.INDEXNAME = ? AND B.SCHEMA = ? AND A.TABLEID = B.TABLEID AND A.TABLEID = C.TABLEID AND A.INDEXID = C.INDEXID AND C.TABLEID = D.TABLEID AND C.COLID = D.COLID"));
-	}
-	
-	public static OrdersPlan getOrders()
-	{
-		return new OrdersPlan(checkPlanCache("SELECT ORDER FROM SYS.INDEXES A, SYS.TABLES B, SYS.INDEXCOLS C WHERE A.INDEXNAME = ? AND B.SCHEMA = ? AND A.TABLEID = B.TABLEID AND A.TABLEID = C.TABLEID AND A.INDEXID = C.INDEXID"));
-	}
-	
-	public static IndexPlan getIndexes()
-	{
-		return new IndexPlan(checkPlanCache("SELECT INDEXNAME FROM SYS.TABLES A, SYS.INDEXES B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID ORDER BY INDEXNAME"));
-	}
-	
-	public static UniquePlan getUnique()
-	{
-		return new UniquePlan(checkPlanCache("SELECT INDEXNAME,UNIQUE FROM SYS.TABLES A, SYS.INDEXES B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID ORDER BY INDEXNAME"));
-	}
-	
-	public static HostLookupPlan getHostLookup()
-	{
-		return new HostLookupPlan(checkPlanCache("SELECT HOSTNAME FROM SYS.NODES WHERE NODEID = ?"));
-	}
-	
-	public static PartitioningPlan getPartitioning()
-	{
-		return new PartitioningPlan(checkPlanCache("SELECT GROUPEXP, NODEEXP, DEVICEEXP FROM SYS.TABLES A, SYS.PARTITIONING B WHERE A.SCHEMA = ? AND A.TABNAME = ? AND A.TABLEID = B.TABLEID"));
-	}
-	
-	public static WorkerNodesPlan getWorkerNodes()
-	{
-		return new WorkerNodesPlan(checkPlanCache("SELECT NODEID FROM SYS.NODES WHERE NODEID >= 0"));
-	}
-	
-	public static class IndexColsForTablePlan
-	{
-		private Plan p;
-		private String schema;
-		private String name;
-		
-		public IndexColsForTablePlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public IndexColsForTablePlan setParms(String schema, String name) throws Exception
-		{
-			this.schema = schema;
-			this.name = name;
-			if (schema.equals("SYS"))
-			{
-				return this;
-			}
-			Operator op = (Operator)p.getTrees().get(0);
-			while (op.children().size() != 0)
-			{
-				op = op.children().get(0);
-			}
-		
-			Index index = ((IndexOperator)op).getIndex();
-			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
-			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + name + "'"));
-			return this;
-		}
-		
-		public ArrayList<Object> execute(Transaction tx) throws Exception
-		{
-			if (schema.equals("SYS"))
-			{
-				ArrayList<Object> retval = new ArrayList<Object>();
-				ArrayList<Object> row = new ArrayList<Object>();
-				if (name.equals("TABLES"))
-				{
-					row.add("SCHEMA");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("TABNAME");
-					retval.add(row);
-				}
-				else if (name.equals("INDEXES"))
-				{
-					row.add("TABLEID");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("INDEXNAME");
-					retval.add(row);
-				}
-				else if (name.equals("COLUMNS"))
-				{
-					row.add("TABLEID");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("COLNAME");
-					retval.add(row);
-				}
-				else if (name.equals("INDEXCOLS"))
-				{
-					row.add("TABLEID");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("INDEXID");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("COLID");
-					retval.add(row);
-				}
-				else if (name.equals("TABLESTATS"))
-				{
-					row.add("TABLEID");
-					retval.add(row);
-				}
-				else if (name.equals("COLSTATS"))
-				{
-					row.add("TABLEID");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("COLID");
-					retval.add(row);
-				}
-				else if (name.equals("INDEXSTATS"))
-				{
-					row.add("TABLEID");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("INDEXID");
-					retval.add(row);
-				}
-				else if (name.equals("NODES"))
-				{
-					row.add("NODEID");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("HOSTNAME");
-					retval.add(row);
-				}
-				else if (name.equals("PARTITIONING"))
-				{
-					row.add("TABLEID");
-					retval.add(row);
-				}
-				else if (name.equals("COLDIST"))
-				{
-					row.add("TABLEID");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("COLID");
-					retval.add(row);
-				}
-				else if (name.equals("NODESTATE"))
-				{
-					row.add("NODEID");
-					retval.add(row);
-				}
-				else if (name.equals("VIEWS"))
-				{
-					row.add("SCHEMA");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("NAME");
-					retval.add(row);
-				}
-				else if (name.equals("BACKUPS"))
-				{
-					row.add("FIRST");
-					retval.add(row);
-				}
-				else throw new Exception("Index not found");
-				
-				return retval;
-			}
-			
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1000000);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			ArrayList<Object> retval = new ArrayList<Object>();
-			while (!(obj instanceof DataEndMarker))
-			{
-				if (obj instanceof Exception)
-				{
-					cmd = new ArrayList<Object>(1);
-					cmd.add("CLOSE");
-					worker.in.put(cmd);
-					tx.setIsolationLevel(iso);
-					throw (Exception)obj;
-				}
-				
-				retval.add(obj);
-				
-				while (true)
-				{
-					try
-					{
-						obj = worker.out.take();
-						break;
-					}
-					catch(InterruptedException e)
-					{}
-				}
-			}
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return retval;
-		}
-	}
-	
-	public static class IndexIDsForTablePlan
-	{
-		private Plan p;
-		private String schema;
-		private String name;
-		
-		public IndexIDsForTablePlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public IndexIDsForTablePlan setParms(String schema, String name) throws Exception
-		{
-			this.schema = schema;
-			this.name = name;
-			if (schema.equals("SYS"))
-			{
-				return this;
-			}
-			Operator op = (Operator)p.getTrees().get(0);
-			while (op.children().size() != 0)
-			{
-				op = op.children().get(0);
-			}
-		
-			Index index = ((IndexOperator)op).getIndex();
-			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
-			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + name + "'"));
-			return this;
-		}
-		
-		public ArrayList<Object> execute(Transaction tx) throws Exception
-		{
-			if (schema.equals("SYS"))
-			{
-				ArrayList<Object> retval = new ArrayList<Object>();
-				ArrayList<Object> row = new ArrayList<Object>();
-				if (name.equals("TABLES"))
-				{
-					row.add(0);
-					retval.add(row);
-				}
-				else if (name.equals("INDEXES"))
-				{
-					row.add(0);
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add(1);
-					retval.add(row);
-				}
-				else if (name.equals("COLUMNS"))
-				{
-					row.add(0);
-					retval.add(row);
-				}
-				else if (name.equals("INDEXCOLS"))
-				{
-					row.add(0);
-					retval.add(row);
-				}
-				else if (name.equals("TABLESTATS"))
-				{
-					row.add(0);
-					retval.add(row);
-				}
-				else if (name.equals("COLSTATS"))
-				{
-					row.add(0);
-					retval.add(row);
-				}
-				else if (name.equals("INDEXSTATS"))
-				{
-					row.add(0);
-					retval.add(row);
-				}
-				else if (name.equals("NODES"))
-				{
-					row.add(0);
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add(1);
-					retval.add(row);
-				}
-				else if (name.equals("PARTITIONING"))
-				{
-					row.add(0);
-					retval.add(row);
-				}
-				else if (name.equals("COLDIST"))
-				{
-					row.add(0);
-					retval.add(row);
-				}
-				else if (name.equals("NODESTATE"))
-				{
-					row.add(0);
-					retval.add(row);
-				}
-				else if (name.equals("VIEWS"))
-				{
-					row.add(0);
-					retval.add(row);
-				}
-				else if (name.equals("BACKUPS"))
-				{
-					row.add(0);
-					retval.add(row);
-				}
-				else throw new Exception("Table not found");
-				
-				return retval;
-			}
-			
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1000000);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			ArrayList<Object> retval = new ArrayList<Object>();
-			while (!(obj instanceof DataEndMarker))
-			{
-				if (obj instanceof Exception)
-				{
-					cmd = new ArrayList<Object>(1);
-					cmd.add("CLOSE");
-					worker.in.put(cmd);
-					tx.setIsolationLevel(iso);
-					throw (Exception)obj;
-				}
-				
-				retval.add(obj);
-				
-				while (true)
-				{
-					try
-					{
-						obj = worker.out.take();
-						break;
-					}
-					catch(InterruptedException e)
-					{}
-				}
-			}
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return retval;
-		}
-	}
-	
-	public static class OrdersPlan
-	{
-		private Plan p;
-		private String schema;
-		private String name;
-		
-		public OrdersPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public OrdersPlan setParms(String schema, String name) throws Exception
-		{
-			this.schema = schema;
-			this.name = name;
-			if (schema.equals("SYS"))
-			{
-				return this;
-			}
-			Operator op = (Operator)p.getTrees().get(0);
-			while (op.children().size() != 0)
-			{
-				op = op.children().get(0);
-			}
-		
-			Index index = ((IndexOperator)op).getIndex();
-			index.setCondition(new Filter("INDEXES.INDEXNAME", "E", "'" + name + "'"));
-			
-			while (!(op instanceof HashJoinOperator))
-			{
-				if (op instanceof TableScanOperator)
-				{
-					op = ((TableScanOperator)op).firstParent();
-				}
-				else
-				{
-					op = op.parent();
-				}
-			}
-			
-			op = op.children().get(1).children().get(0);
-			index = ((IndexOperator)op).getIndex();
-			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
-			return this;
-		}
-		
-		public ArrayList<Object> execute(Transaction tx) throws Exception
-		{
-			if (schema.equals("SYS"))
-			{
-				ArrayList<Object> retval = new ArrayList<Object>();
-				ArrayList<Object> row = new ArrayList<Object>();
-				if (name.equals("PKTABLES"))
-				{
-					row.add("A");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("A");
-					retval.add(row);
-				}
-				else if (name.equals("PKINDEXES"))
-				{
-					row.add("A");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("A");
-					retval.add(row);
-				}
-				else if (name.equals("SKINDEXES"))
-				{
-					row.add("A");
-					retval.add(row);
-				}
-				else if (name.equals("PKCOLUMNS"))
-				{
-					row.add("A");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("A");
-					retval.add(row);
-				}
-				else if (name.equals("PKINDEXCOLS"))
-				{
-					row.add("A");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("A");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("A");
-					retval.add(row);
-				}
-				else if (name.equals("PKTABLESTATS"))
-				{
-					row.add("A");
-					retval.add(row);
-				}
-				else if (name.equals("PKCOLSTATS"))
-				{
-					row.add("A");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("A");
-					retval.add(row);
-				}
-				else if (name.equals("PKINDEXSTATS"))
-				{
-					row.add("A");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("A");
-					retval.add(row);
-				}
-				else if (name.equals("PKNODES"))
-				{
-					row.add("A");
-					retval.add(row);
-				}
-				else if (name.equals("SKNODES"))
-				{
-					row.add("A");
-					retval.add(row);
-				}
-				else if (name.equals("PKPARTITIONING"))
-				{
-					row.add("A");
-					retval.add(row);
-				}
-				else if (name.equals("PKCOLDIST"))
-				{
-					row.add("A");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("A");
-					retval.add(row);
-				}
-				else if (name.equals("PKNODESTATE"))
-				{
-					row.add("A");
-					retval.add(row);
-				}
-				else if (name.equals("PKVIEWS"))
-				{
-					row.add("A");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("A");
-					retval.add(row);
-				}
-				else if (name.equals("PKBACKUPS"))
-				{
-					row.add("A");
-					retval.add(row);
-				}
-				else throw new Exception("Index not found");
-				
-				return retval;
-			}
-			
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1000000);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			ArrayList<Object> retval = new ArrayList<Object>();
-			while (!(obj instanceof DataEndMarker))
-			{
-				if (obj instanceof Exception)
-				{
-					cmd = new ArrayList<Object>(1);
-					cmd.add("CLOSE");
-					worker.in.put(cmd);
-					tx.setIsolationLevel(iso);
-					throw (Exception)obj;
-				}
-				
-				retval.add(obj);
-				
-				while (true)
-				{
-					try
-					{
-						obj = worker.out.take();
-						break;
-					}
-					catch(InterruptedException e)
-					{}
-				}
-			}
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return retval;
-		}
-	}
-	
-	public static class TypesPlan
-	{
-		private Plan p;
-		private String schema;
-		private String name;
-		
-		public TypesPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public TypesPlan setParms(String schema, String name) throws Exception
-		{
-			this.schema = schema;
-			this.name = name;
-			if (schema.equals("SYS"))
-			{
-				return this;
-			}
-			Operator op = (Operator)p.getTrees().get(0);
-			while (op.children().size() != 0)
-			{
-				op = op.children().get(0);
-			}
-		
-			Index index = ((IndexOperator)op).getIndex();
-			index.setCondition(new Filter("INDEXES.INDEXNAME", "E", "'" + name + "'"));
-			
-			while (!(op instanceof HashJoinOperator))
-			{
-				if (op instanceof TableScanOperator)
-				{
-					op = ((TableScanOperator)op).firstParent();
-				}
-				else
-				{
-					op = op.parent();
-				}
-			}
-			
-			op = op.children().get(1).children().get(0);
-			index = ((IndexOperator)op).getIndex();
-			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
-			return this;
-		}
-		
-		public ArrayList<Object> execute(Transaction tx) throws Exception
-		{
-			if (schema.equals("SYS"))
-			{
-				ArrayList<Object> retval = new ArrayList<Object>();
-				ArrayList<Object> row = new ArrayList<Object>();
-				if (name.equals("PKTABLES"))
-				{
-					row.add("VARCHAR");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("VARCHAR");
-					retval.add(row);
-				}
-				else if (name.equals("PKINDEXES"))
-				{
-					row.add("INT");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("VARCHAR");
-					retval.add(row);
-				}
-				else if (name.equals("SKINDEXES"))
-				{
-					row.add("VARCHAR");
-					retval.add(row);
-				}
-				else if (name.equals("PKCOLUMNS"))
-				{
-					row.add("INT");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("VARCHAR");
-					retval.add(row);
-				}
-				else if (name.equals("PKINDEXCOLS"))
-				{
-					row.add("INT");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("INT");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("INT");
-					retval.add(row);
-				}
-				else if (name.equals("PKTABLESTATS"))
-				{
-					row.add("INT");
-					retval.add(row);
-				}
-				else if (name.equals("PKCOLSTATS"))
-				{
-					row.add("INT");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("INT");
-					retval.add(row);
-				}
-				else if (name.equals("PKINDEXSTATS"))
-				{
-					row.add("INT");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("INT");
-					retval.add(row);
-				}
-				else if (name.equals("PKNODES"))
-				{
-					row.add("VARCHAR");
-					retval.add(row);
-				}
-				else if (name.equals("SKNODES"))
-				{
-					row.add("INT");
-					retval.add(row);
-				}
-				else if (name.equals("PKPARTITIONING"))
-				{
-					row.add("INT");
-					retval.add(row);
-				}
-				else if (name.equals("PKCOLDIST"))
-				{
-					row.add("INT");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("INT");
-					retval.add(row);
-				}
-				else if (name.equals("PKNODESTATE"))
-				{
-					row.add("INT");
-					retval.add(row);
-				}
-				else if (name.equals("PKVIEWS"))
-				{
-					row.add("VARCHAR");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("VARCHAR");
-					retval.add(row);
-				}
-				else if (name.equals("PKBACKUPS"))
-				{
-					row.add("INT");
-					retval.add(row);
-				}
-				else throw new Exception("Index not found");
-				
-				return retval;
-			}
-			
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1000000);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			ArrayList<Object> retval = new ArrayList<Object>();
-			while (!(obj instanceof DataEndMarker))
-			{
-				if (obj instanceof Exception)
-				{
-					cmd = new ArrayList<Object>(1);
-					cmd.add("CLOSE");
-					worker.in.put(cmd);
-					tx.setIsolationLevel(iso);
-					throw (Exception)obj;
-				}
-				
-				retval.add(obj);
-				
-				while (true)
-				{
-					try
-					{
-						obj = worker.out.take();
-						break;
-					}
-					catch(InterruptedException e)
-					{}
-				}
-			}
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return retval;
-		}
-	}
-	
-	public static class KeysPlan
-	{
-		private Plan p;
-		private String schema;
-		private String name;
-		
-		public KeysPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public KeysPlan setParms(String schema, String name) throws Exception
-		{
-			this.schema = schema;
-			this.name = name;
-			if (schema.equals("SYS"))
-			{
-				return this;
-			}
-			Operator op = (Operator)p.getTrees().get(0);
-			while (op.children().size() != 0)
-			{
-				op = op.children().get(0);
-			}
-		
-			Index index = ((IndexOperator)op).getIndex();
-			index.setCondition(new Filter("INDEXES.INDEXNAME", "E", "'" + name + "'"));
-			
-			while (!(op instanceof HashJoinOperator))
-			{
-				if (op instanceof TableScanOperator)
-				{
-					op = ((TableScanOperator)op).firstParent();
-				}
-				else
-				{
-					op = op.parent();
-				}
-			}
-			
-			op = op.children().get(1).children().get(0);
-			index = ((IndexOperator)op).getIndex();
-			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
-			return this;
-		}
-		
-		public ArrayList<Object> execute(Transaction tx) throws Exception
-		{
-			if (schema.equals("SYS"))
-			{
-				ArrayList<Object> retval = new ArrayList<Object>();
-				ArrayList<Object> row = new ArrayList<Object>();
-				if (name.equals("PKTABLES"))
-				{
-					row.add("TABLES");
-					row.add("SCHEMA");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("TABLES");
-					row.add("TABNAME");
-					retval.add(row);
-				}
-				else if (name.equals("PKINDEXES"))
-				{
-					row.add("INDEXES");
-					row.add("TABLEID");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("INDEXES");
-					row.add("INDEXNAME");
-					retval.add(row);
-				}
-				else if (name.equals("SKINDEXES"))
-				{
-					row.add("INDEXES");
-					row.add("INDEXNAME");
-					retval.add(row);
-				}
-				else if (name.equals("PKCOLUMNS"))
-				{
-					row.add("COLUMNS");
-					row.add("TABLEID");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("COLUMNS");
-					row.add("COLNAME");
-					retval.add(row);
-				}
-				else if (name.equals("PKINDEXCOLS"))
-				{
-					row.add("INDEXCOLS");
-					row.add("TABLEID");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("INDEXCOLS");
-					row.add("INDEXID");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("INDEXCOLS");
-					row.add("COLID");
-					retval.add(row);
-				}
-				else if (name.equals("PKTABLESTATS"))
-				{
-					row.add("TABLESTATS");
-					row.add("TABLEID");
-					retval.add(row);
-				}
-				else if (name.equals("PKCOLSTATS"))
-				{
-					row.add("COLSTATS");
-					row.add("TABLEID");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("COLSTATS");
-					row.add("COLID");
-					retval.add(row);
-				}
-				else if (name.equals("PKINDEXSTATS"))
-				{
-					row.add("INDEXSTATS");
-					row.add("TABLEID");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("INDEXSTATS");
-					row.add("INDEXID");
-					retval.add(row);
-				}
-				else if (name.equals("PKNODES"))
-				{
-					row.add("NODES");
-					row.add("HOSTNAME");
-					retval.add(row);
-				}
-				else if (name.equals("SKNODES"))
-				{
-					row.add("NODES");
-					row.add("NODEID");
-					retval.add(row);
-				}
-				else if (name.equals("PKPARTITIONING"))
-				{
-					row.add("PARTITIONING");
-					row.add("TABLEID");
-					retval.add(row);
-				}
-				else if (name.equals("PKCOLDIST"))
-				{
-					row.add("COLDIST");
-					row.add("TABLEID");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("COLDIST");
-					row.add("COLID");
-					retval.add(row);
-				}
-				else if (name.equals("PKNODESTATE"))
-				{
-					row.add("NODESTATE");
-					row.add("NODEID");
-					retval.add(row);
-				}
-				else if (name.equals("PKVIEWS"))
-				{
-					row.add("VIEWS");
-					row.add("SCHEMA");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("VIEWS");
-					row.add("NAME");
-					retval.add(row);
-				}
-				else if (name.equals("PKBACKUPS"))
-				{
-					row.add("BACKUPS");
-					row.add("FIRST");
-					retval.add(row);
-				}
-				else throw new Exception("Index not found");
-				
-				return retval;
-			}
-			
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1000000);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			ArrayList<Object> retval = new ArrayList<Object>();
-			while (!(obj instanceof DataEndMarker))
-			{
-				if (obj instanceof Exception)
-				{
-					cmd = new ArrayList<Object>(1);
-					cmd.add("CLOSE");
-					worker.in.put(cmd);
-					tx.setIsolationLevel(iso);
-					throw (Exception)obj;
-				}
-				
-				retval.add(obj);
-				
-				while (true)
-				{
-					try
-					{
-						obj = worker.out.take();
-						break;
-					}
-					catch(InterruptedException e)
-					{}
-				}
-			}
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return retval;
-		}
-	}
-	
-	public static class KeysByIDPlan
-	{
-		private Plan p;
-		private int tableID;
-		private int indexID;
-		
-		public KeysByIDPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public KeysByIDPlan setParms(int tableID, int indexID) throws Exception
-		{
-			this.tableID = tableID;
-			this.indexID = indexID;
-			if (tableID >= 0 && tableID <= 12)
-			{
-				return this;
-			}
-			Operator op = (Operator)p.getTrees().get(0);
-			while (op.children().size() != 0)
-			{
-				op = op.children().get(0);
-			}
-		
-			Index index = ((IndexOperator)op).getIndex();
-			index.setCondition(new Filter("INDEXCOLS.TABLEID", "E", Integer.toString(tableID)));
-			index.addSecondaryFilter(new Filter("INDEXCOLS.INDEXID", "E", Integer.toString(indexID)));
-			return this;
-		}
-		
-		public ArrayList<Object> execute(Transaction tx) throws Exception
-		{
-			if (tableID >= 0 && tableID <= 12)
-			{
-				ArrayList<Object> retval = new ArrayList<Object>();
-				ArrayList<Object> row = new ArrayList<Object>();
-				if (tableID == 0 && indexID == 0)
-				{
-					row.add("SCHEMA");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("TABNAME");
-					retval.add(row);
-				}
-				else if (tableID == 2 && indexID == 0)
-				{
-					row.add("TABLEID");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("INDEXNAME");
-					retval.add(row);
-				}
-				else if (tableID == 2 && indexID == 1)
-				{
-					row.add("INDEXNAME");
-					retval.add(row);
-				}
-				else if (tableID == 1 && indexID == 0)
-				{
-					row.add("TABLEID");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("COLNAME");
-					retval.add(row);
-				}
-				else if (tableID == 3 && indexID == 0)
-				{
-					row.add("TABLEID");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("INDEXID");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("COLID");
-					retval.add(row);
-				}
-				else if (tableID == 5 && indexID == 0)
-				{
-					row.add("TABLEID");
-					retval.add(row);
-				}
-				else if (tableID == 7 && indexID == 0)
-				{
-					row.add("TABLEID");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("COLID");
-					retval.add(row);
-				}
-				else if (tableID == 12 && indexID == 0)
-				{
-					row.add("TABLEID");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("INDEXID");
-					retval.add(row);
-				}
-				else if (tableID == 6 && indexID == 0)
-				{
-					row.add("HOSTNAME");
-					retval.add(row);
-				}
-				else if (tableID == 6 && indexID == 1)
-				{
-					row.add("NODEID");
-					retval.add(row);
-				}
-				else if (tableID == 11 && indexID == 0)
-				{
-					row.add("TABLEID");
-					retval.add(row);
-				}
-				else if (tableID == 8 && indexID == 0)
-				{
-					row.add("TABLEID");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("COLID");
-					retval.add(row);
-				}
-				else if (tableID == 10 && indexID == 0)
-				{
-					row.add("NODEID");
-					retval.add(row);
-				}
-				else if (tableID == 4 && indexID == 0)
-				{
-					row.add("SCHEMA");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("NAME");
-					retval.add(row);
-				}
-				else if (tableID == 9 && indexID == 0)
-				{
-					row.add("FIRST");
-					retval.add(row);
-				}
-				else throw new Exception("Index not found");
-				
-				return retval;
-			}
-			
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1000000);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			ArrayList<Object> retval = new ArrayList<Object>();
-			while (!(obj instanceof DataEndMarker))
-			{
-				if (obj instanceof Exception)
-				{
-					cmd = new ArrayList<Object>(1);
-					cmd.add("CLOSE");
-					worker.in.put(cmd);
-					tx.setIsolationLevel(iso);
-					throw (Exception)obj;
-				}
-				
-				retval.add(obj);
-				
-				while (true)
-				{
-					try
-					{
-						obj = worker.out.take();
-						break;
-					}
-					catch(InterruptedException e)
-					{}
-				}
-			}
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return retval;
-		}
-	}
-	
-	public static class IndexPlan
-	{
-		private Plan p;
-		private String schema;
-		private String table;
-		
-		public IndexPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public IndexPlan setParms(String schema, String table) throws Exception
-		{
-			this.schema = schema;
-			this.table = table;
-			if (schema.equals("SYS"))
-			{
-				return this;
-			}
-			RootOperator root = (RootOperator)p.getTrees().get(0);
-			IndexOperator iOp = (IndexOperator)root.children().get(0).children().get(0).children().get(0).children().get(0).children().get(0);
-			Index index = iOp.getIndex();
-			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
-			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
-			return this;
-		}
-		
-		public ArrayList<Object> execute(Transaction tx) throws Exception
-		{
-			if (schema.equals("SYS"))
-			{
-				ArrayList<Object> retval = new ArrayList<Object>();
-				ArrayList<Object> row = new ArrayList<Object>();
-				if (table.equals("TABLES"))
-				{
-					row.add("PKTABLES");
-					retval.add(row);
-				}
-				else if (table.equals("INDEXES"))
-				{
-					row.add("PKINDEXES");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("SKINDEXES");
-					retval.add(row);
-				}
-				else if (table.equals("COLUMNS"))
-				{
-					row.add("PKCOLUMNS");
-					retval.add(row);
-				}
-				else if (table.equals("INDEXCOLS"))
-				{
-					row.add("PKINDEXCOLS");
-					retval.add(row);
-				}
-				else if (table.equals("TABLESTATS"))
-				{
-					row.add("PKTABLESTATS");
-					retval.add(row);
-				}
-				else if (table.equals("COLSTATS"))
-				{
-					row.add("PKCOLSTATS");
-					retval.add(row);
-				}
-				else if (table.equals("INDEXSTATS"))
-				{
-					row.add("PKINDEXSTATS");
-					retval.add(row);
-				}
-				else if (table.equals("NODES"))
-				{
-					row.add("PKNODES");
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("SKNODES");
-					retval.add(row);
-				}
-				else if (table.equals("PARTITIONING"))
-				{
-					row.add("PKPARTITIONING");
-					retval.add(row);
-				}
-				else if (table.equals("COLDIST"))
-				{
-					row.add("PKCOLDIST");
-					retval.add(row);
-				}
-				else if (table.equals("NODESTATE"))
-				{
-					row.add("PKNODESTATE");
-					retval.add(row);
-				}
-				else if (table.equals("VIEWS"))
-				{
-					row.add("PKVIEWS");
-					retval.add(row);
-				}
-				else if (table.equals("BACKUPS"))
-				{
-					row.add("PKBACKUPS");
-					retval.add(row);
-				}
-				else throw new Exception("Table not found");
-				
-				return retval;
-			}
-			
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1000000);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			ArrayList<Object> retval = new ArrayList<Object>();
-			while (!(obj instanceof DataEndMarker))
-			{
-				if (obj instanceof Exception)
-				{
-					cmd = new ArrayList<Object>(1);
-					cmd.add("CLOSE");
-					worker.in.put(cmd);
-					tx.setIsolationLevel(iso);
-					throw (Exception)obj;
-				}
-				
-				retval.add(obj);
-				
-				while (true)
-				{
-					try
-					{
-						obj = worker.out.take();
-						break;
-					}
-					catch(InterruptedException e)
-					{}
-				}
-			}
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return retval;
-		}
-	}
-	
-	public static class UniquePlan
-	{
-		private Plan p;
-		private String schema;
-		private String table;
-		
-		public UniquePlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public UniquePlan setParms(String schema, String table) throws Exception
-		{
-			this.schema = schema;
-			this.table = table;
-			if (schema.equals("SYS"))
-			{
-				return this;
-			}
-			RootOperator root = (RootOperator)p.getTrees().get(0);
-			IndexOperator iOp = (IndexOperator)root.children().get(0).children().get(0).children().get(0).children().get(0);
-			Index index = iOp.getIndex();
-			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
-			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
-			return this;
-		}
-		
-		public ArrayList<Object> execute(Transaction tx) throws Exception
-		{
-			if (schema.equals("SYS"))
-			{
-				ArrayList<Object> retval = new ArrayList<Object>();
-				ArrayList<Object> row = new ArrayList<Object>();
-				if (table.equals("TABLES"))
-				{
-					row.add("PKTABLES");
-					row.add(true);
-					retval.add(row);
-				}
-				else if (table.equals("INDEXES"))
-				{
-					row.add("PKINDEXES");
-					row.add(true);
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("SKINDEXES");
-					row.add(false);
-					retval.add(row);
-				}
-				else if (table.equals("COLUMNS"))
-				{
-					row.add("PKCOLUMNS");
-					row.add(true);
-					retval.add(row);
-				}
-				else if (table.equals("INDEXCOLS"))
-				{
-					row.add("PKINDEXCOLS");
-					row.add(true);
-					retval.add(row);
-				}
-				else if (table.equals("TABLESTATS"))
-				{
-					row.add("PKTABLESTATS");
-					row.add(true);
-					retval.add(row);
-				}
-				else if (table.equals("COLSTATS"))
-				{
-					row.add("PKCOLSTATS");
-					row.add(true);
-					retval.add(row);
-				}
-				else if (table.equals("INDEXSTATS"))
-				{
-					row.add("PKINDEXSTATS");
-					row.add(true);
-					retval.add(row);
-				}
-				else if (table.equals("NODES"))
-				{
-					row.add("PKNODES");
-					row.add(true);
-					retval.add(row);
-					row = new ArrayList<Object>();
-					row.add("SKNODES");
-					row.add(true);
-					retval.add(row);
-				}
-				else if (table.equals("PARTITIONING"))
-				{
-					row.add("PKPARTITIONING");
-					row.add(true);
-					retval.add(row);
-				}
-				else if (table.equals("COLDIST"))
-				{
-					row.add("PKCOLDIST");
-					row.add(true);
-					retval.add(row);
-				}
-				else if (table.equals("NODESTATE"))
-				{
-					row.add("PKNODESTATE");
-					row.add(true);
-					retval.add(row);
-				}
-				else if (table.equals("VIEWS"))
-				{
-					row.add("PKVIEWS");
-					row.add(true);
-					retval.add(row);
-				}
-				else if (table.equals("BACKUPS"))
-				{
-					row.add("PKBACKUPS");
-					row.add(true);
-					retval.add(row);
-				}
-				else throw new Exception("Table not found");
-				
-				return retval;
-			}
-			
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1000000);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			ArrayList<Object> retval = new ArrayList<Object>();
-			while (!(obj instanceof DataEndMarker))
-			{
-				if (obj instanceof Exception)
-				{
-					cmd = new ArrayList<Object>(1);
-					cmd.add("CLOSE");
-					worker.in.put(cmd);
-					tx.setIsolationLevel(iso);
-					throw (Exception)obj;
-				}
-				
-				retval.add(obj);
-				
-				while (true)
-				{
-					try
-					{
-						obj = worker.out.take();
-						break;
-					}
-					catch(InterruptedException e)
-					{}
-				}
-			}
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return retval;
-		}
-	}
-	
-	public static class WorkerNodesPlan
-	{
-		private Plan p;
-		
-		public WorkerNodesPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public WorkerNodesPlan setParms()
-		{
-			return this;
-		}
-		
-		public ArrayList<Object> execute(Transaction tx) throws Exception
-		{
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1000000000);
-			worker.in.put(cmd);
-			
-			ArrayList<Object> retval = new ArrayList<Object>();
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			while (!(obj instanceof DataEndMarker))
-			{
-				if (obj instanceof Exception)
-				{
-					cmd = new ArrayList<Object>(1);
-					cmd.add("CLOSE");
-					worker.in.put(cmd);
-					tx.setIsolationLevel(iso);
-					throw (Exception)obj;
-				}
-				
-				retval.add(obj);
-				
-				while (true)
-				{
-					try
-					{
-						obj = worker.out.take();
-						break;
-					}
-					catch(InterruptedException e)
-					{}
-				}
-			}
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return retval;
-		}
-	}
-	
-	public static class CoordNodesPlan
-	{
-		private Plan p;
-		
-		public CoordNodesPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public CoordNodesPlan setParms()
-		{
-			return this;
-		}
-		
-		public ArrayList<Object> execute(Transaction tx) throws Exception
-		{
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1000000);
-			worker.in.put(cmd);
-			
-			ArrayList<Object> retval = new ArrayList<Object>();
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			while (!(obj instanceof DataEndMarker))
-			{
-				if (obj instanceof Exception)
-				{
-					cmd = new ArrayList<Object>(1);
-					cmd.add("CLOSE");
-					worker.in.put(cmd);
-					tx.setIsolationLevel(iso);
-					throw (Exception)obj;
-				}
-				
-				retval.add(obj);
-				
-				while (true)
-				{
-					try
-					{
-						obj = worker.out.take();
-						break;
-					}
-					catch(InterruptedException e)
-					{}
-				}
-			}
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return retval;
-		}
-	}
-	
-	public static class PartitioningPlan
-	{
-		private Plan p;
-		private String schema;
-		private String table;
-		
-		public PartitioningPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public PartitioningPlan setParms(String schema, String table) throws Exception
-		{
-			this.schema = schema;
-			this.table = table;
-			if (schema.equals("SYS"))
-			{
-				return this;
-			}
-			RootOperator root = (RootOperator)p.getTrees().get(0);
-			IndexOperator iOp = (IndexOperator)root.children().get(0).children().get(0).children().get(0).children().get(0);
-			Index index = iOp.getIndex();
-			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
-			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
-			return this;
-		}
-		
-		public ArrayList<Object> execute(Transaction tx) throws Exception
-		{
-			if (schema.equals("SYS"))
-			{
-				ArrayList<Object> retval = new ArrayList<Object>();
-				retval.add("NONE");
-				retval.add("{-1}");
-				retval.add("{0}");
-				return retval;
-			}
-			
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			if (obj instanceof DataEndMarker)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				
-				throw new Exception("Table not found: " + schema + "." + table);
-			}
-			
-			if (obj instanceof Exception)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				throw (Exception)obj;
-			}
-			
-			ArrayList<Object> retval = (ArrayList<Object>)obj;
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return retval;
-		}
-	}
-	
-	public static class HostLookupPlan
-	{
-		private Plan p;
-		
-		public HostLookupPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public HostLookupPlan setParms(int node) throws Exception
-		{
-			if (node == -1)
-			{
-				if (HRDBMSWorker.type == HRDBMSWorker.TYPE_WORKER)
-				{
-					throw new Exception("A worker node is trying to look up node -1");
-				}
-				
-				node = MetaData.myCoordNum();
-			}
-			RootOperator root = (RootOperator)p.getTrees().get(0);
-			IndexOperator iOp = (IndexOperator)root.children().get(0).children().get(0);
-			Index index = iOp.getIndex();
-			index.setCondition(new Filter("NODES.NODEID", "E", Integer.toString(node)));
-			return this;
-		}
-		
-		public String execute(Transaction tx) throws Exception
-		{
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			if (obj instanceof DataEndMarker)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				
-				throw new Exception("Node not found");
-			}
-			
-			if (obj instanceof Exception)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				
-				throw (Exception)obj;
-			}
-			
-			String retval = (String)((ArrayList<Object>)obj).get(0);
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return retval;
-		}
-	}
-	
-	public static class ColCardPlan
-	{
-		private Plan p;
-		
-		public ColCardPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public ColCardPlan setParms(String schema, String table, String col) throws Exception
-		{
-			if (col.contains("."))
-			{
-				col = col.substring(col.indexOf('.') + 1);
-			}
-			
-			Operator op = (Operator)p.getTrees().get(0);
-			while (!(op instanceof IndexOperator))
-			{
-				op = op.children().get(0);
-			}
-			IndexOperator iOp = (IndexOperator)op;
-			Index index = iOp.getIndex();
-			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
-			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
-			while (!(op instanceof SelectOperator))
-			{
-				if (op instanceof TableScanOperator)
-				{
-					op = ((TableScanOperator)op).firstParent();
-				}
-				else
-				{
-					op = op.parent();
-				}
-			}
-			SelectOperator select = (SelectOperator)op;
-			select.getFilter().remove(0);
-			select.getFilter().add(new Filter("B.COLNAME", "E", "'" + col + "'"));
-			return this;
-		}
-		
-		public long execute(Transaction tx) throws Exception
-		{
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_UR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			if (obj instanceof DataEndMarker)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				
-				throw new Exception("No column statistics");
-			}
-			
-			if (obj instanceof Exception)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				
-				throw (Exception)obj;
-			}
-			
-			Long retval = (Long)((ArrayList<Object>)obj).get(0);
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return retval;
-		}
-	}
-	
-	public static class IndexColCountPlan
-	{
-		private Plan p;
-		private int tableID;
-		private int indexID;
-		
-		public IndexColCountPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public IndexColCountPlan setParms(int tableID, int indexID) throws Exception
-		{
-			this.tableID = tableID;
-			this.indexID = indexID;
-			if (tableID >= 0 && tableID <= 12)
-			{
-				return this;
-			}
-			
-			Operator op = (Operator)p.getTrees().get(0);
-			while (!(op instanceof IndexOperator))
-			{
-				op = op.children().get(0);
-			}
-			IndexOperator iOp = (IndexOperator)op;
-			Index index = iOp.getIndex();
-			index.setCondition(new Filter("INDEXCOLS.TABLEID", "E", Integer.toString(tableID)));
-			index.addSecondaryFilter(new Filter("INDEXCOLS.INDEXID", "E", Integer.toString(indexID)));
-			return this;
-		}
-		
-		public int execute(Transaction tx) throws Exception
-		{
-			if (tableID >= 0 && tableID <= 12)
-			{
-				if (indexID == 0)
-				{
-					if (tableID == 0)
-					{
-						return 2;
-					}
-					else if (tableID == 1)
-					{
-						return 2;
-					}
-					else if (tableID == 2)
-					{
-						return 2;
-					}
-					else if (tableID == 3)
-					{
-						return 3;
-					}
-					else if (tableID == 4)
-					{
-						return 2;
-					}
-					else if (tableID == 5)
-					{
-						return 1;
-					}
-					else if (tableID == 6)
-					{
-						return 1;
-					}
-					else if (tableID == 7)
-					{
-						return 2;
-					}
-					else if (tableID == 8)
-					{
-						return 2;
-					}
-					else if (tableID == 9)
-					{
-						return 1;
-					}
-					else if (tableID == 10)
-					{
-						return 1;
-					}
-					else if (tableID == 11)
-					{
-						return 1;
-					}
-					else if (tableID == 12)
-					{
-						return 2;
-					}
-				}
-				else if (indexID == 1)
-				{
-					if (tableID == 2)
-					{
-						return 1;
-					}
-					else if (tableID == 6)
-					{
-						return 1;
-					}
-				}
-				
-				throw new Exception("Catalog index not found");
-			}
-			
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			if (obj instanceof DataEndMarker)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				
-				throw new Exception("Index not found");
-			}
-			
-			if (obj instanceof Exception)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				
-				throw (Exception)obj;
-			}
-			
-			Integer retval = ((Long)((ArrayList<Object>)obj).get(0)).intValue();
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return retval;
-		}
-	}
-	
+
 	public static class CheckIndexForColPlan
 	{
-		private Plan p;
+		private final Plan p;
 		private int tableID;
 		private int indexID;
 		private int colID;
-		
+
 		public CheckIndexForColPlan(Plan p)
 		{
 			this.p = p;
 		}
-		
-		public CheckIndexForColPlan setParms(int tableID, int indexID, int colID) throws Exception
-		{
-			this.tableID = tableID;
-			this.indexID = indexID;
-			this.colID = colID;
-			if (tableID >= 0 && tableID <= 12)
-			{
-				return this;
-			}
-			
-			Operator op = (Operator)p.getTrees().get(0);
-			while (!(op instanceof IndexOperator))
-			{
-				op = op.children().get(0);
-			}
-			IndexOperator iOp = (IndexOperator)op;
-			Index index = iOp.getIndex();
-			index.setCondition(new Filter("INDEXCOLS.TABLEID", "E", Integer.toString(tableID)));
-			index.addSecondaryFilter(new Filter("INDEXCOLS.INDEXID", "E", Integer.toString(indexID)));
-			index.addSecondaryFilter(new Filter("INDEXCOLS.COLID", "E", Integer.toString(colID)));
-			return this;
-		}
-		
+
 		public Object execute(Transaction tx) throws Exception
 		{
 			if (tableID >= 0 && tableID <= 12)
@@ -4180,10 +2032,10 @@ public class PlanCacheManager
 						}
 					}
 				}
-				
+
 				return new DataEndMarker();
 			}
-			
+
 			int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
 			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
@@ -4192,7 +2044,7 @@ public class PlanCacheManager
 			cmd.add("NEXT");
 			cmd.add(1);
 			worker.in.put(cmd);
-			
+
 			Object obj = null;
 			while (true)
 			{
@@ -4201,53 +2053,63 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch(InterruptedException e)
-				{}
+				catch (InterruptedException e)
+				{
+				}
 			}
-			
+
 			if (obj instanceof Exception)
 			{
 				cmd = new ArrayList<Object>(1);
 				cmd.add("CLOSE");
 				worker.in.put(cmd);
 				tx.setIsolationLevel(iso);
-				
+
 				throw (Exception)obj;
 			}
-			
+
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
 			worker.in.put(cmd);
 			tx.setIsolationLevel(iso);
-			return obj; 
+			return obj;
 		}
-	}
-	
-	public static class IndexCardPlan
-	{
-		private Plan p;
-		
-		public IndexCardPlan(Plan p)
+
+		public CheckIndexForColPlan setParms(int tableID, int indexID, int colID) throws Exception
 		{
-			this.p = p;
-		}
-		
-		public IndexCardPlan setParms(int tableID, int indexID) throws Exception
-		{
-			Operator op = (Operator)p.getTrees().get(0);
+			this.tableID = tableID;
+			this.indexID = indexID;
+			this.colID = colID;
+			if (tableID >= 0 && tableID <= 12)
+			{
+				return this;
+			}
+
+			Operator op = p.getTrees().get(0);
 			while (!(op instanceof IndexOperator))
 			{
 				op = op.children().get(0);
 			}
 			IndexOperator iOp = (IndexOperator)op;
 			Index index = iOp.getIndex();
-			index.setCondition(new Filter("INDEXSTATS.TABLEID", "E", Integer.toString(tableID)));
-			index.addSecondaryFilter(new Filter("INDEXSTATS.INDEXID", "E", Integer.toString(indexID)));
+			index.setCondition(new Filter("INDEXCOLS.TABLEID", "E", Integer.toString(tableID)));
+			index.addSecondaryFilter(new Filter("INDEXCOLS.INDEXID", "E", Integer.toString(indexID)));
+			index.addSecondaryFilter(new Filter("INDEXCOLS.COLID", "E", Integer.toString(colID)));
 			return this;
 		}
-		
-		public Object execute(Transaction tx) throws Exception
-		{	
+	}
+
+	public static class ColCardPlan
+	{
+		private final Plan p;
+
+		public ColCardPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public long execute(Transaction tx) throws Exception
+		{
 			int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_UR);
 			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
@@ -4256,7 +2118,7 @@ public class PlanCacheManager
 			cmd.add("NEXT");
 			cmd.add(1);
 			worker.in.put(cmd);
-			
+
 			Object obj = null;
 			while (true)
 			{
@@ -4265,49 +2127,48 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch(InterruptedException e)
-				{}
+				catch (InterruptedException e)
+				{
+				}
 			}
-			
+
+			if (obj instanceof DataEndMarker)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+
+				throw new Exception("No column statistics");
+			}
+
 			if (obj instanceof Exception)
 			{
 				cmd = new ArrayList<Object>(1);
 				cmd.add("CLOSE");
 				worker.in.put(cmd);
 				tx.setIsolationLevel(iso);
-				
+
 				throw (Exception)obj;
 			}
-			
+
+			Long retval = (Long)((ArrayList<Object>)obj).get(0);
+
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
 			worker.in.put(cmd);
 			tx.setIsolationLevel(iso);
-			return obj; 
+			return retval;
 		}
-	}
-	
-	public static class Cols2PosPlan
-	{
-		private Plan p;
-		private String schema;
-		private String table;
-		
-		public Cols2PosPlan(Plan p)
+
+		public ColCardPlan setParms(String schema, String table, String col) throws Exception
 		{
-			this.p = p;
-		}
-		
-		public Cols2PosPlan setParms(String schema, String table) throws Exception
-		{
-			this.table = table;
-			this.schema = schema;
-			if (schema.equals("SYS"))
+			if (col.contains("."))
 			{
-				return this;
+				col = col.substring(col.indexOf('.') + 1);
 			}
-			
-			Operator op = (Operator)p.getTrees().get(0);
+
+			Operator op = p.getTrees().get(0);
 			while (!(op instanceof IndexOperator))
 			{
 				op = op.children().get(0);
@@ -4316,9 +2177,35 @@ public class PlanCacheManager
 			Index index = iOp.getIndex();
 			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
 			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
+			while (!(op instanceof SelectOperator))
+			{
+				if (op instanceof TableScanOperator)
+				{
+					op = ((TableScanOperator)op).firstParent();
+				}
+				else
+				{
+					op = op.parent();
+				}
+			}
+			SelectOperator select = (SelectOperator)op;
+			select.getFilter().remove(0);
+			select.getFilter().add(new Filter("B.COLNAME", "E", "'" + col + "'"));
 			return this;
 		}
-		
+	}
+
+	public static class Cols2PosPlan
+	{
+		private final Plan p;
+		private String schema;
+		private String table;
+
+		public Cols2PosPlan(Plan p)
+		{
+			this.p = p;
+		}
+
 		public ArrayList<Object> execute(Transaction tx) throws Exception
 		{
 			ArrayList<Object> retval = new ArrayList<Object>();
@@ -4575,14 +2462,14 @@ public class PlanCacheManager
 					row.add(2);
 					retval.add(row);
 				}
-				else 
+				else
 				{
 					retval.add(new DataEndMarker());
 				}
-				
+
 				return retval;
 			}
-			
+
 			int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
 			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
@@ -4591,7 +2478,7 @@ public class PlanCacheManager
 			cmd.add("NEXT");
 			cmd.add(1000000);
 			worker.in.put(cmd);
-			
+
 			Object obj = null;
 			while (true)
 			{
@@ -4600,10 +2487,11 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch(InterruptedException e)
-				{}
+				catch (InterruptedException e)
+				{
+				}
 			}
-			
+
 			while (!(obj instanceof DataEndMarker))
 			{
 				if (obj instanceof Exception)
@@ -4612,12 +2500,12 @@ public class PlanCacheManager
 					cmd.add("CLOSE");
 					worker.in.put(cmd);
 					tx.setIsolationLevel(iso);
-				
+
 					throw (Exception)obj;
 				}
-				
+
 				retval.add(obj);
-				
+
 				while (true)
 				{
 					try
@@ -4625,11 +2513,12 @@ public class PlanCacheManager
 						obj = worker.out.take();
 						break;
 					}
-					catch(InterruptedException e)
-					{}
+					catch (InterruptedException e)
+					{
+					}
 				}
 			}
-			
+
 			retval.add(new DataEndMarker());
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
@@ -4637,91 +2526,17 @@ public class PlanCacheManager
 			tx.setIsolationLevel(iso);
 			return retval;
 		}
-	}
-	
-	public static class CountWorkerNodesPlan
-	{
-		private Plan p;
-		
-		public CountWorkerNodesPlan(Plan p)
+
+		public Cols2PosPlan setParms(String schema, String table) throws Exception
 		{
-			this.p = p;
-		}
-		
-		public CountWorkerNodesPlan setParms()
-		{
-			return this;
-		}
-		
-		public int execute(Transaction tx) throws Exception
-		{
-			if (numWorkers != null)
+			this.table = table;
+			this.schema = schema;
+			if (schema.equals("SYS"))
 			{
-				return numWorkers;
+				return this;
 			}
-			
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			if (obj instanceof Exception)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				throw (Exception)obj;
-			}
-			
-			if (obj instanceof DataEndMarker)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				throw new Exception("No result received when querying number of worker nodes");
-			}
-			
-			int retval = ((Long)((ArrayList<Object>)obj).get(0)).intValue();
-			HRDBMSWorker.logger.debug("There are " + retval + " worker nodes");
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			numWorkers = retval;
-			return retval;
-		}
-	}
-	
-	public static class TableCardPlan
-	{
-		private Plan p;
-		
-		public TableCardPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public TableCardPlan setParms(String schema, String table) throws Exception
-		{
-			Operator op = (Operator)p.getTrees().get(0);
+
+			Operator op = p.getTrees().get(0);
 			while (!(op instanceof IndexOperator))
 			{
 				op = op.children().get(0);
@@ -4732,1768 +2547,19 @@ public class PlanCacheManager
 			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
 			return this;
 		}
-		
-		public long execute(Transaction tx) throws Exception
-		{
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_UR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			if (obj instanceof DataEndMarker)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				
-				throw new Exception("No table statistics");
-			}
-			
-			if (obj instanceof Exception)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				
-				throw (Exception)obj;
-			}
-			
-			Long retval = (Long)((ArrayList<Object>)obj).get(0);
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return retval;
-		}
 	}
-	
-	public static class ColTypePlan
-	{
-		private Plan p;
-		private String schema;
-		
-		public ColTypePlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public ColTypePlan setParms(String schema, String table, String col) throws Exception
-		{
-			if (col.contains("."))
-			{
-				col = col.substring(col.indexOf('.') + 1);
-			}
-			
-			this.schema = schema;
-			if (schema.equals("SYS"))
-			{
-				return this;
-			}
-			Operator op = (Operator)p.getTrees().get(0);
-			while (!(op instanceof IndexOperator))
-			{
-				op = op.children().get(0);
-			}
-			IndexOperator iOp = (IndexOperator)op;
-			Index index = iOp.getIndex();
-			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
-			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
-			while (!(op instanceof SelectOperator))
-			{
-				if (op instanceof TableScanOperator)
-				{
-					op = ((TableScanOperator)op).firstParent();
-				}
-				else
-				{
-					op = op.parent();
-				}
-			}
-			SelectOperator select = (SelectOperator)op;
-			select.getFilter().remove(0);
-			select.getFilter().add(new Filter("B.COLNAME", "E", "'" + col + "'"));
-			return this;
-		}
-		
-		public String execute(Transaction tx) throws Exception
-		{
-			if (schema.equals("SYS"))
-			{
-				throw new Exception("getColType() should never be called on catalog tables");
-			}
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			if (obj instanceof DataEndMarker)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				
-				throw new Exception("Column not found");
-			}
-			
-			if (obj instanceof Exception)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				
-				throw (Exception)obj;
-			}
-			
-			String retval = (String)((ArrayList<Object>)obj).get(0);
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return retval;
-		}
-	}
-	
-	public static class DistPlan
-	{
-		private Plan p;
-		
-		public DistPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public DistPlan setParms(String schema, String table, String col) throws Exception
-		{
-			Operator op = (Operator)p.getTrees().get(0);
-			while (!(op instanceof IndexOperator))
-			{
-				op = op.children().get(0);
-			}
-			IndexOperator iOp = (IndexOperator)op;
-			Index index = iOp.getIndex();
-			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
-			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
-			while (!(op instanceof SelectOperator))
-			{
-				if (op instanceof TableScanOperator)
-				{
-					op = ((TableScanOperator)op).firstParent();
-				}
-				else
-				{
-					op = op.parent();
-				}
-			}
-			SelectOperator select = (SelectOperator)op;
-			select.getFilter().remove(0);
-			select.getFilter().add(new Filter("B.COLNAME", "E", "'" + col + "'"));
-			return this;
-		}
-		
-		public Object execute(Transaction tx) throws Exception
-		{
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_UR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			if (obj instanceof Exception)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				
-				throw (Exception)obj;
-			}
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return obj;
-		}
-	}
-	
-	public static class InsertTablePlan
-	{
-		private int tableID;
-		private String schema;
-		private String table;
-		private String type;
-		
-		public InsertTablePlan setParms(int tableID, String schema, String table, String type)
-		{
-			this.tableID = tableID;
-			this.schema = schema;
-			this.table = table;
-			this.type = type;
-			return this;
-		}
-		
-		public void execute(Transaction tx) throws Exception
-		{
-			String sql = "INSERT INTO SYS.TABLES VALUES(" + tableID + "," + "'" + schema + "'" + "," + "'" + table + "'" + "," + "'" + type + "')";
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
-			worker.start();
-			worker.join();
-			int updateCount = worker.getUpdateCount();
-			if (updateCount == -1)
-			{
-				throw worker.getException();
-			}
-		}
-	}
-	
-	public static class MultiDeleteIndexStatsPlan
-	{
-		private int tableID;
-		
-		public MultiDeleteIndexStatsPlan setParms(int tableID)
-		{
-			this.tableID = tableID;
-			return this;
-		}
-		
-		public void execute(Transaction tx) throws Exception
-		{
-			String sql = "DELETE FROM SYS.INDEXSTATS WHERE TABLEID = " + tableID; 
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
-			worker.start();
-			worker.join();
-			int updateCount = worker.getUpdateCount();
-			if (updateCount == -1)
-			{
-				throw worker.getException();
-			}
-		}
-	}
-	
-	public static class DeletePartitioningPlan
-	{
-		private int tableID;
-		
-		public DeletePartitioningPlan setParms(int tableID)
-		{
-			this.tableID = tableID;
-			return this;
-		}
-		
-		public void execute(Transaction tx) throws Exception
-		{
-			String sql = "DELETE FROM SYS.PARTITIONING WHERE TABLEID = " + tableID; 
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
-			worker.start();
-			worker.join();
-			int updateCount = worker.getUpdateCount();
-			if (updateCount == -1)
-			{
-				throw worker.getException();
-			}
-		}
-	}
-	
-	public static class DeleteColDistPlan
-	{
-		private int tableID;
-		
-		public DeleteColDistPlan setParms(int tableID)
-		{
-			this.tableID = tableID;
-			return this;
-		}
-		
-		public void execute(Transaction tx) throws Exception
-		{
-			String sql = "DELETE FROM SYS.COLDIST WHERE TABLEID = " + tableID; 
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
-			worker.start();
-			worker.join();
-			int updateCount = worker.getUpdateCount();
-			if (updateCount == -1)
-			{
-				throw worker.getException();
-			}
-		}
-	}
-	
-	public static class DeleteColStatsPlan
-	{
-		private int tableID;
-		
-		public DeleteColStatsPlan setParms(int tableID)
-		{
-			this.tableID = tableID;
-			return this;
-		}
-		
-		public void execute(Transaction tx) throws Exception
-		{
-			String sql = "DELETE FROM SYS.COLSTATS WHERE TABLEID = " + tableID; 
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
-			worker.start();
-			worker.join();
-			int updateCount = worker.getUpdateCount();
-			if (updateCount == -1)
-			{
-				throw worker.getException();
-			}
-		}
-	}
-	
-	public static class DeleteTableStatsPlan
-	{
-		private int tableID;
-		
-		public DeleteTableStatsPlan setParms(int tableID)
-		{
-			this.tableID = tableID;
-			return this;
-		}
-		
-		public void execute(Transaction tx) throws Exception
-		{
-			String sql = "DELETE FROM SYS.TABLESTATS WHERE TABLEID = " + tableID; 
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
-			worker.start();
-			worker.join();
-			int updateCount = worker.getUpdateCount();
-			if (updateCount == -1)
-			{
-				throw worker.getException();
-			}
-		}
-	}
-	
-	public static class MultiDeleteIndexColsPlan
-	{
-		private int tableID;
-		
-		public MultiDeleteIndexColsPlan setParms(int tableID)
-		{
-			this.tableID = tableID;
-			return this;
-		}
-		
-		public void execute(Transaction tx) throws Exception
-		{
-			String sql = "DELETE FROM SYS.INDEXCOLS WHERE TABLEID = " + tableID; 
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
-			worker.start();
-			worker.join();
-			int updateCount = worker.getUpdateCount();
-			if (updateCount == -1)
-			{
-				throw worker.getException();
-			}
-		}
-	}
-	
-	public static class MultiDeleteIndexesPlan
-	{
-		private int tableID;
-		
-		public MultiDeleteIndexesPlan setParms(int tableID)
-		{
-			this.tableID = tableID;
-			return this;
-		}
-		
-		public void execute(Transaction tx) throws Exception
-		{
-			String sql = "DELETE FROM SYS.INDEXES WHERE TABLEID = " + tableID; 
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
-			worker.start();
-			worker.join();
-			int updateCount = worker.getUpdateCount();
-			if (updateCount == -1)
-			{
-				throw worker.getException();
-			}
-		}
-	}
-	
-	public static class DeleteColsPlan
-	{
-		private int tableID;
-		
-		public DeleteColsPlan setParms(int tableID)
-		{
-			this.tableID = tableID;
-			return this;
-		}
-		
-		public void execute(Transaction tx) throws Exception
-		{
-			String sql = "DELETE FROM SYS.COLUMNS WHERE TABLEID = " + tableID; 
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
-			worker.start();
-			worker.join();
-			int updateCount = worker.getUpdateCount();
-			if (updateCount == -1)
-			{
-				throw worker.getException();
-			}
-		}
-	}
-	
-	public static class DeleteTablePlan
-	{
-		private String schema;
-		private String table;
-		
-		public DeleteTablePlan setParms(String schema, String table)
-		{
-			this.schema = schema;
-			this.table = table;
-			return this;
-		}
-		
-		public void execute(Transaction tx) throws Exception
-		{
-			String sql = "DELETE FROM SYS.TABLES WHERE SCHEMA = " + "'" + schema + "'" + " AND TABNAME = " + "'" + table + "'"; 
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
-			worker.start();
-			worker.join();
-			int updateCount = worker.getUpdateCount();
-			if (updateCount == -1)
-			{
-				throw worker.getException();
-			}
-		}
-	}
-	
-	public static class DeleteIndexStatsPlan
-	{
-		private int tableID;
-		private int indexID;
-		
-		public DeleteIndexStatsPlan setParms(int tableID, int indexID)
-		{
-			this.tableID = tableID;
-			this.indexID = indexID;
-			return this;
-		}
-		
-		public void execute(Transaction tx) throws Exception
-		{
-			String sql = "DELETE FROM SYS.INDEXSTATS WHERE TABLEID = " + tableID + " AND INDEXID = " + indexID; 
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
-			worker.start();
-			worker.join();
-			int updateCount = worker.getUpdateCount();
-			if (updateCount == -1)
-			{
-				throw worker.getException();
-			}
-		}
-	}
-	
-	public static class DeleteIndexColPlan
-	{
-		private int tableID;
-		private int indexID;
-		
-		public DeleteIndexColPlan setParms(int tableID, int indexID)
-		{
-			this.tableID = tableID;
-			this.indexID = indexID;
-			return this;
-		}
-		
-		public void execute(Transaction tx) throws Exception
-		{
-			String sql = "DELETE FROM SYS.INDEXCOLS WHERE TABLEID = " + tableID + " AND INDEXID = " + indexID; 
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
-			worker.start();
-			worker.join();
-			int updateCount = worker.getUpdateCount();
-			if (updateCount == -1)
-			{
-				throw worker.getException();
-			}
-		}
-	}
-	
-	public static class DeleteIndexPlan
-	{
-		private int tableID;
-		private int indexID;
-		
-		public DeleteIndexPlan setParms(int tableID, int indexID)
-		{
-			this.tableID = tableID;
-			this.indexID = indexID;
-			return this;
-		}
-		
-		public void execute(Transaction tx) throws Exception
-		{
-			String sql = "DELETE FROM SYS.INDEXES WHERE TABLEID = " + tableID + " AND INDEXID = " + indexID; 
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
-			worker.start();
-			worker.join();
-			int updateCount = worker.getUpdateCount();
-			if (updateCount == -1)
-			{
-				throw worker.getException();
-			}
-		}
-	}
-	
-	public static class InsertIndexColPlan
-	{
-		private int tableID;
-		private int indexID;
-		private int colID;
-		private int pos;
-		private boolean asc;
-		
-		public InsertIndexColPlan setParms(int indexID, int tableID, int colID, int pos, boolean asc)
-		{
-			this.tableID = tableID;
-			this.indexID = indexID;
-			this.colID = colID;
-			this.pos = pos;
-			this.asc = asc;
-			return this;
-		}
-		
-		public void execute(Transaction tx) throws Exception
-		{
-			String ascString = null;
-			if (asc)
-			{
-				ascString = "'A'";
-			}
-			else
-			{
-				ascString = "'D'";
-			}
-			String sql = "INSERT INTO SYS.INDEXCOLS VALUES(" + indexID + "," + tableID + "," + colID + "," + pos + "," + ascString + ")"; 
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
-			worker.start();
-			worker.join();
-			int updateCount = worker.getUpdateCount();
-			if (updateCount == -1)
-			{
-				throw worker.getException();
-			}
-		}
-	}
-	
-	public static class DeleteViewPlan
-	{
-		private String schema;
-		private String table;
-		
-		public DeleteViewPlan setParms(String schema, String table)
-		{
-			this.schema = schema;
-			this.table = table;
-			return this;
-		}
-		
-		public void execute(Transaction tx) throws Exception
-		{
-			String sql = "DELETE FROM SYS.VIEWS WHERE SCHEMA = '" + schema + "' AND NAME = '" + table + "'"; 
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
-			worker.start();
-			worker.join();
-			int updateCount = worker.getUpdateCount();
-			if (updateCount == -1)
-			{
-				throw worker.getException();
-			}
-		}
-	}
-	
-	public static class InsertViewPlan
-	{
-		private int id;
-		private String schema;
-		private String table;
-		private String text;
-		
-		public InsertViewPlan setParms(int id, String schema, String table, String text)
-		{
-			this.id = id;
-			this.schema = schema;
-			this.table = table;
-			this.text = text;
-			return this;
-		}
-		
-		public void execute(Transaction tx) throws Exception
-		{
-			String textCopy = text.replace("'", "\\'");
-			String sql = "INSERT INTO SYS.VIEWS VALUES(" + id + ",'" + schema + "','" + table + "','" + textCopy + "')";
-			HRDBMSWorker.logger.debug(sql);
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
-			worker.start();
-			worker.join();
-			int updateCount = worker.getUpdateCount();
-			if (updateCount == -1)
-			{
-				throw worker.getException();
-			}
-		}
-	}
-	
-	public static class InsertPartitionPlan
-	{
-		private int id;
-		private String group;
-		private String node;
-		private String dev;
-		
-		public InsertPartitionPlan setParms(int id, String group, String node, String dev)
-		{
-			this.id = id;
-			this.group = group;
-			this.node = node;
-			this.dev = dev;
-			return this;
-		}
-		
-		public void execute(Transaction tx) throws Exception
-		{
-			String sql = "INSERT INTO SYS.PARTITIONING VALUES(" + id + ",'" + group + "','" + node + "','" + dev + "')"; 
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
-			worker.start();
-			worker.join();
-			int updateCount = worker.getUpdateCount();
-			if (updateCount == -1)
-			{
-				throw worker.getException();
-			}
-		}
-	}
-	
-	public static class InsertColPlan
-	{
-		private int cid;
-		private int tid;
-		private String name;
-		private String type;
-		private int length;
-		private int scale;
-		private int pkpos;
-		private boolean nullable;
-		
-		public InsertColPlan setParms(int cid, int tid, String name, String type, int length, int scale, int pkpos, boolean nullable)
-		{
-			this.cid = cid;
-			this.tid = tid;
-			this.name = name;
-			this.type = type;
-			this.length = length;
-			this.scale = scale;
-			this.pkpos = pkpos;
-			this.nullable = nullable;
-			return this;
-		}
-		
-		public void execute(Transaction tx) throws Exception
-		{
-			String nullString = null;
-			if (nullable)
-			{
-				nullString = "'Y'";
-			}
-			else
-			{
-				nullString = "'N'";
-			}
-			String sql = "INSERT INTO SYS.COLUMNS VALUES(" + cid + "," + tid + ",'" + name + "','" + type + "'," + length + "," + scale + "," + pkpos + "," + nullString + ")"; 
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
-			worker.start();
-			worker.join();
-			int updateCount = worker.getUpdateCount();
-			if (updateCount == -1)
-			{
-				throw worker.getException();
-			}
-		}
-	}
-	
-	public static class InsertIndexPlan
-	{
-		private int iid;
-		private int tid;
-		private String name;
-		private boolean unique;
-		
-		public InsertIndexPlan setParms(int iid, String name, int tid, boolean unique)
-		{
-			this.iid = iid;
-			this.tid = tid;
-			this.name = name;
-			this.unique = unique;
-			return this;
-		}
-		
-		public void execute(Transaction tx) throws Exception
-		{
-			String uString = null;
-			if (unique)
-			{
-				uString = "'Y'";
-			}
-			else
-			{
-				uString = "'N'";
-			}
-			String sql = "INSERT INTO SYS.INDEXES VALUES(" + iid + ",'" + name + "'," + tid + "," + uString + ")"; 
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
-			worker.start();
-			worker.join();
-			int updateCount = worker.getUpdateCount();
-			if (updateCount == -1)
-			{
-				throw worker.getException();
-			}
-		}
-	}
-	
-	public static class NextTableIDPlan
-	{
-		private Plan p;
-		
-		public NextTableIDPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public NextTableIDPlan setParms() throws Exception
-		{
-			return this;
-		}
-		
-		public int execute(Transaction tx) throws Exception
-		{	
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			if (obj instanceof DataEndMarker)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				
-				throw new Exception("Unable to get next table ID");
-			}
-			
-			if (obj instanceof Exception)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				
-				throw (Exception)obj;
-			}
-			
-			int retval = (Integer)((ArrayList<Object>)obj).get(0);
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return retval+1;
-		}
-	}
-	
-	public static class NextViewIDPlan
-	{
-		private Plan p;
-		
-		public NextViewIDPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public NextViewIDPlan setParms() throws Exception
-		{
-			return this;
-		}
-		
-		public int execute(Transaction tx) throws Exception
-		{	
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			if (obj instanceof DataEndMarker)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				
-				return 0;
-			}
-			
-			if (obj instanceof Exception)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				
-				throw (Exception)obj;
-			}
-			
-			int retval = (Integer)((ArrayList<Object>)obj).get(0);
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return retval+1;
-		}
-	}
-	
-	public static class VerifyTableExistPlan
-	{
-		private Plan p;
-		private String schema;
-		private String name;
-		
-		public VerifyTableExistPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public VerifyTableExistPlan setParms(String schema, String name) throws Exception
-		{
-			this.schema = schema;
-			this.name = name;
-			if (schema.equals("SYS"))
-			{
-				return this;
-			}
-			Operator op = (Operator)p.getTrees().get(0);
-			while (op.children().size() != 0)
-			{
-				op = op.children().get(0);
-			}
-		
-			Index index = ((IndexOperator)op).getIndex();
-			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
-			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + name + "'"));
-			return this;
-		}
-		
-		public Object execute(Transaction tx) throws Exception
-		{
-			if (schema.equals("SYS"))
-			{
-				ArrayList<Object> retval = new ArrayList<Object>();
-				if (name.equals("TABLES"))
-				{
-					return retval;
-				}
-				else if (name.equals("INDEXES"))
-				{
-					return retval;
-				}
-				else if (name.equals("COLUMNS"))
-				{
-					return retval;
-				}
-				else if (name.equals("INDEXCOLS"))
-				{
-					return retval;
-				}
-				else if (name.equals("TABLESTATS"))
-				{
-					return retval;
-				}
-				else if (name.equals("COLSTATS"))
-				{
-					return retval;
-				}
-				else if (name.equals("INDEXSTATS"))
-				{
-					return retval;
-				}
-				else if (name.equals("NODES"))
-				{
-					return retval;
-				}
-				else if (name.equals("PARTITIONING"))
-				{
-					return retval;
-				}
-				else if (name.equals("COLDIST"))
-				{
-					return retval;
-				}
-				else if (name.equals("NODESTATE"))
-				{
-					return retval;
-				}
-				else if (name.equals("VIEWS"))
-				{
-					return retval;
-				}
-				else if (name.equals("BACKUPS"))
-				{
-					return retval;
-				}
-				
-				return new DataEndMarker();
-			}
-			
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			if (obj instanceof Exception)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				throw (Exception)obj;
-			}
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return obj;
-		}
-	}
-	
-	public static class TableIDPlan
-	{
-		private Plan p;
-		private String schema;
-		private String name;
-		
-		public TableIDPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public TableIDPlan setParms(String schema, String name) throws Exception
-		{
-			this.schema = schema;
-			this.name = name;
-			if (schema.equals("SYS"))
-			{
-				return this;
-			}
-			Operator op = (Operator)p.getTrees().get(0);
-			while (op.children().size() != 0)
-			{
-				op = op.children().get(0);
-			}
-		
-			Index index = ((IndexOperator)op).getIndex();
-			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
-			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + name + "'"));
-			return this;
-		}
-		
-		public int execute(Transaction tx) throws Exception
-		{
-			if (schema.equals("SYS"))
-			{
-				if (name.equals("TABLES"))
-				{
-					return 0;
-				}
-				else if (name.equals("INDEXES"))
-				{
-					return 2;
-				}
-				else if (name.equals("COLUMNS"))
-				{
-					return 1;
-				}
-				else if (name.equals("INDEXCOLS"))
-				{
-					return 3;
-				}
-				else if (name.equals("TABLESTATS"))
-				{
-					return 5;
-				}
-				else if (name.equals("COLSTATS"))
-				{
-					return 7;
-				}
-				else if (name.equals("INDEXSTATS"))
-				{
-					return 12;
-				}
-				else if (name.equals("NODES"))
-				{
-					return 6;
-				}
-				else if (name.equals("PARTITIONING"))
-				{
-					return 11;
-				}
-				else if (name.equals("COLDIST"))
-				{
-					return 8;
-				}
-				else if (name.equals("NODESTATE"))
-				{
-					return 10;
-				}
-				else if (name.equals("VIEWS"))
-				{
-					return 4;
-				}
-				else if (name.equals("BACKUPS"))
-				{
-					return 9;
-				}
-				
-				throw new Exception("Table not found: " + schema + "." + name);
-			}
-			
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			if (obj instanceof Exception)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				throw (Exception)obj;
-			}
-			
-			if (obj instanceof DataEndMarker)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				throw new Exception("Table not found");
-			}
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return (Integer)((ArrayList<Object>)obj).get(0);
-		}
-	}
-	
-	public static class VerifyViewExistPlan
-	{
-		private Plan p;
-		
-		public VerifyViewExistPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public VerifyViewExistPlan setParms(String schema, String name) throws Exception
-		{
-			Operator op = (Operator)p.getTrees().get(0);
-			while (op.children().size() != 0)
-			{
-				op = op.children().get(0);
-			}
-		
-			Index index = ((IndexOperator)op).getIndex();
-			index.setCondition(new Filter("VIEWS.SCHEMA", "E", "'" + schema + "'"));
-			index.addSecondaryFilter(new Filter("VIEWS.NAME", "E", "'" + name + "'"));
-			return this;
-		}
-		
-		public Object execute(Transaction tx) throws Exception
-		{	
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			if (obj instanceof Exception)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				throw (Exception)obj;
-			}
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return obj;
-		}
-	}
-	
-	public static class ViewSQLPlan
-	{
-		private Plan p;
-		
-		public ViewSQLPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public ViewSQLPlan setParms(String schema, String name) throws Exception
-		{
-			Operator op = (Operator)p.getTrees().get(0);
-			while (op.children().size() != 0)
-			{
-				op = op.children().get(0);
-			}
-		
-			Index index = ((IndexOperator)op).getIndex();
-			index.setCondition(new Filter("VIEWS.SCHEMA", "E", "'" + schema + "'"));
-			index.addSecondaryFilter(new Filter("VIEWS.NAME", "E", "'" + name + "'"));
-			return this;
-		}
-		
-		public String execute(Transaction tx) throws Exception
-		{	
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			if (obj instanceof Exception)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				throw (Exception)obj;
-			}
-			
-			if (obj instanceof DataEndMarker)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				throw new Exception("View not found");
-			}
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return (String)((ArrayList<Object>)obj).get(0);
-		}
-	}
-	
-	public static class NextIndexIDPlan
-	{
-		private Plan p;
-		
-		public NextIndexIDPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public NextIndexIDPlan setParms(int tableID) throws Exception
-		{
-			Operator op = (Operator)p.getTrees().get(0);
-			while (op.children().size() != 0)
-			{
-				op = op.children().get(0);
-			}
-		
-			Index index = ((IndexOperator)op).getIndex();
-			index.setCondition(new Filter("INDEXES.TABLEID", "E", Integer.toString(tableID)));
-			return this;
-		}
-		
-		public int execute(Transaction tx) throws Exception
-		{	
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			if (obj instanceof DataEndMarker)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				return 0;
-			}
-			
-			if (obj instanceof Exception)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				
-				throw (Exception)obj;
-			}
-			
-			int retval = (Integer)((ArrayList<Object>)obj).get(0);
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return retval+1;
-		}
-	}
-	
-	public static class VerifyIndexPlan
-	{
-		private Plan p;
-		private String schema;
-		private String name;
-		
-		public VerifyIndexPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public VerifyIndexPlan setParms(String schema, String name) throws Exception
-		{
-			this.schema = schema;
-			this.name = name;
-			if (schema.equals("SYS"))
-			{
-				return this;
-			}
-			Operator op = (Operator)p.getTrees().get(0);
-			while (!(op instanceof IndexOperator))
-			{
-				op = op.children().get(0);
-			}
-			IndexOperator iOp = (IndexOperator)op;
-			Index index = iOp.getIndex();
-			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
-			while (!(op instanceof SelectOperator))
-			{
-				if (op instanceof TableScanOperator)
-				{
-					op = ((TableScanOperator)op).firstParent();
-				}
-				else
-				{
-					op = op.parent();
-				}
-			}
-			SelectOperator select = (SelectOperator)op;
-			select.getFilter().remove(0);
-			select.getFilter().add(new Filter("B.INDEXNAME", "E", "'" + name + "'"));
-			return this;
-		}
-		
-		public Object execute(Transaction tx) throws Exception
-		{
-			if (schema.equals("SYS"))
-			{
-				ArrayList<Object> retval = new ArrayList<Object>();
-				if (name.equals("PKTABLES"))
-				{
-					return retval;
-				}
-				else if (name.equals("PKINDEXES"))
-				{
-					return retval;
-				}
-				else if (name.equals("SKINDEXES"))
-				{
-					return retval;
-				}
-				else if (name.equals("PKCOLUMNS"))
-				{
-					return retval;
-				}
-				else if (name.equals("PKINDEXCOLS"))
-				{
-					return retval;
-				}
-				else if (name.equals("PKTABLESTATS"))
-				{
-					return retval;
-				}
-				else if (name.equals("PKCOLSTATS"))
-				{
-					return retval;
-				}
-				else if (name.equals("PKINDEXSTATS"))
-				{
-					return retval;
-				}
-				else if (name.equals("PKNODES"))
-				{
-					return retval;
-				}
-				else if (name.equals("SKNODES"))
-				{
-					return retval;
-				}
-				else if (name.equals("PKPARTITIONING"))
-				{
-					return retval;
-				}
-				else if (name.equals("PKCOLDIST"))
-				{
-					return retval;
-				}
-				else if (name.equals("PKNODESTATE"))
-				{
-					return retval;
-				}
-				else if (name.equals("PKVIEWS"))
-				{
-					return retval;
-				}
-				else if (name.equals("PKBACKUPS"))
-				{
-					return retval;
-				}
-				
-				return new DataEndMarker();
-			}
-			
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			if (obj instanceof Exception)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				throw (Exception)obj;
-			}
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return obj;
-		}
-	}
-	
-	public static class TableAndIndexIDPlan
-	{
-		private Plan p;
-		private String schema;
-		private String name;
-		
-		public TableAndIndexIDPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public TableAndIndexIDPlan setParms(String schema, String name) throws Exception
-		{
-			this.schema = schema;
-			this.name = name;
-			if (schema.equals("SYS"))
-			{
-				return this;
-			}
-			Operator op = (Operator)p.getTrees().get(0);
-			while (!(op instanceof IndexOperator))
-			{
-				op = op.children().get(0);
-			}
-			IndexOperator iOp = (IndexOperator)op;
-			Index index = iOp.getIndex();
-			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
-			while (!(op instanceof SelectOperator))
-			{
-				if (op instanceof TableScanOperator)
-				{
-					op = ((TableScanOperator)op).firstParent();
-				}
-				else
-				{
-					op = op.parent();
-				}
-			}
-			SelectOperator select = (SelectOperator)op;
-			select.getFilter().remove(0);
-			select.getFilter().add(new Filter("B.INDEXNAME", "E", "'" + name + "'"));
-			return this;
-		}
-		
-		public ArrayList<Object> execute(Transaction tx) throws Exception
-		{
-			if (schema.equals("SYS"))
-			{
-				ArrayList<Object> retval = new ArrayList<Object>();
-				if (name.equals("PKTABLES"))
-				{
-					retval.add(0);
-					retval.add(0);
-					return retval;
-				}
-				else if (name.equals("PKINDEXES"))
-				{
-					retval.add(2);
-					retval.add(0);
-					return retval;
-				}
-				else if (name.equals("SKINDEXES"))
-				{
-					retval.add(2);
-					retval.add(1);
-					return retval;
-				}
-				else if (name.equals("PKCOLUMNS"))
-				{
-					retval.add(1);
-					retval.add(0);
-					return retval;
-				}
-				else if (name.equals("PKINDEXCOLS"))
-				{
-					retval.add(3);
-					retval.add(0);
-					return retval;
-				}
-				else if (name.equals("PKTABLESTATS"))
-				{
-					retval.add(5);
-					retval.add(0);
-					return retval;
-				}
-				else if (name.equals("PKCOLSTATS"))
-				{
-					retval.add(7);
-					retval.add(0);
-					return retval;
-				}
-				else if (name.equals("PKINDEXSTATS"))
-				{
-					retval.add(12);
-					retval.add(0);
-					return retval;
-				}
-				else if (name.equals("PKNODES"))
-				{
-					retval.add(6);
-					retval.add(0);
-					return retval;
-				}
-				else if (name.equals("SKNODES"))
-				{
-					retval.add(6);
-					retval.add(1);
-					return retval;
-				}
-				else if (name.equals("PKPARTITIONING"))
-				{
-					retval.add(11);
-					retval.add(0);
-					return retval;
-				}
-				else if (name.equals("PKCOLDIST"))
-				{
-					retval.add(8);
-					retval.add(0);
-					return retval;
-				}
-				else if (name.equals("PKNODESTATE"))
-				{
-					retval.add(10);
-					retval.add(0);
-					return retval;
-				}
-				else if (name.equals("PKVIEWS"))
-				{
-					retval.add(4);
-					retval.add(0);
-					return retval;
-				}
-				else if (name.equals("PKBACKUPS"))
-				{
-					retval.add(9);
-					retval.add(0);
-					return retval;
-				}
-				
-				throw new Exception("Index not found");
-			}
-			
-			int iso = tx.getIsolationLevel();
-			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
-			worker.start();
-			ArrayList<Object> cmd = new ArrayList<Object>(2);
-			cmd.add("NEXT");
-			cmd.add(1);
-			worker.in.put(cmd);
-			
-			Object obj = null;
-			while (true)
-			{
-				try
-				{
-					obj = worker.out.take();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			if (obj instanceof Exception)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				throw (Exception)obj;
-			}
-			
-			if (obj instanceof DataEndMarker)
-			{
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-				tx.setIsolationLevel(iso);
-				throw new Exception("Index not found");
-			}
-			
-			cmd = new ArrayList<Object>(1);
-			cmd.add("CLOSE");
-			worker.in.put(cmd);
-			tx.setIsolationLevel(iso);
-			return (ArrayList<Object>)obj;
-		}
-	}
-	
+
 	public static class Cols2TypesPlan
 	{
-		private Plan p;
+		private final Plan p;
 		private String schema;
 		private String table;
-		
+
 		public Cols2TypesPlan(Plan p)
 		{
 			this.p = p;
 		}
-		
-		public Cols2TypesPlan setParms(String schema, String table) throws Exception
-		{
-			this.table = table;
-			this.schema = schema;
-			if (schema.equals("SYS"))
-			{
-				return this;
-			}
-			
-			Operator op = (Operator)p.getTrees().get(0);
-			while (!(op instanceof IndexOperator))
-			{
-				op = op.children().get(0);
-			}
-			IndexOperator iOp = (IndexOperator)op;
-			Index index = iOp.getIndex();
-			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
-			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
-			return this;
-		}
-		
+
 		public ArrayList<Object> execute(Transaction tx) throws Exception
 		{
 			ArrayList<Object> retval = new ArrayList<Object>();
@@ -6750,14 +2816,14 @@ public class PlanCacheManager
 					row.add("BIGINT");
 					retval.add(row);
 				}
-				else 
+				else
 				{
 					retval.add(new DataEndMarker());
 				}
-				
+
 				return retval;
 			}
-			
+
 			int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
 			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
@@ -6766,7 +2832,7 @@ public class PlanCacheManager
 			cmd.add("NEXT");
 			cmd.add(1000000);
 			worker.in.put(cmd);
-			
+
 			Object obj = null;
 			while (true)
 			{
@@ -6775,10 +2841,11 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch(InterruptedException e)
-				{}
+				catch (InterruptedException e)
+				{
+				}
 			}
-			
+
 			while (!(obj instanceof DataEndMarker))
 			{
 				if (obj instanceof Exception)
@@ -6787,12 +2854,12 @@ public class PlanCacheManager
 					cmd.add("CLOSE");
 					worker.in.put(cmd);
 					tx.setIsolationLevel(iso);
-				
+
 					throw (Exception)obj;
 				}
-				
+
 				retval.add(obj);
-				
+
 				while (true)
 				{
 					try
@@ -6800,11 +2867,12 @@ public class PlanCacheManager
 						obj = worker.out.take();
 						break;
 					}
-					catch(InterruptedException e)
-					{}
+					catch (InterruptedException e)
+					{
+					}
 				}
 			}
-			
+
 			retval.add(new DataEndMarker());
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
@@ -6812,31 +2880,109 @@ public class PlanCacheManager
 			tx.setIsolationLevel(iso);
 			return retval;
 		}
-	}
-	
-	public static class LengthPlan
-	{
-		private Plan p;
-		private String schema;
-		private String table;
-		private String col;
-		
-		public LengthPlan(Plan p)
-		{
-			this.p = p;
-		}
-		
-		public LengthPlan setParms(String schema, String table, String col) throws Exception
+
+		public Cols2TypesPlan setParms(String schema, String table) throws Exception
 		{
 			this.table = table;
 			this.schema = schema;
-			this.col = col;
 			if (schema.equals("SYS"))
 			{
 				return this;
 			}
-			
-			Operator op = (Operator)p.getTrees().get(0);
+
+			Operator op = p.getTrees().get(0);
+			while (!(op instanceof IndexOperator))
+			{
+				op = op.children().get(0);
+			}
+			IndexOperator iOp = (IndexOperator)op;
+			Index index = iOp.getIndex();
+			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
+			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
+			return this;
+		}
+	}
+
+	public static class ColTypePlan
+	{
+		private final Plan p;
+		private String schema;
+
+		public ColTypePlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public String execute(Transaction tx) throws Exception
+		{
+			if (schema.equals("SYS"))
+			{
+				throw new Exception("getColType() should never be called on catalog tables");
+			}
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			if (obj instanceof DataEndMarker)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+
+				throw new Exception("Column not found");
+			}
+
+			if (obj instanceof Exception)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+
+				throw (Exception)obj;
+			}
+
+			String retval = (String)((ArrayList<Object>)obj).get(0);
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return retval;
+		}
+
+		public ColTypePlan setParms(String schema, String table, String col) throws Exception
+		{
+			if (col.contains("."))
+			{
+				col = col.substring(col.indexOf('.') + 1);
+			}
+
+			this.schema = schema;
+			if (schema.equals("SYS"))
+			{
+				return this;
+			}
+			Operator op = p.getTrees().get(0);
 			while (!(op instanceof IndexOperator))
 			{
 				op = op.children().get(0);
@@ -6861,7 +3007,2003 @@ public class PlanCacheManager
 			select.getFilter().add(new Filter("B.COLNAME", "E", "'" + col + "'"));
 			return this;
 		}
-		
+	}
+
+	public static class CoordNodesPlan
+	{
+		private final Plan p;
+
+		public CoordNodesPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public ArrayList<Object> execute(Transaction tx) throws Exception
+		{
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1000000);
+			worker.in.put(cmd);
+
+			ArrayList<Object> retval = new ArrayList<Object>();
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+			while (!(obj instanceof DataEndMarker))
+			{
+				if (obj instanceof Exception)
+				{
+					cmd = new ArrayList<Object>(1);
+					cmd.add("CLOSE");
+					worker.in.put(cmd);
+					tx.setIsolationLevel(iso);
+					throw (Exception)obj;
+				}
+
+				retval.add(obj);
+
+				while (true)
+				{
+					try
+					{
+						obj = worker.out.take();
+						break;
+					}
+					catch (InterruptedException e)
+					{
+					}
+				}
+			}
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return retval;
+		}
+
+		public CoordNodesPlan setParms()
+		{
+			return this;
+		}
+	}
+
+	public static class CountWorkerNodesPlan
+	{
+		private final Plan p;
+
+		public CountWorkerNodesPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public int execute(Transaction tx) throws Exception
+		{
+			if (numWorkers != null)
+			{
+				return numWorkers;
+			}
+
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			if (obj instanceof Exception)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+				throw (Exception)obj;
+			}
+
+			if (obj instanceof DataEndMarker)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+				throw new Exception("No result received when querying number of worker nodes");
+			}
+
+			int retval = ((Long)((ArrayList<Object>)obj).get(0)).intValue();
+			// HRDBMSWorker.logger.debug("There are " + retval +
+			// " worker nodes");
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			numWorkers = retval;
+			return retval;
+		}
+
+		public CountWorkerNodesPlan setParms()
+		{
+			return this;
+		}
+	}
+
+	public static class DeleteColDistPlan
+	{
+		private int tableID;
+
+		public void execute(Transaction tx) throws Exception
+		{
+			String sql = "DELETE FROM SYS.COLDIST WHERE TABLEID = " + tableID;
+			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			worker.start();
+			worker.join();
+			int updateCount = worker.getUpdateCount();
+			if (updateCount == -1)
+			{
+				throw worker.getException();
+			}
+		}
+
+		public DeleteColDistPlan setParms(int tableID)
+		{
+			this.tableID = tableID;
+			return this;
+		}
+	}
+
+	public static class DeleteColsPlan
+	{
+		private int tableID;
+
+		public void execute(Transaction tx) throws Exception
+		{
+			String sql = "DELETE FROM SYS.COLUMNS WHERE TABLEID = " + tableID;
+			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			worker.start();
+			worker.join();
+			int updateCount = worker.getUpdateCount();
+			if (updateCount == -1)
+			{
+				throw worker.getException();
+			}
+		}
+
+		public DeleteColsPlan setParms(int tableID)
+		{
+			this.tableID = tableID;
+			return this;
+		}
+	}
+
+	public static class DeleteColStatsPlan
+	{
+		private int tableID;
+
+		public void execute(Transaction tx) throws Exception
+		{
+			String sql = "DELETE FROM SYS.COLSTATS WHERE TABLEID = " + tableID;
+			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			worker.start();
+			worker.join();
+			int updateCount = worker.getUpdateCount();
+			if (updateCount == -1)
+			{
+				throw worker.getException();
+			}
+		}
+
+		public DeleteColStatsPlan setParms(int tableID)
+		{
+			this.tableID = tableID;
+			return this;
+		}
+	}
+
+	public static class DeleteIndexColPlan
+	{
+		private int tableID;
+		private int indexID;
+
+		public void execute(Transaction tx) throws Exception
+		{
+			String sql = "DELETE FROM SYS.INDEXCOLS WHERE TABLEID = " + tableID + " AND INDEXID = " + indexID;
+			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			worker.start();
+			worker.join();
+			int updateCount = worker.getUpdateCount();
+			if (updateCount == -1)
+			{
+				throw worker.getException();
+			}
+		}
+
+		public DeleteIndexColPlan setParms(int tableID, int indexID)
+		{
+			this.tableID = tableID;
+			this.indexID = indexID;
+			return this;
+		}
+	}
+
+	public static class DeleteIndexPlan
+	{
+		private int tableID;
+		private int indexID;
+
+		public void execute(Transaction tx) throws Exception
+		{
+			String sql = "DELETE FROM SYS.INDEXES WHERE TABLEID = " + tableID + " AND INDEXID = " + indexID;
+			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			worker.start();
+			worker.join();
+			int updateCount = worker.getUpdateCount();
+			if (updateCount == -1)
+			{
+				throw worker.getException();
+			}
+		}
+
+		public DeleteIndexPlan setParms(int tableID, int indexID)
+		{
+			this.tableID = tableID;
+			this.indexID = indexID;
+			return this;
+		}
+	}
+
+	public static class DeleteIndexStatsPlan
+	{
+		private int tableID;
+		private int indexID;
+
+		public void execute(Transaction tx) throws Exception
+		{
+			String sql = "DELETE FROM SYS.INDEXSTATS WHERE TABLEID = " + tableID + " AND INDEXID = " + indexID;
+			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			worker.start();
+			worker.join();
+			int updateCount = worker.getUpdateCount();
+			if (updateCount == -1)
+			{
+				throw worker.getException();
+			}
+		}
+
+		public DeleteIndexStatsPlan setParms(int tableID, int indexID)
+		{
+			this.tableID = tableID;
+			this.indexID = indexID;
+			return this;
+		}
+	}
+
+	public static class DeletePartitioningPlan
+	{
+		private int tableID;
+
+		public void execute(Transaction tx) throws Exception
+		{
+			String sql = "DELETE FROM SYS.PARTITIONING WHERE TABLEID = " + tableID;
+			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			worker.start();
+			worker.join();
+			int updateCount = worker.getUpdateCount();
+			if (updateCount == -1)
+			{
+				throw worker.getException();
+			}
+		}
+
+		public DeletePartitioningPlan setParms(int tableID)
+		{
+			this.tableID = tableID;
+			return this;
+		}
+	}
+
+	public static class DeleteTablePlan
+	{
+		private String schema;
+		private String table;
+
+		public void execute(Transaction tx) throws Exception
+		{
+			String sql = "DELETE FROM SYS.TABLES WHERE SCHEMA = " + "'" + schema + "'" + " AND TABNAME = " + "'" + table + "'";
+			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			worker.start();
+			worker.join();
+			int updateCount = worker.getUpdateCount();
+			if (updateCount == -1)
+			{
+				throw worker.getException();
+			}
+		}
+
+		public DeleteTablePlan setParms(String schema, String table)
+		{
+			this.schema = schema;
+			this.table = table;
+			return this;
+		}
+	}
+
+	public static class DeleteTableStatsPlan
+	{
+		private int tableID;
+
+		public void execute(Transaction tx) throws Exception
+		{
+			String sql = "DELETE FROM SYS.TABLESTATS WHERE TABLEID = " + tableID;
+			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			worker.start();
+			worker.join();
+			int updateCount = worker.getUpdateCount();
+			if (updateCount == -1)
+			{
+				throw worker.getException();
+			}
+		}
+
+		public DeleteTableStatsPlan setParms(int tableID)
+		{
+			this.tableID = tableID;
+			return this;
+		}
+	}
+
+	public static class DeleteViewPlan
+	{
+		private String schema;
+		private String table;
+
+		public void execute(Transaction tx) throws Exception
+		{
+			String sql = "DELETE FROM SYS.VIEWS WHERE SCHEMA = '" + schema + "' AND NAME = '" + table + "'";
+			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			worker.start();
+			worker.join();
+			int updateCount = worker.getUpdateCount();
+			if (updateCount == -1)
+			{
+				throw worker.getException();
+			}
+		}
+
+		public DeleteViewPlan setParms(String schema, String table)
+		{
+			this.schema = schema;
+			this.table = table;
+			return this;
+		}
+	}
+
+	public static class DistPlan
+	{
+		private final Plan p;
+
+		public DistPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public Object execute(Transaction tx) throws Exception
+		{
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_UR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			if (obj instanceof Exception)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+
+				throw (Exception)obj;
+			}
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return obj;
+		}
+
+		public DistPlan setParms(String schema, String table, String col) throws Exception
+		{
+			Operator op = p.getTrees().get(0);
+			while (!(op instanceof IndexOperator))
+			{
+				op = op.children().get(0);
+			}
+			IndexOperator iOp = (IndexOperator)op;
+			Index index = iOp.getIndex();
+			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
+			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
+			while (!(op instanceof SelectOperator))
+			{
+				if (op instanceof TableScanOperator)
+				{
+					op = ((TableScanOperator)op).firstParent();
+				}
+				else
+				{
+					op = op.parent();
+				}
+			}
+			SelectOperator select = (SelectOperator)op;
+			select.getFilter().remove(0);
+			select.getFilter().add(new Filter("B.COLNAME", "E", "'" + col + "'"));
+			return this;
+		}
+	}
+
+	public static class HostLookupPlan
+	{
+		private final Plan p;
+
+		public HostLookupPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public String execute(Transaction tx) throws Exception
+		{
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			if (obj instanceof DataEndMarker)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+
+				throw new Exception("Node not found");
+			}
+
+			if (obj instanceof Exception)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+
+				throw (Exception)obj;
+			}
+
+			String retval = (String)((ArrayList<Object>)obj).get(0);
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return retval;
+		}
+
+		public HostLookupPlan setParms(int node) throws Exception
+		{
+			if (node == -1)
+			{
+				if (HRDBMSWorker.type == HRDBMSWorker.TYPE_WORKER)
+				{
+					throw new Exception("A worker node is trying to look up node -1");
+				}
+
+				node = MetaData.myCoordNum();
+			}
+			RootOperator root = (RootOperator)p.getTrees().get(0);
+			IndexOperator iOp = (IndexOperator)root.children().get(0).children().get(0);
+			Index index = iOp.getIndex();
+			index.setCondition(new Filter("NODES.NODEID", "E", Integer.toString(node)));
+			return this;
+		}
+	}
+
+	public static class IndexCardPlan
+	{
+		private final Plan p;
+
+		public IndexCardPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public Object execute(Transaction tx) throws Exception
+		{
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_UR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			if (obj instanceof Exception)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+
+				throw (Exception)obj;
+			}
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return obj;
+		}
+
+		public IndexCardPlan setParms(int tableID, int indexID) throws Exception
+		{
+			Operator op = p.getTrees().get(0);
+			while (!(op instanceof IndexOperator))
+			{
+				op = op.children().get(0);
+			}
+			IndexOperator iOp = (IndexOperator)op;
+			Index index = iOp.getIndex();
+			index.setCondition(new Filter("INDEXSTATS.TABLEID", "E", Integer.toString(tableID)));
+			index.addSecondaryFilter(new Filter("INDEXSTATS.INDEXID", "E", Integer.toString(indexID)));
+			return this;
+		}
+	}
+
+	public static class IndexColCountPlan
+	{
+		private final Plan p;
+		private int tableID;
+		private int indexID;
+
+		public IndexColCountPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public int execute(Transaction tx) throws Exception
+		{
+			if (tableID >= 0 && tableID <= 12)
+			{
+				if (indexID == 0)
+				{
+					if (tableID == 0)
+					{
+						return 2;
+					}
+					else if (tableID == 1)
+					{
+						return 2;
+					}
+					else if (tableID == 2)
+					{
+						return 2;
+					}
+					else if (tableID == 3)
+					{
+						return 3;
+					}
+					else if (tableID == 4)
+					{
+						return 2;
+					}
+					else if (tableID == 5)
+					{
+						return 1;
+					}
+					else if (tableID == 6)
+					{
+						return 1;
+					}
+					else if (tableID == 7)
+					{
+						return 2;
+					}
+					else if (tableID == 8)
+					{
+						return 2;
+					}
+					else if (tableID == 9)
+					{
+						return 1;
+					}
+					else if (tableID == 10)
+					{
+						return 1;
+					}
+					else if (tableID == 11)
+					{
+						return 1;
+					}
+					else if (tableID == 12)
+					{
+						return 2;
+					}
+				}
+				else if (indexID == 1)
+				{
+					if (tableID == 2)
+					{
+						return 1;
+					}
+					else if (tableID == 6)
+					{
+						return 1;
+					}
+				}
+
+				throw new Exception("Catalog index not found");
+			}
+
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			if (obj instanceof DataEndMarker)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+
+				throw new Exception("Index not found");
+			}
+
+			if (obj instanceof Exception)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+
+				throw (Exception)obj;
+			}
+
+			Integer retval = ((Long)((ArrayList<Object>)obj).get(0)).intValue();
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return retval;
+		}
+
+		public IndexColCountPlan setParms(int tableID, int indexID) throws Exception
+		{
+			this.tableID = tableID;
+			this.indexID = indexID;
+			if (tableID >= 0 && tableID <= 12)
+			{
+				return this;
+			}
+
+			Operator op = p.getTrees().get(0);
+			while (!(op instanceof IndexOperator))
+			{
+				op = op.children().get(0);
+			}
+			IndexOperator iOp = (IndexOperator)op;
+			Index index = iOp.getIndex();
+			index.setCondition(new Filter("INDEXCOLS.TABLEID", "E", Integer.toString(tableID)));
+			index.addSecondaryFilter(new Filter("INDEXCOLS.INDEXID", "E", Integer.toString(indexID)));
+			return this;
+		}
+	}
+
+	public static class IndexColsForTablePlan
+	{
+		private final Plan p;
+		private String schema;
+		private String name;
+
+		public IndexColsForTablePlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public ArrayList<Object> execute(Transaction tx) throws Exception
+		{
+			if (schema.equals("SYS"))
+			{
+				ArrayList<Object> retval = new ArrayList<Object>();
+				ArrayList<Object> row = new ArrayList<Object>();
+				if (name.equals("TABLES"))
+				{
+					row.add("SCHEMA");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("TABNAME");
+					retval.add(row);
+				}
+				else if (name.equals("INDEXES"))
+				{
+					row.add("TABLEID");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("INDEXNAME");
+					retval.add(row);
+				}
+				else if (name.equals("COLUMNS"))
+				{
+					row.add("TABLEID");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("COLNAME");
+					retval.add(row);
+				}
+				else if (name.equals("INDEXCOLS"))
+				{
+					row.add("TABLEID");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("INDEXID");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("COLID");
+					retval.add(row);
+				}
+				else if (name.equals("TABLESTATS"))
+				{
+					row.add("TABLEID");
+					retval.add(row);
+				}
+				else if (name.equals("COLSTATS"))
+				{
+					row.add("TABLEID");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("COLID");
+					retval.add(row);
+				}
+				else if (name.equals("INDEXSTATS"))
+				{
+					row.add("TABLEID");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("INDEXID");
+					retval.add(row);
+				}
+				else if (name.equals("NODES"))
+				{
+					row.add("NODEID");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("HOSTNAME");
+					retval.add(row);
+				}
+				else if (name.equals("PARTITIONING"))
+				{
+					row.add("TABLEID");
+					retval.add(row);
+				}
+				else if (name.equals("COLDIST"))
+				{
+					row.add("TABLEID");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("COLID");
+					retval.add(row);
+				}
+				else if (name.equals("NODESTATE"))
+				{
+					row.add("NODEID");
+					retval.add(row);
+				}
+				else if (name.equals("VIEWS"))
+				{
+					row.add("SCHEMA");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("NAME");
+					retval.add(row);
+				}
+				else if (name.equals("BACKUPS"))
+				{
+					row.add("FIRST");
+					retval.add(row);
+				}
+				else
+				{
+					throw new Exception("Index not found");
+				}
+
+				return retval;
+			}
+
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1000000);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			ArrayList<Object> retval = new ArrayList<Object>();
+			while (!(obj instanceof DataEndMarker))
+			{
+				if (obj instanceof Exception)
+				{
+					cmd = new ArrayList<Object>(1);
+					cmd.add("CLOSE");
+					worker.in.put(cmd);
+					tx.setIsolationLevel(iso);
+					throw (Exception)obj;
+				}
+
+				retval.add(obj);
+
+				while (true)
+				{
+					try
+					{
+						obj = worker.out.take();
+						break;
+					}
+					catch (InterruptedException e)
+					{
+					}
+				}
+			}
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return retval;
+		}
+
+		public IndexColsForTablePlan setParms(String schema, String name) throws Exception
+		{
+			this.schema = schema;
+			this.name = name;
+			if (schema.equals("SYS"))
+			{
+				return this;
+			}
+			Operator op = p.getTrees().get(0);
+			while (op.children().size() != 0)
+			{
+				op = op.children().get(0);
+			}
+
+			Index index = ((IndexOperator)op).getIndex();
+			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
+			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + name + "'"));
+			return this;
+		}
+	}
+
+	public static class IndexIDsForTablePlan
+	{
+		private final Plan p;
+		private String schema;
+		private String name;
+
+		public IndexIDsForTablePlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public ArrayList<Object> execute(Transaction tx) throws Exception
+		{
+			if (schema.equals("SYS"))
+			{
+				ArrayList<Object> retval = new ArrayList<Object>();
+				ArrayList<Object> row = new ArrayList<Object>();
+				if (name.equals("TABLES"))
+				{
+					row.add(0);
+					retval.add(row);
+				}
+				else if (name.equals("INDEXES"))
+				{
+					row.add(0);
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add(1);
+					retval.add(row);
+				}
+				else if (name.equals("COLUMNS"))
+				{
+					row.add(0);
+					retval.add(row);
+				}
+				else if (name.equals("INDEXCOLS"))
+				{
+					row.add(0);
+					retval.add(row);
+				}
+				else if (name.equals("TABLESTATS"))
+				{
+					row.add(0);
+					retval.add(row);
+				}
+				else if (name.equals("COLSTATS"))
+				{
+					row.add(0);
+					retval.add(row);
+				}
+				else if (name.equals("INDEXSTATS"))
+				{
+					row.add(0);
+					retval.add(row);
+				}
+				else if (name.equals("NODES"))
+				{
+					row.add(0);
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add(1);
+					retval.add(row);
+				}
+				else if (name.equals("PARTITIONING"))
+				{
+					row.add(0);
+					retval.add(row);
+				}
+				else if (name.equals("COLDIST"))
+				{
+					row.add(0);
+					retval.add(row);
+				}
+				else if (name.equals("NODESTATE"))
+				{
+					row.add(0);
+					retval.add(row);
+				}
+				else if (name.equals("VIEWS"))
+				{
+					row.add(0);
+					retval.add(row);
+				}
+				else if (name.equals("BACKUPS"))
+				{
+					row.add(0);
+					retval.add(row);
+				}
+				else
+				{
+					throw new Exception("Table not found");
+				}
+
+				return retval;
+			}
+
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1000000);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			ArrayList<Object> retval = new ArrayList<Object>();
+			while (!(obj instanceof DataEndMarker))
+			{
+				if (obj instanceof Exception)
+				{
+					cmd = new ArrayList<Object>(1);
+					cmd.add("CLOSE");
+					worker.in.put(cmd);
+					tx.setIsolationLevel(iso);
+					throw (Exception)obj;
+				}
+
+				retval.add(obj);
+
+				while (true)
+				{
+					try
+					{
+						obj = worker.out.take();
+						break;
+					}
+					catch (InterruptedException e)
+					{
+					}
+				}
+			}
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return retval;
+		}
+
+		public IndexIDsForTablePlan setParms(String schema, String name) throws Exception
+		{
+			this.schema = schema;
+			this.name = name;
+			if (schema.equals("SYS"))
+			{
+				return this;
+			}
+			Operator op = p.getTrees().get(0);
+			while (op.children().size() != 0)
+			{
+				op = op.children().get(0);
+			}
+
+			Index index = ((IndexOperator)op).getIndex();
+			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
+			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + name + "'"));
+			return this;
+		}
+	}
+
+	public static class IndexPlan
+	{
+		private final Plan p;
+		private String schema;
+		private String table;
+
+		public IndexPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public ArrayList<Object> execute(Transaction tx) throws Exception
+		{
+			if (schema.equals("SYS"))
+			{
+				ArrayList<Object> retval = new ArrayList<Object>();
+				ArrayList<Object> row = new ArrayList<Object>();
+				if (table.equals("TABLES"))
+				{
+					row.add("PKTABLES");
+					retval.add(row);
+				}
+				else if (table.equals("INDEXES"))
+				{
+					row.add("PKINDEXES");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("SKINDEXES");
+					retval.add(row);
+				}
+				else if (table.equals("COLUMNS"))
+				{
+					row.add("PKCOLUMNS");
+					retval.add(row);
+				}
+				else if (table.equals("INDEXCOLS"))
+				{
+					row.add("PKINDEXCOLS");
+					retval.add(row);
+				}
+				else if (table.equals("TABLESTATS"))
+				{
+					row.add("PKTABLESTATS");
+					retval.add(row);
+				}
+				else if (table.equals("COLSTATS"))
+				{
+					row.add("PKCOLSTATS");
+					retval.add(row);
+				}
+				else if (table.equals("INDEXSTATS"))
+				{
+					row.add("PKINDEXSTATS");
+					retval.add(row);
+				}
+				else if (table.equals("NODES"))
+				{
+					row.add("PKNODES");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("SKNODES");
+					retval.add(row);
+				}
+				else if (table.equals("PARTITIONING"))
+				{
+					row.add("PKPARTITIONING");
+					retval.add(row);
+				}
+				else if (table.equals("COLDIST"))
+				{
+					row.add("PKCOLDIST");
+					retval.add(row);
+				}
+				else if (table.equals("NODESTATE"))
+				{
+					row.add("PKNODESTATE");
+					retval.add(row);
+				}
+				else if (table.equals("VIEWS"))
+				{
+					row.add("PKVIEWS");
+					retval.add(row);
+				}
+				else if (table.equals("BACKUPS"))
+				{
+					row.add("PKBACKUPS");
+					retval.add(row);
+				}
+				else
+				{
+					throw new Exception("Table not found");
+				}
+
+				return retval;
+			}
+
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1000000);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			ArrayList<Object> retval = new ArrayList<Object>();
+			while (!(obj instanceof DataEndMarker))
+			{
+				if (obj instanceof Exception)
+				{
+					cmd = new ArrayList<Object>(1);
+					cmd.add("CLOSE");
+					worker.in.put(cmd);
+					tx.setIsolationLevel(iso);
+					throw (Exception)obj;
+				}
+
+				retval.add(obj);
+
+				while (true)
+				{
+					try
+					{
+						obj = worker.out.take();
+						break;
+					}
+					catch (InterruptedException e)
+					{
+					}
+				}
+			}
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return retval;
+		}
+
+		public IndexPlan setParms(String schema, String table) throws Exception
+		{
+			this.schema = schema;
+			this.table = table;
+			if (schema.equals("SYS"))
+			{
+				return this;
+			}
+			RootOperator root = (RootOperator)p.getTrees().get(0);
+			IndexOperator iOp = (IndexOperator)root.children().get(0).children().get(0).children().get(0).children().get(0).children().get(0);
+			Index index = iOp.getIndex();
+			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
+			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
+			return this;
+		}
+	}
+
+	public static class InsertColPlan
+	{
+		private int cid;
+		private int tid;
+		private String name;
+		private String type;
+		private int length;
+		private int scale;
+		private int pkpos;
+		private boolean nullable;
+
+		public void execute(Transaction tx) throws Exception
+		{
+			String nullString = null;
+			if (nullable)
+			{
+				nullString = "'Y'";
+			}
+			else
+			{
+				nullString = "'N'";
+			}
+			String sql = "INSERT INTO SYS.COLUMNS VALUES(" + cid + "," + tid + ",'" + name + "','" + type + "'," + length + "," + scale + "," + pkpos + "," + nullString + ")";
+			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			worker.start();
+			worker.join();
+			int updateCount = worker.getUpdateCount();
+			if (updateCount == -1)
+			{
+				throw worker.getException();
+			}
+		}
+
+		public InsertColPlan setParms(int cid, int tid, String name, String type, int length, int scale, int pkpos, boolean nullable)
+		{
+			this.cid = cid;
+			this.tid = tid;
+			this.name = name;
+			this.type = type;
+			this.length = length;
+			this.scale = scale;
+			this.pkpos = pkpos;
+			this.nullable = nullable;
+			return this;
+		}
+	}
+
+	public static class InsertIndexColPlan
+	{
+		private int tableID;
+		private int indexID;
+		private int colID;
+		private int pos;
+		private boolean asc;
+
+		public void execute(Transaction tx) throws Exception
+		{
+			String ascString = null;
+			if (asc)
+			{
+				ascString = "'A'";
+			}
+			else
+			{
+				ascString = "'D'";
+			}
+			String sql = "INSERT INTO SYS.INDEXCOLS VALUES(" + indexID + "," + tableID + "," + colID + "," + pos + "," + ascString + ")";
+			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			worker.start();
+			worker.join();
+			int updateCount = worker.getUpdateCount();
+			if (updateCount == -1)
+			{
+				throw worker.getException();
+			}
+		}
+
+		public InsertIndexColPlan setParms(int indexID, int tableID, int colID, int pos, boolean asc)
+		{
+			this.tableID = tableID;
+			this.indexID = indexID;
+			this.colID = colID;
+			this.pos = pos;
+			this.asc = asc;
+			return this;
+		}
+	}
+
+	public static class InsertIndexPlan
+	{
+		private int iid;
+		private int tid;
+		private String name;
+		private boolean unique;
+
+		public void execute(Transaction tx) throws Exception
+		{
+			String uString = null;
+			if (unique)
+			{
+				uString = "'Y'";
+			}
+			else
+			{
+				uString = "'N'";
+			}
+			String sql = "INSERT INTO SYS.INDEXES VALUES(" + iid + ",'" + name + "'," + tid + "," + uString + ")";
+			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			worker.start();
+			worker.join();
+			int updateCount = worker.getUpdateCount();
+			if (updateCount == -1)
+			{
+				throw worker.getException();
+			}
+		}
+
+		public InsertIndexPlan setParms(int iid, String name, int tid, boolean unique)
+		{
+			this.iid = iid;
+			this.tid = tid;
+			this.name = name;
+			this.unique = unique;
+			return this;
+		}
+	}
+
+	public static class InsertPartitionPlan
+	{
+		private int id;
+		private String group;
+		private String node;
+		private String dev;
+
+		public void execute(Transaction tx) throws Exception
+		{
+			String sql = "INSERT INTO SYS.PARTITIONING VALUES(" + id + ",'" + group + "','" + node + "','" + dev + "')";
+			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			worker.start();
+			worker.join();
+			int updateCount = worker.getUpdateCount();
+			if (updateCount == -1)
+			{
+				throw worker.getException();
+			}
+		}
+
+		public InsertPartitionPlan setParms(int id, String group, String node, String dev)
+		{
+			this.id = id;
+			this.group = group;
+			this.node = node;
+			this.dev = dev;
+			return this;
+		}
+	}
+
+	public static class InsertTablePlan
+	{
+		private int tableID;
+		private String schema;
+		private String table;
+		private String type;
+
+		public void execute(Transaction tx) throws Exception
+		{
+			String sql = "INSERT INTO SYS.TABLES VALUES(" + tableID + "," + "'" + schema + "'" + "," + "'" + table + "'" + "," + "'" + type + "')";
+			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			worker.start();
+			worker.join();
+			int updateCount = worker.getUpdateCount();
+			if (updateCount == -1)
+			{
+				throw worker.getException();
+			}
+		}
+
+		public InsertTablePlan setParms(int tableID, String schema, String table, String type)
+		{
+			this.tableID = tableID;
+			this.schema = schema;
+			this.table = table;
+			this.type = type;
+			return this;
+		}
+	}
+
+	public static class InsertViewPlan
+	{
+		private int id;
+		private String schema;
+		private String table;
+		private String text;
+
+		public void execute(Transaction tx) throws Exception
+		{
+			String textCopy = text.replace("'", "\\'");
+			String sql = "INSERT INTO SYS.VIEWS VALUES(" + id + ",'" + schema + "','" + table + "','" + textCopy + "')";
+			// HRDBMSWorker.logger.debug(sql);
+			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			worker.start();
+			worker.join();
+			int updateCount = worker.getUpdateCount();
+			if (updateCount == -1)
+			{
+				throw worker.getException();
+			}
+		}
+
+		public InsertViewPlan setParms(int id, String schema, String table, String text)
+		{
+			this.id = id;
+			this.schema = schema;
+			this.table = table;
+			this.text = text;
+			return this;
+		}
+	}
+
+	public static class KeysByIDPlan
+	{
+		private final Plan p;
+		private int tableID;
+		private int indexID;
+
+		public KeysByIDPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public ArrayList<Object> execute(Transaction tx) throws Exception
+		{
+			if (tableID >= 0 && tableID <= 12)
+			{
+				ArrayList<Object> retval = new ArrayList<Object>();
+				ArrayList<Object> row = new ArrayList<Object>();
+				if (tableID == 0 && indexID == 0)
+				{
+					row.add("SCHEMA");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("TABNAME");
+					retval.add(row);
+				}
+				else if (tableID == 2 && indexID == 0)
+				{
+					row.add("TABLEID");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("INDEXNAME");
+					retval.add(row);
+				}
+				else if (tableID == 2 && indexID == 1)
+				{
+					row.add("INDEXNAME");
+					retval.add(row);
+				}
+				else if (tableID == 1 && indexID == 0)
+				{
+					row.add("TABLEID");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("COLNAME");
+					retval.add(row);
+				}
+				else if (tableID == 3 && indexID == 0)
+				{
+					row.add("TABLEID");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("INDEXID");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("COLID");
+					retval.add(row);
+				}
+				else if (tableID == 5 && indexID == 0)
+				{
+					row.add("TABLEID");
+					retval.add(row);
+				}
+				else if (tableID == 7 && indexID == 0)
+				{
+					row.add("TABLEID");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("COLID");
+					retval.add(row);
+				}
+				else if (tableID == 12 && indexID == 0)
+				{
+					row.add("TABLEID");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("INDEXID");
+					retval.add(row);
+				}
+				else if (tableID == 6 && indexID == 0)
+				{
+					row.add("HOSTNAME");
+					retval.add(row);
+				}
+				else if (tableID == 6 && indexID == 1)
+				{
+					row.add("NODEID");
+					retval.add(row);
+				}
+				else if (tableID == 11 && indexID == 0)
+				{
+					row.add("TABLEID");
+					retval.add(row);
+				}
+				else if (tableID == 8 && indexID == 0)
+				{
+					row.add("TABLEID");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("COLID");
+					retval.add(row);
+				}
+				else if (tableID == 10 && indexID == 0)
+				{
+					row.add("NODEID");
+					retval.add(row);
+				}
+				else if (tableID == 4 && indexID == 0)
+				{
+					row.add("SCHEMA");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("NAME");
+					retval.add(row);
+				}
+				else if (tableID == 9 && indexID == 0)
+				{
+					row.add("FIRST");
+					retval.add(row);
+				}
+				else
+				{
+					throw new Exception("Index not found");
+				}
+
+				return retval;
+			}
+
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1000000);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			ArrayList<Object> retval = new ArrayList<Object>();
+			while (!(obj instanceof DataEndMarker))
+			{
+				if (obj instanceof Exception)
+				{
+					cmd = new ArrayList<Object>(1);
+					cmd.add("CLOSE");
+					worker.in.put(cmd);
+					tx.setIsolationLevel(iso);
+					throw (Exception)obj;
+				}
+
+				retval.add(obj);
+
+				while (true)
+				{
+					try
+					{
+						obj = worker.out.take();
+						break;
+					}
+					catch (InterruptedException e)
+					{
+					}
+				}
+			}
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return retval;
+		}
+
+		public KeysByIDPlan setParms(int tableID, int indexID) throws Exception
+		{
+			this.tableID = tableID;
+			this.indexID = indexID;
+			if (tableID >= 0 && tableID <= 12)
+			{
+				return this;
+			}
+			Operator op = p.getTrees().get(0);
+			while (op.children().size() != 0)
+			{
+				op = op.children().get(0);
+			}
+
+			Index index = ((IndexOperator)op).getIndex();
+			index.setCondition(new Filter("INDEXCOLS.TABLEID", "E", Integer.toString(tableID)));
+			index.addSecondaryFilter(new Filter("INDEXCOLS.INDEXID", "E", Integer.toString(indexID)));
+			return this;
+		}
+	}
+
+	public static class KeysPlan
+	{
+		private final Plan p;
+		private String schema;
+		private String name;
+
+		public KeysPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public ArrayList<Object> execute(Transaction tx) throws Exception
+		{
+			if (schema.equals("SYS"))
+			{
+				ArrayList<Object> retval = new ArrayList<Object>();
+				ArrayList<Object> row = new ArrayList<Object>();
+				if (name.equals("PKTABLES"))
+				{
+					row.add("TABLES");
+					row.add("SCHEMA");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("TABLES");
+					row.add("TABNAME");
+					retval.add(row);
+				}
+				else if (name.equals("PKINDEXES"))
+				{
+					row.add("INDEXES");
+					row.add("TABLEID");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("INDEXES");
+					row.add("INDEXNAME");
+					retval.add(row);
+				}
+				else if (name.equals("SKINDEXES"))
+				{
+					row.add("INDEXES");
+					row.add("INDEXNAME");
+					retval.add(row);
+				}
+				else if (name.equals("PKCOLUMNS"))
+				{
+					row.add("COLUMNS");
+					row.add("TABLEID");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("COLUMNS");
+					row.add("COLNAME");
+					retval.add(row);
+				}
+				else if (name.equals("PKINDEXCOLS"))
+				{
+					row.add("INDEXCOLS");
+					row.add("TABLEID");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("INDEXCOLS");
+					row.add("INDEXID");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("INDEXCOLS");
+					row.add("COLID");
+					retval.add(row);
+				}
+				else if (name.equals("PKTABLESTATS"))
+				{
+					row.add("TABLESTATS");
+					row.add("TABLEID");
+					retval.add(row);
+				}
+				else if (name.equals("PKCOLSTATS"))
+				{
+					row.add("COLSTATS");
+					row.add("TABLEID");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("COLSTATS");
+					row.add("COLID");
+					retval.add(row);
+				}
+				else if (name.equals("PKINDEXSTATS"))
+				{
+					row.add("INDEXSTATS");
+					row.add("TABLEID");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("INDEXSTATS");
+					row.add("INDEXID");
+					retval.add(row);
+				}
+				else if (name.equals("PKNODES"))
+				{
+					row.add("NODES");
+					row.add("HOSTNAME");
+					retval.add(row);
+				}
+				else if (name.equals("SKNODES"))
+				{
+					row.add("NODES");
+					row.add("NODEID");
+					retval.add(row);
+				}
+				else if (name.equals("PKPARTITIONING"))
+				{
+					row.add("PARTITIONING");
+					row.add("TABLEID");
+					retval.add(row);
+				}
+				else if (name.equals("PKCOLDIST"))
+				{
+					row.add("COLDIST");
+					row.add("TABLEID");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("COLDIST");
+					row.add("COLID");
+					retval.add(row);
+				}
+				else if (name.equals("PKNODESTATE"))
+				{
+					row.add("NODESTATE");
+					row.add("NODEID");
+					retval.add(row);
+				}
+				else if (name.equals("PKVIEWS"))
+				{
+					row.add("VIEWS");
+					row.add("SCHEMA");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("VIEWS");
+					row.add("NAME");
+					retval.add(row);
+				}
+				else if (name.equals("PKBACKUPS"))
+				{
+					row.add("BACKUPS");
+					row.add("FIRST");
+					retval.add(row);
+				}
+				else
+				{
+					throw new Exception("Index not found");
+				}
+
+				return retval;
+			}
+
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1000000);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			ArrayList<Object> retval = new ArrayList<Object>();
+			while (!(obj instanceof DataEndMarker))
+			{
+				if (obj instanceof Exception)
+				{
+					cmd = new ArrayList<Object>(1);
+					cmd.add("CLOSE");
+					worker.in.put(cmd);
+					tx.setIsolationLevel(iso);
+					throw (Exception)obj;
+				}
+
+				retval.add(obj);
+
+				while (true)
+				{
+					try
+					{
+						obj = worker.out.take();
+						break;
+					}
+					catch (InterruptedException e)
+					{
+					}
+				}
+			}
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return retval;
+		}
+
+		public KeysPlan setParms(String schema, String name) throws Exception
+		{
+			this.schema = schema;
+			this.name = name;
+			if (schema.equals("SYS"))
+			{
+				return this;
+			}
+			Operator op = p.getTrees().get(0);
+			while (op.children().size() != 0)
+			{
+				op = op.children().get(0);
+			}
+
+			Index index = ((IndexOperator)op).getIndex();
+			index.setCondition(new Filter("INDEXES.INDEXNAME", "E", "'" + name + "'"));
+
+			while (!(op instanceof HashJoinOperator))
+			{
+				if (op instanceof TableScanOperator)
+				{
+					op = ((TableScanOperator)op).firstParent();
+				}
+				else
+				{
+					op = op.parent();
+				}
+			}
+
+			op = op.children().get(1).children().get(0);
+			index = ((IndexOperator)op).getIndex();
+			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
+			return this;
+		}
+	}
+
+	public static class LengthPlan
+	{
+		private final Plan p;
+		private String schema;
+		private String table;
+		private String col;
+
+		public LengthPlan(Plan p)
+		{
+			this.p = p;
+		}
+
 		public int execute(Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
@@ -6872,7 +5014,7 @@ public class PlanCacheManager
 					{
 						return 128;
 					}
-					
+
 					if (col.equals("TYPE"))
 					{
 						return 1;
@@ -6884,12 +5026,12 @@ public class PlanCacheManager
 					{
 						return 128;
 					}
-					
+
 					if (col.equals("COLTYPE"))
 					{
 						return 16;
 					}
-					
+
 					if (col.equals("NULLABLE"))
 					{
 						return 1;
@@ -6901,7 +5043,7 @@ public class PlanCacheManager
 					{
 						return 128;
 					}
-					
+
 					if (col.equals("UNIQUE"))
 					{
 						return 1;
@@ -6920,7 +5062,7 @@ public class PlanCacheManager
 					{
 						return 128;
 					}
-					
+
 					if (col.equals("TEXT"))
 					{
 						return 32768;
@@ -6932,7 +5074,7 @@ public class PlanCacheManager
 					{
 						return 128;
 					}
-					
+
 					if (col.equals("TYPE"))
 					{
 						return 1;
@@ -6959,10 +5101,10 @@ public class PlanCacheManager
 						return 1;
 					}
 				}
-				
+
 				throw new Exception("Column not found");
 			}
-			
+
 			int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
 			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
@@ -6971,7 +5113,7 @@ public class PlanCacheManager
 			cmd.add("NEXT");
 			cmd.add(1);
 			worker.in.put(cmd);
-			
+
 			Object obj = null;
 			while (true)
 			{
@@ -6980,8 +5122,9 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch(InterruptedException e)
-				{}
+				catch (InterruptedException e)
+				{
+				}
 			}
 
 			if (obj instanceof Exception)
@@ -6990,25 +5133,1954 @@ public class PlanCacheManager
 				cmd.add("CLOSE");
 				worker.in.put(cmd);
 				tx.setIsolationLevel(iso);
-			
+
 				throw (Exception)obj;
 			}
-				
+
 			if (obj instanceof DataEndMarker)
 			{
 				cmd = new ArrayList<Object>(1);
 				cmd.add("CLOSE");
 				worker.in.put(cmd);
 				tx.setIsolationLevel(iso);
-			
+
 				throw new Exception("Column not found");
 			}
-			
+
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
 			worker.in.put(cmd);
 			tx.setIsolationLevel(iso);
 			return (Integer)((ArrayList<Object>)obj).get(0);
+		}
+
+		public LengthPlan setParms(String schema, String table, String col) throws Exception
+		{
+			this.table = table;
+			this.schema = schema;
+			this.col = col;
+			if (schema.equals("SYS"))
+			{
+				return this;
+			}
+
+			Operator op = p.getTrees().get(0);
+			while (!(op instanceof IndexOperator))
+			{
+				op = op.children().get(0);
+			}
+			IndexOperator iOp = (IndexOperator)op;
+			Index index = iOp.getIndex();
+			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
+			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
+			while (!(op instanceof SelectOperator))
+			{
+				if (op instanceof TableScanOperator)
+				{
+					op = ((TableScanOperator)op).firstParent();
+				}
+				else
+				{
+					op = op.parent();
+				}
+			}
+			SelectOperator select = (SelectOperator)op;
+			select.getFilter().remove(0);
+			select.getFilter().add(new Filter("B.COLNAME", "E", "'" + col + "'"));
+			return this;
+		}
+	}
+
+	public static class MultiDeleteIndexColsPlan
+	{
+		private int tableID;
+
+		public void execute(Transaction tx) throws Exception
+		{
+			String sql = "DELETE FROM SYS.INDEXCOLS WHERE TABLEID = " + tableID;
+			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			worker.start();
+			worker.join();
+			int updateCount = worker.getUpdateCount();
+			if (updateCount == -1)
+			{
+				throw worker.getException();
+			}
+		}
+
+		public MultiDeleteIndexColsPlan setParms(int tableID)
+		{
+			this.tableID = tableID;
+			return this;
+		}
+	}
+
+	public static class MultiDeleteIndexesPlan
+	{
+		private int tableID;
+
+		public void execute(Transaction tx) throws Exception
+		{
+			String sql = "DELETE FROM SYS.INDEXES WHERE TABLEID = " + tableID;
+			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			worker.start();
+			worker.join();
+			int updateCount = worker.getUpdateCount();
+			if (updateCount == -1)
+			{
+				throw worker.getException();
+			}
+		}
+
+		public MultiDeleteIndexesPlan setParms(int tableID)
+		{
+			this.tableID = tableID;
+			return this;
+		}
+	}
+
+	public static class MultiDeleteIndexStatsPlan
+	{
+		private int tableID;
+
+		public void execute(Transaction tx) throws Exception
+		{
+			String sql = "DELETE FROM SYS.INDEXSTATS WHERE TABLEID = " + tableID;
+			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			worker.start();
+			worker.join();
+			int updateCount = worker.getUpdateCount();
+			if (updateCount == -1)
+			{
+				throw worker.getException();
+			}
+		}
+
+		public MultiDeleteIndexStatsPlan setParms(int tableID)
+		{
+			this.tableID = tableID;
+			return this;
+		}
+	}
+
+	public static class NextIndexIDPlan
+	{
+		private final Plan p;
+
+		public NextIndexIDPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public int execute(Transaction tx) throws Exception
+		{
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			if (obj instanceof DataEndMarker)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+				return 0;
+			}
+
+			if (obj instanceof Exception)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+
+				throw (Exception)obj;
+			}
+
+			int retval = (Integer)((ArrayList<Object>)obj).get(0);
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return retval + 1;
+		}
+
+		public NextIndexIDPlan setParms(int tableID) throws Exception
+		{
+			Operator op = p.getTrees().get(0);
+			while (op.children().size() != 0)
+			{
+				op = op.children().get(0);
+			}
+
+			Index index = ((IndexOperator)op).getIndex();
+			index.setCondition(new Filter("INDEXES.TABLEID", "E", Integer.toString(tableID)));
+			return this;
+		}
+	}
+
+	public static class NextTableIDPlan
+	{
+		private final Plan p;
+
+		public NextTableIDPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public int execute(Transaction tx) throws Exception
+		{
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			if (obj instanceof DataEndMarker)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+
+				throw new Exception("Unable to get next table ID");
+			}
+
+			if (obj instanceof Exception)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+
+				throw (Exception)obj;
+			}
+
+			int retval = (Integer)((ArrayList<Object>)obj).get(0);
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return retval + 1;
+		}
+
+		public NextTableIDPlan setParms() throws Exception
+		{
+			return this;
+		}
+	}
+
+	public static class NextViewIDPlan
+	{
+		private final Plan p;
+
+		public NextViewIDPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public int execute(Transaction tx) throws Exception
+		{
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			if (obj instanceof DataEndMarker)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+
+				return 0;
+			}
+
+			if (obj instanceof Exception)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+
+				throw (Exception)obj;
+			}
+
+			int retval = (Integer)((ArrayList<Object>)obj).get(0);
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return retval + 1;
+		}
+
+		public NextViewIDPlan setParms() throws Exception
+		{
+			return this;
+		}
+	}
+
+	public static class OrdersPlan
+	{
+		private final Plan p;
+		private String schema;
+		private String name;
+
+		public OrdersPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public ArrayList<Object> execute(Transaction tx) throws Exception
+		{
+			if (schema.equals("SYS"))
+			{
+				ArrayList<Object> retval = new ArrayList<Object>();
+				ArrayList<Object> row = new ArrayList<Object>();
+				if (name.equals("PKTABLES"))
+				{
+					row.add("A");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("A");
+					retval.add(row);
+				}
+				else if (name.equals("PKINDEXES"))
+				{
+					row.add("A");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("A");
+					retval.add(row);
+				}
+				else if (name.equals("SKINDEXES"))
+				{
+					row.add("A");
+					retval.add(row);
+				}
+				else if (name.equals("PKCOLUMNS"))
+				{
+					row.add("A");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("A");
+					retval.add(row);
+				}
+				else if (name.equals("PKINDEXCOLS"))
+				{
+					row.add("A");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("A");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("A");
+					retval.add(row);
+				}
+				else if (name.equals("PKTABLESTATS"))
+				{
+					row.add("A");
+					retval.add(row);
+				}
+				else if (name.equals("PKCOLSTATS"))
+				{
+					row.add("A");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("A");
+					retval.add(row);
+				}
+				else if (name.equals("PKINDEXSTATS"))
+				{
+					row.add("A");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("A");
+					retval.add(row);
+				}
+				else if (name.equals("PKNODES"))
+				{
+					row.add("A");
+					retval.add(row);
+				}
+				else if (name.equals("SKNODES"))
+				{
+					row.add("A");
+					retval.add(row);
+				}
+				else if (name.equals("PKPARTITIONING"))
+				{
+					row.add("A");
+					retval.add(row);
+				}
+				else if (name.equals("PKCOLDIST"))
+				{
+					row.add("A");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("A");
+					retval.add(row);
+				}
+				else if (name.equals("PKNODESTATE"))
+				{
+					row.add("A");
+					retval.add(row);
+				}
+				else if (name.equals("PKVIEWS"))
+				{
+					row.add("A");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("A");
+					retval.add(row);
+				}
+				else if (name.equals("PKBACKUPS"))
+				{
+					row.add("A");
+					retval.add(row);
+				}
+				else
+				{
+					throw new Exception("Index not found");
+				}
+
+				return retval;
+			}
+
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1000000);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			ArrayList<Object> retval = new ArrayList<Object>();
+			while (!(obj instanceof DataEndMarker))
+			{
+				if (obj instanceof Exception)
+				{
+					cmd = new ArrayList<Object>(1);
+					cmd.add("CLOSE");
+					worker.in.put(cmd);
+					tx.setIsolationLevel(iso);
+					throw (Exception)obj;
+				}
+
+				retval.add(obj);
+
+				while (true)
+				{
+					try
+					{
+						obj = worker.out.take();
+						break;
+					}
+					catch (InterruptedException e)
+					{
+					}
+				}
+			}
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return retval;
+		}
+
+		public OrdersPlan setParms(String schema, String name) throws Exception
+		{
+			this.schema = schema;
+			this.name = name;
+			if (schema.equals("SYS"))
+			{
+				return this;
+			}
+			Operator op = p.getTrees().get(0);
+			while (op.children().size() != 0)
+			{
+				op = op.children().get(0);
+			}
+
+			Index index = ((IndexOperator)op).getIndex();
+			index.setCondition(new Filter("INDEXES.INDEXNAME", "E", "'" + name + "'"));
+
+			while (!(op instanceof HashJoinOperator))
+			{
+				if (op instanceof TableScanOperator)
+				{
+					op = ((TableScanOperator)op).firstParent();
+				}
+				else
+				{
+					op = op.parent();
+				}
+			}
+
+			op = op.children().get(1).children().get(0);
+			index = ((IndexOperator)op).getIndex();
+			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
+			return this;
+		}
+	}
+
+	public static class PartitioningPlan
+	{
+		private final Plan p;
+		private String schema;
+		private String table;
+
+		public PartitioningPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public ArrayList<Object> execute(Transaction tx) throws Exception
+		{
+			if (schema.equals("SYS"))
+			{
+				ArrayList<Object> retval = new ArrayList<Object>();
+				retval.add("NONE");
+				retval.add("{-1}");
+				retval.add("{0}");
+				return retval;
+			}
+
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			if (obj instanceof DataEndMarker)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+
+				throw new Exception("Table not found: " + schema + "." + table);
+			}
+
+			if (obj instanceof Exception)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+				throw (Exception)obj;
+			}
+
+			ArrayList<Object> retval = (ArrayList<Object>)obj;
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return retval;
+		}
+
+		public PartitioningPlan setParms(String schema, String table) throws Exception
+		{
+			this.schema = schema;
+			this.table = table;
+			if (schema.equals("SYS"))
+			{
+				return this;
+			}
+			RootOperator root = (RootOperator)p.getTrees().get(0);
+			IndexOperator iOp = (IndexOperator)root.children().get(0).children().get(0).children().get(0).children().get(0);
+			Index index = iOp.getIndex();
+			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
+			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
+			return this;
+		}
+	}
+
+	public static class TableAndIndexIDPlan
+	{
+		private final Plan p;
+		private String schema;
+		private String name;
+
+		public TableAndIndexIDPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public ArrayList<Object> execute(Transaction tx) throws Exception
+		{
+			if (schema.equals("SYS"))
+			{
+				ArrayList<Object> retval = new ArrayList<Object>();
+				if (name.equals("PKTABLES"))
+				{
+					retval.add(0);
+					retval.add(0);
+					return retval;
+				}
+				else if (name.equals("PKINDEXES"))
+				{
+					retval.add(2);
+					retval.add(0);
+					return retval;
+				}
+				else if (name.equals("SKINDEXES"))
+				{
+					retval.add(2);
+					retval.add(1);
+					return retval;
+				}
+				else if (name.equals("PKCOLUMNS"))
+				{
+					retval.add(1);
+					retval.add(0);
+					return retval;
+				}
+				else if (name.equals("PKINDEXCOLS"))
+				{
+					retval.add(3);
+					retval.add(0);
+					return retval;
+				}
+				else if (name.equals("PKTABLESTATS"))
+				{
+					retval.add(5);
+					retval.add(0);
+					return retval;
+				}
+				else if (name.equals("PKCOLSTATS"))
+				{
+					retval.add(7);
+					retval.add(0);
+					return retval;
+				}
+				else if (name.equals("PKINDEXSTATS"))
+				{
+					retval.add(12);
+					retval.add(0);
+					return retval;
+				}
+				else if (name.equals("PKNODES"))
+				{
+					retval.add(6);
+					retval.add(0);
+					return retval;
+				}
+				else if (name.equals("SKNODES"))
+				{
+					retval.add(6);
+					retval.add(1);
+					return retval;
+				}
+				else if (name.equals("PKPARTITIONING"))
+				{
+					retval.add(11);
+					retval.add(0);
+					return retval;
+				}
+				else if (name.equals("PKCOLDIST"))
+				{
+					retval.add(8);
+					retval.add(0);
+					return retval;
+				}
+				else if (name.equals("PKNODESTATE"))
+				{
+					retval.add(10);
+					retval.add(0);
+					return retval;
+				}
+				else if (name.equals("PKVIEWS"))
+				{
+					retval.add(4);
+					retval.add(0);
+					return retval;
+				}
+				else if (name.equals("PKBACKUPS"))
+				{
+					retval.add(9);
+					retval.add(0);
+					return retval;
+				}
+
+				throw new Exception("Index not found");
+			}
+
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			if (obj instanceof Exception)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+				throw (Exception)obj;
+			}
+
+			if (obj instanceof DataEndMarker)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+				throw new Exception("Index not found");
+			}
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return (ArrayList<Object>)obj;
+		}
+
+		public TableAndIndexIDPlan setParms(String schema, String name) throws Exception
+		{
+			this.schema = schema;
+			this.name = name;
+			if (schema.equals("SYS"))
+			{
+				return this;
+			}
+			Operator op = p.getTrees().get(0);
+			while (!(op instanceof IndexOperator))
+			{
+				op = op.children().get(0);
+			}
+			IndexOperator iOp = (IndexOperator)op;
+			Index index = iOp.getIndex();
+			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
+			while (!(op instanceof SelectOperator))
+			{
+				if (op instanceof TableScanOperator)
+				{
+					op = ((TableScanOperator)op).firstParent();
+				}
+				else
+				{
+					op = op.parent();
+				}
+			}
+			SelectOperator select = (SelectOperator)op;
+			select.getFilter().remove(0);
+			select.getFilter().add(new Filter("B.INDEXNAME", "E", "'" + name + "'"));
+			return this;
+		}
+	}
+
+	public static class TableCardPlan
+	{
+		private final Plan p;
+
+		public TableCardPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public long execute(Transaction tx) throws Exception
+		{
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_UR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			if (obj instanceof DataEndMarker)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+
+				throw new Exception("No table statistics");
+			}
+
+			if (obj instanceof Exception)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+
+				throw (Exception)obj;
+			}
+
+			Long retval = (Long)((ArrayList<Object>)obj).get(0);
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return retval;
+		}
+
+		public TableCardPlan setParms(String schema, String table) throws Exception
+		{
+			Operator op = p.getTrees().get(0);
+			while (!(op instanceof IndexOperator))
+			{
+				op = op.children().get(0);
+			}
+			IndexOperator iOp = (IndexOperator)op;
+			Index index = iOp.getIndex();
+			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
+			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
+			return this;
+		}
+	}
+
+	public static class TableIDPlan
+	{
+		private final Plan p;
+		private String schema;
+		private String name;
+
+		public TableIDPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public int execute(Transaction tx) throws Exception
+		{
+			if (schema.equals("SYS"))
+			{
+				if (name.equals("TABLES"))
+				{
+					return 0;
+				}
+				else if (name.equals("INDEXES"))
+				{
+					return 2;
+				}
+				else if (name.equals("COLUMNS"))
+				{
+					return 1;
+				}
+				else if (name.equals("INDEXCOLS"))
+				{
+					return 3;
+				}
+				else if (name.equals("TABLESTATS"))
+				{
+					return 5;
+				}
+				else if (name.equals("COLSTATS"))
+				{
+					return 7;
+				}
+				else if (name.equals("INDEXSTATS"))
+				{
+					return 12;
+				}
+				else if (name.equals("NODES"))
+				{
+					return 6;
+				}
+				else if (name.equals("PARTITIONING"))
+				{
+					return 11;
+				}
+				else if (name.equals("COLDIST"))
+				{
+					return 8;
+				}
+				else if (name.equals("NODESTATE"))
+				{
+					return 10;
+				}
+				else if (name.equals("VIEWS"))
+				{
+					return 4;
+				}
+				else if (name.equals("BACKUPS"))
+				{
+					return 9;
+				}
+
+				throw new Exception("Table not found: " + schema + "." + name);
+			}
+
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			if (obj instanceof Exception)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+				throw (Exception)obj;
+			}
+
+			if (obj instanceof DataEndMarker)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+				throw new Exception("Table not found");
+			}
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return (Integer)((ArrayList<Object>)obj).get(0);
+		}
+
+		public TableIDPlan setParms(String schema, String name) throws Exception
+		{
+			this.schema = schema;
+			this.name = name;
+			if (schema.equals("SYS"))
+			{
+				return this;
+			}
+			Operator op = p.getTrees().get(0);
+			while (op.children().size() != 0)
+			{
+				op = op.children().get(0);
+			}
+
+			Index index = ((IndexOperator)op).getIndex();
+			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
+			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + name + "'"));
+			return this;
+		}
+	}
+
+	public static class TypesPlan
+	{
+		private final Plan p;
+		private String schema;
+		private String name;
+
+		public TypesPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public ArrayList<Object> execute(Transaction tx) throws Exception
+		{
+			if (schema.equals("SYS"))
+			{
+				ArrayList<Object> retval = new ArrayList<Object>();
+				ArrayList<Object> row = new ArrayList<Object>();
+				if (name.equals("PKTABLES"))
+				{
+					row.add("VARCHAR");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("VARCHAR");
+					retval.add(row);
+				}
+				else if (name.equals("PKINDEXES"))
+				{
+					row.add("INT");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("VARCHAR");
+					retval.add(row);
+				}
+				else if (name.equals("SKINDEXES"))
+				{
+					row.add("VARCHAR");
+					retval.add(row);
+				}
+				else if (name.equals("PKCOLUMNS"))
+				{
+					row.add("INT");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("VARCHAR");
+					retval.add(row);
+				}
+				else if (name.equals("PKINDEXCOLS"))
+				{
+					row.add("INT");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("INT");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("INT");
+					retval.add(row);
+				}
+				else if (name.equals("PKTABLESTATS"))
+				{
+					row.add("INT");
+					retval.add(row);
+				}
+				else if (name.equals("PKCOLSTATS"))
+				{
+					row.add("INT");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("INT");
+					retval.add(row);
+				}
+				else if (name.equals("PKINDEXSTATS"))
+				{
+					row.add("INT");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("INT");
+					retval.add(row);
+				}
+				else if (name.equals("PKNODES"))
+				{
+					row.add("VARCHAR");
+					retval.add(row);
+				}
+				else if (name.equals("SKNODES"))
+				{
+					row.add("INT");
+					retval.add(row);
+				}
+				else if (name.equals("PKPARTITIONING"))
+				{
+					row.add("INT");
+					retval.add(row);
+				}
+				else if (name.equals("PKCOLDIST"))
+				{
+					row.add("INT");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("INT");
+					retval.add(row);
+				}
+				else if (name.equals("PKNODESTATE"))
+				{
+					row.add("INT");
+					retval.add(row);
+				}
+				else if (name.equals("PKVIEWS"))
+				{
+					row.add("VARCHAR");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("VARCHAR");
+					retval.add(row);
+				}
+				else if (name.equals("PKBACKUPS"))
+				{
+					row.add("INT");
+					retval.add(row);
+				}
+				else
+				{
+					throw new Exception("Index not found");
+				}
+
+				return retval;
+			}
+
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1000000);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			ArrayList<Object> retval = new ArrayList<Object>();
+			while (!(obj instanceof DataEndMarker))
+			{
+				if (obj instanceof Exception)
+				{
+					cmd = new ArrayList<Object>(1);
+					cmd.add("CLOSE");
+					worker.in.put(cmd);
+					tx.setIsolationLevel(iso);
+					throw (Exception)obj;
+				}
+
+				retval.add(obj);
+
+				while (true)
+				{
+					try
+					{
+						obj = worker.out.take();
+						break;
+					}
+					catch (InterruptedException e)
+					{
+					}
+				}
+			}
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return retval;
+		}
+
+		public TypesPlan setParms(String schema, String name) throws Exception
+		{
+			this.schema = schema;
+			this.name = name;
+			if (schema.equals("SYS"))
+			{
+				return this;
+			}
+			Operator op = p.getTrees().get(0);
+			while (op.children().size() != 0)
+			{
+				op = op.children().get(0);
+			}
+
+			Index index = ((IndexOperator)op).getIndex();
+			index.setCondition(new Filter("INDEXES.INDEXNAME", "E", "'" + name + "'"));
+
+			while (!(op instanceof HashJoinOperator))
+			{
+				if (op instanceof TableScanOperator)
+				{
+					op = ((TableScanOperator)op).firstParent();
+				}
+				else
+				{
+					op = op.parent();
+				}
+			}
+
+			op = op.children().get(1).children().get(0);
+			index = ((IndexOperator)op).getIndex();
+			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
+			return this;
+		}
+	}
+
+	public static class UniquePlan
+	{
+		private final Plan p;
+		private String schema;
+		private String table;
+
+		public UniquePlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public ArrayList<Object> execute(Transaction tx) throws Exception
+		{
+			if (schema.equals("SYS"))
+			{
+				ArrayList<Object> retval = new ArrayList<Object>();
+				ArrayList<Object> row = new ArrayList<Object>();
+				if (table.equals("TABLES"))
+				{
+					row.add("PKTABLES");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("INDEXES"))
+				{
+					row.add("PKINDEXES");
+					row.add(true);
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("SKINDEXES");
+					row.add(false);
+					retval.add(row);
+				}
+				else if (table.equals("COLUMNS"))
+				{
+					row.add("PKCOLUMNS");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("INDEXCOLS"))
+				{
+					row.add("PKINDEXCOLS");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("TABLESTATS"))
+				{
+					row.add("PKTABLESTATS");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("COLSTATS"))
+				{
+					row.add("PKCOLSTATS");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("INDEXSTATS"))
+				{
+					row.add("PKINDEXSTATS");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("NODES"))
+				{
+					row.add("PKNODES");
+					row.add(true);
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("SKNODES");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("PARTITIONING"))
+				{
+					row.add("PKPARTITIONING");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("COLDIST"))
+				{
+					row.add("PKCOLDIST");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("NODESTATE"))
+				{
+					row.add("PKNODESTATE");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("VIEWS"))
+				{
+					row.add("PKVIEWS");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("BACKUPS"))
+				{
+					row.add("PKBACKUPS");
+					row.add(true);
+					retval.add(row);
+				}
+				else
+				{
+					throw new Exception("Table not found");
+				}
+
+				return retval;
+			}
+
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1000000);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			ArrayList<Object> retval = new ArrayList<Object>();
+			while (!(obj instanceof DataEndMarker))
+			{
+				if (obj instanceof Exception)
+				{
+					cmd = new ArrayList<Object>(1);
+					cmd.add("CLOSE");
+					worker.in.put(cmd);
+					tx.setIsolationLevel(iso);
+					throw (Exception)obj;
+				}
+
+				retval.add(obj);
+
+				while (true)
+				{
+					try
+					{
+						obj = worker.out.take();
+						break;
+					}
+					catch (InterruptedException e)
+					{
+					}
+				}
+			}
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return retval;
+		}
+
+		public UniquePlan setParms(String schema, String table) throws Exception
+		{
+			this.schema = schema;
+			this.table = table;
+			if (schema.equals("SYS"))
+			{
+				return this;
+			}
+			RootOperator root = (RootOperator)p.getTrees().get(0);
+			IndexOperator iOp = (IndexOperator)root.children().get(0).children().get(0).children().get(0).children().get(0);
+			Index index = iOp.getIndex();
+			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
+			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
+			return this;
+		}
+	}
+
+	public static class VerifyIndexPlan
+	{
+		private final Plan p;
+		private String schema;
+		private String name;
+
+		public VerifyIndexPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public Object execute(Transaction tx) throws Exception
+		{
+			if (schema.equals("SYS"))
+			{
+				ArrayList<Object> retval = new ArrayList<Object>();
+				if (name.equals("PKTABLES"))
+				{
+					return retval;
+				}
+				else if (name.equals("PKINDEXES"))
+				{
+					return retval;
+				}
+				else if (name.equals("SKINDEXES"))
+				{
+					return retval;
+				}
+				else if (name.equals("PKCOLUMNS"))
+				{
+					return retval;
+				}
+				else if (name.equals("PKINDEXCOLS"))
+				{
+					return retval;
+				}
+				else if (name.equals("PKTABLESTATS"))
+				{
+					return retval;
+				}
+				else if (name.equals("PKCOLSTATS"))
+				{
+					return retval;
+				}
+				else if (name.equals("PKINDEXSTATS"))
+				{
+					return retval;
+				}
+				else if (name.equals("PKNODES"))
+				{
+					return retval;
+				}
+				else if (name.equals("SKNODES"))
+				{
+					return retval;
+				}
+				else if (name.equals("PKPARTITIONING"))
+				{
+					return retval;
+				}
+				else if (name.equals("PKCOLDIST"))
+				{
+					return retval;
+				}
+				else if (name.equals("PKNODESTATE"))
+				{
+					return retval;
+				}
+				else if (name.equals("PKVIEWS"))
+				{
+					return retval;
+				}
+				else if (name.equals("PKBACKUPS"))
+				{
+					return retval;
+				}
+
+				return new DataEndMarker();
+			}
+
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			if (obj instanceof Exception)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+				throw (Exception)obj;
+			}
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return obj;
+		}
+
+		public VerifyIndexPlan setParms(String schema, String name) throws Exception
+		{
+			this.schema = schema;
+			this.name = name;
+			if (schema.equals("SYS"))
+			{
+				return this;
+			}
+			Operator op = p.getTrees().get(0);
+			while (!(op instanceof IndexOperator))
+			{
+				op = op.children().get(0);
+			}
+			IndexOperator iOp = (IndexOperator)op;
+			Index index = iOp.getIndex();
+			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
+			while (!(op instanceof SelectOperator))
+			{
+				if (op instanceof TableScanOperator)
+				{
+					op = ((TableScanOperator)op).firstParent();
+				}
+				else
+				{
+					op = op.parent();
+				}
+			}
+			SelectOperator select = (SelectOperator)op;
+			select.getFilter().remove(0);
+			select.getFilter().add(new Filter("B.INDEXNAME", "E", "'" + name + "'"));
+			return this;
+		}
+	}
+
+	public static class VerifyTableExistPlan
+	{
+		private final Plan p;
+		private String schema;
+		private String name;
+
+		public VerifyTableExistPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public Object execute(Transaction tx) throws Exception
+		{
+			if (schema.equals("SYS"))
+			{
+				ArrayList<Object> retval = new ArrayList<Object>();
+				if (name.equals("TABLES"))
+				{
+					return retval;
+				}
+				else if (name.equals("INDEXES"))
+				{
+					return retval;
+				}
+				else if (name.equals("COLUMNS"))
+				{
+					return retval;
+				}
+				else if (name.equals("INDEXCOLS"))
+				{
+					return retval;
+				}
+				else if (name.equals("TABLESTATS"))
+				{
+					return retval;
+				}
+				else if (name.equals("COLSTATS"))
+				{
+					return retval;
+				}
+				else if (name.equals("INDEXSTATS"))
+				{
+					return retval;
+				}
+				else if (name.equals("NODES"))
+				{
+					return retval;
+				}
+				else if (name.equals("PARTITIONING"))
+				{
+					return retval;
+				}
+				else if (name.equals("COLDIST"))
+				{
+					return retval;
+				}
+				else if (name.equals("NODESTATE"))
+				{
+					return retval;
+				}
+				else if (name.equals("VIEWS"))
+				{
+					return retval;
+				}
+				else if (name.equals("BACKUPS"))
+				{
+					return retval;
+				}
+
+				return new DataEndMarker();
+			}
+
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			if (obj instanceof Exception)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+				throw (Exception)obj;
+			}
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return obj;
+		}
+
+		public VerifyTableExistPlan setParms(String schema, String name) throws Exception
+		{
+			this.schema = schema;
+			this.name = name;
+			if (schema.equals("SYS"))
+			{
+				return this;
+			}
+			Operator op = p.getTrees().get(0);
+			while (op.children().size() != 0)
+			{
+				op = op.children().get(0);
+			}
+
+			Index index = ((IndexOperator)op).getIndex();
+			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
+			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + name + "'"));
+			return this;
+		}
+	}
+
+	public static class VerifyViewExistPlan
+	{
+		private final Plan p;
+
+		public VerifyViewExistPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public Object execute(Transaction tx) throws Exception
+		{
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			if (obj instanceof Exception)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+				throw (Exception)obj;
+			}
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return obj;
+		}
+
+		public VerifyViewExistPlan setParms(String schema, String name) throws Exception
+		{
+			Operator op = p.getTrees().get(0);
+			while (op.children().size() != 0)
+			{
+				op = op.children().get(0);
+			}
+
+			Index index = ((IndexOperator)op).getIndex();
+			index.setCondition(new Filter("VIEWS.SCHEMA", "E", "'" + schema + "'"));
+			index.addSecondaryFilter(new Filter("VIEWS.NAME", "E", "'" + name + "'"));
+			return this;
+		}
+	}
+
+	public static class ViewSQLPlan
+	{
+		private final Plan p;
+
+		public ViewSQLPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public String execute(Transaction tx) throws Exception
+		{
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			if (obj instanceof Exception)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+				throw (Exception)obj;
+			}
+
+			if (obj instanceof DataEndMarker)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+				throw new Exception("View not found");
+			}
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return (String)((ArrayList<Object>)obj).get(0);
+		}
+
+		public ViewSQLPlan setParms(String schema, String name) throws Exception
+		{
+			Operator op = p.getTrees().get(0);
+			while (op.children().size() != 0)
+			{
+				op = op.children().get(0);
+			}
+
+			Index index = ((IndexOperator)op).getIndex();
+			index.setCondition(new Filter("VIEWS.SCHEMA", "E", "'" + schema + "'"));
+			index.addSecondaryFilter(new Filter("VIEWS.NAME", "E", "'" + name + "'"));
+			return this;
+		}
+	}
+
+	public static class WorkerNodesPlan
+	{
+		private final Plan p;
+
+		public WorkerNodesPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public ArrayList<Object> execute(Transaction tx) throws Exception
+		{
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1000000000);
+			worker.in.put(cmd);
+
+			ArrayList<Object> retval = new ArrayList<Object>();
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+			while (!(obj instanceof DataEndMarker))
+			{
+				if (obj instanceof Exception)
+				{
+					cmd = new ArrayList<Object>(1);
+					cmd.add("CLOSE");
+					worker.in.put(cmd);
+					tx.setIsolationLevel(iso);
+					throw (Exception)obj;
+				}
+
+				retval.add(obj);
+
+				while (true)
+				{
+					try
+					{
+						obj = worker.out.take();
+						break;
+					}
+					catch (InterruptedException e)
+					{
+					}
+				}
+			}
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return retval;
+		}
+
+		public WorkerNodesPlan setParms()
+		{
+			return this;
 		}
 	}
 }

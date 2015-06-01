@@ -1,9 +1,13 @@
 package com.exascale.optimizer;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
@@ -12,12 +16,28 @@ import com.exascale.managers.ResourceManager.DiskBackedHashSet;
 
 public final class CountDistinctOperator implements AggregateOperator, Serializable
 {
+	private static sun.misc.Unsafe unsafe;
+
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
+
 	private String input;
+	private String output;
+	private transient final MetaData meta;
 
-	private final String output;
-
-	private final MetaData meta;
 	private int NUM_GROUPS = 16;
+
 	private int childCard = 16 * 16;
 
 	public CountDistinctOperator(String input, String output, MetaData meta)
@@ -26,10 +46,16 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 		this.output = output;
 		this.meta = meta;
 	}
-	
-	public void setInput(String col)
+
+	public static CountDistinctOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
 	{
-		input = col;
+		CountDistinctOperator value = (CountDistinctOperator)unsafe.allocateInstance(CountDistinctOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.input = OperatorUtils.readString(in, prev);
+		value.output = OperatorUtils.readString(in, prev);
+		value.NUM_GROUPS = OperatorUtils.readInt(in);
+		value.childCard = OperatorUtils.readInt(in);
+		return value;
 	}
 
 	@Override
@@ -68,9 +94,33 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 		return "LONG";
 	}
 
+	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(52, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		OperatorUtils.writeString(input, out, prev);
+		OperatorUtils.writeString(output, out, prev);
+		OperatorUtils.writeInt(NUM_GROUPS, out);
+		OperatorUtils.writeInt(childCard, out);
+	}
+
 	public void setChildCard(int card)
 	{
 		childCard = card;
+	}
+
+	@Override
+	public void setInput(String col)
+	{
+		input = col;
 	}
 
 	@Override
@@ -89,13 +139,30 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 	{
 		// private final DiskBackedALOHashMap<AtomicLong> results = new
 		// DiskBackedALOHashMap<AtomicLong>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
-		private final ConcurrentHashMap<ArrayList<Object>, AtomicLong> results = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS > 0 ? NUM_GROUPS : 16, 1.0f);
-		private final DiskBackedHashSet hashSet = ResourceManager.newDiskBackedHashSet(false, childCard);
+		private final ConcurrentHashMap<ArrayList<Object>, AtomicLong> results = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS, 0.75f, 6 * ResourceManager.cpus);
+		private DiskBackedHashSet hashSet2;
+		private ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>> hashSet;
 		private final int pos;
+		private boolean inMem = true;
 
 		public CountDistinctHashThread(HashMap<String, Integer> cols2Pos)
 		{
 			pos = cols2Pos.get(input);
+			if (ResourceManager.lowMem())
+			{
+				inMem = false;
+				hashSet2 = ResourceManager.newDiskBackedHashSet(false, childCard);
+			}
+			else if (childCard > ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")))
+			{
+				inMem = false;
+				hashSet2 = ResourceManager.newDiskBackedHashSet(false, childCard);
+			}
+
+			if (inMem)
+			{
+				hashSet = new ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>>(childCard);
+			}
 		}
 
 		@Override
@@ -103,7 +170,10 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 		{
 			try
 			{
-				hashSet.close();
+				if (hashSet2 != null)
+				{
+					hashSet2.close();
+				}
 				// results.close();
 			}
 			catch (final Exception e)
@@ -125,18 +195,38 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 			final ArrayList<Object> consolidated = new ArrayList<Object>();
 			consolidated.addAll(group);
 			consolidated.add(row.get(pos));
-			if (hashSet.add(consolidated))
+			if (inMem)
 			{
-				final AtomicLong al = results.get(group);
-				if (al != null)
+				if (hashSet.put(consolidated, consolidated) == null)
 				{
-					al.incrementAndGet();
-					return;
-				}
+					final AtomicLong al = results.get(group);
+					if (al != null)
+					{
+						al.incrementAndGet();
+						return;
+					}
 
-				if (results.putIfAbsent(group, new AtomicLong(1)) != null)
+					if (results.putIfAbsent(group, new AtomicLong(1)) != null)
+					{
+						results.get(group).incrementAndGet();
+					}
+				}
+			}
+			else
+			{
+				if (hashSet2.add(consolidated))
 				{
-					results.get(group).incrementAndGet();
+					final AtomicLong al = results.get(group);
+					if (al != null)
+					{
+						al.incrementAndGet();
+						return;
+					}
+
+					if (results.putIfAbsent(group, new AtomicLong(1)) != null)
+					{
+						results.get(group).incrementAndGet();
+					}
 				}
 			}
 		}

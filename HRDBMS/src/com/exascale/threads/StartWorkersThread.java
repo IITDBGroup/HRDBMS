@@ -45,7 +45,7 @@ public class StartWorkersThread extends HRDBMSThread
 				{
 					final String user = HRDBMSWorker.getHParms().getProperty("hrdbms_user");
 					HRDBMSWorker.logger.info("Starting worker " + host);
-					final String command1 = "java -Xmx" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xss" + HRDBMSWorker.getHParms().getProperty("stack_size") + " -cp HRDBMS.jar:. com.exascale.managers.HRDBMSWorker " + HRDBMSWorker.TYPE_WORKER;
+					final String command1 = ". /etc/profile && java -Xmx" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xms" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xss" + HRDBMSWorker.getHParms().getProperty("stack_size") + " " + HRDBMSWorker.getHParms().getProperty("jvm_args") + " -cp HRDBMS.jar:. com.exascale.managers.HRDBMSWorker " + HRDBMSWorker.TYPE_WORKER;
 					try
 					{
 

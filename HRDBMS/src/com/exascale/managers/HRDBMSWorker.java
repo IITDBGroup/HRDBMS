@@ -12,6 +12,7 @@ import org.apache.log4j.Logger;
 import org.apache.log4j.PatternLayout;
 import com.exascale.misc.HParms;
 import com.exascale.optimizer.SQLParser;
+import com.exascale.optimizer.SortOperator;
 import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.StartCoordsThread;
 import com.exascale.threads.StartWorkersThread;
@@ -20,17 +21,17 @@ public class HRDBMSWorker
 {
 	private static HParms hparms; // configurable parameters
 	public static final int TYPE_MASTER = 0, TYPE_COORD = 1, TYPE_WORKER = 2; // master
-																				// is
-																				// the
-																				// first
-																				// coord
+	// is
+	// the
+	// first
+	// coord
 	public static int type; // my type
 	private static ConcurrentHashMap<Long, HRDBMSThread> threadList = new ConcurrentHashMap<Long, HRDBMSThread>();
 	private static long connectionThread;
 	private static long logThread;
 	private static long resourceThread;
 	private static BlockingQueue<String> in = new LinkedBlockingQueue<String>(); // message
-																					// queue
+	// queue
 	private static AtomicLong THREAD_NUMBER = new AtomicLong(0);
 	private static ConcurrentHashMap<Long, ArrayList<Thread>> waitList = new ConcurrentHashMap<Long, ArrayList<Thread>>();
 	public static org.apache.log4j.Logger logger;
@@ -82,7 +83,7 @@ public class HRDBMSWorker
 	{
 		logger = Logger.getLogger("LOG");
 		BasicConfigurator.configure();
-		fa = new FileAppender(new PatternLayout("%d{ISO8601}\t%p\t%C{1}: %m%n"), "hrdbms.log"); 
+		fa = new FileAppender(new PatternLayout("%d{ISO8601}\t%p\t%C{1}: %m%n"), "hrdbms.log");
 		fa.activateOptions();
 		logger.addAppender(fa);
 		logger.setLevel(Level.ALL);
@@ -98,12 +99,12 @@ public class HRDBMSWorker
 			logger.error("Could not load HParms", e);
 			System.exit(1);
 		}
-		
+
 		try
 		{
-			SQLParser bug = new SQLParser();
+			new SQLParser();
 		}
-		catch(Throwable e)
+		catch (Throwable e)
 		{
 			HRDBMSWorker.logger.fatal("Can't load SQLParser class", e);
 			System.exit(1);
@@ -131,7 +132,7 @@ public class HRDBMSWorker
 		}
 
 		new FileManager();
-		new BufferManager(true);
+		addThread(new BufferManager(true));
 		addThread(new XAManager());
 		connectionThread = addThread(new ConnectionManager());
 		checkpoint = new CheckpointManager();
@@ -141,13 +142,35 @@ public class HRDBMSWorker
 		addThread(new LockManager());
 		logger.info("Lock Manager initialization complete.");
 		resourceThread = addThread(new ResourceManager());
-		
+
 		if (type == TYPE_MASTER || type == TYPE_COORD)
 		{
 			addThread(new MaintenanceManager());
 		}
-		
+
+		SortOperator.init();
+
 		hibernate();
+	}
+
+	public static void terminateThread(long index)
+	{
+		// if anyone is waiting on this thread, wait for Thread.getState() ==
+		// WAITING and notify them
+		if (waitList.containsKey(index))
+		{
+			final ArrayList<Thread> threads = waitList.get(index);
+			for (final Thread thread : threads)
+			{
+				while (thread.getState() != Thread.State.WAITING)
+				{
+				}
+				synchronized (thread)
+				{
+					thread.notify();
+				}
+			}
+		}
 	}
 
 	public static void waitOnThreads(long[] threads, Thread waiter)
@@ -177,7 +200,7 @@ public class HRDBMSWorker
 					{
 						try
 						{
-							synchronized(Thread.currentThread())
+							synchronized (Thread.currentThread())
 							{
 								Thread.currentThread().wait();
 								break;
@@ -231,26 +254,6 @@ public class HRDBMSWorker
 	private static StartWorkersThread startWorkers()
 	{
 		return new StartWorkersThread();
-	}
-
-	public static void terminateThread(long index)
-	{
-		// if anyone is waiting on this thread, wait for Thread.getState() ==
-		// WAITING and notify them
-		if (waitList.containsKey(index))
-		{
-			final ArrayList<Thread> threads = waitList.get(index);
-			for (final Thread thread : threads)
-			{
-				while (thread.getState() != Thread.State.WAITING)
-				{
-				}
-				synchronized(thread)
-				{
-					thread.notify();
-				}
-			}
-		}
 	}
 
 	private static void waitListPut(long thread, Thread waiter)

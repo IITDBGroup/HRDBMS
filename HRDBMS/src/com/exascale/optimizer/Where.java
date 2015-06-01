@@ -2,20 +2,21 @@ package com.exascale.optimizer;
 
 public class Where
 {
-	private SearchCondition search;
-	
+	private final SearchCondition search;
+
 	public Where(SearchCondition search)
 	{
 		this.search = search;
 	}
-	
-	public SearchCondition getSearch()
-	{
-		return search;
-	}
-	
+
+	@Override
 	public Where clone()
 	{
 		return new Where(search.clone());
+	}
+
+	public SearchCondition getSearch()
+	{
+		return search;
 	}
 }

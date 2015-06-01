@@ -1,6 +1,11 @@
 package com.exascale.logging;
 
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
 import com.exascale.managers.BufferManager;
@@ -8,20 +13,41 @@ import com.exascale.managers.HRDBMSWorker;
 
 public class DeleteLogRec extends LogRec
 {
+	private static Charset cs = StandardCharsets.UTF_8;
+	private static sun.misc.Unsafe unsafe;
+	private static long offset;
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+			final Field fieldToUpdate = String.class.getDeclaredField("value");
+			// get unsafe offset to this field
+			offset = unsafe.objectFieldOffset(fieldToUpdate);
+		}
+		catch (final Exception e)
+		{
+			unsafe = null;
+		}
+	}
 	private Block b;
 	private int off;
 	private byte[] before;
 	private byte[] after;
 
+	private final CharsetEncoder ce = cs.newEncoder();
+
 	public DeleteLogRec(long txnum, Block b, int off, byte[] before, byte[] after) throws Exception
 	{
-		super(LogRec.DELETE, txnum, ByteBuffer.allocate(32 + b.toString().getBytes("UTF-8").length + 8 + 2 * before.length));
+		super(LogRec.DELETE, txnum, ByteBuffer.allocate(32 + b.toString().getBytes(StandardCharsets.UTF_8).length + 8 + 2 * before.length));
 
 		if (before.length != after.length)
 		{
 			throw new Exception("Before and after images length do not match");
 		}
-		
+
 		this.b = b;
 		this.off = off;
 		this.before = before;
@@ -29,8 +55,12 @@ public class DeleteLogRec extends LogRec
 
 		final ByteBuffer buff = this.buffer();
 		buff.position(28);
-		byte[] bbytes = b.toString().getBytes("UTF-8");
-		final int blen = bbytes.length;
+		// byte[] bbytes = b.toString().getBytes("UTF-8");
+		String string = b.toString();
+		byte[] ba = new byte[string.length() << 2];
+		char[] value = (char[])unsafe.getObject(string, offset);
+		int blen = ((sun.nio.cs.ArrayEncoder)ce).encode(value, 0, value.length, ba);
+		byte[] bbytes = Arrays.copyOf(ba, blen);
 		buff.putInt(blen);
 		try
 		{
@@ -47,42 +77,45 @@ public class DeleteLogRec extends LogRec
 		buff.put(after);
 		buff.putInt(off);
 	}
-	
-	public Block getBlock()
-	{
-		return b;
-	}
-	
-	public int getOffset()
-	{
-		return off;
-	}
-	
-	public int getEnd()
-	{
-		return off + before.length;
-	}
-	
-	public byte[] getBefore()
-	{
-		return before;
-	}
-	
+
 	public byte[] getAfter()
 	{
 		return after;
 	}
 
+	public byte[] getBefore()
+	{
+		return before;
+	}
+
+	public Block getBlock()
+	{
+		return b;
+	}
+
+	@Override
+	public int getEnd()
+	{
+		return off + before.length;
+	}
+
+	@Override
+	public int getOffset()
+	{
+		return off;
+	}
+
 	@Override
 	public void redo() throws Exception
 	{
-		//HRDBMSWorker.logger.debug("Redoing change at " + b + "@" + off + " for a length of " + before.length);
+		// HRDBMSWorker.logger.debug("Redoing change at " + b + "@" + off +
+		// " for a length of " + before.length);
 		if (b.number() < 0)
 		{
-			Exception e = new Exception("Negative block number requested");
+			Exception e = new Exception("Negative block number requested: " + b.number());
 			HRDBMSWorker.logger.debug("", e);
 		}
-		
+
 		BufferManager.requestPage(b, txnum());
 
 		Page p = null;
@@ -98,13 +131,14 @@ public class DeleteLogRec extends LogRec
 	@Override
 	public void undo() throws Exception
 	{
-		//HRDBMSWorker.logger.debug("Undoing change at " + b + "@" + off + " for a length of " + before.length);
+		// HRDBMSWorker.logger.debug("Undoing change at " + b + "@" + off +
+		// " for a length of " + before.length);
 		if (b.number() < 0)
 		{
-			Exception e = new Exception("Negative block number requested");
+			Exception e = new Exception("Negative block number requested: " + b.number());
 			HRDBMSWorker.logger.debug("", e);
 		}
-	
+
 		BufferManager.requestPage(b, txnum());
 
 		Page p = null;

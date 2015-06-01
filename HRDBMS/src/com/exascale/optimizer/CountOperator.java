@@ -1,18 +1,39 @@
 package com.exascale.optimizer;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import com.exascale.managers.ResourceManager;
 
 public final class CountOperator implements AggregateOperator, Serializable
 {
-	private final String output;
+	private static sun.misc.Unsafe unsafe;
 
-	private final MetaData meta;
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
+
+	private String output;
+	private transient final MetaData meta;
 
 	private String input;
+
 	private int NUM_GROUPS = 16;
 
 	public CountOperator(String output, MetaData meta)
@@ -27,10 +48,15 @@ public final class CountOperator implements AggregateOperator, Serializable
 		this.output = output;
 		this.meta = meta;
 	}
-	
-	public void setInput(String col)
+
+	public static CountOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
 	{
-		input = col;
+		CountOperator value = (CountOperator)unsafe.allocateInstance(CountOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.input = OperatorUtils.readString(in, prev);
+		value.output = OperatorUtils.readString(in, prev);
+		value.NUM_GROUPS = OperatorUtils.readInt(in);
+		return value;
 	}
 
 	@Override
@@ -75,6 +101,29 @@ public final class CountOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(53, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		OperatorUtils.writeString(input, out, prev);
+		OperatorUtils.writeString(output, out, prev);
+		OperatorUtils.writeInt(NUM_GROUPS, out);
+	}
+
+	@Override
+	public void setInput(String col)
+	{
+		input = col;
+	}
+
+	@Override
 	public void setInputColumn(String col)
 	{
 		input = col;
@@ -90,7 +139,7 @@ public final class CountOperator implements AggregateOperator, Serializable
 	{
 		// private final DiskBackedALOHashMap<AtomicLong> results = new
 		// DiskBackedALOHashMap<AtomicLong>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
-		private final ConcurrentHashMap<ArrayList<Object>, AtomicLong> results = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS > 0 ? NUM_GROUPS : 16, 1.0f);
+		private final ConcurrentHashMap<ArrayList<Object>, AtomicLong> results = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS, 0.75f, 6 * ResourceManager.cpus);
 		private int pos;
 
 		public CountHashThread(HashMap<String, Integer> cols2Pos)

@@ -1,8 +1,12 @@
 package com.exascale.optimizer;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
@@ -11,26 +15,50 @@ import com.exascale.tables.Plan;
 
 public final class TopOperator implements Operator, Serializable
 {
+	private static sun.misc.Unsafe unsafe;
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
 	private Operator child;
 	private Operator parent;
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
 	private TreeMap<Integer, String> pos2Col;
-	private final MetaData meta;
-	private final AtomicLong remaining;
+	private transient final MetaData meta;
+	private AtomicLong remaining;
+
 	private int node;
-	private volatile boolean demSent = false;
-	private transient Plan plan;
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
-	}
+
+	private transient volatile boolean demSent;
 
 	public TopOperator(long numVals, MetaData meta)
 	{
 		this.remaining = new AtomicLong(numVals);
 		this.meta = meta;
+	}
+
+	public static TopOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		TopOperator value = (TopOperator)unsafe.allocateInstance(TopOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.child = OperatorUtils.deserializeOperator(in, prev);
+		value.parent = OperatorUtils.deserializeOperator(in, prev);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.remaining = new AtomicLong(OperatorUtils.readLong(in));
+		value.node = OperatorUtils.readInt(in);
+		return value;
 	}
 
 	@Override
@@ -136,7 +164,7 @@ public final class TopOperator implements Operator, Serializable
 				demSent = true;
 				remaining.set(0);
 			}
-			
+
 			if (retval instanceof Exception)
 			{
 				throw (Exception)retval;
@@ -209,6 +237,27 @@ public final class TopOperator implements Operator, Serializable
 	}
 
 	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(48, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		child.serialize(out, prev);
+		parent.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.writeLong(remaining.get(), out); // Notice type
+		OperatorUtils.writeInt(node, out);
+	}
+
+	@Override
 	public void setChildPos(int pos)
 	{
 	}
@@ -220,8 +269,14 @@ public final class TopOperator implements Operator, Serializable
 	}
 
 	@Override
+	public void setPlan(Plan plan)
+	{
+	}
+
+	@Override
 	public void start() throws Exception
 	{
+		demSent = false;
 		child.start();
 	}
 

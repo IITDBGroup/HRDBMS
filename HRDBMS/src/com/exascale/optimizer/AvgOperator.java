@@ -1,19 +1,40 @@
 package com.exascale.optimizer;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import com.exascale.misc.AtomicDouble;
+import com.exascale.managers.ResourceManager;
+import com.exascale.misc.BigDecimalReplacement;
 
 public final class AvgOperator implements AggregateOperator, Serializable
 {
+	private static sun.misc.Unsafe unsafe;
+
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
+
 	private String input;
+	private String output;
 
-	private final String output;
+	private transient final MetaData meta;
 
-	private final MetaData meta;
 	private int NUM_GROUPS = 16;
 
 	public AvgOperator(String input, String output, MetaData meta)
@@ -22,10 +43,15 @@ public final class AvgOperator implements AggregateOperator, Serializable
 		this.output = output;
 		this.meta = meta;
 	}
-	
-	public void setInput(String col)
+
+	public static AvgOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
 	{
-		input = col;
+		AvgOperator value = (AvgOperator)unsafe.allocateInstance(AvgOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.input = OperatorUtils.readString(in, prev);
+		value.output = OperatorUtils.readString(in, prev);
+		value.NUM_GROUPS = OperatorUtils.readInt(in);
+		return value;
 	}
 
 	@Override
@@ -65,6 +91,29 @@ public final class AvgOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(51, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		OperatorUtils.writeString(input, out, prev);
+		OperatorUtils.writeString(output, out, prev);
+		OperatorUtils.writeInt(NUM_GROUPS, out);
+	}
+
+	@Override
+	public void setInput(String col)
+	{
+		input = col;
+	}
+
+	@Override
 	public void setInputColumn(String col)
 	{
 		input = col;
@@ -82,8 +131,8 @@ public final class AvgOperator implements AggregateOperator, Serializable
 		// DiskBackedALOHashMap<AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
 		// private final DiskBackedALOHashMap<AtomicLong> counts = new
 		// DiskBackedALOHashMap<AtomicLong>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
-		private final ConcurrentHashMap<ArrayList<Object>, AtomicDouble> sums = new ConcurrentHashMap<ArrayList<Object>, AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16, 1.0f);
-		private final ConcurrentHashMap<ArrayList<Object>, AtomicLong> counts = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS > 0 ? NUM_GROUPS : 16, 1.0f);
+		private final HashMap<ArrayList<Object>, BigDecimalReplacement> sums = new HashMap<ArrayList<Object>, BigDecimalReplacement>();
+		private final ConcurrentHashMap<ArrayList<Object>, AtomicLong> counts = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS, 0.75f, 6 * ResourceManager.cpus);
 		private final int pos;
 
 		public AvgHashThread(HashMap<String, Integer> cols2Pos)
@@ -91,18 +140,19 @@ public final class AvgOperator implements AggregateOperator, Serializable
 			pos = cols2Pos.get(input);
 		}
 
-		public final void addToSum(AtomicDouble ad, double amount)
-		{
-			final AtomicDouble newSum = ad;
-			for (;;)
-			{
-				final double oldVal = newSum.get();
-				if (newSum.compareAndSet(oldVal, oldVal + amount))
-				{
-					return;
-				}
-			}
-		}
+		// public final void addToSum(AtomicBigDecimal ad, BigDecimalReplacement
+		// amount)
+		// {
+		// final AtomicBigDecimal newSum = ad;
+		// for (;;)
+		// {
+		// final BigDecimalReplacement oldVal = newSum.get();
+		// if (newSum.compareAndSet(oldVal, oldVal.add(amount)))
+		// {
+		// return;
+		// }
+		// }
+		// }
 
 		@Override
 		public void close()
@@ -114,24 +164,25 @@ public final class AvgOperator implements AggregateOperator, Serializable
 		@Override
 		public Object getResult(ArrayList<Object> keys)
 		{
-			return new Double(sums.get(keys).get() / counts.get(keys).get());
+			return sums.get(keys).doubleValue() / counts.get(keys).get();
 		}
 
 		// @Parallel
 		@Override
 		public final void put(ArrayList<Object> row, ArrayList<Object> group)
 		{
-			final Double val = ((Number)row.get(pos)).doubleValue();
-			final AtomicDouble ad = sums.get(group);
-			if (ad != null)
+			final Double v = ((Number)row.get(pos)).doubleValue();
+			BigDecimalReplacement val = new BigDecimalReplacement(v);
+			synchronized (sums)
 			{
-				addToSum(ad, val);
-			}
-			else
-			{
-				if (sums.putIfAbsent(group, new AtomicDouble(val)) != null)
+				final BigDecimalReplacement ad = sums.get(group);
+				if (ad != null)
 				{
-					addToSum(sums.get(group), val);
+					ad.add(val);
+				}
+				else
+				{
+					sums.put(group, val);
 				}
 			}
 
@@ -152,7 +203,8 @@ public final class AvgOperator implements AggregateOperator, Serializable
 	{
 		private final ArrayList<ArrayList<Object>> rows;
 		private final HashMap<String, Integer> cols2Pos;
-		private double result;
+		private BigDecimalReplacement result;
+		private double result2;
 
 		public AvgThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos)
 		{
@@ -168,7 +220,7 @@ public final class AvgOperator implements AggregateOperator, Serializable
 		@Override
 		public Double getResult()
 		{
-			return result;
+			return result2;
 		}
 
 		@Override
@@ -176,16 +228,16 @@ public final class AvgOperator implements AggregateOperator, Serializable
 		{
 			final int pos = cols2Pos.get(input);
 			long numRows = 0;
-			result = 0;
+			result = new BigDecimalReplacement(0);
 
 			for (final Object orow : rows)
 			{
 				final ArrayList<Object> row = (ArrayList<Object>)orow;
 				numRows++;
-				result += (Double)row.get(pos);
+				result.add(new BigDecimalReplacement((Double)row.get(pos)));
 			}
 
-			result /= numRows;
+			result2 = result.doubleValue() / numRows;
 			// System.out.println("AvgThread is terminating.");
 		}
 	}

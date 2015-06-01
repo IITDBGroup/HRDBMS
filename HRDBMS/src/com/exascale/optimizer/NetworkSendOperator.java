@@ -1,13 +1,20 @@
 package com.exascale.optimizer;
 
 import java.io.BufferedOutputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
+import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.TreeMap;
-import com.exascale.compression.CompressedSocket;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MyDate;
@@ -15,28 +22,42 @@ import com.exascale.tables.Plan;
 
 public class NetworkSendOperator implements Operator, Serializable
 {
-	protected MetaData meta;
+	protected static final int WORKER_PORT = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"));
 
+	protected static Charset cs = StandardCharsets.UTF_8;
+	private static sun.misc.Unsafe unsafe;
+	private static long offset;
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+			final Field fieldToUpdate = String.class.getDeclaredField("value");
+			// get unsafe offset to this field
+			offset = unsafe.objectFieldOffset(fieldToUpdate);
+		}
+		catch (final Exception e)
+		{
+			unsafe = null;
+		}
+	}
+	protected MetaData meta;
 	protected Operator child;
-	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
-	private static final int WORKER_PORT = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"));
-	private CompressedSocket sock;
-	private OutputStream out;
+	protected Operator parent;
+	protected HashMap<String, String> cols2Types;
+	protected HashMap<String, Integer> cols2Pos;
+	protected TreeMap<Integer, String> pos2Col;
+	protected transient Socket sock;
+	protected transient OutputStream out;
 	protected int node;
-	protected long count = 0;
 	protected int numParents;
 	protected boolean started = false;
 	protected boolean numpSet = false;
-	private boolean cardSet = false;
-	private transient Plan plan;
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
-	}
+	protected boolean cardSet = false;
+
+	protected CharsetEncoder ce = cs.newEncoder();
 
 	public NetworkSendOperator(int node, MetaData meta)
 	{
@@ -46,6 +67,25 @@ public class NetworkSendOperator implements Operator, Serializable
 
 	protected NetworkSendOperator()
 	{
+	}
+
+	public static NetworkSendOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		NetworkSendOperator value = (NetworkSendOperator)unsafe.allocateInstance(NetworkSendOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.meta = new MetaData();
+		value.child = OperatorUtils.deserializeOperator(in, prev);
+		value.parent = OperatorUtils.deserializeOperator(in, prev);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.node = OperatorUtils.readInt(in);
+		value.numParents = OperatorUtils.readInt(in);
+		value.started = OperatorUtils.readBool(in);
+		value.numpSet = OperatorUtils.readBool(in);
+		value.cardSet = OperatorUtils.readBool(in);
+		value.ce = cs.newEncoder();
+		return value;
 	}
 
 	@Override
@@ -65,7 +105,7 @@ public class NetworkSendOperator implements Operator, Serializable
 		}
 	}
 
-	public void addConnection(int fromNode, CompressedSocket sock)
+	public void addConnection(int fromNode, Socket sock)
 	{
 	}
 
@@ -99,12 +139,12 @@ public class NetworkSendOperator implements Operator, Serializable
 		{
 			out.close();
 		}
-		
+
 		if (sock != null)
 		{
 			sock.close();
 		}
-		
+
 		cols2Pos = null;
 		cols2Types = null;
 		pos2Col = null;
@@ -209,7 +249,33 @@ public class NetworkSendOperator implements Operator, Serializable
 	public void reset() throws Exception
 	{
 		HRDBMSWorker.logger.error("NetworkSendOperator does not support reset()");
-		throw new Exception("NetworkSendOperator does not support reset()"); 
+		throw new Exception("NetworkSendOperator does not support reset()");
+	}
+
+	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(36, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		// recreate meta
+		child.serialize(out, prev);
+		// parent.serialize(out, prev);
+		OperatorUtils.serializeOperator(parent, out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.writeInt(node, out);
+		OperatorUtils.writeInt(numParents, out);
+		OperatorUtils.writeBool(started, out);
+		OperatorUtils.writeBool(numpSet, out);
+		OperatorUtils.writeBool(cardSet, out);
 	}
 
 	public boolean setCard()
@@ -245,7 +311,12 @@ public class NetworkSendOperator implements Operator, Serializable
 		return true;
 	}
 
-	public void setSocket(CompressedSocket sock) throws Exception
+	@Override
+	public void setPlan(Plan plan)
+	{
+	}
+
+	public void setSocket(Socket sock) throws Exception
 	{
 		try
 		{
@@ -269,24 +340,32 @@ public class NetworkSendOperator implements Operator, Serializable
 			Object o = child.next(this);
 			while (!(o instanceof DataEndMarker))
 			{
+				final byte[] obj = toBytes(o);
+				try
+				{
+					out.write(obj);
+				}
+				catch (Exception e)
+				{
+					HRDBMSWorker.logger.debug("Error writing to " + sock.getRemoteSocketAddress());
+					throw e;
+				}
 				if (o instanceof Exception)
 				{
+					HRDBMSWorker.logger.debug("", (Exception)o);
 					throw (Exception)o;
 				}
-				final byte[] obj = toBytes(o);
-				out.write(obj);
-				count++;
 				o = child.next(this);
 			}
-			
+
 			final byte[] obj = toBytes(o);
 			out.write(obj);
 			out.flush();
-			//HRDBMSWorker.logger.debug("Wrote " + count + " rows");
+			// HRDBMSWorker.logger.debug("Wrote " + count + " rows");
 			child.close();
-			//Thread.sleep(60 * 1000); WHY was this here?
+			// Thread.sleep(60 * 1000); WHY was this here?
 		}
-		catch(Exception e)
+		catch (Throwable e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			try
@@ -295,23 +374,30 @@ public class NetworkSendOperator implements Operator, Serializable
 				out.write(obj);
 				out.flush();
 				out.close();
+				child.nextAll(this);
 				child.close();
 			}
-			catch(Exception f)
+			catch (Throwable f)
 			{
+				HRDBMSWorker.logger.debug("", f);
 				try
 				{
 					out.close();
+					child.nextAll(this);
 					child.close();
 				}
-				catch(Exception g)
+				catch (Throwable g)
 				{
+					HRDBMSWorker.logger.debug("", g);
 					try
 					{
+						child.nextAll(this);
 						child.close();
 					}
-					catch(Exception h)
-					{}
+					catch (Throwable h)
+					{
+						HRDBMSWorker.logger.debug("", h);
+					}
 				}
 			}
 		}
@@ -325,6 +411,7 @@ public class NetworkSendOperator implements Operator, Serializable
 
 	protected byte[] toBytes(Object v) throws Exception
 	{
+		ArrayList<byte[]> bytes = null;
 		ArrayList<Object> val = null;
 		if (v instanceof ArrayList)
 		{
@@ -340,14 +427,19 @@ public class NetworkSendOperator implements Operator, Serializable
 			byte[] data = null;
 			try
 			{
-				data = e.getMessage().getBytes("UTF-8");
+				data = e.getMessage().getBytes(StandardCharsets.UTF_8);
+				if (data == null)
+				{
+					data = "No message".getBytes(StandardCharsets.UTF_8);
+				}
 			}
-			catch(Exception f)
-			{}
-			
+			catch (Exception f)
+			{
+			}
+
 			int dataLen = data.length;
 			int recLen = 9 + dataLen;
-			ByteBuffer bb = ByteBuffer.allocate(recLen+4);
+			ByteBuffer bb = ByteBuffer.allocate(recLen + 4);
 			bb.position(0);
 			bb.putInt(recLen);
 			bb.putInt(1);
@@ -399,7 +491,21 @@ public class NetworkSendOperator implements Operator, Serializable
 			else if (o instanceof String)
 			{
 				header[i] = (byte)4;
-				size += (4 + ((String)o).getBytes("UTF-8").length);
+				// byte[] b = ((String)o).getBytes("UTF-8");
+				byte[] ba = new byte[((String)o).length() << 2];
+				char[] value = (char[])unsafe.getObject(o, offset);
+				int blen = ((sun.nio.cs.ArrayEncoder)ce).encode(value, 0, value.length, ba);
+				byte[] b = Arrays.copyOf(ba, blen);
+				size += (4 + b.length);
+				if (bytes == null)
+				{
+					bytes = new ArrayList<byte[]>();
+					bytes.add(b);
+				}
+				else
+				{
+					bytes.add(b);
+				}
 			}
 			else
 			{
@@ -420,6 +526,7 @@ public class NetworkSendOperator implements Operator, Serializable
 		retvalBB.putInt(size - 4);
 		retvalBB.putInt(val.size());
 		retvalBB.position(header.length);
+		int x = 0;
 		for (final Object o : val)
 		{
 			if (retval[i] == 0)
@@ -440,16 +547,8 @@ public class NetworkSendOperator implements Operator, Serializable
 			}
 			else if (retval[i] == 4)
 			{
-				byte[] temp = null;
-				try
-				{
-					temp = ((String)o).getBytes("UTF-8");
-				}
-				catch (final Exception e)
-				{
-					HRDBMSWorker.logger.error("", e);
-					throw e;
-				}
+				byte[] temp = bytes.get(x);
+				x++;
 				retvalBB.putInt(temp.length);
 				retvalBB.put(temp);
 			}

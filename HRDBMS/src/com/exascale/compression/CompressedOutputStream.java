@@ -51,10 +51,9 @@ public final class CompressedOutputStream extends FilterOutputStream
 	public static final int MAX_BUFFER_SIZE = Short.MAX_VALUE;
 
 	final static int COMPRESSED = MAX_BUFFER_SIZE + 1; // 0x8000 MSBit: 1 =
-														// compressed, 0 =
-														// uncompressed
+	// compressed, 0 =
+	// uncompressed
 
-	private final int minCompressSize; // minimum packet size for compression
 	private final int bufSize; // buffer size
 
 	private byte[] orgBuf; // original uncompressed data buffer
@@ -63,24 +62,24 @@ public final class CompressedOutputStream extends FilterOutputStream
 	private byte[] defBuf; // deflated/compressed output data buffer
 	private int defLen; // number of bytes in defBuf
 	private byte[] byteBuf = new byte[1]; // single byte buffer for
-												// write(b)
+	// write(b)
 	private boolean closed; // true if closed
 
 	/**
 	 * Creates a compressed output stream with maximum allowed buffersize
 	 * (32K-1) and a default minCompressSize of 64.
-	 * 
+	 *
 	 * @param out
 	 *            the underlying output stream
 	 */
 	public CompressedOutputStream(OutputStream out)
 	{
-		this(out, MAX_BUFFER_SIZE, 64);
+		this(out, MAX_BUFFER_SIZE, 2048);
 	}
 
 	/**
 	 * Creates a compressed output stream.
-	 * 
+	 *
 	 * @param out
 	 *            the underlying output stream (e.g. from a socket)
 	 * @param bufSize
@@ -101,15 +100,13 @@ public final class CompressedOutputStream extends FilterOutputStream
 		}
 
 		this.bufSize = bufSize;
-		this.minCompressSize = minCompressSize;
-
 		orgBuf = new byte[bufSize];
-		deflater = new Deflater(Deflater.BEST_COMPRESSION, true); // with
-																	// noWrap:
-																	// less
-																	// metadata
-																	// -> better
-																	// compression
+		deflater = new Deflater(Deflater.BEST_SPEED, true); // with
+		// noWrap:
+		// less
+		// metadata
+		// -> better
+		// compression
 		defBuf = new byte[bufSize];
 	}
 
@@ -132,7 +129,7 @@ public final class CompressedOutputStream extends FilterOutputStream
 	/**
 	 * Flushes this output stream and forces any buffered output bytes to be
 	 * written out to the stream.
-	 * 
+	 *
 	 * @exception IOException
 	 *                if an I/O error occurs.
 	 */
@@ -157,7 +154,7 @@ public final class CompressedOutputStream extends FilterOutputStream
 	 * <p>
 	 * Packets larger than the buffer size will be split and written to the
 	 * underlying output stream as separate packets.
-	 * 
+	 *
 	 * @param b
 	 *            the data.
 	 * @param off
@@ -195,7 +192,7 @@ public final class CompressedOutputStream extends FilterOutputStream
 
 	/**
 	 * Writes the specified <code>byte</code> to this output stream.
-	 * 
+	 *
 	 * @param b
 	 *            the <code>byte</code>.
 	 * @exception IOException
@@ -218,7 +215,8 @@ public final class CompressedOutputStream extends FilterOutputStream
 	{
 		if (orgLen > 0)
 		{
-			if (orgLen >= minCompressSize)
+			// if (orgLen >= minCompressSize)
+			if (false)
 			{
 				// compress the data
 				deflater.reset(); // sadly we must reset() cause of finish() :(
@@ -258,7 +256,7 @@ public final class CompressedOutputStream extends FilterOutputStream
 
 	/**
 	 * Writes the header.
-	 * 
+	 *
 	 * @param size
 	 *            the logical packet size
 	 * @param compressed

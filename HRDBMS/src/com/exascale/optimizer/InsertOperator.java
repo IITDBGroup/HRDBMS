@@ -4,16 +4,16 @@ import java.io.InputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
+import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.Vector;
 import java.util.concurrent.atomic.AtomicInteger;
-import com.exascale.compression.CompressedSocket;
-import com.exascale.filesystem.RID;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MultiHashMap;
@@ -32,27 +32,12 @@ public final class InsertOperator implements Operator, Serializable
 	private Operator parent;
 	private int node;
 	private transient Plan plan;
-	private String schema;
-	private String table;
-	private AtomicInteger num = new AtomicInteger(0);
+	private final String schema;
+	private final String table;
+	private final AtomicInteger num = new AtomicInteger(0);
 	private boolean done = false;
 	private MultiHashMap map = new MultiHashMap<Integer, ArrayList<Object>>();
 	private Transaction tx;
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
-	}
-	
-	public String getTable()
-	{
-		return table;
-	}
-	
-	public Plan getPlan()
-	{
-		return plan;
-	}
 
 	public InsertOperator(String schema, String table, MetaData meta)
 	{
@@ -60,10 +45,29 @@ public final class InsertOperator implements Operator, Serializable
 		this.table = table;
 		this.meta = meta;
 	}
-	
-	public void setTransaction(Transaction tx)
+
+	private static byte[] intToBytes(int val)
 	{
-		this.tx = tx;
+		final byte[] buff = new byte[4];
+		buff[0] = (byte)(val >> 24);
+		buff[1] = (byte)((val & 0x00FF0000) >> 16);
+		buff[2] = (byte)((val & 0x0000FF00) >> 8);
+		buff[3] = (byte)((val & 0x000000FF));
+		return buff;
+	}
+
+	private static byte[] longToBytes(long val)
+	{
+		final byte[] buff = new byte[8];
+		buff[0] = (byte)(val >> 56);
+		buff[1] = (byte)((val & 0x00FF000000000000L) >> 48);
+		buff[2] = (byte)((val & 0x0000FF0000000000L) >> 40);
+		buff[3] = (byte)((val & 0x000000FF00000000L) >> 32);
+		buff[4] = (byte)((val & 0x00000000FF000000L) >> 24);
+		buff[5] = (byte)((val & 0x0000000000FF0000L) >> 16);
+		buff[6] = (byte)((val & 0x000000000000FF00L) >> 8);
+		buff[7] = (byte)((val & 0x00000000000000FFL));
+		return buff;
 	}
 
 	@Override
@@ -136,6 +140,11 @@ public final class InsertOperator implements Operator, Serializable
 		return node;
 	}
 
+	public Plan getPlan()
+	{
+		return plan;
+	}
+
 	@Override
 	public TreeMap<Integer, String> getPos2Col()
 	{
@@ -149,6 +158,11 @@ public final class InsertOperator implements Operator, Serializable
 		return retval;
 	}
 
+	public String getTable()
+	{
+		return table;
+	}
+
 	@Override
 	// @?Parallel
 	public Object next(Operator op) throws Exception
@@ -157,17 +171,17 @@ public final class InsertOperator implements Operator, Serializable
 		{
 			Thread.sleep(1);
 		}
-		
+
 		if (num.get() == Integer.MIN_VALUE)
 		{
 			throw new Exception("An error occured during an insert operation");
 		}
-		
+
 		if (num.get() < 0)
 		{
 			return new DataEndMarker();
 		}
-		
+
 		int retval = num.get();
 		num.set(-1);
 		return retval;
@@ -219,6 +233,12 @@ public final class InsertOperator implements Operator, Serializable
 	}
 
 	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		throw new Exception("Tried to call serialize on insert operator");
+	}
+
+	@Override
 	public void setChildPos(int pos)
 	{
 	}
@@ -230,27 +250,38 @@ public final class InsertOperator implements Operator, Serializable
 	}
 
 	@Override
+	public void setPlan(Plan plan)
+	{
+		this.plan = plan;
+	}
+
+	public void setTransaction(Transaction tx)
+	{
+		this.tx = tx;
+	}
+
+	@Override
 	public void start() throws Exception
 	{
 		child.start();
-		ArrayList<String> indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
+		ArrayList<String> indexes = meta.getIndexFileNamesForTable(schema, table, tx);
 		HashMap<Integer, Integer> pos2Length = new HashMap<Integer, Integer>();
-		HashMap<String, Integer> cols2Pos = MetaData.getCols2PosForTable(schema, table, tx);
+		HashMap<String, Integer> cols2Pos = meta.getCols2PosForTable(schema, table, tx);
 		TreeMap<Integer, String> pos2Col = MetaData.cols2PosFlip(cols2Pos);
 		HashMap<String, String> cols2Types = new MetaData().getCols2TypesForTable(schema, table, tx);
 		PartitionMetaData spmd = new MetaData().getPartMeta(schema, table, tx);
-		ArrayList<ArrayList<String>> keys = MetaData.getKeys(indexes, tx);
-		ArrayList<ArrayList<String>> types = MetaData.getTypes(indexes, tx);
-		ArrayList<ArrayList<Boolean>> orders = MetaData.getOrders(indexes, tx);
+		ArrayList<ArrayList<String>> keys = meta.getKeys(indexes, tx);
+		ArrayList<ArrayList<String>> types = meta.getTypes(indexes, tx);
+		ArrayList<ArrayList<Boolean>> orders = meta.getOrders(indexes, tx);
 		for (Map.Entry entry : cols2Types.entrySet())
 		{
 			if (entry.getValue().equals("CHAR"))
 			{
-				int length = MetaData.getLengthForCharCol(schema, table, (String)entry.getKey(), tx);
+				int length = meta.getLengthForCharCol(schema, table, (String)entry.getKey(), tx);
 				pos2Length.put(cols2Pos.get(entry.getKey()), length);
 			}
 		}
-		
+
 		Object o = child.next(this);
 		PartitionMetaData pmeta = new MetaData().new PartitionMetaData(schema, table, tx);
 		int numNodes = MetaData.numWorkerNodes;
@@ -291,215 +322,16 @@ public final class InsertOperator implements Operator, Serializable
 					return;
 				}
 			}
-			
+
 			o = child.next(this);
 		}
-		
+
 		if (map.totalSize() > 0)
 		{
 			flush(indexes, cols2Pos, spmd, keys, types, orders);
 		}
-		
+
 		done = true;
-	}
-	
-	private void flush(ArrayList<String> indexes, HashMap<String, Integer> cols2Pos, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders)
-	{
-		ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
-		for (Object o : map.getKeySet())
-		{
-			int node = (Integer)o;
-			Set<ArrayList<Object>> list = map.get(node);
-			threads.add(new FlushThread(list, indexes, node, cols2Pos, spmd, keys, types, orders));
-		}
-		
-		for (FlushThread thread : threads)
-		{
-			thread.start();
-		}
-		
-		for (FlushThread thread : threads)
-		{
-			while (true)
-			{
-				try
-				{
-					thread.join();
-					break;
-				}
-				catch(InterruptedException e)
-				{}
-			}
-			
-			if (!thread.getOK())
-			{
-				num.set(Integer.MIN_VALUE);
-			}
-		}
-		
-		map.clear();
-	}
-	
-	private class FlushThread extends HRDBMSThread
-	{
-		private Set<ArrayList<Object>> list;
-		private ArrayList<String> indexes;
-		private boolean ok = true;
-		private int node;
-		private HashMap<String, Integer> cols2Pos;
-		private PartitionMetaData spmd;
-		private ArrayList<ArrayList<String>> keys;
-		private ArrayList<ArrayList<String>> types;
-		private ArrayList<ArrayList<Boolean>> orders;
-		
-		public FlushThread(Set<ArrayList<Object>> list, ArrayList<String> indexes, int node, HashMap<String, Integer> cols2Pos, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders)
-		{
-			this.list = list;
-			this.indexes = indexes;
-			this.node = node;
-			this.cols2Pos = cols2Pos;
-			this.spmd = spmd;
-			this.keys = keys;
-			this.orders = orders;
-			this.types = types;
-		}
-		
-		public boolean getOK()
-		{
-			return ok;
-		}
-		
-		public void run()
-		{
-			//send schema, table, tx, indexes, list, and cols2Pos
-			Socket sock = null;
-			try
-			{
-				String hostname = new MetaData().getHostNameForNode(node, tx);
-				sock = CompressedSocket.newCompressedSocket(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
-				OutputStream out = sock.getOutputStream();
-				byte[] outMsg = "INSERT          ".getBytes("UTF-8");
-				outMsg[8] = 0;
-				outMsg[9] = 0;
-				outMsg[10] = 0;
-				outMsg[11] = 0;
-				outMsg[12] = 0;
-				outMsg[13] = 0;
-				outMsg[14] = 0;
-				outMsg[15] = 0;
-				out.write(outMsg);
-				out.write(longToBytes(tx.number()));
-				out.write(stringToBytes(schema));
-				out.write(stringToBytes(table));
-				ObjectOutputStream objOut = new ObjectOutputStream(out);
-				objOut.writeObject(indexes);
-				objOut.writeObject(new ArrayList(list));
-				objOut.writeObject(keys);
-				objOut.writeObject(types);
-				objOut.writeObject(orders);
-				objOut.writeObject(cols2Pos);
-				objOut.writeObject(spmd);
-				objOut.flush();
-				out.flush();
-				getConfirmation(sock);
-				objOut.close();
-				sock.close();
-			}
-			catch(Exception e)
-			{
-				try
-				{
-					sock.close();
-				}
-				catch(Exception f)
-				{}
-				ok = false;
-				HRDBMSWorker.logger.debug("", e);
-			}
-		}
-		
-		private void getConfirmation(Socket sock) throws Exception
-		{
-			InputStream in = sock.getInputStream();
-			byte[] inMsg = new byte[2];
-			
-			int count = 0;
-			while (count < 2)
-			{
-				try
-				{
-					int temp = in.read(inMsg, count, 2 - count);
-					if (temp == -1)
-					{
-						in.close();
-						throw new Exception();
-					}
-					else
-					{
-						count += temp;
-					}
-				}
-				catch (final Exception e)
-				{
-					in.close();
-					throw new Exception();
-				}
-			}
-			
-			String inStr = new String(inMsg, "UTF-8");
-			if (!inStr.equals("OK"))
-			{
-				in.close();
-				throw new Exception();
-			}
-			
-			try
-			{
-				in.close();
-			}
-			catch(Exception e)
-			{}
-		}
-	}
-	
-	private static byte[] intToBytes(int val)
-	{
-		final byte[] buff = new byte[4];
-		buff[0] = (byte)(val >> 24);
-		buff[1] = (byte)((val & 0x00FF0000) >> 16);
-		buff[2] = (byte)((val & 0x0000FF00) >> 8);
-		buff[3] = (byte)((val & 0x000000FF));
-		return buff;
-	}
-	
-	private byte[] stringToBytes(String string)
-	{
-		byte[] data = null;
-		try
-		{
-			data = string.getBytes("UTF-8");
-		}
-		catch(Exception e)
-		{}
-		byte[] len = intToBytes(data.length);
-		byte[] retval = new byte[data.length + len.length];
-		System.arraycopy(len, 0, retval, 0, len.length);
-		System.arraycopy(data, 0, retval, len.length, data.length);
-		return retval;
-	}
-	
-	private static byte[] longToBytes(long val)
-	{
-		final byte[] buff = new byte[8];
-		buff[0] = (byte)(val >> 56);
-		buff[1] = (byte)((val & 0x00FF000000000000L) >> 48);
-		buff[2] = (byte)((val & 0x0000FF0000000000L) >> 40);
-		buff[3] = (byte)((val & 0x000000FF00000000L) >> 32);
-		buff[4] = (byte)((val & 0x00000000FF000000L) >> 24);
-		buff[5] = (byte)((val & 0x0000000000FF0000L) >> 16);
-		buff[6] = (byte)((val & 0x000000000000FF00L) >> 8);
-		buff[7] = (byte)((val & 0x00000000000000FFL));
-		return buff;
 	}
 
 	@Override
@@ -507,11 +339,12 @@ public final class InsertOperator implements Operator, Serializable
 	{
 		return "InsertOperator";
 	}
-	
+
 	private void cast(ArrayList<Object> row, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types)
 	{
 		int i = 0;
-		while (i < pos2Col.size())
+		final int size = pos2Col.size();
+		while (i < size)
 		{
 			String type = cols2Types.get(pos2Col.get(i));
 			Object o = row.get(i);
@@ -554,8 +387,196 @@ public final class InsertOperator implements Operator, Serializable
 					row.add(i, ((Long)o).doubleValue());
 				}
 			}
-			
+
 			i++;
+		}
+	}
+
+	private void flush(ArrayList<String> indexes, HashMap<String, Integer> cols2Pos, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders)
+	{
+		ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
+		for (Object o : map.getKeySet())
+		{
+			int node = (Integer)o;
+			Set<ArrayList<Object>> list = map.get(node);
+			threads.add(new FlushThread(list, indexes, node, cols2Pos, spmd, keys, types, orders));
+		}
+
+		for (FlushThread thread : threads)
+		{
+			thread.start();
+		}
+
+		for (FlushThread thread : threads)
+		{
+			while (true)
+			{
+				try
+				{
+					thread.join();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			if (!thread.getOK())
+			{
+				num.set(Integer.MIN_VALUE);
+			}
+		}
+
+		map.clear();
+	}
+
+	private byte[] stringToBytes(String string)
+	{
+		byte[] data = null;
+		try
+		{
+			data = string.getBytes(StandardCharsets.UTF_8);
+		}
+		catch (Exception e)
+		{
+		}
+		byte[] len = intToBytes(data.length);
+		byte[] retval = new byte[data.length + len.length];
+		System.arraycopy(len, 0, retval, 0, len.length);
+		System.arraycopy(data, 0, retval, len.length, data.length);
+		return retval;
+	}
+
+	private class FlushThread extends HRDBMSThread
+	{
+		private final Set<ArrayList<Object>> list;
+		private final ArrayList<String> indexes;
+		private boolean ok = true;
+		private final int node;
+		private final HashMap<String, Integer> cols2Pos;
+		private final PartitionMetaData spmd;
+		private final ArrayList<ArrayList<String>> keys;
+		private final ArrayList<ArrayList<String>> types;
+		private final ArrayList<ArrayList<Boolean>> orders;
+
+		public FlushThread(Set<ArrayList<Object>> list, ArrayList<String> indexes, int node, HashMap<String, Integer> cols2Pos, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders)
+		{
+			this.list = list;
+			this.indexes = indexes;
+			this.node = node;
+			this.cols2Pos = cols2Pos;
+			this.spmd = spmd;
+			this.keys = keys;
+			this.orders = orders;
+			this.types = types;
+		}
+
+		public boolean getOK()
+		{
+			return ok;
+		}
+
+		@Override
+		public void run()
+		{
+			// send schema, table, tx, indexes, list, and cols2Pos
+			Socket sock = null;
+			try
+			{
+				String hostname = new MetaData().getHostNameForNode(node, tx);
+				// sock = new Socket(hostname,
+				// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+				sock = new Socket();
+				sock.setReceiveBufferSize(262144);
+				sock.setSendBufferSize(262144);
+				sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
+				OutputStream out = sock.getOutputStream();
+				byte[] outMsg = "INSERT          ".getBytes(StandardCharsets.UTF_8);
+				outMsg[8] = 0;
+				outMsg[9] = 0;
+				outMsg[10] = 0;
+				outMsg[11] = 0;
+				outMsg[12] = 0;
+				outMsg[13] = 0;
+				outMsg[14] = 0;
+				outMsg[15] = 0;
+				out.write(outMsg);
+				out.write(longToBytes(tx.number()));
+				out.write(stringToBytes(schema));
+				out.write(stringToBytes(table));
+				ObjectOutputStream objOut = new ObjectOutputStream(out);
+				objOut.writeObject(indexes);
+				objOut.writeObject(new ArrayList(list));
+				objOut.writeObject(keys);
+				objOut.writeObject(types);
+				objOut.writeObject(orders);
+				objOut.writeObject(cols2Pos);
+				objOut.writeObject(spmd);
+				objOut.flush();
+				out.flush();
+				getConfirmation(sock);
+				objOut.close();
+				sock.close();
+			}
+			catch (Exception e)
+			{
+				try
+				{
+					if (sock != null)
+					{
+						sock.close();
+					}
+				}
+				catch (Exception f)
+				{
+				}
+				ok = false;
+				HRDBMSWorker.logger.debug("", e);
+			}
+		}
+
+		private void getConfirmation(Socket sock) throws Exception
+		{
+			InputStream in = sock.getInputStream();
+			byte[] inMsg = new byte[2];
+
+			int count = 0;
+			while (count < 2)
+			{
+				try
+				{
+					int temp = in.read(inMsg, count, 2 - count);
+					if (temp == -1)
+					{
+						in.close();
+						throw new Exception();
+					}
+					else
+					{
+						count += temp;
+					}
+				}
+				catch (final Exception e)
+				{
+					in.close();
+					throw new Exception();
+				}
+			}
+
+			String inStr = new String(inMsg, StandardCharsets.UTF_8);
+			if (!inStr.equals("OK"))
+			{
+				in.close();
+				throw new Exception();
+			}
+
+			try
+			{
+				in.close();
+			}
+			catch (Exception e)
+			{
+			}
 		}
 	}
 }

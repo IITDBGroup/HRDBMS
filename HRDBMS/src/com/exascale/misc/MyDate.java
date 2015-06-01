@@ -76,7 +76,7 @@ public class MyDate implements Comparable, Serializable
 
 	public String format()
 	{
-		final StringBuilder b = new StringBuilder();
+		final StringBuilder b = new StringBuilder(10);
 		b.append(year);
 		b.append("-");
 		if (month < 10)

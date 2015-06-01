@@ -2,20 +2,21 @@ package com.exascale.optimizer;
 
 public class Having
 {
-	private SearchCondition search;
-	
+	private final SearchCondition search;
+
 	public Having(SearchCondition search)
 	{
 		this.search = search;
 	}
-	
-	public SearchCondition getSearch()
-	{
-		return search;
-	}
-	
+
+	@Override
 	public Having clone()
 	{
 		return new Having(search.clone());
+	}
+
+	public SearchCondition getSearch()
+	{
+		return search;
 	}
 }

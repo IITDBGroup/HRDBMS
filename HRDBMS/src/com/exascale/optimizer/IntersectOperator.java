@@ -1,12 +1,15 @@
 package com.exascale.optimizer;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.TreeMap;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
-import com.exascale.managers.ResourceManager.DiskBackedArray;
 import com.exascale.managers.ResourceManager.DiskBackedHashSet;
 import com.exascale.misc.BufferedLinkedBlockingQueue;
 import com.exascale.misc.DataEndMarker;
@@ -15,31 +18,56 @@ import com.exascale.threads.ThreadPoolThread;
 
 public final class IntersectOperator implements Operator, Serializable
 {
-	private MetaData meta;
+	private static sun.misc.Unsafe unsafe;
 
-	private final ArrayList<Operator> children = new ArrayList<Operator>();
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
 
+	private transient MetaData meta;
+	private ArrayList<Operator> children = new ArrayList<Operator>();
 	private Operator parent;
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
 	private TreeMap<Integer, String> pos2Col;
 	private int node;
-	private ArrayList<DiskBackedHashSet> sets = new ArrayList<DiskBackedHashSet>();
-	private BufferedLinkedBlockingQueue buffer;
+	private transient ArrayList<DiskBackedHashSet> sets;
+	private transient BufferedLinkedBlockingQueue buffer;
 	private int estimate = 16;
-	private volatile boolean inited = false;
+
 	private volatile boolean startDone = false;
-	private transient Plan plan;
+
 	private boolean estimateSet = false;
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
-	}
 
 	public IntersectOperator(MetaData meta)
 	{
 		this.meta = meta;
+	}
+
+	public static IntersectOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		IntersectOperator value = (IntersectOperator)unsafe.allocateInstance(IntersectOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.children = OperatorUtils.deserializeALOp(in, prev);
+		value.parent = OperatorUtils.deserializeOperator(in, prev);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.node = OperatorUtils.readInt(in);
+		value.estimate = OperatorUtils.readInt(in);
+		value.startDone = OperatorUtils.readBool(in);
+		value.estimateSet = OperatorUtils.readBool(in);
+		return value;
 	}
 
 	@Override
@@ -70,24 +98,27 @@ public final class IntersectOperator implements Operator, Serializable
 	@Override
 	public void close() throws Exception
 	{
-		for (final DiskBackedHashSet set : sets)
+		if (sets != null)
 		{
-			set.getArray().close();
-			set.close();
+			for (final DiskBackedHashSet set : sets)
+			{
+				set.getArray().close();
+				set.close();
+			}
+
+			sets = null;
 		}
-		
-		sets = null;
-		
+
 		for (Operator o : children)
 		{
 			o.close();
 		}
-		
+
 		if (buffer != null)
 		{
 			buffer.close();
 		}
-		
+
 		cols2Pos = null;
 		cols2Types = null;
 		pos2Col = null;
@@ -155,7 +186,7 @@ public final class IntersectOperator implements Operator, Serializable
 				return o;
 			}
 		}
-		
+
 		if (o instanceof Exception)
 		{
 			throw (Exception)o;
@@ -226,7 +257,6 @@ public final class IntersectOperator implements Operator, Serializable
 		}
 		else
 		{
-			inited = false;
 			for (final Operator op : children)
 			{
 				op.reset();
@@ -247,16 +277,31 @@ public final class IntersectOperator implements Operator, Serializable
 
 			sets = new ArrayList<DiskBackedHashSet>();
 			buffer.clear();
-			if (!inited)
-			{
-			}
-			else
-			{
-				HRDBMSWorker.logger.error("IntersectOperator is inited more than once!");
-				throw new Exception("IntersectOperator is inited more than once!");
-			}
 			new InitThread().start();
 		}
+	}
+
+	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(31, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		OperatorUtils.serializeALOp(children, out, prev);
+		parent.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.writeInt(node, out);
+		OperatorUtils.writeInt(estimate, out);
+		OperatorUtils.writeBool(startDone, out);
+		OperatorUtils.writeBool(estimateSet, out);
 	}
 
 	@Override
@@ -282,8 +327,14 @@ public final class IntersectOperator implements Operator, Serializable
 	}
 
 	@Override
+	public void setPlan(Plan plan)
+	{
+	}
+
+	@Override
 	public void start() throws Exception
 	{
+		sets = new ArrayList<DiskBackedHashSet>();
 		startDone = true;
 		for (final Operator op : children)
 		{
@@ -291,15 +342,6 @@ public final class IntersectOperator implements Operator, Serializable
 		}
 
 		buffer = new BufferedLinkedBlockingQueue(ResourceManager.QUEUE_SIZE);
-		if (!inited)
-		{
-		}
-		else
-		{
-			Exception e = new Exception("IntersectOperator is inited more than once!");
-			HRDBMSWorker.logger.error("IntersectOperator is inited more than once!", e);
-			throw e;
-		}
 		new InitThread().start();
 	}
 
@@ -316,25 +358,10 @@ public final class IntersectOperator implements Operator, Serializable
 		@Override
 		public void run()
 		{
-			if (!inited)
-			{
-				inited = true;
-			}
-			else
-			{
-				Exception e = new Exception("IntersectOperator is inited more than once!");
-				HRDBMSWorker.logger.error("IntersectOperator is inited more than once!", e);
-				try
-				{
-					buffer.put(e);
-				}
-				catch(Exception f)
-				{}
-				return;
-			}
 			if (children.size() == 1)
 			{
-				//uses not distinct logic since this can only happen during index processing
+				// uses not distinct logic since this can only happen during
+				// index processing
 				int count = 0;
 				try
 				{
@@ -378,16 +405,18 @@ public final class IntersectOperator implements Operator, Serializable
 					{
 						buffer.put(f);
 					}
-					catch(Exception g)
-					{}
+					catch (Exception g)
+					{
+					}
 					return;
 				}
 
 				return;
 			}
-			
+
 			int i = 0;
-			while (i < children.size())
+			final int size = children.size();
+			while (i < size)
 			{
 				final ReadThread read = new ReadThread(i);
 				threads.add(read);
@@ -440,14 +469,15 @@ public final class IntersectOperator implements Operator, Serializable
 							break;
 						}
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						try
 						{
 							buffer.put(e);
 						}
-						catch(Exception f)
-						{}
+						catch (Exception f)
+						{
+						}
 						return;
 					}
 				}
@@ -482,6 +512,20 @@ public final class IntersectOperator implements Operator, Serializable
 				{
 				}
 			}
+
+			for (final DiskBackedHashSet set : sets)
+			{
+				try
+				{
+					set.getArray().close();
+					set.close();
+				}
+				catch (Exception e)
+				{
+				}
+			}
+
+			sets = null;
 		}
 	}
 
@@ -516,8 +560,9 @@ public final class IntersectOperator implements Operator, Serializable
 				{
 					buffer.put(e);
 				}
-				catch(Exception f)
-				{}
+				catch (Exception f)
+				{
+				}
 				return;
 			}
 		}

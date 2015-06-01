@@ -1,9 +1,13 @@
 package com.exascale.optimizer;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.TreeMap;
 import com.exascale.gpu.Kernel;
@@ -13,34 +17,44 @@ import com.exascale.managers.ResourceManager;
 import com.exascale.misc.BufferedLinkedBlockingQueue;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.FastStringTokenizer;
-import com.exascale.misc.Utils;
 import com.exascale.tables.Plan;
 import com.exascale.threads.ThreadPoolThread;
 
 public final class ExtendOperator implements Operator, Serializable
 {
+	private static sun.misc.Unsafe unsafe;
+
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
+
 	private Operator child;
-
 	private Operator parent;
-
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
 	private TreeMap<Integer, String> pos2Col;
-	private final String prefix;
-	private final MetaData meta;
-	private final String name;
+	private String prefix;
+	private transient final MetaData meta;
+	private String name;
 	private int node;
 	private FastStringTokenizer tokens;
 	private ArrayDeque<String> master;
-	private BufferedLinkedBlockingQueue queue;
-	private volatile ArrayList<Integer> poses;
+	private transient BufferedLinkedBlockingQueue queue;
+	private transient volatile ArrayList<Integer> poses;
+
 	private volatile boolean startDone = false;
-	private transient Plan plan;
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
-	}
+
+	private transient volatile ArrayList<Double> literals;
 
 	public ExtendOperator(String prefix, String name, MetaData meta)
 	{
@@ -54,10 +68,23 @@ public final class ExtendOperator implements Operator, Serializable
 			master.push(token);
 		}
 	}
-	
-	public String getPrefix()
+
+	public static ExtendOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
 	{
-		return prefix;
+		ExtendOperator value = (ExtendOperator)unsafe.allocateInstance(ExtendOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.child = OperatorUtils.deserializeOperator(in, prev);
+		value.parent = OperatorUtils.deserializeOperator(in, prev);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.prefix = OperatorUtils.readString(in, prev);
+		value.name = OperatorUtils.readString(in, prev);
+		value.node = OperatorUtils.readInt(in);
+		value.tokens = OperatorUtils.deserializeFST(in, prev);
+		value.master = OperatorUtils.deserializeADS(in, prev);
+		value.startDone = OperatorUtils.readBool(in);
+		return value;
 	}
 
 	@Override
@@ -104,12 +131,12 @@ public final class ExtendOperator implements Operator, Serializable
 	public void close() throws Exception
 	{
 		child.close();
-		
+
 		if (queue != null)
 		{
 			queue.close();
 		}
-		
+
 		master = null;
 		queue = null;
 		poses = null;
@@ -159,6 +186,11 @@ public final class ExtendOperator implements Operator, Serializable
 		return pos2Col;
 	}
 
+	public String getPrefix()
+	{
+		return prefix;
+	}
+
 	@Override
 	public ArrayList<String> getReferences()
 	{
@@ -174,7 +206,7 @@ public final class ExtendOperator implements Operator, Serializable
 					retval.add(temp);
 					continue;
 				}
-				
+
 				Integer x = cols2Pos.get(temp);
 				if (x == null)
 				{
@@ -204,7 +236,7 @@ public final class ExtendOperator implements Operator, Serializable
 						}
 					}
 				}
-				
+
 				retval.add(temp);
 			}
 		}
@@ -233,7 +265,7 @@ public final class ExtendOperator implements Operator, Serializable
 				return o;
 			}
 		}
-		
+
 		if (o instanceof Exception)
 		{
 			throw (Exception)o;
@@ -312,6 +344,31 @@ public final class ExtendOperator implements Operator, Serializable
 	}
 
 	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(27, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		child.serialize(out, prev);
+		parent.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.writeString(prefix, out, prev);
+		OperatorUtils.writeString(name, out, prev);
+		OperatorUtils.writeInt(node, out);
+		OperatorUtils.serializeFST(tokens, out, prev);
+		OperatorUtils.serializeADS(master, out, prev);
+		OperatorUtils.writeBool(startDone, out);
+	}
+
+	@Override
 	public void setChildPos(int pos)
 	{
 	}
@@ -320,6 +377,11 @@ public final class ExtendOperator implements Operator, Serializable
 	public void setNode(int node)
 	{
 		this.node = node;
+	}
+
+	@Override
+	public void setPlan(Plan plan)
+	{
 	}
 
 	@Override
@@ -339,13 +401,18 @@ public final class ExtendOperator implements Operator, Serializable
 
 	private final Double parsePrefixDouble(ArrayList<Object> row)
 	{
-		final ArrayList<Integer> p = new ArrayList<Integer>();
+		ArrayList<Integer> p = null;
+		ArrayList<Double> ds = null;
 		final ArrayDeque<String> parseStack = master.clone();
 		final ArrayDeque<Object> execStack = new ArrayDeque<Object>();
+		int i = 0;
+		int j = 0;
 		// System.out.println("Starting parse stack = " + parseStack);
 
-		while (parseStack.size() > 0)
+		int y = parseStack.size();
+		while (y > 0)
 		{
+			y--;
 			// System.out.println("Exec stack = " + execStack);
 			String temp = parseStack.pop();
 			// System.out.println("We popped " + temp);
@@ -385,78 +452,126 @@ public final class ExtendOperator implements Operator, Serializable
 					if (Character.isLetter(temp.charAt(0)) || (temp.charAt(0) == '_') || temp.charAt(0) == '.')
 					{
 						Object field = null;
-						try
+						Integer x;
+						if (poses != null)
 						{
-							// System.out.println("Fetching field " + temp +
-							// " from " + cols2Pos);
-							// System.out.println("Row is " + row);
-							Integer x = cols2Pos.get(temp);
-							if (x == null)
+							x = poses.get(i);
+							i++;
+
+							field = row.get(x);
+							if (field instanceof Long)
 							{
-								int count = 0;
-								if (temp.startsWith("."))
+								execStack.push(new Double(((Long)field).longValue()));
+							}
+							else if (field instanceof Integer)
+							{
+								execStack.push(new Double(((Integer)field).intValue()));
+							}
+							else if (field instanceof Double)
+							{
+								execStack.push(field);
+							}
+							else
+							{
+								HRDBMSWorker.logger.error("Unknown type in ExtendOperator: " + field.getClass());
+								HRDBMSWorker.logger.error("Row: " + row);
+								HRDBMSWorker.logger.error("Cols2Pos: " + cols2Pos);
+								queue.put(new Exception("Unknown type in ExtendOperator: " + field.getClass()));
+								return 0D;
+							}
+						}
+						else
+						{
+							if (p == null)
+							{
+								p = new ArrayList<Integer>();
+							}
+							try
+							{
+								// System.out.println("Fetching field " + temp +
+								// " from " + cols2Pos);
+								// System.out.println("Row is " + row);
+								x = cols2Pos.get(temp);
+								if (x == null)
 								{
-									temp = temp.substring(1);
-								}
-								for (String col : cols2Pos.keySet())
-								{
-									String origCol = col;
-									if (col.contains("."))
+									int count = 0;
+									if (temp.startsWith("."))
 									{
-										col = col.substring(col.indexOf('.') + 1);
-										if (col.equals(temp))
+										temp = temp.substring(1);
+									}
+									for (String col : cols2Pos.keySet())
+									{
+										String origCol = col;
+										if (col.contains("."))
 										{
-											count++;
-											if (count == 1)
+											col = col.substring(col.indexOf('.') + 1);
+											if (col.equals(temp))
 											{
-												x = cols2Pos.get(origCol);
-											}
-											else
-											{
-												queue.put(new Exception("Column " + temp + " is ambiguous"));
+												count++;
+												if (count == 1)
+												{
+													x = cols2Pos.get(origCol);
+												}
+												else
+												{
+													queue.put(new Exception("Column " + temp + " is ambiguous"));
+												}
 											}
 										}
 									}
 								}
+								p.add(x);
+								field = row.get(x);
+								// System.out.println("Fetched value is " +
+								// field);
 							}
-							p.add(x);
-							field = row.get(x);
-							// System.out.println("Fetched value is " + field);
-						}
-						catch (final Exception e)
-						{
-							HRDBMSWorker.logger.error("Error getting column " + temp + " from row " + row, e);
-							HRDBMSWorker.logger.error("Cols2Pos = " + cols2Pos);
-							queue.put(e);
-							return 0D;
-						}
-						if (field instanceof Long)
-						{
-							execStack.push(new Double(((Long)field).longValue()));
-						}
-						else if (field instanceof Integer)
-						{
-							execStack.push(new Double(((Integer)field).intValue()));
-						}
-						else if (field instanceof Double)
-						{
-							execStack.push(field);
-						}
-						else
-						{
-							HRDBMSWorker.logger.error("Unknown type in ExtendOperator: " + field.getClass());
-							HRDBMSWorker.logger.error("Row: " + row);
-							HRDBMSWorker.logger.error("Cols2Pos: " + cols2Pos);
-							queue.put(new Exception("Unknown type in ExtendOperator: " + field.getClass()));
-							return 0D;
+							catch (final Exception e)
+							{
+								HRDBMSWorker.logger.error("Error getting column " + temp + " from row " + row, e);
+								HRDBMSWorker.logger.error("Cols2Pos = " + cols2Pos);
+								queue.put(e);
+								return 0D;
+							}
+							if (field instanceof Long)
+							{
+								execStack.push(new Double(((Long)field).longValue()));
+							}
+							else if (field instanceof Integer)
+							{
+								execStack.push(new Double(((Integer)field).intValue()));
+							}
+							else if (field instanceof Double)
+							{
+								execStack.push(field);
+							}
+							else
+							{
+								HRDBMSWorker.logger.error("Unknown type in ExtendOperator: " + field.getClass());
+								HRDBMSWorker.logger.error("Row: " + row);
+								HRDBMSWorker.logger.error("Cols2Pos: " + cols2Pos);
+								queue.put(new Exception("Unknown type in ExtendOperator: " + field.getClass()));
+								return 0D;
+							}
 						}
 					}
 					else
 					{
-						final double d = Double.parseDouble(temp);
-						// System.out.println("Parsed a literal numeric value and got "
-						// + d);
-						execStack.push(d);
+						if (literals != null)
+						{
+							execStack.push(literals.get(j++));
+						}
+						else
+						{
+							if (ds == null)
+							{
+								ds = new ArrayList<Double>();
+							}
+							final double d = Double.parseDouble(temp);
+							// System.out.println("Parsed a literal numeric value and got "
+							// + d);
+							execStack.push(d);
+							ds.add(d);
+						}
 					}
 				}
 				catch (final Exception e)
@@ -466,14 +581,24 @@ public final class ExtendOperator implements Operator, Serializable
 					{
 						queue.put(e);
 					}
-					catch(Exception f)
-					{}
+					catch (Exception f)
+					{
+					}
 					return 0D;
 				}
 			}
 		}
 
-		poses = p;
+		if (poses == null)
+		{
+			poses = p;
+		}
+
+		if (literals == null)
+		{
+			literals = ds;
+		}
+
 		final Double retval = (Double)execStack.pop();
 		// System.out.println("Going to return " + retval);
 		return retval;
@@ -522,8 +647,9 @@ public final class ExtendOperator implements Operator, Serializable
 					{
 						queue.put(e);
 					}
-					catch(Exception f)
-					{}
+					catch (Exception f)
+					{
+					}
 					return;
 				}
 
@@ -544,14 +670,15 @@ public final class ExtendOperator implements Operator, Serializable
 								i++;
 							}
 						}
-						catch(Exception e)
+						catch (Exception e)
 						{
 							try
 							{
 								queue.put(e);
 							}
-							catch(Exception f)
-							{}
+							catch (Exception f)
+							{
+							}
 							return;
 						}
 					}
@@ -561,14 +688,15 @@ public final class ExtendOperator implements Operator, Serializable
 						queue.put(o);
 						return;
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						try
 						{
 							queue.put(e);
 						}
-						catch(Exception f)
-						{}
+						catch (Exception f)
+						{
+						}
 						return;
 					}
 				}
@@ -582,14 +710,15 @@ public final class ExtendOperator implements Operator, Serializable
 					{
 						queue.put(row);
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						try
 						{
 							queue.put(e);
 						}
-						catch(Exception f)
-						{}
+						catch (Exception f)
+						{
+						}
 						return;
 					}
 				}
@@ -614,14 +743,15 @@ public final class ExtendOperator implements Operator, Serializable
 								i++;
 							}
 						}
-						catch(Exception e)
+						catch (Exception e)
 						{
 							try
 							{
 								queue.put(e);
 							}
-							catch(Exception f)
-							{}
+							catch (Exception f)
+							{
+							}
 							return;
 						}
 

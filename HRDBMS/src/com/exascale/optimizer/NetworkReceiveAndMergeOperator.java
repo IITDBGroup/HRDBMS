@@ -2,28 +2,54 @@ package com.exascale.optimizer;
 
 import java.io.BufferedInputStream;
 import java.io.InputStream;
-import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.Map;
-import java.util.TreeMap;
-import java.util.TreeSet;
-import com.exascale.compression.CompressedSocket;
+import java.util.IdentityHashMap;
 import com.exascale.managers.HRDBMSWorker;
+import com.exascale.managers.ResourceManager;
+import com.exascale.misc.BinomialHeap;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MyDate;
+import com.exascale.misc.SPSCQueue;
+import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.ThreadPoolThread;
-import com.exascale.misc.BinomialHeap;
 
 public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator implements Operator, Serializable
 {
-	private final ArrayList<String> sortCols;
+	private static Charset cs = StandardCharsets.UTF_8;
 
-	private final ArrayList<Boolean> orders;
+	private static long offset;
+
+	private static sun.misc.Unsafe unsafe;
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+			final Field fieldToUpdate = String.class.getDeclaredField("value");
+			// get unsafe offset to this field
+			offset = unsafe.objectFieldOffset(fieldToUpdate);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
+	private ArrayList<String> sortCols;
+
+	private ArrayList<Boolean> orders;
 
 	private int[] sortPos;
 
@@ -32,6 +58,26 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 		super(meta);
 		this.sortCols = sortCols;
 		this.orders = orders;
+	}
+
+	public static NetworkReceiveAndMergeOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		NetworkReceiveAndMergeOperator value = (NetworkReceiveAndMergeOperator)unsafe.allocateInstance(NetworkReceiveAndMergeOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.meta = new MetaData();
+		value.children = OperatorUtils.deserializeALOp(in, prev);
+		value.parent = OperatorUtils.deserializeOperator(in, prev);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.fullyStarted = OperatorUtils.readBool(in);
+		value.start = OperatorUtils.readLong(in);
+		value.node = OperatorUtils.readInt(in);
+		value.sortCols = OperatorUtils.deserializeALS(in, prev);
+		value.orders = OperatorUtils.deserializeALB(in, prev);
+		value.sortPos = OperatorUtils.deserializeIntArray(in, prev);
+		value.cd = cs.newDecoder();
+		return value;
 	}
 
 	protected static byte[] intToBytes(int val)
@@ -96,13 +142,19 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 					{
 						final NetworkSendOperator child = (NetworkSendOperator)op;
 						child.clearParent();
-						final CompressedSocket sock = CompressedSocket.newCompressedSocket(meta.getHostNameForNode(child.getNode()), WORKER_PORT);
+						// final Socket sock = new
+						// Socket(meta.getHostNameForNode(child.getNode()),
+						// WORKER_PORT);
+						Socket sock = new Socket();
+						sock.setReceiveBufferSize(262144);
+						sock.setSendBufferSize(262144);
+						sock.connect(new InetSocketAddress(meta.getHostNameForNode(child.getNode()), WORKER_PORT));
 						socks.put(child, sock);
 						final OutputStream out = sock.getOutputStream();
 						outs.put(child, out);
 						final InputStream in = sock.getInputStream();
 						ins.put(child, new BufferedInputStream(in, 65536));
-						final byte[] command = "REMOTTRE".getBytes("UTF-8");
+						final byte[] command = "REMOTTRE".getBytes(StandardCharsets.UTF_8);
 						final byte[] from = intToBytes(-1);
 						final byte[] to = intToBytes(child.getNode());
 						final byte[] data = new byte[command.length + from.length + to.length];
@@ -111,16 +163,10 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 						System.arraycopy(to, 0, data, 12, 4);
 						out.write(data);
 						out.flush();
-						final ObjectOutputStream objOut = new ObjectOutputStream(out);
-						objOuts.put(child, objOut);
-						// Field[] fields =
-						// child.getClass().getDeclaredFields();
-						// for (Field field : fields)
-						// {
-						// printHierarchy("child", field, child);
-						// }
-						objOut.writeObject(child);
-						objOut.flush();
+						IdentityHashMap<Object, Long> map = new IdentityHashMap<Object, Long>();
+						child.serialize(out, map);
+						map.clear();
+						map = null;
 						out.flush();
 					}
 
@@ -145,7 +191,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 				return o;
 			}
 		}
-		
+
 		if (o instanceof Exception)
 		{
 			throw (Exception)o;
@@ -167,6 +213,32 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 	}
 
 	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(73, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		// recreate meta
+		OperatorUtils.serializeALOp(children, out, prev);
+		parent.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.writeBool(fullyStarted, out);
+		OperatorUtils.writeLong(start, out);
+		OperatorUtils.writeInt(node, out);
+		OperatorUtils.serializeALS(sortCols, out, prev);
+		OperatorUtils.serializeALB(orders, out, prev);
+		OperatorUtils.serializeIntArray(sortPos, out, prev);
+	}
+
+	@Override
 	public String toString()
 	{
 		return "NetworkReceiveAndMergeOperator(" + node + ")";
@@ -176,6 +248,34 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 	{
 		final int ret = java.nio.ByteBuffer.wrap(val).getInt();
 		return ret;
+	}
+
+	public class ALOO
+	{
+		private final ArrayList<Object> alo;
+		private final Operator op;
+
+		public ALOO(ArrayList<Object> alo, Operator op)
+		{
+			this.alo = alo;
+			this.op = op;
+		}
+
+		@Override
+		public boolean equals(Object o)
+		{
+			return this == o;
+		}
+
+		public ArrayList<Object> getALO()
+		{
+			return alo;
+		}
+
+		public Operator getOp()
+		{
+			return op;
+		}
 	}
 
 	private final class InitThread extends ThreadPoolThread
@@ -197,7 +297,9 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 				{
 				}
 			}
-			HRDBMSWorker.logger.debug("NetworkReceiveOperator: " + ((bytes.get() / ((System.currentTimeMillis() - start) / 1000.0)) / (1024.0 * 1024.0)) + "MB/sec");
+			// HRDBMSWorker.logger.debug("NetworkReceiveOperator: " +
+			// ((bytes.get() / ((System.currentTimeMillis() - start) / 1000.0))
+			// / (1024.0 * 1024.0)) + "MB/sec");
 
 			while (true)
 			{
@@ -212,116 +314,100 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 			}
 		}
 	}
-	
-	private class ALOO
-	{
-		private ArrayList<Object> alo;
-		private Operator op;
-		
-		public ALOO(ArrayList<Object> alo, Operator op)
-		{
-			this.alo = alo;
-			this.op = op;
-		}
-		
-		public ArrayList<Object> getALO()
-		{
-			return alo;
-		}
-		
-		public Operator getOp()
-		{
-			return op;
-		}
-		
-		public boolean equals(Object o)
-		{
-			return this == o;
-		}
-	}
-	
+
 	private class MergeComparator implements Comparator<Object>
 	{
+		@Override
 		public int compare(Object l2, Object r2)
 		{
 			ALOO l = (ALOO)l2;
 			ALOO r = (ALOO)r2;
-			if (l == r)
+			try
 			{
+				if (l == r)
+				{
+					return 0;
+				}
+
+				ArrayList<Object> lhs = l.getALO();
+				ArrayList<Object> rhs = r.getALO();
+				int result = 0;
+				int i = 0;
+
+				for (final int pos : sortPos)
+				{
+					Object lField = lhs.get(pos);
+					Object rField = rhs.get(pos);
+
+					if (lField instanceof Integer)
+					{
+						result = ((Integer)lField).compareTo((Integer)rField);
+					}
+					else if (lField instanceof Long)
+					{
+						result = ((Long)lField).compareTo((Long)rField);
+					}
+					else if (lField instanceof Double)
+					{
+						result = ((Double)lField).compareTo((Double)rField);
+					}
+					else if (lField instanceof String)
+					{
+						result = ((String)lField).compareTo((String)rField);
+					}
+					else if (lField instanceof MyDate)
+					{
+						result = ((MyDate)lField).compareTo(rField);
+					}
+					else
+					{
+						lField = null;
+						lField.toString();
+					}
+
+					if (orders.get(i))
+					{
+						if (result > 0)
+						{
+							return 1;
+						}
+						else if (result < 0)
+						{
+							return -1;
+						}
+					}
+					else
+					{
+						if (result > 0)
+						{
+							return -1;
+						}
+						else if (result < 0)
+						{
+							return 1;
+						}
+					}
+
+					i++;
+				}
+
 				return 0;
 			}
-			
-			ArrayList<Object> lhs = l.getALO();
-			ArrayList<Object> rhs = r.getALO();
-			int result = 0;
-			int i = 0;
-
-			for (final int pos : sortPos)
+			catch (Exception e)
 			{
-				Object lField = lhs.get(pos);
-				Object rField = rhs.get(pos);
-
-				if (lField instanceof Integer)
-				{
-					result = ((Integer)lField).compareTo((Integer)rField);
-				}
-				else if (lField instanceof Long)
-				{
-					result = ((Long)lField).compareTo((Long)rField);
-				}
-				else if (lField instanceof Double)
-				{
-					result = ((Double)lField).compareTo((Double)rField);
-				}
-				else if (lField instanceof String)
-				{
-					result = ((String)lField).compareTo((String)rField);
-				}
-				else if (lField instanceof MyDate)
-				{
-					result = ((MyDate)lField).compareTo(rField);
-				}
-				else
-				{
-					lField = null;
-					lField.toString();
-				}
-
-				if (orders.get(i))
-				{
-					if (result > 0)
-					{
-						return 1;
-					}
-					else if (result < 0)
-					{
-						return -1;
-					}
-				}
-				else
-				{
-					if (result > 0)
-					{
-						return -1;
-					}
-					else if (result < 0)
-					{
-						return 1;
-					}
-				}
-
-				i++;
+				HRDBMSWorker.logger.debug("Error comparing " + l.getALO() + " and " + r.getALO());
+				throw e;
 			}
-			
-			return 0;
 		}
 	}
 
 	private final class ReadThread extends ThreadPoolThread
 	{
 		private final ArrayList<Operator> children;
-		//private final HashMap<Operator, ArrayList<Object>> rows = new HashMap<Operator, ArrayList<Object>>();
-		//private final TreeMap<ArrayList<Object>, Operator> rows = new TreeMap<ArrayList<Object>, Operator>(new MergeComparator());
+		// private final HashMap<Operator, ArrayList<Object>> rows = new
+		// HashMap<Operator, ArrayList<Object>>();
+		// private final TreeMap<ArrayList<Object>, Operator> rows = new
+		// TreeMap<ArrayList<Object>, Operator>(new MergeComparator());
 		private final BinomialHeap<ALOO> rows = new BinomialHeap<ALOO>(new MergeComparator());
 		private ALOO minEntry;
 
@@ -333,61 +419,183 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 		@Override
 		public void run()
 		{
-			for (final Operator op : children)
+			try
 			{
-				try
+				HashMap<Operator, ReadThread2> map = new HashMap<Operator, ReadThread2>();
+				for (Operator op : children)
 				{
-					final ArrayList<Object> row = readRow(op);
-					if (row != null)
-					{
-						rows.insert(new ALOO(row, op));
-					}
+					ReadThread2 thread = new ReadThread2(op);
+					thread.start();
+					map.put(op, thread);
 				}
-				catch(Exception e)
+
+				for (final Operator op : children)
 				{
 					try
 					{
-						outBuffer.put(e);
+						Object o = map.get(op).q.take();
+
+						if (o instanceof ArrayList)
+						{
+							final ArrayList<Object> row = (ArrayList<Object>)o;
+							rows.insert(new ALOO(row, op));
+						}
+						else if (o instanceof Exception)
+						{
+							throw (Exception)o;
+						}
+						else if (!(o instanceof DataEndMarker))
+						{
+							HRDBMSWorker.logger.debug("Unknown object in NRAM: " + o);
+							throw new Exception("Unknown object in NRAM: " + o);
+						}
 					}
-					catch(Exception f)
-					{}
-					return;
+					catch (Exception e)
+					{
+						try
+						{
+							HRDBMSWorker.logger.debug("", e);
+							outBuffer.put(e);
+						}
+						catch (Exception f)
+						{
+						}
+						return;
+					}
+				}
+
+				while (rows.size() > 0)
+				{
+					try
+					{
+						minEntry = rows.extractMin();
+					}
+					catch (Exception e)
+					{
+						HRDBMSWorker.logger.debug("", e);
+						outBuffer.put(e);
+						return;
+					}
+
+					while (true)
+					{
+						try
+						{
+							outBuffer.put(minEntry.getALO());
+							break;
+						}
+						catch (final Exception e)
+						{
+							HRDBMSWorker.logger.debug("", e);
+							outBuffer.put(e);
+							return;
+						}
+					}
+					try
+					{
+						Object o = map.get(minEntry.getOp()).q.take();
+
+						if (o instanceof ArrayList)
+						{
+							final ArrayList<Object> row = (ArrayList<Object>)o;
+							rows.insert(new ALOO(row, minEntry.getOp()));
+						}
+						else if (o instanceof Exception)
+						{
+							throw (Exception)o;
+						}
+						else if (!(o instanceof DataEndMarker))
+						{
+							HRDBMSWorker.logger.debug("Unknown object in NRAM: " + o);
+							throw new Exception("Unknown object in NRAM: " + o);
+						}
+					}
+					catch (Exception e)
+					{
+						try
+						{
+							HRDBMSWorker.logger.debug("", e);
+							outBuffer.put(e);
+						}
+						catch (Exception f)
+						{
+						}
+						return;
+					}
 				}
 			}
-
-			while (rows.size() > 0)
+			catch (Exception g)
 			{
-				minEntry = rows.extractMin();
+				HRDBMSWorker.logger.debug("", g);
+				outBuffer.put(g);
+			}
+		}
+	}
 
+	private class ReadThread2 extends HRDBMSThread
+	{
+		private final Operator op;
+		public SPSCQueue q = new SPSCQueue(ResourceManager.QUEUE_SIZE >> 6);
+
+		public ReadThread2(Operator op)
+		{
+			this.op = op;
+		}
+
+		@Override
+		public void run()
+		{
+			try
+			{
+				final InputStream in = ins.get(op);
+				final byte[] sizeBuff = new byte[4];
+				byte[] data = null;
 				while (true)
 				{
-					try
+					int count = 0;
+					while (count < 4)
 					{
-						outBuffer.put(minEntry.getALO());
-						break;
+						int temp = in.read(sizeBuff, count, 4 - count);
+						if (temp == -1)
+						{
+							throw new Exception("Early EOF reading from socket");
+						}
+						count += temp;
 					}
-					catch (final Exception e)
+					// bytes.getAndAdd(4);
+					final int size = bytesToInt(sizeBuff);
+					data = new byte[size];
+					count = 0;
+					while (count < size)
 					{
+						int temp = in.read(data, count, size - count);
+						if (temp == -1)
+						{
+							throw new Exception("Early EOF reading from socket");
+						}
+						count += temp;
 					}
+					// bytes.getAndAdd(size);
+					final Object row = fromBytes(data);
+					if (row instanceof DataEndMarker)
+					{
+						q.put(row);
+						return;
+					}
+
+					if (row instanceof Exception)
+					{
+						q.put(row);
+						return;
+					}
+
+					q.put(row);
 				}
-				try
-				{
-					final ArrayList<Object> row = readRow(minEntry.getOp());
-					if (row != null)
-					{
-						rows.insert(new ALOO(row, minEntry.getOp()));
-					}
-				}
-				catch(Exception e)
-				{
-					try
-					{
-						outBuffer.put(e);
-					}
-					catch(Exception f)
-					{}
-					return;
-				}
+			}
+			catch (final Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				q.put(e);
 			}
 		}
 
@@ -416,7 +624,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 				bb.get(temp);
 				try
 				{
-					final String o = new String(temp, "UTF-8");
+					final String o = new String(temp, StandardCharsets.UTF_8);
 					return new Exception(o);
 				}
 				catch (final Exception e)
@@ -457,11 +665,22 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 					// string
 					final int length = bb.getInt();
 					final byte[] temp = new byte[length];
+					final char[] ca = new char[length];
 					bb.get(temp);
 					try
 					{
-						final String o = new String(temp, "UTF-8");
-						retval.add(o);
+						String value = (String)unsafe.allocateInstance(String.class);
+						int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(temp, 0, length, ca);
+						if (clen == ca.length)
+						{
+							unsafe.putObject(value, offset, ca);
+						}
+						else
+						{
+							char[] v = Arrays.copyOf(ca, clen);
+							unsafe.putObject(value, offset, v);
+						}
+						retval.add(value);
 					}
 					catch (final Exception e)
 					{
@@ -479,52 +698,6 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 			}
 
 			return retval;
-		}
-
-		private ArrayList<Object> readRow(Operator op) throws Exception
-		{
-			try
-			{
-				final InputStream in = ins.get(op);
-				final byte[] sizeBuff = new byte[4];
-				while (true)
-				{
-					int count = 0;
-					while (count < 4)
-					{
-						count += in.read(sizeBuff, count, 4 - count);
-					}
-					bytes.getAndAdd(4);
-					final int size = bytesToInt(sizeBuff);
-
-					final byte[] data = new byte[size];
-					count = 0;
-					while (count < size)
-					{
-						count += in.read(data, count, size - count);
-					}
-					bytes.getAndAdd(size);
-					final Object row = fromBytes(data);
-
-					if (row instanceof DataEndMarker)
-					{
-						return null;
-					}
-					
-					if (row instanceof Exception)
-					{
-						throw (Exception)row;
-					}
-
-					readCounter.getAndIncrement();
-					return (ArrayList<Object>)row;
-				}
-			}
-			catch (final Exception e)
-			{
-				HRDBMSWorker.logger.error("", e);
-				throw e;
-			}
 		}
 	}
 }

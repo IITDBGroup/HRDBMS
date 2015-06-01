@@ -1,6 +1,5 @@
 package com.exascale.managers;
 
-import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.channels.FileChannel;
 import java.util.HashSet;
@@ -18,33 +17,16 @@ public class CheckpointManager extends HRDBMSThread
 		this.description = "Checkpoint Manager";
 	}
 
-	@Override
-	public void run()
-	{
-		final long sleep = Long.parseLong(HRDBMSWorker.getHParms().getProperty("checkpoint_freq_sec"));
-		HRDBMSWorker.logger.info("Checkpoint Manager initialization complete.");
-		while (true)
-		{
-			try
-			{
-				Thread.sleep(sleep * 1000);
-			}
-			catch (final InterruptedException e)
-			{
-			}
-
-			doCheckpoint();
-		}
-	}
-	
 	public void doCheckpoint()
 	{
-		//block all log writes
-		//go through log and archive anything that is not part of an open transaction
-		//rewrite current log
-		//for all blocks in bufferpool, if not pinned - flush, otherwise copy and rollback and flush
-		
-		synchronized (Transaction.txList)
+		// block all log writes
+		// go through log and archive anything that is not part of an open
+		// transaction
+		// rewrite current log
+		// for all blocks in bufferpool, if not pinned - flush, otherwise copy
+		// and rollback and flush
+
+		Transaction.txListLock.writeLock().lock();
 		{
 			try
 			{
@@ -71,7 +53,7 @@ public class CheckpointManager extends HRDBMSThread
 				}
 				RandomAccessFile f = LogManager.archive(Transaction.txList.keySet());
 				FileChannel fc2 = f.getChannel();
-				BufferManager.flushAll(fc2); 
+				BufferManager.flushAll(fc2);
 				FileChannel fc = LogManager.getFile(LogManager.filename);
 				fc.truncate(0);
 				fc2.position(0);
@@ -89,6 +71,26 @@ public class CheckpointManager extends HRDBMSThread
 				System.exit(1);
 				return;
 			}
+		}
+		Transaction.txListLock.writeLock().unlock();
+	}
+
+	@Override
+	public void run()
+	{
+		final long sleep = Long.parseLong(HRDBMSWorker.getHParms().getProperty("checkpoint_freq_sec"));
+		HRDBMSWorker.logger.info("Checkpoint Manager initialization complete.");
+		while (true)
+		{
+			try
+			{
+				Thread.sleep(sleep * 1000);
+			}
+			catch (final InterruptedException e)
+			{
+			}
+
+			doCheckpoint();
 		}
 	}
 }

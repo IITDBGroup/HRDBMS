@@ -1,8 +1,6 @@
 package com.exascale.misc;
 
-import java.io.PrintWriter;
 import java.io.Serializable;
-import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Vector;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -14,27 +12,28 @@ import com.exascale.optimizer.MultiOperator.AggregateThread;
 public final class BufferedLinkedBlockingQueue implements Serializable
 {
 	public static int BLOCK_SIZE;
-	private ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal = new ConcurrentHashMap<Thread, ArrayAndIndex>(64 * ResourceManager.cpus, 1.0f);
-	private ConcurrentHashMap<Thread, ArrayAndIndex> receives = new ConcurrentHashMap<Thread, ArrayAndIndex>(64 * ResourceManager.cpus, 1.0f);
-	private volatile ArrayBlockingQueue q;
 	private static Vector<ArrayBlockingQueue> free = new Vector<ArrayBlockingQueue>();
 	private static int RETRY_TIME;
-	private volatile boolean closed = false;
-
 	static
 	{
 		HParms hparms = HRDBMSWorker.getHParms();
 		BLOCK_SIZE = Integer.parseInt(hparms.getProperty("queue_block_size")); // 256
 		RETRY_TIME = Integer.parseInt(hparms.getProperty("queue_flush_retry_timeout"));
 	}
+	private ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal = new ConcurrentHashMap<Thread, ArrayAndIndex>(64 * ResourceManager.cpus, 0.75f, 64 * ResourceManager.cpus);
+	private ConcurrentHashMap<Thread, ArrayAndIndex> receives = new ConcurrentHashMap<Thread, ArrayAndIndex>(64 * ResourceManager.cpus, 0.75f, 64 * ResourceManager.cpus);
+	private volatile ArrayBlockingQueue q;
+
+	private volatile boolean closed = false;
 
 	public BufferedLinkedBlockingQueue(int cap)
 	{
 		try
 		{
 			q = free.remove(0);
+			q.clear();
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
 			q = new ArrayBlockingQueue(cap / BLOCK_SIZE);
 		}
@@ -46,14 +45,14 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 		threadLocal.clear();
 		q.clear();
 	}
-	
+
 	public synchronized void close()
 	{
 		closed = true;
 		ArrayBlockingQueue temp = q;
 		q = null;
-		///receives.clear();
-		//threadLocal.clear();
+		// /receives.clear();
+		// threadLocal.clear();
 		receives = null;
 		threadLocal = null;
 		temp.clear();
@@ -66,7 +65,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 		{
 			return null;
 		}
-		
+
 		try
 		{
 			ArrayAndIndex oa = receives.get(Thread.currentThread());
@@ -91,7 +90,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 						{
 							return null;
 						}
-						
+
 						throw e;
 					}
 				}
@@ -99,13 +98,13 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 
 			return oa.peek();
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
 			if (closed)
 			{
 				return null;
 			}
-			
+
 			throw e;
 		}
 	}
@@ -124,13 +123,13 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 				HRDBMSWorker.logger.error("Null object placed on queue", e);
 				return;
 			}
-		
+
 			if (o instanceof ArrayList && ((ArrayList)o).size() == 0)
 			{
 				HRDBMSWorker.logger.debug("ArrayList of size zero was placed on queue");
 				return;
 			}
-		
+
 			ArrayAndIndex oa = threadLocal.get(Thread.currentThread());
 			if (oa == null)
 			{
@@ -140,13 +139,13 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 
 			oa.put(o, threadLocal);
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
 			if (closed)
 			{
 				return;
 			}
-			
+
 			HRDBMSWorker.logger.debug("", e);
 			throw e;
 		}
@@ -180,16 +179,16 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 			{
 				throw new Exception("take() is returning a null value");
 			}
-		
+
 			return retval;
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
 			if (closed)
 			{
 				return null;
 			}
-			
+
 			throw e;
 		}
 	}
@@ -232,9 +231,9 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 
 		private boolean flushAll(ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal, Object o)
 		{
-			synchronized(BufferedLinkedBlockingQueue.this)
+			synchronized (BufferedLinkedBlockingQueue.this)
 			{
-				synchronized(this)
+				synchronized (this)
 				{
 					for (final ArrayAndIndex oa : threadLocal.values())
 					{
@@ -242,17 +241,13 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 						{
 							while (true)
 							{
-								synchronized(oa)
+								synchronized (oa)
 								{
 									if (oa.oa[0] != null)
 									{
 										if (!q.offer(oa.oa))
 										{
-											if (!(oa.oa[0] instanceof DataEndMarker))
-											{
-												HRDBMSWorker.logger.debug("FlushAll failed because we could not flush someone else's data");
-												return false;
-											}
+											return false;
 										}
 										oa.oa = new Object[BLOCK_SIZE];
 										oa.index = 0;
@@ -269,58 +264,33 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 						{
 							if (!q.offer(this.oa))
 							{
-								if (!(this.oa[0] instanceof DataEndMarker))
-								{
-									HRDBMSWorker.logger.debug("FlushAll failed because I could not flush my data");
-									return false;
-								}
+								return false;
 							}
-					
+
 							this.oa = new Object[BLOCK_SIZE];
 							this.index = 0;
 						}
-					
+
 						Object[] temp = new Object[BLOCK_SIZE];
 						temp[0] = o;
 						if (!q.offer(temp))
 						{
-							if (!(temp[0] instanceof DataEndMarker))
-							{
-								HRDBMSWorker.logger.debug("FlushAll failed because I couldn't write my data that initiated the flushAll and it's not a DataEndMarker");
-								HRDBMSWorker.logger.debug("It is " + temp[0]);
-								return false;
-							}
-							
-							Object[] temp2 = ((Object[])q.peek());
-							if (temp2 == null)
-							{
-								return false;
-							}
-							if (!(temp2[0] instanceof DataEndMarker))
-							{
-								try
-								{
-									HRDBMSWorker.logger.debug("FlushAll failed because I have a DataEndMarker to write and the head of the queue is " + ((Object[])q.peek())[0]);
-								}
-								catch(Exception e)
-								{}
-								return false;
-							}
+							return false;
 						}
-					
-						int i = 0;
-						int safetyNet = receives.size();
-						while (i < safetyNet)
-						{
-							temp = new Object[BLOCK_SIZE];
-							temp[0] = new DataEndMarker();
-							q.offer(temp);
-							i++;
-						}
-				
+
+						// int i = 0;
+						// int safetyNet = receives.size();
+						// while (i < safetyNet)
+						// {
+						// temp = new Object[BLOCK_SIZE];
+						// temp[0] = new DataEndMarker();
+						// q.offer(temp);
+						// i++;
+						// }
+
 						break;
 					}
-			
+
 					return true;
 				}
 			}
@@ -366,18 +336,19 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 				{
 					boolean ok = true;
 					ok = flushAll(threadLocal, o);
-					
+
 					if (ok)
 					{
 						break;
 					}
-					
+
 					try
 					{
 						Thread.sleep(RETRY_TIME);
 					}
-					catch(Exception e)
-					{}
+					catch (Exception e)
+					{
+					}
 				}
 			}
 			else if (o instanceof AggregateThread && ((AggregateThread)o).isEnd())
@@ -386,27 +357,28 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 				{
 					boolean ok = true;
 					ok = flushAll(threadLocal, o);
-					
+
 					if (ok)
 					{
 						break;
 					}
-					
+
 					try
 					{
 						Thread.sleep(RETRY_TIME);
 					}
-					catch(Exception e)
-					{}
+					catch (Exception e)
+					{
+					}
 				}
 			}
 			else
 			{
-				synchronized(this)
+				synchronized (this)
 				{
 					oa[index++] = o;
 				}
-				
+
 				if (index == BLOCK_SIZE)
 				{
 					flush();
@@ -423,7 +395,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 				{
 					throw new Exception("OA.take() returning null value first path");
 				}
-				
+
 				return retval;
 			}
 
@@ -451,7 +423,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 			{
 				throw new Exception("OA.take() returning null value second path");
 			}
-			
+
 			return retval;
 		}
 	}

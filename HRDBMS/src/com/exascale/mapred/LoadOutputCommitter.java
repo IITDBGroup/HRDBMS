@@ -7,13 +7,13 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 
 public class LoadOutputCommitter extends OutputCommitter
 {
-	private LoadRecordWriter writer;
-	
+	private final LoadRecordWriter writer;
+
 	public LoadOutputCommitter(String table, String portString, String hrdbmsHome)
 	{
 		writer = LoadRecordWriter.get(table, portString, hrdbmsHome);
 	}
-	
+
 	@Override
 	public void abortTask(TaskAttemptContext arg0) throws IOException
 	{
@@ -26,7 +26,7 @@ public class LoadOutputCommitter extends OutputCommitter
 		{
 			writer.flush();
 		}
-		
+
 		if (writer.thread != null)
 		{
 			while (true)
@@ -40,8 +40,9 @@ public class LoadOutputCommitter extends OutputCommitter
 					}
 					break;
 				}
-				catch(InterruptedException e)
-				{}
+				catch (InterruptedException e)
+				{
+				}
 			}
 		}
 	}

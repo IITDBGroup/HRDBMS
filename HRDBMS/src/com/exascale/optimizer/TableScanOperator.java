@@ -1,31 +1,26 @@
 package com.exascale.optimizer;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeMap;
 import com.exascale.filesystem.Block;
-import com.exascale.filesystem.Page;
 import com.exascale.filesystem.RID;
-import com.exascale.gpu.Kernel;
 import com.exascale.managers.FileManager;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LockManager;
 import com.exascale.managers.ResourceManager;
 import com.exascale.misc.BufferedLinkedBlockingQueue;
 import com.exascale.misc.DataEndMarker;
-import com.exascale.misc.DateParser;
-import com.exascale.misc.FastStringTokenizer;
 import com.exascale.misc.HParms;
 import com.exascale.misc.MyDate;
-import com.exascale.misc.Utils;
 import com.exascale.optimizer.MetaData.PartitionMetaData;
 import com.exascale.tables.DataType;
 import com.exascale.tables.Plan;
@@ -38,125 +33,95 @@ import com.exascale.threads.ThreadPoolThread;
 
 public final class TableScanOperator implements Operator, Serializable
 {
+	private static int PREFETCH_REQUEST_SIZE;
+
+	private static int PAGES_IN_ADVANCE;
+
+	private static sun.misc.Unsafe unsafe;
+	private static long offset;
+	static
+	{
+		try
+		{
+			HParms hparms = HRDBMSWorker.getHParms();
+			PREFETCH_REQUEST_SIZE = Integer.parseInt(hparms.getProperty("prefetch_request_size")); // 80
+			PAGES_IN_ADVANCE = Integer.parseInt(hparms.getProperty("pages_in_advance")); // 40
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+			final Field fieldToUpdate = ArrayList.class.getDeclaredField("elementData");
+			// get unsafe offset to this field
+			offset = unsafe.objectFieldOffset(fieldToUpdate);
+		}
+		catch (Exception e)
+		{
+			HRDBMSWorker.logger.debug("", e);
+		}
+	}
 	private HashMap<String, String> cols2Types = new HashMap<String, String>();
-
 	private HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
-
 	private TreeMap<Integer, String> pos2Col = new TreeMap<Integer, String>();
-	private final String name;
-	private final String schema;
-	private ArrayList<String> ins = new ArrayList<String>();
-	private final ArrayList<Operator> parents = new ArrayList<Operator>();
-	public volatile BufferedLinkedBlockingQueue readBuffer;
-	private volatile HashMap<Operator, BufferedLinkedBlockingQueue> readBuffers = new HashMap<Operator, BufferedLinkedBlockingQueue>();
+	private String name;
+	private String schema;
+	private transient ArrayList<String> ins;
+	private ArrayList<Operator> parents = new ArrayList<Operator>();
+	public transient volatile BufferedLinkedBlockingQueue readBuffer;
+	private transient volatile HashMap<Operator, BufferedLinkedBlockingQueue> readBuffers;
 	private boolean startDone = false;
-	private boolean optimize = false;
-	private HashMap<Operator, HashSet<HashMap<Filter, Filter>>> filters = new HashMap<Operator, HashSet<HashMap<Filter, Filter>>>();
-	HashMap<Operator, CNFFilter> orderedFilters = new HashMap<Operator, CNFFilter>();
-	private final MetaData meta;
-	private final HashMap<Operator, Operator> opParents = new HashMap<Operator, Operator>();
+	private transient boolean optimize;
+	private transient HashMap<Operator, HashSet<HashMap<Filter, Filter>>> filters = new HashMap<Operator, HashSet<HashMap<Filter, Filter>>>();
+	protected HashMap<Operator, CNFFilter> orderedFilters = new HashMap<Operator, CNFFilter>();
+	private MetaData meta;
+	private transient final HashMap<Operator, Operator> opParents = new HashMap<Operator, Operator>();
 	private ArrayList<Integer> neededPos;
 	private ArrayList<Integer> fetchPos;
-	private TreeMap<Integer, String> midPos2Col;
+	private String[] midPos2Col;
 	private HashMap<String, String> midCols2Types;
 	private boolean set = false;
-	private PartitionMetaData partMeta;
-	private HashMap<Operator, ArrayList<Integer>> activeDevices = new HashMap<Operator, ArrayList<Integer>>();
-	private HashMap<Operator, ArrayList<Integer>> activeNodes = new HashMap<Operator, ArrayList<Integer>>();
+	private transient PartitionMetaData partMeta; // OK now that clone won't
+	// happen at runtime?
+	private transient HashMap<Operator, ArrayList<Integer>> activeDevices = new HashMap<Operator, ArrayList<Integer>>();
+	private transient HashMap<Operator, ArrayList<Integer>> activeNodes = new HashMap<Operator, ArrayList<Integer>>();
 	private ArrayList<Integer> devices = new ArrayList<Integer>();
 	private int node;
 	private boolean phase2Done = false;
 	public HashMap<Integer, Operator> device2Child = new HashMap<Integer, Operator>();
 	private ArrayList<Operator> children = new ArrayList<Operator>();
-	private ArrayList<String> randomIns = new ArrayList<String>();
-	private HashMap<String, Integer> ins2Device = new HashMap<String, Integer>();
+	private transient ArrayList<String> randomIns;
+	private transient HashMap<String, Integer> ins2Device;
 	private boolean indexOnly = false;
-	private volatile boolean forceDone = false;
-	private static int PREFETCH_REQUEST_SIZE;
-	private static int PAGES_IN_ADVANCE;
-	private Transaction tx;
-	private transient Plan plan;
+	private transient volatile boolean forceDone;
+	public Transaction tx;
 	private String alias = "";
 	private boolean getRID = false;
 	private HashMap<String, String> tableCols2Types;
 	private TreeMap<Integer, String> tablePos2Col;
 	private HashMap<String, Integer> tableCols2Pos;
 	private boolean releaseLocks = false;
-	
-	public boolean isGetRID()
+
+	private transient HashSet<Integer> referencesHash = null;
+
+	public TableScanOperator(String schema, String name, MetaData meta, HashMap<String, Integer> cols2Pos, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, TreeMap<Integer, String> tablePos2Col, HashMap<String, String> tableCols2Types, HashMap<String, Integer> tableCols2Pos) throws Exception
 	{
-		return getRID;
-	}
-	
-	public String getAlias()
-	{
-		return alias;
-	}
-	
-	public void getRID()
-	{
-		getRID = true;
-		cols2Types.put("_RID1", "INT");
-		cols2Types.put("_RID2", "INT");
-		cols2Types.put("_RID3", "INT");
-		cols2Types.put("_RID4", "INT");
-		
-		HashMap<String, Integer> newCols2Pos = new HashMap<String, Integer>();
-		TreeMap<Integer, String> newPos2Col = new TreeMap<Integer, String>();
-		newCols2Pos.put("_RID1", 0);
-		newCols2Pos.put("_RID2", 1);
-		newCols2Pos.put("_RID3", 2);
-		newCols2Pos.put("_RID4", 3);
-		newPos2Col.put(0, "_RID1");
-		newPos2Col.put(1, "_RID2");
-		newPos2Col.put(2, "_RID3");
-		newPos2Col.put(3, "_RID4");
-		for (Map.Entry entry : cols2Pos.entrySet())
-		{
-			newCols2Pos.put((String)entry.getKey(), (Integer)entry.getValue() + 4);
-			newPos2Col.put((Integer)entry.getValue() + 4, (String)entry.getKey());
-		}
-		cols2Pos = newCols2Pos;
-		pos2Col = newPos2Col;
-	}
-	
-	public void setAlias(String alias)
-	{
-		this.alias = alias;
-		TreeMap<Integer, String> newPos2Col = new TreeMap<Integer, String>();
-		HashMap<String, Integer> newCols2Pos = new HashMap<String, Integer>();
-		HashMap<String, String> newCols2Types = new HashMap<String, String>();
-		for (Map.Entry entry : pos2Col.entrySet())
-		{
-			String val = (String)entry.getValue();
-			val = val.substring(val.indexOf('.') + 1);
-			newPos2Col.put((Integer)entry.getKey(), alias + "." + val);
-			newCols2Pos.put(alias + "." + val, (Integer)entry.getKey());
-		}
-		
-		for (Map.Entry entry : cols2Types.entrySet())
-		{
-			String val = (String)entry.getKey();
-			val = val.substring(val.indexOf('.') + 1);
-			newCols2Types.put(alias + "." + val, (String)entry.getValue());
-		}
-		
-		pos2Col = newPos2Col;
-		cols2Pos = newCols2Pos;
-		cols2Types = newCols2Types;
-	}
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
+		this.meta = meta;
+		this.name = name;
+		this.schema = schema;
+		this.cols2Types = (HashMap<String, String>)cols2Types.clone();
+		this.cols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
+		this.pos2Col = (TreeMap<Integer, String>)pos2Col.clone();
+		this.tableCols2Types = tableCols2Types;
+		this.tablePos2Col = tablePos2Col;
+		this.tableCols2Pos = tableCols2Pos;
 	}
 
-	static
-	{
-		HParms hparms = HRDBMSWorker.getHParms();
-		PREFETCH_REQUEST_SIZE = Integer.parseInt(hparms.getProperty("prefetch_request_size")); // 80
-		PAGES_IN_ADVANCE = Integer.parseInt(hparms.getProperty("pages_in_advance")); // 40
-	}
+	// private static long MAX_PAGES;
+
+	// static
+	// {
+	// MAX_PAGES =
+	// (Long.parseLong(HRDBMSWorker.getHParms().getProperty("bp_pages")) /
+	// MetaData.getNumDevices()) / 15;
+	// }
 
 	public TableScanOperator(String schema, String name, MetaData meta, Transaction tx) throws Exception
 	{
@@ -170,7 +135,7 @@ public final class TableScanOperator implements Operator, Serializable
 		tablePos2Col = (TreeMap<Integer, String>)pos2Col.clone();
 		tableCols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
 	}
-	
+
 	public TableScanOperator(String schema, String name, MetaData meta, Transaction tx, boolean releaseLocks) throws Exception
 	{
 		this.meta = meta;
@@ -184,13 +149,13 @@ public final class TableScanOperator implements Operator, Serializable
 		tableCols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
 		this.releaseLocks = releaseLocks;
 	}
-	
+
 	public TableScanOperator(String schema, String name, MetaData meta, Transaction tx, boolean releaseLocks, HashMap<String, Integer> cols2Pos, TreeMap<Integer, String> pos2Col) throws Exception
 	{
 		this.meta = meta;
 		this.name = name;
 		this.schema = schema;
-		cols2Types = MetaData.getCols2TypesForTable(schema, name, tx);
+		cols2Types = meta.getCols2TypesForTable(schema, name, tx);
 		this.cols2Pos = cols2Pos;
 		this.pos2Col = pos2Col;
 		tableCols2Types = (HashMap<String, String>)cols2Types.clone();
@@ -198,18 +163,39 @@ public final class TableScanOperator implements Operator, Serializable
 		tableCols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
 		this.releaseLocks = releaseLocks;
 	}
-	
-	public TableScanOperator(String schema, String name, MetaData meta, HashMap<String, Integer> cols2Pos, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, TreeMap<Integer, String> tablePos2Col, HashMap<String, String> tableCols2Types, HashMap<String, Integer> tableCols2Pos) throws Exception
+
+	public static TableScanOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
 	{
-		this.meta = meta;
-		this.name = name;
-		this.schema = schema;
-		this.cols2Types = (HashMap<String, String>)cols2Types.clone();
-		this.cols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
-		this.pos2Col = (TreeMap<Integer, String>)pos2Col.clone();
-		this.tableCols2Types = tableCols2Types;
-		this.tablePos2Col = tablePos2Col;
-		this.tableCols2Pos = tableCols2Pos;
+		TableScanOperator value = (TableScanOperator)unsafe.allocateInstance(TableScanOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.name = OperatorUtils.readString(in, prev);
+		value.schema = OperatorUtils.readString(in, prev);
+		value.parents = OperatorUtils.deserializeALOp(in, prev);
+		value.startDone = OperatorUtils.readBool(in);
+		value.orderedFilters = OperatorUtils.deserializeHMOpCNF(in, prev);
+		value.meta = new MetaData();
+		value.neededPos = OperatorUtils.deserializeALI(in, prev);
+		value.fetchPos = OperatorUtils.deserializeALI(in, prev);
+		value.midPos2Col = OperatorUtils.deserializeStringArray(in, prev);
+		value.midCols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.set = OperatorUtils.readBool(in);
+		value.devices = OperatorUtils.deserializeALI(in, prev);
+		value.node = OperatorUtils.readInt(in);
+		value.phase2Done = OperatorUtils.readBool(in);
+		value.device2Child = OperatorUtils.deserializeHMIntOp(in, prev);
+		value.children = OperatorUtils.deserializeALOp(in, prev);
+		value.indexOnly = OperatorUtils.readBool(in);
+		value.tx = new Transaction(OperatorUtils.readLong(in));
+		value.alias = OperatorUtils.readString(in, prev);
+		value.getRID = OperatorUtils.readBool(in);
+		value.tableCols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.tablePos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.tableCols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.releaseLocks = OperatorUtils.readBool(in);
+		return value;
 	}
 
 	@Override
@@ -293,9 +279,9 @@ public final class TableScanOperator implements Operator, Serializable
 
 				f.add(map);
 				this.filters.put(op, f);
-				//Transaction t = new Transaction(Transaction.ISOLATION_RR);
+				// Transaction t = new Transaction(Transaction.ISOLATION_RR);
 				orderedFilters.put(op, new CNFFilter(f, meta, cols2Pos, this));
-				//t.commit();
+				// t.commit();
 				return;
 			}
 		}
@@ -353,11 +339,6 @@ public final class TableScanOperator implements Operator, Serializable
 			opParents.clear();
 		}
 	}
-	
-	public HashMap<String, Integer> getTableCols2Pos()
-	{
-		return tableCols2Pos;
-	}
 
 	@Override
 	public TableScanOperator clone()
@@ -382,7 +363,7 @@ public final class TableScanOperator implements Operator, Serializable
 		}
 		if (midPos2Col != null)
 		{
-			retval.midPos2Col = (TreeMap<Integer, String>)midPos2Col.clone();
+			retval.midPos2Col = midPos2Col.clone();
 		}
 		if (midCols2Types != null)
 		{
@@ -424,12 +405,12 @@ public final class TableScanOperator implements Operator, Serializable
 				throw e;
 			}
 		}
-		
+
 		if (readBuffer != null)
 		{
 			readBuffer.close();
 		}
-		
+
 		if (readBuffers != null)
 		{
 			for (BufferedLinkedBlockingQueue readBuffer : readBuffers.values())
@@ -437,12 +418,12 @@ public final class TableScanOperator implements Operator, Serializable
 				readBuffer.close();
 			}
 		}
-		
+
 		if (releaseLocks)
 		{
 			tx.releaseLocksAndPins();
 		}
-		
+
 		ins = null;
 		neededPos = null;
 		activeDevices = null;
@@ -514,6 +495,11 @@ public final class TableScanOperator implements Operator, Serializable
 		}
 	}
 
+	public String getAlias()
+	{
+		return alias;
+	}
+
 	@Override
 	public int getChildPos()
 	{
@@ -568,9 +554,10 @@ public final class TableScanOperator implements Operator, Serializable
 		ArrayList<Integer> deviceList = null;
 		if (partMeta.allDevices())
 		{
-			deviceList = new ArrayList<Integer>(partMeta.getNumDevices());
+			final int num = partMeta.getNumDevices();
+			deviceList = new ArrayList<Integer>(num);
 			int i = 0;
-			while (i < partMeta.getNumDevices())
+			while (i < num)
 			{
 				deviceList.add(i);
 				i++;
@@ -686,14 +673,14 @@ public final class TableScanOperator implements Operator, Serializable
 		return partMeta.getNodeHash();
 	}
 
-	public ArrayList<Integer> getNodeList(Operator op)
-	{
-		return activeNodes.get(op);
-	}
-	
 	public ArrayList<Integer> getNodeList()
 	{
 		return partMeta.nodeSet();
+	}
+
+	public ArrayList<Integer> getNodeList(Operator op)
+	{
+		return activeNodes.get(op);
 	}
 
 	public String getNodeRangeCol()
@@ -712,12 +699,13 @@ public final class TableScanOperator implements Operator, Serializable
 		ArrayList<Integer> nodeList = null;
 		if (partMeta.allNodes())
 		{
-			nodeList = new ArrayList<Integer>(partMeta.getNumNodes());
+			final int num = partMeta.getNumNodes();
+			nodeList = new ArrayList<Integer>(num);
 			int i = 0;
 
 			if (partMeta.noNodeGroupSet())
 			{
-				while (i < partMeta.getNumNodes())
+				while (i < num)
 				{
 					nodeList.add(i);
 					i++;
@@ -789,6 +777,33 @@ public final class TableScanOperator implements Operator, Serializable
 		return retval;
 	}
 
+	public void getRID()
+	{
+		getRID = true;
+		cols2Types.put("_RID1", "INT");
+		cols2Types.put("_RID2", "INT");
+		cols2Types.put("_RID3", "INT");
+		cols2Types.put("_RID4", "INT");
+
+		HashMap<String, Integer> newCols2Pos = new HashMap<String, Integer>();
+		TreeMap<Integer, String> newPos2Col = new TreeMap<Integer, String>();
+		newCols2Pos.put("_RID1", 0);
+		newCols2Pos.put("_RID2", 1);
+		newCols2Pos.put("_RID3", 2);
+		newCols2Pos.put("_RID4", 3);
+		newPos2Col.put(0, "_RID1");
+		newPos2Col.put(1, "_RID2");
+		newPos2Col.put(2, "_RID3");
+		newPos2Col.put(3, "_RID4");
+		for (Map.Entry entry : cols2Pos.entrySet())
+		{
+			newCols2Pos.put((String)entry.getKey(), (Integer)entry.getValue() + 4);
+			newPos2Col.put((Integer)entry.getValue() + 4, (String)entry.getKey());
+		}
+		cols2Pos = newCols2Pos;
+		pos2Col = newPos2Col;
+	}
+
 	public String getSchema()
 	{
 		return schema;
@@ -814,10 +829,25 @@ public final class TableScanOperator implements Operator, Serializable
 		return name;
 	}
 
+	public HashMap<String, Integer> getTableCols2Pos()
+	{
+		return tableCols2Pos;
+	}
+
 	@Override
 	public int hashCode()
 	{
-		return schema.hashCode() + name.hashCode();
+		int hash = 23;
+		hash = hash * 31 + schema.hashCode();
+		hash = hash * 31 + name.hashCode();
+		hash = hash * 31 + node;
+		return hash;
+		// return schema.hashCode() + name.hashCode();
+	}
+
+	public boolean isGetRID()
+	{
+		return getRID;
 	}
 
 	public boolean isSingleDeviceSet()
@@ -864,11 +894,12 @@ public final class TableScanOperator implements Operator, Serializable
 					return o;
 				}
 			}
-			
+
 			if (o instanceof Exception)
 			{
 				throw (Exception)o;
 			}
+
 			return o;
 		}
 		else
@@ -889,11 +920,12 @@ public final class TableScanOperator implements Operator, Serializable
 					return o;
 				}
 			}
-			
+
 			if (o instanceof Exception)
 			{
 				throw (Exception)o;
 			}
+
 			return o;
 		}
 	}
@@ -943,10 +975,10 @@ public final class TableScanOperator implements Operator, Serializable
 			{
 				retval.add(null);
 			}
-			
+
 			return retval;
 		}
-		
+
 		return parents;
 	}
 
@@ -1015,6 +1047,73 @@ public final class TableScanOperator implements Operator, Serializable
 		}
 	}
 
+	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(78, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.writeString(name, out, prev);
+		OperatorUtils.writeString(schema, out, prev);
+		OperatorUtils.serializeALOp(parents, out, prev);
+		OperatorUtils.writeBool(startDone, out);
+		OperatorUtils.serializeHMOpCNF(orderedFilters, out, prev);
+		// recreate meta
+		OperatorUtils.serializeALI(neededPos, out, prev);
+		OperatorUtils.serializeALI(fetchPos, out, prev);
+		OperatorUtils.serializeStringArray(midPos2Col, out, prev);
+		OperatorUtils.serializeStringHM(midCols2Types, out, prev);
+		OperatorUtils.writeBool(set, out);
+		OperatorUtils.serializeALI(devices, out, prev);
+		OperatorUtils.writeInt(node, out);
+		OperatorUtils.writeBool(phase2Done, out);
+		OperatorUtils.serializeHMIntOp(device2Child, out, prev);
+		OperatorUtils.serializeALOp(children, out, prev);
+		OperatorUtils.writeBool(indexOnly, out);
+		OperatorUtils.writeLong(tx.number(), out); // notice type
+		OperatorUtils.writeString(alias, out, prev);
+		OperatorUtils.writeBool(getRID, out);
+		OperatorUtils.serializeStringHM(tableCols2Types, out, prev);
+		OperatorUtils.serializeTM(tablePos2Col, out, prev);
+		OperatorUtils.serializeStringIntHM(tableCols2Pos, out, prev);
+		OperatorUtils.writeBool(releaseLocks, out);
+	}
+
+	public void setAlias(String alias)
+	{
+		this.alias = alias;
+		TreeMap<Integer, String> newPos2Col = new TreeMap<Integer, String>();
+		HashMap<String, Integer> newCols2Pos = new HashMap<String, Integer>();
+		HashMap<String, String> newCols2Types = new HashMap<String, String>();
+		for (Map.Entry entry : pos2Col.entrySet())
+		{
+			String val = (String)entry.getValue();
+			val = val.substring(val.indexOf('.') + 1);
+			newPos2Col.put((Integer)entry.getKey(), alias + "." + val);
+			newCols2Pos.put(alias + "." + val, (Integer)entry.getKey());
+		}
+
+		for (Map.Entry entry : cols2Types.entrySet())
+		{
+			String val = (String)entry.getKey();
+			val = val.substring(val.indexOf('.') + 1);
+			newCols2Types.put(alias + "." + val, (String)entry.getValue());
+		}
+
+		pos2Col = newPos2Col;
+		cols2Pos = newCols2Pos;
+		cols2Types = newCols2Types;
+	}
+
 	public void setChildForDevice(int device, Operator child)
 	{
 		device2Child.put(device, child);
@@ -1068,12 +1167,12 @@ public final class TableScanOperator implements Operator, Serializable
 
 		int i = 0;
 		final HashMap<String, Integer> fetchCols2Pos = new HashMap<String, Integer>();
-		midPos2Col = new TreeMap<Integer, String>();
+		midPos2Col = new String[fetchPos.size()];
 		midCols2Types = new HashMap<String, String>();
 		for (final int pos : fetchPos)
 		{
 			fetchCols2Pos.put(pos2Col.get(pos), i);
-			midPos2Col.put(i, pos2Col.get(pos));
+			midPos2Col[i] = pos2Col.get(pos);
 			midCols2Types.put(pos2Col.get(pos), cols2Types.get(pos2Col.get(pos)));
 			i++;
 		}
@@ -1117,6 +1216,11 @@ public final class TableScanOperator implements Operator, Serializable
 		phase2Done = true;
 	}
 
+	@Override
+	public void setPlan(Plan plan)
+	{
+	}
+
 	public void setTransaction(Transaction tx)
 	{
 		this.tx = tx;
@@ -1125,13 +1229,22 @@ public final class TableScanOperator implements Operator, Serializable
 	@Override
 	public synchronized void start() throws Exception
 	{
-		//HRDBMSWorker.logger.debug("Starting " + TableScanOperator.this);
+		// HRDBMSWorker.logger.debug("Starting " + TableScanOperator.this);
+		ins = new ArrayList<String>();
+		readBuffers = new HashMap<Operator, BufferedLinkedBlockingQueue>();
+		optimize = false;
+		randomIns = new ArrayList<String>();
+		ins2Device = new HashMap<String, Integer>();
+		forceDone = false;
+
 		if (!startDone)
 		{
-			//HRDBMSWorker.logger.debug(TableScanOperator.this + " did need to be started");
+			// HRDBMSWorker.logger.debug(TableScanOperator.this +
+			// " did need to be started");
 			startDone = true;
 
-			//HRDBMSWorker.logger.debug(TableScanOperator.this + " had " + children.size() + " children to start");
+			// HRDBMSWorker.logger.debug(TableScanOperator.this + " had " +
+			// children.size() + " children to start");
 			for (final Operator o : children)
 			{
 				try
@@ -1149,11 +1262,13 @@ public final class TableScanOperator implements Operator, Serializable
 			{
 				final String in = schema + "." + name + ".tbl";
 				ins.add(in);
-				//HRDBMSWorker.logger.debug(TableScanOperator.this + " had 0 devices");
+				// HRDBMSWorker.logger.debug(TableScanOperator.this +
+				// " had 0 devices");
 			}
 			else
 			{
-				//HRDBMSWorker.logger.debug(TableScanOperator.this + " had " + devices.size() + " devices");
+				// HRDBMSWorker.logger.debug(TableScanOperator.this + " had " +
+				// devices.size() + " devices");
 				for (final int device : devices)
 				{
 					if (children.size() == 0)
@@ -1185,7 +1300,9 @@ public final class TableScanOperator implements Operator, Serializable
 
 			if (!optimize)
 			{
-				//HRDBMSWorker.logger.debug("WARNING: " + TableScanOperator.this + " had " + parents.size() + " parents");
+				// HRDBMSWorker.logger.debug("WARNING: " +
+				// TableScanOperator.this + " had " + parents.size() +
+				// " parents");
 				for (final Operator parent : parents)
 				{
 					readBuffers.put(parent, new BufferedLinkedBlockingQueue(ResourceManager.QUEUE_SIZE));
@@ -1338,6 +1455,22 @@ public final class TableScanOperator implements Operator, Serializable
 		t.start();
 	}
 
+	private boolean needThisColForFilter(String col, CNFFilter filter)
+	{
+		if (referencesHash == null)
+		{
+			HashSet<Integer> temp = new HashSet<Integer>();
+			for (String s : filter.getReferencesHash())
+			{
+				temp.add(s.hashCode());
+			}
+
+			referencesHash = temp;
+		}
+
+		return referencesHash.contains(col.hashCode());
+	}
+
 	private final class InitThread extends ThreadPoolThread
 	{
 		private final ArrayList<ReaderThread> reads = new ArrayList<ReaderThread>(ins.size());
@@ -1347,7 +1480,8 @@ public final class TableScanOperator implements Operator, Serializable
 		{
 			try
 			{
-				//HRDBMSWorker.logger.debug("Going to start " + ins.size() + " ReaderThreads for ins for " + TableScanOperator.this);
+				// HRDBMSWorker.logger.debug("Going to start " + ins.size() +
+				// " ReaderThreads for ins for " + TableScanOperator.this);
 				for (final String in : ins)
 				{
 					final ReaderThread read = new ReaderThread(in);
@@ -1355,7 +1489,9 @@ public final class TableScanOperator implements Operator, Serializable
 					reads.add(read);
 				}
 
-				//HRDBMSWorker.logger.debug("Going to start " + randomIns.size() + " ReaderThreads for randomIns for " + TableScanOperator.this);
+				// HRDBMSWorker.logger.debug("Going to start " +
+				// randomIns.size() + " ReaderThreads for randomIns for " +
+				// TableScanOperator.this);
 				for (final String in : randomIns)
 				{
 					final ReaderThread read = new ReaderThread(in, true);
@@ -1387,8 +1523,9 @@ public final class TableScanOperator implements Operator, Serializable
 				{
 					readBuffer.put(e);
 				}
-				catch(Exception f)
-				{}
+				catch (Exception f)
+				{
+				}
 				return;
 			}
 		}
@@ -1399,25 +1536,45 @@ public final class TableScanOperator implements Operator, Serializable
 		private String in;
 		private String in2;
 
-		public ReaderThread(String in2, boolean marker)
-		{
-			this.in2 = in2;
-		}
-
 		public ReaderThread(String in)
 		{
 			this.in = in;
 		}
 
+		public ReaderThread(String in2, boolean marker)
+		{
+			this.in2 = in2;
+		}
+
 		@Override
 		public final void run()
 		{
-			//HRDBMSWorker.logger.debug("ReaderThread for " + TableScanOperator.this + " has started");
+			// HRDBMSWorker.logger.debug("ReaderThread for " +
+			// TableScanOperator.this + " has started");
 			CNFFilter filter = orderedFilters.get(parents.get(0));
-			ArrayList<String> types = new ArrayList<String>(midPos2Col.size());
-			for (final Map.Entry entry : midPos2Col.entrySet())
+			boolean neededPosNeeded = true;
+			if (filter != null)
 			{
-				types.add(midCols2Types.get(entry.getValue()));
+				if (neededPos.size() == fetchPos.size())
+				{
+					int i = 0;
+					neededPosNeeded = false;
+					for (int pos : neededPos)
+					{
+						if (pos != i)
+						{
+							neededPosNeeded = true;
+							break;
+						}
+
+						i++;
+					}
+				}
+			}
+			ArrayList<String> types = new ArrayList<String>(midPos2Col.length);
+			for (final String entry : midPos2Col)
+			{
+				types.add(midCols2Types.get(entry));
 			}
 
 			try
@@ -1425,14 +1582,16 @@ public final class TableScanOperator implements Operator, Serializable
 				if (in2 == null)
 				{
 					LockManager.sLock(new Block(in, -1), tx.number());
-					//HRDBMSWorker.logger.debug("About to open " + in + " for " + TableScanOperator.this);
-					FileChannel xx = FileManager.getFile(in);
-					//HRDBMSWorker.logger.debug("Opened " + in + " for " + TableScanOperator.this);
+					FileManager.getFile(in);
+					// HRDBMSWorker.logger.debug("Opened " + in + " for " +
+					// TableScanOperator.this);
 					int numBlocks = FileManager.numBlocks.get(in);
-					//HRDBMSWorker.logger.debug(in + " has " + numBlocks + " blocks");
+					// HRDBMSWorker.logger.debug(in + " has " + numBlocks +
+					// " blocks");
 					if (numBlocks == 0)
 					{
-						//HRDBMSWorker.logger.debug("Unable to open file " + in);
+						// HRDBMSWorker.logger.debug("Unable to open file " +
+						// in);
 						throw new Exception("Unable to open file " + in);
 					}
 					HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
@@ -1467,50 +1626,84 @@ public final class TableScanOperator implements Operator, Serializable
 					Schema sch = new Schema(layout);
 					int onPage = Schema.HEADER_SIZE;
 					int lastRequested = Schema.HEADER_SIZE - 1;
+					// long count = 0;
+					ArrayList<Object> row = new ArrayList<Object>(fetchPos.size());
 					while (onPage < numBlocks)
 					{
 						if (lastRequested - onPage < PAGES_IN_ADVANCE)
 						{
 							Block[] toRequest = new Block[lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1];
 							int i = 0;
-							while (i < toRequest.length)
+							final int length = toRequest.length;
+							while (i < length)
 							{
 								toRequest[i] = new Block(in, lastRequested + i + 1);
 								i++;
 							}
 							tx.requestPages(toRequest);
 							lastRequested += toRequest.length;
+							// count += toRequest.length;
+
+							// if (count > MAX_PAGES)
+							// {
+							// tx.checkpoint(onPage, in, true);
+							// count = lastRequested - onPage + 1;
+							// }
 						}
 
 						tx.read(new Block(in, onPage++), sch);
 						RowIterator rit = sch.rowIterator();
-						while (rit.hasNext())
+						outer: while (rit.hasNext())
 						{
 							Row r = rit.next();
-							if (!r.getCol(0).exists())
-							{
-								continue;
-							}
-							final ArrayList<Object> row = new ArrayList<Object>(types.size());
 							RID rid = null;
 							if (getRID)
 							{
 								rid = r.getRID();
 							}
 							int j = 0;
-							while (j < fetchPos.size())
+							boolean checked = false;
+							final int size = fetchPos.size();
+							row.clear();
+							while (j < size)
 							{
 								if (!getRID)
 								{
-									FieldValue fv = r.getCol(fetchPos.get(j));
-									row.add(fv.getValue());
+									if (filter != null && !needThisColForFilter(midPos2Col[j], filter))
+									{
+										row.add(null);
+									}
+									else
+									{
+										FieldValue fv = r.getCol(fetchPos.get(j));
+										if (!checked)
+										{
+											if (!fv.exists())
+											{
+												continue outer;
+											}
+
+											checked = true;
+										}
+										row.add(fv.getValue());
+									}
 								}
 								else
 								{
 									int colNum = fetchPos.get(j);
 									if (colNum >= 4)
 									{
-										FieldValue fv = r.getCol(colNum-4);
+
+										FieldValue fv = r.getCol(colNum - 4);
+										if (!checked)
+										{
+											if (!fv.exists())
+											{
+												continue outer;
+											}
+
+											checked = true;
+										}
 										row.add(fv.getValue());
 									}
 									else if (colNum == 0)
@@ -1535,33 +1728,37 @@ public final class TableScanOperator implements Operator, Serializable
 
 							if (!optimize)
 							{
-								for (final Map.Entry entry : readBuffers.entrySet())
-								{
-									final BufferedLinkedBlockingQueue q = (BufferedLinkedBlockingQueue)entry.getValue();
-									filter = orderedFilters.get(entry.getKey());
+								// for (final Map.Entry entry :
+								// readBuffers.entrySet())
+								// {
+								// final BufferedLinkedBlockingQueue q =
+								// (BufferedLinkedBlockingQueue)entry.getValue();
+								// filter = orderedFilters.get(entry.getKey());
 
-									if (filter != null)
-									{
-										if (filter.passes(row))
-										{
-											final ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
-											for (final int pos : neededPos)
-											{
-												newRow.add(row.get(pos));
-											}
-											q.put(newRow);
-										}
-									}
-									else
-									{
-										final ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
-										for (final int pos : neededPos)
-										{
-											newRow.add(row.get(pos));
-										}
-										q.put(newRow);
-									}
-								}
+								// if (filter != null)
+								// {
+								// if (filter.passes(row))
+								// {
+								// final ArrayList<Object> newRow = new
+								// ArrayList<Object>(neededPos.size());
+								// for (final int pos : neededPos)
+								// {
+								// newRow.add(row.get(pos));
+								// }
+								// q.put(newRow);
+								// }
+								// }
+								// else
+								// {
+								// final ArrayList<Object> newRow = new
+								// ArrayList<Object>(neededPos.size());
+								// for (final int pos : neededPos)
+								// {
+								// newRow.add(row.get(pos));
+								// }
+								// q.put(newRow);
+								// }
+								// }
 							}
 							else
 							{
@@ -1569,32 +1766,69 @@ public final class TableScanOperator implements Operator, Serializable
 								{
 									if (filter.passes(row))
 									{
-										final ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
-										for (final int pos : neededPos)
+										if (!getRID)
 										{
-											newRow.add(row.get(pos));
+											int i = 0;
+											for (Object o : row)
+											{
+												if (o == null)
+												{
+													int temp = fetchPos.get(i);
+													FieldValue fv = r.getCol(temp);
+													// row.set(i,
+													// fv.getValue());
+													Object[] array = (Object[])unsafe.getObject(row, offset);
+													array[i] = fv.getValue();
+												}
+
+												i++;
+											}
 										}
-										if (!forceDone)
+
+										if (neededPosNeeded)
 										{
-											readBuffer.put(newRow);
+											final ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
+											for (final int pos : neededPos)
+											{
+												newRow.add(row.get(pos));
+											}
+											if (!forceDone)
+											{
+												readBuffer.put(newRow);
+											}
+											else
+											{
+												readBuffer.put(new DataEndMarker());
+												return;
+											}
 										}
 										else
 										{
-											readBuffer.put(new DataEndMarker());
-											return;
+											if (!forceDone)
+											{
+												readBuffer.put(row);
+												row = new ArrayList<Object>(fetchPos.size());
+											}
+											else
+											{
+												readBuffer.put(new DataEndMarker());
+												return;
+											}
 										}
 									}
 								}
 								else
 								{
-									final ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
-									for (final int pos : neededPos)
-									{
-										newRow.add(row.get(pos));
-									}
+									// final ArrayList<Object> newRow = new
+									// ArrayList<Object>(neededPos.size());
+									// for (final int pos : neededPos)
+									// {
+									// newRow.add(row.get(pos));
+									// }
 									if (!forceDone)
 									{
-										readBuffer.put(newRow);
+										readBuffer.put(row);
+										row = new ArrayList<Object>(fetchPos.size());
 									}
 									else
 									{
@@ -1656,6 +1890,8 @@ public final class TableScanOperator implements Operator, Serializable
 					}
 
 					Schema sch = new Schema(layout);
+					// long count = 0;
+					ArrayList<Object> row = new ArrayList<Object>(fetchPos.size());
 					while (!(o instanceof DataEndMarker))
 					{
 						if (!indexOnly)
@@ -1668,6 +1904,13 @@ public final class TableScanOperator implements Operator, Serializable
 								Block b = new Block(in2, blockNum);
 								tx.requestPage(b);
 								tx.read(b, sch);
+								// count++;
+
+								// if (count > MAX_PAGES)
+								// {
+								// tx.checkpoint(in2, b);
+								// count = 1;
+								// }
 							}
 							int node2 = node;
 							if (node2 < 0)
@@ -1675,24 +1918,32 @@ public final class TableScanOperator implements Operator, Serializable
 								node2 = -1;
 							}
 							final Row r = sch.getRow(new RID(node2, device, blockNum, recNum));
-							final ArrayList<Object> row = new ArrayList<Object>(types.size());
+							row.clear();
 
 							int j = 0;
-							while (j < fetchPos.size())
+							final int size = fetchPos.size();
+							while (j < size)
 							{
 								try
 								{
 									if (!getRID)
 									{
-										FieldValue fv = r.getCol(fetchPos.get(j));
-										row.add(fv.getValue());
+										if (filter != null && !needThisColForFilter(midPos2Col[j], filter))
+										{
+											row.add(null);
+										}
+										else
+										{
+											FieldValue fv = r.getCol(fetchPos.get(j));
+											row.add(fv.getValue());
+										}
 									}
 									else
 									{
 										int colNum = fetchPos.get(j);
 										if (colNum >= 4)
 										{
-											FieldValue fv = r.getCol(colNum-4);
+											FieldValue fv = r.getCol(colNum - 4);
 											row.add(fv.getValue());
 										}
 										else if (colNum == 0)
@@ -1714,7 +1965,7 @@ public final class TableScanOperator implements Operator, Serializable
 									}
 									j++;
 								}
-								catch(Exception e)
+								catch (Exception e)
 								{
 									HRDBMSWorker.logger.debug("", e);
 									throw e;
@@ -1723,33 +1974,37 @@ public final class TableScanOperator implements Operator, Serializable
 
 							if (!optimize)
 							{
-								for (final Map.Entry entry : readBuffers.entrySet())
-								{
-									final BufferedLinkedBlockingQueue q = (BufferedLinkedBlockingQueue)entry.getValue();
-									filter = orderedFilters.get(entry.getKey());
+								// for (final Map.Entry entry :
+								// readBuffers.entrySet())
+								// {
+								// final BufferedLinkedBlockingQueue q =
+								// (BufferedLinkedBlockingQueue)entry.getValue();
+								// filter = orderedFilters.get(entry.getKey());
 
-									if (filter != null)
-									{
-										if (filter.passes(row))
-										{
-											final ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
-											for (final int pos : neededPos)
-											{
-												newRow.add(row.get(pos));
-											}
-											q.put(newRow);
-										}
-									}
-									else
-									{
-										final ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
-										for (final int pos : neededPos)
-										{
-											newRow.add(row.get(pos));
-										}
-										q.put(newRow);
-									}
-								}
+								// if (filter != null)
+								// {
+								// if (filter.passes(row))
+								// {
+								// final ArrayList<Object> newRow = new
+								// ArrayList<Object>(neededPos.size());
+								// for (final int pos : neededPos)
+								// {
+								// newRow.add(row.get(pos));
+								// }
+								// q.put(newRow);
+								// }
+								// }
+								// else
+								// {
+								// final ArrayList<Object> newRow = new
+								// ArrayList<Object>(neededPos.size());
+								// for (final int pos : neededPos)
+								// {
+								// newRow.add(row.get(pos));
+								// }
+								// q.put(newRow);
+								// }
+								// }
 							}
 							else
 							{
@@ -1757,32 +2012,68 @@ public final class TableScanOperator implements Operator, Serializable
 								{
 									if (filter.passes(row))
 									{
-										final ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
-										for (final int pos : neededPos)
+										if (!getRID)
 										{
-											newRow.add(row.get(pos));
+											int i = 0;
+											for (Object o2 : row)
+											{
+												if (o2 == null)
+												{
+													FieldValue fv = r.getCol(fetchPos.get(i));
+													// row.set(i,
+													// fv.getValue());
+													Object[] array = (Object[])unsafe.getObject(row, offset);
+													array[i] = fv.getValue();
+												}
+
+												i++;
+											}
 										}
-										if (!forceDone)
+
+										if (neededPosNeeded)
 										{
-											readBuffer.put(newRow);
+											final ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
+											for (final int pos : neededPos)
+											{
+												newRow.add(row.get(pos));
+											}
+											if (!forceDone)
+											{
+												readBuffer.put(newRow);
+											}
+											else
+											{
+												readBuffer.put(new DataEndMarker());
+												return;
+											}
 										}
 										else
 										{
-											readBuffer.put(new DataEndMarker());
-											return;
+											if (!forceDone)
+											{
+												readBuffer.put(row);
+												row = new ArrayList<Object>(fetchPos.size());
+											}
+											else
+											{
+												readBuffer.put(new DataEndMarker());
+												return;
+											}
 										}
 									}
 								}
 								else
 								{
-									final ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
-									for (final int pos : neededPos)
-									{
-										newRow.add(row.get(pos));
-									}
+									// final ArrayList<Object> newRow = new
+									// ArrayList<Object>(neededPos.size());
+									// for (final int pos : neededPos)
+									// {
+									// newRow.add(row.get(pos));
+									// }
 									if (!forceDone)
 									{
-										readBuffer.put(newRow);
+										readBuffer.put(row);
+										row = new ArrayList<Object>(fetchPos.size());
 									}
 									else
 									{
@@ -1808,15 +2099,15 @@ public final class TableScanOperator implements Operator, Serializable
 								}
 							}
 
-							final ArrayList<Object> row = new ArrayList<Object>(pos2Col.size());
+							final ArrayList<Object> row2 = new ArrayList<Object>(pos2Col.size());
 							for (final String col : pos2Col.values())
 							{
-								row.add(((ArrayList<Object>)o).get(child.getCols2Pos().get(col)));
+								row2.add(((ArrayList<Object>)o).get(child.getCols2Pos().get(col)));
 							}
 
 							if (!forceDone)
 							{
-								readBuffer.put(row);
+								readBuffer.put(row2);
 							}
 							else
 							{
@@ -1838,8 +2129,9 @@ public final class TableScanOperator implements Operator, Serializable
 				{
 					readBuffer.put(e);
 				}
-				catch(Exception f)
-				{}
+				catch (Exception f)
+				{
+				}
 				return;
 			}
 		}

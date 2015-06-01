@@ -1,8 +1,12 @@
 package com.exascale.optimizer;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
@@ -16,34 +20,44 @@ import com.exascale.threads.ThreadPoolThread;
 
 public final class MultiOperator implements Operator, Serializable
 {
+	private static final int ATHREAD_QUEUE_SIZE = 1000;
+
+	private static final int NUM_HGBR_THREADS = ResourceManager.cpus;
+
+	private static sun.misc.Unsafe unsafe;
+
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
+
 	private Operator child;
-
 	private Operator parent;
-
 	private HashMap<String, String> cols2Types;
-
 	private HashMap<String, Integer> cols2Pos;
-
 	private TreeMap<Integer, String> pos2Col;
-	private final MetaData meta;
+	private transient final MetaData meta;
 	private ArrayList<AggregateOperator> ops;
 	private ArrayList<String> groupCols;
-	private static final int ATHREAD_QUEUE_SIZE = BufferedLinkedBlockingQueue.BLOCK_SIZE < 1000 ? 1000 : BufferedLinkedBlockingQueue.BLOCK_SIZE;
-	private volatile BufferedLinkedBlockingQueue inFlight;
-	private volatile BufferedLinkedBlockingQueue readBuffer;
+	private transient volatile BufferedLinkedBlockingQueue inFlight;
+	private transient volatile BufferedLinkedBlockingQueue readBuffer;
 	private boolean sorted;
-	private static final int NUM_HGBR_THREADS = ResourceManager.cpus;
 	private int node;
 	private int NUM_GROUPS = 16;
 	private int childCard = 16 * 16;
+
 	private boolean cardSet = false;
+
 	private volatile boolean startDone = false;
-	private transient Plan plan;
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
-	}
 
 	public MultiOperator(ArrayList<AggregateOperator> ops, ArrayList<String> groupCols, MetaData meta, boolean sorted)
 	{
@@ -51,6 +65,26 @@ public final class MultiOperator implements Operator, Serializable
 		this.groupCols = groupCols;
 		this.meta = meta;
 		this.sorted = sorted;
+	}
+
+	public static MultiOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		MultiOperator value = (MultiOperator)unsafe.allocateInstance(MultiOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.child = OperatorUtils.deserializeOperator(in, prev);
+		value.parent = OperatorUtils.deserializeOperator(in, prev);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.ops = OperatorUtils.deserializeALAgOp(in, prev);
+		value.groupCols = OperatorUtils.deserializeALS(in, prev);
+		value.sorted = OperatorUtils.readBool(in);
+		value.node = OperatorUtils.readInt(in);
+		value.NUM_GROUPS = OperatorUtils.readInt(in);
+		value.childCard = OperatorUtils.readInt(in);
+		value.cardSet = OperatorUtils.readBool(in);
+		value.startDone = OperatorUtils.readBool(in);
+		return value;
 	}
 
 	@Override
@@ -96,7 +130,7 @@ public final class MultiOperator implements Operator, Serializable
 									matches++;
 								}
 							}
-						
+
 							if (matches != 1)
 							{
 								HRDBMSWorker.logger.debug("Could not find " + groupCol + " in " + tempCols2Types.keySet());
@@ -115,7 +149,7 @@ public final class MultiOperator implements Operator, Serializable
 						i++;
 					}
 				}
-				catch(Exception e)
+				catch (Exception e)
 				{
 					HRDBMSWorker.logger.debug("", e);
 					throw e;
@@ -185,22 +219,35 @@ public final class MultiOperator implements Operator, Serializable
 	public void close() throws Exception
 	{
 		child.close();
-		
+
 		if (inFlight != null)
 		{
 			inFlight.close();
 		}
-		
+
 		if (readBuffer != null)
 		{
 			readBuffer.close();
 		}
-		
+
 		ops = null;
 		groupCols = null;
 		cols2Pos = null;
 		cols2Types = null;
 		pos2Col = null;
+	}
+
+	public boolean existsCountDistinct()
+	{
+		for (final AggregateOperator op : ops)
+		{
+			if (op instanceof CountDistinctOperator)
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	public String getAvgCol()
@@ -287,7 +334,7 @@ public final class MultiOperator implements Operator, Serializable
 		{
 			retval.add(op.getInputColumn());
 		}
-		
+
 		for (String col : groupCols)
 		{
 			if (!retval.contains(col))
@@ -332,7 +379,7 @@ public final class MultiOperator implements Operator, Serializable
 				return o;
 			}
 		}
-		
+
 		if (o instanceof Exception)
 		{
 			throw (Exception)o;
@@ -378,19 +425,6 @@ public final class MultiOperator implements Operator, Serializable
 			child = null;
 			op.removeParent(this);
 		}
-	}
-
-	public boolean existsCountDistinct()
-	{
-		for (final AggregateOperator op : ops)
-		{
-			if (op instanceof CountDistinctOperator)
-			{
-				return true;
-			}
-		}
-		
-		return false;
 	}
 
 	@Override
@@ -456,6 +490,33 @@ public final class MultiOperator implements Operator, Serializable
 	}
 
 	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(33, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		child.serialize(out, prev);
+		parent.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.serializeALAgOp(ops, out, prev);
+		OperatorUtils.serializeALS(groupCols, out, prev);
+		OperatorUtils.writeBool(sorted, out);
+		OperatorUtils.writeInt(node, out);
+		OperatorUtils.writeInt(NUM_GROUPS, out);
+		OperatorUtils.writeInt(childCard, out);
+		OperatorUtils.writeBool(cardSet, out);
+		OperatorUtils.writeBool(startDone, out);
+	}
+
+	@Override
 	public void setChildPos(int pos)
 	{
 	}
@@ -486,6 +547,11 @@ public final class MultiOperator implements Operator, Serializable
 		}
 
 		return true;
+	}
+
+	@Override
+	public void setPlan(Plan plan)
+	{
 	}
 
 	public void setSorted()
@@ -667,7 +733,7 @@ public final class MultiOperator implements Operator, Serializable
 		// private volatile DiskBackedHashSet groups =
 		// ResourceManager.newDiskBackedHashSet(true, NUM_GROUPS > 0 ?
 		// NUM_GROUPS : 16);
-		private volatile ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>> groups = new ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>>(NUM_GROUPS > 0 ? NUM_GROUPS : 16, 1.0f);
+		private volatile ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>> groups = new ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>>(NUM_GROUPS, 0.75f, 6 * ResourceManager.cpus);
 
 		private final AggregateResultThread[] threads = new AggregateResultThread[ops.size()];
 
@@ -734,8 +800,9 @@ public final class MultiOperator implements Operator, Serializable
 				{
 					readBuffer.put(e);
 				}
-				catch(Exception f)
-				{}
+				catch (Exception f)
+				{
+				}
 				return;
 			}
 		}
@@ -771,7 +838,7 @@ public final class MultiOperator implements Operator, Serializable
 								groupKeys.add(row.get(pos));
 							}
 						}
-						catch(Exception e)
+						catch (Exception e)
 						{
 							HRDBMSWorker.logger.debug("Trying to group on " + groupCols);
 							HRDBMSWorker.logger.debug("Child.getCols2Pos() = " + child.getCols2Pos());
@@ -796,8 +863,9 @@ public final class MultiOperator implements Operator, Serializable
 					{
 						readBuffer.put(e);
 					}
-					catch(Exception f)
-					{}
+					catch (Exception f)
+					{
+					}
 					return;
 				}
 			}
@@ -844,13 +912,6 @@ public final class MultiOperator implements Operator, Serializable
 
 					if (newGroup)
 					{
-						// DEBUG
-						// for (Object obj : groupKeys)
-						// {
-						// System.out.println("Key: " + obj);
-						// }
-						// DEBUG
-
 						if (rows != null)
 						{
 							final AggregateThread aggThread = new AggregateThread(oldGroup, ops, rows);
@@ -910,8 +971,9 @@ public final class MultiOperator implements Operator, Serializable
 				{
 					readBuffer.put(e);
 				}
-				catch(Exception f)
-				{}
+				catch (Exception f)
+				{
+				}
 				return;
 			}
 		}

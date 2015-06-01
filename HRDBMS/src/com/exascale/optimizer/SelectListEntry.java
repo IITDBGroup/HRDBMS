@@ -4,23 +4,24 @@ public class SelectListEntry
 {
 	private Column col;
 	private Expression exp;
-	private String name;
-	private boolean isCol;
-	
+	private final String name;
+	private final boolean isCol;
+
 	public SelectListEntry(Column col, String name)
 	{
 		this.col = col;
 		this.name = name;
 		isCol = true;
 	}
-	
+
 	public SelectListEntry(Expression exp, String name)
 	{
 		this.exp = exp;
 		this.name = name;
 		isCol = false;
 	}
-	
+
+	@Override
 	public SelectListEntry clone()
 	{
 		if (isCol)
@@ -32,24 +33,24 @@ public class SelectListEntry
 			return new SelectListEntry(exp.clone(), name);
 		}
 	}
-	
-	public boolean isColumn()
+
+	public Column getColumn()
 	{
-		return isCol;
+		return col;
 	}
-	
+
 	public Expression getExpression()
 	{
 		return exp;
 	}
-	
+
 	public String getName()
 	{
 		return name;
 	}
-	
-	public Column getColumn()
+
+	public boolean isColumn()
 	{
-		return col;
+		return isCol;
 	}
 }

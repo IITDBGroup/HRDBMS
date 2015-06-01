@@ -1,9 +1,13 @@
 package com.exascale.optimizer;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.TreeMap;
 import com.exascale.managers.HRDBMSWorker;
@@ -15,7 +19,21 @@ import com.exascale.tables.Plan;
 
 public final class CaseOperator implements Operator, Serializable
 {
-	private final MetaData meta;
+	private static sun.misc.Unsafe unsafe;
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
+	private transient final MetaData meta;
 	private ArrayList<HashSet<HashMap<Filter, Filter>>> filters;
 	private ArrayList<Object> results;
 	private Operator child = null;
@@ -23,18 +41,14 @@ public final class CaseOperator implements Operator, Serializable
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
 	private TreeMap<Integer, String> pos2Col;
-	private final String name;
+	private String name;
 	private String type;
 	// private MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
 	private ArrayList<String> origResults;
+
 	private ArrayList<String> references = new ArrayList<String>();
+
 	private int node;
-	private transient Plan plan;
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
-	}
 
 	public CaseOperator(ArrayList<HashSet<HashMap<Filter, Filter>>> filters, ArrayList<String> results, String name, String type, MetaData meta)
 	{
@@ -101,6 +115,25 @@ public final class CaseOperator implements Operator, Serializable
 		}
 	}
 
+	public static CaseOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		CaseOperator value = (CaseOperator)unsafe.allocateInstance(CaseOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.filters = OperatorUtils.deserializeALHSHM(in, prev);
+		value.results = OperatorUtils.deserializeALO(in, prev);
+		value.child = OperatorUtils.deserializeOperator(in, prev);
+		value.parent = OperatorUtils.deserializeOperator(in, prev);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.name = OperatorUtils.readString(in, prev);
+		value.type = OperatorUtils.readString(in, prev);
+		value.origResults = OperatorUtils.deserializeALS(in, prev);
+		value.references = OperatorUtils.deserializeALS(in, prev);
+		value.node = OperatorUtils.readInt(in);
+		return value;
+	}
+
 	@Override
 	public void add(Operator op) throws Exception
 	{
@@ -121,39 +154,6 @@ public final class CaseOperator implements Operator, Serializable
 		else
 		{
 			throw new Exception("CaseOperator only supports 1 child.");
-		}
-	}
-	
-	public void setType(String type)
-	{
-		this.type = type;
-		if (cols2Types != null)
-		{
-			cols2Types.put(name, type);
-		}
-	}
-	
-	public void setFilters(ArrayList<HashSet<HashMap<Filter, Filter>>> filters)
-	{
-		this.filters = filters;
-		
-		for (final HashSet<HashMap<Filter, Filter>> filter : filters)
-		{
-			for (final HashMap<Filter, Filter> f : filter)
-			{
-				for (final Filter f2 : f.keySet())
-				{
-					if (f2.leftIsColumn())
-					{
-						references.add(f2.leftColumn());
-					}
-
-					if (f2.rightIsColumn())
-					{
-						references.add(f2.rightColumn());
-					}
-				}
-			}
 		}
 	}
 
@@ -231,6 +231,16 @@ public final class CaseOperator implements Operator, Serializable
 	public ArrayList<String> getReferences()
 	{
 		return references;
+	}
+
+	public ArrayList<Object> getResults()
+	{
+		return results;
+	}
+
+	public String getType()
+	{
+		return type;
 	}
 
 	@Override
@@ -341,53 +351,6 @@ public final class CaseOperator implements Operator, Serializable
 
 		return o;
 	}
-	
-	private Object getColumn(String name, ArrayList<Object> row) throws Exception
-	{
-		Integer pos = cols2Pos.get(name);
-		if (pos != null)
-		{
-			return row.get(pos);
-		}
-		
-		if (name.indexOf('.') > 0)
-		{
-			throw new Exception("Column " + name + " not found in CaseOperator");
-		}
-		
-		if (name.startsWith("."))
-		{
-			name = name.substring(1);
-		}
-		
-		int matches = 0;
-		for (Map.Entry entry : cols2Pos.entrySet())
-		{
-			String name2 =(String)entry.getKey();
-			if (name2.contains("."))
-			{
-				name2 = name2.substring(name2.indexOf('.') + 1);
-			}
-			
-			if (name.equals(name2))
-			{
-				matches++;
-				pos = (Integer)entry.getValue();
-			}
-		}
-		
-		if (matches == 0)
-		{
-			throw new Exception("Column " + name + " not found in CaseOperator");
-		}
-		
-		if (matches > 1)
-		{
-			throw new Exception("Column " + name + " is ambiguous in CaseOperator");
-		}
-		
-		return row.get(pos);
-	}
 
 	@Override
 	public void nextAll(Operator op) throws Exception
@@ -442,14 +405,78 @@ public final class CaseOperator implements Operator, Serializable
 	}
 
 	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(20, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		OperatorUtils.serializeALHSHM(filters, out, prev);
+		OperatorUtils.serializeALO(results, out, prev);
+		child.serialize(out, prev);
+		parent.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.writeString(name, out, prev);
+		OperatorUtils.writeString(type, out, prev);
+		OperatorUtils.serializeALS(origResults, out, prev);
+		OperatorUtils.serializeALS(references, out, prev);
+		OperatorUtils.writeInt(node, out);
+	}
+
+	@Override
 	public void setChildPos(int pos)
 	{
+	}
+
+	public void setFilters(ArrayList<HashSet<HashMap<Filter, Filter>>> filters)
+	{
+		this.filters = filters;
+
+		for (final HashSet<HashMap<Filter, Filter>> filter : filters)
+		{
+			for (final HashMap<Filter, Filter> f : filter)
+			{
+				for (final Filter f2 : f.keySet())
+				{
+					if (f2.leftIsColumn())
+					{
+						references.add(f2.leftColumn());
+					}
+
+					if (f2.rightIsColumn())
+					{
+						references.add(f2.rightColumn());
+					}
+				}
+			}
+		}
 	}
 
 	@Override
 	public void setNode(int node)
 	{
 		this.node = node;
+	}
+
+	@Override
+	public void setPlan(Plan plan)
+	{
+	}
+
+	public void setType(String type)
+	{
+		this.type = type;
+		if (cols2Types != null)
+		{
+			cols2Types.put(name, type);
+		}
 	}
 
 	@Override
@@ -462,6 +489,53 @@ public final class CaseOperator implements Operator, Serializable
 	public String toString()
 	{
 		return "CaseOperator: filters = " + filters + " results = " + origResults;
+	}
+
+	private Object getColumn(String name, ArrayList<Object> row) throws Exception
+	{
+		Integer pos = cols2Pos.get(name);
+		if (pos != null)
+		{
+			return row.get(pos);
+		}
+
+		if (name.indexOf('.') > 0)
+		{
+			throw new Exception("Column " + name + " not found in CaseOperator");
+		}
+
+		if (name.startsWith("."))
+		{
+			name = name.substring(1);
+		}
+
+		int matches = 0;
+		for (Map.Entry entry : cols2Pos.entrySet())
+		{
+			String name2 = (String)entry.getKey();
+			if (name2.contains("."))
+			{
+				name2 = name2.substring(name2.indexOf('.') + 1);
+			}
+
+			if (name.equals(name2))
+			{
+				matches++;
+				pos = (Integer)entry.getValue();
+			}
+		}
+
+		if (matches == 0)
+		{
+			throw new Exception("Column " + name + " not found in CaseOperator");
+		}
+
+		if (matches > 1)
+		{
+			throw new Exception("Column " + name + " is ambiguous in CaseOperator");
+		}
+
+		return row.get(pos);
 	}
 
 	private boolean passesCase(ArrayList<Object> row, HashMap<String, Integer> cols2Pos, HashSet<HashMap<Filter, Filter>> ands) throws Exception
@@ -496,15 +570,5 @@ public final class CaseOperator implements Operator, Serializable
 		}
 
 		return false;
-	}
-	
-	public String getType()
-	{
-		return type;
-	}
-	
-	public ArrayList<Object> getResults()
-	{
-		return results;
 	}
 }

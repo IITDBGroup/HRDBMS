@@ -1,8 +1,12 @@
 package com.exascale.optimizer;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.TreeMap;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MyDate;
@@ -10,28 +14,54 @@ import com.exascale.tables.Plan;
 
 public final class YearOperator implements Operator, Serializable
 {
+	private static sun.misc.Unsafe unsafe;
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
 	private Operator child;
 	private Operator parent;
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
 	private TreeMap<Integer, String> pos2Col;
 	private String col;
-	private final String name;
+	private String name;
 	private int colPos;
-	private final MetaData meta;
+
+	private transient final MetaData meta;
+
 	private int node;
-	private transient Plan plan;
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
-	}
 
 	public YearOperator(String col, String name, MetaData meta)
 	{
 		this.col = col;
 		this.meta = meta;
 		this.name = name;
+	}
+
+	public static YearOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		YearOperator value = (YearOperator)unsafe.allocateInstance(YearOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.child = OperatorUtils.deserializeOperator(in, prev);
+		value.parent = OperatorUtils.deserializeOperator(in, prev);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.col = OperatorUtils.readString(in, prev);
+		value.name = OperatorUtils.readString(in, prev);
+		value.colPos = OperatorUtils.readInt(in);
+		value.node = OperatorUtils.readInt(in);
+		return value;
 	}
 
 	@Override
@@ -63,14 +93,14 @@ public final class YearOperator implements Operator, Serializable
 							{
 								col3 = col3.substring(col3.indexOf('.') + 1);
 							}
-							
+
 							if (col3.equals(col))
 							{
 								col = orig;
 								count++;
 								colPos1 = cols2Pos.get(orig);
 							}
-							
+
 							if (count > 1)
 							{
 								throw new Exception("Ambiguous column: " + col);
@@ -169,7 +199,7 @@ public final class YearOperator implements Operator, Serializable
 		{
 			return o;
 		}
-		
+
 		if (o instanceof Exception)
 		{
 			throw (Exception)o;
@@ -233,6 +263,29 @@ public final class YearOperator implements Operator, Serializable
 	}
 
 	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(50, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		child.serialize(out, prev);
+		parent.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.writeString(col, out, prev);
+		OperatorUtils.writeString(name, out, prev);
+		OperatorUtils.writeInt(colPos, out);
+		OperatorUtils.writeInt(node, out);
+	}
+
+	@Override
 	public void setChildPos(int pos)
 	{
 	}
@@ -241,6 +294,11 @@ public final class YearOperator implements Operator, Serializable
 	public void setNode(int node)
 	{
 		this.node = node;
+	}
+
+	@Override
+	public void setPlan(Plan plan)
+	{
 	}
 
 	@Override

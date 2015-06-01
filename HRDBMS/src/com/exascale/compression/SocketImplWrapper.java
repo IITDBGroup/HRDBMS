@@ -34,10 +34,10 @@ import java.net.SocketOptions;
 
 /**
  * A wrapping SocketImpl.<br>
- * 
+ *
  * Nice to wrap SSL sockets to add compression, for example. Notice that wrapped
  * sockets are always connected/bound!
- * 
+ *
  * @author harald
  */
 public final class SocketImplWrapper extends SocketImpl
@@ -48,7 +48,7 @@ public final class SocketImplWrapper extends SocketImpl
 	/**
 	 * Creates an impl wrapper that delegates all method invocations to the
 	 * wrapped socket.
-	 * 
+	 *
 	 * @param socket
 	 *            the socket to wrap
 	 */

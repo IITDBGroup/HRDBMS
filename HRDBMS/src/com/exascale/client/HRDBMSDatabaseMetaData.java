@@ -1,4 +1,5 @@
 package com.exascale.client;
+
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
@@ -7,23 +8,11 @@ import java.sql.SQLException;
 
 public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 {
-	private Connection conn;
-	
+	private final Connection conn;
+
 	public HRDBMSDatabaseMetaData(Connection conn)
 	{
 		this.conn = conn;
-	}
-	
-	@Override
-	public <T> T unwrap(Class<T> iface) throws SQLException
-	{
-		throw new SQLException("Unwrap() is not supported.");
-	}
-
-	@Override
-	public boolean isWrapperFor(Class<?> iface) throws SQLException
-	{
-		return false;
 	}
 
 	@Override
@@ -39,45 +28,118 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public String getURL() throws SQLException
-	{
-		return null;
-	}
-
-	@Override
-	public String getUserName() throws SQLException
-	{
-		return "";
-	}
-
-	@Override
-	public boolean isReadOnly() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean nullsAreSortedHigh() throws SQLException
+	public boolean autoCommitFailureClosesAllResultSets() throws SQLException
 	{
 		return true;
 	}
 
 	@Override
-	public boolean nullsAreSortedLow() throws SQLException
+	public boolean dataDefinitionCausesTransactionCommit() throws SQLException
 	{
 		return false;
 	}
 
 	@Override
-	public boolean nullsAreSortedAtStart() throws SQLException
+	public boolean dataDefinitionIgnoredInTransactions() throws SQLException
 	{
 		return false;
 	}
 
 	@Override
-	public boolean nullsAreSortedAtEnd() throws SQLException
+	public boolean deletesAreDetected(int type) throws SQLException
 	{
 		return false;
+	}
+
+	@Override
+	public boolean doesMaxRowSizeIncludeBlobs() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean generatedKeyAlwaysReturned() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public ResultSet getAttributes(String catalog, String schemaPattern, String typeNamePattern, String attributeNamePattern) throws SQLException
+	{
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public ResultSet getBestRowIdentifier(String catalog, String schema, String table, int scope, boolean nullable) throws SQLException
+	{
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public ResultSet getCatalogs() throws SQLException
+	{
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public String getCatalogSeparator() throws SQLException
+	{
+		return ".";
+	}
+
+	@Override
+	public String getCatalogTerm() throws SQLException
+	{
+		return "schema";
+	}
+
+	@Override
+	public ResultSet getClientInfoProperties() throws SQLException
+	{
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public ResultSet getColumnPrivileges(String catalog, String schema, String table, String columnNamePattern) throws SQLException
+	{
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public ResultSet getColumns(String catalog, String schemaPattern, String tableNamePattern, String columnNamePattern) throws SQLException
+	{
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public Connection getConnection() throws SQLException
+	{
+		return conn;
+	}
+
+	@Override
+	public ResultSet getCrossReference(String parentCatalog, String parentSchema, String parentTable, String foreignCatalog, String foreignSchema, String foreignTable) throws SQLException
+	{
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public int getDatabaseMajorVersion() throws SQLException
+	{
+		return 1;
+	}
+
+	@Override
+	public int getDatabaseMinorVersion() throws SQLException
+	{
+		return 0;
 	}
 
 	@Override
@@ -93,15 +155,9 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public String getDriverName() throws SQLException
+	public int getDefaultTransactionIsolation() throws SQLException
 	{
-		return "HRDBMS JDBC Driver";
-	}
-
-	@Override
-	public String getDriverVersion() throws SQLException
-	{
-		return "1.0";
+		return Connection.TRANSACTION_READ_COMMITTED;
 	}
 
 	@Override
@@ -117,105 +173,22 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public boolean usesLocalFiles() throws SQLException
+	public String getDriverName() throws SQLException
 	{
-		return false;
+		return "HRDBMS JDBC Driver";
 	}
 
 	@Override
-	public boolean usesLocalFilePerTable() throws SQLException
+	public String getDriverVersion() throws SQLException
 	{
-		return false;
+		return "1.0";
 	}
 
 	@Override
-	public boolean supportsMixedCaseIdentifiers() throws SQLException
+	public ResultSet getExportedKeys(String catalog, String schema, String table) throws SQLException
 	{
-		return false;
-	}
-
-	@Override
-	public boolean storesUpperCaseIdentifiers() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean storesLowerCaseIdentifiers() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean storesMixedCaseIdentifiers() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean supportsMixedCaseQuotedIdentifiers() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean storesUpperCaseQuotedIdentifiers() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean storesLowerCaseQuotedIdentifiers() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean storesMixedCaseQuotedIdentifiers() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public String getIdentifierQuoteString() throws SQLException
-	{
-		return "'";
-	}
-
-	@Override
-	public String getSQLKeywords() throws SQLException
-	{
-		return "";
-	}
-
-	@Override
-	public String getNumericFunctions() throws SQLException
-	{
-		return "";
-	}
-
-	@Override
-	public String getStringFunctions() throws SQLException
-	{
-		return "";
-	}
-
-	@Override
-	public String getSystemFunctions() throws SQLException
-	{
-		return "";
-	}
-
-	@Override
-	public String getTimeDateFunctions() throws SQLException
-	{
-		return "";
-	}
-
-	@Override
-	public String getSearchStringEscape() throws SQLException
-	{
-		return "";
+		// TODO Auto-generated method stub
+		return null;
 	}
 
 	@Override
@@ -225,351 +198,61 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public boolean supportsAlterTableWithAddColumn() throws SQLException
+	public ResultSet getFunctionColumns(String catalog, String schemaPattern, String functionNamePattern, String columnNamePattern) throws SQLException
 	{
-		return false;
+		// TODO Auto-generated method stub
+		return null;
 	}
 
 	@Override
-	public boolean supportsAlterTableWithDropColumn() throws SQLException
+	public ResultSet getFunctions(String catalog, String schemaPattern, String functionNamePattern) throws SQLException
 	{
-		return false;
+		// TODO Auto-generated method stub
+		return null;
 	}
 
 	@Override
-	public boolean supportsColumnAliasing() throws SQLException
+	public String getIdentifierQuoteString() throws SQLException
 	{
-		return true;
+		return "'";
 	}
 
 	@Override
-	public boolean nullPlusNonNullIsNull() throws SQLException
+	public ResultSet getImportedKeys(String catalog, String schema, String table) throws SQLException
 	{
-		return true;
+		// TODO Auto-generated method stub
+		return null;
 	}
 
 	@Override
-	public boolean supportsConvert() throws SQLException
+	public ResultSet getIndexInfo(String catalog, String schema, String table, boolean unique, boolean approximate) throws SQLException
 	{
-		return false;
+		// TODO Auto-generated method stub
+		return null;
 	}
 
 	@Override
-	public boolean supportsConvert(int fromType, int toType) throws SQLException
+	public int getJDBCMajorVersion() throws SQLException
 	{
-		return false;
+		return 4;
 	}
 
 	@Override
-	public boolean supportsTableCorrelationNames() throws SQLException
+	public int getJDBCMinorVersion() throws SQLException
 	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsDifferentTableCorrelationNames() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean supportsExpressionsInOrderBy() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean supportsOrderByUnrelated() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsGroupBy() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsGroupByUnrelated() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsGroupByBeyondSelect() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsLikeEscapeClause() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean supportsMultipleResultSets() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean supportsMultipleTransactions() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsNonNullableColumns() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsMinimumSQLGrammar() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsCoreSQLGrammar() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean supportsExtendedSQLGrammar() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean supportsANSI92EntryLevelSQL() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsANSI92IntermediateSQL() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean supportsANSI92FullSQL() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean supportsIntegrityEnhancementFacility() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean supportsOuterJoins() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsFullOuterJoins() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsLimitedOuterJoins() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public String getSchemaTerm() throws SQLException
-	{
-		return "schema";
-	}
-
-	@Override
-	public String getProcedureTerm() throws SQLException
-	{
-		return "stored procedure";
-	}
-
-	@Override
-	public String getCatalogTerm() throws SQLException
-	{
-		return "schema";
-	}
-
-	@Override
-	public boolean isCatalogAtStart() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public String getCatalogSeparator() throws SQLException
-	{
-		return ".";
-	}
-
-	@Override
-	public boolean supportsSchemasInDataManipulation() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsSchemasInProcedureCalls() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsSchemasInTableDefinitions() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsSchemasInIndexDefinitions() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean supportsSchemasInPrivilegeDefinitions() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsCatalogsInDataManipulation() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsCatalogsInProcedureCalls() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsCatalogsInTableDefinitions() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsCatalogsInIndexDefinitions() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean supportsCatalogsInPrivilegeDefinitions() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsPositionedDelete() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean supportsPositionedUpdate() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean supportsSelectForUpdate() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean supportsStoredProcedures() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean supportsSubqueriesInComparisons() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsSubqueriesInExists() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsSubqueriesInIns() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsSubqueriesInQuantifieds() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsCorrelatedSubqueries() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsUnion() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsUnionAll() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsOpenCursorsAcrossCommit() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean supportsOpenCursorsAcrossRollback() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean supportsOpenStatementsAcrossCommit() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsOpenStatementsAcrossRollback() throws SQLException
-	{
-		return true;
+		return 1;
 	}
 
 	@Override
 	public int getMaxBinaryLiteralLength() throws SQLException
 	{
 		return 0;
+	}
+
+	@Override
+	public int getMaxCatalogNameLength() throws SQLException
+	{
+		return 128;
 	}
 
 	@Override
@@ -633,19 +316,7 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public int getMaxSchemaNameLength() throws SQLException
-	{
-		return 128;
-	}
-
-	@Override
 	public int getMaxProcedureNameLength() throws SQLException
-	{
-		return 128;
-	}
-
-	@Override
-	public int getMaxCatalogNameLength() throws SQLException
 	{
 		return 128;
 	}
@@ -653,13 +324,13 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	@Override
 	public int getMaxRowSize() throws SQLException
 	{
-		return 128*1024;
+		return 128 * 1024;
 	}
 
 	@Override
-	public boolean doesMaxRowSizeIncludeBlobs() throws SQLException
+	public int getMaxSchemaNameLength() throws SQLException
 	{
-		return true;
+		return 128;
 	}
 
 	@Override
@@ -693,49 +364,13 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public int getDefaultTransactionIsolation() throws SQLException
+	public String getNumericFunctions() throws SQLException
 	{
-		return Connection.TRANSACTION_READ_COMMITTED;
+		return "";
 	}
 
 	@Override
-	public boolean supportsTransactions() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsTransactionIsolationLevel(int level) throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsDataDefinitionAndDataManipulationTransactions() throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean supportsDataManipulationTransactionsOnly() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean dataDefinitionCausesTransactionCommit() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public boolean dataDefinitionIgnoredInTransactions() throws SQLException
-	{
-		return false;
-	}
-
-	@Override
-	public ResultSet getProcedures(String catalog, String schemaPattern, String procedureNamePattern) throws SQLException
+	public ResultSet getPrimaryKeys(String catalog, String schema, String table) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
@@ -749,10 +384,35 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public ResultSet getTables(String catalog, String schemaPattern, String tableNamePattern, String[] types) throws SQLException
+	public ResultSet getProcedures(String catalog, String schemaPattern, String procedureNamePattern) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
+	}
+
+	@Override
+	public String getProcedureTerm() throws SQLException
+	{
+		return "stored procedure";
+	}
+
+	@Override
+	public ResultSet getPseudoColumns(String catalog, String schemaPattern, String tableNamePattern, String columnNamePattern) throws SQLException
+	{
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public int getResultSetHoldability() throws SQLException
+	{
+		return ResultSet.CLOSE_CURSORS_AT_COMMIT;
+	}
+
+	@Override
+	public RowIdLifetime getRowIdLifetime() throws SQLException
+	{
+		return RowIdLifetime.ROWID_UNSUPPORTED;
 	}
 
 	@Override
@@ -763,7 +423,71 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public ResultSet getCatalogs() throws SQLException
+	public ResultSet getSchemas(String catalog, String schemaPattern) throws SQLException
+	{
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public String getSchemaTerm() throws SQLException
+	{
+		return "schema";
+	}
+
+	@Override
+	public String getSearchStringEscape() throws SQLException
+	{
+		return "";
+	}
+
+	@Override
+	public String getSQLKeywords() throws SQLException
+	{
+		return "";
+	}
+
+	@Override
+	public int getSQLStateType() throws SQLException
+	{
+		return 0;
+	}
+
+	@Override
+	public String getStringFunctions() throws SQLException
+	{
+		return "";
+	}
+
+	@Override
+	public ResultSet getSuperTables(String catalog, String schemaPattern, String tableNamePattern) throws SQLException
+	{
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public ResultSet getSuperTypes(String catalog, String schemaPattern, String typeNamePattern) throws SQLException
+	{
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public String getSystemFunctions() throws SQLException
+	{
+		return "";
+	}
+
+	@Override
+	public ResultSet getTablePrivileges(String catalog, String schemaPattern, String tableNamePattern) throws SQLException
+	{
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public ResultSet getTables(String catalog, String schemaPattern, String tableNamePattern, String[] types) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
@@ -777,66 +501,9 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public ResultSet getColumns(String catalog, String schemaPattern, String tableNamePattern, String columnNamePattern) throws SQLException
+	public String getTimeDateFunctions() throws SQLException
 	{
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
-	public ResultSet getColumnPrivileges(String catalog, String schema, String table, String columnNamePattern) throws SQLException
-	{
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
-	public ResultSet getTablePrivileges(String catalog, String schemaPattern, String tableNamePattern) throws SQLException
-	{
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
-	public ResultSet getBestRowIdentifier(String catalog, String schema, String table, int scope, boolean nullable) throws SQLException
-	{
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
-	public ResultSet getVersionColumns(String catalog, String schema, String table) throws SQLException
-	{
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
-	public ResultSet getPrimaryKeys(String catalog, String schema, String table) throws SQLException
-	{
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
-	public ResultSet getImportedKeys(String catalog, String schema, String table) throws SQLException
-	{
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
-	public ResultSet getExportedKeys(String catalog, String schema, String table) throws SQLException
-	{
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
-	public ResultSet getCrossReference(String parentCatalog, String parentSchema, String parentTable, String foreignCatalog, String foreignSchema, String foreignTable) throws SQLException
-	{
-		// TODO Auto-generated method stub
-		return null;
+		return "";
 	}
 
 	@Override
@@ -847,54 +514,87 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public ResultSet getIndexInfo(String catalog, String schema, String table, boolean unique, boolean approximate) throws SQLException
+	public ResultSet getUDTs(String catalog, String schemaPattern, String typeNamePattern, int[] types) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
 	}
 
 	@Override
-	public boolean supportsResultSetType(int type) throws SQLException
+	public String getURL() throws SQLException
 	{
-		if (type == ResultSet.TYPE_FORWARD_ONLY)
-		{
-			return true;
-		}
-		
+		return null;
+	}
+
+	@Override
+	public String getUserName() throws SQLException
+	{
+		return "";
+	}
+
+	@Override
+	public ResultSet getVersionColumns(String catalog, String schema, String table) throws SQLException
+	{
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public boolean insertsAreDetected(int type) throws SQLException
+	{
 		return false;
 	}
 
 	@Override
-	public boolean supportsResultSetConcurrency(int type, int concurrency) throws SQLException
+	public boolean isCatalogAtStart() throws SQLException
 	{
-		if (type == ResultSet.TYPE_FORWARD_ONLY && concurrency == ResultSet.CONCUR_READ_ONLY)
-		{
-			return true;
-		}
-		
+		return true;
+	}
+
+	@Override
+	public boolean isReadOnly() throws SQLException
+	{
 		return false;
 	}
 
 	@Override
-	public boolean ownUpdatesAreVisible(int type) throws SQLException
+	public boolean isWrapperFor(Class<?> iface) throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean locatorsUpdateCopy() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean nullPlusNonNullIsNull() throws SQLException
 	{
 		return true;
 	}
 
 	@Override
-	public boolean ownDeletesAreVisible(int type) throws SQLException
+	public boolean nullsAreSortedAtEnd() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean nullsAreSortedAtStart() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean nullsAreSortedHigh() throws SQLException
 	{
 		return true;
 	}
 
 	@Override
-	public boolean ownInsertsAreVisible(int type) throws SQLException
-	{
-		return true;
-	}
-
-	@Override
-	public boolean othersUpdatesAreVisible(int type) throws SQLException
+	public boolean nullsAreSortedLow() throws SQLException
 	{
 		return false;
 	}
@@ -912,19 +612,91 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public boolean updatesAreDetected(int type) throws SQLException
+	public boolean othersUpdatesAreVisible(int type) throws SQLException
 	{
 		return false;
 	}
 
 	@Override
-	public boolean deletesAreDetected(int type) throws SQLException
+	public boolean ownDeletesAreVisible(int type) throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean ownInsertsAreVisible(int type) throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean ownUpdatesAreVisible(int type) throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean storesLowerCaseIdentifiers() throws SQLException
 	{
 		return false;
 	}
 
 	@Override
-	public boolean insertsAreDetected(int type) throws SQLException
+	public boolean storesLowerCaseQuotedIdentifiers() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean storesMixedCaseIdentifiers() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean storesMixedCaseQuotedIdentifiers() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean storesUpperCaseIdentifiers() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean storesUpperCaseQuotedIdentifiers() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean supportsAlterTableWithAddColumn() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean supportsAlterTableWithDropColumn() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean supportsANSI92EntryLevelSQL() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean supportsANSI92FullSQL() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean supportsANSI92IntermediateSQL() throws SQLException
 	{
 		return false;
 	}
@@ -936,26 +708,157 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public ResultSet getUDTs(String catalog, String schemaPattern, String typeNamePattern, int[] types) throws SQLException
+	public boolean supportsCatalogsInDataManipulation() throws SQLException
 	{
-		// TODO Auto-generated method stub
-		return null;
+		return true;
 	}
 
 	@Override
-	public Connection getConnection() throws SQLException
-	{
-		return conn;
-	}
-
-	@Override
-	public boolean supportsSavepoints() throws SQLException
+	public boolean supportsCatalogsInIndexDefinitions() throws SQLException
 	{
 		return false;
 	}
 
 	@Override
-	public boolean supportsNamedParameters() throws SQLException
+	public boolean supportsCatalogsInPrivilegeDefinitions() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean supportsCatalogsInProcedureCalls() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean supportsCatalogsInTableDefinitions() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean supportsColumnAliasing() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean supportsConvert() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean supportsConvert(int fromType, int toType) throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean supportsCoreSQLGrammar() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean supportsCorrelatedSubqueries() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean supportsDataDefinitionAndDataManipulationTransactions() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean supportsDataManipulationTransactionsOnly() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean supportsDifferentTableCorrelationNames() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean supportsExpressionsInOrderBy() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean supportsExtendedSQLGrammar() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean supportsFullOuterJoins() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean supportsGetGeneratedKeys() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean supportsGroupBy() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean supportsGroupByBeyondSelect() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean supportsGroupByUnrelated() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean supportsIntegrityEnhancementFacility() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean supportsLikeEscapeClause() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean supportsLimitedOuterJoins() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean supportsMinimumSQLGrammar() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean supportsMixedCaseIdentifiers() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean supportsMixedCaseQuotedIdentifiers() throws SQLException
 	{
 		return false;
 	}
@@ -967,30 +870,86 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public boolean supportsGetGeneratedKeys() throws SQLException
+	public boolean supportsMultipleResultSets() throws SQLException
 	{
 		return false;
 	}
 
 	@Override
-	public ResultSet getSuperTypes(String catalog, String schemaPattern, String typeNamePattern) throws SQLException
+	public boolean supportsMultipleTransactions() throws SQLException
 	{
-		// TODO Auto-generated method stub
-		return null;
+		return true;
 	}
 
 	@Override
-	public ResultSet getSuperTables(String catalog, String schemaPattern, String tableNamePattern) throws SQLException
+	public boolean supportsNamedParameters() throws SQLException
 	{
-		// TODO Auto-generated method stub
-		return null;
+		return false;
 	}
 
 	@Override
-	public ResultSet getAttributes(String catalog, String schemaPattern, String typeNamePattern, String attributeNamePattern) throws SQLException
+	public boolean supportsNonNullableColumns() throws SQLException
 	{
-		// TODO Auto-generated method stub
-		return null;
+		return true;
+	}
+
+	@Override
+	public boolean supportsOpenCursorsAcrossCommit() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean supportsOpenCursorsAcrossRollback() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean supportsOpenStatementsAcrossCommit() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean supportsOpenStatementsAcrossRollback() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean supportsOrderByUnrelated() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean supportsOuterJoins() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean supportsPositionedDelete() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean supportsPositionedUpdate() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean supportsResultSetConcurrency(int type, int concurrency) throws SQLException
+	{
+		if (type == ResultSet.TYPE_FORWARD_ONLY && concurrency == ResultSet.CONCUR_READ_ONLY)
+		{
+			return true;
+		}
+
+		return false;
 	}
 
 	@Override
@@ -1000,48 +959,59 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 		{
 			return true;
 		}
-		
+
 		return false;
 	}
 
 	@Override
-	public int getResultSetHoldability() throws SQLException
+	public boolean supportsResultSetType(int type) throws SQLException
 	{
-		return ResultSet.CLOSE_CURSORS_AT_COMMIT;
+		if (type == ResultSet.TYPE_FORWARD_ONLY)
+		{
+			return true;
+		}
+
+		return false;
 	}
 
 	@Override
-	public int getDatabaseMajorVersion() throws SQLException
+	public boolean supportsSavepoints() throws SQLException
 	{
-		return 1;
+		return false;
 	}
 
 	@Override
-	public int getDatabaseMinorVersion() throws SQLException
+	public boolean supportsSchemasInDataManipulation() throws SQLException
 	{
-		return 0;
+		return true;
 	}
 
 	@Override
-	public int getJDBCMajorVersion() throws SQLException
+	public boolean supportsSchemasInIndexDefinitions() throws SQLException
 	{
-		return 4;
+		return false;
 	}
 
 	@Override
-	public int getJDBCMinorVersion() throws SQLException
+	public boolean supportsSchemasInPrivilegeDefinitions() throws SQLException
 	{
-		return 1;
+		return true;
 	}
 
 	@Override
-	public int getSQLStateType() throws SQLException
+	public boolean supportsSchemasInProcedureCalls() throws SQLException
 	{
-		return 0;
+		return true;
 	}
 
 	@Override
-	public boolean locatorsUpdateCopy() throws SQLException
+	public boolean supportsSchemasInTableDefinitions() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean supportsSelectForUpdate() throws SQLException
 	{
 		return false;
 	}
@@ -1053,60 +1023,91 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public RowIdLifetime getRowIdLifetime() throws SQLException
-	{
-		return RowIdLifetime.ROWID_UNSUPPORTED;
-	}
-
-	@Override
-	public ResultSet getSchemas(String catalog, String schemaPattern) throws SQLException
-	{
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
 	public boolean supportsStoredFunctionsUsingCallSyntax() throws SQLException
 	{
 		return false;
 	}
 
 	@Override
-	public boolean autoCommitFailureClosesAllResultSets() throws SQLException
+	public boolean supportsStoredProcedures() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean supportsSubqueriesInComparisons() throws SQLException
 	{
 		return true;
 	}
 
 	@Override
-	public ResultSet getClientInfoProperties() throws SQLException
+	public boolean supportsSubqueriesInExists() throws SQLException
 	{
-		// TODO Auto-generated method stub
-		return null;
+		return true;
 	}
 
 	@Override
-	public ResultSet getFunctions(String catalog, String schemaPattern, String functionNamePattern) throws SQLException
+	public boolean supportsSubqueriesInIns() throws SQLException
 	{
-		// TODO Auto-generated method stub
-		return null;
+		return true;
 	}
 
 	@Override
-	public ResultSet getFunctionColumns(String catalog, String schemaPattern, String functionNamePattern, String columnNamePattern) throws SQLException
+	public boolean supportsSubqueriesInQuantifieds() throws SQLException
 	{
-		// TODO Auto-generated method stub
-		return null;
+		return true;
 	}
 
 	@Override
-	public ResultSet getPseudoColumns(String catalog, String schemaPattern, String tableNamePattern, String columnNamePattern) throws SQLException
+	public boolean supportsTableCorrelationNames() throws SQLException
 	{
-		// TODO Auto-generated method stub
-		return null;
+		return true;
 	}
 
 	@Override
-	public boolean generatedKeyAlwaysReturned() throws SQLException
+	public boolean supportsTransactionIsolationLevel(int level) throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean supportsTransactions() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean supportsUnion() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public boolean supportsUnionAll() throws SQLException
+	{
+		return true;
+	}
+
+	@Override
+	public <T> T unwrap(Class<T> iface) throws SQLException
+	{
+		throw new SQLException("Unwrap() is not supported.");
+	}
+
+	@Override
+	public boolean updatesAreDetected(int type) throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean usesLocalFilePerTable() throws SQLException
+	{
+		return false;
+	}
+
+	@Override
+	public boolean usesLocalFiles() throws SQLException
 	{
 		return false;
 	}

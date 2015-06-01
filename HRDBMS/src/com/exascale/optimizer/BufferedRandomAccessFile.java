@@ -48,11 +48,12 @@ import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * This class defines a Buffered Random Access File, where all I/O is considered
  * to be big-endian, and extends the <tt>BufferedRandomAccessFile</tt> class.
- * 
+ *
  * @see RandomAccessIO
  * @see BinaryDataOutput
  * @see BinaryDataInput
@@ -66,24 +67,23 @@ public final class BufferedRandomAccessFile
 	private volatile byte[] byteBuffer;
 	private volatile boolean byteBufferChanged;
 	private volatile long offset;
-	private volatile int pos;
-	private volatile int maxByte;
+	private final AtomicInteger pos = new AtomicInteger(0);
+	private final AtomicInteger maxByte = new AtomicInteger(0);
 	private volatile boolean isEOFInBuffer;
-	private static final int BIG_ENDIAN = 0;
 	private volatile long length;
 	private boolean skipLF = false;
 
 	/**
 	 * Constructor. Uses the default value for the byte-buffer size (512 bytes).
-	 * 
+	 *
 	 * @param file
 	 *            The file associated with the buffer
-	 * 
+	 *
 	 * @param mode
 	 *            "r" for read, "rw" or "rw+" for read and write mode ("rw+"
 	 *            opens the file for update whereas "rw" removes it before. So
 	 *            the 2 modes are different only if the file already exists).
-	 * 
+	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 * */
@@ -94,18 +94,18 @@ public final class BufferedRandomAccessFile
 
 	/**
 	 * Constructor. Always needs a size for the buffer.
-	 * 
+	 *
 	 * @param file
 	 *            The file associated with the buffer
-	 * 
+	 *
 	 * @param mode
 	 *            "r" for read, "rw" or "rw+" for read and write mode ("rw+"
 	 *            opens the file for update whereas "rw" removes it before. So
 	 *            the 2 modes are different only if the file already exists).
-	 * 
+	 *
 	 * @param bufferSize
 	 *            The number of bytes to buffer
-	 * 
+	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 * */
@@ -132,15 +132,15 @@ public final class BufferedRandomAccessFile
 
 	/**
 	 * Constructor. Uses the default value for the byte-buffer size (512 bytes).
-	 * 
+	 *
 	 * @param name
 	 *            The name of the file associated with the buffer
-	 * 
+	 *
 	 * @param mode
 	 *            "r" for read, "rw" or "rw+" for read and write mode ("rw+"
 	 *            opens the file for update whereas "rw" removes it before. So
 	 *            the 2 modes are different only if the file already exists).
-	 * 
+	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 * */
@@ -151,18 +151,18 @@ public final class BufferedRandomAccessFile
 
 	/**
 	 * Constructor. Always needs a size for the buffer.
-	 * 
+	 *
 	 * @param name
 	 *            The name of the file associated with the buffer
-	 * 
+	 *
 	 * @param mode
 	 *            "r" for read, "rw" or "rw+" for read and write mode ("rw+"
 	 *            opens the file for update whereas "rw" removes it before. So
 	 *            the 2 modes are different only if the file already exists).
-	 * 
+	 *
 	 * @param bufferSize
 	 *            The number of bytes to buffer
-	 * 
+	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 * */
@@ -186,7 +186,7 @@ public final class BufferedRandomAccessFile
 		if (byteBufferChanged)
 		{
 			theFile.seek(offset);
-			theFile.write(byteBuffer, 0, maxByte);
+			theFile.write(byteBuffer, 0, maxByte.get());
 			byteBufferChanged = false;
 		}
 	}
@@ -198,7 +198,7 @@ public final class BufferedRandomAccessFile
 
 	public long getFilePointer()
 	{
-		return offset + pos;
+		return offset + pos.get();
 	}
 
 	public long length() throws IOException
@@ -208,24 +208,24 @@ public final class BufferedRandomAccessFile
 
 	public long position()
 	{
-		return pos + offset;
+		return pos.get() + offset;
 	}
 
 	public final int read() throws IOException, EOFException
 	{
-		if (pos < maxByte)
+		if (pos.get() < maxByte.get())
 		{ // The byte can be read from the buffer
 			// In Java, the bytes are always signed.
-			return (byteBuffer[pos++] & 0xFF);
+			return (byteBuffer[pos.getAndIncrement()] & 0xFF);
 		}
 		else if (isEOFInBuffer)
 		{ // EOF is reached
-			pos = maxByte + 1; // Set position to EOF
+			pos.set(maxByte.get() + 1); // Set position to EOF
 			throw new EOFException();
 		}
 		else
 		{ // End of the buffer is reached
-			readNewBuffer(offset + pos);
+			readNewBuffer(offset + pos.get());
 			return read();
 		}
 	}
@@ -234,13 +234,13 @@ public final class BufferedRandomAccessFile
 	 * Reads an IEEE double precision (i.e., 64 bit) floating-point number from
 	 * the input. Prior to reading, the input should be realigned at the byte
 	 * level.
-	 * 
+	 *
 	 * @return The next byte-aligned IEEE double (64 bit) from the input.
-	 * 
+	 *
 	 * @exception java.io.EOFException
 	 *                If the end-of file was reached before getting all the
 	 *                necessary data.
-	 * 
+	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 * */
@@ -253,13 +253,13 @@ public final class BufferedRandomAccessFile
 	 * Reads an IEEE single precision (i.e., 32 bit) floating-point number from
 	 * the input. Prior to reading, the input should be realigned at the byte
 	 * level.
-	 * 
+	 *
 	 * @return The next byte-aligned IEEE float (32 bit) from the input.
-	 * 
+	 *
 	 * @exception java.io.EOFException
 	 *                If the end-of file was reached before getting all the
 	 *                necessary data.
-	 * 
+	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 * */
@@ -271,13 +271,13 @@ public final class BufferedRandomAccessFile
 	/**
 	 * Reads a signed int (i.e., 32 bit) from the input. Prior to reading, the
 	 * input should be realigned at the byte level.
-	 * 
+	 *
 	 * @return The next byte-aligned signed int (32 bit) from the input.
-	 * 
+	 *
 	 * @exception java.io.EOFException
 	 *                If the end-of file was reached before getting all the
 	 *                necessary data.
-	 * 
+	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 * */
@@ -342,13 +342,13 @@ public final class BufferedRandomAccessFile
 	/**
 	 * Reads a signed long (i.e., 64 bit) from the input. Prior to reading, the
 	 * input should be realigned at the byte level.
-	 * 
+	 *
 	 * @return The next byte-aligned signed long (64 bit) from the input.
-	 * 
+	 *
 	 * @exception java.io.EOFException
 	 *                If the end-of file was reached before getting all the
 	 *                necessary data.
-	 * 
+	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 * */
@@ -360,13 +360,13 @@ public final class BufferedRandomAccessFile
 	/**
 	 * Reads a signed short (i.e., 16 bit) from the input. Prior to reading, the
 	 * input should be realigned at the byte level.
-	 * 
+	 *
 	 * @return The next byte-aligned signed short (16 bit) from the input.
-	 * 
+	 *
 	 * @exception java.io.EOFException
 	 *                If the end-of file was reached before getting all the
 	 *                necessary data.
-	 * 
+	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 * */
@@ -379,14 +379,14 @@ public final class BufferedRandomAccessFile
 	 * Reads an unsigned int (i.e., 32 bit) from the input. It is returned as a
 	 * <tt>long</tt> since Java does not have an unsigned short type. Prior to
 	 * reading, the input should be realigned at the byte level.
-	 * 
+	 *
 	 * @return The next byte-aligned unsigned int (32 bit) from the input, as a
 	 *         <tt>long</tt>.
-	 * 
+	 *
 	 * @exception java.io.EOFException
 	 *                If the end-of file was reached before getting all the
 	 *                necessary data.
-	 * 
+	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 * */
@@ -399,14 +399,14 @@ public final class BufferedRandomAccessFile
 	 * Reads an unsigned short (i.e., 16 bit) from the input. It is returned as
 	 * an <tt>int</tt> since Java does not have an unsigned short type. Prior to
 	 * reading, the input should be realigned at the byte level.
-	 * 
+	 *
 	 * @return The next byte-aligned unsigned short (16 bit) from the input, as
 	 *         an <tt>int</tt>.
-	 * 
+	 *
 	 * @exception java.io.EOFException
 	 *                If the end-of file was reached before getting all the
 	 *                necessary data.
-	 * 
+	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 * */
@@ -424,12 +424,12 @@ public final class BufferedRandomAccessFile
 		skipLF = false;
 		if ((off >= offset) && (off < (offset + byteBuffer.length)))
 		{
-			if (isReadOnly && isEOFInBuffer && off > offset + maxByte)
+			if (isReadOnly && isEOFInBuffer && off > offset + maxByte.get())
 			{
 				// We are seeking beyond EOF in read-only mode!
 				throw new EOFException();
 			}
-			pos = (int)(off - offset);
+			pos.set((int)(off - offset));
 		}
 		else
 		{
@@ -495,23 +495,23 @@ public final class BufferedRandomAccessFile
 		// As long as pos is less than the length of the buffer we can write
 		// to the buffer. If the position is after the buffer a new buffer is
 		// needed
-		if (pos < byteBuffer.length)
+		if (pos.get() < byteBuffer.length)
 		{
 			if (isReadOnly)
 			{
 				throw new IOException("File is read only");
 			}
-			byteBuffer[pos] = b;
-			if (pos >= maxByte)
+			byteBuffer[pos.get()] = b;
+			if (pos.get() >= maxByte.get())
 			{
-				maxByte = pos + 1;
+				maxByte.set(pos.get() + 1);
 			}
-			pos++;
+			pos.getAndIncrement();
 			byteBufferChanged = true;
 		}
 		else
 		{
-			readNewBuffer(offset + pos);
+			readNewBuffer(offset + pos.get());
 			write(b);
 		}
 	}
@@ -529,24 +529,24 @@ public final class BufferedRandomAccessFile
 		// As long as pos is less than the length of the buffer we can write
 		// to the buffer. If the position is after the buffer a new buffer is
 		// needed
-		if (pos < byteBuffer.length)
+		if (pos.get() < byteBuffer.length)
 		{
 			if (isReadOnly)
 			{
 				throw new IOException("File is read only");
 			}
-			byteBuffer[pos] = (byte)b;
-			if (pos >= maxByte)
+			byteBuffer[pos.get()] = (byte)b;
+			if (pos.get() >= maxByte.get())
 			{
-				maxByte = pos + 1;
-				length = offset + maxByte;
+				maxByte.set(pos.get() + 1);
+				length = offset + maxByte.get();
 			}
-			pos++;
+			pos.incrementAndGet();
 			byteBufferChanged = true;
 		}
 		else
 		{
-			readNewBuffer(offset + pos);
+			readNewBuffer(offset + pos.get());
 			write(b);
 		}
 	}
@@ -554,10 +554,10 @@ public final class BufferedRandomAccessFile
 	/**
 	 * Writes the IEEE double value <tt>v</tt> (i.e., 64 bits) to the output.
 	 * Prior to writing, the output should be realigned at the byte level.
-	 * 
+	 *
 	 * @param v
 	 *            The value to write to the output
-	 * 
+	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 * */
@@ -578,10 +578,10 @@ public final class BufferedRandomAccessFile
 	/**
 	 * Writes the IEEE float value <tt>v</tt> (i.e., 32 bits) to the output.
 	 * Prior to writing, the output should be realigned at the byte level.
-	 * 
+	 *
 	 * @param v
 	 *            The value to write to the output
-	 * 
+	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 * */
@@ -598,10 +598,10 @@ public final class BufferedRandomAccessFile
 	/**
 	 * Writes the int value of <tt>v</tt> (i.e., the 32 bits) to the output.
 	 * Prior to writing, the output should be realigned at the byte level.
-	 * 
+	 *
 	 * @param v
 	 *            The value to write to the output
-	 * 
+	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 * */
@@ -616,10 +616,10 @@ public final class BufferedRandomAccessFile
 	/**
 	 * Writes the long value of <tt>v</tt> (i.e., the 64 bits) to the output.
 	 * Prior to writing, the output should be realigned at the byte level.
-	 * 
+	 *
 	 * @param v
 	 *            The value to write to the output
-	 * 
+	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 * */
@@ -639,16 +639,16 @@ public final class BufferedRandomAccessFile
 	 * Writes the short value of <tt>v</tt> (i.e., 16 least significant bits) to
 	 * the output. Prior to writing, the output should be realigned at the byte
 	 * level.
-	 * 
+	 *
 	 * <P>
 	 * Signed or unsigned data can be written. To write a signed value just pass
 	 * the <tt>short</tt> value as an argument. To write unsigned data pass the
 	 * <tt>int</tt> value as an argument (it will be automatically casted, and
 	 * only the 16 least significant bits will be written).
-	 * 
+	 *
 	 * @param v
 	 *            The value to write to the output
-	 * 
+	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 * */
@@ -678,15 +678,15 @@ public final class BufferedRandomAccessFile
 
 		theFile.seek(offset);
 
-		maxByte = theFile.read(byteBuffer, 0, byteBuffer.length);
-		pos = 0;
+		maxByte.set(theFile.read(byteBuffer, 0, byteBuffer.length));
+		pos.set(0);
 
-		if (maxByte < byteBuffer.length)
+		if (maxByte.get() < byteBuffer.length)
 		{ // Not enough data in input file.
 			isEOFInBuffer = true;
-			if (maxByte == -1)
+			if (maxByte.get() == -1)
 			{
-				maxByte++;
+				maxByte.incrementAndGet();
 			}
 		}
 		else

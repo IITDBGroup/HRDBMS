@@ -1,20 +1,39 @@
 package com.exascale.optimizer;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.IdentityHashMap;
 import com.exascale.managers.HRDBMSWorker;
-import com.exascale.misc.AtomicDouble;
+import com.exascale.misc.BigDecimalReplacement;
 
 public final class SumOperator implements AggregateOperator, Serializable
 {
+	private static sun.misc.Unsafe unsafe;
+
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
+
 	private String input;
+	private String output;
+	private transient final MetaData meta;
 
-	private final String output;
-
-	private final MetaData meta;
 	private boolean isInt;
+
 	private int NUM_GROUPS = 16;
 
 	public SumOperator(String input, String output, MetaData meta, boolean isInt)
@@ -24,10 +43,16 @@ public final class SumOperator implements AggregateOperator, Serializable
 		this.meta = meta;
 		this.isInt = isInt;
 	}
-	
-	public void setInput(String col)
+
+	public static SumOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
 	{
-		input = col;
+		SumOperator value = (SumOperator)unsafe.allocateInstance(SumOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.input = OperatorUtils.readString(in, prev);
+		value.output = OperatorUtils.readString(in, prev);
+		value.NUM_GROUPS = OperatorUtils.readInt(in);
+		value.isInt = OperatorUtils.readBool(in);
+		return value;
 	}
 
 	@Override
@@ -36,11 +61,6 @@ public final class SumOperator implements AggregateOperator, Serializable
 		final SumOperator retval = new SumOperator(input, output, meta, isInt);
 		retval.NUM_GROUPS = NUM_GROUPS;
 		return retval;
-	}
-	
-	public void setIsInt(boolean isInt)
-	{
-		this.isInt = isInt;
 	}
 
 	@Override
@@ -81,9 +101,38 @@ public final class SumOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(56, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		OperatorUtils.writeString(input, out, prev);
+		OperatorUtils.writeString(output, out, prev);
+		OperatorUtils.writeInt(NUM_GROUPS, out);
+		OperatorUtils.writeBool(isInt, out);
+	}
+
+	@Override
+	public void setInput(String col)
+	{
+		input = col;
+	}
+
+	@Override
 	public void setInputColumn(String col)
 	{
 		input = col;
+	}
+
+	public void setIsInt(boolean isInt)
+	{
+		this.isInt = isInt;
 	}
 
 	@Override
@@ -96,7 +145,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 	{
 		// private final DiskBackedALOHashMap<AtomicDouble> results = new
 		// DiskBackedALOHashMap<AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
-		private final ConcurrentHashMap<ArrayList<Object>, AtomicDouble> results = new ConcurrentHashMap<ArrayList<Object>, AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16, 1.0f);
+		private final HashMap<ArrayList<Object>, Object> results = new HashMap<ArrayList<Object>, Object>();
 		private final HashMap<String, Integer> cols2Pos;
 		private int pos;
 
@@ -115,18 +164,19 @@ public final class SumOperator implements AggregateOperator, Serializable
 			}
 		}
 
-		public final void addToSum(AtomicDouble ad, double amount)
-		{
-			final AtomicDouble newSum = ad;
-			for (;;)
-			{
-				final double oldVal = newSum.get();
-				if (newSum.compareAndSet(oldVal, oldVal + amount))
-				{
-					return;
-				}
-			}
-		}
+		// public final void addToSum(AtomicBigDecimal ad, BigDecimalReplacement
+		// amount)
+		// {
+		// final AtomicBigDecimal newSum = ad;
+		// for (;;)
+		// {
+		// final BigDecimalReplacement oldVal = newSum.get();
+		// if (newSum.compareAndSet(oldVal, oldVal.add(amount)))
+		// {
+		// return;
+		// }
+		// }
+		// }
 
 		@Override
 		public void close()
@@ -139,13 +189,13 @@ public final class SumOperator implements AggregateOperator, Serializable
 		{
 			if (isInt)
 			{
-				return (long)results.get(keys).get();
+				return results.get(keys);
 			}
 
 			try
 			{
-				final AtomicDouble ad = results.get(keys);
-				return ad.get();
+				final BigDecimalReplacement ad = (BigDecimalReplacement)results.get(keys);
+				return ad.doubleValue();
 			}
 			catch (final Exception e)
 			{
@@ -183,49 +233,73 @@ public final class SumOperator implements AggregateOperator, Serializable
 				HRDBMSWorker.logger.error("Row is " + row);
 				throw e;
 			}
-			Double val;
-			if (o instanceof Integer)
+
+			if (!isInt)
 			{
-				val = new Double((Integer)o);
-			}
-			else if (o instanceof Long)
-			{
-				val = new Double((Long)o);
+				BigDecimalReplacement val;
+				if (o instanceof Integer)
+				{
+					val = new BigDecimalReplacement((Integer)o);
+				}
+				else if (o instanceof Long)
+				{
+					val = new BigDecimalReplacement((Long)o);
+				}
+				else
+				{
+					try
+					{
+						val = new BigDecimalReplacement((Double)o);
+					}
+					catch (Exception e)
+					{
+						HRDBMSWorker.logger.debug("Was expecting a numeric in position " + pos + " of " + row);
+						HRDBMSWorker.logger.debug("Cols2Pos is " + cols2Pos);
+						HRDBMSWorker.logger.debug("Input is " + input);
+						throw e;
+					}
+				}
+
+				// final AtomicBigDecimal ad =
+				// (AtomicBigDecimal)results.get(group);
+				synchronized (results)
+				{
+					BigDecimalReplacement ad = (BigDecimalReplacement)results.get(group);
+					if (ad != null)
+					{
+						ad.add(val);
+						return;
+					}
+					else
+					{
+						results.put(group, val);
+						return;
+					}
+				}
 			}
 			else
 			{
-				try
+				Long val;
+				if (o instanceof Integer)
 				{
-					val = (Double)o;
+					val = new Long((Integer)o);
 				}
-				catch(Exception e)
+				else
 				{
-					HRDBMSWorker.logger.debug("Was expecting a numeric in position " + pos + " of " + row);
-					HRDBMSWorker.logger.debug("Cols2Pos is " + cols2Pos);
-					HRDBMSWorker.logger.debug("Input is " + input);
-					throw e;
+					val = (Long)o;
 				}
-			}
 
-			final AtomicDouble ad = results.get(group);
-			if (ad != null)
-			{
-				try
+				synchronized (results)
 				{
-					addToSum(ad, val);
+					final Long ad = (Long)results.get(group);
+					if (ad != null)
+					{
+						results.put(group, ad + val);
+						return;
+					}
+
+					results.put(group, val);
 				}
-				catch (final Exception e)
-				{
-					HRDBMSWorker.logger.error("Error calling addAndGet() in SumOperator", e);
-					HRDBMSWorker.logger.error("ad = " + ad);
-					HRDBMSWorker.logger.error("val = " + val);
-					throw e;
-				}
-				return;
-			}
-			if (results.putIfAbsent(group, new AtomicDouble(val)) != null)
-			{
-				addToSum(results.get(group), val);
 			}
 		}
 	}
@@ -234,7 +308,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 	{
 		private final ArrayList<ArrayList<Object>> rows;
 		private final HashMap<String, Integer> cols2Pos;
-		private double result;
+		private BigDecimalReplacement result;
 
 		public SumThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos)
 		{
@@ -252,7 +326,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 		{
 			if (isInt)
 			{
-				return (long)result;
+				return (long)result.doubleValue();
 			}
 
 			return result;
@@ -262,7 +336,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 		public void run()
 		{
 			final int pos = cols2Pos.get(input);
-			result = 0;
+			result = new BigDecimalReplacement(0);
 
 			for (final Object orow : rows)
 			{
@@ -272,11 +346,11 @@ public final class SumOperator implements AggregateOperator, Serializable
 					final Object o = row.get(pos);
 					if (o instanceof Integer)
 					{
-						result += (Integer)o;
+						result.add(new BigDecimalReplacement((Integer)o));
 					}
 					else if (o instanceof Long)
 					{
-						result += (Long)o;
+						result.add(new BigDecimalReplacement((Long)o));
 					}
 					else
 					{
@@ -287,7 +361,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 				else
 				{
 					final Double o = (Double)row.get(pos);
-					result += o;
+					result.add(new BigDecimalReplacement(o));
 				}
 			}
 

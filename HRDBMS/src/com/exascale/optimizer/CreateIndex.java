@@ -4,11 +4,11 @@ import java.util.ArrayList;
 
 public class CreateIndex extends SQLStatement
 {
-	private TableName index;
-	private TableName table;
-	private ArrayList<IndexDef> cols;
-	private boolean unique;
-	
+	private final TableName index;
+	private final TableName table;
+	private final ArrayList<IndexDef> cols;
+	private final boolean unique;
+
 	public CreateIndex(TableName index, TableName table, ArrayList<IndexDef> cols, boolean unique)
 	{
 		this.index = index;
@@ -16,22 +16,22 @@ public class CreateIndex extends SQLStatement
 		this.cols = cols;
 		this.unique = unique;
 	}
-	
-	public TableName getIndex()
-	{
-		return index;
-	}
-	
-	public TableName getTable()
-	{
-		return table;
-	}
-	
+
 	public ArrayList<IndexDef> getCols()
 	{
 		return cols;
 	}
-	
+
+	public TableName getIndex()
+	{
+		return index;
+	}
+
+	public TableName getTable()
+	{
+		return table;
+	}
+
 	public boolean getUnique()
 	{
 		return unique;

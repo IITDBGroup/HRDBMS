@@ -1,41 +1,54 @@
 package com.exascale.optimizer;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.TreeMap;
-import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Transaction;
 
 public final class SelectOperator implements Operator, Cloneable, Serializable
 {
-	private final MetaData meta;
+	private static int HASH_THRESHOLD = 10;
+	private static sun.misc.Unsafe unsafe;
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
+	private transient final MetaData meta;
 	private ArrayList<Filter> filters;
 	private Operator child = null;
 	private Operator parent;
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
 	private TreeMap<Integer, String> pos2Col;
-	private AtomicLong passed = new AtomicLong(0);
-	private AtomicLong total = new AtomicLong(0);
+	// private AtomicLong passed = new AtomicLong(0);
+	// private AtomicLong total = new AtomicLong(0);
 	private ArrayList<String> references = new ArrayList<String>();
 	private int node;
-	private transient Plan plan;
 	private boolean hash = false;
 	boolean always = false;
+
 	private HashSet<Object> hashSet;
+
 	private String hashCol = null;
+
 	private int hashPos;
-	
-	private static int HASH_THRESHOLD = 10;
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
-	}
 
 	public SelectOperator(ArrayList<Filter> filters, MetaData meta)
 	{
@@ -49,7 +62,7 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 		boolean allEqual = true;
 		boolean leftAllSameCol = true;
 		boolean rightAllSameCol = true;
-	
+
 		for (final Filter filter : filters)
 		{
 			if (filter.leftIsColumn() && !references.contains(filter.leftColumn()))
@@ -61,7 +74,7 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 			{
 				references.add(filter.rightColumn());
 			}
-			
+
 			if (filter.leftIsColumn())
 			{
 				leftIsAllLiteral = false;
@@ -81,7 +94,7 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 			{
 				leftIsAllCol = false;
 			}
-			
+
 			if (filter.rightIsColumn())
 			{
 				rightIsAllLiteral = false;
@@ -101,18 +114,18 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 			{
 				rightIsAllCol = false;
 			}
-			
+
 			if (!filter.op().equals("E"))
 			{
 				allEqual = false;
 			}
-			
+
 			if (filter.alwaysTrue())
 			{
 				always = true;
 			}
 		}
-		
+
 		if (!always && filters.size() > HASH_THRESHOLD && allEqual && leftIsAllCol && rightIsAllLiteral && leftAllSameCol)
 		{
 			hash = true;
@@ -124,7 +137,7 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 				{
 					obj = new Double((Long)obj);
 				}
-				
+
 				hashSet.add(obj);
 			}
 		}
@@ -139,7 +152,7 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 				{
 					obj = new Double((Long)obj);
 				}
-				
+
 				hashSet.add(obj);
 			}
 		}
@@ -162,6 +175,26 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 		}
 	}
 
+	public static SelectOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		SelectOperator value = (SelectOperator)unsafe.allocateInstance(SelectOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.filters = OperatorUtils.deserializeALF(in, prev);
+		value.child = OperatorUtils.deserializeOperator(in, prev);
+		value.parent = OperatorUtils.deserializeOperator(in, prev);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.references = OperatorUtils.deserializeALS(in, prev);
+		value.node = OperatorUtils.readInt(in);
+		value.hash = OperatorUtils.readBool(in);
+		value.always = OperatorUtils.readBool(in);
+		value.hashSet = OperatorUtils.deserializeHSO(in, prev);
+		value.hashCol = OperatorUtils.readString(in, prev);
+		value.hashPos = OperatorUtils.readInt(in);
+		return value;
+	}
+
 	@Override
 	public void add(Operator op) throws Exception
 	{
@@ -172,7 +205,7 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 			cols2Types = child.getCols2Types();
 			cols2Pos = child.getCols2Pos();
 			pos2Col = child.getPos2Col();
-			
+
 			if (hash)
 			{
 				hashPos = cols2Pos.get(hashCol);
@@ -264,14 +297,14 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 		return references;
 	}
 
-	public double likelihood(Transaction tx) throws Exception
-	{
-		return meta.likelihood(new ArrayList<Filter>(filters), tx, this);
-	}
-
 	public double likelihood(RootOperator op, Transaction tx) throws Exception
 	{
 		return meta.likelihood(new ArrayList<Filter>(filters), op, tx, this);
+	}
+
+	public double likelihood(Transaction tx) throws Exception
+	{
+		return meta.likelihood(new ArrayList<Filter>(filters), tx, this);
 	}
 
 	// @?Parallel
@@ -279,20 +312,20 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 	public Object next(Operator op) throws Exception
 	{
 		Object o = child.next(this);
-		total.getAndIncrement();
+		// total.getAndIncrement();
 		while (!(o instanceof DataEndMarker))
 		{
 			if (o instanceof Exception)
 			{
 				throw (Exception)o;
 			}
-			
+
 			if (always)
 			{
-				passed.getAndIncrement();
+				// passed.getAndIncrement();
 				return o;
 			}
-			
+
 			if (hash)
 			{
 				ArrayList<Object> row = (ArrayList<Object>)o;
@@ -301,10 +334,10 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 				{
 					obj = new Double((Long)obj);
 				}
-				
+
 				if (hashSet.contains(obj))
 				{
-					passed.getAndIncrement();
+					// passed.getAndIncrement();
 					return o;
 				}
 			}
@@ -314,14 +347,14 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 				{
 					if (filter.passes((ArrayList<Object>)o, cols2Pos))
 					{
-						passed.getAndIncrement();
+						// passed.getAndIncrement();
 						return o;
 					}
 				}
 			}
 
 			o = child.next(this);
-			total.getAndIncrement();
+			// total.getAndIncrement();
 		}
 
 		// System.out.println("Select operator returned " + passed + "/" + total
@@ -379,8 +412,35 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 	public void reset() throws Exception
 	{
 		child.reset();
-		passed = new AtomicLong(0);
-		total = new AtomicLong(0);
+		// passed = new AtomicLong(0);
+		// total = new AtomicLong(0);
+	}
+
+	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(41, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		OperatorUtils.serializeALF(filters, out, prev);
+		child.serialize(out, prev);
+		parent.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.serializeALS(references, out, prev);
+		OperatorUtils.writeInt(node, out);
+		OperatorUtils.writeBool(hash, out);
+		OperatorUtils.writeBool(always, out);
+		OperatorUtils.serializeHSO(hashSet, out, prev);
+		OperatorUtils.writeString(hashCol, out, prev);
+		OperatorUtils.writeInt(hashPos, out);
 	}
 
 	@Override
@@ -392,6 +452,11 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 	public void setNode(int node)
 	{
 		this.node = node;
+	}
+
+	@Override
+	public void setPlan(Plan plan)
+	{
 	}
 
 	@Override

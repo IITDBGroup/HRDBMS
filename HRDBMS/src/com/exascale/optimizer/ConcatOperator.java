@@ -1,21 +1,32 @@
 package com.exascale.optimizer;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
-import java.text.SimpleDateFormat;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
-import java.util.Date;
-import java.util.GregorianCalendar;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.TreeMap;
-import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
-import com.exascale.misc.DateParser;
-import com.exascale.misc.MyDate;
-import com.exascale.misc.MySimpleDateFormat;
 import com.exascale.tables.Plan;
 
 public final class ConcatOperator implements Operator, Serializable
 {
+	private static sun.misc.Unsafe unsafe;
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
 	private Operator child;
 	private Operator parent;
 	private HashMap<String, String> cols2Types;
@@ -23,17 +34,13 @@ public final class ConcatOperator implements Operator, Serializable
 	private TreeMap<Integer, String> pos2Col;
 	private String col1;
 	private String col2;
-	private final String name;
-	private final MetaData meta;
+	private String name;
+	private transient final MetaData meta;
 	private int node;
-	private transient Plan plan;
+
 	private Integer colPos1;
+
 	private Integer colPos2;
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
-	}
 
 	public ConcatOperator(String col1, String col2, String name, MetaData meta)
 	{
@@ -41,6 +48,24 @@ public final class ConcatOperator implements Operator, Serializable
 		this.col2 = col2;
 		this.meta = meta;
 		this.name = name;
+	}
+
+	public static ConcatOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		ConcatOperator value = (ConcatOperator)unsafe.allocateInstance(ConcatOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.child = OperatorUtils.deserializeOperator(in, prev);
+		value.parent = OperatorUtils.deserializeOperator(in, prev);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.col1 = OperatorUtils.readString(in, prev);
+		value.col2 = OperatorUtils.readString(in, prev);
+		value.name = OperatorUtils.readString(in, prev);
+		value.node = OperatorUtils.readInt(in);
+		value.colPos1 = OperatorUtils.readIntClass(in, prev);
+		value.colPos2 = OperatorUtils.readIntClass(in, prev);
+		return value;
 	}
 
 	@Override
@@ -72,14 +97,14 @@ public final class ConcatOperator implements Operator, Serializable
 							{
 								col3 = col3.substring(col3.indexOf('.') + 1);
 							}
-							
+
 							if (col3.equals(col1))
 							{
 								col1 = orig;
 								count++;
 								colPos1 = cols2Pos.get(orig);
 							}
-							
+
 							if (count > 1)
 							{
 								throw new Exception("Ambiguous column: " + col1);
@@ -101,14 +126,14 @@ public final class ConcatOperator implements Operator, Serializable
 							{
 								col3 = col3.substring(col3.indexOf('.') + 1);
 							}
-							
+
 							if (col3.equals(col2))
 							{
 								col2 = orig;
 								count++;
 								colPos2 = cols2Pos.get(orig);
 							}
-							
+
 							if (count > 1)
 							{
 								throw new Exception("Ambiguous column: " + col2);
@@ -207,7 +232,7 @@ public final class ConcatOperator implements Operator, Serializable
 		{
 			return o;
 		}
-		
+
 		if (o instanceof Exception)
 		{
 			throw (Exception)o;
@@ -271,6 +296,31 @@ public final class ConcatOperator implements Operator, Serializable
 	}
 
 	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(21, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		child.serialize(out, prev);
+		parent.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.writeString(col1, out, prev);
+		OperatorUtils.writeString(col2, out, prev);
+		OperatorUtils.writeString(name, out, prev);
+		OperatorUtils.writeInt(node, out);
+		OperatorUtils.writeIntClass(colPos1, out, prev);
+		OperatorUtils.writeIntClass(colPos2, out, prev);
+	}
+
+	@Override
 	public void setChildPos(int pos)
 	{
 	}
@@ -279,6 +329,11 @@ public final class ConcatOperator implements Operator, Serializable
 	public void setNode(int node)
 	{
 		this.node = node;
+	}
+
+	@Override
+	public void setPlan(Plan plan)
+	{
 	}
 
 	@Override

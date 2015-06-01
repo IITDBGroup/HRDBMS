@@ -1,15 +1,20 @@
 package com.exascale.tables;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.TreeSet;
 import com.exascale.exceptions.LockAbortException;
 import com.exascale.exceptions.RecNumOverflowException;
 import com.exascale.filesystem.Block;
@@ -30,6 +35,29 @@ public class Schema
 
 	public static final int HEADER_SIZE = 4096;
 
+	private static Charset cs = StandardCharsets.UTF_8;
+
+	private static sun.misc.Unsafe unsafe;
+
+	private static long offset;
+
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+			final Field fieldToUpdate = String.class.getDeclaredField("value");
+			// get unsafe offset to this field
+			offset = unsafe.objectFieldOffset(fieldToUpdate);
+		}
+		catch (final Exception e)
+		{
+			unsafe = null;
+		}
+	}
+
 	private final Map<Integer, DataType> colTypes;
 
 	private int nextRecNum;
@@ -47,13 +75,9 @@ public class Schema
 	private int nullArrayOff;
 
 	private int colIDListOff;
-
 	private int rowIDListOff;
-
 	private int offArrayOff;
-
 	private FreeSpace[] freeSpace;
-
 	private int[] colIDs;
 	private int colIDListSize;
 	private int rowIDListSize;
@@ -63,16 +87,214 @@ public class Schema
 	private int[][] offsetArray;
 	private int offsetArrayRows;
 	private Page p;
-	private Map<Integer, Integer> colIDToIndex = new HashMap<Integer, Integer>();
-	private Map<RID, Integer> rowIDToIndex = new HashMap<RID, Integer>();
+	private final Map<Integer, Integer> colIDToIndex = new HashMap<Integer, Integer>();
+	private Map<RID, Integer> rowIDToIndex = null;
 	private Transaction tx;
 	private volatile HeaderPage myHP;
 	private volatile int myDev = -1;
 	private volatile int myNode = -1;
+	private boolean rowIDsSet = false;
+	private final CharsetDecoder cd = cs.newDecoder();
+	private int nodeNumber = -2;
+	private int deviceNumber = -2;
+
+	private TreeSet<RID> copy = null;
 
 	public Schema(Map<Integer, DataType> map)
 	{
 		colTypes = map;
+	}
+
+	public Schema(Map<Integer, DataType> map, int nodeNumber, int deviceNumber)
+	{
+		colTypes = map;
+		if (nodeNumber < 0)
+		{
+			nodeNumber = -1;
+		}
+		this.nodeNumber = nodeNumber;
+		this.deviceNumber = deviceNumber;
+	}
+
+	public void close() throws Exception
+	{
+		if (freeSpaceListEntries == -1)
+		{
+			freeSpaceListEntries = p.getInt(37);
+			int pos = 41;
+			int i = 0;
+			try
+			{
+				freeSpace = new FreeSpace[freeSpaceListEntries];
+			}
+			catch (Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				HRDBMSWorker.logger.error("Page = " + p.block().fileName() + ":" + p.block().number());
+				HRDBMSWorker.logger.error("freeSpaceListEntries = " + freeSpaceListEntries);
+			}
+
+			while (i < freeSpaceListEntries)
+			{
+				final int start = p.getInt(pos);
+				final int end = p.getInt(pos + 4);
+				freeSpace[i] = new FreeSpace(start, end);
+				i++;
+				pos += 8;
+			}
+		}
+		final byte[] after = new byte[48 + (rowIDListSize << 4) + (freeSpaceListEntries << 3) + (colIDListSize << 2) + (5 * rowIDListSize * colIDListSize)];
+
+		// copy(after,0,
+		// ByteBuffer.allocate(4).putInt(this.nextRecNum).array()); //nextRecNum
+		ByteBuffer x = ByteBuffer.allocate(4);
+		x.position(0);
+		if (nextRecNum == -1)
+		{
+			nextRecNum = p.getInt(1);
+		}
+		x.putInt(this.nextRecNum);
+		System.arraycopy(x.array(), 0, after, 0, 4);
+		// copy(after,4, ByteBuffer.allocate(4).putInt(before.length -
+		// 1).array()); //headEnd
+		x.position(0);
+		x.putInt(after.length - 1);
+		System.arraycopy(x.array(), 0, after, 4, 4);
+		// copy(after,8, ByteBuffer.allocate(4).putInt(this.dataStart).array());
+		// //dataStart
+		x.position(0);
+		if (dataStart == -1)
+		{
+			dataStart = p.getInt(9);
+		}
+		x.putInt(this.dataStart);
+		System.arraycopy(x.array(), 0, after, 8, 4);
+		// copy(after,12, ByteBuffer.allocate(8).putLong(this.modTime).array());
+		// //modTime
+		if (modTime == -1)
+		{
+			modTime = p.getLong(13);
+		}
+		System.arraycopy(ByteBuffer.allocate(8).putLong(this.modTime).array(), 0, after, 12, 8);
+		// copy(after,32,
+		// ByteBuffer.allocate(4).putInt(freeSpaceListEntries).array());
+		x.position(0);
+		x.putInt(freeSpaceListEntries);
+		System.arraycopy(x.array(), 0, after, 36, 4);
+
+		int i = 40;
+		for (final FreeSpace fs : freeSpace)
+		{
+			// copy(after, i,
+			// ByteBuffer.allocate(4).putInt(fs.getStart()).array());
+			x.position(0);
+			x.putInt(fs.getStart());
+			System.arraycopy(x.array(), 0, after, i, 4);
+			// copy(after, i+4,
+			// ByteBuffer.allocate(4).putInt(fs.getEnd()).array());
+			x.position(0);
+			x.putInt(fs.getEnd());
+			System.arraycopy(x.array(), 0, after, i + 4, 4);
+			i += 8;
+		}
+
+		// copy(after, 20, ByteBuffer.allocate(4).putInt(i).array());
+		x.position(0);
+		x.putInt(i + 1);
+		System.arraycopy(x.array(), 0, after, 24, 4);
+		// copy(after, i, ByteBuffer.allocate(4).putInt(colIDListSize).array());
+		x.position(0);
+		x.putInt(colIDListSize);
+		System.arraycopy(x.array(), 0, after, i, 4);
+		i += 4;
+
+		for (final int id : colIDs)
+		{
+			// copy(after, i, ByteBuffer.allocate(4).putInt(id).array());
+			x.position(0);
+			x.putInt(id);
+			System.arraycopy(x.array(), 0, after, i, 4);
+			i += 4;
+		}
+
+		// copy(after, 24, ByteBuffer.allocate(4).putInt(i).array());
+		x.position(0);
+		x.putInt(i + 1);
+		System.arraycopy(x.array(), 0, after, 28, 4);
+		// copy(after, i, ByteBuffer.allocate(4).putInt(rowIDListSize).array());
+		x.position(0);
+		x.putInt(rowIDListSize);
+		System.arraycopy(x.array(), 0, after, i, 4);
+		i += 4;
+
+		int a = 0;
+		if (!rowIDsSet)
+		{
+			setRowIDs();
+		}
+		for (final RID id : rowIDs)
+		{
+			if (a >= rowIDListSize)
+			{
+				break;
+			}
+			// copy(after, i,
+			// ByteBuffer.allocate(4).putInt(id.getNode()).array());
+			x.position(0);
+			x.putInt(id.getNode());
+			System.arraycopy(x.array(), 0, after, i, 4);
+			// copy(after, i+4,
+			// ByteBuffer.allocate(4).putInt(id.getDevice()).array());
+			x.position(0);
+			x.putInt(id.getDevice());
+			System.arraycopy(x.array(), 0, after, i + 4, 4);
+			// copy(after, i+8,
+			// ByteBuffer.allocate(4).putInt(id.getBlockNum()).array());
+			x.position(0);
+			x.putInt(id.getBlockNum());
+			System.arraycopy(x.array(), 0, after, i + 8, 4);
+			// copy(after, i+12,
+			// ByteBuffer.allocate(4).putInt(id.getRecNum()).array());
+			x.position(0);
+			x.putInt(id.getRecNum());
+			System.arraycopy(x.array(), 0, after, i + 12, 4);
+			i += 16;
+		}
+
+		x.position(0);
+		x.putInt(i + 1);
+		System.arraycopy(x.array(), 0, after, 20, 4);
+
+		int j = 0;
+		while (j < nullArrayRows)
+		{
+			byte[] row = nullArray[j];
+			System.arraycopy(row, 0, after, i, row.length);
+			i += row.length;
+			j++;
+		}
+
+		// copy(after, 28, ByteBuffer.allocate(4).putInt(i).array());
+		x.position(0);
+		x.putInt(i + 1);
+		System.arraycopy(x.array(), 0, after, 32, 4);
+
+		int k = 0;
+		while (k < offsetArrayRows)
+		{
+			int[] row = offsetArray[k];
+			ByteBuffer temp = ByteBuffer.allocate(row.length << 2);
+			temp.asIntBuffer().put(row);
+			System.arraycopy(temp.array(), 0, after, i, 4 * row.length);
+			i += (4 * row.length);
+			k++;
+		}
+
+		long lsn = LogManager.getLSN();
+		p.write(1, after, tx.number(), lsn);
+
+		final int newMax = getSizeLargestFS();
+		updateFSInHeaderNoLog(newMax);
 	}
 
 	public ColIterator colIterator()
@@ -95,21 +317,40 @@ public class Schema
 		byte[] after;
 		int off;
 		int index = -1;
+		if (rowIDToIndex == null)
+		{
+			rowIDToIndex = new HashMap<RID, Integer>();
+			int i = 0;
+			if (!rowIDsSet)
+			{
+				setRowIDs();
+			}
+			for (final RID rid : rowIDs)
+			{
+				if (i >= rowIDListSize)
+				{
+					break;
+				}
+				rowIDToIndex.put(rid, i);
+				i++;
+			}
+		}
 		try
 		{
 			index = rowIDToIndex.get(id);
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
 			HRDBMSWorker.logger.debug("Looking for rid = " + id + " in " + rowIDToIndex, e);
 			throw e;
 		}
-		off = offArrayOff + index * colIDListSize * 4;
-		before = new byte[colIDListSize * 4];
+		off = offArrayOff + index * (colIDListSize << 2);
+		before = new byte[colIDListSize << 2];
 		p.get(off, before);
-		after = new byte[colIDListSize * 4];
+		after = new byte[colIDListSize << 2];
 		int i = 0;
-		while (i < after.length)
+		final int l1 = after.length;
+		while (i < l1)
 		{
 			after[i] = (byte)0xFF;
 			i++;
@@ -135,7 +376,7 @@ public class Schema
 		rec = tx.delete(before, after, off, p.block());
 		p.write(off, after, tx.number(), rec.lsn());
 	}
-	
+
 	public void deleteRowNoLog(RID id) throws LockAbortException, Exception
 	{
 		final int level = tx.getIsolationLevel();
@@ -149,11 +390,30 @@ public class Schema
 		LockManager.xLock(p.block(), tx.number());
 		byte[] after;
 		int off;
+		if (rowIDToIndex == null)
+		{
+			rowIDToIndex = new HashMap<RID, Integer>();
+			int i = 0;
+			if (!rowIDsSet)
+			{
+				setRowIDs();
+			}
+			for (final RID rid : rowIDs)
+			{
+				if (i >= rowIDListSize)
+				{
+					break;
+				}
+				rowIDToIndex.put(rid, i);
+				i++;
+			}
+		}
 		final int index = rowIDToIndex.get(id);
-		off = offArrayOff + index * colIDListSize * 4;
-		after = new byte[colIDListSize * 4];
+		off = offArrayOff + index * (colIDListSize << 2);
+		after = new byte[colIDListSize << 2];
 		int i = 0;
-		while (i < after.length)
+		final int l2 = after.length;
+		while (i < l2)
 		{
 			after[i] = (byte)0xFF;
 			i++;
@@ -270,15 +530,28 @@ public class Schema
 		return null;
 	}
 
-	public RID[] getRIDS()
-	{
-		return rowIDs;
-	}
-
 	public Row getRow(RID id)
 	{
 		try
 		{
+			if (rowIDToIndex == null)
+			{
+				rowIDToIndex = new HashMap<RID, Integer>();
+				int i = 0;
+				if (!rowIDsSet)
+				{
+					setRowIDs();
+				}
+				for (final RID rid : rowIDs)
+				{
+					if (i >= rowIDListSize)
+					{
+						break;
+					}
+					rowIDToIndex.put(rid, i);
+					i++;
+				}
+			}
 			Row row = new Row(rowIDToIndex.get(id));
 			return row;
 		}
@@ -313,8 +586,30 @@ public class Schema
 		final Integer off = hasEnoughSpace(headerGrowthPerRow(), length);
 		if (off != null)
 		{
-			final int node = getNodeNumber(); // from 1st header page
-			final int dev = getDeviceNumber(); // from 1st header page
+			int node;
+			if (nodeNumber == -2)
+			{
+				node = getNodeNumber(); // from 1st header page
+			}
+			else
+			{
+				node = nodeNumber;
+			}
+
+			int dev;
+			if (deviceNumber == -2)
+			{
+				dev = getDeviceNumber(); // from 1st header page
+			}
+			else
+			{
+				dev = deviceNumber;
+			}
+
+			if (nextRecNum == -1)
+			{
+				nextRecNum = p.getInt(1);
+			}
 			final RID rid = new RID(node, dev, p.block().number(), nextRecNum);
 			final byte[] after = new byte[length];
 			int i = 0;
@@ -328,18 +623,19 @@ public class Schema
 			final byte[] before = new byte[length];
 			p.get(off, before);
 			final LogRec rec = tx.insert(before, after, off, p.block()); // write
-																			// log
-																			// rec
+			// log
+			// rec
 			p.write(off, after, tx.number(), rec.lsn());
+
 			updateHeader(rid, vals, nextRecNum, off, length); // update
-																// nextRecNum,
-																// freeSpace,
-																// nullArray,
-																// rowIDList,
-																// and
-																// offsetArray
-																// internal and
-																// external
+			// nextRecNum,
+			// freeSpace,
+			// nullArray,
+			// rowIDList,
+			// and
+			// offsetArray
+			// internal and
+			// external
 			return rid;
 		}
 		else
@@ -350,7 +646,7 @@ public class Schema
 			{
 				final Block b = new Block(p.block().fileName(), blockNum);
 				tx.requestPage(b);
-				final Schema newPage = new Schema(this.colTypes);
+				final Schema newPage = new Schema(this.colTypes, nodeNumber, deviceNumber);
 
 				level = tx.getIsolationLevel();
 				if (level == Transaction.ISOLATION_CS || level == Transaction.ISOLATION_UR)
@@ -370,13 +666,15 @@ public class Schema
 					return newPage.insertRow(vals);
 				}
 
-				blockNum = findPage(blockNum, length + headerGrowthPerRow()); // find blocks after
-														// this num
+				blockNum = findPage(blockNum, length + headerGrowthPerRow()); // find
+				// blocks
+				// after
+				// this num
 			}
 
 			final Block b = addNewBlock(p.block().fileName(), colIDs);
 			tx.requestPage(b);
-			final Schema newPage = new Schema(this.colTypes);
+			final Schema newPage = new Schema(this.colTypes, nodeNumber, deviceNumber);
 			level = tx.getIsolationLevel();
 			if (level == Transaction.ISOLATION_CS || level == Transaction.ISOLATION_UR)
 			{
@@ -392,7 +690,7 @@ public class Schema
 			return newPage.insertRow(vals);
 		}
 	}
-	
+
 	public RID insertRowAppend(FieldValue[] vals) throws LockAbortException, UnsupportedEncodingException, IOException, RecNumOverflowException, Exception
 	{
 		int length = 0;
@@ -414,8 +712,30 @@ public class Schema
 		final Integer off = hasEnoughSpace(headerGrowthPerRow(), length);
 		if (off != null)
 		{
-			final int node = getNodeNumber(); // from 1st header page
-			final int dev = getDeviceNumber(); // from 1st header page
+			int node;
+			if (nodeNumber == -2)
+			{
+				node = getNodeNumber(); // from 1st header page
+			}
+			else
+			{
+				node = nodeNumber;
+			}
+
+			int dev;
+			if (deviceNumber == -2)
+			{
+				dev = getDeviceNumber(); // from 1st header page
+			}
+			else
+			{
+				dev = deviceNumber;
+			}
+
+			if (nextRecNum == -1)
+			{
+				nextRecNum = p.getInt(1);
+			}
 			final RID rid = new RID(node, dev, p.block().number(), nextRecNum);
 			final byte[] after = new byte[length];
 			int i = 0;
@@ -429,21 +749,22 @@ public class Schema
 			long lsn = LogManager.getLSN();
 			p.write(off, after, tx.number(), lsn);
 			updateHeaderNoLog(rid, vals, nextRecNum, off, length); // update
-																// nextRecNum,
-																// freeSpace,
-																// nullArray,
-																// rowIDList,
-																// and
-																// offsetArray
-																// internal and
-																// external
+			// nextRecNum,
+			// freeSpace,
+			// nullArray,
+			// rowIDList,
+			// and
+			// offsetArray
+			// internal
+			// and
+			// external
 			return rid;
 		}
 		else
 		{
 			final Block b = addNewBlockNoLog(p.block().fileName(), colIDs);
 			tx.requestPage(b);
-			final Schema newPage = new Schema(this.colTypes);
+			final Schema newPage = new Schema(this.colTypes, nodeNumber, deviceNumber);
 			level = tx.getIsolationLevel();
 			if (level == Transaction.ISOLATION_CS || level == Transaction.ISOLATION_UR)
 			{
@@ -480,7 +801,8 @@ public class Schema
 
 		LockManager.xLock(p.block(), tx.number());
 
-		while (count < vals.length)
+		final int vLen = vals.length;
+		while (count < vLen)
 		{
 			final int length = vals[count].size();
 
@@ -499,7 +821,7 @@ public class Schema
 				{
 					final Block b = new Block(p.block().fileName(), blockNum);
 					tx.requestPage(b);
-					final Schema newPage = new Schema(this.colTypes);
+					final Schema newPage = new Schema(this.colTypes, nodeNumber, deviceNumber);
 					tx.read(b, newPage);
 					LockManager.xLock(b, tx.number());
 
@@ -511,17 +833,17 @@ public class Schema
 					}
 
 					blockNum = findPage(blockNum, length + headerGrowthPerRow(), count, 0); // find
-																		// blocks
-																		// before
-																		// this
-																		// num
+					// blocks
+					// before
+					// this
+					// num
 				}
 
 				final int[] cols = new int[1];
 				cols[0] = count;
 				final Block b = addNewBlock(p.block().fileName(), cols);
 				tx.requestPage(b);
-				final Schema newPage = new Schema(this.colTypes);
+				final Schema newPage = new Schema(this.colTypes, nodeNumber, deviceNumber);
 				tx.read(b, newPage);
 
 				final FieldValue[] value = new FieldValue[1];
@@ -542,48 +864,58 @@ public class Schema
 
 	public void read(Transaction tx, Page p) throws Exception
 	{
+		rowIDsSet = false;
 		myHP = null;
 		myDev = -1;
 		myNode = -1;
 		this.p = p;
 		this.tx = tx;
+		nextRecNum = -1;
+		headEnd = -1;
+		dataStart = -1;
+		modTime = -1;
+		freeSpaceListEntries = -1;
+		freeSpace = null;
 
 		blockType = p.get(0);
-		nextRecNum = p.getInt(1);
-		headEnd = p.getInt(5);
-		dataStart = p.getInt(9);
-		modTime = p.getLong(13);
+		// nextRecNum = p.getInt(1);
+		// headEnd = p.getInt(5);
+		// dataStart = p.getInt(9);
+		// modTime = p.getLong(13);
 		nullArrayOff = p.getInt(21);
 		colIDListOff = p.getInt(25);
 		rowIDListOff = p.getInt(29);
 		offArrayOff = p.getInt(33);
 
-		freeSpaceListEntries = p.getInt(37);
-		int pos = 41;
-		int i = 0;
-		try
-		{
-			freeSpace = new FreeSpace[freeSpaceListEntries];
-		}
-		catch (Exception e)
-		{
-			HRDBMSWorker.logger.error("", e);
-			HRDBMSWorker.logger.error("Page = " + p.block().fileName() + ":" + p.block().number());
-			HRDBMSWorker.logger.error("freeSpaceListEntries = " + freeSpaceListEntries);
-		}
+		// freeSpaceListEntries = p.getInt(37);
+		// int pos = 41;
+		// int i = 0;
+		// try
+		// {
+		// freeSpace = new FreeSpace[freeSpaceListEntries];
+		// }
+		// catch (Exception e)
+		// {
+		// HRDBMSWorker.logger.error("", e);
+		// HRDBMSWorker.logger.error("Page = " + p.block().fileName() + ":" +
+		// p.block().number());
+		// HRDBMSWorker.logger.error("freeSpaceListEntries = " +
+		// freeSpaceListEntries);
+		// }
 
-		while (i < freeSpaceListEntries)
-		{
-			final int start = p.getInt(pos);
-			final int end = p.getInt(pos + 4);
-			freeSpace[i] = new FreeSpace(start, end);
-			i++;
-			pos += 8;
-		}
+		// while (i < freeSpaceListEntries)
+		// {
+		// final int start = p.getInt(pos);
+		// final int end = p.getInt(pos + 4);
+		// freeSpace[i] = new FreeSpace(start, end);
+		// i++;
+		// pos += 8;
+		// }
 
+		int pos = colIDListOff;
 		colIDListSize = p.getInt(pos);
 		pos += 4;
-		i = 0;
+		int i = 0;
 		colIDs = new int[colIDListSize];
 
 		p.get(pos, colIDs);
@@ -603,33 +935,29 @@ public class Schema
 
 		rowIDListSize = p.getInt(pos);
 		pos += 4;
-		i = 0;
-		rowIDs = new RID[rowIDListSize];
-		while (i < rowIDListSize)
-		{
-			final int node = p.getInt(pos);
-			final int dev = p.getInt(pos + 4);
-			final int block = p.getInt(pos + 8);
-			final int rec = p.getInt(pos + 12);
-			rowIDs[i] = new RID(node, dev, block, rec);
-			i++;
-			pos += 16;
-		}
+		pos += (16 * rowIDListSize);
 
-		i = 0;
-		for (final RID rid : rowIDs)
-		{
-			rowIDToIndex.put(rid, i);
-			i++;
-		}
+		// i = 0;
+		// for (final RID rid : rowIDs)
+		// {
+		// rowIDToIndex.put(rid, i);
+		// i++;
+		// }
+		rowIDToIndex = null;
 
 		int y = 1;
 		while (y * ROWS_TO_ALLOCATE < rowIDListSize)
 		{
 			y++;
 		}
-		
-		nullArray = new byte[y * ROWS_TO_ALLOCATE][colIDListSize];
+
+		if (nullArray != null && nullArray.length >= (y * ROWS_TO_ALLOCATE))
+		{
+		}
+		else
+		{
+			nullArray = new byte[y * ROWS_TO_ALLOCATE][colIDListSize];
+		}
 		nullArrayRows = rowIDListSize;
 		int row = 0;
 		while (row < rowIDListSize)
@@ -639,7 +967,13 @@ public class Schema
 			row++;
 		}
 
-		offsetArray = new int[y * ROWS_TO_ALLOCATE][colIDListSize];
+		if (offsetArray != null && offsetArray.length >= (y * ROWS_TO_ALLOCATE))
+		{
+		}
+		else
+		{
+			offsetArray = new int[y * ROWS_TO_ALLOCATE][colIDListSize];
+		}
 		offsetArrayRows = rowIDListSize;
 		row = 0;
 		while (row < rowIDListSize)
@@ -719,7 +1053,7 @@ public class Schema
 			{
 				final Block b = new Block(p.block().fileName(), blockNum);
 				tx.requestPage(b);
-				final Schema newPage = new Schema(this.colTypes);
+				final Schema newPage = new Schema(this.colTypes, nodeNumber, deviceNumber);
 				final int level = tx.getIsolationLevel();
 				if (level == Transaction.ISOLATION_CS || level == Transaction.ISOLATION_UR)
 				{
@@ -742,15 +1076,15 @@ public class Schema
 				}
 
 				blockNum = findPage(blockNum, length + headerGrowthPerRow(), colIDs[0], 0); // find
-																		// blocks
-																		// after
-																		// this
-																		// num
+				// blocks
+				// after
+				// this
+				// num
 			}
 
 			final Block b = addNewBlock(p.block().fileName(), colIDs);
 			tx.requestPage(b);
-			final Schema newPage = new Schema(this.colTypes);
+			final Schema newPage = new Schema(this.colTypes, nodeNumber, deviceNumber);
 
 			final int level = tx.getIsolationLevel();
 			if (level == Transaction.ISOLATION_CS || level == Transaction.ISOLATION_UR)
@@ -836,7 +1170,7 @@ public class Schema
 		addNewBlockToHeader(newBlockNum, colIDs[0]);
 		return bl;
 	}
-	
+
 	private Block addNewBlockNoLog(String fn, int[] colIDs) throws IOException, LockAbortException, Exception
 	{
 		final ByteBuffer oldBuff = ByteBuffer.allocate(Page.BLOCK_SIZE);
@@ -902,19 +1236,19 @@ public class Schema
 		int entryNum;
 		if (blockType == TYPE_ROW)
 		{
-			pageNum = (newBlockNum + 2) / (Page.BLOCK_SIZE / 4);
-			entryNum = (newBlockNum + 2) % (Page.BLOCK_SIZE / 4);
+			pageNum = (newBlockNum + 2) / (Page.BLOCK_SIZE >> 2);
+			entryNum = (newBlockNum + 2) & ((Page.BLOCK_SIZE >> 2) - 1);
 		}
 		else
 		{
-			pageNum = (newBlockNum + 1) / (Page.BLOCK_SIZE / 8);
-			entryNum = (newBlockNum + 1) / (Page.BLOCK_SIZE / 8);
+			pageNum = (newBlockNum + 1) / (Page.BLOCK_SIZE >> 3);
+			entryNum = (newBlockNum + 1) & ((Page.BLOCK_SIZE >> 3) - 1);
 		}
 
 		final Block blkd = new Block(p.block().fileName(), newBlockNum);
 		final Block blkh = new Block(p.block().fileName(), pageNum);
 		tx.requestPage(blkh);
-		final Schema newSchema = new Schema(this.colTypes);
+		final Schema newSchema = new Schema(this.colTypes, nodeNumber, deviceNumber);
 		tx.read(blkd, newSchema);
 		final int size = newSchema.getSizeLargestFS();
 		final HeaderPage hp = tx.forceReadHeaderPage(blkh, blockType);
@@ -929,26 +1263,26 @@ public class Schema
 			hp.updateColNum(entryNum, colID, tx);
 		}
 	}
-	
+
 	private void addNewBlockToHeaderNoLog(int newBlockNum, int colID) throws LockAbortException, Exception
 	{
 		int pageNum;
 		int entryNum;
 		if (blockType == TYPE_ROW)
 		{
-			pageNum = (newBlockNum + 2) / (Page.BLOCK_SIZE / 4);
-			entryNum = (newBlockNum + 2) % (Page.BLOCK_SIZE / 4);
+			pageNum = (newBlockNum + 2) / (Page.BLOCK_SIZE >> 2);
+			entryNum = (newBlockNum + 2) % (Page.BLOCK_SIZE >> 2);
 		}
 		else
 		{
-			pageNum = (newBlockNum + 1) / (Page.BLOCK_SIZE / 8);
-			entryNum = (newBlockNum + 1) / (Page.BLOCK_SIZE / 8);
+			pageNum = (newBlockNum + 1) / (Page.BLOCK_SIZE >> 3);
+			entryNum = (newBlockNum + 1) / (Page.BLOCK_SIZE >> 3);
 		}
 
 		final Block blkd = new Block(p.block().fileName(), newBlockNum);
 		final Block blkh = new Block(p.block().fileName(), pageNum);
 		tx.requestPage(blkh);
-		final Schema newSchema = new Schema(this.colTypes);
+		final Schema newSchema = new Schema(this.colTypes, nodeNumber, deviceNumber);
 		tx.read(blkd, newSchema);
 		final int size = newSchema.getSizeLargestFS();
 		final HeaderPage hp = tx.forceReadHeaderPage(blkh, blockType);
@@ -980,11 +1314,11 @@ public class Schema
 				freeSpaceListEntries--;
 			}
 		}
-		
+
 		final int newMax = getSizeLargestFS();
 		updateFSInHeader(newMax);
 	}
-	
+
 	private void againUpdateFreeListNoLog(int headSize) throws Exception
 	{
 		if (freeSpace[0].getStart() < headSize)
@@ -1013,7 +1347,8 @@ public class Schema
 			i++;
 		}
 
-		while (i < newFS.length)
+		final int length = newFS.length;
+		while (i < length)
 		{
 			newFS[i] = freeSpace[i + 1];
 			i++;
@@ -1023,51 +1358,37 @@ public class Schema
 		freeSpaceListEntries--;
 	}
 
-	private int findNextFreeRecNum(int justUsed) throws RecNumOverflowException
+	private int findNextFreeRecNum(int justUsed) throws Exception
 	{
-		boolean cont = false;
-		int candidate = justUsed + 1;
-		final RID[] copy = rowIDs.clone();
-		Arrays.sort(copy);
+		if (!rowIDsSet)
+		{
+			setRowIDs();
+		}
 
-		for (final RID rid : copy)
-		{
-			if (rid.getRecNum() == candidate)
-			{
-				cont = true;
-				break;
-			}
-			
-			if (rid.getRecNum() > candidate)
-			{
-				return candidate;
-			}
-		}
-		
-		if (cont)
-		{
-			int i = -1;
-			for (final RID rid : copy)
-			{
-				if (rid.getRecNum() != i+1)
-				{
-					return i+1;
-				}
-			
-				i++;
-			}
-		
-			if (i == Integer.MAX_VALUE)
-			{
-				throw new RecNumOverflowException();
-			}
-		
-			return i + 1;
-		}
-		else
+		int candidate = justUsed + 1;
+
+		if (!copy.contains(new RID(0, 0, 0, candidate)))
 		{
 			return candidate;
 		}
+
+		int i = -1;
+		for (final RID rid : copy)
+		{
+			if (rid.getRecNum() != i + 1)
+			{
+				return i + 1;
+			}
+
+			i++;
+		}
+
+		if (i == Integer.MAX_VALUE)
+		{
+			throw new RecNumOverflowException();
+		}
+
+		return i + 1;
 	}
 
 	private int findPage(int data) throws LockAbortException, Exception
@@ -1101,7 +1422,7 @@ public class Schema
 	private int findPage(int after, int data) throws LockAbortException, Exception
 	{
 		after = after + 1;
-		int i = (after + 2) / (Page.BLOCK_SIZE / 4);
+		int i = (after + 2) / (Page.BLOCK_SIZE >> 2);
 		int block = -1;
 		while (i < HEADER_SIZE && block == -1)
 		{
@@ -1151,7 +1472,7 @@ public class Schema
 	private int findPage(int after, int data, int colID, int colMarker) throws LockAbortException, Exception
 	{
 		after = after + 1;
-		int i = (after + 1) / (Page.BLOCK_SIZE / 8);
+		int i = (after + 1) / (Page.BLOCK_SIZE >> 3);
 		int block = -1;
 		while (i < HEADER_SIZE && block == -1)
 		{
@@ -1181,7 +1502,7 @@ public class Schema
 			final HeaderPage hp = tx.readHeaderPage(b, blockType);
 			myDev = hp.getDeviceNumber();
 		}
-		
+
 		return myDev;
 	}
 
@@ -1191,16 +1512,41 @@ public class Schema
 		{
 			final Block b = new Block(p.block().fileName(), 0);
 			tx.requestPage(b);
-			
+
 			final HeaderPage hp = tx.readHeaderPage(b, blockType);
 			myNode = hp.getNodeNumber();
 		}
-		
+
 		return myNode;
 	}
 
 	private int getSizeLargestFS()
 	{
+		if (freeSpaceListEntries == -1)
+		{
+			freeSpaceListEntries = p.getInt(37);
+			int pos = 41;
+			int i = 0;
+			try
+			{
+				freeSpace = new FreeSpace[freeSpaceListEntries];
+			}
+			catch (Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				HRDBMSWorker.logger.error("Page = " + p.block().fileName() + ":" + p.block().number());
+				HRDBMSWorker.logger.error("freeSpaceListEntries = " + freeSpaceListEntries);
+			}
+
+			while (i < freeSpaceListEntries)
+			{
+				final int start = p.getInt(pos);
+				final int end = p.getInt(pos + 4);
+				freeSpace[i] = new FreeSpace(start, end);
+				i++;
+				pos += 8;
+			}
+		}
 		int largest = 0;
 		for (final FreeSpace fs : freeSpace)
 		{
@@ -1217,6 +1563,32 @@ public class Schema
 
 	private Integer hasEnoughSpace(int head, int data)
 	{
+		if (freeSpaceListEntries == -1)
+		{
+			freeSpaceListEntries = p.getInt(37);
+			int pos = 41;
+			int i = 0;
+			try
+			{
+				freeSpace = new FreeSpace[freeSpaceListEntries];
+			}
+			catch (Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				HRDBMSWorker.logger.error("Page = " + p.block().fileName() + ":" + p.block().number());
+				HRDBMSWorker.logger.error("freeSpaceListEntries = " + freeSpaceListEntries);
+			}
+
+			while (i < freeSpaceListEntries)
+			{
+				final int start = p.getInt(pos);
+				final int end = p.getInt(pos + 4);
+				freeSpace[i] = new FreeSpace(start, end);
+				i++;
+				pos += 8;
+			}
+		}
+
 		if (freeSpace.length == 0)
 		{
 			return null;
@@ -1224,6 +1596,10 @@ public class Schema
 
 		final FreeSpace fs = freeSpace[0];
 
+		if (headEnd == -1)
+		{
+			headEnd = p.getInt(5);
+		}
 		if (fs.getStart() == headEnd + 1)
 		{
 			if (fs.getEnd() - fs.getStart() + 1 >= head)
@@ -1252,7 +1628,7 @@ public class Schema
 				}
 			}
 		}
-		
+
 		return null;
 	}
 
@@ -1274,7 +1650,8 @@ public class Schema
 		newFS[i] = fs;
 		i++;
 
-		while (i < newFS.length)
+		final int length = newFS.length;
+		while (i < length)
 		{
 			newFS[i] = freeSpace[i - 1];
 			i++;
@@ -1282,6 +1659,31 @@ public class Schema
 
 		freeSpace = newFS;
 		freeSpaceListEntries++;
+	}
+
+	private void setRowIDs() throws Exception
+	{
+		copy = new TreeSet<RID>(new RIDComparator());
+		int i = 0;
+		int pos = rowIDListOff + 4;
+		if (rowIDs != null && rowIDs.length >= rowIDListSize)
+		{
+		}
+		else
+		{
+			rowIDs = new RID[rowIDListSize];
+		}
+		int[] rid = new int[4];
+		while (i < rowIDListSize)
+		{
+			p.get(pos, rid);
+			rowIDs[i] = new RID(rid[0], rid[1], rid[2], rid[3]);
+			copy.add(rowIDs[i]);
+			i++;
+			pos += 16;
+		}
+
+		rowIDsSet = true;
 	}
 
 	private void updateFreeSpace(int off, int length) throws LockAbortException, Exception
@@ -1328,18 +1730,18 @@ public class Schema
 		int entryNum;
 		if (blockType == TYPE_ROW)
 		{
-			pageNum = (p.block().number() + 2) / (Page.BLOCK_SIZE / 4);
-			entryNum = (p.block().number() + 2) % (Page.BLOCK_SIZE / 4);
+			pageNum = (p.block().number() + 2) / (Page.BLOCK_SIZE >> 2);
+			entryNum = (p.block().number() + 2) & ((Page.BLOCK_SIZE >> 2) - 1);
 		}
 		else
 		{
-			pageNum = (p.block().number() + 1) / (Page.BLOCK_SIZE / 8);
-			entryNum = (p.block().number() + 1) / (Page.BLOCK_SIZE / 8);
+			pageNum = (p.block().number() + 1) / (Page.BLOCK_SIZE >> 3);
+			entryNum = (p.block().number() + 1) & ((Page.BLOCK_SIZE >> 3) - 1);
 		}
 
 		final Block blk = new Block(p.block().fileName(), pageNum);
 		tx.requestPage(blk);
-		
+
 		if (myHP == null)
 		{
 			myHP = tx.forceReadHeaderPage(blk, blockType);
@@ -1354,25 +1756,25 @@ public class Schema
 			myHP.updateSize(entryNum, size, tx, 0);
 		}
 	}
-	
+
 	private void updateFSInHeaderNoLog(int size) throws LockAbortException, Exception
 	{
 		int pageNum;
 		int entryNum;
 		if (blockType == TYPE_ROW)
 		{
-			pageNum = (p.block().number() + 2) / (Page.BLOCK_SIZE / 4);
-			entryNum = (p.block().number() + 2) % (Page.BLOCK_SIZE / 4);
+			pageNum = (p.block().number() + 2) / (Page.BLOCK_SIZE >> 2);
+			entryNum = (p.block().number() + 2) % (Page.BLOCK_SIZE >> 2);
 		}
 		else
 		{
-			pageNum = (p.block().number() + 1) / (Page.BLOCK_SIZE / 8);
-			entryNum = (p.block().number() + 1) / (Page.BLOCK_SIZE / 8);
+			pageNum = (p.block().number() + 1) / (Page.BLOCK_SIZE >> 3);
+			entryNum = (p.block().number() + 1) / (Page.BLOCK_SIZE >> 3);
 		}
 
 		final Block blk = new Block(p.block().fileName(), pageNum);
 		tx.requestPage(blk);
-		
+
 		if (myHP == null)
 		{
 			myHP = tx.forceReadHeaderPage(blk, blockType);
@@ -1390,7 +1792,36 @@ public class Schema
 
 	private void updateHeader(RID rid, FieldValue[] vals, int nextRecNum, int off, int length) throws RecNumOverflowException, LockAbortException, Exception
 	{
+		if (freeSpaceListEntries == -1)
+		{
+			freeSpaceListEntries = p.getInt(37);
+			int pos = 41;
+			int i = 0;
+			try
+			{
+				freeSpace = new FreeSpace[freeSpaceListEntries];
+			}
+			catch (Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				HRDBMSWorker.logger.error("Page = " + p.block().fileName() + ":" + p.block().number());
+				HRDBMSWorker.logger.error("freeSpaceListEntries = " + freeSpaceListEntries);
+			}
+
+			while (i < freeSpaceListEntries)
+			{
+				final int start = p.getInt(pos);
+				final int end = p.getInt(pos + 4);
+				freeSpace[i] = new FreeSpace(start, end);
+				i++;
+				pos += 8;
+			}
+		}
 		updateFreeSpace(off, length);
+		if (dataStart == -1)
+		{
+			dataStart = p.getInt(9);
+		}
 		if (off < dataStart)
 		{
 			this.dataStart = off;
@@ -1400,9 +1831,9 @@ public class Schema
 		updateRowIDs(rid);
 		this.nextRecNum = findNextFreeRecNum(nextRecNum);
 		updateOffsets(vals, off);
-		againUpdateFreeList(48 + (rowIDListSize * 16) + (freeSpaceListEntries * 8) + (colIDListSize * 4) + (5 * rowIDListSize * colIDListSize));
+		againUpdateFreeList(48 + (rowIDListSize << 4) + (freeSpaceListEntries << 3) + (colIDListSize << 2) + (5 * rowIDListSize * colIDListSize));
 
-		final byte[] before = new byte[48 + (rowIDListSize * 16) + (freeSpaceListEntries * 8) + (colIDListSize * 4) + (5 * rowIDListSize * colIDListSize)];
+		final byte[] before = new byte[48 + (rowIDListSize << 4) + (freeSpaceListEntries << 3) + (colIDListSize << 2) + (5 * rowIDListSize * colIDListSize)];
 		p.get(1, before);
 		final byte[] after = new byte[before.length];
 
@@ -1415,7 +1846,7 @@ public class Schema
 		// copy(after,4, ByteBuffer.allocate(4).putInt(before.length -
 		// 1).array()); //headEnd
 		x.position(0);
-		x.putInt(before.length-1);
+		x.putInt(before.length - 1);
 		System.arraycopy(x.array(), 0, after, 4, 4);
 		headEnd = before.length - 1;
 		// copy(after,8, ByteBuffer.allocate(4).putInt(this.dataStart).array());
@@ -1425,6 +1856,7 @@ public class Schema
 		System.arraycopy(x.array(), 0, after, 8, 4);
 		// copy(after,12, ByteBuffer.allocate(8).putLong(this.modTime).array());
 		// //modTime
+
 		System.arraycopy(ByteBuffer.allocate(8).putLong(this.modTime).array(), 0, after, 12, 8);
 		// copy(after,32,
 		// ByteBuffer.allocate(4).putInt(freeSpaceListEntries).array());
@@ -1450,7 +1882,7 @@ public class Schema
 
 		// copy(after, 20, ByteBuffer.allocate(4).putInt(i).array());
 		x.position(0);
-		x.putInt(i+1);
+		x.putInt(i + 1);
 		System.arraycopy(x.array(), 0, after, 24, 4);
 		// copy(after, i, ByteBuffer.allocate(4).putInt(colIDListSize).array());
 		x.position(0);
@@ -1469,7 +1901,7 @@ public class Schema
 
 		// copy(after, 24, ByteBuffer.allocate(4).putInt(i).array());
 		x.position(0);
-		x.putInt(i+1);
+		x.putInt(i + 1);
 		System.arraycopy(x.array(), 0, after, 28, 4);
 		// copy(after, i, ByteBuffer.allocate(4).putInt(rowIDListSize).array());
 		x.position(0);
@@ -1477,8 +1909,17 @@ public class Schema
 		System.arraycopy(x.array(), 0, after, i, 4);
 		i += 4;
 
+		int a = 0;
+		if (!rowIDsSet)
+		{
+			setRowIDs();
+		}
 		for (final RID id : rowIDs)
 		{
+			if (a >= rowIDListSize)
+			{
+				break;
+			}
 			// copy(after, i,
 			// ByteBuffer.allocate(4).putInt(id.getNode()).array());
 			x.position(0);
@@ -1503,7 +1944,7 @@ public class Schema
 		}
 
 		x.position(0);
-		x.putInt(i+1);
+		x.putInt(i + 1);
 		System.arraycopy(x.array(), 0, after, 20, 4);
 
 		int j = 0;
@@ -1517,14 +1958,14 @@ public class Schema
 
 		// copy(after, 28, ByteBuffer.allocate(4).putInt(i).array());
 		x.position(0);
-		x.putInt(i+1);
+		x.putInt(i + 1);
 		System.arraycopy(x.array(), 0, after, 32, 4);
 
 		int k = 0;
 		while (k < offsetArrayRows)
 		{
 			int[] row = offsetArray[k];
-			ByteBuffer temp = ByteBuffer.allocate(row.length * 4);
+			ByteBuffer temp = ByteBuffer.allocate(row.length << 2);
 			temp.asIntBuffer().put(row);
 			System.arraycopy(temp.array(), 0, after, i, 4 * row.length);
 			i += (4 * row.length);
@@ -1534,10 +1975,39 @@ public class Schema
 		final InsertLogRec rec = tx.insert(before, after, 1, p.block());
 		p.write(1, after, tx.number(), rec.lsn());
 	}
-	
+
 	private void updateHeaderNoLog(RID rid, FieldValue[] vals, int nextRecNum, int off, int length) throws RecNumOverflowException, LockAbortException, Exception
 	{
+		if (freeSpaceListEntries == -1)
+		{
+			freeSpaceListEntries = p.getInt(37);
+			int pos = 41;
+			int i = 0;
+			try
+			{
+				freeSpace = new FreeSpace[freeSpaceListEntries];
+			}
+			catch (Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				HRDBMSWorker.logger.error("Page = " + p.block().fileName() + ":" + p.block().number());
+				HRDBMSWorker.logger.error("freeSpaceListEntries = " + freeSpaceListEntries);
+			}
+
+			while (i < freeSpaceListEntries)
+			{
+				final int start = p.getInt(pos);
+				final int end = p.getInt(pos + 4);
+				freeSpace[i] = new FreeSpace(start, end);
+				i++;
+				pos += 8;
+			}
+		}
 		updateFreeSpace(off, length);
+		if (dataStart == -1)
+		{
+			dataStart = p.getInt(9);
+		}
 		if (off < dataStart)
 		{
 			this.dataStart = off;
@@ -1547,143 +2017,8 @@ public class Schema
 		updateRowIDs(rid);
 		this.nextRecNum = findNextFreeRecNum(nextRecNum);
 		updateOffsets(vals, off);
-		againUpdateFreeListNoLog(48 + (rowIDListSize * 16) + (freeSpaceListEntries * 8) + (colIDListSize * 4) + (5 * rowIDListSize * colIDListSize));
-		headEnd = 47 + (rowIDListSize * 16) + (freeSpaceListEntries * 8) + (colIDListSize * 4) + (5 * rowIDListSize * colIDListSize);
-	}
-	
-	public void close() throws Exception
-	{
-		final byte[] after = new byte[48 + (rowIDListSize * 16) + (freeSpaceListEntries * 8) + (colIDListSize * 4) + (5 * rowIDListSize * colIDListSize)];
-
-		// copy(after,0,
-		// ByteBuffer.allocate(4).putInt(this.nextRecNum).array()); //nextRecNum
-		ByteBuffer x = ByteBuffer.allocate(4);
-		x.position(0);
-		x.putInt(this.nextRecNum);
-		System.arraycopy(x.array(), 0, after, 0, 4);
-		// copy(after,4, ByteBuffer.allocate(4).putInt(before.length -
-		// 1).array()); //headEnd
-		x.position(0);
-		x.putInt(after.length-1);
-		System.arraycopy(x.array(), 0, after, 4, 4);
-		// copy(after,8, ByteBuffer.allocate(4).putInt(this.dataStart).array());
-		// //dataStart
-		x.position(0);
-		x.putInt(this.dataStart);
-		System.arraycopy(x.array(), 0, after, 8, 4);
-		// copy(after,12, ByteBuffer.allocate(8).putLong(this.modTime).array());
-		// //modTime
-		System.arraycopy(ByteBuffer.allocate(8).putLong(this.modTime).array(), 0, after, 12, 8);
-		// copy(after,32,
-		// ByteBuffer.allocate(4).putInt(freeSpaceListEntries).array());
-		x.position(0);
-		x.putInt(freeSpaceListEntries);
-		System.arraycopy(x.array(), 0, after, 36, 4);
-
-		int i = 40;
-		for (final FreeSpace fs : freeSpace)
-		{
-			// copy(after, i,
-			// ByteBuffer.allocate(4).putInt(fs.getStart()).array());
-			x.position(0);
-			x.putInt(fs.getStart());
-			System.arraycopy(x.array(), 0, after, i, 4);
-			// copy(after, i+4,
-			// ByteBuffer.allocate(4).putInt(fs.getEnd()).array());
-			x.position(0);
-			x.putInt(fs.getEnd());
-			System.arraycopy(x.array(), 0, after, i + 4, 4);
-			i += 8;
-		}
-
-		// copy(after, 20, ByteBuffer.allocate(4).putInt(i).array());
-		x.position(0);
-		x.putInt(i+1);
-		System.arraycopy(x.array(), 0, after, 24, 4);
-		// copy(after, i, ByteBuffer.allocate(4).putInt(colIDListSize).array());
-		x.position(0);
-		x.putInt(colIDListSize);
-		System.arraycopy(x.array(), 0, after, i, 4);
-		i += 4;
-
-		for (final int id : colIDs)
-		{
-			// copy(after, i, ByteBuffer.allocate(4).putInt(id).array());
-			x.position(0);
-			x.putInt(id);
-			System.arraycopy(x.array(), 0, after, i, 4);
-			i += 4;
-		}
-
-		// copy(after, 24, ByteBuffer.allocate(4).putInt(i).array());
-		x.position(0);
-		x.putInt(i+1);
-		System.arraycopy(x.array(), 0, after, 28, 4);
-		// copy(after, i, ByteBuffer.allocate(4).putInt(rowIDListSize).array());
-		x.position(0);
-		x.putInt(rowIDListSize);
-		System.arraycopy(x.array(), 0, after, i, 4);
-		i += 4;
-
-		for (final RID id : rowIDs)
-		{
-			// copy(after, i,
-			// ByteBuffer.allocate(4).putInt(id.getNode()).array());
-			x.position(0);
-			x.putInt(id.getNode());
-			System.arraycopy(x.array(), 0, after, i, 4);
-			// copy(after, i+4,
-			// ByteBuffer.allocate(4).putInt(id.getDevice()).array());
-			x.position(0);
-			x.putInt(id.getDevice());
-			System.arraycopy(x.array(), 0, after, i + 4, 4);
-			// copy(after, i+8,
-			// ByteBuffer.allocate(4).putInt(id.getBlockNum()).array());
-			x.position(0);
-			x.putInt(id.getBlockNum());
-			System.arraycopy(x.array(), 0, after, i + 8, 4);
-			// copy(after, i+12,
-			// ByteBuffer.allocate(4).putInt(id.getRecNum()).array());
-			x.position(0);
-			x.putInt(id.getRecNum());
-			System.arraycopy(x.array(), 0, after, i + 12, 4);
-			i += 16;
-		}
-
-		x.position(0);
-		x.putInt(i+1);
-		System.arraycopy(x.array(), 0, after, 20, 4);
-
-		int j = 0;
-		while (j < nullArrayRows)
-		{
-			byte[] row = nullArray[j];
-			System.arraycopy(row, 0, after, i, row.length);
-			i += row.length;
-			j++;
-		}
-
-		// copy(after, 28, ByteBuffer.allocate(4).putInt(i).array());
-		x.position(0);
-		x.putInt(i+1);
-		System.arraycopy(x.array(), 0, after, 32, 4);
-
-		int k = 0;
-		while (k < offsetArrayRows)
-		{
-			int[] row = offsetArray[k];
-			ByteBuffer temp = ByteBuffer.allocate(row.length * 4);
-			temp.asIntBuffer().put(row);
-			System.arraycopy(temp.array(), 0, after, i, 4 * row.length);
-			i += (4 * row.length);
-			k++;
-		}
-
-		long lsn = LogManager.getLSN();
-		p.write(1, after, tx.number(), lsn);
-		
-		final int newMax = getSizeLargestFS();
-		updateFSInHeaderNoLog(newMax);
+		againUpdateFreeListNoLog(48 + (rowIDListSize << 4) + (freeSpaceListEntries << 3) + (colIDListSize << 2) + (5 * rowIDListSize * colIDListSize));
+		headEnd = 47 + (rowIDListSize << 4) + (freeSpaceListEntries << 3) + (colIDListSize << 2) + (5 * rowIDListSize * colIDListSize);
 	}
 
 	private void updateNullArray(FieldValue[] vals)
@@ -1704,7 +2039,7 @@ public class Schema
 				}
 				j++;
 			}
-			
+
 			nullArrayRows++;
 			return;
 		}
@@ -1735,7 +2070,7 @@ public class Schema
 
 	private void updateOffsets(FieldValue[] vals, int off)
 	{
-		if (rowIDs.length <= offsetArray.length)
+		if (rowIDListSize <= offsetArray.length)
 		{
 			int j = 0;
 			final int i = offsetArrayRows;
@@ -1745,7 +2080,7 @@ public class Schema
 				j++;
 				off += fv.size();
 			}
-			
+
 			offsetArrayRows++;
 			return;
 		}
@@ -1768,21 +2103,33 @@ public class Schema
 		}
 	}
 
-	private void updateRowIDs(RID id)
+	private void updateRowIDs(RID id) throws Exception
 	{
-		final RID[] newRI = new RID[rowIDs.length + 1];
-		// int i = 0;
-		// while (i < rowIDs.length)
-		// {
-		// newRI[i] = rowIDs[i];
-		// i++;
-		// }
-		System.arraycopy(rowIDs, 0, newRI, 0, rowIDs.length);
+		if (!rowIDsSet)
+		{
+			setRowIDs();
+		}
+		if (rowIDListSize + 1 > rowIDs.length)
+		{
+			final RID[] newRI = new RID[rowIDListSize + 1];
+			// int i = 0;
+			// while (i < rowIDs.length)
+			// {
+			// newRI[i] = rowIDs[i];
+			// i++;
+			// }
+			System.arraycopy(rowIDs, 0, newRI, 0, rowIDListSize);
 
-		final int i = rowIDs.length;
-		newRI[i] = id;
-		rowIDs = newRI;
+			final int i = rowIDListSize;
+			newRI[i] = id;
+			rowIDs = newRI;
+		}
+		else
+		{
+			rowIDs[rowIDListSize] = id;
+		}
 		rowIDListSize++;
+		copy.add(id);
 	}
 
 	public static class BigintFV extends FieldValue
@@ -1830,6 +2177,12 @@ public class Schema
 		}
 
 		@Override
+		public String toString()
+		{
+			return "" + value;
+		}
+
+		@Override
 		public int write(byte[] buff, int off)
 		{
 			if (!isNull && exists)
@@ -1847,11 +2200,6 @@ public class Schema
 
 			return 0;
 		}
-
-		public String toString()
-		{
-			return "" + value;
-		}
 	}
 
 	public static class BinaryFV extends FieldValue
@@ -1867,11 +2215,6 @@ public class Schema
 				value = new byte[len];
 				s.p.get(off, value);
 			}
-		}
-
-		public String toString()
-		{
-			return "" + value; // FIXME
 		}
 
 		@Override
@@ -1892,12 +2235,19 @@ public class Schema
 		}
 
 		@Override
+		public String toString()
+		{
+			return "BinaryFV";
+		}
+
+		@Override
 		public int write(byte[] buff, int off)
 		{
 			if (!isNull && exists)
 			{
 				int i = 0;
-				while (i < value.length)
+				final int length = value.length;
+				while (i < length)
 				{
 					buff[off + i] = value[i];
 					i++;
@@ -1937,11 +2287,6 @@ public class Schema
 			}
 		}
 
-		public String toString()
-		{
-			return "" + value;
-		}
-
 		@Override
 		public MyDate getValue()
 		{
@@ -1957,6 +2302,12 @@ public class Schema
 			}
 
 			return 0;
+		}
+
+		@Override
+		public String toString()
+		{
+			return "" + value;
 		}
 
 		@Override
@@ -2014,11 +2365,6 @@ public class Schema
 			}
 		}
 
-		public String toString()
-		{
-			return "" + value;
-		}
-
 		@Override
 		public BigDecimal getValue()
 		{
@@ -2037,12 +2383,19 @@ public class Schema
 		}
 
 		@Override
+		public String toString()
+		{
+			return "" + value;
+		}
+
+		@Override
 		public int write(byte[] buff, int off)
 		{
 			if (!isNull && exists)
 			{
 				int i = 0;
-				while (i < bytes.length)
+				final int length = bytes.length;
+				while (i < length)
 				{
 					buff[off + i] = bytes[i];
 					i++;
@@ -2059,16 +2412,6 @@ public class Schema
 	{
 		private double value;
 
-		public DoubleFV(int row, int col, Schema s)
-		{
-			super(row, col, s);
-
-			if (!isNull && exists)
-			{
-				value = s.p.getDouble(off);
-			}
-		}
-
 		public DoubleFV(Double val)
 		{
 			this.exists = true;
@@ -2082,9 +2425,14 @@ public class Schema
 			}
 		}
 
-		public String toString()
+		public DoubleFV(int row, int col, Schema s)
 		{
-			return "" + value;
+			super(row, col, s);
+
+			if (!isNull && exists)
+			{
+				value = s.p.getDouble(off);
+			}
 		}
 
 		@Override
@@ -2102,6 +2450,12 @@ public class Schema
 			}
 
 			return 0;
+		}
+
+		@Override
+		public String toString()
+		{
+			return "" + value;
 		}
 
 		@Override
@@ -2178,11 +2532,6 @@ public class Schema
 			}
 		}
 
-		public String toString()
-		{
-			return "" + value;
-		}
-
 		@Override
 		public Float getValue()
 		{
@@ -2198,6 +2547,12 @@ public class Schema
 			}
 
 			return 0;
+		}
+
+		@Override
+		public String toString()
+		{
+			return "" + value;
 		}
 
 		@Override
@@ -2247,11 +2602,6 @@ public class Schema
 			}
 		}
 
-		public String toString()
-		{
-			return "" + value;
-		}
-
 		@Override
 		public Integer getValue()
 		{
@@ -2267,6 +2617,12 @@ public class Schema
 			}
 
 			return 0;
+		}
+
+		@Override
+		public String toString()
+		{
+			return "" + value;
 		}
 
 		@Override
@@ -2313,11 +2669,95 @@ public class Schema
 
 		public FieldValue getCol(int id) throws Exception
 		{
-			return getField(index, colIDToIndex.get(id));
+			// return getField(index, colIDToIndex.get(id));
+			int rowIndex = index;
+			int colIndex = colIDToIndex.get(id);
+			DataType dt = null;
+			int type;
+
+			try
+			{
+				dt = colTypes.get(colIDs[colIndex]);
+				type = dt.getType();
+			}
+			catch (Exception e)
+			{
+				HRDBMSWorker.logger.warn("Unable to retrieve field", e);
+				HRDBMSWorker.logger.warn("We are on row " + rowIndex);
+				HRDBMSWorker.logger.warn("Looking for colIndex " + colIndex);
+				HRDBMSWorker.logger.warn("The colIDs array is ");
+				int i = 0;
+				while (i < colIDs.length)
+				{
+					HRDBMSWorker.logger.warn("" + colIDs[i]);
+					i++;
+				}
+
+				HRDBMSWorker.logger.warn("ColTypes is " + colTypes);
+				throw e;
+			}
+
+			if (type == DataType.BIGINT)
+			{
+				return new BigintFV(rowIndex, colIndex, Schema.this);
+			}
+
+			if (type == DataType.BINARY)
+			{
+				return new BinaryFV(rowIndex, colIndex, dt.getLength(), Schema.this);
+			}
+
+			if (type == DataType.DATE)
+			// TODO || type == DataType.TIME || type == DataType.TIMESTAMP)
+			{
+				return new DateFV(rowIndex, colIndex, Schema.this);
+			}
+
+			if (type == DataType.DECIMAL)
+			{
+				return new DecimalFV(rowIndex, colIndex, dt.getLength(), dt.getScale(), Schema.this);
+			}
+
+			if (type == DataType.DOUBLE)
+			{
+				return new DoubleFV(rowIndex, colIndex, Schema.this);
+			}
+
+			if (type == DataType.FLOAT)
+			{
+				return new FloatFV(rowIndex, colIndex, Schema.this);
+			}
+
+			if (type == DataType.INTEGER)
+			{
+				return new IntegerFV(rowIndex, colIndex, Schema.this);
+			}
+
+			if (type == DataType.SMALLINT)
+			{
+				return new SmallintFV(rowIndex, colIndex, Schema.this);
+			}
+
+			if (type == DataType.VARBINARY)
+			{
+				return new VarbinaryFV(rowIndex, colIndex, Schema.this);
+			}
+
+			if (type == DataType.VARCHAR)
+			{
+				return new VarcharFV(rowIndex, colIndex, Schema.this);
+			}
+
+			HRDBMSWorker.logger.error("Unknown data type in Schema.getField()");
+			return null;
 		}
 
-		public RID getRID()
+		public RID getRID() throws Exception
 		{
+			if (!rowIDsSet)
+			{
+				setRowIDs();
+			}
 			return rowIDs[index];
 		}
 	}
@@ -2369,11 +2809,6 @@ public class Schema
 			}
 		}
 
-		public String toString()
-		{
-			return "" + value;
-		}
-
 		@Override
 		public Short getValue()
 		{
@@ -2389,6 +2824,12 @@ public class Schema
 			}
 
 			return 0;
+		}
+
+		@Override
+		public String toString()
+		{
+			return "" + value;
 		}
 
 		@Override
@@ -2433,11 +2874,6 @@ public class Schema
 			return value;
 		}
 
-		public String toString()
-		{
-			return "" + value; // FIXME
-		}
-
 		@Override
 		public int size()
 		{
@@ -2447,6 +2883,12 @@ public class Schema
 			}
 
 			return 0;
+		}
+
+		@Override
+		public String toString()
+		{
+			return "VarbinaryFV";
 		}
 
 		@Override
@@ -2463,7 +2905,8 @@ public class Schema
 				}
 
 				i = 0;
-				while (i < value.length)
+				final int length = value.length;
+				while (i < length)
 				{
 					buff[off + 4 + i] = value[i];
 					i++;
@@ -2479,6 +2922,7 @@ public class Schema
 	public static class VarcharFV extends FieldValue
 	{
 		private String value;
+		private byte[] bytes = null;
 		private int size;
 
 		public VarcharFV(int row, int col, Schema s) throws Exception
@@ -2488,16 +2932,36 @@ public class Schema
 			if (!isNull && exists)
 			{
 				final int len = s.p.getInt(off);
-				final byte[] temp = new byte[len];
-				size = 4 + len;
-				s.p.get(off + 4, temp);
-				try
+				if (len == 0)
 				{
-					value = new String(temp, "UTF-8");
+					value = new String();
 				}
-				catch (final Exception e)
+				else
 				{
-					throw e;
+					char[] ca = new char[len];
+					final byte[] temp = new byte[len];
+					bytes = temp;
+					size = 4 + len;
+					s.p.get(off + 4, temp);
+					try
+					{
+						// value = new String(temp, "UTF-8");
+						value = (String)unsafe.allocateInstance(String.class);
+						int clen = ((sun.nio.cs.ArrayDecoder)s.cd).decode(temp, 0, len, ca);
+						if (clen == ca.length)
+						{
+							unsafe.putObject(value, Schema.offset, ca);
+						}
+						else
+						{
+							char[] v = Arrays.copyOf(ca, clen);
+							unsafe.putObject(value, Schema.offset, v);
+						}
+					}
+					catch (final Exception e)
+					{
+						throw e;
+					}
 				}
 			}
 		}
@@ -2515,17 +2979,13 @@ public class Schema
 				this.value = val;
 				try
 				{
-					size = 4 + val.getBytes("UTF-8").length;
+					bytes = val.getBytes(StandardCharsets.UTF_8);
+					size = 4 + bytes.length;
 				}
 				catch (Exception e)
 				{
 				}
 			}
-		}
-
-		public String toString()
-		{
-			return value;
 		}
 
 		@Override
@@ -2546,11 +3006,17 @@ public class Schema
 		}
 
 		@Override
+		public String toString()
+		{
+			return value;
+		}
+
+		@Override
 		public int write(byte[] buff, int off) throws UnsupportedEncodingException
 		{
 			if (!isNull && exists)
 			{
-				final byte[] stringBytes = value.getBytes("UTF-8");
+				final byte[] stringBytes = bytes;
 				final byte[] val = ByteBuffer.allocate(4).putInt(stringBytes.length).array();
 				int i = 0;
 				while (i < 4)
@@ -2560,7 +3026,8 @@ public class Schema
 				}
 
 				i = 0;
-				while (i < stringBytes.length)
+				final int length = stringBytes.length;
+				while (i < length)
 				{
 					buff[off + 4 + i] = stringBytes[i];
 					i++;
@@ -2570,6 +3037,17 @@ public class Schema
 			}
 
 			return 0;
+		}
+	}
+
+	private static class RIDComparator implements Comparator
+	{
+		@Override
+		public int compare(Object o1, Object o2)
+		{
+			RID lhs = (RID)o1;
+			RID rhs = (RID)o2;
+			return Integer.compare(lhs.getRecNum(), rhs.getRecNum());
 		}
 	}
 
@@ -2602,6 +3080,24 @@ public class Schema
 
 		public FieldValue getRow(RID id) throws Exception
 		{
+			if (rowIDToIndex == null)
+			{
+				rowIDToIndex = new HashMap<RID, Integer>();
+				int i = 0;
+				if (!rowIDsSet)
+				{
+					setRowIDs();
+				}
+				for (final RID rid : rowIDs)
+				{
+					if (i >= rowIDListSize)
+					{
+						break;
+					}
+					rowIDToIndex.put(rid, i);
+					i++;
+				}
+			}
 			return getField(rowIDToIndex.get(id), index);
 		}
 	}

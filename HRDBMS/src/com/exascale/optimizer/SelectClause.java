@@ -4,17 +4,18 @@ import java.util.ArrayList;
 
 public class SelectClause
 {
-	private boolean selectAll;
-	private boolean selectStar;
-	private ArrayList<SelectListEntry> selectList;
-	
+	private final boolean selectAll;
+	private final boolean selectStar;
+	private final ArrayList<SelectListEntry> selectList;
+
 	public SelectClause(boolean selectAll, boolean selectStar, ArrayList<SelectListEntry> selectList)
 	{
 		this.selectAll = selectAll;
 		this.selectStar = selectStar;
 		this.selectList = selectList;
 	}
-	
+
+	@Override
 	public SelectClause clone()
 	{
 		ArrayList<SelectListEntry> newList = new ArrayList<SelectListEntry>();
@@ -29,20 +30,20 @@ public class SelectClause
 		{
 			newList = null;
 		}
-		
+
 		return new SelectClause(selectAll, selectStar, selectList);
 	}
-	
+
 	public ArrayList<SelectListEntry> getSelectList()
 	{
 		return selectList;
 	}
-	
+
 	public boolean isSelectAll()
 	{
 		return selectAll;
 	}
-	
+
 	public boolean isSelectStar()
 	{
 		return selectStar;

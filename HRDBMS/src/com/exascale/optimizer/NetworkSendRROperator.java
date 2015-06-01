@@ -3,21 +3,41 @@ package com.exascale.optimizer;
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Field;
+import java.net.Socket;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.concurrent.ConcurrentHashMap;
-import com.exascale.compression.CompressedSocket;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 
 public final class NetworkSendRROperator extends NetworkSendOperator
 {
-	private final int id;
-	private ConcurrentHashMap<Integer, CompressedSocket> connections = new ConcurrentHashMap<Integer, CompressedSocket>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
+	private static sun.misc.Unsafe unsafe;
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
+	private int id;
+	private ConcurrentHashMap<Integer, Socket> connections = new ConcurrentHashMap<Integer, Socket>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
 	private ConcurrentHashMap<Integer, OutputStream> outs = new ConcurrentHashMap<Integer, OutputStream>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
-	private final ArrayList<Operator> parents = new ArrayList<Operator>();
-	private boolean error;
-	private String errorText;
+	private ArrayList<Operator> parents = new ArrayList<Operator>();
+
+	private boolean error = false;
+
+	private transient String errorText;
 
 	public NetworkSendRROperator(int id, MetaData meta)
 	{
@@ -25,8 +45,32 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 		this.meta = meta;
 	}
 
+	public static NetworkSendRROperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		NetworkSendRROperator value = (NetworkSendRROperator)unsafe.allocateInstance(NetworkSendRROperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.meta = new MetaData();
+		value.child = OperatorUtils.deserializeOperator(in, prev);
+		// prev = parent.serialize(out, prev);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.node = OperatorUtils.readInt(in);
+		value.numParents = OperatorUtils.readInt(in);
+		value.started = OperatorUtils.readBool(in);
+		value.numpSet = OperatorUtils.readBool(in);
+		value.cardSet = OperatorUtils.readBool(in);
+		value.id = OperatorUtils.readInt(in);
+		value.connections = new ConcurrentHashMap<Integer, Socket>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
+		value.outs = new ConcurrentHashMap<Integer, OutputStream>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
+		value.parents = OperatorUtils.deserializeALOp(in, prev);
+		value.error = OperatorUtils.readBool(in);
+		value.ce = NetworkSendOperator.cs.newEncoder();
+		return value;
+	}
+
 	@Override
-	public void addConnection(int fromNode, CompressedSocket sock)
+	public void addConnection(int fromNode, Socket sock)
 	{
 		connections.put(fromNode, sock);
 		try
@@ -72,7 +116,7 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 			}
 		}
 
-		for (final CompressedSocket sock : connections.values())
+		for (final Socket sock : connections.values())
 		{
 			try
 			{
@@ -82,7 +126,7 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 			{
 			}
 		}
-		
+
 		connections = null;
 		outs = null;
 		super.close();
@@ -96,7 +140,8 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 	@Override
 	public boolean hasAllConnections()
 	{
-		HRDBMSWorker.logger.debug(this + " is expecting " + numParents + " connections and has " + outs.size());
+		// HRDBMSWorker.logger.debug(this + " is expecting " + numParents +
+		// " connections and has " + outs.size());
 		return outs.size() == numParents;
 	}
 
@@ -123,6 +168,41 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 	public void removeParent(Operator op)
 	{
 		parents.remove(op);
+	}
+
+	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(77, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		// recreate meta
+		child.serialize(out, prev);
+		// prev = parent.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.writeInt(node, out);
+		OperatorUtils.writeInt(numParents, out);
+		OperatorUtils.writeBool(started, out);
+		OperatorUtils.writeBool(numpSet, out);
+		OperatorUtils.writeBool(cardSet, out);
+		OperatorUtils.writeInt(this.id, out);
+		// recreate connections
+		// recreate outs
+		OperatorUtils.serializeALOp(parents, out, prev);
+		OperatorUtils.writeBool(error, out);
+	}
+
+	public void setID(int id)
+	{
+		this.id = id;
 	}
 
 	@Override
@@ -154,13 +234,14 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 			Object o = child.next(this);
 			while (!(o instanceof DataEndMarker))
 			{
-				if (o instanceof Exception)
-				{
-					throw (Exception)o;
-				}
 				final byte[] obj = toBytes(o);
 				outs2.get(i % outs2.size()).write(obj);
-				count++;
+				if (o instanceof Exception)
+				{
+					HRDBMSWorker.logger.debug("", (Exception)o);
+					throw (Exception)o;
+				}
+				// count++;
 				i++;
 				o = child.next(this);
 			}
@@ -171,16 +252,17 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 				out.write(obj);
 				out.flush();
 			}
-			HRDBMSWorker.logger.debug("Wrote " + count + " rows");
+			// HRDBMSWorker.logger.debug("Wrote " + count + " rows");
 			try
 			{
 				child.close();
 			}
-			catch(Exception e)
-			{}
-			//Thread.sleep(60 * 1000);
+			catch (Exception e)
+			{
+			}
+			// Thread.sleep(60 * 1000);
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			byte[] obj = null;
@@ -188,7 +270,7 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 			{
 				obj = toBytes(e);
 			}
-			catch(Exception f)
+			catch (Exception f)
 			{
 				for (final OutputStream out : outs.values())
 				{
@@ -196,8 +278,9 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 					{
 						out.close();
 					}
-					catch(Exception g)
-					{}
+					catch (Exception g)
+					{
+					}
 				}
 			}
 			for (final OutputStream out : outs.values())
@@ -206,15 +289,20 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 				{
 					out.write(obj);
 					out.flush();
+					child.nextAll(this);
+					child.close();
 				}
-				catch(Exception f)
+				catch (Exception f)
 				{
 					try
 					{
 						out.close();
+						child.nextAll(this);
+						child.close();
 					}
-					catch(Exception g)
-					{}
+					catch (Exception g)
+					{
+					}
 				}
 			}
 		}

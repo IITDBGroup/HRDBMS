@@ -24,12 +24,11 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.net.SocketException;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Socket with compressing streams. Based on tentackles
  * CompressedInput/OutputStream.
- * 
+ *
  * @author harald
  */
 public final class CompressedSocket extends Socket
@@ -41,7 +40,7 @@ public final class CompressedSocket extends Socket
 	/**
 	 * Creates an unconnected socket, with the system-default type of
 	 * SocketImpl.
-	 * 
+	 *
 	 * @see Socket#Socket()
 	 */
 	public CompressedSocket() throws SocketException
@@ -54,7 +53,7 @@ public final class CompressedSocket extends Socket
 	/**
 	 * Creates a compressed stream socket and connects it to the specified port
 	 * number on the named host.
-	 * 
+	 *
 	 * @param host
 	 *            the host name, or <code>null</code> for the loopback address.
 	 * @param port
@@ -67,15 +66,15 @@ public final class CompressedSocket extends Socket
 	{
 		super(host, port);
 	}
-	
-	public static CompressedSocket newCompressedSocket(String host, int port) throws IOException
-	{
-		return new CompressedSocket(host, port);
-	}
-	
+
 	public static CompressedSocket newCompressedSocket() throws IOException
 	{
 		return new CompressedSocket();
+	}
+
+	public static CompressedSocket newCompressedSocket(String host, int port) throws IOException
+	{
+		return new CompressedSocket(host, port);
 	}
 
 	@Override

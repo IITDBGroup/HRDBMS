@@ -7,7 +7,7 @@ public class PrepareLogRec extends LogRec
 {
 	public PrepareLogRec(long txnum, ArrayList<Integer> nodes)
 	{
-		super(LogRec.PREPARE, txnum, ByteBuffer.allocate((nodes.size() + 1) * 4 + 28));
+		super(LogRec.PREPARE, txnum, ByteBuffer.allocate(((nodes.size() + 1) << 2) + 28));
 		this.buffer().position(28);
 		this.buffer().putInt(nodes.size());
 		for (Integer i : nodes)
@@ -15,7 +15,7 @@ public class PrepareLogRec extends LogRec
 			this.buffer().putInt(i);
 		}
 	}
-	
+
 	public ArrayList<Integer> getNodes()
 	{
 		buffer.position(28);
@@ -26,7 +26,7 @@ public class PrepareLogRec extends LogRec
 			retval.add(buffer.getInt());
 			size--;
 		}
-		
+
 		return retval;
 	}
 }

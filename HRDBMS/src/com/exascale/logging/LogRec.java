@@ -3,6 +3,7 @@ package com.exascale.logging;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
 import com.exascale.filesystem.Block;
@@ -10,13 +11,13 @@ import com.exascale.managers.HRDBMSWorker;
 
 public class LogRec implements Comparable<LogRec>
 {
+	public static final int NQCHECK = 0, START = 1, COMMIT = 2, ROLLB = 3, INSERT = 4, DELETE = 5, PREPARE = 6, READY = 7, NOTREADY = 8, XACOMMIT = 9, XAABORT = 10, EXTEND = 11, TRUNCATE = 12;
 	private final int type;
 	private final long txnum;
 	private long lsn;
 	private long timestamp;
-	protected final ByteBuffer buffer;
 
-	public static final int NQCHECK = 0, START = 1, COMMIT = 2, ROLLB = 3, INSERT = 4, DELETE = 5, PREPARE = 6, READY = 7, NOTREADY = 8, XACOMMIT = 9, XAABORT = 10, EXTEND = 11, TRUNCATE = 12;
+	protected final ByteBuffer buffer;
 
 	public LogRec(FileChannel fc) throws IOException
 	{
@@ -41,15 +42,15 @@ public class LogRec implements Comparable<LogRec>
 		lsn = buffer.getLong();
 		timestamp = buffer.getLong();
 	}
-	
+
 	public LogRec(FileChannel fc, boolean partial) throws IOException
 	{
-		//fc.position(fc.position() - 4); // leading size
-		//final ByteBuffer size = ByteBuffer.allocate(4);
-		//size.position(0);
-		//fc.read(size);
-		//size.position(0);
-		//final int sizeVal = size.getInt();
+		// fc.position(fc.position() - 4); // leading size
+		// final ByteBuffer size = ByteBuffer.allocate(4);
+		// size.position(0);
+		// fc.read(size);
+		// size.position(0);
+		// final int sizeVal = size.getInt();
 		final ByteBuffer rec = ByteBuffer.allocate(12);
 		rec.position(0);
 		fc.read(rec);
@@ -75,6 +76,80 @@ public class LogRec implements Comparable<LogRec>
 		return buffer;
 	}
 
+	@Override
+	public int compareTo(LogRec arg0)
+	{
+		if (lsn < arg0.lsn)
+		{
+			return -1;
+		}
+		else if (lsn > arg0.lsn)
+		{
+			return 1;
+		}
+		else
+		{
+			return 0;
+		}
+	}
+
+	@Override
+	public boolean equals(Object rhs)
+	{
+		if (rhs == null)
+		{
+			return false;
+		}
+
+		if (rhs instanceof LogRec)
+		{
+			return lsn == ((LogRec)rhs).lsn;
+		}
+
+		return false;
+	}
+
+	public int getEnd()
+	{
+		if (this instanceof InsertLogRec)
+		{
+			return ((InsertLogRec)this).getEnd();
+		}
+
+		if (this instanceof DeleteLogRec)
+		{
+			return ((DeleteLogRec)this).getEnd();
+		}
+
+		return -1;
+	}
+
+	public int getOffset()
+	{
+		if (this instanceof InsertLogRec)
+		{
+			return ((InsertLogRec)this).getOffset();
+		}
+
+		if (this instanceof DeleteLogRec)
+		{
+			return ((DeleteLogRec)this).getOffset();
+		}
+
+		return -1;
+	}
+
+	public long getTimeStamp()
+	{
+		return timestamp;
+	}
+
+	@Override
+	public int hashCode()
+	{
+		return new Long(lsn).hashCode();
+	}
+
 	public long lsn()
 	{
 		return lsn;
@@ -90,7 +165,7 @@ public class LogRec implements Comparable<LogRec>
 			Block block;
 			try
 			{
-				block = new Block(new String(bytes, "UTF-8"));
+				block = new Block(new String(bytes, StandardCharsets.UTF_8));
 			}
 			catch (final Exception e)
 			{
@@ -108,7 +183,7 @@ public class LogRec implements Comparable<LogRec>
 			retval.setTimeStamp(timestamp);
 			return retval;
 		}
-		
+
 		if (type == EXTEND)
 		{
 			buffer.position(28);
@@ -117,20 +192,20 @@ public class LogRec implements Comparable<LogRec>
 			Block block;
 			try
 			{
-				block = new Block(new String(bytes, "UTF-8"));
+				block = new Block(new String(bytes, StandardCharsets.UTF_8));
 			}
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("Error converting bytes to UTF-8 string in LogRec.rebuild().", e);
 				return null;
 			}
-			
+
 			ExtendLogRec retval = new ExtendLogRec(txnum, block);
 			retval.setLSN(lsn);
 			retval.setTimeStamp(timestamp);
 			return retval;
 		}
-		
+
 		if (type == TRUNCATE)
 		{
 			buffer.position(28);
@@ -139,20 +214,20 @@ public class LogRec implements Comparable<LogRec>
 			Block block;
 			try
 			{
-				block = new Block(new String(bytes, "UTF-8"));
+				block = new Block(new String(bytes, StandardCharsets.UTF_8));
 			}
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("Error converting bytes to UTF-8 string in LogRec.rebuild().", e);
 				return null;
 			}
-			
+
 			TruncateLogRec retval = new TruncateLogRec(txnum, block);
 			retval.setLSN(lsn);
 			retval.setTimeStamp(timestamp);
 			return retval;
 		}
-		
+
 		if (type == XACOMMIT)
 		{
 			buffer.position(28);
@@ -163,10 +238,10 @@ public class LogRec implements Comparable<LogRec>
 				retval.add(buffer.getInt());
 				size--;
 			}
-			
+
 			return new XACommitLogRec(txnum, retval);
 		}
-		
+
 		if (type == XAABORT)
 		{
 			buffer.position(28);
@@ -177,10 +252,10 @@ public class LogRec implements Comparable<LogRec>
 				retval.add(buffer.getInt());
 				size--;
 			}
-			
+
 			return new XAAbortLogRec(txnum, retval);
 		}
-		
+
 		if (type == PREPARE)
 		{
 			buffer.position(28);
@@ -191,10 +266,10 @@ public class LogRec implements Comparable<LogRec>
 				retval.add(buffer.getInt());
 				size--;
 			}
-			
+
 			return new PrepareLogRec(txnum, retval);
 		}
-		
+
 		if (type == READY)
 		{
 			buffer.position(28);
@@ -203,10 +278,11 @@ public class LogRec implements Comparable<LogRec>
 			buffer.get(data);
 			try
 			{
-				return new ReadyLogRec(txnum, new String(data, "UTF-8"));
+				return new ReadyLogRec(txnum, new String(data, StandardCharsets.UTF_8));
 			}
-			catch(Exception e)
-			{}
+			catch (Exception e)
+			{
+			}
 		}
 
 		if (type == DELETE)
@@ -217,7 +293,7 @@ public class LogRec implements Comparable<LogRec>
 			Block block;
 			try
 			{
-				block = new Block(new String(bytes, "UTF-8"));
+				block = new Block(new String(bytes, StandardCharsets.UTF_8));
 			}
 			catch (final Exception e)
 			{
@@ -290,11 +366,6 @@ public class LogRec implements Comparable<LogRec>
 		buffer.position(20);
 		buffer.putLong(time);
 	}
-	
-	public long getTimeStamp()
-	{
-		return timestamp;
-	}
 
 	public int size()
 	{
@@ -313,72 +384,5 @@ public class LogRec implements Comparable<LogRec>
 
 	public void undo() throws Exception
 	{
-	}
-	
-	public int getOffset()
-	{
-		if (this instanceof InsertLogRec)
-		{
-			return ((InsertLogRec)this).getOffset();
-		}
-		
-		if (this instanceof DeleteLogRec)
-		{
-			return ((DeleteLogRec)this).getOffset();
-		}
-		
-		return -1;
-	}
-	
-	public int getEnd()
-	{
-		if (this instanceof InsertLogRec)
-		{
-			return ((InsertLogRec)this).getEnd();
-		}
-		
-		if (this instanceof DeleteLogRec)
-		{
-			return ((DeleteLogRec)this).getEnd();
-		}
-		
-		return -1;
-	}
-	
-	public boolean equals(Object rhs)
-	{
-		if (rhs == null)
-		{
-			return false;
-		}
-		
-		if (rhs instanceof LogRec)
-		{
-			return lsn == ((LogRec)rhs).lsn;
-		}
-		
-		return false;
-	}
-	
-	public int hashCode()
-	{
-		return new Long(lsn).hashCode();
-	}
-
-	@Override
-	public int compareTo(LogRec arg0)
-	{
-		if (lsn < arg0.lsn)
-		{
-			return -1;
-		}
-		else if (lsn > arg0.lsn)
-		{
-			return 1;
-		}
-		else
-		{
-			return 0;
-		}
 	}
 }

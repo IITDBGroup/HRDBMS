@@ -2,20 +2,21 @@ package com.exascale.optimizer;
 
 public class FetchFirst
 {
-	private long num;
-	
+	private final long num;
+
 	public FetchFirst(long num)
 	{
 		this.num = num;
 	}
-	
-	public long getNumber()
-	{
-		return num;
-	}
-	
+
+	@Override
 	public FetchFirst clone()
 	{
 		return new FetchFirst(num);
+	}
+
+	public long getNumber()
+	{
+		return num;
 	}
 }

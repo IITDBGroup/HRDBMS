@@ -1,26 +1,43 @@
 package com.exascale.optimizer;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.IdentityHashMap;
 import com.exascale.managers.HRDBMSWorker;
-import com.exascale.misc.AtomicDouble;
 import com.exascale.misc.MyDate;
 
 public final class MinOperator implements AggregateOperator, Serializable
 {
+	private static sun.misc.Unsafe unsafe;
+
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
+
 	private String input;
-
-	private final String output;
-
-	private final MetaData meta;
+	private String output;
+	private transient final MetaData meta;
 	private boolean isInt;
 	private boolean isLong;
 	private boolean isFloat;
 	private boolean isChar;
+
 	private boolean isDate;
+
 	private int NUM_GROUPS = 16;
 
 	public MinOperator(String input, String output, MetaData meta, boolean isInt)
@@ -45,10 +62,20 @@ public final class MinOperator implements AggregateOperator, Serializable
 			this.isDate = false;
 		}
 	}
-	
-	public void setInput(String col)
+
+	public static MinOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
 	{
-		input = col;
+		MinOperator value = (MinOperator)unsafe.allocateInstance(MinOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.input = OperatorUtils.readString(in, prev);
+		value.output = OperatorUtils.readString(in, prev);
+		value.NUM_GROUPS = OperatorUtils.readInt(in);
+		value.isInt = OperatorUtils.readBool(in);
+		value.isLong = OperatorUtils.readBool(in);
+		value.isFloat = OperatorUtils.readBool(in);
+		value.isChar = OperatorUtils.readBool(in);
+		value.isDate = OperatorUtils.readBool(in);
+		return value;
 	}
 
 	@Override
@@ -62,31 +89,6 @@ public final class MinOperator implements AggregateOperator, Serializable
 		retval.isChar = isChar;
 		retval.isDate = isDate;
 		return retval;
-	}
-	
-	public void setIsInt(boolean isInt)
-	{
-		this.isInt = isInt;
-	}
-	
-	public void setIsLong(boolean isInt)
-	{
-		this.isLong = isInt;
-	}
-	
-	public void setIsFloat(boolean isInt)
-	{
-		this.isFloat = isInt;
-	}
-	
-	public void setIsChar(boolean isInt)
-	{
-		this.isChar = isInt;
-	}
-	
-	public void setIsDate(boolean isInt)
-	{
-		this.isDate = isInt;
 	}
 
 	@Override
@@ -139,9 +141,62 @@ public final class MinOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(55, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		OperatorUtils.writeString(input, out, prev);
+		OperatorUtils.writeString(output, out, prev);
+		OperatorUtils.writeInt(NUM_GROUPS, out);
+		OperatorUtils.writeBool(isInt, out);
+		OperatorUtils.writeBool(isLong, out);
+		OperatorUtils.writeBool(isFloat, out);
+		OperatorUtils.writeBool(isChar, out);
+		OperatorUtils.writeBool(isDate, out);
+	}
+
+	@Override
+	public void setInput(String col)
+	{
+		input = col;
+	}
+
+	@Override
 	public void setInputColumn(String col)
 	{
 		input = col;
+	}
+
+	public void setIsChar(boolean isInt)
+	{
+		this.isChar = isInt;
+	}
+
+	public void setIsDate(boolean isInt)
+	{
+		this.isDate = isInt;
+	}
+
+	public void setIsFloat(boolean isInt)
+	{
+		this.isFloat = isInt;
+	}
+
+	public void setIsInt(boolean isInt)
+	{
+		this.isInt = isInt;
+	}
+
+	public void setIsLong(boolean isInt)
+	{
+		this.isLong = isInt;
 	}
 
 	@Override
@@ -154,7 +209,7 @@ public final class MinOperator implements AggregateOperator, Serializable
 	{
 		// private final DiskBackedALOHashMap<AtomicDouble> mins = new
 		// DiskBackedALOHashMap<AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
-		private final ConcurrentHashMap<ArrayList<Object>, AtomicReference> mins = new ConcurrentHashMap<ArrayList<Object>, AtomicReference>(NUM_GROUPS > 0 ? NUM_GROUPS : 16, 1.0f);
+		private final HashMap<ArrayList<Object>, Object> mins = new HashMap<ArrayList<Object>, Object>();
 		private final HashMap<String, Integer> cols2Pos;
 		private int pos;
 
@@ -181,7 +236,7 @@ public final class MinOperator implements AggregateOperator, Serializable
 		@Override
 		public Object getResult(ArrayList<Object> keys)
 		{
-			return mins.get(keys).get();
+			return mins.get(keys);
 		}
 
 		// @Parallel
@@ -190,43 +245,22 @@ public final class MinOperator implements AggregateOperator, Serializable
 		{
 			final Object o = row.get(pos);
 			Comparable val = (Comparable)o;
-			
-			AtomicReference ad = mins.get(group);
-			if (ad != null)
+
+			synchronized (mins)
 			{
-				Comparable min = (Comparable)ad.get();
-				if (val.compareTo(min) < 0)
+				Object ad = mins.get(group);
+				if (ad != null)
 				{
-					while (!ad.compareAndSet(min, val))
+					Comparable min = (Comparable)ad;
+					if (val.compareTo(min) < 0)
 					{
-						min = (Comparable)ad.get();
-						if (val.compareTo(min) > -1)
-						{
-							break;
-						}
+						mins.put(group, val);
 					}
+
+					return;
 				}
 
-				return;
-			}
-
-			if (mins.putIfAbsent(group, new AtomicReference(val)) != null)
-			{
-				ad = mins.get(group);
-				Comparable min = (Comparable)ad.get();
-				if (val.compareTo(min) < 0)
-				{
-					while (!ad.compareAndSet(min, val))
-					{
-						min = (Comparable)ad.get();
-						if (val.compareTo(min) > -1)
-						{
-							break;
-						}
-					}
-				}
-
-				return;
+				mins.put(group, val);
 			}
 		}
 	}
@@ -318,7 +352,7 @@ public final class MinOperator implements AggregateOperator, Serializable
 					{
 						min = o;
 					}
-					else if (o.compareTo((MyDate)min) < 0)
+					else if (o.compareTo(min) < 0)
 					{
 						min = o;
 					}

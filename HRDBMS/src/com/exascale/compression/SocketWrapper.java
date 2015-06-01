@@ -36,11 +36,12 @@ public abstract class SocketWrapper extends Socket
 {
 
 	private final Socket socket; // the wrapped socket (there is no public
-									// getImpl() in Socket :-()
+
+	// getImpl() in Socket :-()
 
 	/**
 	 * Creates a wrapper for the given socket.
-	 * 
+	 *
 	 * @param socket
 	 *            the socket to wrap
 	 * @throws SocketException

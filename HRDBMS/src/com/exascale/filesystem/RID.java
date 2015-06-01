@@ -17,13 +17,14 @@ public class RID implements Serializable, Comparable
 		this.rec = rec;
 	}
 
+	@Override
 	public int compareTo(Object r)
 	{
 		if (!(r instanceof RID))
 		{
 			return -1;
 		}
-		
+
 		RID rhs = (RID)r;
 		if (node < rhs.node)
 		{
@@ -105,6 +106,12 @@ public class RID implements Serializable, Comparable
 		return "" + node + dev + block + rec;
 	}
 
+	@Override
+	public int hashCode()
+	{
+		return Integer.reverse(node) + Integer.reverse(dev) + Integer.reverse(block) + Integer.reverse(rec);
+	}
+
 	public void setBlock(int block)
 	{
 		this.block = block;
@@ -124,14 +131,10 @@ public class RID implements Serializable, Comparable
 	{
 		this.rec = rec;
 	}
-	
+
+	@Override
 	public String toString()
 	{
 		return node + ":" + dev + ":" + block + ":" + rec;
-	}
-	
-	public int hashCode()
-	{
-		return Integer.reverse(node) + Integer.reverse(dev) + Integer.reverse(block) + Integer.reverse(rec);
 	}
 }

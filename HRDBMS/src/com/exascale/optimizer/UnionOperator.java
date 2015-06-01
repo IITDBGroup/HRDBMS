@@ -1,54 +1,92 @@
 package com.exascale.optimizer;
 
+import java.io.File;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.RandomAccessFile;
 import java.io.Serializable;
+import java.lang.reflect.Field;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.TreeMap;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.ConcurrentHashMap;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
-import com.exascale.managers.ResourceManager.DiskBackedHashSet;
 import com.exascale.misc.BufferedLinkedBlockingQueue;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.MurmurHash;
+import com.exascale.misc.MyDate;
 import com.exascale.tables.Plan;
+import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.ThreadPoolThread;
 
 public final class UnionOperator implements Operator, Serializable
 {
-	private final ArrayList<Operator> children = new ArrayList<Operator>();
+	private static sun.misc.Unsafe unsafe;
 
-	private final MetaData meta;
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
 
+	private ArrayList<Operator> children = new ArrayList<Operator>();
+	private transient final MetaData meta;
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
 	private TreeMap<Integer, String> pos2Col;
 	private Operator parent;
 	private int node;
 	private boolean distinct;
-	private BufferedLinkedBlockingQueue buffer;
-	private DiskBackedHashSet set;
-	private final AtomicLong counter = new AtomicLong(0);
+	private transient BufferedLinkedBlockingQueue buffer;
+	private transient ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>> set;
+	// private final AtomicLong counter = new AtomicLong(0);
 	private int estimate = 16;
-	private volatile boolean inited = false;
-	private ArrayList<ReadThread> threads;
+	private transient ArrayList<ReadThread> threads;
 	private boolean startDone = false;
-	private transient Plan plan;
 	private boolean estimateSet = false;
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
-	}
-	
-	public boolean isDistinct()
-	{
-		return distinct;
-	}
+	private transient boolean inMem;
+	private transient int numFiles = 1;
+	private transient ArrayList<ArrayList<String>> externalFiles;
+
+	private transient ArrayList<ArrayList<RandomAccessFile>> rafs;
+
+	private transient ArrayList<ArrayList<FileChannel>> fcs;
 
 	public UnionOperator(boolean distinct, MetaData meta)
 	{
 		this.meta = meta;
 		this.distinct = distinct;
+	}
+
+	public static UnionOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		UnionOperator value = (UnionOperator)unsafe.allocateInstance(UnionOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.children = OperatorUtils.deserializeALOp(in, prev);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.parent = OperatorUtils.deserializeOperator(in, prev);
+		value.node = OperatorUtils.readInt(in);
+		value.distinct = OperatorUtils.readBool(in);
+		value.estimate = OperatorUtils.readInt(in);
+		value.startDone = OperatorUtils.readBool(in);
+		value.estimateSet = OperatorUtils.readBool(in);
+		return value;
 	}
 
 	@Override
@@ -88,12 +126,12 @@ public final class UnionOperator implements Operator, Serializable
 		{
 			child.close();
 		}
-		
+
 		if (buffer != null)
 		{
 			buffer.close();
 		}
-		
+
 		threads = null;
 		cols2Pos = null;
 		cols2Types = null;
@@ -143,6 +181,11 @@ public final class UnionOperator implements Operator, Serializable
 		return retval;
 	}
 
+	public boolean isDistinct()
+	{
+		return distinct;
+	}
+
 	@Override
 	public Object next(Operator op) throws Exception
 	{
@@ -163,7 +206,7 @@ public final class UnionOperator implements Operator, Serializable
 				return o;
 			}
 		}
-		
+
 		if (o instanceof Exception)
 		{
 			throw (Exception)o;
@@ -241,18 +284,32 @@ public final class UnionOperator implements Operator, Serializable
 			}
 
 			buffer.clear();
-			inited = false;
-			if (!inited)
-			{
-			}
-			else
-			{
-				Exception e = new Exception("UnionOperator has been inited more than once!");
-				HRDBMSWorker.logger.error("UnionOperator has been inited more than once!", e);
-				throw e;
-			}
 			new InitThread().start();
 		}
+	}
+
+	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(49, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		OperatorUtils.serializeALOp(children, out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		parent.serialize(out, prev);
+		OperatorUtils.writeInt(node, out);
+		OperatorUtils.writeBool(distinct, out);
+		OperatorUtils.writeInt(estimate, out);
+		OperatorUtils.writeBool(startDone, out);
+		OperatorUtils.writeBool(estimateSet, out);
 	}
 
 	@Override
@@ -283,6 +340,11 @@ public final class UnionOperator implements Operator, Serializable
 	}
 
 	@Override
+	public void setPlan(Plan plan)
+	{
+	}
+
+	@Override
 	public void start() throws Exception
 	{
 		startDone = true;
@@ -292,15 +354,6 @@ public final class UnionOperator implements Operator, Serializable
 		}
 
 		buffer = new BufferedLinkedBlockingQueue(ResourceManager.QUEUE_SIZE);
-		if (!inited)
-		{
-		}
-		else
-		{
-			Exception e = new Exception("UnionOperator has been inited more than once!");
-			HRDBMSWorker.logger.error("UnionOperator has been inited more than once!", e);
-			throw e;
-		}
 		new InitThread().start();
 	}
 
@@ -315,36 +368,61 @@ public final class UnionOperator implements Operator, Serializable
 		@Override
 		public void run()
 		{
-			if (!inited)
-			{
-				inited = true;
-			}
-			else
-			{
-				Exception e = new Exception();
-				HRDBMSWorker.logger.error("UnionOperator has been inited more than once!", e);
-				try
-				{
-					buffer.put(e);
-				}
-				catch(Exception f)
-				{}
-				return;
-			}
-
+			inMem = true;
 			threads = new ArrayList<ReadThread>(children.size());
 
 			if (distinct)
 			{
-				set = ResourceManager.newDiskBackedHashSet(true, estimate);
+				if (ResourceManager.lowMem())
+				{
+					inMem = false;
+					numFiles = (int)(estimate / (ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor"))) + 1);
+					// HRDBMSWorker.logger.debug("Setting numFiles to " +
+					// numFiles + " based on estimate of " + estimate);
+					if (numFiles == 1)
+					{
+						inMem = true;
+					}
+				}
+				else if (estimate > ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")))
+				{
+					inMem = false;
+					numFiles = (int)(estimate / (ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor"))) + 1);
+					// HRDBMSWorker.logger.debug("Setting numFiles to " +
+					// numFiles + " based on estimate of " + estimate);
+					if (numFiles == 1)
+					{
+						inMem = true;
+					}
+				}
+
+				if (inMem)
+				{
+					set = new ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>>(estimate, 1.0f, children.size());
+				}
+				else
+				{
+					try
+					{
+						createTempFiles();
+					}
+					catch (Exception e)
+					{
+						HRDBMSWorker.logger.debug("", e);
+						buffer.put(e);
+						cleanupExternal();
+						return;
+					}
+				}
 			}
 
 			// System.out.println("Union operator has " + children.size() +
 			// " children");
 
+			int i = 0;
 			for (final Operator op : children)
 			{
-				final ReadThread thread = new ReadThread(op);
+				final ReadThread thread = new ReadThread(op, i++);
 				threads.add(thread);
 				thread.start();
 			}
@@ -366,38 +444,29 @@ public final class UnionOperator implements Operator, Serializable
 
 			if (distinct)
 			{
-				for (final Object o : set.getArray())
+				if (inMem)
 				{
-					while (true)
+					for (final ArrayList<Object> o : set.keySet())
 					{
-						try
+						while (true)
 						{
-							buffer.put(o);
-							break;
-						}
-						catch (final Exception e)
-						{
+							try
+							{
+								buffer.put(o);
+								break;
+							}
+							catch (final Exception e)
+							{
+							}
 						}
 					}
 				}
-
-				// System.out.println("Union operator returned " +
-				// set.getArray().size() + " rows");
-
-				try
+				else
 				{
-					set.getArray().close();
-					set.close();
+					HRDBMSWorker.logger.debug("External hash set");
+					doExternal();
+					cleanupExternal();
 				}
-				catch (final Exception e)
-				{
-					HRDBMSWorker.logger.error("", e);
-				}
-			}
-			else
-			{
-				// System.out.println("Union operator returned " + counter.get()
-				// + " rows");
 			}
 
 			while (true)
@@ -412,15 +481,123 @@ public final class UnionOperator implements Operator, Serializable
 				}
 			}
 		}
+
+		private void cleanupExternal()
+		{
+			for (ArrayList<FileChannel> fc : fcs)
+			{
+				for (FileChannel f : fc)
+				{
+					try
+					{
+						f.close();
+					}
+					catch (Exception e)
+					{
+					}
+				}
+			}
+
+			for (ArrayList<RandomAccessFile> raf : rafs)
+			{
+				for (RandomAccessFile r : raf)
+				{
+					try
+					{
+						r.close();
+					}
+					catch (Exception e)
+					{
+					}
+				}
+			}
+
+			for (ArrayList<String> files : externalFiles)
+			{
+				for (String fn : files)
+				{
+					new File(fn).delete();
+				}
+			}
+		}
+
+		private void createTempFiles() throws Exception
+		{
+			int i = 0; // fileNum
+			externalFiles = new ArrayList<ArrayList<String>>();
+			rafs = new ArrayList<ArrayList<RandomAccessFile>>();
+			fcs = new ArrayList<ArrayList<FileChannel>>();
+			while (i < numFiles)
+			{
+				ArrayList<String> files = new ArrayList<String>();
+				ArrayList<RandomAccessFile> raf = new ArrayList<RandomAccessFile>();
+				ArrayList<FileChannel> fc = new ArrayList<FileChannel>();
+				int j = 0; // child num
+				while (j < children.size())
+				{
+					String fn = ResourceManager.TEMP_DIRS.get(i % ResourceManager.TEMP_DIRS.size()) + this.hashCode() + "" + System.currentTimeMillis() + ".exths" + i + "." + j;
+					files.add(fn);
+					RandomAccessFile r = new RandomAccessFile(fn, "rw");
+					raf.add(r);
+					fc.add(r.getChannel());
+					j++;
+				}
+
+				externalFiles.add(files);
+				rafs.add(raf);
+				fcs.add(fc);
+				i++;
+			}
+		}
+
+		private void doExternal()
+		{
+			int i = 0; // fileNum
+			double factor = Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor"));
+			int size = (int)(ResourceManager.QUEUE_SIZE * factor);
+			HashSet<ArrayList<Object>> set = new HashSet<ArrayList<Object>>(size);
+			ReadBackThread thread = new ReadBackThread(i, set);
+			thread.start();
+			while (i < numFiles)
+			{
+				while (true)
+				{
+					try
+					{
+						thread.join();
+						break;
+					}
+					catch (InterruptedException e)
+					{
+					}
+				}
+				HashSet<ArrayList<Object>> temp = set;
+				if (i + 1 < numFiles)
+				{
+					set = new HashSet<ArrayList<Object>>(size);
+					thread = new ReadBackThread(i + 1, set);
+					thread.start();
+				}
+
+				for (ArrayList<Object> row : temp)
+				{
+					buffer.put(row);
+				}
+
+				i++;
+			}
+		}
 	}
 
-	private final class ReadThread extends ThreadPoolThread
+	private class ReadBackThread extends HRDBMSThread
 	{
-		private final Operator op;
+		private final int fileNum;
+		private final HashSet<ArrayList<Object>> set;
 
-		public ReadThread(Operator op)
+		public ReadBackThread(int fileNum, HashSet<ArrayList<Object>> set)
 		{
-			this.op = op;
+			this.fileNum = fileNum;
+			this.set = set;
 		}
 
 		@Override
@@ -428,49 +605,416 @@ public final class UnionOperator implements Operator, Serializable
 		{
 			try
 			{
-				Object o = null;
-				o = op.next(UnionOperator.this);
-				while (!(o instanceof DataEndMarker))
+				ArrayList<FileChannel> fs = fcs.get(fileNum);
+				for (FileChannel fc : fs)
 				{
-					if (o instanceof Exception)
+					fc.position(0);
+					ByteBuffer bb1 = ByteBuffer.allocate(4);
+					while (true)
 					{
-						buffer.put(o);
-						return;
+						bb1.position(0);
+						if (fc.read(bb1) == -1)
+						{
+							break;
+						}
+						bb1.position(0);
+						int length = bb1.getInt();
+						ByteBuffer bb = ByteBuffer.allocate(length);
+						fc.read(bb);
+						ArrayList<Object> row = (ArrayList<Object>)fromBytes(bb.array());
+						set.add(row);
 					}
-					if (distinct)
+				}
+			}
+			catch (Exception e)
+			{
+				HRDBMSWorker.logger.debug("", e);
+				buffer.put(e);
+			}
+		}
+
+		private final Object fromBytes(byte[] val) throws Exception
+		{
+			final ByteBuffer bb = ByteBuffer.wrap(val);
+			final int numFields = bb.getInt();
+
+			if (numFields == 0)
+			{
+				return new ArrayList<Object>();
+			}
+
+			bb.position(bb.position() + numFields);
+			final byte[] bytes = bb.array();
+			if (bytes[4] == 5)
+			{
+				return new DataEndMarker();
+			}
+			final ArrayList<Object> retval = new ArrayList<Object>(numFields);
+			int i = 0;
+			while (i < numFields)
+			{
+				if (bytes[i + 4] == 0)
+				{
+					// long
+					final Long o = bb.getLong();
+					retval.add(o);
+				}
+				else if (bytes[i + 4] == 1)
+				{
+					// integer
+					final Integer o = bb.getInt();
+					retval.add(o);
+				}
+				else if (bytes[i + 4] == 2)
+				{
+					// double
+					final Double o = bb.getDouble();
+					retval.add(o);
+				}
+				else if (bytes[i + 4] == 3)
+				{
+					// date
+					final MyDate o = new MyDate(bb.getLong());
+					retval.add(o);
+				}
+				else if (bytes[i + 4] == 4)
+				{
+					// string
+					final int length = bb.getInt();
+					final byte[] temp = new byte[length];
+					bb.get(temp);
+					try
 					{
-						set.add((ArrayList<Object>)o);
+						final String o = new String(temp, StandardCharsets.UTF_8);
+						retval.add(o);
+					}
+					catch (final Exception e)
+					{
+						HRDBMSWorker.logger.error("", e);
+						throw e;
+					}
+				}
+				// else if (bytes[i + 4] == 6)
+				// {
+				// // AtomicLong
+				// final long o = bb.getLong();
+				// retval.add(new AtomicLong(o));
+				// }
+				// else if (bytes[i + 4] == 7)
+				// {
+				// // AtomicDouble
+				// final double o = bb.getDouble();
+				// retval.add(new AtomicBigDecimal(new
+				// BigDecimalReplacement(o)));
+				// }
+				else if (bytes[i + 4] == 8)
+				{
+					// Empty ArrayList
+					retval.add(new ArrayList<Object>());
+				}
+				else
+				{
+					HRDBMSWorker.logger.error("Unknown type in fromBytes(): " + bytes[i + 4]);
+					HRDBMSWorker.logger.debug("So far the row is " + retval);
+					throw new Exception("Unknown type in fromBytes(): " + bytes[i + 4]);
+				}
+
+				i++;
+			}
+
+			return retval;
+		}
+	}
+
+	private final class ReadThread extends ThreadPoolThread
+	{
+		private final Operator op;
+		private final int childNum;
+
+		public ReadThread(Operator op, int childNum)
+		{
+			this.op = op;
+			this.childNum = childNum;
+		}
+
+		@Override
+		public void run()
+		{
+			if (inMem)
+			{
+				try
+				{
+					Object o = null;
+					o = op.next(UnionOperator.this);
+					while (!(o instanceof DataEndMarker))
+					{
+						if (o instanceof Exception)
+						{
+							buffer.put(o);
+							return;
+						}
+						if (distinct)
+						{
+							set.put((ArrayList<Object>)o, (ArrayList<Object>)o);
+						}
+						else
+						{
+							while (true)
+							{
+								try
+								{
+									buffer.put(o);
+									// counter.getAndIncrement();
+									break;
+								}
+								catch (final Exception e)
+								{
+								}
+							}
+						}
+
+						o = op.next(UnionOperator.this);
+					}
+				}
+				catch (final Exception f)
+				{
+					HRDBMSWorker.logger.error("", f);
+					try
+					{
+						buffer.put(f);
+					}
+					catch (Exception g)
+					{
+					}
+					return;
+				}
+			}
+			else
+			{
+				try
+				{
+					ArrayList<ArrayList<byte[]>> buckets = new ArrayList<ArrayList<byte[]>>();
+					int i = 0;
+					while (i < numFiles)
+					{
+						buckets.add(new ArrayList<byte[]>());
+						i++;
+					}
+
+					Object o = null;
+					o = op.next(UnionOperator.this);
+					while (!(o instanceof DataEndMarker))
+					{
+						if (o instanceof Exception)
+						{
+							buffer.put(o);
+							return;
+						}
+
+						byte[] data = toBytes(o);
+						int hash = (int)(hash(data) % numFiles);
+						ArrayList<byte[]> bucket = buckets.get(hash);
+						bucket.add(data);
+						if (bucket.size() > 512)
+						{
+							flushBucket(bucket, hash, childNum);
+						}
+
+						o = op.next(UnionOperator.this);
+					}
+
+					flushBuckets(buckets, childNum);
+				}
+				catch (Exception e)
+				{
+					HRDBMSWorker.logger.debug("", e);
+					buffer.put(e);
+				}
+			}
+		}
+
+		private void flushBucket(ArrayList<byte[]> bucket, int fileNum, int childNum) throws Exception
+		{
+			FileChannel fc = fcs.get(fileNum).get(childNum);
+			for (byte[] data : bucket)
+			{
+				ByteBuffer bb = ByteBuffer.wrap(data);
+				fc.write(bb);
+			}
+
+			bucket.clear();
+		}
+
+		private void flushBuckets(ArrayList<ArrayList<byte[]>> buckets, int childNum) throws Exception
+		{
+			int i = 0;
+			for (ArrayList<byte[]> bucket : buckets)
+			{
+				flushBucket(bucket, i, childNum);
+				i++;
+			}
+		}
+
+		private long hash(byte[] key) throws Exception
+		{
+			long eHash;
+			if (key == null)
+			{
+				eHash = 0;
+			}
+			else
+			{
+				eHash = MurmurHash.hash64(key, key.length);
+			}
+
+			return eHash & 0x0EFFFFFFFFFFFFFFL;
+		}
+
+		private final byte[] toBytes(Object v) throws Exception
+		{
+			ArrayList<byte[]> bytes = null;
+			ArrayList<Object> val;
+			if (v instanceof ArrayList)
+			{
+				val = (ArrayList<Object>)v;
+			}
+			else
+			{
+				final byte[] retval = new byte[9];
+				retval[0] = 0;
+				retval[1] = 0;
+				retval[2] = 0;
+				retval[3] = 5;
+				retval[4] = 0;
+				retval[5] = 0;
+				retval[6] = 0;
+				retval[7] = 1;
+				retval[8] = 5;
+				return retval;
+			}
+
+			int size = val.size() + 8;
+			final byte[] header = new byte[size];
+			int i = 8;
+			for (final Object o : val)
+			{
+				if (o instanceof Long)
+				{
+					header[i] = (byte)0;
+					size += 8;
+				}
+				else if (o instanceof Integer)
+				{
+					header[i] = (byte)1;
+					size += 4;
+				}
+				else if (o instanceof Double)
+				{
+					header[i] = (byte)2;
+					size += 8;
+				}
+				else if (o instanceof MyDate)
+				{
+					header[i] = (byte)3;
+					size += 8;
+				}
+				else if (o instanceof String)
+				{
+					header[i] = (byte)4;
+					byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
+					size += (4 + b.length);
+
+					if (bytes == null)
+					{
+						bytes = new ArrayList<byte[]>();
+						bytes.add(b);
 					}
 					else
 					{
-						while (true)
-						{
-							try
-							{
-								buffer.put(o);
-								counter.getAndIncrement();
-								break;
-							}
-							catch (final Exception e)
-							{
-							}
-						}
+						bytes.add(b);
 					}
-
-					o = op.next(UnionOperator.this);
 				}
-			}
-			catch (final Exception f)
-			{
-				HRDBMSWorker.logger.error("", f);
-				try
+				// else if (o instanceof AtomicLong)
+				// {
+				// header[i] = (byte)6;
+				// size += 8;
+				// }
+				// else if (o instanceof AtomicBigDecimal)
+				// {
+				// header[i] = (byte)7;
+				// size += 8;
+				// }
+				else if (o instanceof ArrayList)
 				{
-					buffer.put(f);
+					if (((ArrayList)o).size() != 0)
+					{
+						Exception e = new Exception("Non-zero size ArrayList in toBytes()");
+						HRDBMSWorker.logger.error("Non-zero size ArrayList in toBytes()", e);
+						throw e;
+					}
+					header[i] = (byte)8;
 				}
-				catch(Exception g)
-				{}
-				return;
+				else
+				{
+					HRDBMSWorker.logger.error("Unknown type " + o.getClass() + " in toBytes()");
+					HRDBMSWorker.logger.error(o);
+					throw new Exception("Unknown type " + o.getClass() + " in toBytes()");
+				}
+
+				i++;
 			}
+
+			final byte[] retval = new byte[size];
+			// System.out.println("In toBytes(), row has " + val.size() +
+			// " columns, object occupies " + size + " bytes");
+			System.arraycopy(header, 0, retval, 0, header.length);
+			i = 8;
+			final ByteBuffer retvalBB = ByteBuffer.wrap(retval);
+			retvalBB.putInt(size - 4);
+			retvalBB.putInt(val.size());
+			retvalBB.position(header.length);
+			int x = 0;
+			for (final Object o : val)
+			{
+				if (retval[i] == 0)
+				{
+					retvalBB.putLong((Long)o);
+				}
+				else if (retval[i] == 1)
+				{
+					retvalBB.putInt((Integer)o);
+				}
+				else if (retval[i] == 2)
+				{
+					retvalBB.putDouble((Double)o);
+				}
+				else if (retval[i] == 3)
+				{
+					retvalBB.putLong(((MyDate)o).getTime());
+				}
+				else if (retval[i] == 4)
+				{
+					byte[] temp = bytes.get(x);
+					x++;
+					retvalBB.putInt(temp.length);
+					retvalBB.put(temp);
+				}
+				// else if (retval[i] == 6)
+				// {
+				// retvalBB.putLong(((AtomicLong)o).get());
+				// }
+				// else if (retval[i] == 7)
+				// {
+				// retvalBB.putDouble(((AtomicBigDecimal)o).get().doubleValue());
+				// }
+				else if (retval[i] == 8)
+				{
+				}
+
+				i++;
+			}
+
+			return retval;
 		}
 	}
 }

@@ -1,30 +1,53 @@
 package com.exascale.optimizer;
 
-import java.io.File;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MurmurHash;
-import com.exascale.tables.Transaction;
+import com.exascale.misc.MyDate;
 
 public class CNFFilter implements Serializable
 {
+	private static sun.misc.Unsafe unsafe;
+
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
+
 	private ArrayList<ArrayList<Filter>> filters = new ArrayList<ArrayList<Filter>>();
 
-	private MetaData meta;
+	private transient MetaData meta;
 
 	private volatile HashMap<String, Integer> cols2Pos;
 
-	private ArrayList<Object> partHash;
+	private transient ArrayList<Object> partHash;
 
-	private ArrayList<Filter> rangeFilters;
+	private transient ArrayList<Filter> rangeFilters;
 
 	private volatile HashSet<HashMap<Filter, Filter>> hshm = null;
 
-	private final DataEndMarker hshmLock = new DataEndMarker();
+	private DataEndMarker hshmLock = new DataEndMarker();
+
+	private volatile HashSet<String> references;
 
 	public CNFFilter()
 	{
@@ -36,14 +59,14 @@ public class CNFFilter implements Serializable
 		this.setHSHM(clause);
 	}
 
-	public CNFFilter(HashSet<HashMap<Filter, Filter>> clause, MetaData meta, HashMap<String, Integer> cols2Pos, Operator tree) throws Exception
+	public CNFFilter(HashSet<HashMap<Filter, Filter>> clause, MetaData meta, HashMap<String, Integer> cols2Pos, HashMap<String, Double> generated, Operator tree) throws Exception
 	{
 		this.meta = meta;
 		this.cols2Pos = cols2Pos;
 		this.setHSHM(clause);
 	}
 
-	public CNFFilter(HashSet<HashMap<Filter, Filter>> clause, MetaData meta, HashMap<String, Integer> cols2Pos, HashMap<String, Double> generated, Operator tree) throws Exception
+	public CNFFilter(HashSet<HashMap<Filter, Filter>> clause, MetaData meta, HashMap<String, Integer> cols2Pos, Operator tree) throws Exception
 	{
 		this.meta = meta;
 		this.cols2Pos = cols2Pos;
@@ -53,6 +76,20 @@ public class CNFFilter implements Serializable
 	public CNFFilter(HashSet<HashMap<Filter, Filter>> clause, MetaData meta, HashMap<String, Integer> cols2Pos, RootOperator op) throws Exception
 	{
 		this(clause, meta, cols2Pos, op.getGenerated(), op);
+	}
+
+	public static CNFFilter deserializeKnown(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		CNFFilter value = (CNFFilter)unsafe.allocateInstance(CNFFilter.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.filters = OperatorUtils.deserializeALALF(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.partHash = OperatorUtils.deserializeALO(in, prev);
+		value.rangeFilters = OperatorUtils.deserializeALF(in, prev);
+		value.hshm = OperatorUtils.deserializeHSHM(in, prev);
+		value.hshmLock = new DataEndMarker();
+		value.references = OperatorUtils.deserializeHSS(in, prev);
+		return value;
 	}
 
 	public static void quicksort(ArrayList main, ArrayList<Double> scores)
@@ -89,6 +126,24 @@ public class CNFFilter implements Serializable
 		reverseQuicksort(a, scores, i + 1, right);
 	}
 
+	private static boolean areEquivalent(String l, String r)
+	{
+		String lhs = l;
+		String rhs = r;
+
+		if (lhs.contains("."))
+		{
+			lhs = lhs.substring(lhs.indexOf('.') + 1);
+		}
+
+		if (rhs.contains("."))
+		{
+			rhs = rhs.substring(rhs.indexOf('.') + 1);
+		}
+
+		return lhs.equals(rhs);
+	}
+
 	// exchange a[i] and a[j]
 	private static void exch(ArrayList<Object> a, ArrayList<Double> scores, int i, int j)
 	{
@@ -106,6 +161,30 @@ public class CNFFilter implements Serializable
 		a.add(j, swap1);
 		scores.remove(j);
 		scores.add(j, swap3);
+	}
+
+	private static long hash(Object key) throws Exception
+	{
+		long eHash;
+		if (key == null)
+		{
+			eHash = 0;
+		}
+		else
+		{
+			if (key instanceof ArrayList)
+			{
+				byte[] data = toBytes(key);
+				eHash = MurmurHash.hash64(data, data.length);
+			}
+			else
+			{
+				byte[] data = key.toString().getBytes(StandardCharsets.UTF_8);
+				eHash = MurmurHash.hash64(data, data.length);
+			}
+		}
+
+		return eHash;
 	}
 
 	// is x < y ?
@@ -175,6 +254,153 @@ public class CNFFilter implements Serializable
 		return i;
 	}
 
+	private static final byte[] toBytes(Object v) throws Exception
+	{
+		ArrayList<byte[]> bytes = null;
+		ArrayList<Object> val;
+		if (v instanceof ArrayList)
+		{
+			val = (ArrayList<Object>)v;
+		}
+		else
+		{
+			final byte[] retval = new byte[9];
+			retval[0] = 0;
+			retval[1] = 0;
+			retval[2] = 0;
+			retval[3] = 5;
+			retval[4] = 0;
+			retval[5] = 0;
+			retval[6] = 0;
+			retval[7] = 1;
+			retval[8] = 5;
+			return retval;
+		}
+
+		int size = val.size() + 8;
+		final byte[] header = new byte[size];
+		int i = 8;
+		for (final Object o : val)
+		{
+			if (o instanceof Long)
+			{
+				header[i] = (byte)0;
+				size += 8;
+			}
+			else if (o instanceof Integer)
+			{
+				header[i] = (byte)1;
+				size += 4;
+			}
+			else if (o instanceof Double)
+			{
+				header[i] = (byte)2;
+				size += 8;
+			}
+			else if (o instanceof MyDate)
+			{
+				header[i] = (byte)3;
+				size += 8;
+			}
+			else if (o instanceof String)
+			{
+				header[i] = (byte)4;
+				byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
+				size += (4 + b.length);
+
+				if (bytes == null)
+				{
+					bytes = new ArrayList<byte[]>();
+					bytes.add(b);
+				}
+				else
+				{
+					bytes.add(b);
+				}
+			}
+			// else if (o instanceof AtomicLong)
+			// {
+			// header[i] = (byte)6;
+			// size += 8;
+			// }
+			// else if (o instanceof AtomicBigDecimal)
+			// {
+			// header[i] = (byte)7;
+			// size += 8;
+			// }
+			else if (o instanceof ArrayList)
+			{
+				if (((ArrayList)o).size() != 0)
+				{
+					Exception e = new Exception("Non-zero size ArrayList in toBytes()");
+					HRDBMSWorker.logger.error("Non-zero size ArrayList in toBytes()", e);
+					throw e;
+				}
+				header[i] = (byte)8;
+			}
+			else
+			{
+				HRDBMSWorker.logger.error("Unknown type " + o.getClass() + " in toBytes()");
+				HRDBMSWorker.logger.error(o);
+				throw new Exception("Unknown type " + o.getClass() + " in toBytes()");
+			}
+
+			i++;
+		}
+
+		final byte[] retval = new byte[size];
+		// System.out.println("In toBytes(), row has " + val.size() +
+		// " columns, object occupies " + size + " bytes");
+		System.arraycopy(header, 0, retval, 0, header.length);
+		i = 8;
+		final ByteBuffer retvalBB = ByteBuffer.wrap(retval);
+		retvalBB.putInt(size - 4);
+		retvalBB.putInt(val.size());
+		retvalBB.position(header.length);
+		int x = 0;
+		for (final Object o : val)
+		{
+			if (retval[i] == 0)
+			{
+				retvalBB.putLong((Long)o);
+			}
+			else if (retval[i] == 1)
+			{
+				retvalBB.putInt((Integer)o);
+			}
+			else if (retval[i] == 2)
+			{
+				retvalBB.putDouble((Double)o);
+			}
+			else if (retval[i] == 3)
+			{
+				retvalBB.putLong(((MyDate)o).getTime());
+			}
+			else if (retval[i] == 4)
+			{
+				byte[] temp = bytes.get(x);
+				x++;
+				retvalBB.putInt(temp.length);
+				retvalBB.put(temp);
+			}
+			// else if (retval[i] == 6)
+			// {
+			// retvalBB.putLong(((AtomicLong)o).get());
+			// }
+			// else if (retval[i] == 7)
+			// {
+			// retvalBB.putDouble(((AtomicBigDecimal)o).get().doubleValue());
+			// }
+			else if (retval[i] == 8)
+			{
+			}
+
+			i++;
+		}
+
+		return retval;
+	}
+
 	@Override
 	public CNFFilter clone()
 	{
@@ -230,7 +456,7 @@ public class CNFFilter implements Serializable
 		return hshm;
 	}
 
-	public long getPartitionHash()
+	public long getPartitionHash() throws Exception
 	{
 		return 0x0EFFFFFFFFFFFFFFL & hash(partHash);
 	}
@@ -267,23 +493,32 @@ public class CNFFilter implements Serializable
 
 		return retval;
 	}
-	
-	private static boolean areEquivalent(String l, String r)
+
+	public HashSet<String> getReferencesHash()
 	{
-		String lhs = l;
-		String rhs = r;
-		
-		if (lhs.contains("."))
+		if (references == null)
 		{
-			lhs = lhs.substring(lhs.indexOf('.') + 1);
+			final HashSet<String> retval = new HashSet<String>(filters.size());
+			for (final ArrayList<Filter> f : filters)
+			{
+				for (final Filter filter : f)
+				{
+					if (filter.leftIsColumn())
+					{
+						retval.add(filter.leftColumn());
+					}
+
+					if (filter.rightIsColumn())
+					{
+						retval.add(filter.rightColumn());
+					}
+				}
+			}
+
+			references = retval;
 		}
-		
-		if (rhs.contains("."))
-		{
-			rhs = rhs.substring(rhs.indexOf('.') + 1);
-		}
-		
-		return lhs.equals(rhs);
+
+		return references;
 	}
 
 	public boolean hashFiltersPartitions(ArrayList<String> hashCols)
@@ -417,6 +652,26 @@ public class CNFFilter implements Serializable
 		return retval;
 	}
 
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(63, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		OperatorUtils.serializeALALF(filters, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeALO(partHash, out, prev);
+		OperatorUtils.serializeALF(rangeFilters, out, prev);
+		OperatorUtils.serializeHSHM(hshm, out, prev);
+		// recreate hshmLock
+		OperatorUtils.serializeHSS(references, out, prev);
+	}
+
 	public void setHSHM(HashSet<HashMap<Filter, Filter>> hshm)
 	{
 		filters = new ArrayList<ArrayList<Filter>>(hshm.size());
@@ -445,21 +700,6 @@ public class CNFFilter implements Serializable
 	public void updateCols2Pos(HashMap<String, Integer> cols2Pos)
 	{
 		this.cols2Pos = cols2Pos;
-	}
-
-	private long hash(Object key)
-	{
-		long eHash;
-		if (key == null)
-		{
-			eHash = 0;
-		}
-		else
-		{
-			eHash = MurmurHash.hash64(key.toString());
-		}
-
-		return eHash;
 	}
 
 	private final boolean passesOredCondition(ArrayList<Filter> filter, ArrayList<Object> row) throws Exception

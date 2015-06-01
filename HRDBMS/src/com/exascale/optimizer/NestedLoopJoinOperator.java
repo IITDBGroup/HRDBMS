@@ -1,16 +1,20 @@
 package com.exascale.optimizer;
 
-import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.Vector;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 import com.exascale.managers.HRDBMSWorker;
@@ -23,52 +27,59 @@ import com.exascale.misc.MurmurHash;
 import com.exascale.misc.MyDate;
 import com.exascale.misc.MySimpleDateFormat;
 import com.exascale.tables.Plan;
-import com.exascale.tables.Transaction;
 import com.exascale.threads.ThreadPoolThread;
 
 public final class NestedLoopJoinOperator extends JoinOperator implements Serializable
 {
-	private final ArrayList<Operator> children = new ArrayList<Operator>(2);
+	private static sun.misc.Unsafe unsafe;
+
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
+
+	private ArrayList<Operator> children = new ArrayList<Operator>(2);
 
 	private Operator parent;
 
 	private HashMap<String, String> cols2Types;
 
 	private HashMap<String, Integer> cols2Pos;
-
 	private TreeMap<Integer, String> pos2Col;
-
-	private final MetaData meta;
-	private volatile BufferedLinkedBlockingQueue outBuffer;
-	private volatile DiskBackedArray inBuffer;
-	private int NUM_RT_THREADS = 4 * ResourceManager.cpus;
-	private final int NUM_PTHREADS = 4 * ResourceManager.cpus;
-	private final AtomicLong outCount = new AtomicLong(0);
-	private volatile boolean readersDone = false;
+	private MetaData meta;
+	private transient volatile BufferedLinkedBlockingQueue outBuffer;
+	private transient volatile DiskBackedArray inBuffer;
+	private transient int NUM_RT_THREADS;
+	private transient int NUM_PTHREADS;
+	// private final AtomicLong outCount = new AtomicLong(0);
+	private transient volatile boolean readersDone;
 	private CNFFilter cnfFilters;
 	private HashSet<HashMap<Filter, Filter>> f;
 	private int childPos = -1;
 	private int node;
 	private boolean indexAccess = false;
 	private ArrayList<Index> dynamicIndexes;
-	private ArrayList<ArrayList<Object>> queuedRows = new ArrayList<ArrayList<Object>>();
-	private final MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
+	private transient ArrayList<ArrayList<Object>> queuedRows;
+	private transient MySimpleDateFormat sdf;
 	private int rightChildCard = 16;
-	private ArrayList<DiskBackedHashMap> buckets = new ArrayList<DiskBackedHashMap>();
-	private ReentrantLock bucketsLock = new ReentrantLock();
-	private final AtomicLong inCount2 = new AtomicLong(0);
+	private transient ArrayList<DiskBackedHashMap> buckets;
+	private transient ReentrantLock bucketsLock;
+	// private final AtomicLong inCount2 = new AtomicLong(0);
 	private boolean alreadySorted = false;
 	private boolean cardSet = false;
-	private Vector<Operator> clones = new Vector<Operator>();
-	private Vector<AtomicBoolean> lockVector = new Vector<AtomicBoolean>();
-	private final ReentrantLock thisLock = new ReentrantLock();
-	private transient Plan plan;
-	private AtomicLong inCount = new AtomicLong(0);
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
-	}
+
+	private transient Vector<Operator> clones;
+
+	private transient Vector<AtomicBoolean> lockVector;
 
 	public NestedLoopJoinOperator(ArrayList<Filter> filters, MetaData meta)
 	{
@@ -85,6 +96,175 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	private NestedLoopJoinOperator(MetaData meta)
 	{
 		this.meta = meta;
+	}
+
+	public static NestedLoopJoinOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		NestedLoopJoinOperator value = (NestedLoopJoinOperator)unsafe.allocateInstance(NestedLoopJoinOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.children = OperatorUtils.deserializeALOp(in, prev);
+		value.parent = OperatorUtils.deserializeOperator(in, prev);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.meta = new MetaData();
+		value.cnfFilters = OperatorUtils.deserializeCNF(in, prev);
+		value.f = OperatorUtils.deserializeHSHM(in, prev);
+		value.childPos = OperatorUtils.readInt(in);
+		value.node = OperatorUtils.readInt(in);
+		value.indexAccess = OperatorUtils.readBool(in);
+		value.dynamicIndexes = OperatorUtils.deserializeALIndx(in, prev);
+		value.rightChildCard = OperatorUtils.readInt(in);
+		value.alreadySorted = OperatorUtils.readBool(in);
+		value.cardSet = OperatorUtils.readBool(in);
+		return value;
+	}
+
+	private static final byte[] toBytes(Object v) throws Exception
+	{
+		ArrayList<byte[]> bytes = null;
+		ArrayList<Object> val;
+		if (v instanceof ArrayList)
+		{
+			val = (ArrayList<Object>)v;
+		}
+		else
+		{
+			final byte[] retval = new byte[9];
+			retval[0] = 0;
+			retval[1] = 0;
+			retval[2] = 0;
+			retval[3] = 5;
+			retval[4] = 0;
+			retval[5] = 0;
+			retval[6] = 0;
+			retval[7] = 1;
+			retval[8] = 5;
+			return retval;
+		}
+
+		int size = val.size() + 8;
+		final byte[] header = new byte[size];
+		int i = 8;
+		for (final Object o : val)
+		{
+			if (o instanceof Long)
+			{
+				header[i] = (byte)0;
+				size += 8;
+			}
+			else if (o instanceof Integer)
+			{
+				header[i] = (byte)1;
+				size += 4;
+			}
+			else if (o instanceof Double)
+			{
+				header[i] = (byte)2;
+				size += 8;
+			}
+			else if (o instanceof MyDate)
+			{
+				header[i] = (byte)3;
+				size += 8;
+			}
+			else if (o instanceof String)
+			{
+				header[i] = (byte)4;
+				byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
+				size += (4 + b.length);
+
+				if (bytes == null)
+				{
+					bytes = new ArrayList<byte[]>();
+					bytes.add(b);
+				}
+				else
+				{
+					bytes.add(b);
+				}
+			}
+			// else if (o instanceof AtomicLong)
+			// {
+			// header[i] = (byte)6;
+			// size += 8;
+			// }
+			// else if (o instanceof AtomicBigDecimal)
+			// {
+			// header[i] = (byte)7;
+			// size += 8;
+			// }
+			else if (o instanceof ArrayList)
+			{
+				if (((ArrayList)o).size() != 0)
+				{
+					Exception e = new Exception("Non-zero size ArrayList in toBytes()");
+					HRDBMSWorker.logger.error("Non-zero size ArrayList in toBytes()", e);
+					throw e;
+				}
+				header[i] = (byte)8;
+			}
+			else
+			{
+				HRDBMSWorker.logger.error("Unknown type " + o.getClass() + " in toBytes()");
+				HRDBMSWorker.logger.error(o);
+				throw new Exception("Unknown type " + o.getClass() + " in toBytes()");
+			}
+
+			i++;
+		}
+
+		final byte[] retval = new byte[size];
+		// System.out.println("In toBytes(), row has " + val.size() +
+		// " columns, object occupies " + size + " bytes");
+		System.arraycopy(header, 0, retval, 0, header.length);
+		i = 8;
+		final ByteBuffer retvalBB = ByteBuffer.wrap(retval);
+		retvalBB.putInt(size - 4);
+		retvalBB.putInt(val.size());
+		retvalBB.position(header.length);
+		int x = 0;
+		for (final Object o : val)
+		{
+			if (retval[i] == 0)
+			{
+				retvalBB.putLong((Long)o);
+			}
+			else if (retval[i] == 1)
+			{
+				retvalBB.putInt((Integer)o);
+			}
+			else if (retval[i] == 2)
+			{
+				retvalBB.putDouble((Double)o);
+			}
+			else if (retval[i] == 3)
+			{
+				retvalBB.putLong(((MyDate)o).getTime());
+			}
+			else if (retval[i] == 4)
+			{
+				byte[] temp = bytes.get(x);
+				x++;
+				retvalBB.putInt(temp.length);
+				retvalBB.put(temp);
+			}
+			// else if (retval[i] == 6)
+			// {
+			// retvalBB.putLong(((AtomicLong)o).get());
+			// }
+			// else if (retval[i] == 7)
+			// {
+			// retvalBB.putDouble(((AtomicBigDecimal)o).get().doubleValue());
+			// }
+			else if (retval[i] == 8)
+			{
+			}
+
+			i++;
+		}
+
+		return retval;
 	}
 
 	@Override
@@ -115,7 +295,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 					cols2Pos.put((String)entry.getValue(), cols2Pos.size());
 					pos2Col.put(pos2Col.size(), (String)entry.getValue());
 				}
-				
+
 				cnfFilters = new CNFFilter(f, meta, cols2Pos, this);
 			}
 		}
@@ -204,12 +384,12 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		{
 			o.close();
 		}
-		
+
 		if (outBuffer != null)
 		{
 			outBuffer.close();
 		}
-		
+
 		cnfFilters = null;
 		f = null;
 		dynamicIndexes = null;
@@ -253,6 +433,12 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	}
 
 	@Override
+	public boolean getIndexAccess()
+	{
+		return indexAccess;
+	}
+
+	@Override
 	public ArrayList<String> getJoinForChild(Operator op)
 	{
 		Filter x = null;
@@ -279,7 +465,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				break;
 			}
 		}
-		
+
 		if (x == null)
 		{
 			return null;
@@ -351,7 +537,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 					{
 						throw (Exception)o;
 					}
-					
+
 					return o;
 				}
 			}
@@ -450,7 +636,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 						{
 							throw (Exception)obj;
 						}
-						
+
 						return obj;
 					}
 				}
@@ -474,7 +660,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				return o;
 			}
 		}
-		
+
 		if (o instanceof Exception)
 		{
 			throw (Exception)o;
@@ -535,6 +721,35 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	}
 
 	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(59, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		OperatorUtils.serializeALOp(children, out, prev);
+		parent.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		// create new meta on receive side
+		OperatorUtils.serializeCNF(cnfFilters, out, prev);
+		OperatorUtils.serializeHSHM(f, out, prev);
+		OperatorUtils.writeInt(childPos, out);
+		OperatorUtils.writeInt(node, out);
+		OperatorUtils.writeBool(indexAccess, out);
+		OperatorUtils.serializeALIndx(dynamicIndexes, out, prev);
+		OperatorUtils.writeInt(rightChildCard, out);
+		OperatorUtils.writeBool(alreadySorted, out);
+		OperatorUtils.writeBool(cardSet, out);
+	}
+
+	@Override
 	public void setChildPos(int pos)
 	{
 		childPos = pos;
@@ -545,16 +760,16 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		indexAccess = true;
 		this.dynamicIndexes = indexes;
 	}
-	
-	public boolean getIndexAccess()
-	{
-		return indexAccess;
-	}
 
 	@Override
 	public void setNode(int node)
 	{
 		this.node = node;
+	}
+
+	@Override
+	public void setPlan(Plan plan)
+	{
 	}
 
 	public boolean setRightChildCard(int card)
@@ -681,6 +896,16 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	@Override
 	public void start() throws Exception
 	{
+		NUM_RT_THREADS = 4 * ResourceManager.cpus;
+		NUM_PTHREADS = 4 * ResourceManager.cpus;
+		readersDone = false;
+		queuedRows = new ArrayList<ArrayList<Object>>();
+		sdf = new MySimpleDateFormat("yyyy-MM-dd");
+		buckets = new ArrayList<DiskBackedHashMap>();
+		bucketsLock = new ReentrantLock();
+		clones = new Vector<Operator>();
+		lockVector = new Vector<AtomicBoolean>();
+
 		if (!indexAccess)
 		{
 			inBuffer = ResourceManager.newDiskBackedArray(rightChildCard);
@@ -841,7 +1066,8 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		synchronized (clones)
 		{
 			int i = 0;
-			while (i < clones.size())
+			final int size = clones.size();
+			while (i < size)
 			{
 				final Operator o = clones.get(i);
 				if (clone == o)
@@ -860,7 +1086,8 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		synchronized (clones)
 		{
 			int i = 0;
-			while (i < lockVector.size())
+			final int size = lockVector.size();
+			while (i < size)
 			{
 				final AtomicBoolean lock = lockVector.get(i);
 				if (!lock.get())
@@ -966,7 +1193,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 										{
 											try
 											{
-												nlHash.join();
+												thread.join();
 												break;
 											}
 											catch (final InterruptedException e)
@@ -1133,8 +1360,9 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				{
 					nlHash.close();
 				}
-				catch(Exception e)
-				{}
+				catch (Exception e)
+				{
+				}
 			}
 
 			while (true)
@@ -1149,15 +1377,18 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 					HRDBMSWorker.logger.error("", e);
 				}
 			}
-			
+
 			try
 			{
 				inBuffer.close();
 			}
-			catch(Exception e)
-			{}
-			
-			HRDBMSWorker.logger.debug(NestedLoopJoinOperator.this + " received " + inCount.get() + " left rows and " + inCount2.get() + " right rows and output " + outCount.get() + " rows");
+			catch (Exception e)
+			{
+			}
+
+			// HRDBMSWorker.logger.debug(NestedLoopJoinOperator.this +
+			// " received " + inCount.get() + " left rows and " + inCount2.get()
+			// + " right rows and output " + outCount.get() + " rows");
 		}
 	}
 
@@ -1208,7 +1439,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				// @Parallel
 				while (!(o instanceof DataEndMarker))
 				{
-					inCount2.incrementAndGet();
+					// inCount2.incrementAndGet();
 
 					// if (count % 10000 == 0)
 					// {
@@ -1233,8 +1464,9 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				{
 					outBuffer.put(e);
 				}
-				catch(Exception f)
-				{}
+				catch (Exception f)
+				{
+				}
 				return;
 			}
 		}
@@ -1266,7 +1498,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			return retval;
 		}
 
-		private long hash(Object key)
+		private long hash(Object key) throws Exception
 		{
 			long eHash;
 			if (key == null)
@@ -1275,7 +1507,16 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			}
 			else
 			{
-				eHash = MurmurHash.hash64(key.toString());
+				if (key instanceof ArrayList)
+				{
+					byte[] data = toBytes(key);
+					eHash = MurmurHash.hash64(data, data.length);
+				}
+				else
+				{
+					byte[] data = key.toString().getBytes(StandardCharsets.UTF_8);
+					eHash = MurmurHash.hash64(data, data.length);
+				}
 			}
 
 			return eHash;
@@ -1295,6 +1536,31 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			}
 
 			int i = 0;
+			int min = -1;
+			int max = buckets.size() - 1;
+			while (max - min >= 4)
+			{
+				boolean exists = buckets.get(((max - min) >> 1) + min).exists(hash);
+				if (!exists)
+				{
+					max = ((max - min) >> 1) + min - 1;
+				}
+				else
+				{
+					min = ((max - min) >> 1) + min;
+				}
+			}
+
+			// if (max - min == 1)
+			// {
+			// Object o = buckets.get(max).get(hash);
+			// if (o != null)
+			// {
+			// min = max;
+			// }
+			// }
+
+			i = min + 1;
 			Object o = 0;
 			while (o != null)
 			{
@@ -1305,6 +1571,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 					{
 						o = buckets.get(i);
 					}
+
 					o = ((DiskBackedHashMap)o).putIfAbsent(hash, row);
 				}
 				else
@@ -1332,7 +1599,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 							o = null;
 						}
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						bucketsLock.unlock();
 						throw e;
@@ -1413,8 +1680,9 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				{
 					outBuffer.put(e);
 				}
-				catch(Exception f)
-				{}
+				catch (Exception f)
+				{
+				}
 				return;
 			}
 		}
@@ -1621,8 +1889,9 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 					{
 						outBuffer.put(e);
 					}
-					catch(Exception f)
-					{}
+					catch (Exception f)
+					{
+					}
 					return;
 				}
 			}
@@ -1669,16 +1938,18 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 					}
 				}
 				// @Parallel
+				final ArrayList<Object> key = new ArrayList<Object>(1);
 				while (!(o instanceof DataEndMarker))
 				{
-					inCount.incrementAndGet();
+					// inCount.incrementAndGet();
 					final ArrayList<Object> lRow = (ArrayList<Object>)o;
 					long i = 0;
+
 					while (true)
 					{
 						if (nlHash != null)
 						{
-							final ArrayList<Object> key = new ArrayList<Object>(1);
+							key.clear();
 							try
 							{
 								key.add(lRow.get(pos));
@@ -1700,11 +1971,13 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 									out.addAll(lRow);
 									out.addAll(rRow);
 									outBuffer.put(out);
-									final long count = outCount.incrementAndGet();
-									if (count % 100000 == 0)
-									{
-										HRDBMSWorker.logger.debug("NestedLoopJoinOperator has output " + count + " rows");
-									}
+									// final long count =
+									// outCount.incrementAndGet();
+									// if (count % 100000 == 0)
+									// {
+									// //HRDBMSWorker.logger.debug("NestedLoopJoinOperator has output "
+									// + count + " rows");
+									// }
 								}
 							}
 
@@ -1744,11 +2017,12 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 							out.addAll(lRow);
 							out.addAll(rRow);
 							outBuffer.put(out);
-							final long count = outCount.incrementAndGet();
-							if (count % 100000 == 0)
-							{
-								HRDBMSWorker.logger.debug("NestedLoopJoinOperator has output " + count + " rows");
-							}
+							// final long count = outCount.incrementAndGet();
+							// if (count % 100000 == 0)
+							// {
+							// //HRDBMSWorker.logger.debug("NestedLoopJoinOperator has output "
+							// + count + " rows");
+							// }
 						}
 						else
 						{
@@ -1772,8 +2046,9 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				{
 					outBuffer.put(e);
 				}
-				catch(Exception f)
-				{}
+				catch (Exception f)
+				{
+				}
 				return;
 			}
 		}
@@ -1790,7 +2065,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				Object o = child.next(NestedLoopJoinOperator.this);
 				while (!(o instanceof DataEndMarker))
 				{
-					inCount2.incrementAndGet();
+					// inCount2.incrementAndGet();
 					inBuffer.add((ArrayList<Object>)o);
 					o = child.next(NestedLoopJoinOperator.this);
 				}
@@ -1802,8 +2077,9 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				{
 					outBuffer.put(e);
 				}
-				catch(Exception f)
-				{}
+				catch (Exception f)
+				{
+				}
 				return;
 			}
 		}

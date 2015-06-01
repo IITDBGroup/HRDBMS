@@ -11,14 +11,10 @@ import java.nio.file.Path;
 import java.nio.file.PathMatcher;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
-import java.util.LinkedList;
 import com.exascale.managers.HRDBMSWorker;
-import com.exascale.managers.LogManager;
-import com.exascale.tables.Transaction;
 
 public class ArchiveIterator implements Iterator<LogRec>
 {
@@ -30,7 +26,7 @@ public class ArchiveIterator implements Iterator<LogRec>
 	private ArrayList<String> files;
 	private int index = 0;
 	private RandomAccessFile raf;
-	
+
 	public ArchiveIterator(String filename) throws IOException
 	{
 		this.fn = filename;
@@ -39,41 +35,47 @@ public class ArchiveIterator implements Iterator<LogRec>
 		{
 			name += "/";
 		}
-		
+
 		name += (fn.substring(fn.lastIndexOf('/') + 1) + "*.archive");
 		this.fn = name;
-		
-		//find all archive files
-		final ArrayList<Path> files = new ArrayList<Path>();
-		final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + fn);
-	    Files.walkFileTree(Paths.get("/"), new SimpleFileVisitor<Path>() {
-	        @Override
-	        public FileVisitResult visitFile(Path file, java.nio.file.attribute.BasicFileAttributes attrs) throws IOException {
-	            if (matcher.matches(file)) {
-	                files.add(file);
-	            }
-	            return FileVisitResult.CONTINUE;
-	        }
 
-	        @Override
-	        public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
-	            return FileVisitResult.CONTINUE;
-	        }
-	    });
-	    
-	    ArrayList<String> files2 = new ArrayList<String>();
-	    for (Path file : files)
-	    {
-	    	files2.add(file.toAbsolutePath().toString());
-	    }
-	    
-	    Collections.sort(files2);
-	    Collections.reverse(files2);
-	    
-	    this.files = files2;
-	    
-	   raf = new RandomAccessFile(this.files.get(index), "r");
-	   fc = raf.getChannel();
+		// find all archive files
+		final ArrayList<Path> files = new ArrayList<Path>();
+		int split = fn.lastIndexOf('/');
+		String dir = fn.substring(0, split);
+		String relative = fn.substring(split + 1);
+		final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + relative);
+		Files.walkFileTree(Paths.get(dir), new SimpleFileVisitor<Path>() {
+			@Override
+			public FileVisitResult visitFile(Path file, java.nio.file.attribute.BasicFileAttributes attrs) throws IOException
+			{
+				if (matcher.matches(file.getFileName()))
+				{
+					files.add(file);
+				}
+				return FileVisitResult.CONTINUE;
+			}
+
+			@Override
+			public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException
+			{
+				return FileVisitResult.CONTINUE;
+			}
+		});
+
+		ArrayList<String> files2 = new ArrayList<String>();
+		for (Path file : files)
+		{
+			files2.add(file.toAbsolutePath().toString());
+		}
+
+		Collections.sort(files2);
+		Collections.reverse(files2);
+
+		this.files = files2;
+
+		raf = new RandomAccessFile(this.files.get(index), "r");
+		fc = raf.getChannel();
 		synchronized (fc)
 		{
 			try
@@ -105,11 +107,11 @@ public class ArchiveIterator implements Iterator<LogRec>
 		{
 			try
 			{
-				//move to next file
+				// move to next file
 				index++;
 				fc.close();
 				raf.close();
-			
+
 				raf = new RandomAccessFile(this.files.get(index), "r");
 				fc = raf.getChannel();
 				synchronized (fc)
@@ -129,12 +131,12 @@ public class ArchiveIterator implements Iterator<LogRec>
 					}
 				}
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				return null;
 			}
 		}
-		
+
 		LogRec retval = null;
 		try
 		{

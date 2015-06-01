@@ -2,29 +2,29 @@ package com.exascale.optimizer;
 
 public class CreateView extends SQLStatement
 {
-	private TableName view;
-	private FullSelect select;
-	private String text;
-	
+	private final TableName view;
+	private final FullSelect select;
+	private final String text;
+
 	public CreateView(TableName view, FullSelect select, String text)
 	{
 		this.view = view;
 		this.select = select;
 		this.text = text;
 	}
-	
-	public TableName getView()
-	{
-		return view;
-	}
-	
+
 	public FullSelect getSelect()
 	{
 		return select;
 	}
-	
+
 	public String getText()
 	{
 		return text;
+	}
+
+	public TableName getView()
+	{
+		return view;
 	}
 }

@@ -30,7 +30,8 @@ public class FreeSpace
 	{
 		startOffset = start;
 	}
-	
+
+	@Override
 	public String toString()
 	{
 		return "(" + startOffset + ", " + endOffset + ")";

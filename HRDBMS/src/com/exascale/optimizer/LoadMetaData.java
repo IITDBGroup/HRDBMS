@@ -8,12 +8,12 @@ import com.exascale.optimizer.MetaData.PartitionMetaData;
 
 public class LoadMetaData implements Serializable
 {
-	//numNodes = (Integer)objIn.readObject();
-	//delimiter = (String)objIn.readObject();
-	//pos2Col = (TreeMap<Integer, String>)objIn.readObject();
-	//cols2Types = (HashMap<String, String>)objIn.readObject();
-	//pos2Length = (HashMap<Integer, Integer>)objIn.readObject();
-	//pmd = (PartitionMetaData)objIn.readObject();
+	// numNodes = (Integer)objIn.readObject();
+	// delimiter = (String)objIn.readObject();
+	// pos2Col = (TreeMap<Integer, String>)objIn.readObject();
+	// cols2Types = (HashMap<String, String>)objIn.readObject();
+	// pos2Length = (HashMap<Integer, Integer>)objIn.readObject();
+	// pmd = (PartitionMetaData)objIn.readObject();
 	public int numNodes;
 	public String delimiter;
 	public TreeMap<Integer, String> pos2Col;
@@ -27,7 +27,7 @@ public class LoadMetaData implements Serializable
 	public ArrayList<ArrayList<String>> types;
 	public ArrayList<ArrayList<Boolean>> orders;
 	public ArrayList<String> indexes;
-	
+
 	public LoadMetaData(int numNodes, String delimiter, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, HashMap<Integer, Integer> pos2Length, PartitionMetaData pmd, ArrayList<Integer> workerNodes, ArrayList<Integer> coordNodes, long txNum, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes)
 	{
 		this.numNodes = numNodes;

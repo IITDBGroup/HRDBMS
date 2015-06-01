@@ -9,7 +9,8 @@ public class Rootbeer
 {
 	public void runAll(List<Kernel> jobs) throws Exception
 	{
-		HRDBMSWorker.logger.debug("Rootbeer runAll() called with " + jobs.size() + " jobs");
+		// HRDBMSWorker.logger.debug("Rootbeer runAll() called with " +
+		// jobs.size() + " jobs");
 		if (jobs.get(0) instanceof ExtendKernel)
 		{
 			// format things for JNI

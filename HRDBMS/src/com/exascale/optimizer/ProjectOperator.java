@@ -1,8 +1,12 @@
 package com.exascale.optimizer;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -12,28 +16,54 @@ import com.exascale.tables.Plan;
 
 public final class ProjectOperator implements Operator, Serializable
 {
+	private static sun.misc.Unsafe unsafe;
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
 	private Operator child;
 	private ArrayList<String> cols;
-	private final MetaData meta;
+	private transient final MetaData meta;
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
 	private TreeMap<Integer, String> pos2Col;
 	private Operator parent;
 	private HashMap<String, Integer> childCols2Pos;
 	private int node;
-	private ArrayList<Integer> pos2Get = new ArrayList<Integer>();
+
+	private transient ArrayList<Integer> pos2Get;
+
 	private volatile boolean startDone = false;
-	private transient Plan plan;
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
-	}
 
 	public ProjectOperator(ArrayList<String> cols, MetaData meta)
 	{
 		this.cols = cols;
 		this.meta = meta;
+	}
+
+	public static ProjectOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		ProjectOperator value = (ProjectOperator)unsafe.allocateInstance(ProjectOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.child = OperatorUtils.deserializeOperator(in, prev);
+		value.cols = OperatorUtils.deserializeALS(in, prev);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.parent = OperatorUtils.deserializeOperator(in, prev);
+		value.childCols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.node = OperatorUtils.readInt(in);
+		value.startDone = OperatorUtils.readBool(in);
+		return value;
 	}
 
 	@Override
@@ -159,7 +189,7 @@ public final class ProjectOperator implements Operator, Serializable
 		{
 			return o;
 		}
-		
+
 		if (o instanceof Exception)
 		{
 			throw (Exception)o;
@@ -243,6 +273,29 @@ public final class ProjectOperator implements Operator, Serializable
 	}
 
 	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(37, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		child.serialize(out, prev);
+		OperatorUtils.serializeALS(cols, out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		parent.serialize(out, prev);
+		OperatorUtils.serializeStringIntHM(childCols2Pos, out, prev);
+		OperatorUtils.writeInt(node, out);
+		OperatorUtils.writeBool(startDone, out);
+	}
+
+	@Override
 	public void setChildPos(int pos)
 	{
 	}
@@ -254,9 +307,16 @@ public final class ProjectOperator implements Operator, Serializable
 	}
 
 	@Override
+	public void setPlan(Plan plan)
+	{
+	}
+
+	@Override
 	public void start() throws Exception
 	{
-		HRDBMSWorker.logger.debug("ProjectOperator starting with cols = " + cols + " and child cols = " + child.getCols2Pos().keySet());
+		// HRDBMSWorker.logger.debug("ProjectOperator starting with cols = " +
+		// cols + " and child cols = " + child.getCols2Pos().keySet());
+		pos2Get = new ArrayList<Integer>();
 		startDone = true;
 		child.start();
 		for (final String col : pos2Col.values())

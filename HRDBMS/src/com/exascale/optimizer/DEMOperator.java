@@ -1,30 +1,40 @@
 package com.exascale.optimizer;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
+import java.util.IdentityHashMap;
 import java.util.TreeMap;
-import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.tables.Plan;
 
 public final class DEMOperator implements Operator, Serializable
 {
-	private Operator child;
-	private final MetaData meta;
+	private static sun.misc.Unsafe unsafe;
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
+	private transient final MetaData meta;
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
 	private TreeMap<Integer, String> pos2Col;
+
 	private Operator parent;
+
 	private int node;
-	private transient Plan plan;
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
-	}
 
 	public DEMOperator(MetaData meta)
 	{
@@ -33,20 +43,17 @@ public final class DEMOperator implements Operator, Serializable
 		cols2Pos = new HashMap<String, Integer>();
 		pos2Col = new TreeMap<Integer, String>();
 	}
-	
-	public void setCols2Pos(HashMap<String, Integer> cols2Pos)
+
+	public static DEMOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
 	{
-		this.cols2Pos = (HashMap<String, Integer>)cols2Pos.clone(); 
-	}
-	
-	public void setCols2Types(HashMap<String, String> cols2Types)
-	{
-		this.cols2Types = (HashMap<String, String>)cols2Types.clone();
-	}
-	
-	public void setPos2Col(TreeMap<Integer, String> pos2Col)
-	{
-		this.pos2Col = (TreeMap<Integer, String>)pos2Col.clone();
+		DEMOperator value = (DEMOperator)unsafe.allocateInstance(DEMOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.parent = OperatorUtils.deserializeOperator(in, prev);
+		value.node = OperatorUtils.readInt(in);
+		return value;
 	}
 
 	@Override
@@ -169,14 +176,53 @@ public final class DEMOperator implements Operator, Serializable
 	}
 
 	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(23, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		parent.serialize(out, prev);
+		OperatorUtils.writeInt(node, out);
+	}
+
+	@Override
 	public void setChildPos(int pos)
 	{
+	}
+
+	public void setCols2Pos(HashMap<String, Integer> cols2Pos)
+	{
+		this.cols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
+	}
+
+	public void setCols2Types(HashMap<String, String> cols2Types)
+	{
+		this.cols2Types = (HashMap<String, String>)cols2Types.clone();
 	}
 
 	@Override
 	public void setNode(int node)
 	{
 		this.node = node;
+	}
+
+	@Override
+	public void setPlan(Plan plan)
+	{
+	}
+
+	public void setPos2Col(TreeMap<Integer, String> pos2Col)
+	{
+		this.pos2Col = (TreeMap<Integer, String>)pos2Col.clone();
 	}
 
 	@Override

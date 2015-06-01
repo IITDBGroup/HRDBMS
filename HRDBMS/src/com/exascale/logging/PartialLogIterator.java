@@ -5,7 +5,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayDeque;
 import java.util.Iterator;
-import java.util.LinkedList;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LogManager;
 import com.exascale.tables.Transaction;
@@ -19,16 +18,18 @@ public class PartialLogIterator implements Iterator<LogRec>
 
 	public PartialLogIterator(String filename) throws IOException
 	{
-		//synchronized (LogManager.noArchiveLock) // disable archiving while we have
-											// an iterator open
-		synchronized(Transaction.txList)
+		// synchronized (LogManager.noArchiveLock) // disable archiving while we
+		// have
+		// an iterator open
+		Transaction.txListLock.writeLock().lock();
 		{
 			LogManager.openIters++;
 			LogManager.noArchive = true;
 		}
+		Transaction.txListLock.writeLock().unlock();
 
 		final ArrayDeque<LogRec> log = LogManager.logs.get(filename);
-		synchronized(log)
+		synchronized (log)
 		{
 			if (log.size() > 0)
 			{
@@ -54,16 +55,18 @@ public class PartialLogIterator implements Iterator<LogRec>
 			}
 		}
 	}
-	
+
 	public PartialLogIterator(String filename, boolean flush) throws IOException
 	{
-		//synchronized (LogManager.noArchiveLock) // disable archiving while we have
-											// an iterator open
-		synchronized(Transaction.txList)
+		// synchronized (LogManager.noArchiveLock) // disable archiving while we
+		// have
+		// an iterator open
+		Transaction.txListLock.writeLock().lock();
 		{
 			LogManager.openIters++;
 			LogManager.noArchive = true;
 		}
+		Transaction.txListLock.writeLock().unlock();
 
 		fc = LogManager.getFile(filename);
 		synchronized (fc)
@@ -83,16 +86,18 @@ public class PartialLogIterator implements Iterator<LogRec>
 			}
 		}
 	}
-	
+
 	public PartialLogIterator(String filename, boolean flush, FileChannel fc) throws IOException
 	{
-		//synchronized (LogManager.noArchiveLock) // disable archiving while we have
-											// an iterator open
-		synchronized(Transaction.txList)
+		// synchronized (LogManager.noArchiveLock) // disable archiving while we
+		// have
+		// an iterator open
+		Transaction.txListLock.writeLock().lock();
 		{
 			LogManager.openIters++;
 			LogManager.noArchive = true;
 		}
+		Transaction.txListLock.writeLock().unlock();
 
 		this.fc = fc;
 		synchronized (fc)
@@ -115,8 +120,8 @@ public class PartialLogIterator implements Iterator<LogRec>
 
 	public void close()
 	{
-		//synchronized (LogManager.noArchiveLock)
-		synchronized(Transaction.txList)
+		// synchronized (LogManager.noArchiveLock)
+		Transaction.txListLock.writeLock().lock();
 		{
 			LogManager.openIters--;
 
@@ -125,6 +130,7 @@ public class PartialLogIterator implements Iterator<LogRec>
 				LogManager.noArchive = false;
 			}
 		}
+		Transaction.txListLock.writeLock().unlock();
 	}
 
 	@Override

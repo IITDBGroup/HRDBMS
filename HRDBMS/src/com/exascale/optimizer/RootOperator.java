@@ -1,27 +1,41 @@
 package com.exascale.optimizer;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.TreeMap;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.tables.Plan;
 
 public final class RootOperator implements Operator, Serializable
 {
+	private static sun.misc.Unsafe unsafe;
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
 	private Operator child;
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
 	private TreeMap<Integer, String> pos2Col;
-	private HashMap<String, Double> generated;
+	private transient HashMap<String, Double> generated;
+
 	private int node;
-	private final MetaData meta;
-	private transient Plan plan;
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
-	}
+
+	private transient final MetaData meta;
 
 	public RootOperator(HashMap<String, Double> generated, MetaData meta)
 	{
@@ -32,6 +46,18 @@ public final class RootOperator implements Operator, Serializable
 	public RootOperator(MetaData meta)
 	{
 		this.meta = meta;
+	}
+
+	public static RootOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		RootOperator value = (RootOperator)unsafe.allocateInstance(RootOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.child = OperatorUtils.deserializeOperator(in, prev);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.node = OperatorUtils.readInt(in);
+		return value;
 	}
 
 	@Override
@@ -142,7 +168,7 @@ public final class RootOperator implements Operator, Serializable
 		{
 			throw (Exception)o;
 		}
-		
+
 		return o;
 	}
 
@@ -192,6 +218,25 @@ public final class RootOperator implements Operator, Serializable
 	}
 
 	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(40, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		child.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.writeInt(node, out);
+	}
+
+	@Override
 	public void setChildPos(int pos)
 	{
 	}
@@ -200,6 +245,11 @@ public final class RootOperator implements Operator, Serializable
 	public void setNode(int node)
 	{
 		this.node = node;
+	}
+
+	@Override
+	public void setPlan(Plan plan)
+	{
 	}
 
 	@Override

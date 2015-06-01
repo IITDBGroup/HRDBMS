@@ -1,8 +1,12 @@
 package com.exascale.optimizer;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.TreeMap;
 import com.exascale.managers.HRDBMSWorker;
@@ -11,22 +15,32 @@ import com.exascale.tables.Plan;
 
 public final class RenameOperator implements Operator, Serializable
 {
+	private static sun.misc.Unsafe unsafe;
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (Exception e)
+		{
+			unsafe = null;
+		}
+	}
 	private Operator child;
 	private Operator parent;
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
 	private TreeMap<Integer, String> pos2Col;
 	private HashMap<String, String> old2New = new HashMap<String, String>();
-	private final MetaData meta;
+	private transient final MetaData meta;
 	private ArrayList<String> oldVals;
+
 	private ArrayList<String> newVals;
+
 	private int node;
-	private transient Plan plan;
-	
-	public void setPlan(Plan plan)
-	{
-		this.plan = plan;
-	}
 
 	public RenameOperator(ArrayList<String> oldVals, ArrayList<String> newVals, MetaData meta) throws Exception
 	{
@@ -49,6 +63,22 @@ public final class RenameOperator implements Operator, Serializable
 		}
 
 		this.meta = meta;
+	}
+
+	public static RenameOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		RenameOperator value = (RenameOperator)unsafe.allocateInstance(RenameOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.child = OperatorUtils.deserializeOperator(in, prev);
+		value.parent = OperatorUtils.deserializeOperator(in, prev);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.old2New = OperatorUtils.deserializeStringHM(in, prev);
+		value.oldVals = OperatorUtils.deserializeALS(in, prev);
+		value.newVals = OperatorUtils.deserializeALS(in, prev);
+		value.node = OperatorUtils.readInt(in);
+		return value;
 	}
 
 	@Override
@@ -126,7 +156,7 @@ public final class RenameOperator implements Operator, Serializable
 			retval.node = node;
 			return retval;
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
 			return null;
 		}
@@ -221,7 +251,7 @@ public final class RenameOperator implements Operator, Serializable
 		{
 			throw (Exception)o;
 		}
-		
+
 		return o;
 	}
 
@@ -328,6 +358,29 @@ public final class RenameOperator implements Operator, Serializable
 	}
 
 	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(38, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		child.serialize(out, prev);
+		parent.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.serializeStringHM(old2New, out, prev);
+		OperatorUtils.serializeALS(oldVals, out, prev);
+		OperatorUtils.serializeALS(newVals, out, prev);
+		OperatorUtils.writeInt(node, out);
+	}
+
+	@Override
 	public void setChildPos(int pos)
 	{
 	}
@@ -336,6 +389,11 @@ public final class RenameOperator implements Operator, Serializable
 	public void setNode(int node)
 	{
 		this.node = node;
+	}
+
+	@Override
+	public void setPlan(Plan plan)
+	{
 	}
 
 	@Override

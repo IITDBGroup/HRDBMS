@@ -1,7 +1,9 @@
 package com.exascale.optimizer;
 
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import com.exascale.threads.ThreadPoolThread;
 
 public interface AggregateOperator
@@ -18,11 +20,13 @@ public interface AggregateOperator
 
 	public String outputType();
 
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception;
+
+	public void setInput(String col);
+
 	public void setInputColumn(String col);
 
 	public void setNumGroups(int groups);
-	
-	public void setInput(String col);
 
 	public abstract class AggregateResultThread extends ThreadPoolThread
 	{

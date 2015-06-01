@@ -74,7 +74,7 @@ public class Block
 		hash = hash * 23 + blknum;
 		return hash;
 	}
-	
+
 	public int hashCode2()
 	{
 		int hash = 17;
@@ -95,7 +95,7 @@ public class Block
 		{
 			string = filename + "~" + blknum;
 		}
-		
+
 		return string;
 	}
 }

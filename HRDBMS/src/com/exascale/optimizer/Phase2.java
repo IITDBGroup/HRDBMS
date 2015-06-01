@@ -11,7 +11,7 @@ public final class Phase2
 {
 	private final RootOperator root;
 	private final MetaData meta;
-	private Transaction tx;
+	private final Transaction tx;
 
 	public Phase2(RootOperator root, Transaction tx)
 	{
@@ -24,8 +24,8 @@ public final class Phase2
 	{
 		setPartitionMetaData(root);
 		updateTree(root);
-		//HRDBMSWorker.logger.debug("Exiting P2: ");
-		//Phase1.printTree(root, 0);
+		// HRDBMSWorker.logger.debug("Exiting P2: ");
+		// Phase1.printTree(root, 0);
 	}
 
 	private ArrayList<Integer> determineHashMapEntries(TableScanOperator t, CNFFilter filter) throws Exception
@@ -303,7 +303,7 @@ public final class Phase2
 						ArrayList<Integer> nodeList = t.getNodeList();
 						if (nodeList.get(0) == MetaData.PartitionMetaData.NODE_ALL)
 						{
-							nodeList = MetaData.getNodesForTable(t.getSchema(), t.getTable(), tx);
+							nodeList = meta.getNodesForTable(t.getSchema(), t.getTable(), tx);
 						}
 						final ArrayList<ArrayList<Integer>> nodeLists = new ArrayList<ArrayList<Integer>>(1);
 						nodeLists.add(nodeList);
