@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.TreeMap;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.RID;
+import com.exascale.managers.BufferManager;
 import com.exascale.managers.FileManager;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LockManager;

@@ -26,11 +26,13 @@ import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import com.exascale.managers.HRDBMSWorker;
+import com.exascale.managers.ResourceManager;
 import com.exascale.mapred.ALOWritable;
 import com.exascale.mapred.LoadMapper;
 import com.exascale.mapred.LoadOutputFormat;
@@ -65,8 +67,9 @@ public final class LoadOperator implements Operator, Serializable
 	private final String delimiter;
 	private final String glob;
 	private final ArrayList<String> types2 = new ArrayList<String>();
-	private final HashSet<Integer> touched = new HashSet<Integer>();
 	private final ArrayList<FlushThread> fThreads = new ArrayList<FlushThread>();
+	private transient ConcurrentHashMap<Pair, AtomicInteger> waitTill;
+	private transient ArrayList<FlushThread> waitThreads;
 
 	public LoadOperator(String schema, String table, boolean replace, String delimiter, String glob, MetaData meta)
 	{
@@ -664,6 +667,8 @@ public final class LoadOperator implements Operator, Serializable
 	@Override
 	public void start() throws Exception
 	{
+		waitTill = new ConcurrentHashMap<Pair, AtomicInteger>();
+		waitThreads = new ArrayList<FlushThread>();
 		if (replace)
 		{
 			MassDeleteOperator delete = new MassDeleteOperator(schema, table, meta, false);
@@ -1033,24 +1038,152 @@ public final class LoadOperator implements Operator, Serializable
 		{
 			ok = true;
 			ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
-			synchronized (map)
+			synchronized(waitThreads)
 			{
-				for (Object o : map.getKeySet())
+				synchronized (map)
 				{
-					long key = (Long)o;
-					Set<ArrayList<Object>> list = map.get(key);
-					threads.add(new FlushThread(list, indexes, key, cols2Pos, spmd, keys, types, orders));
+					for (Object o : map.getKeySet())
+					{
+						long key = (Long)o;
+						Set<ArrayList<Object>> list = map.get(key);
+						threads.add(new FlushThread(list, indexes, key, cols2Pos, spmd, keys, types, orders));
+					}
+
+					map.clear();
+
+					ArrayList<FlushThread> temp = new ArrayList<FlushThread>();
+					for (FlushThread thread : threads)
+					{
+						AtomicInteger ai = waitTill.get(new Pair(thread.getNode(), thread.getDevice()));
+					
+						if (ai != null)
+						{
+							int newCount = ai.incrementAndGet();
+							if (newCount > 2)
+							{
+								ai.decrementAndGet();
+								temp.add(thread);
+							}
+							else
+							{
+								thread.start();
+							}
+						}
+						else
+						{
+							waitTill.put(new Pair(thread.getNode(), thread.getDevice()), new AtomicInteger(1));
+							thread.start();
+						}
+					}
+			
+					for (FlushThread thread : (ArrayList<FlushThread>)waitThreads.clone())
+					{
+						AtomicInteger ai = waitTill.get(new Pair(thread.getNode(), thread.getDevice()));
+					
+						if (ai != null)
+						{
+							int newCount = ai.incrementAndGet();
+							if (newCount > 2)
+							{
+								ai.decrementAndGet();
+							}	
+							else
+							{
+								thread.start();
+								if (!waitThreads.remove(thread))
+								{
+									HRDBMSWorker.logger.debug("Failed to remove a thread from waitThreads!");
+								}
+							}	
+						}
+						else
+						{
+							waitTill.put(new Pair(thread.getNode(), thread.getDevice()), new AtomicInteger(1));
+							thread.start();
+							if (!waitThreads.remove(thread))
+							{
+								HRDBMSWorker.logger.debug("Failed to remove a thread from waitThreads!");
+							}
+						}
+					}
+			
+					waitThreads.addAll(temp);
+			
+					while (waitThreads.size() > Long.parseLong(HRDBMSWorker.getHParms().getProperty("max_queued_load_flush_threads")))
+					{
+						try
+						{
+							Thread.sleep(1000);
+						}
+						catch(InterruptedException e)
+						{}
+						
+						//HRDBMSWorker.logger.debug("# of waiting threads = " + waitThreads.size()); //DEBUG
+						
+						for (FlushThread thread : (ArrayList<FlushThread>)waitThreads.clone())
+						{
+							AtomicInteger ai = waitTill.get(new Pair(thread.getNode(), thread.getDevice()));
+				
+							if (ai != null)
+							{
+								int newCount = ai.incrementAndGet();
+								if (newCount > 2)
+								{
+									ai.decrementAndGet();
+								}
+								else
+								{
+									thread.start();
+									if (!waitThreads.remove(thread))
+									{
+										HRDBMSWorker.logger.debug("Failed to remove a thread from waitThreads!");
+									}
+								}		
+							}
+							else
+							{
+								waitTill.put(new Pair(thread.getNode(), thread.getDevice()), new AtomicInteger(1));
+								thread.start();
+								if (!waitThreads.remove(thread))
+								{
+									HRDBMSWorker.logger.debug("Failed to remove a thread from waitThreads!");
+								}
+							}	
+						}
+					}
 				}
-
-				map.clear();
 			}
 
-			for (FlushThread thread : threads)
+			synchronized(fThreads)
 			{
-				thread.start();
+				fThreads.addAll(threads);
 			}
-
-			fThreads.addAll(threads);
+		}
+	}
+	
+	private class Pair
+	{
+		private int node;
+		private int device;
+		
+		public Pair(int node, int device)
+		{
+			this.node = node;
+			this.device = device;
+		}
+		
+		public int hashCode()
+		{
+			int val = 31;
+			val = val * 23 + node;
+			val = val * 23 + device;
+			return val;
+		}
+		
+		public boolean equals(Object o)
+		{
+			Pair rhs = (Pair)o;
+			return node == rhs.node && device == rhs.device;
 		}
 	}
 
@@ -1079,6 +1212,16 @@ public final class LoadOperator implements Operator, Serializable
 		public boolean getOK()
 		{
 			return ok;
+		}
+		
+		public int getNode()
+		{
+			return (int)(key >> 32);
+		}
+		
+		public int getDevice()
+		{
+			return (int)(key & 0xFFFFFFFFL);
 		}
 
 		@Override
@@ -1123,6 +1266,8 @@ public final class LoadOperator implements Operator, Serializable
 				objOut.flush();
 				out.flush();
 				getConfirmation(sock);
+				waitTill.get(new Pair(getNode(), getDevice())).decrementAndGet();
+
 				objOut.close();
 				sock.close();
 				indexes = null;
@@ -1130,7 +1275,6 @@ public final class LoadOperator implements Operator, Serializable
 				keys = null;
 				types = null;
 				orders = null;
-				;
 			}
 			catch (Exception e)
 			{
@@ -1179,7 +1323,7 @@ public final class LoadOperator implements Operator, Serializable
 
 			String inStr = new String(inMsg, StandardCharsets.UTF_8);
 			if (!inStr.equals("OK"))
-			{
+			{	
 				in.close();
 				throw new Exception();
 			}
@@ -1200,7 +1344,7 @@ public final class LoadOperator implements Operator, Serializable
 		private final HashMap<Integer, Integer> pos2Length;
 		private final ArrayList<String> indexes;
 		private boolean ok = true;
-		private int num = 0;
+		private volatile int num = 0;
 		private final HashMap<String, Integer> cols2Pos;
 		PartitionMetaData spmd;
 		private final ArrayList<ArrayList<String>> keys;
@@ -1253,7 +1397,7 @@ public final class LoadOperator implements Operator, Serializable
 					}
 					ArrayList<Integer> nodes = MetaData.determineNode(schema, table, row, tx, pmeta, cols2Pos, numNodes);
 					int device = MetaData.determineDevice(row, pmeta, cols2Pos);
-					touched.addAll(nodes);
+					
 					for (Integer node : nodes)
 					{
 						plan.addNode(node);
@@ -1270,6 +1414,7 @@ public final class LoadOperator implements Operator, Serializable
 								throw new Exception("Error flushing inserts");
 							}
 						}
+						
 						master = flush(indexes, spmd, keys, types, orders);
 					}
 					else if (map.totalSize() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_batch")))
@@ -1282,22 +1427,24 @@ public final class LoadOperator implements Operator, Serializable
 								throw new Exception("Error flushing inserts");
 							}
 						}
+						
 						master = flush(indexes, spmd, keys, types, orders);
 					}
 
 					o = next(in);
 				}
 
-				if (map.totalSize() > 0)
+				if (master != null)
 				{
-					if (master != null)
+					master.join();
+					if (!master.getOK())
 					{
-						master.join();
-						if (!master.getOK())
-						{
-							throw new Exception("Error flushing inserts");
-						}
+						throw new Exception("Error flushing inserts");
 					}
+				}
+				
+				if (map.totalSize() > 0)
+				{	
 					master = flush(indexes, spmd, keys, types, orders);
 					master.join();
 					if (!master.getOK())
@@ -1305,13 +1452,40 @@ public final class LoadOperator implements Operator, Serializable
 						throw new Exception("Error flushing inserts");
 					}
 				}
-
-				for (FlushThread thread : fThreads)
+				
+				int count;
+				synchronized(waitThreads)
 				{
-					thread.join();
-					if (!thread.getOK())
+					count = waitThreads.size();
+				}
+				
+				while (count > 0 && map.totalSize() == 0)
+				{
+					master = flush(indexes, spmd, keys, types, orders);
+					master.join();
+					if (!master.getOK())
 					{
 						throw new Exception("Error flushing inserts");
+					}
+					
+					synchronized(waitThreads)
+					{
+						count = waitThreads.size();
+					}
+				}
+
+				synchronized(fThreads)
+				{
+					for (FlushThread thread : fThreads)
+					{
+						if (thread.started())
+						{
+							thread.join();
+							if (!thread.getOK())
+							{
+								throw new Exception("Error flushing inserts");
+							}
+						}
 					}
 				}
 			}

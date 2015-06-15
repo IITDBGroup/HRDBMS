@@ -73,7 +73,7 @@ public final class ResourceManager extends HRDBMSThread
 
 	public static volatile AtomicInteger NO_OFFLOAD = new AtomicInteger(0);
 
-	private static final int GC_TIME;
+	private static long GC_TIME;
 	private static Charset cs = StandardCharsets.UTF_8;
 	private static sun.misc.Unsafe unsafe;
 	private static long offset;
@@ -108,7 +108,7 @@ public final class ResourceManager extends HRDBMSThread
 		cpus = Runtime.getRuntime().availableProcessors();
 		pool = Executors.newCachedThreadPool();
 		maxMemory = Runtime.getRuntime().maxMemory();
-		GC_TIME = Integer.parseInt(hparms.getProperty("gc_frequency_ms"));
+		GC_TIME = 30000;
 		if (GPU)
 		{
 			HRDBMSWorker.logger.debug("Going to load CUDA code");
@@ -213,10 +213,11 @@ public final class ResourceManager extends HRDBMSThread
 		// long time = System.currentTimeMillis();
 		ArrayList<ThreadPoolThread> threads = new ArrayList<ThreadPoolThread>(collections.size());
 		long time = System.currentTimeMillis();
-		if (time - lastSystemGC > Long.parseLong(HRDBMSWorker.getHParms().getProperty("gc_frequency_ms")))
+		if (time - lastSystemGC > GC_TIME)
 		{
 			System.gc();
 			lastSystemGC = System.currentTimeMillis();
+			GC_TIME = (lastSystemGC - time) * 10;
 		}
 		while (lowMem())
 		{
@@ -266,10 +267,11 @@ public final class ResourceManager extends HRDBMSThread
 					try
 					{
 						time = System.currentTimeMillis();
-						if (time - lastSystemGC > Long.parseLong(HRDBMSWorker.getHParms().getProperty("gc_frequency_ms")))
+						if (time - lastSystemGC > GC_TIME)
 						{
 							System.gc();
 							lastSystemGC = System.currentTimeMillis();
+							GC_TIME = (lastSystemGC - time) * 10;
 						}
 						rt.join();
 						// System.out.println(((Runtime.getRuntime().freeMemory()
@@ -284,10 +286,11 @@ public final class ResourceManager extends HRDBMSThread
 			}
 
 			time = System.currentTimeMillis();
-			if (time - lastSystemGC > Long.parseLong(HRDBMSWorker.getHParms().getProperty("gc_frequency_ms")))
+			if (time - lastSystemGC > GC_TIME)
 			{
 				System.gc();
 				lastSystemGC = System.currentTimeMillis();
+				GC_TIME = (lastSystemGC - time) * 10;
 			}
 		}
 	}

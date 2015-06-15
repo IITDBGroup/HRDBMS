@@ -121,7 +121,7 @@ public class DeleteLogRec extends LogRec
 		Page p = null;
 		while (p == null)
 		{
-			p = BufferManager.getPage(b);
+			p = BufferManager.getPage(b, txnum());
 		}
 
 		p.write(off, after, this.txnum(), this.lsn());
@@ -144,7 +144,7 @@ public class DeleteLogRec extends LogRec
 		Page p = null;
 		while (p == null)
 		{
-			p = BufferManager.getPage(b);
+			p = BufferManager.getPage(b, txnum());
 		}
 
 		p.write(off, before, this.txnum(), this.lsn());

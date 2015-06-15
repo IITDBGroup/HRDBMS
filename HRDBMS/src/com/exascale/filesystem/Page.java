@@ -34,11 +34,11 @@ public class Page
 	}
 	// extent size
 	private ByteBuffer contents;
-	private Block blk;
+	private volatile Block blk;
 	private final ConcurrentHashMap<Long, AtomicInteger> pins;
-	private long modifiedBy = -1;
-	private long timePinned = -1;
-	private long lsn;
+	private volatile long modifiedBy = -1;
+	private volatile long timePinned = -1;
+	private volatile long lsn;
 
 	private volatile boolean readDone = false;
 
@@ -111,16 +111,6 @@ public class Page
 	public ByteBuffer buffer()
 	{
 		return contents;
-	}
-
-	@Override
-	public Page clone()
-	{
-		Page p = new Page();
-		p.blk = blk;
-		p.contents.position(0);
-		p.contents.put(contents.array());
-		return p;
 	}
 
 	@Override
@@ -270,14 +260,14 @@ public class Page
 		return modifiedBy != -1;
 	}
 
-	public boolean isModifiedBy(long txnum)
-	{
-		return modifiedBy == txnum;
-	}
-
 	public boolean isPinned()
 	{
 		return pins.size() > 0;
+	}
+	
+	public boolean isPinnedBy(long txnum)
+	{
+		return pins.containsKey(txnum);
 	}
 
 	public boolean isReady()
@@ -339,6 +329,24 @@ public class Page
 	public synchronized void unpin(long txnum)
 	{
 		pins.remove(txnum);
+	}
+	
+	public synchronized boolean unpin1(long txnum)
+	{
+		AtomicInteger ai = pins.get(txnum);
+		if (ai != null)
+		{
+			int newVal = ai.decrementAndGet();
+			if (newVal == 0)
+			{
+				pins.remove(txnum);
+				return true;
+			}
+		
+			return false;
+		}
+		
+		return true;
 	}
 
 	public synchronized void write(int off, byte[] data, long txnum, long lsn) throws Exception

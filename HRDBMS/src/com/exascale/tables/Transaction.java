@@ -243,7 +243,7 @@ public class Transaction implements Serializable
 			HRDBMSWorker.logger.debug("", e);
 			throw e;
 		}
-		Page p = BufferManager.getPage(b);
+		Page p = BufferManager.getPage(b, txnum);
 
 		if (p == null)
 		{
@@ -259,7 +259,7 @@ public class Transaction implements Serializable
 				{
 				}
 
-				p = BufferManager.getPage(b);
+				p = BufferManager.getPage(b, txnum);
 				sleeps++;
 			}
 		}

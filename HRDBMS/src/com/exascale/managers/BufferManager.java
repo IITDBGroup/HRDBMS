@@ -87,10 +87,10 @@ public class BufferManager extends HRDBMSThread
 		}
 	}
 
-	public static Page getPage(Block b)
+	public static Page getPage(Block b, long txnum)
 	{
 		int hash = (b.hashCode2() & 0x7FFFFFFF) & (mLength - 1);
-		return managers[hash].getPage(b);
+		return managers[hash].getPage(b, txnum);
 	}
 
 	public static void invalidateFile(String fn) throws Exception
@@ -225,7 +225,10 @@ public class BufferManager extends HRDBMSThread
 				{
 					try
 					{
-						managers[j].cleanPage(i, delayed);
+						if (managers[j].cleanPage(i, delayed))
+						{
+							didSomething = true;
+						}
 					}
 					catch (Exception e)
 					{
@@ -241,10 +244,10 @@ public class BufferManager extends HRDBMSThread
 			{
 				try
 				{
-					for (String file : delayed)
-					{
-						FileManager.endDelay(file);
-					}
+					//for (String file : delayed)
+					//{
+					//	FileManager.endDelay(file);
+					//}
 
 					delayed.clear();
 					Thread.sleep(20000);
@@ -329,7 +332,10 @@ public class BufferManager extends HRDBMSThread
 					{
 						try
 						{
-							managers[j].cleanPage(i, d);
+							if (managers[j].cleanPage(i, d))
+							{
+								didSomething = true;
+							}
 						}
 						catch (Exception e)
 						{
@@ -345,10 +351,10 @@ public class BufferManager extends HRDBMSThread
 				{
 					try
 					{
-						for (String file : d)
-						{
-							FileManager.endDelay(file);
-						}
+						//for (String file : d)
+						//{
+						//	FileManager.endDelay(file);
+						//}
 
 						d.clear();
 						Thread.sleep(20000);

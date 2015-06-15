@@ -70,7 +70,7 @@ public class Plan implements Serializable
 	 * for (Operator o : op.children()) { updateIDs(o); } }
 	 */
 
-	public void addNode(int node)
+	public synchronized void addNode(int node)
 	{
 		touchedNodes.add(node);
 	}
@@ -87,7 +87,7 @@ public class Plan implements Serializable
 	}
 
 	@Override
-	public boolean equals(Object rhs)
+	public synchronized boolean equals(Object rhs)
 	{
 		if (rhs == null)
 		{
@@ -148,7 +148,7 @@ public class Plan implements Serializable
 		return time;
 	}
 
-	public ArrayList<Integer> getTouchedNodes()
+	public synchronized ArrayList<Integer> getTouchedNodes()
 	{
 		return new ArrayList<Integer>(touchedNodes);
 	}
@@ -159,7 +159,7 @@ public class Plan implements Serializable
 	}
 
 	@Override
-	public int hashCode()
+	public synchronized int hashCode()
 	{
 		int hash = 17;
 		hash = hash * 23 + trees.hashCode();

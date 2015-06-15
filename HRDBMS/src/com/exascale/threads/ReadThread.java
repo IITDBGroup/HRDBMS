@@ -31,10 +31,11 @@ public class ReadThread extends HRDBMSThread
 	@Override
 	public void run()
 	{
-		bb.clear();
-		bb.position(0);
 		try
 		{
+			bb.clear();
+			bb.position(0);
+	
 			final FileChannel fc = FileManager.getFile(b.fileName());
 			// if (b.number() * bb.capacity() >= fc.size())
 			// {
@@ -45,6 +46,8 @@ public class ReadThread extends HRDBMSThread
 			// }
 
 			fc.read(bb, ((long)b.number()) * bb.capacity());
+			p.setReady();
+			this.terminate();
 		}
 		catch (final Exception e)
 		{
@@ -53,8 +56,6 @@ public class ReadThread extends HRDBMSThread
 			this.terminate();
 			return;
 		}
-		p.setReady();
-		this.terminate();
 		return;
 	}
 }

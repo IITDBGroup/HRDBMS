@@ -3262,14 +3262,18 @@ public class ConnectionWorker extends HRDBMSThread
 
 		Transaction newTx = new Transaction(txNum);
 		FlushLoadThread thread = new FlushLoadThread(list, newTx, schema, table, keys, types, orders, indexes, cols2Pos, device);
-		while (flThreads.putIfAbsent(thread, thread) != null)
+		
+		if (flThreads.putIfAbsent(thread, thread) != null)
 		{
-			try
+			while (flThreads.putIfAbsent(thread, thread) != null)
 			{
-				Thread.sleep(1);
-			}
-			catch (InterruptedException e)
-			{
+				try
+				{
+					Thread.sleep(1);
+				}
+				catch (InterruptedException e)
+				{
+				}
 			}
 		}
 		thread.run();
@@ -4980,6 +4984,63 @@ public class ConnectionWorker extends HRDBMSThread
 			}
 		}
 	}
+	
+	private void sendWait()
+	{
+		try
+		{
+			sock.getOutputStream().write("WA".getBytes(StandardCharsets.UTF_8));
+			sock.getOutputStream().flush();
+		}
+		catch (Exception e)
+		{
+			HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
+			if (tx != null)
+			{
+				try
+				{
+					XAManager.rollback(tx);
+					tx = null;
+				}
+				catch (Exception f)
+				{
+					HRDBMSWorker.logger.error("", f);
+				}
+			}
+
+			try
+			{
+				sock.close();
+				if (worker != null)
+				{
+					ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+					cmd2.add("CLOSE");
+					worker.in.put(cmd2);
+				}
+				this.terminate();
+			}
+			catch (Exception f)
+			{
+				if (worker != null)
+				{
+					ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+					cmd2.add("CLOSE");
+					while (true)
+					{
+						try
+						{
+							worker.in.put(cmd2);
+							break;
+						}
+						catch (Exception g)
+						{
+						}
+					}
+				}
+				this.terminate();
+			}
+		}
+	}
 
 	private void sendString(String string)
 	{
@@ -6052,7 +6113,7 @@ public class ConnectionWorker extends HRDBMSThread
 		ArrayList<String> indexes;
 		ArrayList<ArrayList<Object>> list;
 		HashMap<String, Integer> cols2Pos;
-		int num;
+		private final int num;
 		// LinkedBlockingQueue<Object> queue = new
 		// LinkedBlockingQueue<Object>();
 		SPSCQueue queue = new SPSCQueue(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_batch")));
@@ -6282,6 +6343,7 @@ public class ConnectionWorker extends HRDBMSThread
 
 					RIDAndIndexKeys raik = (RIDAndIndexKeys)obj;
 					// for each index, insert row based on rid and key values
+					/* TODO 
 					if (!isFieldValues)
 					{
 						int i = 0;
@@ -6300,6 +6362,7 @@ public class ConnectionWorker extends HRDBMSThread
 							i++;
 						}
 					}
+					*/
 				}
 			}
 			catch (Exception e)

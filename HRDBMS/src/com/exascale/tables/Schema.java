@@ -22,6 +22,7 @@ import com.exascale.filesystem.Page;
 import com.exascale.filesystem.RID;
 import com.exascale.logging.InsertLogRec;
 import com.exascale.logging.LogRec;
+import com.exascale.managers.BufferManager;
 import com.exascale.managers.FileManager;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LockManager;
@@ -114,6 +115,11 @@ public class Schema
 		}
 		this.nodeNumber = nodeNumber;
 		this.deviceNumber = deviceNumber;
+	}
+	
+	public Page getPage()
+	{
+		return p;
 	}
 
 	public void close() throws Exception
@@ -868,6 +874,10 @@ public class Schema
 		myHP = null;
 		myDev = -1;
 		myNode = -1;
+		if (this.p != null)
+		{
+			BufferManager.unpin(this.p, tx.number());
+		}
 		this.p = p;
 		this.tx = tx;
 		nextRecNum = -1;
@@ -2188,14 +2198,15 @@ public class Schema
 			if (!isNull && exists)
 			{
 				final byte[] val = ByteBuffer.allocate(8).putLong(value).array();
-				int i = 0;
-				while (i < 8)
-				{
-					buff[off + i] = val[i];
-					i++;
-				}
+				//int i = 0;
+				//while (i < 8)
+				//{
+				//	buff[off + i] = val[i];
+				//	i++;
+				//}
+				System.arraycopy(val, 0, buff, off, 8);
 
-				return size();
+				return 8;
 			}
 
 			return 0;
@@ -2245,15 +2256,16 @@ public class Schema
 		{
 			if (!isNull && exists)
 			{
-				int i = 0;
-				final int length = value.length;
-				while (i < length)
-				{
-					buff[off + i] = value[i];
-					i++;
-				}
+				//int i = 0;
+				//final int length = value.length;
+				//while (i < length)
+				//{
+				//	buff[off + i] = value[i];
+				//	i++;
+				//}
+				System.arraycopy(value, 0, buff, off, value.length);
 
-				return size();
+				return value.length;
 			}
 
 			return 0;
@@ -2316,14 +2328,15 @@ public class Schema
 			if (!isNull && exists)
 			{
 				final byte[] val = ByteBuffer.allocate(8).putLong(value.getTime()).array();
-				int i = 0;
-				while (i < 8)
-				{
-					buff[off + i] = val[i];
-					i++;
-				}
+				//int i = 0;
+				//while (i < 8)
+				//{
+				//	buff[off + i] = val[i];
+				//	i++;
+				//}
+				System.arraycopy(val, 0, buff, off, 8);
 
-				return size();
+				return 8;
 			}
 
 			return 0;
@@ -2393,15 +2406,16 @@ public class Schema
 		{
 			if (!isNull && exists)
 			{
-				int i = 0;
-				final int length = bytes.length;
-				while (i < length)
-				{
-					buff[off + i] = bytes[i];
-					i++;
-				}
+				//int i = 0;
+				//final int length = bytes.length;
+				//while (i < length)
+				//{
+				//	buff[off + i] = bytes[i];
+				//	i++;
+				//}
+				System.arraycopy(bytes, 0, buff, off, bytes.length);
 
-				return size();
+				return bytes.length;
 			}
 
 			return 0;
@@ -2464,14 +2478,15 @@ public class Schema
 			if (!isNull && exists)
 			{
 				final byte[] val = ByteBuffer.allocate(8).putDouble(value).array();
-				int i = 0;
-				while (i < 8)
-				{
-					buff[off + i] = val[i];
-					i++;
-				}
+				//int i = 0;
+				//while (i < 8)
+				//{
+				//	buff[off + i] = val[i];
+				//	i++;
+				//}
+				System.arraycopy(val, 0, buff, off, 8);
 
-				return size();
+				return 8;
 			}
 
 			return 0;
@@ -2561,14 +2576,15 @@ public class Schema
 			if (!isNull && exists)
 			{
 				final byte[] val = ByteBuffer.allocate(4).putFloat(value).array();
-				int i = 0;
-				while (i < 4)
-				{
-					buff[off + i] = val[i];
-					i++;
-				}
+				//int i = 0;
+				//while (i < 4)
+				//{
+				//	buff[off + i] = val[i];
+				//	i++;
+				//}
+				System.arraycopy(val, 0, buff, off, 4);
 
-				return size();
+				return 4;
 			}
 
 			return 0;
@@ -2631,14 +2647,15 @@ public class Schema
 			if (!isNull && exists)
 			{
 				final byte[] val = ByteBuffer.allocate(4).putInt(value).array();
-				int i = 0;
-				while (i < 4)
-				{
-					buff[off + i] = val[i];
-					i++;
-				}
+				//int i = 0;
+				//while (i < 4)
+				//{
+				//	buff[off + i] = val[i];
+				//	i++;
+				//}
+				System.arraycopy(val, 0, buff, off, 4);
 
-				return size();
+				return 4;
 			}
 
 			return 0;
@@ -2838,14 +2855,15 @@ public class Schema
 			if (!isNull && exists)
 			{
 				final byte[] val = ByteBuffer.allocate(2).putShort(value).array();
-				int i = 0;
-				while (i < 2)
-				{
-					buff[off + i] = val[i];
-					i++;
-				}
+				//int i = 0;
+				//while (i < 2)
+				//{
+				//	buff[off + i] = val[i];
+				//	i++;
+				//}
+				System.arraycopy(val, 0, buff, off, 2);
 
-				return size();
+				return 2;
 			}
 
 			return 0;
@@ -2897,22 +2915,24 @@ public class Schema
 			if (!isNull && exists)
 			{
 				final byte[] val = ByteBuffer.allocate(4).putInt(value.length).array();
-				int i = 0;
-				while (i < 4)
-				{
-					buff[off + i] = val[i];
-					i++;
-				}
+				//int i = 0;
+				//while (i < 4)
+				//{
+				//	buff[off + i] = val[i];
+				//	i++;
+				//}
+				System.arraycopy(val, 0, buff, off, 4);
 
-				i = 0;
-				final int length = value.length;
-				while (i < length)
-				{
-					buff[off + 4 + i] = value[i];
-					i++;
-				}
+				//i = 0;
+				//final int length = value.length;
+				//while (i < length)
+				//{
+				//	buff[off + 4 + i] = value[i];
+				//	i++;
+				//}
+				System.arraycopy(value, 0, buff, off+4, value.length);
 
-				return size();
+				return 4 + value.length;
 			}
 
 			return 0;
@@ -3018,22 +3038,24 @@ public class Schema
 			{
 				final byte[] stringBytes = bytes;
 				final byte[] val = ByteBuffer.allocate(4).putInt(stringBytes.length).array();
-				int i = 0;
-				while (i < 4)
-				{
-					buff[off + i] = val[i];
-					i++;
-				}
+				//int i = 0;
+				//while (i < 4)
+				//{
+				//	buff[off + i] = val[i];
+				//	i++;
+				//}
+				System.arraycopy(val, 0, buff, off, 4);
 
-				i = 0;
-				final int length = stringBytes.length;
-				while (i < length)
-				{
-					buff[off + 4 + i] = stringBytes[i];
-					i++;
-				}
+				//i = 0;
+				//final int length = stringBytes.length;
+				//while (i < length)
+				//{
+				//	buff[off + 4 + i] = stringBytes[i];
+				//	i++;
+				//}
+				System.arraycopy(stringBytes, 0, buff, off+4, stringBytes.length);
 
-				return size();
+				return size;
 			}
 
 			return 0;

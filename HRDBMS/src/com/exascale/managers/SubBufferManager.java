@@ -56,8 +56,8 @@ public class SubBufferManager
 		Page p = bp[i];
 		if (p.isModified() && !p.isPinned())
 		{
-			FileManager.writeDelayed(p.block(), p.buffer());
 			p.setNotModified();
+			FileManager.writeDelayed(p.block(), p.buffer());
 			unmodLookup.put(p.pinTime(), p.block());
 			d.add(p.block().fileName());
 			return true;
@@ -68,76 +68,19 @@ public class SubBufferManager
 
 	public synchronized HashSet<String> flushAll(FileChannel fc) throws Exception
 	{
-		/*
-		 * for (final Page p : BufferManager.bp) { if (p.isModified() &&
-		 * (!p.isPinned())) { p.pin(p.pinTime(), -3);
-		 * FileManager.write(p.block(), p.buffer());
-		 *
-		 * p.unpin(-3); } }
-		 */
-
-		// for all blocks in bufferpool, if not pinned - flush, otherwise copy
-		// and rollback and flush
-		HashMap<Block, Page> toRoll = new HashMap<Block, Page>();
 		ArrayList<Page> toPut = new ArrayList<Page>();
 		for (Page p : bp)
 		{
 			if (p.isModified())
 			{
-				if (p.isPinned())
-				{
-					Page clone = p.clone();
-					toRoll.put(clone.block(), clone);
-				}
-				else
-				{
-					toPut.add(p);
-				}
+				toPut.add(p);
 			}
 		}
 
 		// start put threads
 		PutThread putThread = null;
-		RollThread rollThread = null;
 		putThread = new PutThread(toPut);
 		putThread.start();
-
-		// do rollbacks
-		Iterator<LogRec> iter = new LogIterator(LogManager.filename, false, fc);
-		while (iter.hasNext())
-		{
-			LogRec rec = iter.next();
-			if (rec.type() == LogRec.INSERT)
-			{
-				InsertLogRec ins = (InsertLogRec)rec.rebuild();
-				Block b = ins.getBlock();
-				Page p = toRoll.get(b);
-				if (p != null)
-				{
-					p.writeDirect(ins.getOffset(), ins.getBefore());
-				}
-			}
-			else if (rec.type() == LogRec.DELETE)
-			{
-				DeleteLogRec del = (DeleteLogRec)rec.rebuild();
-				Block b = del.getBlock();
-				Page p = toRoll.get(b);
-				if (p != null)
-				{
-					p.writeDirect(del.getOffset(), del.getBefore());
-				}
-			}
-		}
-
-		// ((LogIterator)iter).close();
-
-		// for (Page p : toRoll.values())
-		// {
-		// FileManager.write(p.block(), p.buffer());
-		// }
-
-		rollThread = new RollThread(toRoll);
-		rollThread.start();
 
 		HashSet<String> retval = new HashSet<String>();
 		for (Page p : toPut)
@@ -145,22 +88,11 @@ public class SubBufferManager
 			retval.add(p.block().fileName());
 		}
 
-		for (Block b : toRoll.keySet())
-		{
-			retval.add(b.fileName());
-		}
-
 		Exception e = null;
 		putThread.join();
 		if (e == null)
 		{
 			e = putThread.getException();
-		}
-
-		rollThread.join();
-		if (e == null)
-		{
-			e = rollThread.getException();
 		}
 
 		if (e != null)
@@ -171,7 +103,7 @@ public class SubBufferManager
 		return retval;
 	}
 
-	public synchronized Page getPage(Block b)
+	public synchronized Page getPage(Block b, long txnum)
 	{
 		final Integer index = pageLookup.get(b);
 
@@ -181,6 +113,12 @@ public class SubBufferManager
 		}
 
 		Page retval = bp[index];
+		
+		if (!retval.isPinnedBy(txnum))
+		{
+			return null;
+		}
+		
 		Block b2 = retval.block();
 		if (!b.equals(b2))
 		{
@@ -382,10 +320,10 @@ public class SubBufferManager
 
 						final long lsn = LogManager.getLSN();
 						referencedLookup.put(lsn, b);
-						if (!bp[index].isModified())
-						{
-							unmodLookup.put(lsn, b);
-						}
+						//if (!bp[index].isModified())
+						//{
+						//	unmodLookup.put(lsn, b);
+						//}
 						bp[index].pin(lsn, txnum);
 						myBuffers.multiPut(txnum, bp[index]);
 					}
@@ -395,6 +333,7 @@ public class SubBufferManager
 			}
 			catch (Exception e)
 			{
+				HRDBMSWorker.logger.debug("", e);
 				Transaction.txListLock.readLock().unlock();
 				throw e;
 			}
@@ -426,8 +365,10 @@ public class SubBufferManager
 
 	public synchronized void unpin(Page p, long txnum)
 	{
-		p.unpin(txnum);
-		myBuffers.multiRemove(txnum, p);
+		if (p.unpin1(txnum))
+		{
+			myBuffers.multiRemove(txnum, p);
+		}
 	}
 
 	public synchronized void unpinAll(long txnum)
@@ -567,8 +508,11 @@ public class SubBufferManager
 				try
 				{
 					FileManager.writeDelayed(p.block(), p.buffer());
-					p.setNotModified();
-					unmodLookup.put(p.pinTime(), p.block());
+					if (!p.isPinned())
+					{
+						p.setNotModified();
+						unmodLookup.put(p.pinTime(), p.block());
+					}
 				}
 				catch (Exception e)
 				{

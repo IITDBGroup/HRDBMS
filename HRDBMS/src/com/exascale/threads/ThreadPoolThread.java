@@ -6,7 +6,7 @@ import com.exascale.managers.ResourceManager;
 
 public abstract class ThreadPoolThread implements Runnable
 {
-	private Future forJoin;
+	private volatile Future forJoin;
 
 	public void join() throws InterruptedException
 	{
@@ -17,6 +17,11 @@ public abstract class ThreadPoolThread implements Runnable
 		catch (final ExecutionException e)
 		{
 		}
+	}
+	
+	public boolean started()
+	{
+		return forJoin != null;
 	}
 
 	public void kill()
