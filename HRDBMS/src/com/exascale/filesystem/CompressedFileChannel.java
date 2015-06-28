@@ -1123,7 +1123,7 @@ public class CompressedFileChannel extends FileChannel
 					Boolean needsFlush = modded.get(entry.getKey());
 					if (needsFlush != null && needsFlush)
 					{
-						fc.force(false);
+						//fc.force(false);
 						modded.remove(entry.getKey());
 					}
 					fcs.remove(entry.getKey());
