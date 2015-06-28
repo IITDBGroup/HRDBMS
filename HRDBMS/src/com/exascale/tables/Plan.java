@@ -4,6 +4,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.optimizer.CNFFilter;
@@ -15,7 +16,7 @@ public class Plan implements Serializable
 	private transient final long time;
 	private transient final boolean reserved;
 	private final ArrayList<Operator> trees;
-	private transient final HashSet<Integer> touchedNodes = new HashSet<Integer>();
+	private transient final ConcurrentHashMap<Integer, Integer> touchedNodes = new ConcurrentHashMap<Integer, Integer>();
 
 	// private HashMap<Integer, Integer> old2New = null;
 
@@ -38,6 +39,29 @@ public class Plan implements Serializable
 		// }
 		//
 		// old2New = null;
+	}
+	
+	public void setSample(long sPer)
+	{
+		for (Operator op : trees)
+		{
+			setSample(op, sPer);
+		}
+	}
+	
+	private void setSample(Operator op, long sPer)
+	{
+		if (op instanceof TableScanOperator)
+		{
+			((TableScanOperator)op).setSample(sPer);
+		}
+		else
+		{
+			for (Operator o : op.children())
+			{
+				setSample(o, sPer);
+			}
+		}
 	}
 
 	/*
@@ -70,9 +94,9 @@ public class Plan implements Serializable
 	 * for (Operator o : op.children()) { updateIDs(o); } }
 	 */
 
-	public synchronized void addNode(int node)
+	public void addNode(int node)
 	{
-		touchedNodes.add(node);
+		touchedNodes.put(node, node);
 	}
 
 	public ArrayList<Operator> cloneArray(ArrayList<Operator> source)
@@ -150,7 +174,7 @@ public class Plan implements Serializable
 
 	public synchronized ArrayList<Integer> getTouchedNodes()
 	{
-		return new ArrayList<Integer>(touchedNodes);
+		return new ArrayList<Integer>(touchedNodes.keySet());
 	}
 
 	public ArrayList<Operator> getTrees()

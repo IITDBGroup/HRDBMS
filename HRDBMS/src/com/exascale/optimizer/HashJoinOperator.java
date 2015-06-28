@@ -83,6 +83,8 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 	private transient Vector<Operator> clones;
 	private transient Vector<AtomicBoolean> lockVector;
 	private transient ArrayList<String> externalFiles;
+	private transient Boolean semi = null;
+	private transient Boolean anti = null;
 
 	public HashJoinOperator(String left, String right, MetaData meta) throws Exception
 	{
@@ -127,6 +129,21 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		value.rightChildCard = OperatorUtils.readInt(in);
 		value.cardSet = OperatorUtils.readBool(in);
 		return value;
+	}
+	
+	public void setSemi()
+	{
+		semi = new Boolean(true);
+	}
+	
+	public void setAnti()
+	{
+		anti = new Boolean(true);
+	}
+	
+	public void setCNF(HashSet<HashMap<Filter, Filter>> hshm) throws Exception
+	{
+		cnfFilters = new CNFFilter(hshm, meta, cols2Pos, null, this);
 	}
 
 	private static long hash(Object key) throws Exception
@@ -1128,6 +1145,17 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					return;
 				}
 				ExternalProcessThread ept = new ExternalProcessThread(left, right);
+				if (epThreads.size() > 1)
+				{
+					epThreads.get(0).join();
+					epThreads.remove(0);
+					
+					if (epThreads.get(0).isDone())
+					{
+						epThreads.get(0).join();
+						epThreads.remove(0);
+					}
+				}
 				ept.start();
 				epThreads.add(ept);
 				
@@ -1254,17 +1282,40 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 
 			final long hash = 0x0EFFFFFFFFFFFFFFL & hash(key);
 			Set<ArrayList<Object>> candidates = table.get(hash);
+			boolean found = false;
 			for (final ArrayList<Object> rRow : candidates)
 			{
 				if (cnfFilters.passes(row, rRow))
 				{
-					final ArrayList<Object> out = new ArrayList<Object>(row.size() + rRow.size());
-					out.addAll(row);
-					out.addAll(rRow);
-					outBuffer.put(out);
+					if (semi != null)
+					{
+						outBuffer.put(row);
+						break;
+					}
+					else if (anti != null)
+					{
+						found = true;
+					}
+					else
+					{
+						final ArrayList<Object> out = new ArrayList<Object>(row.size() + rRow.size());
+						out.addAll(row);
+						out.addAll(rRow);
+						outBuffer.put(out);
+					}
 				}
 			}
+			
+			if (anti != null && !found)
+			{
+				outBuffer.put(row);
+			}
 		}
+		
+		left.clear();
+		right.clear();
+		probe = null;
+		table = null;
 	}
 	
 	private class HashDataThread extends HRDBMSThread
@@ -1352,6 +1403,11 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 				this.e = e;
 			}
 		}
+		
+		public void clear()
+		{
+			data = null;
+		}
 	}
 	
 	private class ReadDataThread extends HRDBMSThread
@@ -1410,6 +1466,11 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 				ok = false;
 				this.e = e;
 			}
+		}
+		
+		public void clear()
+		{
+			data = null;
 		}
 	}
 	
@@ -2333,16 +2394,33 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					final long hash = 0x0EFFFFFFFFFFFFFFL & hash(key);
 					final ArrayList<ArrayList<Object>> candidates = getCandidates(hash);
 
+					boolean found = false;
 					for (final ArrayList<Object> rRow : candidates)
 					{
 						if (cnfFilters.passes(lRow, rRow))
 						{
-							final ArrayList<Object> out = new ArrayList<Object>(lRow.size() + rRow.size());
-							out.addAll(lRow);
-							out.addAll(rRow);
-							outBuffer.put(out);
-							// outCount.incrementAndGet();
+							if (semi != null)
+							{
+								outBuffer.put(lRow);
+								break;
+							}
+							else if (anti != null)
+							{
+								found = true;
+							}
+							else
+							{
+								final ArrayList<Object> out = new ArrayList<Object>(lRow.size() + rRow.size());
+								out.addAll(lRow);
+								out.addAll(rRow);
+								outBuffer.put(out);
+							}
 						}
+					}
+					
+					if (anti != null && !found)
+					{
+						outBuffer.put(lRow);
 					}
 
 					// leftCount.incrementAndGet();

@@ -71,6 +71,7 @@ public final class SortOperator implements Operator, Serializable
 	private int childCard = 16;
 	private boolean cardSet = false;
 	private transient ArrayList<String> externalFiles;
+	private long limit = 0;
 
 	public SortOperator(ArrayList<String> sortCols, ArrayList<Boolean> orders, MetaData meta)
 	{
@@ -95,6 +96,7 @@ public final class SortOperator implements Operator, Serializable
 		value.node = OperatorUtils.readInt(in);
 		value.childCard = OperatorUtils.readInt(in);
 		value.cardSet = OperatorUtils.readBool(in);
+		value.limit = OperatorUtils.readLong(in);
 		return value;
 	}
 
@@ -183,6 +185,11 @@ public final class SortOperator implements Operator, Serializable
 			throw new Exception("SortOperator only supports 1 child.");
 		}
 	}
+	
+	public void setLimit(long limit)
+	{
+		this.limit = limit;
+	}
 
 	@Override
 	public ArrayList<Operator> children()
@@ -199,6 +206,7 @@ public final class SortOperator implements Operator, Serializable
 		retval.node = node;
 		retval.childCard = childCard;
 		retval.cardSet = cardSet;
+		retval.limit = limit;
 		return retval;
 	}
 
@@ -427,6 +435,7 @@ public final class SortOperator implements Operator, Serializable
 		OperatorUtils.writeInt(node, out);
 		OperatorUtils.writeInt(childCard, out);
 		OperatorUtils.writeBool(cardSet, out);
+		OperatorUtils.writeLong(limit, out);
 	}
 
 	public boolean setChildCard(int card)
@@ -485,6 +494,223 @@ public final class SortOperator implements Operator, Serializable
 	{
 		return "SortOperator";
 	}
+	
+	private void limitSort() throws Exception
+	{
+		try
+		{
+			ReverseComparator cmp = new ReverseComparator();
+			BinomialHeap<ArrayList<Object>> bh = new BinomialHeap<ArrayList<Object>>(cmp);
+			Object o = child.next(this);
+			while (!(o instanceof DataEndMarker))
+			{
+				if (o instanceof Exception)
+				{
+					readBuffer.put(o);
+					return;
+				}
+			
+				ArrayList<Object> row = (ArrayList<Object>)o;
+				if (bh.size() < limit)
+				{
+					bh.insert(row);
+				}
+				else
+				{
+					int result = cmp.compare(row, bh.peek());
+					if (result > 0)
+					{
+						bh.insert(row);
+						bh.extractMin();
+					}
+				}
+			
+				o = child.next(this);
+			}	
+		
+			//sort and write to queue
+			ArrayList<ArrayList<Object>> result = new ArrayList<ArrayList<Object>>();
+			while (bh.size() > 0)
+			{
+				result.add(bh.extractMin());
+			}
+		
+			if (result.size() < PARALLEL_SORT_MIN_NUM_ROWS)
+			{
+				result.sort(new MergeComparator2());
+			}
+			else
+			{
+				Object[] underlying = (Object[])unsafe.getObject(result, edOff);
+				Arrays.parallelSort(underlying, 0, result.size(), new MergeComparator2());
+			}
+			
+			for (ArrayList<Object> row : result)
+			{
+				readBuffer.put(row);
+			}
+			
+			readBuffer.put(new DataEndMarker());
+		}
+		catch(Exception e)
+		{
+			readBuffer.put(e);
+		}
+	}
+	
+	private class MergeComparator2 implements Comparator<Object>
+	{
+		@Override
+		public int compare(Object l, Object r)
+		{
+			if (l == r)
+			{
+				return 0;
+			}
+
+			ArrayList<Object> lhs = (ArrayList<Object>)l;
+			ArrayList<Object> rhs = (ArrayList<Object>)r;
+
+			int result = 0;
+			int i = 0;
+
+			for (final int pos : sortPos)
+			{
+				Object lField = lhs.get(pos);
+				Object rField = rhs.get(pos);
+
+				if (lField instanceof Integer)
+				{
+					result = ((Integer)lField).compareTo((Integer)rField);
+				}
+				else if (lField instanceof Long)
+				{
+					result = ((Long)lField).compareTo((Long)rField);
+				}
+				else if (lField instanceof Double)
+				{
+					result = ((Double)lField).compareTo((Double)rField);
+				}
+				else if (lField instanceof String)
+				{
+					result = ((String)lField).compareTo((String)rField);
+				}
+				else if (lField instanceof MyDate)
+				{
+					result = ((MyDate)lField).compareTo(rField);
+				}
+				else
+				{
+					lField = null;
+					lField.toString();
+				}
+
+				if (orders.get(i))
+				{
+					if (result > 0)
+					{
+						return 1;
+					}
+					else if (result < 0)
+					{
+						return -1;
+					}
+				}
+				else
+				{
+					if (result > 0)
+					{
+						return -1;
+					}
+					else if (result < 0)
+					{
+						return 1;
+					}
+				}
+
+				i++;
+			}
+
+			return 0;
+		}
+	}
+	
+	private class ReverseComparator implements Comparator<Object>
+	{
+		@Override
+		public int compare(Object l, Object r)
+		{
+			if (l == r)
+			{
+				return 0;
+			}
+
+			ArrayList<Object> lhs = (ArrayList<Object>)l;
+			ArrayList<Object> rhs = (ArrayList<Object>)r;
+
+			int result = 0;
+			int i = 0;
+
+			for (final int pos : sortPos)
+			{
+				Object lField = lhs.get(pos);
+				Object rField = rhs.get(pos);
+
+				if (lField instanceof Integer)
+				{
+					result = ((Integer)lField).compareTo((Integer)rField);
+				}
+				else if (lField instanceof Long)
+				{
+					result = ((Long)lField).compareTo((Long)rField);
+				}
+				else if (lField instanceof Double)
+				{
+					result = ((Double)lField).compareTo((Double)rField);
+				}
+				else if (lField instanceof String)
+				{
+					result = ((String)lField).compareTo((String)rField);
+				}
+				else if (lField instanceof MyDate)
+				{
+					result = ((MyDate)lField).compareTo(rField);
+				}
+				else
+				{
+					lField = null;
+					lField.toString();
+				}
+
+				if (orders.get(i))
+				{
+					if (result > 0)
+					{
+						return -1;
+					}
+					else if (result < 0)
+					{
+						return 1;
+					}
+				}
+				else
+				{
+					if (result > 0)
+					{
+						return 1;
+					}
+					else if (result < 0)
+					{
+						return -1;
+					}
+				}
+
+				i++;
+			}
+
+			return 0;
+		}
+	}
 
 	private final class SortThread extends ThreadPoolThread
 	{
@@ -504,6 +730,11 @@ public final class SortOperator implements Operator, Serializable
 		{
 			try
 			{
+				if (limit > 0)
+				{
+					limitSort();
+					return;
+				}
 				if (childCard > ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")))
 				{
 					externalSort();
@@ -1421,7 +1652,7 @@ public final class SortOperator implements Operator, Serializable
 		private class WriteDataThread extends HRDBMSThread
 		{
 			private final String fn;
-			private final byte[] data;
+			private byte[] data;
 			private Exception e;
 			private boolean ok = true;
 			private final ConcurrentHashMap<String, RandomAccessFile> map2;
@@ -1456,6 +1687,7 @@ public final class SortOperator implements Operator, Serializable
 					map3.put(fn, fc);
 					ByteBuffer bb = ByteBuffer.wrap(data);
 					fc.write(bb);
+					data = null;
 				}
 				catch (Exception e)
 				{

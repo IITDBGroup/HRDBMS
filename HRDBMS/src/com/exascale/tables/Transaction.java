@@ -319,6 +319,12 @@ public class Transaction implements Serializable
 			LockManager.unlockSLock(b, txnum);
 		}
 	}
+	
+	public void dummyRead(Block b, Schema schema) throws LockAbortException, Exception
+	{
+		final Page p = this.getPage(b);
+		schema.dummyRead(this, p);
+	}
 
 	public void read(Block b, Schema schema, boolean lock) throws LockAbortException, Exception
 	{

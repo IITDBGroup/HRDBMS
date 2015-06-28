@@ -1288,6 +1288,36 @@ public final class Phase3
 
 		if (parent.existsCountDistinct())
 		{
+			if (parent.getKeys().size() == 0 && parent.getOutputCols().size() == 1)
+			{
+				String col = parent.getInputCols().get(0);
+				for (Operator op : (ArrayList<Operator>)receive.children().clone())
+				{
+					Operator child = op.children().get(0);
+					if (!(child instanceof UnionOperator))
+					{
+						op.removeChild(child);
+						if (child.getCols2Pos().size() > 1)
+						{
+							ArrayList<String> cols = new ArrayList<String>();
+							cols.add(col);
+							Operator child2 = new ProjectOperator(cols, meta);
+							child2.add(child);
+							child = child2;
+						}
+					
+						Operator child2 = new UnionOperator(true, meta);
+						child2.add(child);
+						child = child2;
+						op.add(child);
+						receive.removeChild(op);
+						receive.add(op);
+					}
+				}
+				
+				parent.removeChild(receive);
+				parent.add(receive);
+			}
 			return false;
 		}
 

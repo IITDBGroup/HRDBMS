@@ -5721,28 +5721,22 @@ public class ConnectionWorker extends HRDBMSThread
 			{
 				data.put((byte)0); // not unique
 			}
-			data.position(9); // first free byte @ 5
-			data.putInt(Page.BLOCK_SIZE - 1); // last free byte
+			data.putInt(0); //first free
+			data.putInt(0); //head points to block 0
+			data.putInt(17); //head point to offset 17
 
-			data.put((byte)0); // not a leaf
-			// offset of next free value from start of record (13)
-			data.position(18);
-			data.putInt(0); // zero valid key values in this internal node
-			int i = 0;
-			while (i < 128)
-			{
-				data.putInt(0); // down block
-				data.putInt(0); // down offset
-				i++;
-			}
-
-			data.putInt(0); // no up block
-			data.putInt(0); // no up offset
+			data.put((byte)3); // start record
+			data.putInt(0); //left
+			data.putInt(0);
+			data.putInt(0); //right
+			data.putInt(0);
+			data.putInt(0); //up
+			data.putInt(0);
+			data.putInt(0); //down
+			data.putInt(0);
 
 			// fill in first free val pointer
 			int pos = data.position();
-			data.position(14);
-			data.putInt(pos - 13);
 			data.position(5);
 			data.putInt(pos); // first free byte
 			data.position(pos);
@@ -5973,7 +5967,7 @@ public class ConnectionWorker extends HRDBMSThread
 						for (Object o2 : map.get(block))
 						{
 							RIDAndIndexKeys raik = (RIDAndIndexKeys)o2;
-							idx.delete(aloToFieldValues(raik.getIndexKeys().get(i)), raik.getRID());
+							idx.delete(raik.getIndexKeys().get(i), raik.getRID());
 						}
 						i++;
 					}
@@ -6088,7 +6082,7 @@ public class ConnectionWorker extends HRDBMSThread
 					idx.open();
 					for (RIDAndIndexKeys raik : raiks)
 					{
-						idx.insert(aloToFieldValues(raik.getIndexKeys().get(i)), raik.getRID());
+						idx.insert(raik.getIndexKeys().get(i), raik.getRID());
 					}
 					i++;
 				}
@@ -6184,7 +6178,6 @@ public class ConnectionWorker extends HRDBMSThread
 				tx.requestPage(toRequest);
 				tx.read(toRequest, sch, true);
 				new ArrayList<RIDAndIndexKeys>();
-				Collections.shuffle(list);
 				for (ArrayList<Object> row : list)
 				{
 					RID rid = sch.insertRowAppend(aloToFieldValues(row));
@@ -6343,13 +6336,13 @@ public class ConnectionWorker extends HRDBMSThread
 
 					RIDAndIndexKeys raik = (RIDAndIndexKeys)obj;
 					// for each index, insert row based on rid and key values
-					/* TODO 
+
 					if (!isFieldValues)
 					{
 						int i = 0;
 						for (Index idx : indexes)
 						{
-							idx.insertNoLog(aloToFieldValues(raik.getIndexKeys().get(i)), raik.getRID());
+							idx.insertNoLog(raik.getIndexKeys().get(i), raik.getRID());
 							i++;
 						}
 					}
@@ -6358,11 +6351,11 @@ public class ConnectionWorker extends HRDBMSThread
 						int i = 0;
 						for (Index idx : indexes)
 						{
-							idx.insertNoLog(toFVA(raik.getIndexKeys().get(i)), raik.getRID());
+							idx.insertNoLog(raik.getIndexKeys().get(i), raik.getRID());
 							i++;
 						}
 					}
-					*/
+					
 				}
 			}
 			catch (Exception e)

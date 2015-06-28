@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import com.exascale.managers.HRDBMSWorker;
+import com.exascale.managers.ResourceManager;
 import com.exascale.tables.Transaction;
 
 public final class Phase5
@@ -488,6 +489,30 @@ public final class Phase5
 		// sanityCheck(root, -1);
 		setSpecificCoord(root, new HashSet<Operator>());
 		// Phase1.printTree(root, 0);
+		sortLimit(root);
+	}
+	
+	private void sortLimit(Operator op)
+	{
+		if (op instanceof TopOperator)
+		{
+			if (op.children().get(0) instanceof SortOperator)
+			{
+				SortOperator sop = (SortOperator)op.children().get(0);
+				TopOperator top = (TopOperator)op;
+				long limit = top.getRemaining();
+				
+				if (limit < ResourceManager.QUEUE_SIZE * Long.parseLong(HRDBMSWorker.getHParms().getProperty("hash_external_fator")))
+				{
+					sop.setLimit(limit);
+				}
+			}
+		}
+		
+		for (Operator o : op.children())
+		{
+			sortLimit(o);
+		}
 	}
 
 	public void printTree(Operator op, int indent) throws Exception

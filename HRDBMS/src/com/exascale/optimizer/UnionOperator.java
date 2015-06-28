@@ -377,6 +377,10 @@ public final class UnionOperator implements Operator, Serializable
 				{
 					inMem = false;
 					numFiles = (int)(estimate / (ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor"))) + 1);
+					if (numFiles > 1024)
+					{
+						numFiles = 1024;
+					}
 					// HRDBMSWorker.logger.debug("Setting numFiles to " +
 					// numFiles + " based on estimate of " + estimate);
 					if (numFiles == 1)
@@ -384,10 +388,14 @@ public final class UnionOperator implements Operator, Serializable
 						inMem = true;
 					}
 				}
-				else if (estimate > ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")))
+				else if (estimate > ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")))
 				{
 					inMem = false;
 					numFiles = (int)(estimate / (ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor"))) + 1);
+					if (numFiles > 1024)
+					{
+						numFiles = 1024;
+					}
 					// HRDBMSWorker.logger.debug("Setting numFiles to " +
 					// numFiles + " based on estimate of " + estimate);
 					if (numFiles == 1)
@@ -815,7 +823,7 @@ public final class UnionOperator implements Operator, Serializable
 						int hash = (int)(hash(data) % numFiles);
 						ArrayList<byte[]> bucket = buckets.get(hash);
 						bucket.add(data);
-						if (bucket.size() > 512)
+						if (bucket.size() > 8192)
 						{
 							flushBucket(bucket, hash, childNum);
 						}

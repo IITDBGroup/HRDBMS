@@ -354,28 +354,22 @@ public class CatalogCode
 		{
 			data.put((byte)0); // not unique
 		}
-		data.position(9); // first free byte @ 5
-		data.putInt(Page.BLOCK_SIZE - 1); // last free byte
+		data.putInt(0); //first free
+		data.putInt(0); //head points to block 0
+		data.putInt(17); //head point to offset 17
 
-		data.put((byte)0); // not a leaf
-		// offset of next free value from start of record (13)
-		data.position(18);
-		data.putInt(0); // zero valid key values in this internal node
-		int i = 0;
-		while (i < 128)
-		{
-			data.putInt(0); // down block
-			data.putInt(0); // down offset
-			i++;
-		}
-
-		data.putInt(0); // no up block
-		data.putInt(0); // no up offset
+		data.put((byte)3); // start record
+		data.putInt(0); //left
+		data.putInt(0);
+		data.putInt(0); //right
+		data.putInt(0);
+		data.putInt(0); //up
+		data.putInt(0);
+		data.putInt(0); //down
+		data.putInt(0);
 
 		// fill in first free val pointer
 		int pos = data.position();
-		data.position(14);
-		data.putInt(pos - 13);
 		data.position(5);
 		data.putInt(pos); // first free byte
 		data.position(pos);
@@ -1162,26 +1156,6 @@ public class CatalogCode
 		}
 	}
 
-	private static ByteBuffer createLeaf(ByteBuffer keyBytes, RID rid, int prevOff, int nextOff)
-	{
-		final ByteBuffer data = ByteBuffer.allocate(41 + keyBytes.limit());
-		data.position(0);
-		data.put((byte)1); // leaf
-		data.putInt(0); // prev block
-		data.putInt(prevOff);
-		data.putInt(0); // next block
-		data.putInt(nextOff);
-		data.putInt(0); // up block
-		data.putInt(13); // up offset
-		data.putInt(rid.getNode());
-		data.putInt(rid.getDevice());
-		data.putInt(rid.getBlockNum());
-		data.putInt(rid.getRecNum());
-		keyBytes.position(0);
-		data.put(keyBytes);
-		return data;
-	}
-
 	private static void createNodes() throws IOException
 	{
 		final BufferedReader nodes = new BufferedReader(new FileReader(new File("nodes.cfg")));
@@ -1848,70 +1822,42 @@ public class CatalogCode
 
 	private static void indexPut(ByteBuffer data, ByteBuffer keyBytes, RID rid)
 	{
-		data.position(14); // offset of first free key value
-		final int freeKeyOff = data.getInt();
-		final int numKeyVals = data.getInt();
-		final int pointerOff = 22 + (8 * numKeyVals);
-		data.position(18); // num valid keys
-		data.putInt(numKeyVals + 1);
+		data.position(5); // offset of first slot
+		final int freeOff = data.getInt();
+		data.position(13); //head offset
+		int headOff = data.getInt();
+		while (true)
+		{
+			int temp = data.getInt(headOff+13); //get right offset
+			if (temp == 0)
+			{
+				break;
+			}
+			
+			headOff = temp;
+		}
+		data.position(freeOff);
 
-		// key val
-		data.position(freeKeyOff + 13);
+		data.put((byte)1);
+		data.putInt(0); //left
+		data.putInt(headOff);
+		data.putInt(0); //right
+		data.putInt(0);
+		data.putInt(0); //up
+		data.putInt(0);
+		//data.putInt(0); // no down
+		//data.putInt(0);
+		data.putInt(rid.getNode());
+		data.putInt(rid.getDevice());
+		data.putInt(rid.getBlockNum());
+		data.putInt(rid.getRecNum());
 		keyBytes.position(0);
 		data.put(keyBytes);
-
-		// next free val off
-		final int pos = data.position();
-		data.position(14); // first free key offset
-		data.putInt(pos - 13);
-
-		// first free byte
+		int newFreeOff = data.position();
+		data.position(headOff+13);
+		data.putInt(freeOff);
 		data.position(5);
-		data.putInt(pos);
-
-		// leaf + last free byte
-		int prevOff, nextOff;
-		final int prevPointerOff = pointerOff - 4;
-		if (prevPointerOff < 26)
-		{
-			prevOff = 0;
-		}
-		else
-		{
-			data.position(prevPointerOff);
-			prevOff = data.getInt();
-		}
-		final int nextPointerOff = pointerOff + 12;
-		if (nextPointerOff > 1042)
-		{
-			nextOff = 0;
-		}
-		else
-		{
-			data.position(nextPointerOff);
-			nextOff = data.getInt();
-		}
-
-		final ByteBuffer leaf = createLeaf(keyBytes, rid, prevOff, nextOff);
-		data.position(9); // last free byte
-		final int lastFree = data.getInt();
-		data.position(9);
-		data.putInt(lastFree - leaf.limit()); // new last free byte
-		data.position(lastFree - leaf.limit() + 1); // start of leaf record
-		final int downOff = data.position();
-		leaf.position(0);
-		data.put(leaf);
-
-		if (prevOff != 0)
-		{
-			data.position(prevOff + 13); // next pointer in previous leaf
-			data.putInt(downOff);
-		}
-
-		// down pointer
-		data.position(pointerOff);
-		data.putInt(0); // block 0
-		data.putInt(downOff); // offset
+		data.putInt(newFreeOff);
 	}
 
 	private static int numCols(int tableId)

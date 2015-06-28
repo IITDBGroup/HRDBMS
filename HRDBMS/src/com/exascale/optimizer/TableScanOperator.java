@@ -99,6 +99,8 @@ public final class TableScanOperator implements Operator, Serializable
 	private TreeMap<Integer, String> tablePos2Col;
 	private HashMap<String, Integer> tableCols2Pos;
 	private boolean releaseLocks = false;
+	private boolean sample = false;
+	private long sPer;
 
 	private transient HashSet<Integer> referencesHash = null;
 
@@ -196,7 +198,15 @@ public final class TableScanOperator implements Operator, Serializable
 		value.tablePos2Col = OperatorUtils.deserializeTM(in, prev);
 		value.tableCols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
 		value.releaseLocks = OperatorUtils.readBool(in);
+		value.sample = OperatorUtils.readBool(in);
+		value.sPer = OperatorUtils.readLong(in);
 		return value;
+	}
+	
+	public void setSample(long sPer)
+	{
+		sample = true;
+		this.sPer = sPer;
 	}
 
 	@Override
@@ -377,6 +387,8 @@ public final class TableScanOperator implements Operator, Serializable
 		retval.partMeta = partMeta;
 		retval.phase2Done = phase2Done;
 		retval.node = node;
+		retval.sample = sample;
+		retval.sPer = sPer;
 		if (devices != null)
 		{
 			retval.devices = (ArrayList<Integer>)devices.clone();
@@ -1087,6 +1099,8 @@ public final class TableScanOperator implements Operator, Serializable
 		OperatorUtils.serializeTM(tablePos2Col, out, prev);
 		OperatorUtils.serializeStringIntHM(tableCols2Pos, out, prev);
 		OperatorUtils.writeBool(releaseLocks, out);
+		OperatorUtils.writeBool(sample, out);
+		OperatorUtils.writeLong(sPer, out);
 	}
 
 	public void setAlias(String alias)
@@ -1554,6 +1568,14 @@ public final class TableScanOperator implements Operator, Serializable
 			// TableScanOperator.this + " has started");
 			CNFFilter filter = orderedFilters.get(parents.get(0));
 			boolean neededPosNeeded = true;
+			int get = 0;
+			int skip = 0;
+			
+			if (sample)
+			{
+				get = (int)sPer;
+				skip = 100 - get;
+			}
 			if (filter != null)
 			{
 				if (neededPos.size() == fetchPos.size())
@@ -1629,6 +1651,8 @@ public final class TableScanOperator implements Operator, Serializable
 					int lastRequested = Schema.HEADER_SIZE - 1;
 					// long count = 0;
 					ArrayList<Object> row = new ArrayList<Object>(fetchPos.size());
+					int get2 = get;
+					int skip2 = skip;
 					while (onPage < numBlocks)
 					{
 						if (lastRequested - onPage < PAGES_IN_ADVANCE)
@@ -1652,6 +1676,22 @@ public final class TableScanOperator implements Operator, Serializable
 							// }
 						}
 
+						if (sample && skip2 == 0)
+						{
+							get2 = get - 1;
+							skip2 = skip;
+						}
+						else if (sample && get2 == 0)
+						{
+							skip2--;
+							tx.dummyRead(new Block(in, onPage++), sch);
+							continue;
+						}
+						else if (sample)
+						{
+							get2--;
+						}
+						
 						tx.read(new Block(in, onPage++), sch);
 						RowIterator rit = sch.rowIterator();
 						outer: while (rit.hasNext())

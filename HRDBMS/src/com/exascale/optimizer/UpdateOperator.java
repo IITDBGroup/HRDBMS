@@ -18,7 +18,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import com.exascale.filesystem.RID;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
-import com.exascale.managers.ResourceManager.DiskBackedArray;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MultiHashMap;
 import com.exascale.optimizer.MetaData.PartitionMetaData;
@@ -306,21 +305,14 @@ public final class UpdateOperator implements Operator, Serializable
 		}
 
 		PartitionMetaData pmeta = new MetaData().new PartitionMetaData(schema, table, tx);
-		Object o = child.next(this);
-		DiskBackedArray dba = ResourceManager.newDiskBackedArray(10);
-		while (!(o instanceof DataEndMarker))
-		{
-			dba.add((ArrayList<Object>)o);
-			o = child.next(this);
-		}
-
-		Iterator it = dba.iterator();
+	
 		int numNodes = MetaData.numWorkerNodes;
-		while (it.hasNext())
+		Object o = child.next(this);
+		while (!(o instanceof DataEndMarker))
 		{
 			try
 			{
-				ArrayList<Object> row = (ArrayList<Object>)it.next();
+				ArrayList<Object> row = (ArrayList<Object>)o;
 				int node = (Integer)row.get(child.getCols2Pos().get("_RID1"));
 				int device = (Integer)row.get(child.getCols2Pos().get("_RID2"));
 				int block = (Integer)row.get(child.getCols2Pos().get("_RID3"));
@@ -436,9 +428,10 @@ public final class UpdateOperator implements Operator, Serializable
 					return;
 				}
 			}
+			
+			o = child.next(this);
 		}
 
-		dba.close();
 		if (map.totalSize() > 0)
 		{
 			flush(indexes, spmd, cols2Pos);

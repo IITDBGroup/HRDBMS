@@ -867,6 +867,16 @@ public class Schema
 
 		return retval;
 	}
+	
+	public void dummyRead(Transaction tx, Page p) throws Exception
+	{
+		if (this.p != null)
+		{
+			BufferManager.unpin(this.p,  tx.number());
+		}
+		
+		this.p = p;
+	}
 
 	public void read(Transaction tx, Page p) throws Exception
 	{

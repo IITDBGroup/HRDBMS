@@ -33,4 +33,14 @@ public abstract class ThreadPoolThread implements Runnable
 	{
 		forJoin = ResourceManager.pool.submit(this);
 	}
+	
+	public boolean isDone()
+	{
+		if (!started())
+		{
+			return false;
+		}
+		
+		return forJoin.isDone();
+	}
 }

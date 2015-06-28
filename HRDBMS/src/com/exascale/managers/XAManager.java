@@ -49,6 +49,9 @@ public class XAManager extends HRDBMSThread
 	public static volatile boolean rP1 = false;
 	public static volatile boolean rP2 = false;
 	public static BlockingQueue<Object> in = new LinkedBlockingQueue<Object>();
+	public static int PORT_NUMBER = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"));
+	public static int MAX_NEIGHBORS = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
+	public static String LOG_DIR = HRDBMSWorker.getHParms().getProperty("log_dir");
 
 	public XAManager()
 	{
@@ -72,7 +75,7 @@ public class XAManager extends HRDBMSThread
 					sock = new Socket();
 					sock.setReceiveBufferSize(262144);
 					sock.setSendBufferSize(262144);
-					sock.connect(new InetSocketAddress(xa.getHost(), Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
+					sock.connect(new InetSocketAddress(xa.getHost(), PORT_NUMBER));
 					break;
 				}
 				catch (Exception e)
@@ -302,6 +305,62 @@ public class XAManager extends HRDBMSThread
 		}
 
 		txs.multiPut(tx, plan);
+		return new XAWorker(plan, tx, true);
+	}
+	
+	public static XAWorker executeQuery(String sql, Transaction tx, ConnectionWorker conn, long sPer) throws Exception
+	{
+		String sql2 = new SQL(sql).toString();
+		if (!(sql2.startsWith("SELECT") || sql2.startsWith("WITH")))
+		{
+			throw new Exception("Not a select statement");
+		}
+		// HRDBMSWorker.logger.debug("About to check plan cache");
+		Plan plan = PlanCacheManager.checkPlanCache(sql2);
+
+		if (plan == null)
+		{
+			try
+			{
+				// HRDBMSWorker.logger.debug("Did not find plan in cache");
+				SQLParser parse = new SQLParser(sql2, conn, tx);
+				// HRDBMSWorker.logger.debug("Created SQL parser");
+				Operator op = parse.parse();
+				// HRDBMSWorker.logger.debug("Parsing completed");
+				Phase1 p1 = new Phase1((RootOperator)op, tx);
+				p1.optimize();
+				// HRDBMSWorker.logger.debug("Phase 1 completed");
+				new Phase2((RootOperator)op, tx).optimize();
+				// HRDBMSWorker.logger.debug("Phase 2 completed");
+				new Phase3((RootOperator)op, tx).optimize();
+				// HRDBMSWorker.logger.debug("Phase 3 completed");
+				new Phase4((RootOperator)op, tx).optimize();
+				// HRDBMSWorker.logger.debug("Phase 4 completed");
+				new Phase5((RootOperator)op, tx, p1.likelihoodCache).optimize();
+				// HRDBMSWorker.logger.debug("Phase 5 completed");
+				//Phase1.printTree(op, 0); // DEBUG
+				ArrayList<Operator> array = new ArrayList<Operator>(1);
+				array.add(op);
+				plan = new Plan(false, array);
+
+				// if (parse.doesNotUseCurrentSchema())
+				// {
+				// PlanCacheManager.addPlan(sql2, new Plan(plan));
+				// }
+			}
+			catch (Throwable e)
+			{
+				HRDBMSWorker.logger.debug("Error in executeQuery", e);
+				throw e;
+			}
+		}
+		else
+		{
+			// HRDBMSWorker.logger.debug("Did find plan in cache");
+		}
+
+		txs.multiPut(tx, plan);
+		plan.setSample(sPer);
 		return new XAWorker(plan, tx, true);
 	}
 
@@ -671,7 +730,7 @@ public class XAManager extends HRDBMSThread
 
 	private static ArrayList<Object> makeTree(ArrayList<Integer> nodes)
 	{
-		int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
+		int max = MAX_NEIGHBORS;
 		if (nodes.size() <= max)
 		{
 			ArrayList<Object> retval = new ArrayList<Object>(nodes);
@@ -784,7 +843,7 @@ public class XAManager extends HRDBMSThread
 			sock = new Socket();
 			sock.setReceiveBufferSize(262144);
 			sock.setSendBufferSize(262144);
-			sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
+			sock.connect(new InetSocketAddress(hostname, PORT_NUMBER));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "CHECKPNT        ".getBytes(StandardCharsets.UTF_8);
 			outMsg[8] = 0;
@@ -895,7 +954,7 @@ public class XAManager extends HRDBMSThread
 					sock = new Socket();
 					sock.setReceiveBufferSize(262144);
 					sock.setSendBufferSize(262144);
-					sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
+					sock.connect(new InetSocketAddress(hostname, PORT_NUMBER));
 					break;
 				}
 				catch (Exception e)
@@ -958,7 +1017,7 @@ public class XAManager extends HRDBMSThread
 
 	private static void sendCommits(ArrayList<Object> tree, Transaction tx) throws Exception
 	{
-		String filename = HRDBMSWorker.getHParms().getProperty("log_dir");
+		String filename = LOG_DIR;
 		if (!filename.endsWith("/"))
 		{
 			filename += "/";
@@ -1158,7 +1217,7 @@ public class XAManager extends HRDBMSThread
 			sock = new Socket();
 			sock.setReceiveBufferSize(262144);
 			sock.setSendBufferSize(262144);
-			sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
+			sock.connect(new InetSocketAddress(hostname, PORT_NUMBER));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "PREPARE         ".getBytes(StandardCharsets.UTF_8);
 			outMsg[8] = 0;
@@ -1222,7 +1281,7 @@ public class XAManager extends HRDBMSThread
 					sock = new Socket();
 					sock.setReceiveBufferSize(262144);
 					sock.setSendBufferSize(262144);
-					sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
+					sock.connect(new InetSocketAddress(hostname, PORT_NUMBER));
 					break;
 				}
 				catch (Exception e)
@@ -1285,7 +1344,7 @@ public class XAManager extends HRDBMSThread
 
 	private static void sendRollbacks(ArrayList<Object> tree, Transaction tx) throws Exception
 	{
-		String filename = HRDBMSWorker.getHParms().getProperty("log_dir");
+		String filename = LOG_DIR;
 		if (!filename.endsWith("/"))
 		{
 			filename += "/";

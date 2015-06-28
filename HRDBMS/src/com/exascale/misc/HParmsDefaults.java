@@ -32,9 +32,6 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("rm_sleep_time_ms", "10000");
 		retval.setProperty("low_mem_percent", "50");
 		retval.setProperty("high_mem_percent", "70");
-		retval.setProperty("percent_to_cut", "1");
-		retval.setProperty("min_cleaner_thread_size", "20000");
-		retval.setProperty("max_cleaner_threads", "8");
 		retval.setProperty("profile", "false");
 		retval.setProperty("detect_thread_deadlocks", "false");
 		retval.setProperty("queue_size", "1000000");
@@ -48,7 +45,7 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("max_local_no_hash_product", "10000000");
 		retval.setProperty("max_local_left_hash", "100000");
 		retval.setProperty("max_local_sort", "2500000");
-		retval.setProperty("parallel_sort_min_rows", "2500");
+		retval.setProperty("parallel_sort_min_rows", Integer.toString((int)(2500 * Math.pow(Math.pow(Runtime.getRuntime().availableProcessors(), 2), 1.0 / 3.0))));
 		retval.setProperty("prefetch_request_size", "80");
 		retval.setProperty("pages_in_advance", "40");
 		retval.setProperty("getpage_attempts", "300000");
@@ -63,7 +60,7 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("statistics_refresh_target_days", "7");
 		retval.setProperty("old_file_cleanup_target_days", "7");
 		retval.setProperty("reorg_refresh_target_days", "7");
-		retval.setProperty("max_load_average", Integer.toString(100 * Runtime.getRuntime().availableProcessors()));
+		retval.setProperty("max_load_average", Integer.toString(25 * Runtime.getRuntime().availableProcessors()));
 		retval.setProperty("critical_mem_percent", "15");
 		retval.setProperty("stack_size", "2M");
 		retval.setProperty("jvm_args", "-XX:+AggressiveOpts -XX:-DontCompileHugeMethods -XX:+UseAdaptiveSizePolicyWithSystemGC");

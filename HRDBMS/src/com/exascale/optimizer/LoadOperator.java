@@ -40,8 +40,10 @@ import com.exascale.mapred.LoadReducer;
 import com.exascale.mapred.MyLongWritable;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.FastStringTokenizer;
+import com.exascale.misc.LOMultiHashMap;
 import com.exascale.misc.MultiHashMap;
 import com.exascale.misc.MyDate;
+import com.exascale.misc.ScalableStampedRWLock;
 import com.exascale.misc.Utils;
 import com.exascale.optimizer.MetaData.PartitionMetaData;
 import com.exascale.tables.Plan;
@@ -61,7 +63,7 @@ public final class LoadOperator implements Operator, Serializable
 	private final String table;
 	private final AtomicInteger num = new AtomicInteger(0);
 	private volatile boolean done = false;
-	private final MultiHashMap map = new MultiHashMap<Long, ArrayList<Object>>();
+	private final LOMultiHashMap map = new LOMultiHashMap<Long, ArrayList<Object>>();
 	private Transaction tx;
 	private final boolean replace;
 	private final String delimiter;
@@ -70,6 +72,12 @@ public final class LoadOperator implements Operator, Serializable
 	private final ArrayList<FlushThread> fThreads = new ArrayList<FlushThread>();
 	private transient ConcurrentHashMap<Pair, AtomicInteger> waitTill;
 	private transient ArrayList<FlushThread> waitThreads;
+	private transient ScalableStampedRWLock lock;
+	private static int MAX_NEIGHBOR_NODES = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
+	private static String DATA_DIRS = HRDBMSWorker.getHParms().getProperty("data_directories");
+	private static long MAX_QUEUED = Long.parseLong(HRDBMSWorker.getHParms().getProperty("max_queued_load_flush_threads"));
+	private static int PORT_NUMBER = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"));
+	private static int MAX_BATCH = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_batch"));
 
 	public LoadOperator(String schema, String table, boolean replace, String delimiter, String glob, MetaData meta)
 	{
@@ -121,7 +129,7 @@ public final class LoadOperator implements Operator, Serializable
 			sock = new Socket();
 			sock.setReceiveBufferSize(262144);
 			sock.setSendBufferSize(262144);
-			sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
+			sock.connect(new InetSocketAddress(hostname, PORT_NUMBER));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "SETLDMD         ".getBytes(StandardCharsets.UTF_8);
 			outMsg[8] = 0;
@@ -181,7 +189,7 @@ public final class LoadOperator implements Operator, Serializable
 			sock = new Socket();
 			sock.setReceiveBufferSize(262144);
 			sock.setSendBufferSize(262144);
-			sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
+			sock.connect(new InetSocketAddress(hostname, PORT_NUMBER));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "DELLDMD         ".getBytes(StandardCharsets.UTF_8);
 			outMsg[8] = 0;
@@ -293,7 +301,7 @@ public final class LoadOperator implements Operator, Serializable
 
 	private static ArrayList<Object> makeTree(ArrayList<Integer> nodes)
 	{
-		int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
+		int max = MAX_NEIGHBOR_NODES;
 		if (nodes.size() <= max)
 		{
 			ArrayList<Object> retval = new ArrayList<Object>(nodes);
@@ -350,7 +358,7 @@ public final class LoadOperator implements Operator, Serializable
 
 	private static int numDevicesPerNode()
 	{
-		String dirs = HRDBMSWorker.getHParms().getProperty("data_directories");
+		String dirs = DATA_DIRS;
 		FastStringTokenizer tokens = new FastStringTokenizer(dirs, ",", false);
 		return tokens.allTokens().length;
 	}
@@ -667,6 +675,7 @@ public final class LoadOperator implements Operator, Serializable
 	@Override
 	public void start() throws Exception
 	{
+		lock = new ScalableStampedRWLock();
 		waitTill = new ConcurrentHashMap<Pair, AtomicInteger>();
 		waitThreads = new ArrayList<FlushThread>();
 		if (replace)
@@ -689,9 +698,25 @@ public final class LoadOperator implements Operator, Serializable
 		}
 
 		ArrayList<String> indexes = meta.getIndexFileNamesForTable(schema, table, tx);
+		//DEBUG
+		//if (indexes.size() == 0)
+		//{
+		//	Exception e = new Exception();
+		//	HRDBMSWorker.logger.debug("No indexes found", e);
+		//}
+		//DEBUG
 		ArrayList<ArrayList<String>> keys = meta.getKeys(indexes, tx);
+		//DEBUG
+		//HRDBMSWorker.logger.debug("Keys = " + keys);
+		//DEBUG
 		ArrayList<ArrayList<String>> types = meta.getTypes(indexes, tx);
+		//DEBUG
+		//HRDBMSWorker.logger.debug("Types = " + types);
+		//DEBUG
 		ArrayList<ArrayList<Boolean>> orders = meta.getOrders(indexes, tx);
+		//DEBUG
+		//HRDBMSWorker.logger.debug("Orders = " + orders);
+		//DEBUG
 
 		HashMap<Integer, Integer> pos2Length = new HashMap<Integer, Integer>();
 		for (Map.Entry entry : cols2Types.entrySet())
@@ -896,6 +921,13 @@ public final class LoadOperator implements Operator, Serializable
 		master.start();
 		return master;
 	}
+	
+	private FlushMasterThread flush(ArrayList<String> indexes, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, boolean force) throws Exception
+	{
+		FlushMasterThread master = new FlushMasterThread(indexes, spmd, keys, types, orders, true);
+		master.start();
+		return master;
+	}
 
 	private boolean sendLDMD(ArrayList<Object> tree, String key, LoadMetaData ldmd, Transaction tx)
 	{
@@ -1018,6 +1050,7 @@ public final class LoadOperator implements Operator, Serializable
 		private final ArrayList<ArrayList<String>> keys;
 		private final ArrayList<ArrayList<String>> types;
 		private final ArrayList<ArrayList<Boolean>> orders;
+		private boolean force = false;
 
 		public FlushMasterThread(ArrayList<String> indexes, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders)
 		{
@@ -1026,6 +1059,16 @@ public final class LoadOperator implements Operator, Serializable
 			this.keys = keys;
 			this.types = types;
 			this.orders = orders;
+		}
+		
+		public FlushMasterThread(ArrayList<String> indexes, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, boolean force)
+		{
+			this.indexes = indexes;
+			this.spmd = spmd;
+			this.keys = keys;
+			this.types = types;
+			this.orders = orders;
+			this.force = force;
 		}
 
 		public boolean getOK()
@@ -1040,8 +1083,14 @@ public final class LoadOperator implements Operator, Serializable
 			ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
 			synchronized(waitThreads)
 			{
-				synchronized (map)
+				lock.writeLock().lock();
 				{
+					if (!force && map.size() <= MAX_NEIGHBOR_NODES && map.totalSize() <= MAX_BATCH)
+					{
+						lock.writeLock().unlock();
+						return;
+					}
+					
 					for (Object o : map.getKeySet())
 					{
 						long key = (Long)o;
@@ -1109,7 +1158,7 @@ public final class LoadOperator implements Operator, Serializable
 			
 					waitThreads.addAll(temp);
 			
-					while (waitThreads.size() > Long.parseLong(HRDBMSWorker.getHParms().getProperty("max_queued_load_flush_threads")))
+					while (waitThreads.size() > MAX_QUEUED)
 					{
 						try
 						{
@@ -1152,6 +1201,7 @@ public final class LoadOperator implements Operator, Serializable
 						}
 					}
 				}
+				lock.writeLock().unlock();
 			}
 
 			synchronized(fThreads)
@@ -1239,7 +1289,7 @@ public final class LoadOperator implements Operator, Serializable
 				sock = new Socket();
 				sock.setReceiveBufferSize(262144);
 				sock.setSendBufferSize(262144);
-				sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
+				sock.connect(new InetSocketAddress(hostname, PORT_NUMBER));
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "LOAD            ".getBytes(StandardCharsets.UTF_8);
 				outMsg[8] = 0;
@@ -1398,13 +1448,15 @@ public final class LoadOperator implements Operator, Serializable
 					ArrayList<Integer> nodes = MetaData.determineNode(schema, table, row, tx, pmeta, cols2Pos, numNodes);
 					int device = MetaData.determineDevice(row, pmeta, cols2Pos);
 					
+					lock.readLock().lock();
 					for (Integer node : nodes)
 					{
 						plan.addNode(node);
 						long key = (((long)node) << 32) + device;
 						map.multiPut(key, row);
 					}
-					if (map.size() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes")))
+					lock.readLock().unlock();
+					if (map.size() > MAX_NEIGHBOR_NODES)
 					{
 						if (master != null)
 						{
@@ -1417,7 +1469,7 @@ public final class LoadOperator implements Operator, Serializable
 						
 						master = flush(indexes, spmd, keys, types, orders);
 					}
-					else if (map.totalSize() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_batch")))
+					else if (map.totalSize() > MAX_BATCH)
 					{
 						if (master != null)
 						{
@@ -1445,7 +1497,7 @@ public final class LoadOperator implements Operator, Serializable
 				
 				if (map.totalSize() > 0)
 				{	
-					master = flush(indexes, spmd, keys, types, orders);
+					master = flush(indexes, spmd, keys, types, orders, true);
 					master.join();
 					if (!master.getOK())
 					{
@@ -1461,7 +1513,7 @@ public final class LoadOperator implements Operator, Serializable
 				
 				while (count > 0 && map.totalSize() == 0)
 				{
-					master = flush(indexes, spmd, keys, types, orders);
+					master = flush(indexes, spmd, keys, types, orders, true);
 					master.join();
 					if (!master.getOK())
 					{
