@@ -904,31 +904,6 @@ public class XAManager extends HRDBMSThread
 		{
 			thread.start();
 		}
-
-		for (SendCheckpointThread thread : threads)
-		{
-			while (true)
-			{
-				try
-				{
-					thread.join();
-					break;
-				}
-				catch (InterruptedException e)
-				{
-				}
-			}
-			boolean ok = thread.getOK();
-			if (!ok)
-			{
-				allOK = false;
-			}
-		}
-
-		if (!allOK)
-		{
-			throw new Exception("Checkpoint after load failed!");
-		}
 	}
 
 	private static void sendCommit(ArrayList<Object> tree, Transaction tx)

@@ -101,6 +101,7 @@ public final class TableScanOperator implements Operator, Serializable
 	private boolean releaseLocks = false;
 	private boolean sample = false;
 	private long sPer;
+	private Index scanIndex = null;
 
 	private transient HashSet<Integer> referencesHash = null;
 
@@ -200,7 +201,14 @@ public final class TableScanOperator implements Operator, Serializable
 		value.releaseLocks = OperatorUtils.readBool(in);
 		value.sample = OperatorUtils.readBool(in);
 		value.sPer = OperatorUtils.readLong(in);
+		value.scanIndex = OperatorUtils.deserializeIndex(in, prev);
 		return value;
+	}
+	
+	public void setIndexScan(Index scanIndex)
+	{
+		this.scanIndex = scanIndex;
+		scanIndex.setTransaction(new Transaction(0));
 	}
 	
 	public void setSample(long sPer)
@@ -389,6 +397,7 @@ public final class TableScanOperator implements Operator, Serializable
 		retval.node = node;
 		retval.sample = sample;
 		retval.sPer = sPer;
+		retval.scanIndex = scanIndex;
 		if (devices != null)
 		{
 			retval.devices = (ArrayList<Integer>)devices.clone();
@@ -1101,6 +1110,7 @@ public final class TableScanOperator implements Operator, Serializable
 		OperatorUtils.writeBool(releaseLocks, out);
 		OperatorUtils.writeBool(sample, out);
 		OperatorUtils.writeLong(sPer, out);
+		OperatorUtils.serializeIndex(scanIndex, out, prev);
 	}
 
 	public void setAlias(String alias)
@@ -1497,21 +1507,35 @@ public final class TableScanOperator implements Operator, Serializable
 			{
 				// HRDBMSWorker.logger.debug("Going to start " + ins.size() +
 				// " ReaderThreads for ins for " + TableScanOperator.this);
-				for (final String in : ins)
+				if (scanIndex != null)
 				{
-					final ReaderThread read = new ReaderThread(in);
-					read.start();
-					reads.add(read);
+					String fn = scanIndex.getFileName();
+					for (final int device : devices)
+					{
+						final String in = meta.getDevicePath(device) + fn;
+						ReaderThread read = new ReaderThread(in, scanIndex);
+						read.start();
+						reads.add(read);
+					}
 				}
-
-				// HRDBMSWorker.logger.debug("Going to start " +
-				// randomIns.size() + " ReaderThreads for randomIns for " +
-				// TableScanOperator.this);
-				for (final String in : randomIns)
+				else
 				{
-					final ReaderThread read = new ReaderThread(in, true);
-					read.start();
-					reads.add(read);
+					for (final String in : ins)
+					{
+						final ReaderThread read = new ReaderThread(in);
+						read.start();
+						reads.add(read);
+					}
+
+					// HRDBMSWorker.logger.debug("Going to start " +
+					// randomIns.size() + " ReaderThreads for randomIns for " +
+					// TableScanOperator.this);
+					for (final String in : randomIns)
+					{
+						final ReaderThread read = new ReaderThread(in, true);
+						read.start();
+						reads.add(read);
+					}
 				}
 
 				for (final ReaderThread read : reads)
@@ -1550,6 +1574,7 @@ public final class TableScanOperator implements Operator, Serializable
 	{
 		private String in;
 		private String in2;
+		private Index scan;
 
 		public ReaderThread(String in)
 		{
@@ -1559,6 +1584,12 @@ public final class TableScanOperator implements Operator, Serializable
 		public ReaderThread(String in2, boolean marker)
 		{
 			this.in2 = in2;
+		}
+		
+		public ReaderThread(String in, Index scan)
+		{
+			this.in = in;
+			this.scan = scan;
 		}
 
 		@Override
@@ -1576,6 +1607,30 @@ public final class TableScanOperator implements Operator, Serializable
 				get = (int)sPer;
 				skip = 100 - get;
 			}
+			
+			if (scan != null)
+			{
+				try
+				{
+					Index index = new Index(in, scan.getKeys(), scan.getTypes(), scan.getOrders());
+					index.open();
+					index.scan(filter, sample, get, skip, readBuffer, midPos2Col, pos2Col, tx);
+					return;
+				}
+				catch(Exception e)
+				{
+					HRDBMSWorker.logger.error("", e);
+					try
+					{
+						readBuffer.put(e);
+					}
+					catch (Exception f)
+					{
+					}
+					return;
+				}
+			}
+			
 			if (filter != null)
 			{
 				if (neededPos.size() == fetchPos.size())
@@ -1653,27 +1708,66 @@ public final class TableScanOperator implements Operator, Serializable
 					ArrayList<Object> row = new ArrayList<Object>(fetchPos.size());
 					int get2 = get;
 					int skip2 = skip;
+					int get3 = get;
+					int skip3 = skip;
 					while (onPage < numBlocks)
 					{
 						if (lastRequested - onPage < PAGES_IN_ADVANCE)
 						{
-							Block[] toRequest = new Block[lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1];
-							int i = 0;
-							final int length = toRequest.length;
-							while (i < length)
+							if (!sample)
 							{
-								toRequest[i] = new Block(in, lastRequested + i + 1);
-								i++;
+								Block[] toRequest = new Block[lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1];
+								int i = 0;
+								final int length = toRequest.length;
+								while (i < length)
+								{
+									toRequest[i] = new Block(in, lastRequested + i + 1);
+									i++;
+								}
+								tx.requestPages(toRequest);
+								lastRequested += toRequest.length;
 							}
-							tx.requestPages(toRequest);
-							lastRequested += toRequest.length;
-							// count += toRequest.length;
-
-							// if (count > MAX_PAGES)
-							// {
-							// tx.checkpoint(onPage, in, true);
-							// count = lastRequested - onPage + 1;
-							// }
+							else
+							{
+								ArrayList<Block> toRequest = new ArrayList<Block>();
+								int i = 0;
+								int length = lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1;
+								while (i < length)
+								{
+									if (skip3 == 0)
+									{
+										get3 = get - 1;
+										skip3 = skip;
+									}
+									else if (get3 == 0)
+									{
+										skip3--;
+										i++;
+										continue;
+									}
+									else
+									{
+										get3--;
+									}
+									
+									toRequest.add(new Block(in, lastRequested + i + 1));
+									i++;
+								}
+								
+								if (toRequest.size() > 0)
+								{
+									Block[] toRequest2 = new Block[toRequest.size()];
+									int j = 0;
+									for (Block b : toRequest)
+									{
+										toRequest2[j] = b;
+										j++;
+									}
+									tx.requestPages(toRequest2);
+								}
+								
+								lastRequested += length;
+							}
 						}
 
 						if (sample && skip2 == 0)
@@ -1684,7 +1778,7 @@ public final class TableScanOperator implements Operator, Serializable
 						else if (sample && get2 == 0)
 						{
 							skip2--;
-							tx.dummyRead(new Block(in, onPage++), sch);
+							onPage++;
 							continue;
 						}
 						else if (sample)
@@ -2176,5 +2270,10 @@ public final class TableScanOperator implements Operator, Serializable
 				return;
 			}
 		}
+	}
+	
+	public String[] getMidPos2Col()
+	{
+		return midPos2Col;
 	}
 }

@@ -5387,9 +5387,9 @@ public final class MetaData implements Serializable
 			try
 			{
 				p = 100000000l / totalCard;
-				if (p < 4)
+				if (p < 5)
 				{
-					p = 4;
+					p = 5;
 				}
 				
 				tx.setIsolationLevel(Transaction.ISOLATION_UR);
@@ -5957,9 +5957,9 @@ public final class MetaData implements Serializable
 			try
 			{
 				p = 100000000l / totalCard;
-				if (p < 4)
+				if (p < 5)
 				{
-					p = 4;
+					p = 5;
 				}
 				
 				tx.setIsolationLevel(Transaction.ISOLATION_UR);
@@ -6127,9 +6127,9 @@ public final class MetaData implements Serializable
 			try
 			{
 				p = 100000000l / totalCard;
-				if (p < 4)
+				if (p < 5)
 				{
-					p = 4;
+					p = 5;
 				}
 				tx.setIsolationLevel(Transaction.ISOLATION_UR);
 				String sql = "SELECT COUNT(*) FROM (SELECT DISTINCT " + keys.get(0);

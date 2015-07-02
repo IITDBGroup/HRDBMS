@@ -153,7 +153,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 		private boolean inMem = true;
 		private ArrayList<String> externalFiles;
 		private ArrayList<ArrayList<byte[]>> bins;
-		final int numBins = 1024;
+		final int numBins = 4096;
 		private int size;
 		private HashMap<Integer, FlushBinThread> threads;
 		private ArrayList<FileChannel> channels;

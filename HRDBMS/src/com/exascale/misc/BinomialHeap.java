@@ -9,6 +9,8 @@ public final class BinomialHeap<E> extends AbstractQueue<E>
 
 	private final Node<E> head;
 	private final Comparator compare;
+	private E min = null;
+	private int size = -1;
 
 	public BinomialHeap(Comparator compare)
 	{
@@ -53,6 +55,8 @@ public final class BinomialHeap<E> extends AbstractQueue<E>
 	@Override
 	public boolean offer(E val)
 	{
+		min = null;
+		size = -1;
 		merge(new Node<E>(val));
 		return true;
 	}
@@ -60,6 +64,11 @@ public final class BinomialHeap<E> extends AbstractQueue<E>
 	@Override
 	public E peek()
 	{
+		if (min != null)
+		{
+			return min;
+		}
+		
 		E result = null;
 		for (Node<E> node = head.next; node != null; node = node.next)
 		{
@@ -68,12 +77,16 @@ public final class BinomialHeap<E> extends AbstractQueue<E>
 				result = node.value;
 			}
 		}
+		
+		min = result;
 		return result;
 	}
 
 	@Override
 	public E poll()
 	{
+		min = null;
+		size = -1;
 		if (head.next == null)
 		{
 			return null;
@@ -100,6 +113,11 @@ public final class BinomialHeap<E> extends AbstractQueue<E>
 	@Override
 	public int size()
 	{
+		if (size != -1)
+		{
+			return size;
+		}
+		
 		int result = 0;
 		for (Node<?> node = head.next; node != null; node = node.next)
 		{
@@ -115,6 +133,8 @@ public final class BinomialHeap<E> extends AbstractQueue<E>
 			}
 			result |= 1 << node.rank;
 		}
+		
+		size = result;
 		return result;
 	}
 

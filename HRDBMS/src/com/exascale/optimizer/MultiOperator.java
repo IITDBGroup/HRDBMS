@@ -86,6 +86,11 @@ public final class MultiOperator implements Operator, Serializable
 		value.startDone = OperatorUtils.readBool(in);
 		return value;
 	}
+	
+	public ArrayList<AggregateOperator> getOps()
+	{
+		return ops;
+	}
 
 	@Override
 	public void add(Operator op) throws Exception
@@ -287,6 +292,28 @@ public final class MultiOperator implements Operator, Serializable
 		for (final AggregateOperator op : ops)
 		{
 			retval.add(op.getInputColumn());
+		}
+
+		return retval;
+	}
+	
+	public ArrayList<String> getRealInputCols()
+	{
+		final ArrayList<String> retval = new ArrayList<String>(ops.size());
+		for (final AggregateOperator op : ops)
+		{
+			if (op instanceof CountOperator)
+			{
+				String col = ((CountOperator)op).getRealInputColumn();
+				if (col != null)
+				{
+					retval.add(col);
+				}
+			}
+			else
+			{
+				retval.add(op.getInputColumn());
+			}
 		}
 
 		return retval;
@@ -557,6 +584,11 @@ public final class MultiOperator implements Operator, Serializable
 	public void setSorted()
 	{
 		sorted = true;
+	}
+	
+	public boolean isSorted()
+	{
+		return sorted;
 	}
 
 	@Override

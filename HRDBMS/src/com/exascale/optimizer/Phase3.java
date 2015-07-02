@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 import com.exascale.managers.HRDBMSWorker;
+import com.exascale.managers.ResourceManager;
 import com.exascale.optimizer.MetaData.PartitionMetaData;
 import com.exascale.tables.Transaction;
 
@@ -19,6 +20,7 @@ public final class Phase3
 	private final RootOperator root;
 	private final MetaData meta;
 	private final Transaction tx;
+	private static final long MAX_GB = (long)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")));
 
 	public Phase3(RootOperator root, Transaction tx)
 	{
@@ -274,6 +276,7 @@ public final class Phase3
 
 	public void optimize() throws Exception
 	{
+		pushDownGB(root);
 		final ArrayList<NetworkReceiveOperator> receives = getReceives(root);
 		for (final NetworkReceiveOperator receive : receives)
 		{
@@ -290,6 +293,344 @@ public final class Phase3
 		// HRDBMSWorker.logger.debug("Upon exiting P3:");
 		// Phase1.printTree(root, 0);
 		// sanityCheck(root, -1);
+	}
+	
+	private void pushDownGB(Operator op) throws Exception
+	{
+		if (op instanceof MultiOperator)
+		{
+			Operator child = op.children().get(0);
+			if (child instanceof HashJoinOperator)
+			{
+				MultiOperator mop = (MultiOperator)op;
+				HashJoinOperator hjop = (HashJoinOperator)child;
+				doPushDownGB(mop, hjop);
+			}
+		}
+		
+		for (Operator o : op.children())
+		{
+			pushDownGB(o);
+		}
+	}
+	
+	private void doPushDownGB(MultiOperator mop, HashJoinOperator hjop) throws Exception
+	{
+		if (mop.existsCountDistinct())
+		{
+			HRDBMSWorker.logger.debug("But it had a count distinct");
+			return;
+		}
+		
+		ArrayList<String> group1 = (ArrayList<String>)mop.getKeys().clone();
+		ArrayList<String> group2 = (ArrayList<String>)group1.clone();
+		for (String col : hjop.getLefts())
+		{
+			if (!group1.contains(col))
+			{
+				group1.add(col);
+			}
+		}
+		
+		for (String col : hjop.getRights())
+		{
+			if (!group2.contains(col))
+			{
+				group2.add(col);
+			}
+		}
+		
+		mop.removeChild(hjop);
+		Operator l = hjop.children().get(0);
+		Operator r = hjop.children().get(1);
+		hjop.removeChild(r);
+		hjop.removeChild(l);
+		
+		MultiOperator newOp = new MultiOperator(mop.clone().getOps(), group1, meta, false);
+		HRDBMSWorker.logger.debug("Group1 is " + group1);
+		HRDBMSWorker.logger.debug("Group2 is " + group2);
+		HRDBMSWorker.logger.debug("Input cols are " + mop.getRealInputCols());
+		HRDBMSWorker.logger.debug("L contains " + l.getCols2Pos().keySet());
+		HRDBMSWorker.logger.debug("R contains " + r.getCols2Pos().keySet());
+		HRDBMSWorker.logger.debug("HJOP contains " + hjop.getCols2Pos().keySet());
+		if (l.getCols2Pos().keySet().containsAll(group1) && l.getCols2Pos().keySet().containsAll(mop.getRealInputCols()))
+		{
+			long prev = card(l);
+			newOp.add(l);
+			long newCard = card(newOp);
+			
+			HRDBMSWorker.logger.debug("Considering l with reduction " + (newCard * 1.0) / (prev * 1.0));
+			if (newCard < MAX_GB && (newCard * 1.0) / (prev * 1.0) <= 0.2)
+			{
+				doLeft(mop, hjop, l, r, newOp);
+				HRDBMSWorker.logger.debug("Doing pushdown across the left side");
+				return;
+			}
+			else
+			{
+				HRDBMSWorker.logger.debug("Decided against it");
+				newOp.removeChild(l);
+			}
+		}
+		
+		if (r.getCols2Pos().keySet().containsAll(group2) && l.getCols2Pos().keySet().containsAll(mop.getRealInputCols()))
+		{
+			newOp = new MultiOperator(mop.clone().getOps(), group2, meta, false);
+			long prev = card(r);
+			newOp.add(r);
+			long newCard = card(newOp);
+			
+			HRDBMSWorker.logger.debug("Considering r with reduction " + (newCard * 1.0) / (prev * 1.0));
+			if (newCard < MAX_GB && (newCard * 1.0) / (prev * 1.0) <= 0.2)
+			{
+				doRight(mop, hjop, l, r, newOp);
+				HRDBMSWorker.logger.debug("Doing pushdown across the right side");
+				return;
+			}
+			else
+			{
+				HRDBMSWorker.logger.debug("Decided against it");
+				newOp.removeChild(r);
+			}
+		}
+		
+		hjop.add(l);
+		hjop.add(r);
+		mop.add(hjop);
+	}
+	
+	private void doLeft(MultiOperator parent, HashJoinOperator hjop, Operator l, Operator r, MultiOperator pClone) throws Exception
+	{
+		final int oldSuffix = colSuffix;
+		final Operator orig = parent.parent();
+		final ArrayList<String> cols = new ArrayList<String>(parent.getPos2Col().values());
+		ArrayList<String> oldCols = null;
+		ArrayList<String> newCols = null;
+
+		while (pClone.hasAvg())
+		{
+			final String avgCol = pClone.getAvgCol();
+			final ArrayList<String> newCols2 = new ArrayList<String>(2);
+			final String newCol1 = "_P" + colSuffix++;
+			final String newCol2 = "_P" + colSuffix++;
+			newCols2.add(newCol1);
+			newCols2.add(newCol2);
+			final HashMap<String, ArrayList<String>> old2News = new HashMap<String, ArrayList<String>>();
+			old2News.put(avgCol, newCols2);
+			pClone.replaceAvgWithSumAndCount(old2News);
+			parent.replaceAvgWithSumAndCount(old2News);
+			final Operator grandParent = parent.parent();
+			grandParent.removeChild(parent);
+			final ExtendOperator extend = new ExtendOperator("/," + old2News.get(avgCol).get(0) + "," + old2News.get(avgCol).get(1), avgCol, meta);
+			try
+			{
+				extend.add(parent);
+				grandParent.add(extend);
+			}
+			catch (final Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				throw e;
+			}
+		}
+
+		colSuffix = oldSuffix;
+		oldCols = new ArrayList(pClone.getOutputCols());
+		newCols = new ArrayList(pClone.getInputCols());
+		final HashMap<String, String> old2New2 = new HashMap<String, String>();
+		int counter = 10;
+		int i = 0;
+		for (final String col : oldCols)
+		{
+			if (!old2New2.containsValue(newCols.get(i)))
+			{
+				old2New2.put(col, newCols.get(i));
+			}
+			else
+			{
+				String new2 = newCols.get(i) + counter++;
+				while (old2New2.containsValue(new2))
+				{
+					new2 = newCols.get(i) + counter++;
+				}
+
+				old2New2.put(col, new2);
+			}
+
+			i++;
+		}
+		
+		newCols = new ArrayList<String>(oldCols.size());
+		for (final String col : oldCols)
+		{
+			newCols.add(old2New2.get(col));
+		}
+
+		try
+		{
+			RenameOperator rename = null;
+			rename = new RenameOperator(oldCols, newCols, meta);
+			rename.add(pClone);
+			hjop.add(rename);
+			hjop.add(r);
+			parent.add(hjop);
+		}
+		catch (final Exception e)
+		{
+			HRDBMSWorker.logger.error("", e);
+			throw e;
+		}
+
+		parent.changeCountsToSums();
+		parent.updateInputColumns(oldCols, newCols);
+		try
+		{
+			final Operator child = parent.children().get(0);
+			parent.removeChild(child);
+			parent.add(child);
+			Operator grandParent = parent.parent();
+			grandParent.removeChild(parent);
+			grandParent.add(parent);
+			while (!grandParent.equals(orig))
+			{
+				final Operator next = grandParent.parent();
+				next.removeChild(grandParent);
+				if (next.equals(orig))
+				{
+					final ReorderOperator order = new ReorderOperator(cols, meta);
+					order.add(grandParent);
+					orig.add(order);
+					grandParent = next;
+				}
+				else
+				{
+					next.add(grandParent);
+					grandParent = next;
+				}
+			}
+		}
+		catch (final Exception e)
+		{
+			HRDBMSWorker.logger.error("", e);
+			throw e;
+		}
+	}
+	
+	private void doRight(MultiOperator parent, HashJoinOperator hjop, Operator l, Operator r, MultiOperator pClone) throws Exception
+	{
+		final int oldSuffix = colSuffix;
+		final Operator orig = parent.parent();
+		final ArrayList<String> cols = new ArrayList<String>(parent.getPos2Col().values());
+		ArrayList<String> oldCols = null;
+		ArrayList<String> newCols = null;
+
+		while (pClone.hasAvg())
+		{
+			final String avgCol = pClone.getAvgCol();
+			final ArrayList<String> newCols2 = new ArrayList<String>(2);
+			final String newCol1 = "_P" + colSuffix++;
+			final String newCol2 = "_P" + colSuffix++;
+			newCols2.add(newCol1);
+			newCols2.add(newCol2);
+			final HashMap<String, ArrayList<String>> old2News = new HashMap<String, ArrayList<String>>();
+			old2News.put(avgCol, newCols2);
+			pClone.replaceAvgWithSumAndCount(old2News);
+			parent.replaceAvgWithSumAndCount(old2News);
+			final Operator grandParent = parent.parent();
+			grandParent.removeChild(parent);
+			final ExtendOperator extend = new ExtendOperator("/," + old2News.get(avgCol).get(0) + "," + old2News.get(avgCol).get(1), avgCol, meta);
+			try
+			{
+				extend.add(parent);
+				grandParent.add(extend);
+			}
+			catch (final Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				throw e;
+			}
+		}
+
+		colSuffix = oldSuffix;
+		oldCols = new ArrayList(pClone.getOutputCols());
+		newCols = new ArrayList(pClone.getInputCols());
+		final HashMap<String, String> old2New2 = new HashMap<String, String>();
+		int counter = 10;
+		int i = 0;
+		for (final String col : oldCols)
+		{
+			if (!old2New2.containsValue(newCols.get(i)))
+			{
+				old2New2.put(col, newCols.get(i));
+			}
+			else
+			{
+				String new2 = newCols.get(i) + counter++;
+				while (old2New2.containsValue(new2))
+				{
+					new2 = newCols.get(i) + counter++;
+				}
+
+				old2New2.put(col, new2);
+			}
+
+			i++;
+		}
+		
+		newCols = new ArrayList<String>(oldCols.size());
+		for (final String col : oldCols)
+		{
+			newCols.add(old2New2.get(col));
+		}
+
+		try
+		{
+			RenameOperator rename = null;
+			rename = new RenameOperator(oldCols, newCols, meta);
+			rename.add(pClone);
+			hjop.add(l);
+			hjop.add(rename);
+			parent.add(hjop);
+		}
+		catch (final Exception e)
+		{
+			HRDBMSWorker.logger.error("", e);
+			throw e;
+		}
+
+		parent.changeCountsToSums();
+		parent.updateInputColumns(oldCols, newCols);
+		try
+		{
+			final Operator child = parent.children().get(0);
+			parent.removeChild(child);
+			parent.add(child);
+			Operator grandParent = parent.parent();
+			grandParent.removeChild(parent);
+			grandParent.add(parent);
+			while (!grandParent.equals(orig))
+			{
+				final Operator next = grandParent.parent();
+				next.removeChild(grandParent);
+				if (next.equals(orig))
+				{
+					final ReorderOperator order = new ReorderOperator(cols, meta);
+					order.add(grandParent);
+					orig.add(order);
+					grandParent = next;
+				}
+				else
+				{
+					next.add(grandParent);
+					grandParent = next;
+				}
+			}
+		}
+		catch (final Exception e)
+		{
+			HRDBMSWorker.logger.error("", e);
+			throw e;
+		}
 	}
 
 	private void assignNodes(Operator op, int node) throws Exception

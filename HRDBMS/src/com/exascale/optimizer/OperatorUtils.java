@@ -101,6 +101,7 @@ public class OperatorUtils
 	// 79 - HMOpCNF
 	// 80 - HMIntOp
 	// 81 - Operator null
+	// 82 - Index null;
 
 	public static int bytesToInt(byte[] val)
 	{
@@ -556,6 +557,27 @@ public class OperatorUtils
 		}
 
 		return CNFFilter.deserializeKnown(in, prev); // already read type
+	}
+	
+	public static Index deserializeIndex(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		int type = getType(in);
+		if (type == 0)
+		{
+			return (Index)readReference(in, prev);
+		}
+		
+		if (type == 82)
+		{
+			return null;
+		}
+		
+		if (type != 64)
+		{
+			throw new Exception("Corrupted stream. Expected type 64 but received " + type);
+		}
+		
+		return Index.deserializeKnown(in, prev);
 	}
 
 	public static Filter deserializeFilter(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -1985,6 +2007,19 @@ public class OperatorUtils
 		else
 		{
 			op.serialize(out, prev);
+		}
+	}
+	
+	public static void serializeIndex(Index i, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		if (i == null)
+		{
+			writeType(82, out);
+			return;
+		}
+		else
+		{
+			i.serialize(out, prev);
 		}
 	}
 

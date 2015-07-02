@@ -15,6 +15,7 @@ public final class Phase5
 	private final HashMap<Operator, Long> cCache = new HashMap<Operator, Long>();
 	private final Transaction tx;
 	private final HashMap<ArrayList<Filter>, Double> likelihoodCache;
+	private static final long MAX_GB = (long)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")));
 
 	public Phase5(RootOperator root, Transaction tx, HashMap<ArrayList<Filter>, Double> likelihoodCache)
 	{
@@ -484,16 +485,113 @@ public final class Phase5
 		addIndexesToTableScans();
 		// addIndexesToJoins();
 		turnOffDistinctUnion(root, false, new HashSet<Operator>());
+		largeGBs(root, new HashSet<Operator>());
 		setCards(root, new HashSet<Operator>());
 		setNumParents(root);
 		// sanityCheck(root, -1);
 		setSpecificCoord(root, new HashSet<Operator>());
 		// Phase1.printTree(root, 0);
-		sortLimit(root);
+		sortLimit(root, new HashSet<Operator>());
+		indexOnlyScan(root, new HashSet<Operator>());
 	}
 	
-	private void sortLimit(Operator op)
+	private void indexOnlyScan(Operator op, HashSet<Operator> touched) throws Exception
 	{
+		if (touched.contains(op))
+		{
+			return;
+		}
+
+		touched.add(op);
+		
+		if (op instanceof TableScanOperator && op.children().size() == 0)
+		{
+			TableScanOperator top = (TableScanOperator)op;
+			String[] needed = top.getMidPos2Col();
+			ArrayList<String> needed2 = new ArrayList<String>(needed.length);
+			for (String n : needed)
+			{
+				needed2.add(n);
+			}
+			
+			//if exists index with all these cols, use it
+			final ArrayList<Index> available = meta.getIndexesForTable(top.getSchema(), top.getTable(), tx);
+			Index best = null;
+			int bestSize = Integer.MAX_VALUE;
+			for (Index index : available)
+			{
+				if (index.getKeys().containsAll(needed2))
+				{
+					if (index.getKeys().size() < bestSize)
+					{
+						best = index;
+						bestSize = index.getKeys().size();
+					}
+				}
+			}
+			
+			if (best != null)
+			{
+				top.setIndexScan(best);
+			}
+		}
+		
+		for (Operator o : op.children())
+		{
+			indexOnlyScan(o, touched);
+		}
+	}
+	
+	private void largeGBs(Operator op, HashSet<Operator> touched) throws Exception
+	{
+		if (touched.contains(op))
+		{
+			return;
+		}
+
+		touched.add(op);
+		
+		if (op instanceof MultiOperator)
+		{
+			long card = card(op);
+			if (card > MAX_GB)
+			{
+				MultiOperator mop = (MultiOperator)op;
+				if (!mop.isSorted())
+				{
+					Operator child = mop.children().get(0);
+					ArrayList<String> cols = mop.getKeys();
+					ArrayList<Boolean> orders = new ArrayList<Boolean>();
+					int i = 0;
+					while (i < cols.size())
+					{
+						orders.add(true);
+						i++;
+					}
+					SortOperator sop = new SortOperator(cols, orders, meta);
+					mop.removeChild(child);
+					sop.add(child);
+					mop.add(sop);
+					mop.setSorted();
+				}
+			}
+		}
+		
+		for (Operator o : op.children())
+		{
+			largeGBs(o, touched);
+		}
+	}
+	
+	private void sortLimit(Operator op, HashSet<Operator> touched)
+	{
+		if (touched.contains(op))
+		{
+			return;
+		}
+
+		touched.add(op);
+		
 		if (op instanceof TopOperator)
 		{
 			if (op.children().get(0) instanceof SortOperator)
@@ -502,7 +600,7 @@ public final class Phase5
 				TopOperator top = (TopOperator)op;
 				long limit = top.getRemaining();
 				
-				if (limit < ResourceManager.QUEUE_SIZE * Long.parseLong(HRDBMSWorker.getHParms().getProperty("hash_external_fator")))
+				if (limit < ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")))
 				{
 					sop.setLimit(limit);
 				}
@@ -511,7 +609,7 @@ public final class Phase5
 		
 		for (Operator o : op.children())
 		{
-			sortLimit(o);
+			sortLimit(o, touched);
 		}
 	}
 

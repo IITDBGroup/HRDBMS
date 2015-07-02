@@ -398,7 +398,7 @@ public class SubBufferManager
 		String prefix = tFn.substring(0, tFn.lastIndexOf('/') + 1);
 		for (final Page p : myBuffers.get(txnum))
 		{
-			if (p.block().fileName().startsWith(prefix) && (p.block().fileName().endsWith("indx") || p.block().number() < lt))
+			if (p.block().fileName().startsWith(prefix) && (p.block().fileName().endsWith("indx") || p.block().number() < lt-1))
 			{
 				p.unpin(txnum);
 				myBuffers.multiRemove(txnum, p);

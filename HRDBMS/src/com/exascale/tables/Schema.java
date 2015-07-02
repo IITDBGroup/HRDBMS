@@ -872,10 +872,11 @@ public class Schema
 	{
 		if (this.p != null)
 		{
-			BufferManager.unpin(this.p,  tx.number());
+			BufferManager.unpin(this.p, tx.number());
 		}
-		
 		this.p = p;
+		this.tx = tx;
+		blockType = p.get(0);
 	}
 
 	public void read(Transaction tx, Page p) throws Exception

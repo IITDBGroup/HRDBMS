@@ -991,7 +991,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 	{
 		try
 		{
-			final int numBins = 1024; 
+			int numBins = 4096;
 			byte[] types1 = new byte[children.get(0).getPos2Col().size()];
 			int j = 0;
 			for (String col : children.get(0).getPos2Col().values())
@@ -1145,7 +1145,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					return;
 				}
 				ExternalProcessThread ept = new ExternalProcessThread(left, right);
-				if (epThreads.size() > 1)
+				if (epThreads.size() > 7)
 				{
 					epThreads.get(0).join();
 					epThreads.remove(0);
@@ -1154,6 +1154,42 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					{
 						epThreads.get(0).join();
 						epThreads.remove(0);
+						
+						if (epThreads.get(0).isDone())
+						{
+							epThreads.get(0).join();
+							epThreads.remove(0);
+							
+							if (epThreads.get(0).isDone())
+							{
+								epThreads.get(0).join();
+								epThreads.remove(0);
+								
+								if (epThreads.get(0).isDone())
+								{
+									epThreads.get(0).join();
+									epThreads.remove(0);
+									
+									if (epThreads.get(0).isDone())
+									{
+										epThreads.get(0).join();
+										epThreads.remove(0);
+										
+										if (epThreads.get(0).isDone())
+										{
+											epThreads.get(0).join();
+											epThreads.remove(0);
+											
+											if (epThreads.get(0).isDone())
+											{
+												epThreads.get(0).join();
+												epThreads.remove(0);
+											}
+										}
+									}
+								}
+							}
+						}
 					}
 				}
 				ept.start();

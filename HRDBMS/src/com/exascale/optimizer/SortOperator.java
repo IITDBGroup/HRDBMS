@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -535,15 +536,7 @@ public final class SortOperator implements Operator, Serializable
 				result.add(bh.extractMin());
 			}
 		
-			if (result.size() < PARALLEL_SORT_MIN_NUM_ROWS)
-			{
-				result.sort(new MergeComparator2());
-			}
-			else
-			{
-				Object[] underlying = (Object[])unsafe.getObject(result, edOff);
-				Arrays.parallelSort(underlying, 0, result.size(), new MergeComparator2());
-			}
+			Collections.reverse(result);
 			
 			for (ArrayList<Object> row : result)
 			{

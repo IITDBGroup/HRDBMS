@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.TreeMap;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.optimizer.MetaData.PartitionMetaData;
 import com.exascale.tables.Transaction;
@@ -1119,6 +1120,7 @@ public final class Phase1
 				{
 					final TableScanOperator table = (TableScanOperator)op;
 					final HashMap<String, Integer> cols2Pos = table.getCols2Pos();
+					TreeMap<Integer, String> pos2Col = table.getPos2Col();
 					final ArrayList<String> needed = new ArrayList<String>(references.size());
 					for (final String col : references)
 					{
@@ -1139,11 +1141,11 @@ public final class Phase1
 					{
 						if (table.getAlias() == null || table.getAlias().equals(""))
 						{
-							needed.add(new ArrayList<String>(cols2Pos.keySet()).get(0));
+							needed.add(pos2Col.get(0));
 						}
 						else
 						{
-							String col = new ArrayList<String>(cols2Pos.keySet()).get(0);
+							String col = pos2Col.get(0);
 							needed.add(table.getAlias() + "." + col.substring(col.indexOf('.') + 1));
 						}
 					}

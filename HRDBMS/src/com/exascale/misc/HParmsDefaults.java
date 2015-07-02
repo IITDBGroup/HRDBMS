@@ -63,7 +63,7 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("max_load_average", Integer.toString(25 * Runtime.getRuntime().availableProcessors()));
 		retval.setProperty("critical_mem_percent", "15");
 		retval.setProperty("stack_size", "2M");
-		retval.setProperty("jvm_args", "-XX:+AggressiveOpts -XX:-DontCompileHugeMethods -XX:+UseAdaptiveSizePolicyWithSystemGC");
+		retval.setProperty("jvm_args", "-XX:+UseAdaptiveSizePolicyWithSystemGC");
 		retval.setProperty("external_factor", "0.3");
 		retval.setProperty("hash_external_factor", "10.0");
 		retval.setProperty("max_queued_load_flush_threads", "1");

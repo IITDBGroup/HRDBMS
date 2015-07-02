@@ -68,6 +68,22 @@ public class FileManager
 			thread.start();
 			threads.add(thread);
 		}
+		
+		String temps = HRDBMSWorker.getHParms().getProperty("temp_directories");
+		StringTokenizer tokens = new StringTokenizer(temps, ",", false);
+		while (tokens.hasMoreTokens())
+		{
+			String tempDir = tokens.nextToken();
+			File dir = new File(tempDir);
+			for (String file : dir.list())
+			{
+				File f = new File(dir, file);
+				if (!f.isDirectory())
+				{
+					f.delete();
+				}
+			}
+		}
 
 		for (OpenThread thread : threads)
 		{

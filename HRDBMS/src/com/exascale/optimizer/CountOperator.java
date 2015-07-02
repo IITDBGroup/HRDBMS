@@ -81,6 +81,11 @@ public final class CountOperator implements AggregateOperator, Serializable
 
 		return output;
 	}
+	
+	public String getRealInputColumn()
+	{
+		return input;
+	}
 
 	@Override
 	public AggregateResultThread newProcessingThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos)

@@ -17,7 +17,9 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Random;
+import java.util.TreeMap;
 import java.util.concurrent.locks.LockSupport;
 import com.exascale.exceptions.LockAbortException;
 import com.exascale.filesystem.Block;
@@ -35,8 +37,11 @@ import com.exascale.misc.BufferedLinkedBlockingQueue;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MyDate;
 import com.exascale.misc.RowComparator;
+import com.exascale.tables.DataType;
 import com.exascale.tables.Schema;
 import com.exascale.tables.Schema.FieldValue;
+import com.exascale.tables.Schema.Row;
+import com.exascale.tables.Schema.RowIterator;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.ThreadPoolThread;
 
@@ -46,6 +51,9 @@ public final class Index implements Serializable
 
 	private static long soffset;
 	private static sun.misc.Unsafe unsafe;
+	private static int PREFETCH_REQUEST_SIZE;
+	private static int PAGES_IN_ADVANCE;
+	
 	static
 	{
 		try
@@ -56,6 +64,8 @@ public final class Index implements Serializable
 			final Field fieldToUpdate = String.class.getDeclaredField("value");
 			// get unsafe offset to this field
 			soffset = unsafe.objectFieldOffset(fieldToUpdate);
+			PREFETCH_REQUEST_SIZE = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("prefetch_request_size")); // 80
+			PAGES_IN_ADVANCE = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pages_in_advance")); // 40
 		}
 		catch (Exception e)
 		{
@@ -116,6 +126,35 @@ public final class Index implements Serializable
 		rc = new RowComparator(orders, types);
 	}
 
+	public static Index deserializeKnown(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		Index value = (Index)unsafe.allocateInstance(Index.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.fileName = OperatorUtils.readString(in, prev);
+		value.keys = OperatorUtils.deserializeALS(in, prev);
+		value.types = OperatorUtils.deserializeALS(in, prev);
+		value.orders = OperatorUtils.deserializeALB(in, prev);
+		value.f = OperatorUtils.deserializeFilter(in, prev);
+		value.secondary = OperatorUtils.deserializeALF(in, prev);
+		value.positioned = OperatorUtils.readBool(in);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.indexOnly = OperatorUtils.readBool(in);
+		value.fetches = OperatorUtils.deserializeALI(in, prev);
+		value.fetchTypes = OperatorUtils.deserializeALS(in, prev);
+		value.delayed = OperatorUtils.readBool(in);
+		value.delayedConditions = OperatorUtils.deserializeALF(in, prev);
+		value.renames = OperatorUtils.deserializeStringHM(in, prev);
+		value.offset = OperatorUtils.readLong(in);
+		value.tx = new Transaction(OperatorUtils.readLong(in));
+		value.isUniqueVar = OperatorUtils.readBoolClass(in, prev);
+		value.myPages = new HashMap<Block, Page>();
+		value.rc = new RowComparator(value.orders, value.types);
+		value.cache = new HashMap<Long, ArrayList<Object>>();
+		value.cd = cs.newDecoder();
+		value.ce = cs.newEncoder();
+		return value;
+	}
+	
 	public static Index deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
 	{
 		Index value = (Index)unsafe.allocateInstance(Index.class);
@@ -169,6 +208,174 @@ public final class Index implements Serializable
 	public void addSecondaryFilter(Filter filter)
 	{
 		secondary.add(filter);
+	}
+	
+	public void scan(CNFFilter filter, boolean sample, int get, int skip, BufferedLinkedBlockingQueue queue, String[] fetchP2C, TreeMap<Integer, String> finalP2C, Transaction tx) throws Exception
+	{
+		LockManager.sLock(new Block(fileName, -1), tx.number());
+		FileManager.getFile(fileName);
+		int numBlocks = FileManager.numBlocks.get(fileName);
+
+		if (numBlocks == 0)
+		{
+			throw new Exception("Unable to open file " + fileName);
+		}
+		
+		ArrayList<Integer> fetchPos = new ArrayList<Integer>();
+		ArrayList<Integer> keepPos = new ArrayList<Integer>();
+		for (String s : fetchP2C)
+		{
+			int indx = keys.indexOf(s);
+			fetchPos.add(indx);
+		}
+		
+		for (String s : finalP2C.values())
+		{
+			int indx = keys.indexOf(s);
+			indx = fetchPos.indexOf(indx);
+			keepPos.add(indx);
+		}
+		
+		int onPage = 0;
+		int lastRequested = -1;
+		ArrayList<Object> row = new ArrayList<Object>(fetchPos.size());
+		int get2 = get;
+		int skip2 = skip;
+		int get3 = get;
+		int skip3 = skip;
+		while (onPage < numBlocks)
+		{
+			if (lastRequested - onPage < PAGES_IN_ADVANCE)
+			{
+				if (!sample)
+				{
+					Block[] toRequest = new Block[lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1];
+					int i = 0;
+					final int length = toRequest.length;
+					while (i < length)
+					{
+						toRequest[i] = new Block(fileName, lastRequested + i + 1);
+						i++;
+					}
+					tx.requestPages(toRequest);
+					lastRequested += toRequest.length;
+				}
+				else
+				{
+					ArrayList<Block> toRequest = new ArrayList<Block>();
+					int i = 0;
+					int length = lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1;
+					while (i < length)
+					{
+						if (skip3 == 0)
+						{
+							get3 = get - 1;
+							skip3 = skip;
+						}
+						else if (get3 == 0)
+						{
+							skip3--;
+							i++;
+							continue;
+						}
+						else
+						{
+							get3--;
+						}
+						
+						toRequest.add(new Block(fileName, lastRequested + i + 1));
+						i++;
+					}
+					
+					if (toRequest.size() > 0)
+					{
+						Block[] toRequest2 = new Block[toRequest.size()];
+						int j = 0;
+						for (Block b : toRequest)
+						{
+							toRequest2[j] = b;
+							j++;
+						}
+						tx.requestPages(toRequest2);
+					}
+					
+					lastRequested += length;
+				}
+			}
+
+			if (sample && skip2 == 0)
+			{
+				get2 = get - 1;
+				skip2 = skip;
+			}
+			else if (sample && get2 == 0)
+			{
+				skip2--;
+				onPage++;
+				continue;
+			}
+			else if (sample)
+			{
+				get2--;
+			}
+			
+			Block b = new Block(fileName, onPage++);
+			Page p = tx.getPage(b);
+			LockManager.sLock(b, tx.number());
+			int firstFree = p.getInt(5);
+			int offset = 0;
+			if (b.number() == 0)
+			{
+				offset = 17;
+			}
+			else
+			{
+				offset = 9;
+			}
+			
+			outer: while (offset < firstFree)
+			{
+				row.clear();
+				IndexRecord rec = new IndexRecord(fileName, b.number(), offset, tx, p);
+				if (rec.isLeaf() && !rec.isStart() && !rec.isTombstone())
+				{
+					ArrayList<Object> r = rec.getKeysAndScroll(types);
+					for (int pos : fetchPos)
+					{
+						row.add(r.get(pos));
+					}
+					
+					if (filter.passes(row))
+					{
+						ArrayList<Object> r2 = new ArrayList<Object>();
+						for (int pos : keepPos)
+						{
+							r2.add(row.get(pos));
+						}
+						
+						queue.put(r2);
+					}
+					
+					offset += rec.getScroll();
+				}
+				else if (rec.isTombstone())
+				{
+					rec.getKeysAndScroll(types);
+					offset += rec.getScroll();
+				}
+				else if (rec.isStart())
+				{
+					offset += 33;
+				}
+				else
+				{
+					rec.getKeysAndScroll(types);
+					offset += rec.getScroll();
+				}
+			}
+			
+			tx.unpin(p);
+		}
 	}
 
 	@Override
@@ -2014,7 +2221,7 @@ public final class Index implements Serializable
 						else
 						{
 							line = down;
-							prev = null;
+							//prev = null;
 						}
 					}
 					else
@@ -2050,7 +2257,7 @@ public final class Index implements Serializable
 					else
 					{
 						line = down;
-						prev = null;
+						//prev = null;
 					}
 				}
 				else
@@ -2097,7 +2304,7 @@ public final class Index implements Serializable
 						else
 						{
 							line = down;
-							prev = null;
+							//prev = null;
 						}
 					}
 					else
@@ -2148,7 +2355,7 @@ public final class Index implements Serializable
 					else
 					{
 						line = down;
-						prev = null;
+						//prev = null;
 					}
 				}
 				else
@@ -2214,7 +2421,7 @@ public final class Index implements Serializable
 						else
 						{
 							line = down;
-							prev = null;
+							//prev = null;
 						}
 					}
 					else
@@ -2265,7 +2472,7 @@ public final class Index implements Serializable
 					else
 					{
 						line = down;
-						prev = null;
+						//prev = null;
 					}
 				}
 				else
@@ -2652,6 +2859,7 @@ public final class Index implements Serializable
 		private boolean isTombstone = false;
 		private boolean isStart = false;
 		private byte[] keyBytes = null;
+		private int scroll;
 
 		public IndexRecord(String file, int block, int offset, Transaction tx) throws Exception
 		{
@@ -2755,6 +2963,32 @@ public final class Index implements Serializable
 			}
 		}
 		
+		public IndexRecord(String file, int block, int offset, Transaction tx, Page p) throws Exception
+		{
+			this.file = file;
+			this.tx = tx;
+			this.p = p;
+			if (p == null)
+			{
+				throw new Exception("NULL page in IndexRecord Constructor");
+			}
+			this.b = p.block();
+			off = offset;
+			
+			byte type = p.get(off + 0);
+			isLeaf = (type == 1);
+			if (type == 2)
+			{
+				isLeaf = true;
+				isTombstone = true;
+			}
+			
+			if (type == 3)
+			{
+				isStart = true;
+			}
+		}
+		
 		public IndexRecord(Page p, int offset, byte[] key, Transaction tx) throws Exception
 		{
 			this.file = fileName;
@@ -2828,6 +3062,11 @@ public final class Index implements Serializable
 		public boolean isStart()
 		{
 			return isStart;
+		}
+		
+		public int getScroll()
+		{
+			return scroll;
 		}
 		
 		public boolean ridsMatch(RID rid)
@@ -2943,6 +3182,77 @@ public final class Index implements Serializable
 					}
 				}
 			
+				return retval;
+			}
+			catch(Exception e)
+			{
+				HRDBMSWorker.logger.debug(toString());
+				//DEBUG
+				//RandomAccessFile dump = new RandomAccessFile("/tmp/dump", "rw");
+				//FileChannel fc = dump.getChannel();
+				//p.buffer().position(0);
+				//fc.write(p.buffer());
+				//fc.close();
+				//dump.close();
+				//DEBUG
+				throw e;
+			}
+		}
+		
+		public ArrayList<Object> getKeysAndScroll(ArrayList<String> types) throws Exception
+		{
+			try
+			{
+				ArrayList<Object> retval = new ArrayList<Object>(types.size());
+				int o = 0;
+				if (isLeaf)
+				{
+					o = off+41;
+				}
+				else
+				{
+					o = off+33;
+				}
+				
+				for (byte type : typesBytes)
+				{
+					o++; //null indicator
+					if (type == 0)
+					{
+						retval.add(p.getInt(o));
+						o += 4;
+					}
+					else if (type == 1)
+					{
+						retval.add(p.getDouble(o));
+						o += 8;
+					}
+					else if (type == 2)
+					{
+						int length = p.getInt(o);
+						o += 4;
+						byte[] bytes = new byte[length];
+						p.get(o, bytes);
+						retval.add(new String(bytes, StandardCharsets.UTF_8));
+						o += length;
+					}
+					else if (type == 3)
+					{
+						retval.add(p.getLong(o));
+						o += 8;
+					}
+					else if (type == 4)
+					{
+						retval.add(new MyDate(p.getLong(o)));
+						o += 8;
+					}
+					else
+					{
+						throw new Exception("Unknown type: " + type);
+					}
+				}
+			
+				scroll = o - off;
 				return retval;
 			}
 			catch(Exception e)
