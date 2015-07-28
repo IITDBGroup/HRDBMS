@@ -14,13 +14,12 @@ import com.exascale.tables.Transaction;
 public final class Phase3
 {
 	protected static final int MAX_INCOMING_CONNECTIONS = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes")); // 100
-	private static final int MAX_CARD_BEFORE_HASH = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_card_before_hash")); // 500000
 	protected static int colSuffix = 0;
 	private static Random random = new Random(System.currentTimeMillis());
 	private final RootOperator root;
 	private final MetaData meta;
 	private final Transaction tx;
-	private static final long MAX_GB = (long)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")));
+	private static final long MAX_GB = (long)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("sort_gb_factor")));
 
 	public Phase3(RootOperator root, Transaction tx)
 	{
@@ -360,7 +359,7 @@ public final class Phase3
 			long newCard = card(newOp);
 			
 			HRDBMSWorker.logger.debug("Considering l with reduction " + (newCard * 1.0) / (prev * 1.0));
-			if (newCard < MAX_GB && (newCard * 1.0) / (prev * 1.0) <= 0.2)
+			if (newCard < MAX_GB && (newCard * 1.0) / (prev * 1.0) <= 0.5)
 			{
 				doLeft(mop, hjop, l, r, newOp);
 				HRDBMSWorker.logger.debug("Doing pushdown across the left side");
@@ -381,7 +380,7 @@ public final class Phase3
 			long newCard = card(newOp);
 			
 			HRDBMSWorker.logger.debug("Considering r with reduction " + (newCard * 1.0) / (prev * 1.0));
-			if (newCard < MAX_GB && (newCard * 1.0) / (prev * 1.0) <= 0.2)
+			if (newCard < MAX_GB && (newCard * 1.0) / (prev * 1.0) <= 0.5)
 			{
 				doRight(mop, hjop, l, r, newOp);
 				HRDBMSWorker.logger.debug("Doing pushdown across the right side");
@@ -1471,8 +1470,9 @@ public final class Phase3
 			}
 		}
 
+		
 		final long card = card(parent);
-		if (card > MAX_CARD_BEFORE_HASH && parent.getKeys().size() > 0)
+		if (card > Phase5.MAX_GB && parent.getKeys().size() > 0)
 		{
 			final ArrayList<String> cols2 = new ArrayList<String>(parent.getKeys());
 			boolean rehash = false;
@@ -1626,6 +1626,7 @@ public final class Phase3
 				return true;
 			}
 		}
+		
 
 		if (parent.existsCountDistinct())
 		{

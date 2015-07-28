@@ -230,8 +230,12 @@ public final class AvgOperator implements AggregateOperator, Serializable
 			long numRows = 0;
 			result = new BigDecimalReplacement(0);
 
-			for (final Object orow : rows)
+			int z = 0;
+			final int limit = rows.size();
+			//for (final Object orow : rows)
+			while (z < limit)
 			{
+				Object orow = rows.get(z++);
 				final ArrayList<Object> row = (ArrayList<Object>)orow;
 				numRows++;
 				result.add(new BigDecimalReplacement((Double)row.get(pos)));

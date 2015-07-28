@@ -654,6 +654,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 	{
 		boolean usesHash = usesHash();
 		boolean usesSort = usesSort();
+		HashSet<HashMap<Filter, Filter>> temp = getHSHM();
 		
 		if (usesHash)
 		{
@@ -674,9 +675,26 @@ public final class AntiJoinOperator implements Operator, Serializable
 			Operator right = children.get(1);
 			removeChild(left);
 			removeChild(right);
+			if (left instanceof TableScanOperator)
+			{
+				((TableScanOperator)left).rebuild();
+			}
+			
+			if (right instanceof TableScanOperator)
+			{
+				((TableScanOperator)right).rebuild();
+			}
 			dynamicOp.add(left);
 			dynamicOp.add(right);
-			((HashJoinOperator)dynamicOp).setCNF(getHSHM());
+			if (left instanceof TableScanOperator)
+			{
+				((TableScanOperator)left).setCNFForParent(dynamicOp, ((TableScanOperator)left).getCNFForParent(this));
+			}
+			if (right instanceof TableScanOperator)
+			{
+				((TableScanOperator)right).setCNFForParent(dynamicOp, ((TableScanOperator)right).getCNFForParent(this));
+			}
+			((HashJoinOperator)dynamicOp).setCNF(temp);
 			((HashJoinOperator)dynamicOp).setRightChildCard(rightChildCard);
 			((HashJoinOperator)dynamicOp).setAnti();
 			dynamicOp.start();
@@ -690,9 +708,26 @@ public final class AntiJoinOperator implements Operator, Serializable
 			Operator right = children.get(1);
 			removeChild(left);
 			removeChild(right);
+			if (left instanceof TableScanOperator)
+			{
+				((TableScanOperator)left).rebuild();
+			}
+			
+			if (right instanceof TableScanOperator)
+			{
+				((TableScanOperator)right).rebuild();
+			}
 			dynamicOp.add(left);
 			dynamicOp.add(right);
-			((ProductOperator)dynamicOp).setHSHM(getHSHM());
+			if (left instanceof TableScanOperator)
+			{
+				((TableScanOperator)left).setCNFForParent(dynamicOp, ((TableScanOperator)left).getCNFForParent(this));
+			}
+			if (right instanceof TableScanOperator)
+			{
+				((TableScanOperator)right).setCNFForParent(dynamicOp, ((TableScanOperator)right).getCNFForParent(this));
+			}
+			((ProductOperator)dynamicOp).setHSHM(temp);
 			((ProductOperator)dynamicOp).setRightChildCard(rightChildCard);
 			((ProductOperator)dynamicOp).setAnti();
 			dynamicOp.start();
@@ -705,11 +740,29 @@ public final class AntiJoinOperator implements Operator, Serializable
 			Operator right = children.get(1);
 			removeChild(left);
 			removeChild(right);
+			if (left instanceof TableScanOperator)
+			{
+				((TableScanOperator)left).rebuild();
+			}
+			
+			if (right instanceof TableScanOperator)
+			{
+				((TableScanOperator)right).rebuild();
+			}
 			dynamicOp.add(left);
 			dynamicOp.add(right);
-			((ProductOperator)dynamicOp).setHSHM(getHSHM());
+			if (left instanceof TableScanOperator)
+			{
+				((TableScanOperator)left).setCNFForParent(dynamicOp, ((TableScanOperator)left).getCNFForParent(this));
+			}
+			if (right instanceof TableScanOperator)
+			{
+				((TableScanOperator)right).setCNFForParent(dynamicOp, ((TableScanOperator)right).getCNFForParent(this));
+			}
+			((ProductOperator)dynamicOp).setHSHM(temp);
 			((ProductOperator)dynamicOp).setRightChildCard(rightChildCard);
 			((ProductOperator)dynamicOp).setAnti();
+			dynamicOp.start();
 		}
 	}
 

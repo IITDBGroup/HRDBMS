@@ -41,7 +41,7 @@ public final class ResourceManager extends HRDBMSThread
 {
 	private static int SLEEP_TIME;
 	private static int LOW_PERCENT_FREE;
-	private static int HIGH_PERCENT_FREE;
+	private static int CRITICAL_PERCENT_FREE = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("critical_mem_percent"));
 	public static int QUEUE_SIZE;
 	public static int CUDA_SIZE;
 	private static volatile boolean lowMem = false;
@@ -79,7 +79,6 @@ public final class ResourceManager extends HRDBMSThread
 		final HParms hparms = HRDBMSWorker.getHParms();
 		LOW_PERCENT_FREE = Integer.parseInt(hparms.getProperty("low_mem_percent")); // 30
 		SLEEP_TIME = Integer.parseInt(hparms.getProperty("rm_sleep_time_ms")); // 10000
-		HIGH_PERCENT_FREE = Integer.parseInt(hparms.getProperty("high_mem_percent")); // 70
 		PROFILE = (hparms.getProperty("profile")).equals("true");
 		DEADLOCK_DETECT = (hparms.getProperty("detect_thread_deadlocks")).equals("true");
 		QUEUE_SIZE = Integer.parseInt(hparms.getProperty("queue_size")); // 2500000
@@ -130,6 +129,11 @@ public final class ResourceManager extends HRDBMSThread
 	public static boolean lowMem()
 	{
 		return ((Runtime.getRuntime().freeMemory()) * 100.0) / (maxMemory * 1.0) < LOW_PERCENT_FREE;
+	}
+	
+	public static boolean criticalMem()
+	{
+		return ((Runtime.getRuntime().freeMemory()) * 100.0) / (maxMemory * 1.0) < CRITICAL_PERCENT_FREE;
 	}
 
 	private static void handleLowMem()

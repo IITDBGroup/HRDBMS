@@ -389,7 +389,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	@Override
 	public void start() throws Exception
 	{
-		int maxAllowed = (int)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")));
+		int maxAllowed = (int)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")) / 2);
 		inBuffer = new Vector<ArrayList<Object>>(maxAllowed);
 		inMem = true;
 		if (rightChildCard > maxAllowed)
@@ -575,7 +575,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 				types = types1;
 				int i = 0;
 				int mod = ResourceManager.TEMP_DIRS.size();
-				int limit = (int)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor"))) / mod;
+				int limit = (int)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")) / 2) / mod;
 				while (i < mod)
 				{
 					rows.add(new ArrayList<ArrayList<Object>>(limit));

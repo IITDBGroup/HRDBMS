@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.concurrent.ConcurrentHashMap;
+import com.exascale.compression.CompressedOutputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 
@@ -221,6 +222,12 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 	@Override
 	public synchronized void start()
 	{
+		ArrayList<CompressedOutputStream> compOuts = new ArrayList<CompressedOutputStream>(outs.size());
+		for (OutputStream out : outs.values())
+		{
+			compOuts.add(new CompressedOutputStream(out));
+		}
+		
 		try
 		{
 			if (error)
@@ -233,7 +240,7 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 			while (!(o instanceof DataEndMarker))
 			{
 				final byte[] obj = toBytes(o);
-				for (final OutputStream out : outs.values())
+				for (final OutputStream out : compOuts)
 				{
 					out.write(obj);
 				}
@@ -247,7 +254,7 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 			}
 
 			final byte[] obj = toBytes(o);
-			for (final OutputStream out : outs.values())
+			for (final OutputStream out : compOuts)
 			{
 				out.write(obj);
 				out.flush();
@@ -272,7 +279,7 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 			}
 			catch (Exception f)
 			{
-				for (final OutputStream out : outs.values())
+				for (final OutputStream out : compOuts)
 				{
 					try
 					{
@@ -283,7 +290,7 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 					}
 				}
 			}
-			for (final OutputStream out : outs.values())
+			for (final OutputStream out : compOuts)
 			{
 				try
 				{

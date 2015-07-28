@@ -7,14 +7,14 @@ import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import com.exascale.managers.HRDBMSWorker;
+import com.exascale.managers.ResourceManager;
 import com.exascale.tables.Transaction;
 
 public final class Phase4
 {
 	private static final int MAX_LOCAL_NO_HASH_PRODUCT = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_local_no_hash_product")); // 1000000
-	private static final int MAX_LOCAL_LEFT_HASH = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_local_left_hash")); // 1000000
+	private static final int MAX_LOCAL_LEFT_HASH = (int)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")));
 	private static final int MAX_LOCAL_SORT = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_local_sort")); // 1000000
-	private static final int MAX_CARD_BEFORE_HASH = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_card_before_hash")); // 500000
 	public static AtomicInteger id = new AtomicInteger(0);
 	private final RootOperator root;
 	private final MetaData meta;
@@ -353,6 +353,63 @@ public final class Phase4
 		// HRDBMSWorker.logger.debug("Exiting P4:");
 		// Phase1.printTree(root, 0);
 		// sanityCheck(root, -1);
+		swapLeftRight(root, new HashSet<Operator>());
+	}
+	
+	private void swapLeftRight(Operator op, HashSet<Operator> touched) throws Exception
+	{
+		if (touched.contains(op))
+		{
+			return;
+		}
+		
+		touched.add(op);
+		
+		if (op instanceof HashJoinOperator)
+		{
+			if (card(op.children().get(0)) < card(op.children().get(1)))
+			{
+				//swap
+				HRDBMSWorker.logger.debug("Swapping HJ");
+				Operator left = op.children().get(0);
+				Operator right = op.children().get(1);
+				ArrayList<String> origOrder = new ArrayList<String>(op.getPos2Col().values());
+				op.removeChild(left);
+				op.removeChild(right);
+				op.add(right);
+				op.add(left);
+				Operator parent = op.parent();
+				parent.removeChild(op);
+				ReorderOperator reorder = new ReorderOperator(origOrder, meta);
+				reorder.add(op);
+				parent.add(reorder);
+			}
+		}
+		else if (op instanceof NestedLoopJoinOperator)
+		{
+			if (card(op.children().get(0)) < card(op.children().get(1)))
+			{
+				//swap
+				HRDBMSWorker.logger.debug("Swapping NL");
+				Operator left = op.children().get(0);
+				Operator right = op.children().get(1);
+				ArrayList<String> origOrder = new ArrayList<String>(op.getPos2Col().values());
+				op.removeChild(left);
+				op.removeChild(right);
+				op.add(right);
+				op.add(left);
+				Operator parent = op.parent();
+				parent.removeChild(op);
+				ReorderOperator reorder = new ReorderOperator(origOrder, meta);
+				reorder.add(op);
+				parent.add(reorder);
+			}
+		}
+		
+		for (Operator o : (ArrayList<Operator>)op.children().clone())
+		{
+			swapLeftRight(o, touched);
+		}
 	}
 
 	private void allIntersectionsHave2Children(Operator op, HashSet<Operator> touched) throws Exception
@@ -806,7 +863,7 @@ public final class Phase4
 		}
 		makeHierarchical2(r);
 		makeHierarchical(r);
-		cCache.clear();
+		//cCache.clear();
 		return false;
 	}
 
@@ -1054,7 +1111,7 @@ public final class Phase4
 		}
 		makeHierarchical2(r);
 		makeHierarchical(r);
-		cCache.clear();
+		//cCache.clear();
 		return false;
 	}
 
@@ -1179,7 +1236,7 @@ public final class Phase4
 			}
 
 			makeHierarchical(r);
-			cCache.clear();
+			//cCache.clear();
 			return false;
 		}
 
@@ -1253,7 +1310,7 @@ public final class Phase4
 			handleTop(receive);
 		}
 		makeHierarchical(receive);
-		cCache.clear();
+		//cCache.clear();
 	}
 
 	private Operator fullyCloneTree(Operator op) throws Exception
@@ -1646,7 +1703,7 @@ public final class Phase4
 		}
 		makeHierarchical2(r);
 		makeHierarchical(r);
-		cCache.clear();
+		//cCache.clear();
 		return false;
 	}
 
@@ -1664,8 +1721,9 @@ public final class Phase4
 		}
 
 		final MultiOperator parent = (MultiOperator)receive.parent();
+		
 		final long card = card(parent);
-		if (card > MAX_CARD_BEFORE_HASH && parent.getKeys().size() > 0)
+		if (card > Phase5.MAX_GB && parent.getKeys().size() > 0)
 		{
 			final ArrayList<String> cols2 = new ArrayList<String>(parent.getKeys());
 			final int starting = getStartingNode(MetaData.numWorkerNodes);
@@ -1753,9 +1811,10 @@ public final class Phase4
 				HRDBMSWorker.logger.error("", e);
 				throw e;
 			}
-			cCache.clear();
+			//cCache.clear();
 			return true;
 		}
+		
 
 		if (parent.existsCountDistinct())
 		{
@@ -1942,7 +2001,7 @@ public final class Phase4
 			HRDBMSWorker.logger.error("", e);
 			throw e;
 		}
-		cCache.clear();
+		//cCache.clear();
 		return false;
 	}
 
@@ -1999,7 +2058,7 @@ public final class Phase4
 			throw e;
 		}
 
-		cCache.clear();
+		//cCache.clear();
 		return false;
 	}
 
@@ -2048,7 +2107,7 @@ public final class Phase4
 			}
 		}
 
-		cCache.clear();
+		//cCache.clear();
 		return false;
 	}
 
@@ -2284,7 +2343,7 @@ public final class Phase4
 		}
 		makeHierarchical2(r);
 		makeHierarchical(r);
-		cCache.clear();
+		//cCache.clear();
 		return false;
 	}
 
@@ -2569,7 +2628,7 @@ public final class Phase4
 			}
 		}
 
-		cCache.clear();
+		//cCache.clear();
 	}
 
 	private boolean noLargeUpstreamJoins(Operator op) throws Exception
@@ -2790,7 +2849,7 @@ public final class Phase4
 			HRDBMSWorker.logger.error("", e);
 			throw e;
 		}
-		cCache.clear();
+		//cCache.clear();
 	}
 
 	private void pushUpReceives() throws Exception
@@ -2902,7 +2961,7 @@ public final class Phase4
 							card += card(child);
 						}
 
-						if (card <= MAX_LOCAL_LEFT_HASH)
+						if (card <= MAX_LOCAL_LEFT_HASH / 2)
 						{
 							continue;
 						}
@@ -2919,7 +2978,7 @@ public final class Phase4
 				else if (op instanceof IntersectOperator)
 				{
 					op.parent();
-					if (card(op.children().get(0)) + card(op.children().get(1)) <= MAX_LOCAL_LEFT_HASH && noLargeUpstreamJoins(op))
+					if (card(op.children().get(0)) + card(op.children().get(1)) <= MAX_LOCAL_LEFT_HASH / 2 && noLargeUpstreamJoins(op))
 					{
 						continue;
 					}
@@ -2935,7 +2994,7 @@ public final class Phase4
 				else if (op instanceof ExceptOperator)
 				{
 					op.parent();
-					if (card(op.children().get(0)) + card(op.children().get(1)) <= MAX_LOCAL_LEFT_HASH && noLargeUpstreamJoins(op))
+					if (card(op.children().get(0)) + card(op.children().get(1)) <= MAX_LOCAL_LEFT_HASH / 2 && noLargeUpstreamJoins(op))
 					{
 						continue;
 					}
@@ -3326,7 +3385,7 @@ public final class Phase4
 		}
 		makeHierarchical2(r);
 		makeHierarchical(r);
-		cCache.clear();
+		//cCache.clear();
 		return false;
 	}
 
@@ -3460,7 +3519,7 @@ public final class Phase4
 			}
 
 			makeHierarchical(r);
-			cCache.clear();
+			//cCache.clear();
 			return false;
 		}
 
@@ -3824,7 +3883,7 @@ public final class Phase4
 				receive.setNode(op.getNode());
 				receive.add(send);
 				op.add(receive);
-				cCache.clear();
+				//cCache.clear();
 			}
 
 			if (!(op.children().get(1) instanceof NetworkReceiveOperator))
@@ -3837,7 +3896,7 @@ public final class Phase4
 				receive.setNode(op.getNode());
 				receive.add(send);
 				op.add(receive);
-				cCache.clear();
+				//cCache.clear();
 			}
 		}
 		catch (final Exception e)
@@ -3861,7 +3920,7 @@ public final class Phase4
 				receive.setNode(op.getNode());
 				receive.add(send);
 				op.add(receive);
-				cCache.clear();
+				//cCache.clear();
 			}
 
 			if (!(op.children().get(1) instanceof NetworkReceiveOperator))
@@ -3899,7 +3958,7 @@ public final class Phase4
 					receive.add(send2);
 				}
 				op.add(receive);
-				cCache.clear();
+				//cCache.clear();
 			}
 		}
 		catch (final Exception e)
@@ -3923,7 +3982,7 @@ public final class Phase4
 				receive.setNode(op.getNode());
 				receive.add(send);
 				op.add(receive);
-				cCache.clear();
+				//cCache.clear();
 			}
 
 			if (!(op.children().get(0) instanceof NetworkReceiveOperator))
@@ -3961,7 +4020,7 @@ public final class Phase4
 					receive.add(send2);
 				}
 				op.add(receive);
-				cCache.clear();
+				//cCache.clear();
 			}
 		}
 		catch (final Exception e)

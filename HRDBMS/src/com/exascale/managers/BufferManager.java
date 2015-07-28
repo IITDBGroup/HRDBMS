@@ -106,6 +106,12 @@ public class BufferManager extends HRDBMSThread
 		int hash = (b.hashCode2() & 0x7FFFFFFF) & (mLength - 1);
 		managers[hash].pin(b, txnum);
 	}
+	
+	public static void pin(Block b, long txnum, boolean flag) throws Exception
+	{
+		int hash = (b.hashCode2() & 0x7FFFFFFF) & (mLength - 1);
+		managers[hash].pin(b, txnum, true);
+	}
 
 	public static void requestPage(Block b, long txnum)
 	{

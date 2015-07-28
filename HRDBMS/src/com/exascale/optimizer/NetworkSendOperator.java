@@ -15,6 +15,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.TreeMap;
+import com.exascale.compression.CompressedOutputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MyDate;
@@ -333,6 +334,7 @@ public class NetworkSendOperator implements Operator, Serializable
 	@Override
 	public synchronized void start() throws Exception
 	{
+		CompressedOutputStream compOut = new CompressedOutputStream(out);
 		try
 		{
 			started = true;
@@ -343,7 +345,7 @@ public class NetworkSendOperator implements Operator, Serializable
 				final byte[] obj = toBytes(o);
 				try
 				{
-					out.write(obj);
+					compOut.write(obj);
 				}
 				catch (Exception e)
 				{
@@ -359,8 +361,8 @@ public class NetworkSendOperator implements Operator, Serializable
 			}
 
 			final byte[] obj = toBytes(o);
-			out.write(obj);
-			out.flush();
+			compOut.write(obj);
+			compOut.flush();
 			// HRDBMSWorker.logger.debug("Wrote " + count + " rows");
 			child.close();
 			// Thread.sleep(60 * 1000); WHY was this here?
@@ -371,9 +373,9 @@ public class NetworkSendOperator implements Operator, Serializable
 			try
 			{
 				byte[] obj = toBytes(e);
-				out.write(obj);
-				out.flush();
-				out.close();
+				compOut.write(obj);
+				compOut.flush();
+				compOut.close();
 				child.nextAll(this);
 				child.close();
 			}
@@ -382,7 +384,7 @@ public class NetworkSendOperator implements Operator, Serializable
 				HRDBMSWorker.logger.debug("", f);
 				try
 				{
-					out.close();
+					compOut.close();
 					child.nextAll(this);
 					child.close();
 				}
@@ -466,8 +468,12 @@ public class NetworkSendOperator implements Operator, Serializable
 		int size = val.size() + 8;
 		final byte[] header = new byte[size];
 		int i = 8;
-		for (final Object o : val)
+		int z = 0;
+		int limit = val.size();
+		//for (final Object o : val)
+		while (z < limit)
 		{
+			Object o = val.get(z++);
 			if (o instanceof Long)
 			{
 				header[i] = (byte)0;
@@ -527,8 +533,12 @@ public class NetworkSendOperator implements Operator, Serializable
 		retvalBB.putInt(val.size());
 		retvalBB.position(header.length);
 		int x = 0;
-		for (final Object o : val)
+		z = 0;
+		limit = val.size();
+		//for (final Object o : val)
+		while (z < limit)
 		{
+			Object o = val.get(z++);
 			if (retval[i] == 0)
 			{
 				retvalBB.putLong((Long)o);

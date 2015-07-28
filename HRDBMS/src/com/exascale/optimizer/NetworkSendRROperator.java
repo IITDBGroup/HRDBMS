@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.concurrent.ConcurrentHashMap;
+import com.exascale.compression.CompressedOutputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 
@@ -221,6 +222,11 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 	@Override
 	public synchronized void start()
 	{
+		final ArrayList<OutputStream> outs2 = new ArrayList<OutputStream>(outs.size());
+		for (OutputStream out : outs.values())
+		{
+			outs2.add(new CompressedOutputStream(out));
+		}
 		try
 		{
 			if (error)
@@ -229,7 +235,6 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 			}
 			started = true;
 			int i = 0;
-			final ArrayList<OutputStream> outs2 = new ArrayList<OutputStream>(outs.values());
 			child.start();
 			Object o = child.next(this);
 			while (!(o instanceof DataEndMarker))
@@ -247,7 +252,7 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 			}
 
 			final byte[] obj = toBytes(o);
-			for (final OutputStream out : outs.values())
+			for (final OutputStream out : outs2)
 			{
 				out.write(obj);
 				out.flush();
@@ -272,7 +277,7 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 			}
 			catch (Exception f)
 			{
-				for (final OutputStream out : outs.values())
+				for (final OutputStream out : outs2)
 				{
 					try
 					{
@@ -283,7 +288,7 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 					}
 				}
 			}
-			for (final OutputStream out : outs.values())
+			for (final OutputStream out : outs2)
 			{
 				try
 				{

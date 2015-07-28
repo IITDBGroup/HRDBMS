@@ -80,6 +80,29 @@ public class Page
 		}
 		pins.clear();
 	}
+	
+	public synchronized void assignToBlock(Block b, boolean log, boolean flag) throws Exception
+	{
+		if (modifiedBy >= 0)
+		{
+			if (b != null)
+			{
+				if (log)
+				{
+					LogManager.flush(lsn);
+				}
+				FileManager.write(blk, contents);
+			}
+			modifiedBy = -1;
+		}
+		blk = b;
+		readDone = false;
+		if (b != null)
+		{
+			FileManager.read(this, b, contents, true);
+		}
+		pins.clear();
+	}
 
 	public synchronized void assignToBlockFromMemory(Block b, boolean log, ByteBuffer data) throws Exception
 	{

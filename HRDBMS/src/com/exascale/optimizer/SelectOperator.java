@@ -343,8 +343,12 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 			}
 			else
 			{
-				for (final Filter filter : filters)
+				int z = 0;
+				final int limit = filters.size();
+				//for (final Filter filter : filters)
+				while (z < limit)
 				{
+					final Filter filter = filters.get(z++);
 					if (filter.passes((ArrayList<Object>)o, cols2Pos))
 					{
 						// passed.getAndIncrement();

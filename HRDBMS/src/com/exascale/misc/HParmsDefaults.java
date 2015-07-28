@@ -31,19 +31,16 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("catalog_sync_port", "3233");
 		retval.setProperty("rm_sleep_time_ms", "10000");
 		retval.setProperty("low_mem_percent", "50");
-		retval.setProperty("high_mem_percent", "70");
 		retval.setProperty("profile", "false");
 		retval.setProperty("detect_thread_deadlocks", "false");
-		retval.setProperty("queue_size", "1000000");
+		retval.setProperty("queue_size", "125000");
 		retval.setProperty("cuda_batch_size", "30720");
 		retval.setProperty("gpu_offload", "false");
 		retval.setProperty("temp_directories", "/home/hrdbms/");
-		retval.setProperty("queue_block_size", "48");
+		retval.setProperty("queue_block_size", "256");
 		retval.setProperty("catalog_creation_tcp_wait_ms", "5000");
 		retval.setProperty("max_neighbor_nodes", "100");
-		retval.setProperty("max_card_before_hash", "2000000");
 		retval.setProperty("max_local_no_hash_product", "10000000");
-		retval.setProperty("max_local_left_hash", "100000");
 		retval.setProperty("max_local_sort", "2500000");
 		retval.setProperty("parallel_sort_min_rows", Integer.toString((int)(2500 * Math.pow(Math.pow(Runtime.getRuntime().availableProcessors(), 2), 1.0 / 3.0))));
 		retval.setProperty("prefetch_request_size", "80");
@@ -64,9 +61,11 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("critical_mem_percent", "15");
 		retval.setProperty("stack_size", "2M");
 		retval.setProperty("jvm_args", "-XX:+UseAdaptiveSizePolicyWithSystemGC");
-		retval.setProperty("external_factor", "0.3");
-		retval.setProperty("hash_external_factor", "10.0");
+		retval.setProperty("external_factor", "2.4");
+		retval.setProperty("hash_external_factor", "100.0");
 		retval.setProperty("max_queued_load_flush_threads", "1");
+		retval.setProperty("unpin_delay_ms", "7000");
+		retval.setProperty("sort_gb_factor", "200.0");
 		HParmsDefaults.retval = retval;
 		return retval;
 	}

@@ -2066,8 +2066,12 @@ public final class Index implements Serializable
 				// System.out.println("Filter " + f + " returns true");
 			}
 
-			for (final Filter filter : secondary)
+			int z = 0;
+			final int limit = secondary.size();
+			//for (final Filter filter : secondary)
+			while (z < limit)
 			{
+				final Filter filter = secondary.get(z++);
 				if (!filter.passes(row, cols2Pos))
 				{
 					// System.out.println("Filter " + filter +
@@ -2132,8 +2136,12 @@ public final class Index implements Serializable
 
 		try
 		{
-			for (final Filter terminate : terminates)
+			int z = 0;
+			final int limit = terminates.size();
+			//for (final Filter terminate : terminates)
+			while (z < limit)
 			{
+				final Filter terminate = terminates.get(z++);
 				if (terminate.passes(row, cols2Pos))
 				{
 					return true;
@@ -2232,7 +2240,7 @@ public final class Index implements Serializable
 				}
 				else
 				{
-					IndexRecord down = line.prev().getDown();
+					IndexRecord down = prev.getDown();
 					if (down.isNull())
 					{
 						return;
@@ -2315,16 +2323,32 @@ public final class Index implements Serializable
 				}
 				else if (cmp == 0)
 				{
-					while (true)
+					if (isUnique())
 					{
-						IndexRecord down = line.getDown();
+						while (true)
+						{
+							IndexRecord down = line.getDown();
+							if (down.isNull())
+							{
+								return;
+							}
+							else
+							{
+								line = down;
+							}
+						}
+					}
+					else
+					{
+						IndexRecord down = prev.getDown();
 						if (down.isNull())
 						{
 							return;
 						}
 						else
 						{
-							line = down;
+							prev = down;
+							line = down.next();
 						}
 					}
 				}
@@ -2432,16 +2456,32 @@ public final class Index implements Serializable
 				}
 				else if (cmp == 0)
 				{
-					while (true)
+					if (isUnique())
 					{
-						IndexRecord down = line.getDown(true);
+						while (true)
+						{
+							IndexRecord down = line.getDown(true);
+							if (down.isNull())
+							{
+								return;
+							}
+							else
+							{
+								line = down;
+							}
+						}
+					}
+					else
+					{
+						IndexRecord down = prev.getDown(true);
 						if (down.isNull())
 						{
 							return;
 						}
 						else
 						{
-							line = down;
+							prev = down;
+							line = down.next(true);
 						}
 					}
 				}
@@ -3582,8 +3622,12 @@ public final class Index implements Serializable
 	{
 		FieldValue[] retval = new FieldValue[row.size()];
 		int i = 0;
-		for (Object o : row)
+		int z = 0;
+		final int limit = row.size();
+		//for (Object o : row)
+		while (z < limit)
 		{
+			Object o = row.get(z++);
 			if (o instanceof Integer)
 			{
 				retval[i] = new Schema.IntegerFV((Integer)o);
@@ -3775,8 +3819,12 @@ public final class Index implements Serializable
 
 						ridList.add(getPartialRid());
 						ArrayList<Object> keys = line.getKeys(types);
-						for (final int pos : fetches)
+						int z = 0;
+						final int limit = fetches.size();
+						//for (final int pos : fetches)
+						while (z < limit)
 						{
+							final int pos = fetches.get(z++);
 							final Object val = keys.get(pos);
 							row.add(val);
 						}

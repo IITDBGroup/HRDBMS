@@ -48,7 +48,6 @@ public final class MultiOperator implements Operator, Serializable
 	private transient final MetaData meta;
 	private ArrayList<AggregateOperator> ops;
 	private ArrayList<String> groupCols;
-	private transient volatile BufferedLinkedBlockingQueue inFlight;
 	private transient volatile BufferedLinkedBlockingQueue readBuffer;
 	private boolean sorted;
 	private int node;
@@ -224,11 +223,6 @@ public final class MultiOperator implements Operator, Serializable
 	public void close() throws Exception
 	{
 		child.close();
-
-		if (inFlight != null)
-		{
-			inFlight.close();
-		}
 
 		if (readBuffer != null)
 		{
@@ -499,11 +493,6 @@ public final class MultiOperator implements Operator, Serializable
 		else
 		{
 			child.reset();
-			if (inFlight != null)
-			{
-				inFlight.close();
-			}
-			inFlight = new BufferedLinkedBlockingQueue(ATHREAD_QUEUE_SIZE);
 			readBuffer.clear();
 			if (sorted)
 			{
@@ -596,7 +585,6 @@ public final class MultiOperator implements Operator, Serializable
 	{
 		startDone = true;
 		child.start();
-		inFlight = new BufferedLinkedBlockingQueue(ATHREAD_QUEUE_SIZE);
 		readBuffer = new BufferedLinkedBlockingQueue(ResourceManager.QUEUE_SIZE);
 		if (sorted)
 		{
@@ -636,7 +624,6 @@ public final class MultiOperator implements Operator, Serializable
 	private void init()
 	{
 		new InitThread().start();
-		new CleanerThread().start();
 	}
 
 	public final class AggregateThread
@@ -703,59 +690,7 @@ public final class MultiOperator implements Operator, Serializable
 
 			for (final ThreadPoolThread thread : threads)
 			{
-				thread.start();
-			}
-		}
-	}
-
-	private final class CleanerThread extends ThreadPoolThread
-	{
-		@Override
-		public void run()
-		{
-			while (true)
-			{
-				AggregateThread t = null;
-				while (true)
-				{
-					try
-					{
-						t = (AggregateThread)inFlight.take();
-						break;
-					}
-					catch (final Exception e)
-					{
-					}
-				}
-				if (t.isEnd())
-				{
-					while (true)
-					{
-						try
-						{
-							readBuffer.put(new DataEndMarker());
-							break;
-						}
-						catch (final Exception e)
-						{
-						}
-					}
-					// System.out.println("MultiOperator marked end of output.");
-					return;
-				}
-
-				while (true)
-				{
-					try
-					{
-						readBuffer.put(t.getResult());
-						break;
-					}
-					catch (final Exception e)
-					{
-					}
-				}
-				// System.out.println("Picked up aggregation result.");
+				thread.run();
 			}
 		}
 	}
@@ -915,7 +850,12 @@ public final class MultiOperator implements Operator, Serializable
 				Object[] oldGroup = null;
 				ArrayList<ArrayList<Object>> rows = null;
 				boolean newGroup = false;
-				;
+				
+				ArrayList<Integer> indxs = new ArrayList<Integer>(groupCols.size());
+				for (String groupCol : groupCols)
+				{
+					indxs.add(child.getCols2Pos().get(groupCol));
+				}
 
 				Object o = child.next(MultiOperator.this);
 				while (!(o instanceof DataEndMarker))
@@ -924,9 +864,9 @@ public final class MultiOperator implements Operator, Serializable
 					oldGroup = null;
 					final ArrayList<Object> row = (ArrayList<Object>)o;
 					int i = 0;
-					for (final String groupCol : groupCols)
+					for (final int indx : indxs)
 					{
-						if (row.get(child.getCols2Pos().get(groupCol)).equals(groupKeys[i]))
+						if (row.get(indx).equals(groupKeys[i]))
 						{
 						}
 						else
@@ -936,7 +876,7 @@ public final class MultiOperator implements Operator, Serializable
 							{
 								oldGroup = groupKeys.clone();
 							}
-							groupKeys[i] = row.get(child.getCols2Pos().get(groupCol));
+							groupKeys[i] = row.get(indx);
 						}
 
 						i++;
@@ -948,20 +888,13 @@ public final class MultiOperator implements Operator, Serializable
 						{
 							final AggregateThread aggThread = new AggregateThread(oldGroup, ops, rows);
 							aggThread.start();
-							while (true)
-							{
-								try
-								{
-									inFlight.put(aggThread);
-									break;
-								}
-								catch (final Exception f)
-								{
-								}
-							}
+							readBuffer.put(aggThread.getResult());
+							rows.clear();
 						}
-
-						rows = new ArrayList<ArrayList<Object>>();
+						else
+						{
+							rows = new ArrayList<ArrayList<Object>>();
+						}
 					}
 
 					rows.add(row);
@@ -970,31 +903,8 @@ public final class MultiOperator implements Operator, Serializable
 
 				AggregateThread aggThread = new AggregateThread(groupKeys, ops, rows);
 				aggThread.start();
-				while (true)
-				{
-					try
-					{
-						inFlight.put(aggThread);
-						break;
-					}
-					catch (final Exception f)
-					{
-					}
-				}
-				// System.out.println("Last aggregation thread has been started.");
-
-				aggThread = new AggregateThread();
-				while (true)
-				{
-					try
-					{
-						inFlight.put(aggThread);
-						break;
-					}
-					catch (final Exception f)
-					{
-					}
-				}
+				readBuffer.put(aggThread.getResult());
+				readBuffer.put(new DataEndMarker());
 			}
 			catch (final Exception e)
 			{

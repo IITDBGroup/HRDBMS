@@ -23,6 +23,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
 import net.jpountz.lz4.LZ4Compressor;
 import net.jpountz.lz4.LZ4Factory;
@@ -50,12 +51,13 @@ public class CompressedFileChannel extends FileChannel
 	private int length; // in 128k pages
 	private int bufferedBlock = -1;
 	private byte[] buffer;
-	private int bufferSize;
+	private int bufferSize = 0;
 	private long pos = 0;
 	private final ScalableStampedReentrantRWLock lock = new ScalableStampedReentrantRWLock();
 	private final ScalableStampedRWLock bufferLock = new ScalableStampedRWLock();
 	private final HashMap<Integer, Integer>[] inUse = new HashMap[32];
 	private final AtomicBoolean trimInProgress = new AtomicBoolean(false);
+	private AtomicInteger ai = new AtomicInteger(0);
 
 	private final ConcurrentHashMap<Integer, Integer> writeLocks = new ConcurrentHashMap<Integer, Integer>(MAX_FCS, 0.75f, ResourceManager.cpus);
 
@@ -288,14 +290,14 @@ public class CompressedFileChannel extends FileChannel
 		{
 			while (writeLocks.putIfAbsent(block, block) != null)
 			{
-				LockSupport.parkNanos(100000);
+				Thread.yield();
 			}
 			offset += ((page % 3) * 128 * 1024);
 
 			// bufferLock.readLock().lock();
 			if (bufferLock.readLock().tryLock())
 			{
-				if (block == bufferedBlock)
+				if (bufferedBlock == block)
 				{
 					System.arraycopy(buffer, offset, arg0.array(), 0, arg0.capacity());
 					bufferLock.readLock().unlock();
@@ -331,7 +333,8 @@ public class CompressedFileChannel extends FileChannel
 				}
 				FileChannel fc = getFC(block);
 				ByteBuffer bb = ByteBuffer.allocate((int)fc.size());
-				fc.read(bb, 0);
+				while (fc.read(bb, 0) <= 0)
+				{}
 				int size = (int)fc.size();
 				synchronized (inUse[mod])
 				{
@@ -348,11 +351,16 @@ public class CompressedFileChannel extends FileChannel
 				byte[] target = new byte[128 * 1024 * 3]; // max 3 pages
 				int bytes = decomp.decompress(bb.array(), 0, size, target, 0, 128 * 1024 * 3);
 				System.arraycopy(target, offset, arg0.array(), 0, arg0.capacity());
-				bufferLock.writeLock().lock();
-				bufferedBlock = block;
-				buffer = target;
-				bufferSize = bytes / (128 * 1024);
-				bufferLock.writeLock().unlock();
+				if (bytes == 3 * 128 * 1024)
+				{
+					if (bufferLock.writeLock().tryLock())
+					{
+						bufferedBlock = block;
+						buffer = target;
+						bufferSize = 3;
+						bufferLock.writeLock().unlock();
+					}
+				}
 			}
 			else
 			{
@@ -373,7 +381,8 @@ public class CompressedFileChannel extends FileChannel
 				}
 				FileChannel fc = getFC(block);
 				ByteBuffer bb = ByteBuffer.allocate((int)(fc.size()));
-				fc.read(bb, 0);
+				while (fc.read(bb, 0) <= 0)
+				{}
 				synchronized (inUse[mod])
 				{
 					Integer count = inUse[mod].get(block);
@@ -403,11 +412,13 @@ public class CompressedFileChannel extends FileChannel
 					throw e;
 				}
 				System.arraycopy(target, offset, arg0.array(), 0, arg0.capacity());
-				bufferLock.writeLock().lock();
-				bufferedBlock = block;
-				buffer = target;
-				bufferSize = 3;
-				bufferLock.writeLock().unlock();
+				if (bufferLock.writeLock().tryLock())
+				{
+					bufferedBlock = block;
+					buffer = target;
+					bufferSize = 3;
+					bufferLock.writeLock().unlock();
+				}
 			}
 		}
 		catch (Exception e)
@@ -499,7 +510,7 @@ public class CompressedFileChannel extends FileChannel
 
 				if (bufferedBlock == actualHighFileNum)
 				{
-					bufferSize = desiredPages % 3;
+					bufferedBlock = -1;
 				}
 			}
 
@@ -570,11 +581,11 @@ public class CompressedFileChannel extends FileChannel
 			// lock.readLock().lock();
 			while (writeLocks.putIfAbsent(block, block) != null)
 			{
-				LockSupport.parkNanos(100000);
+				Thread.yield();
 			}
 			// lock.writeLock().unlock();
 			bufferLock.readLock().lock();
-			if (block == bufferedBlock)
+			if (bufferedBlock == block)
 			{
 				// HRDBMSWorker.logger.debug("The block was buffered"); //DEBUG
 				System.arraycopy(arg0.array(), 0, buffer, offset, arg0.capacity());
@@ -1106,7 +1117,7 @@ public class CompressedFileChannel extends FileChannel
 			int block = (Integer)entry.getKey();
 			while (writeLocks.putIfAbsent(block, block) != null)
 			{
-				LockSupport.parkNanos(100000);
+				Thread.yield();
 			}
 			try
 			{

@@ -52,6 +52,7 @@ public final class MetaData implements Serializable
 	private static ArrayList<Integer> workers = new ArrayList<Integer>();
 	private static HashMap<String, ArrayList<Object>> getPartitioningCache = new HashMap<String, ArrayList<Object>>();
 	private static HashMap<String, ArrayList<Object>> getIndexesCache = new HashMap<String, ArrayList<Object>>();
+	private static HashMap<String, ArrayList<Object>> getUniqueIndexesCache = new HashMap<String, ArrayList<Object>>();
 	private static HashMap<String, ArrayList<Object>> getKeysCache = new HashMap<String, ArrayList<Object>>();
 	private static HashMap<String, ArrayList<Object>> getTypesCache = new HashMap<String, ArrayList<Object>>();
 	private static HashMap<String, ArrayList<Object>> getOrdersCache = new HashMap<String, ArrayList<Object>>();
@@ -132,6 +133,7 @@ public final class MetaData implements Serializable
 	}
 
 	private transient ConnectionWorker connection = null;
+	private HashMap<ColAndTree, String> gtfcCache = new HashMap<ColAndTree, String>();
 
 	public MetaData()
 	{
@@ -1110,8 +1112,12 @@ public final class MetaData implements Serializable
 		int size = val.size() + 8;
 		final byte[] header = new byte[size];
 		int i = 8;
-		for (final Object o : val)
+		int z = 0;
+		int limit = val.size();
+		//for (final Object o : val)
+		while (z < limit)
 		{
+			Object o = val.get(z++);
 			if (o instanceof Long)
 			{
 				header[i] = (byte)0;
@@ -1188,8 +1194,12 @@ public final class MetaData implements Serializable
 		retvalBB.putInt(val.size());
 		retvalBB.position(header.length);
 		int x = 0;
-		for (final Object o : val)
+		z = 0;
+		limit = val.size();
+		//for (final Object o : val)
+		while (z < limit)
 		{
+			Object o = val.get(z++);
 			if (retval[i] == 0)
 			{
 				retvalBB.putLong((Long)o);
@@ -2048,6 +2058,89 @@ public final class MetaData implements Serializable
 
 		return retval;
 	}
+	
+	public ArrayList<Index> getUniqueIndexesForTable(String schema, String table, Transaction tx) throws Exception
+	{
+		final ArrayList<Index> retval = new ArrayList<Index>();
+		ArrayList<Object> rs = getUniqueIndexesCache.get(schema + "." + table);
+		if (rs == null)
+		{
+			rs = PlanCacheManager.getUniqueIndexes().setParms(schema, table).execute(tx);
+			getUniqueIndexesCache.put(schema + "." + table, rs);
+		}
+		for (Object o : rs)
+		{
+			if (!(o instanceof DataEndMarker))
+			{
+				ArrayList<Object> row = (ArrayList<Object>)o;
+				ArrayList<Object> rs2 = getKeysCache.get(schema + "." + row.get(0));
+				if (rs2 == null)
+				{
+					rs2 = PlanCacheManager.getKeys().setParms(schema, (String)row.get(0)).execute(tx);
+					getKeysCache.put(schema + "." + row.get(0), rs2);
+				}
+				// tabname, colname
+				ArrayList<String> keys = new ArrayList<String>();
+				for (Object o2 : rs2)
+				{
+					ArrayList<Object> row2 = (ArrayList<Object>)o2;
+					keys.add(row2.get(0) + "." + row2.get(1));
+				}
+
+				rs2 = getTypesCache.get(schema + "." + row.get(0));
+				if (rs2 == null)
+				{
+					rs2 = PlanCacheManager.getTypes().setParms(schema, (String)row.get(0)).execute(tx);
+					getTypesCache.put(schema + "." + row.get(0), rs2);
+				}
+				ArrayList<String> types = new ArrayList<String>();
+				for (Object o2 : rs2)
+				{
+					ArrayList<Object> row2 = (ArrayList<Object>)o2;
+					String type = (String)row2.get(0);
+					if (type.equals("BIGINT"))
+					{
+						type = "LONG";
+					}
+					else if (type.equals("VARCHAR"))
+					{
+						type = "CHAR";
+					}
+					else if (type.equals("DOUBLE"))
+					{
+						type = "FLOAT";
+					}
+					types.add(type);
+				}
+
+				rs2 = getOrdersCache.get(schema + "." + row.get(0));
+				if (rs2 == null)
+				{
+					rs2 = PlanCacheManager.getOrders().setParms(schema, (String)row.get(0)).execute(tx);
+					getOrdersCache.put(schema + "." + row.get(0), rs2);
+				}
+				ArrayList<Boolean> orders = new ArrayList<Boolean>();
+				for (Object o2 : rs2)
+				{
+					if (!(o2 instanceof DataEndMarker))
+					{
+						ArrayList<Object> row2 = (ArrayList<Object>)o2;
+						String ord = (String)row2.get(0);
+						boolean order = true;
+						if (!ord.equals("A"))
+						{
+							order = false;
+						}
+						orders.add(order);
+					}
+				}
+
+				retval.add(new Index(schema + "." + row.get(0) + ".indx", keys, types, orders));
+			}
+		}
+
+		return retval;
+	}
 
 	public ArrayList<String> getIndexFileNamesForTable(String schema, String table, Transaction tx) throws Exception
 	{
@@ -2259,6 +2352,32 @@ public final class MetaData implements Serializable
 			return 1000000;
 		}
 	}
+	
+	private class ColAndTree
+	{
+		private String col;
+		private Operator tree;
+		
+		public ColAndTree(String col, Operator tree)
+		{
+			this.col = col;
+			this.tree = tree;
+		}
+		
+		public boolean equals(Object r)
+		{
+			ColAndTree rhs = (ColAndTree)r;
+			return col.equals(rhs.col) && tree == rhs.tree;
+		}
+		
+		public int hashCode()
+		{
+			int hash = 23;
+			hash = hash * 31 + col.hashCode();
+			hash = hash * 31 + tree.hashCode();
+			return hash;
+		}
+	}
 
 	public String getTableForCol(String col, Operator tree) throws Exception// must
 	// return
@@ -2271,6 +2390,13 @@ public final class MetaData implements Serializable
 	// unqualified
 	// col
 	{
+		ColAndTree cat = new ColAndTree(col, tree);
+		String s = gtfcCache.get(cat);
+		if (s != null)
+		{
+			return s;
+		}
+		
 		ArrayList<TableScanOperator> tables = getTables(tree, new HashSet<Operator>());
 		if (isQualified(col))
 		{
@@ -2302,7 +2428,9 @@ public final class MetaData implements Serializable
 
 			if (retSchema != null)
 			{
-				return retSchema + "." + retTable;
+				String retval = retSchema + "." + retTable;
+				gtfcCache.put(cat, retval);
+				return retval;
 			}
 			else
 			{
@@ -2335,7 +2463,9 @@ public final class MetaData implements Serializable
 
 			if (retSchema != null)
 			{
-				return retSchema + "." + retTable;
+				String retval = retSchema + "." + retTable;
+				gtfcCache.put(cat, retval);
+				return retval;
 			}
 			else
 			{
@@ -2763,12 +2893,12 @@ public final class MetaData implements Serializable
 
 		if (op.equals("LI"))
 		{
-			return 0.25;
+			return 0.05;
 		}
 
 		if (op.equals("NL"))
 		{
-			return 0.75;
+			return 0.95;
 		}
 
 		HRDBMSWorker.logger.error("Unknown operator in likelihood()");
@@ -3101,12 +3231,12 @@ public final class MetaData implements Serializable
 
 		if (op.equals("LI"))
 		{
-			return 0.25;
+			return 0.05;
 		}
 
 		if (op.equals("NL"))
 		{
-			return 0.75;
+			return 0.95;
 		}
 
 		HRDBMSWorker.logger.error("Unknown operator in likelihood()");

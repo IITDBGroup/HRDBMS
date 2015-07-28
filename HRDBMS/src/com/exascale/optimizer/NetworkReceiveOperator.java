@@ -16,6 +16,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.TreeMap;
+import com.exascale.compression.CompressedInputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 import com.exascale.misc.BufferedLinkedBlockingQueue;
@@ -30,7 +31,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 
 	protected static Charset cs = StandardCharsets.UTF_8;
 
-	private static long offset;
+	protected static long offset;
 
 	private static sun.misc.Unsafe unsafe;
 	static
@@ -225,49 +226,6 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	@Override
 	public Object next(Operator op2) throws Exception
 	{
-		if (!fullyStarted)
-		{
-			synchronized (this)
-			{
-				if (!fullyStarted)
-				{
-					fullyStarted = true;
-					for (final Operator op : children)
-					{
-						final NetworkSendOperator child = (NetworkSendOperator)op;
-						child.clearParent();
-						// final Socket sock = new
-						// Socket(meta.getHostNameForNode(child.getNode()),
-						// WORKER_PORT);
-						Socket sock = new Socket();
-						sock.setReceiveBufferSize(262144);
-						sock.setSendBufferSize(262144);
-						sock.connect(new InetSocketAddress(meta.getHostNameForNode(child.getNode()), WORKER_PORT));
-						socks.put(child, sock);
-						final OutputStream out = sock.getOutputStream();
-						outs.put(child, out);
-						final InputStream in = sock.getInputStream();
-						ins.put(child, new BufferedInputStream(in, 65536));
-						final byte[] command = "REMOTTRE".getBytes(StandardCharsets.UTF_8);
-						final byte[] from = intToBytes(-1);
-						final byte[] to = intToBytes(child.getNode());
-						final byte[] data = new byte[command.length + from.length + to.length];
-						System.arraycopy(command, 0, data, 0, 8);
-						System.arraycopy(from, 0, data, 8, 4);
-						System.arraycopy(to, 0, data, 12, 4);
-						out.write(data);
-						out.flush();
-						IdentityHashMap<Object, Long> map = new IdentityHashMap<Object, Long>();
-						child.serialize(out, map);
-						map.clear();
-						map = null;
-						out.flush();
-					}
-
-					new InitThread().start();
-				}
-			}
-		}
 		Object o;
 		o = outBuffer.take();
 
@@ -385,15 +343,66 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	public void setPlan(Plan plan)
 	{
 	}
-
-	@Override
-	public void start() throws Exception
+	
+	public void start(boolean flag) throws Exception
 	{
 		outBuffer = new BufferedLinkedBlockingQueue(ResourceManager.QUEUE_SIZE);
 		socks = new HashMap<Operator, Socket>();
 		outs = new HashMap<Operator, OutputStream>();
 		ins = new HashMap<Operator, InputStream>();
 		threads = new ArrayList<ReadThread>();
+	}
+	
+	public void start() throws Exception
+	{
+		if (!fullyStarted)
+		{
+			synchronized (this)
+			{
+				if (!fullyStarted)
+				{
+					outBuffer = new BufferedLinkedBlockingQueue(ResourceManager.QUEUE_SIZE);
+					socks = new HashMap<Operator, Socket>();
+					outs = new HashMap<Operator, OutputStream>();
+					ins = new HashMap<Operator, InputStream>();
+					threads = new ArrayList<ReadThread>();
+					fullyStarted = true;
+					for (final Operator op : children)
+					{
+						final NetworkSendOperator child = (NetworkSendOperator)op;
+						child.clearParent();
+						// final Socket sock = new
+						// Socket(meta.getHostNameForNode(child.getNode()),
+						// WORKER_PORT);
+						Socket sock = new Socket();
+						sock.setReceiveBufferSize(262144);
+						sock.setSendBufferSize(262144);
+						sock.connect(new InetSocketAddress(meta.getHostNameForNode(child.getNode()), WORKER_PORT));
+						socks.put(child, sock);
+						final OutputStream out = sock.getOutputStream();
+						outs.put(child, out);
+						final InputStream in = sock.getInputStream();
+						ins.put(child, new BufferedInputStream(in, 65536));
+						final byte[] command = "REMOTTRE".getBytes(StandardCharsets.UTF_8);
+						final byte[] from = intToBytes(-1);
+						final byte[] to = intToBytes(child.getNode());
+						final byte[] data = new byte[command.length + from.length + to.length];
+						System.arraycopy(command, 0, data, 0, 8);
+						System.arraycopy(from, 0, data, 8, 4);
+						System.arraycopy(to, 0, data, 12, 4);
+						out.write(data);
+						out.flush();
+						IdentityHashMap<Object, Long> map = new IdentityHashMap<Object, Long>();
+						child.serialize(out, map);
+						map.clear();
+						map = null;
+						out.flush();
+					}
+
+					new InitThread().start();
+				}
+			}
+		}
 	}
 
 	@Override
@@ -423,7 +432,8 @@ public class NetworkReceiveOperator implements Operator, Serializable
 		{
 			try
 			{
-				final InputStream in = ins.get(op);
+				final InputStream i = ins.get(op);
+				InputStream in = new CompressedInputStream(i);
 				sock = socks.get(op);
 				op = null;
 				final byte[] sizeBuff = new byte[4];

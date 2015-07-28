@@ -588,6 +588,7 @@ public final class Phase1
 					}
 				}
 
+				/*
 				if (lefts.size() > 0 && rights.size() > 0)
 				{
 					String leftTable = getTable(left);
@@ -615,6 +616,7 @@ public final class Phase1
 						}
 					}
 				}
+				*/
 
 				// HRDBMSWorker.logger.debug("Estimated join cardinality = " +
 				// likelihood); //DEBUG
@@ -626,6 +628,7 @@ public final class Phase1
 				}
 			}
 
+			/*
 			if (minColocated <= minLikelihood * 2)
 			{
 				// HRDBMSWorker.logger.debug("Chose " + minColocated); //DEBUG
@@ -635,6 +638,7 @@ public final class Phase1
 			{
 				// HRDBMSWorker.logger.debug("Chose " + minLikelihood); //DEBUG
 			}
+			*/
 
 			selects.remove(minSelect);
 			return minSelect;
@@ -848,6 +852,7 @@ public final class Phase1
 				}
 			}
 
+			/*
 			if (lefts.size() > 0 && rights.size() > 0)
 			{
 				String leftTable = getTable(left);
@@ -875,6 +880,7 @@ public final class Phase1
 					}
 				}
 			}
+			*/
 
 			// HRDBMSWorker.logger.debug("Estimated join cardinality = " +
 			// likelihood); //DEBUG
@@ -886,6 +892,7 @@ public final class Phase1
 			}
 		}
 
+		/*
 		if (minColocated <= minLikelihood * 2)
 		{
 			// HRDBMSWorker.logger.debug("Chose " + minColocated); //DEBUG
@@ -895,6 +902,7 @@ public final class Phase1
 		{
 			// HRDBMSWorker.logger.debug("Chose " + minLikelihood); //DEBUG
 		}
+		*/
 
 		selects.remove(minSelect);
 		return minSelect;

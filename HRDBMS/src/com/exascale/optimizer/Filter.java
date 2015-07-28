@@ -654,6 +654,8 @@ public class Filter implements Cloneable, Serializable
 				}
 			}
 
+			HRDBMSWorker.logger.debug("How did I get here?");
+			HRDBMSWorker.logger.debug("LO = " + lo);
 			throw new Exception("How did I get here!");
 		}
 		else if (lVal1 != null)

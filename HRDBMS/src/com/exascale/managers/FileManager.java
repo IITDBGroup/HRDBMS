@@ -260,7 +260,18 @@ public class FileManager
 		// throw new IOException("Trying to read block " + b.number() + " from "
 		// + b.fileName() + " which doesn't exist");
 		// }
-		HRDBMSWorker.addThread(new ReadThread(p, b, bb));
+		new ReadThread(p, b, bb).start();
+	}
+	
+	public static void read(Page p, Block b, ByteBuffer bb, boolean flag) throws Exception
+	{
+		// final FileChannel fc = FileManager.getFile(b.fileName());
+		// if (b.number() > numBlocks.get(b.fileName()) + 1)
+		// {
+		// throw new IOException("Trying to read block " + b.number() + " from "
+		// + b.fileName() + " which doesn't exist");
+		// }
+		new ReadThread(p, b, bb).run();
 	}
 
 	public static void redoExtend(Block bl) throws Exception

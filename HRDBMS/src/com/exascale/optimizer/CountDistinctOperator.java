@@ -16,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
+import com.exascale.misc.BufferedFileChannel;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MultiHashMap;
 import com.exascale.misc.MurmurHash;
@@ -148,12 +149,12 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 		// private final DiskBackedALOHashMap<AtomicLong> results = new
 		// DiskBackedALOHashMap<AtomicLong>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
 		private final ConcurrentHashMap<ArrayList<Object>, AtomicLong> results = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS, 0.75f, 6 * ResourceManager.cpus);
-		private ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>> hashSet;
+		private ConcurrentHashMap<byte[], byte[]> hashSet;
 		private final int pos;
 		private boolean inMem = true;
 		private ArrayList<String> externalFiles;
 		private ArrayList<ArrayList<byte[]>> bins;
-		final int numBins = 4096;
+		final int numBins = 4099;
 		private int size;
 		private HashMap<Integer, FlushBinThread> threads;
 		private ArrayList<FileChannel> channels;
@@ -164,7 +165,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 		public CountDistinctHashThread(HashMap<String, Integer> cols2Pos)
 		{
 			pos = cols2Pos.get(input);
-			if (ResourceManager.lowMem())
+			if (ResourceManager.criticalMem())
 			{
 				inMem = false;
 			}
@@ -175,7 +176,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 
 			if (inMem)
 			{
-				hashSet = new ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>>(childCard);
+				hashSet = new ConcurrentHashMap<byte[], byte[]>(childCard);
 			}
 			else
 			{
@@ -260,8 +261,12 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 					if (!done)
 					{
 						int i = 0;
-						for (ArrayList<byte[]> bin : bins)
+						int z = 0;
+						final int limit = bins.size();
+						//for (ArrayList<byte[]> bin : bins)
+						while (z < limit)
 						{
+							ArrayList<byte[]> bin = bins.get(z++);
 							if (bin.size() > 0)
 							{
 								FlushBinThread thread = new FlushBinThread(bin, types, channels.get(i));
@@ -386,7 +391,44 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 			consolidated.add(row.get(pos));
 			if (inMem)
 			{
-				if (hashSet.put(consolidated, consolidated) == null)
+				if (types == null)
+				{
+					byte[] types1 = new byte[consolidated.size()];
+					int j = 0;
+					for (Object o : consolidated)
+					{
+						if (o instanceof Integer)
+						{
+							types1[j] = (byte)1;
+						}
+						else if (o instanceof Double)
+						{
+							types1[j] = (byte)2;
+						}
+						else if (o instanceof String)
+						{
+							types1[j] = (byte)4;
+						}
+						else if (o instanceof Long)
+						{
+							types1[j] = (byte)0;
+						}
+						else if (o instanceof MyDate)
+						{
+							types1[j] = (byte)3;
+						}
+						else
+						{
+							throw new Exception("Unknown type: " + o.getClass());
+						}
+					
+						j++;
+					}
+					
+					types = types1;
+				}
+				byte[] c = toBytes(consolidated, types);
+				if (hashSet.put(c, c) == null)
 				{
 					final AtomicLong al = results.get(group);
 					if (al != null)
@@ -512,8 +554,12 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 			retvalBB.putInt(size - 4);
 			int x = 0;
 			i = 0;
-			for (final Object o : val)
+			int z = 0;
+			final int limit = val.size();
+			//for (final Object o : val)
+			while (z < limit)
 			{
+				Object o = val.get(z++);
 				if (types[i] == 0)
 				{
 					retvalBB.putLong((Long)o);
@@ -586,15 +632,22 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 			try
 			{
 				int length = 0;
-				for (byte[] b : bin)
+				int z = 0;
+				final int limit = bin.size();
+				//for (byte[] b : bin)
+				while (z < limit)
 				{
+					byte[] b = bin.get(z++);
 					length += b.length;
 				}
 				
 				byte[] data = new byte[length];
 				length = 0;
-				for (byte[] b : bin)
+				z = 0;
+				//for (byte[] b : bin)
+				while (z < limit)
 				{
+					byte[] b = bin.get(z++);
 					System.arraycopy(b, 0, data, length, b.length);
 					length += b.length;
 				}
@@ -622,7 +675,14 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 		
 		public HashDataThread(FileChannel fc, byte[] types, ConcurrentHashMap<ArrayList<Object>, AtomicLong> results)
 		{
-			this.fc = fc;
+			try
+			{
+				this.fc = new BufferedFileChannel(fc);
+			}
+			catch(Exception e)
+			{
+				this.fc = fc;
+			}
 			this.types = types;
 			this.results = results;
 		}
@@ -780,8 +840,12 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 		@Override
 		public void run()
 		{
-			for (final Object o : rows)
+			int z = 0;
+			final int limit = rows.size();
+			//for (final Object o : rows)
+			while (z < limit)
 			{
+				final Object o = rows.get(z++);
 				final ArrayList<Object> row = (ArrayList<Object>)o;
 				final Object val = row.get(pos);
 				distinct.add(val);

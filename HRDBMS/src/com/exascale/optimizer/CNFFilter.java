@@ -280,8 +280,12 @@ public class CNFFilter implements Serializable
 		int size = val.size() + 8;
 		final byte[] header = new byte[size];
 		int i = 8;
-		for (final Object o : val)
+		int z = 0;
+		int limit = val.size();
+		//for (final Object o : val)
+		while (z < limit)
 		{
+			Object o = val.get(z++);
 			if (o instanceof Long)
 			{
 				header[i] = (byte)0;
@@ -358,8 +362,12 @@ public class CNFFilter implements Serializable
 		retvalBB.putInt(val.size());
 		retvalBB.position(header.length);
 		int x = 0;
-		for (final Object o : val)
+		z = 0;
+		limit = val.size();
+		//for (final Object o : val)
+		while (z < limit)
 		{
+			Object o = val.get(z++);
 			if (retval[i] == 0)
 			{
 				retvalBB.putLong((Long)o);
@@ -580,8 +588,12 @@ public class CNFFilter implements Serializable
 	// @Parallel
 	public boolean passes(ArrayList<Object> row) throws Exception
 	{
-		for (final ArrayList<Filter> filter : filters)
+		int z = 0;
+		final int limit = filters.size();
+		//for (final ArrayList<Filter> filter : filters)
+		while (z < limit)
 		{
+			final ArrayList<Filter> filter = filters.get(z++);
 			if (!passesOredCondition(filter, row))
 			{
 				return false;
@@ -594,8 +606,12 @@ public class CNFFilter implements Serializable
 	// @Parallel
 	public boolean passes(ArrayList<Object> lRow, ArrayList<Object> rRow) throws Exception
 	{
-		for (final ArrayList<Filter> filter : filters)
+		int z = 0;
+		final int limit = filters.size();
+		//for (final ArrayList<Filter> filter : filters)
+		while (z < limit)
 		{
+			final ArrayList<Filter> filter = filters.get(z++);
 			if (!passesOredCondition(filter, lRow, rRow))
 			{
 				return false;
@@ -706,8 +722,12 @@ public class CNFFilter implements Serializable
 	{
 		try
 		{
-			for (final Filter f : filter)
+			int z = 0;
+			final int limit = filter.size();
+			//for (final Filter f : filter)
+			while (z < limit)
 			{
+				final Filter f = filter.get(z++);
 				if (f.passes(row, cols2Pos))
 				{
 					return true;
@@ -727,8 +747,12 @@ public class CNFFilter implements Serializable
 	{
 		try
 		{
-			for (final Filter f : filter)
+			int z = 0;
+			final int limit = filter.size();
+			//for (final Filter f : filter)
+			while (z < limit)
 			{
+				final Filter f = filter.get(z++);
 				if (f.passes(lRow, rRow, cols2Pos))
 				{
 					return true;

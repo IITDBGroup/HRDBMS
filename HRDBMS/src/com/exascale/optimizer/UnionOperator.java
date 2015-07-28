@@ -17,6 +17,7 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
+import com.exascale.misc.BufferedFileChannel;
 import com.exascale.misc.BufferedLinkedBlockingQueue;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MurmurHash;
@@ -373,7 +374,7 @@ public final class UnionOperator implements Operator, Serializable
 
 			if (distinct)
 			{
-				if (ResourceManager.lowMem())
+				if (ResourceManager.criticalMem())
 				{
 					inMem = false;
 					numFiles = (int)(estimate / (ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor"))) + 1);
@@ -614,8 +615,9 @@ public final class UnionOperator implements Operator, Serializable
 			try
 			{
 				ArrayList<FileChannel> fs = fcs.get(fileNum);
-				for (FileChannel fc : fs)
+				for (FileChannel f : fs)
 				{
+					FileChannel fc = new BufferedFileChannel(f);
 					fc.position(0);
 					ByteBuffer bb1 = ByteBuffer.allocate(4);
 					while (true)
@@ -904,8 +906,12 @@ public final class UnionOperator implements Operator, Serializable
 			int size = val.size() + 8;
 			final byte[] header = new byte[size];
 			int i = 8;
-			for (final Object o : val)
+			int z = 0;
+			int limit = val.size();
+			//for (final Object o : val)
+			while (z < limit)
 			{
+				Object o = val.get(z++);
 				if (o instanceof Long)
 				{
 					header[i] = (byte)0;
@@ -982,8 +988,12 @@ public final class UnionOperator implements Operator, Serializable
 			retvalBB.putInt(val.size());
 			retvalBB.position(header.length);
 			int x = 0;
-			for (final Object o : val)
+			z = 0;
+			limit = val.size();
+			//for (final Object o : val)
+			while (z < limit)
 			{
+				Object o = val.get(z++);
 				if (retval[i] == 0)
 				{
 					retvalBB.putLong((Long)o);

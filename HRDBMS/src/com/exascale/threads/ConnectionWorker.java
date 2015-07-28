@@ -91,7 +91,6 @@ public class ConnectionWorker extends HRDBMSThread
 	private static int PAGES_IN_ADVANCE;
 	private static ConcurrentHashMap<String, LoadMetaData> ldmds = new ConcurrentHashMap<String, LoadMetaData>(16, 0.75f, 6 * ResourceManager.cpus);
 	private static int maxLoad = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_load_average"));
-	private static int criticalMem = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("critical_mem_percent"));
 	private static long MAX_PAGES;
 	private static final ConcurrentHashMap<Long, Exception> loadExceptions = new ConcurrentHashMap<Long, Exception>(16, 0.75f, 64 * ResourceManager.cpus);
 	private static final ConcurrentHashMap<FlushLoadThread, FlushLoadThread> flThreads = new ConcurrentHashMap<FlushLoadThread, FlushLoadThread>(12000000, 0.75f, 64 * ResourceManager.cpus);
@@ -468,11 +467,6 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 
 		return retval;
-	}
-
-	private static boolean memoryOK()
-	{
-		return ((Runtime.getRuntime().freeMemory() + ResourceManager.maxMemory - Runtime.getRuntime().totalMemory()) * 100.0) / (ResourceManager.maxMemory * 1.0) > criticalMem;
 	}
 
 	private static boolean rebuildTree(ArrayList<Object> tree, String remove)
@@ -886,7 +880,7 @@ public class ConnectionWorker extends HRDBMSThread
 					double load = parseUptimeResult(uptimeCmdResult);
 					if (load <= (maxLoad * 1.0))
 					{
-						if (memoryOK())
+						if (!ResourceManager.criticalMem())
 						{
 							break;
 						}
@@ -5326,8 +5320,12 @@ public class ConnectionWorker extends HRDBMSThread
 		int size = val.size() + 8;
 		final byte[] header = new byte[size];
 		int i = 8;
-		for (final Object o : val)
+		int z = 0;
+		int limit = val.size();
+		//for (final Object o : val)
+		while (z < limit)
 		{
+			Object o = val.get(z++);
 			if (o instanceof Long)
 			{
 				header[i] = (byte)0;
@@ -5411,8 +5409,12 @@ public class ConnectionWorker extends HRDBMSThread
 		retvalBB.putInt(val.size());
 		retvalBB.position(header.length);
 		int x = 0;
-		for (final Object o : val)
+		z = 0;
+		limit = val.size();
+		//for (final Object o : val)
+		while (z < limit)
 		{
+			Object o = val.get(z++);
 			if (retval[i] == 0)
 			{
 				retvalBB.putLong((Long)o);

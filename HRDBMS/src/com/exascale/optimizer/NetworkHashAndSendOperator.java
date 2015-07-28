@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.concurrent.ConcurrentHashMap;
+import com.exascale.compression.CompressedOutputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MurmurHash;
@@ -284,6 +285,13 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 			HRDBMSWorker.logger.debug("But found " + numParents + " at runtime");
 			throw new Exception("NetworkHashAndSendOperator does not have the correct number of parents");
 		}
+		
+		OutputStream[] outs2 = new OutputStream[outs.length];
+		int i = 0;
+		for (OutputStream out : outs)
+		{
+			outs2[i++] = new CompressedOutputStream(out);
+		}
 		try
 		{
 			if (error)
@@ -304,7 +312,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 					if (o instanceof Exception)
 					{
 						HRDBMSWorker.logger.debug("", (Exception)o);
-						for (final OutputStream out : outs)
+						for (final OutputStream out : outs2)
 						{
 							out.write(obj);
 							out.flush();
@@ -322,8 +330,12 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 				}
 
 				key.clear();
-				for (final String col : hashCols)
+				int z = 0;
+				final int limit = hashCols.size();
+				//for (final String col : hashCols)
+				while (z < limit)
 				{
+					final String col = hashCols.get(z++);
 					int pos = -1;
 					try
 					{
@@ -341,7 +353,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 				final int hash = (int)(starting + ((0x0EFFFFFFFFFFFFFFL & hash(key)) % numNodes));
 				try
 				{
-					final OutputStream out = outs[hash];
+					final OutputStream out = outs2[hash];
 					out.write(obj);
 				}
 				catch (final NullPointerException e)
@@ -357,7 +369,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 			}
 
 			final byte[] obj = toBytes(o);
-			for (final OutputStream out : outs)
+			for (final OutputStream out : outs2)
 			{
 				out.write(obj);
 				out.flush();
@@ -382,7 +394,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 			}
 			catch (Exception f)
 			{
-				for (final OutputStream out : outs)
+				for (final OutputStream out : outs2)
 				{
 					try
 					{
@@ -393,7 +405,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 					}
 				}
 			}
-			for (final OutputStream out : outs)
+			for (final OutputStream out : outs2)
 			{
 				try
 				{

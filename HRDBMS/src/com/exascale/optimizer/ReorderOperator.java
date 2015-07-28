@@ -258,8 +258,12 @@ public final class ReorderOperator implements Operator, Serializable
 
 			final ArrayList<Object> row = (ArrayList<Object>)o;
 			final ArrayList<Object> retval = new ArrayList<Object>(order.size());
-			for (final String col : order)
+			int z = 0;
+			final int limit = order.size();
+			//for (final String col : order)
+			while (z < limit)
 			{
+				final String col = order.get(z++);
 				try
 				{
 					retval.add(row.get(child.getCols2Pos().get(col)));

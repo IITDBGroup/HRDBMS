@@ -15,6 +15,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import com.exascale.compression.CompressedInputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 import com.exascale.misc.BinomialHeap;
@@ -127,9 +128,8 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 	{
 		return meta;
 	}
-
-	@Override
-	public Object next(Operator op2) throws Exception
+	
+	public void start() throws Exception
 	{
 		if (!fullyStarted)
 		{
@@ -137,6 +137,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 			{
 				if (!fullyStarted)
 				{
+					super.start(true);
 					fullyStarted = true;
 					for (final Operator op : children)
 					{
@@ -174,6 +175,11 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 				}
 			}
 		}
+	}
+
+	@Override
+	public Object next(Operator op2) throws Exception
+	{
 		Object o;
 		o = outBuffer.take();
 
@@ -547,7 +553,8 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 		{
 			try
 			{
-				final InputStream in = ins.get(op);
+				final InputStream i = ins.get(op);
+				InputStream in = new CompressedInputStream(i);
 				final byte[] sizeBuff = new byte[4];
 				byte[] data = null;
 				while (true)

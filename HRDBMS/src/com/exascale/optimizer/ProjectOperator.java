@@ -197,8 +197,12 @@ public final class ProjectOperator implements Operator, Serializable
 
 		final ArrayList<Object> row = (ArrayList<Object>)o;
 		final ArrayList<Object> retval = new ArrayList<Object>(pos2Get.size());
-		for (final int pos : pos2Get)
+		int z = 0;
+		final int limit = pos2Get.size();
+		//for (final int pos : pos2Get)
+		while (z < limit)
 		{
+			final int pos = pos2Get.get(z++);
 			retval.add(row.get(pos));
 		}
 

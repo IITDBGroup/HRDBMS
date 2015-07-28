@@ -30,6 +30,8 @@ public class SubBufferManager
 	private final ConcurrentHashMap<Long, Block> unmodLookup;
 	private final boolean log;
 	private final MultiHashMap<Long, Page> myBuffers;
+	private static final ConcurrentHashMap<Page, Long> toExpire = new ConcurrentHashMap<Page, Long>();
+	private static final long EXPIRE_TIME = Long.parseLong(HRDBMSWorker.getHParms().getProperty("unpin_delay_ms"));
 
 	public SubBufferManager(boolean log)
 	{
@@ -159,7 +161,7 @@ public class SubBufferManager
 				{
 					if (wait)
 					{
-						LockSupport.parkNanos(100000);
+						Thread.yield();
 					}
 
 					synchronized (this)
@@ -173,7 +175,7 @@ public class SubBufferManager
 								continue;
 							}
 
-							index = chooseUnpinnedPage();
+							index = chooseUnpinnedPage(b.fileName());
 
 							if (index == -1)
 							{
@@ -248,6 +250,107 @@ public class SubBufferManager
 		}
 		Transaction.txListLock.readLock().unlock();
 	}
+	
+	public void pin(Block b, long txnum, boolean flag) throws Exception
+	{
+		// Transaction.txListLock.readLock().lock();
+		{
+			try
+			{
+				boolean wait = false;
+				while (true)
+				{
+					if (wait)
+					{
+						Thread.yield();
+					}
+
+					synchronized (this)
+					{
+						int index = findExistingPage(b);
+						if (index == -1)
+						{
+							if (!Transaction.txListLock.writeLock().tryLock())
+							{
+								wait = true;
+								continue;
+							}
+
+							index = chooseUnpinnedPage(b.fileName());
+
+							if (index == -1)
+							{
+								HRDBMSWorker.logger.error("Buffer pool exhausted.");
+								throw new BufferPoolExhaustedException();
+							}
+
+							if (numNotTouched > 0)
+							{
+								numNotTouched--;
+							}
+
+							if (bp[index].block() != null)
+							{
+								referencedLookup.remove(bp[index].pinTime());
+								unmodLookup.remove(bp[index].pinTime());
+								bp[index].setPinTime(-1);
+								pageLookup.remove(bp[index].block());
+							}
+							try
+							{
+								bp[index].assignToBlock(b, log, true);
+							}
+							catch (Exception e)
+							{
+								Transaction.txListLock.writeLock().unlock();
+								throw e;
+							}
+							Transaction.txListLock.readLock().lock();
+							Transaction.txListLock.writeLock().unlock();
+							if (pageLookup.containsKey(b))
+							{
+								Exception e = new Exception("About to put a duplicate page in the bufferpool");
+								HRDBMSWorker.logger.debug("", e);
+								throw e;
+							}
+							pageLookup.put(b, index);
+						}
+						else
+						{
+							if (!Transaction.txListLock.readLock().tryLock())
+							{
+								wait = true;
+								continue;
+							}
+						}
+
+						if (bp[index].pinTime() != -1)
+						{
+							referencedLookup.remove(bp[index].pinTime());
+							unmodLookup.remove(bp[index].pinTime());
+						}
+
+						final long lsn = LogManager.getLSN();
+						referencedLookup.put(lsn, b);
+						if (!bp[index].isModified())
+						{
+							unmodLookup.put(lsn, b);
+						}
+						bp[index].pin(lsn, txnum);
+						myBuffers.multiPut(txnum, bp[index]);
+					}
+
+					break;
+				}
+			}
+			catch (Exception e)
+			{
+				Transaction.txListLock.readLock().unlock();
+				throw e;
+			}
+		}
+		Transaction.txListLock.readLock().unlock();
+	}
 
 	public void pinFromMemory(Block b, long txnum, ByteBuffer data) throws Exception
 	{
@@ -260,7 +363,7 @@ public class SubBufferManager
 				{
 					if (wait)
 					{
-						LockSupport.parkNanos(100000);
+						Thread.yield();
 					}
 
 					synchronized (this)
@@ -273,7 +376,7 @@ public class SubBufferManager
 							continue;
 						}
 
-						index = chooseUnpinnedPage();
+						index = chooseUnpinnedPage(b.fileName());
 
 						if (index == -1)
 						{
@@ -369,6 +472,8 @@ public class SubBufferManager
 		{
 			myBuffers.multiRemove(txnum, p);
 		}
+		
+		toExpire.put(p, System.currentTimeMillis());
 	}
 
 	public synchronized void unpinAll(long txnum)
@@ -440,15 +545,81 @@ public class SubBufferManager
 		}
 	}
 
-	private synchronized int chooseUnpinnedPage()
+	private synchronized int chooseUnpinnedPage(String newFN)
 	{
 		if (numNotTouched > 0)
 		{
 			return numAvailable - numNotTouched;
 		}
+		
+		String partial = newFN.substring(newFN.lastIndexOf('/') + 1);
 
+		//int checked = 0;
 		synchronized (unmodLookup)
 		{
+			if (!unmodLookup.isEmpty())
+			{
+				for (final Block b : unmodLookup.values())
+				{
+					//if (checked < 1000 && b.fileName().endsWith(partial))
+					if (b.fileName().endsWith(partial))
+					{
+						//checked++;
+						continue;
+					}
+					//else if (checked < 2000 && b.fileName().equals(newFN))
+					//{
+					//	checked++;
+					//	continue;
+					//}
+					
+					final int index = pageLookup.get(b);
+					if (!bp[index].isPinned())
+					{
+						Long time = toExpire.get(this.bp[index]);
+						if (time == null)
+						{
+							return index;
+						}
+						
+						if (time + EXPIRE_TIME < System.currentTimeMillis())
+						{
+							toExpire.remove(this.bp[index]);
+							return index;
+						}
+					}
+				}
+			}
+			
+			if (!unmodLookup.isEmpty())
+			{
+				for (final Block b : unmodLookup.values())
+				{
+					//else if (checked < 2000 && b.fileName().equals(newFN))
+					if (b.fileName().equals(newFN))
+					{
+						//checked++;
+						continue;
+					}
+					
+					final int index = pageLookup.get(b);
+					if (!bp[index].isPinned())
+					{
+						Long time = toExpire.get(this.bp[index]);
+						if (time == null)
+						{
+							return index;
+						}
+						
+						if (time + EXPIRE_TIME < System.currentTimeMillis())
+						{
+							toExpire.remove(this.bp[index]);
+							return index;
+						}
+					}
+				}
+			}
+			
 			if (!unmodLookup.isEmpty())
 			{
 				for (final Block b : unmodLookup.values())
@@ -456,7 +627,17 @@ public class SubBufferManager
 					final int index = pageLookup.get(b);
 					if (!bp[index].isPinned())
 					{
-						return index;
+						Long time = toExpire.get(this.bp[index]);
+						if (time == null)
+						{
+							return index;
+						}
+						
+						if (time + EXPIRE_TIME < System.currentTimeMillis())
+						{
+							toExpire.remove(this.bp[index]);
+							return index;
+						}
 					}
 				}
 			}

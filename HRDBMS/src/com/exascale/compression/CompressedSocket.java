@@ -46,8 +46,8 @@ public final class CompressedSocket extends Socket
 	public CompressedSocket() throws SocketException
 	{
 		super();
-		this.setSendBufferSize(64 * 1024 * 1024);
-		this.setReceiveBufferSize(64 * 1024 * 1024);
+		//this.setSendBufferSize(64 * 1024 * 1024);
+		//this.setReceiveBufferSize(64 * 1024 * 1024);
 	}
 
 	/**

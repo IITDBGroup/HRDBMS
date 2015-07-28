@@ -73,7 +73,7 @@ public final class TableScanOperator implements Operator, Serializable
 	private transient HashMap<Operator, HashSet<HashMap<Filter, Filter>>> filters = new HashMap<Operator, HashSet<HashMap<Filter, Filter>>>();
 	protected HashMap<Operator, CNFFilter> orderedFilters = new HashMap<Operator, CNFFilter>();
 	private MetaData meta;
-	private transient final HashMap<Operator, Operator> opParents = new HashMap<Operator, Operator>();
+	private transient HashMap<Operator, Operator> opParents = new HashMap<Operator, Operator>();
 	private ArrayList<Integer> neededPos;
 	private ArrayList<Integer> fetchPos;
 	private String[] midPos2Col;
@@ -1003,6 +1003,11 @@ public final class TableScanOperator implements Operator, Serializable
 
 		return parents;
 	}
+	
+	public void rebuild()
+	{
+		opParents = new HashMap<Operator, Operator>();
+	}
 
 	public boolean phase2Done()
 	{
@@ -1758,8 +1763,12 @@ public final class TableScanOperator implements Operator, Serializable
 								{
 									Block[] toRequest2 = new Block[toRequest.size()];
 									int j = 0;
-									for (Block b : toRequest)
+									int z = 0;
+									final int limit = toRequest.size();
+									//for (Block b : toRequest)
+									while (z < limit)
 									{
+										Block b = toRequest.get(z++);
 										toRequest2[j] = b;
 										j++;
 									}
@@ -1861,8 +1870,8 @@ public final class TableScanOperator implements Operator, Serializable
 								j++;
 							}
 
-							if (!optimize)
-							{
+							//if (!optimize)
+							//{
 								// for (final Map.Entry entry :
 								// readBuffers.entrySet())
 								// {
@@ -1894,8 +1903,8 @@ public final class TableScanOperator implements Operator, Serializable
 								// q.put(newRow);
 								// }
 								// }
-							}
-							else
+							//}
+							//else
 							{
 								if (filter != null)
 								{
@@ -1904,8 +1913,12 @@ public final class TableScanOperator implements Operator, Serializable
 										if (!getRID)
 										{
 											int i = 0;
-											for (Object o : row)
+											int z = 0;
+											final int limit = row.size();
+											//for (Object o : row)
+											while (z < limit)
 											{
+												Object o = row.get(z++);
 												if (o == null)
 												{
 													int temp = fetchPos.get(i);
@@ -1923,9 +1936,12 @@ public final class TableScanOperator implements Operator, Serializable
 										if (neededPosNeeded)
 										{
 											final ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
-											for (final int pos : neededPos)
+											int z = 0;
+											final int limit = neededPos.size();
+											//for (final int pos : neededPos)
+											while (z < limit)
 											{
-												newRow.add(row.get(pos));
+												newRow.add(row.get(neededPos.get(z++)));
 											}
 											if (!forceDone)
 											{
@@ -2150,8 +2166,12 @@ public final class TableScanOperator implements Operator, Serializable
 										if (!getRID)
 										{
 											int i = 0;
-											for (Object o2 : row)
+											int z = 0;
+											final int limit = row.size();
+											//for (Object o2 : row)
+											while (z < limit)
 											{
+												Object o2 = row.get(z++);
 												if (o2 == null)
 												{
 													FieldValue fv = r.getCol(fetchPos.get(i));

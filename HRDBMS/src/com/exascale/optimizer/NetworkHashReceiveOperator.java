@@ -68,9 +68,8 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 	{
 		return ID;
 	}
-
-	@Override
-	public Object next(Operator op2) throws Exception
+	
+	public void start() throws Exception
 	{
 		if (!fullyStarted)
 		{
@@ -78,6 +77,7 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 			{
 				if (!fullyStarted)
 				{
+					super.start(true);
 					HRDBMSWorker.logger.debug("Starting NetworkHashReceiveOperator(" + node + ") ID = " + ID);
 					fullyStarted = true;
 					for (final Operator op : children)
@@ -131,6 +131,11 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 				}
 			}
 		}
+	}
+
+	@Override
+	public Object next(Operator op2) throws Exception
+	{
 		Object o;
 		o = outBuffer.take();
 

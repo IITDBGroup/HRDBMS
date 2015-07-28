@@ -1,6 +1,7 @@
 package com.exascale.optimizer;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import com.exascale.managers.HRDBMSWorker;
@@ -15,7 +16,7 @@ public final class Phase5
 	private final HashMap<Operator, Long> cCache = new HashMap<Operator, Long>();
 	private final Transaction tx;
 	private final HashMap<ArrayList<Filter>, Double> likelihoodCache;
-	private static final long MAX_GB = (long)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")));
+	public static final long MAX_GB = (long)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("sort_gb_factor")));
 
 	public Phase5(RootOperator root, Transaction tx, HashMap<ArrayList<Filter>, Double> likelihoodCache)
 	{
@@ -493,6 +494,121 @@ public final class Phase5
 		// Phase1.printTree(root, 0);
 		sortLimit(root, new HashSet<Operator>());
 		indexOnlyScan(root, new HashSet<Operator>());
+		rhsIsUnique(root, new HashSet<Operator>());
+	}
+	
+	private MultiOperator leadsToGB(Operator op)
+	{
+		Operator next = op.children().get(1);
+		while (!(next instanceof TableScanOperator))
+		{
+			if (next.children().size() > 1)
+			{
+				return null;
+			}
+			
+			if (next instanceof MultiOperator)
+			{
+				return (MultiOperator)next;
+			}
+			
+			next = next.children().get(0);
+		}
+		
+		return null;
+	}
+	
+	private TableScanOperator leadsToTSO(Operator op)
+	{
+		Operator next = op.children().get(1);
+		while (true)
+		{
+			if (next.children().size() > 1)
+			{
+				return null;
+			}
+			
+			if (next instanceof TableScanOperator)
+			{
+				return (TableScanOperator)next;
+			}
+			
+			next = next.children().get(0);
+		}
+	}
+	
+	private boolean keysSame(ArrayList<String> l, ArrayList<String> r)
+	{
+		if (l.size() != r.size())
+		{
+			return false;
+		}
+		
+		ArrayList<String> lhs = (ArrayList<String>)l.clone();
+		ArrayList<String> rhs = (ArrayList<String>)r.clone();
+		Collections.sort(lhs);
+		Collections.sort(rhs);
+		return lhs.equals(rhs);
+	}
+	
+	private boolean isUnique(TableScanOperator tso, ArrayList<String> cols) throws Exception
+	{
+		final ArrayList<Index> available = meta.getUniqueIndexesForTable(tso.getSchema(), tso.getTable(), tx);
+		Index best = null;
+		int bestSize = Integer.MAX_VALUE;
+		for (Index index : available)
+		{
+			if (index.getKeys().containsAll(cols))
+			{
+				return true;
+			}
+		}
+		
+		return false;
+	}
+	
+	private void rhsIsUnique(Operator op, HashSet<Operator> touched) throws Exception
+	{
+		if (touched.contains(op))
+		{
+			return;
+		}
+		
+		touched.add(op);
+		
+		if (op instanceof HashJoinOperator)
+		{
+			MultiOperator gb = leadsToGB(op);
+			if (gb != null && keysSame(gb.getKeys(), ((HashJoinOperator)op).getRights()))
+			{
+				((HashJoinOperator)op).setRHSUnique();
+			}
+			
+			TableScanOperator tso = leadsToTSO(op);
+			if (tso != null && isUnique(tso, ((HashJoinOperator)op).getRights()))
+			{
+				((HashJoinOperator)op).setRHSUnique();
+			}
+		}
+		else if (op instanceof NestedLoopJoinOperator)
+		{
+			MultiOperator gb = leadsToGB(op);
+			if (gb != null && ((NestedLoopJoinOperator)op).usesHash() && keysSame(gb.getKeys(), ((NestedLoopJoinOperator)op).getJoinForChild(op.children().get(1))))
+			{
+				((NestedLoopJoinOperator)op).setRHSUnique();
+			}
+			
+			TableScanOperator tso = leadsToTSO(op);
+			if (tso != null && ((NestedLoopJoinOperator)op).usesHash() && isUnique(tso, ((NestedLoopJoinOperator)op).getJoinForChild(op.children().get(1))))
+			{
+				((NestedLoopJoinOperator)op).setRHSUnique();
+			}
+		}
+		
+		for (Operator o : op.children())
+		{
+			rhsIsUnique(o, touched);
+		}
 	}
 	
 	private void indexOnlyScan(Operator op, HashSet<Operator> touched) throws Exception
@@ -600,7 +716,7 @@ public final class Phase5
 				TopOperator top = (TopOperator)op;
 				long limit = top.getRemaining();
 				
-				if (limit < ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")))
+				if (limit < ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")) / 2)
 				{
 					sop.setLimit(limit);
 				}

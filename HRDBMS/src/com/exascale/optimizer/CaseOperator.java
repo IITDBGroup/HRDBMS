@@ -251,8 +251,12 @@ public final class CaseOperator implements Operator, Serializable
 		if (!(o instanceof DataEndMarker) && !(o instanceof Exception))
 		{
 			int i = 0;
-			for (final HashSet<HashMap<Filter, Filter>> aCase : filters)
+			int z = 0;
+			final int limit = filters.size();
+			//for (final HashSet<HashMap<Filter, Filter>> aCase : filters)
+			while (z < limit)
 			{
+				final HashSet<HashMap<Filter, Filter>> aCase = filters.get(z++);
 				if (passesCase((ArrayList<Object>)o, cols2Pos, aCase))
 				{
 					Object obj = results.get(i);

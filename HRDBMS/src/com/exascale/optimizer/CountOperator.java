@@ -223,8 +223,12 @@ public final class CountOperator implements AggregateOperator, Serializable
 			else
 			{
 				result = 0;
-				for (final Object o : rows)
+				int z = 0;
+				final int limit = rows.size();
+				//for (final Object o : rows)
+				while (z < limit)
 				{
+					final Object o = rows.get(z++);
 					final ArrayList<Object> row = (ArrayList<Object>)o;
 					row.get(pos);
 					result++; // TODO only increment if not null

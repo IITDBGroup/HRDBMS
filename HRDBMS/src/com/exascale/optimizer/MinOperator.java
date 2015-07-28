@@ -294,8 +294,12 @@ public final class MinOperator implements AggregateOperator, Serializable
 			final int pos = cols2Pos.get(input);
 			min = null;
 
-			for (final Object orow : rows)
+			int z = 0;
+			final int limit = rows.size();
+			//for (final Object orow : rows)
+			while (z < limit)
 			{
+				final Object orow = rows.get(z++);
 				final ArrayList<Object> row = (ArrayList<Object>)orow;
 				if (isInt)
 				{
