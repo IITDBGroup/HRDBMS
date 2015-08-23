@@ -28,6 +28,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.LockSupport;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
@@ -393,7 +394,7 @@ public final class LoadOperator implements Operator, Serializable
 				else if (o instanceof MyDate)
 				{
 					header[i] = (byte)3;
-					size += 8;
+					size += 4;
 				}
 				else if (o instanceof String)
 				{
@@ -455,7 +456,7 @@ public final class LoadOperator implements Operator, Serializable
 				}
 				else if (retval[i] == 3)
 				{
-					retvalBB.putLong(((MyDate)o).getTime());
+					retvalBB.putInt(((MyDate)o).getTime());
 				}
 				else if (retval[i] == 4)
 				{
@@ -590,7 +591,7 @@ public final class LoadOperator implements Operator, Serializable
 	{
 		while (!done)
 		{
-			Thread.sleep(1);
+			LockSupport.parkNanos(500);
 		}
 
 		if (num.get() == Integer.MIN_VALUE)
@@ -761,8 +762,12 @@ public final class LoadOperator implements Operator, Serializable
 		{
 			throw new Exception("Load input files were not found!");
 		}
+		HRDBMSWorker.logger.debug("Going to load from: ");
+		int debug = 1;
 		for (Path path : files)
 		{
+			HRDBMSWorker.logger.debug(debug + ") " + path);
+			debug++;
 			threads.add(new ReadThread(path.toFile(), pos2Length, indexes, cols2Pos, cols2Types, pos2Col, spmd, keys, types, orders));
 		}
 
@@ -1080,17 +1085,24 @@ public final class LoadOperator implements Operator, Serializable
 		public void run()
 		{
 			ok = true;
-			ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
+			if (!force && map.totalSize() <= MAX_BATCH)
+			{
+				return;
+			}
+			
+			ArrayList<FlushThread> threads = null;
+			
 			synchronized(waitThreads)
 			{
 				lock.writeLock().lock();
 				{
-					if (!force && map.size() <= MAX_NEIGHBOR_NODES && map.totalSize() <= MAX_BATCH)
+					if (!force && map.totalSize() <= MAX_BATCH)
 					{
 						lock.writeLock().unlock();
 						return;
 					}
 					
+					threads = new ArrayList<FlushThread>();
 					for (Object o : map.getKeySet())
 					{
 						long key = (Long)o;
@@ -1162,7 +1174,7 @@ public final class LoadOperator implements Operator, Serializable
 					{
 						try
 						{
-							Thread.sleep(1000);
+							Thread.sleep(10);
 						}
 						catch(InterruptedException e)
 						{}
@@ -1456,20 +1468,7 @@ public final class LoadOperator implements Operator, Serializable
 						map.multiPut(key, row);
 					}
 					lock.readLock().unlock();
-					if (map.size() > MAX_NEIGHBOR_NODES)
-					{
-						if (master != null)
-						{
-							master.join();
-							if (!master.getOK())
-							{
-								throw new Exception("Error flushing inserts");
-							}
-						}
-						
-						master = flush(indexes, spmd, keys, types, orders);
-					}
-					else if (map.totalSize() > MAX_BATCH)
+					if (map.totalSize() > MAX_BATCH)
 					{
 						if (master != null)
 						{

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 import com.exascale.tables.Transaction;
@@ -494,7 +495,48 @@ public final class Phase5
 		// Phase1.printTree(root, 0);
 		sortLimit(root, new HashSet<Operator>());
 		indexOnlyScan(root, new HashSet<Operator>());
-		rhsIsUnique(root, new HashSet<Operator>());
+		pruneTree(root, new IdentityHashMap<Operator, Operator>());
+	}
+	
+	private void pruneTree(Operator op, IdentityHashMap<Operator, Operator> covered)
+	{
+		if (op instanceof NetworkHashReceiveOperator)
+		{
+			Operator o = op.children().get(0);
+			if (covered.containsKey(o))
+			{
+				return;
+			}
+			else
+			{
+				((NetworkHashReceiveOperator)op).setSend();
+				for (Operator o2 : op.children())
+				{
+					covered.put(o2, o2);
+				}
+			}
+		}
+		else if (op instanceof NetworkHashReceiveAndMergeOperator)
+		{
+			Operator o = op.children().get(0);
+			if (covered.containsKey(o))
+			{
+				return;
+			}
+			else
+			{
+				((NetworkHashReceiveAndMergeOperator)op).setSend();
+				for (Operator o2 : op.children())
+				{
+					covered.put(o2, o2);
+				}
+			}
+		}
+		
+		for (Operator o : op.children())
+		{
+			pruneTree(o, covered);
+		}
 	}
 	
 	private MultiOperator leadsToGB(Operator op)
@@ -537,88 +579,17 @@ public final class Phase5
 		}
 	}
 	
-	private boolean keysSame(ArrayList<String> l, ArrayList<String> r)
-	{
-		if (l.size() != r.size())
-		{
-			return false;
-		}
-		
-		ArrayList<String> lhs = (ArrayList<String>)l.clone();
-		ArrayList<String> rhs = (ArrayList<String>)r.clone();
-		Collections.sort(lhs);
-		Collections.sort(rhs);
-		return lhs.equals(rhs);
-	}
-	
-	private boolean isUnique(TableScanOperator tso, ArrayList<String> cols) throws Exception
-	{
-		final ArrayList<Index> available = meta.getUniqueIndexesForTable(tso.getSchema(), tso.getTable(), tx);
-		Index best = null;
-		int bestSize = Integer.MAX_VALUE;
-		for (Index index : available)
-		{
-			if (index.getKeys().containsAll(cols))
-			{
-				return true;
-			}
-		}
-		
-		return false;
-	}
-	
-	private void rhsIsUnique(Operator op, HashSet<Operator> touched) throws Exception
-	{
-		if (touched.contains(op))
-		{
-			return;
-		}
-		
-		touched.add(op);
-		
-		if (op instanceof HashJoinOperator)
-		{
-			MultiOperator gb = leadsToGB(op);
-			if (gb != null && keysSame(gb.getKeys(), ((HashJoinOperator)op).getRights()))
-			{
-				((HashJoinOperator)op).setRHSUnique();
-			}
-			
-			TableScanOperator tso = leadsToTSO(op);
-			if (tso != null && isUnique(tso, ((HashJoinOperator)op).getRights()))
-			{
-				((HashJoinOperator)op).setRHSUnique();
-			}
-		}
-		else if (op instanceof NestedLoopJoinOperator)
-		{
-			MultiOperator gb = leadsToGB(op);
-			if (gb != null && ((NestedLoopJoinOperator)op).usesHash() && keysSame(gb.getKeys(), ((NestedLoopJoinOperator)op).getJoinForChild(op.children().get(1))))
-			{
-				((NestedLoopJoinOperator)op).setRHSUnique();
-			}
-			
-			TableScanOperator tso = leadsToTSO(op);
-			if (tso != null && ((NestedLoopJoinOperator)op).usesHash() && isUnique(tso, ((NestedLoopJoinOperator)op).getJoinForChild(op.children().get(1))))
-			{
-				((NestedLoopJoinOperator)op).setRHSUnique();
-			}
-		}
-		
-		for (Operator o : op.children())
-		{
-			rhsIsUnique(o, touched);
-		}
-	}
-	
 	private void indexOnlyScan(Operator op, HashSet<Operator> touched) throws Exception
 	{
-		if (touched.contains(op))
+		if (op instanceof NetworkSendOperator)
 		{
-			return;
-		}
+			if (touched.contains(op))
+			{
+				return;
+			}
 
-		touched.add(op);
+			touched.add(op);
+		}
 		
 		if (op instanceof TableScanOperator && op.children().size() == 0)
 		{
@@ -660,12 +631,15 @@ public final class Phase5
 	
 	private void largeGBs(Operator op, HashSet<Operator> touched) throws Exception
 	{
-		if (touched.contains(op))
+		if (op instanceof NetworkSendOperator)
 		{
-			return;
-		}
+			if (touched.contains(op))
+			{
+				return;
+			}
 
-		touched.add(op);
+			touched.add(op);
+		}
 		
 		if (op instanceof MultiOperator)
 		{
@@ -673,23 +647,7 @@ public final class Phase5
 			if (card > MAX_GB)
 			{
 				MultiOperator mop = (MultiOperator)op;
-				if (!mop.isSorted())
-				{
-					Operator child = mop.children().get(0);
-					ArrayList<String> cols = mop.getKeys();
-					ArrayList<Boolean> orders = new ArrayList<Boolean>();
-					int i = 0;
-					while (i < cols.size())
-					{
-						orders.add(true);
-						i++;
-					}
-					SortOperator sop = new SortOperator(cols, orders, meta);
-					mop.removeChild(child);
-					sop.add(child);
-					mop.add(sop);
-					mop.setSorted();
-				}
+				mop.setExternal();
 			}
 		}
 		
@@ -701,12 +659,15 @@ public final class Phase5
 	
 	private void sortLimit(Operator op, HashSet<Operator> touched)
 	{
-		if (touched.contains(op))
+		if (op instanceof NetworkSendOperator)
 		{
-			return;
-		}
+			if (touched.contains(op))
+			{
+				return;
+			}
 
-		touched.add(op);
+			touched.add(op);
+		}
 		
 		if (op instanceof TopOperator)
 		{
@@ -1314,12 +1275,16 @@ public final class Phase5
 
 	private void setCards(Operator op, HashSet<Operator> touched) throws Exception
 	{
-		if (touched.contains(op))
+		if (op instanceof NetworkSendOperator)
 		{
-			return;
-		}
+			if (touched.contains(op))
+			{
+				return;
+			}
 
-		touched.add(op);
+			touched.add(op);
+		}
+		
 		if (op instanceof MultiOperator)
 		{
 			final long xl = card(op);
@@ -1607,13 +1572,17 @@ public final class Phase5
 
 	private void setSpecificCoord(Operator op, HashSet<Operator> touched) throws Exception
 	{
-		if (touched.contains(op))
+		if (op instanceof NetworkSendOperator)
 		{
-			return;
-		}
+			if (touched.contains(op))
+			{
+				return;
+			}
 
-		touched.add(op);
+			touched.add(op);
+		}
 		if (op.getNode() == -1)
+			
 		{
 			op.setNode(MetaData.myCoordNum());
 		}
@@ -1626,12 +1595,16 @@ public final class Phase5
 
 	private void turnOffDistinctUnion(Operator op, boolean seenIntersect, HashSet<Operator> touched)
 	{
-		if (touched.contains(op))
+		if (op instanceof NetworkSendOperator)
 		{
-			return;
-		}
+			if (touched.contains(op))
+			{
+				return;
+			}
 
-		touched.add(op);
+			touched.add(op);
+		}
+		
 		if (op instanceof UnionOperator)
 		{
 			// System.out.println("UnionOperator");

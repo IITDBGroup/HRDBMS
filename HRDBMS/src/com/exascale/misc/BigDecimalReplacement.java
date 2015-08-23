@@ -31,7 +31,7 @@ public class BigDecimalReplacement
 		this.decPos = decPos;
 	}
 
-	public void add(BigDecimalReplacement val)
+	public synchronized void add(BigDecimalReplacement val)
 	{
 		BigDecimalReplacement rhs = null;
 		short resDecPos;

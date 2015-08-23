@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.TreeMap;
 import com.exascale.compression.CompressedInputStream;
+import com.exascale.compression.CompressedOutputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 import com.exascale.misc.BufferedLinkedBlockingQueue;
@@ -584,7 +585,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 				else if (bytes[i + 4] == 3)
 				{
 					// date
-					final MyDate o = new MyDate(bb.getLong());
+					final MyDate o = new MyDate(bb.getInt());
 					retval.add(o);
 				}
 				else if (bytes[i + 4] == 4)

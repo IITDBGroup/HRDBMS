@@ -14,6 +14,9 @@ import com.exascale.tables.Transaction;
 public final class Phase3
 {
 	protected static final int MAX_INCOMING_CONNECTIONS = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes")); // 100
+	private static final int MAX_LOCAL_NO_HASH_PRODUCT = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_local_no_hash_product")); // 1000000
+	private static final int MAX_LOCAL_LEFT_HASH = (int)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")));
+	private static final int MAX_LOCAL_SORT = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_local_sort")); // 1000000
 	protected static int colSuffix = 0;
 	private static Random random = new Random(System.currentTimeMillis());
 	private final RootOperator root;
@@ -1472,7 +1475,7 @@ public final class Phase3
 
 		
 		final long card = card(parent);
-		if (card > Phase5.MAX_GB && parent.getKeys().size() > 0)
+		if (!noLargeUpstreamJoins(parent) && parent.getKeys().size() > 0)
 		{
 			final ArrayList<String> cols2 = new ArrayList<String>(parent.getKeys());
 			boolean rehash = false;
@@ -1805,6 +1808,135 @@ public final class Phase3
 			throw e;
 		}
 		return false;
+	}
+	
+	private boolean noLargeUpstreamJoins(Operator op) throws Exception
+	{
+		Operator o = op.parent();
+		while (!(o instanceof RootOperator))
+		{
+			if (o instanceof ProductOperator)
+			{
+				long l = card(o.children().get(0));
+				long r = card(o.children().get(1));
+				if (l == 0)
+				{
+					l = 1;
+				}
+
+				if (r == 0)
+				{
+					r = 1;
+				}
+				if (l * r <= MAX_LOCAL_NO_HASH_PRODUCT && noLargeUpstreamJoins(o))
+				{
+					return true;
+				}
+
+				return false;
+			}
+
+			if (o instanceof HashJoinOperator)
+			{
+				if (card(o.children().get(0)) + card(o.children().get(1)) <= MAX_LOCAL_LEFT_HASH && noLargeUpstreamJoins(o))
+				{
+					return true;
+				}
+
+				return false;
+			}
+
+			if (o instanceof NestedLoopJoinOperator)
+			{
+				long l = card(o.children().get(0));
+				long r = card(o.children().get(1));
+				if (l == 0)
+				{
+					l = 1;
+				}
+
+				if (r == 0)
+				{
+					r = 1;
+				}
+				if (((NestedLoopJoinOperator)o).usesHash() && l + r <= MAX_LOCAL_LEFT_HASH && noLargeUpstreamJoins(o))
+				{
+					return true;
+				}
+				else if (((NestedLoopJoinOperator)o).usesSort() && card(o) <= MAX_LOCAL_NO_HASH_PRODUCT && r <= MAX_LOCAL_SORT && noLargeUpstreamJoins(o))
+				{
+					return true;
+				}
+				else if (l * r <= MAX_LOCAL_NO_HASH_PRODUCT && noLargeUpstreamJoins(o))
+				{
+					return true;
+				}
+
+				return false;
+			}
+
+			if (o instanceof SemiJoinOperator)
+			{
+				long l = card(o.children().get(0));
+				long r = card(o.children().get(1));
+				if (l == 0)
+				{
+					l = 1;
+				}
+
+				if (r == 0)
+				{
+					r = 1;
+				}
+				if (((SemiJoinOperator)o).usesHash() && l + r <= MAX_LOCAL_LEFT_HASH && noLargeUpstreamJoins(o))
+				{
+					return true;
+				}
+				else if (((SemiJoinOperator)o).usesSort() && card(o) <= MAX_LOCAL_NO_HASH_PRODUCT && r <= MAX_LOCAL_SORT && noLargeUpstreamJoins(o))
+				{
+					return true;
+				}
+				else if (l * r <= MAX_LOCAL_NO_HASH_PRODUCT && noLargeUpstreamJoins(o))
+				{
+					return true;
+				}
+
+				return false;
+			}
+
+			if (o instanceof AntiJoinOperator)
+			{
+				long l = card(o.children().get(0));
+				long r = card(o.children().get(1));
+				if (l == 0)
+				{
+					l = 1;
+				}
+
+				if (r == 0)
+				{
+					r = 1;
+				}
+				if (((AntiJoinOperator)o).usesHash() && l + r <= MAX_LOCAL_LEFT_HASH && noLargeUpstreamJoins(o))
+				{
+					return true;
+				}
+				else if (((AntiJoinOperator)o).usesSort() && card(o) <= MAX_LOCAL_NO_HASH_PRODUCT && r <= MAX_LOCAL_SORT && noLargeUpstreamJoins(o))
+				{
+					return true;
+				}
+				else if (l * r <= MAX_LOCAL_NO_HASH_PRODUCT && noLargeUpstreamJoins(o))
+				{
+					return true;
+				}
+
+				return false;
+			}
+
+			o = o.parent();
+		}
+
+		return true;
 	}
 
 	private boolean handleNested(NetworkReceiveOperator receive) throws Exception
@@ -3041,6 +3173,21 @@ public final class Phase3
 					final Operator op = receive.parent();
 					if (op instanceof SelectOperator || op instanceof YearOperator || op instanceof SubstringOperator || op instanceof ProjectOperator || op instanceof ExtendOperator || op instanceof RenameOperator || op instanceof ReorderOperator || op instanceof CaseOperator || op instanceof ExtendObjectOperator || op instanceof DateMathOperator || op instanceof ConcatOperator)
 					{
+						if (op instanceof SelectOperator)
+						{
+							int count = 1;
+							Operator parent = op.parent();
+							while (parent instanceof SelectOperator)
+							{
+								count++;
+								parent = parent.parent();
+							}
+							
+							if (count >= 20)
+							{
+								break;
+							}
+						}
 						pushAcross(receive);
 						// HRDBMSWorker.logger.debug("Push across");
 						// Phase1.printTree(root, 0);

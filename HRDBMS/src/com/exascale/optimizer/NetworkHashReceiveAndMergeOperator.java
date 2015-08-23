@@ -16,6 +16,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import com.exascale.compression.CompressedInputStream;
+import com.exascale.compression.CompressedOutputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.BinomialHeap;
 import com.exascale.misc.DataEndMarker;
@@ -29,6 +30,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 	private static long offset;
 
 	private static sun.misc.Unsafe unsafe;
+	private boolean send = false;
 
 	static
 	{
@@ -60,6 +62,11 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 		this.orders = orders;
 		this.ID = ID;
 	}
+	
+	public void setSend()
+	{
+		send = true;
+	}
 
 	public static NetworkHashReceiveAndMergeOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
 	{
@@ -78,6 +85,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 		value.orders = OperatorUtils.deserializeALB(in, prev);
 		value.ID = OperatorUtils.readInt(in);
 		value.sortPos = OperatorUtils.deserializeIntArray(in, prev);
+		value.send = OperatorUtils.readBool(in);
 		value.cd = cs.newDecoder();
 		return value;
 	}
@@ -121,6 +129,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 	{
 		final NetworkHashReceiveAndMergeOperator retval = new NetworkHashReceiveAndMergeOperator(ID, sortCols, orders, meta);
 		retval.node = node;
+		retval.send = send;
 		return retval;
 	}
 
@@ -171,24 +180,39 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 						outs.put(child, out);
 						final InputStream in = new BufferedInputStream(sock.getInputStream(), 65536);
 						ins.put(child, in);
-						final byte[] command = "SNDRMTTR".getBytes(StandardCharsets.UTF_8);
-						final byte[] from = intToBytes(node);
-						final byte[] to = intToBytes(child.getNode());
-						final byte[] idBytes = intToBytes(ID);
-						final byte[] data = new byte[command.length + from.length + to.length + idBytes.length];
-						System.arraycopy(command, 0, data, 0, 8);
-						System.arraycopy(from, 0, data, 8, 4);
-						System.arraycopy(to, 0, data, 12, 4);
-						System.arraycopy(idBytes, 0, data, 16, 4);
-						out.write(data);
-						out.flush();
-						final int doSend = in.read();
-						if (doSend != 0)
+						
+						if (send)
 						{
+							final byte[] command = "SNDRMTTR".getBytes(StandardCharsets.UTF_8);
+							final byte[] from = intToBytes(node);
+							final byte[] to = intToBytes(child.getNode());
+							final byte[] idBytes = intToBytes(ID);
+							final byte[] data = new byte[command.length + from.length + to.length + idBytes.length];
+							System.arraycopy(command, 0, data, 0, 8);
+							System.arraycopy(from, 0, data, 8, 4);
+							System.arraycopy(to, 0, data, 12, 4);
+							System.arraycopy(idBytes, 0, data, 16, 4);
+							out.write(data);
+							out.flush();
+					
 							IdentityHashMap<Object, Long> map = new IdentityHashMap<Object, Long>();
 							child.serialize(out, map);
 							map.clear();
 							map = null;
+							out.flush();
+						}
+						else
+						{
+							final byte[] command = "SNDRMTT2".getBytes(StandardCharsets.UTF_8);
+							final byte[] from = intToBytes(node);
+							final byte[] to = intToBytes(child.getNode());
+							final byte[] idBytes = intToBytes(ID);
+							final byte[] data = new byte[command.length + from.length + to.length + idBytes.length];
+							System.arraycopy(command, 0, data, 0, 8);
+							System.arraycopy(from, 0, data, 8, 4);
+							System.arraycopy(to, 0, data, 12, 4);
+							System.arraycopy(idBytes, 0, data, 16, 4);
+							out.write(data);
 							out.flush();
 						}
 					}
@@ -253,7 +277,14 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 		OperatorUtils.writeType(73, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		// recreate meta
-		OperatorUtils.serializeALOp(children, out, prev);
+		if (send)
+		{
+			OperatorUtils.serializeALOp(children, out, prev);
+		}
+		else
+		{
+			OperatorUtils.serializeALOp(children, out, prev, false);
+		}
 		parent.serialize(out, prev);
 		OperatorUtils.serializeStringHM(cols2Types, out, prev);
 		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
@@ -265,6 +296,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 		OperatorUtils.serializeALB(orders, out, prev);
 		OperatorUtils.writeInt(ID, out);
 		OperatorUtils.serializeIntArray(sortPos, out, prev);
+		OperatorUtils.writeBool(send, out);
 	}
 
 	public void setID(int id)
@@ -563,7 +595,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 				else if (bytes[i + 4] == 3)
 				{
 					// date
-					final MyDate o = new MyDate(bb.getLong());
+					final MyDate o = new MyDate(bb.getInt());
 					retval.add(o);
 				}
 				else if (bytes[i + 4] == 4)

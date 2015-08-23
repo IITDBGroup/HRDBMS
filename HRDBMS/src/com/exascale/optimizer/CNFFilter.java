@@ -304,7 +304,7 @@ public class CNFFilter implements Serializable
 			else if (o instanceof MyDate)
 			{
 				header[i] = (byte)3;
-				size += 8;
+				size += 4;
 			}
 			else if (o instanceof String)
 			{
@@ -382,7 +382,7 @@ public class CNFFilter implements Serializable
 			}
 			else if (retval[i] == 3)
 			{
-				retvalBB.putLong(((MyDate)o).getTime());
+				retvalBB.putInt(((MyDate)o).getTime());
 			}
 			else if (retval[i] == 4)
 			{
@@ -466,7 +466,7 @@ public class CNFFilter implements Serializable
 
 	public long getPartitionHash() throws Exception
 	{
-		return 0x0EFFFFFFFFFFFFFFL & hash(partHash);
+		return 0x7FFFFFFFFFFFFFFFL & hash(partHash);
 	}
 
 	public ArrayList<Filter> getRangeFilters()

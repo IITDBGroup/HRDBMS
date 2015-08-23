@@ -154,7 +154,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 		private boolean inMem = true;
 		private ArrayList<String> externalFiles;
 		private ArrayList<ArrayList<byte[]>> bins;
-		final int numBins = 4099;
+		final int numBins = 127;
 		private int size;
 		private HashMap<Integer, FlushBinThread> threads;
 		private ArrayList<FileChannel> channels;
@@ -182,7 +182,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 			{
 				try
 				{
-					externalFiles = new ArrayList<String>(numBins << 1);
+					externalFiles = new ArrayList<String>(numBins);
 					ArrayList<String> fns1 = createFNs(numBins, 0);
 					externalFiles.addAll(fns1);
 					files1 = createFiles(fns1);
@@ -428,7 +428,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 					types = types1;
 				}
 				byte[] c = toBytes(consolidated, types);
-				if (hashSet.put(c, c) == null)
+				if (hashSet.putIfAbsent(c, c) == null)
 				{
 					final AtomicLong al = results.get(group);
 					if (al != null)
@@ -482,7 +482,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 					types = types1;
 				}
 				byte[] data = toBytes(consolidated, types);
-				final long hash = 0x0EFFFFFFFFFFFFFFL & hash(data);
+				final long hash = 0x7FFFFFFFFFFFFFFFL & hash(data);
 				int x = (int)(hash % numBins);
 				
 				synchronized(bins)
@@ -525,11 +525,11 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 			int i = 0;
 			for (byte b : types)
 			{
-				if (b == 0 || b == 2 || b == 3)
+				if (b == 0 || b == 2)
 				{
 					size += 8;
 				}
-				else if (b == 1)
+				else if (b == 1 || b == 3)
 				{
 					size += 4;
 				}
@@ -574,7 +574,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 				}
 				else if (types[i] == 3)
 				{
-					retvalBB.putLong(((MyDate)o).getTime());
+					retvalBB.putInt(((MyDate)o).getTime());
 				}
 				else if (types[i] == 4)
 				{
@@ -779,7 +779,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 				else if (types[i] == 3)
 				{
 					// date
-					final MyDate o = new MyDate(bb.getLong());
+					final MyDate o = new MyDate(bb.getInt());
 					retval.add(o);
 				}
 				else if (types[i] == 4)

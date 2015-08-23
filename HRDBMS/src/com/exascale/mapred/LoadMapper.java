@@ -66,7 +66,7 @@ public class LoadMapper extends Mapper<LongWritable, Text, MyLongWritable, ALOWr
 				}
 			}
 
-			long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+			long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
 			if (pmeta.allDevices())
 			{
 				return (int)(hash % numDevices);
@@ -191,7 +191,7 @@ public class LoadMapper extends Mapper<LongWritable, Text, MyLongWritable, ALOWr
 			else if (o instanceof MyDate)
 			{
 				header[i] = (byte)3;
-				size += 8;
+				size += 4;
 			}
 			else if (o instanceof String)
 			{
@@ -265,7 +265,7 @@ public class LoadMapper extends Mapper<LongWritable, Text, MyLongWritable, ALOWr
 			}
 			else if (retval[i] == 3)
 			{
-				retvalBB.putLong(((MyDate)o).getTime());
+				retvalBB.putInt(((MyDate)o).getTime());
 			}
 			else if (retval[i] == 4)
 			{

@@ -34,6 +34,7 @@ import com.exascale.misc.LongPrimitiveConcurrentHashMap.EntryIterator;
 import com.exascale.misc.MurmurHash;
 import com.exascale.misc.MyDate;
 import com.exascale.misc.ReverseConcurrentHashMap;
+import com.exascale.optimizer.TableScanOperator;
 import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.ThreadPoolThread;
 
@@ -145,7 +146,7 @@ public final class ResourceManager extends HRDBMSThread
 			{
 				System.gc();
 				lastSystemGC = System.currentTimeMillis();
-				GC_TIME = (lastSystemGC - time) * 10;
+				GC_TIME = (lastSystemGC - time) * 5;
 			}
 		}
 	}
@@ -184,8 +185,8 @@ public final class ResourceManager extends HRDBMSThread
 		{
 			new DeadlockThread().start();
 		}
-		while (true)
-		{
+		//while (true)
+		//{
 			// System.out.println(((Runtime.getRuntime().freeMemory() +
 			// Runtime.getRuntime().maxMemory() -
 			// Runtime.getRuntime().totalMemory()) * 100.0) /
@@ -195,25 +196,25 @@ public final class ResourceManager extends HRDBMSThread
 			// handleHighMem();
 			// hasBeenLowMem = false;
 			// }
-			if (lowMem())
-			{
+			//if (lowMem())
+			//{
 				// System.gc();
 				// if (lowMem())
 				// {
-				lowMem = true;
-				handleLowMem();
-				lowMem = false;
+				//lowMem = true;
+			//	handleLowMem();
+				//lowMem = false;
 				// }
-			}
+			//}
 
-			try
-			{
-				Thread.sleep(SLEEP_TIME);
-			}
-			catch (final Exception e)
-			{
-			}
-		}
+			//try
+			//{
+			//	Thread.sleep(SLEEP_TIME);
+			//}
+			//catch (final Exception e)
+			//{
+			//}
+		//}
 	}
 
 	private static final class DeadlockThread extends ThreadPoolThread
@@ -303,7 +304,7 @@ public final class ResourceManager extends HRDBMSThread
 				// }
 				// last = temp;
 				//
-				HRDBMSWorker.logger.debug(((Runtime.getRuntime().freeMemory()) * 100.0) / (maxMemory * 1.0) + "% free");
+				HRDBMSWorker.logger.debug(((Runtime.getRuntime().freeMemory()) * 100.0) / (maxMemory * 1.0) + "% free - skipped " + TableScanOperator.skippedPages.get() + " pages");
 				// HRDBMSWorker.logger.debug("GC time was " + (pct * 100.0) +
 				// "%");
 				try

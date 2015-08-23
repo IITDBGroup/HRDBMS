@@ -206,7 +206,7 @@ public final class DummyOperator implements Operator, Serializable
 		OperatorUtils.serializeStringHM(cols2Types, out, prev);
 		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
 		OperatorUtils.serializeTM(pos2Col, out, prev);
-		parent.serialize(out, prev);
+		OperatorUtils.serializeOperator(parent, out, prev);
 		OperatorUtils.writeInt(node, out);
 	}
 

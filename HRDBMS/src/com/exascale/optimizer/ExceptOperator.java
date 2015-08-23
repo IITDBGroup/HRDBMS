@@ -722,7 +722,7 @@ public final class ExceptOperator implements Operator, Serializable
 				else if (bytes[i + 4] == 3)
 				{
 					// date
-					final MyDate o = new MyDate(bb.getLong());
+					final MyDate o = new MyDate(bb.getInt());
 					retval.add(o);
 				}
 				else if (bytes[i + 4] == 4)
@@ -998,7 +998,7 @@ public final class ExceptOperator implements Operator, Serializable
 			else if (o instanceof MyDate)
 			{
 				header[i] = (byte)3;
-				size += 8;
+				size += 4;
 			}
 			else if (o instanceof String)
 			{
@@ -1076,7 +1076,7 @@ public final class ExceptOperator implements Operator, Serializable
 			}
 			else if (retval[i] == 3)
 			{
-				retvalBB.putLong(((MyDate)o).getTime());
+				retvalBB.putInt(((MyDate)o).getTime());
 			}
 			else if (retval[i] == 4)
 			{
@@ -1115,6 +1115,6 @@ public final class ExceptOperator implements Operator, Serializable
 			eHash = MurmurHash.hash64(key, key.length);
 		}
 
-		return eHash & 0x0EFFFFFFFFFFFFFFL;
+		return eHash & 0x7FFFFFFFFFFFFFFFL;
 	}
 }

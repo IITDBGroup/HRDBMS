@@ -17,21 +17,19 @@ import com.exascale.logging.InsertLogRec;
 import com.exascale.logging.LogIterator;
 import com.exascale.logging.LogRec;
 import com.exascale.misc.MultiHashMap;
+import com.exascale.tables.Schema;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.HRDBMSThread;
 
 public class SubBufferManager
 {
-	final Page[] bp;
+	Page[] bp;
 	private final int numAvailable;
 	private int numNotTouched;
 	private final HashMap<Block, Integer> pageLookup;
-	private final TreeMap<Long, Block> referencedLookup;
-	private final ConcurrentHashMap<Long, Block> unmodLookup;
 	private final boolean log;
 	private final MultiHashMap<Long, Page> myBuffers;
-	private static final ConcurrentHashMap<Page, Long> toExpire = new ConcurrentHashMap<Page, Long>();
-	private static final long EXPIRE_TIME = Long.parseLong(HRDBMSWorker.getHParms().getProperty("unpin_delay_ms"));
+	private volatile int clock = 0;
 
 	public SubBufferManager(boolean log)
 	{
@@ -41,6 +39,7 @@ public class SubBufferManager
 		numAvailable = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("bp_pages")) / (Runtime.getRuntime().availableProcessors() << 5);
 		numNotTouched = numAvailable;
 		bp = new Page[numAvailable];
+		clock = numAvailable / 2;
 		int i = 0;
 		while (i < numAvailable)
 		{
@@ -49,19 +48,20 @@ public class SubBufferManager
 		}
 
 		pageLookup = new HashMap<Block, Integer>(numAvailable);
-		referencedLookup = new TreeMap<Long, Block>();
-		unmodLookup = new ConcurrentHashMap<Long, Block>(numAvailable, 1.0f, 64 * ResourceManager.cpus);
 	}
 
-	public synchronized boolean cleanPage(int i, HashSet<String> d) throws Exception
+	public synchronized boolean cleanPage(int i) throws Exception
 	{
+		if (i >= bp.length)
+		{
+			return false;
+		}
+		
 		Page p = bp[i];
 		if (p.isModified() && !p.isPinned())
 		{
 			p.setNotModified();
 			FileManager.writeDelayed(p.block(), p.buffer());
-			unmodLookup.put(p.pinTime(), p.block());
-			d.add(p.block().fileName());
 			return true;
 		}
 
@@ -140,8 +140,6 @@ public class SubBufferManager
 			{
 				if (p.block().fileName().contains("/" + fn))
 				{
-					referencedLookup.remove(p.pinTime());
-					unmodLookup.remove(p.pinTime());
 					p.setPinTime(-1);
 					pageLookup.remove(p.block());
 					p.assignToBlock(null, log);
@@ -161,7 +159,7 @@ public class SubBufferManager
 				{
 					if (wait)
 					{
-						Thread.yield();
+						LockSupport.parkNanos(500);
 					}
 
 					synchronized (this)
@@ -190,8 +188,6 @@ public class SubBufferManager
 
 							if (bp[index].block() != null)
 							{
-								referencedLookup.remove(bp[index].pinTime());
-								unmodLookup.remove(bp[index].pinTime());
 								bp[index].setPinTime(-1);
 								pageLookup.remove(bp[index].block());
 							}
@@ -204,15 +200,13 @@ public class SubBufferManager
 								Transaction.txListLock.writeLock().unlock();
 								throw e;
 							}
-							Transaction.txListLock.readLock().lock();
-							Transaction.txListLock.writeLock().unlock();
-							if (pageLookup.containsKey(b))
-							{
-								Exception e = new Exception("About to put a duplicate page in the bufferpool");
-								HRDBMSWorker.logger.debug("", e);
-								throw e;
-							}
+
 							pageLookup.put(b, index);
+							final long lsn = LogManager.getLSN();
+							bp[index].pin(lsn, txnum);
+							myBuffers.multiPut(txnum, bp[index]);
+							Transaction.txListLock.writeLock().unlock();
+							return;
 						}
 						else
 						{
@@ -221,25 +215,15 @@ public class SubBufferManager
 								wait = true;
 								continue;
 							}
+							
+							final long lsn = LogManager.getLSN();
+							bp[index].pin(lsn, txnum);
+							myBuffers.multiPut(txnum, bp[index]);
+							Transaction.txListLock.readLock().unlock();
+							return;
 						}
 
-						if (bp[index].pinTime() != -1)
-						{
-							referencedLookup.remove(bp[index].pinTime());
-							unmodLookup.remove(bp[index].pinTime());
-						}
-
-						final long lsn = LogManager.getLSN();
-						referencedLookup.put(lsn, b);
-						if (!bp[index].isModified())
-						{
-							unmodLookup.put(lsn, b);
-						}
-						bp[index].pin(lsn, txnum);
-						myBuffers.multiPut(txnum, bp[index]);
 					}
-
-					break;
 				}
 			}
 			catch (Exception e)
@@ -248,12 +232,12 @@ public class SubBufferManager
 				throw e;
 			}
 		}
-		Transaction.txListLock.readLock().unlock();
 	}
 	
-	public void pin(Block b, long txnum, boolean flag) throws Exception
+	public void pin(Block b, Transaction tx, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos) throws Exception
 	{
 		// Transaction.txListLock.readLock().lock();
+		long txnum = tx.number();
 		{
 			try
 			{
@@ -262,7 +246,7 @@ public class SubBufferManager
 				{
 					if (wait)
 					{
-						Thread.yield();
+						LockSupport.parkNanos(500);
 					}
 
 					synchronized (this)
@@ -291,29 +275,24 @@ public class SubBufferManager
 
 							if (bp[index].block() != null)
 							{
-								referencedLookup.remove(bp[index].pinTime());
-								unmodLookup.remove(bp[index].pinTime());
 								bp[index].setPinTime(-1);
 								pageLookup.remove(bp[index].block());
 							}
 							try
 							{
-								bp[index].assignToBlock(b, log, true);
+								bp[index].assignToBlock(b, log, schema, schemaMap, tx, fetchPos);
 							}
 							catch (Exception e)
 							{
 								Transaction.txListLock.writeLock().unlock();
 								throw e;
 							}
-							Transaction.txListLock.readLock().lock();
-							Transaction.txListLock.writeLock().unlock();
-							if (pageLookup.containsKey(b))
-							{
-								Exception e = new Exception("About to put a duplicate page in the bufferpool");
-								HRDBMSWorker.logger.debug("", e);
-								throw e;
-							}
 							pageLookup.put(b, index);
+							final long lsn = LogManager.getLSN();
+							bp[index].pin(lsn, txnum);
+							myBuffers.multiPut(txnum, bp[index]);
+							Transaction.txListLock.writeLock().unlock();
+							return;
 						}
 						else
 						{
@@ -322,34 +301,56 @@ public class SubBufferManager
 								wait = true;
 								continue;
 							}
+							
+							final long lsn = LogManager.getLSN();
+							bp[index].pin(lsn, txnum);
+							myBuffers.multiPut(txnum, bp[index]);
+							new ParseThread(bp[index], schema, tx, schemaMap, fetchPos).start();
+							Transaction.txListLock.readLock().unlock();
+							return;
 						}
-
-						if (bp[index].pinTime() != -1)
-						{
-							referencedLookup.remove(bp[index].pinTime());
-							unmodLookup.remove(bp[index].pinTime());
-						}
-
-						final long lsn = LogManager.getLSN();
-						referencedLookup.put(lsn, b);
-						if (!bp[index].isModified())
-						{
-							unmodLookup.put(lsn, b);
-						}
-						bp[index].pin(lsn, txnum);
-						myBuffers.multiPut(txnum, bp[index]);
 					}
-
-					break;
 				}
 			}
 			catch (Exception e)
 			{
+				HRDBMSWorker.logger.debug("", e);
 				Transaction.txListLock.readLock().unlock();
 				throw e;
 			}
 		}
-		Transaction.txListLock.readLock().unlock();
+	}
+	
+	private class ParseThread extends HRDBMSThread
+	{
+		private Page p;
+		private Schema schema;
+		private Transaction tx;
+		private ConcurrentHashMap<Integer, Schema> schemaMap;
+		private ArrayList<Integer> fetchPos;
+		
+		public ParseThread(Page p, Schema schema, Transaction tx, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos)
+		{
+			this.p = p;
+			this.schema = schema;
+			this.tx = tx;
+			this.schemaMap = schemaMap;
+			this.fetchPos = fetchPos;
+		}
+		
+		public void run()
+		{
+			try
+			{
+				tx.read2(p.block(), schema, p);
+				schemaMap.put(p.block().number(), schema);
+				schema.prepRowIter(fetchPos);
+			}
+			catch(Exception e)
+			{
+				HRDBMSWorker.logger.debug("", e);
+			}
+		}
 	}
 
 	public void pinFromMemory(Block b, long txnum, ByteBuffer data) throws Exception
@@ -363,7 +364,7 @@ public class SubBufferManager
 				{
 					if (wait)
 					{
-						Thread.yield();
+						LockSupport.parkNanos(500);
 					}
 
 					synchronized (this)
@@ -391,8 +392,6 @@ public class SubBufferManager
 
 						if (bp[index].block() != null)
 						{
-							referencedLookup.remove(bp[index].pinTime());
-							unmodLookup.remove(bp[index].pinTime());
 							bp[index].setPinTime(-1);
 							pageLookup.remove(bp[index].block());
 						}
@@ -405,33 +404,14 @@ public class SubBufferManager
 							Transaction.txListLock.writeLock().unlock();
 							throw e;
 						}
-						Transaction.txListLock.readLock().lock();
-						Transaction.txListLock.writeLock().unlock();
-						if (pageLookup.containsKey(b))
-						{
-							Exception e = new Exception("About to put a duplicate page in the bufferpool " + b);
-							HRDBMSWorker.logger.debug("", e);
-							throw e;
-						}
+						
 						pageLookup.put(b, index);
-
-						if (bp[index].pinTime() != -1)
-						{
-							referencedLookup.remove(bp[index].pinTime());
-							unmodLookup.remove(bp[index].pinTime());
-						}
-
 						final long lsn = LogManager.getLSN();
-						referencedLookup.put(lsn, b);
-						//if (!bp[index].isModified())
-						//{
-						//	unmodLookup.put(lsn, b);
-						//}
 						bp[index].pin(lsn, txnum);
 						myBuffers.multiPut(txnum, bp[index]);
+						Transaction.txListLock.writeLock().unlock();
+						return;
 					}
-
-					break;
 				}
 			}
 			catch (Exception e)
@@ -441,7 +421,6 @@ public class SubBufferManager
 				throw e;
 			}
 		}
-		Transaction.txListLock.readLock().unlock();
 	}
 
 	public void requestPage(Block b, long txnum)
@@ -460,8 +439,6 @@ public class SubBufferManager
 	{
 		Page p = bp[pageLookup.get(b)];
 		p.setNotModified();
-		referencedLookup.remove(p.pinTime());
-		unmodLookup.remove(p.pinTime());
 		p.setPinTime(-1);
 		pageLookup.remove(p.block());
 	}
@@ -472,8 +449,6 @@ public class SubBufferManager
 		{
 			myBuffers.multiRemove(txnum, p);
 		}
-		
-		toExpire.put(p, System.currentTimeMillis());
 	}
 
 	public synchronized void unpinAll(long txnum)
@@ -539,10 +514,6 @@ public class SubBufferManager
 	{
 		p.buffer().position(off);
 		p.buffer().put(data);
-		synchronized (unmodLookup)
-		{
-			unmodLookup.remove(p.pinTime());
-		}
 	}
 
 	private synchronized int chooseUnpinnedPage(String newFN)
@@ -552,107 +523,58 @@ public class SubBufferManager
 			return numAvailable - numNotTouched;
 		}
 		
-		String partial = newFN.substring(newFN.lastIndexOf('/') + 1);
+		//String partial = newFN.substring(newFN.lastIndexOf('/') + 1);
 
 		//int checked = 0;
-		synchronized (unmodLookup)
+		int initialClock = clock;
+		boolean start = true;
+
+		while (start || clock != initialClock)
 		{
-			if (!unmodLookup.isEmpty())
+			start = false;
+			Page p = bp[clock];
+			int index = clock;
+			clock++;
+			if (clock == bp.length)
 			{
-				for (final Block b : unmodLookup.values())
-				{
-					//if (checked < 1000 && b.fileName().endsWith(partial))
-					if (b.fileName().endsWith(partial))
-					{
-						//checked++;
-						continue;
-					}
-					//else if (checked < 2000 && b.fileName().equals(newFN))
-					//{
-					//	checked++;
-					//	continue;
-					//}
-					
-					final int index = pageLookup.get(b);
-					if (!bp[index].isPinned())
-					{
-						Long time = toExpire.get(this.bp[index]);
-						if (time == null)
-						{
-							return index;
-						}
-						
-						if (time + EXPIRE_TIME < System.currentTimeMillis())
-						{
-							toExpire.remove(this.bp[index]);
-							return index;
-						}
-					}
-				}
+				clock = 0;
 			}
-			
-			if (!unmodLookup.isEmpty())
+			if (!p.isPinned() && !BufferManager.isInterest(p.block()))
 			{
-				for (final Block b : unmodLookup.values())
-				{
-					//else if (checked < 2000 && b.fileName().equals(newFN))
-					if (b.fileName().equals(newFN))
-					{
-						//checked++;
-						continue;
-					}
-					
-					final int index = pageLookup.get(b);
-					if (!bp[index].isPinned())
-					{
-						Long time = toExpire.get(this.bp[index]);
-						if (time == null)
-						{
-							return index;
-						}
-						
-						if (time + EXPIRE_TIME < System.currentTimeMillis())
-						{
-							toExpire.remove(this.bp[index]);
-							return index;
-						}
-					}
-				}
-			}
-			
-			if (!unmodLookup.isEmpty())
-			{
-				for (final Block b : unmodLookup.values())
-				{
-					final int index = pageLookup.get(b);
-					if (!bp[index].isPinned())
-					{
-						Long time = toExpire.get(this.bp[index]);
-						if (time == null)
-						{
-							return index;
-						}
-						
-						if (time + EXPIRE_TIME < System.currentTimeMillis())
-						{
-							toExpire.remove(this.bp[index]);
-							return index;
-						}
-					}
-				}
+				return index;
 			}
 		}
+		
+		start = true;
 
-		for (final Block b : referencedLookup.values())
+		while (start || clock != initialClock)
 		{
-			final int index = pageLookup.get(b);
-			if (!bp[index].isPinned())
+			start = false;
+			Page p = bp[clock];
+			int index = clock;
+			clock++;
+			if (clock == bp.length)
+			{
+				clock = 0;
+			}
+			if (!p.isPinned())
 			{
 				return index;
 			}
 		}
 
-		return -1;
+		//expand bufferpool
+		Page[] bp2 = new Page[(int)(bp.length * 1.1)];
+		System.arraycopy(bp, 0, bp2, 0, bp.length);
+		int z = bp.length;
+		final int limit = bp2.length;
+		while (z < limit)
+		{
+			bp2[z++] = new Page();
+		}
+		
+		bp = bp2;
+		return chooseUnpinnedPage(newFN);
 	}
 
 	private synchronized int findExistingPage(Block b)
@@ -692,7 +614,6 @@ public class SubBufferManager
 					if (!p.isPinned())
 					{
 						p.setNotModified();
-						unmodLookup.put(p.pinTime(), p.block());
 					}
 				}
 				catch (Exception e)

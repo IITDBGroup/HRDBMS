@@ -737,7 +737,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 					startSize += 4;
 					stringCols.add(a);
 				}
-				else if (b == 1)
+				else if (b == 1 || b == 3)
 				{
 					startSize += 4;
 				}
@@ -782,7 +782,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 					}
 					else if (types[i] == 3)
 					{
-						retvalBB.putLong(((MyDate)o).getTime());
+						retvalBB.putInt(((MyDate)o).getTime());
 					}
 					else if (types[i] == 4)
 					{
@@ -883,7 +883,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 								}
 								else
 								{
-									LockSupport.parkNanos(75000);
+									LockSupport.parkNanos(500);
 									continue;
 								}
 							}
@@ -893,7 +893,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 
 							if (orow == null)
 							{
-								LockSupport.parkNanos(75000);
+								LockSupport.parkNanos(500);
 								continue;
 							}
 							
@@ -1265,7 +1265,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 				else if (types[i] == 3)
 				{
 					// date
-					final MyDate o = new MyDate(bb.getLong());
+					final MyDate o = new MyDate(bb.getInt());
 					retval.add(o);
 				}
 				else if (types[i] == 4)

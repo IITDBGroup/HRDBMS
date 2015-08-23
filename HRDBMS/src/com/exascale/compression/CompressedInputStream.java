@@ -94,4 +94,11 @@ public final class CompressedInputStream extends FilterInputStream
 		
 		return read;
 	}
+	
+	public int read() throws IOException
+	{
+		byte[] buff = new byte[1];
+		read(buff, 0, 1);
+		return buff[0];
+	}
 }

@@ -9,12 +9,14 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeSet;
+import java.util.concurrent.locks.LockSupport;
 import com.exascale.exceptions.LockAbortException;
 import com.exascale.exceptions.RecNumOverflowException;
 import com.exascale.filesystem.Block;
@@ -27,7 +29,11 @@ import com.exascale.managers.FileManager;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LockManager;
 import com.exascale.managers.LogManager;
+import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MyDate;
+import com.exascale.misc.SPSCQueue;
+import com.exascale.optimizer.TableScanOperator;
+import com.exascale.threads.HRDBMSThread;
 
 public class Schema
 {
@@ -41,6 +47,7 @@ public class Schema
 	private static sun.misc.Unsafe unsafe;
 
 	private static long offset;
+	private volatile SPSCQueue iterCache;
 
 	static
 	{
@@ -319,6 +326,7 @@ public class Schema
 		}
 
 		LockManager.xLock(p.block(), tx.number());
+		TableScanOperator.noResults.remove(p.block());
 		byte[] before;
 		byte[] after;
 		int off;
@@ -394,6 +402,7 @@ public class Schema
 		}
 
 		LockManager.xLock(p.block(), tx.number());
+		TableScanOperator.noResults.remove(p.block());
 		byte[] after;
 		int off;
 		if (rowIDToIndex == null)
@@ -588,6 +597,7 @@ public class Schema
 		}
 
 		LockManager.xLock(p.block(), tx.number());
+		TableScanOperator.noResults.remove(p.block());
 
 		final Integer off = hasEnoughSpace(headerGrowthPerRow(), length);
 		if (off != null)
@@ -714,6 +724,7 @@ public class Schema
 		}
 
 		LockManager.xLock(p.block(), tx.number());
+		TableScanOperator.noResults.remove(p.block());
 
 		final Integer off = hasEnoughSpace(headerGrowthPerRow(), length);
 		if (off != null)
@@ -806,6 +817,7 @@ public class Schema
 		}
 
 		LockManager.xLock(p.block(), tx.number());
+		TableScanOperator.noResults.remove(p.block());
 
 		final int vLen = vals.length;
 		while (count < vLen)
@@ -872,11 +884,28 @@ public class Schema
 	{
 		if (this.p != null)
 		{
-			BufferManager.unpin(this.p, tx.number());
+			new UnpinThread(this.p, tx.number()).start();
 		}
 		this.p = p;
 		this.tx = tx;
 		blockType = p.get(0);
+	}
+	
+	private class UnpinThread extends HRDBMSThread
+	{
+		private Page p;
+		private long txnum;
+		
+		public UnpinThread(Page p, long txnum)
+		{
+			this.p = p;
+			this.txnum = txnum;
+		}
+		
+		public void run()
+		{
+			BufferManager.unpin(p, txnum);
+		}
 	}
 
 	public void read(Transaction tx, Page p) throws Exception
@@ -887,7 +916,7 @@ public class Schema
 		myNode = -1;
 		if (this.p != null)
 		{
-			BufferManager.unpin(this.p, tx.number());
+			new UnpinThread(this.p, tx.number()).start();
 		}
 		this.p = p;
 		this.tx = tx;
@@ -1007,7 +1036,24 @@ public class Schema
 
 	public RowIterator rowIterator()
 	{
-		return new RowIterator();
+		return new RowIterator(true);
+	}
+	
+	public RowIterator rowIterator(boolean flag)
+	{
+		if (flag)
+		{
+			while (iterCache == null)
+			{
+				LockSupport.parkNanos(500);
+			}
+		
+			return new RowIterator(true);
+		}
+		else
+		{
+			return new RowIterator(false);
+		}
 	}
 
 	public RIDChange updateRow(RID id, int startColID, FieldValue[] vals) throws Exception
@@ -1023,6 +1069,7 @@ public class Schema
 			}
 
 			LockManager.xLock(p.block(), tx.number());
+			TableScanOperator.noResults.remove(p.block());
 			final Row row = this.getRow(id);
 			final FieldValue[] values = row.getAllCols();
 			this.deleteRow(id);
@@ -1088,6 +1135,7 @@ public class Schema
 				}
 
 				LockManager.xLock(b, tx.number());
+				TableScanOperator.noResults.remove(p.block());
 
 				if (newPage.hasEnoughSpace(headerGrowthPerRow(), length) != null)
 				{
@@ -1173,6 +1221,7 @@ public class Schema
 
 		Block bl = new Block(fn, newBlockNum);
 		LockManager.xLock(bl, tx.number());
+		TableScanOperator.noResults.remove(p.block());
 		tx.requestPage(bl);
 		Page p2 = null;
 		try
@@ -1231,6 +1280,7 @@ public class Schema
 
 		Block bl = new Block(fn, newBlockNum);
 		LockManager.xLock(bl, tx.number());
+		TableScanOperator.noResults.remove(p.block());
 		tx.requestPage(bl);
 		Page p2 = null;
 		try
@@ -2293,7 +2343,7 @@ public class Schema
 
 			if (!isNull && exists)
 			{
-				value = new MyDate(s.p.getLong(off));
+				value = new MyDate(s.p.getInt(off-1) & 0x00ffffff);
 			}
 		}
 
@@ -2321,7 +2371,7 @@ public class Schema
 		{
 			if (!isNull && exists)
 			{
-				return 8;
+				return 3;
 			}
 
 			return 0;
@@ -2338,16 +2388,16 @@ public class Schema
 		{
 			if (!isNull && exists)
 			{
-				final byte[] val = ByteBuffer.allocate(8).putLong(value.getTime()).array();
+				final byte[] val = ByteBuffer.allocate(4).putInt(value.getTime()).array();
 				//int i = 0;
 				//while (i < 8)
 				//{
 				//	buff[off + i] = val[i];
 				//	i++;
 				//}
-				System.arraycopy(val, 0, buff, off, 8);
+				System.arraycopy(val, 1, buff, off, 3);
 
-				return 8;
+				return 3;
 			}
 
 			return 0;
@@ -2676,6 +2726,7 @@ public class Schema
 	public class Row
 	{
 		private final int index;
+		private FieldValue[] cache;
 
 		public Row(int index)
 		{
@@ -2692,6 +2743,30 @@ public class Schema
 				i++;
 			}
 
+			cache = retval;
+			return retval;
+		}
+		
+		public FieldValue[] getAllCols(ArrayList<Integer> fetchPos) throws Exception
+		{
+			int i = 0;
+			final FieldValue[] retval = new FieldValue[colIDListSize];
+			//while (i < colIDListSize)
+			//{
+			//	retval[i] = getField(index, i);
+			//	i++;
+			//}
+			
+			int z = 0;
+			final int limit = fetchPos.size();
+			while (z < limit)
+			{
+				int pos = fetchPos.get(z++);
+				i = colIDToIndex.get(pos);
+				retval[i] = getField(index, i);
+			}
+
+			cache = retval;
 			return retval;
 		}
 
@@ -2700,6 +2775,12 @@ public class Schema
 			// return getField(index, colIDToIndex.get(id));
 			int rowIndex = index;
 			int colIndex = colIDToIndex.get(id);
+			
+			if (cache != null)
+			{
+				return cache[colIndex];
+			}
+			
 			DataType dt = null;
 			int type;
 
@@ -2789,15 +2870,59 @@ public class Schema
 			return rowIDs[index];
 		}
 	}
+	
+	public void prepRowIter(ArrayList<Integer> fetchPos) throws Exception
+	{
+		iterCache = new SPSCQueue(1024);
+		RowIterator iter = new RowIterator(false);
+		while (iter.hasNext())
+		{
+			Row row = iter.next();
+			row.getAllCols(fetchPos);
+			iterCache.put(row);
+		}
+		
+		iterCache.put(new DataEndMarker());
+	}
 
 	public class RowIterator implements Iterator<Row>
 	{
 		private int rowIndex = 0;
 		private Row currentRow;
+		private boolean useCache;
+		
+		public RowIterator(boolean useCache)
+		{
+			this.useCache = useCache;
+		}
 
 		@Override
-		public boolean hasNext()
+		public boolean hasNext() 
 		{
+			if (iterCache != null && useCache)
+			{
+				try
+				{
+					Object o = iterCache.take();
+					if (o instanceof DataEndMarker)
+					{
+						iterCache = null;
+						return false;
+					}
+					else
+					{
+						currentRow = (Row)o;
+					}
+				
+					return true;
+				}
+				catch(Exception e)
+				{
+					HRDBMSWorker.logger.debug("", e);
+					currentRow = null;
+					return true;
+				}
+			}
 			if (rowIndex < rowIDListSize)
 			{
 				return true;
@@ -2811,6 +2936,11 @@ public class Schema
 		@Override
 		public Row next()
 		{
+			if (iterCache != null && useCache)
+			{
+				return currentRow;
+			}
+			
 			rowIndex++;
 			currentRow = new Row(rowIndex - 1);
 			return currentRow;
@@ -2962,7 +3092,7 @@ public class Schema
 
 			if (!isNull && exists)
 			{
-				final int len = s.p.getInt(off);
+				final int len = (s.p.getInt(off-1) & 0x00ffffff);
 				if (len == 0)
 				{
 					value = new String();
@@ -2972,8 +3102,8 @@ public class Schema
 					char[] ca = new char[len];
 					final byte[] temp = new byte[len];
 					bytes = temp;
-					size = 4 + len;
-					s.p.get(off + 4, temp);
+					size = 3 + len;
+					s.p.get(off + 3, temp);
 					try
 					{
 						// value = new String(temp, "UTF-8");
@@ -3011,7 +3141,7 @@ public class Schema
 				try
 				{
 					bytes = val.getBytes(StandardCharsets.UTF_8);
-					size = 4 + bytes.length;
+					size = 3 + bytes.length;
 				}
 				catch (Exception e)
 				{
@@ -3055,7 +3185,7 @@ public class Schema
 				//	buff[off + i] = val[i];
 				//	i++;
 				//}
-				System.arraycopy(val, 0, buff, off, 4);
+				System.arraycopy(val, 1, buff, off, 3);
 
 				//i = 0;
 				//final int length = stringBytes.length;
@@ -3064,7 +3194,7 @@ public class Schema
 				//	buff[off + 4 + i] = stringBytes[i];
 				//	i++;
 				//}
-				System.arraycopy(stringBytes, 0, buff, off+4, stringBytes.length);
+				System.arraycopy(stringBytes, 0, buff, off+3, stringBytes.length);
 
 				return size;
 			}

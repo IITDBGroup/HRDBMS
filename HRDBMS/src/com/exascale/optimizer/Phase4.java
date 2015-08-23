@@ -34,19 +34,22 @@ public final class Phase4
 
 	public static void clearOpParents(Operator op, HashSet<Operator> touched)
 	{
-		if (touched.contains(op))
+		if (op instanceof NetworkSendOperator)
 		{
-			return;
+			if (touched.contains(op))
+			{
+				return;
+			}
+			
+			touched.add(op);
 		}
 
 		if (op instanceof TableScanOperator)
 		{
 			((TableScanOperator)op).clearOpParents();
-			touched.add(op);
 		}
 		else
 		{
-			touched.add(op);
 			for (final Operator o : op.children())
 			{
 				clearOpParents(o, touched);
@@ -358,12 +361,15 @@ public final class Phase4
 	
 	private void swapLeftRight(Operator op, HashSet<Operator> touched) throws Exception
 	{
-		if (touched.contains(op))
+		if (op instanceof NetworkSendOperator)
 		{
-			return;
-		}
+			if (touched.contains(op))
+			{
+				return;
+			}
 		
-		touched.add(op);
+			touched.add(op);
+		}
 		
 		if (op instanceof HashJoinOperator)
 		{
@@ -414,14 +420,18 @@ public final class Phase4
 
 	private void allIntersectionsHave2Children(Operator op, HashSet<Operator> touched) throws Exception
 	{
-		if (touched.contains(op))
+		if (op instanceof NetworkSendOperator)
 		{
-			return;
+			if (touched.contains(op))
+			{
+				return;
+			}
+			
+			touched.add(op);
 		}
 
 		if (!(op instanceof IntersectOperator))
 		{
-			touched.add(op);
 			for (Operator o : op.children())
 			{
 				allIntersectionsHave2Children(o, touched);
@@ -429,7 +439,6 @@ public final class Phase4
 		}
 		else
 		{
-			touched.add(op);
 			if (op.children().size() <= 2)
 			{
 				for (Operator o : op.children())
@@ -478,14 +487,18 @@ public final class Phase4
 
 	private void allUnionsHave2Children(Operator op, HashSet<Operator> touched) throws Exception
 	{
-		if (touched.contains(op))
+		if (op instanceof NetworkSendOperator)
 		{
-			return;
+			if (touched.contains(op))
+			{
+				return;
+			}
+			
+			touched.add(op);
 		}
 
 		if (!(op instanceof UnionOperator))
 		{
-			touched.add(op);
 			for (Operator o : op.children())
 			{
 				allUnionsHave2Children(o, touched);
@@ -493,7 +506,6 @@ public final class Phase4
 		}
 		else
 		{
-			touched.add(op);
 			if (op.children().size() <= 2)
 			{
 				for (Operator o : op.children())
@@ -542,19 +554,22 @@ public final class Phase4
 
 	private void cleanupOrderedFilters(Operator op, HashSet<Operator> touched)
 	{
-		if (touched.contains(op))
+		if (op instanceof NetworkSendOperator)
 		{
-			return;
+			if (touched.contains(op))
+			{
+				return;
+			}
+			
+			touched.add(op);
 		}
 
 		if (op instanceof TableScanOperator)
 		{
-			touched.add(op);
 			((TableScanOperator)op).cleanupOrderedFilters();
 		}
 		else
 		{
-			touched.add(op);
 			for (final Operator o : op.children())
 			{
 				cleanupOrderedFilters(o, touched);
@@ -1407,33 +1422,32 @@ public final class Phase4
 		return retval;
 	}
 
-	private HashMap<NetworkReceiveOperator, Integer> getReceives(Operator op, int level)
+	private void getReceives(Operator op, int level, HashMap<NetworkReceiveOperator, Integer> result)
 	{
-		final HashMap<NetworkReceiveOperator, Integer> retval = new HashMap<NetworkReceiveOperator, Integer>();
 		if (!(op instanceof NetworkReceiveOperator))
 		{
 			if (op.getNode() == -1)
 			{
 				for (final Operator child : op.children())
 				{
-					retval.putAll(getReceives(child, level + 1));
+					getReceives(child, level + 1, result);
 				}
 			}
 
-			return retval;
+			return;
 		}
 		else
 		{
 			if (op.getNode() == -1)
 			{
-				retval.put((NetworkReceiveOperator)op, level);
+				result.put((NetworkReceiveOperator)op, level);
 				for (final Operator child : op.children())
 				{
-					retval.putAll(getReceives(child, level + 1));
+					getReceives(child, level + 1, result);
 				}
 			}
 
-			return retval;
+			return;
 		}
 	}
 
@@ -1723,7 +1737,7 @@ public final class Phase4
 		final MultiOperator parent = (MultiOperator)receive.parent();
 		
 		final long card = card(parent);
-		if (card > Phase5.MAX_GB && parent.getKeys().size() > 0)
+		if (!noLargeUpstreamJoins(parent) && parent.getKeys().size() > 0)
 		{
 			final ArrayList<String> cols2 = new ArrayList<String>(parent.getKeys());
 			final int starting = getStartingNode(MetaData.numWorkerNodes);
@@ -2859,14 +2873,15 @@ public final class Phase4
 		while (workToDo)
 		{
 			workToDo = false;
-			final HashMap<NetworkReceiveOperator, Integer> receives = getReceives(root, 0);
+			final HashMap<NetworkReceiveOperator, Integer> receives = new HashMap<NetworkReceiveOperator, Integer>();
+			getReceives(root, 0, receives);
 			for (final NetworkReceiveOperator receive : order(receives))
 			{
 				if (completed.contains(receive))
 				{
 					continue;
 				}
-				if (!treeContains(root, receive))
+				if (!treeContains(root, receive, new HashSet<Operator>()))
 				{
 					continue;
 				}
@@ -2874,6 +2889,21 @@ public final class Phase4
 				final Operator op = receive.parent();
 				if (op instanceof SelectOperator || op instanceof YearOperator || op instanceof SubstringOperator || op instanceof ProjectOperator || op instanceof ExtendOperator || op instanceof RenameOperator || op instanceof ReorderOperator || op instanceof CaseOperator || op instanceof ExtendObjectOperator || op instanceof DateMathOperator || op instanceof ConcatOperator)
 				{
+					if (op instanceof SelectOperator)
+					{
+						int count = 1;
+						Operator parent = op.parent();
+						while (parent instanceof SelectOperator)
+						{
+							count++;
+							parent = parent.parent();
+						}
+						
+						if (count >= 20)
+						{
+							continue;
+						}
+					}
 					pushAcross(receive);
 					workToDo = true;
 					break;
@@ -3551,12 +3581,16 @@ public final class Phase4
 
 	private void removeDuplicateReorders(Operator op, HashSet<Operator> touched) throws Exception
 	{
-		if (touched.contains(op))
+		if (op instanceof NetworkSendOperator)
 		{
-			return;
-		}
+			if (touched.contains(op))
+			{
+				return;
+			}
 
-		touched.add(op);
+			touched.add(op);
+		}
+		
 		if (!(op instanceof ReorderOperator))
 		{
 			for (Operator o : op.children())
@@ -3600,12 +3634,16 @@ public final class Phase4
 
 	private void removeLocalSendReceive(Operator op, HashSet<Operator> visited) throws Exception
 	{
-		if (visited.contains(op))
+		if (op instanceof NetworkSendOperator)
 		{
-			return;
-		}
+			if (visited.contains(op))
+			{
+				return;
+			}
 
-		visited.add(op);
+			visited.add(op);
+		}
+		
 		if (op instanceof NetworkReceiveOperator && op.getClass().equals(NetworkReceiveOperator.class))
 		{
 			if (op.children().size() == 1)
@@ -3851,8 +3889,15 @@ public final class Phase4
 		}
 	}
 
-	private boolean treeContains(Operator root, Operator op)
+	private boolean treeContains(Operator root, Operator op, HashSet<Operator> touched)
 	{
+		if (touched.contains(root))
+		{
+			return false;
+		}
+		
+		touched.add(root);
+		
 		if (root.equals(op))
 		{
 			return true;
@@ -3860,7 +3905,7 @@ public final class Phase4
 
 		for (final Operator o : root.children())
 		{
-			if (treeContains(o, op))
+			if (treeContains(o, op, touched))
 			{
 				return true;
 			}

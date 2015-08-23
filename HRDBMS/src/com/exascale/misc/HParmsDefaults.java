@@ -43,15 +43,15 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("max_local_no_hash_product", "10000000");
 		retval.setProperty("max_local_sort", "2500000");
 		retval.setProperty("parallel_sort_min_rows", Integer.toString((int)(2500 * Math.pow(Math.pow(Runtime.getRuntime().availableProcessors(), 2), 1.0 / 3.0))));
-		retval.setProperty("prefetch_request_size", "80");
-		retval.setProperty("pages_in_advance", "40");
+		retval.setProperty("prefetch_request_size", "16");
+		retval.setProperty("pages_in_advance", "8");
 		retval.setProperty("getpage_attempts", "300000");
 		retval.setProperty("getpage_fail_sleep_time_ms", "1");
 		retval.setProperty("archive_dir", "/home/hrdbms/");
 		retval.setProperty("hrdbms_user", "hrdbms");
 		retval.setProperty("Xmx_string", "64g");
 		retval.setProperty("number_of_coords", "1");
-		retval.setProperty("max_batch", "5000000");
+		retval.setProperty("max_batch", "1250000");
 		retval.setProperty("archive", "false");
 		retval.setProperty("queue_flush_retry_timeout", "1");
 		retval.setProperty("statistics_refresh_target_days", "7");
@@ -62,10 +62,9 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("stack_size", "2M");
 		retval.setProperty("jvm_args", "-XX:+UseAdaptiveSizePolicyWithSystemGC");
 		retval.setProperty("external_factor", "2.4");
-		retval.setProperty("hash_external_factor", "100.0");
+		retval.setProperty("hash_external_factor", "25.0");
 		retval.setProperty("max_queued_load_flush_threads", "1");
-		retval.setProperty("unpin_delay_ms", "7000");
-		retval.setProperty("sort_gb_factor", "200.0");
+		retval.setProperty("sort_gb_factor", "100.0");
 		HParmsDefaults.retval = retval;
 		return retval;
 	}

@@ -10,7 +10,11 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.LockSupport;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.RID;
 import com.exascale.managers.BufferManager;
@@ -21,6 +25,7 @@ import com.exascale.managers.ResourceManager;
 import com.exascale.misc.BufferedLinkedBlockingQueue;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.HParms;
+import com.exascale.misc.MultiHashMap;
 import com.exascale.misc.MyDate;
 import com.exascale.optimizer.MetaData.PartitionMetaData;
 import com.exascale.tables.DataType;
@@ -40,6 +45,9 @@ public final class TableScanOperator implements Operator, Serializable
 
 	private static sun.misc.Unsafe unsafe;
 	private static long offset;
+	public static MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>> noResults = new MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>>();
+	public static AtomicInteger skippedPages = new AtomicInteger(0);
+	
 	static
 	{
 		try
@@ -83,7 +91,7 @@ public final class TableScanOperator implements Operator, Serializable
 	// happen at runtime?
 	private transient HashMap<Operator, ArrayList<Integer>> activeDevices = new HashMap<Operator, ArrayList<Integer>>();
 	private transient HashMap<Operator, ArrayList<Integer>> activeNodes = new HashMap<Operator, ArrayList<Integer>>();
-	private ArrayList<Integer> devices = new ArrayList<Integer>();
+	public ArrayList<Integer> devices = new ArrayList<Integer>();
 	private int node;
 	private boolean phase2Done = false;
 	public HashMap<Integer, Operator> device2Child = new HashMap<Integer, Operator>();
@@ -94,7 +102,7 @@ public final class TableScanOperator implements Operator, Serializable
 	private transient volatile boolean forceDone;
 	public Transaction tx;
 	private String alias = "";
-	private boolean getRID = false;
+	public boolean getRID = false;
 	private HashMap<String, String> tableCols2Types;
 	private TreeMap<Integer, String> tablePos2Col;
 	private HashMap<String, Integer> tableCols2Pos;
@@ -103,7 +111,7 @@ public final class TableScanOperator implements Operator, Serializable
 	private long sPer;
 	private Index scanIndex = null;
 
-	private transient HashSet<Integer> referencesHash = null;
+	private volatile transient HashSet<Integer> referencesHash = null;
 
 	public TableScanOperator(String schema, String name, MetaData meta, HashMap<String, Integer> cols2Pos, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, TreeMap<Integer, String> tablePos2Col, HashMap<String, String> tableCols2Types, HashMap<String, Integer> tableCols2Pos) throws Exception
 	{
@@ -1386,7 +1394,7 @@ public final class TableScanOperator implements Operator, Serializable
 			}
 			else if (highLE instanceof MyDate)
 			{
-				lowLE = new MyDate(Long.MIN_VALUE);
+				lowLE = new MyDate(Integer.MIN_VALUE);
 			}
 			else if (highLE instanceof String)
 			{
@@ -1410,7 +1418,7 @@ public final class TableScanOperator implements Operator, Serializable
 			}
 			else if (lowLE instanceof MyDate)
 			{
-				highLE = new MyDate(Long.MAX_VALUE);
+				highLE = new MyDate(Integer.MAX_VALUE);
 			}
 			else if (lowLE instanceof String)
 			{
@@ -1575,15 +1583,24 @@ public final class TableScanOperator implements Operator, Serializable
 		}
 	}
 
-	private final class ReaderThread extends ThreadPoolThread
+	public final class ReaderThread extends ThreadPoolThread
 	{
 		private String in;
 		private String in2;
 		private Index scan;
+		int myMaxBlock = 0;
+		int start = 0;
 
 		public ReaderThread(String in)
 		{
 			this.in = in;
+		}
+		
+		public ReaderThread(String in, int start, int max)
+		{
+			this.in = in;
+			this.start = start;
+			this.myMaxBlock = max;
 		}
 
 		public ReaderThread(String in2, boolean marker)
@@ -1602,10 +1619,21 @@ public final class TableScanOperator implements Operator, Serializable
 		{
 			// HRDBMSWorker.logger.debug("ReaderThread for " +
 			// TableScanOperator.this + " has started");
+			ArrayList<ReaderThread> secondThreads = new ArrayList<ReaderThread>();
 			CNFFilter filter = orderedFilters.get(parents.get(0));
 			boolean neededPosNeeded = true;
 			int get = 0;
 			int skip = 0;
+			boolean checkNoResults = (filter != null && !(filter instanceof NullCNFFilter) && !sample);
+			HashSet<HashMap<Filter, Filter>> hshm = null;
+			if (checkNoResults)
+			{
+				hshm = filter.getHSHM();
+				if (hshm == null)
+				{
+					checkNoResults = false;
+				}
+			}
 			
 			if (sample)
 			{
@@ -1669,6 +1697,17 @@ public final class TableScanOperator implements Operator, Serializable
 					// HRDBMSWorker.logger.debug("Opened " + in + " for " +
 					// TableScanOperator.this);
 					int numBlocks = FileManager.numBlocks.get(in);
+					/*
+					if (numBlocks > 5000 && myMaxBlock == 0)
+					{
+						int numThreads = 2;	
+						int blocksPerThread = (int)((numBlocks-4000) * 1.0 / numThreads);
+						myMaxBlock = blocksPerThread + 4000;
+						ReaderThread thread = new ReaderThread(in, myMaxBlock, numBlocks);
+						thread.start();
+						secondThreads.add(thread);
+					}
+					*/
 					// HRDBMSWorker.logger.debug(in + " has " + numBlocks +
 					// " blocks");
 					if (numBlocks == 0)
@@ -1705,32 +1744,82 @@ public final class TableScanOperator implements Operator, Serializable
 
 						layout.put((Integer)entry.getKey(), value);
 					}
-
-					Schema sch = new Schema(layout);
+					
+					Schema[] schemas = new Schema[PREFETCH_REQUEST_SIZE * 4];
+					int g = 0;
+					while (g < schemas.length)
+					{
+						schemas[g++] = new Schema(layout);
+					}
+					final ConcurrentHashMap<Integer, Schema> schemaMap = new ConcurrentHashMap<Integer, Schema>();
+					long schemaIndex = 0;
+					
 					int onPage = Schema.HEADER_SIZE;
-					int lastRequested = Schema.HEADER_SIZE - 1;
+					if (myMaxBlock != 0)
+					{
+						numBlocks = myMaxBlock;
+					}
+					
+					if (start != 0)
+					{
+						onPage = start;
+					}
+					
+					BufferManager.registerInterest(this, in, onPage, numBlocks-1);
+					
+					int lastRequested = onPage - 1;
 					// long count = 0;
 					ArrayList<Object> row = new ArrayList<Object>(fetchPos.size());
 					int get2 = get;
 					int skip2 = skip;
 					int get3 = get;
 					int skip3 = skip;
+					
 					while (onPage < numBlocks)
 					{
 						if (lastRequested - onPage < PAGES_IN_ADVANCE)
 						{
+							BufferManager.updateProgress(this, onPage);
 							if (!sample)
 							{
-								Block[] toRequest = new Block[lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1];
+								//Block[] toRequest = new Block[lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1];
+								ArrayList<Block> toRequest = new ArrayList<Block>();
 								int i = 0;
-								final int length = toRequest.length;
+								final int length = lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1;
 								while (i < length)
 								{
-									toRequest[i] = new Block(in, lastRequested + i + 1);
+									Block block = new Block(in, lastRequested + i + 1);
+									if (hshm != null)
+									{
+										Set<HashSet<HashMap<Filter, Filter>>> filters = noResults.get(block);
+										if (filter != null && filters.contains(hshm))
+										{
+											i++;
+											continue;
+										}
+									}
+									toRequest.add(block);
 									i++;
 								}
-								tx.requestPages(toRequest);
-								lastRequested += toRequest.length;
+								
+								Block[] toRequest2 = new Block[toRequest.size()];
+								i = 0;
+								while (i < toRequest2.length)
+								{
+									toRequest2[i] = toRequest.get(i);
+									i++;
+								}
+								
+								if (!getRID)
+								{
+									tx.requestPages(toRequest2, schemas, (int)(schemaIndex % (PREFETCH_REQUEST_SIZE * 4)), schemaMap, fetchPos);
+									schemaIndex += PREFETCH_REQUEST_SIZE;
+								}
+								else
+								{
+									tx.requestPages(toRequest2);
+								}
+								lastRequested += length;
 							}
 							else
 							{
@@ -1754,7 +1843,7 @@ public final class TableScanOperator implements Operator, Serializable
 									{
 										get3--;
 									}
-									
+								
 									toRequest.add(new Block(in, lastRequested + i + 1));
 									i++;
 								}
@@ -1772,7 +1861,16 @@ public final class TableScanOperator implements Operator, Serializable
 										toRequest2[j] = b;
 										j++;
 									}
-									tx.requestPages(toRequest2);
+									
+									if (!getRID)
+									{
+										tx.requestPages(toRequest2, schemas, (int)(schemaIndex % (PREFETCH_REQUEST_SIZE * 4)), schemaMap, fetchPos);
+										schemaIndex += PREFETCH_REQUEST_SIZE;
+									}
+									else
+									{
+										tx.requestPages(toRequest2);
+									}
 								}
 								
 								lastRequested += length;
@@ -1795,8 +1893,46 @@ public final class TableScanOperator implements Operator, Serializable
 							get2--;
 						}
 						
-						tx.read(new Block(in, onPage++), sch);
-						RowIterator rit = sch.rowIterator();
+						Block thisBlock = new Block(in, onPage);
+						if (hshm != null)
+						{
+							Set<HashSet<HashMap<Filter, Filter>>> filters = noResults.get(thisBlock);
+							if (filter != null && filters.contains(hshm))
+							{
+								skippedPages.getAndIncrement();
+								onPage++;
+								continue;
+							}
+						}
+						
+						//tx.read(new Block(in, onPage++), sch);
+						Schema sch = null;
+						RowIterator rit = null;
+						if (!getRID)
+						{
+							sch = schemaMap.get(onPage);
+							while (sch == null)
+							{
+								LockSupport.parkNanos(500);
+								sch = schemaMap.get(onPage);
+							}
+						
+							schemaMap.remove(onPage);
+							onPage++;
+							
+							synchronized(sch)
+							{
+								rit = sch.rowIterator(true);
+							}
+						}
+						else
+						{
+							sch = schemas[0];
+							tx.read(new Block(in, onPage++), sch);
+							rit = sch.rowIterator(false);
+						}
+						
+						boolean hadResults = false;
 						outer: while (rit.hasNext())
 						{
 							Row r = rit.next();
@@ -1910,6 +2046,7 @@ public final class TableScanOperator implements Operator, Serializable
 								{
 									if (filter.passes(row))
 									{
+										hadResults = true;
 										if (!getRID)
 										{
 											int i = 0;
@@ -1923,6 +2060,10 @@ public final class TableScanOperator implements Operator, Serializable
 												{
 													int temp = fetchPos.get(i);
 													FieldValue fv = r.getCol(temp);
+													if (!fv.exists())
+													{
+														continue outer;
+													}
 													// row.set(i,
 													// fv.getValue());
 													Object[] array = (Object[])unsafe.getObject(row, offset);
@@ -1949,6 +2090,8 @@ public final class TableScanOperator implements Operator, Serializable
 											}
 											else
 											{
+												checkNoResults = false;
+												BufferManager.unregisterInterest(this);
 												readBuffer.put(new DataEndMarker());
 												return;
 											}
@@ -1962,6 +2105,8 @@ public final class TableScanOperator implements Operator, Serializable
 											}
 											else
 											{
+												checkNoResults = false;
+												BufferManager.unregisterInterest(this);
 												readBuffer.put(new DataEndMarker());
 												return;
 											}
@@ -1970,6 +2115,7 @@ public final class TableScanOperator implements Operator, Serializable
 								}
 								else
 								{
+									hadResults = true;
 									// final ArrayList<Object> newRow = new
 									// ArrayList<Object>(neededPos.size());
 									// for (final int pos : neededPos)
@@ -1983,11 +2129,28 @@ public final class TableScanOperator implements Operator, Serializable
 									}
 									else
 									{
+										checkNoResults = false;
+										BufferManager.unregisterInterest(this);
 										readBuffer.put(new DataEndMarker());
 										return;
 									}
 								}
 							}
+						}
+						
+						if (checkNoResults && !hadResults)
+						{
+							noResults.multiPut(thisBlock, hshm);
+						}
+					}
+					
+					BufferManager.unregisterInterest(this);
+					
+					if (start == 0 && myMaxBlock != 0)
+					{
+						for (ReaderThread thread : secondThreads)
+						{
+							thread.join();
 						}
 					}
 				}

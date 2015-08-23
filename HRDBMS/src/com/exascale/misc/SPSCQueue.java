@@ -1,5 +1,7 @@
 package com.exascale.misc;
 
+import java.util.concurrent.locks.LockSupport;
+
 public class SPSCQueue
 {
 	private final Object[] q;
@@ -39,13 +41,7 @@ public class SPSCQueue
 	{
 		while (tail - head > length)
 		{
-			try
-			{
-				Thread.sleep(1);
-			}
-			catch (InterruptedException e)
-			{
-			}
+			LockSupport.parkNanos(500);
 		}
 
 		q[(int)(tail & (length - 1))] = o;
@@ -56,13 +52,7 @@ public class SPSCQueue
 	{
 		while (head + 1 == tail)
 		{
-			try
-			{
-				Thread.sleep(1);
-			}
-			catch (InterruptedException e)
-			{
-			}
+			LockSupport.parkNanos(500);
 		}
 		final int index = (int)((head + 1) & (length - 1));
 		Object retval = q[index];

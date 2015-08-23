@@ -246,6 +246,39 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		OperatorUtils.writeBool(error, out);
 		OperatorUtils.writeInt(connCount, out);
 	}
+	
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev, boolean flag) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(72, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		// recreate meta
+		//child.serialize(out, prev);
+		new DummyOperator(meta).serialize(out, prev);
+		// prev = parent.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.writeInt(node, out);
+		OperatorUtils.writeInt(numParents, out);
+		OperatorUtils.writeBool(started, out);
+		OperatorUtils.writeBool(numpSet, out);
+		OperatorUtils.writeBool(cardSet, out);
+		OperatorUtils.serializeALS(hashCols, out, prev);
+		OperatorUtils.writeInt(numNodes, out);
+		OperatorUtils.writeInt(this.id, out);
+		OperatorUtils.writeInt(starting, out);
+		// recreate connections
+		OperatorUtils.serializeALOp(parents, out, prev);
+		OperatorUtils.writeBool(error, out);
+		OperatorUtils.writeInt(connCount, out);
+	}
 
 	public void setID(int id)
 	{
@@ -299,16 +332,16 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 				throw new Exception(errorText);
 			}
 			started = true;
-			child.start();
-			Object o = child.next(this);
-			final ArrayList<Object> key = new ArrayList<Object>(hashCols.size());
-			while (!(o instanceof DataEndMarker))
+			//child.start();
+			try
 			{
-				final byte[] obj;
-				try
+				Object o = child.next(this);
+				final ArrayList<Object> key = new ArrayList<Object>(hashCols.size());
+				while (!(o instanceof DataEndMarker))
 				{
+					final byte[] obj;
 					obj = toBytes(o);
-
+					
 					if (o instanceof Exception)
 					{
 						HRDBMSWorker.logger.debug("", (Exception)o);
@@ -322,53 +355,40 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 						child.close();
 						return;
 					}
-				}
-				catch (Exception e)
-				{
-					HRDBMSWorker.logger.debug("Received an empty array list to send from " + child);
-					throw e;
-				}
 
-				key.clear();
-				int z = 0;
-				final int limit = hashCols.size();
-				//for (final String col : hashCols)
-				while (z < limit)
-				{
-					final String col = hashCols.get(z++);
-					int pos = -1;
-					try
+					key.clear();
+					int z = 0;
+					final int limit = hashCols.size();
+					//for (final String col : hashCols)
+					while (z < limit)
 					{
+						final String col = hashCols.get(z++);
+						int pos = -1;
 						pos = child.getCols2Pos().get(col);
+						key.add(((ArrayList<Object>)o).get(pos));
 					}
-					catch (final Exception e)
-					{
-						HRDBMSWorker.logger.error("Looking up column position in NetworkHashAndSend", e);
-						HRDBMSWorker.logger.error("Looking for " + col + " in " + child.getCols2Pos());
-						throw e;
-					}
-					key.add(((ArrayList<Object>)o).get(pos));
-				}
 
-				final int hash = (int)(starting + ((0x0EFFFFFFFFFFFFFFL & hash(key)) % numNodes));
-				try
-				{
+					final int hash = (int)(starting + ((0x7FFFFFFFFFFFFFFFL & hash(key)) % numNodes));
 					final OutputStream out = outs2[hash];
 					out.write(obj);
+					
+					o = child.next(this);
 				}
-				catch (final NullPointerException e)
+			}
+			catch(Exception e)
+			{
+				for (final OutputStream out : outs2)
 				{
-					HRDBMSWorker.logger.error("HashAndSend is looking for a connection to node " + hash + " in " + outs + ". Starting is " + starting, e);
-					HRDBMSWorker.logger.error("Outs = " + outs);
-					HRDBMSWorker.logger.error("Outs.get(hash) = " + outs[hash]);
-					// HRDBMSWorker.logger.error("Obj = " + obj);
-					throw e;
+					out.write(toBytes(e));
+					out.flush();
 				}
-				// count++;
-				o = child.next(this);
+
+				child.nextAll(this);
+				child.close();
+				return;
 			}
 
-			final byte[] obj = toBytes(o);
+			final byte[] obj = toBytes(new DataEndMarker());
 			for (final OutputStream out : outs2)
 			{
 				out.write(obj);

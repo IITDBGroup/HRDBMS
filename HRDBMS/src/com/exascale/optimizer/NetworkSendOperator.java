@@ -278,6 +278,10 @@ public class NetworkSendOperator implements Operator, Serializable
 		OperatorUtils.writeBool(numpSet, out);
 		OperatorUtils.writeBool(cardSet, out);
 	}
+	
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev, boolean flag) throws Exception
+	{
+	}
 
 	public boolean setCard()
 	{
@@ -330,6 +334,11 @@ public class NetworkSendOperator implements Operator, Serializable
 			throw e;
 		}
 	}
+	
+	public void startChildren() throws Exception
+	{
+		child.start();
+	}
 
 	@Override
 	public synchronized void start() throws Exception
@@ -338,7 +347,7 @@ public class NetworkSendOperator implements Operator, Serializable
 		try
 		{
 			started = true;
-			child.start();
+			//child.start();
 			Object o = child.next(this);
 			while (!(o instanceof DataEndMarker))
 			{
@@ -492,7 +501,7 @@ public class NetworkSendOperator implements Operator, Serializable
 			else if (o instanceof MyDate)
 			{
 				header[i] = (byte)3;
-				size += 8;
+				size += 4;
 			}
 			else if (o instanceof String)
 			{
@@ -553,7 +562,7 @@ public class NetworkSendOperator implements Operator, Serializable
 			}
 			else if (retval[i] == 3)
 			{
-				retvalBB.putLong(((MyDate)o).getTime());
+				retvalBB.putInt(((MyDate)o).getTime());
 			}
 			else if (retval[i] == 4)
 			{

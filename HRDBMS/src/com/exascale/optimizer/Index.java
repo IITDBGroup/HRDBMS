@@ -492,7 +492,7 @@ public final class Index implements Serializable
 	{
 		this.setEqualsPosMulti(keys, true);
 		IndexRecord rec = line;
-		while (!rec.isNull() && rec.keysMatch(keys))
+		while (!rec.isNull())
 		{
 			if (rec.ridsMatch(rid))
 			{
@@ -1247,7 +1247,7 @@ public final class Index implements Serializable
 		setEqualsPosMulti(keys, true);
 		IndexRecord rec = line;
 		int cmp = rec.compareTo(keys);
-		if (cmp == 0)
+		if (!rec.isTombstone() && cmp == 0)
 		{
 			if (isUnique())
 			{
@@ -1298,11 +1298,12 @@ public final class Index implements Serializable
 		setEqualsPosMulti(keys, true);
 		IndexRecord rec = line;
 		int cmp = rec.compareTo(keys);
-		if (cmp == 0)
+		if (!rec.isTombstone() && cmp == 0)
 		{
 			if (isUnique())
 			{
 				HRDBMSWorker.logger.debug("Unique constraint violation");
+				rec.compareTo(keys, true);
 				throw new Exception("Unique constraint violation");
 			}
 		}
@@ -1404,7 +1405,7 @@ public final class Index implements Serializable
 
 		while (delayed)
 		{
-			LockSupport.parkNanos(75000);
+			LockSupport.parkNanos(500);
 		}
 
 		if (!positioned)
@@ -2021,6 +2022,12 @@ public final class Index implements Serializable
 	{
 		RowComparator rc = new RowComparator(orders, types);
 		return rc.compare(vals, r);
+	}
+	
+	private final int compare(ArrayList<Object> vals, ArrayList<Object> r, boolean debug)
+	{
+		RowComparator rc = new RowComparator(orders, types);
+		return rc.compare(vals, r, true);
 	}
 
 	private final int compare(FieldValue[] vals, ArrayList<Object> r)
@@ -3111,7 +3118,7 @@ public final class Index implements Serializable
 		
 		public boolean ridsMatch(RID rid)
 		{
-			RID myRid = new RID(p.getInt(off+33), p.getInt(off+37), p.getInt(off+41), p.getInt(off+45));
+			RID myRid = new RID(p.getInt(off + 25), p.getInt(off + 29), p.getInt(off + 33), p.getInt(off + 37));
 			return myRid.equals(rid);
 		}
 
@@ -3143,6 +3150,16 @@ public final class Index implements Serializable
 			}
 			
 			return compare(getKeys(types), rhs);
+		}
+		
+		public int compareTo(ArrayList<Object> rhs, boolean debug) throws Exception
+		{
+			if (isStart())
+			{
+				return -1;
+			}
+			
+			return compare(getKeys(types), rhs, true);
 		}
 
 		public boolean isLeaf()
@@ -3213,8 +3230,8 @@ public final class Index implements Serializable
 					}
 					else if (type == 4)
 					{
-						retval.add(new MyDate(p.getLong(o)));
-						o += 8;
+						retval.add(new MyDate(p.getInt(o)));
+						o += 4;
 					}
 					else
 					{
@@ -3283,8 +3300,8 @@ public final class Index implements Serializable
 					}
 					else if (type == 4)
 					{
-						retval.add(new MyDate(p.getLong(o)));
-						o += 8;
+						retval.add(new MyDate(p.getInt(o)));
+						o += 4;
 					}
 					else
 					{
@@ -3677,7 +3694,7 @@ public final class Index implements Serializable
 			}
 			else if (type == 4)
 			{
-				size += 8;
+				size += 4;
 			}
 			else if (type == 2)
 			{
@@ -3721,7 +3738,7 @@ public final class Index implements Serializable
 			}
 			else if (type == 4)
 			{
-				bb.putLong(((MyDate)keys[i].getValue()).getTime());
+				bb.putInt(((MyDate)keys[i].getValue()).getTime());
 			}
 			else if (type == 2)
 			{

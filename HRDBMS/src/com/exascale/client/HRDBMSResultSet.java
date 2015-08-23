@@ -2190,7 +2190,7 @@ public class HRDBMSResultSet implements ResultSet
 			else if (bytes[i + 4] == 3)
 			{
 				// date
-				final MyDate o = new MyDate(bb.getLong());
+				final MyDate o = new MyDate(bb.getInt());
 				retval.add(o);
 			}
 			else if (bytes[i + 4] == 4)

@@ -44,6 +44,8 @@ import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.LockSupport;
+import com.exascale.compression.CompressedInputStream;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
 import com.exascale.filesystem.RID;
@@ -86,7 +88,7 @@ import com.sun.management.OperatingSystemMXBean;
 
 public class ConnectionWorker extends HRDBMSThread
 {
-	private static HashMap<Integer, NetworkSendOperator> sends;
+	private static ConcurrentHashMap<Integer, NetworkSendOperator> sends;
 	private static int PREFETCH_REQUEST_SIZE;
 	private static int PAGES_IN_ADVANCE;
 	private static ConcurrentHashMap<String, LoadMetaData> ldmds = new ConcurrentHashMap<String, LoadMetaData>(16, 0.75f, 6 * ResourceManager.cpus);
@@ -99,12 +101,11 @@ public class ConnectionWorker extends HRDBMSThread
 	private static Charset scs = StandardCharsets.UTF_8;
 	static
 	{
-		sends = new HashMap<Integer, NetworkSendOperator>();
+		sends = new ConcurrentHashMap<Integer, NetworkSendOperator>();
 		HParms hparms = HRDBMSWorker.getHParms();
 		PREFETCH_REQUEST_SIZE = Integer.parseInt(hparms.getProperty("prefetch_request_size")); // 80
 		PAGES_IN_ADVANCE = Integer.parseInt(hparms.getProperty("pages_in_advance")); // 40
-		MAX_PAGES = (Long.parseLong(HRDBMSWorker.getHParms().getProperty("bp_pages")) * 128 / 2 / MetaData.getNumDevices());
-		MAX_PAGES -= (MAX_PAGES * 128 / 1024);
+		MAX_PAGES = 5000;
 		try
 		{
 			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
@@ -869,6 +870,7 @@ public class ConnectionWorker extends HRDBMSThread
 	public void run()
 	{
 		// check if there are enough available resources or not
+		/*
 		if (HRDBMSWorker.type == HRDBMSWorker.TYPE_MASTER || HRDBMSWorker.type == HRDBMSWorker.TYPE_COORD)
 		{
 			try
@@ -884,6 +886,10 @@ public class ConnectionWorker extends HRDBMSThread
 						{
 							break;
 						}
+						else
+						{
+							System.gc();
+						}
 					}
 
 					Thread.sleep(5000);
@@ -894,6 +900,7 @@ public class ConnectionWorker extends HRDBMSThread
 				HRDBMSWorker.logger.debug("", e);
 			}
 		}
+		*/
 
 		// HRDBMSWorker.logger.debug("New connection worker is up and running");
 		try
@@ -1079,6 +1086,7 @@ public class ConnectionWorker extends HRDBMSThread
 					{
 						Thread.sleep(1000);
 					}
+					op.startChildren();
 					op.start();
 					try
 					{
@@ -1086,6 +1094,45 @@ public class ConnectionWorker extends HRDBMSThread
 					}
 					catch (Exception e)
 					{
+					}
+				}
+				else if (command.equals("SNDRMTT2"))
+				{
+					final byte[] idBytes = new byte[4];
+					num = in.read(idBytes);
+					if (num != 4)
+					{
+						throw new Exception("Received less than 4 bytes when reading id field in SNDRMTTR command.");
+					}
+
+					final int id = bytesToInt(idBytes);
+					NetworkSendOperator send = sends.get(id);
+					while (send == null)
+					{
+						LockSupport.parkNanos(500);
+						send = sends.get(id);
+					}
+					// System.out.println("Adding connection from " + from +
+					// " to " + send + " = " + sock);
+					send.addConnection(from, sock);
+					while (!XAManager.rP2)
+					{
+						Thread.sleep(1000);
+					}
+					synchronized (send)
+					{
+						if (send.notStarted() && send.hasAllConnections())
+						{
+							send.start();
+							try
+							{
+								send.close();
+							}
+							catch (Exception e)
+							{
+							}
+							sends.remove(id);
+						}
 					}
 				}
 				else if (command.equals("SNDRMTTR"))
@@ -1098,30 +1145,13 @@ public class ConnectionWorker extends HRDBMSThread
 					}
 
 					final int id = bytesToInt(idBytes);
-					if (!sends.containsKey(id))
+					HashMap<Long, Object> map = new HashMap<Long, Object>();
+					NetworkSendOperator op = (NetworkSendOperator)OperatorUtils.deserializeOperator(in, map);
+					map.clear();
+					map = null;
+					if (sends.putIfAbsent(id, op) == null)
 					{
-						out.write(1); // do send
-						out.flush();
-						// final ObjectInputStream objIn = new
-						// ObjectInputStream(in);
-						// final NetworkSendOperator op =
-						// (NetworkSendOperator)objIn.readObject();
-						HashMap<Long, Object> map = new HashMap<Long, Object>();
-						NetworkSendOperator op = (NetworkSendOperator)OperatorUtils.deserializeOperator(in, map);
-						map.clear();
-						map = null;
-						synchronized (sends)
-						{
-							if (!sends.containsKey(id))
-							{
-								sends.put(id, op);
-							}
-						}
-					}
-					else
-					{
-						out.write(0); // don't send
-						out.flush();
+						op.startChildren();
 					}
 
 					final NetworkSendOperator send = sends.get(id);
@@ -2108,7 +2138,7 @@ public class ConnectionWorker extends HRDBMSThread
 		// determine node and device
 		ArrayList<Object> partial = new ArrayList<Object>();
 		partial.add(key);
-		long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+		long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
 		int node = (int)(hash % MetaData.numWorkerNodes);
 		int device = (int)(hash % MetaData.getNumDevices());
 		Index index = new Index(schema + ".PK" + table + ".indx", keys, types, orders);
@@ -2500,7 +2530,7 @@ public class ConnectionWorker extends HRDBMSThread
 		// determine node and device
 		ArrayList<Object> partial = new ArrayList<Object>();
 		partial.add(key);
-		long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+		long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
 		int node = (int)(hash % MetaData.numWorkerNodes);
 		int device = (int)(hash % MetaData.getNumDevices());
 		SendPut2Thread thread = new SendPut2Thread(schema, table, node, device, key, tx, value, tx2);
@@ -2543,7 +2573,7 @@ public class ConnectionWorker extends HRDBMSThread
 		// determine node and device
 		ArrayList<Object> partial = new ArrayList<Object>();
 		partial.add(key);
-		long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+		long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
 		int node = (int)(hash % MetaData.numWorkerNodes);
 		int device = (int)(hash % MetaData.getNumDevices());
 		SendRemove2Thread thread = new SendRemove2Thread(schema, table, node, device, key, tx);
@@ -2768,7 +2798,7 @@ public class ConnectionWorker extends HRDBMSThread
 			else if (bytes[i + 4] == 3)
 			{
 				// date
-				final MyDate o = new MyDate(bb.getLong());
+				final MyDate o = new MyDate(bb.getInt());
 				retval.add(o);
 			}
 			else if (bytes[i + 4] == 4)
@@ -3261,13 +3291,7 @@ public class ConnectionWorker extends HRDBMSThread
 		{
 			while (flThreads.putIfAbsent(thread, thread) != null)
 			{
-				try
-				{
-					Thread.sleep(1);
-				}
-				catch (InterruptedException e)
-				{
-				}
+				LockSupport.parkNanos(500);
 			}
 		}
 		thread.run();
@@ -5344,7 +5368,7 @@ public class ConnectionWorker extends HRDBMSThread
 			else if (o instanceof MyDate)
 			{
 				header[i] = (byte)3;
-				size += 8;
+				size += 4;
 			}
 			else if (o instanceof String)
 			{
@@ -5429,7 +5453,7 @@ public class ConnectionWorker extends HRDBMSThread
 			}
 			else if (retval[i] == 3)
 			{
-				retvalBB.putLong(((MyDate)o).getTime());
+				retvalBB.putInt(((MyDate)o).getTime());
 			}
 			else if (retval[i] == 4)
 			{

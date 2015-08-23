@@ -3,10 +3,19 @@ package com.exascale.managers;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
 import com.exascale.managers.FileManager.EndDelayThread;
+import com.exascale.misc.HJOMultiHashMap;
+import com.exascale.misc.MultiHashMap;
+import com.exascale.misc.VHJOMultiHashMap;
+import com.exascale.optimizer.TableScanOperator;
+import com.exascale.tables.Schema;
+import com.exascale.tables.Transaction;
 import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.IOThread;
 
@@ -14,7 +23,35 @@ public class BufferManager extends HRDBMSThread
 {
 	public static SubBufferManager[] managers;
 	private final static int mLength;
-	private final static HashSet<String> delayed = new HashSet<String>();
+	private final static ConcurrentHashMap<TableScanOperator.ReaderThread, Range> threadRanges = new ConcurrentHashMap<TableScanOperator.ReaderThread, Range>();
+	private final static VHJOMultiHashMap<String, Range> fileRanges = new VHJOMultiHashMap<String, Range>();
+	private final static ConcurrentHashMap<TableScanOperator.ReaderThread, String> threadFiles = new ConcurrentHashMap<TableScanOperator.ReaderThread, String>();
+	
+	public static class Range
+	{
+		public volatile int low;
+		public final int high;
+		
+		public Range(int low, int high)
+		{
+			this.low = low;
+			this.high = high;
+		}
+		
+		public boolean equals(Object r)
+		{
+			Range rhs = (Range)r;
+			return low == rhs.low && high == rhs.high;
+		}
+		
+		public int hashCode()
+		{
+			int hash = 23;
+			hash = hash * 31 + low;
+			hash = hash * 31 + high;
+			return hash;
+		}
+	}
 
 	static
 	{
@@ -30,6 +67,56 @@ public class BufferManager extends HRDBMSThread
 			managers[i] = new SubBufferManager(log);
 			i++;
 		}
+	}
+	
+	public static void registerInterest(TableScanOperator.ReaderThread op, String fn, int low, int high)
+	{
+		Range range = new Range(low, high);
+		threadRanges.put(op, range);
+		fileRanges.multiPut(fn, range);
+		threadFiles.put(op, fn);
+	}
+	
+	public static void unregisterInterest(TableScanOperator.ReaderThread op)
+	{
+		Range range = threadRanges.remove(op);
+		String fn = threadFiles.remove(op);
+		List<Range> ranges = fileRanges.get(fn);
+		ranges.remove(range);
+	}
+	
+	public static void updateProgress(TableScanOperator.ReaderThread op, int low)
+	{
+		threadRanges.get(op).low = low;
+	}
+	
+	public static boolean isInterest(Block b)
+	{
+		if (b == null)
+		{
+			return false;
+		}
+		
+		String fn = b.fileName();
+		int num = b.number();
+		List<Range> ranges = fileRanges.get(fn);
+		int z = 0;
+		final int limit = ranges.size();
+		while (z < limit)
+		{
+			try
+			{
+				Range range = ranges.get(z++);
+				if (range != null && num >= range.low && num <= range.high)
+				{
+					return true;
+				}
+			}
+			catch(Exception e)
+			{}
+		}
+		
+		return false;
 	}
 
 	public static void flushAll(FileChannel fc) throws Exception
@@ -107,10 +194,10 @@ public class BufferManager extends HRDBMSThread
 		managers[hash].pin(b, txnum);
 	}
 	
-	public static void pin(Block b, long txnum, boolean flag) throws Exception
+	public static void pin(Block b, Transaction tx, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos) throws Exception
 	{
 		int hash = (b.hashCode2() & 0x7FFFFFFF) & (mLength - 1);
-		managers[hash].pin(b, txnum, true);
+		managers[hash].pin(b, tx, schema, schemaMap, fetchPos);
 	}
 
 	public static void requestPage(Block b, long txnum)
@@ -126,15 +213,19 @@ public class BufferManager extends HRDBMSThread
 		}
 	}
 
-	public static void requestPages(Block[] reqBlocks, long txnum)
+	public static void requestPages(Block[] reqBlocks, long txnum) throws Exception
 	{
-		try
+		for (final Block b : reqBlocks)
 		{
-			new IOThread(reqBlocks, txnum).start();
+			BufferManager.pin(b, txnum);
 		}
-		catch (Exception e)
+	}
+	
+	public static void requestPages(Block[] reqBlocks, Transaction tx, Schema[] schemas, int schemaIndex, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos) throws Exception
+	{
+		for (final Block b : reqBlocks)
 		{
-			HRDBMSWorker.logger.warn("Error fetching pages", e);
+			BufferManager.pin(b, tx, schemas[schemaIndex++], schemaMap, fetchPos);
 		}
 	}
 
@@ -210,7 +301,7 @@ public class BufferManager extends HRDBMSThread
 	@Override
 	public void run()
 	{
-		int numThreads = mLength >> 6;
+		int numThreads = mLength >> 4;
 		int x = 1;
 		while (x < numThreads)
 		{
@@ -231,7 +322,7 @@ public class BufferManager extends HRDBMSThread
 				{
 					try
 					{
-						if (managers[j].cleanPage(i, delayed))
+						if (managers[j].cleanPage(i))
 						{
 							didSomething = true;
 						}
@@ -255,7 +346,6 @@ public class BufferManager extends HRDBMSThread
 					//	FileManager.endDelay(file);
 					//}
 
-					delayed.clear();
 					Thread.sleep(20000);
 				}
 				catch (Exception e)
@@ -314,7 +404,6 @@ public class BufferManager extends HRDBMSThread
 	{
 		private final int add;
 		private final int start;
-		private final HashSet<String> d = new HashSet<String>();
 
 		public OddThread(int add, int start)
 		{
@@ -338,7 +427,7 @@ public class BufferManager extends HRDBMSThread
 					{
 						try
 						{
-							if (managers[j].cleanPage(i, d))
+							if (managers[j].cleanPage(i))
 							{
 								didSomething = true;
 							}
@@ -362,7 +451,6 @@ public class BufferManager extends HRDBMSThread
 						//	FileManager.endDelay(file);
 						//}
 
-						d.clear();
 						Thread.sleep(20000);
 					}
 					catch (Exception e)

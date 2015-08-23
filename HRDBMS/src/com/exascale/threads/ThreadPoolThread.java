@@ -2,11 +2,13 @@ package com.exascale.threads;
 
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 
 public abstract class ThreadPoolThread implements Runnable
 {
 	private volatile Future forJoin;
+	private volatile boolean started = false;
 
 	public void join() throws InterruptedException
 	{
@@ -31,7 +33,16 @@ public abstract class ThreadPoolThread implements Runnable
 
 	public void start()
 	{
-		forJoin = ResourceManager.pool.submit(this);
+		if (!started)
+		{
+			forJoin = ResourceManager.pool.submit(this);
+			started = true;
+		}
+		else
+		{
+			Exception e = new Exception();
+			HRDBMSWorker.logger.debug("Starting a thread that has already been started", e);
+		}
 	}
 	
 	public boolean isDone()

@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.LockSupport;
 import com.exascale.filesystem.RID;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
@@ -191,7 +192,7 @@ public final class UpdateOperator implements Operator, Serializable
 	{
 		while (!done)
 		{
-			Thread.sleep(1);
+			LockSupport.parkNanos(500);
 		}
 
 		if (num.get() == Integer.MIN_VALUE)

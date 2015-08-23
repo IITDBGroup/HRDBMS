@@ -9,12 +9,14 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import com.exascale.compression.CompressedOutputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 
 public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 {
 	private static sun.misc.Unsafe unsafe;
+	private boolean send = false;
 
 	static
 	{
@@ -52,6 +54,7 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 		value.start = OperatorUtils.readLong(in);
 		value.node = OperatorUtils.readInt(in);
 		value.ID = OperatorUtils.readInt(in);
+		value.send = OperatorUtils.readBool(in);
 		value.cd = cs.newDecoder();
 		return value;
 	}
@@ -61,6 +64,7 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 	{
 		final NetworkHashReceiveOperator retval = new NetworkHashReceiveOperator(ID, meta);
 		retval.node = node;
+		retval.send = send;
 		return retval;
 	}
 
@@ -105,24 +109,39 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 						outs.put(child, out);
 						final InputStream in = new BufferedInputStream(sock.getInputStream(), 65536);
 						ins.put(child, in);
-						final byte[] command = "SNDRMTTR".getBytes(StandardCharsets.UTF_8);
-						final byte[] from = intToBytes(node);
-						final byte[] to = intToBytes(child.getNode());
-						final byte[] idBytes = intToBytes(ID);
-						final byte[] data = new byte[command.length + from.length + to.length + idBytes.length];
-						System.arraycopy(command, 0, data, 0, 8);
-						System.arraycopy(from, 0, data, 8, 4);
-						System.arraycopy(to, 0, data, 12, 4);
-						System.arraycopy(idBytes, 0, data, 16, 4);
-						out.write(data);
-						out.flush();
-						final int doSend = in.read();
-						if (doSend != 0)
+						
+						if (send)
 						{
+							final byte[] command = "SNDRMTTR".getBytes(StandardCharsets.UTF_8);
+							final byte[] from = intToBytes(node);
+							final byte[] to = intToBytes(child.getNode());
+							final byte[] idBytes = intToBytes(ID);
+							final byte[] data = new byte[command.length + from.length + to.length + idBytes.length];
+							System.arraycopy(command, 0, data, 0, 8);
+							System.arraycopy(from, 0, data, 8, 4);
+							System.arraycopy(to, 0, data, 12, 4);
+							System.arraycopy(idBytes, 0, data, 16, 4);
+							out.write(data);
+							out.flush();
+
 							IdentityHashMap<Object, Long> map = new IdentityHashMap<Object, Long>();
 							child.serialize(out, map);
 							map.clear();
 							map = null;
+							out.flush();
+						}
+						else
+						{
+							final byte[] command = "SNDRMTT2".getBytes(StandardCharsets.UTF_8);
+							final byte[] from = intToBytes(node);
+							final byte[] to = intToBytes(child.getNode());
+							final byte[] idBytes = intToBytes(ID);
+							final byte[] data = new byte[command.length + from.length + to.length + idBytes.length];
+							System.arraycopy(command, 0, data, 0, 8);
+							System.arraycopy(from, 0, data, 8, 4);
+							System.arraycopy(to, 0, data, 12, 4);
+							System.arraycopy(idBytes, 0, data, 16, 4);
+							out.write(data);
 							out.flush();
 						}
 					}
@@ -160,6 +179,11 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 		}
 		return o;
 	}
+	
+	public void setSend()
+	{
+		send = true;
+	}
 
 	@Override
 	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
@@ -174,7 +198,14 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 		OperatorUtils.writeType(74, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		// recreate meta
-		OperatorUtils.serializeALOp(children, out, prev);
+		if (send)
+		{
+			OperatorUtils.serializeALOp(children, out, prev);
+		}
+		else
+		{
+			OperatorUtils.serializeALOp(children, out, prev, false);
+		}
 		parent.serialize(out, prev);
 		OperatorUtils.serializeStringHM(cols2Types, out, prev);
 		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
@@ -183,6 +214,7 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 		OperatorUtils.writeLong(start, out);
 		OperatorUtils.writeInt(node, out);
 		OperatorUtils.writeInt(ID, out);
+		OperatorUtils.writeBool(send, out);
 	}
 
 	public void setID(int ID)

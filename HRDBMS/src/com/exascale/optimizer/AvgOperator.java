@@ -131,7 +131,7 @@ public final class AvgOperator implements AggregateOperator, Serializable
 		// DiskBackedALOHashMap<AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
 		// private final DiskBackedALOHashMap<AtomicLong> counts = new
 		// DiskBackedALOHashMap<AtomicLong>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
-		private final HashMap<ArrayList<Object>, BigDecimalReplacement> sums = new HashMap<ArrayList<Object>, BigDecimalReplacement>();
+		private final ConcurrentHashMap<ArrayList<Object>, BigDecimalReplacement> sums = new ConcurrentHashMap<ArrayList<Object>, BigDecimalReplacement>();
 		private final ConcurrentHashMap<ArrayList<Object>, AtomicLong> counts = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS, 0.75f, 6 * ResourceManager.cpus);
 		private final int pos;
 
@@ -173,17 +173,18 @@ public final class AvgOperator implements AggregateOperator, Serializable
 		{
 			final Double v = ((Number)row.get(pos)).doubleValue();
 			BigDecimalReplacement val = new BigDecimalReplacement(v);
-			synchronized (sums)
+			//synchronized (sums)
+			//{
+			final BigDecimalReplacement ad = sums.get(group);
+			if (ad != null)
 			{
-				final BigDecimalReplacement ad = sums.get(group);
-				if (ad != null)
-				{
-					ad.add(val);
-				}
-				else
-				{
-					sums.put(group, val);
-				}
+				ad.add(val);
+				return;
+			}
+			
+			if (sums.putIfAbsent(group, val) != null)
+			{
+				sums.get(group).add(val);
 			}
 
 			final AtomicLong al = counts.get(group);

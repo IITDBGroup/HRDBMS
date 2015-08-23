@@ -434,7 +434,7 @@ public class CatalogCode
 				{
 					if (!token.equals("null"))
 					{
-						total += (4 + token.length());
+						total += (3 + token.length());
 					}
 				}
 				else
@@ -2106,7 +2106,9 @@ public class CatalogCode
 				{
 					if (!token.equals("null"))
 					{
-						out.println("\t\tbb.putInt(" + token.length() + ");");
+						out.println("\t\tbb.put((byte)" + (token.length() >> 16) + ");");
+						out.println("\t\tbb.put((byte)" + ((token.length() >> 8) & 0xff) + ");");
+						out.println("\t\tbb.put((byte)" + (token.length() & 0xff) + ");");
 						out.println("\t\tputString(bb, \"" + token + "\");");
 					}
 				}
@@ -2208,7 +2210,7 @@ public class CatalogCode
 					out.println("\t\tbb.putInt(Page.BLOCK_SIZE - " + off + ");");
 					if (!token.equals("null"))
 					{
-						off -= (4 + token.length());
+						off -= (3 + token.length());
 					}
 				}
 				else

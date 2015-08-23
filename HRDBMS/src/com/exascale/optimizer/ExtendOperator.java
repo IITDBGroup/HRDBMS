@@ -18,6 +18,7 @@ import com.exascale.misc.BufferedLinkedBlockingQueue;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.FastStringTokenizer;
 import com.exascale.tables.Plan;
+import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.ThreadPoolThread;
 
 public final class ExtendOperator implements Operator, Serializable
@@ -322,25 +323,7 @@ public final class ExtendOperator implements Operator, Serializable
 	@Override
 	public void reset() throws Exception
 	{
-		if (!startDone)
-		{
-			try
-			{
-				start();
-			}
-			catch (final Exception e)
-			{
-				HRDBMSWorker.logger.error("", e);
-				queue.put(e);
-				return;
-			}
-		}
-		else
-		{
-			queue.clear();
-			child.reset();
-			new GPUThread().start();
-		}
+		throw new UnsupportedOperationException();
 	}
 
 	@Override
@@ -390,7 +373,44 @@ public final class ExtendOperator implements Operator, Serializable
 		startDone = true;
 		child.start();
 		queue = new BufferedLinkedBlockingQueue(ResourceManager.QUEUE_SIZE);
-		new GPUThread().start();
+		if (ResourceManager.GPU)
+		{
+			new GPUThread(true).start();
+		}
+		else
+		{
+			new NonGPUThread().start();
+		}
+	}
+	
+	private class NonGPUThread extends HRDBMSThread
+	{
+		public void run()
+		{
+			ArrayList<GPUThread> threads = new ArrayList<GPUThread>();
+			int z = 0;
+			final int limit = Runtime.getRuntime().availableProcessors();
+			while (z < limit)
+			{
+				GPUThread thread = new GPUThread(false);
+				thread.start();
+				threads.add(thread);
+				z++;
+			}
+			
+			z = 0;
+			while (z < limit)
+			{
+				try
+				{
+					threads.get(z++).join();
+				}
+				catch(Exception e)
+				{}
+			}
+			
+			queue.put(new DataEndMarker());
+		}
 	}
 
 	@Override
@@ -627,6 +647,13 @@ public final class ExtendOperator implements Operator, Serializable
 
 	private final class GPUThread extends ThreadPoolThread
 	{
+		private boolean sendDEM;
+		
+		public GPUThread(boolean sendDEM)
+		{
+			this.sendDEM = sendDEM;
+		}
+		
 		@Override
 		public void run()
 		{
@@ -683,20 +710,27 @@ public final class ExtendOperator implements Operator, Serializable
 						}
 					}
 
-					try
-					{
-						queue.put(o);
-						return;
-					}
-					catch (Exception e)
+					if (sendDEM)
 					{
 						try
 						{
-							queue.put(e);
+							queue.put(o);
+							return;
 						}
-						catch (Exception f)
+						catch (Exception e)
 						{
+							try
+							{
+								queue.put(e);
+							}
+							catch (Exception f)
+							{
+							}
+							return;
 						}
+					}
+					else
+					{
 						return;
 					}
 				}

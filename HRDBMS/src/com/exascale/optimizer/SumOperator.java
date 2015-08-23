@@ -7,6 +7,8 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.BigDecimalReplacement;
 
@@ -145,7 +147,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 	{
 		// private final DiskBackedALOHashMap<AtomicDouble> results = new
 		// DiskBackedALOHashMap<AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
-		private final HashMap<ArrayList<Object>, Object> results = new HashMap<ArrayList<Object>, Object>();
+		private final ConcurrentHashMap<ArrayList<Object>, Object> results = new ConcurrentHashMap<ArrayList<Object>, Object>();
 		private final HashMap<String, Integer> cols2Pos;
 		private int pos;
 
@@ -189,7 +191,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 		{
 			if (isInt)
 			{
-				return results.get(keys);
+				return ((AtomicLong)results.get(keys)).get();
 			}
 
 			try
@@ -262,19 +264,31 @@ public final class SumOperator implements AggregateOperator, Serializable
 
 				// final AtomicBigDecimal ad =
 				// (AtomicBigDecimal)results.get(group);
-				synchronized (results)
+				//synchronized (results)
+				//{
+				//	sdf
+				//	BigDecimalReplacement ad = (BigDecimalReplacement)results.get(group);
+				//	if (ad != null)
+				//	{
+				//		ad.add(val);
+				//		return;
+				//	}
+				//	else
+				//	{
+				//		results.put(group, val);
+				//		return;
+				//	}
+				//}
+				final BigDecimalReplacement ad = (BigDecimalReplacement)results.get(group);
+				if (ad != null)
 				{
-					BigDecimalReplacement ad = (BigDecimalReplacement)results.get(group);
-					if (ad != null)
-					{
-						ad.add(val);
-						return;
-					}
-					else
-					{
-						results.put(group, val);
-						return;
-					}
+					ad.add(val);
+					return;
+				}
+				
+				if (results.putIfAbsent(group, val) != null)
+				{
+					((BigDecimalReplacement)results.get(group)).add(val);
 				}
 			}
 			else
@@ -289,6 +303,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 					val = (Long)o;
 				}
 
+				/*
 				synchronized (results)
 				{
 					final Long ad = (Long)results.get(group);
@@ -299,6 +314,17 @@ public final class SumOperator implements AggregateOperator, Serializable
 					}
 
 					results.put(group, val);
+				}
+				*/
+				final AtomicLong al = (AtomicLong)results.get(group);
+				if (al != null)
+				{
+					al.addAndGet(val);
+					return;
+				}
+				if (results.putIfAbsent(group, new AtomicLong(val)) != null)
+				{
+					((AtomicLong)results.get(group)).addAndGet(val);
 				}
 			}
 		}

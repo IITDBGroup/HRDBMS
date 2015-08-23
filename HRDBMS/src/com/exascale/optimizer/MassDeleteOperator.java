@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.LockSupport;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.tables.Plan;
@@ -277,7 +278,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 	{
 		while (!done)
 		{
-			Thread.sleep(1);
+			LockSupport.parkNanos(500);
 		}
 
 		if (num.get() >= 0)

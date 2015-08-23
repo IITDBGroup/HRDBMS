@@ -10,11 +10,14 @@ import com.exascale.threads.HRDBMSThread;
 
 public class CheckpointManager extends HRDBMSThread
 {
-	public CheckpointManager()
+	private long offset;
+	
+	public CheckpointManager(long offset)
 	{
 		HRDBMSWorker.logger.info("Starting initialization of the Checkpoint Manager.");
 		this.setWait(true);
 		this.description = "Checkpoint Manager";
+		this.offset = offset;
 	}
 
 	public void doCheckpoint()
@@ -78,15 +81,19 @@ public class CheckpointManager extends HRDBMSThread
 	@Override
 	public void run()
 	{
-		final long sleep = Long.parseLong(HRDBMSWorker.getHParms().getProperty("checkpoint_freq_sec"));
+		final long sleep = Long.parseLong(HRDBMSWorker.getHParms().getProperty("checkpoint_freq_sec")) * 1000;
 		HRDBMSWorker.logger.info("Checkpoint Manager initialization complete.");
+		long i = 0;
+		long start = System.currentTimeMillis() - offset;
+		
 		while (true)
 		{
 			try
 			{
-				Thread.sleep(sleep * 1000);
+				i++;
+				Thread.sleep(i * sleep + start - System.currentTimeMillis());
 			}
-			catch (final InterruptedException e)
+			catch (final Exception e)
 			{
 			}
 

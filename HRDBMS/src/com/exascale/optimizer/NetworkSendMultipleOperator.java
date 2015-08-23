@@ -200,6 +200,36 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 		OperatorUtils.serializeALOp(parents, out, prev);
 		OperatorUtils.writeBool(error, out);
 	}
+	
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev, boolean flag) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(76, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		// recreate meta
+		//child.serialize(out, prev);
+		new DummyOperator(meta).serialize(out, prev);
+		// prev = parent.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.writeInt(node, out);
+		OperatorUtils.writeInt(numParents, out);
+		OperatorUtils.writeBool(started, out);
+		OperatorUtils.writeBool(numpSet, out);
+		OperatorUtils.writeBool(cardSet, out);
+		OperatorUtils.writeInt(this.id, out);
+		// recreate connections
+		// recreate outs
+		OperatorUtils.serializeALOp(parents, out, prev);
+		OperatorUtils.writeBool(error, out);
+	}
 
 	public void setID(int id)
 	{
@@ -235,7 +265,7 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 				throw new Exception(errorText);
 			}
 			started = true;
-			child.start();
+			//child.start();
 			Object o = child.next(this);
 			while (!(o instanceof DataEndMarker))
 			{

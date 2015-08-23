@@ -31,6 +31,7 @@ import com.exascale.filesystem.CompressedRandomAccessFile;
 import com.exascale.filesystem.Page;
 import com.exascale.logging.ExtendLogRec;
 import com.exascale.misc.CatalogCode;
+import com.exascale.tables.Schema;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.ReadThread;
@@ -116,7 +117,7 @@ public class FileManager
 		synchronized (fc)
 		{
 			fc.write(data, retval * Page.BLOCK_SIZE);
-			fc.force(false);
+			//fc.force(false);
 		}
 		numBlocks.put(fn, retval + 1);
 
@@ -252,7 +253,7 @@ public class FileManager
 		return fc;
 	}
 
-	public static void read(Page p, Block b, ByteBuffer bb) throws Exception
+	public static ReadThread read(Page p, Block b, ByteBuffer bb) throws Exception
 	{
 		// final FileChannel fc = FileManager.getFile(b.fileName());
 		// if (b.number() > numBlocks.get(b.fileName()) + 1)
@@ -260,7 +261,15 @@ public class FileManager
 		// throw new IOException("Trying to read block " + b.number() + " from "
 		// + b.fileName() + " which doesn't exist");
 		// }
-		new ReadThread(p, b, bb).start();
+		ReadThread retval = new ReadThread(p, b, bb);
+		retval.start();
+		return retval;
+	}
+	
+	public static void read(Page p, Block b, ByteBuffer bb, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos) throws Exception
+	{
+		ReadThread retval = new ReadThread(p, b, bb, schema, schemaMap, tx, fetchPos);
+		retval.start();
 	}
 	
 	public static void read(Page p, Block b, ByteBuffer bb, boolean flag) throws Exception
@@ -300,7 +309,7 @@ public class FileManager
 				}
 				data.position(0);
 				fc.write(data, blockNum * Page.BLOCK_SIZE);
-				fc.force(false);
+				//fc.force(false);
 				numBlocks.put(bl.fileName(), blockNum + 1);
 			}
 			else
@@ -374,7 +383,7 @@ public class FileManager
 		bb.position(0);
 		final FileChannel fc = getFile(b.fileName());
 		fc.write(bb, ((long)b.number()) * bb.capacity());
-		fc.force(false);
+		//fc.force(false);
 	}
 
 	public static void writeDelayed(Block b, ByteBuffer bb) throws Exception

@@ -2,6 +2,8 @@ package com.exascale.filesystem;
 
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import com.exascale.managers.BufferManager;
@@ -9,6 +11,10 @@ import com.exascale.managers.FileManager;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LogManager;
 import com.exascale.managers.ResourceManager;
+import com.exascale.tables.Schema;
+import com.exascale.tables.Schema.FieldValue;
+import com.exascale.tables.Transaction;
+import com.exascale.threads.ReadThread;
 
 public class Page
 {
@@ -80,7 +86,35 @@ public class Page
 		}
 		pins.clear();
 	}
-	
+
+	public void assignToBlock(Block b, boolean log, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos) throws Exception
+	{
+		ReadThread retval = null;
+		synchronized (this)
+		{
+			if (modifiedBy >= 0)
+			{
+				if (b != null)
+				{
+					if (log)
+					{
+						LogManager.flush(lsn);
+					}
+					FileManager.write(blk, contents);
+				}
+				modifiedBy = -1;
+			}
+			blk = b;
+			readDone = false;
+			pins.clear();
+			
+			if (b != null)
+			{
+				FileManager.read(this, b, contents, schema, schemaMap, tx, fetchPos);
+			}
+		}
+	}
+
 	public synchronized void assignToBlock(Block b, boolean log, boolean flag) throws Exception
 	{
 		if (modifiedBy >= 0)
@@ -287,7 +321,7 @@ public class Page
 	{
 		return pins.size() > 0;
 	}
-	
+
 	public boolean isPinnedBy(long txnum)
 	{
 		return pins.containsKey(txnum);
@@ -353,7 +387,7 @@ public class Page
 	{
 		pins.remove(txnum);
 	}
-	
+
 	public synchronized boolean unpin1(long txnum)
 	{
 		AtomicInteger ai = pins.get(txnum);
@@ -365,10 +399,10 @@ public class Page
 				pins.remove(txnum);
 				return true;
 			}
-		
+
 			return false;
 		}
-		
+
 		return true;
 	}
 

@@ -114,6 +114,12 @@ public class OperatorUtils
 		final long ret = java.nio.ByteBuffer.wrap(val).getLong();
 		return ret;
 	}
+	
+	public static short bytesToShort(byte[] val)
+	{
+		final short ret = java.nio.ByteBuffer.wrap(val).getShort();
+		return ret;
+	}
 
 	public static ArrayDeque<String> deserializeADS(InputStream in, HashMap<Long, Object> prev) throws Exception
 	{
@@ -134,7 +140,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		ArrayDeque<String> retval = new ArrayDeque<String>(size);
 		prev.put(id, retval);
 		int i = 0;
@@ -207,7 +213,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		ArrayList<AggregateOperator> retval = new ArrayList<AggregateOperator>(size);
 		prev.put(id, retval);
 		int i = 0;
@@ -239,7 +245,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		ArrayList<ArrayList<Filter>> retval = new ArrayList<ArrayList<Filter>>(size);
 		prev.put(id, retval);
 		int i = 0;
@@ -271,7 +277,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		ArrayList<Boolean> retval = new ArrayList<Boolean>(size);
 		prev.put(id, retval);
 		int i = 0;
@@ -303,7 +309,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		ArrayList<Filter> retval = new ArrayList<Filter>(size);
 		prev.put(id, retval);
 		int i = 0;
@@ -335,7 +341,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		ArrayList<HashSet<HashMap<Filter, Filter>>> retval = new ArrayList<HashSet<HashMap<Filter, Filter>>>(size);
 		prev.put(id, retval);
 		int i = 0;
@@ -367,7 +373,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		ArrayList<Integer> retval = new ArrayList<Integer>(size);
 		prev.put(id, retval);
 		int i = 0;
@@ -399,7 +405,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		ArrayList<Index> retval = new ArrayList<Index>(size);
 		prev.put(id, retval);
 		int i = 0;
@@ -431,7 +437,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		ArrayList<Object> retval = new ArrayList<Object>(size);
 		prev.put(id, retval);
 		int i = 0;
@@ -493,7 +499,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		ArrayList<Operator> retval = new ArrayList<Operator>(size);
 		prev.put(id, retval);
 		int i = 0;
@@ -525,7 +531,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		ArrayList<String> retval = new ArrayList<String>(size);
 		prev.put(id, retval);
 		int i = 0;
@@ -642,7 +648,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		HashMap<Filter, Filter> retval = new HashMap<Filter, Filter>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
@@ -675,7 +681,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		HashMap<Integer, Operator> retval = new HashMap<Integer, Operator>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
@@ -709,7 +715,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		HashMap<Operator, CNFFilter> retval = new HashMap<Operator, CNFFilter>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
@@ -743,7 +749,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		HashSet<HashMap<Filter, Filter>> retval = new HashSet<HashMap<Filter, Filter>>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
@@ -775,7 +781,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		HashSet<Object> retval = new HashSet<Object>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
@@ -837,7 +843,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		HashSet<String> retval = new HashSet<String>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
@@ -869,7 +875,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		int[] retval = new int[size];
 		prev.put(id, retval);
 		int i = 0;
@@ -1066,7 +1072,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		String[] retval = new String[size];
 		prev.put(id, retval);
 		int i = 0;
@@ -1098,7 +1104,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		HashMap<String, String> retval = new HashMap<String, String>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
@@ -1132,7 +1138,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		HashMap<String, Integer> retval = new HashMap<String, Integer>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
@@ -1166,7 +1172,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		TreeMap<Integer, String> retval = new TreeMap<Integer, String>();
 		prev.put(id, retval);
 		int i = 0;
@@ -1236,17 +1242,17 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 19 but received " + type);
 		}
 
-		byte[] data = new byte[8];
+		byte[] data = new byte[4];
 		read(data, in);
-		long l = bytesToLong(data);
+		int l = bytesToInt(data);
 		return new MyDate(l);
 	}
 
 	public static MyDate readDateKnown(InputStream in) throws Exception
 	{
-		byte[] data = new byte[8];
+		byte[] data = new byte[4];
 		read(data, in);
-		long l = bytesToLong(data);
+		int l = bytesToInt(data);
 		return new MyDate(l);
 	}
 
@@ -1282,6 +1288,13 @@ public class OperatorUtils
 		byte[] data = new byte[4];
 		read(data, in);
 		return bytesToInt(data);
+	}
+	
+	public static short readShort(InputStream in) throws Exception
+	{
+		byte[] data = new byte[2];
+		read(data, in);
+		return bytesToShort(data);
 	}
 
 	public static Integer readIntClass(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -1399,7 +1412,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		byte[] data = new byte[size];
 		read(data, in);
 		String retval = new String(data, StandardCharsets.UTF_8);
@@ -1415,7 +1428,7 @@ public class OperatorUtils
 			return null;
 		}
 
-		int size = readInt(in);
+		int size = readShort(in);
 		byte[] data = new byte[size];
 		read(data, in);
 		String retval = new String(data, StandardCharsets.UTF_8);
@@ -1441,7 +1454,7 @@ public class OperatorUtils
 
 		writeType(29, out);
 		prev.put(als, writeID(out));
-		writeInt(als.size(), out);
+		writeShort(als.size(), out);
 		Iterator<String> iter = als.descendingIterator();
 		while (iter.hasNext())
 		{
@@ -1469,7 +1482,7 @@ public class OperatorUtils
 
 		writeType(34, out);
 		prev.put(als, writeID(out));
-		writeInt(als.size(), out);
+		writeShort(als.size(), out);
 		for (AggregateOperator entry : als)
 		{
 			entry.serialize(out, prev);
@@ -1496,7 +1509,7 @@ public class OperatorUtils
 
 		writeType(67, out);
 		prev.put(als, writeID(out));
-		writeInt(als.size(), out);
+		writeShort(als.size(), out);
 		for (ArrayList<Filter> entry : als)
 		{
 			serializeALF(entry, out, prev);
@@ -1523,7 +1536,7 @@ public class OperatorUtils
 
 		writeType(45, out);
 		prev.put(als, writeID(out));
-		writeInt(als.size(), out);
+		writeShort(als.size(), out);
 		for (Boolean entry : als)
 		{
 			writeBool(entry, out);
@@ -1550,7 +1563,7 @@ public class OperatorUtils
 
 		writeType(42, out);
 		prev.put(als, writeID(out));
-		writeInt(als.size(), out);
+		writeShort(als.size(), out);
 		for (Filter entry : als)
 		{
 			entry.serialize(out, prev);
@@ -1577,7 +1590,7 @@ public class OperatorUtils
 
 		writeType(11, out);
 		prev.put(als, writeID(out));
-		writeInt(als.size(), out);
+		writeShort(als.size(), out);
 		for (HashSet<HashMap<Filter, Filter>> entry : als)
 		{
 			serializeHSHM(entry, out, prev);
@@ -1604,7 +1617,7 @@ public class OperatorUtils
 
 		writeType(7, out);
 		prev.put(als, writeID(out));
-		writeInt(als.size(), out);
+		writeShort(als.size(), out);
 		for (Integer entry : als)
 		{
 			writeInt(entry, out);
@@ -1631,7 +1644,7 @@ public class OperatorUtils
 
 		writeType(10, out);
 		prev.put(als, writeID(out));
-		writeInt(als.size(), out);
+		writeShort(als.size(), out);
 		for (Index entry : als)
 		{
 			entry.serialize(out, prev);
@@ -1658,7 +1671,7 @@ public class OperatorUtils
 
 		writeType(12, out);
 		prev.put(als, writeID(out));
-		writeInt(als.size(), out);
+		writeShort(als.size(), out);
 		for (Object entry : als)
 		{
 			if (entry instanceof String)
@@ -1708,10 +1721,37 @@ public class OperatorUtils
 
 		writeType(32, out);
 		prev.put(als, writeID(out));
-		writeInt(als.size(), out);
+		writeShort(als.size(), out);
 		for (Operator entry : als)
 		{
 			entry.serialize(out, prev);
+		}
+
+		return;
+	}
+	
+	public static void serializeALOp(ArrayList<Operator> als, OutputStream out, IdentityHashMap<Object, Long> prev, boolean flag) throws Exception
+	{
+		if (als == null)
+		{
+			writeType(32, out);
+			writeLong(-1, out);
+			return;
+		}
+
+		Long id = prev.get(als);
+		if (id != null)
+		{
+			serializeReference(id, out);
+			return;
+		}
+
+		writeType(32, out);
+		prev.put(als, writeID(out));
+		writeShort(als.size(), out);
+		for (Operator entry : als)
+		{
+			((NetworkSendOperator)entry).serialize(out, prev, false);
 		}
 
 		return;
@@ -1735,7 +1775,7 @@ public class OperatorUtils
 
 		writeType(6, out);
 		prev.put(als, writeID(out));
-		writeInt(als.size(), out);
+		writeShort(als.size(), out);
 		for (String entry : als)
 		{
 			writeString(entry, out, prev);
@@ -1795,7 +1835,7 @@ public class OperatorUtils
 
 		writeType(9, out);
 		prev.put(hmf, writeID(out));
-		writeInt(hmf.size(), out);
+		writeShort(hmf.size(), out);
 		for (Filter entry : hmf.keySet())
 		{
 			entry.serialize(out, prev);
@@ -1822,7 +1862,7 @@ public class OperatorUtils
 
 		writeType(80, out);
 		prev.put(hm, writeID(out));
-		writeInt(hm.size(), out);
+		writeShort(hm.size(), out);
 		for (Map.Entry<Integer, Operator> entry : hm.entrySet())
 		{
 			Integer key = entry.getKey();
@@ -1853,7 +1893,7 @@ public class OperatorUtils
 
 		writeType(79, out);
 		prev.put(hm, writeID(out));
-		writeInt(hm.size(), out);
+		writeShort(hm.size(), out);
 		for (Map.Entry<Operator, CNFFilter> entry : hm.entrySet())
 		{
 			Operator key = entry.getKey();
@@ -1884,7 +1924,7 @@ public class OperatorUtils
 
 		writeType(8, out);
 		prev.put(hshm, writeID(out));
-		writeInt(hshm.size(), out);
+		writeShort(hshm.size(), out);
 		for (HashMap<Filter, Filter> entry : hshm)
 		{
 			serializeHMF(entry, out, prev);
@@ -1911,7 +1951,7 @@ public class OperatorUtils
 
 		writeType(43, out);
 		prev.put(als, writeID(out));
-		writeInt(als.size(), out);
+		writeShort(als.size(), out);
 		for (Object entry : als)
 		{
 			if (entry instanceof String)
@@ -1961,7 +2001,7 @@ public class OperatorUtils
 
 		writeType(68, out);
 		prev.put(als, writeID(out));
-		writeInt(als.size(), out);
+		writeShort(als.size(), out);
 		for (String entry : als)
 		{
 			writeString(entry, out, prev);
@@ -1988,7 +2028,7 @@ public class OperatorUtils
 
 		writeType(46, out);
 		prev.put(als, writeID(out));
-		writeInt(als.length, out);
+		writeShort(als.length, out);
 		for (int entry : als)
 		{
 			writeInt(entry, out);
@@ -2047,7 +2087,7 @@ public class OperatorUtils
 
 		writeType(66, out);
 		prev.put(als, writeID(out));
-		writeInt(als.length, out);
+		writeShort(als.length, out);
 		for (String entry : als)
 		{
 			writeString(entry, out, prev);
@@ -2075,7 +2115,7 @@ public class OperatorUtils
 		writeType(2, out);
 		prev.put(hm, writeID(out));
 
-		writeInt(hm.size(), out);
+		writeShort(hm.size(), out);
 		for (Map.Entry<String, String> entry : hm.entrySet())
 		{
 			String key = entry.getKey();
@@ -2106,7 +2146,7 @@ public class OperatorUtils
 
 		writeType(4, out);
 		prev.put(hm, writeID(out));
-		writeInt(hm.size(), out);
+		writeShort(hm.size(), out);
 		for (Map.Entry<String, Integer> entry : hm.entrySet())
 		{
 			String key = entry.getKey();
@@ -2137,7 +2177,7 @@ public class OperatorUtils
 
 		writeType(5, out);
 		prev.put(hm, writeID(out));
-		writeInt(hm.size(), out);
+		writeShort(hm.size(), out);
 		for (Map.Entry<Integer, String> entry : hm.entrySet())
 		{
 			String value = entry.getValue();
@@ -2184,7 +2224,7 @@ public class OperatorUtils
 		}
 
 		writeType(19, out);
-		out.write(longToBytes(d.getTime()));
+		out.write(intToBytes(d.getTime()));
 		return;
 	}
 
@@ -2211,6 +2251,11 @@ public class OperatorUtils
 	public static void writeInt(int i, OutputStream out) throws Exception
 	{
 		out.write(intToBytes(i));
+	}
+	
+	public static void writeShort(int i, OutputStream out) throws Exception
+	{
+		out.write(shortToBytes((short)i));
 	}
 
 	public static void writeIntClass(Integer d, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
@@ -2293,7 +2338,7 @@ public class OperatorUtils
 		writeType(3, out);
 		prev.put(s, writeID(out));
 		byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
-		writeInt(bytes.length, out);
+		writeShort(bytes.length, out);
 		out.write(bytes);
 		return;
 	}
@@ -2310,6 +2355,14 @@ public class OperatorUtils
 		buff[1] = (byte)((val & 0x00FF0000) >> 16);
 		buff[2] = (byte)((val & 0x0000FF00) >> 8);
 		buff[3] = (byte)((val & 0x000000FF));
+		return buff;
+	}
+	
+	private static byte[] shortToBytes(int val)
+	{
+		final byte[] buff = new byte[2];
+		buff[0] = (byte)((val & 0x0000FF00) >> 8);
+		buff[1] = (byte)((val & 0x000000FF));
 		return buff;
 	}
 

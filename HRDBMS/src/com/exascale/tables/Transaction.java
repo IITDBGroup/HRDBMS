@@ -2,7 +2,9 @@ package com.exascale.tables;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import com.exascale.exceptions.LockAbortException;
@@ -17,6 +19,7 @@ import com.exascale.managers.BufferManager;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LockManager;
 import com.exascale.managers.LogManager;
+import com.exascale.misc.ScalableStampedReentrantRWLock;
 import com.exascale.optimizer.MetaData;
 
 public class Transaction implements Serializable
@@ -47,7 +50,7 @@ public class Transaction implements Serializable
 		}
 	}
 
-	public static ReentrantReadWriteLock txListLock = new ReentrantReadWriteLock();
+	public static ScalableStampedReentrantRWLock txListLock = new ScalableStampedReentrantRWLock();
 
 	private final long txnum;
 	public int level;
@@ -320,6 +323,19 @@ public class Transaction implements Serializable
 		}
 	}
 	
+	public void read2(Block b, Schema schema, Page p) throws LockAbortException, Exception
+	{
+		if (level == ISOLATION_RR || level == ISOLATION_CS)
+		{
+			LockManager.sLock(b, txnum);
+		}
+		schema.read(this, p);
+		if (level == ISOLATION_CS)
+		{
+			LockManager.unlockSLock(b, txnum);
+		}
+	}
+	
 	public void dummyRead(Block b, Schema schema) throws LockAbortException, Exception
 	{
 		final Page p = this.getPage(b);
@@ -403,6 +419,21 @@ public class Transaction implements Serializable
 		}
 
 		BufferManager.requestPages(bs, this.number());
+	}
+	
+	public void requestPages(Block[] bs, Schema[] schemas, int schemaIndex, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos) throws Exception
+	{
+		//for (Block b : bs)
+		//{
+			//if (b.number() < 0)
+			//{
+			//	Exception e = new Exception("Negative block number requested: " + b.number());
+			//	HRDBMSWorker.logger.debug("", e);
+			//	throw e;
+			//}
+		//}
+
+		BufferManager.requestPages(bs, this, schemas, schemaIndex, schemaMap, fetchPos);
 	}
 
 	public void rollback() throws Exception

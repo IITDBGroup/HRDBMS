@@ -61,7 +61,6 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	private boolean alreadySorted = false;
 	private boolean cardSet = false;
 	private transient Operator dynamicOp;
-	private boolean rhsUnique = false;
 
 	public NestedLoopJoinOperator(ArrayList<Filter> filters, MetaData meta)
 	{
@@ -99,7 +98,6 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		value.rightChildCard = OperatorUtils.readInt(in);
 		value.alreadySorted = OperatorUtils.readBool(in);
 		value.cardSet = OperatorUtils.readBool(in);
-		value.rhsUnique = OperatorUtils.readBool(in);
 		return value;
 	}
 
@@ -139,11 +137,6 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		{
 			throw new Exception("NestedLoopJoinOperator only supports 2 children");
 		}
-	}
-	
-	public void setRHSUnique()
-	{
-		rhsUnique = true;
 	}
 
 	public void addFilter(ArrayList<Filter> filters)
@@ -205,7 +198,6 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		retval.alreadySorted = alreadySorted;
 		retval.rightChildCard = rightChildCard;
 		retval.cardSet = cardSet;
-		retval.rhsUnique = rhsUnique;
 		return retval;
 	}
 
@@ -425,7 +417,6 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		OperatorUtils.writeInt(rightChildCard, out);
 		OperatorUtils.writeBool(alreadySorted, out);
 		OperatorUtils.writeBool(cardSet, out);
-		OperatorUtils.writeBool(rhsUnique, out);
 	}
 
 	@Override
@@ -647,10 +638,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			}
 			((HashJoinOperator)dynamicOp).setCNF(f);
 			((HashJoinOperator)dynamicOp).setRightChildCard(rightChildCard);
-			if (rhsUnique)
-			{
-				((HashJoinOperator)dynamicOp).setRHSUnique();
-			}
+
 			dynamicOp.start();
 		}
 		else

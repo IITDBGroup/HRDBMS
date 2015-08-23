@@ -5,6 +5,7 @@ import java.util.ConcurrentModificationException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.optimizer.MetaData.PartitionMetaData;
 import com.exascale.tables.Transaction;
@@ -289,7 +290,7 @@ public final class Phase1
 		do
 		{
 			pushdownHadResults = false;
-			pushDownSelects2(root);
+			pushDownSelects2(root, System.currentTimeMillis());
 		} while (pushdownHadResults);
 
 		reorderProducts(root);
@@ -297,7 +298,7 @@ public final class Phase1
 		do
 		{
 			pushdownHadResults = false;
-			pushDownSelects(root);
+			pushDownSelects(root, System.currentTimeMillis());
 		} while (pushdownHadResults);
 
 		combineProductsAndSelects(root);
@@ -1227,8 +1228,13 @@ public final class Phase1
 		}
 	}
 
-	private void pushDownSelects(Operator op) throws Exception
+	private void pushDownSelects(Operator op, long time) throws Exception
 	{
+		if (System.currentTimeMillis() - time > 2000)
+		{
+			return;
+		}
+		
 		if (op instanceof SelectOperator)
 		{
 			if (!anyHope(op))
@@ -1237,7 +1243,7 @@ public final class Phase1
 			}
 			if (done.contains(op))
 			{
-				pushDownSelects(op.children().get(0));
+				pushDownSelects(op.children().get(0), time);
 				return;
 			}
 
@@ -1326,7 +1332,7 @@ public final class Phase1
 
 					pushdownHadResults = true;
 
-					pushDownSelects(newOp);
+					pushDownSelects(newOp, time);
 				}
 				else
 				{
@@ -1334,7 +1340,7 @@ public final class Phase1
 					final Operator selectChild = op.children().get(0);
 					if (selectChild != null)
 					{
-						pushDownSelects(selectChild);
+						pushDownSelects(selectChild, time);
 					}
 				}
 
@@ -1347,14 +1353,19 @@ public final class Phase1
 			while (i < op.children().size())
 			{
 				final Operator child = op.children().get(i);
-				pushDownSelects(child);
+				pushDownSelects(child, time);
 				i++;
 			}
 		}
 	}
 
-	private void pushDownSelects2(Operator op) throws Exception
+	private void pushDownSelects2(Operator op, long time) throws Exception
 	{
+		if (System.currentTimeMillis() - time > 2000)
+		{
+			return;
+		}
+		
 		if (op instanceof SelectOperator)
 		{
 			if (!anyHope(op))
@@ -1363,7 +1374,7 @@ public final class Phase1
 			}
 			if (done2.contains(op))
 			{
-				pushDownSelects2(op.children().get(0));
+				pushDownSelects2(op.children().get(0), time);
 				return;
 			}
 
@@ -1396,7 +1407,7 @@ public final class Phase1
 						if (child instanceof ProductOperator)
 						{
 							done2.add(op);
-							pushDownSelects2(child);
+							pushDownSelects2(child, time);
 							return;
 						}
 					}
@@ -1487,7 +1498,7 @@ public final class Phase1
 					}
 
 					pushdownHadResults = true;
-					pushDownSelects2(newOp);
+					pushDownSelects2(newOp, time);
 				}
 				else
 				{
@@ -1495,7 +1506,7 @@ public final class Phase1
 					final Operator selectChild = op.children().get(0);
 					if (selectChild != null)
 					{
-						pushDownSelects2(selectChild);
+						pushDownSelects2(selectChild, time);
 					}
 				}
 
@@ -1508,7 +1519,7 @@ public final class Phase1
 			while (i < op.children().size())
 			{
 				final Operator child = op.children().get(i);
-				pushDownSelects2(child);
+				pushDownSelects2(child, time);
 				i++;
 			}
 		}
@@ -1647,6 +1658,7 @@ public final class Phase1
 		}
 		selects.get(selects.size() - 1).removeChild(selects.get(selects.size() - 1).children().get(0));
 		final ArrayList<SelectOperator> selectsCopy = (ArrayList<SelectOperator>)selects.clone();
+		transitive(selectsCopy);
 
 		Operator newProd = null;
 		ArrayList<SelectOperator> delay = new ArrayList<SelectOperator>();
@@ -1830,6 +1842,92 @@ public final class Phase1
 		for (final Operator operator : backup)
 		{
 			reorderProducts(operator);
+		}
+	}
+	
+	private void transitive(ArrayList<SelectOperator> list) throws Exception
+	{
+		ConcurrentHashMap<Filter, Filter> set = new ConcurrentHashMap<Filter, Filter>();
+		for (SelectOperator op : list)
+		{
+			ArrayList<Filter> ors = op.getFilter();
+			if (ors.size() == 1)
+			{
+				Filter f = ors.get(0);
+				if (f.op().equals("E") && f.leftIsColumn() && f.rightIsColumn())
+				{
+					set.put(f, f);
+				}
+			}
+		}
+		
+		
+		boolean didWork = true;
+		while (didWork)
+		{
+			didWork = false;
+			for (Filter f1 : set.keySet())
+			{
+				for (Filter f2 : set.keySet())
+				{
+					if (f1.leftColumn().equals(f2.leftColumn()))
+					{
+						if (!f1.rightColumn().equals(f2.rightColumn()))
+						{
+							Filter f3 = new Filter(f1.getRightString(), "E", f2.getRightString());
+							if (!set.contains(f3) && !set.contains(new Filter(f2.getRightString(), "E", f1.getRightString())))
+							{
+								set.put(f3, f3);
+								list.add(new SelectOperator(f3, meta));
+								didWork = true;
+								HRDBMSWorker.logger.debug("Added a transitive filter");
+							}
+						}
+					}
+					else if (f1.leftColumn().equals(f2.rightColumn()))
+					{
+						if (!f1.rightColumn().equals(f2.leftColumn()))
+						{
+							Filter f3 = new Filter(f1.getRightString(), "E", f2.getLeftString());
+							if (!set.contains(f3) && !set.contains(new Filter(f2.getLeftString(), "E", f1.getRightString())))
+							{
+								set.put(f3, f3);
+								list.add(new SelectOperator(f3, meta));
+								didWork = true;
+								HRDBMSWorker.logger.debug("Added a transitive filter");
+							}
+						}
+					}
+					else if (f1.rightColumn().equals(f2.rightColumn()))
+					{
+						if (!f1.leftColumn().equals(f2.leftColumn()))
+						{
+							Filter f3 = new Filter(f1.getLeftString(), "E", f2.getLeftString());
+							if (!set.contains(f3) && !set.contains(new Filter(f2.getLeftString(), "E", f1.getLeftString())))
+							{
+								set.put(f3, f3);
+								list.add(new SelectOperator(f3, meta));
+								didWork = true;
+								HRDBMSWorker.logger.debug("Added a transitive filter");
+							}
+						}
+					}
+					else if (f1.rightColumn().equals(f2.leftColumn()))
+					{
+						if (!f1.leftColumn().equals(f2.rightColumn()))
+						{
+							Filter f3 = new Filter(f1.getLeftString(), "E", f2.getRightString());
+							if (!set.contains(f3) && !set.contains(new Filter(f2.getRightString(), "E", f1.getLeftString())))
+							{
+								set.put(f3, f3);
+								list.add(new SelectOperator(f3, meta));
+								didWork = true;
+								HRDBMSWorker.logger.debug("Added a transitive filter");
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 

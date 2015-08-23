@@ -19,7 +19,7 @@ public class HeaderPage
 	// and
 	// column
 	// id
-	private int blockNum;
+	private int blockNum; 
 	private int off;
 	private final Page p;
 

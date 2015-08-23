@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -33,6 +34,8 @@ import com.exascale.managers.BufferManager;
 import com.exascale.managers.FileManager;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
+import com.exascale.misc.BWT;
+import com.exascale.misc.IndexedByteArray;
 import com.exascale.misc.ScalableStampedRWLock;
 import com.exascale.misc.ScalableStampedReentrantRWLock;
 import com.exascale.threads.HRDBMSThread;
@@ -41,6 +44,7 @@ public class CompressedFileChannel extends FileChannel
 {
 	private static LZ4Factory factory;
 	public static final int MAX_FCS = 1024;
+	
 	static
 	{
 		factory = LZ4Factory.nativeInstance();
@@ -270,31 +274,21 @@ public class CompressedFileChannel extends FileChannel
 	@Override
 	public int read(ByteBuffer arg0, long arg1) throws IOException
 	{
-		// if (arg0.capacity() != 128 * 1024)
-		// {
-		// throw new IOException("Invalid read length of " + arg0.capacity());
-		// }
-
 		boolean closed = false;
 		int page = (int)(arg1 >> 17);
-		int offset = (int)(arg1 & (128 * 1024 - 1));
-		if (offset != 0)
-		{
-			closed = true;
-			HRDBMSWorker.logger.debug("Invalid read of offset " + offset);
-			throw new IOException("Invalid read offset of " + offset);
-		}
+		int offset = 0;
 		int block = page / 3;
 		lock.readLock().lock();
 		try
 		{
 			while (writeLocks.putIfAbsent(block, block) != null)
 			{
-				Thread.yield();
+				LockSupport.parkNanos(500);
 			}
-			offset += ((page % 3) * 128 * 1024);
+			offset += ((page % 3) << 17);
 
 			// bufferLock.readLock().lock();
+			
 			if (bufferLock.readLock().tryLock())
 			{
 				if (bufferedBlock == block)
@@ -307,6 +301,7 @@ public class CompressedFileChannel extends FileChannel
 				}
 				bufferLock.readLock().unlock();
 			}
+			
 
 			int actualBlocks = length / 3;
 			if (length % 3 != 0)
@@ -351,15 +346,13 @@ public class CompressedFileChannel extends FileChannel
 				byte[] target = new byte[128 * 1024 * 3]; // max 3 pages
 				int bytes = decomp.decompress(bb.array(), 0, size, target, 0, 128 * 1024 * 3);
 				System.arraycopy(target, offset, arg0.array(), 0, arg0.capacity());
-				if (bytes == 3 * 128 * 1024)
+				
+				if (bufferLock.writeLock().tryLock())
 				{
-					if (bufferLock.writeLock().tryLock())
-					{
-						bufferedBlock = block;
-						buffer = target;
-						bufferSize = 3;
-						bufferLock.writeLock().unlock();
-					}
+					bufferedBlock = block;
+					buffer = target;
+					bufferSize = bytes >> 17;
+					bufferLock.writeLock().unlock();
 				}
 			}
 			else
@@ -411,7 +404,9 @@ public class CompressedFileChannel extends FileChannel
 					closed = true;
 					throw e;
 				}
+
 				System.arraycopy(target, offset, arg0.array(), 0, arg0.capacity());
+				
 				if (bufferLock.writeLock().tryLock())
 				{
 					bufferedBlock = block;
@@ -501,8 +496,8 @@ public class CompressedFileChannel extends FileChannel
 				byte[] trunced = new byte[(desiredPages % 3) * 128 * 1024];
 				System.arraycopy(target, 0, trunced, 0, trunced.length);
 				fc.truncate(0);
-				// LZ4Compressor comp = factory.highCompressor();
-				LZ4Compressor comp = factory.fastCompressor();
+				LZ4Compressor comp = factory.highCompressor();
+				//LZ4Compressor comp = factory.fastCompressor();
 				byte[] comped = comp.compress(trunced);
 				bb = ByteBuffer.wrap(comped);
 				fc.write(bb, 0);
@@ -581,18 +576,19 @@ public class CompressedFileChannel extends FileChannel
 			// lock.readLock().lock();
 			while (writeLocks.putIfAbsent(block, block) != null)
 			{
-				Thread.yield();
+				LockSupport.parkNanos(500);
 			}
 			// lock.writeLock().unlock();
 			bufferLock.readLock().lock();
+			
 			if (bufferedBlock == block)
 			{
 				// HRDBMSWorker.logger.debug("The block was buffered"); //DEBUG
 				System.arraycopy(arg0.array(), 0, buffer, offset, arg0.capacity());
 
 				// compress it
-				// LZ4Compressor comp = factory.highCompressor();
-				LZ4Compressor comp = factory.fastCompressor();
+				LZ4Compressor comp = factory.highCompressor();
+				//LZ4Compressor comp = factory.fastCompressor();
 				// write it
 				int mod = block & 31;
 				synchronized (inUse[mod])
@@ -675,6 +671,7 @@ public class CompressedFileChannel extends FileChannel
 					throw e;
 				}
 				System.arraycopy(arg0.array(), 0, target, offset, arg0.capacity());
+				
 				if (bufferLock.writeLock().tryLock())
 				{
 					bufferedBlock = block;
@@ -682,9 +679,10 @@ public class CompressedFileChannel extends FileChannel
 					bufferSize = 3;
 					bufferLock.writeLock().unlock();
 				}
+				
 				// compress it
-				// LZ4Compressor comp = factory.highCompressor();
-				LZ4Compressor comp = factory.fastCompressor();
+				LZ4Compressor comp = factory.highCompressor();
+				//LZ4Compressor comp = factory.fastCompressor();
 				// write it
 				fc.truncate(0);
 				byte[] data = comp.compress(target);
@@ -724,6 +722,7 @@ public class CompressedFileChannel extends FileChannel
 				actualBlocks++;
 			}
 			highFileNum = actualBlocks - 1;
+			
 			if (block == bufferedBlock)
 			{
 				// HRDBMSWorker.logger.debug("The block was buffered"); //DEBUG
@@ -747,8 +746,8 @@ public class CompressedFileChannel extends FileChannel
 				if (bufferSize == 3)
 				{
 					// compress it
-					// LZ4Compressor comp = factory.highCompressor();
-					LZ4Compressor comp = factory.fastCompressor();
+					LZ4Compressor comp = factory.highCompressor();
+					//LZ4Compressor comp = factory.fastCompressor();
 					// write it
 					FileChannel fc = getFC(block);
 					fc.truncate(0);
@@ -771,8 +770,8 @@ public class CompressedFileChannel extends FileChannel
 					System.arraycopy(buffer, 0, valid, 0, valid.length);
 
 					// compress it
-					// LZ4Compressor comp = factory.highCompressor();
-					LZ4Compressor comp = factory.fastCompressor();
+					LZ4Compressor comp = factory.highCompressor();
+					//LZ4Compressor comp = factory.fastCompressor();
 					// write it
 					FileChannel fc = getFC(block);
 					fc.truncate(0);
@@ -829,16 +828,18 @@ public class CompressedFileChannel extends FileChannel
 
 						length += ((3 * 128 * 1024 - bytes) / (128 * 1024));
 						fc3.truncate(0);
-						// LZ4Compressor comp = factory.highCompressor();
-						LZ4Compressor comp = factory.fastCompressor();
+						LZ4Compressor comp = factory.highCompressor();
+						//LZ4Compressor comp = factory.fastCompressor();
 						byte[] data = comp.compress(fullBlock);
 						ByteBuffer bb = ByteBuffer.wrap(data);
 						fc3.write(bb, 0);
+						
 						if (bufferedBlock == highFileNum)
 						{
 							buffer = fullBlock;
 							bufferSize = 3;
 						}
+						
 						modded.put(highFileNum, true);
 						// if (modded.size() > 1024)
 						// {
@@ -848,8 +849,8 @@ public class CompressedFileChannel extends FileChannel
 				}
 
 				// new block
-				// LZ4Compressor comp = factory.highCompressor();
-				LZ4Compressor comp = factory.fastCompressor();
+				LZ4Compressor comp = factory.highCompressor();
+				//LZ4Compressor comp = factory.fastCompressor();
 				if (block > highFileNum + 1)
 				{
 					byte[] blank = new byte[3 * 128 * 1024];
@@ -893,9 +894,9 @@ public class CompressedFileChannel extends FileChannel
 				}
 				else if (offset == 128 * 1024)
 				{
-					byte[] temp = new byte[2 * 128 * 1024];
-					System.arraycopy(arg0.array(), 0, temp, 128 * 1024, 128 * 1024);
-					byte[] data = comp.compress(temp);
+					byte[] temp2 = new byte[2 * 128 * 1024];
+					System.arraycopy(arg0.array(), 0, temp2, 128 * 1024, 128 * 1024);
+					byte[] data = comp.compress(temp2);
 					ByteBuffer bb = ByteBuffer.wrap(data);
 					FileChannel fc = getFC(block);
 					fc.write(bb, 0);
@@ -911,9 +912,9 @@ public class CompressedFileChannel extends FileChannel
 				}
 				else
 				{
-					byte[] temp = new byte[3 * 128 * 1024];
-					System.arraycopy(arg0.array(), 0, temp, 2 * 128 * 1024, 128 * 1024);
-					byte[] data = comp.compress(temp);
+					byte[] temp2 = new byte[3 * 128 * 1024];
+					System.arraycopy(arg0.array(), 0, temp2, 2 * 128 * 1024, 128 * 1024);
+					byte[] data = comp.compress(temp2);
 					ByteBuffer bb = ByteBuffer.wrap(data);
 					FileChannel fc = getFC(block);
 					fc.write(bb, 0);
@@ -954,11 +955,11 @@ public class CompressedFileChannel extends FileChannel
 					// //DEBUG
 				}
 				byte[] valid = new byte[128 * 1024 * bufferSize];
-				System.arraycopy(buffer, 0, valid, 0, valid.length);
+				System.arraycopy(target, 0, valid, 0, valid.length);
 
 				// compress it
-				// LZ4Compressor comp = factory.highCompressor();
-				LZ4Compressor comp = factory.fastCompressor();
+				LZ4Compressor comp = factory.highCompressor();
+				//LZ4Compressor comp = factory.fastCompressor();
 				// write it
 				fc.truncate(0);
 				byte[] data = comp.compress(valid);
@@ -1117,7 +1118,7 @@ public class CompressedFileChannel extends FileChannel
 			int block = (Integer)entry.getKey();
 			while (writeLocks.putIfAbsent(block, block) != null)
 			{
-				Thread.yield();
+				LockSupport.parkNanos(500);
 			}
 			try
 			{

@@ -131,11 +131,17 @@ public class HRDBMSWorker
 			addThread(new MetaDataManager());
 		}
 
+		long start = System.currentTimeMillis();
+		if (type == TYPE_MASTER)
+		{
+			start -= 10000;
+		}
+		
 		new FileManager();
 		addThread(new BufferManager(true));
 		addThread(new XAManager());
 		connectionThread = addThread(new ConnectionManager());
-		checkpoint = new CheckpointManager();
+		checkpoint = new CheckpointManager(System.currentTimeMillis() - start);
 		addThread(checkpoint);
 		logThread = addThread(new LogManager());
 		logger.info("Starting initialization of the Lock Manager.");

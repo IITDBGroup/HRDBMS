@@ -16,6 +16,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import com.exascale.compression.CompressedInputStream;
+import com.exascale.compression.CompressedOutputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 import com.exascale.misc.BinomialHeap;
@@ -289,7 +290,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 		@Override
 		public void run()
 		{
-			start = System.currentTimeMillis();
+			//start = System.currentTimeMillis();
 			final ReadThread readThread = new ReadThread(children);
 			readThread.start();
 			while (true)
@@ -541,7 +542,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 	private class ReadThread2 extends HRDBMSThread
 	{
 		private final Operator op;
-		public SPSCQueue q = new SPSCQueue(ResourceManager.QUEUE_SIZE >> 6);
+		public SPSCQueue q = new SPSCQueue(ResourceManager.QUEUE_SIZE);
 
 		public ReadThread2(Operator op)
 		{
@@ -664,7 +665,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 				else if (bytes[i + 4] == 3)
 				{
 					// date
-					final MyDate o = new MyDate(bb.getLong());
+					final MyDate o = new MyDate(bb.getInt());
 					retval.add(o);
 				}
 				else if (bytes[i + 4] == 4)

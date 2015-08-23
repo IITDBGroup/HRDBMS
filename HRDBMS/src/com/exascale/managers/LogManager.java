@@ -824,10 +824,10 @@ public class LogManager extends HRDBMSThread
 		final HashSet<Long> needsCommit = new HashSet<Long>();
 		HashSet<String> truncated = new HashSet<String>();
 		HashMap<String, Long> trunc2LSN = new HashMap<String, Long>();
+		Transaction.txListLock.writeLock().lock();
 		while (fn != null)
 		{
 			logs.get(fn);
-			Transaction.txListLock.writeLock().lock();
 			{
 				try
 				{
@@ -1019,8 +1019,8 @@ public class LogManager extends HRDBMSThread
 					throw e;
 				}
 			}
-			Transaction.txListLock.writeLock().unlock();
 		}
+		Transaction.txListLock.writeLock().unlock();
 	}
 
 	// public static void writeStartRecIfNeeded(long txnum)

@@ -236,7 +236,7 @@ public final class MetaData implements Serializable
 				}
 			}
 
-			long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+			long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
 			if (pmeta.allDevices())
 			{
 				return (int)(hash % getNumDevices());
@@ -313,7 +313,7 @@ public final class MetaData implements Serializable
 					partial.add(row.get(cols2Pos.get(table + "." + col)));
 				}
 
-				long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+				long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
 				if (pmeta.allNodes())
 				{
 					ArrayList<Integer> retval = new ArrayList<Integer>();
@@ -387,7 +387,7 @@ public final class MetaData implements Serializable
 					partial.add(row.get(cols2Pos.get(table + "." + col)));
 				}
 
-				long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+				long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
 				ngSet = pmeta.getNodeGroupHashMap().get((int)(hash % pmeta.getNodeGroupHashMap().size()));
 			}
 			else
@@ -433,7 +433,7 @@ public final class MetaData implements Serializable
 					partial.add(row.get(cols2Pos.get(table + "." + col)));
 				}
 
-				long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+				long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
 				if (pmeta.allNodes())
 				{
 					ArrayList<Integer> retval = new ArrayList<Integer>();
@@ -522,7 +522,7 @@ public final class MetaData implements Serializable
 					partial.add(row.get(cols2Pos.get(table + "." + col)));
 				}
 
-				long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+				long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
 				if (pmeta.allNodes())
 				{
 					ArrayList<Integer> retval = new ArrayList<Integer>();
@@ -596,7 +596,7 @@ public final class MetaData implements Serializable
 					partial.add(row.get(cols2Pos.get(table + "." + col)));
 				}
 
-				long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+				long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
 				ngSet = pmeta.getNodeGroupHashMap().get((int)(hash % pmeta.getNodeGroupHashMap().size()));
 			}
 			else
@@ -642,7 +642,7 @@ public final class MetaData implements Serializable
 					partial.add(row.get(cols2Pos.get(table + "." + col)));
 				}
 
-				long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+				long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
 				if (pmeta.allNodes())
 				{
 					ArrayList<Integer> retval = new ArrayList<Integer>();
@@ -1136,7 +1136,7 @@ public final class MetaData implements Serializable
 			else if (o instanceof MyDate)
 			{
 				header[i] = (byte)3;
-				size += 8;
+				size += 4;
 			}
 			else if (o instanceof String)
 			{
@@ -1214,7 +1214,7 @@ public final class MetaData implements Serializable
 			}
 			else if (retval[i] == 3)
 			{
-				retvalBB.putLong(((MyDate)o).getTime());
+				retvalBB.putInt(((MyDate)o).getTime());
 			}
 			else if (retval[i] == 4)
 			{
@@ -1367,7 +1367,7 @@ public final class MetaData implements Serializable
 				partial.add(row.get(cols2Pos.get(table + "." + col)));
 			}
 
-			long hash = 0x0EFFFFFFFFFFFFFFL & hash(partial);
+			long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
 			if (pmeta.allDevices())
 			{
 				return (int)(hash % getNumDevices());
@@ -2397,7 +2397,8 @@ public final class MetaData implements Serializable
 			return s;
 		}
 		
-		ArrayList<TableScanOperator> tables = getTables(tree, new HashSet<Operator>());
+		ArrayList<TableScanOperator> tables = new ArrayList<TableScanOperator>();
+		getTables(tree, new HashSet<Operator>(), tables);
 		if (isQualified(col))
 		{
 			String qual = getQual(col);
@@ -4357,40 +4358,27 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	private ArrayList<TableScanOperator> getTables(Operator op, HashSet<Operator> touched)
+	private void getTables(Operator op, HashSet<Operator> touched, ArrayList<TableScanOperator> tables)
 	{
 		if (touched.contains(op))
 		{
-			return new ArrayList<TableScanOperator>();
+			return;
 		}
 
 		touched.add(op);
 		if (op instanceof TableScanOperator)
 		{
-			ArrayList<TableScanOperator> retval = new ArrayList<TableScanOperator>();
-			retval.add((TableScanOperator)op);
-			return retval;
+			tables.add((TableScanOperator)op);
+			return;
 		}
 		else
 		{
-			if (op.children().size() == 1)
-			{
-				return getTables(op.children().get(0), touched);
-			}
-			ArrayList<TableScanOperator> retval = new ArrayList<TableScanOperator>();
 			for (Operator o : op.children())
 			{
-				// if (o == null)
-				// {
-				// Exception e = new
-				// Exception("Operator contained null child.  Op is " + op +
-				// ". Children are " + op.children());
-				// HRDBMSWorker.logger.debug("", e);
-				// }
-				retval.addAll(getTables(o, touched));
+				getTables(o, touched, tables);
 			}
 
-			return retval;
+			return;
 		}
 	}
 
