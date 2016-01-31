@@ -1,6 +1,7 @@
 package com.exascale.optimizer;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
@@ -13,14 +14,15 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeMap;
 import java.util.Vector;
+import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 import com.exascale.managers.HRDBMSWorker;
@@ -41,6 +43,7 @@ import com.exascale.threads.ThreadPoolThread;
 public final class HashJoinOperator extends JoinOperator implements Serializable
 {
 	private static sun.misc.Unsafe unsafe;
+	private static AtomicInteger numHJO = new AtomicInteger(0);
 
 	static
 	{
@@ -83,6 +86,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 	private transient ArrayList<ArrayList<Object>> queuedRows;
 	private transient MySimpleDateFormat sdf;
 	private int rightChildCard = 16;
+	private int leftChildCard = 16;
 	private boolean cardSet = false;
 	private transient Vector<Operator> clones;
 	private transient Vector<AtomicBoolean> lockVector;
@@ -91,6 +95,9 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 	private transient Boolean anti = null;
 	private transient volatile BloomFilter bf = null;
 	private transient volatile BloomFilter bf2 = null;
+	private transient AtomicLong received;
+	private transient volatile boolean demReceived;
+	private transient volatile int MAGIC_NUM;
 
 	public HashJoinOperator(String left, String right, MetaData meta) throws Exception
 	{
@@ -104,6 +111,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			HRDBMSWorker.logger.error("", e);
 			throw e;
 		}
+		received = new AtomicLong(0);
 	}
 
 	private HashJoinOperator(HashSet<HashMap<Filter, Filter>> f, ArrayList<String> lefts, ArrayList<String> rights, MetaData meta)
@@ -112,6 +120,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		this.f = f;
 		this.lefts = lefts;
 		this.rights = rights;
+		received = new AtomicLong(0);
 	}
 
 	public static HashJoinOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -134,22 +143,10 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		value.dynamicIndexes = OperatorUtils.deserializeALIndx(in, prev);
 		value.rightChildCard = OperatorUtils.readInt(in);
 		value.cardSet = OperatorUtils.readBool(in);
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
+		value.leftChildCard = OperatorUtils.readInt(in);
 		return value;
-	}
-
-	public void setSemi()
-	{
-		semi = new Boolean(true);
-	}
-
-	public void setAnti()
-	{
-		anti = new Boolean(true);
-	}
-
-	public void setCNF(HashSet<HashMap<Filter, Filter>> hshm) throws Exception
-	{
-		cnfFilters = new CNFFilter(hshm, meta, cols2Pos, null, this);
 	}
 
 	private static long hash(Object key) throws Exception
@@ -439,6 +436,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		retval.indexAccess = indexAccess;
 		retval.dynamicIndexes = dynamicIndexes;
 		retval.rightChildCard = rightChildCard;
+		retval.leftChildCard = leftChildCard;
 		retval.cardSet = cardSet;
 		return retval;
 	}
@@ -713,9 +711,21 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
 	}
 
 	@Override
@@ -860,12 +870,23 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		OperatorUtils.serializeALIndx(dynamicIndexes, out, prev);
 		OperatorUtils.writeInt(rightChildCard, out);
 		OperatorUtils.writeBool(cardSet, out);
+		OperatorUtils.writeInt(leftChildCard, out);
+	}
+
+	public void setAnti()
+	{
+		anti = new Boolean(true);
 	}
 
 	@Override
 	public void setChildPos(int pos)
 	{
 		childPos = pos;
+	}
+
+	public void setCNF(HashSet<HashMap<Filter, Filter>> hshm) throws Exception
+	{
+		cnfFilters = new CNFFilter(hshm, meta, cols2Pos, null, this);
 	}
 
 	public void setDynamicIndex(ArrayList<Index> indexes)
@@ -885,7 +906,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 	{
 	}
 
-	public boolean setRightChildCard(int card)
+	public boolean setRightChildCard(int card, int card2)
 	{
 		if (cardSet)
 		{
@@ -894,12 +915,19 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 
 		cardSet = true;
 		rightChildCard = card;
+		leftChildCard = card2;
 		return true;
+	}
+
+	public void setSemi()
+	{
+		semi = new Boolean(true);
 	}
 
 	@Override
 	public void start() throws Exception
 	{
+		HRDBMSWorker.logger.debug("Starting HJO(" + leftChildCard + ", " + rightChildCard + ")");
 		NUM_RT_THREADS = ResourceManager.cpus;
 		NUM_PTHREADS = ResourceManager.cpus;
 		readersDone = false;
@@ -925,8 +953,10 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			}
 			else if (rightChildCard > ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")))
 			{
-				//double percentInMem = ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")) / rightChildCard;
-				//percentInMem = percentInMem / 8;
+				// double percentInMem = ResourceManager.QUEUE_SIZE *
+				// Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor"))
+				// / rightChildCard;
+				// percentInMem = percentInMem / 8;
 				double percentInMem = 0;
 				new ExternalThread(percentInMem).start();
 			}
@@ -950,24 +980,98 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 
 	}
 
-	private class ExternalThread extends HRDBMSThread
+	@Override
+	public String toString()
 	{
-		private double percentInMem;
-		
-		public ExternalThread()
+		return "HashJoinOperator: " + lefts.toString() + "," + rights.toString();
+	}
+
+	private Operator clone(Operator op)
+	{
+		final Operator clone = op.clone();
+		int i = 0;
+		for (final Operator o : op.children())
 		{
-			percentInMem = 0;
+			try
+			{
+				clone.add(clone(o));
+				clone.setChildPos(op.getChildPos());
+				if (o instanceof TableScanOperator)
+				{
+					final CNFFilter cnf = ((TableScanOperator)o).getCNFForParent(op);
+					if (cnf != null)
+					{
+						final Operator child = clone.children().get(i);
+						((TableScanOperator)child).setCNFForParent(clone, cnf);
+					}
+				}
+
+				if (op instanceof TableScanOperator)
+				{
+					final Operator child = clone.children().get(i);
+					int device = -1;
+
+					for (final Map.Entry entry : (((TableScanOperator)op).device2Child).entrySet())
+					{
+						if (entry.getValue() == o)
+						{
+							device = (Integer)entry.getKey();
+						}
+					}
+					((TableScanOperator)clone).setChildForDevice(device, child);
+				}
+			}
+			catch (final Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				return null;
+			}
+
+			i++;
 		}
-		
-		public ExternalThread(double percentInMem)
+
+		return clone;
+	}
+
+	private ArrayList<FileChannel> createChannels(ArrayList<RandomAccessFile> files)
+	{
+		ArrayList<FileChannel> retval = new ArrayList<FileChannel>(files.size());
+		for (RandomAccessFile raf : files)
 		{
-			this.percentInMem = percentInMem;
+			retval.add(raf.getChannel());
 		}
-		
-		public void run()
+
+		return retval;
+	}
+
+	private ArrayList<RandomAccessFile> createFiles(ArrayList<String> fns) throws Exception
+	{
+		ArrayList<RandomAccessFile> retval = new ArrayList<RandomAccessFile>(fns.size());
+		for (String fn : fns)
 		{
-			external(percentInMem);
+			while (true)
+			{
+				try
+				{
+					RandomAccessFile raf = new RandomAccessFile(fn, "rw");
+					retval.add(raf);
+					break;
+				}
+				catch (FileNotFoundException e)
+				{
+					ResourceManager.panic = true;
+					try
+					{
+						Thread.sleep(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("rm_sleep_time_ms")) / 2);
+					}
+					catch (Exception f)
+					{
+					}
+				}
+			}
 		}
+
+		return retval;
 	}
 
 	private ArrayList<String> createFNs(int num, int extra)
@@ -984,24 +1088,35 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		return retval;
 	}
 
-	private ArrayList<RandomAccessFile> createFiles(ArrayList<String> fns) throws Exception
+	private ArrayList<Filter> deepClone(ArrayList<Filter> in)
 	{
-		ArrayList<RandomAccessFile> retval = new ArrayList<RandomAccessFile>(fns.size());
-		for (String fn : fns)
+		final ArrayList<Filter> out = new ArrayList<Filter>();
+		for (final Filter f : in)
 		{
-			RandomAccessFile raf = new RandomAccessFile(fn, "rw");
-			retval.add(raf);
+			out.add(f.clone());
 		}
 
-		return retval;
+		return out;
 	}
 
-	private ArrayList<FileChannel> createChannels(ArrayList<RandomAccessFile> files)
+	private ArrayList<Index> dynamicIndexes(Operator model, Operator actual)
 	{
-		ArrayList<FileChannel> retval = new ArrayList<FileChannel>(files.size());
-		for (RandomAccessFile raf : files)
+		final ArrayList<Index> retval = new ArrayList<Index>(dynamicIndexes.size());
+		if (model instanceof IndexOperator)
 		{
-			retval.add(raf.getChannel());
+			if (dynamicIndexes.contains(((IndexOperator)model).index))
+			{
+				retval.add(((IndexOperator)actual).index);
+			}
+		}
+		else
+		{
+			int i = 0;
+			for (final Operator o : model.children())
+			{
+				retval.addAll(dynamicIndexes(o, actual.children().get(i)));
+				i++;
+			}
 		}
 
 		return retval;
@@ -1009,9 +1124,30 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 
 	private void external(double percentInMem)
 	{
+		numHJO.incrementAndGet();
 		try
 		{
-			int numBins = 1201;
+			// int numBins = (int)((((((long)leftChildCard)
+			// +((long)rightChildCard)) * 1.0 / 755000000.0) * 76800000.0) /
+			// (ResourceManager.QUEUE_SIZE *
+			// Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor"))));
+			// numBins *= numHJO.get();
+			// if (numHJO.get() != 1)
+			// {
+			// numBins *= 2;
+			// }
+
+			// if (numBins < 2)
+			// {
+			// numBins = 2;
+			// }
+
+			// if (numBins > 8192)
+			// {
+			// numBins = 8192;
+			// }
+			// HRDBMSWorker.logger.debug("Using numBins = " + numBins);
+			int numBins = 1023;
 			int inMemBins = (int)(numBins * percentInMem);
 			byte[] types1 = new byte[children.get(0).getPos2Col().size()];
 			int j = 0;
@@ -1110,7 +1246,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 				outBuffer.put(thread1.getException());
 				return;
 			}
-			
+
 			ArrayList<ArrayList<ArrayList<Object>>> lbins = thread1.getBins();
 
 			ReadDataThread thread3 = new ReadDataThread(channels1.get(0), types1, lbins, inMemBins, 0);
@@ -1137,7 +1273,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 				outBuffer.put(thread2.getException());
 				return;
 			}
-			
+
 			ArrayList<ArrayList<ArrayList<Object>>> rbins = thread2.getBins();
 
 			HashDataThread thread5 = new HashDataThread(channels2.get(0), types2, rbins, inMemBins, 0);
@@ -1150,6 +1286,10 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 
 			int i = 2;
 			ArrayList<ExternalProcessThread> epThreads = new ArrayList<ExternalProcessThread>();
+
+			int maxPar = Runtime.getRuntime().availableProcessors();
+			int numPar1 = -1;
+			int numPar2 = -1;
 
 			while (true)
 			{
@@ -1171,12 +1311,29 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					outBuffer.put(right.getException());
 					return;
 				}
-				ExternalProcessThread ept = new ExternalProcessThread(left, right, types2);
-				final int numPar = Runtime.getRuntime().availableProcessors();
-				
-				if (epThreads.size() >= numPar)
+
+				if (numPar1 == -1)
 				{
-					int k = numPar - 1;
+					int leftSize = left.data.size();
+					numPar2 = leftSize / 100000;
+					if (numPar2 == 0)
+					{
+						numPar2 = 1;
+					}
+
+					if (numPar2 > maxPar)
+					{
+						numPar2 = maxPar;
+					}
+
+					numPar1 = maxPar / numPar2;
+				}
+
+				ExternalProcessThread ept = new ExternalProcessThread(left, right, types2, numPar2);
+
+				if (epThreads.size() >= numPar1)
+				{
+					int k = numPar1 - 1;
 					while (k >= 0)
 					{
 						if (epThreads.get(k).isDone())
@@ -1184,17 +1341,17 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 							epThreads.get(k).join();
 							epThreads.remove(k);
 						}
-						
+
 						k--;
 					}
-					
-					if (epThreads.size() >= numPar)
+
+					if (epThreads.size() >= numPar1)
 					{
 						epThreads.get(0).join();
 						epThreads.remove(0);
 					}
 				}
-				
+
 				ept.start();
 				epThreads.add(ept);
 
@@ -1274,340 +1431,36 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		}
 		catch (Exception e)
 		{
+			HRDBMSWorker.logger.debug("", e);
 			outBuffer.put(e);
 		}
+
+		numHJO.decrementAndGet();
 	}
 
-	private class ExternalProcessThread extends HRDBMSThread
+	private void freeClone(Operator clone) throws Exception
 	{
-		private ReadDataThread left;
-		private HashDataThread right;
-		private byte[] types;
-
-		public ExternalProcessThread(ReadDataThread left, HashDataThread right, byte[] types)
+		synchronized (clones)
 		{
-			this.left = left;
-			this.right = right;
-			this.types = types;
-		}
-
-		public void run()
-		{
-			try
+			int i = 0;
+			final int size = clones.size();
+			while (i < size)
 			{
-				process(left, right, types);
-			}
-			catch (Exception e)
-			{
-				outBuffer.put(e);
-			}
-		}
-	}
-	
-	private List<ArrayList<Object>> getCandidates(List<byte[]> bCandidates, byte[] types) throws Exception
-	{
-		ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>(bCandidates.size());
-		int z = 0;
-		final int limit = bCandidates.size();
-		while (z < limit)
-		{
-			byte[] b = bCandidates.get(z++);
-			retval.add((ArrayList<Object>)fromBytes(b, types));
-		}
-		
-		return retval;
-	}
-
-	private void process(ReadDataThread left, HashDataThread right, byte[] types) throws Exception
-	{
-		ArrayList<ArrayList<Object>> probe = left.getData();
-		HJOMultiHashMap<Long, byte[]> table = right.getData();
-		final HashMap<String, Integer> childCols2Pos = children.get(0).getCols2Pos();
-
-		int[] poses = new int[lefts.size()];
-		int i = 0;
-		for (String col : lefts)
-		{
-			poses[i] = childCols2Pos.get(col);
-			i++;
-		}
-		final ArrayList<Object> key = new ArrayList<Object>(lefts.size());
-
-		for (ArrayList<Object> row : probe)
-		{
-			i = 0;
-			key.clear();
-			for (int pos : poses)
-			{
-				try
+				final Operator o = clones.get(i);
+				if (clone == o)
 				{
-					key.add(row.get(pos));
-					i++;
-				}
-				catch (Exception e)
-				{
-					HRDBMSWorker.logger.debug("Failed to find a column in " + childCols2Pos);
-					throw e;
-				}
-			}
-
-			final long hash = hash(key);
-			List<ArrayList<Object>> candidates = getCandidates(table.get(hash), types);
-			boolean found = false;
-			final int limit = candidates.size();
-			int at = 0;
-			// for (final ArrayList<Object> rRow : candidates)
-			while (at < limit)
-			{
-				ArrayList<Object> rRow = candidates.get(at);
-				if (cnfFilters.passes(row, rRow))
-				{
-					if (semi != null)
+					if (!lockVector.get(i).get())
 					{
-						outBuffer.put(row);
-						break;
+						Exception e = new Exception("About to unlock an unlocked lock");
+						HRDBMSWorker.logger.error("About to unlock an unlocked lock", e);
+						throw e;
 					}
-					else if (anti != null)
-					{
-						found = true;
-						break;
-					}
-					else
-					{
-						final ArrayList<Object> out = new ArrayList<Object>(row.size() + rRow.size());
-						out.addAll(row);
-						out.addAll(rRow);
-						outBuffer.put(out);
-						//if (rhsUnique)
-						//{
-						//	break;
-						//}
-					}
-				}
-
-				at++;
-			}
-
-			if (anti != null && !found)
-			{
-				outBuffer.put(row);
-			}
-		}
-
-		left.clear();
-		right.clear();
-		probe = null;
-		table = null;
-	}
-
-	private class HashDataThread extends HRDBMSThread
-	{
-		private FileChannel fc;
-		private boolean ok = true;
-		private Exception e;
-		private HJOMultiHashMap<Long, byte[]> data;
-		private byte[] types;
-		private ArrayList<ArrayList<ArrayList<Object>>> bins;
-		private int binsInMem;
-		private int index;
-
-		public HashDataThread(FileChannel fc, byte[] types, ArrayList<ArrayList<ArrayList<Object>>> bins, int binsInMem, int index) throws Exception
-		{
-			this.fc = new BufferedFileChannel(fc);
-			this.types = types;
-			data = new HJOMultiHashMap<Long, byte[]>();
-			this.bins = bins;
-			this.binsInMem = binsInMem;
-			this.index = index;
-		}
-
-		public HJOMultiHashMap<Long, byte[]> getData()
-		{
-			return data;
-		}
-
-		public boolean getOK()
-		{
-			return ok;
-		}
-
-		public Exception getException()
-		{
-			return e;
-		}
-
-		public void run()
-		{
-			try
-			{
-				if (index < binsInMem)
-				{
-					final HashMap<String, Integer> childCols2Pos = children.get(1).getCols2Pos();
-
-					int[] poses = new int[rights.size()];
-					int i = 0;
-					for (String col : rights)
-					{
-						poses[i] = childCols2Pos.get(col);
-						i++;
-					}
-
-					final ArrayList<Object> key = new ArrayList<Object>(rights.size());
-					for (ArrayList<Object> row : bins.get(index))
-					{
-						i = 0;
-						key.clear();
-						for (int pos : poses)
-						{
-							try
-							{
-								key.add(row.get(pos));
-								i++;
-							}
-							catch (Exception e)
-							{
-								HRDBMSWorker.logger.debug("Failed to find a column in " + childCols2Pos);
-								throw e;
-							}
-						}
-
-						final long hash = hash(key);
-						data.multiPut(hash, toBytes(row));
-					}
-					
+					lockVector.get(i).set(false);
 					return;
 				}
-				fc.position(0);
-				ByteBuffer bb1 = ByteBuffer.allocate(4);
-				final HashMap<String, Integer> childCols2Pos = children.get(1).getCols2Pos();
 
-				int[] poses = new int[rights.size()];
-				int i = 0;
-				for (String col : rights)
-				{
-					poses[i] = childCols2Pos.get(col);
-					i++;
-				}
-
-				final ArrayList<Object> key = new ArrayList<Object>(rights.size());
-				while (true)
-				{
-					bb1.position(0);
-					if (fc.read(bb1) == -1)
-					{
-						return;
-					}
-					bb1.position(0);
-					int length = bb1.getInt();
-					ByteBuffer bb = ByteBuffer.allocate(length);
-					fc.read(bb);
-					ArrayList<Object> row = (ArrayList<Object>)fromBytes(bb.array(), types);
-					i = 0;
-					key.clear();
-					for (int pos : poses)
-					{
-						try
-						{
-							key.add(row.get(pos));
-							i++;
-						}
-						catch (Exception e)
-						{
-							HRDBMSWorker.logger.debug("Failed to find a column in " + childCols2Pos);
-							throw e;
-						}
-					}
-
-					final long hash = hash(key);
-					data.multiPut(hash, bb.array());
-				}
+				i++;
 			}
-			catch (Exception e)
-			{
-				ok = false;
-				this.e = e;
-			}
-		}
-
-		public void clear()
-		{
-			data = null;
-		}
-	}
-
-	private class ReadDataThread extends HRDBMSThread
-	{
-		private FileChannel fc;
-		private boolean ok = true;
-		private Exception e;
-		private ArrayList<ArrayList<Object>> data;
-		private byte[] types;
-		private ArrayList<ArrayList<ArrayList<Object>>> bins;
-		private int inMemBins;
-		private int index;
-
-		public ReadDataThread(FileChannel fc, byte[] types, ArrayList<ArrayList<ArrayList<Object>>> bins, int inMemBins, int index) throws Exception
-		{
-			this.fc = new BufferedFileChannel(fc);
-			data = new ArrayList<ArrayList<Object>>();
-			this.types = types;
-			this.bins = bins;
-			this.inMemBins = inMemBins;
-			this.index = index;
-		}
-
-		public ArrayList<ArrayList<Object>> getData()
-		{
-			return data;
-		}
-
-		public boolean getOK()
-		{
-			return ok;
-		}
-
-		public Exception getException()
-		{
-			return e;
-		}
-
-		public void run()
-		{
-			if (index < inMemBins)
-			{
-				data = bins.get(index);
-				return;
-			}
-			
-			try
-			{
-				fc.position(0);
-				ByteBuffer bb1 = ByteBuffer.allocate(4);
-				while (true)
-				{
-					bb1.position(0);
-					if (fc.read(bb1) == -1)
-					{
-						return;
-					}
-					bb1.position(0);
-					int length = bb1.getInt();
-					ByteBuffer bb = ByteBuffer.allocate(length);
-					fc.read(bb);
-					ArrayList<Object> row = (ArrayList<Object>)fromBytes(bb.array(), types);
-					data.add(row);
-				}
-			}
-			catch (Exception e)
-			{
-				ok = false;
-				this.e = e;
-			}
-		}
-
-		public void clear()
-		{
-			data = null;
 		}
 	}
 
@@ -1679,220 +1532,279 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		return retval;
 	}
 
-	private class RightThread extends HRDBMSThread
+	private final Object fromBytes(byte[] val, byte[] types, int[] poses) throws Exception
 	{
-		private ArrayList<FileChannel> channels;
-		private ArrayList<RandomAccessFile> files;
-		private int numBins;
-		private byte[] types;
-		private boolean ok = true;
-		private Exception e;
-		private BloomFilter tempBF;
-		private int inMemBins;
-		private ArrayList<ArrayList<ArrayList<Object>>> bins;
+		final ByteBuffer bb = ByteBuffer.wrap(val);
+		final int numFields = types.length;
 
-		public RightThread(ArrayList<RandomAccessFile> files, ArrayList<FileChannel> channels, int numBins, byte[] types, int inMemBins)
+		if (numFields == 0)
 		{
-			this.channels = channels;
-			this.files = files;
-			this.numBins = numBins;
-			this.types = types;
-			this.inMemBins = inMemBins;
+			return new ArrayList<Object>();
+		}
 
-			if (anti == null)
+		final ArrayList<Object> retval = new ArrayList<Object>(poses.length);
+		int[] offsets = new int[types.length];
+		int i = 0;
+		int pos = 0;
+		while (i < offsets.length)
+		{
+			offsets[i] = pos;
+			if (types[i] == 0 || types[i] == 2)
 			{
-				tempBF = new BloomFilter();
+				pos += 8;
+			}
+			else if (types[i] == 1 || types[i] == 3)
+			{
+				pos += 4;
 			}
 			else
 			{
-				boolean doIt = true;
-				HashSet<HashMap<Filter, Filter>> hshm = cnfFilters.getHSHM();
-				for (HashMap<Filter, Filter> hm : hshm)
-				{
-					if (hm.size() != 1)
-					{
-						doIt = false;
-						break;
-					}
+				// type 4
+				int length = bb.getInt(pos);
+				pos += (4 + length);
+			}
 
-					for (Filter f : hm.keySet())
-					{
-						if (!f.op().equals("E"))
-						{
-							doIt = false;
-							break;
-						}
-					}
+			i++;
+		}
+
+		for (int pos2 : poses)
+		{
+			pos = offsets[pos2];
+			if (types[pos2] == 0)
+			{
+				// long
+				final Long o = bb.getLong(pos);
+				retval.add(o);
+			}
+			else if (types[pos2] == 1)
+			{
+				// integer
+				final Integer o = bb.getInt(pos);
+				retval.add(o);
+			}
+			else if (types[pos2] == 2)
+			{
+				// double
+				final Double o = bb.getDouble(pos);
+				retval.add(o);
+			}
+			else if (types[pos2] == 3)
+			{
+				// date
+				final MyDate o = new MyDate(bb.getInt(pos));
+				retval.add(o);
+			}
+			else
+			{
+				// string
+				final int length = bb.getInt(pos);
+				final byte[] temp = new byte[length];
+				bb.position(pos + 4);
+				bb.get(temp);
+				try
+				{
+					final String o = new String(temp, StandardCharsets.UTF_8);
+					retval.add(o);
 				}
-
-				if (doIt)
+				catch (final Exception e)
 				{
-					tempBF = new BloomFilter(true);
-					bf = tempBF;
+					HRDBMSWorker.logger.error("", e);
+					throw e;
 				}
 			}
 		}
-		
-		public ArrayList<ArrayList<ArrayList<Object>>> getBins()
+
+		return retval;
+	}
+
+	private List<ArrayList<Object>> getCandidates(List<byte[]> bCandidates, byte[] types) throws Exception
+	{
+		ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>(bCandidates.size());
+		int z = 0;
+		final int limit = bCandidates.size();
+		while (z < limit)
 		{
-			return bins;
+			byte[] b = bCandidates.get(z++);
+			retval.add((ArrayList<Object>)fromBytes(b, types));
 		}
 
-		public boolean getOK()
+		return retval;
+	}
+
+	private final ArrayList<ArrayList<Object>> getCandidates(long hash, byte[] types) throws Exception
+	{
+		final ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>();
+		List<byte[]> list = buckets.get(hash);
+		int z = 0;
+		final int limit = list.size();
+		while (z < limit)
 		{
-			return ok;
+			retval.add((ArrayList<Object>)fromBytes(list.get(z++), types));
 		}
 
-		public Exception getException()
-		{
-			return e;
-		}
+		return retval;
+	}
 
-		public void run()
+	private Operator getClone() throws Exception
+	{
+		synchronized (clones)
 		{
-			bins = new ArrayList<ArrayList<ArrayList<Object>>>();
-			HashMap<Integer, FlushBinThread> threads = new HashMap<Integer, FlushBinThread>();
-			int size = (int)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")) / (numBins >> 1));
 			int i = 0;
-			while (i < numBins)
+			final int size = lockVector.size();
+			while (i < size)
 			{
-				bins.add(new ArrayList<ArrayList<Object>>(size));
+				final AtomicBoolean lock = lockVector.get(i);
+
+				if (!lock.get())
+				{
+					if (lock.compareAndSet(false, true))
+					{
+						final Operator retval = clones.get(i);
+						return retval;
+					}
+				}
+
 				i++;
 			}
 
+			Operator clone = clone(children.get(1));
+			final RootOperator root = new RootOperator(meta);
 			try
 			{
-				final Operator child = children.get(1);
-				final HashMap<String, Integer> childCols2Pos = child.getCols2Pos();
-				Object o = child.next(HashJoinOperator.this);
-
-				int[] poses = new int[rights.size()];
-				i = 0;
-				for (String col : rights)
-				{
-					poses[i] = childCols2Pos.get(col);
-					i++;
-				}
-				final ArrayList<Object> key = new ArrayList<Object>(rights.size());
-				ArrayList<FlushBinThread> current = new ArrayList<FlushBinThread>();
-				int curSize = ResourceManager.TEMP_DIRS.size() * 3;
-				while (!(o instanceof DataEndMarker))
-				{
-					i = 0;
-					key.clear();
-					for (int pos : poses)
-					{
-						try
-						{
-							key.add(((ArrayList<Object>)o).get(pos));
-							i++;
-						}
-						catch (Exception e)
-						{
-							HRDBMSWorker.logger.debug("Failed to find a column in " + childCols2Pos);
-							throw e;
-						}
-					}
-
-					final long hash = 0x7FFFFFFFFFFFFFFFL & hash(key);
-					if (anti == null)
-					{
-						tempBF.add(hash);
-					}
-					else if (tempBF != null)
-					{
-						tempBF.add(hash, (ArrayList<Object>)key.clone());
-					}
-
-					if (bf2 != null && !bf2.passes(hash))
-					{
-						o = child.next(HashJoinOperator.this);
-						continue;
-					}
-					int x = (int)(hash % numBins);
-					ArrayList<ArrayList<Object>> bin = bins.get(x);
-					// writeToHashTable(hash, (ArrayList<Object>)o);
-					bin.add((ArrayList<Object>)o);
-
-					if (x >= inMemBins && bin.size() == size)
-					{
-						FlushBinThread thread = new FlushBinThread(bin, types, channels.get(x));
-						if (threads.putIfAbsent(x, thread) != null)
-						{
-							threads.get(x).join();
-							if (!threads.get(x).getOK())
-							{
-								throw threads.get(x).getException();
-							}
-
-							threads.put(x, thread);
-						}
-						current.add(thread);
-						if (current.size() > curSize)
-						{
-							current.get(0).join();
-							current.remove(0);
-						}
-						thread.start();
-						bins.set(x, new ArrayList<ArrayList<Object>>(size));
-					}
-
-					o = child.next(HashJoinOperator.this);
-				}
-
-				bf = tempBF;
-
-				i = 0;
-				for (ArrayList<ArrayList<Object>> bin : bins)
-				{
-					if (i >= inMemBins && bin.size() > 0)
-					{
-						FlushBinThread thread = new FlushBinThread(bin, types, channels.get(i));
-						if (threads.putIfAbsent(i, thread) != null)
-						{
-							threads.get(i).join();
-							if (!threads.get(i).getOK())
-							{
-								throw threads.get(i).getException();
-							}
-
-							threads.put(i, thread);
-						}
-						current.add(thread);
-						if (current.size() > curSize)
-						{
-							current.get(0).join();
-							current.remove(0);
-						}
-						thread.start();
-					}
-
-					i++;
-				}
-
-				for (FlushBinThread thread : threads.values())
-				{
-					thread.join();
-					if (!thread.getOK())
-					{
-						throw thread.getException();
-					}
-				}
-
-				// everything is written
-				i = numBins - 1;
-				while (i >= inMemBins)
-				{
-					bins.remove(i);
-					i--;
-				}
+				root.add(clone);
 			}
 			catch (final Exception e)
 			{
-				ok = false;
-				this.e = e;
+				HRDBMSWorker.logger.error("", e);
+				throw e;
+			}
+			if (clone instanceof TableScanOperator)
+			{
+				if (((TableScanOperator)children.get(1)).orderedFilters.size() > 0)
+				{
+					((TableScanOperator)clone).setCNFForParent(root, ((TableScanOperator)children.get(1)).getCNFForParent(this));
+				}
+			}
+			clone = root;
+			clones.add(clone);
+			lockVector.add(new AtomicBoolean(true));
+
+			return clone;
+		}
+	}
+
+	private String getLeftForRight(String right)
+	{
+		int i = 0;
+		for (final String r : rights)
+		{
+			if (r.equals(right))
+			{
+				return lefts.get(i);
+			}
+
+			i++;
+		}
+
+		return null;
+	}
+
+	private String getRightForLeft(String left)
+	{
+		int i = 0;
+		for (final String l : lefts)
+		{
+			if (l.equals(left))
+			{
+				return rights.get(i);
+			}
+
+			i++;
+		}
+
+		return null;
+	}
+
+	private void process(ReadDataThread left, HashDataThread right, byte[] types, int start, int end) throws Exception
+	{
+		ArrayList<ArrayList<Object>> probe = left.getData();
+		HJOMultiHashMap<Long, byte[]> table = right.getData();
+		final HashMap<String, Integer> childCols2Pos = children.get(0).getCols2Pos();
+
+		int[] poses = new int[lefts.size()];
+		int i = 0;
+		for (String col : lefts)
+		{
+			poses[i] = childCols2Pos.get(col);
+			i++;
+		}
+		final ArrayList<Object> key = new ArrayList<Object>(lefts.size());
+
+		int z = start;
+		while (z < end)
+		{
+			ArrayList<Object> row = probe.get(z++);
+			i = 0;
+			key.clear();
+			for (int pos : poses)
+			{
+				try
+				{
+					key.add(row.get(pos));
+					i++;
+				}
+				catch (Exception e)
+				{
+					HRDBMSWorker.logger.debug("Failed to find a column in " + childCols2Pos);
+					throw e;
+				}
+			}
+
+			final long hash = hash(key);
+			List<ArrayList<Object>> candidates = getCandidates(table.get(hash), types);
+			boolean found = false;
+			final int limit = candidates.size();
+			int at = 0;
+			// for (final ArrayList<Object> rRow : candidates)
+			while (at < limit)
+			{
+				ArrayList<Object> rRow = candidates.get(at);
+				if (cnfFilters.passes(row, rRow))
+				{
+					if (semi != null)
+					{
+						outBuffer.put(row);
+						break;
+					}
+					else if (anti != null)
+					{
+						found = true;
+						break;
+					}
+					else
+					{
+						final ArrayList<Object> out = new ArrayList<Object>(row.size() + rRow.size());
+						out.addAll(row);
+						out.addAll(rRow);
+						outBuffer.put(out);
+						// if (rhsUnique)
+						// {
+						// break;
+						// }
+					}
+				}
+
+				at++;
+			}
+
+			if (anti != null && !found)
+			{
+				outBuffer.put(row);
 			}
 		}
+
+		probe = null;
+		table = null;
 	}
 
 	private final byte[] rsToBytes(ArrayList<ArrayList<Object>> rows, final byte[] types) throws Exception
@@ -1989,185 +1901,159 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		return retval;
 	}
 
-	private class LeftThread extends HRDBMSThread
+	private final void writeToHashTable(long hash, byte[] row) throws Exception
 	{
-		private ArrayList<FileChannel> channels;
-		private ArrayList<RandomAccessFile> files;
-		private int numBins;
-		private byte[] types;
-		private boolean ok = true;
-		private Exception e;
-		private BloomFilter tempBF;
-		private int inMemBins;
-		private ArrayList<ArrayList<ArrayList<Object>>> bins;
+		buckets.multiPut(hash, row);
+	}
 
-		public LeftThread(ArrayList<RandomAccessFile> files, ArrayList<FileChannel> channels, int numBins, byte[] types, int inMemBins)
+	private class EPT2Thread extends HRDBMSThread
+	{
+		private final ReadDataThread left;
+		private final HashDataThread right;
+		private final byte[] types;
+		private final int start;
+		private final int end;
+
+		public EPT2Thread(ReadDataThread left, HashDataThread right, byte[] types, int start, int end)
 		{
-			this.channels = channels;
-			this.files = files;
-			this.numBins = numBins;
+			this.left = left;
+			this.right = right;
 			this.types = types;
-			tempBF = new BloomFilter();
-			this.inMemBins = inMemBins;
-		}
-		
-		public ArrayList<ArrayList<ArrayList<Object>>> getBins()
-		{
-			return bins;
+			this.start = start;
+			this.end = end;
 		}
 
-		public boolean getOK()
-		{
-			return ok;
-		}
-
-		public Exception getException()
-		{
-			return e;
-		}
-
+		@Override
 		public void run()
 		{
-			bins = new ArrayList<ArrayList<ArrayList<Object>>>();
-			HashMap<Integer, FlushBinThread> threads = new HashMap<Integer, FlushBinThread>();
-			int size = (int)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")) / (numBins >> 1));
-			int i = 0;
-			while (i < numBins)
-			{
-				bins.add(new ArrayList<ArrayList<Object>>(size));
-				i++;
-			}
-
 			try
 			{
-				final Operator child = children.get(0);
-				final HashMap<String, Integer> childCols2Pos = child.getCols2Pos();
-				Object o = child.next(HashJoinOperator.this);
+				process(left, right, types, start, end);
+			}
+			catch (Exception e)
+			{
+				// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+				// ": ExternalProcessThread #" + left.index +
+				// " completed with exception");
+				HRDBMSWorker.logger.debug("", e);
+				outBuffer.put(e);
+			}
+		}
+	}
 
-				int[] poses = new int[lefts.size()];
-				i = 0;
-				for (String col : lefts)
+	private class ExternalProcessThread extends HRDBMSThread
+	{
+		private final ReadDataThread left;
+		private final HashDataThread right;
+		private final byte[] types;
+		private final int par;
+
+		public ExternalProcessThread(ReadDataThread left, HashDataThread right, byte[] types, int par)
+		{
+			this.left = left;
+			this.right = right;
+			this.types = types;
+			this.par = par;
+		}
+
+		@Override
+		public void run()
+		{
+			try
+			{
+				if (par == 1)
 				{
-					poses[i] = childCols2Pos.get(col);
-					i++;
-				}
-				final ArrayList<Object> key = new ArrayList<Object>(lefts.size());
-				while (!(o instanceof DataEndMarker))
-				{
-					i = 0;
-					key.clear();
-					for (int pos : poses)
-					{
-						try
-						{
-							key.add(((ArrayList<Object>)o).get(pos));
-							i++;
-						}
-						catch (Exception e)
-						{
-							HRDBMSWorker.logger.debug("Failed to find a column in " + childCols2Pos);
-							throw e;
-						}
-					}
-
-					final long hash = 0x7FFFFFFFFFFFFFFFL & hash(key);
-					if (tempBF != null)
-					{
-						tempBF.add(hash);
-					}
-					if (anti == null && bf != null && !bf.passes(hash))
-					{
-						o = child.next(HashJoinOperator.this);
-						continue;
-					}
-					else if (anti != null && bf != null && !bf.passes(hash, key))
-					{
-						o = child.next(HashJoinOperator.this);
-						continue;
-					}
-
-					int x = (int)(hash % numBins);
-					ArrayList<ArrayList<Object>> bin = bins.get(x);
-					// writeToHashTable(hash, (ArrayList<Object>)o);
-					bin.add((ArrayList<Object>)o);
-
-					if (x >= inMemBins && bin.size() == size)
-					{
-						FlushBinThread thread = new FlushBinThread(bin, types, channels.get(x));
-						if (threads.putIfAbsent(x, thread) != null)
-						{
-							threads.get(x).join();
-							if (!threads.get(x).getOK())
-							{
-								throw threads.get(x).getException();
-							}
-
-							threads.put(x, thread);
-						}
-						thread.start();
-						bins.set(x, new ArrayList<ArrayList<Object>>(size));
-					}
-
-					o = child.next(HashJoinOperator.this);
+					process(left, right, types, 0, left.data.size());
+					left.clear();
+					right.clear();
+					return;
 				}
 
-				if (tempBF != null)
+				int i = 0;
+				int size = left.data.size();
+				int per = size / par;
+
+				if (per == 0 && size != 0)
 				{
-					bf2 = tempBF;
+					per = 1;
 				}
 
-				i = 0;
-				for (ArrayList<ArrayList<Object>> bin : bins)
+				int pos = 0;
+				ArrayList<EPT2Thread> threads = new ArrayList<EPT2Thread>(par);
+				while (i < par)
 				{
-					if (i >= inMemBins && bin.size() > 0)
+					int end = pos + per;
+					if (end > size)
 					{
-						FlushBinThread thread = new FlushBinThread(bin, types, channels.get(i));
-						if (threads.putIfAbsent(i, thread) != null)
-						{
-							threads.get(i).join();
-							if (!threads.get(i).getOK())
-							{
-								throw threads.get(i).getException();
-							}
+						end = size;
+					}
 
-							threads.put(i, thread);
-						}
-						thread.start();
+					if (i == par - 1)
+					{
+						end = size;
+					}
+
+					EPT2Thread thread = new EPT2Thread(left, right, types, pos, end);
+					thread.start();
+					threads.add(thread);
+					pos = end;
+
+					if (pos >= size)
+					{
+						break;
 					}
 
 					i++;
 				}
 
-				for (FlushBinThread thread : threads.values())
+				for (EPT2Thread thread : threads)
 				{
 					thread.join();
-					if (!thread.getOK())
-					{
-						throw thread.getException();
-					}
 				}
 
-				// everything is written
-				i = numBins - 1;
-				while (i >= inMemBins)
-				{
-					bins.remove(i);
-					i--;
-				}
+				// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+				// ": ExternalProcessThread #" + left.index + " completed");
+				left.clear();
+				right.clear();
 			}
-			catch (final Exception e)
+			catch (Exception e)
 			{
-				ok = false;
-				this.e = e;
+				// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+				// ": ExternalProcessThread #" + left.index +
+				// " completed with exception");
+				HRDBMSWorker.logger.debug("", e);
+				outBuffer.put(e);
 			}
+		}
+	}
+
+	private class ExternalThread extends HRDBMSThread
+	{
+		private final double percentInMem;
+
+		public ExternalThread()
+		{
+			percentInMem = 0;
+		}
+
+		public ExternalThread(double percentInMem)
+		{
+			this.percentInMem = percentInMem;
+		}
+
+		@Override
+		public void run()
+		{
+			MAGIC_NUM = (int)(0.5 * ResourceManager.TEMP_DIRS.size() + 1);
+			external(percentInMem);
 		}
 	}
 
 	private class FlushBinThread extends HRDBMSThread
 	{
-		private byte[] types;
+		private final byte[] types;
 		private ArrayList<ArrayList<Object>> bin;
-		private FileChannel fc;
+		private final FileChannel fc;
 		private boolean ok = true;
 		private Exception e;
 
@@ -2178,23 +2064,24 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			this.fc = fc;
 		}
 
-		public boolean getOK()
-		{
-			return ok;
-		}
-
 		public Exception getException()
 		{
 			return e;
 		}
 
+		public boolean getOK()
+		{
+			return ok;
+		}
+
+		@Override
 		public void run()
 		{
 			try
 			{
 				byte[] data = rsToBytes(bin, types);
 				bin = null;
-				//fc.position(fc.size());
+				// fc.position(fc.size());
 				ByteBuffer bb = ByteBuffer.wrap(data);
 				fc.write(bb);
 			}
@@ -2206,216 +2093,145 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		}
 	}
 
-	@Override
-	public String toString()
+	private class HashDataThread extends HRDBMSThread
 	{
-		return "HashJoinOperator: " + lefts.toString() + "," + rights.toString();
-	}
+		private final FileChannel fc;
+		private boolean ok = true;
+		private Exception e;
+		private HJOMultiHashMap<Long, byte[]> data;
+		private final byte[] types;
+		private final ArrayList<ArrayList<ArrayList<Object>>> bins;
+		private final int binsInMem;
+		private final int index;
 
-	private Operator clone(Operator op)
-	{
-		final Operator clone = op.clone();
-		int i = 0;
-		for (final Operator o : op.children())
+		public HashDataThread(FileChannel fc, byte[] types, ArrayList<ArrayList<ArrayList<Object>>> bins, int binsInMem, int index) throws Exception
 		{
+			this.fc = new BufferedFileChannel(fc);
+			this.types = types;
+			data = new HJOMultiHashMap<Long, byte[]>();
+			this.bins = bins;
+			this.binsInMem = binsInMem;
+			this.index = index;
+		}
+
+		public void clear()
+		{
+			data = null;
+		}
+
+		public HJOMultiHashMap<Long, byte[]> getData()
+		{
+			return data;
+		}
+
+		public Exception getException()
+		{
+			return e;
+		}
+
+		public boolean getOK()
+		{
+			return ok;
+		}
+
+		@Override
+		public void run()
+		{
+			// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+			// ": HashDataThread #" + index + " starting");
 			try
 			{
-				clone.add(clone(o));
-				clone.setChildPos(op.getChildPos());
-				if (o instanceof TableScanOperator)
+				if (index < binsInMem)
 				{
-					final CNFFilter cnf = ((TableScanOperator)o).getCNFForParent(op);
-					if (cnf != null)
+					final HashMap<String, Integer> childCols2Pos = children.get(1).getCols2Pos();
+
+					int[] poses = new int[rights.size()];
+					int i = 0;
+					for (String col : rights)
 					{
-						final Operator child = clone.children().get(i);
-						((TableScanOperator)child).setCNFForParent(clone, cnf);
+						poses[i] = childCols2Pos.get(col);
+						i++;
 					}
-				}
 
-				if (op instanceof TableScanOperator)
-				{
-					final Operator child = clone.children().get(i);
-					int device = -1;
-
-					for (final Map.Entry entry : (((TableScanOperator)op).device2Child).entrySet())
+					final ArrayList<Object> key = new ArrayList<Object>(rights.size());
+					for (ArrayList<Object> row : bins.get(index))
 					{
-						if (entry.getValue() == o)
+						i = 0;
+						key.clear();
+						for (int pos : poses)
 						{
-							device = (Integer)entry.getKey();
+							try
+							{
+								key.add(row.get(pos));
+								i++;
+							}
+							catch (Exception e)
+							{
+								HRDBMSWorker.logger.debug("Failed to find a column in " + childCols2Pos);
+								throw e;
+							}
 						}
+
+						final long hash = hash(key);
+						data.multiPut(hash, toBytes(row));
 					}
-					((TableScanOperator)clone).setChildForDevice(device, child);
-				}
-			}
-			catch (final Exception e)
-			{
-				HRDBMSWorker.logger.error("", e);
-				return null;
-			}
 
-			i++;
-		}
-
-		return clone;
-	}
-
-	private ArrayList<Filter> deepClone(ArrayList<Filter> in)
-	{
-		final ArrayList<Filter> out = new ArrayList<Filter>();
-		for (final Filter f : in)
-		{
-			out.add(f.clone());
-		}
-
-		return out;
-	}
-
-	private ArrayList<Index> dynamicIndexes(Operator model, Operator actual)
-	{
-		final ArrayList<Index> retval = new ArrayList<Index>(dynamicIndexes.size());
-		if (model instanceof IndexOperator)
-		{
-			if (dynamicIndexes.contains(((IndexOperator)model).index))
-			{
-				retval.add(((IndexOperator)actual).index);
-			}
-		}
-		else
-		{
-			int i = 0;
-			for (final Operator o : model.children())
-			{
-				retval.addAll(dynamicIndexes(o, actual.children().get(i)));
-				i++;
-			}
-		}
-
-		return retval;
-	}
-
-	private void freeClone(Operator clone) throws Exception
-	{
-		synchronized (clones)
-		{
-			int i = 0;
-			final int size = clones.size();
-			while (i < size)
-			{
-				final Operator o = clones.get(i);
-				if (clone == o)
-				{
-					if (!lockVector.get(i).get())
-					{
-						Exception e = new Exception("About to unlock an unlocked lock");
-						HRDBMSWorker.logger.error("About to unlock an unlocked lock", e);
-						throw e;
-					}
-					lockVector.get(i).set(false);
+					// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+					// ": HashDataThread #" + index + " completed");
 					return;
 				}
+				fc.position(0);
+				ByteBuffer bb1 = ByteBuffer.allocate(4);
+				final HashMap<String, Integer> childCols2Pos = children.get(1).getCols2Pos();
 
-				i++;
-			}
-		}
-	}
-
-	private final ArrayList<ArrayList<Object>> getCandidates(long hash, byte[] types) throws Exception
-	{
-		final ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>();
-		List<byte[]> list = buckets.get(hash);
-		int z = 0;
-		final int limit = list.size();
-		while (z < limit)
-		{
-			retval.add((ArrayList<Object>)fromBytes(list.get(z++), types));
-		}
-		
-		return retval;
-	}
-
-	private Operator getClone() throws Exception
-	{
-		synchronized (clones)
-		{
-			int i = 0;
-			final int size = lockVector.size();
-			while (i < size)
-			{
-				final AtomicBoolean lock = lockVector.get(i);
-
-				if (!lock.get())
+				int[] poses = new int[rights.size()];
+				int i = 0;
+				for (String col : rights)
 				{
-					if (lock.compareAndSet(false, true))
+					poses[i] = childCols2Pos.get(col);
+					i++;
+				}
+
+				while (true)
+				{
+					bb1.position(0);
+					if (fc.read(bb1) == -1)
 					{
-						final Operator retval = clones.get(i);
-						return retval;
+						// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+						// ": HashDataThread #" + index + " completed");
+						return;
 					}
+					bb1.position(0);
+					int length = bb1.getInt();
+					ByteBuffer bb = ByteBuffer.allocate(length);
+					fc.read(bb);
+					ArrayList<Object> row = (ArrayList<Object>)fromBytes(bb.array(), types, poses);
+
+					final long hash = hash(row);
+					final long hash2 = 0x7FFFFFFFFFFFFFFFL & hash;
+					if (bf2 != null && !bf2.passes(hash2))
+					{
+						continue;
+					}
+					data.multiPut(hash, bb.array());
 				}
-
-				i++;
 			}
-
-			Operator clone = clone(children.get(1));
-			final RootOperator root = new RootOperator(meta);
-			try
+			catch (Throwable e)
 			{
-				root.add(clone);
-			}
-			catch (final Exception e)
-			{
-				HRDBMSWorker.logger.error("", e);
-				throw e;
-			}
-			if (clone instanceof TableScanOperator)
-			{
-				if (((TableScanOperator)children.get(1)).orderedFilters.size() > 0)
+				// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+				// ": HashDataThread #" + index + " completed with exception");
+				HRDBMSWorker.logger.debug("", e);
+				ok = false;
+				if (e instanceof Exception)
 				{
-					((TableScanOperator)clone).setCNFForParent(root, ((TableScanOperator)children.get(1)).getCNFForParent(this));
+					this.e = (Exception)e;
+				}
+				else
+				{
+					this.e = new Exception();
 				}
 			}
-			clone = root;
-			clones.add(clone);
-			lockVector.add(new AtomicBoolean(true));
-
-			return clone;
 		}
-	}
-
-	private String getLeftForRight(String right)
-	{
-		int i = 0;
-		for (final String r : rights)
-		{
-			if (r.equals(right))
-			{
-				return lefts.get(i);
-			}
-
-			i++;
-		}
-
-		return null;
-	}
-
-	private String getRightForLeft(String left)
-	{
-		int i = 0;
-		for (final String l : lefts)
-		{
-			if (l.equals(left))
-			{
-				return rights.get(i);
-			}
-
-			i++;
-		}
-
-		return null;
-	}
-
-	private final void writeToHashTable(long hash, byte[] row) throws Exception
-	{
-		buckets.multiPut(hash, row);
 	}
 
 	private final class InitThread extends ThreadPoolThread
@@ -2499,6 +2315,273 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		}
 	}
 
+	private class LeftThread extends HRDBMSThread
+	{
+		private final ArrayList<FileChannel> channels;
+		private final int numBins;
+		private final byte[] types;
+		private boolean ok = true;
+		private Exception e;
+		private final BloomFilter tempBF;
+		private final int inMemBins;
+		private ArrayList<ArrayList<ArrayList<Object>>> bins;
+
+		public LeftThread(ArrayList<RandomAccessFile> files, ArrayList<FileChannel> channels, int numBins, byte[] types, int inMemBins)
+		{
+			this.channels = channels;
+			this.numBins = numBins;
+			this.types = types;
+			tempBF = new BloomFilter();
+			this.inMemBins = inMemBins;
+		}
+
+		public ArrayList<ArrayList<ArrayList<Object>>> getBins()
+		{
+			return bins;
+		}
+
+		public Exception getException()
+		{
+			return e;
+		}
+
+		public boolean getOK()
+		{
+			return ok;
+		}
+
+		@Override
+		public void run()
+		{
+			bins = new ArrayList<ArrayList<ArrayList<Object>>>();
+			ConcurrentHashMap<Integer, FlushBinThread> threads = new ConcurrentHashMap<Integer, FlushBinThread>();
+			int size = (int)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")) / (numBins >> 1));
+			int i = 0;
+			while (i < numBins)
+			{
+				bins.add(new ArrayList<ArrayList<Object>>(size));
+				i++;
+			}
+
+			try
+			{
+				final Operator child = children.get(0);
+				final HashMap<String, Integer> childCols2Pos = child.getCols2Pos();
+				Object o = child.next(HashJoinOperator.this);
+				if (o instanceof DataEndMarker)
+				{
+					demReceived = true;
+					// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+					// " LeftThread received DEM");
+				}
+				else
+				{
+					received.getAndIncrement();
+				}
+
+				int[] poses = new int[lefts.size()];
+				i = 0;
+				for (String col : lefts)
+				{
+					poses[i] = childCols2Pos.get(col);
+					i++;
+				}
+				final ArrayList<Object> key = new ArrayList<Object>(lefts.size());
+				loopy: while (!(o instanceof DataEndMarker))
+				{
+					i = 0;
+					key.clear();
+					for (int pos : poses)
+					{
+						try
+						{
+							key.add(((ArrayList<Object>)o).get(pos));
+							i++;
+						}
+						catch (Exception e)
+						{
+							HRDBMSWorker.logger.debug("Failed to find a column in " + childCols2Pos);
+							throw e;
+						}
+					}
+
+					final long hash = 0x7FFFFFFFFFFFFFFFL & hash(key);
+					if (tempBF != null)
+					{
+						tempBF.add(hash);
+					}
+					if (anti == null && bf != null && !bf.passes(hash))
+					{
+						o = child.next(HashJoinOperator.this);
+						if (o instanceof DataEndMarker)
+						{
+							demReceived = true;
+							// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+							// " LeftThread received DEM");
+						}
+						else
+						{
+							received.getAndIncrement();
+						}
+						continue;
+					}
+					else if (anti != null && bf != null && !bf.passes(hash, key))
+					{
+						o = child.next(HashJoinOperator.this);
+						if (o instanceof DataEndMarker)
+						{
+							demReceived = true;
+							// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+							// " LeftThread received DEM");
+						}
+						else
+						{
+							received.getAndIncrement();
+						}
+						continue;
+					}
+
+					int x = (int)(hash % numBins);
+					ArrayList<ArrayList<Object>> bin = bins.get(x);
+					// writeToHashTable(hash, (ArrayList<Object>)o);
+					bin.add((ArrayList<Object>)o);
+
+					if (x >= inMemBins && bin.size() >= size)
+					{
+						if (threads.size() >= MAGIC_NUM)
+						{
+							while (true)
+							{
+								for (Entry entry : threads.entrySet())
+								{
+									FlushBinThread old = (FlushBinThread)entry.getValue();
+									if (old.isDone())
+									{
+										old.join();
+										threads.remove((Integer)entry.getKey());
+									}
+								}
+								
+								if (threads.size() >= MAGIC_NUM)
+								{
+									LockSupport.parkNanos(1);
+								}
+								else
+								{
+									break;
+								}
+							}
+						}
+						
+						FlushBinThread thread = new FlushBinThread(bin, types, channels.get(x));
+						if (threads.putIfAbsent(x, thread) != null)
+						{
+							threads.get(x).join();
+							if (!threads.get(x).getOK())
+							{
+								throw threads.get(x).getException();
+							}
+
+							threads.put(x, thread);
+						}
+						thread.start();
+						bins.set(x, new ArrayList<ArrayList<Object>>(size));
+					}
+
+					o = child.next(HashJoinOperator.this);
+					if (o instanceof DataEndMarker)
+					{
+						demReceived = true;
+						// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+						// " LeftThread received DEM");
+					}
+					else
+					{
+						received.getAndIncrement();
+					}
+				}
+
+				if (tempBF != null)
+				{
+					bf2 = tempBF;
+				}
+
+				i = 0;
+				for (ArrayList<ArrayList<Object>> bin : bins)
+				{
+					if (i >= inMemBins && bin.size() > 0)
+					{
+						if (threads.size() >= MAGIC_NUM)
+						{
+							while (true)
+							{
+								for (Entry entry : threads.entrySet())
+								{
+									FlushBinThread old = (FlushBinThread)entry.getValue();
+									if (old.isDone())
+									{
+										old.join();
+										threads.remove((Integer)entry.getKey());
+									}
+								}
+								
+								if (threads.size() >= MAGIC_NUM)
+								{
+									LockSupport.parkNanos(1);
+								}
+								else
+								{
+									break;
+								}
+							}
+						}
+						FlushBinThread thread = new FlushBinThread(bin, types, channels.get(i));
+						if (threads.putIfAbsent(i, thread) != null)
+						{
+							threads.get(i).join();
+							if (!threads.get(i).getOK())
+							{
+								throw threads.get(i).getException();
+							}
+
+							threads.put(i, thread);
+						}
+						thread.start();
+					}
+
+					i++;
+				}
+
+				for (FlushBinThread thread : threads.values())
+				{
+					thread.join();
+					if (!thread.getOK())
+					{
+						throw thread.getException();
+					}
+				}
+				
+				MAGIC_NUM = ResourceManager.TEMP_DIRS.size();
+
+				// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+				// " LeftThread wrote everything to disk");
+
+				// everything is written
+				i = numBins - 1;
+				while (i >= inMemBins)
+				{
+					bins.remove(i);
+					i--;
+				}
+			}
+			catch (final Exception e)
+			{
+				ok = false;
+				this.e = e;
+			}
+		}
+	}
+
 	private final class ProcessThread extends ThreadPoolThread
 	{
 		@Override
@@ -2548,6 +2631,16 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 				final Operator left = children.get(0);
 				final HashMap<String, Integer> childCols2Pos = left.getCols2Pos();
 				Object o = left.next(HashJoinOperator.this);
+				if (o instanceof DataEndMarker)
+				{
+					demReceived = true;
+					// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+					// " ProcessThread received DEM");
+				}
+				else
+				{
+					received.getAndIncrement();
+				}
 				final ArrayList<Object> key = new ArrayList<Object>(lefts.size());
 				// @Parallel
 				int[] poses = new int[lefts.size()];
@@ -2609,10 +2702,10 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 								out.addAll(lRow);
 								out.addAll(rRow);
 								outBuffer.put(out);
-								//if (rhsUnique)
-								//{
-								//	break;
-								//}
+								// if (rhsUnique)
+								// {
+								// break;
+								// }
 							}
 						}
 
@@ -2626,6 +2719,16 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 
 					// leftCount.incrementAndGet();
 					o = left.next(HashJoinOperator.this);
+					if (o instanceof DataEndMarker)
+					{
+						demReceived = true;
+						// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+						// " ProcessThread received DEM");
+					}
+					else
+					{
+						received.getAndIncrement();
+					}
 				}
 			}
 			catch (final Exception e)
@@ -2643,6 +2746,124 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		}
 	}
 
+	private class ReadDataThread extends HRDBMSThread
+	{
+		private final FileChannel fc;
+		private boolean ok = true;
+		private Exception e;
+		private ArrayList<ArrayList<Object>> data;
+		private final byte[] types;
+		private final ArrayList<ArrayList<ArrayList<Object>>> bins;
+		private final int inMemBins;
+		public int index;
+
+		public ReadDataThread(FileChannel fc, byte[] types, ArrayList<ArrayList<ArrayList<Object>>> bins, int inMemBins, int index) throws Exception
+		{
+			this.fc = new BufferedFileChannel(fc);
+			data = new ArrayList<ArrayList<Object>>();
+			this.types = types;
+			this.bins = bins;
+			this.inMemBins = inMemBins;
+			this.index = index;
+		}
+
+		public void clear()
+		{
+			data = null;
+		}
+
+		public ArrayList<ArrayList<Object>> getData()
+		{
+			return data;
+		}
+
+		public Exception getException()
+		{
+			return e;
+		}
+
+		public boolean getOK()
+		{
+			return ok;
+		}
+
+		@Override
+		public void run()
+		{
+			// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+			// ": ReadDataThread #" + index + " started");
+			if (index < inMemBins)
+			{
+				data = bins.get(index);
+				// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+				// ": ReadDataThread #" + index + " completed");
+				return;
+			}
+
+			try
+			{
+				fc.position(0);
+				ByteBuffer bb1 = ByteBuffer.allocate(4);
+				ArrayList<Object> key = new ArrayList<Object>(lefts.size());
+				int[] poses = new int[lefts.size()];
+				final Operator child = children.get(0);
+				final HashMap<String, Integer> childCols2Pos = child.getCols2Pos();
+				int i = 0;
+				for (String col : lefts)
+				{
+					poses[i] = childCols2Pos.get(col);
+					i++;
+				}
+				while (true)
+				{
+					bb1.position(0);
+					if (fc.read(bb1) == -1)
+					{
+						// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+						// ": ReadDataThread #" + index + " completed");
+						return;
+					}
+					bb1.position(0);
+					int length = bb1.getInt();
+					ByteBuffer bb = ByteBuffer.allocate(length);
+					fc.read(bb);
+					ArrayList<Object> row = (ArrayList<Object>)fromBytes(bb.array(), types);
+					key.clear();
+					for (int pos : poses)
+					{
+						key.add(row.get(pos));
+					}
+
+					final long hash = 0x7FFFFFFFFFFFFFFFL & hash(key);
+					if (anti == null && bf != null && !bf.passes(hash))
+					{
+						continue;
+					}
+					else if (anti != null && bf != null && !bf.passes(hash, key))
+					{
+						continue;
+					}
+					data.add(row);
+				}
+			}
+			catch (Throwable e)
+			{
+				// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+				// ": ReadDataThread #" + index + " completed with exception");
+				HRDBMSWorker.logger.debug("", e);
+				ok = false;
+				if (e instanceof Exception)
+				{
+					this.e = (Exception)e;
+				}
+				else
+				{
+					this.e = new Exception();
+				}
+			}
+		}
+	}
+
 	private final class ReaderThread extends ThreadPoolThread
 	{
 		@Override
@@ -2653,6 +2874,16 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 				final Operator child = children.get(1);
 				final HashMap<String, Integer> childCols2Pos = child.getCols2Pos();
 				Object o = child.next(HashJoinOperator.this);
+				if (o instanceof DataEndMarker)
+				{
+					demReceived = true;
+					// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+					// " ReaderThread received DEM");
+				}
+				else
+				{
+					received.getAndIncrement();
+				}
 				// @Parallel
 				int[] poses = new int[rights.size()];
 				int i = 0;
@@ -2690,8 +2921,18 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					}
 
 					final long hash = 0x7FFFFFFFFFFFFFFFL & hash(key);
-					writeToHashTable(hash, toBytes((ArrayList<Object>)o));
+					writeToHashTable(hash, toBytes(o));
 					o = child.next(HashJoinOperator.this);
+					if (o instanceof DataEndMarker)
+					{
+						demReceived = true;
+						// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+						// " ReaderThread received DEM");
+					}
+					else
+					{
+						received.getAndIncrement();
+					}
 				}
 			}
 			catch (final Exception e)
@@ -2705,6 +2946,293 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 				{
 				}
 				return;
+			}
+		}
+	}
+
+	private class RightThread extends HRDBMSThread
+	{
+		private final ArrayList<FileChannel> channels;
+		private final int numBins;
+		private final byte[] types;
+		private boolean ok = true;
+		private Exception e;
+		private BloomFilter tempBF;
+		private final int inMemBins;
+		private ArrayList<ArrayList<ArrayList<Object>>> bins;
+
+		public RightThread(ArrayList<RandomAccessFile> files, ArrayList<FileChannel> channels, int numBins, byte[] types, int inMemBins)
+		{
+			this.channels = channels;
+			this.numBins = numBins;
+			this.types = types;
+			this.inMemBins = inMemBins;
+
+			if (anti == null)
+			{
+				tempBF = new BloomFilter();
+			}
+			else
+			{
+				boolean doIt = true;
+				HashSet<HashMap<Filter, Filter>> hshm = cnfFilters.getHSHM();
+				for (HashMap<Filter, Filter> hm : hshm)
+				{
+					if (hm.size() != 1)
+					{
+						doIt = false;
+						break;
+					}
+
+					for (Filter f : hm.keySet())
+					{
+						if (!f.op().equals("E"))
+						{
+							doIt = false;
+							break;
+						}
+					}
+				}
+
+				if (doIt)
+				{
+					tempBF = new BloomFilter(true);
+					bf = tempBF;
+				}
+			}
+		}
+
+		public ArrayList<ArrayList<ArrayList<Object>>> getBins()
+		{
+			return bins;
+		}
+
+		public Exception getException()
+		{
+			return e;
+		}
+
+		public boolean getOK()
+		{
+			return ok;
+		}
+
+		@Override
+		public void run()
+		{
+			bins = new ArrayList<ArrayList<ArrayList<Object>>>();
+			ConcurrentHashMap<Integer, FlushBinThread> threads = new ConcurrentHashMap<Integer, FlushBinThread>();
+			int size = (int)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")) / (numBins >> 1));
+			int i = 0;
+
+			while (i < numBins)
+			{
+				bins.add(new ArrayList<ArrayList<Object>>(size));
+				i++;
+			}
+
+			try
+			{
+				final Operator child = children.get(1);
+				final HashMap<String, Integer> childCols2Pos = child.getCols2Pos();
+				Object o = child.next(HashJoinOperator.this);
+				if (o instanceof DataEndMarker)
+				{
+					// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+					// " RightThread received DEM");
+					demReceived = true;
+				}
+				else
+				{
+					received.getAndIncrement();
+				}
+
+				int[] poses = new int[rights.size()];
+				i = 0;
+				for (String col : rights)
+				{
+					poses[i] = childCols2Pos.get(col);
+					i++;
+				}
+				final ArrayList<Object> key = new ArrayList<Object>(rights.size());
+				
+				loopy2: while (!(o instanceof DataEndMarker))
+				{
+					i = 0;
+					key.clear();
+					for (int pos : poses)
+					{
+						try
+						{
+							key.add(((ArrayList<Object>)o).get(pos));
+							i++;
+						}
+						catch (Exception e)
+						{
+							HRDBMSWorker.logger.debug("Failed to find a column in " + childCols2Pos);
+							throw e;
+						}
+					}
+
+					final long hash = 0x7FFFFFFFFFFFFFFFL & hash(key);
+					if (anti == null)
+					{
+						tempBF.add(hash);
+					}
+					else if (tempBF != null)
+					{
+						tempBF.add(hash, (ArrayList<Object>)key.clone());
+					}
+
+					if (bf2 != null && !bf2.passes(hash))
+					{
+						o = child.next(HashJoinOperator.this);
+						if (o instanceof DataEndMarker)
+						{
+							demReceived = true;
+							// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+							// " RightThread received DEM");
+						}
+						else
+						{
+							received.getAndIncrement();
+						}
+						continue;
+					}
+					int x = (int)(hash % numBins);
+					ArrayList<ArrayList<Object>> bin = bins.get(x);
+					// writeToHashTable(hash, (ArrayList<Object>)o);
+					bin.add((ArrayList<Object>)o);
+
+					if (x >= inMemBins && bin.size() >= size)
+					{
+						if (threads.size() >= MAGIC_NUM)
+						{
+							while (true)
+							{
+								for (Entry entry : threads.entrySet())
+								{
+									FlushBinThread old = (FlushBinThread)entry.getValue();
+									if (old.isDone())
+									{
+										old.join();
+										threads.remove((Integer)entry.getKey());
+									}
+								}
+								
+								if (threads.size() >= MAGIC_NUM)
+								{
+									LockSupport.parkNanos(1);
+								}
+								else
+								{
+									break;
+								}
+							}
+						}
+						FlushBinThread thread = new FlushBinThread(bin, types, channels.get(x));
+						if (threads.putIfAbsent(x, thread) != null)
+						{
+							threads.get(x).join();
+							if (!threads.get(x).getOK())
+							{
+								throw threads.get(x).getException();
+							}
+
+							threads.put(x, thread);
+						}
+						thread.start();
+						bins.set(x, new ArrayList<ArrayList<Object>>(size));
+					}
+
+					o = child.next(HashJoinOperator.this);
+					if (o instanceof DataEndMarker)
+					{
+						demReceived = true;
+						// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+						// " RightThread received DEM");
+					}
+					else
+					{
+						received.getAndIncrement();
+					}
+				}
+
+				bf = tempBF;
+
+				i = 0;
+				for (ArrayList<ArrayList<Object>> bin : bins)
+				{
+					if (i >= inMemBins && bin.size() > 0)
+					{
+						if (threads.size() >= MAGIC_NUM)
+						{
+							while (true)
+							{
+								for (Entry entry : threads.entrySet())
+								{
+									FlushBinThread old = (FlushBinThread)entry.getValue();
+									if (old.isDone())
+									{
+										old.join();
+										threads.remove((Integer)entry.getKey());
+									}
+								}
+								
+								if (threads.size() >= MAGIC_NUM)
+								{
+									LockSupport.parkNanos(1);
+								}
+								else
+								{
+									break;
+								}
+							}
+						}
+						FlushBinThread thread = new FlushBinThread(bin, types, channels.get(i));
+						if (threads.putIfAbsent(i, thread) != null)
+						{
+							threads.get(i).join();
+							if (!threads.get(i).getOK())
+							{
+								throw threads.get(i).getException();
+							}
+
+							threads.put(i, thread);
+						}
+						
+						thread.start();
+					}
+
+					i++;
+				}
+
+				for (FlushBinThread thread : threads.values())
+				{
+					thread.join();
+					if (!thread.getOK())
+					{
+						throw thread.getException();
+					}
+				}
+
+				// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+				// " RightThread wrote everything to disk");
+				
+				MAGIC_NUM = ResourceManager.TEMP_DIRS.size();
+
+				// everything is written
+				i = numBins - 1;
+				while (i >= inMemBins)
+				{
+					bins.remove(i);
+					i--;
+				}
+			}
+			catch (final Exception e)
+			{
+				ok = false;
+				this.e = e;
 			}
 		}
 	}

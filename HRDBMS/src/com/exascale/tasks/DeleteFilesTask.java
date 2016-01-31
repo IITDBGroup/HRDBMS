@@ -139,7 +139,7 @@ public class DeleteFilesTask extends Task
 			catch (Exception e)
 			{
 				HRDBMSWorker.logger.warn("DeleteFilesTask failed", e);
-				long target = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("old_file_cleanup_target_days")) * 24 * 60 * 60 * 1000;
+				long target = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("old_file_cleanup_target_days")) * 24L * 60 * 60 * 1000;
 				MaintenanceManager.schedule(DeleteFilesTask.this, System.currentTimeMillis() + target);
 			}
 		}

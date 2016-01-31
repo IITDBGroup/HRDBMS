@@ -2,23 +2,15 @@ package com.exascale.managers;
 
 import java.io.File;
 import java.io.FileWriter;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.file.FileSystems;
-import java.nio.file.FileVisitResult;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.PathMatcher;
-import java.nio.file.Paths;
-import java.nio.file.SimpleFileVisitor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.concurrent.ConcurrentHashMap;
 import javax.tools.JavaCompiler;
@@ -34,12 +26,13 @@ import com.exascale.misc.CatalogCode;
 import com.exascale.tables.Schema;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.HRDBMSThread;
+import com.exascale.threads.Read3Thread;
 import com.exascale.threads.ReadThread;
 
 public class FileManager
 {
 	private static File[] dirs;
-	private static Map<String, FileChannel> openFiles = new HashMap<String, FileChannel>();
+	public static ConcurrentHashMap<String, CompressedFileChannel> openFiles = new ConcurrentHashMap<String, CompressedFileChannel>();
 	public static ConcurrentHashMap<String, Integer> numBlocks = new ConcurrentHashMap<String, Integer>(2000, 0.75f, 64 * ResourceManager.cpus);
 
 	public FileManager()
@@ -69,7 +62,7 @@ public class FileManager
 			thread.start();
 			threads.add(thread);
 		}
-		
+
 		String temps = HRDBMSWorker.getHParms().getProperty("temp_directories");
 		StringTokenizer tokens = new StringTokenizer(temps, ",", false);
 		while (tokens.hasMoreTokens())
@@ -114,11 +107,8 @@ public class FileManager
 		ExtendLogRec rec = LogManager.extend(tx.number(), bl);
 		LogManager.flush(rec.lsn());
 		data.position(0);
-		synchronized (fc)
-		{
-			fc.write(data, retval * Page.BLOCK_SIZE);
-			//fc.force(false);
-		}
+		fc.write(data, retval * Page.BLOCK_SIZE);
+		// fc.force(false);
 		numBlocks.put(fn, retval + 1);
 
 		return retval;
@@ -127,12 +117,17 @@ public class FileManager
 	public static int addNewBlockNoLog(String fn, ByteBuffer data, Transaction tx) throws Exception
 	{
 		LockManager.xLock(new Block(fn, -1), tx.number());
-		getFile(fn);
-		int retval = numBlocks.get(fn);
+		// getFile(fn);
+		Integer retval = numBlocks.get(fn);
+		if (retval == null)
+		{
+			getFile(fn);
+			retval = numBlocks.get(fn);
+		}
 
 		// write page to bufferpool
 		Block b = new Block(fn, retval);
-		int hash = (b.hashCode2() & 0x7FFFFFFF) & (BufferManager.managers.length - 1);
+		int hash = (b.hashCode2() & 0x7FFFFFFF) % BufferManager.managers.length;
 		BufferManager.managers[hash].pinFromMemory(b, tx.number(), data);
 		numBlocks.put(fn, retval + 1);
 
@@ -195,6 +190,7 @@ public class FileManager
 			}
 
 			openFiles.clear();
+			numBlocks.clear();
 		}
 		catch (Throwable e)
 		{
@@ -221,17 +217,26 @@ public class FileManager
 		return dirs;
 	}
 
-	public static synchronized CompressedFileChannel getFile(String filename) throws Exception
+	public static CompressedFileChannel getFile(String filename) throws Exception
 	{
-		CompressedFileChannel fc = (CompressedFileChannel)openFiles.get(filename);
+		CompressedFileChannel fc = openFiles.get(filename);
 
 		if (fc == null)
 		{
-			final File table = new File(filename);
-			final CompressedRandomAccessFile f = new CompressedRandomAccessFile(table, "rw");
-			fc = (CompressedFileChannel)f.getChannel();
-			numBlocks.put(filename, (int)(fc.size() / Page.BLOCK_SIZE));
-			openFiles.put(filename, fc);
+			synchronized (FileManager.class)
+			{
+				fc = openFiles.get(filename);
+				if (fc == null)
+				{
+					final File table = new File(filename);
+					final CompressedRandomAccessFile f = new CompressedRandomAccessFile(table, "rw");
+					fc = (CompressedFileChannel)f.getChannel();
+					long size = fc.size();
+					HRDBMSWorker.logger.debug("Size of " + filename + " is " + size); //DEBUG
+					numBlocks.put(filename, (int)(size / Page.BLOCK_SIZE));
+					openFiles.put(filename, fc);
+				}
+			}
 		}
 
 		return fc;
@@ -239,15 +244,22 @@ public class FileManager
 
 	public static synchronized CompressedFileChannel getFile(String filename, int suffix) throws Exception
 	{
-		CompressedFileChannel fc = (CompressedFileChannel)openFiles.get(filename);
+		CompressedFileChannel fc = openFiles.get(filename);
 
 		if (fc == null)
 		{
-			final File table = new File(filename);
-			final CompressedRandomAccessFile f = new CompressedRandomAccessFile(table, "rw", suffix);
-			fc = (CompressedFileChannel)f.getChannel();
-			numBlocks.put(filename, (int)(fc.size() / Page.BLOCK_SIZE));
-			openFiles.put(filename, fc);
+			synchronized (FileManager.class)
+			{
+				fc = openFiles.get(filename);
+				if (fc == null)
+				{
+					final File table = new File(filename);
+					final CompressedRandomAccessFile f = new CompressedRandomAccessFile(table, "rw", suffix);
+					fc = (CompressedFileChannel)f.getChannel();
+					numBlocks.put(filename, (int)(fc.size() / Page.BLOCK_SIZE));
+					openFiles.put(filename, fc);
+				}
+			}
 		}
 
 		return fc;
@@ -265,13 +277,20 @@ public class FileManager
 		retval.start();
 		return retval;
 	}
-	
-	public static void read(Page p, Block b, ByteBuffer bb, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos) throws Exception
+
+	public static ReadThread read(Page p, Block b, ByteBuffer bb, ArrayList<Integer> cols, int layoutSize) throws Exception
 	{
-		ReadThread retval = new ReadThread(p, b, bb, schema, schemaMap, tx, fetchPos);
+		// final FileChannel fc = FileManager.getFile(b.fileName());
+		// if (b.number() > numBlocks.get(b.fileName()) + 1)
+		// {
+		// throw new IOException("Trying to read block " + b.number() + " from "
+		// + b.fileName() + " which doesn't exist");
+		// }
+		ReadThread retval = new ReadThread(p, b, bb, cols, layoutSize);
 		retval.start();
+		return retval;
 	}
-	
+
 	public static void read(Page p, Block b, ByteBuffer bb, boolean flag) throws Exception
 	{
 		// final FileChannel fc = FileManager.getFile(b.fileName());
@@ -281,6 +300,63 @@ public class FileManager
 		// + b.fileName() + " which doesn't exist");
 		// }
 		new ReadThread(p, b, bb).run();
+	}
+
+	public static void read(Page p, Block b, ByteBuffer bb, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos) throws Exception
+	{
+		ReadThread retval = new ReadThread(p, b, bb, schema, schemaMap, tx, fetchPos);
+		retval.start();
+	}
+
+	public static Read3Thread read3(Page p, Page p2, Page p3, Block b, ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3) throws Exception
+	{
+		// final FileChannel fc = FileManager.getFile(b.fileName());
+		// if (b.number() > numBlocks.get(b.fileName()) + 1)
+		// {
+		// throw new IOException("Trying to read block " + b.number() + " from "
+		// + b.fileName() + " which doesn't exist");
+		// }
+		Read3Thread retval = new Read3Thread(p, p2, p3, b, bb, bb2, bb3);
+		retval.start();
+		return retval;
+	}
+
+	public static Read3Thread read3(Page p, Page p2, Page p3, Block b, ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3, ArrayList<Integer> cols, int layoutSize) throws Exception
+	{
+		// final FileChannel fc = FileManager.getFile(b.fileName());
+		// if (b.number() > numBlocks.get(b.fileName()) + 1)
+		// {
+		// throw new IOException("Trying to read block " + b.number() + " from "
+		// + b.fileName() + " which doesn't exist");
+		// }
+		Read3Thread retval = new Read3Thread(p, p2, p3, b, bb, bb2, bb3, cols, layoutSize);
+		retval.start();
+		return retval;
+	}
+
+	public static void read3(Page p, Page p2, Page p3, Block b, ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3, Schema schema1, Schema schema2, Schema schema3, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos) throws Exception
+	{
+		Read3Thread retval = new Read3Thread(p, p2, p3, b, bb, bb2, bb3, schema1, schema2, schema3, schemaMap, tx, fetchPos);
+		retval.start();
+	}
+
+	public static ReadThread readSync(Page p, Block b, ByteBuffer bb) throws Exception
+	{
+		// final FileChannel fc = FileManager.getFile(b.fileName());
+		// if (b.number() > numBlocks.get(b.fileName()) + 1)
+		// {
+		// throw new IOException("Trying to read block " + b.number() + " from "
+		// + b.fileName() + " which doesn't exist");
+		// }
+		ReadThread retval = new ReadThread(p, b, bb);
+		retval.run();
+		return retval;
+	}
+
+	public static void readSync(Page p, Block b, ByteBuffer bb, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos) throws Exception
+	{
+		ReadThread retval = new ReadThread(p, b, bb, schema, schemaMap, tx, fetchPos);
+		retval.run();
 	}
 
 	public static void redoExtend(Block bl) throws Exception
@@ -309,7 +385,7 @@ public class FileManager
 				}
 				data.position(0);
 				fc.write(data, blockNum * Page.BLOCK_SIZE);
-				//fc.force(false);
+				// fc.force(false);
 				numBlocks.put(bl.fileName(), blockNum + 1);
 			}
 			else
@@ -383,7 +459,7 @@ public class FileManager
 		bb.position(0);
 		final FileChannel fc = getFile(b.fileName());
 		fc.write(bb, ((long)b.number()) * bb.capacity());
-		//fc.force(false);
+		// fc.force(false);
 	}
 
 	public static void writeDelayed(Block b, ByteBuffer bb) throws Exception
@@ -464,24 +540,16 @@ public class FileManager
 			try
 			{
 				final ArrayList<Path> files = new ArrayList<Path>();
-				final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + "*.*.tbl.*");
-				Files.walkFileTree(Paths.get(dir), new SimpleFileVisitor<Path>() {
-					@Override
-					public FileVisitResult visitFile(Path file, java.nio.file.attribute.BasicFileAttributes attrs) throws IOException
+				File path = new File(dir);
+				File[] files2 = path.listFiles();
+				for (File f : files2)
+				{
+					String name = f.getName();
+					if (name.matches(".*\\..*\\.(tbl|indx)\\..*"))
 					{
-						if (matcher.matches(file.getFileName()))
-						{
-							files.add(file);
-						}
-						return FileVisitResult.CONTINUE;
+						files.add(f.toPath());
 					}
-
-					@Override
-					public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException
-					{
-						return FileVisitResult.CONTINUE;
-					}
-				});
+				}
 
 				HashSet<String> set = new HashSet<String>();
 				HashMap<String, Integer> tops = new HashMap<String, Integer>();
@@ -501,44 +569,9 @@ public class FileManager
 					}
 				}
 
-				final ArrayList<Path> files2 = new ArrayList<Path>();
-				final PathMatcher matcher2 = FileSystems.getDefault().getPathMatcher("glob:" + "*.*.indx.*");
-				Files.walkFileTree(Paths.get(dir), new SimpleFileVisitor<Path>() {
-					@Override
-					public FileVisitResult visitFile(Path file, java.nio.file.attribute.BasicFileAttributes attrs) throws IOException
-					{
-						if (matcher2.matches(file.getFileName()))
-						{
-							files2.add(file);
-						}
-						return FileVisitResult.CONTINUE;
-					}
-
-					@Override
-					public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException
-					{
-						return FileVisitResult.CONTINUE;
-					}
-				});
-
-				for (Path file2 : files2)
-				{
-					String s = file2.toAbsolutePath().toString().substring(0, file2.toAbsolutePath().toString().lastIndexOf('.'));
-					int suffix = Integer.parseInt(file2.toAbsolutePath().toString().substring(file2.toAbsolutePath().toString().lastIndexOf('.') + 1));
-					set.add(s);
-					Integer high = tops.get(s);
-					if (high == null)
-					{
-						tops.put(s, suffix);
-					}
-					else if (suffix > high)
-					{
-						tops.put(s, suffix);
-					}
-				}
-
 				for (String s : set)
 				{
+					HRDBMSWorker.logger.debug("Opening " + s);
 					try
 					{
 						FileManager.getFile(s, tops.get(s));

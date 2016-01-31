@@ -68,7 +68,7 @@ public final class BinomialHeap<E> extends AbstractQueue<E>
 		{
 			return min;
 		}
-		
+
 		E result = null;
 		for (Node<E> node = head.next; node != null; node = node.next)
 		{
@@ -77,7 +77,7 @@ public final class BinomialHeap<E> extends AbstractQueue<E>
 				result = node.value;
 			}
 		}
-		
+
 		min = result;
 		return result;
 	}
@@ -117,7 +117,7 @@ public final class BinomialHeap<E> extends AbstractQueue<E>
 		{
 			return size;
 		}
-		
+
 		int result = 0;
 		for (Node<?> node = head.next; node != null; node = node.next)
 		{
@@ -133,7 +133,7 @@ public final class BinomialHeap<E> extends AbstractQueue<E>
 			}
 			result |= 1 << node.rank;
 		}
-		
+
 		size = result;
 		return result;
 	}

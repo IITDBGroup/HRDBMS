@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.tables.Plan;
 
@@ -41,6 +42,8 @@ public final class SubstringOperator implements Operator, Serializable
 	private int end = -1;
 
 	private int node;
+	private transient AtomicLong received;
+	private transient volatile boolean demReceived;
 
 	public SubstringOperator(String col, int start, int end, String name, MetaData meta)
 	{
@@ -49,6 +52,7 @@ public final class SubstringOperator implements Operator, Serializable
 		this.name = name;
 		this.start = start;
 		this.end = end;
+		received = new AtomicLong(0);
 	}
 
 	public SubstringOperator(String col, int start, String name, MetaData meta)
@@ -57,6 +61,7 @@ public final class SubstringOperator implements Operator, Serializable
 		this.meta = meta;
 		this.name = name;
 		this.start = start;
+		received = new AtomicLong(0);
 	}
 
 	public static SubstringOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -74,6 +79,8 @@ public final class SubstringOperator implements Operator, Serializable
 		value.start = OperatorUtils.readInt(in);
 		value.end = OperatorUtils.readInt(in);
 		value.node = OperatorUtils.readInt(in);
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
 		return value;
 	}
 
@@ -215,7 +222,12 @@ public final class SubstringOperator implements Operator, Serializable
 		final Object o = child.next(this);
 		if (o instanceof DataEndMarker)
 		{
+			demReceived = true;
 			return o;
+		}
+		else
+		{
+			received.getAndIncrement();
 		}
 
 		if (o instanceof Exception)
@@ -255,9 +267,21 @@ public final class SubstringOperator implements Operator, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
 	}
 
 	@Override

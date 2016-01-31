@@ -10,6 +10,7 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.DateParser;
@@ -49,9 +50,12 @@ public final class CaseOperator implements Operator, Serializable
 	private ArrayList<String> references = new ArrayList<String>();
 
 	private int node;
+	private transient AtomicLong received;
+	private transient volatile boolean demReceived;
 
 	public CaseOperator(ArrayList<HashSet<HashMap<Filter, Filter>>> filters, ArrayList<String> results, String name, String type, MetaData meta)
 	{
+		received = new AtomicLong(0);
 		this.filters = filters;
 		this.name = name;
 		this.type = type;
@@ -131,6 +135,8 @@ public final class CaseOperator implements Operator, Serializable
 		value.origResults = OperatorUtils.deserializeALS(in, prev);
 		value.references = OperatorUtils.deserializeALS(in, prev);
 		value.node = OperatorUtils.readInt(in);
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
 		return value;
 	}
 
@@ -248,12 +254,21 @@ public final class CaseOperator implements Operator, Serializable
 	{
 		final Object o = child.next(this);
 
+		if (o instanceof DataEndMarker)
+		{
+			demReceived = true;
+		}
+		else
+		{
+			received.getAndIncrement();
+		}
+
 		if (!(o instanceof DataEndMarker) && !(o instanceof Exception))
 		{
 			int i = 0;
 			int z = 0;
 			final int limit = filters.size();
-			//for (final HashSet<HashMap<Filter, Filter>> aCase : filters)
+			// for (final HashSet<HashMap<Filter, Filter>> aCase : filters)
 			while (z < limit)
 			{
 				final HashSet<HashMap<Filter, Filter>> aCase = filters.get(z++);
@@ -368,9 +383,21 @@ public final class CaseOperator implements Operator, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
 	}
 
 	@Override

@@ -74,8 +74,8 @@ public class CatalogCode
 		}
 
 		final String in =
-				// SYS.TABLES(ID, SCHEMA, NAME, TYPE)
-		"SYS.TABLES(INT, VARCHAR, VARCHAR, VARCHAR)\n" + "13\n" + "(0, SYS, TABLES, R)\n" + "(1, SYS, COLUMNS, R)\n" + "(2, SYS, INDEXES, R)\n" + "(3, SYS, INDEXCOLS, R)\n" + "(4, SYS, VIEWS, R)\n" + "(5, SYS, TABLESTATS, R)\n" + "(6, SYS, NODES, R)\n" + "(7, SYS, COLSTATS, R)\n" + "(8, SYS, COLDIST, R)\n" + "(9, SYS, BACKUPS, R)\n" + "(10, SYS, NODESTATE, R)\n" + "(11, SYS, PARTITIONING, R)\n" + "(12, SYS, INDEXSTATS, R)\n"
+		// SYS.TABLES(ID, SCHEMA, NAME, TYPE)
+				"SYS.TABLES(INT, VARCHAR, VARCHAR, VARCHAR)\n" + "13\n" + "(0, SYS, TABLES, R)\n" + "(1, SYS, COLUMNS, R)\n" + "(2, SYS, INDEXES, R)\n" + "(3, SYS, INDEXCOLS, R)\n" + "(4, SYS, VIEWS, R)\n" + "(5, SYS, TABLESTATS, R)\n" + "(6, SYS, NODES, R)\n" + "(7, SYS, COLSTATS, R)\n" + "(8, SYS, COLDIST, R)\n" + "(9, SYS, BACKUPS, R)\n" + "(10, SYS, NODESTATE, R)\n" + "(11, SYS, PARTITIONING, R)\n" + "(12, SYS, INDEXSTATS, R)\n"
 
 		+ "SYS.BACKUPS(INT, INT, INT)\n" + "0\n"
 
@@ -114,27 +114,27 @@ public class CatalogCode
 
 		+ "SYS.INDEXCOLS(INT, INT, INT, INT, VARCHAR)\n" + "24\n" + "(0, 0, 1, 0, A)\n" // TABLES(SCHEMA,
 		// NAME)
-		+ "(0, 0, 2, 1, A)\n" + "(0, 1, 1, 0, A)\n" // COLUMNS(TABLEID,
-		// COLNAME)
-		+ "(0, 1, 2, 1, A)\n" + "(0, 2, 1, 1, A)\n" // INDEXES(TABLEID,
-		// INDEXNAME)
-		+ "(0, 2, 2, 0, A)\n" + "(0, 3, 0, 1, A)\n" // INDEXCOLS(TABLE,
-		// INDEX, COL)
-		+ "(0, 3, 1, 0, A)\n" + "(0, 3, 2, 2, A)\n" + "(0, 4, 1, 0, A)\n" // VIEWS(SCHEMA,
-		// NAME)
-		+ "(0, 4, 2, 1, A)\n" + "(0, 5, 0, 0, A)\n" // TABLESTATS(ID)
-		+ "(0, 6, 1, 0, A)\n" // NODES(HOSTNAME)
-		+ "(0, 7, 0, 0, A)\n" // COLSTATS(TABLE, COL)
-		+ "(0, 7, 1, 1, A)\n" + "(0, 8, 0, 0, A)\n" // COLDIST(TABLE,
-		// COL)
-		+ "(0, 8, 1, 1, A)\n" + "(0, 9, 0, 0, A)\n" // BACKUPS(FIRST)
-		+ "(0, 10, 0, 0, A)\n" // NODESTATE(NODE)
-		+ "(0, 11, 0, 0, A)\n" // PARTITIONING(TABLE)
-		+ "(0, 12, 0, 0, A)\n" // INDEXSTATS(TABLE, INDEX)
-		+ "(0, 12, 1, 1, A)\n" + "(1, 6, 0, 0, A)\n" // NODES(NODEID)
-		+ "(1, 2, 1, 0, A)\n" // INDEXES(INDEXNAME)
+				+ "(0, 0, 2, 1, A)\n" + "(0, 1, 1, 0, A)\n" // COLUMNS(TABLEID,
+				// COLNAME)
+				+ "(0, 1, 2, 1, A)\n" + "(0, 2, 1, 1, A)\n" // INDEXES(TABLEID,
+				// INDEXNAME)
+				+ "(0, 2, 2, 0, A)\n" + "(0, 3, 0, 1, A)\n" // INDEXCOLS(TABLE,
+				// INDEX, COL)
+				+ "(0, 3, 1, 0, A)\n" + "(0, 3, 2, 2, A)\n" + "(0, 4, 1, 0, A)\n" // VIEWS(SCHEMA,
+				// NAME)
+				+ "(0, 4, 2, 1, A)\n" + "(0, 5, 0, 0, A)\n" // TABLESTATS(ID)
+				+ "(0, 6, 1, 0, A)\n" // NODES(HOSTNAME)
+				+ "(0, 7, 0, 0, A)\n" // COLSTATS(TABLE, COL)
+				+ "(0, 7, 1, 1, A)\n" + "(0, 8, 0, 0, A)\n" // COLDIST(TABLE,
+				// COL)
+				+ "(0, 8, 1, 1, A)\n" + "(0, 9, 0, 0, A)\n" // BACKUPS(FIRST)
+				+ "(0, 10, 0, 0, A)\n" // NODESTATE(NODE)
+				+ "(0, 11, 0, 0, A)\n" // PARTITIONING(TABLE)
+				+ "(0, 12, 0, 0, A)\n" // INDEXSTATS(TABLE, INDEX)
+				+ "(0, 12, 1, 1, A)\n" + "(1, 6, 0, 0, A)\n" // NODES(NODEID)
+				+ "(1, 2, 1, 0, A)\n" // INDEXES(INDEXNAME)
 
-		+ "SYS.TABLESTATS(INT, BIGINT)\n" + "0\n"
+				+ "SYS.TABLESTATS(INT, BIGINT)\n" + "0\n"
 
 				+ "SYS.NODES(INT, VARCHAR, VARCHAR, VARCHAR)\n" + "0\n"
 
@@ -261,8 +261,6 @@ public class CatalogCode
 			sizes.add(dataSize);
 			createTableHeader(out, tableNames.get(i), table.size(), colTypes.get(i).size(), dataSize);
 			HRDBMSWorker.logger.debug("createTableHeader() done for table " + i);
-			writeNullArray(out, table);
-			HRDBMSWorker.logger.debug("writeNullArray() done for table " + i);
 			writeOffsetArray(out, table, dataSize, colTypes.get(i));
 			HRDBMSWorker.logger.debug("writeOffsetArray() done for table " + i);
 			writeData(out, table, dataSize, colTypes.get(i));
@@ -354,18 +352,18 @@ public class CatalogCode
 		{
 			data.put((byte)0); // not unique
 		}
-		data.putInt(0); //first free
-		data.putInt(0); //head points to block 0
-		data.putInt(17); //head point to offset 17
+		data.putInt(0); // first free
+		data.putInt(0); // head points to block 0
+		data.putInt(17); // head point to offset 17
 
 		data.put((byte)3); // start record
-		data.putInt(0); //left
+		data.putInt(0); // left
 		data.putInt(0);
-		data.putInt(0); //right
+		data.putInt(0); // right
 		data.putInt(0);
-		data.putInt(0); //up
+		data.putInt(0); // up
 		data.putInt(0);
-		data.putInt(0); //down
+		data.putInt(0); // down
 		data.putInt(0);
 
 		// fill in first free val pointer
@@ -1043,7 +1041,7 @@ public class CatalogCode
 					}
 				}
 
-				keys2RIDs.put(keys, new RID(-1, 0, 4096, rowNum));
+				keys2RIDs.put(keys, new RID(-1, 0, 1, rowNum));
 				HRDBMSWorker.logger.debug("Adding key/RID pair.");
 				rowNum++;
 			}
@@ -1262,7 +1260,6 @@ public class CatalogCode
 		out.println("\tString fn;");
 		out.println("\tFileChannel fc = null;");
 		out.println("\tByteBuffer bb = null;");
-		out.println("\tByteBuffer head = ByteBuffer.allocate(Page.BLOCK_SIZE * 4095);");
 		out.println("\tint i = 0;");
 		out.println("\tint j = 0;");
 		out.println("\tString base = HRDBMSWorker.getHParms().getProperty(\"data_directories\");");
@@ -1277,13 +1274,7 @@ public class CatalogCode
 		out.println("\t\t\tbase += \"/\";");
 		out.println("\t\t}");
 		HRDBMSWorker.logger.debug("Number of tables is " + data.size());
-		out.println("\t\t i = 0;");
-		out.println("\t\thead.position(0);");
-		out.println("\t\twhile (i < Page.BLOCK_SIZE * 4095)");
-		out.println("\t\t{");
-		out.println("\t\t\thead.putLong(-1);");
-		out.println("\t\t\ti += 8;");
-		out.println("\t\t}");
+
 		int i = 0;
 		while (i < data.size())
 		{
@@ -1295,6 +1286,13 @@ public class CatalogCode
 
 	private static void createOutputTrailer(PrintWriter out, Vector<Vector<String>> data, Vector<String> tableLines)
 	{
+		out.println("");
+		out.println("\tprivate static void putMedium(ByteBuffer bb, int val)");
+		out.println("\t{");
+		out.println("\t\tbb.put((byte)((val & 0xff0000) >> 16));");
+		out.println("\t\tbb.put((byte)((val & 0xff00) >> 8));");
+		out.println("\t\tbb.put((byte)(val & 0xff));");
+		out.println("\t}");
 		out.println("");
 		out.println("\tprivate static void putString(ByteBuffer bb, String val) throws UnsupportedEncodingException");
 		out.println("\t{");
@@ -1332,10 +1330,7 @@ public class CatalogCode
 		out.println("\t\tbb.putInt(-1); //node -1");
 		out.println("\t\tbb.putInt(0); //device 0");
 		out.println("");
-		out.println("\t\tbb.putInt(Page.BLOCK_SIZE - (57 + " + dataSize + " + (16 * " + rows + ") + (5 * " + rows + " * " + cols + ") + (" + cols + " * 4))); //largest free size");
-		HRDBMSWorker.logger.info("Free Space in block = " + (64 * 1024 - (57 + dataSize + (16 * rows) + (5 * rows * cols) + (cols * 4))));
-		out.println("");
-		out.println("\t\ti = 12;");
+		out.println("\t\ti = 8;");
 		out.println("\t\twhile (i < Page.BLOCK_SIZE)");
 		out.println("\t\t{");
 		out.println("\t\t\tbb.putInt(-1);");
@@ -1361,45 +1356,46 @@ public class CatalogCode
 		// out.println("\t\t\tfc.write(bb);");
 		// out.println("\t\t\tj++;");
 		// out.println("\t\t}");
-		out.println("\t\thead.position(0);");
-		out.println("\t\tfc.write(head);");
-		out.println("\t\tfc.force(false);");
-		out.println("");
-		out.println("\t\t//done writing header pages");
+		// out.println("\t\thead.position(0);");
+		// out.println("\t\tfc.write(head);");
+		// out.println("\t\tfc.force(false);");
+		// out.println("");
+		// out.println("\t\t//done writing header pages");
 		out.println("\t\tbb.position(0);");
 		out.println("\t\tbb.put(Schema.TYPE_ROW);");
-		out.println("\t\tbb.putInt(" + rows + "); //nextRecNum");
-		out.println("\t\tbb.putInt(56 + (16 * " + rows + ") + (5 * " + rows + " * " + cols + ") + (" + cols + " * 4)); //headEnd for " + rows + " rows, " + cols + " cols");
-		out.println("\t\tbb.putInt(Page.BLOCK_SIZE - " + dataSize + "); //dataStart, total data size " + dataSize);
+		out.println("\t\tputMedium(bb, " + rows + "); //nextRecNum");
+		out.println("\t\tputMedium(bb, 29 + (12 * " + rows + ") + (3 * " + rows + " * " + cols + ") + (" + cols + " * 3)); //headEnd for " + rows + " rows, " + cols + " cols");
+		out.println("\t\tputMedium(bb, Page.BLOCK_SIZE - " + dataSize + "); //dataStart, total data size " + dataSize);
 		out.println("\t\tbb.putLong(System.currentTimeMillis()); //modTime");
-		out.println("\t\tbb.putInt(57 + (16 * " + rows + ") + (4 * " + cols + ")); //nullArray offset for " + rows + " rows " + cols + " cols");
-		out.println("\t\tbb.putInt(49); //colIDListOff");
-		out.println("\t\tbb.putInt(53 + (4 * " + cols + ")); //rowIDListOff for " + cols + " cols");
-		out.println("\t\tbb.putInt(57 + (16 * " + rows + ") + (4 * " + cols + ") + (" + rows + " * " + cols + ")); // offset Array offset for " + rows + "rows " + cols + " cols");
-		out.println("\t\tbb.putInt(1); //freeSpaceListEntries");
-		out.println("\t\tbb.putInt(57 + (16 * " + rows + ") + (5 * " + rows + " * " + cols + ") + (" + cols + " * 4)); //free space start = headEnd + 1");
-		out.println("\t\tbb.putInt(Page.BLOCK_SIZE - 1 - " + dataSize + "); //free space end = dataStart - 1");
-		out.println("\t\tbb.putInt(" + cols + "); //colIDListSize - start of colIDs");
+		out.println("\t\tputMedium(bb, 27 + (3 * " + cols + ")); //rowIDListOff for " + cols + " cols");
+		out.println("\t\tputMedium(bb, 30 + (12 * " + rows + ") + (3 * " + cols + "));"); // offset
+																							// Array
+																							// offset
+																							// for
+																							// " + rows + "rows
+																							// " + cols + "
+																							// cols");		out.println("\t\tbb.putInt(1);
+																							// //freeSpaceListEntries");
+		out.println("\t\tputMedium(bb, " + cols + "); //colIDListSize - start of colIDs");
 		out.println("");
 		out.println("\t\ti = 0;");
 		out.println("\t\twhile (i < " + cols + ")");
 		out.println("\t\t{");
-		out.println("\t\t\tbb.putInt(i);");
+		out.println("\t\t\tputMedium(bb, i);");
 		out.println("\t\t\ti++;");
 		out.println("\t\t}");
 		out.println("");
-		out.println("\t\tbb.putInt(" + rows + "); //rowIDListSize - start of rowIDs");
+		out.println("\t\tputMedium(bb, " + rows + "); //rowIDListSize - start of rowIDs");
 		out.println("\t\ti = 0;");
 		out.println("\t\twhile (i < " + rows + ")");
 		out.println("\t\t{");
-		out.println("\t\t\tbb.putInt(-1); //node -1");
-		out.println("\t\t\tbb.putInt(0); //device 0");
-		out.println("\t\t\tbb.putInt(4096); //block 4096");
-		out.println("\t\t\tbb.putInt(i); //record i");
+		out.println("\t\t\tputMedium(bb, -1); //node -1");
+		out.println("\t\t\tputMedium(bb, 0); //device 0");
+		out.println("\t\t\tputMedium(bb, 1); //block 1");
+		out.println("\t\t\tputMedium(bb, i); //record i");
 		out.println("\t\t\ti++;");
 		out.println("\t\t}");
 		out.println("");
-		out.println("\t\t//null Array start");
 	}
 
 	private static void createTableStats(Vector<String> tableLines, Vector<Vector<String>> data)
@@ -1604,39 +1600,39 @@ public class CatalogCode
 	 * private static int getAvgLen(String table, int colIndex) { final
 	 * Vector<String> t = getTable(table, tableLines, data); final
 	 * Vector<String> types = getTypes(table);
-	 *
+	 * 
 	 * int total = 0; int num = 0; for (final String row : t) { final
 	 * StringTokenizer tokens = new StringTokenizer(row, ",", false); int j = 0;
 	 * while (j < colIndex) { tokens.nextToken(); j++; }
-	 *
+	 * 
 	 * String token = tokens.nextToken().trim();
-	 *
+	 * 
 	 * if (token.startsWith("(")) { token = token.substring(1); }
-	 *
+	 * 
 	 * if (token.endsWith(")")) { token = token.substring(0, token.length() -
 	 * 1); }
-	 *
+	 * 
 	 * if (token.startsWith("!")) { final Long val = vars.get(token);
-	 *
+	 * 
 	 * if (val == null) { token = "null"; } else { token = val.toString(); } }
-	 *
+	 * 
 	 * if (token.equals("null")) { continue; }
-	 *
+	 * 
 	 * final String type = types.get(colIndex); if (type.equals("INT")) { total
 	 * += 4; } else if (type.equals("BIGINT")) { total += 8; } else if
 	 * (type.equals("VARCHAR")) { total += (4 + token.length()); } else if
 	 * (type.equals("VARBINARY")) { total += (8 + token.length()); } else {
 	 * HRDBMSWorker.logger.error("Unknown type: " + type); System.exit(1); }
-	 *
+	 * 
 	 * num++; }
-	 *
+	 * 
 	 * if (num == 0) { return 0; } else { return total / num; } }
 	 */
 
 	/*
 	 * private static int getColIndexForIndex(String table, int pos) {
 	 * Vector<String> t = getTable("SYS.TABLES", tableLines, data);
-	 *
+	 * 
 	 * for (final String row : t) { final StringTokenizer tokens = new
 	 * StringTokenizer(row, ",", false); final int id =
 	 * Integer.parseInt(tokens.nextToken().trim().substring(1));
@@ -1647,10 +1643,10 @@ public class CatalogCode
 	 * false); tokens2.nextToken(); if (id ==
 	 * Integer.parseInt(tokens2.nextToken().trim())) { final int colid =
 	 * Integer.parseInt(tokens2.nextToken().trim());
-	 *
+	 * 
 	 * if (Integer.parseInt(tokens2.nextToken().trim()) == pos) { return colid;
 	 * } } } } }
-	 *
+	 * 
 	 * return -1; }
 	 */
 
@@ -1824,29 +1820,29 @@ public class CatalogCode
 	{
 		data.position(5); // offset of first slot
 		final int freeOff = data.getInt();
-		data.position(13); //head offset
+		data.position(13); // head offset
 		int headOff = data.getInt();
 		while (true)
 		{
-			int temp = data.getInt(headOff+13); //get right offset
+			int temp = data.getInt(headOff + 13); // get right offset
 			if (temp == 0)
 			{
 				break;
 			}
-			
+
 			headOff = temp;
 		}
 		data.position(freeOff);
 
 		data.put((byte)1);
-		data.putInt(0); //left
+		data.putInt(0); // left
 		data.putInt(headOff);
-		data.putInt(0); //right
+		data.putInt(0); // right
 		data.putInt(0);
-		data.putInt(0); //up
+		data.putInt(0); // up
 		data.putInt(0);
-		//data.putInt(0); // no down
-		//data.putInt(0);
+		// data.putInt(0); // no down
+		// data.putInt(0);
 		data.putInt(rid.getNode());
 		data.putInt(rid.getDevice());
 		data.putInt(rid.getBlockNum());
@@ -1854,7 +1850,7 @@ public class CatalogCode
 		keyBytes.position(0);
 		data.put(keyBytes);
 		int newFreeOff = data.position();
-		data.position(headOff+13);
+		data.position(headOff + 13);
 		data.putInt(freeOff);
 		data.position(5);
 		data.putInt(newFreeOff);
@@ -2129,38 +2125,6 @@ public class CatalogCode
 		out.println("");
 	}
 
-	private static void writeNullArray(PrintWriter out, Vector<String> table)
-	{
-		out.println("HRDBMSWorker.logger.debug(\"Writing null array.\");");
-		for (final String row : table)
-		{
-			final StringTokenizer tokens = new StringTokenizer(row, ",", false);
-			while (tokens.hasMoreTokens())
-			{
-				String token = tokens.nextToken().trim();
-				if (token.startsWith("("))
-				{
-					token = token.substring(1);
-				}
-
-				if (token.endsWith(")"))
-				{
-					token = token.substring(0, token.length() - 1);
-				}
-
-				token = token.trim();
-				if (token.equals("null"))
-				{
-					out.println("\t\tbb.put((byte)1);");
-				}
-				else
-				{
-					out.println("\t\tbb.put((byte)0);");
-				}
-			}
-		}
-	}
-
 	private static void writeOffsetArray(PrintWriter out, Vector<String> table, int dataSize, Vector<String> types)
 	{
 		out.println("");
@@ -2191,7 +2155,7 @@ public class CatalogCode
 
 				if (type.equals("INT"))
 				{
-					out.println("\t\tbb.putInt(Page.BLOCK_SIZE - " + off + ");");
+					out.println("\t\tputMedium(bb, Page.BLOCK_SIZE - " + off + ");");
 					if (!token.equals("null"))
 					{
 						off -= 4;
@@ -2199,7 +2163,7 @@ public class CatalogCode
 				}
 				else if (type.equals("BIGINT"))
 				{
-					out.println("\t\tbb.putInt(Page.BLOCK_SIZE - " + off + ");");
+					out.println("\t\tputMedium(bb, Page.BLOCK_SIZE - " + off + ");");
 					if (!token.equals("null"))
 					{
 						off -= 8;
@@ -2207,7 +2171,7 @@ public class CatalogCode
 				}
 				else if (type.equals("VARCHAR"))
 				{
-					out.println("\t\tbb.putInt(Page.BLOCK_SIZE - " + off + ");");
+					out.println("\t\tputMedium(bb, Page.BLOCK_SIZE - " + off + ");");
 					if (!token.equals("null"))
 					{
 						off -= (3 + token.length());

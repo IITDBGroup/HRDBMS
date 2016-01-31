@@ -10,8 +10,10 @@ public class CreateTable extends SQLStatement
 	private final String nodeGroupExp;
 	private final String nodeExp;
 	private final String deviceExp;
+	private final int type;
+	private ArrayList<Integer> colOrder;
 
-	public CreateTable(TableName table, ArrayList<ColDef> cols, PrimaryKey pk, String nodeGroupExp, String nodeExp, String deviceExp)
+	public CreateTable(TableName table, ArrayList<ColDef> cols, PrimaryKey pk, String nodeGroupExp, String nodeExp, String deviceExp, int type)
 	{
 		this.table = table;
 		this.cols = cols;
@@ -19,6 +21,19 @@ public class CreateTable extends SQLStatement
 		this.nodeGroupExp = nodeGroupExp;
 		this.nodeExp = nodeExp;
 		this.deviceExp = deviceExp;
+		this.type = type;
+	}
+	
+	public CreateTable(TableName table, ArrayList<ColDef> cols, PrimaryKey pk, String nodeGroupExp, String nodeExp, String deviceExp, int type, ArrayList<Integer> colOrder)
+	{
+		this.table = table;
+		this.cols = cols;
+		this.pk = pk;
+		this.nodeGroupExp = nodeGroupExp;
+		this.nodeExp = nodeExp;
+		this.deviceExp = deviceExp;
+		this.type = type;
+		this.colOrder = colOrder;
 	}
 
 	public ArrayList<ColDef> getCols()
@@ -49,5 +64,15 @@ public class CreateTable extends SQLStatement
 	public TableName getTable()
 	{
 		return table;
+	}
+
+	public int getType()
+	{
+		return type;
+	}
+	
+	public ArrayList<Integer> getColOrder()
+	{
+		return colOrder;
 	}
 }

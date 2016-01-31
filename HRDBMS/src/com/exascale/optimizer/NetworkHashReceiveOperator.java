@@ -9,15 +9,13 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
-import com.exascale.compression.CompressedOutputStream;
+import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 
 public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 {
 	private static sun.misc.Unsafe unsafe;
-	private boolean send = false;
-
 	static
 	{
 		try
@@ -32,12 +30,15 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 		}
 	}
 
+	private boolean send = false;
+
 	private int ID;
 
 	public NetworkHashReceiveOperator(int ID, MetaData meta)
 	{
 		this.ID = ID;
 		this.meta = meta;
+		received = new AtomicLong(0);
 	}
 
 	public static NetworkHashReceiveOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -56,6 +57,8 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 		value.ID = OperatorUtils.readInt(in);
 		value.send = OperatorUtils.readBool(in);
 		value.cd = cs.newDecoder();
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
 		return value;
 	}
 
@@ -72,7 +75,95 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 	{
 		return ID;
 	}
-	
+
+	@Override
+	public Object next(Operator op2) throws Exception
+	{
+		Object o;
+		o = outBuffer.take();
+
+		if (o instanceof DataEndMarker)
+		{
+			demReceived = true;
+			o = outBuffer.peek();
+			if (o == null)
+			{
+				outBuffer.put(new DataEndMarker());
+				return new DataEndMarker();
+			}
+			else
+			{
+				outBuffer.put(new DataEndMarker());
+				return o;
+			}
+		}
+		else
+		{
+			received.getAndIncrement();
+		}
+
+		if (o instanceof Exception)
+		{
+			throw (Exception)o;
+		}
+		return o;
+	}
+
+	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
+	}
+
+	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(74, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		// recreate meta
+		if (send)
+		{
+			OperatorUtils.serializeALOp(children, out, prev);
+		}
+		else
+		{
+			OperatorUtils.serializeALOp(children, out, prev, false);
+		}
+		parent.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.writeBool(fullyStarted, out);
+		OperatorUtils.writeLong(start, out);
+		OperatorUtils.writeInt(node, out);
+		OperatorUtils.writeInt(ID, out);
+		OperatorUtils.writeBool(send, out);
+	}
+
+	public void setID(int ID)
+	{
+		this.ID = ID;
+	}
+
+	public void setSend()
+	{
+		send = true;
+	}
+
+	@Override
 	public void start() throws Exception
 	{
 		if (!fullyStarted)
@@ -109,7 +200,7 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 						outs.put(child, out);
 						final InputStream in = new BufferedInputStream(sock.getInputStream(), 65536);
 						ins.put(child, in);
-						
+
 						if (send)
 						{
 							final byte[] command = "SNDRMTTR".getBytes(StandardCharsets.UTF_8);
@@ -150,76 +241,6 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 				}
 			}
 		}
-	}
-
-	@Override
-	public Object next(Operator op2) throws Exception
-	{
-		Object o;
-		o = outBuffer.take();
-
-		if (o instanceof DataEndMarker)
-		{
-			o = outBuffer.peek();
-			if (o == null)
-			{
-				outBuffer.put(new DataEndMarker());
-				return new DataEndMarker();
-			}
-			else
-			{
-				outBuffer.put(new DataEndMarker());
-				return o;
-			}
-		}
-
-		if (o instanceof Exception)
-		{
-			throw (Exception)o;
-		}
-		return o;
-	}
-	
-	public void setSend()
-	{
-		send = true;
-	}
-
-	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
-	{
-		Long id = prev.get(this);
-		if (id != null)
-		{
-			OperatorUtils.serializeReference(id, out);
-			return;
-		}
-
-		OperatorUtils.writeType(74, out);
-		prev.put(this, OperatorUtils.writeID(out));
-		// recreate meta
-		if (send)
-		{
-			OperatorUtils.serializeALOp(children, out, prev);
-		}
-		else
-		{
-			OperatorUtils.serializeALOp(children, out, prev, false);
-		}
-		parent.serialize(out, prev);
-		OperatorUtils.serializeStringHM(cols2Types, out, prev);
-		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
-		OperatorUtils.serializeTM(pos2Col, out, prev);
-		OperatorUtils.writeBool(fullyStarted, out);
-		OperatorUtils.writeLong(start, out);
-		OperatorUtils.writeInt(node, out);
-		OperatorUtils.writeInt(ID, out);
-		OperatorUtils.writeBool(send, out);
-	}
-
-	public void setID(int ID)
-	{
-		this.ID = ID;
 	}
 
 	@Override

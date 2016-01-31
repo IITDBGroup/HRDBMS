@@ -5,6 +5,7 @@ import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -14,10 +15,12 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.RID;
 import com.exascale.managers.BufferManager;
+import com.exascale.managers.BufferManager.RequestPagesThread;
 import com.exascale.managers.FileManager;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LockManager;
@@ -39,22 +42,21 @@ import com.exascale.threads.ThreadPoolThread;
 
 public final class TableScanOperator implements Operator, Serializable
 {
-	private static int PREFETCH_REQUEST_SIZE;
-
-	private static int PAGES_IN_ADVANCE;
+	private static int PREFETCH_REQUEST_SIZE_STATIC;
+	private static int PAGES_IN_ADVANCE_STATIC;
 
 	private static sun.misc.Unsafe unsafe;
 	private static long offset;
+
 	public static MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>> noResults = new MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>>();
 	public static AtomicInteger skippedPages = new AtomicInteger(0);
-	
 	static
 	{
 		try
 		{
 			HParms hparms = HRDBMSWorker.getHParms();
-			PREFETCH_REQUEST_SIZE = Integer.parseInt(hparms.getProperty("prefetch_request_size")); // 80
-			PAGES_IN_ADVANCE = Integer.parseInt(hparms.getProperty("pages_in_advance")); // 40
+			PREFETCH_REQUEST_SIZE_STATIC = Integer.parseInt(hparms.getProperty("prefetch_request_size")); // 80
+			PAGES_IN_ADVANCE_STATIC = Integer.parseInt(hparms.getProperty("pages_in_advance")); // 40
 			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
 			f.setAccessible(true);
 			unsafe = (sun.misc.Unsafe)f.get(null);
@@ -67,6 +69,9 @@ public final class TableScanOperator implements Operator, Serializable
 			HRDBMSWorker.logger.debug("", e);
 		}
 	}
+	private int PREFETCH_REQUEST_SIZE;
+
+	private int PAGES_IN_ADVANCE;
 	private HashMap<String, String> cols2Types = new HashMap<String, String>();
 	private HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
 	private TreeMap<Integer, String> pos2Col = new TreeMap<Integer, String>();
@@ -110,6 +115,9 @@ public final class TableScanOperator implements Operator, Serializable
 	private boolean sample = false;
 	private long sPer;
 	private Index scanIndex = null;
+	private transient AtomicLong received;
+	private transient volatile boolean demReceived;
+	private int tType = 0;
 
 	private volatile transient HashSet<Integer> referencesHash = null;
 
@@ -124,6 +132,7 @@ public final class TableScanOperator implements Operator, Serializable
 		this.tableCols2Types = tableCols2Types;
 		this.tablePos2Col = tablePos2Col;
 		this.tableCols2Pos = tableCols2Pos;
+		received = new AtomicLong(0);
 	}
 
 	// private static long MAX_PAGES;
@@ -146,6 +155,7 @@ public final class TableScanOperator implements Operator, Serializable
 		tableCols2Types = (HashMap<String, String>)cols2Types.clone();
 		tablePos2Col = (TreeMap<Integer, String>)pos2Col.clone();
 		tableCols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
+		received = new AtomicLong(0);
 	}
 
 	public TableScanOperator(String schema, String name, MetaData meta, Transaction tx, boolean releaseLocks) throws Exception
@@ -160,6 +170,7 @@ public final class TableScanOperator implements Operator, Serializable
 		tablePos2Col = (TreeMap<Integer, String>)pos2Col.clone();
 		tableCols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
 		this.releaseLocks = releaseLocks;
+		received = new AtomicLong(0);
 	}
 
 	public TableScanOperator(String schema, String name, MetaData meta, Transaction tx, boolean releaseLocks, HashMap<String, Integer> cols2Pos, TreeMap<Integer, String> pos2Col) throws Exception
@@ -174,6 +185,7 @@ public final class TableScanOperator implements Operator, Serializable
 		tablePos2Col = (TreeMap<Integer, String>)pos2Col.clone();
 		tableCols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
 		this.releaseLocks = releaseLocks;
+		received = new AtomicLong(0);
 	}
 
 	public static TableScanOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -210,19 +222,10 @@ public final class TableScanOperator implements Operator, Serializable
 		value.sample = OperatorUtils.readBool(in);
 		value.sPer = OperatorUtils.readLong(in);
 		value.scanIndex = OperatorUtils.deserializeIndex(in, prev);
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
+		value.tType = OperatorUtils.readInt(in);
 		return value;
-	}
-	
-	public void setIndexScan(Index scanIndex)
-	{
-		this.scanIndex = scanIndex;
-		scanIndex.setTransaction(new Transaction(0));
-	}
-	
-	public void setSample(long sPer)
-	{
-		sample = true;
-		this.sPer = sPer;
 	}
 
 	@Override
@@ -406,6 +409,7 @@ public final class TableScanOperator implements Operator, Serializable
 		retval.sample = sample;
 		retval.sPer = sPer;
 		retval.scanIndex = scanIndex;
+		retval.tType = tType;
 		if (devices != null)
 		{
 			retval.devices = (ArrayList<Integer>)devices.clone();
@@ -422,7 +426,7 @@ public final class TableScanOperator implements Operator, Serializable
 
 	@Override
 	public void close() throws Exception
-	{
+	{	
 		for (final Operator o : children)
 		{
 			try
@@ -646,6 +650,11 @@ public final class TableScanOperator implements Operator, Serializable
 		return meta;
 	}
 
+	public String[] getMidPos2Col()
+	{
+		return midPos2Col;
+	}
+
 	@Override
 	public int getNode()
 	{
@@ -864,6 +873,11 @@ public final class TableScanOperator implements Operator, Serializable
 		return tableCols2Pos;
 	}
 
+	public int getType()
+	{
+		return tType;
+	}
+
 	@Override
 	public int hashCode()
 	{
@@ -938,6 +952,7 @@ public final class TableScanOperator implements Operator, Serializable
 
 			if (o instanceof DataEndMarker)
 			{
+				demReceived = true;
 				o = readBuffer.peek();
 				if (o == null)
 				{
@@ -949,6 +964,10 @@ public final class TableScanOperator implements Operator, Serializable
 					readBuffer.put(new DataEndMarker());
 					return o;
 				}
+			}
+			else
+			{
+				received.getAndIncrement();
 			}
 
 			if (o instanceof Exception)
@@ -992,6 +1011,12 @@ public final class TableScanOperator implements Operator, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
 	public Operator parent() throws UnsupportedOperationException
 	{
 		throw new UnsupportedOperationException("TableScanOperator does not support parent()");
@@ -1011,15 +1036,21 @@ public final class TableScanOperator implements Operator, Serializable
 
 		return parents;
 	}
-	
+
+	public boolean phase2Done()
+	{
+		return phase2Done;
+	}
+
 	public void rebuild()
 	{
 		opParents = new HashMap<Operator, Operator>();
 	}
 
-	public boolean phase2Done()
+	@Override
+	public boolean receivedDEM()
 	{
-		return phase2Done;
+		return demReceived;
 	}
 
 	@Override
@@ -1124,6 +1155,7 @@ public final class TableScanOperator implements Operator, Serializable
 		OperatorUtils.writeBool(sample, out);
 		OperatorUtils.writeLong(sPer, out);
 		OperatorUtils.serializeIndex(scanIndex, out, prev);
+		OperatorUtils.writeInt(tType, out);
 	}
 
 	public void setAlias(String alias)
@@ -1175,6 +1207,12 @@ public final class TableScanOperator implements Operator, Serializable
 	public void setIndexOnly()
 	{
 		indexOnly = true;
+	}
+
+	public void setIndexScan(Index scanIndex)
+	{
+		this.scanIndex = scanIndex;
+		scanIndex.setTransaction(new Transaction(0));
 	}
 
 	public void setMetaData(Transaction t) throws Exception
@@ -1259,9 +1297,20 @@ public final class TableScanOperator implements Operator, Serializable
 	{
 	}
 
+	public void setSample(long sPer)
+	{
+		sample = true;
+		this.sPer = sPer;
+	}
+
 	public void setTransaction(Transaction tx)
 	{
 		this.tx = tx;
+	}
+
+	public void setType(int type)
+	{
+		tType = type;
 	}
 
 	@Override
@@ -1370,8 +1419,13 @@ public final class TableScanOperator implements Operator, Serializable
 		String retval = "TableScanOperator(" + node + ":" + devices + "): " + schema + "." + table2;
 		for (final Map.Entry entry : orderedFilters.entrySet())
 		{
-			retval += (", (" + entry.getKey().toString() + ", " + entry.getValue().toString()) + ")";
+			if (entry.getValue() != null)
+			{
+				retval += (", (" + entry.getValue().toString()) + ")";
+			}
 		}
+		
+		retval += (" : " + cols2Pos);
 
 		return retval;
 	}
@@ -1509,63 +1563,717 @@ public final class TableScanOperator implements Operator, Serializable
 		return referencesHash.contains(col.hashCode());
 	}
 
-	private final class InitThread extends ThreadPoolThread
+	public final class ReaderThread extends ThreadPoolThread
 	{
-		private final ArrayList<ReaderThread> reads = new ArrayList<ReaderThread>(ins.size());
+		private String in;
+		private String in2;
+		private Index scan;
+		int myMaxBlock = 0;
+		int start = 0;
 
-		@Override
-		public void run()
+		public ReaderThread(String in)
 		{
+			this.in = in;
+		}
+
+		public ReaderThread(String in2, boolean marker)
+		{
+			this.in2 = in2;
+		}
+
+		public ReaderThread(String in, Index scan)
+		{
+			this.in = in;
+			this.scan = scan;
+		}
+
+		public ReaderThread(String in, int start, int max)
+		{
+			this.in = in;
+			this.start = start;
+			this.myMaxBlock = max;
+		}
+
+		public void colTableRT()
+		{
+			new ArrayList<ReaderThread>();
+			CNFFilter filter = orderedFilters.get(parents.get(0));
+			boolean neededPosNeeded = true;
+			int get = 0;
+			int skip = 0;
+			boolean checkNoResults = (filter != null && !(filter instanceof NullCNFFilter) && !sample);
+			HashSet<HashMap<Filter, Filter>> hshm = null;
+			if (checkNoResults)
+			{
+				hshm = filter.getHSHM();
+				if (hshm == null)
+				{
+					checkNoResults = false;
+				}
+			}
+
+			if (sample)
+			{
+				get = (int)sPer;
+				skip = 100 - get;
+			}
+
+			if (scan != null)
+			{
+				try
+				{
+					Index index = new Index(in, scan.getKeys(), scan.getTypes(), scan.getOrders());
+					index.open();
+					index.scan(filter, sample, get, skip, readBuffer, midPos2Col, pos2Col, tx);
+					return;
+				}
+				catch (Exception e)
+				{
+					HRDBMSWorker.logger.error("", e);
+					try
+					{
+						readBuffer.put(e);
+					}
+					catch (Exception f)
+					{
+					}
+					return;
+				}
+			}
+
+			if (filter != null)
+			{
+				if (neededPos.size() == fetchPos.size())
+				{
+					int i = 0;
+					neededPosNeeded = false;
+					for (int pos : neededPos)
+					{
+						if (pos != i)
+						{
+							neededPosNeeded = true;
+							break;
+						}
+
+						i++;
+					}
+				}
+			}
+
+			ArrayList<String> types = new ArrayList<String>(midPos2Col.length);
+			for (final String entry : midPos2Col)
+			{
+				types.add(midCols2Types.get(entry));
+			}
+
+			ArrayList<Integer> cols = new ArrayList<Integer>(fetchPos.size());
+			HashMap<Integer, Integer> rowToIterator = new HashMap<Integer, Integer>();
+
+			if (!getRID)
+			{
+				int w = 0;
+				while (w < fetchPos.size())
+				{
+					cols.add(fetchPos.get(w++));
+				}
+
+				Collections.sort(cols);
+				int pos = 0;
+				for (int col : cols)
+				{
+					int index = fetchPos.indexOf(col);
+					rowToIterator.put(index, pos);
+					pos++;
+				}
+			}
+			else
+			{
+				int w = 0;
+				while (w < fetchPos.size())
+				{
+					int col = fetchPos.get(w++);
+					if (col >= 4)
+					{
+						cols.add(col - 4);
+					}
+				}
+
+				Collections.sort(cols);
+				int pos = 0;
+				for (int col : cols)
+				{
+					int index = fetchPos.indexOf(col + 4);
+					rowToIterator.put(index, pos);
+					pos++;
+				}
+			}
+
 			try
 			{
-				// HRDBMSWorker.logger.debug("Going to start " + ins.size() +
-				// " ReaderThreads for ins for " + TableScanOperator.this);
-				if (scanIndex != null)
+				if (in2 == null)
 				{
-					String fn = scanIndex.getFileName();
-					for (final int device : devices)
+					LockManager.sLock(new Block(in, -1), tx.number());
+					Integer numBlocks = FileManager.numBlocks.get(in);
+					if (numBlocks == null)
 					{
-						final String in = meta.getDevicePath(device) + fn;
-						ReaderThread read = new ReaderThread(in, scanIndex);
-						read.start();
-						reads.add(read);
+						FileManager.getFile(in);
+						numBlocks = FileManager.numBlocks.get(in);
 					}
+
+					if (numBlocks == 0)
+					{
+						throw new Exception("Unable to open file " + in);
+					}
+
+					HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+					for (Map.Entry entry : tablePos2Col.entrySet())
+					{
+						String type = tableCols2Types.get(entry.getValue());
+						DataType value = null;
+						if (type.equals("INT"))
+						{
+							value = new DataType(DataType.INTEGER, 0, 0);
+						}
+						else if (type.equals("FLOAT"))
+						{
+							value = new DataType(DataType.DOUBLE, 0, 0);
+						}
+						else if (type.equals("CHAR"))
+						{
+							value = new DataType(DataType.VARCHAR, 0, 0);
+						}
+						else if (type.equals("LONG"))
+						{
+							value = new DataType(DataType.BIGINT, 0, 0);
+						}
+						else if (type.equals("DATE"))
+						{
+							value = new DataType(DataType.DATE, 0, 0);
+						}
+
+						layout.put((Integer)entry.getKey(), value);
+					}
+
+					Schema sch = new Schema(layout);
+
+					int onPage = 1;
+					BufferManager.registerInterest(this, in, onPage, numBlocks - 1);
+
+					int lastRequested = onPage - 1;
+					// long count = 0;
+					ArrayList<Object> row = new ArrayList<Object>(fetchPos.size());
+					int get2 = get;
+					int skip2 = skip;
+					int get3 = get;
+					int skip3 = skip;
+
+					PREFETCH_REQUEST_SIZE = layout.size() * PREFETCH_REQUEST_SIZE_STATIC / cols.size();
+
+					RequestPagesThread raThread = null;
+					int MAX_PAGES_IN_ADVANCE = PREFETCH_REQUEST_SIZE * 2;
+
+					while (onPage < numBlocks)
+					{
+						if (lastRequested - onPage < MAX_PAGES_IN_ADVANCE)
+						{
+							if (raThread != null)
+							{
+								raThread.join();
+							}
+
+							BufferManager.updateProgress(this, onPage);
+							if (!sample)
+							{
+								// Block[] toRequest = new Block[lastRequested +
+								// PREFETCH_REQUEST_SIZE < numBlocks ?
+								// PREFETCH_REQUEST_SIZE : numBlocks -
+								// lastRequested - 1];
+								ArrayList<Block> toRequest = new ArrayList<Block>();
+								int i = 0;
+								final int length = lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1;
+								while (i < length)
+								{
+									if ((lastRequested + i + 1) % layout.size() == 1)
+									{
+										Block block = new Block(in, lastRequested + i + 1);
+										if (hshm != null)
+										{
+											Set<HashSet<HashMap<Filter, Filter>>> filters = noResults.get(block);
+											if (filter != null && filters.contains(hshm))
+											{
+												i++;
+												continue;
+											}
+										}
+
+										toRequest.add(block);
+									}
+
+									i++;
+								}
+
+								if (toRequest.size() > 0)
+								{
+									Block[] toRequest2 = toRequest.toArray(new Block[toRequest.size()]);
+									raThread = tx.requestPages(toRequest2, cols, layout.size());
+								}
+
+								lastRequested += length;
+							}
+							else
+							{
+								ArrayList<Block> toRequest = new ArrayList<Block>();
+								int i = 0;
+								int length = lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1;
+								while (i < length)
+								{
+									if ((lastRequested + i + 1) % layout.size() == 1)
+									{
+										if (skip3 == 0)
+										{
+											get3 = get - 1;
+											skip3 = skip;
+										}
+										else if (get3 == 0)
+										{
+											skip3--;
+											i += layout.size();
+											continue;
+										}
+										else
+										{
+											get3--;
+										}
+
+										toRequest.add(new Block(in, lastRequested + i + 1));
+										i += layout.size();
+									}
+									else
+									{
+										i++;
+									}
+								}
+
+								if (toRequest.size() > 0)
+								{
+									Block[] toRequest2 = new Block[toRequest.size()];
+									int j = 0;
+									int z = 0;
+									final int limit = toRequest.size();
+									// for (Block b : toRequest)
+									while (z < limit)
+									{
+										Block b = toRequest.get(z++);
+										toRequest2[j] = b;
+										j++;
+									}
+
+									raThread = tx.requestPages(toRequest2, cols, layout.size());
+								}
+
+								lastRequested += length;
+							}
+						}
+
+						if (sample && skip2 == 0)
+						{
+							get2 = get - 1;
+							skip2 = skip;
+						}
+						else if (sample && get2 == 0)
+						{
+							skip2--;
+							onPage += layout.size();
+							continue;
+						}
+						else if (sample)
+						{
+							get2--;
+						}
+
+						Block thisBlock = new Block(in, onPage);
+						if (hshm != null)
+						{
+							Set<HashSet<HashMap<Filter, Filter>>> filters = noResults.get(thisBlock);
+							if (filter != null && filters.contains(hshm))
+							{
+								skippedPages.getAndIncrement();
+								onPage += layout.size();
+								continue;
+							}
+						}
+
+						tx.read(new Block(in, onPage), sch, cols, true);
+						Iterator rit = null;
+						if (!getRID)
+						{
+							onPage += layout.size();
+							rit = sch.colTableIterator();
+						}
+						else
+						{
+							onPage += layout.size();
+							rit = sch.colTableIteratorWithRIDs();
+						}
+
+						boolean hadResults = false;
+						outer: while (rit.hasNext())
+						{
+							Object o = rit.next();
+							ArrayList<FieldValue> r = null;
+							RID rid = null;
+							if (getRID)
+							{
+								Map.Entry entry = (Map.Entry)o;
+								rid = (RID)entry.getKey();
+								r = (ArrayList<FieldValue>)entry.getValue();
+							}
+							else
+							{
+								r = (ArrayList<FieldValue>)o;
+							}
+
+							int j = 0;
+							int size = 0;
+							try
+							{
+								size = fetchPos.size();
+							}
+							catch(Exception e)
+							{
+								if (forceDone)
+								{
+									checkNoResults = false;
+									BufferManager.unregisterInterest(this);
+									readBuffer.put(new DataEndMarker());
+									return;
+								}
+								else
+								{
+									throw e;
+								}
+							}
+							row.clear();
+							while (j < size)
+							{
+								if (!getRID)
+								{
+									row.add(r.get(rowToIterator.get(j)).getValue());
+								}
+								else
+								{
+									if (j >= 4)
+									{
+
+										row.add(r.get(rowToIterator.get(j)).getValue());
+									}
+									else if (j == 0)
+									{
+										row.add(rid.getNode());
+									}
+									else if (j == 1)
+									{
+										row.add(rid.getDevice());
+									}
+									else if (j == 2)
+									{
+										row.add(rid.getBlockNum());
+									}
+									else if (j == 3)
+									{
+										row.add(rid.getRecNum());
+									}
+								}
+								j++;
+							}
+
+							{
+								if (filter != null)
+								{
+									if (filter.passes(row))
+									{
+										hadResults = true;
+
+										if (neededPosNeeded)
+										{
+											final ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
+											int z = 0;
+											final int limit = neededPos.size();
+											// for (final int pos : neededPos)
+											while (z < limit)
+											{
+												newRow.add(row.get(neededPos.get(z++)));
+											}
+											if (!forceDone)
+											{
+												readBuffer.put(newRow);
+											}
+											else
+											{
+												checkNoResults = false;
+												BufferManager.unregisterInterest(this);
+												readBuffer.put(new DataEndMarker());
+												return;
+											}
+										}
+										else
+										{
+											if (!forceDone)
+											{
+												readBuffer.put(row);
+												row = new ArrayList<Object>(fetchPos.size());
+											}
+											else
+											{
+												checkNoResults = false;
+												BufferManager.unregisterInterest(this);
+												readBuffer.put(new DataEndMarker());
+												return;
+											}
+										}
+									}
+								}
+								else
+								{
+									hadResults = true;
+									// final ArrayList<Object> newRow = new
+									// ArrayList<Object>(neededPos.size());
+									// for (final int pos : neededPos)
+									// {
+									// newRow.add(row.get(pos));
+									// }
+									if (!forceDone)
+									{
+										readBuffer.put(row);
+										row = new ArrayList<Object>(fetchPos.size());
+									}
+									else
+									{
+										checkNoResults = false;
+										BufferManager.unregisterInterest(this);
+										readBuffer.put(new DataEndMarker());
+										return;
+									}
+								}
+							}
+						}
+
+						if (checkNoResults && !hadResults)
+						{
+							noResults.multiPut(thisBlock, hshm);
+						}
+					}
+
+					BufferManager.unregisterInterest(this);
 				}
 				else
 				{
-					for (final String in : ins)
+					final Operator child = device2Child.get(ins2Device.get(in2));
+					Object o = null;
+					try
 					{
-						final ReaderThread read = new ReaderThread(in);
-						read.start();
-						reads.add(read);
+						o = child.next(TableScanOperator.this);
+					}
+					catch (final Exception e)
+					{
+						HRDBMSWorker.logger.error("ins2Device = " + ins2Device, e);
+						HRDBMSWorker.logger.error("ins2Device.get(in2) = " + ins2Device.get(in2));
+						HRDBMSWorker.logger.error("device2Child = " + device2Child);
+						HRDBMSWorker.logger.error("device2Child.get(ins2Device.get(in2)) = " + device2Child.get(ins2Device.get(in2)));
+						readBuffer.put(e);
+						return;
+					}
+					// @?Parallel
+					int device = ins2Device.get(in2);
+					int currentPage = -1;
+					HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+					for (Map.Entry entry : tablePos2Col.entrySet())
+					{
+						String type = tableCols2Types.get(entry.getValue());
+						DataType value = null;
+						if (type.equals("INT"))
+						{
+							value = new DataType(DataType.INTEGER, 0, 0);
+						}
+						else if (type.equals("FLOAT"))
+						{
+							value = new DataType(DataType.DOUBLE, 0, 0);
+						}
+						else if (type.equals("CHAR"))
+						{
+							value = new DataType(DataType.VARCHAR, 0, 0);
+						}
+						else if (type.equals("LONG"))
+						{
+							value = new DataType(DataType.BIGINT, 0, 0);
+						}
+						else if (type.equals("DATE"))
+						{
+							value = new DataType(DataType.DATE, 0, 0);
+						}
+
+						layout.put((Integer)entry.getKey(), value);
 					}
 
-					// HRDBMSWorker.logger.debug("Going to start " +
-					// randomIns.size() + " ReaderThreads for randomIns for " +
-					// TableScanOperator.this);
-					for (final String in : randomIns)
+					Schema sch = new Schema(layout);
+					// long count = 0;
+					ArrayList<Object> row = new ArrayList<Object>(fetchPos.size());
+					while (!(o instanceof DataEndMarker))
 					{
-						final ReaderThread read = new ReaderThread(in, true);
-						read.start();
-						reads.add(read);
-					}
-				}
+						if (!indexOnly)
+						{
+							long partialRid = (Long)(((ArrayList<Object>)o).get(0));
+							int blockNum = (int)(partialRid >> 32);
+							int recNum = (int)(partialRid & 0xFFFFFFFF);
+							if (blockNum != currentPage)
+							{
+								Block b = new Block(in2, blockNum);
+								tx.requestPage(b, cols);
+								tx.read(b, sch, cols, false);
+							}
+							int node2 = node;
+							if (node2 < 0)
+							{
+								node2 = -1;
+							}
+							final ArrayList<FieldValue> r = sch.getRowForColTable(new RID(node2, device, blockNum, recNum));
+							row.clear();
 
-				for (final ReaderThread read : reads)
-				{
-					read.join();
-				}
+							int j = 0;
+							final int size = fetchPos.size();
+							while (j < size)
+							{
+								try
+								{
+									if (!getRID)
+									{
+										row.add(r.get(rowToIterator.get(j)).getValue());
+									}
+									else
+									{
+										if (j >= 4)
+										{
+											row.add(r.get(rowToIterator.get(j)).getValue());
+										}
+										else if (j == 0)
+										{
+											row.add(node2);
+										}
+										else if (j == 1)
+										{
+											row.add(device);
+										}
+										else if (j == 2)
+										{
+											row.add(blockNum);
+										}
+										else if (j == 3)
+										{
+											row.add(recNum);
+										}
+									}
+									j++;
+								}
+								catch (Exception e)
+								{
+									HRDBMSWorker.logger.debug("", e);
+									throw e;
+								}
+							}
 
-				if (optimize)
-				{
-					readBuffer.put(new DataEndMarker());
-				}
-				else
-				{
-					for (final BufferedLinkedBlockingQueue q : readBuffers.values())
-					{
-						q.put(new DataEndMarker());
+							if (!optimize)
+							{
+							}
+							else
+							{
+								if (filter != null)
+								{
+									if (filter.passes(row))
+									{
+										if (neededPosNeeded)
+										{
+											final ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
+											for (final int pos : neededPos)
+											{
+												newRow.add(row.get(pos));
+											}
+											if (!forceDone)
+											{
+												readBuffer.put(newRow);
+											}
+											else
+											{
+												readBuffer.put(new DataEndMarker());
+												return;
+											}
+										}
+										else
+										{
+											if (!forceDone)
+											{
+												readBuffer.put(row);
+												row = new ArrayList<Object>(fetchPos.size());
+											}
+											else
+											{
+												readBuffer.put(new DataEndMarker());
+												return;
+											}
+										}
+									}
+								}
+								else
+								{
+									if (!forceDone)
+									{
+										readBuffer.put(row);
+										row = new ArrayList<Object>(fetchPos.size());
+									}
+									else
+									{
+										readBuffer.put(new DataEndMarker());
+										return;
+									}
+								}
+							}
+
+							o = child.next(TableScanOperator.this);
+						}
+						else
+						{
+							filter = orderedFilters.get(parents.get(0));
+
+							if (filter != null)
+							{
+								filter.updateCols2Pos(child.getCols2Pos());
+								if (!filter.passes((ArrayList<Object>)o))
+								{
+									o = child.next(TableScanOperator.this);
+									continue;
+								}
+							}
+
+							final ArrayList<Object> row2 = new ArrayList<Object>(pos2Col.size());
+							for (final String col : pos2Col.values())
+							{
+								row2.add(((ArrayList<Object>)o).get(child.getCols2Pos().get(col)));
+							}
+
+							if (!forceDone)
+							{
+								readBuffer.put(row2);
+							}
+							else
+							{
+								readBuffer.put(new DataEndMarker());
+								return;
+							}
+							o = child.next(TableScanOperator.this);
+						}
 					}
+
+					// System.out.println("TableScanOperator read " + count +
+					// " rows based on a RID list");
 				}
 			}
 			catch (final Exception e)
@@ -1581,44 +2289,9 @@ public final class TableScanOperator implements Operator, Serializable
 				return;
 			}
 		}
-	}
 
-	public final class ReaderThread extends ThreadPoolThread
-	{
-		private String in;
-		private String in2;
-		private Index scan;
-		int myMaxBlock = 0;
-		int start = 0;
-
-		public ReaderThread(String in)
+		public void rowTableRT()
 		{
-			this.in = in;
-		}
-		
-		public ReaderThread(String in, int start, int max)
-		{
-			this.in = in;
-			this.start = start;
-			this.myMaxBlock = max;
-		}
-
-		public ReaderThread(String in2, boolean marker)
-		{
-			this.in2 = in2;
-		}
-		
-		public ReaderThread(String in, Index scan)
-		{
-			this.in = in;
-			this.scan = scan;
-		}
-
-		@Override
-		public final void run()
-		{
-			// HRDBMSWorker.logger.debug("ReaderThread for " +
-			// TableScanOperator.this + " has started");
 			ArrayList<ReaderThread> secondThreads = new ArrayList<ReaderThread>();
 			CNFFilter filter = orderedFilters.get(parents.get(0));
 			boolean neededPosNeeded = true;
@@ -1634,13 +2307,13 @@ public final class TableScanOperator implements Operator, Serializable
 					checkNoResults = false;
 				}
 			}
-			
+
 			if (sample)
 			{
 				get = (int)sPer;
 				skip = 100 - get;
 			}
-			
+
 			if (scan != null)
 			{
 				try
@@ -1650,7 +2323,7 @@ public final class TableScanOperator implements Operator, Serializable
 					index.scan(filter, sample, get, skip, readBuffer, midPos2Col, pos2Col, tx);
 					return;
 				}
-				catch(Exception e)
+				catch (Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
 					try
@@ -1663,7 +2336,7 @@ public final class TableScanOperator implements Operator, Serializable
 					return;
 				}
 			}
-			
+
 			if (filter != null)
 			{
 				if (neededPos.size() == fetchPos.size())
@@ -1693,21 +2366,22 @@ public final class TableScanOperator implements Operator, Serializable
 				if (in2 == null)
 				{
 					LockManager.sLock(new Block(in, -1), tx.number());
-					FileManager.getFile(in);
+					// FileManager.getFile(in);
 					// HRDBMSWorker.logger.debug("Opened " + in + " for " +
 					// TableScanOperator.this);
-					int numBlocks = FileManager.numBlocks.get(in);
-					/*
-					if (numBlocks > 5000 && myMaxBlock == 0)
+					Integer numBlocks = FileManager.numBlocks.get(in);
+					if (numBlocks == null)
 					{
-						int numThreads = 2;	
-						int blocksPerThread = (int)((numBlocks-4000) * 1.0 / numThreads);
-						myMaxBlock = blocksPerThread + 4000;
-						ReaderThread thread = new ReaderThread(in, myMaxBlock, numBlocks);
-						thread.start();
-						secondThreads.add(thread);
+						FileManager.getFile(in);
+						numBlocks = FileManager.numBlocks.get(in);
 					}
-					*/
+					/*
+					 * if (numBlocks > 5000 && myMaxBlock == 0) { int numThreads
+					 * = 2; int blocksPerThread = (int)((numBlocks-4000) * 1.0 /
+					 * numThreads); myMaxBlock = blocksPerThread + 4000;
+					 * ReaderThread thread = new ReaderThread(in, myMaxBlock,
+					 * numBlocks); thread.start(); secondThreads.add(thread); }
+					 */
 					// HRDBMSWorker.logger.debug(in + " has " + numBlocks +
 					// " blocks");
 					if (numBlocks == 0)
@@ -1744,7 +2418,9 @@ public final class TableScanOperator implements Operator, Serializable
 
 						layout.put((Integer)entry.getKey(), value);
 					}
-					
+
+					PREFETCH_REQUEST_SIZE = PREFETCH_REQUEST_SIZE_STATIC;
+					PAGES_IN_ADVANCE = PAGES_IN_ADVANCE_STATIC;
 					Schema[] schemas = new Schema[PREFETCH_REQUEST_SIZE * 4];
 					int g = 0;
 					while (g < schemas.length)
@@ -1753,20 +2429,20 @@ public final class TableScanOperator implements Operator, Serializable
 					}
 					final ConcurrentHashMap<Integer, Schema> schemaMap = new ConcurrentHashMap<Integer, Schema>();
 					long schemaIndex = 0;
-					
-					int onPage = Schema.HEADER_SIZE;
+
+					int onPage = 1;
 					if (myMaxBlock != 0)
 					{
 						numBlocks = myMaxBlock;
 					}
-					
+
 					if (start != 0)
 					{
 						onPage = start;
 					}
-					
-					BufferManager.registerInterest(this, in, onPage, numBlocks-1);
-					
+
+					BufferManager.registerInterest(this, in, onPage, numBlocks - 1);
+
 					int lastRequested = onPage - 1;
 					// long count = 0;
 					ArrayList<Object> row = new ArrayList<Object>(fetchPos.size());
@@ -1774,7 +2450,7 @@ public final class TableScanOperator implements Operator, Serializable
 					int skip2 = skip;
 					int get3 = get;
 					int skip3 = skip;
-					
+
 					while (onPage < numBlocks)
 					{
 						if (lastRequested - onPage < PAGES_IN_ADVANCE)
@@ -1782,7 +2458,10 @@ public final class TableScanOperator implements Operator, Serializable
 							BufferManager.updateProgress(this, onPage);
 							if (!sample)
 							{
-								//Block[] toRequest = new Block[lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1];
+								// Block[] toRequest = new Block[lastRequested +
+								// PREFETCH_REQUEST_SIZE < numBlocks ?
+								// PREFETCH_REQUEST_SIZE : numBlocks -
+								// lastRequested - 1];
 								ArrayList<Block> toRequest = new ArrayList<Block>();
 								int i = 0;
 								final int length = lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1;
@@ -1801,7 +2480,7 @@ public final class TableScanOperator implements Operator, Serializable
 									toRequest.add(block);
 									i++;
 								}
-								
+
 								Block[] toRequest2 = new Block[toRequest.size()];
 								i = 0;
 								while (i < toRequest2.length)
@@ -1809,7 +2488,7 @@ public final class TableScanOperator implements Operator, Serializable
 									toRequest2[i] = toRequest.get(i);
 									i++;
 								}
-								
+
 								if (!getRID)
 								{
 									tx.requestPages(toRequest2, schemas, (int)(schemaIndex % (PREFETCH_REQUEST_SIZE * 4)), schemaMap, fetchPos);
@@ -1843,25 +2522,25 @@ public final class TableScanOperator implements Operator, Serializable
 									{
 										get3--;
 									}
-								
+
 									toRequest.add(new Block(in, lastRequested + i + 1));
 									i++;
 								}
-								
+
 								if (toRequest.size() > 0)
 								{
 									Block[] toRequest2 = new Block[toRequest.size()];
 									int j = 0;
 									int z = 0;
 									final int limit = toRequest.size();
-									//for (Block b : toRequest)
+									// for (Block b : toRequest)
 									while (z < limit)
 									{
 										Block b = toRequest.get(z++);
 										toRequest2[j] = b;
 										j++;
 									}
-									
+
 									if (!getRID)
 									{
 										tx.requestPages(toRequest2, schemas, (int)(schemaIndex % (PREFETCH_REQUEST_SIZE * 4)), schemaMap, fetchPos);
@@ -1872,7 +2551,7 @@ public final class TableScanOperator implements Operator, Serializable
 										tx.requestPages(toRequest2);
 									}
 								}
-								
+
 								lastRequested += length;
 							}
 						}
@@ -1892,7 +2571,7 @@ public final class TableScanOperator implements Operator, Serializable
 						{
 							get2--;
 						}
-						
+
 						Block thisBlock = new Block(in, onPage);
 						if (hshm != null)
 						{
@@ -1904,8 +2583,8 @@ public final class TableScanOperator implements Operator, Serializable
 								continue;
 							}
 						}
-						
-						//tx.read(new Block(in, onPage++), sch);
+
+						// tx.read(new Block(in, onPage++), sch);
 						Schema sch = null;
 						RowIterator rit = null;
 						if (!getRID)
@@ -1916,11 +2595,11 @@ public final class TableScanOperator implements Operator, Serializable
 								LockSupport.parkNanos(500);
 								sch = schemaMap.get(onPage);
 							}
-						
+
 							schemaMap.remove(onPage);
 							onPage++;
-							
-							synchronized(sch)
+
+							synchronized (sch)
 							{
 								rit = sch.rowIterator(true);
 							}
@@ -1931,7 +2610,7 @@ public final class TableScanOperator implements Operator, Serializable
 							tx.read(new Block(in, onPage++), sch);
 							rit = sch.rowIterator(false);
 						}
-						
+
 						boolean hadResults = false;
 						outer: while (rit.hasNext())
 						{
@@ -2006,41 +2685,41 @@ public final class TableScanOperator implements Operator, Serializable
 								j++;
 							}
 
-							//if (!optimize)
-							//{
-								// for (final Map.Entry entry :
-								// readBuffers.entrySet())
-								// {
-								// final BufferedLinkedBlockingQueue q =
-								// (BufferedLinkedBlockingQueue)entry.getValue();
-								// filter = orderedFilters.get(entry.getKey());
+							// if (!optimize)
+							// {
+							// for (final Map.Entry entry :
+							// readBuffers.entrySet())
+							// {
+							// final BufferedLinkedBlockingQueue q =
+							// (BufferedLinkedBlockingQueue)entry.getValue();
+							// filter = orderedFilters.get(entry.getKey());
 
-								// if (filter != null)
-								// {
-								// if (filter.passes(row))
-								// {
-								// final ArrayList<Object> newRow = new
-								// ArrayList<Object>(neededPos.size());
-								// for (final int pos : neededPos)
-								// {
-								// newRow.add(row.get(pos));
-								// }
-								// q.put(newRow);
-								// }
-								// }
-								// else
-								// {
-								// final ArrayList<Object> newRow = new
-								// ArrayList<Object>(neededPos.size());
-								// for (final int pos : neededPos)
-								// {
-								// newRow.add(row.get(pos));
-								// }
-								// q.put(newRow);
-								// }
-								// }
-							//}
-							//else
+							// if (filter != null)
+							// {
+							// if (filter.passes(row))
+							// {
+							// final ArrayList<Object> newRow = new
+							// ArrayList<Object>(neededPos.size());
+							// for (final int pos : neededPos)
+							// {
+							// newRow.add(row.get(pos));
+							// }
+							// q.put(newRow);
+							// }
+							// }
+							// else
+							// {
+							// final ArrayList<Object> newRow = new
+							// ArrayList<Object>(neededPos.size());
+							// for (final int pos : neededPos)
+							// {
+							// newRow.add(row.get(pos));
+							// }
+							// q.put(newRow);
+							// }
+							// }
+							// }
+							// else
 							{
 								if (filter != null)
 								{
@@ -2052,7 +2731,7 @@ public final class TableScanOperator implements Operator, Serializable
 											int i = 0;
 											int z = 0;
 											final int limit = row.size();
-											//for (Object o : row)
+											// for (Object o : row)
 											while (z < limit)
 											{
 												Object o = row.get(z++);
@@ -2079,7 +2758,7 @@ public final class TableScanOperator implements Operator, Serializable
 											final ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
 											int z = 0;
 											final int limit = neededPos.size();
-											//for (final int pos : neededPos)
+											// for (final int pos : neededPos)
 											while (z < limit)
 											{
 												newRow.add(row.get(neededPos.get(z++)));
@@ -2137,15 +2816,15 @@ public final class TableScanOperator implements Operator, Serializable
 								}
 							}
 						}
-						
+
 						if (checkNoResults && !hadResults)
 						{
 							noResults.multiPut(thisBlock, hshm);
 						}
 					}
-					
+
 					BufferManager.unregisterInterest(this);
-					
+
 					if (start == 0 && myMaxBlock != 0)
 					{
 						for (ReaderThread thread : secondThreads)
@@ -2331,7 +3010,7 @@ public final class TableScanOperator implements Operator, Serializable
 											int i = 0;
 											int z = 0;
 											final int limit = row.size();
-											//for (Object o2 : row)
+											// for (Object o2 : row)
 											while (z < limit)
 											{
 												Object o2 = row.get(z++);
@@ -2453,10 +3132,92 @@ public final class TableScanOperator implements Operator, Serializable
 				return;
 			}
 		}
+
+		@Override
+		public final void run()
+		{
+			if (tType == 0)
+			{
+				rowTableRT();
+			}
+			else
+			{
+				colTableRT();
+			}
+		}
 	}
-	
-	public String[] getMidPos2Col()
+
+	private final class InitThread extends ThreadPoolThread
 	{
-		return midPos2Col;
+		private final ArrayList<ReaderThread> reads = new ArrayList<ReaderThread>(ins.size());
+
+		@Override
+		public void run()
+		{
+			try
+			{
+				// HRDBMSWorker.logger.debug("Going to start " + ins.size() +
+				// " ReaderThreads for ins for " + TableScanOperator.this);
+				if (scanIndex != null)
+				{
+					String fn = scanIndex.getFileName();
+					for (final int device : devices)
+					{
+						final String in = meta.getDevicePath(device) + fn;
+						ReaderThread read = new ReaderThread(in, scanIndex);
+						read.start();
+						reads.add(read);
+					}
+				}
+				else
+				{
+					for (final String in : ins)
+					{
+						final ReaderThread read = new ReaderThread(in);
+						read.start();
+						reads.add(read);
+					}
+
+					// HRDBMSWorker.logger.debug("Going to start " +
+					// randomIns.size() + " ReaderThreads for randomIns for " +
+					// TableScanOperator.this);
+					for (final String in : randomIns)
+					{
+						final ReaderThread read = new ReaderThread(in, true);
+						read.start();
+						reads.add(read);
+					}
+				}
+
+				for (final ReaderThread read : reads)
+				{
+					read.join();
+				}
+
+				if (optimize)
+				{
+					readBuffer.put(new DataEndMarker());
+				}
+				else
+				{
+					for (final BufferedLinkedBlockingQueue q : readBuffers.values())
+					{
+						q.put(new DataEndMarker());
+					}
+				}
+			}
+			catch (final Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				try
+				{
+					readBuffer.put(e);
+				}
+				catch (Exception f)
+				{
+				}
+				return;
+			}
+		}
 	}
 }

@@ -1,6 +1,7 @@
 package com.exascale.optimizer;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
@@ -15,6 +16,7 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 import com.exascale.misc.BufferedFileChannel;
@@ -66,11 +68,14 @@ public final class UnionOperator implements Operator, Serializable
 	private transient ArrayList<ArrayList<RandomAccessFile>> rafs;
 
 	private transient ArrayList<ArrayList<FileChannel>> fcs;
+	private transient AtomicLong received;
+	private transient volatile boolean demReceived;
 
 	public UnionOperator(boolean distinct, MetaData meta)
 	{
 		this.meta = meta;
 		this.distinct = distinct;
+		received = new AtomicLong(0);
 	}
 
 	public static UnionOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -87,6 +92,8 @@ public final class UnionOperator implements Operator, Serializable
 		value.estimate = OperatorUtils.readInt(in);
 		value.startDone = OperatorUtils.readBool(in);
 		value.estimateSet = OperatorUtils.readBool(in);
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
 		return value;
 	}
 
@@ -231,9 +238,21 @@ public final class UnionOperator implements Operator, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
 	}
 
 	@Override
@@ -546,7 +565,26 @@ public final class UnionOperator implements Operator, Serializable
 				{
 					String fn = ResourceManager.TEMP_DIRS.get(i % ResourceManager.TEMP_DIRS.size()) + this.hashCode() + "" + System.currentTimeMillis() + ".exths" + i + "." + j;
 					files.add(fn);
-					RandomAccessFile r = new RandomAccessFile(fn, "rw");
+					RandomAccessFile r = null;
+					while (true)
+					{
+						try
+						{
+							r = new RandomAccessFile(fn, "rw");
+							break;
+						}
+						catch (FileNotFoundException e)
+						{
+							ResourceManager.panic = true;
+							try
+							{
+								Thread.sleep(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("rm_sleep_time_ms")) / 2);
+							}
+							catch (Exception f)
+							{
+							}
+						}
+					}
 					raf.add(r);
 					fc.add(r.getChannel());
 					j++;
@@ -756,6 +794,14 @@ public final class UnionOperator implements Operator, Serializable
 				{
 					Object o = null;
 					o = op.next(UnionOperator.this);
+					if (o instanceof DataEndMarker)
+					{
+						demReceived = true;
+					}
+					else
+					{
+						received.getAndIncrement();
+					}
 					while (!(o instanceof DataEndMarker))
 					{
 						if (o instanceof Exception)
@@ -784,6 +830,14 @@ public final class UnionOperator implements Operator, Serializable
 						}
 
 						o = op.next(UnionOperator.this);
+						if (o instanceof DataEndMarker)
+						{
+							demReceived = true;
+						}
+						else
+						{
+							received.getAndIncrement();
+						}
 					}
 				}
 				catch (final Exception f)
@@ -807,12 +861,20 @@ public final class UnionOperator implements Operator, Serializable
 					int i = 0;
 					while (i < numFiles)
 					{
-						buckets.add(new ArrayList<byte[]>());
+						buckets.add(new ArrayList<byte[]>(8192));
 						i++;
 					}
 
 					Object o = null;
 					o = op.next(UnionOperator.this);
+					if (o instanceof DataEndMarker)
+					{
+						demReceived = true;
+					}
+					else
+					{
+						received.getAndIncrement();
+					}
 					while (!(o instanceof DataEndMarker))
 					{
 						if (o instanceof Exception)
@@ -831,6 +893,14 @@ public final class UnionOperator implements Operator, Serializable
 						}
 
 						o = op.next(UnionOperator.this);
+						if (o instanceof DataEndMarker)
+						{
+							demReceived = true;
+						}
+						else
+						{
+							received.getAndIncrement();
+						}
 					}
 
 					flushBuckets(buckets, childNum);
@@ -908,7 +978,7 @@ public final class UnionOperator implements Operator, Serializable
 			int i = 8;
 			int z = 0;
 			int limit = val.size();
-			//for (final Object o : val)
+			// for (final Object o : val)
 			while (z < limit)
 			{
 				Object o = val.get(z++);
@@ -990,7 +1060,7 @@ public final class UnionOperator implements Operator, Serializable
 			int x = 0;
 			z = 0;
 			limit = val.size();
-			//for (final Object o : val)
+			// for (final Object o : val)
 			while (z < limit)
 			{
 				Object o = val.get(z++);

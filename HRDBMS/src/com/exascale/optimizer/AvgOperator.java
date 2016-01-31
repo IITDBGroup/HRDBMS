@@ -173,15 +173,15 @@ public final class AvgOperator implements AggregateOperator, Serializable
 		{
 			final Double v = ((Number)row.get(pos)).doubleValue();
 			BigDecimalReplacement val = new BigDecimalReplacement(v);
-			//synchronized (sums)
-			//{
+			// synchronized (sums)
+			// {
 			final BigDecimalReplacement ad = sums.get(group);
 			if (ad != null)
 			{
 				ad.add(val);
 				return;
 			}
-			
+
 			if (sums.putIfAbsent(group, val) != null)
 			{
 				sums.get(group).add(val);
@@ -233,7 +233,7 @@ public final class AvgOperator implements AggregateOperator, Serializable
 
 			int z = 0;
 			final int limit = rows.size();
-			//for (final Object orow : rows)
+			// for (final Object orow : rows)
 			while (z < limit)
 			{
 				Object orow = rows.get(z++);

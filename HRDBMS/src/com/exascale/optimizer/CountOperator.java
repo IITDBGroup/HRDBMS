@@ -81,7 +81,7 @@ public final class CountOperator implements AggregateOperator, Serializable
 
 		return output;
 	}
-	
+
 	public String getRealInputColumn()
 	{
 		return input;
@@ -225,7 +225,7 @@ public final class CountOperator implements AggregateOperator, Serializable
 				result = 0;
 				int z = 0;
 				final int limit = rows.size();
-				//for (final Object o : rows)
+				// for (final Object o : rows)
 				while (z < limit)
 				{
 					final Object o = rows.get(z++);

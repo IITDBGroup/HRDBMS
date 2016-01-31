@@ -264,28 +264,29 @@ public final class SumOperator implements AggregateOperator, Serializable
 
 				// final AtomicBigDecimal ad =
 				// (AtomicBigDecimal)results.get(group);
-				//synchronized (results)
-				//{
-				//	sdf
-				//	BigDecimalReplacement ad = (BigDecimalReplacement)results.get(group);
-				//	if (ad != null)
-				//	{
-				//		ad.add(val);
-				//		return;
-				//	}
-				//	else
-				//	{
-				//		results.put(group, val);
-				//		return;
-				//	}
-				//}
+				// synchronized (results)
+				// {
+				// sdf
+				// BigDecimalReplacement ad =
+				// (BigDecimalReplacement)results.get(group);
+				// if (ad != null)
+				// {
+				// ad.add(val);
+				// return;
+				// }
+				// else
+				// {
+				// results.put(group, val);
+				// return;
+				// }
+				// }
 				final BigDecimalReplacement ad = (BigDecimalReplacement)results.get(group);
 				if (ad != null)
 				{
 					ad.add(val);
 					return;
 				}
-				
+
 				if (results.putIfAbsent(group, val) != null)
 				{
 					((BigDecimalReplacement)results.get(group)).add(val);
@@ -304,18 +305,12 @@ public final class SumOperator implements AggregateOperator, Serializable
 				}
 
 				/*
-				synchronized (results)
-				{
-					final Long ad = (Long)results.get(group);
-					if (ad != null)
-					{
-						results.put(group, ad + val);
-						return;
-					}
-
-					results.put(group, val);
-				}
-				*/
+				 * synchronized (results) { final Long ad =
+				 * (Long)results.get(group); if (ad != null) {
+				 * results.put(group, ad + val); return; }
+				 * 
+				 * results.put(group, val); }
+				 */
 				final AtomicLong al = (AtomicLong)results.get(group);
 				if (al != null)
 				{
@@ -366,7 +361,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 
 			int z = 0;
 			final int limit = rows.size();
-			//for (final Object orow : rows)
+			// for (final Object orow : rows)
 			while (z < limit)
 			{
 				final Object orow = rows.get(z++);

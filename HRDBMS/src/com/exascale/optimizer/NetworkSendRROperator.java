@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedOutputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
@@ -44,6 +45,7 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 	{
 		this.id = id;
 		this.meta = meta;
+		received = new AtomicLong(0);
 	}
 
 	public static NetworkSendRROperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -67,6 +69,8 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 		value.parents = OperatorUtils.deserializeALOp(in, prev);
 		value.error = OperatorUtils.readBool(in);
 		value.ce = NetworkSendOperator.cs.newEncoder();
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
 		return value;
 	}
 
@@ -147,6 +151,12 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
 	public Operator parent()
 	{
 		Exception e = new Exception();
@@ -157,6 +167,12 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 	public ArrayList<Operator> parents()
 	{
 		return parents;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
 	}
 
 	@Override
@@ -200,7 +216,8 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 		OperatorUtils.serializeALOp(parents, out, prev);
 		OperatorUtils.writeBool(error, out);
 	}
-	
+
+	@Override
 	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev, boolean flag) throws Exception
 	{
 		Long id = prev.get(this);
@@ -213,7 +230,7 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 		OperatorUtils.writeType(77, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		// recreate meta
-		//child.serialize(out, prev);
+		// child.serialize(out, prev);
 		new DummyOperator(meta).serialize(out, prev);
 		// prev = parent.serialize(out, prev);
 		OperatorUtils.serializeStringHM(cols2Types, out, prev);
@@ -265,8 +282,16 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 			}
 			started = true;
 			int i = 0;
-			//child.start();
+			// child.start();
 			Object o = child.next(this);
+			if (o instanceof DataEndMarker)
+			{
+				demReceived = true;
+			}
+			else
+			{
+				received.getAndIncrement();
+			}
 			while (!(o instanceof DataEndMarker))
 			{
 				final byte[] obj = toBytes(o);
@@ -279,6 +304,14 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 				// count++;
 				i++;
 				o = child.next(this);
+				if (o instanceof DataEndMarker)
+				{
+					demReceived = true;
+				}
+				else
+				{
+					received.getAndIncrement();
+				}
 			}
 
 			final byte[] obj = toBytes(o);

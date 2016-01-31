@@ -3,17 +3,11 @@ package com.exascale.threads;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
-import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.util.StringTokenizer;
 import com.exascale.managers.HRDBMSWorker;
-import com.jcraft.jsch.Channel;
-import com.jcraft.jsch.ChannelExec;
-import com.jcraft.jsch.JSch;
-import com.jcraft.jsch.Session;
-import com.jcraft.jsch.UserInfo;
 
 public class StartCoordsThread extends HRDBMSThread
 {
@@ -54,6 +48,8 @@ public class StartCoordsThread extends HRDBMSThread
 				final StringTokenizer tokens = new StringTokenizer(line, ",", false);
 				final String host = tokens.nextToken().trim();
 				final String type = tokens.nextToken().trim().toUpperCase();
+				tokens.nextToken();
+				final String wd = tokens.nextToken().trim();
 				if (type.equals("C") || type.equals("W"))
 				{
 				}
@@ -61,6 +57,21 @@ public class StartCoordsThread extends HRDBMSThread
 				{
 					HRDBMSWorker.logger.error("Type found in nodes.cfg was not valid: " + type);
 					System.exit(1);
+				}
+
+				String cmd = HRDBMSWorker.getHParms().getProperty("java_path");
+				if (cmd.equals(""))
+				{
+					cmd = "java";
+				}
+				else
+				{
+					if (!cmd.endsWith("/"))
+					{
+						cmd += "/";
+					}
+
+					cmd += "java";
 				}
 
 				if (type.equals("C"))
@@ -72,37 +83,42 @@ public class StartCoordsThread extends HRDBMSThread
 						continue;
 					}
 
-					final String user = HRDBMSWorker.getHParms().getProperty("hrdbms_user");
+					// final String user =
+					// HRDBMSWorker.getHParms().getProperty("hrdbms_user");
 					HRDBMSWorker.logger.info("Starting coordinator " + host);
-					final String command1 = ". /etc/profile && java -Xmx" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xms" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xss" + HRDBMSWorker.getHParms().getProperty("stack_size") + " " + HRDBMSWorker.getHParms().getProperty("jvm_args") + " -cp HRDBMS.jar:. com.exascale.managers.HRDBMSWorker " + HRDBMSWorker.TYPE_COORD;
+					final String command1 = "cd " + wd + "; ulimit -n 102400; ulimit -u 3000000; nohup " + cmd + " -Xmx" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xms" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xss" + HRDBMSWorker.getHParms().getProperty("stack_size") + " " + HRDBMSWorker.getHParms().getProperty("jvm_args") + " -cp HRDBMS.jar:. com.exascale.managers.HRDBMSWorker " + HRDBMSWorker.TYPE_COORD + " > /dev/null 2>&1 &";
 					try
 					{
 
-						final java.util.Properties config = new java.util.Properties();
-						config.put("StrictHostKeyChecking", "no");
-						final JSch jsch = new JSch();
-						final Session session = jsch.getSession(user, host, 22);
-						final UserInfo ui = new MyUserInfo();
-						session.setUserInfo(ui);
-						jsch.addIdentity(".ssh/id_rsa");
-						session.setConfig(config);
-						session.connect();
+						// final java.util.Properties config = new
+						// java.util.Properties();
+						// config.put("StrictHostKeyChecking", "no");
+						// final JSch jsch = new JSch();
+						// final Session session = jsch.getSession(user, host,
+						// 22);
+						// final UserInfo ui = new MyUserInfo();
+						// session.setUserInfo(ui);
+						// jsch.addIdentity("~/.ssh/id_rsa");
+						// session.setConfig(config);
+						// session.connect();
 
-						final Channel channel = session.openChannel("exec");
-						((ChannelExec)channel).setCommand(command1);
-						channel.setInputStream(null);
-						((ChannelExec)channel).setErrStream(System.out);
-						((ChannelExec)channel).setOutputStream(System.out);
+						// final Channel channel = session.openChannel("exec");
+						// ((ChannelExec)channel).setCommand(command1);
+						// channel.setInputStream(null);
+						// ((ChannelExec)channel).setErrStream(System.out);
+						// ((ChannelExec)channel).setOutputStream(System.out);
 
-						final InputStream in2 = channel.getInputStream();
-						channel.connect();
-						final byte[] tmp = new byte[1024];
-						while (in2.available() > 0)
-						{
-							in2.read(tmp, 0, 1024);
-						}
-						channel.disconnect();
-						session.disconnect();
+						// final InputStream in2 = channel.getInputStream();
+						// channel.connect();
+						// final byte[] tmp = new byte[1024];
+						// while (in2.available() > 0)
+						// {
+						// in2.read(tmp, 0, 1024);
+						// }
+						// channel.disconnect();
+						// session.disconnect();
+						HRDBMSWorker.logger.info("Command: " + "ssh -n -f " + host + "  \"sh -c '" + command1 + "'\"");
+						Runtime.getRuntime().exec(new String[] { "bash", "-c", "ssh -n -f " + host + "  \"sh -c '" + command1 + "'\"" });
 					}
 					catch (final Exception e)
 					{
@@ -121,45 +137,5 @@ public class StartCoordsThread extends HRDBMSThread
 		{
 			HRDBMSWorker.logger.error("Failed to start a coordinator node.", e);
 		}
-	}
-
-	private class MyUserInfo implements UserInfo
-	{
-
-		@Override
-		public String getPassphrase()
-		{
-			return "";
-		}
-
-		@Override
-		public String getPassword()
-		{
-			return null;
-		}
-
-		@Override
-		public boolean promptPassphrase(String arg0)
-		{
-			return false;
-		}
-
-		@Override
-		public boolean promptPassword(String arg0)
-		{
-			return false;
-		}
-
-		@Override
-		public boolean promptYesNo(String arg0)
-		{
-			return false;
-		}
-
-		@Override
-		public void showMessage(String arg0)
-		{
-		}
-
 	}
 }

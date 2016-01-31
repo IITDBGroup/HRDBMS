@@ -4,28 +4,14 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
-import java.util.Map;
 import java.util.TreeMap;
-import java.util.Vector;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.LockSupport;
-import java.util.concurrent.locks.ReentrantLock;
 import com.exascale.managers.HRDBMSWorker;
-import com.exascale.managers.ResourceManager;
-import com.exascale.misc.BufferedLinkedBlockingQueue;
 import com.exascale.misc.DataEndMarker;
-import com.exascale.misc.MurmurHash;
-import com.exascale.misc.MyDate;
-import com.exascale.misc.MySimpleDateFormat;
 import com.exascale.tables.Plan;
-import com.exascale.threads.ThreadPoolThread;
 
 public final class SemiJoinOperator implements Operator, Serializable
 {
@@ -64,7 +50,8 @@ public final class SemiJoinOperator implements Operator, Serializable
 	private int rightChildCard = 16;
 	private boolean alreadySorted = false;
 	private boolean cardSet = false;
-	private transient Operator dynamicOp;
+	public transient Operator dynamicOp;
+	private int leftChildCard = 16;
 
 	public SemiJoinOperator(ArrayList<String> cols, MetaData meta)
 	{
@@ -113,6 +100,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 		value.rightChildCard = OperatorUtils.readInt(in);
 		value.alreadySorted = OperatorUtils.readBool(in);
 		value.cardSet = OperatorUtils.readBool(in);
+		value.leftChildCard = OperatorUtils.readInt(in);
 		return value;
 	}
 
@@ -172,6 +160,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 		retval.alreadySorted = alreadySorted;
 		retval.rightChildCard = rightChildCard;
 		retval.cardSet = cardSet;
+		retval.leftChildCard = leftChildCard;
 		return retval;
 	}
 
@@ -350,12 +339,11 @@ public final class SemiJoinOperator implements Operator, Serializable
 	@Override
 	public ArrayList<String> getReferences()
 	{
-		final ArrayList<String> retval = new ArrayList<String>(cols);
-		retval.addAll(children.get(1).getCols2Pos().keySet());
-
-		if (f != null)
+		try
 		{
-			for (final HashMap<Filter, Filter> filters : f)
+			HashSet<HashMap<Filter, Filter>> hshm = getHSHM();
+			final ArrayList<String> retval = new ArrayList<String>(cols);
+			for (final HashMap<Filter, Filter> filters : hshm)
 			{
 				for (final Filter filter : filters.keySet())
 				{
@@ -370,8 +358,12 @@ public final class SemiJoinOperator implements Operator, Serializable
 					}
 				}
 			}
+			return retval;
 		}
-		return retval;
+		catch(Exception e)
+		{
+			return null;
+		}
 	}
 
 	public ArrayList<String> getRights()
@@ -425,9 +417,21 @@ public final class SemiJoinOperator implements Operator, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return dynamicOp.numRecsReceived();
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return dynamicOp.receivedDEM();
 	}
 
 	@Override
@@ -497,6 +501,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 		OperatorUtils.writeInt(rightChildCard, out);
 		OperatorUtils.writeBool(alreadySorted, out);
 		OperatorUtils.writeBool(cardSet, out);
+		OperatorUtils.writeInt(leftChildCard, out);
 	}
 
 	@Override
@@ -522,7 +527,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 	{
 	}
 
-	public boolean setRightChildCard(int card)
+	public boolean setRightChildCard(int card, int card2)
 	{
 		if (cardSet)
 		{
@@ -531,6 +536,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 
 		cardSet = true;
 		rightChildCard = card;
+		leftChildCard = card2;
 		return true;
 	}
 
@@ -659,10 +665,10 @@ public final class SemiJoinOperator implements Operator, Serializable
 		boolean usesHash = usesHash();
 		boolean usesSort = usesSort();
 		HashSet<HashMap<Filter, Filter>> temp = getHSHM();
-		
+
 		if (usesHash)
 		{
-			//HJO w/ existence + filter
+			// HJO w/ existence + filter
 			ArrayList<String> lefts = this.getJoinForChild(children.get(0));
 			ArrayList<String> rights = this.getJoinForChild(children.get(1));
 			dynamicOp = new HashJoinOperator(lefts.get(0), rights.get(0), meta);
@@ -683,7 +689,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 			{
 				((TableScanOperator)left).rebuild();
 			}
-			
+
 			if (right instanceof TableScanOperator)
 			{
 				((TableScanOperator)right).rebuild();
@@ -699,14 +705,14 @@ public final class SemiJoinOperator implements Operator, Serializable
 				((TableScanOperator)right).setCNFForParent(dynamicOp, ((TableScanOperator)right).getCNFForParent(this));
 			}
 			((HashJoinOperator)dynamicOp).setCNF(temp);
-			((HashJoinOperator)dynamicOp).setRightChildCard(rightChildCard);
+			((HashJoinOperator)dynamicOp).setRightChildCard(rightChildCard, leftChildCard);
 			((HashJoinOperator)dynamicOp).setSemi();
 			dynamicOp.start();
 		}
 		else if (usesSort)
 		{
-			//not implemented - add sort to the below
-			//prod w/ existence + filter + remove from left
+			// not implemented - add sort to the below
+			// prod w/ existence + filter + remove from left
 			dynamicOp = new ProductOperator(meta);
 			Operator left = children.get(0);
 			Operator right = children.get(1);
@@ -716,7 +722,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 			{
 				((TableScanOperator)left).rebuild();
 			}
-			
+
 			if (right instanceof TableScanOperator)
 			{
 				((TableScanOperator)right).rebuild();
@@ -732,13 +738,13 @@ public final class SemiJoinOperator implements Operator, Serializable
 				((TableScanOperator)right).setCNFForParent(dynamicOp, ((TableScanOperator)right).getCNFForParent(this));
 			}
 			((ProductOperator)dynamicOp).setHSHM(temp);
-			((ProductOperator)dynamicOp).setRightChildCard(rightChildCard);
+			((ProductOperator)dynamicOp).setRightChildCard(rightChildCard, leftChildCard);
 			((ProductOperator)dynamicOp).setSemi();
 			dynamicOp.start();
 		}
 		else
 		{
-			//prod w/ existence + filter + remove from left
+			// prod w/ existence + filter + remove from left
 			dynamicOp = new ProductOperator(meta);
 			Operator left = children.get(0);
 			Operator right = children.get(1);
@@ -748,7 +754,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 			{
 				((TableScanOperator)left).rebuild();
 			}
-			
+
 			if (right instanceof TableScanOperator)
 			{
 				((TableScanOperator)right).rebuild();
@@ -764,7 +770,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 				((TableScanOperator)right).setCNFForParent(dynamicOp, ((TableScanOperator)right).getCNFForParent(this));
 			}
 			((ProductOperator)dynamicOp).setHSHM(temp);
-			((ProductOperator)dynamicOp).setRightChildCard(rightChildCard);
+			((ProductOperator)dynamicOp).setRightChildCard(rightChildCard, leftChildCard);
 			((ProductOperator)dynamicOp).setSemi();
 			dynamicOp.start();
 		}

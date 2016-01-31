@@ -2202,7 +2202,8 @@ public class HRDBMSResultSet implements ResultSet
 				bb.get(temp);
 				try
 				{
-					// final String o = new String(temp, StandardCharsets.UTF_8);
+					// final String o = new String(temp,
+					// StandardCharsets.UTF_8);
 					String value = (String)unsafe.allocateInstance(String.class);
 					int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(temp, 0, length, ca);
 					if (clen == ca.length)

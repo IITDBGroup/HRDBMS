@@ -16,8 +16,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedInputStream;
-import com.exascale.compression.CompressedOutputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 import com.exascale.misc.BufferedLinkedBlockingQueue;
@@ -71,14 +71,18 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	protected int node;
 
 	protected CharsetDecoder cd = cs.newDecoder();
+	protected transient AtomicLong received;
+	protected transient volatile boolean demReceived;
 
 	public NetworkReceiveOperator(MetaData meta)
 	{
 		this.meta = meta;
+		received = new AtomicLong(0);
 	}
 
 	protected NetworkReceiveOperator()
 	{
+		received = new AtomicLong(0);
 	}
 
 	public static NetworkReceiveOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -95,6 +99,8 @@ public class NetworkReceiveOperator implements Operator, Serializable
 		value.start = OperatorUtils.readLong(in);
 		value.node = OperatorUtils.readInt(in);
 		value.cd = cs.newDecoder();
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
 		return value;
 	}
 
@@ -232,6 +238,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 
 		if (o instanceof DataEndMarker)
 		{
+			demReceived = true;
 			o = outBuffer.peek();
 			if (o == null)
 			{
@@ -243,6 +250,10 @@ public class NetworkReceiveOperator implements Operator, Serializable
 				outBuffer.put(new DataEndMarker());
 				return o;
 			}
+		}
+		else
+		{
+			received.getAndIncrement();
 		}
 
 		if (o instanceof Exception)
@@ -263,9 +274,21 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
 	}
 
 	@Override
@@ -344,16 +367,8 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	public void setPlan(Plan plan)
 	{
 	}
-	
-	public void start(boolean flag) throws Exception
-	{
-		outBuffer = new BufferedLinkedBlockingQueue(ResourceManager.QUEUE_SIZE);
-		socks = new HashMap<Operator, Socket>();
-		outs = new HashMap<Operator, OutputStream>();
-		ins = new HashMap<Operator, InputStream>();
-		threads = new ArrayList<ReadThread>();
-	}
-	
+
+	@Override
 	public void start() throws Exception
 	{
 		if (!fullyStarted)
@@ -404,6 +419,15 @@ public class NetworkReceiveOperator implements Operator, Serializable
 				}
 			}
 		}
+	}
+
+	public void start(boolean flag) throws Exception
+	{
+		outBuffer = new BufferedLinkedBlockingQueue(ResourceManager.QUEUE_SIZE);
+		socks = new HashMap<Operator, Socket>();
+		outs = new HashMap<Operator, OutputStream>();
+		ins = new HashMap<Operator, InputStream>();
+		threads = new ArrayList<ReadThread>();
 	}
 
 	@Override
@@ -505,6 +529,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 
 					if (row instanceof Exception)
 					{
+						HRDBMSWorker.logger.debug("", (Exception)row);
 						outBuffer.put(row);
 						return;
 					}

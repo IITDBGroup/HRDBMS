@@ -77,7 +77,7 @@ public final class Phase1
 	{
 		if (op instanceof AntiJoinOperator)
 		{
-			return (long)((1 - meta.likelihood(((AntiJoinOperator)op).getHSHM(), root, tx, op)) * card(op.children().get(0)));
+			return card(op.children().get(0));
 		}
 
 		if (op instanceof CaseOperator)
@@ -122,7 +122,20 @@ public final class Phase1
 					max = temp;
 				}
 			}
-			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * max);
+			long retval = (long)(card(op.children().get(0)) * max * card(op.children().get(1)));
+			if (retval < card(op.children().get(0)))
+			{
+				retval = card(op.children().get(0));
+			}
+			
+			if (retval < card(op.children().get(1)))
+			{
+				retval = card(op.children().get(1));
+			}
+			if (retval == 0)
+			{
+				retval = 1;
+			}
 			return retval;
 		}
 
@@ -133,10 +146,18 @@ public final class Phase1
 
 			if (lCard <= rCard)
 			{
+				if (lCard == 0)
+				{
+					lCard = 1;
+				}
 				return lCard;
 			}
 			else
 			{
+				if (rCard == 0)
+				{
+					rCard = 1;
+				}
 				return rCard;
 			}
 		}
@@ -165,7 +186,20 @@ public final class Phase1
 					max = temp;
 				}
 			}
-			final long retval = (long)(card(op.children().get(0)) * card(op.children().get(1)) * max);
+			long retval = (long)(card(op.children().get(0)) * max * card(op.children().get(1)));
+			if (retval < card(op.children().get(0)))
+			{
+				retval = card(op.children().get(0));
+			}
+			
+			if (retval < card(op.children().get(1)))
+			{
+				retval = card(op.children().get(1));
+			}
+			if (retval == 0)
+			{
+				retval = 1;
+			}
 			return retval;
 		}
 
@@ -177,6 +211,10 @@ public final class Phase1
 				retval += card(o);
 			}
 
+			if (retval == 0)
+			{
+				retval = 1;
+			}
 			return retval;
 		}
 
@@ -197,7 +235,15 @@ public final class Phase1
 
 		if (op instanceof ProductOperator)
 		{
-			return card(op.children().get(0)) * card(op.children().get(1));
+			long temp = card(op.children().get(0)) * card(op.children().get(1));
+			if (temp < 0)
+			{
+				return Long.MAX_VALUE;
+			}
+			else
+			{
+				return temp;
+			}
 		}
 
 		if (op instanceof ProjectOperator)
@@ -227,7 +273,7 @@ public final class Phase1
 
 		if (op instanceof SemiJoinOperator)
 		{
-			return (long)(meta.likelihood(((SemiJoinOperator)op).getHSHM(), root, tx, op) * card(op.children().get(0)));
+			return card(op.children().get(0));
 		}
 
 		if (op instanceof SortOperator)
@@ -242,15 +288,23 @@ public final class Phase1
 
 		if (op instanceof TopOperator)
 		{
-			final long retval = ((TopOperator)op).getRemaining();
-			final long retval2 = card(op.children().get(0));
+			long retval = ((TopOperator)op).getRemaining();
+			long retval2 = card(op.children().get(0));
 
 			if (retval2 < retval)
 			{
+				if (retval2 == 0)
+				{
+					retval2 = 1;
+				}
 				return retval2;
 			}
 			else
 			{
+				if (retval == 0)
+				{
+					retval = 1;
+				}
 				return retval;
 			}
 		}
@@ -263,6 +317,10 @@ public final class Phase1
 				retval += card(o);
 			}
 
+			if (retval == 0)
+			{
+				retval = 1;
+			}
 			return retval;
 		}
 
@@ -303,9 +361,9 @@ public final class Phase1
 
 		combineProductsAndSelects(root);
 		mergeSelectsAndTableScans(root);
-		pushDownProjects();
 		removeUnneededOps(root);
 		projectForSemiAnti(root);
+		pushDownProjects();
 
 		// HRDBMSWorker.logger.debug("Upon exiting P1:"); //DEBUG
 		// printTree(root, 0); //DEBUG
@@ -482,10 +540,7 @@ public final class Phase1
 	private SelectOperator getMostPromisingSelect(ArrayList<SelectOperator> selects, ArrayList<Operator> subtrees, Operator current) throws Exception
 	{
 		double minLikelihood = Double.MAX_VALUE;
-		double minColocated = Double.MAX_VALUE;
 		SelectOperator minSelect = null;
-		SelectOperator minSelect2 = null;
-
 		if (current == null)
 		{
 			// HRDBMSWorker.logger.debug("Current is null");
@@ -590,34 +645,26 @@ public final class Phase1
 				}
 
 				/*
-				if (lefts.size() > 0 && rights.size() > 0)
-				{
-					String leftTable = getTable(left);
-					String rightTable = getTable(right);
-
-					if (leftTable != null && rightTable != null)
-					{
-						String lschema = leftTable.substring(0, leftTable.indexOf('.'));
-						String ltable = leftTable.substring(leftTable.indexOf('.') + 1);
-						String rschema = rightTable.substring(0, rightTable.indexOf('.'));
-						String rtable = rightTable.substring(rightTable.indexOf('.') + 1);
-						PartitionMetaData lpmd = meta.getPartMeta(lschema, ltable, tx);
-						PartitionMetaData rpmd = meta.getPartMeta(rschema, rtable, tx);
-
-						if (lpmd.noNodeGroupSet() && rpmd.noNodeGroupSet())
-						{
-							if (lpmd.getNodeHash() != null && lefts.equals(lpmd.getNodeHash()) && rpmd.getNodeHash() != null && rights.equals(rpmd.getNodeHash()))
-							{
-								if (likelihood < minColocated)
-								{
-									minColocated = likelihood;
-									minSelect2 = select;
-								}
-							}
-						}
-					}
-				}
-				*/
+				 * if (lefts.size() > 0 && rights.size() > 0) { String leftTable
+				 * = getTable(left); String rightTable = getTable(right);
+				 * 
+				 * if (leftTable != null && rightTable != null) { String lschema
+				 * = leftTable.substring(0, leftTable.indexOf('.')); String
+				 * ltable = leftTable.substring(leftTable.indexOf('.') + 1);
+				 * String rschema = rightTable.substring(0,
+				 * rightTable.indexOf('.')); String rtable =
+				 * rightTable.substring(rightTable.indexOf('.') + 1);
+				 * PartitionMetaData lpmd = meta.getPartMeta(lschema, ltable,
+				 * tx); PartitionMetaData rpmd = meta.getPartMeta(rschema,
+				 * rtable, tx);
+				 * 
+				 * if (lpmd.noNodeGroupSet() && rpmd.noNodeGroupSet()) { if
+				 * (lpmd.getNodeHash() != null &&
+				 * lefts.equals(lpmd.getNodeHash()) && rpmd.getNodeHash() !=
+				 * null && rights.equals(rpmd.getNodeHash())) { if (likelihood <
+				 * minColocated) { minColocated = likelihood; minSelect2 =
+				 * select; } } } } }
+				 */
 
 				// HRDBMSWorker.logger.debug("Estimated join cardinality = " +
 				// likelihood); //DEBUG
@@ -630,16 +677,11 @@ public final class Phase1
 			}
 
 			/*
-			if (minColocated <= minLikelihood * 2)
-			{
-				// HRDBMSWorker.logger.debug("Chose " + minColocated); //DEBUG
-				minSelect = minSelect2;
-			}
-			else
-			{
-				// HRDBMSWorker.logger.debug("Chose " + minLikelihood); //DEBUG
-			}
-			*/
+			 * if (minColocated <= minLikelihood * 2) { //
+			 * HRDBMSWorker.logger.debug("Chose " + minColocated); //DEBUG
+			 * minSelect = minSelect2; } else { //
+			 * HRDBMSWorker.logger.debug("Chose " + minLikelihood); //DEBUG }
+			 */
 
 			selects.remove(minSelect);
 			return minSelect;
@@ -854,34 +896,24 @@ public final class Phase1
 			}
 
 			/*
-			if (lefts.size() > 0 && rights.size() > 0)
-			{
-				String leftTable = getTable(left);
-				String rightTable = getTable(right);
-
-				if (leftTable != null && rightTable != null)
-				{
-					String lschema = leftTable.substring(0, leftTable.indexOf('.'));
-					String ltable = leftTable.substring(leftTable.indexOf('.') + 1);
-					String rschema = rightTable.substring(0, rightTable.indexOf('.'));
-					String rtable = rightTable.substring(rightTable.indexOf('.') + 1);
-					PartitionMetaData lpmd = meta.getPartMeta(lschema, ltable, tx);
-					PartitionMetaData rpmd = meta.getPartMeta(rschema, rtable, tx);
-
-					if (lpmd.noNodeGroupSet() && rpmd.noNodeGroupSet())
-					{
-						if (lpmd.getNodeHash() != null && lefts.equals(lpmd.getNodeHash()) && rpmd.getNodeHash() != null && rights.equals(rpmd.getNodeHash()))
-						{
-							if (likelihood < minColocated)
-							{
-								minColocated = likelihood;
-								minSelect2 = select;
-							}
-						}
-					}
-				}
-			}
-			*/
+			 * if (lefts.size() > 0 && rights.size() > 0) { String leftTable =
+			 * getTable(left); String rightTable = getTable(right);
+			 * 
+			 * if (leftTable != null && rightTable != null) { String lschema =
+			 * leftTable.substring(0, leftTable.indexOf('.')); String ltable =
+			 * leftTable.substring(leftTable.indexOf('.') + 1); String rschema =
+			 * rightTable.substring(0, rightTable.indexOf('.')); String rtable =
+			 * rightTable.substring(rightTable.indexOf('.') + 1);
+			 * PartitionMetaData lpmd = meta.getPartMeta(lschema, ltable, tx);
+			 * PartitionMetaData rpmd = meta.getPartMeta(rschema, rtable, tx);
+			 * 
+			 * if (lpmd.noNodeGroupSet() && rpmd.noNodeGroupSet()) { if
+			 * (lpmd.getNodeHash() != null && lefts.equals(lpmd.getNodeHash())
+			 * && rpmd.getNodeHash() != null &&
+			 * rights.equals(rpmd.getNodeHash())) { if (likelihood <
+			 * minColocated) { minColocated = likelihood; minSelect2 = select; }
+			 * } } } }
+			 */
 
 			// HRDBMSWorker.logger.debug("Estimated join cardinality = " +
 			// likelihood); //DEBUG
@@ -894,16 +926,11 @@ public final class Phase1
 		}
 
 		/*
-		if (minColocated <= minLikelihood * 2)
-		{
-			// HRDBMSWorker.logger.debug("Chose " + minColocated); //DEBUG
-			minSelect = minSelect2;
-		}
-		else
-		{
-			// HRDBMSWorker.logger.debug("Chose " + minLikelihood); //DEBUG
-		}
-		*/
+		 * if (minColocated <= minLikelihood * 2) { //
+		 * HRDBMSWorker.logger.debug("Chose " + minColocated); //DEBUG minSelect
+		 * = minSelect2; } else { // HRDBMSWorker.logger.debug("Chose " +
+		 * minLikelihood); //DEBUG }
+		 */
 
 		selects.remove(minSelect);
 		return minSelect;
@@ -934,39 +961,6 @@ public final class Phase1
 			HRDBMSWorker.logger.debug(op.getCols2Pos().keySet());
 		}
 		return null;
-	}
-
-	private String getTable(Operator op)
-	{
-		if (op instanceof TableScanOperator)
-		{
-			return ((TableScanOperator)op).getSchema() + "." + ((TableScanOperator)op).getTable();
-		}
-		else
-		{
-			HashSet<String> retval = new HashSet<String>();
-			for (Operator o : op.children())
-			{
-				String ret = getTable(o);
-				if (ret == null)
-				{
-					return null;
-				}
-				else
-				{
-					retval.add(ret);
-				}
-			}
-
-			if (retval.size() == 1)
-			{
-				return (String)retval.toArray()[0];
-			}
-			else
-			{
-				return null;
-			}
-		}
 	}
 
 	private void mergeSelectsAndTableScans(Operator op) throws Exception
@@ -1234,7 +1228,7 @@ public final class Phase1
 		{
 			return;
 		}
-		
+
 		if (op instanceof SelectOperator)
 		{
 			if (!anyHope(op))
@@ -1259,7 +1253,7 @@ public final class Phase1
 
 			int i = 0;
 			while (i < child.children().size())
-			// for (Operator grandChild : grandChildren)
+				// for (Operator grandChild : grandChildren)
 			{
 				final Operator grandChild = child.children().get(i);
 				// can I push down to be a parent of this operator?
@@ -1365,7 +1359,7 @@ public final class Phase1
 		{
 			return;
 		}
-		
+
 		if (op instanceof SelectOperator)
 		{
 			if (!anyHope(op))
@@ -1426,7 +1420,7 @@ public final class Phase1
 
 			int i = 0;
 			while (i < child.children().size())
-			// for (Operator grandChild : grandChildren)
+				// for (Operator grandChild : grandChildren)
 			{
 				final Operator grandChild = child.children().get(i);
 				// can I push down to be a parent of this operator?
@@ -1844,7 +1838,7 @@ public final class Phase1
 			reorderProducts(operator);
 		}
 	}
-	
+
 	private void transitive(ArrayList<SelectOperator> list) throws Exception
 	{
 		ConcurrentHashMap<Filter, Filter> set = new ConcurrentHashMap<Filter, Filter>();
@@ -1860,8 +1854,7 @@ public final class Phase1
 				}
 			}
 		}
-		
-		
+
 		boolean didWork = true;
 		while (didWork)
 		{

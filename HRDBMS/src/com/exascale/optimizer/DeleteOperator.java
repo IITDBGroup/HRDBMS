@@ -10,14 +10,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
-import java.util.Iterator;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
 import com.exascale.filesystem.RID;
 import com.exascale.managers.HRDBMSWorker;
-import com.exascale.managers.ResourceManager;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MultiHashMap;
 import com.exascale.tables.Plan;
@@ -200,9 +198,21 @@ public final class DeleteOperator implements Operator, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return 0;
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return false;
 	}
 
 	@Override
@@ -268,6 +278,9 @@ public final class DeleteOperator implements Operator, Serializable
 		ArrayList<ArrayList<String>> keys = meta.getKeys(indexes, tx);
 		ArrayList<ArrayList<String>> types = meta.getTypes(indexes, tx);
 		ArrayList<ArrayList<Boolean>> orders = meta.getOrders(indexes, tx);
+		TreeMap<Integer, String> tP2C = meta.getPos2ColForTable(schema, table, tx);
+		HashMap<String, String> tC2T = meta.getCols2TypesForTable(schema, table, tx);
+		int type = meta.getTypeForTable(schema, table, tx);
 
 		Object o = child.next(this);
 		while (!(o instanceof DataEndMarker))
@@ -303,7 +316,7 @@ public final class DeleteOperator implements Operator, Serializable
 			num.incrementAndGet();
 			if (map.size() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes")))
 			{
-				flush(indexes, keys, types, orders);
+				flush(indexes, keys, types, orders, tP2C, tC2T, type);
 				if (num.get() == Integer.MIN_VALUE)
 				{
 					done = true;
@@ -312,20 +325,20 @@ public final class DeleteOperator implements Operator, Serializable
 			}
 			else if (map.totalSize() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_batch")))
 			{
-				flush(indexes, keys, types, orders);
+				flush(indexes, keys, types, orders, tP2C, tC2T, type);
 				if (num.get() == Integer.MIN_VALUE)
 				{
 					done = true;
 					return;
 				}
 			}
-			
+
 			o = child.next(this);
 		}
 
 		if (map.totalSize() > 0)
 		{
-			flush(indexes, keys, types, orders);
+			flush(indexes, keys, types, orders, tP2C, tC2T, type);
 		}
 
 		done = true;
@@ -337,7 +350,7 @@ public final class DeleteOperator implements Operator, Serializable
 		return "DeleteOperator";
 	}
 
-	private void flush(ArrayList<String> indexes, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders) throws Exception
+	private void flush(ArrayList<String> indexes, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, TreeMap<Integer, String> tP2C, HashMap<String, String> tC2T, int type) throws Exception
 	{
 		ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
 		for (Object o : map.getKeySet())
@@ -350,12 +363,12 @@ public final class DeleteOperator implements Operator, Serializable
 
 				for (Integer coord : coords)
 				{
-					threads.add(new FlushThread(list, indexes, coord, keys, types, orders));
+					threads.add(new FlushThread(list, indexes, coord, keys, types, orders, tP2C, tC2T, type));
 				}
 			}
 			else
 			{
-				threads.add(new FlushThread(list, indexes, node, keys, types, orders));
+				threads.add(new FlushThread(list, indexes, node, keys, types, orders, tP2C, tC2T, type));
 			}
 		}
 
@@ -413,8 +426,11 @@ public final class DeleteOperator implements Operator, Serializable
 		private final ArrayList<ArrayList<String>> keys;
 		private final ArrayList<ArrayList<String>> types;
 		private final ArrayList<ArrayList<Boolean>> orders;
+		private final TreeMap<Integer, String> tP2C;
+		private final HashMap<String, String> tC2T;
+		private final int type;
 
-		public FlushThread(Set<RIDAndIndexKeys> list, ArrayList<String> indexes, int node, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders)
+		public FlushThread(Set<RIDAndIndexKeys> list, ArrayList<String> indexes, int node, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, TreeMap<Integer, String> tP2C, HashMap<String, String> tC2T, int type)
 		{
 			this.list = list;
 			this.indexes = indexes;
@@ -422,6 +438,9 @@ public final class DeleteOperator implements Operator, Serializable
 			this.keys = keys;
 			this.types = types;
 			this.orders = orders;
+			this.tP2C = tP2C;
+			this.tC2T = tC2T;
+			this.type = type;
 		}
 
 		public boolean getOK()
@@ -457,12 +476,15 @@ public final class DeleteOperator implements Operator, Serializable
 				out.write(longToBytes(tx.number()));
 				out.write(stringToBytes(schema));
 				out.write(stringToBytes(table));
+				out.write(intToBytes(type));
 				ObjectOutputStream objOut = new ObjectOutputStream(out);
 				objOut.writeObject(indexes);
 				objOut.writeObject(new ArrayList(list));
 				objOut.writeObject(keys);
 				objOut.writeObject(types);
 				objOut.writeObject(orders);
+				objOut.writeObject(tP2C);
+				objOut.writeObject(tC2T);
 				objOut.flush();
 				out.flush();
 				getConfirmation(sock);

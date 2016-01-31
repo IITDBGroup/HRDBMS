@@ -13,6 +13,7 @@ import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
+import java.nio.file.FileVisitOption;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,7 +34,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import com.exascale.managers.HRDBMSWorker;
-import com.exascale.managers.ResourceManager;
 import com.exascale.mapred.ALOWritable;
 import com.exascale.mapred.LoadMapper;
 import com.exascale.mapred.LoadOutputFormat;
@@ -42,7 +42,6 @@ import com.exascale.mapred.MyLongWritable;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.FastStringTokenizer;
 import com.exascale.misc.LOMultiHashMap;
-import com.exascale.misc.MultiHashMap;
 import com.exascale.misc.MyDate;
 import com.exascale.misc.ScalableStampedRWLock;
 import com.exascale.misc.Utils;
@@ -53,6 +52,11 @@ import com.exascale.threads.HRDBMSThread;
 
 public final class LoadOperator implements Operator, Serializable
 {
+	private static int MAX_NEIGHBOR_NODES = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
+	private static String DATA_DIRS = HRDBMSWorker.getHParms().getProperty("data_directories");
+	private static long MAX_QUEUED = Long.parseLong(HRDBMSWorker.getHParms().getProperty("max_queued_load_flush_threads"));
+	private static int PORT_NUMBER = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"));
+	private static int MAX_BATCH = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_batch"));
 	private final MetaData meta;
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
@@ -72,13 +76,8 @@ public final class LoadOperator implements Operator, Serializable
 	private final ArrayList<String> types2 = new ArrayList<String>();
 	private final ArrayList<FlushThread> fThreads = new ArrayList<FlushThread>();
 	private transient ConcurrentHashMap<Pair, AtomicInteger> waitTill;
-	private transient ArrayList<FlushThread> waitThreads;
+	private volatile transient ArrayList<FlushThread> waitThreads;
 	private transient ScalableStampedRWLock lock;
-	private static int MAX_NEIGHBOR_NODES = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
-	private static String DATA_DIRS = HRDBMSWorker.getHParms().getProperty("data_directories");
-	private static long MAX_QUEUED = Long.parseLong(HRDBMSWorker.getHParms().getProperty("max_queued_load_flush_threads"));
-	private static int PORT_NUMBER = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"));
-	private static int MAX_BATCH = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_batch"));
 
 	public LoadOperator(String schema, String table, boolean replace, String delimiter, String glob, MetaData meta)
 	{
@@ -445,10 +444,20 @@ public final class LoadOperator implements Operator, Serializable
 				if (retval[i] == 0)
 				{
 					retvalBB.putLong((Long)o);
+					// if ((Long)o < 0)
+					// {
+					// HRDBMSWorker.logger.debug("Negative long value in rsToBytes: "
+					// + o);
+					// }
 				}
 				else if (retval[i] == 1)
 				{
 					retvalBB.putInt((Integer)o);
+					// if ((Integer)o < 0)
+					// {
+					// HRDBMSWorker.logger.debug("Negative int value in rsToBytes: "
+					// + o);
+					// }
 				}
 				else if (retval[i] == 2)
 				{
@@ -616,9 +625,21 @@ public final class LoadOperator implements Operator, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return 0;
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return false;
 	}
 
 	@Override
@@ -677,7 +698,7 @@ public final class LoadOperator implements Operator, Serializable
 	public void start() throws Exception
 	{
 		lock = new ScalableStampedRWLock();
-		waitTill = new ConcurrentHashMap<Pair, AtomicInteger>();
+		waitTill = new ConcurrentHashMap<Pair, AtomicInteger>(64 * 16 * 1024, 0.75f, 64);
 		waitThreads = new ArrayList<FlushThread>();
 		if (replace)
 		{
@@ -692,6 +713,7 @@ public final class LoadOperator implements Operator, Serializable
 		cols2Pos = new MetaData().getCols2PosForTable(schema, table, tx);
 		pos2Col = MetaData.cols2PosFlip(cols2Pos);
 		cols2Types = new MetaData().getCols2TypesForTable(schema, table, tx);
+		int type = meta.getTypeForTable(schema, table, tx);
 
 		for (String col : pos2Col.values())
 		{
@@ -699,25 +721,32 @@ public final class LoadOperator implements Operator, Serializable
 		}
 
 		ArrayList<String> indexes = meta.getIndexFileNamesForTable(schema, table, tx);
-		//DEBUG
-		//if (indexes.size() == 0)
-		//{
-		//	Exception e = new Exception();
-		//	HRDBMSWorker.logger.debug("No indexes found", e);
-		//}
-		//DEBUG
+		ArrayList<String> indexNames = new ArrayList<String>();
+		for (String s : indexes)
+		{
+			int start = s.indexOf('.') + 1;
+			int end = s.indexOf('.', start);
+			indexNames.add(s.substring(start, end));
+		}
+		// DEBUG
+		// if (indexes.size() == 0)
+		// {
+		// Exception e = new Exception();
+		// HRDBMSWorker.logger.debug("No indexes found", e);
+		// }
+		// DEBUG
 		ArrayList<ArrayList<String>> keys = meta.getKeys(indexes, tx);
-		//DEBUG
-		//HRDBMSWorker.logger.debug("Keys = " + keys);
-		//DEBUG
+		// DEBUG
+		// HRDBMSWorker.logger.debug("Keys = " + keys);
+		// DEBUG
 		ArrayList<ArrayList<String>> types = meta.getTypes(indexes, tx);
-		//DEBUG
-		//HRDBMSWorker.logger.debug("Types = " + types);
-		//DEBUG
+		// DEBUG
+		// HRDBMSWorker.logger.debug("Types = " + types);
+		// DEBUG
 		ArrayList<ArrayList<Boolean>> orders = meta.getOrders(indexes, tx);
-		//DEBUG
-		//HRDBMSWorker.logger.debug("Orders = " + orders);
-		//DEBUG
+		// DEBUG
+		// HRDBMSWorker.logger.debug("Orders = " + orders);
+		// DEBUG
 
 		HashMap<Integer, Integer> pos2Length = new HashMap<Integer, Integer>();
 		for (Map.Entry entry : cols2Types.entrySet())
@@ -738,15 +767,57 @@ public final class LoadOperator implements Operator, Serializable
 		// figure out what files to read from
 		final ArrayList<Path> files = new ArrayList<Path>();
 		final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + glob);
-		Files.walkFileTree(Paths.get("/"), new SimpleFileVisitor<Path>() {
+		int a = 0;
+		int b = 0;
+		while (a < glob.length())
+		{
+			if (glob.charAt(a) == '/')
+			{
+				b = a;
+			}
+
+			if (glob.charAt(a) == '*')
+			{
+				break;
+			}
+
+			a++;
+		}
+
+		String startingPath = glob.substring(0, b + 1);
+		Set<FileVisitOption> options = new HashSet<FileVisitOption>();
+		HashSet<String> dirs = new HashSet<String>();
+		options.add(FileVisitOption.FOLLOW_LINKS);
+		HRDBMSWorker.logger.debug("Starting search with directory: " + startingPath);
+		Files.walkFileTree(Paths.get(startingPath), options, Integer.MAX_VALUE, new SimpleFileVisitor<Path>() {
+			@Override
+			public FileVisitResult postVisitDirectory(Path file, IOException exc) throws IOException
+			{
+				return FileVisitResult.CONTINUE;
+			}
+
 			@Override
 			public FileVisitResult visitFile(Path file, java.nio.file.attribute.BasicFileAttributes attrs) throws IOException
 			{
-				if (matcher.matches(file))
+				try
 				{
-					files.add(file);
+					String dir = file.getParent().toString();
+					if (!dirs.contains(dir))
+					{
+						dirs.add(dir);
+						HRDBMSWorker.logger.debug("New directory visited: " + dir);
+					}
+					if (matcher.matches(file))
+					{
+						files.add(file);
+					}
+					return FileVisitResult.CONTINUE;
 				}
-				return FileVisitResult.CONTINUE;
+				catch (Exception e)
+				{
+					HRDBMSWorker.logger.debug("", e);
+					return FileVisitResult.CONTINUE;
+				}
 			}
 
 			@Override
@@ -768,7 +839,7 @@ public final class LoadOperator implements Operator, Serializable
 		{
 			HRDBMSWorker.logger.debug(debug + ") " + path);
 			debug++;
-			threads.add(new ReadThread(path.toFile(), pos2Length, indexes, cols2Pos, cols2Types, pos2Col, spmd, keys, types, orders));
+			threads.add(new ReadThread(path.toFile(), pos2Length, indexes, cols2Pos, cols2Types, pos2Col, spmd, keys, types, orders, type));
 		}
 
 		for (ReadThread thread : threads)
@@ -801,6 +872,11 @@ public final class LoadOperator implements Operator, Serializable
 		if (!allOK)
 		{
 			num.set(Integer.MIN_VALUE);
+		}
+
+		for (String index : indexNames)
+		{
+			meta.populateIndex(schema, index, table, tx, cols2Pos);
 		}
 
 		done = true;
@@ -920,16 +996,16 @@ public final class LoadOperator implements Operator, Serializable
 		}
 	}
 
-	private FlushMasterThread flush(ArrayList<String> indexes, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders) throws Exception
+	private FlushMasterThread flush(ArrayList<String> indexes, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, boolean force, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type) throws Exception
 	{
-		FlushMasterThread master = new FlushMasterThread(indexes, spmd, keys, types, orders);
+		FlushMasterThread master = new FlushMasterThread(indexes, spmd, keys, types, orders, true, pos2Col, cols2Types, type);
 		master.start();
 		return master;
 	}
-	
-	private FlushMasterThread flush(ArrayList<String> indexes, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, boolean force) throws Exception
+
+	private FlushMasterThread flush(ArrayList<String> indexes, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type) throws Exception
 	{
-		FlushMasterThread master = new FlushMasterThread(indexes, spmd, keys, types, orders, true);
+		FlushMasterThread master = new FlushMasterThread(indexes, spmd, keys, types, orders, pos2Col, cols2Types, type);
 		master.start();
 		return master;
 	}
@@ -1056,17 +1132,11 @@ public final class LoadOperator implements Operator, Serializable
 		private final ArrayList<ArrayList<String>> types;
 		private final ArrayList<ArrayList<Boolean>> orders;
 		private boolean force = false;
+		private final TreeMap<Integer, String> pos2Col;
+		private final HashMap<String, String> cols2Types;
+		private final int type;
 
-		public FlushMasterThread(ArrayList<String> indexes, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders)
-		{
-			this.indexes = indexes;
-			this.spmd = spmd;
-			this.keys = keys;
-			this.types = types;
-			this.orders = orders;
-		}
-		
-		public FlushMasterThread(ArrayList<String> indexes, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, boolean force)
+		public FlushMasterThread(ArrayList<String> indexes, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, boolean force, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type)
 		{
 			this.indexes = indexes;
 			this.spmd = spmd;
@@ -1074,6 +1144,21 @@ public final class LoadOperator implements Operator, Serializable
 			this.types = types;
 			this.orders = orders;
 			this.force = force;
+			this.pos2Col = pos2Col;
+			this.cols2Types = cols2Types;
+			this.type = type;
+		}
+
+		public FlushMasterThread(ArrayList<String> indexes, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type)
+		{
+			this.indexes = indexes;
+			this.spmd = spmd;
+			this.keys = keys;
+			this.types = types;
+			this.orders = orders;
+			this.pos2Col = pos2Col;
+			this.cols2Types = cols2Types;
+			this.type = type;
 		}
 
 		public boolean getOK()
@@ -1089,10 +1174,9 @@ public final class LoadOperator implements Operator, Serializable
 			{
 				return;
 			}
-			
+
 			ArrayList<FlushThread> threads = null;
-			
-			synchronized(waitThreads)
+
 			{
 				lock.writeLock().lock();
 				{
@@ -1101,13 +1185,13 @@ public final class LoadOperator implements Operator, Serializable
 						lock.writeLock().unlock();
 						return;
 					}
-					
+
 					threads = new ArrayList<FlushThread>();
 					for (Object o : map.getKeySet())
 					{
 						long key = (Long)o;
 						Set<ArrayList<Object>> list = map.get(key);
-						threads.add(new FlushThread(list, indexes, key, cols2Pos, spmd, keys, types, orders));
+						threads.add(new FlushThread(list, indexes, key, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type));
 					}
 
 					map.clear();
@@ -1116,7 +1200,7 @@ public final class LoadOperator implements Operator, Serializable
 					for (FlushThread thread : threads)
 					{
 						AtomicInteger ai = waitTill.get(new Pair(thread.getNode(), thread.getDevice()));
-					
+
 						if (ai != null)
 						{
 							int newCount = ai.incrementAndGet();
@@ -1136,116 +1220,83 @@ public final class LoadOperator implements Operator, Serializable
 							thread.start();
 						}
 					}
-			
-					for (FlushThread thread : (ArrayList<FlushThread>)waitThreads.clone())
+
+					ArrayList<FlushThread> clone = new ArrayList<FlushThread>();
+					for (FlushThread thread : waitThreads)
 					{
 						AtomicInteger ai = waitTill.get(new Pair(thread.getNode(), thread.getDevice()));
-					
+
 						if (ai != null)
 						{
 							int newCount = ai.incrementAndGet();
 							if (newCount > 2)
 							{
 								ai.decrementAndGet();
-							}	
+								clone.add(thread);
+							}
 							else
 							{
 								thread.start();
-								if (!waitThreads.remove(thread))
-								{
-									HRDBMSWorker.logger.debug("Failed to remove a thread from waitThreads!");
-								}
-							}	
+							}
 						}
 						else
 						{
 							waitTill.put(new Pair(thread.getNode(), thread.getDevice()), new AtomicInteger(1));
 							thread.start();
-							if (!waitThreads.remove(thread))
-							{
-								HRDBMSWorker.logger.debug("Failed to remove a thread from waitThreads!");
-							}
 						}
 					}
-			
+
+					waitThreads = clone;
 					waitThreads.addAll(temp);
-			
+
 					while (waitThreads.size() > MAX_QUEUED)
 					{
 						try
 						{
-							Thread.sleep(10);
+							Thread.sleep(1);
 						}
-						catch(InterruptedException e)
-						{}
-						
-						//HRDBMSWorker.logger.debug("# of waiting threads = " + waitThreads.size()); //DEBUG
-						
-						for (FlushThread thread : (ArrayList<FlushThread>)waitThreads.clone())
+						catch (InterruptedException e)
+						{
+						}
+
+						// HRDBMSWorker.logger.debug("# of waiting threads = " +
+						// waitThreads.size()); //DEBUG
+
+						clone = new ArrayList<FlushThread>();
+						for (FlushThread thread : waitThreads)
 						{
 							AtomicInteger ai = waitTill.get(new Pair(thread.getNode(), thread.getDevice()));
-				
+
 							if (ai != null)
 							{
 								int newCount = ai.incrementAndGet();
 								if (newCount > 2)
 								{
 									ai.decrementAndGet();
+									clone.add(thread);
 								}
 								else
 								{
 									thread.start();
-									if (!waitThreads.remove(thread))
-									{
-										HRDBMSWorker.logger.debug("Failed to remove a thread from waitThreads!");
-									}
-								}		
+								}
 							}
 							else
 							{
 								waitTill.put(new Pair(thread.getNode(), thread.getDevice()), new AtomicInteger(1));
 								thread.start();
-								if (!waitThreads.remove(thread))
-								{
-									HRDBMSWorker.logger.debug("Failed to remove a thread from waitThreads!");
-								}
-							}	
+							}
 						}
+
+						waitThreads = clone;
 					}
 				}
 				lock.writeLock().unlock();
 			}
 
-			synchronized(fThreads)
+			synchronized (fThreads)
 			{
 				fThreads.addAll(threads);
 			}
-		}
-	}
-	
-	private class Pair
-	{
-		private int node;
-		private int device;
-		
-		public Pair(int node, int device)
-		{
-			this.node = node;
-			this.device = device;
-		}
-		
-		public int hashCode()
-		{
-			int val = 31;
-			val = val * 23 + node;
-			val = val * 23 + device;
-			return val;
-		}
-		
-		public boolean equals(Object o)
-		{
-			Pair rhs = (Pair)o;
-			return node == rhs.node && device == rhs.device;
 		}
 	}
 
@@ -1259,8 +1310,11 @@ public final class LoadOperator implements Operator, Serializable
 		private ArrayList<ArrayList<String>> keys;
 		private ArrayList<ArrayList<String>> types;
 		private ArrayList<ArrayList<Boolean>> orders;
+		private final TreeMap<Integer, String> pos2Col;
+		private final HashMap<String, String> cols2Types;
+		private final int type;
 
-		public FlushThread(Set<ArrayList<Object>> list, ArrayList<String> indexes, long key, HashMap<String, Integer> cols2Pos, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders)
+		public FlushThread(Set<ArrayList<Object>> list, ArrayList<String> indexes, long key, HashMap<String, Integer> cols2Pos, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type)
 		{
 			this.list = list;
 			this.indexes = indexes;
@@ -1269,21 +1323,24 @@ public final class LoadOperator implements Operator, Serializable
 			this.keys = keys;
 			this.types = types;
 			this.orders = orders;
+			this.pos2Col = pos2Col;
+			this.cols2Types = cols2Types;
+			this.type = type;
+		}
+
+		public int getDevice()
+		{
+			return (int)(key & 0xFFFFFFFFL);
+		}
+
+		public int getNode()
+		{
+			return (int)(key >> 32);
 		}
 
 		public boolean getOK()
 		{
 			return ok;
-		}
-		
-		public int getNode()
-		{
-			return (int)(key >> 32);
-		}
-		
-		public int getDevice()
-		{
-			return (int)(key & 0xFFFFFFFFL);
 		}
 
 		@Override
@@ -1317,6 +1374,7 @@ public final class LoadOperator implements Operator, Serializable
 				out.write(intToBytes(device));
 				out.write(stringToBytes(schema));
 				out.write(stringToBytes(table));
+				out.write(intToBytes(type));
 				out.write(rsToBytes(list));
 				list = null;
 				ObjectOutputStream objOut = new ObjectOutputStream(out);
@@ -1325,6 +1383,8 @@ public final class LoadOperator implements Operator, Serializable
 				objOut.writeObject(types);
 				objOut.writeObject(orders);
 				objOut.writeObject(cols2Pos);
+				objOut.writeObject(pos2Col);
+				objOut.writeObject(cols2Types);
 				objOut.flush();
 				out.flush();
 				getConfirmation(sock);
@@ -1385,7 +1445,7 @@ public final class LoadOperator implements Operator, Serializable
 
 			String inStr = new String(inMsg, StandardCharsets.UTF_8);
 			if (!inStr.equals("OK"))
-			{	
+			{
 				in.close();
 				throw new Exception();
 			}
@@ -1397,6 +1457,34 @@ public final class LoadOperator implements Operator, Serializable
 			catch (Exception e)
 			{
 			}
+		}
+	}
+
+	private class Pair
+	{
+		private final int node;
+		private final int device;
+
+		public Pair(int node, int device)
+		{
+			this.node = node;
+			this.device = device;
+		}
+
+		@Override
+		public boolean equals(Object o)
+		{
+			Pair rhs = (Pair)o;
+			return node == rhs.node && device == rhs.device;
+		}
+
+		@Override
+		public int hashCode()
+		{
+			int val = 31;
+			val = val * 23 + node;
+			val = val * 23 + device;
+			return val;
 		}
 	}
 
@@ -1412,8 +1500,11 @@ public final class LoadOperator implements Operator, Serializable
 		private final ArrayList<ArrayList<String>> keys;
 		private final ArrayList<ArrayList<String>> types;
 		private final ArrayList<ArrayList<Boolean>> orders;
+		private final TreeMap<Integer, String> pos2Col;
+		private final HashMap<String, String> cols2Types;
+		private final int type;
 
-		public ReadThread(File file, HashMap<Integer, Integer> pos2Length, ArrayList<String> indexes, HashMap<String, Integer> cols2Pos, HashMap<String, String> cols2Types, TreeMap<Integer, String> pos2Col, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders)
+		public ReadThread(File file, HashMap<Integer, Integer> pos2Length, ArrayList<String> indexes, HashMap<String, Integer> cols2Pos, HashMap<String, String> cols2Types, TreeMap<Integer, String> pos2Col, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, int type)
 		{
 			this.file = file;
 			this.pos2Length = pos2Length;
@@ -1423,6 +1514,9 @@ public final class LoadOperator implements Operator, Serializable
 			this.keys = keys;
 			this.types = types;
 			this.orders = orders;
+			this.pos2Col = pos2Col;
+			this.cols2Types = cols2Types;
+			this.type = type;
 		}
 
 		public int getNum()
@@ -1459,7 +1553,7 @@ public final class LoadOperator implements Operator, Serializable
 					}
 					ArrayList<Integer> nodes = MetaData.determineNode(schema, table, row, tx, pmeta, cols2Pos, numNodes);
 					int device = MetaData.determineDevice(row, pmeta, cols2Pos);
-					
+
 					lock.readLock().lock();
 					for (Integer node : nodes)
 					{
@@ -1478,8 +1572,8 @@ public final class LoadOperator implements Operator, Serializable
 								throw new Exception("Error flushing inserts");
 							}
 						}
-						
-						master = flush(indexes, spmd, keys, types, orders);
+
+						master = flush(indexes, spmd, keys, types, orders, pos2Col, cols2Types, type);
 					}
 
 					o = next(in);
@@ -1493,39 +1587,37 @@ public final class LoadOperator implements Operator, Serializable
 						throw new Exception("Error flushing inserts");
 					}
 				}
-				
+
 				if (map.totalSize() > 0)
-				{	
-					master = flush(indexes, spmd, keys, types, orders, true);
+				{
+					master = flush(indexes, spmd, keys, types, orders, true, pos2Col, cols2Types, type);
 					master.join();
 					if (!master.getOK())
 					{
 						throw new Exception("Error flushing inserts");
-					}
-				}
-				
-				int count;
-				synchronized(waitThreads)
-				{
-					count = waitThreads.size();
-				}
-				
-				while (count > 0 && map.totalSize() == 0)
-				{
-					master = flush(indexes, spmd, keys, types, orders, true);
-					master.join();
-					if (!master.getOK())
-					{
-						throw new Exception("Error flushing inserts");
-					}
-					
-					synchronized(waitThreads)
-					{
-						count = waitThreads.size();
 					}
 				}
 
-				synchronized(fThreads)
+				int count;
+				lock.readLock().lock();
+				count = waitThreads.size();
+				lock.readLock().unlock();
+
+				while (count > 0 && map.totalSize() == 0)
+				{
+					master = flush(indexes, spmd, keys, types, orders, true, pos2Col, cols2Types, type);
+					master.join();
+					if (!master.getOK())
+					{
+						throw new Exception("Error flushing inserts");
+					}
+
+					lock.readLock().lock();
+					count = waitThreads.size();
+					lock.readLock().unlock();
+				}
+
+				synchronized (fThreads)
 				{
 					for (FlushThread thread : fThreads)
 					{

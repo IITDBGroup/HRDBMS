@@ -1,6 +1,7 @@
 package com.exascale.optimizer;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
@@ -14,6 +15,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 import com.exascale.misc.BufferedFileChannel;
@@ -64,10 +66,13 @@ public final class IntersectOperator implements Operator, Serializable
 	private transient ArrayList<ArrayList<RandomAccessFile>> rafs;
 
 	private transient ArrayList<ArrayList<FileChannel>> fcs;
+	private transient AtomicLong received;
+	private transient volatile boolean demReceived;
 
 	public IntersectOperator(MetaData meta)
 	{
 		this.meta = meta;
+		received = new AtomicLong(0);
 	}
 
 	public static IntersectOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -83,6 +88,8 @@ public final class IntersectOperator implements Operator, Serializable
 		value.estimate = OperatorUtils.readInt(in);
 		value.startDone = OperatorUtils.readBool(in);
 		value.estimateSet = OperatorUtils.readBool(in);
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
 		return value;
 	}
 
@@ -214,9 +221,21 @@ public final class IntersectOperator implements Operator, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
 	}
 
 	@Override
@@ -343,6 +362,316 @@ public final class IntersectOperator implements Operator, Serializable
 		return "IntersectOperator";
 	}
 
+	private void cleanupExternal()
+	{
+		for (ArrayList<FileChannel> fc : fcs)
+		{
+			for (FileChannel f : fc)
+			{
+				try
+				{
+					f.close();
+				}
+				catch (Exception e)
+				{
+				}
+			}
+		}
+
+		for (ArrayList<RandomAccessFile> raf : rafs)
+		{
+			for (RandomAccessFile r : raf)
+			{
+				try
+				{
+					r.close();
+				}
+				catch (Exception e)
+				{
+				}
+			}
+		}
+
+		for (ArrayList<String> files : externalFiles)
+		{
+			for (String fn : files)
+			{
+				new File(fn).delete();
+			}
+		}
+	}
+
+	private void createTempFiles() throws Exception
+	{
+		int i = 0; // fileNum
+		externalFiles = new ArrayList<ArrayList<String>>();
+		rafs = new ArrayList<ArrayList<RandomAccessFile>>();
+		fcs = new ArrayList<ArrayList<FileChannel>>();
+		while (i < numFiles)
+		{
+			ArrayList<String> files = new ArrayList<String>();
+			ArrayList<RandomAccessFile> raf = new ArrayList<RandomAccessFile>();
+			ArrayList<FileChannel> fc = new ArrayList<FileChannel>();
+			int j = 0; // child num
+			while (j < children.size())
+			{
+				String fn = ResourceManager.TEMP_DIRS.get(i % ResourceManager.TEMP_DIRS.size()) + this.hashCode() + "" + System.currentTimeMillis() + ".exths" + i + "." + j;
+				files.add(fn);
+				RandomAccessFile r = null;
+				while (true)
+				{
+					try
+					{
+						r = new RandomAccessFile(fn, "rw");
+						break;
+					}
+					catch (FileNotFoundException e)
+					{
+						ResourceManager.panic = true;
+						try
+						{
+							Thread.sleep(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("rm_sleep_time_ms")) / 2);
+						}
+						catch (Exception f)
+						{
+						}
+					}
+				}
+				raf.add(r);
+				fc.add(r.getChannel());
+				j++;
+			}
+
+			externalFiles.add(files);
+			rafs.add(raf);
+			fcs.add(fc);
+			i++;
+		}
+	}
+
+	private void doExternal()
+	{
+		int i = 0; // fileNum
+		ArrayList<HashSet<ArrayList<Object>>> sets = new ArrayList<HashSet<ArrayList<Object>>>();
+		ReadBackThread thread = new ReadBackThread(i, sets);
+		thread.start();
+		while (i < numFiles)
+		{
+			while (true)
+			{
+				try
+				{
+					thread.join();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			if (i + 1 < numFiles)
+			{
+				sets = new ArrayList<HashSet<ArrayList<Object>>>();
+				thread = new ReadBackThread(i + 1, sets);
+				thread.start();
+			}
+
+			i++;
+		}
+	}
+
+	private void flushBucket(ArrayList<byte[]> bucket, int fileNum, int childNum) throws Exception
+	{
+		FileChannel fc = fcs.get(fileNum).get(childNum);
+		for (byte[] data : bucket)
+		{
+			ByteBuffer bb = ByteBuffer.wrap(data);
+			fc.write(bb);
+		}
+
+		bucket.clear();
+	}
+
+	private void flushBuckets(ArrayList<ArrayList<byte[]>> buckets, int childNum) throws Exception
+	{
+		int i = 0;
+		for (ArrayList<byte[]> bucket : buckets)
+		{
+			flushBucket(bucket, i, childNum);
+			i++;
+		}
+	}
+
+	private long hash(byte[] key) throws Exception
+	{
+		long eHash;
+		if (key == null)
+		{
+			eHash = 0;
+		}
+		else
+		{
+			eHash = MurmurHash.hash64(key, key.length);
+		}
+
+		return eHash & 0x7FFFFFFFFFFFFFFFL;
+	}
+
+	private final byte[] toBytes(Object v) throws Exception
+	{
+		ArrayList<byte[]> bytes = null;
+		ArrayList<Object> val;
+		if (v instanceof ArrayList)
+		{
+			val = (ArrayList<Object>)v;
+		}
+		else
+		{
+			final byte[] retval = new byte[9];
+			retval[0] = 0;
+			retval[1] = 0;
+			retval[2] = 0;
+			retval[3] = 5;
+			retval[4] = 0;
+			retval[5] = 0;
+			retval[6] = 0;
+			retval[7] = 1;
+			retval[8] = 5;
+			return retval;
+		}
+
+		int size = val.size() + 8;
+		final byte[] header = new byte[size];
+		int i = 8;
+		int z = 0;
+		int limit = val.size();
+		// for (final Object o : val)
+		while (z < limit)
+		{
+			Object o = val.get(z++);
+			if (o instanceof Long)
+			{
+				header[i] = (byte)0;
+				size += 8;
+			}
+			else if (o instanceof Integer)
+			{
+				header[i] = (byte)1;
+				size += 4;
+			}
+			else if (o instanceof Double)
+			{
+				header[i] = (byte)2;
+				size += 8;
+			}
+			else if (o instanceof MyDate)
+			{
+				header[i] = (byte)3;
+				size += 4;
+			}
+			else if (o instanceof String)
+			{
+				header[i] = (byte)4;
+				byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
+				size += (4 + b.length);
+
+				if (bytes == null)
+				{
+					bytes = new ArrayList<byte[]>();
+					bytes.add(b);
+				}
+				else
+				{
+					bytes.add(b);
+				}
+			}
+			// else if (o instanceof AtomicLong)
+			// {
+			// header[i] = (byte)6;
+			// size += 8;
+			// }
+			// else if (o instanceof AtomicBigDecimal)
+			// {
+			// header[i] = (byte)7;
+			// size += 8;
+			// }
+			else if (o instanceof ArrayList)
+			{
+				if (((ArrayList)o).size() != 0)
+				{
+					Exception e = new Exception("Non-zero size ArrayList in toBytes()");
+					HRDBMSWorker.logger.error("Non-zero size ArrayList in toBytes()", e);
+					throw e;
+				}
+				header[i] = (byte)8;
+			}
+			else
+			{
+				HRDBMSWorker.logger.error("Unknown type " + o.getClass() + " in toBytes()");
+				HRDBMSWorker.logger.error(o);
+				throw new Exception("Unknown type " + o.getClass() + " in toBytes()");
+			}
+
+			i++;
+		}
+
+		final byte[] retval = new byte[size];
+		// System.out.println("In toBytes(), row has " + val.size() +
+		// " columns, object occupies " + size + " bytes");
+		System.arraycopy(header, 0, retval, 0, header.length);
+		i = 8;
+		final ByteBuffer retvalBB = ByteBuffer.wrap(retval);
+		retvalBB.putInt(size - 4);
+		retvalBB.putInt(val.size());
+		retvalBB.position(header.length);
+		int x = 0;
+		z = 0;
+		limit = val.size();
+		// for (final Object o : val)
+		while (z < limit)
+		{
+			Object o = val.get(z++);
+			if (retval[i] == 0)
+			{
+				retvalBB.putLong((Long)o);
+			}
+			else if (retval[i] == 1)
+			{
+				retvalBB.putInt((Integer)o);
+			}
+			else if (retval[i] == 2)
+			{
+				retvalBB.putDouble((Double)o);
+			}
+			else if (retval[i] == 3)
+			{
+				retvalBB.putInt(((MyDate)o).getTime());
+			}
+			else if (retval[i] == 4)
+			{
+				byte[] temp = bytes.get(x);
+				x++;
+				retvalBB.putInt(temp.length);
+				retvalBB.put(temp);
+			}
+			// else if (retval[i] == 6)
+			// {
+			// retvalBB.putLong(((AtomicLong)o).get());
+			// }
+			// else if (retval[i] == 7)
+			// {
+			// retvalBB.putDouble(((AtomicBigDecimal)o).get().doubleValue());
+			// }
+			else if (retval[i] == 8)
+			{
+			}
+
+			i++;
+		}
+
+		return retval;
+	}
+
 	private final class InitThread extends ThreadPoolThread
 	{
 		private final ArrayList<ReadThread> threads = new ArrayList<ReadThread>(children.size());
@@ -358,6 +687,14 @@ public final class IntersectOperator implements Operator, Serializable
 				try
 				{
 					Object o = children.get(0).next(IntersectOperator.this);
+					if (o instanceof DataEndMarker)
+					{
+						demReceived = true;
+					}
+					else
+					{
+						received.getAndIncrement();
+					}
 					while (!(o instanceof DataEndMarker))
 					{
 						while (true)
@@ -374,6 +711,14 @@ public final class IntersectOperator implements Operator, Serializable
 						}
 
 						o = children.get(0).next(IntersectOperator.this);
+						if (o instanceof DataEndMarker)
+						{
+							demReceived = true;
+						}
+						else
+						{
+							received.getAndIncrement();
+						}
 					}
 
 					HRDBMSWorker.logger.debug("Intersect operator returned " + count + " rows");
@@ -405,10 +750,10 @@ public final class IntersectOperator implements Operator, Serializable
 
 				return;
 			}
-			
+
 			inMem = true;
 			numFiles = 0;
-			
+
 			if (ResourceManager.criticalMem())
 			{
 				inMem = false;
@@ -453,7 +798,7 @@ public final class IntersectOperator implements Operator, Serializable
 					cleanupExternal();
 					return;
 				}
-				
+
 				int i = 0;
 				final int size = children.size();
 				while (i < size)
@@ -478,7 +823,7 @@ public final class IntersectOperator implements Operator, Serializable
 						}
 					}
 				}
-				
+
 				doExternal();
 				cleanupExternal();
 				while (true)
@@ -492,10 +837,10 @@ public final class IntersectOperator implements Operator, Serializable
 					{
 					}
 				}
-				
+
 				return;
 			}
-			
+
 			int i = 0;
 			final int size = children.size();
 			while (i < size)
@@ -598,38 +943,7 @@ public final class IntersectOperator implements Operator, Serializable
 			sets = null;
 		}
 	}
-	
-	private void doExternal()
-	{
-		int i = 0; // fileNum
-		ArrayList<HashSet<ArrayList<Object>>> sets = new ArrayList<HashSet<ArrayList<Object>>>();
-		ReadBackThread thread = new ReadBackThread(i, sets);
-		thread.start();
-		while (i < numFiles)
-		{
-			while (true)
-			{
-				try
-				{
-					thread.join();
-					break;
-				}
-				catch (InterruptedException e)
-				{
-				}
-			}
-			
-			if (i + 1 < numFiles)
-			{
-				sets = new ArrayList<HashSet<ArrayList<Object>>>();
-				thread = new ReadBackThread(i + 1, sets);
-				thread.start();
-			}
 
-			i++;
-		}
-	}
-	
 	private class ReadBackThread extends HRDBMSThread
 	{
 		private final int fileNum;
@@ -669,7 +983,7 @@ public final class IntersectOperator implements Operator, Serializable
 						set.add(row);
 					}
 				}
-				
+
 				int i = 0;
 				long minCard = Long.MAX_VALUE;
 				int minI = -1;
@@ -685,7 +999,6 @@ public final class IntersectOperator implements Operator, Serializable
 					i++;
 				}
 
-				int count = 0;
 				for (final Object o : sets.get(minI))
 				{
 					boolean inAll = true;
@@ -719,7 +1032,6 @@ public final class IntersectOperator implements Operator, Serializable
 							try
 							{
 								buffer.put(o);
-								count++;
 								break;
 							}
 							catch (final Exception e)
@@ -728,7 +1040,7 @@ public final class IntersectOperator implements Operator, Serializable
 						}
 					}
 				}
-				
+
 				sets.clear();
 			}
 			catch (Exception e)
@@ -830,74 +1142,6 @@ public final class IntersectOperator implements Operator, Serializable
 			return retval;
 		}
 	}
-	
-	private void cleanupExternal()
-	{
-		for (ArrayList<FileChannel> fc : fcs)
-		{
-			for (FileChannel f : fc)
-			{
-				try
-				{
-					f.close();
-				}
-				catch (Exception e)
-				{
-				}
-			}
-		}
-
-		for (ArrayList<RandomAccessFile> raf : rafs)
-		{
-			for (RandomAccessFile r : raf)
-			{
-				try
-				{
-					r.close();
-				}
-				catch (Exception e)
-				{
-				}
-			}
-		}
-
-		for (ArrayList<String> files : externalFiles)
-		{
-			for (String fn : files)
-			{
-				new File(fn).delete();
-			}
-		}
-	}
-	
-	private void createTempFiles() throws Exception
-	{
-		int i = 0; // fileNum
-		externalFiles = new ArrayList<ArrayList<String>>();
-		rafs = new ArrayList<ArrayList<RandomAccessFile>>();
-		fcs = new ArrayList<ArrayList<FileChannel>>();
-		while (i < numFiles)
-		{
-			ArrayList<String> files = new ArrayList<String>();
-			ArrayList<RandomAccessFile> raf = new ArrayList<RandomAccessFile>();
-			ArrayList<FileChannel> fc = new ArrayList<FileChannel>();
-			int j = 0; // child num
-			while (j < children.size())
-			{
-				String fn = ResourceManager.TEMP_DIRS.get(i % ResourceManager.TEMP_DIRS.size()) + this.hashCode() + "" + System.currentTimeMillis() + ".exths" + i + "." + j;
-				files.add(fn);
-				RandomAccessFile r = new RandomAccessFile(fn, "rw");
-				raf.add(r);
-				fc.add(r.getChannel());
-				j++;
-			}
-
-			externalFiles.add(files);
-			rafs.add(raf);
-			fcs.add(fc);
-			i++;
-		}
-	}
 
 	private final class ReadThread extends ThreadPoolThread
 	{
@@ -919,10 +1163,26 @@ public final class IntersectOperator implements Operator, Serializable
 				{
 					final HashSet<ArrayList<Object>> set = sets.get(childNum);
 					Object o = op.next(IntersectOperator.this);
+					if (o instanceof DataEndMarker)
+					{
+						demReceived = true;
+					}
+					else
+					{
+						received.getAndIncrement();
+					}
 					while (!(o instanceof DataEndMarker))
 					{
 						set.add((ArrayList<Object>)o);
 						o = op.next(IntersectOperator.this);
+						if (o instanceof DataEndMarker)
+						{
+							demReceived = true;
+						}
+						else
+						{
+							received.getAndIncrement();
+						}
 					}
 				}
 				else
@@ -939,6 +1199,14 @@ public final class IntersectOperator implements Operator, Serializable
 
 						Object o = null;
 						o = op.next(IntersectOperator.this);
+						if (o instanceof DataEndMarker)
+						{
+							demReceived = true;
+						}
+						else
+						{
+							received.getAndIncrement();
+						}
 						while (!(o instanceof DataEndMarker))
 						{
 							if (o instanceof Exception)
@@ -957,6 +1225,14 @@ public final class IntersectOperator implements Operator, Serializable
 							}
 
 							o = op.next(IntersectOperator.this);
+							if (o instanceof DataEndMarker)
+							{
+								demReceived = true;
+							}
+							else
+							{
+								received.getAndIncrement();
+							}
 						}
 
 						flushBuckets(buckets, childNum);
@@ -981,197 +1257,5 @@ public final class IntersectOperator implements Operator, Serializable
 				return;
 			}
 		}
-	}
-	
-	private void flushBucket(ArrayList<byte[]> bucket, int fileNum, int childNum) throws Exception
-	{
-		FileChannel fc = fcs.get(fileNum).get(childNum);
-		for (byte[] data : bucket)
-		{
-			ByteBuffer bb = ByteBuffer.wrap(data);
-			fc.write(bb);
-		}
-
-		bucket.clear();
-	}
-
-	private void flushBuckets(ArrayList<ArrayList<byte[]>> buckets, int childNum) throws Exception
-	{
-		int i = 0;
-		for (ArrayList<byte[]> bucket : buckets)
-		{
-			flushBucket(bucket, i, childNum);
-			i++;
-		}
-	}
-	
-	private final byte[] toBytes(Object v) throws Exception
-	{
-		ArrayList<byte[]> bytes = null;
-		ArrayList<Object> val;
-		if (v instanceof ArrayList)
-		{
-			val = (ArrayList<Object>)v;
-		}
-		else
-		{
-			final byte[] retval = new byte[9];
-			retval[0] = 0;
-			retval[1] = 0;
-			retval[2] = 0;
-			retval[3] = 5;
-			retval[4] = 0;
-			retval[5] = 0;
-			retval[6] = 0;
-			retval[7] = 1;
-			retval[8] = 5;
-			return retval;
-		}
-
-		int size = val.size() + 8;
-		final byte[] header = new byte[size];
-		int i = 8;
-		int z = 0;
-		int limit = val.size();
-		//for (final Object o : val)
-		while (z < limit)
-		{
-			Object o = val.get(z++);
-			if (o instanceof Long)
-			{
-				header[i] = (byte)0;
-				size += 8;
-			}
-			else if (o instanceof Integer)
-			{
-				header[i] = (byte)1;
-				size += 4;
-			}
-			else if (o instanceof Double)
-			{
-				header[i] = (byte)2;
-				size += 8;
-			}
-			else if (o instanceof MyDate)
-			{
-				header[i] = (byte)3;
-				size += 4;
-			}
-			else if (o instanceof String)
-			{
-				header[i] = (byte)4;
-				byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
-				size += (4 + b.length);
-
-				if (bytes == null)
-				{
-					bytes = new ArrayList<byte[]>();
-					bytes.add(b);
-				}
-				else
-				{
-					bytes.add(b);
-				}
-			}
-			// else if (o instanceof AtomicLong)
-			// {
-			// header[i] = (byte)6;
-			// size += 8;
-			// }
-			// else if (o instanceof AtomicBigDecimal)
-			// {
-			// header[i] = (byte)7;
-			// size += 8;
-			// }
-			else if (o instanceof ArrayList)
-			{
-				if (((ArrayList)o).size() != 0)
-				{
-					Exception e = new Exception("Non-zero size ArrayList in toBytes()");
-					HRDBMSWorker.logger.error("Non-zero size ArrayList in toBytes()", e);
-					throw e;
-				}
-				header[i] = (byte)8;
-			}
-			else
-			{
-				HRDBMSWorker.logger.error("Unknown type " + o.getClass() + " in toBytes()");
-				HRDBMSWorker.logger.error(o);
-				throw new Exception("Unknown type " + o.getClass() + " in toBytes()");
-			}
-
-			i++;
-		}
-
-		final byte[] retval = new byte[size];
-		// System.out.println("In toBytes(), row has " + val.size() +
-		// " columns, object occupies " + size + " bytes");
-		System.arraycopy(header, 0, retval, 0, header.length);
-		i = 8;
-		final ByteBuffer retvalBB = ByteBuffer.wrap(retval);
-		retvalBB.putInt(size - 4);
-		retvalBB.putInt(val.size());
-		retvalBB.position(header.length);
-		int x = 0;
-		z = 0;
-		limit = val.size();
-		//for (final Object o : val)
-		while (z < limit)
-		{
-			Object o = val.get(z++);
-			if (retval[i] == 0)
-			{
-				retvalBB.putLong((Long)o);
-			}
-			else if (retval[i] == 1)
-			{
-				retvalBB.putInt((Integer)o);
-			}
-			else if (retval[i] == 2)
-			{
-				retvalBB.putDouble((Double)o);
-			}
-			else if (retval[i] == 3)
-			{
-				retvalBB.putInt(((MyDate)o).getTime());
-			}
-			else if (retval[i] == 4)
-			{
-				byte[] temp = bytes.get(x);
-				x++;
-				retvalBB.putInt(temp.length);
-				retvalBB.put(temp);
-			}
-			// else if (retval[i] == 6)
-			// {
-			// retvalBB.putLong(((AtomicLong)o).get());
-			// }
-			// else if (retval[i] == 7)
-			// {
-			// retvalBB.putDouble(((AtomicBigDecimal)o).get().doubleValue());
-			// }
-			else if (retval[i] == 8)
-			{
-			}
-
-			i++;
-		}
-
-		return retval;
-	}
-	
-	private long hash(byte[] key) throws Exception
-	{
-		long eHash;
-		if (key == null)
-		{
-			eHash = 0;
-		}
-		else
-		{
-			eHash = MurmurHash.hash64(key, key.length);
-		}
-
-		return eHash & 0x7FFFFFFFFFFFFFFFL;
 	}
 }

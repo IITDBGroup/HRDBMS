@@ -211,13 +211,13 @@ public class InternalConcurrentHashMap
 {
 	/*
 	 * Overview:
-	 *
+	 * 
 	 * The primary design goal of this hash table is to maintain concurrent
 	 * readability (typically method get(), but also iterators and related
 	 * methods) while minimizing update contention. Secondary goals are to keep
 	 * space consumption about the same or better than java.util.HashMap, and to
 	 * support high initial insertion rates on an empty table by many threads.
-	 *
+	 * 
 	 * This map usually acts as a binned (bucketed) hash table. Each key-value
 	 * mapping is held in a Node. Most nodes are instances of the basic Node
 	 * class with hash, key, value, and next fields. However, various subclasses
@@ -230,18 +230,18 @@ public class InternalConcurrentHashMap
 	 * etc because they have negative hash fields and null key and value fields.
 	 * (These special nodes are either uncommon or transient, so the impact of
 	 * carrying around some unused fields is insignificant.)
-	 *
+	 * 
 	 * The table is lazily initialized to a power-of-two size upon the first
 	 * insertion. Each bin in the table normally contains a list of Nodes (most
 	 * often, the list has only zero or one Node). Table accesses require
 	 * volatile/atomic reads, writes, and CASes. Because there is no other way
 	 * to arrange this without adding further indirections, we use intrinsics
 	 * (sun.misc.Unsafe) operations.
-	 *
+	 * 
 	 * We use the top (sign) bit of Node hash fields for control purposes -- it
 	 * is available anyway because of addressing constraints. Nodes with
 	 * negative hash fields are specially handled or ignored in map methods.
-	 *
+	 * 
 	 * Insertion (via put or its variants) of the first node in an empty bin is
 	 * performed by just CASing it to the bin. This is by far the most common
 	 * case for put operations under most key/hash distributions. Other update
@@ -250,14 +250,14 @@ public class InternalConcurrentHashMap
 	 * bin, so instead use the first node of a bin list itself as a lock.
 	 * Locking support for these locks relies on builtin "synchronized"
 	 * monitors.
-	 *
+	 * 
 	 * Using the first node of a list as a lock does not by itself suffice
 	 * though: When a node is locked, any update must first validate that it is
 	 * still the first node after locking it, and retry if not. Because new
 	 * nodes are always appended to lists, once a node is first in a bin, it
 	 * remains first until deleted or the bin becomes invalidated (upon
 	 * resizing).
-	 *
+	 * 
 	 * The main disadvantage of per-bin locks is that other update operations on
 	 * other nodes in a bin list protected by the same lock can stall, for
 	 * example when user equals() or mapping functions take a long time.
@@ -268,14 +268,14 @@ public class InternalConcurrentHashMap
 	 * although with a large variance because of resizing granularity. Ignoring
 	 * variance, the expected occurrences of list size k are (exp(-0.5) *
 	 * pow(0.5, k) / factorial(k)). The first values are:
-	 *
+	 * 
 	 * 0: 0.60653066 1: 0.30326533 2: 0.07581633 3: 0.01263606 4: 0.00157952 5:
 	 * 0.00015795 6: 0.00001316 7: 0.00000094 8: 0.00000006 more: less than 1 in
 	 * ten million
-	 *
+	 * 
 	 * Lock contention probability for two threads accessing distinct elements
 	 * is roughly 1 / (8 * #elements) under random hashes.
-	 *
+	 * 
 	 * Actual hash code distributions encountered in practice sometimes deviate
 	 * significantly from uniform randomness. This includes the case when N >
 	 * (1<<30), so some keys MUST collide. Similarly for dumb or hostile usages
@@ -291,7 +291,7 @@ public class InternalConcurrentHashMap
 	 * (which is very common -- String, Long, etc). TreeBin nodes (TreeNodes)
 	 * also maintain the same "next" traversal pointers as regular nodes, so can
 	 * be traversed in iterators in the same way.
-	 *
+	 * 
 	 * The table is resized when occupancy exceeds a percentage threshold
 	 * (nominally, 0.75, but see below). Any thread noticing an overfull bin may
 	 * assist in resizing after the initiating thread allocates and sets up the
@@ -313,7 +313,7 @@ public class InternalConcurrentHashMap
 	 * (with hash field "MOVED") that contains the next table as its key. On
 	 * encountering a forwarding node, access and update operations restart,
 	 * using the new table.
-	 *
+	 * 
 	 * Each bin transfer requires its bin lock, which can stall waiting for
 	 * locks while resizing. However, because other threads can join in and help
 	 * resize rather than contend for locks, average aggregate waits become
@@ -330,19 +330,19 @@ public class InternalConcurrentHashMap
 	 * is encountered, typically many more will be. So Traversers use a simple
 	 * caching scheme to avoid creating so many new TableStack nodes. (Thanks to
 	 * Peter Levart for suggesting use of a stack here.)
-	 *
+	 * 
 	 * The traversal scheme also applies to partial traversals of ranges of bins
 	 * (via an alternate Traverser constructor) to support partitioned aggregate
 	 * operations. Also, read-only operations give up if ever forwarded to a
 	 * null table, which provides support for shutdown-style clearing, which is
 	 * also not currently implemented.
-	 *
+	 * 
 	 * Lazy table initialization minimizes footprint until first use, and also
 	 * avoids resizings when the first operation is from a putAll, constructor
 	 * with map argument, or deserialization. These cases attempt to override
 	 * the initial capacity settings, but harmlessly fail to take effect in
 	 * cases of races.
-	 *
+	 * 
 	 * The element count is maintained using a specialization of LongAdder. We
 	 * need to incorporate a specialization rather than just use a LongAdder in
 	 * order to access implicit contention-sensing that leads to creation of
@@ -353,7 +353,7 @@ public class InternalConcurrentHashMap
 	 * Under uniform hash distributions, the probability of this occurring at
 	 * threshold is around 13%, meaning that only about 1 in 8 puts check
 	 * threshold (and after resizing, many fewer do so).
-	 *
+	 * 
 	 * TreeBins use a special form of comparison for search and related
 	 * operations (which is the main reason we cannot use existing collections
 	 * such as TreeMaps). TreeBins contain Comparable elements, but may contain
@@ -370,7 +370,7 @@ public class InternalConcurrentHashMap
 	 * balancing code is updated from pre-jdk-collections
 	 * (http://gee.cs.oswego.edu/dl/classes/collections/RBCell.java) based in
 	 * turn on Cormen, Leiserson, and Rivest "Introduction to Algorithms" (CLR).
-	 *
+	 * 
 	 * TreeBins also require an additional locking mechanism. While list
 	 * traversal is always possible by readers even during updates, tree
 	 * traversal is not, mainly because of tree-rotations that may change the
@@ -384,7 +384,7 @@ public class InternalConcurrentHashMap
 	 * along the slow traversal path (via next-pointers) until the lock becomes
 	 * available or the list is exhausted, whichever comes first. These cases
 	 * are not fast, but maximize aggregate expected throughput.
-	 *
+	 * 
 	 * Maintaining API and serialization compatibility with previous versions of
 	 * this class introduces several oddities. Mainly: We leave untouched but
 	 * unused constructor arguments refering to concurrencyLevel. We accept a
@@ -392,11 +392,11 @@ public class InternalConcurrentHashMap
 	 * capacity (which is the only time that we can guarantee to honor it.) We
 	 * also declare an unused "Segment" class that is instantiated in minimal
 	 * form only when serializing.
-	 *
+	 * 
 	 * Also, solely for compatibility with previous versions of this class, it
 	 * extends AbstractMap, even though all of its methods are overridden, so it
 	 * is just useless baggage.
-	 *
+	 * 
 	 * This file is organized to make things a little easier to follow while
 	 * reading than they might otherwise: First the main static declarations and
 	 * utilities, then fields, then main public methods (with a few factorings
@@ -514,7 +514,7 @@ public class InternalConcurrentHashMap
 	 * CountedCompleter<R> { Node[] tab; // same as Traverser Node next;
 	 * TableStack stack, spare; int index; int baseIndex; int baseLimit; final
 	 * int baseSize; int batch; // split control
-	 *
+	 * 
 	 * BulkTask(BulkTask<?> par, int b, int i, int f, Node[] t) { super(par);
 	 * this.batch = b; this.index = this.baseIndex = i; if ((this.tab = t) ==
 	 * null) this.baseSize = this.baseLimit = 0; else if (par == null)
@@ -533,11 +533,11 @@ public class InternalConcurrentHashMap
 	 * null; pushState(t, i, n); continue; } else if (e instanceof TreeBin) e =
 	 * ((TreeBin)e).first; else e = null; } if (stack != null) recoverState(n);
 	 * else if ((index = i + baseSize) >= n) index = ++baseIndex; } }
-	 *
+	 * 
 	 * private void pushState(Node[] t, int i, int n) { TableStack s = spare; if
 	 * (s != null) spare = s.next; else s = new TableStack(); s.tab = t;
 	 * s.length = n; s.index = i; s.next = stack; stack = s; }
-	 *
+	 * 
 	 * private void recoverState(int n) { TableStack s; int len; while ((s =
 	 * stack) != null && (index += (len = s.length)) >= n) { n = len; index =
 	 * s.index; tab = s.tab; s.tab = null; TableStack next = s.next; s.next =
@@ -775,7 +775,7 @@ public class InternalConcurrentHashMap
 	 * u : u == null ? r : reducer.apply(r, u); } result = r;
 	 * CountedCompleter<?> c; for (c = firstComplete(); c != null; c =
 	 * c.nextComplete()) {
-	 *
+	 * 
 	 * @SuppressWarnings("unchecked") ReduceKeysTask<K,V> t =
 	 * (ReduceKeysTask<K,V>)c, s = t.rights; while (s != null) { K tr, sr; if
 	 * ((sr = s.result) != null) t.result = (((tr = t.result) == null) ? sr :
@@ -798,7 +798,7 @@ public class InternalConcurrentHashMap
 	 * for (Node<K,V> p; (p = advance()) != null; ) { V v = p.val; r = (r ==
 	 * null) ? v : reducer.apply(r, v); } result = r; CountedCompleter<?> c; for
 	 * (c = firstComplete(); c != null; c = c.nextComplete()) {
-	 *
+	 * 
 	 * @SuppressWarnings("unchecked") ReduceValuesTask<K,V> t =
 	 * (ReduceValuesTask<K,V>)c, s = t.rights; while (s != null) { V tr, sr; if
 	 * ((sr = s.result) != null) t.result = (((tr = t.result) == null) ? sr :
@@ -821,7 +821,7 @@ public class InternalConcurrentHashMap
 	 * Map.Entry r = null; for (Node p; (p = advance()) != null; ) r = (r ==
 	 * null) ? p : reducer.apply(r, p); result = r; CountedCompleter<?> c; for
 	 * (c = firstComplete(); c != null; c = c.nextComplete()) {
-	 *
+	 * 
 	 * @SuppressWarnings("unchecked") ReduceEntriesTask t =
 	 * (ReduceEntriesTask)c, s = t.rights; while (s != null) { Map.Entry tr, sr;
 	 * if ((sr = s.result) != null) t.result = (((tr = t.result) == null) ? sr :
@@ -849,7 +849,7 @@ public class InternalConcurrentHashMap
 	 * transformer.apply(p.key)) != null) r = (r == null) ? u : reducer.apply(r,
 	 * u); } result = r; CountedCompleter<?> c; for (c = firstComplete(); c !=
 	 * null; c = c.nextComplete()) {
-	 *
+	 * 
 	 * @SuppressWarnings("unchecked") MapReduceKeysTask<K,V,U> t =
 	 * (MapReduceKeysTask<K,V,U>)c, s = t.rights; while (s != null) { U tr, sr;
 	 * if ((sr = s.result) != null) t.result = (((tr = t.result) == null) ? sr :
@@ -877,7 +877,7 @@ public class InternalConcurrentHashMap
 	 * transformer.apply(p.val)) != null) r = (r == null) ? u : reducer.apply(r,
 	 * u); } result = r; CountedCompleter<?> c; for (c = firstComplete(); c !=
 	 * null; c = c.nextComplete()) {
-	 *
+	 * 
 	 * @SuppressWarnings("unchecked") MapReduceValuesTask<K,V,U> t =
 	 * (MapReduceValuesTask<K,V,U>)c, s = t.rights; while (s != null) { U tr,
 	 * sr; if ((sr = s.result) != null) t.result = (((tr = t.result) == null) ?
@@ -904,7 +904,7 @@ public class InternalConcurrentHashMap
 	 * advance()) != null; ) { U u; if ((u = transformer.apply(p)) != null) r =
 	 * (r == null) ? u : reducer.apply(r, u); } result = r; CountedCompleter<?>
 	 * c; for (c = firstComplete(); c != null; c = c.nextComplete()) {
-	 *
+	 * 
 	 * @SuppressWarnings("unchecked") MapReduceEntriesTask<U> t =
 	 * (MapReduceEntriesTask<U>)c, s = t.rights; while (s != null) { U tr, sr;
 	 * if ((sr = s.result) != null) t.result = (((tr = t.result) == null) ? sr :
@@ -932,7 +932,7 @@ public class InternalConcurrentHashMap
 	 * null; ) { U u; if ((u = transformer.apply(p.key, p.val)) != null) r = (r
 	 * == null) ? u : reducer.apply(r, u); } result = r; CountedCompleter<?> c;
 	 * for (c = firstComplete(); c != null; c = c.nextComplete()) {
-	 *
+	 * 
 	 * @SuppressWarnings("unchecked") MapReduceMappingsTask<K,V,U> t =
 	 * (MapReduceMappingsTask<K,V,U>)c, s = t.rights; while (s != null) { U tr,
 	 * sr; if ((sr = s.result) != null) t.result = (((tr = t.result) == null) ?
@@ -961,7 +961,7 @@ public class InternalConcurrentHashMap
 	 * advance()) != null; ) r = reducer.applyAsDouble(r,
 	 * transformer.applyAsDouble(p.key)); result = r; CountedCompleter<?> c; for
 	 * (c = firstComplete(); c != null; c = c.nextComplete()) {
-	 *
+	 * 
 	 * @SuppressWarnings("unchecked") MapReduceKeysToDoubleTask<K,V> t =
 	 * (MapReduceKeysToDoubleTask<K,V>)c, s = t.rights; while (s != null) {
 	 * t.result = reducer.applyAsDouble(t.result, s.result); s = t.rights =
@@ -990,7 +990,7 @@ public class InternalConcurrentHashMap
 	 * advance()) != null; ) r = reducer.applyAsDouble(r,
 	 * transformer.applyAsDouble(p.val)); result = r; CountedCompleter<?> c; for
 	 * (c = firstComplete(); c != null; c = c.nextComplete()) {
-	 *
+	 * 
 	 * @SuppressWarnings("unchecked") MapReduceValuesToDoubleTask<K,V> t =
 	 * (MapReduceValuesToDoubleTask<K,V>)c, s = t.rights; while (s != null) {
 	 * t.result = reducer.applyAsDouble(t.result, s.result); s = t.rights =
@@ -1018,7 +1018,7 @@ public class InternalConcurrentHashMap
 	 * != null; ) r = reducer.applyAsDouble(r, transformer.applyAsDouble(p));
 	 * result = r; CountedCompleter<?> c; for (c = firstComplete(); c != null; c
 	 * = c.nextComplete()) {
-	 *
+	 * 
 	 * @SuppressWarnings("unchecked") MapReduceEntriesToDoubleTask t =
 	 * (MapReduceEntriesToDoubleTask)c, s = t.rights; while (s != null) {
 	 * t.result = reducer.applyAsDouble(t.result, s.result); s = t.rights =
@@ -1047,7 +1047,7 @@ public class InternalConcurrentHashMap
 	 * (p = advance()) != null; ) r = reducer.applyAsDouble(r,
 	 * transformer.applyAsDouble(p.key, p.val)); result = r; CountedCompleter<?>
 	 * c; for (c = firstComplete(); c != null; c = c.nextComplete()) {
-	 *
+	 * 
 	 * @SuppressWarnings("unchecked") MapReduceMappingsToDoubleTask<K,V> t =
 	 * (MapReduceMappingsToDoubleTask<K,V>)c, s = t.rights; while (s != null) {
 	 * t.result = reducer.applyAsDouble(t.result, s.result); s = t.rights =
@@ -1074,7 +1074,7 @@ public class InternalConcurrentHashMap
 	 * p; (p = advance()) != null; ) r = reducer.applyAsLong(r,
 	 * transformer.applyAsLong(p.key)); result = r; CountedCompleter<?> c; for
 	 * (c = firstComplete(); c != null; c = c.nextComplete()) {
-	 *
+	 * 
 	 * @SuppressWarnings("unchecked") MapReduceKeysToLongTask<K,V> t =
 	 * (MapReduceKeysToLongTask<K,V>)c, s = t.rights; while (s != null) {
 	 * t.result = reducer.applyAsLong(t.result, s.result); s = t.rights =
@@ -1102,7 +1102,7 @@ public class InternalConcurrentHashMap
 	 * reducer.applyAsLong(r, transformer.applyAsLong(p.val)); result = r;
 	 * CountedCompleter<?> c; for (c = firstComplete(); c != null; c =
 	 * c.nextComplete()) {
-	 *
+	 * 
 	 * @SuppressWarnings("unchecked") MapReduceValuesToLongTask<K,V> t =
 	 * (MapReduceValuesToLongTask<K,V>)c, s = t.rights; while (s != null) {
 	 * t.result = reducer.applyAsLong(t.result, s.result); s = t.rights =
@@ -1129,7 +1129,7 @@ public class InternalConcurrentHashMap
 	 * != null; ) r = reducer.applyAsLong(r, transformer.applyAsLong(p)); result
 	 * = r; CountedCompleter<?> c; for (c = firstComplete(); c != null; c =
 	 * c.nextComplete()) {
-	 *
+	 * 
 	 * @SuppressWarnings("unchecked") MapReduceEntriesToLongTask t =
 	 * (MapReduceEntriesToLongTask)c, s = t.rights; while (s != null) { t.result
 	 * = reducer.applyAsLong(t.result, s.result); s = t.rights = s.nextRight; }
@@ -1158,7 +1158,7 @@ public class InternalConcurrentHashMap
 	 * = advance()) != null; ) r = reducer.applyAsLong(r,
 	 * transformer.applyAsLong(p.key, p.val)); result = r; CountedCompleter<?>
 	 * c; for (c = firstComplete(); c != null; c = c.nextComplete()) {
-	 *
+	 * 
 	 * @SuppressWarnings("unchecked") MapReduceMappingsToLongTask<K,V> t =
 	 * (MapReduceMappingsToLongTask<K,V>)c, s = t.rights; while (s != null) {
 	 * t.result = reducer.applyAsLong(t.result, s.result); s = t.rights =
@@ -1185,7 +1185,7 @@ public class InternalConcurrentHashMap
 	 * advance()) != null; ) r = reducer.applyAsInt(r,
 	 * transformer.applyAsInt(p.key)); result = r; CountedCompleter<?> c; for (c
 	 * = firstComplete(); c != null; c = c.nextComplete()) {
-	 *
+	 * 
 	 * @SuppressWarnings("unchecked") MapReduceKeysToIntTask<K,V> t =
 	 * (MapReduceKeysToIntTask<K,V>)c, s = t.rights; while (s != null) {
 	 * t.result = reducer.applyAsInt(t.result, s.result); s = t.rights =
@@ -1213,7 +1213,7 @@ public class InternalConcurrentHashMap
 	 * reducer.applyAsInt(r, transformer.applyAsInt(p.val)); result = r;
 	 * CountedCompleter<?> c; for (c = firstComplete(); c != null; c =
 	 * c.nextComplete()) {
-	 *
+	 * 
 	 * @SuppressWarnings("unchecked") MapReduceValuesToIntTask<K,V> t =
 	 * (MapReduceValuesToIntTask<K,V>)c, s = t.rights; while (s != null) {
 	 * t.result = reducer.applyAsInt(t.result, s.result); s = t.rights =
@@ -1239,7 +1239,7 @@ public class InternalConcurrentHashMap
 	 * != null; ) r = reducer.applyAsInt(r, transformer.applyAsInt(p)); result =
 	 * r; CountedCompleter<?> c; for (c = firstComplete(); c != null; c =
 	 * c.nextComplete()) {
-	 *
+	 * 
 	 * @SuppressWarnings("unchecked") MapReduceEntriesToIntTask t =
 	 * (MapReduceEntriesToIntTask)c, s = t.rights; while (s != null) { t.result
 	 * = reducer.applyAsInt(t.result, s.result); s = t.rights = s.nextRight; } }
@@ -1268,7 +1268,7 @@ public class InternalConcurrentHashMap
 	 * advance()) != null; ) r = reducer.applyAsInt(r,
 	 * transformer.applyAsInt(p.key, p.val)); result = r; CountedCompleter<?> c;
 	 * for (c = firstComplete(); c != null; c = c.nextComplete()) {
-	 *
+	 * 
 	 * @SuppressWarnings("unchecked") MapReduceMappingsToIntTask<K,V> t =
 	 * (MapReduceMappingsToIntTask<K,V>)c, s = t.rights; while (s != null) {
 	 * t.result = reducer.applyAsInt(t.result, s.result); s = t.rights =
@@ -1870,15 +1870,15 @@ public class InternalConcurrentHashMap
 	/*
 	 * sizeCtl = -1; // force exclusion for table construction
 	 * s.defaultReadObject(); long size = 0L; Node p = null; for (;;) {
-	 *
+	 * 
 	 * @SuppressWarnings("unchecked") K k = (K) s.readObject();
-	 *
+	 * 
 	 * @SuppressWarnings("unchecked") V v = (V) s.readObject(); if (k != null &&
 	 * v != null) { p = new Node<K,V>(spread(k.hashCode()), k, v, p); ++size; }
 	 * else break; } if (size == 0L) sizeCtl = 0; else { int n; if (size >=
 	 * (long)(MAXIMUM_CAPACITY >>> 1)) n = MAXIMUM_CAPACITY; else { int sz =
 	 * (int)size; n = tableSizeFor(sz + (sz >>> 1) + 1); }
-	 *
+	 * 
 	 * @SuppressWarnings("unchecked") Node<K,V>[] tab = (Node<K,V>[])new
 	 * Node<?,?>[n]; int mask = n - 1; long added = 0L; while (p != null) {
 	 * boolean insertAtFront; Node<K,V> next = p.next, first; int h = p.hash, j
@@ -2034,7 +2034,7 @@ public class InternalConcurrentHashMap
 	 * != null) { Traverser<K,V> it = new Traverser<K,V>(t, t.length, 0,
 	 * t.length); for (Node<K,V> p; (p = it.advance()) != null; ) {
 	 * action.accept(p.key, p.val); } } }
-	 *
+	 * 
 	 * public void replaceAll(BiFunction<? super K, ? super V, ? extends V>
 	 * function) { if (function == null) throw new NullPointerException();
 	 * Node<K,V>[] t; if ((t = table) != null) { Traverser<K,V> it = new
@@ -3449,7 +3449,7 @@ public class InternalConcurrentHashMap
 		/*
 		 * public boolean add(Entry e) { return map.putVal(e.getKey(),
 		 * e.getValue(), false) == null; }
-		 *
+		 * 
 		 * public boolean addAll(Collection<? extends Entry> c) { boolean added
 		 * = false; for (Entry e : c) { if (add(e)) added = true; } return
 		 * added; }
@@ -3467,12 +3467,12 @@ public class InternalConcurrentHashMap
 		 * public final boolean equals(Object o) { Set<?> c; return ((o
 		 * instanceof Set) && ((c = (Set<?>)o) == this || (containsAll(c) &&
 		 * c.containsAll(this)))); }
-		 *
+		 * 
 		 * public Spliterator<Map.Entry> spliterator() { Node[] t;
 		 * InternalConcurrentHashMap m = map; long n = m.sumCount(); int f = (t
 		 * = m.table) == null ? 0 : t.length; return new EntrySpliterator(t, f,
 		 * 0, f, n < 0L ? 0L : n, m); }
-		 *
+		 * 
 		 * public void forEach(Consumer<? super Map.Entry> action) { if (action
 		 * == null) throw new NullPointerException(); Node[] t; if ((t =
 		 * map.table) != null) { Traverser it = new Traverser(t, t.length, 0,
@@ -3513,22 +3513,22 @@ public class InternalConcurrentHashMap
 	 * Spliterator { long est; // size estimate KeySpliterator(Node[] tab, int
 	 * size, int index, int limit, long est) { super(tab, size, index, limit);
 	 * this.est = est; }
-	 *
+	 * 
 	 * public Spliterator trySplit() { int i, f, h; return (h = ((i = baseIndex)
 	 * + (f = baseLimit)) >>> 1) <= i ? null : new KeySpliterator(tab, baseSize,
 	 * baseLimit = h, f, est >>>= 1); }
-	 *
+	 * 
 	 * /* public void forEachRemaining(Consumer<? super K> action) { if (action
 	 * == null) throw new NullPointerException(); for (Node<K,V> p; (p =
 	 * advance()) != null;) action.accept(p.key); }
-	 *
+	 * 
 	 * public boolean tryAdvance(Consumer<? super K> action) { if (action ==
 	 * null) throw new NullPointerException(); Node<K,V> p; if ((p = advance())
 	 * == null) return false; action.accept(p.key); return true; }
 	 */
 	/*
 	 * public long estimateSize() { return est; }
-	 *
+	 * 
 	 * public int characteristics() { return Spliterator.DISTINCT |
 	 * Spliterator.CONCURRENT | Spliterator.NONNULL; } }
 	 */
@@ -3538,15 +3538,15 @@ public class InternalConcurrentHashMap
 	 * Spliterator { long est; // size estimate ValueSpliterator(Node[] tab, int
 	 * size, int index, int limit, long est) { super(tab, size, index, limit);
 	 * this.est = est; }
-	 *
+	 * 
 	 * public Spliterator<ArrayList<Object>> trySplit() { int i, f, h; return (h
 	 * = ((i = baseIndex) + (f = baseLimit)) >>> 1) <= i ? null : new
 	 * ValueSpliterator(tab, baseSize, baseLimit = h, f, est >>>= 1); }
-	 *
+	 * 
 	 * /* public void forEachRemaining(Consumer<? super V> action) { if (action
 	 * == null) throw new NullPointerException(); for (Node p; (p = advance())
 	 * != null;) action.accept(p.val); }
-	 *
+	 * 
 	 * public boolean tryAdvance(Consumer<? super V> action) { if (action ==
 	 * null) throw new NullPointerException(); Node p; if ((p = advance()) ==
 	 * null) return false; action.accept(p.val); return true; }
@@ -3554,7 +3554,7 @@ public class InternalConcurrentHashMap
 
 	/*
 	 * public long estimateSize() { return est; }
-	 *
+	 * 
 	 * public int characteristics() { return Spliterator.CONCURRENT |
 	 * Spliterator.NONNULL; } }
 	 */
@@ -3564,22 +3564,22 @@ public class InternalConcurrentHashMap
 	 * export MapEntry long est; // size estimate EntrySpliterator(Node[] tab,
 	 * int size, int index, int limit, long est, InternalConcurrentHashMap map)
 	 * { super(tab, size, index, limit); this.map = map; this.est = est; }
-	 *
+	 * 
 	 * public Spliterator<Map.Entry> trySplit() { int i, f, h; return (h = ((i =
 	 * baseIndex) + (f = baseLimit)) >>> 1) <= i ? null : new
 	 * EntrySpliterator(tab, baseSize, baseLimit = h, f, est >>>= 1, map); }
-	 *
+	 * 
 	 * public void forEachRemaining(Consumer<? super Map.Entry> action) { if
 	 * (action == null) throw new NullPointerException(); for (Node p; (p =
 	 * advance()) != null; ) action.accept(new MapEntry(p.key, p.val, map)); }
-	 *
+	 * 
 	 * public boolean tryAdvance(Consumer<? super Map.Entry> action) { if
 	 * (action == null) throw new NullPointerException(); Node p; if ((p =
 	 * advance()) == null) return false; action.accept(new MapEntry(p.key,
 	 * p.val, map)); return true; }
-	 *
+	 * 
 	 * public long estimateSize() { return est; }
-	 *
+	 * 
 	 * public int characteristics() { return Spliterator.DISTINCT |
 	 * Spliterator.CONCURRENT | Spliterator.NONNULL; } }
 	 */
@@ -4789,7 +4789,7 @@ public class InternalConcurrentHashMap
 		 * (Iterator<E> it = iterator(); it.hasNext();) { if
 		 * (c.contains(it.next())) { it.remove(); modified = true; } } return
 		 * modified; }
-		 *
+		 * 
 		 * public final boolean retainAll(Collection<?> c) { if (c == null)
 		 * throw new NullPointerException(); boolean modified = false; for
 		 * (Iterator<E> it = iterator(); it.hasNext();) { if
@@ -5746,7 +5746,7 @@ public class InternalConcurrentHashMap
 				return true;
 			}
 			if ((r = root) == null || r.right == null || // too small
-					(rl = r.left) == null || rl.left == null)
+			(rl = r.left) == null || rl.left == null)
 			{
 				return true;
 			}

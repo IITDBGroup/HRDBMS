@@ -17,7 +17,7 @@ public final class CompressedServerSocket extends ServerSocket
 	public CompressedServerSocket(int port) throws IOException
 	{
 		super(port);
-		//this.setReceiveBufferSize(64 * 1024 * 1024);
+		// this.setReceiveBufferSize(64 * 1024 * 1024);
 	}
 
 	@Override

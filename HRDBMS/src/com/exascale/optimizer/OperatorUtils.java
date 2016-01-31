@@ -114,7 +114,7 @@ public class OperatorUtils
 		final long ret = java.nio.ByteBuffer.wrap(val).getLong();
 		return ret;
 	}
-	
+
 	public static short bytesToShort(byte[] val)
 	{
 		final short ret = java.nio.ByteBuffer.wrap(val).getShort();
@@ -564,27 +564,6 @@ public class OperatorUtils
 
 		return CNFFilter.deserializeKnown(in, prev); // already read type
 	}
-	
-	public static Index deserializeIndex(InputStream in, HashMap<Long, Object> prev) throws Exception
-	{
-		int type = getType(in);
-		if (type == 0)
-		{
-			return (Index)readReference(in, prev);
-		}
-		
-		if (type == 82)
-		{
-			return null;
-		}
-		
-		if (type != 64)
-		{
-			throw new Exception("Corrupted stream. Expected type 64 but received " + type);
-		}
-		
-		return Index.deserializeKnown(in, prev);
-	}
 
 	public static Filter deserializeFilter(InputStream in, HashMap<Long, Object> prev) throws Exception
 	{
@@ -856,6 +835,27 @@ public class OperatorUtils
 		return retval;
 	}
 
+	public static Index deserializeIndex(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		int type = getType(in);
+		if (type == 0)
+		{
+			return (Index)readReference(in, prev);
+		}
+
+		if (type == 82)
+		{
+			return null;
+		}
+
+		if (type != 64)
+		{
+			throw new Exception("Corrupted stream. Expected type 64 but received " + type);
+		}
+
+		return Index.deserializeKnown(in, prev);
+	}
+
 	public static int[] deserializeIntArray(InputStream in, HashMap<Long, Object> prev) throws Exception
 	{
 		int type = getType(in);
@@ -893,7 +893,7 @@ public class OperatorUtils
 		int type = getType(in);
 		switch (type)
 		{
-			// 0 - reference
+		// 0 - reference
 			case 0:
 				return (Operator)readReference(in, prev);
 				// 1 - AntiJoin
@@ -1289,13 +1289,6 @@ public class OperatorUtils
 		read(data, in);
 		return bytesToInt(data);
 	}
-	
-	public static short readShort(InputStream in) throws Exception
-	{
-		byte[] data = new byte[2];
-		read(data, in);
-		return bytesToShort(data);
-	}
 
 	public static Integer readIntClass(InputStream in, HashMap<Long, Object> prev) throws Exception
 	{
@@ -1391,6 +1384,13 @@ public class OperatorUtils
 		}
 
 		return obj;
+	}
+
+	public static short readShort(InputStream in) throws Exception
+	{
+		byte[] data = new byte[2];
+		read(data, in);
+		return bytesToShort(data);
 	}
 
 	public static String readString(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -1729,7 +1729,7 @@ public class OperatorUtils
 
 		return;
 	}
-	
+
 	public static void serializeALOp(ArrayList<Operator> als, OutputStream out, IdentityHashMap<Object, Long> prev, boolean flag) throws Exception
 	{
 		if (als == null)
@@ -2010,6 +2010,19 @@ public class OperatorUtils
 		return;
 	}
 
+	public static void serializeIndex(Index i, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		if (i == null)
+		{
+			writeType(82, out);
+			return;
+		}
+		else
+		{
+			i.serialize(out, prev);
+		}
+	}
+
 	public static void serializeIntArray(int[] als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
@@ -2047,19 +2060,6 @@ public class OperatorUtils
 		else
 		{
 			op.serialize(out, prev);
-		}
-	}
-	
-	public static void serializeIndex(Index i, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
-	{
-		if (i == null)
-		{
-			writeType(82, out);
-			return;
-		}
-		else
-		{
-			i.serialize(out, prev);
 		}
 	}
 
@@ -2252,11 +2252,6 @@ public class OperatorUtils
 	{
 		out.write(intToBytes(i));
 	}
-	
-	public static void writeShort(int i, OutputStream out) throws Exception
-	{
-		out.write(shortToBytes((short)i));
-	}
 
 	public static void writeIntClass(Integer d, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
 	{
@@ -2319,6 +2314,11 @@ public class OperatorUtils
 		return;
 	}
 
+	public static void writeShort(int i, OutputStream out) throws Exception
+	{
+		out.write(shortToBytes((short)i));
+	}
+
 	public static void writeString(String s, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (s == null)
@@ -2357,14 +2357,6 @@ public class OperatorUtils
 		buff[3] = (byte)((val & 0x000000FF));
 		return buff;
 	}
-	
-	private static byte[] shortToBytes(int val)
-	{
-		final byte[] buff = new byte[2];
-		buff[0] = (byte)((val & 0x0000FF00) >> 8);
-		buff[1] = (byte)((val & 0x000000FF));
-		return buff;
-	}
 
 	private static byte[] longToBytes(long val)
 	{
@@ -2377,6 +2369,14 @@ public class OperatorUtils
 		buff[5] = (byte)((val & 0x0000000000FF0000L) >> 16);
 		buff[6] = (byte)((val & 0x000000000000FF00L) >> 8);
 		buff[7] = (byte)((val & 0x00000000000000FFL));
+		return buff;
+	}
+
+	private static byte[] shortToBytes(int val)
+	{
+		final byte[] buff = new byte[2];
+		buff[0] = (byte)((val & 0x0000FF00) >> 8);
+		buff[1] = (byte)((val & 0x000000FF));
 		return buff;
 	}
 }

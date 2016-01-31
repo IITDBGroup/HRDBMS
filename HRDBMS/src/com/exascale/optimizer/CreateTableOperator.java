@@ -27,6 +27,8 @@ public final class CreateTableOperator implements Operator, Serializable
 	private final String nodeGroupExp;
 	private final String nodeExp;
 	private final String deviceExp;
+	private final int type;
+	private ArrayList<Integer> colOrder;
 
 	public CreateTableOperator(String schema, String table, ArrayList<ColDef> defs, ArrayList<String> pks, String nodeGroupExp, String nodeExp, String deviceExp, MetaData meta)
 	{
@@ -38,6 +40,34 @@ public final class CreateTableOperator implements Operator, Serializable
 		this.nodeGroupExp = nodeGroupExp;
 		this.nodeExp = nodeExp;
 		this.deviceExp = deviceExp;
+		type = 0;
+	}
+
+	public CreateTableOperator(String schema, String table, ArrayList<ColDef> defs, ArrayList<String> pks, String nodeGroupExp, String nodeExp, String deviceExp, MetaData meta, int type)
+	{
+		this.meta = meta;
+		this.schema = schema;
+		this.table = table;
+		this.defs = defs;
+		this.pks = pks;
+		this.nodeGroupExp = nodeGroupExp;
+		this.nodeExp = nodeExp;
+		this.deviceExp = deviceExp;
+		this.type = type;
+	}
+	
+	public CreateTableOperator(String schema, String table, ArrayList<ColDef> defs, ArrayList<String> pks, String nodeGroupExp, String nodeExp, String deviceExp, MetaData meta, int type, ArrayList<Integer> colOrder)
+	{
+		this.meta = meta;
+		this.schema = schema;
+		this.table = table;
+		this.defs = defs;
+		this.pks = pks;
+		this.nodeGroupExp = nodeGroupExp;
+		this.nodeExp = nodeExp;
+		this.deviceExp = deviceExp;
+		this.type = type;
+		this.colOrder = colOrder;
 	}
 
 	@Override
@@ -121,7 +151,7 @@ public final class CreateTableOperator implements Operator, Serializable
 		if (!done)
 		{
 			done = true;
-			meta.createTable(schema, table, defs, pks, tx, nodeGroupExp, nodeExp, deviceExp);
+			meta.createTable(schema, table, defs, pks, tx, nodeGroupExp, nodeExp, deviceExp, type, colOrder);
 			return 1;
 		}
 		else
@@ -136,9 +166,21 @@ public final class CreateTableOperator implements Operator, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return 0;
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return false;
 	}
 
 	@Override

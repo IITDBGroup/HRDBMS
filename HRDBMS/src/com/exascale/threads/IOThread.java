@@ -1,7 +1,6 @@
 package com.exascale.threads;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import com.exascale.filesystem.Block;
 import com.exascale.managers.BufferManager;
@@ -27,7 +26,15 @@ public class IOThread extends HRDBMSThread
 		bs[0] = b;
 		this.txnum = txnum;
 	}
-	
+
+	public IOThread(Block[] bs, long txnum)
+	{
+		this.setWait(false);
+		this.description = ("I/O for multiple blocks");
+		this.bs = bs;
+		this.txnum = txnum;
+	}
+
 	public IOThread(Block[] bs, Transaction tx, Schema[] schemas, int schemaIndex, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos)
 	{
 		this.setWait(false);
@@ -38,14 +45,6 @@ public class IOThread extends HRDBMSThread
 		this.schemaMap = schemaMap;
 		this.tx = tx;
 		this.fetchPos = fetchPos;
-	}
-
-	public IOThread(Block[] bs, long txnum)
-	{
-		this.setWait(false);
-		this.description = ("I/O for multiple blocks");
-		this.bs = bs;
-		this.txnum = txnum;
 	}
 
 	@Override
@@ -65,7 +64,7 @@ public class IOThread extends HRDBMSThread
 					{
 						BufferManager.pin(b, tx, schemas[schemaIndex++], schemaMap, fetchPos);
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						HRDBMSWorker.logger.debug("", e);
 					}

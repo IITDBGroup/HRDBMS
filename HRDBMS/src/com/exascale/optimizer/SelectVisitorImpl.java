@@ -3,6 +3,7 @@ package com.exascale.optimizer;
 import java.util.ArrayList;
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.misc.Interval;
+import org.antlr.v4.runtime.tree.TerminalNode;
 import com.exascale.misc.Utils;
 
 public class SelectVisitorImpl extends SelectBaseVisitor<Object>
@@ -162,6 +163,17 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 		}
 		return new CreateIndex(index, table, defs, unique);
 	}
+	
+	public ArrayList<Integer> visitColOrder(SelectParser.ColOrderContext ctx)
+	{
+		ArrayList<Integer> colOrder = new ArrayList<Integer>();
+		for (TerminalNode node : ctx.INTEGER())
+		{
+			colOrder.add(Integer.parseInt(node.getText().trim()));
+		}
+		
+		return colOrder;
+	}
 
 	@Override
 	public CreateTable visitCreateTable(SelectParser.CreateTableContext ctx)
@@ -190,7 +202,26 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 		nodeExp = ctx.nodeExp().getText();
 		deviceExp = ctx.deviceExp().getText();
 
-		return new CreateTable(table, cols, pk, nodeGroupExp, nodeExp, deviceExp);
+		int type = 0;
+		if (ctx.COLUMN() != null)
+		{
+			type = 1;
+		}
+		
+		ArrayList<Integer> colOrder = null;
+		if (ctx.colOrder() != null)
+		{
+			colOrder = (ArrayList<Integer>)visit(ctx.colOrder());
+		}
+
+		if (colOrder == null)
+		{
+			return new CreateTable(table, cols, pk, nodeGroupExp, nodeExp, deviceExp, type);
+		}
+		else
+		{
+			return new CreateTable(table, cols, pk, nodeGroupExp, nodeExp, deviceExp, type, colOrder);
+		}
 	}
 
 	@Override

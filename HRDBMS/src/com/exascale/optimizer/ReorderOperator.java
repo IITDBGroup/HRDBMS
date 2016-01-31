@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.tables.Plan;
@@ -39,6 +40,8 @@ public final class ReorderOperator implements Operator, Serializable
 	private boolean nullOp = false;
 
 	private int node;
+	private transient AtomicLong received;
+	private transient volatile boolean demReceived;
 
 	public ReorderOperator(ArrayList<String> order, MetaData meta) throws Exception
 	{
@@ -48,6 +51,7 @@ public final class ReorderOperator implements Operator, Serializable
 			throw new Exception("Reorder operator defined with 0 output columns");
 		}
 		this.meta = meta;
+		received = new AtomicLong(0);
 	}
 
 	public static ReorderOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -62,6 +66,8 @@ public final class ReorderOperator implements Operator, Serializable
 		value.order = OperatorUtils.deserializeALS(in, prev);
 		value.nullOp = OperatorUtils.readBool(in);
 		value.node = OperatorUtils.readInt(in);
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
 		return value;
 	}
 
@@ -236,6 +242,14 @@ public final class ReorderOperator implements Operator, Serializable
 		if (nullOp)
 		{
 			Object o = child.next(this);
+			if (o instanceof DataEndMarker)
+			{
+				demReceived = true;
+			}
+			else
+			{
+				received.getAndIncrement();
+			}
 			if (o instanceof Exception)
 			{
 				throw (Exception)o;
@@ -248,7 +262,12 @@ public final class ReorderOperator implements Operator, Serializable
 			final Object o = child.next(this);
 			if (o instanceof DataEndMarker)
 			{
+				demReceived = true;
 				return o;
+			}
+			else
+			{
+				received.getAndIncrement();
 			}
 
 			if (o instanceof Exception)
@@ -260,7 +279,7 @@ public final class ReorderOperator implements Operator, Serializable
 			final ArrayList<Object> retval = new ArrayList<Object>(order.size());
 			int z = 0;
 			final int limit = order.size();
-			//for (final String col : order)
+			// for (final String col : order)
 			while (z < limit)
 			{
 				final String col = order.get(z++);
@@ -291,9 +310,21 @@ public final class ReorderOperator implements Operator, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
 	}
 
 	@Override

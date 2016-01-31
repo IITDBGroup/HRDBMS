@@ -6,14 +6,14 @@ public class MyDate implements Comparable, Serializable
 {
 	private final int time;
 
-	public MyDate(int year, int month, int day)
-	{
-		this.time = day + (month << 5) + (year << 9);
-	}
-
 	public MyDate(int time)
 	{
 		this.time = time;
+	}
+
+	public MyDate(int year, int month, int day)
+	{
+		this.time = day + (month << 5) + (year << 9);
 	}
 
 	@Override

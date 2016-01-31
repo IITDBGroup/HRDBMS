@@ -296,7 +296,7 @@ public final class MaxOperator implements AggregateOperator, Serializable
 
 			int z = 0;
 			final int limit = rows.size();
-			//for (final Object orow : rows)
+			// for (final Object orow : rows)
 			while (z < limit)
 			{
 				final Object orow = rows.get(z++);

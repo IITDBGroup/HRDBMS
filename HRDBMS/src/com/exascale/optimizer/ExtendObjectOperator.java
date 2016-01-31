@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MyDate;
 import com.exascale.tables.Plan;
@@ -39,12 +40,15 @@ public final class ExtendObjectOperator implements Operator, Serializable
 	private int node;
 
 	private Object obj;
+	private transient AtomicLong received;
+	private transient volatile boolean demReceived;
 
 	public ExtendObjectOperator(Object obj, String name, MetaData meta)
 	{
 		this.obj = obj;
 		this.meta = meta;
 		this.name = name;
+		received = new AtomicLong(0);
 	}
 
 	public static ExtendObjectOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -59,6 +63,8 @@ public final class ExtendObjectOperator implements Operator, Serializable
 		value.name = OperatorUtils.readString(in, prev);
 		value.node = OperatorUtils.readInt(in);
 		value.obj = OperatorUtils.readObject(in, prev);
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
 		return value;
 	}
 
@@ -171,7 +177,12 @@ public final class ExtendObjectOperator implements Operator, Serializable
 		final Object o = child.next(this);
 		if (o instanceof DataEndMarker)
 		{
+			demReceived = true;
 			return o;
+		}
+		else
+		{
+			received.getAndIncrement();
 		}
 
 		if (o instanceof Exception)
@@ -196,9 +207,21 @@ public final class ExtendObjectOperator implements Operator, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
 	}
 
 	@Override

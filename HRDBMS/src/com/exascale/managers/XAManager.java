@@ -283,7 +283,7 @@ public class XAManager extends HRDBMSThread
 				// HRDBMSWorker.logger.debug("Phase 4 completed");
 				new Phase5((RootOperator)op, tx, p1.likelihoodCache).optimize();
 				// HRDBMSWorker.logger.debug("Phase 5 completed");
-				//Phase1.printTree(op, 0); // DEBUG
+				// Phase1.printTree(op, 0); // DEBUG
 				ArrayList<Operator> array = new ArrayList<Operator>(1);
 				array.add(op);
 				plan = new Plan(false, array);
@@ -307,7 +307,7 @@ public class XAManager extends HRDBMSThread
 		txs.multiPut(tx, plan);
 		return new XAWorker(plan, tx, true);
 	}
-	
+
 	public static XAWorker executeQuery(String sql, Transaction tx, ConnectionWorker conn, long sPer) throws Exception
 	{
 		String sql2 = new SQL(sql).toString();
@@ -338,7 +338,7 @@ public class XAManager extends HRDBMSThread
 				// HRDBMSWorker.logger.debug("Phase 4 completed");
 				new Phase5((RootOperator)op, tx, p1.likelihoodCache).optimize();
 				// HRDBMSWorker.logger.debug("Phase 5 completed");
-				//Phase1.printTree(op, 0); // DEBUG
+				// Phase1.printTree(op, 0); // DEBUG
 				ArrayList<Operator> array = new ArrayList<Operator>(1);
 				array.add(op);
 				plan = new Plan(false, array);
@@ -882,7 +882,6 @@ public class XAManager extends HRDBMSThread
 
 	private static void sendCheckpoints(ArrayList<Object> tree, Transaction tx) throws Exception
 	{
-		boolean allOK = true;
 		ArrayList<SendCheckpointThread> threads = new ArrayList<SendCheckpointThread>();
 		for (Object o : tree)
 		{
@@ -1473,11 +1472,6 @@ public class XAManager extends HRDBMSThread
 		{
 			this.tree = tree;
 			this.tx = tx;
-		}
-
-		public boolean getOK()
-		{
-			return ok;
 		}
 
 		@Override

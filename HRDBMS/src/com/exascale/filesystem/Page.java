@@ -3,17 +3,15 @@ package com.exascale.filesystem;
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import com.exascale.managers.BufferManager;
 import com.exascale.managers.FileManager;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LogManager;
 import com.exascale.managers.ResourceManager;
 import com.exascale.tables.Schema;
-import com.exascale.tables.Schema.FieldValue;
 import com.exascale.tables.Transaction;
+import com.exascale.threads.Read3Thread;
 import com.exascale.threads.ReadThread;
 
 public class Page
@@ -41,7 +39,7 @@ public class Page
 	// extent size
 	private ByteBuffer contents;
 	private volatile Block blk;
-	private final ConcurrentHashMap<Long, AtomicInteger> pins;
+	public final ConcurrentHashMap<Long, AtomicInteger> pins;
 	private volatile long modifiedBy = -1;
 	private volatile long timePinned = -1;
 	private volatile long lsn;
@@ -64,7 +62,7 @@ public class Page
 		readDone = false;
 	}
 
-	public synchronized void assignToBlock(Block b, boolean log) throws Exception
+	public synchronized ReadThread assignToBlock(Block b, boolean log) throws Exception
 	{
 		if (modifiedBy >= 0)
 		{
@@ -80,39 +78,38 @@ public class Page
 		}
 		blk = b;
 		readDone = false;
+		ReadThread retval = null;
 		if (b != null)
 		{
-			FileManager.read(this, b, contents);
+			retval = FileManager.read(this, b, contents);
 		}
 		pins.clear();
+		return retval;
 	}
 
-	public void assignToBlock(Block b, boolean log, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos) throws Exception
+	public synchronized ReadThread assignToBlock(Block b, boolean log, ArrayList<Integer> cols, int layoutSize) throws Exception
 	{
-		ReadThread retval = null;
-		synchronized (this)
+		if (modifiedBy >= 0)
 		{
-			if (modifiedBy >= 0)
-			{
-				if (b != null)
-				{
-					if (log)
-					{
-						LogManager.flush(lsn);
-					}
-					FileManager.write(blk, contents);
-				}
-				modifiedBy = -1;
-			}
-			blk = b;
-			readDone = false;
-			pins.clear();
-			
 			if (b != null)
 			{
-				FileManager.read(this, b, contents, schema, schemaMap, tx, fetchPos);
+				if (log)
+				{
+					LogManager.flush(lsn);
+				}
+				FileManager.write(blk, contents);
 			}
+			modifiedBy = -1;
 		}
+		blk = b;
+		readDone = false;
+		ReadThread retval = null;
+		if (b != null)
+		{
+			retval = FileManager.read(this, b, contents, cols, layoutSize);
+		}
+		pins.clear();
+		return retval;
 	}
 
 	public synchronized void assignToBlock(Block b, boolean log, boolean flag) throws Exception
@@ -138,9 +135,218 @@ public class Page
 		pins.clear();
 	}
 
+	public void assignToBlock(Block b, boolean log, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos) throws Exception
+	{
+		synchronized (this)
+		{
+			if (modifiedBy >= 0)
+			{
+				if (b != null)
+				{
+					if (log)
+					{
+						LogManager.flush(lsn);
+					}
+					FileManager.write(blk, contents);
+				}
+				modifiedBy = -1;
+			}
+			blk = b;
+			readDone = false;
+			pins.clear();
+
+			if (b != null)
+			{
+				FileManager.read(this, b, contents, schema, schemaMap, tx, fetchPos);
+			}
+		}
+	}
+
+	public synchronized Read3Thread assignToBlock3(Block b, Block b2, Block b3, boolean log, Page p2, Page p3) throws Exception
+	{
+		// HRDBMSWorker.logger.debug("Short Page pin3 starting");
+		Read3Thread retval = null;
+		try
+		{
+			synchronized (p2)
+			{
+				synchronized (p3)
+				{
+					if (modifiedBy >= 0)
+					{
+						if (log)
+						{
+							LogManager.flush(lsn);
+						}
+						FileManager.write(blk, contents);
+						modifiedBy = -1;
+					}
+					if (p2.modifiedBy >= 0)
+					{
+						if (log)
+						{
+							LogManager.flush(p2.lsn);
+						}
+						FileManager.write(p2.blk, p2.contents);
+						p2.modifiedBy = -1;
+					}
+					if (p3.modifiedBy >= 0)
+					{
+						if (log)
+						{
+							LogManager.flush(p3.lsn);
+						}
+						FileManager.write(p3.blk, p3.contents);
+						p3.modifiedBy = -1;
+					}
+					blk = b;
+					p2.blk = b2;
+					p3.blk = b3;
+					readDone = false;
+					p2.readDone = false;
+					p3.readDone = false;
+					retval = FileManager.read3(this, p2, p3, b, contents, p2.contents, p3.contents);
+					pins.clear();
+					p2.pins.clear();
+					p3.pins.clear();
+				}
+			}
+		}
+		catch (Exception e)
+		{
+			HRDBMSWorker.logger.debug("", e);
+			throw e;
+		}
+
+		return retval;
+		// HRDBMSWorker.logger.debug("Short Page pin3 ending");
+	}
+
+	public synchronized Read3Thread assignToBlock3(Block b, Block b2, Block b3, boolean log, Page p2, Page p3, ArrayList<Integer> cols, int layoutSize) throws Exception
+	{
+		// HRDBMSWorker.logger.debug("Short Page pin3 starting");
+		Read3Thread retval = null;
+		try
+		{
+			synchronized (p2)
+			{
+				synchronized (p3)
+				{
+					if (modifiedBy >= 0)
+					{
+						if (log)
+						{
+							LogManager.flush(lsn);
+						}
+						FileManager.write(blk, contents);
+						modifiedBy = -1;
+					}
+					if (p2.modifiedBy >= 0)
+					{
+						if (log)
+						{
+							LogManager.flush(p2.lsn);
+						}
+						FileManager.write(p2.blk, p2.contents);
+						p2.modifiedBy = -1;
+					}
+					if (p3.modifiedBy >= 0)
+					{
+						if (log)
+						{
+							LogManager.flush(p3.lsn);
+						}
+						FileManager.write(p3.blk, p3.contents);
+						p3.modifiedBy = -1;
+					}
+					blk = b;
+					p2.blk = b2;
+					p3.blk = b3;
+					readDone = false;
+					p2.readDone = false;
+					p3.readDone = false;
+					retval = FileManager.read3(this, p2, p3, b, contents, p2.contents, p3.contents, cols, layoutSize);
+					pins.clear();
+					p2.pins.clear();
+					p3.pins.clear();
+				}
+			}
+		}
+		catch (Exception e)
+		{
+			HRDBMSWorker.logger.debug("", e);
+			throw e;
+		}
+
+		return retval;
+		// HRDBMSWorker.logger.debug("Short Page pin3 ending");
+	}
+
+	public void assignToBlock3(Block b, Block b2, Block b3, boolean log, Schema schema1, Schema schema2, Schema schema3, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos, Page p2, Page p3) throws Exception
+	{
+		// HRDBMSWorker.logger.debug("Long Page pin3 starting");
+		try
+		{
+			synchronized (this)
+			{
+				synchronized (p2)
+				{
+					synchronized (p3)
+					{
+						if (modifiedBy >= 0)
+						{
+							if (log)
+							{
+								LogManager.flush(lsn);
+							}
+							FileManager.write(blk, contents);
+							modifiedBy = -1;
+						}
+						if (p2.modifiedBy >= 0)
+						{
+							if (log)
+							{
+								LogManager.flush(p2.lsn);
+							}
+							FileManager.write(p2.blk, p2.contents);
+							p2.modifiedBy = -1;
+						}
+						if (p3.modifiedBy >= 0)
+						{
+							if (log)
+							{
+								LogManager.flush(p3.lsn);
+							}
+							FileManager.write(p3.blk, p3.contents);
+							p3.modifiedBy = -1;
+						}
+
+						blk = b;
+						readDone = false;
+						pins.clear();
+						p2.blk = b2;
+						p2.readDone = false;
+						p2.pins.clear();
+						p3.blk = b3;
+						p3.readDone = false;
+						p3.pins.clear();
+
+						FileManager.read3(this, p2, p3, b, contents, p2.contents, p3.contents, schema1, schema2, schema3, schemaMap, tx, fetchPos);
+					}
+				}
+			}
+		}
+		catch (Exception e)
+		{
+			HRDBMSWorker.logger.debug("", e);
+			throw e;
+		}
+		// HRDBMSWorker.logger.debug("Long Page pin3 ending");
+	}
+
 	public synchronized void assignToBlockFromMemory(Block b, boolean log, ByteBuffer data) throws Exception
 	{
-		FileManager.getFile(b.fileName());
+		// FileManager.getFile(b.fileName());
 
 		if (modifiedBy >= 0)
 		{
@@ -158,6 +364,25 @@ public class Page
 		contents.position(0);
 		contents.put(data.array());
 		pins.clear();
+	}
+
+	public synchronized void assignToBlockSync(Block b, boolean log) throws Exception
+	{
+		if (b != null)
+		{
+			FileManager.readSync(this, b, contents);
+		}
+	}
+
+	public void assignToBlockSync(Block b, boolean log, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos) throws Exception
+	{
+		synchronized (this)
+		{
+			if (b != null)
+			{
+				FileManager.readSync(this, b, contents, schema, schemaMap, tx, fetchPos);
+			}
+		}
 	}
 
 	public Block block()
@@ -290,7 +515,19 @@ public class Page
 
 		// return contents.getLong(pos);
 		byte[] hb = (byte[])unsafe.getObject(contents, offset);
-		long retval = (hb[pos] << 56) | ((hb[pos + 1] & 0xff) << 48) | ((hb[pos + 2] & 0xff) << 40) | ((hb[pos + 3] & 0xff) << 32) | ((hb[pos + 4] & 0xff) << 24) | ((hb[pos + 5] & 0xff) << 16) | ((hb[pos + 6] & 0xff) << 8) | (hb[pos + 7] & 0xff);
+		long retval = (((long)hb[pos]) << 56) | ((((long)hb[pos + 1]) & 0xff) << 48) | ((((long)hb[pos + 2]) & 0xff) << 40) | ((((long)hb[pos + 3]) & 0xff) << 32) | ((((long)hb[pos + 4]) & 0xff) << 24) | ((((long)hb[pos + 5]) & 0xff) << 16) | ((((long)hb[pos + 6]) & 0xff) << 8) | (((long)hb[pos + 7]) & 0xff);
+		return retval;
+	}
+
+	public synchronized int getMedium(int pos)
+	{
+		while (!readDone)
+		{
+		}
+
+		// return contents.getInt(pos);
+		byte[] hb = (byte[])unsafe.getObject(contents, offset);
+		int retval = (hb[pos] << 16) | ((hb[pos + 1] & 0xff) << 8) | ((hb[pos + 2] & 0xff));
 		return retval;
 	}
 
@@ -353,6 +590,24 @@ public class Page
 	public long pinTime()
 	{
 		return timePinned;
+	}
+
+	public synchronized void preAssignToBlock(Block b, boolean log) throws Exception
+	{
+		if (modifiedBy >= 0)
+		{
+			if (b != null)
+			{
+				if (log)
+				{
+					LogManager.flush(lsn);
+				}
+				FileManager.write(blk, contents);
+			}
+			modifiedBy = -1;
+		}
+		blk = b;
+		readDone = false;
 	}
 
 	public synchronized byte[] read(int off, int length)
@@ -426,7 +681,9 @@ public class Page
 		// HRDBMSWorker.logger.debug("Tried to write to page without xLock", e);
 		// }
 		// LockManager.lock.unlock();
-		BufferManager.write(this, off, data);
+		// BufferManager.write(this, off, data);
+		byte[] hb = (byte[])unsafe.getObject(contents, offset);
+		System.arraycopy(data, 0, hb, off, data.length);
 	}
 
 	public synchronized void writeDirect(int off, byte[] data)
@@ -435,5 +692,21 @@ public class Page
 		// contents.put(data);
 		byte[] hb = (byte[])unsafe.getObject(contents, offset);
 		System.arraycopy(data, 0, hb, off, data.length);
+	}
+
+	public synchronized void writeShift(int srcOff, int destOff, int len, long txnum, long lsn) throws Exception
+	{
+		while (!readDone)
+		{
+		}
+		if (lsn > 0)
+		{
+			this.lsn = lsn;
+		}
+
+		this.modifiedBy = txnum;
+
+		byte[] hb = (byte[])unsafe.getObject(contents, offset);
+		System.arraycopy(hb, srcOff, hb, destOff, len);
 	}
 }

@@ -5,7 +5,8 @@ runstats : 'RUNSTATS' 'ON' tableName ;
 insert : 'INSERT' 'INTO' tableName (('FROM'? fullSelect) | ('VALUES' '(' expression (',' expression)* ')')) ;
 update : 'UPDATE' tableName 'SET' (columnName | colList) EQUALS expression whereClause? ;
 delete : 'DELETE' 'FROM' tableName whereClause? ;
-createTable : 'CREATE' 'TABLE' tableName '(' colDef (',' colDef)* (',' primaryKey)? ')' groupExp? nodeExp deviceExp ;
+createTable : 'CREATE' COLUMN? 'TABLE' tableName '(' colDef (',' colDef)* (',' primaryKey)? ')' colOrder? groupExp? nodeExp deviceExp ;
+colOrder : COLORDER '(' INTEGER (',' INTEGER)* ')' ;
 groupExp : NONE | realGroupExp ;
 realGroupExp :  '{' groupDef ('|' groupDef)* '}' (',' (hashExp | rangeType))? ;
 groupDef : '{' INTEGER ('|' INTEGER)* '}' ;
@@ -129,6 +130,7 @@ TABLECOMBINATION : 'UNION ALL'
 				| 'UNION'
 				| 'INTERSECT'
 				| 'EXCEPT' ;
+COLUMN : 'COLUMN' ;
 DISTINCT : 'DISTINCT' ;
 INTEGER : [0-9]+ ;
 WS : [ \t\n\r]+ -> skip ;
@@ -141,5 +143,6 @@ ANYTEXT : 'ANY' ;
 HASH : 'HASH' ;
 RANGE : 'RANGE' ;
 DATE : 'DATE' ;
+COLORDER : 'COLORDER' ;
 IDENTIFIER : [A-Z]([A-Z] | [0-9] | '_')* ;
 ANY : . ;

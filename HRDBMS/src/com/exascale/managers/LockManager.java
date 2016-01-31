@@ -40,13 +40,13 @@ public class LockManager extends HRDBMSThread
 
 	public static void sLock(Block b, long txnum) throws LockAbortException
 	{
-		int hash = (b.hashCode2() & 0x7FFFFFFF) & (mLength - 1);
+		int hash = (b.hashCode2() & 0x7FFFFFFF) % mLength;
 		managers[hash].sLock(b, txnum);
 	}
 
 	public static void unlockSLock(Block b, long txnum)
 	{
-		int hash = (b.hashCode2() & 0x7FFFFFFF) & (mLength - 1);
+		int hash = (b.hashCode2() & 0x7FFFFFFF) % mLength;
 		managers[hash].unlockSLock(b, txnum);
 	}
 
@@ -62,7 +62,7 @@ public class LockManager extends HRDBMSThread
 
 	public static void xLock(Block b, long txnum) throws LockAbortException
 	{
-		int hash = (b.hashCode2() & 0x7FFFFFFF) & (mLength - 1);
+		int hash = (b.hashCode2() & 0x7FFFFFFF) % mLength;
 		managers[hash].xLock(b, txnum);
 	}
 

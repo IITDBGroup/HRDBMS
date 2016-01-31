@@ -4,28 +4,15 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.Vector;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.LockSupport;
-import java.util.concurrent.locks.ReentrantLock;
 import com.exascale.managers.HRDBMSWorker;
-import com.exascale.managers.ResourceManager;
-import com.exascale.misc.BufferedLinkedBlockingQueue;
 import com.exascale.misc.DataEndMarker;
-import com.exascale.misc.MurmurHash;
-import com.exascale.misc.MyDate;
-import com.exascale.misc.MySimpleDateFormat;
 import com.exascale.tables.Plan;
-import com.exascale.threads.ThreadPoolThread;
 
 public final class NestedLoopJoinOperator extends JoinOperator implements Serializable
 {
@@ -60,7 +47,8 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	private int rightChildCard = 16;
 	private boolean alreadySorted = false;
 	private boolean cardSet = false;
-	private transient Operator dynamicOp;
+	public transient Operator dynamicOp;
+	private int leftChildCard = 16;
 
 	public NestedLoopJoinOperator(ArrayList<Filter> filters, MetaData meta)
 	{
@@ -98,6 +86,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		value.rightChildCard = OperatorUtils.readInt(in);
 		value.alreadySorted = OperatorUtils.readBool(in);
 		value.cardSet = OperatorUtils.readBool(in);
+		value.leftChildCard = OperatorUtils.readInt(in);
 		return value;
 	}
 
@@ -198,6 +187,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		retval.alreadySorted = alreadySorted;
 		retval.rightChildCard = rightChildCard;
 		retval.cardSet = cardSet;
+		retval.leftChildCard = leftChildCard;
 		return retval;
 	}
 
@@ -351,9 +341,21 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return dynamicOp.numRecsReceived();
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return dynamicOp.receivedDEM();
 	}
 
 	@Override
@@ -417,6 +419,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		OperatorUtils.writeInt(rightChildCard, out);
 		OperatorUtils.writeBool(alreadySorted, out);
 		OperatorUtils.writeBool(cardSet, out);
+		OperatorUtils.writeInt(leftChildCard, out);
 	}
 
 	@Override
@@ -442,7 +445,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	{
 	}
 
-	public boolean setRightChildCard(int card)
+	public boolean setRightChildCard(int card, int card2)
 	{
 		if (cardSet)
 		{
@@ -451,6 +454,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 
 		cardSet = true;
 		rightChildCard = card;
+		leftChildCard = card2;
 		return true;
 	}
 
@@ -568,7 +572,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	{
 		boolean usesHash = usesHash();
 		boolean usesSort = usesSort();
-		
+
 		if (!usesHash && !usesSort)
 		{
 			dynamicOp = new ProductOperator(meta);
@@ -580,7 +584,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			{
 				((TableScanOperator)left).rebuild();
 			}
-			
+
 			if (right instanceof TableScanOperator)
 			{
 				((TableScanOperator)right).rebuild();
@@ -596,7 +600,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				((TableScanOperator)right).setCNFForParent(dynamicOp, ((TableScanOperator)right).getCNFForParent(this));
 			}
 			((ProductOperator)dynamicOp).setHSHM(f);
-			((ProductOperator)dynamicOp).setRightChildCard(rightChildCard);
+			((ProductOperator)dynamicOp).setRightChildCard(rightChildCard, leftChildCard);
 			dynamicOp.start();
 		}
 		else if (usesHash)
@@ -621,7 +625,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			{
 				((TableScanOperator)left).rebuild();
 			}
-			
+
 			if (right instanceof TableScanOperator)
 			{
 				((TableScanOperator)right).rebuild();
@@ -637,7 +641,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				((TableScanOperator)right).setCNFForParent(dynamicOp, ((TableScanOperator)right).getCNFForParent(this));
 			}
 			((HashJoinOperator)dynamicOp).setCNF(f);
-			((HashJoinOperator)dynamicOp).setRightChildCard(rightChildCard);
+			((HashJoinOperator)dynamicOp).setRightChildCard(rightChildCard, leftChildCard);
 
 			dynamicOp.start();
 		}
@@ -652,7 +656,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			{
 				((TableScanOperator)left).rebuild();
 			}
-			
+
 			if (right instanceof TableScanOperator)
 			{
 				((TableScanOperator)right).rebuild();
@@ -668,8 +672,9 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 				((TableScanOperator)right).setCNFForParent(dynamicOp, ((TableScanOperator)right).getCNFForParent(this));
 			}
 			((ProductOperator)dynamicOp).setHSHM(f);
-			((ProductOperator)dynamicOp).setRightChildCard(rightChildCard);
-			//((ProductOperator)dynamicOp).setSort(sortKeys(), sortOrders()); //No sort for now
+			((ProductOperator)dynamicOp).setRightChildCard(rightChildCard, leftChildCard);
+			// ((ProductOperator)dynamicOp).setSort(sortKeys(), sortOrders());
+			// //No sort for now
 			dynamicOp.start();
 		}
 	}

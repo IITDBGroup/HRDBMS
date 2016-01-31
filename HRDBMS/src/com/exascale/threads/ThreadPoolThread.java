@@ -10,6 +10,16 @@ public abstract class ThreadPoolThread implements Runnable
 	private volatile Future forJoin;
 	private volatile boolean started = false;
 
+	public boolean isDone()
+	{
+		if (!started())
+		{
+			return false;
+		}
+
+		return forJoin.isDone();
+	}
+
 	public void join() throws InterruptedException
 	{
 		try
@@ -19,11 +29,6 @@ public abstract class ThreadPoolThread implements Runnable
 		catch (final ExecutionException e)
 		{
 		}
-	}
-	
-	public boolean started()
-	{
-		return forJoin != null;
 	}
 
 	public void kill()
@@ -44,14 +49,9 @@ public abstract class ThreadPoolThread implements Runnable
 			HRDBMSWorker.logger.debug("Starting a thread that has already been started", e);
 		}
 	}
-	
-	public boolean isDone()
+
+	public boolean started()
 	{
-		if (!started())
-		{
-			return false;
-		}
-		
-		return forJoin.isDone();
+		return forJoin != null;
 	}
 }

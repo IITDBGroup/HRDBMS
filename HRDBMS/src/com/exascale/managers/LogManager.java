@@ -1,6 +1,7 @@
 package com.exascale.managers;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
@@ -101,7 +102,26 @@ public class LogManager extends HRDBMSThread
 					}
 
 					final File table = new File(fn + ".new");
-					final RandomAccessFile f = new RandomAccessFile(table, "rwd");
+					RandomAccessFile f = null;
+					while (true)
+					{
+						try
+						{
+							f = new RandomAccessFile(table, "rwd");
+							break;
+						}
+						catch (FileNotFoundException e)
+						{
+							ResourceManager.panic = true;
+							try
+							{
+								Thread.sleep(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("rm_sleep_time_ms")) / 2);
+							}
+							catch (Exception g)
+							{
+							}
+						}
+					}
 					FileChannel fc2 = f.getChannel();
 					fc2.truncate(0);
 					Iterator<LogRec> iter = new ForwardLogIterator(fn);
@@ -131,7 +151,26 @@ public class LogManager extends HRDBMSThread
 
 						name += (fn.substring(fn.lastIndexOf('/') + 1) + toArchive.get(0).lsn() + ".archive");
 						final File t = new File(name);
-						final RandomAccessFile f1 = new RandomAccessFile(t, "rwd");
+						RandomAccessFile f1 = null;
+						while (true)
+						{
+							try
+							{
+								f1 = new RandomAccessFile(t, "rwd");
+								break;
+							}
+							catch (FileNotFoundException e)
+							{
+								ResourceManager.panic = true;
+								try
+								{
+									Thread.sleep(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("rm_sleep_time_ms")) / 2);
+								}
+								catch (Exception g)
+								{
+								}
+							}
+						}
 						FileChannel fc1 = f1.getChannel();
 
 						fc1.position(0);
@@ -616,7 +655,26 @@ public class LogManager extends HRDBMSThread
 		if (fc == null)
 		{
 			final File table = new File(filename);
-			final RandomAccessFile f = new RandomAccessFile(table, "rw");
+			RandomAccessFile f = null;
+			while (true)
+			{
+				try
+				{
+					f = new RandomAccessFile(table, "rw");
+					break;
+				}
+				catch (FileNotFoundException e)
+				{
+					ResourceManager.panic = true;
+					try
+					{
+						Thread.sleep(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("rm_sleep_time_ms")) / 2);
+					}
+					catch (Exception g)
+					{
+					}
+				}
+			}
 			fc = f.getChannel();
 			openFiles.put(filename, fc);
 			logs.put(filename, new ArrayDeque<LogRec>());

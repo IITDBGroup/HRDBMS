@@ -78,7 +78,7 @@ public class Block
 	public int hashCode2()
 	{
 		int hash = 17;
-		hash = hash * 23 + blknum;
+		hash = hash * 23 + (blknum / 3);
 		hash = hash * 23 + filename.hashCode();
 		return hash;
 	}

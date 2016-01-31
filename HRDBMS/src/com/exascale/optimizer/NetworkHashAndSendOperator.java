@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedOutputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
@@ -59,6 +60,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		this.id = id;
 		this.starting = starting;
 		this.meta = meta;
+		received = new AtomicLong(0);
 	}
 
 	public static NetworkHashAndSendOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -85,6 +87,8 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		value.error = OperatorUtils.readBool(in);
 		value.connCount = OperatorUtils.readInt(in);
 		value.ce = NetworkSendOperator.cs.newEncoder();
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
 		return value;
 	}
 
@@ -190,6 +194,12 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
 	public Operator parent()
 	{
 		Exception e = new Exception();
@@ -200,6 +210,12 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 	public ArrayList<Operator> parents()
 	{
 		return parents;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
 	}
 
 	@Override
@@ -246,7 +262,8 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		OperatorUtils.writeBool(error, out);
 		OperatorUtils.writeInt(connCount, out);
 	}
-	
+
+	@Override
 	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev, boolean flag) throws Exception
 	{
 		Long id = prev.get(this);
@@ -259,7 +276,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		OperatorUtils.writeType(72, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		// recreate meta
-		//child.serialize(out, prev);
+		// child.serialize(out, prev);
 		new DummyOperator(meta).serialize(out, prev);
 		// prev = parent.serialize(out, prev);
 		OperatorUtils.serializeStringHM(cols2Types, out, prev);
@@ -318,7 +335,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 			HRDBMSWorker.logger.debug("But found " + numParents + " at runtime");
 			throw new Exception("NetworkHashAndSendOperator does not have the correct number of parents");
 		}
-		
+
 		OutputStream[] outs2 = new OutputStream[outs.length];
 		int i = 0;
 		for (OutputStream out : outs)
@@ -332,16 +349,24 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 				throw new Exception(errorText);
 			}
 			started = true;
-			//child.start();
+			// child.start();
 			try
 			{
 				Object o = child.next(this);
+				if (o instanceof DataEndMarker)
+				{
+					demReceived = true;
+				}
+				else
+				{
+					received.getAndIncrement();
+				}
 				final ArrayList<Object> key = new ArrayList<Object>(hashCols.size());
 				while (!(o instanceof DataEndMarker))
 				{
 					final byte[] obj;
 					obj = toBytes(o);
-					
+
 					if (o instanceof Exception)
 					{
 						HRDBMSWorker.logger.debug("", (Exception)o);
@@ -359,7 +384,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 					key.clear();
 					int z = 0;
 					final int limit = hashCols.size();
-					//for (final String col : hashCols)
+					// for (final String col : hashCols)
 					while (z < limit)
 					{
 						final String col = hashCols.get(z++);
@@ -371,11 +396,19 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 					final int hash = (int)(starting + ((0x7FFFFFFFFFFFFFFFL & hash(key)) % numNodes));
 					final OutputStream out = outs2[hash];
 					out.write(obj);
-					
+
 					o = child.next(this);
+					if (o instanceof DataEndMarker)
+					{
+						demReceived = true;
+					}
+					else
+					{
+						received.getAndIncrement();
+					}
 				}
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				for (final OutputStream out : outs2)
 				{

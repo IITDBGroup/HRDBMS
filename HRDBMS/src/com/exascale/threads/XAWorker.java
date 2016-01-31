@@ -94,6 +94,7 @@ public class XAWorker extends HRDBMSThread
 			try
 			{
 				Operator op = p.execute();
+				ResourceManager.registerOperator(op);
 				while (true)
 				{
 					try
@@ -104,6 +105,7 @@ public class XAWorker extends HRDBMSThread
 						{
 							op.nextAll(op);
 							op.close();
+							ResourceManager.deregisterOperator(op);
 							in.clear();
 							out.clear();
 							free.add(in);
@@ -140,6 +142,7 @@ public class XAWorker extends HRDBMSThread
 									out.put(e);
 									op.nextAll(op);
 									op.close();
+									ResourceManager.deregisterOperator(op);
 									this.terminate();
 									return;
 								}
@@ -149,6 +152,7 @@ public class XAWorker extends HRDBMSThread
 						{
 							HRDBMSWorker.logger.debug("Unknown command received by XAWorker: " + text);
 							op.close();
+							ResourceManager.deregisterOperator(op);
 							this.terminate();
 						}
 					}

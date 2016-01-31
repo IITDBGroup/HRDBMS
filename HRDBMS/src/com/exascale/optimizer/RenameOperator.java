@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.tables.Plan;
@@ -41,6 +42,8 @@ public final class RenameOperator implements Operator, Serializable
 	private ArrayList<String> newVals;
 
 	private int node;
+	private transient AtomicLong received;
+	private transient volatile boolean demReceived;
 
 	public RenameOperator(ArrayList<String> oldVals, ArrayList<String> newVals, MetaData meta) throws Exception
 	{
@@ -63,6 +66,7 @@ public final class RenameOperator implements Operator, Serializable
 		}
 
 		this.meta = meta;
+		received = new AtomicLong(0);
 	}
 
 	public static RenameOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -78,6 +82,8 @@ public final class RenameOperator implements Operator, Serializable
 		value.oldVals = OperatorUtils.deserializeALS(in, prev);
 		value.newVals = OperatorUtils.deserializeALS(in, prev);
 		value.node = OperatorUtils.readInt(in);
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
 		return value;
 	}
 
@@ -247,6 +253,14 @@ public final class RenameOperator implements Operator, Serializable
 	public Object next(Operator op) throws Exception
 	{
 		Object o = child.next(this);
+		if (o instanceof DataEndMarker)
+		{
+			demReceived = true;
+		}
+		else
+		{
+			received.getAndIncrement();
+		}
 		if (o instanceof Exception)
 		{
 			throw (Exception)o;
@@ -267,9 +281,21 @@ public final class RenameOperator implements Operator, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
 	}
 
 	@Override

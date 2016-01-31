@@ -184,9 +184,21 @@ public final class RootOperator implements Operator, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return 0;
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return null;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return false;
 	}
 
 	@Override

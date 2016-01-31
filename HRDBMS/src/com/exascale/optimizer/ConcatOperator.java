@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.tables.Plan;
 
@@ -41,6 +42,8 @@ public final class ConcatOperator implements Operator, Serializable
 	private Integer colPos1;
 
 	private Integer colPos2;
+	private transient AtomicLong received;
+	private transient volatile boolean demReceived;
 
 	public ConcatOperator(String col1, String col2, String name, MetaData meta)
 	{
@@ -48,6 +51,7 @@ public final class ConcatOperator implements Operator, Serializable
 		this.col2 = col2;
 		this.meta = meta;
 		this.name = name;
+		received = new AtomicLong(0);
 	}
 
 	public static ConcatOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -65,6 +69,8 @@ public final class ConcatOperator implements Operator, Serializable
 		value.node = OperatorUtils.readInt(in);
 		value.colPos1 = OperatorUtils.readIntClass(in, prev);
 		value.colPos2 = OperatorUtils.readIntClass(in, prev);
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
 		return value;
 	}
 
@@ -230,7 +236,12 @@ public final class ConcatOperator implements Operator, Serializable
 		final Object o = child.next(this);
 		if (o instanceof DataEndMarker)
 		{
+			demReceived = true;
 			return o;
+		}
+		else
+		{
+			received.getAndIncrement();
 		}
 
 		if (o instanceof Exception)
@@ -255,9 +266,21 @@ public final class ConcatOperator implements Operator, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
 	}
 
 	@Override

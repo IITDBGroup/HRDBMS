@@ -1,21 +1,23 @@
 package com.exascale.managers;
 
+import java.io.BufferedReader;
 import java.io.File;
-import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.PrintWriter;
-import java.io.RandomAccessFile;
+import java.io.Reader;
+import java.io.StringWriter;
+import java.io.Writer;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
 import java.lang.reflect.Field;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.TreeSet;
@@ -23,18 +25,15 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.StampedLock;
-import com.exascale.misc.DataEndMarker;
+import com.exascale.filesystem.CompressedFileChannel;
 import com.exascale.misc.HParms;
-import com.exascale.misc.InternalConcurrentHashMap;
-import com.exascale.misc.InternalConcurrentHashMap.EntrySetView;
-import com.exascale.misc.InternalConcurrentHashMap.MapEntry;
-import com.exascale.misc.LongPrimitiveConcurrentHashMap;
-import com.exascale.misc.LongPrimitiveConcurrentHashMap.EntryIterator;
-import com.exascale.misc.MurmurHash;
-import com.exascale.misc.MyDate;
-import com.exascale.misc.ReverseConcurrentHashMap;
+import com.exascale.optimizer.AntiJoinOperator;
+import com.exascale.optimizer.NestedLoopJoinOperator;
+import com.exascale.optimizer.NetworkSendOperator;
+import com.exascale.optimizer.Operator;
+import com.exascale.optimizer.SemiJoinOperator;
 import com.exascale.optimizer.TableScanOperator;
+import com.exascale.tables.Transaction;
 import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.ThreadPoolThread;
 
@@ -45,7 +44,6 @@ public final class ResourceManager extends HRDBMSThread
 	private static int CRITICAL_PERCENT_FREE = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("critical_mem_percent"));
 	public static int QUEUE_SIZE;
 	public static int CUDA_SIZE;
-	private static volatile boolean lowMem = false;
 	public static ArrayList<String> TEMP_DIRS;
 	private static final AtomicLong idGen = new AtomicLong(0);
 	private static HashMap<Long, String> creations = new HashMap<Long, String>();
@@ -62,6 +60,10 @@ public final class ResourceManager extends HRDBMSThread
 	private static sun.misc.Unsafe unsafe;
 	private static long offset;
 	private static long lastSystemGC = 0;
+	public static volatile boolean panic = false;
+	private static IdentityHashMap<Operator, Operator> ops = new IdentityHashMap<Operator, Operator>();
+	public static int MAX_FCS;
+
 	static
 	{
 		try
@@ -72,6 +74,7 @@ public final class ResourceManager extends HRDBMSThread
 			final Field fieldToUpdate = String.class.getDeclaredField("value");
 			// get unsafe offset to this field
 			offset = unsafe.objectFieldOffset(fieldToUpdate);
+			MAX_FCS = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("num_fcs_per_cfc"));
 		}
 		catch (final Exception e)
 		{
@@ -127,28 +130,315 @@ public final class ResourceManager extends HRDBMSThread
 		}
 	}
 
-	public static boolean lowMem()
+	public static void checkOpenFiles() throws Exception
 	{
-		return ((Runtime.getRuntime().freeMemory()) * 100.0) / (maxMemory * 1.0) < LOW_PERCENT_FREE;
+		ProcessBuilder crunchifyProcessBuilder = null;
+
+		crunchifyProcessBuilder = new ProcessBuilder("/bin/bash", "-c", "bc -l  <<< \"`cat /proc/sys/fs/file-nr | cut -f1` - `cat /proc/sys/fs/file-nr | cut -f2`\"");
+		crunchifyProcessBuilder.redirectErrorStream(true);
+		Writer crunchifyWriter = null;
+		try
+		{
+			Process process = crunchifyProcessBuilder.start();
+			if (true)
+			{
+				InputStream crunchifyStream = process.getInputStream();
+
+				if (crunchifyStream != null)
+				{
+					crunchifyWriter = new StringWriter();
+
+					char[] crunchifyBuffer = new char[2048];
+					try
+					{
+						Reader crunchifyReader = new BufferedReader(new InputStreamReader(crunchifyStream, StandardCharsets.UTF_8));
+						int count;
+						while ((count = crunchifyReader.read(crunchifyBuffer)) != -1)
+						{
+							crunchifyWriter.write(crunchifyBuffer, 0, count);
+						}
+					}
+					finally
+					{
+						crunchifyStream.close();
+					}
+					crunchifyWriter.toString();
+					crunchifyStream.close();
+				}
+			}
+		}
+		catch (Exception e)
+		{
+			panic = true;
+		}
+		if (crunchifyWriter == null)
+		{
+			panic = true;
+		}
+
+		if (panic)
+		{
+			panic = false;
+			long maxOpen = Long.parseLong(HRDBMSWorker.getHParms().getProperty("max_open_files"));
+			long openFiles = maxOpen;
+			double factor = 0;
+			closeSomeFiles(openFiles, maxOpen, factor);
+		}
+		else
+		{
+			long openFiles = Integer.parseInt(crunchifyWriter.toString().trim());
+			HRDBMSWorker.logger.debug("Open files - " + openFiles);
+			long maxOpen = Long.parseLong(HRDBMSWorker.getHParms().getProperty("max_open_files"));
+			double factor = 0.5;
+			closeSomeFiles(openFiles, maxOpen, factor);
+		}
+
+		for (CompressedFileChannel cfc : FileManager.openFiles.values())
+		{
+			cfc.accesses.set(0);
+			cfc.didRead3.set(false);
+			cfc.aoOK.set(true);
+		}
 	}
-	
+
 	public static boolean criticalMem()
 	{
 		return ((Runtime.getRuntime().freeMemory()) * 100.0) / (maxMemory * 1.0) < CRITICAL_PERCENT_FREE;
 	}
 
-	private static void handleLowMem()
+	public static void deregisterOperator(Operator op)
 	{
-		if (lowMem())
+		synchronized (ops)
 		{
-			long time = System.currentTimeMillis();
-			if (time - lastSystemGC > GC_TIME)
+			ops.remove(op);
+		}
+	}
+
+	public static boolean display(Operator op, int indent)
+	{
+		boolean unpin = true;
+		
+		if (op instanceof TableScanOperator)
+		{
+			unpin = op.receivedDEM();
+		}
+		
+		String line = "";
+		int i = 0;
+		while (i < indent)
+		{
+			line += " ";
+			i++;
+		}
+
+		line += op;
+		line += " : Received " + op.numRecsReceived() + " records. Received DataEndMarker? " + op.receivedDEM();
+		HRDBMSWorker.logger.debug(line);
+
+		if (( op instanceof SemiJoinOperator) || (op instanceof AntiJoinOperator) || (op instanceof NestedLoopJoinOperator) || (op.children() != null && op.children().size() > 0 && !(op.children().get(0) instanceof NetworkSendOperator)))
+		{
+			line = "";
+			i = 0;
+			while (i < indent)
 			{
-				System.gc();
-				lastSystemGC = System.currentTimeMillis();
-				GC_TIME = (lastSystemGC - time) * 5;
+				line += " ";
+				i++;
+			}
+
+			line += "(";
+			HRDBMSWorker.logger.debug(line);
+
+			if (op instanceof SemiJoinOperator && ((SemiJoinOperator)op).dynamicOp != null)
+			{
+				if (!display(((SemiJoinOperator)op).dynamicOp, indent + 3))
+				{
+					unpin = false;
+				}
+			}
+			else if (op instanceof AntiJoinOperator && ((AntiJoinOperator)op).dynamicOp != null)
+			{
+				if (!display(((AntiJoinOperator)op).dynamicOp, indent + 3))
+				{
+					unpin = false;
+				}
+			}
+			else if (op instanceof NestedLoopJoinOperator && ((NestedLoopJoinOperator)op).dynamicOp != null)
+			{
+				if (!display(((NestedLoopJoinOperator)op).dynamicOp, indent + 3))
+				{
+					unpin = false;
+				}
+			}
+			else
+			{
+				for (Operator child : op.children())
+				{
+					if (!display(child, indent + 3))
+					{
+						unpin = false;
+					}
+				}
+			}
+
+			line = "";
+			i = 0;
+			while (i < indent)
+			{
+				line += " ";
+				i++;
+			}
+
+			line += ")";
+			HRDBMSWorker.logger.debug(line);
+		}
+		
+		return unpin;
+	}
+
+	public static boolean lowMem()
+	{
+		return ((Runtime.getRuntime().freeMemory()) * 100.0) / (maxMemory * 1.0) < LOW_PERCENT_FREE;
+	}
+
+	public static void registerOperator(Operator op)
+	{
+		synchronized (ops)
+		{
+			ops.put(op, op);
+		}
+	}
+
+	private static void closeSomeFiles(long numOpen, long maxOpen, double factor)
+	{
+		long totalAccesses = 0;
+		long totalFiles = 0;
+		HashMap<CompressedFileChannel, Long> cfc2Open = new HashMap<CompressedFileChannel, Long>();
+		for (CompressedFileChannel cfc : FileManager.openFiles.values())
+		{
+			long get = cfc.accesses.get();
+			if (get == 0)
+			{
+				get = 1;
+			}
+			cfc2Open.put(cfc, get);
+			totalAccesses += get;
+			totalFiles += cfc.fcs_size.get();
+		}
+
+		long otherFiles = numOpen - totalFiles;
+		HRDBMSWorker.logger.debug("Open files - " + numOpen + "\tOther files - " + otherFiles);
+		if (otherFiles < 0)
+		{
+			otherFiles = 0;
+		}
+		long target = (long)(maxOpen * factor);
+		target -= otherFiles;
+		if (target < 1)
+		{
+			target = 1;
+		}
+
+		for (CompressedFileChannel cfc : cfc2Open.keySet())
+		{
+			Long get = cfc2Open.get(cfc);
+			double pct = get * 1.0 / totalAccesses;
+			int num = (int)(pct * target);
+			if (num == 0)
+			{
+				num = 1;
+			}
+
+			int realNum = num;
+
+			if (num > MAX_FCS)
+			{
+				num = MAX_FCS;
+			}
+
+			cfc.MAX_FCS = num;
+			int current = cfc.fcs_size.get();
+			if (current > num && numOpen > maxOpen * factor)
+			{
+				// HRDBMSWorker.logger.debug("Current = " + current +
+				// "\tTarget = " + num);
+				if (cfc.trimInProgress.compareAndSet(false, true))
+				{
+					cfc.new TrimFCSThread().start();
+					// HRDBMSWorker.logger.debug("Starting trim thread");
+				}
+				else
+				{
+					// HRDBMSWorker.logger.debug("Unable to start trim thread");
+				}
+			}
+			else if (cfc.aoOK.get() && current + MAX_FCS < realNum && cfc.didRead3.get() && !cfc.fn.endsWith("indx"))
+			{
+				if (cfc.oaInProgress.compareAndSet(false, true))
+				{
+					cfc.new OpenAheadThread().start();
+					numOpen += (MAX_FCS + 500);
+				}
+			}
+			else if (current + MAX_FCS < realNum && cfc.aoBlocks.size() > 0)
+			{
+				if (cfc.oaInProgress.compareAndSet(false, true))
+				{
+					cfc.new OpenAheadThread(true).start();
+					numOpen += (MAX_FCS + 500);
+				}
 			}
 		}
+	}
+
+	private static void displayQueryProgress()
+	{
+		boolean unpin = true;
+		if (HRDBMSWorker.type != HRDBMSWorker.TYPE_WORKER)
+		{
+			unpin = false;
+		}
+		
+		synchronized (ops)
+		{
+			for (Operator op : ops.keySet())
+			{
+				try
+				{
+					if (!display(op, 0))
+					{
+						unpin = false;
+					}
+				}
+				catch (Exception e)
+				{
+					HRDBMSWorker.logger.debug("", e);
+				}
+			}
+		}
+		
+		/*
+		if (unpin)
+		{
+			for (SubBufferManager sbm : BufferManager.managers)
+			{
+				sbm.lock.lock();
+			}
+			
+			try
+			{
+				BufferManager.unpinAll();
+			}
+			catch(Exception e)
+			{
+				HRDBMSWorker.logger.debug("", e);
+			}
+			
+			for (SubBufferManager sbm : BufferManager.managers)
+			{
+				sbm.lock.unlock();
+			}
+		}
+		*/
 	}
 
 	private static void setDirs(String list)
@@ -185,36 +475,36 @@ public final class ResourceManager extends HRDBMSThread
 		{
 			new DeadlockThread().start();
 		}
-		//while (true)
-		//{
-			// System.out.println(((Runtime.getRuntime().freeMemory() +
-			// Runtime.getRuntime().maxMemory() -
-			// Runtime.getRuntime().totalMemory()) * 100.0) /
-			// (Runtime.getRuntime().maxMemory() * 1.0) + "% free");
-			// if (highMem() && hasBeenLowMem)
-			// {
-			// handleHighMem();
-			// hasBeenLowMem = false;
-			// }
-			//if (lowMem())
-			//{
-				// System.gc();
-				// if (lowMem())
-				// {
-				//lowMem = true;
-			//	handleLowMem();
-				//lowMem = false;
-				// }
-			//}
+		// while (true)
+		// {
+		// System.out.println(((Runtime.getRuntime().freeMemory() +
+		// Runtime.getRuntime().maxMemory() -
+		// Runtime.getRuntime().totalMemory()) * 100.0) /
+		// (Runtime.getRuntime().maxMemory() * 1.0) + "% free");
+		// if (highMem() && hasBeenLowMem)
+		// {
+		// handleHighMem();
+		// hasBeenLowMem = false;
+		// }
+		// if (lowMem())
+		// {
+		// System.gc();
+		// if (lowMem())
+		// {
+		// lowMem = true;
+		// handleLowMem();
+		// lowMem = false;
+		// }
+		// }
 
-			//try
-			//{
-			//	Thread.sleep(SLEEP_TIME);
-			//}
-			//catch (final Exception e)
-			//{
-			//}
-		//}
+		// try
+		// {
+		// Thread.sleep(SLEEP_TIME);
+		// }
+		// catch (final Exception e)
+		// {
+		// }
+		// }
 	}
 
 	private static final class DeadlockThread extends ThreadPoolThread
@@ -265,6 +555,7 @@ public final class ResourceManager extends HRDBMSThread
 			// long last = System.currentTimeMillis();
 			// HashMap<GarbageCollectorMXBean, Long> map = new
 			// HashMap<GarbageCollectorMXBean, Long>();
+			int i = 0;
 			while (true)
 			{
 				// long temp = System.currentTimeMillis();
@@ -305,8 +596,29 @@ public final class ResourceManager extends HRDBMSThread
 				// last = temp;
 				//
 				HRDBMSWorker.logger.debug(((Runtime.getRuntime().freeMemory()) * 100.0) / (maxMemory * 1.0) + "% free - skipped " + TableScanOperator.skippedPages.get() + " pages");
+				try
+				{
+					checkOpenFiles();
+				}
+				catch (Exception e)
+				{
+					HRDBMSWorker.logger.debug("", e);
+				}
+				// for (SubBufferManager sbm : BufferManager.managers)
+				// {
+				// HRDBMSWorker.logger.debug("Owner is " +
+				// sbm.lock.whoIsOwner());
+				// HRDBMSWorker.logger.debug("Owners is " +
+				// sbm.lock.getOwners());
+				// }
 				// HRDBMSWorker.logger.debug("GC time was " + (pct * 100.0) +
 				// "%");
+				if (i % 12 == 0)
+				{
+					displayQueryProgress();
+				}
+
+				i++;
 				try
 				{
 					Thread.sleep(SLEEP_TIME);

@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Transaction;
@@ -49,11 +50,14 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 	private String hashCol = null;
 
 	private int hashPos;
+	private transient AtomicLong received;
+	private transient volatile boolean demReceived;
 
 	public SelectOperator(ArrayList<Filter> filters, MetaData meta)
 	{
 		this.filters = filters;
 		this.meta = meta;
+		received = new AtomicLong(0);
 
 		boolean leftIsAllCol = true;
 		boolean leftIsAllLiteral = true;
@@ -173,6 +177,8 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 		{
 			references.add(filter.rightColumn());
 		}
+
+		received = new AtomicLong(0);
 	}
 
 	public static SelectOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -192,6 +198,8 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 		value.hashSet = OperatorUtils.deserializeHSO(in, prev);
 		value.hashCol = OperatorUtils.readString(in, prev);
 		value.hashPos = OperatorUtils.readInt(in);
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
 		return value;
 	}
 
@@ -312,6 +320,14 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 	public Object next(Operator op) throws Exception
 	{
 		Object o = child.next(this);
+		if (o instanceof DataEndMarker)
+		{
+			demReceived = true;
+		}
+		else
+		{
+			received.getAndIncrement();
+		}
 		// total.getAndIncrement();
 		while (!(o instanceof DataEndMarker))
 		{
@@ -345,7 +361,7 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 			{
 				int z = 0;
 				final int limit = filters.size();
-				//for (final Filter filter : filters)
+				// for (final Filter filter : filters)
 				while (z < limit)
 				{
 					final Filter filter = filters.get(z++);
@@ -358,6 +374,14 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 			}
 
 			o = child.next(this);
+			if (o instanceof DataEndMarker)
+			{
+				demReceived = true;
+			}
+			else
+			{
+				received.getAndIncrement();
+			}
 			// total.getAndIncrement();
 		}
 
@@ -378,9 +402,21 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
 	}
 
 	@Override

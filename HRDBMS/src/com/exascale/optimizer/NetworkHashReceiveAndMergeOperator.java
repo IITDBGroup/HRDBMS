@@ -15,8 +15,8 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedInputStream;
-import com.exascale.compression.CompressedOutputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.BinomialHeap;
 import com.exascale.misc.DataEndMarker;
@@ -30,8 +30,6 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 	private static long offset;
 
 	private static sun.misc.Unsafe unsafe;
-	private boolean send = false;
-
 	static
 	{
 		try
@@ -48,6 +46,8 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 			unsafe = null;
 		}
 	}
+
+	private boolean send = false;
 	private ArrayList<String> sortCols;
 	private ArrayList<Boolean> orders;
 
@@ -61,11 +61,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 		this.sortCols = sortCols;
 		this.orders = orders;
 		this.ID = ID;
-	}
-	
-	public void setSend()
-	{
-		send = true;
+		received = new AtomicLong(0);
 	}
 
 	public static NetworkHashReceiveAndMergeOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -87,6 +83,8 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 		value.sortPos = OperatorUtils.deserializeIntArray(in, prev);
 		value.send = OperatorUtils.readBool(in);
 		value.cd = cs.newDecoder();
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
 		return value;
 	}
 
@@ -143,85 +141,6 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 	{
 		return meta;
 	}
-	
-	public void start() throws Exception
-	{
-		if (!fullyStarted)
-		{
-			synchronized (this)
-			{
-				if (!fullyStarted)
-				{
-					super.start(true);
-					HRDBMSWorker.logger.debug("Starting NetworkHashReceiveAndMergeOperator ID = " + ID);
-					fullyStarted = true;
-					for (final Operator op : children)
-					{
-						final NetworkSendOperator child = (NetworkSendOperator)op;
-						child.clearParent();
-						Socket sock = null;
-						try
-						{
-							// sock = new
-							// Socket(meta.getHostNameForNode(child.getNode()),
-							// WORKER_PORT);
-							sock = new Socket();
-							sock.setReceiveBufferSize(262144);
-							sock.setSendBufferSize(262144);
-							sock.connect(new InetSocketAddress(meta.getHostNameForNode(child.getNode()), WORKER_PORT));
-						}
-						catch (final java.net.ConnectException e)
-						{
-							HRDBMSWorker.logger.error("Connection failed to " + meta.getHostNameForNode(child.getNode()), e);
-							throw e;
-						}
-						socks.put(child, sock);
-						final OutputStream out = sock.getOutputStream();
-						outs.put(child, out);
-						final InputStream in = new BufferedInputStream(sock.getInputStream(), 65536);
-						ins.put(child, in);
-						
-						if (send)
-						{
-							final byte[] command = "SNDRMTTR".getBytes(StandardCharsets.UTF_8);
-							final byte[] from = intToBytes(node);
-							final byte[] to = intToBytes(child.getNode());
-							final byte[] idBytes = intToBytes(ID);
-							final byte[] data = new byte[command.length + from.length + to.length + idBytes.length];
-							System.arraycopy(command, 0, data, 0, 8);
-							System.arraycopy(from, 0, data, 8, 4);
-							System.arraycopy(to, 0, data, 12, 4);
-							System.arraycopy(idBytes, 0, data, 16, 4);
-							out.write(data);
-							out.flush();
-					
-							IdentityHashMap<Object, Long> map = new IdentityHashMap<Object, Long>();
-							child.serialize(out, map);
-							map.clear();
-							map = null;
-							out.flush();
-						}
-						else
-						{
-							final byte[] command = "SNDRMTT2".getBytes(StandardCharsets.UTF_8);
-							final byte[] from = intToBytes(node);
-							final byte[] to = intToBytes(child.getNode());
-							final byte[] idBytes = intToBytes(ID);
-							final byte[] data = new byte[command.length + from.length + to.length + idBytes.length];
-							System.arraycopy(command, 0, data, 0, 8);
-							System.arraycopy(from, 0, data, 8, 4);
-							System.arraycopy(to, 0, data, 12, 4);
-							System.arraycopy(idBytes, 0, data, 16, 4);
-							out.write(data);
-							out.flush();
-						}
-					}
-
-					new InitThread().start();
-				}
-			}
-		}
-	}
 
 	@Override
 	public Object next(Operator op2) throws Exception
@@ -231,6 +150,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 
 		if (o instanceof DataEndMarker)
 		{
+			demReceived = true;
 			o = outBuffer.peek();
 			if (o == null)
 			{
@@ -243,12 +163,28 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 				return o;
 			}
 		}
+		else
+		{
+			received.getAndIncrement();
+		}
 
 		if (o instanceof Exception)
 		{
 			throw (Exception)o;
 		}
 		return o;
+	}
+
+	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
 	}
 
 	@Override
@@ -302,6 +238,91 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 	public void setID(int id)
 	{
 		this.ID = id;
+	}
+
+	public void setSend()
+	{
+		send = true;
+	}
+
+	@Override
+	public void start() throws Exception
+	{
+		if (!fullyStarted)
+		{
+			synchronized (this)
+			{
+				if (!fullyStarted)
+				{
+					super.start(true);
+					HRDBMSWorker.logger.debug("Starting NetworkHashReceiveAndMergeOperator ID = " + ID);
+					fullyStarted = true;
+					for (final Operator op : children)
+					{
+						final NetworkSendOperator child = (NetworkSendOperator)op;
+						child.clearParent();
+						Socket sock = null;
+						try
+						{
+							// sock = new
+							// Socket(meta.getHostNameForNode(child.getNode()),
+							// WORKER_PORT);
+							sock = new Socket();
+							sock.setReceiveBufferSize(262144);
+							sock.setSendBufferSize(262144);
+							sock.connect(new InetSocketAddress(meta.getHostNameForNode(child.getNode()), WORKER_PORT));
+						}
+						catch (final java.net.ConnectException e)
+						{
+							HRDBMSWorker.logger.error("Connection failed to " + meta.getHostNameForNode(child.getNode()), e);
+							throw e;
+						}
+						socks.put(child, sock);
+						final OutputStream out = sock.getOutputStream();
+						outs.put(child, out);
+						final InputStream in = new BufferedInputStream(sock.getInputStream(), 65536);
+						ins.put(child, in);
+
+						if (send)
+						{
+							final byte[] command = "SNDRMTTR".getBytes(StandardCharsets.UTF_8);
+							final byte[] from = intToBytes(node);
+							final byte[] to = intToBytes(child.getNode());
+							final byte[] idBytes = intToBytes(ID);
+							final byte[] data = new byte[command.length + from.length + to.length + idBytes.length];
+							System.arraycopy(command, 0, data, 0, 8);
+							System.arraycopy(from, 0, data, 8, 4);
+							System.arraycopy(to, 0, data, 12, 4);
+							System.arraycopy(idBytes, 0, data, 16, 4);
+							out.write(data);
+							out.flush();
+
+							IdentityHashMap<Object, Long> map = new IdentityHashMap<Object, Long>();
+							child.serialize(out, map);
+							map.clear();
+							map = null;
+							out.flush();
+						}
+						else
+						{
+							final byte[] command = "SNDRMTT2".getBytes(StandardCharsets.UTF_8);
+							final byte[] from = intToBytes(node);
+							final byte[] to = intToBytes(child.getNode());
+							final byte[] idBytes = intToBytes(ID);
+							final byte[] data = new byte[command.length + from.length + to.length + idBytes.length];
+							System.arraycopy(command, 0, data, 0, 8);
+							System.arraycopy(from, 0, data, 8, 4);
+							System.arraycopy(to, 0, data, 12, 4);
+							System.arraycopy(idBytes, 0, data, 16, 4);
+							out.write(data);
+							out.flush();
+						}
+					}
+
+					new InitThread().start();
+				}
+			}
+		}
 	}
 
 	@Override
@@ -607,7 +628,8 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 					bb.get(temp);
 					try
 					{
-						// final String o = new String(temp, StandardCharsets.UTF_8);
+						// final String o = new String(temp,
+						// StandardCharsets.UTF_8);
 						String value = (String)unsafe.allocateInstance(String.class);
 						int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(temp, 0, length, ca);
 						if (clen == ca.length)

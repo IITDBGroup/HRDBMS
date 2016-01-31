@@ -6,7 +6,6 @@ import java.io.FileReader;
 import java.io.InputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
-import java.io.RandomAccessFile;
 import java.io.Serializable;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -14,7 +13,6 @@ import java.net.NetworkInterface;
 import java.net.Socket;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -26,7 +24,6 @@ import java.util.StringTokenizer;
 import java.util.TreeMap;
 import com.exascale.exceptions.ParseException;
 import com.exascale.filesystem.Block;
-import com.exascale.filesystem.Page;
 import com.exascale.managers.BufferManager;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LockManager;
@@ -133,7 +130,7 @@ public final class MetaData implements Serializable
 	}
 
 	private transient ConnectionWorker connection = null;
-	private HashMap<ColAndTree, String> gtfcCache = new HashMap<ColAndTree, String>();
+	private final HashMap<ColAndTree, String> gtfcCache = new HashMap<ColAndTree, String>();
 
 	public MetaData()
 	{
@@ -222,8 +219,11 @@ public final class MetaData implements Serializable
 		{
 			ArrayList<String> devHash = pmeta.getDeviceHash();
 			ArrayList<Object> partial = new ArrayList<Object>();
-			for (String col : devHash)
+			final int z = devHash.size();
+			int i = 0;
+			while (i < z)
 			{
+				String col = devHash.get(i++);
 				try
 				{
 					partial.add(row.get(cols2Pos.get(table + "." + col)));
@@ -308,8 +308,11 @@ public final class MetaData implements Serializable
 			{
 				ArrayList<String> nodeHash = pmeta.getNodeHash();
 				ArrayList<Object> partial = new ArrayList<Object>();
-				for (String col : nodeHash)
+				final int z = nodeHash.size();
+				int i = 0;
+				while (i < z)
 				{
+					String col = nodeHash.get(i++);
 					partial.add(row.get(cols2Pos.get(table + "." + col)));
 				}
 
@@ -382,8 +385,11 @@ public final class MetaData implements Serializable
 			{
 				ArrayList<String> nodeGroupHash = pmeta.getNodeGroupHash();
 				ArrayList<Object> partial = new ArrayList<Object>();
-				for (String col : nodeGroupHash)
+				final int z = nodeGroupHash.size();
+				int i = 0;
+				while (i < z)
 				{
+					String col = nodeGroupHash.get(i++);
 					partial.add(row.get(cols2Pos.get(table + "." + col)));
 				}
 
@@ -428,8 +434,11 @@ public final class MetaData implements Serializable
 			{
 				ArrayList<String> nodeHash = pmeta.getNodeHash();
 				ArrayList<Object> partial = new ArrayList<Object>();
-				for (String col : nodeHash)
+				final int z = nodeHash.size();
+				int i = 0;
+				while (i < z)
 				{
+					String col = nodeHash.get(i++);
 					partial.add(row.get(cols2Pos.get(table + "." + col)));
 				}
 
@@ -1114,7 +1123,7 @@ public final class MetaData implements Serializable
 		int i = 8;
 		int z = 0;
 		int limit = val.size();
-		//for (final Object o : val)
+		// for (final Object o : val)
 		while (z < limit)
 		{
 			Object o = val.get(z++);
@@ -1196,7 +1205,7 @@ public final class MetaData implements Serializable
 		int x = 0;
 		z = 0;
 		limit = val.size();
-		//for (final Object o : val)
+		// for (final Object o : val)
 		while (z < limit)
 		{
 			Object o = val.get(z++);
@@ -1265,7 +1274,7 @@ public final class MetaData implements Serializable
 		populateIndex(schema, index, table, tx, cols2Pos);
 	}
 
-	public void createTable(String schema, String table, ArrayList<ColDef> defs, ArrayList<String> pks, Transaction tx, String nodeGroupExp, String nodeExp, String deviceExp) throws Exception
+	public void createTable(String schema, String table, ArrayList<ColDef> defs, ArrayList<String> pks, Transaction tx, String nodeGroupExp, String nodeExp, String deviceExp, int tType, ArrayList<Integer> colOrder) throws Exception
 	{
 		// validate expressions
 		HashMap<String, String> cols2Types = new HashMap<String, String>();
@@ -1295,7 +1304,13 @@ public final class MetaData implements Serializable
 		// indexcols
 		// partitioning
 		int tableID = PlanCacheManager.getNextTableID().setParms().execute(tx);
-		PlanCacheManager.getInsertTable().setParms(tableID, schema, table, "R").execute(tx);
+		String typeFlag = "R";
+		if (tType == 1)
+		{
+			typeFlag = "C";
+		}
+
+		PlanCacheManager.getInsertTable().setParms(tableID, schema, table, typeFlag).execute(tx);
 		int colID = 0;
 		for (ColDef def : defs)
 		{
@@ -1340,19 +1355,28 @@ public final class MetaData implements Serializable
 		}
 
 		PlanCacheManager.getInsertPartition().setParms(tableID, nodeGroupExp, nodeExp, deviceExp).execute(tx);
-		int indexID = PlanCacheManager.getNextIndexID().setParms(tableID).execute(tx);
-		PlanCacheManager.getInsertIndex().setParms(indexID, "PK" + table, tableID, true).execute(tx);
-		HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
-		int pos = 0;
-		for (String col : pks)
+		int indexID = -1;
+		if (pks != null && pks.size() != 0)
 		{
-			colID = cols2Pos.get(table + "." + col);
-			PlanCacheManager.getInsertIndexCol().setParms(indexID, tableID, colID, pos, true).execute(tx);
-			pos++;
+			indexID = PlanCacheManager.getNextIndexID().setParms(tableID).execute(tx);
+			PlanCacheManager.getInsertIndex().setParms(indexID, "PK" + table, tableID, true).execute(tx);
+		
+			HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
+			int pos = 0;
+			for (String col : pks)
+			{
+				colID = cols2Pos.get(table + "." + col);
+				PlanCacheManager.getInsertIndexCol().setParms(indexID, tableID, colID, pos, true).execute(tx);
+				pos++;
+			}
 		}
 
-		buildTable(schema, table, defs.size(), tx);
-		buildIndex(schema, "PK" + table, table, pks.size(), true, tx);
+		buildTable(schema, table, defs.size(), tx, tType, defs, colOrder);
+
+		if (pks != null && pks.size() != 0)
+		{
+			buildIndex(schema, "PK" + table, table, pks.size(), true, tx);
+		}
 	}
 
 	public int determineDevice(String schema, String table, ArrayList<Object> row, PartitionMetaData pmeta, Transaction tx) throws Exception
@@ -1703,7 +1727,12 @@ public final class MetaData implements Serializable
 				final int size = cs.size();
 				while (i < size)
 				{
+					long old = card;
 					card *= 1000000;
+					if (card < 0)
+					{
+						return old;
+					}
 					i++;
 				}
 
@@ -1838,24 +1867,25 @@ public final class MetaData implements Serializable
 			rs = PlanCacheManager.getCols2PosForTable().setParms(schema, name).execute(tx);
 			getCols2PosForTableCache.put(schema + "." + name, rs);
 		}
-		
-		//DEBUG
-		//if (rs.size() < 2)
-		//{
-		//	HRDBMSWorker.logger.debug("Unable to get cols2Pos info for " + schema + "." + name);
-		//	Block b = new Block("/data1/SYS.PKTABLES.indx", 0);
-		//	tx.requestPage(b);
-		//	Page p = tx.getPage(b);
-		//	RandomAccessFile raf = new RandomAccessFile("/tmp/dump", "rw");
-		//	FileChannel fc = raf.getChannel();
-		//	p.buffer().position(0);
-		//	fc.write(p.buffer());
-		//	fc.close();
-		//	raf.close();
-		//	System.exit(-1);
-		//}
-		//DEBUG
-		
+
+		// DEBUG
+		// if (rs.size() < 2)
+		// {
+		// HRDBMSWorker.logger.debug("Unable to get cols2Pos info for " + schema
+		// + "." + name);
+		// Block b = new Block("/data1/SYS.PKTABLES.indx", 0);
+		// tx.requestPage(b);
+		// Page p = tx.getPage(b);
+		// RandomAccessFile raf = new RandomAccessFile("/tmp/dump", "rw");
+		// FileChannel fc = raf.getChannel();
+		// p.buffer().position(0);
+		// fc.write(p.buffer());
+		// fc.close();
+		// raf.close();
+		// System.exit(-1);
+		// }
+		// DEBUG
+
 		for (Object r : rs)
 		{
 			if (r instanceof DataEndMarker)
@@ -1984,89 +2014,6 @@ public final class MetaData implements Serializable
 		{
 			rs = PlanCacheManager.getIndexes().setParms(schema, table).execute(tx);
 			getIndexesCache.put(schema + "." + table, rs);
-		}
-		for (Object o : rs)
-		{
-			if (!(o instanceof DataEndMarker))
-			{
-				ArrayList<Object> row = (ArrayList<Object>)o;
-				ArrayList<Object> rs2 = getKeysCache.get(schema + "." + row.get(0));
-				if (rs2 == null)
-				{
-					rs2 = PlanCacheManager.getKeys().setParms(schema, (String)row.get(0)).execute(tx);
-					getKeysCache.put(schema + "." + row.get(0), rs2);
-				}
-				// tabname, colname
-				ArrayList<String> keys = new ArrayList<String>();
-				for (Object o2 : rs2)
-				{
-					ArrayList<Object> row2 = (ArrayList<Object>)o2;
-					keys.add(row2.get(0) + "." + row2.get(1));
-				}
-
-				rs2 = getTypesCache.get(schema + "." + row.get(0));
-				if (rs2 == null)
-				{
-					rs2 = PlanCacheManager.getTypes().setParms(schema, (String)row.get(0)).execute(tx);
-					getTypesCache.put(schema + "." + row.get(0), rs2);
-				}
-				ArrayList<String> types = new ArrayList<String>();
-				for (Object o2 : rs2)
-				{
-					ArrayList<Object> row2 = (ArrayList<Object>)o2;
-					String type = (String)row2.get(0);
-					if (type.equals("BIGINT"))
-					{
-						type = "LONG";
-					}
-					else if (type.equals("VARCHAR"))
-					{
-						type = "CHAR";
-					}
-					else if (type.equals("DOUBLE"))
-					{
-						type = "FLOAT";
-					}
-					types.add(type);
-				}
-
-				rs2 = getOrdersCache.get(schema + "." + row.get(0));
-				if (rs2 == null)
-				{
-					rs2 = PlanCacheManager.getOrders().setParms(schema, (String)row.get(0)).execute(tx);
-					getOrdersCache.put(schema + "." + row.get(0), rs2);
-				}
-				ArrayList<Boolean> orders = new ArrayList<Boolean>();
-				for (Object o2 : rs2)
-				{
-					if (!(o2 instanceof DataEndMarker))
-					{
-						ArrayList<Object> row2 = (ArrayList<Object>)o2;
-						String ord = (String)row2.get(0);
-						boolean order = true;
-						if (!ord.equals("A"))
-						{
-							order = false;
-						}
-						orders.add(order);
-					}
-				}
-
-				retval.add(new Index(schema + "." + row.get(0) + ".indx", keys, types, orders));
-			}
-		}
-
-		return retval;
-	}
-	
-	public ArrayList<Index> getUniqueIndexesForTable(String schema, String table, Transaction tx) throws Exception
-	{
-		final ArrayList<Index> retval = new ArrayList<Index>();
-		ArrayList<Object> rs = getUniqueIndexesCache.get(schema + "." + table);
-		if (rs == null)
-		{
-			rs = PlanCacheManager.getUniqueIndexes().setParms(schema, table).execute(tx);
-			getUniqueIndexesCache.put(schema + "." + table, rs);
 		}
 		for (Object o : rs)
 		{
@@ -2352,32 +2299,6 @@ public final class MetaData implements Serializable
 			return 1000000;
 		}
 	}
-	
-	private class ColAndTree
-	{
-		private String col;
-		private Operator tree;
-		
-		public ColAndTree(String col, Operator tree)
-		{
-			this.col = col;
-			this.tree = tree;
-		}
-		
-		public boolean equals(Object r)
-		{
-			ColAndTree rhs = (ColAndTree)r;
-			return col.equals(rhs.col) && tree == rhs.tree;
-		}
-		
-		public int hashCode()
-		{
-			int hash = 23;
-			hash = hash * 31 + col.hashCode();
-			hash = hash * 31 + tree.hashCode();
-			return hash;
-		}
-	}
 
 	public String getTableForCol(String col, Operator tree) throws Exception// must
 	// return
@@ -2396,7 +2317,7 @@ public final class MetaData implements Serializable
 		{
 			return s;
 		}
-		
+
 		ArrayList<TableScanOperator> tables = new ArrayList<TableScanOperator>();
 		getTables(tree, new HashSet<Operator>(), tables);
 		if (isQualified(col))
@@ -2475,6 +2396,11 @@ public final class MetaData implements Serializable
 		}
 	}
 
+	public int getTypeForTable(String schema, String table, Transaction tx) throws Exception
+	{
+		return PlanCacheManager.getTableType().setParms(schema, table).execute(tx);
+	}
+
 	public ArrayList<ArrayList<String>> getTypes(ArrayList<String> indexes, Transaction tx) throws Exception
 	{
 		ArrayList<ArrayList<String>> retval = new ArrayList<ArrayList<String>>();
@@ -2538,6 +2464,89 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
+	public ArrayList<Index> getUniqueIndexesForTable(String schema, String table, Transaction tx) throws Exception
+	{
+		final ArrayList<Index> retval = new ArrayList<Index>();
+		ArrayList<Object> rs = getUniqueIndexesCache.get(schema + "." + table);
+		if (rs == null)
+		{
+			rs = PlanCacheManager.getUniqueIndexes().setParms(schema, table).execute(tx);
+			getUniqueIndexesCache.put(schema + "." + table, rs);
+		}
+		for (Object o : rs)
+		{
+			if (!(o instanceof DataEndMarker))
+			{
+				ArrayList<Object> row = (ArrayList<Object>)o;
+				ArrayList<Object> rs2 = getKeysCache.get(schema + "." + row.get(0));
+				if (rs2 == null)
+				{
+					rs2 = PlanCacheManager.getKeys().setParms(schema, (String)row.get(0)).execute(tx);
+					getKeysCache.put(schema + "." + row.get(0), rs2);
+				}
+				// tabname, colname
+				ArrayList<String> keys = new ArrayList<String>();
+				for (Object o2 : rs2)
+				{
+					ArrayList<Object> row2 = (ArrayList<Object>)o2;
+					keys.add(row2.get(0) + "." + row2.get(1));
+				}
+
+				rs2 = getTypesCache.get(schema + "." + row.get(0));
+				if (rs2 == null)
+				{
+					rs2 = PlanCacheManager.getTypes().setParms(schema, (String)row.get(0)).execute(tx);
+					getTypesCache.put(schema + "." + row.get(0), rs2);
+				}
+				ArrayList<String> types = new ArrayList<String>();
+				for (Object o2 : rs2)
+				{
+					ArrayList<Object> row2 = (ArrayList<Object>)o2;
+					String type = (String)row2.get(0);
+					if (type.equals("BIGINT"))
+					{
+						type = "LONG";
+					}
+					else if (type.equals("VARCHAR"))
+					{
+						type = "CHAR";
+					}
+					else if (type.equals("DOUBLE"))
+					{
+						type = "FLOAT";
+					}
+					types.add(type);
+				}
+
+				rs2 = getOrdersCache.get(schema + "." + row.get(0));
+				if (rs2 == null)
+				{
+					rs2 = PlanCacheManager.getOrders().setParms(schema, (String)row.get(0)).execute(tx);
+					getOrdersCache.put(schema + "." + row.get(0), rs2);
+				}
+				ArrayList<Boolean> orders = new ArrayList<Boolean>();
+				for (Object o2 : rs2)
+				{
+					if (!(o2 instanceof DataEndMarker))
+					{
+						ArrayList<Object> row2 = (ArrayList<Object>)o2;
+						String ord = (String)row2.get(0);
+						boolean order = true;
+						if (!ord.equals("A"))
+						{
+							order = false;
+						}
+						orders.add(order);
+					}
+				}
+
+				retval.add(new Index(schema + "." + row.get(0) + ".indx", keys, types, orders));
+			}
+		}
+
+		return retval;
+	}
+
 	public String getViewSQL(String schema, String name, Transaction tx) throws Exception
 	{
 		return PlanCacheManager.getViewSQL().setParms(schema, name).execute(tx);
@@ -2565,11 +2574,6 @@ public final class MetaData implements Serializable
 		return likelihood(filters, op.getGenerated(), tx, tree);
 	}
 
-	// public static int getNumNodes(Transaction tx) throws Exception
-	// {
-	// return PlanCacheManager.getCountWorkerNodes().setParms().execute(tx);
-	// }
-
 	public double likelihood(ArrayList<Filter> filters, Transaction tx, Operator tree) throws Exception
 	{
 		double sum = 0;
@@ -2586,6 +2590,11 @@ public final class MetaData implements Serializable
 
 		return sum;
 	}
+
+	// public static int getNumNodes(Transaction tx) throws Exception
+	// {
+	// return PlanCacheManager.getCountWorkerNodes().setParms().execute(tx);
+	// }
 
 	// likelihood of a row directly out of the table passing this test
 	public double likelihood(Filter filter, HashMap<String, Double> generated, Transaction tx, Operator tree) throws Exception
@@ -3278,10 +3287,168 @@ public final class MetaData implements Serializable
 	{
 		return likelihood(hshm, op.getGenerated(), tx, tree);
 	}
-	
-	private static abstract class RunstatsThread extends HRDBMSThread
+
+	public void populateIndex(String schema, String index, String table, Transaction tx, HashMap<String, Integer> cols2Pos) throws Exception
 	{
-		public abstract boolean getOK();
+		String iFn = schema + "." + index + ".indx";
+		String tFn = schema + "." + table + ".tbl";
+		ArrayList<Integer> nodes = getNodesForTable(schema, table, tx);
+		ArrayList<Integer> devices = MetaData.getDevicesForTable(schema, table, tx);
+		ArrayList<Object> rs = getKeysCache.get(schema + "." + index);
+		if (rs == null)
+		{
+			rs = PlanCacheManager.getKeys().setParms(schema, index).execute(tx);
+			getKeysCache.put(schema + "." + index, rs);
+		}
+		// tabname, colname
+		ArrayList<String> keys = new ArrayList<String>();
+		for (Object o : rs)
+		{
+			if (!(o instanceof DataEndMarker))
+			{
+				ArrayList<Object> row = (ArrayList<Object>)o;
+				keys.add(row.get(0) + "." + row.get(1));
+			}
+		}
+
+		rs = getTypesCache.get(schema + "." + index);
+		if (rs == null)
+		{
+			rs = PlanCacheManager.getTypes().setParms(schema, index).execute(tx);
+			getTypesCache.put(schema + "." + index, rs);
+		}
+		ArrayList<String> types = new ArrayList<String>();
+		for (Object o : rs)
+		{
+			if (!(o instanceof DataEndMarker))
+			{
+				ArrayList<Object> row = (ArrayList<Object>)o;
+				String type = (String)row.get(0);
+				if (type.equals("BIGINT"))
+				{
+					type = "LONG";
+				}
+				else if (type.equals("VARCHAR"))
+				{
+					type = "CHAR";
+				}
+				else if (type.equals("DOUBLE"))
+				{
+					type = "FLOAT";
+				}
+				types.add(type);
+			}
+		}
+
+		rs = getOrdersCache.get(schema + "." + index);
+		if (rs == null)
+		{
+			rs = PlanCacheManager.getOrders().setParms(schema, index).execute(tx);
+			getOrdersCache.put(schema + "." + index, rs);
+		}
+		ArrayList<Boolean> orders = new ArrayList<Boolean>();
+		for (Object o : rs)
+		{
+			if (!(o instanceof DataEndMarker))
+			{
+				ArrayList<Object> row = (ArrayList<Object>)o;
+				String ord = (String)row.get(0);
+				boolean order = true;
+				if (!ord.equals("A"))
+				{
+					order = false;
+				}
+				orders.add(order);
+			}
+		}
+
+		ArrayList<Integer> poses = new ArrayList<Integer>();
+		for (String col : keys)
+		{
+			poses.add(cols2Pos.get(col));
+		}
+
+		ArrayList<Object> tree = makeTree(nodes);
+		ArrayList<Socket> sockets = new ArrayList<Socket>();
+		int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
+
+		TreeMap<Integer, String> pos2Col = cols2PosFlip(cols2Pos);
+		HashMap<String, String> cols2Types = getCols2TypesForTable(schema, table, tx);
+		int type = getTypeForTable(schema, table, tx);
+
+		for (Object o : tree)
+		{
+			ArrayList<Object> list;
+			if (o instanceof Integer)
+			{
+				list = new ArrayList<Object>(1);
+				list.add(o);
+			}
+			else
+			{
+				list = (ArrayList<Object>)o;
+			}
+
+			Object obj = list.get(0);
+			while (obj instanceof ArrayList)
+			{
+				obj = ((ArrayList)obj).get(0);
+			}
+
+			Socket sock;
+			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
+			// sock = new Socket(hostname,
+			// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			sock = new Socket();
+			sock.setReceiveBufferSize(262144);
+			sock.setSendBufferSize(262144);
+			sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
+			OutputStream out = sock.getOutputStream();
+			byte[] outMsg = "POPINDEX        ".getBytes(StandardCharsets.UTF_8);
+			outMsg[8] = 0;
+			outMsg[9] = 0;
+			outMsg[10] = 0;
+			outMsg[11] = 0;
+			outMsg[12] = 0;
+			outMsg[13] = 0;
+			outMsg[14] = 0;
+			outMsg[15] = 0;
+			out.write(outMsg);
+			out.write(longToBytes(tx.number()));
+			out.write(stringToBytes(iFn));
+			out.write(stringToBytes(tFn));
+			out.write(intToBytes(type));
+			ObjectOutputStream objOut = new ObjectOutputStream(out);
+			objOut.writeObject(devices);
+			objOut.writeObject(keys);
+			objOut.writeObject(types);
+			objOut.writeObject(orders);
+			objOut.writeObject(poses);
+			objOut.writeObject(pos2Col);
+			objOut.writeObject(cols2Types);
+			objOut.writeObject(convertToHosts(list, tx));
+			objOut.flush();
+			out.flush();
+			sockets.add(sock);
+
+			if (sockets.size() >= max)
+			{
+				sock = sockets.get(0);
+				out = sock.getOutputStream();
+				getConfirmation(sock);
+				objOut.close();
+				sock.close();
+				sockets.remove(0);
+			}
+		}
+
+		for (Socket sock : sockets)
+		{
+			OutputStream out = sock.getOutputStream();
+			getConfirmation(sock);
+			out.close();
+			sock.close();
+		}
 	}
 
 	public void runstats(String schema, String table, Transaction tx) throws Exception
@@ -3302,121 +3469,135 @@ public final class MetaData implements Serializable
 		}
 
 		ArrayList<Transaction> cdTxs = new ArrayList<Transaction>();
-		if (allOK)
+		// if (allOK)
+		// {
+		int i = 0;
+		final int size = pos2Col.size();
+		while (i < size)
 		{
-			int i = 0;
-			final int size = pos2Col.size();
-			while (i < size)
-			{
-				Transaction ctx = new Transaction(Transaction.ISOLATION_UR);
-				cTxs.add(ctx);
-				i++;
-			}
-			
-			long card = PlanCacheManager.getTableCard().setParms(schema, table).execute(cTxs.get(0));
-			
-			i = 0;
-			while (i < size)
-			{
-				threads.add(new ColStatsThread(schema, table, pos2Col.get(i), tableID, i, cTxs.get(i), card));
-				i++;
-			}
+			Transaction ctx = new Transaction(Transaction.ISOLATION_UR);
+			cTxs.add(ctx);
+			i++;
+		}
 
-			// indexes
-			ArrayList<Transaction> iTxs = new ArrayList<Transaction>();
-			ArrayList<Object> rs = PlanCacheManager.getIndexIDsForTable().setParms(schema, table).execute(tTx);
-			for (Object o : rs)
+		long card = PlanCacheManager.getTableCard().setParms(schema, table).execute(cTxs.get(0));
+
+		// indexes
+		ArrayList<Transaction> iTxs = new ArrayList<Transaction>();
+		ArrayList<Object> rs = PlanCacheManager.getIndexIDsForTable().setParms(schema, table).execute(tTx);
+		HashMap<String, Integer> colToIndex = new HashMap<String, Integer>();
+		int iThreads = 0;
+		for (Object o : rs)
+		{
+			if (o instanceof DataEndMarker)
 			{
-				if (o instanceof DataEndMarker)
+				continue;
+			}
+			ArrayList<Object> row = (ArrayList<Object>)o;
+			int indexID = (Integer)row.get(0);
+			ArrayList<Object> rs2 = PlanCacheManager.getKeysByID().setParms(tableID, indexID).execute(tTx);
+			ArrayList<String> keys = new ArrayList<String>();
+			for (Object o2 : rs2)
+			{
+				if (o2 instanceof DataEndMarker)
 				{
 					continue;
 				}
-
-				ArrayList<Object> row = (ArrayList<Object>)o;
-				int indexID = (Integer)row.get(0);
-				ArrayList<Object> rs2 = PlanCacheManager.getKeysByID().setParms(tableID, indexID).execute(tTx);
-				ArrayList<String> keys = new ArrayList<String>();
-				for (Object o2 : rs2)
-				{
-					if (o2 instanceof DataEndMarker)
-					{
-						continue;
-					}
-
-					keys.add((String)((ArrayList<Object>)o2).get(0));
-				}
-
-				Transaction itx = new Transaction(Transaction.ISOLATION_UR);
-				threads.add(new IndexStatsThread(schema, table, keys, tableID, indexID, itx, card));
-				iTxs.add(itx);
-			}
-			
-			i = 0;
-			int j = 0;
-			while (i < size)
-			{
-				Transaction ctx = new Transaction(Transaction.ISOLATION_UR);
-				cdTxs.add(ctx);
-				String col = pos2Col.get(i);
-				if (col.contains("."))
-				{
-					col = col.substring(col.indexOf('.') + 1);
-				}
-				threads.add(j, new ColDistThread(schema, table, col, tableID, i, card, ctx));
-				i++;
-				j += 2;
+				keys.add((String)((ArrayList<Object>)o2).get(0));
 			}
 
-			ArrayList<RunstatsThread> submitted = new ArrayList<RunstatsThread>();
-			for (RunstatsThread thread : threads)
+			Transaction itx = new Transaction(Transaction.ISOLATION_UR);
+			threads.add(new IndexStatsThread(schema, table, keys, tableID, indexID, itx, card));
+			if (keys.size() == 0)
 			{
-				thread.start();
-				submitted.add(thread);
-				if (submitted.size() == 8)
+				colToIndex.put(keys.get(0), indexID);
+			}
+			iThreads++;
+			iTxs.add(itx);
+		}
+
+		i = 0;
+		while (i < size)
+		{
+			Integer indexID = colToIndex.get(pos2Col.get(i));
+			if (indexID != null)
+			{
+				threads.add(new ColStatsThread(schema, table, pos2Col.get(i), tableID, i, cTxs.get(i), card, indexID));
+			}
+			else
+			{
+				threads.add(new ColStatsThread(schema, table, pos2Col.get(i), tableID, i, cTxs.get(i), card, -1));
+			}
+			i++;
+		}
+
+		i = 0;
+		int j = iThreads;
+		while (i < size)
+		{
+			Transaction ctx = new Transaction(Transaction.ISOLATION_UR);
+			cdTxs.add(ctx);
+			String col = pos2Col.get(i);
+			if (col.contains("."))
+			{
+				col = col.substring(col.indexOf('.') + 1);
+			}
+			threads.add(j, new ColDistThread(schema, table, col, tableID, i, card, ctx));
+			i++;
+			j += 2;
+		}
+
+		ArrayList<RunstatsThread> submitted = new ArrayList<RunstatsThread>();
+		HRDBMSWorker.logger.debug("THREADS:" + threads);
+		for (RunstatsThread thread : threads)
+		{
+			thread.start();
+			submitted.add(thread);
+			if (submitted.size() == 8)
+			{
+				while (true)
 				{
-					while (true)
+					RunstatsThread thread2 = null;
+					int x = 0;
+					for (RunstatsThread thread3 : submitted)
 					{
-						RunstatsThread thread2 = null;
-						int x = 0;
-						for (RunstatsThread thread3 : submitted)
+						if (thread3.isDone())
 						{
-							if (thread3.isDone())
-							{
-								thread2 = thread3;
-								break;
-							}
-						
-							x++;
-						}
-					
-						if (thread2 != null)
-						{
-							thread2.join();
-							if (!thread2.getOK())
-							{
-								allOK = false;
-							}
-					
-							submitted.remove(x);
+							thread2 = thread3;
 							break;
 						}
-						else
-						{
-							Thread.sleep(100);
-						}
+
+						x++;
 					}
-				}
-			}
-			
-			for (RunstatsThread thread : submitted)
-			{
-				thread.join();
-				if (!thread.getOK())
-				{
-					allOK = false;
+
+					if (thread2 != null)
+					{
+						thread2.join();
+						if (!thread2.getOK())
+						{
+							allOK = false;
+						}
+
+						submitted.remove(x);
+						break;
+					}
+					else
+					{
+						Thread.sleep(100);
+					}
 				}
 			}
 		}
+
+		for (RunstatsThread thread : submitted)
+		{
+			thread.join();
+			if (!thread.getOK())
+			{
+				allOK = false;
+			}
+		}
+		// }
 
 		getPartitioningCache.clear();
 		getIndexesCache.clear();
@@ -3758,8 +3939,18 @@ public final class MetaData implements Serializable
 		}
 	}
 
-	private void buildTable(String schema, String table, int numCols, Transaction tx) throws Exception
+	private void buildTable(String schema, String table, int numCols, Transaction tx, int tType, ArrayList<ColDef> defs, ArrayList<Integer> colOrder) throws Exception
 	{
+		if (tType != 0 && colOrder == null)
+		{
+			colOrder = new ArrayList<Integer>();
+			int i = 0;
+			while (i < numCols)
+			{
+				colOrder.add(i++);
+			}
+		}
+		
 		String fn = schema + "." + table + ".tbl";
 		ArrayList<Integer> nodes = getNodesForTable(schema, table, tx);
 		ArrayList<Integer> devices = MetaData.getDevicesForTable(schema, table, tx);
@@ -3808,9 +3999,15 @@ public final class MetaData implements Serializable
 			out.write(longToBytes(tx.number()));
 			out.write(intToBytes(numCols));
 			out.write(stringToBytes(fn));
+			out.write(intToBytes(tType));
 			ObjectOutputStream objOut = new ObjectOutputStream(out);
 			objOut.writeObject(devices);
 			objOut.writeObject(convertToHosts(list, tx));
+			objOut.writeObject(defs);
+			if (tType != 0)
+			{
+				objOut.writeObject(colOrder);
+			}
 			objOut.flush();
 			out.flush();
 			sockets.add(sock);
@@ -4611,167 +4808,6 @@ public final class MetaData implements Serializable
 		return 0;
 	}
 
-	private void populateIndex(String schema, String index, String table, Transaction tx, HashMap<String, Integer> cols2Pos) throws Exception
-	{
-		String iFn = schema + "." + index + ".indx";
-		String tFn = schema + "." + table + ".tbl";
-		ArrayList<Integer> nodes = getNodesForTable(schema, table, tx);
-		ArrayList<Integer> devices = MetaData.getDevicesForTable(schema, table, tx);
-		ArrayList<Object> rs = getKeysCache.get(schema + "." + index);
-		if (rs == null)
-		{
-			rs = PlanCacheManager.getKeys().setParms(schema, index).execute(tx);
-			getKeysCache.put(schema + "." + index, rs);
-		}
-		// tabname, colname
-		ArrayList<String> keys = new ArrayList<String>();
-		for (Object o : rs)
-		{
-			if (!(o instanceof DataEndMarker))
-			{
-				ArrayList<Object> row = (ArrayList<Object>)o;
-				keys.add(row.get(0) + "." + row.get(1));
-			}
-		}
-
-		rs = getTypesCache.get(schema + "." + index);
-		if (rs == null)
-		{
-			rs = PlanCacheManager.getTypes().setParms(schema, index).execute(tx);
-			getTypesCache.put(schema + "." + index, rs);
-		}
-		ArrayList<String> types = new ArrayList<String>();
-		for (Object o : rs)
-		{
-			if (!(o instanceof DataEndMarker))
-			{
-				ArrayList<Object> row = (ArrayList<Object>)o;
-				String type = (String)row.get(0);
-				if (type.equals("BIGINT"))
-				{
-					type = "LONG";
-				}
-				else if (type.equals("VARCHAR"))
-				{
-					type = "CHAR";
-				}
-				else if (type.equals("DOUBLE"))
-				{
-					type = "FLOAT";
-				}
-				types.add(type);
-			}
-		}
-
-		rs = getOrdersCache.get(schema + "." + index);
-		if (rs == null)
-		{
-			rs = PlanCacheManager.getOrders().setParms(schema, index).execute(tx);
-			getOrdersCache.put(schema + "." + index, rs);
-		}
-		ArrayList<Boolean> orders = new ArrayList<Boolean>();
-		for (Object o : rs)
-		{
-			if (!(o instanceof DataEndMarker))
-			{
-				ArrayList<Object> row = (ArrayList<Object>)o;
-				String ord = (String)row.get(0);
-				boolean order = true;
-				if (!ord.equals("A"))
-				{
-					order = false;
-				}
-				orders.add(order);
-			}
-		}
-
-		ArrayList<Integer> poses = new ArrayList<Integer>();
-		for (String col : keys)
-		{
-			poses.add(cols2Pos.get(col));
-		}
-
-		ArrayList<Object> tree = makeTree(nodes);
-		ArrayList<Socket> sockets = new ArrayList<Socket>();
-		int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
-
-		TreeMap<Integer, String> pos2Col = cols2PosFlip(cols2Pos);
-		HashMap<String, String> cols2Types = getCols2TypesForTable(schema, table, tx);
-
-		for (Object o : tree)
-		{
-			ArrayList<Object> list;
-			if (o instanceof Integer)
-			{
-				list = new ArrayList<Object>(1);
-				list.add(o);
-			}
-			else
-			{
-				list = (ArrayList<Object>)o;
-			}
-
-			Object obj = list.get(0);
-			while (obj instanceof ArrayList)
-			{
-				obj = ((ArrayList)obj).get(0);
-			}
-
-			Socket sock;
-			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
-			// sock = new Socket(hostname,
-			// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
-			sock = new Socket();
-			sock.setReceiveBufferSize(262144);
-			sock.setSendBufferSize(262144);
-			sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
-			OutputStream out = sock.getOutputStream();
-			byte[] outMsg = "POPINDEX        ".getBytes(StandardCharsets.UTF_8);
-			outMsg[8] = 0;
-			outMsg[9] = 0;
-			outMsg[10] = 0;
-			outMsg[11] = 0;
-			outMsg[12] = 0;
-			outMsg[13] = 0;
-			outMsg[14] = 0;
-			outMsg[15] = 0;
-			out.write(outMsg);
-			out.write(longToBytes(tx.number()));
-			out.write(stringToBytes(iFn));
-			out.write(stringToBytes(tFn));
-			ObjectOutputStream objOut = new ObjectOutputStream(out);
-			objOut.writeObject(devices);
-			objOut.writeObject(keys);
-			objOut.writeObject(types);
-			objOut.writeObject(orders);
-			objOut.writeObject(poses);
-			objOut.writeObject(pos2Col);
-			objOut.writeObject(cols2Types);
-			objOut.writeObject(convertToHosts(list, tx));
-			objOut.flush();
-			out.flush();
-			sockets.add(sock);
-
-			if (sockets.size() >= max)
-			{
-				sock = sockets.get(0);
-				out = sock.getOutputStream();
-				getConfirmation(sock);
-				objOut.close();
-				sock.close();
-				sockets.remove(0);
-			}
-		}
-
-		for (Socket sock : sockets)
-		{
-			OutputStream out = sock.getOutputStream();
-			getConfirmation(sock);
-			out.close();
-			sock.close();
-		}
-	}
-
 	private boolean references(ArrayList<Filter> filters, ArrayList<String> cols)
 	{
 		for (final Filter filter : filters)
@@ -5469,6 +5505,34 @@ public final class MetaData implements Serializable
 		}
 	}
 
+	private class ColAndTree
+	{
+		private final String col;
+		private final Operator tree;
+
+		public ColAndTree(String col, Operator tree)
+		{
+			this.col = col;
+			this.tree = tree;
+		}
+
+		@Override
+		public boolean equals(Object r)
+		{
+			ColAndTree rhs = (ColAndTree)r;
+			return col.equals(rhs.col) && tree == rhs.tree;
+		}
+
+		@Override
+		public int hashCode()
+		{
+			int hash = 23;
+			hash = hash * 31 + col.hashCode();
+			hash = hash * 31 + tree.hashCode();
+			return hash;
+		}
+	}
+
 	private static class ColDistThread extends RunstatsThread
 	{
 		private final String schema;
@@ -5480,7 +5544,7 @@ public final class MetaData implements Serializable
 		private Transaction tx;
 		private boolean ok = true;
 		private long p;
-		private long totalCard;
+		private final long totalCard;
 
 		public ColDistThread(String schema, String table, String col, int tableID, int colID, long card, Transaction tx)
 		{
@@ -5494,6 +5558,7 @@ public final class MetaData implements Serializable
 			this.totalCard = card;
 		}
 
+		@Override
 		public boolean getOK()
 		{
 			return ok;
@@ -5509,7 +5574,7 @@ public final class MetaData implements Serializable
 				{
 					p = 5;
 				}
-				
+
 				tx.setIsolationLevel(Transaction.ISOLATION_UR);
 				String type = PlanCacheManager.getColType().setParms(schema, table, col).execute(tx);
 				String sql = "SELECT " + col + " FROM " + schema + "." + table + " ORDER BY " + col + " ASC";
@@ -6050,10 +6115,11 @@ public final class MetaData implements Serializable
 		private final int colID;
 		private Transaction tx;
 		private boolean ok = true;
-		private long totalCard;
+		private final long totalCard;
 		private long p;
+		private final int indexID;
 
-		public ColStatsThread(String schema, String table, String col, int tableID, int colID, Transaction tx, long totalCard)
+		public ColStatsThread(String schema, String table, String col, int tableID, int colID, Transaction tx, long totalCard, int indexID)
 		{
 			this.schema = schema;
 			this.table = table;
@@ -6062,8 +6128,10 @@ public final class MetaData implements Serializable
 			this.colID = colID;
 			this.tx = tx;
 			this.totalCard = totalCard;
+			this.indexID = indexID;
 		}
 
+		@Override
 		public boolean getOK()
 		{
 			return ok;
@@ -6074,68 +6142,125 @@ public final class MetaData implements Serializable
 		{
 			try
 			{
-				p = 100000000l / totalCard;
-				if (p < 5)
+				String sql;
+				String unique = "N";
+
+				if (indexID != -1)
 				{
-					p = 5;
-				}
-				
-				tx.setIsolationLevel(Transaction.ISOLATION_UR);
-				String sql = "SELECT COUNT(DISTINCT " + col + ") FROM " + schema + "." + table;
-				XAWorker worker = null;
-				if (totalCard > 1000000)
-				{
-					worker = XAManager.executeQuery(sql, tx, null, p); //sample
-				}
-				else
-				{
+					sql = "SELECT * FROM SYS.INDEXES WHERE TABLEID = " + tableID + " AND INDEXID = " + indexID;
+					XAWorker worker = null;
 					worker = XAManager.executeQuery(sql, tx, null);
-				}
-				worker.start();
-				ArrayList<Object> cmd = new ArrayList<Object>(2);
-				cmd.add("NEXT");
-				cmd.add(1);
-				worker.in.put(cmd);
+					worker.start();
+					ArrayList<Object> cmd = new ArrayList<Object>(2);
+					cmd.add("NEXT");
+					cmd.add(1);
+					worker.in.put(cmd);
 
-				Object obj = null;
-				while (true)
-				{
-					try
+					Object obj2 = null;
+					while (true)
 					{
-						obj = worker.out.take();
-						break;
+						try
+						{
+							obj2 = worker.out.take();
+							break;
+						}
+						catch (InterruptedException e)
+						{
+						}
 					}
-					catch (InterruptedException e)
-					{
-					}
-				}
 
-				if (obj instanceof Exception)
-				{
+					if (obj2 instanceof Exception)
+					{
+						cmd = new ArrayList<Object>(1);
+						cmd.add("CLOSE");
+						worker.in.put(cmd);
+						ok = false;
+						return;
+					}
+
 					cmd = new ArrayList<Object>(1);
 					cmd.add("CLOSE");
 					worker.in.put(cmd);
-					ok = false;
-					return;
-				}
 
-				cmd = new ArrayList<Object>(1);
-				cmd.add("CLOSE");
-				worker.in.put(cmd);
-
-				if (obj instanceof DataEndMarker)
-				{
-					ok = false;
-					return;
-				}
-
-				long card = (Long)((ArrayList<Object>)obj).get(0);
-				if (totalCard > 1000000)
-				{
-					card = (long)(card + ((100.0d * card * card * (100.0d - p)) / (totalCard * p * p)));
-					if (card > totalCard)
+					if (obj2 instanceof DataEndMarker)
 					{
-						card = totalCard;
+						ok = false;
+						return;
+					}
+
+					unique = (String)((ArrayList<Object>)obj2).get(3);
+				}
+
+				long card = -1;
+				if (unique.equals("Y"))
+				{
+					card = totalCard;
+				}
+				else
+				{
+					p = 100000000l / totalCard;
+					if (p < 5)
+					{
+						p = 5;
+					}
+
+					tx.setIsolationLevel(Transaction.ISOLATION_UR);
+					sql = "SELECT COUNT(DISTINCT " + col + ") FROM " + schema + "." + table;
+					XAWorker worker = null;
+					if (totalCard > 1000000)
+					{
+						worker = XAManager.executeQuery(sql, tx, null, p); // sample
+					}
+					else
+					{
+						worker = XAManager.executeQuery(sql, tx, null);
+					}
+					worker.start();
+					ArrayList<Object> cmd = new ArrayList<Object>(2);
+					cmd.add("NEXT");
+					cmd.add(1);
+					worker.in.put(cmd);
+
+					Object obj = null;
+					while (true)
+					{
+						try
+						{
+							obj = worker.out.take();
+							break;
+						}
+						catch (InterruptedException e)
+						{
+						}
+					}
+
+					if (obj instanceof Exception)
+					{
+						cmd = new ArrayList<Object>(1);
+						cmd.add("CLOSE");
+						worker.in.put(cmd);
+						ok = false;
+						return;
+					}
+
+					cmd = new ArrayList<Object>(1);
+					cmd.add("CLOSE");
+					worker.in.put(cmd);
+
+					if (obj instanceof DataEndMarker)
+					{
+						ok = false;
+						return;
+					}
+
+					card = (Long)((ArrayList<Object>)obj).get(0);
+					if (totalCard > 1000000)
+					{
+						card = (long)(card + ((100.0d * card * card * (100.0d - p)) / (totalCard * p * p)));
+						if (card > totalCard)
+						{
+							card = totalCard;
+						}
 					}
 				}
 				int updateCount = -1;
@@ -6149,7 +6274,7 @@ public final class MetaData implements Serializable
 					catch (Exception e)
 					{
 						sql = "INSERT INTO SYS.COLSTATS VALUES(" + tableID + "," + colID + "," + card + ")";
-						worker = XAManager.executeAuthorizedUpdate(sql, tx);
+						XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 						worker.start();
 						worker.join();
 						updateCount = worker.getUpdateCount();
@@ -6169,7 +6294,7 @@ public final class MetaData implements Serializable
 					}
 
 					sql = "UPDATE SYS.COLSTATS SET CARD = " + card + " WHERE TABLEID = " + tableID + " AND COLID = " + colID;
-					worker = XAManager.executeAuthorizedUpdate(sql, tx);
+					XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 					worker.start();
 					worker.join();
 					updateCount = worker.getUpdateCount();
@@ -6220,7 +6345,7 @@ public final class MetaData implements Serializable
 		private final int indexID;
 		private Transaction tx;
 		private boolean ok = true;
-		private long totalCard;
+		private final long totalCard;
 		private long p;
 
 		public IndexStatsThread(String schema, String table, ArrayList<String> keys, int tableID, int indexID, Transaction tx, long totalCard)
@@ -6234,6 +6359,7 @@ public final class MetaData implements Serializable
 			this.totalCard = totalCard;
 		}
 
+		@Override
 		public boolean getOK()
 		{
 			return ok;
@@ -6244,30 +6370,9 @@ public final class MetaData implements Serializable
 		{
 			try
 			{
-				p = 100000000l / totalCard;
-				if (p < 5)
-				{
-					p = 5;
-				}
-				tx.setIsolationLevel(Transaction.ISOLATION_UR);
-				String sql = "SELECT COUNT(*) FROM (SELECT DISTINCT " + keys.get(0);
-				int i = 1;
-				final int size = keys.size();
-				while (i < size)
-				{
-					sql += (", " + keys.get(i));
-					i++;
-				}
-				sql += (" FROM " + schema + "." + table + ")");
+				String sql = "SELECT * FROM SYS.INDEXES WHERE TABLEID = " + tableID + " AND INDEXID = " + indexID;
 				XAWorker worker = null;
-				if (totalCard > 1000000)
-				{
-					worker = XAManager.executeQuery(sql, tx, null, p);
-				}
-				else
-				{
-					worker = XAManager.executeQuery(sql, tx, null);
-				}
+				worker = XAManager.executeQuery(sql, tx, null);
 				worker.start();
 				ArrayList<Object> cmd = new ArrayList<Object>(2);
 				cmd.add("NEXT");
@@ -6306,13 +6411,92 @@ public final class MetaData implements Serializable
 					return;
 				}
 
-				long card = (Long)((ArrayList<Object>)obj2).get(0);
-				if (totalCard > 1000000)
+				String unique = (String)((ArrayList<Object>)obj2).get(3);
+				long card = -1;
+				if (unique.equals("Y"))
 				{
-					card = (long)(card + ((100.0d * card * card * (100.0d - p)) / (totalCard * p * p)));
-					if (card > totalCard)
+					card = totalCard;
+				}
+				else
+				{
+					p = 100000000l / totalCard;
+					if (p < 5)
 					{
-						card = totalCard;
+						p = 5;
+					}
+					tx.setIsolationLevel(Transaction.ISOLATION_UR);
+
+					if (keys.size() > 1)
+					{
+						sql = "SELECT COUNT(*) FROM (SELECT DISTINCT " + keys.get(0);
+						int i = 1;
+						final int size = keys.size();
+						while (i < size)
+						{
+							sql += (", " + keys.get(i));
+							i++;
+						}
+						sql += (" FROM " + schema + "." + table + ")");
+					}
+					else
+					{
+						sql = "SELECT COUNT(DISTINCT " + keys.get(0) + ") FROM " + schema + "." + table;
+					}
+
+					if (totalCard > 1000000)
+					{
+						worker = XAManager.executeQuery(sql, tx, null, p);
+					}
+					else
+					{
+						worker = XAManager.executeQuery(sql, tx, null);
+					}
+					worker.start();
+					cmd = new ArrayList<Object>(2);
+					cmd.add("NEXT");
+					cmd.add(1);
+					worker.in.put(cmd);
+
+					obj2 = null;
+					while (true)
+					{
+						try
+						{
+							obj2 = worker.out.take();
+							break;
+						}
+						catch (InterruptedException e)
+						{
+						}
+					}
+
+					if (obj2 instanceof Exception)
+					{
+						cmd = new ArrayList<Object>(1);
+						cmd.add("CLOSE");
+						worker.in.put(cmd);
+						ok = false;
+						return;
+					}
+
+					cmd = new ArrayList<Object>(1);
+					cmd.add("CLOSE");
+					worker.in.put(cmd);
+
+					if (obj2 instanceof DataEndMarker)
+					{
+						ok = false;
+						return;
+					}
+
+					card = (Long)((ArrayList<Object>)obj2).get(0);
+					if (totalCard > 1000000)
+					{
+						card = (long)(card + ((100.0d * card * card * (100.0d - p)) / (totalCard * p * p)));
+						if (card > totalCard)
+						{
+							card = totalCard;
+						}
 					}
 				}
 				int updateCount = -1;
@@ -6386,6 +6570,11 @@ public final class MetaData implements Serializable
 				}
 			}
 		}
+	}
+
+	private static abstract class RunstatsThread extends HRDBMSThread
+	{
+		public abstract boolean getOK();
 	}
 
 	private static class TableStatsThread extends HRDBMSThread

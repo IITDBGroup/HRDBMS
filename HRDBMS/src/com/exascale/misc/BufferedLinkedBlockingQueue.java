@@ -14,7 +14,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 	public static int BLOCK_SIZE;
 	private static Vector<ArrayBlockingQueue> free = new Vector<ArrayBlockingQueue>();
 	private static int RETRY_TIME;
-	
+
 	static
 	{
 		HParms hparms = HRDBMSWorker.getHParms();

@@ -15,6 +15,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedOutputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
@@ -59,15 +60,19 @@ public class NetworkSendOperator implements Operator, Serializable
 	protected boolean cardSet = false;
 
 	protected CharsetEncoder ce = cs.newEncoder();
+	protected transient AtomicLong received;
+	protected transient volatile boolean demReceived;
 
 	public NetworkSendOperator(int node, MetaData meta)
 	{
 		this.meta = meta;
 		this.node = node;
+		received = new AtomicLong(0);
 	}
 
 	protected NetworkSendOperator()
 	{
+		received = new AtomicLong(0);
 	}
 
 	public static NetworkSendOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -86,6 +91,8 @@ public class NetworkSendOperator implements Operator, Serializable
 		value.numpSet = OperatorUtils.readBool(in);
 		value.cardSet = OperatorUtils.readBool(in);
 		value.ce = cs.newEncoder();
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
 		return value;
 	}
 
@@ -215,9 +222,21 @@ public class NetworkSendOperator implements Operator, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
 	}
 
 	@Override
@@ -278,7 +297,7 @@ public class NetworkSendOperator implements Operator, Serializable
 		OperatorUtils.writeBool(numpSet, out);
 		OperatorUtils.writeBool(cardSet, out);
 	}
-	
+
 	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev, boolean flag) throws Exception
 	{
 	}
@@ -334,11 +353,6 @@ public class NetworkSendOperator implements Operator, Serializable
 			throw e;
 		}
 	}
-	
-	public void startChildren() throws Exception
-	{
-		child.start();
-	}
 
 	@Override
 	public synchronized void start() throws Exception
@@ -347,8 +361,16 @@ public class NetworkSendOperator implements Operator, Serializable
 		try
 		{
 			started = true;
-			//child.start();
+			// child.start();
 			Object o = child.next(this);
+			if (o instanceof DataEndMarker)
+			{
+				demReceived = true;
+			}
+			else
+			{
+				received.getAndIncrement();
+			}
 			while (!(o instanceof DataEndMarker))
 			{
 				final byte[] obj = toBytes(o);
@@ -367,6 +389,14 @@ public class NetworkSendOperator implements Operator, Serializable
 					throw (Exception)o;
 				}
 				o = child.next(this);
+				if (o instanceof DataEndMarker)
+				{
+					demReceived = true;
+				}
+				else
+				{
+					received.getAndIncrement();
+				}
 			}
 
 			final byte[] obj = toBytes(o);
@@ -412,6 +442,11 @@ public class NetworkSendOperator implements Operator, Serializable
 				}
 			}
 		}
+	}
+
+	public void startChildren() throws Exception
+	{
+		child.start();
 	}
 
 	@Override
@@ -479,7 +514,7 @@ public class NetworkSendOperator implements Operator, Serializable
 		int i = 8;
 		int z = 0;
 		int limit = val.size();
-		//for (final Object o : val)
+		// for (final Object o : val)
 		while (z < limit)
 		{
 			Object o = val.get(z++);
@@ -544,7 +579,7 @@ public class NetworkSendOperator implements Operator, Serializable
 		int x = 0;
 		z = 0;
 		limit = val.size();
-		//for (final Object o : val)
+		// for (final Object o : val)
 		while (z < limit)
 		{
 			Object o = val.get(z++);

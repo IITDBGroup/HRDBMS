@@ -5,6 +5,7 @@ import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 import com.exascale.filesystem.Block;
+import com.exascale.filesystem.CompressedFileChannel;
 import com.exascale.filesystem.Page;
 import com.exascale.managers.FileManager;
 import com.exascale.managers.HRDBMSWorker;
@@ -21,6 +22,8 @@ public class ReadThread extends HRDBMSThread
 	private ConcurrentHashMap<Integer, Schema> schemaMap;
 	private Transaction tx;
 	private ArrayList<Integer> fetchPos;
+	private ArrayList<Integer> cols;
+	private int layoutSize;
 
 	public ReadThread(Page p, Block b, ByteBuffer bb)
 	{
@@ -30,7 +33,18 @@ public class ReadThread extends HRDBMSThread
 		this.b = b;
 		this.bb = bb;
 	}
-	
+
+	public ReadThread(Page p, Block b, ByteBuffer bb, ArrayList<Integer> cols, int layoutSize)
+	{
+		this.description = "Read thread for buffer Manager";
+		this.setWait(false);
+		this.p = p;
+		this.b = b;
+		this.bb = bb;
+		this.cols = cols;
+		this.layoutSize = layoutSize;
+	}
+
 	public ReadThread(Page p, Block b, ByteBuffer bb, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos)
 	{
 		this.description = "Read thread for buffer Manager";
@@ -56,7 +70,7 @@ public class ReadThread extends HRDBMSThread
 		{
 			bb.clear();
 			bb.position(0);
-	
+
 			final FileChannel fc = FileManager.getFile(b.fileName());
 			// if (b.number() * bb.capacity() >= fc.size())
 			// {
@@ -66,9 +80,16 @@ public class ReadThread extends HRDBMSThread
 			// ok = false;
 			// }
 
-			fc.read(bb, ((long)b.number()) * bb.capacity());
+			if (cols != null)
+			{
+				((CompressedFileChannel)fc).read(bb, ((long)b.number()) * bb.capacity(), cols, layoutSize);
+			}
+			else
+			{
+				fc.read(bb, ((long)b.number()) * bb.capacity());
+			}
 			p.setReady();
-			
+
 			if (schema != null)
 			{
 				synchronized (schema)

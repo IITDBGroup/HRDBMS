@@ -10,8 +10,8 @@ import com.exascale.threads.HRDBMSThread;
 
 public class CheckpointManager extends HRDBMSThread
 {
-	private long offset;
-	
+	private final long offset;
+
 	public CheckpointManager(long offset)
 	{
 		HRDBMSWorker.logger.info("Starting initialization of the Checkpoint Manager.");
@@ -28,6 +28,11 @@ public class CheckpointManager extends HRDBMSThread
 		// rewrite current log
 		// for all blocks in bufferpool, if not pinned - flush, otherwise copy
 		// and rollback and flush
+
+		for (SubBufferManager sbm : BufferManager.managers)
+		{
+			sbm.lock.lock();
+		}
 
 		Transaction.txListLock.writeLock().lock();
 		{
@@ -76,6 +81,10 @@ public class CheckpointManager extends HRDBMSThread
 			}
 		}
 		Transaction.txListLock.writeLock().unlock();
+		for (SubBufferManager sbm : BufferManager.managers)
+		{
+			sbm.lock.unlock();
+		}
 	}
 
 	@Override
@@ -85,7 +94,7 @@ public class CheckpointManager extends HRDBMSThread
 		HRDBMSWorker.logger.info("Checkpoint Manager initialization complete.");
 		long i = 0;
 		long start = System.currentTimeMillis() - offset;
-		
+
 		while (true)
 		{
 			try

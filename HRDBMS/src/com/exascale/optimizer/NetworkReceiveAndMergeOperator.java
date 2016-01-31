@@ -15,8 +15,8 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedInputStream;
-import com.exascale.compression.CompressedOutputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 import com.exascale.misc.BinomialHeap;
@@ -60,6 +60,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 		super(meta);
 		this.sortCols = sortCols;
 		this.orders = orders;
+		received = new AtomicLong(0);
 	}
 
 	public static NetworkReceiveAndMergeOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -79,6 +80,8 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 		value.orders = OperatorUtils.deserializeALB(in, prev);
 		value.sortPos = OperatorUtils.deserializeIntArray(in, prev);
 		value.cd = cs.newDecoder();
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
 		return value;
 	}
 
@@ -129,7 +132,92 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 	{
 		return meta;
 	}
-	
+
+	@Override
+	public Object next(Operator op2) throws Exception
+	{
+		Object o;
+		o = outBuffer.take();
+
+		if (o instanceof DataEndMarker)
+		{
+			demReceived = true;
+			o = outBuffer.peek();
+			if (o == null)
+			{
+				outBuffer.put(new DataEndMarker());
+				return new DataEndMarker();
+			}
+			else
+			{
+				outBuffer.put(new DataEndMarker());
+				return o;
+			}
+		}
+		else
+		{
+			received.getAndIncrement();
+		}
+
+		if (o instanceof Exception)
+		{
+			throw (Exception)o;
+		}
+		return o;
+	}
+
+	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
+	}
+
+	@Override
+	public void registerParent(Operator op) throws Exception
+	{
+		if (parent == null)
+		{
+			parent = op;
+		}
+		else
+		{
+			throw new Exception("NetworkReceiveAndMergeOperator only supports 1 parent.");
+		}
+	}
+
+	@Override
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(73, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		// recreate meta
+		OperatorUtils.serializeALOp(children, out, prev);
+		parent.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.writeBool(fullyStarted, out);
+		OperatorUtils.writeLong(start, out);
+		OperatorUtils.writeInt(node, out);
+		OperatorUtils.serializeALS(sortCols, out, prev);
+		OperatorUtils.serializeALB(orders, out, prev);
+		OperatorUtils.serializeIntArray(sortPos, out, prev);
+	}
+
+	@Override
 	public void start() throws Exception
 	{
 		if (!fullyStarted)
@@ -179,73 +267,6 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 	}
 
 	@Override
-	public Object next(Operator op2) throws Exception
-	{
-		Object o;
-		o = outBuffer.take();
-
-		if (o instanceof DataEndMarker)
-		{
-			o = outBuffer.peek();
-			if (o == null)
-			{
-				outBuffer.put(new DataEndMarker());
-				return new DataEndMarker();
-			}
-			else
-			{
-				outBuffer.put(new DataEndMarker());
-				return o;
-			}
-		}
-
-		if (o instanceof Exception)
-		{
-			throw (Exception)o;
-		}
-		return o;
-	}
-
-	@Override
-	public void registerParent(Operator op) throws Exception
-	{
-		if (parent == null)
-		{
-			parent = op;
-		}
-		else
-		{
-			throw new Exception("NetworkReceiveAndMergeOperator only supports 1 parent.");
-		}
-	}
-
-	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
-	{
-		Long id = prev.get(this);
-		if (id != null)
-		{
-			OperatorUtils.serializeReference(id, out);
-			return;
-		}
-
-		OperatorUtils.writeType(73, out);
-		prev.put(this, OperatorUtils.writeID(out));
-		// recreate meta
-		OperatorUtils.serializeALOp(children, out, prev);
-		parent.serialize(out, prev);
-		OperatorUtils.serializeStringHM(cols2Types, out, prev);
-		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
-		OperatorUtils.serializeTM(pos2Col, out, prev);
-		OperatorUtils.writeBool(fullyStarted, out);
-		OperatorUtils.writeLong(start, out);
-		OperatorUtils.writeInt(node, out);
-		OperatorUtils.serializeALS(sortCols, out, prev);
-		OperatorUtils.serializeALB(orders, out, prev);
-		OperatorUtils.serializeIntArray(sortPos, out, prev);
-	}
-
-	@Override
 	public String toString()
 	{
 		return "NetworkReceiveAndMergeOperator(" + node + ")";
@@ -290,7 +311,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 		@Override
 		public void run()
 		{
-			//start = System.currentTimeMillis();
+			// start = System.currentTimeMillis();
 			final ReadThread readThread = new ReadThread(children);
 			readThread.start();
 			while (true)

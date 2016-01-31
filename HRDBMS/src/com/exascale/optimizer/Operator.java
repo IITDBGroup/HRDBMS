@@ -35,7 +35,11 @@ public interface Operator
 
 	public void nextAll(Operator op) throws Exception;
 
+	public long numRecsReceived();
+
 	public Operator parent();
+
+	public boolean receivedDEM();
 
 	public void registerParent(Operator op) throws Exception;
 

@@ -1,6 +1,7 @@
 package com.exascale.optimizer;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
@@ -19,6 +20,7 @@ import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 import com.exascale.misc.BinomialHeap;
@@ -74,12 +76,15 @@ public final class SortOperator implements Operator, Serializable
 	private boolean cardSet = false;
 	private transient ArrayList<String> externalFiles;
 	private long limit = 0;
+	private transient AtomicLong received;
+	private transient volatile boolean demReceived;
 
 	public SortOperator(ArrayList<String> sortCols, ArrayList<Boolean> orders, MetaData meta)
 	{
 		this.sortCols = sortCols;
 		this.orders = orders;
 		this.meta = meta;
+		received = new AtomicLong(0);
 	}
 
 	public static SortOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -99,6 +104,8 @@ public final class SortOperator implements Operator, Serializable
 		value.childCard = OperatorUtils.readInt(in);
 		value.cardSet = OperatorUtils.readBool(in);
 		value.limit = OperatorUtils.readLong(in);
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
 		return value;
 	}
 
@@ -186,11 +193,6 @@ public final class SortOperator implements Operator, Serializable
 		{
 			throw new Exception("SortOperator only supports 1 child.");
 		}
-	}
-	
-	public void setLimit(long limit)
-	{
-		this.limit = limit;
 	}
 
 	@Override
@@ -341,9 +343,21 @@ public final class SortOperator implements Operator, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
 	}
 
 	@Override
@@ -457,6 +471,11 @@ public final class SortOperator implements Operator, Serializable
 	{
 	}
 
+	public void setLimit(long limit)
+	{
+		this.limit = limit;
+	}
+
 	@Override
 	public void setNode(int node)
 	{
@@ -496,7 +515,7 @@ public final class SortOperator implements Operator, Serializable
 	{
 		return "SortOperator";
 	}
-	
+
 	private void limitSort() throws Exception
 	{
 		try
@@ -504,6 +523,14 @@ public final class SortOperator implements Operator, Serializable
 			ReverseComparator cmp = new ReverseComparator();
 			BinomialHeap<ArrayList<Object>> bh = new BinomialHeap<ArrayList<Object>>(cmp);
 			Object o = child.next(this);
+			if (o instanceof DataEndMarker)
+			{
+				demReceived = true;
+			}
+			else
+			{
+				received.getAndIncrement();
+			}
 			while (!(o instanceof DataEndMarker))
 			{
 				if (o instanceof Exception)
@@ -511,7 +538,7 @@ public final class SortOperator implements Operator, Serializable
 					readBuffer.put(o);
 					return;
 				}
-			
+
 				ArrayList<Object> row = (ArrayList<Object>)o;
 				if (bh.size() < limit)
 				{
@@ -526,186 +553,40 @@ public final class SortOperator implements Operator, Serializable
 						bh.extractMin();
 					}
 				}
-			
+
 				o = child.next(this);
-			}	
-		
-			//sort and write to queue
+				if (o instanceof DataEndMarker)
+				{
+					demReceived = true;
+				}
+				else
+				{
+					received.getAndIncrement();
+				}
+			}
+
+			// sort and write to queue
 			ArrayList<ArrayList<Object>> result = new ArrayList<ArrayList<Object>>();
 			while (bh.size() > 0)
 			{
 				result.add(bh.extractMin());
 			}
-		
+
 			Collections.reverse(result);
-			
+
 			for (ArrayList<Object> row : result)
 			{
 				readBuffer.put(row);
 			}
-			
+
 			readBuffer.put(new DataEndMarker());
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
 			readBuffer.put(e);
 		}
 	}
-	
-	private class MergeComparator2 implements Comparator<Object>
-	{
-		@Override
-		public int compare(Object l, Object r)
-		{
-			if (l == r)
-			{
-				return 0;
-			}
 
-			ArrayList<Object> lhs = (ArrayList<Object>)l;
-			ArrayList<Object> rhs = (ArrayList<Object>)r;
-
-			int result = 0;
-			int i = 0;
-
-			for (final int pos : sortPos)
-			{
-				Object lField = lhs.get(pos);
-				Object rField = rhs.get(pos);
-
-				if (lField instanceof Integer)
-				{
-					result = ((Integer)lField).compareTo((Integer)rField);
-				}
-				else if (lField instanceof Long)
-				{
-					result = ((Long)lField).compareTo((Long)rField);
-				}
-				else if (lField instanceof Double)
-				{
-					result = ((Double)lField).compareTo((Double)rField);
-				}
-				else if (lField instanceof String)
-				{
-					result = ((String)lField).compareTo((String)rField);
-				}
-				else if (lField instanceof MyDate)
-				{
-					result = ((MyDate)lField).compareTo(rField);
-				}
-				else
-				{
-					lField = null;
-					lField.toString();
-				}
-
-				if (orders.get(i))
-				{
-					if (result > 0)
-					{
-						return 1;
-					}
-					else if (result < 0)
-					{
-						return -1;
-					}
-				}
-				else
-				{
-					if (result > 0)
-					{
-						return -1;
-					}
-					else if (result < 0)
-					{
-						return 1;
-					}
-				}
-
-				i++;
-			}
-
-			return 0;
-		}
-	}
-	
-	private class ReverseComparator implements Comparator<Object>
-	{
-		@Override
-		public int compare(Object l, Object r)
-		{
-			if (l == r)
-			{
-				return 0;
-			}
-
-			ArrayList<Object> lhs = (ArrayList<Object>)l;
-			ArrayList<Object> rhs = (ArrayList<Object>)r;
-
-			int result = 0;
-			int i = 0;
-
-			for (final int pos : sortPos)
-			{
-				Object lField = lhs.get(pos);
-				Object rField = rhs.get(pos);
-
-				if (lField instanceof Integer)
-				{
-					result = ((Integer)lField).compareTo((Integer)rField);
-				}
-				else if (lField instanceof Long)
-				{
-					result = ((Long)lField).compareTo((Long)rField);
-				}
-				else if (lField instanceof Double)
-				{
-					result = ((Double)lField).compareTo((Double)rField);
-				}
-				else if (lField instanceof String)
-				{
-					result = ((String)lField).compareTo((String)rField);
-				}
-				else if (lField instanceof MyDate)
-				{
-					result = ((MyDate)lField).compareTo(rField);
-				}
-				else
-				{
-					lField = null;
-					lField.toString();
-				}
-
-				if (orders.get(i))
-				{
-					if (result > 0)
-					{
-						return -1;
-					}
-					else if (result < 0)
-					{
-						return 1;
-					}
-				}
-				else
-				{
-					if (result > 0)
-					{
-						return 1;
-					}
-					else if (result < 0)
-					{
-						return -1;
-					}
-				}
-
-				i++;
-			}
-
-			return 0;
-		}
-	}
-	
 	private void mediumSort()
 	{
 		ArrayList<ArrayList<ArrayList<Object>>> results = new ArrayList<ArrayList<ArrayList<Object>>>();
@@ -743,11 +624,11 @@ public final class SortOperator implements Operator, Serializable
 				readBuffer.put(new Exception("Unknown type: " + type));
 				return;
 			}
-			
+
 			j++;
 		}
-		
-		j= 0;
+
+		j = 0;
 		while (!done)
 		{
 			int i = 0;
@@ -758,7 +639,12 @@ public final class SortOperator implements Operator, Serializable
 					Object o = child.next(SortOperator.this);
 					if (o instanceof DataEndMarker)
 					{
+						demReceived = true;
 						break;
+					}
+					else
+					{
+						received.getAndIncrement();
 					}
 
 					if (o instanceof Exception)
@@ -828,7 +714,93 @@ public final class SortOperator implements Operator, Serializable
 		readBuffer.put(new DataEndMarker());
 		results = null;
 	}
-	
+
+	private void mergeIntoResult(ArrayList<ArrayList<ArrayList<Object>>> results)
+	{
+		int[] poses = new int[results.size()];
+		BinomialHeap<ALOO> rows = new BinomialHeap<ALOO>(new MergeComparator());
+		ALOO minEntry;
+		int i = 0;
+		for (ArrayList<ArrayList<Object>> result : results)
+		{
+			try
+			{
+				final ArrayList<Object> row = readRow(result, i, poses);
+				if (row != null)
+				{
+					rows.insert(new ALOO(row, i));
+				}
+			}
+			catch (Exception e)
+			{
+				try
+				{
+					HRDBMSWorker.logger.debug("", e);
+					readBuffer.put(e);
+				}
+				catch (Exception f)
+				{
+				}
+				return;
+			}
+
+			i++;
+		}
+
+		while (rows.size() > 0)
+		{
+			minEntry = rows.extractMin();
+
+			while (true)
+			{
+				try
+				{
+					readBuffer.put(minEntry.getALO());
+					break;
+				}
+				catch (final Exception e)
+				{
+				}
+			}
+			try
+			{
+				// final ArrayList<Object> row = minEntry.getOp().readRow();
+				int slot = (Integer)minEntry.getOp();
+				final ArrayList<Object> row = readRow(results.get(slot), slot, poses);
+
+				if (row != null)
+				{
+					rows.insert(new ALOO(row, slot));
+				}
+			}
+			catch (Exception e)
+			{
+				try
+				{
+					HRDBMSWorker.logger.debug("", e);
+					readBuffer.put(e);
+				}
+				catch (Exception f)
+				{
+				}
+				return;
+			}
+		}
+	}
+
+	private ArrayList<Object> readRow(ArrayList<ArrayList<Object>> result, int i, int[] poses)
+	{
+		int pos = poses[i];
+		if (pos < result.size())
+		{
+			ArrayList<Object> retval = result.get(pos);
+			poses[i]++;
+			return retval;
+		}
+
+		return null;
+	}
+
 	private class ALOO
 	{
 		private final ArrayList<Object> alo;
@@ -856,7 +828,7 @@ public final class SortOperator implements Operator, Serializable
 			return op;
 		}
 	}
-	
+
 	private class MergeComparator implements Comparator<Object>
 	{
 		@Override
@@ -934,90 +906,158 @@ public final class SortOperator implements Operator, Serializable
 			return 0;
 		}
 	}
-	
-	private ArrayList<Object> readRow(ArrayList<ArrayList<Object>> result, int i, int[] poses)
+
+	private class MergeComparator2 implements Comparator<Object>
 	{
-		int pos = poses[i];
-		if (pos < result.size())
+		@Override
+		public int compare(Object l, Object r)
 		{
-			ArrayList<Object> retval = result.get(pos);
-			poses[i]++;
-			return retval;
+			if (l == r)
+			{
+				return 0;
+			}
+
+			ArrayList<Object> lhs = (ArrayList<Object>)l;
+			ArrayList<Object> rhs = (ArrayList<Object>)r;
+
+			int result = 0;
+			int i = 0;
+
+			for (final int pos : sortPos)
+			{
+				Object lField = lhs.get(pos);
+				Object rField = rhs.get(pos);
+
+				if (lField instanceof Integer)
+				{
+					result = ((Integer)lField).compareTo((Integer)rField);
+				}
+				else if (lField instanceof Long)
+				{
+					result = ((Long)lField).compareTo((Long)rField);
+				}
+				else if (lField instanceof Double)
+				{
+					result = ((Double)lField).compareTo((Double)rField);
+				}
+				else if (lField instanceof String)
+				{
+					result = ((String)lField).compareTo((String)rField);
+				}
+				else if (lField instanceof MyDate)
+				{
+					result = ((MyDate)lField).compareTo(rField);
+				}
+				else
+				{
+					lField = null;
+					lField.toString();
+				}
+
+				if (orders.get(i))
+				{
+					if (result > 0)
+					{
+						return 1;
+					}
+					else if (result < 0)
+					{
+						return -1;
+					}
+				}
+				else
+				{
+					if (result > 0)
+					{
+						return -1;
+					}
+					else if (result < 0)
+					{
+						return 1;
+					}
+				}
+
+				i++;
+			}
+
+			return 0;
 		}
-		
-		return null;
 	}
-	
-	private void mergeIntoResult(ArrayList<ArrayList<ArrayList<Object>>> results)
+
+	private class ReverseComparator implements Comparator<Object>
 	{
-		int[] poses = new int[results.size()];
-		BinomialHeap<ALOO> rows = new BinomialHeap<ALOO>(new MergeComparator());
-		ALOO minEntry;
-		int i = 0;
-		for (ArrayList<ArrayList<Object>> result : results)
+		@Override
+		public int compare(Object l, Object r)
 		{
-			try
+			if (l == r)
 			{
-				final ArrayList<Object> row = readRow(result, i, poses);
-				if (row != null)
-				{
-					rows.insert(new ALOO(row, i));
-				}
+				return 0;
 			}
-			catch (Exception e)
-			{
-				try
-				{
-					HRDBMSWorker.logger.debug("", e);
-					readBuffer.put(e);
-				}
-				catch (Exception f)
-				{
-				}
-				return;
-			}
-			
-			i++;
-		}
 
-		while (rows.size() > 0)
-		{
-			minEntry = rows.extractMin();
+			ArrayList<Object> lhs = (ArrayList<Object>)l;
+			ArrayList<Object> rhs = (ArrayList<Object>)r;
 
-			while (true)
+			int result = 0;
+			int i = 0;
+
+			for (final int pos : sortPos)
 			{
-				try
+				Object lField = lhs.get(pos);
+				Object rField = rhs.get(pos);
+
+				if (lField instanceof Integer)
 				{
-					readBuffer.put(minEntry.getALO());
-					break;
+					result = ((Integer)lField).compareTo((Integer)rField);
 				}
-				catch (final Exception e)
+				else if (lField instanceof Long)
 				{
+					result = ((Long)lField).compareTo((Long)rField);
 				}
+				else if (lField instanceof Double)
+				{
+					result = ((Double)lField).compareTo((Double)rField);
+				}
+				else if (lField instanceof String)
+				{
+					result = ((String)lField).compareTo((String)rField);
+				}
+				else if (lField instanceof MyDate)
+				{
+					result = ((MyDate)lField).compareTo(rField);
+				}
+				else
+				{
+					lField = null;
+					lField.toString();
+				}
+
+				if (orders.get(i))
+				{
+					if (result > 0)
+					{
+						return -1;
+					}
+					else if (result < 0)
+					{
+						return 1;
+					}
+				}
+				else
+				{
+					if (result > 0)
+					{
+						return 1;
+					}
+					else if (result < 0)
+					{
+						return -1;
+					}
+				}
+
+				i++;
 			}
-			try
-			{
-				//final ArrayList<Object> row = minEntry.getOp().readRow();
-				int slot = (Integer)minEntry.getOp();
-				final ArrayList<Object> row = readRow(results.get(slot), slot, poses);
-				
-				if (row != null)
-				{
-					rows.insert(new ALOO(row, slot));
-				}
-			}
-			catch (Exception e)
-			{
-				try
-				{
-					HRDBMSWorker.logger.debug("", e);
-					readBuffer.put(e);
-				}
-				catch (Exception f)
-				{
-				}
-				return;
-			}
+
+			return 0;
 		}
 	}
 
@@ -1044,23 +1084,25 @@ public final class SortOperator implements Operator, Serializable
 					limitSort();
 					return;
 				}
-				
+
 				if (ResourceManager.criticalMem())
 				{
 					externalSort(0);
 					return;
 				}
-				
+
 				if (childCard > ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")) && childCard < ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")) / 2)
 				{
 					mediumSort();
 					return;
 				}
-				
+
 				if (childCard > ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")))
 				{
-					//double percentInMem = (ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")) / 2) / childCard;
-					//percentInMem = percentInMem / 4;
+					// double percentInMem = (ResourceManager.QUEUE_SIZE *
+					// Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor"))
+					// / 2) / childCard;
+					// percentInMem = percentInMem / 4;
 					double percentInMem = 0;
 					externalSort(percentInMem);
 					return;
@@ -1170,11 +1212,11 @@ public final class SortOperator implements Operator, Serializable
 					readBuffer.put(new Exception("Unknown type: " + type));
 					return;
 				}
-				
+
 				j++;
 			}
-			
-			j= 0;
+
+			j = 0;
 			while (!done)
 			{
 				int i = 0;
@@ -1185,7 +1227,12 @@ public final class SortOperator implements Operator, Serializable
 						Object o = child.next(SortOperator.this);
 						if (o instanceof DataEndMarker)
 						{
+							demReceived = true;
 							break;
+						}
+						else
+						{
+							received.getAndIncrement();
 						}
 
 						if (o instanceof Exception)
@@ -1248,7 +1295,7 @@ public final class SortOperator implements Operator, Serializable
 
 				String fn = ResourceManager.TEMP_DIRS.get(j % ResourceManager.TEMP_DIRS.size()) + this.hashCode() + "" + System.currentTimeMillis() + ".extsrt";
 				externalFiles.add(fn);
-				
+
 				try
 				{
 					if (j < numInMem)
@@ -1301,7 +1348,7 @@ public final class SortOperator implements Operator, Serializable
 					thread.doStart();
 					map.put((String)entry.getKey(), thread);
 				}
-				catch(Exception e)
+				catch (Exception e)
 				{
 					HRDBMSWorker.logger.debug("", e);
 				}
@@ -1327,7 +1374,7 @@ public final class SortOperator implements Operator, Serializable
 					}
 				}
 			}
-			
+
 			int z = 0;
 			while (z < bins.size())
 			{
@@ -1440,7 +1487,7 @@ public final class SortOperator implements Operator, Serializable
 					final ArrayList<Object> row = ((ReadDataThread)op).readRow();
 					if (row != null)
 					{
-						rows.insert(new ALOO(row, (ReadDataThread)op));
+						rows.insert(new ALOO(row, op));
 					}
 				}
 				catch (Exception e)
@@ -1495,7 +1542,6 @@ public final class SortOperator implements Operator, Serializable
 			}
 		}
 
-		
 		private final byte[] rsToBytes(ArrayList<ArrayList<Object>> rows, final byte[] types) throws Exception
 		{
 			final ArrayList<byte[]> results = new ArrayList<byte[]>(rows.size());
@@ -1518,13 +1564,13 @@ public final class SortOperator implements Operator, Serializable
 				{
 					startSize += 8;
 				}
-				
+
 				a++;
 			}
-			
+
 			int z = 0;
 			final int limit = rows.size();
-			//for (ArrayList<Object> val : rows)
+			// for (ArrayList<Object> val : rows)
 			while (z < limit)
 			{
 				ArrayList<Object> val = rows.get(z++);
@@ -1740,14 +1786,8 @@ public final class SortOperator implements Operator, Serializable
 			private ConcurrentHashMap<String, RandomAccessFile> map2;
 			private ConcurrentHashMap<String, FileChannel> map3;
 			private byte[] types;
-			private boolean inMem;
+			private final boolean inMem;
 
-			public ReadDataThread(String fn, long offset, int numRecs, ConcurrentHashMap<String, RandomAccessFile> map2, ConcurrentHashMap<String, FileChannel> map3, byte[] types, int index, ArrayList<ArrayList<ArrayList<Object>>> bins)
-			{
-				this.data = bins.get(index);
-				inMem = true;
-			}
-			
 			public ReadDataThread(String fn, long offset, int numRecs, ConcurrentHashMap<String, RandomAccessFile> map2, ConcurrentHashMap<String, FileChannel> map3, byte[] types) throws Exception
 			{
 				if (fn == null)
@@ -1764,6 +1804,26 @@ public final class SortOperator implements Operator, Serializable
 				inMem = false;
 			}
 
+			public ReadDataThread(String fn, long offset, int numRecs, ConcurrentHashMap<String, RandomAccessFile> map2, ConcurrentHashMap<String, FileChannel> map3, byte[] types, int index, ArrayList<ArrayList<ArrayList<Object>>> bins)
+			{
+				this.data = bins.get(index);
+				inMem = true;
+			}
+
+			public void doStart() throws Exception
+			{
+				if (inMem)
+				{
+					throw new Exception("Trying to start in mem thread");
+				}
+
+				if (fn == null)
+				{
+					throw new Exception("Filename is null at start");
+				}
+				this.start();
+			}
+
 			public Exception getException()
 			{
 				return e;
@@ -1772,20 +1832,6 @@ public final class SortOperator implements Operator, Serializable
 			public boolean getOK()
 			{
 				return ok;
-			}
-			
-			public void doStart() throws Exception
-			{
-				if (inMem)
-				{
-					throw new Exception("Trying to start in mem thread");
-				}
-				
-				if (fn == null)
-				{
-					throw new Exception("Filename is null at start");
-				}
-				this.start();
 			}
 
 			public ArrayList<Object> readRow() throws Exception
@@ -1796,16 +1842,16 @@ public final class SortOperator implements Operator, Serializable
 					{
 						return null;
 					}
-					
+
 					if (readOffset < data.size())
 					{
 						return data.get(readOffset++);
 					}
-					
+
 					data = null;
 					return null;
 				}
-				
+
 				if (readOffset < data.size())
 				{
 					if (!started && offset != -1)
@@ -1816,7 +1862,7 @@ public final class SortOperator implements Operator, Serializable
 					}
 					return data.get(readOffset++);
 				}
-				
+
 				if (data == null)
 				{
 					return null;
@@ -1837,7 +1883,7 @@ public final class SortOperator implements Operator, Serializable
 						{
 							throw second.getException();
 						}
-						
+
 						break;
 					}
 					catch (InterruptedException e)
@@ -1864,9 +1910,9 @@ public final class SortOperator implements Operator, Serializable
 					fc.position(offset);
 					int i = 0;
 					ByteBuffer bb1 = ByteBuffer.allocate(4);
-				
+
 					while (i < numRecs)
-					{	
+					{
 						bb1.position(0);
 						if (fc.read(bb1) == -1)
 						{
@@ -1916,10 +1962,26 @@ public final class SortOperator implements Operator, Serializable
 				try
 				{
 					Object o = child.next(SortOperator.this);
+					if (o instanceof DataEndMarker)
+					{
+						demReceived = true;
+					}
+					else
+					{
+						received.getAndIncrement();
+					}
 					while (!(o instanceof DataEndMarker))
 					{
 						array.add((ArrayList<Object>)o);
 						o = child.next(SortOperator.this);
+						if (o instanceof DataEndMarker)
+						{
+							demReceived = true;
+						}
+						else
+						{
+							received.getAndIncrement();
+						}
 					}
 				}
 				catch (final Exception e)
@@ -1969,7 +2031,26 @@ public final class SortOperator implements Operator, Serializable
 			{
 				try
 				{
-					RandomAccessFile raf = new RandomAccessFile(fn, "rw");
+					RandomAccessFile raf = null;
+					while (true)
+					{
+						try
+						{
+							raf = new RandomAccessFile(fn, "rw");
+							break;
+						}
+						catch (FileNotFoundException e)
+						{
+							ResourceManager.panic = true;
+							try
+							{
+								Thread.sleep(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("rm_sleep_time_ms")) / 2);
+							}
+							catch (Exception f)
+							{
+							}
+						}
+					}
 					map2.put(fn, raf);
 					FileChannel fc = raf.getChannel();
 					map3.put(fn, fc);

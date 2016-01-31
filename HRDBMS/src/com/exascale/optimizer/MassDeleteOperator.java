@@ -305,9 +305,21 @@ public final class MassDeleteOperator implements Operator, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return 0;
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return false;
 	}
 
 	@Override
@@ -371,7 +383,8 @@ public final class MassDeleteOperator implements Operator, Serializable
 		ArrayList<ArrayList<String>> keys = meta.getKeys(indexes, tx);
 		ArrayList<ArrayList<String>> types = meta.getTypes(indexes, tx);
 		ArrayList<ArrayList<Boolean>> orders = meta.getOrders(indexes, tx);
-		boolean ok = sendMassDeletes(tree, tx, meta.getCols2TypesForTable(schema, table, tx), meta.getPos2ColForTable(schema, table, tx), keys, types, orders, indexes, logged);
+		int type = meta.getTypeForTable(schema, table, tx);
+		boolean ok = sendMassDeletes(tree, tx, meta.getCols2TypesForTable(schema, table, tx), meta.getPos2ColForTable(schema, table, tx), keys, types, orders, indexes, logged, type);
 		// if anyone responds not ok tell next() to throw an exception
 		if (!ok)
 		{
@@ -395,7 +408,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 		return ret;
 	}
 
-	private boolean sendMassDeletes(ArrayList<Object> tree, Transaction tx, HashMap<String, String> cols2Types, TreeMap<Integer, String> pos2Col, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes, boolean logged)
+	private boolean sendMassDeletes(ArrayList<Object> tree, Transaction tx, HashMap<String, String> cols2Types, TreeMap<Integer, String> pos2Col, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes, boolean logged, int type)
 	{
 		// all of them should respond OK with delete count
 		boolean allOK = true;
@@ -406,12 +419,12 @@ public final class MassDeleteOperator implements Operator, Serializable
 			{
 				ArrayList<Object> list = new ArrayList<Object>(1);
 				list.add(o);
-				SendMassDeleteThread thread = new SendMassDeleteThread(list, tx, cols2Types, pos2Col, keys, types, orders, indexes, logged);
+				SendMassDeleteThread thread = new SendMassDeleteThread(list, tx, cols2Types, pos2Col, keys, types, orders, indexes, logged, type);
 				threads.add(thread);
 			}
 			else
 			{
-				SendMassDeleteThread thread = new SendMassDeleteThread((ArrayList<Object>)o, tx, cols2Types, pos2Col, keys, types, orders, indexes, logged);
+				SendMassDeleteThread thread = new SendMassDeleteThread((ArrayList<Object>)o, tx, cols2Types, pos2Col, keys, types, orders, indexes, logged, type);
 				threads.add(thread);
 			}
 		}
@@ -485,8 +498,9 @@ public final class MassDeleteOperator implements Operator, Serializable
 		private final ArrayList<ArrayList<Boolean>> orders;
 		private final ArrayList<String> indexes;
 		private final boolean logged;
+		private final int type;
 
-		public SendMassDeleteThread(ArrayList<Object> tree, Transaction tx, HashMap<String, String> cols2Types, TreeMap<Integer, String> pos2Col, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes, boolean logged)
+		public SendMassDeleteThread(ArrayList<Object> tree, Transaction tx, HashMap<String, String> cols2Types, TreeMap<Integer, String> pos2Col, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes, boolean logged, int type)
 		{
 			this.tree = tree;
 			this.tx = tx;
@@ -497,6 +511,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 			this.orders = orders;
 			this.indexes = indexes;
 			this.logged = logged;
+			this.type = type;
 		}
 
 		public int getNum()
@@ -556,6 +571,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 				{
 					out.write((byte)0);
 				}
+				out.write(intToBytes(type));
 				ObjectOutputStream objOut = new ObjectOutputStream(out);
 				objOut.writeObject(convertToHosts(tree, tx));
 				objOut.writeObject(indexes);

@@ -10,6 +10,7 @@ import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.tables.Plan;
@@ -43,11 +44,14 @@ public final class ProjectOperator implements Operator, Serializable
 	private transient ArrayList<Integer> pos2Get;
 
 	private volatile boolean startDone = false;
+	private transient AtomicLong received;
+	private transient volatile boolean demReceived;
 
 	public ProjectOperator(ArrayList<String> cols, MetaData meta)
 	{
 		this.cols = cols;
 		this.meta = meta;
+		received = new AtomicLong(0);
 	}
 
 	public static ProjectOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -63,6 +67,8 @@ public final class ProjectOperator implements Operator, Serializable
 		value.childCols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
 		value.node = OperatorUtils.readInt(in);
 		value.startDone = OperatorUtils.readBool(in);
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
 		return value;
 	}
 
@@ -187,7 +193,12 @@ public final class ProjectOperator implements Operator, Serializable
 		final Object o = child.next(this);
 		if (o instanceof DataEndMarker)
 		{
+			demReceived = true;
 			return o;
+		}
+		else
+		{
+			received.getAndIncrement();
 		}
 
 		if (o instanceof Exception)
@@ -199,7 +210,7 @@ public final class ProjectOperator implements Operator, Serializable
 		final ArrayList<Object> retval = new ArrayList<Object>(pos2Get.size());
 		int z = 0;
 		final int limit = pos2Get.size();
-		//for (final int pos : pos2Get)
+		// for (final int pos : pos2Get)
 		while (z < limit)
 		{
 			final int pos = pos2Get.get(z++);
@@ -221,9 +232,21 @@ public final class ProjectOperator implements Operator, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
 	}
 
 	@Override
@@ -332,7 +355,7 @@ public final class ProjectOperator implements Operator, Serializable
 	@Override
 	public String toString()
 	{
-		return "ProjectOperator";
+		return "ProjectOperator: " + cols;
 	}
 
 }

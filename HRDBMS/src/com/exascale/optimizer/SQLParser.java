@@ -1107,6 +1107,7 @@ public class SQLParser
 		ArrayList<ColDef> colDefs = createTable.getCols();
 		HashSet<String> colNames = new HashSet<String>();
 		HashSet<String> pks = new HashSet<String>();
+		ArrayList<String> orderedPks = new ArrayList<String>();
 		for (ColDef def : colDefs)
 		{
 			String col = def.getCol().getColumn();
@@ -1127,7 +1128,10 @@ public class SQLParser
 
 			if (def.isPK())
 			{
-				pks.add(col);
+				if (pks.add(col))
+				{
+					orderedPks.add(col);
+				}
 			}
 		}
 
@@ -1142,11 +1146,46 @@ public class SQLParser
 					throw new ParseException("Column names cannot be qualified with table names in a CREATE TABLE statement");
 				}
 
-				pks.add(c);
+				if (pks.add(c))
+				{
+					orderedPks.add(c);
+				}
 			}
 		}
+		
+		if (createTable.getType() != 0 && colDefs.size() > 26212)
+		{
+			throw new ParseException("Maximum number of columns for a column table is 26212");
+		}
+		
+		if (createTable.getType() != 0 && createTable.getColOrder() != null)
+		{
+			if (colDefs.size() != createTable.getColOrder().size())
+			{
+				throw new ParseException("Explicit COLORDER defined on a column table but it had the wrong number of columns");
+			}
+			
+			int z = 1;
+			boolean ok = true;
+			ArrayList<Integer> colOrder = createTable.getColOrder();
+			while (z <= colDefs.size())
+			{
+				if (!colOrder.contains(z++))
+				{
+					ok = false;
+					break;
+				}
+			}
+			
+			if (!ok)
+			{
+				throw new ParseException("COLORDER clause is the right size but is invalid");
+			}
+			
+			return new CreateTableOperator(schema, tbl, colDefs, orderedPks, createTable.getNodeGroupExp(), createTable.getNodeExp(), createTable.getDeviceExp(), meta, createTable.getType(), colOrder); 
+		}
 
-		return new CreateTableOperator(schema, tbl, colDefs, new ArrayList<String>(pks), createTable.getNodeGroupExp(), createTable.getNodeExp(), createTable.getDeviceExp(), meta);
+		return new CreateTableOperator(schema, tbl, colDefs, orderedPks, createTable.getNodeGroupExp(), createTable.getNodeExp(), createTable.getDeviceExp(), meta, createTable.getType());
 	}
 
 	private Operator buildOperatorTreeFromCreateView(CreateView createView) throws Exception
@@ -3565,7 +3604,7 @@ public class SQLParser
 		Operator op;
 		if (select.getSubSelect() != null)
 		{
-			op = buildOperatorTreeFromSubSelect(select.getSubSelect());
+			op = buildOperatorTreeFromSubSelect(select.getSubSelect(), false);
 		}
 		else
 		{
@@ -3584,7 +3623,7 @@ public class SQLParser
 			}
 			else
 			{
-				rhs = buildOperatorTreeFromSubSelect(cs.getSub());
+				rhs = buildOperatorTreeFromSubSelect(cs.getSub(), false);
 			}
 
 			verifyColumnsAreTheSame(lhs, rhs);
@@ -4218,13 +4257,13 @@ public class SQLParser
 						// by
 						if (negated)
 						{
-							Operator op2 = buildOperatorTreeFromSubSelect(clone);
+							Operator op2 = buildOperatorTreeFromSubSelect(clone, true);
 							op2 = addRename(op2, join);
 							return connectWithAntiJoin(op, op2, join);
 						}
 						else
 						{
-							Operator op2 = buildOperatorTreeFromSubSelect(clone);
+							Operator op2 = buildOperatorTreeFromSubSelect(clone, true);
 							op2 = addRename(op2, join);
 							return connectWithSemiJoin(op, op2, join);
 						}
@@ -4373,7 +4412,7 @@ public class SQLParser
 								try
 								{
 									product.add(op);
-									Operator op2 = buildOperatorTreeFromSubSelect(clone);
+									Operator op2 = buildOperatorTreeFromSubSelect(clone, true);
 									op2 = addRename(op2, join);
 									lhsStr = op2.getPos2Col().get(0);
 									product.add(op2);
@@ -4391,7 +4430,7 @@ public class SQLParser
 								{
 									throw new ParseException("A SubSelect is present which could return more than 1 row, but cannot do so.  Please rewrite it to ensure only 1 row is returned.");
 								}
-								Operator rhs2 = buildOperatorTreeFromSubSelect(sub);
+								Operator rhs2 = buildOperatorTreeFromSubSelect(sub, true);
 								if (rhs2.getCols2Pos().size() != 1)
 								{
 									throw new ParseException("A SubSelect is present which must return only 1 column, but insted returns more than 1");
@@ -4563,7 +4602,7 @@ public class SQLParser
 							// conditions
 							if ((o.equals("IN") && !negated) || (o.equals("NI") && negated))
 							{
-								Operator rhs2 = buildOperatorTreeFromSubSelect(clone);
+								Operator rhs2 = buildOperatorTreeFromSubSelect(clone, true);
 								rhs2 = addRename(rhs2, join);
 								rhsStr = rhs2.getPos2Col().get(0);
 								verifyTypes(lhsStr, op, rhsStr, rhs2);
@@ -4578,7 +4617,7 @@ public class SQLParser
 							}
 							else
 							{
-								Operator rhs2 = buildOperatorTreeFromSubSelect(clone);
+								Operator rhs2 = buildOperatorTreeFromSubSelect(clone, true);
 								rhs2 = addRename(rhs2, join);
 								rhsStr = rhs2.getPos2Col().get(0);
 								verifyTypes(lhsStr, op, rhsStr, rhs2);
@@ -4596,7 +4635,7 @@ public class SQLParser
 						}
 						else
 						{
-							Operator rhs2 = buildOperatorTreeFromSubSelect(sub2);
+							Operator rhs2 = buildOperatorTreeFromSubSelect(sub2, true);
 							rhsStr = rhs2.getPos2Col().get(0);
 							verifyTypes(lhsStr, op, rhsStr, rhs2);
 							if ((o.equals("IN") && !negated) || (o.equals("NI") && negated))
@@ -4769,7 +4808,7 @@ public class SQLParser
 						try
 						{
 							product.add(op);
-							Operator op2 = buildOperatorTreeFromSubSelect(clone);
+							Operator op2 = buildOperatorTreeFromSubSelect(clone, true);
 							op2 = addRename(op2, join);
 							lhsStr = op2.getPos2Col().get(0);
 							product.add(op2);
@@ -4787,7 +4826,7 @@ public class SQLParser
 						{
 							throw new ParseException("A SubSelect is present which could return more than 1 row, but cannot do so.  Please rewrite it to ensure only 1 row is returned.");
 						}
-						Operator rhs2 = buildOperatorTreeFromSubSelect(sub2);
+						Operator rhs2 = buildOperatorTreeFromSubSelect(sub2, true);
 						if (rhs2.getCols2Pos().size() != 1)
 						{
 							throw new ParseException("A SubSelect is present which must return only 1 column, but insted returns more than 1");
@@ -5011,7 +5050,7 @@ public class SQLParser
 						try
 						{
 							product.add(op);
-							Operator op2 = buildOperatorTreeFromSubSelect(clone);
+							Operator op2 = buildOperatorTreeFromSubSelect(clone, true);
 							op2 = addRename(op2, join);
 							rhsStr = op2.getPos2Col().get(0);
 							product.add(op2);
@@ -5029,7 +5068,7 @@ public class SQLParser
 						{
 							throw new ParseException("A SubSelect is present which could return more than 1 row, but cannot do so.  Please rewrite it to ensure only 1 row is returned.");
 						}
-						Operator rhs2 = buildOperatorTreeFromSubSelect(sub2);
+						Operator rhs2 = buildOperatorTreeFromSubSelect(sub2, true);
 						if (rhs2.getCols2Pos().size() != 1)
 						{
 							throw new ParseException("A SubSelect is present which must return only 1 column, but insted returns more than 1");
@@ -5608,7 +5647,7 @@ public class SQLParser
 						{
 							throw new ParseException("A SubSelect is present which could return more than 1 row, but cannot do so.  Please rewrite it to ensure only 1 row is returned.");
 						}
-						Operator rhs2 = buildOperatorTreeFromSubSelect(sub2);
+						Operator rhs2 = buildOperatorTreeFromSubSelect(sub2, true);
 						if (rhs2.getCols2Pos().size() != 1)
 						{
 							throw new ParseException("A SubSelect is present which must return only 1 column, but insted returns more than 1");
@@ -5829,7 +5868,7 @@ public class SQLParser
 						{
 							throw new ParseException("A SubSelect is present which could return more than 1 row, but cannot do so.  Please rewrite it to ensure only 1 row is returned.");
 						}
-						Operator rhs2 = buildOperatorTreeFromSubSelect(sub2);
+						Operator rhs2 = buildOperatorTreeFromSubSelect(sub2, true);
 						if (rhs2.getCols2Pos().size() != 1)
 						{
 							throw new ParseException("A SubSelect is present which must return only 1 column, but insted returns more than 1");
@@ -5999,7 +6038,7 @@ public class SQLParser
 		return buildOperatorTreeFromFullSelect(select.getFullSelect());
 	}
 
-	private Operator buildOperatorTreeFromSelectClause(SelectClause select, Operator op, SubSelect sub) throws ParseException
+	private Operator buildOperatorTreeFromSelectClause(SelectClause select, Operator op, SubSelect sub, boolean subquery) throws ParseException
 	{
 		if (!select.isSelectStar())
 		{
@@ -6191,23 +6230,26 @@ public class SQLParser
 		}
 		else
 		{
-			ArrayList<String> cols = new ArrayList<String>(op.getPos2Col().values().size());
-			for (String col : op.getPos2Col().values())
+			if (!subquery)
 			{
-				if (!col.startsWith("_"))
+				ArrayList<String> cols = new ArrayList<String>(op.getPos2Col().values().size());
+				for (String col : op.getPos2Col().values())
 				{
-					cols.add(col);
+					if (!col.startsWith("_"))
+					{
+						cols.add(col);
+					}
 				}
-			}
-			try
-			{
-				ReorderOperator reorder = new ReorderOperator(cols, meta);
-				reorder.add(op);
-				op = reorder;
-			}
-			catch (Exception e)
-			{
-				throw new ParseException(e.getMessage());
+				try
+				{
+					ReorderOperator reorder = new ReorderOperator(cols, meta);
+					reorder.add(op);
+					op = reorder;
+				}
+				catch (Exception e)
+				{
+					throw new ParseException(e.getMessage());
+				}
 			}
 		}
 
@@ -6311,7 +6353,7 @@ public class SQLParser
 		return op;
 	}
 
-	private Operator buildOperatorTreeFromSubSelect(SubSelect select) throws Exception
+	private Operator buildOperatorTreeFromSubSelect(SubSelect select, boolean subquery) throws Exception
 	{
 		Operator op = buildOperatorTreeFromFrom(select.getFrom(), select);
 		getComplexColumns(select.getSelect(), select, select.getHaving());
@@ -6338,7 +6380,7 @@ public class SQLParser
 			op = buildOperatorTreeFromHaving(select.getHaving(), op, select);
 		}
 
-		op = buildOperatorTreeFromSelectClause(select.getSelect(), op, select);
+		op = buildOperatorTreeFromSelectClause(select.getSelect(), op, select, subquery);
 		// handle orderBy
 		if (select.getOrderBy() != null)
 		{
@@ -9858,21 +9900,21 @@ public class SQLParser
 	 * SelectClause select = sub.getSelect(); if (select.isSelectStar()) { throw
 	 * new ParseException(
 	 * "SELECT * is not allowed in a subselect that must return 1 column"); }
-	 * 
+	 *
 	 * ArrayList<SelectListEntry> list = select.getSelectList(); if (list.size()
 	 * != 1) { throw new ParseException(
 	 * "A subselect was used in a context where it must return 1 column, but instead returns a different number of columns"
 	 * ); }
-	 * 
+	 *
 	 * SelectListEntry entry = list.get(0); if (entry.isColumn()) { String
 	 * retval = ""; Column col = entry.getColumn(); if (col.getTable() != null)
 	 * { retval += col.getTable(); }
-	 * 
+	 *
 	 * retval += ("." + col.getColumn()); return retval; }
-	 * 
+	 *
 	 * String retval = entry.getName(); if (!retval.contains(".")) { retval =
 	 * "." + retval; }
-	 * 
+	 *
 	 * return retval; }
 	 */
 
@@ -10077,7 +10119,7 @@ public class SQLParser
 	{
 		try
 		{
-			buildOperatorTreeFromSubSelect(select);
+			buildOperatorTreeFromSubSelect(select, true);
 		}
 		catch (ParseException e)
 		{

@@ -65,13 +65,13 @@ public class MyThreadLocalRandom extends Random
 	 * MyThreadLocalRandom sequence. The dual use is a marriage of convenience,
 	 * but is a simple and efficient way of reducing application-level overhead
 	 * and footprint of most concurrent programs.
-	 *
+	 * 
 	 * Even though this class subclasses java.util.Random, it uses the same
 	 * basic algorithm as java.util.SplittableRandom. (See its internal
 	 * documentation for explanations, which are not repeated here.) Because
 	 * MyThreadLocalRandoms are not splittable though, we use only a single
 	 * 64bit gamma.
-	 *
+	 * 
 	 * Because this class is in a different package than class Thread, field
 	 * access methods use Unsafe to bypass access control rules. To conform to
 	 * the requirements of the Random superclass constructor, the common static
@@ -81,11 +81,11 @@ public class MyThreadLocalRandom extends Random
 	 * there is only a static singleton. But we generate a serial form
 	 * containing "rnd" and "initialized" fields to ensure compatibility across
 	 * versions.
-	 *
+	 * 
 	 * Implementations of non-core methods are mostly the same as in
 	 * SplittableRandom, that were in part derived from a previous version of
 	 * this class.
-	 *
+	 * 
 	 * The nextLocalGaussian ThreadLocal supports the very rarely used
 	 * nextGaussian method by providing a holder for the second of a pair of
 	 * them. As is true for the base class version of this method, this
@@ -690,7 +690,7 @@ public class MyThreadLocalRandom extends Random
 		}
 		double result = (mix64(nextSeed()) >>> 11) * DOUBLE_UNIT * bound;
 		return (result < bound) ? result : // correct for rounding
-			Double.longBitsToDouble(Double.doubleToLongBits(bound) - 1);
+		Double.longBitsToDouble(Double.doubleToLongBits(bound) - 1);
 	}
 
 	/**
@@ -841,7 +841,7 @@ public class MyThreadLocalRandom extends Random
 	 * adaptive spin/block sequences for which a cheap RNG suffices and for
 	 * which it could in principle disrupt user-visible statistical properties
 	 * of the main MyThreadLocalRandom if we were to use it.
-	 *
+	 * 
 	 * Note: Because of package-protection issues, versions of some these
 	 * methods also appear in some subpackage classes.
 	 */
@@ -1043,8 +1043,8 @@ public class MyThreadLocalRandom extends Random
 			else if (n > 0L)
 			{ // reject over-represented candidates
 				for (long u = r >>> 1; // ensure nonnegative
-						u + m - (r = u % n) < 0L; // rejection check
-						u = mix64(nextSeed()) >>> 1)
+				u + m - (r = u % n) < 0L; // rejection check
+				u = mix64(nextSeed()) >>> 1)
 				{
 					;
 				}
@@ -1139,7 +1139,7 @@ public class MyThreadLocalRandom extends Random
 		public RandomDoublesSpliterator trySplit()
 		{
 			long i = index, m = (i + fence) >>> 1;
-				return (m <= i) ? null : new RandomDoublesSpliterator(i, index = m, origin, bound);
+			return (m <= i) ? null : new RandomDoublesSpliterator(i, index = m, origin, bound);
 		}
 	}
 	/**
@@ -1217,7 +1217,7 @@ public class MyThreadLocalRandom extends Random
 		public RandomIntsSpliterator trySplit()
 		{
 			long i = index, m = (i + fence) >>> 1;
-				return (m <= i) ? null : new RandomIntsSpliterator(i, index = m, origin, bound);
+			return (m <= i) ? null : new RandomIntsSpliterator(i, index = m, origin, bound);
 		}
 	}
 
@@ -1292,7 +1292,7 @@ public class MyThreadLocalRandom extends Random
 		public RandomLongsSpliterator trySplit()
 		{
 			long i = index, m = (i + fence) >>> 1;
-				return (m <= i) ? null : new RandomLongsSpliterator(i, index = m, origin, bound);
+			return (m <= i) ? null : new RandomLongsSpliterator(i, index = m, origin, bound);
 		}
 
 	}

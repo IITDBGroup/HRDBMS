@@ -300,11 +300,11 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	public void ensureCapacity(int minCapacity)
 	{
 		final int minExpand = (elementData != EMPTY_ELEMENTDATA)
-		// any size if real element table
-		? 0
-		// larger than default for empty table. It's already supposed to be
-		// at default size.
-		: DEFAULT_CAPACITY;
+				// any size if real element table
+				? 0
+						// larger than default for empty table. It's already supposed to be
+						// at default size.
+						: DEFAULT_CAPACITY;
 
 		if (minCapacity > minExpand)
 		{

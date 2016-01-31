@@ -15,7 +15,7 @@ public class BWTTest
 		{
 			data.putInt(i++);
 		}
-		
+
 		LZ4Factory factory = LZ4Factory.nativeInstance();
 		LZ4Compressor fast = factory.fastCompressor();
 		LZ4Compressor hc = factory.highCompressor();

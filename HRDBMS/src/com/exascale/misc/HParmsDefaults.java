@@ -29,8 +29,8 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("log_dir", "/home/hrdbms");
 		retval.setProperty("log_clean_sleep_secs", "60");
 		retval.setProperty("catalog_sync_port", "3233");
-		retval.setProperty("rm_sleep_time_ms", "10000");
-		retval.setProperty("low_mem_percent", "50");
+		retval.setProperty("rm_sleep_time_ms", "5000");
+		retval.setProperty("low_mem_percent", "40");
 		retval.setProperty("profile", "false");
 		retval.setProperty("detect_thread_deadlocks", "false");
 		retval.setProperty("queue_size", "125000");
@@ -44,7 +44,7 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("max_local_sort", "2500000");
 		retval.setProperty("parallel_sort_min_rows", Integer.toString((int)(2500 * Math.pow(Math.pow(Runtime.getRuntime().availableProcessors(), 2), 1.0 / 3.0))));
 		retval.setProperty("prefetch_request_size", "16");
-		retval.setProperty("pages_in_advance", "8");
+		retval.setProperty("pages_in_advance", "1");
 		retval.setProperty("getpage_attempts", "300000");
 		retval.setProperty("getpage_fail_sleep_time_ms", "1");
 		retval.setProperty("archive_dir", "/home/hrdbms/");
@@ -60,11 +60,20 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("max_load_average", Integer.toString(25 * Runtime.getRuntime().availableProcessors()));
 		retval.setProperty("critical_mem_percent", "15");
 		retval.setProperty("stack_size", "2M");
-		retval.setProperty("jvm_args", "-XX:+UseAdaptiveSizePolicyWithSystemGC");
+		retval.setProperty("jvm_args", "");
 		retval.setProperty("external_factor", "2.4");
-		retval.setProperty("hash_external_factor", "25.0");
-		retval.setProperty("max_queued_load_flush_threads", "1");
-		retval.setProperty("sort_gb_factor", "100.0");
+		retval.setProperty("hash_external_factor", "12.5");
+		retval.setProperty("max_queued_load_flush_threads", "5");
+		retval.setProperty("sort_gb_factor", "2.4");
+		retval.setProperty("java_path", "");
+		retval.setProperty("max_cfc_cache_size", "1572864");
+		retval.setProperty("batches_per_check", "4");
+		retval.setProperty("create_index_batch_size", "1000000");
+		retval.setProperty("num_fcs_per_cfc", "1024");
+		retval.setProperty("max_open_files", "102400");
+		retval.setProperty("bp_trim_sleep_ms", "300000");
+		retval.setProperty("enable_cvarchar_compression", "true");
+		retval.setProperty("enable_col_reordering", "true");
 		HParmsDefaults.retval = retval;
 		return retval;
 	}

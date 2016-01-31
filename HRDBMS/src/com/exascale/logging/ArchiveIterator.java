@@ -1,20 +1,17 @@
 package com.exascale.logging;
 
+import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.file.FileSystems;
-import java.nio.file.FileVisitResult;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.PathMatcher;
-import java.nio.file.Paths;
-import java.nio.file.SimpleFileVisitor;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import com.exascale.managers.HRDBMSWorker;
+import com.exascale.managers.ResourceManager;
 
 public class ArchiveIterator implements Iterator<LogRec>
 {
@@ -23,7 +20,7 @@ public class ArchiveIterator implements Iterator<LogRec>
 	private FileChannel fc;
 	private int size;
 	private String fn;
-	private ArrayList<String> files;
+	private final ArrayList<String> files;
 	private int index = 0;
 	private RandomAccessFile raf;
 
@@ -44,24 +41,17 @@ public class ArchiveIterator implements Iterator<LogRec>
 		int split = fn.lastIndexOf('/');
 		String dir = fn.substring(0, split);
 		String relative = fn.substring(split + 1);
-		final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + relative);
-		Files.walkFileTree(Paths.get(dir), new SimpleFileVisitor<Path>() {
-			@Override
-			public FileVisitResult visitFile(Path file, java.nio.file.attribute.BasicFileAttributes attrs) throws IOException
+		String firstPart = relative.substring(0, relative.indexOf('*'));
+		File dirFile = new File(dir);
+		File[] files3 = dirFile.listFiles();
+		for (File f : files3)
+		{
+			String fStr = f.getName();
+			if (fStr.startsWith(firstPart) && fStr.endsWith(".archive"))
 			{
-				if (matcher.matches(file.getFileName()))
-				{
-					files.add(file);
-				}
-				return FileVisitResult.CONTINUE;
+				files.add(f.toPath());
 			}
-
-			@Override
-			public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException
-			{
-				return FileVisitResult.CONTINUE;
-			}
-		});
+		}
 
 		ArrayList<String> files2 = new ArrayList<String>();
 		for (Path file : files)
@@ -74,7 +64,26 @@ public class ArchiveIterator implements Iterator<LogRec>
 
 		this.files = files2;
 
-		raf = new RandomAccessFile(this.files.get(index), "r");
+		while (true)
+		{
+			try
+			{
+				raf = new RandomAccessFile(this.files.get(index), "r");
+				break;
+			}
+			catch (FileNotFoundException e)
+			{
+				ResourceManager.panic = true;
+				try
+				{
+					Thread.sleep(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("rm_sleep_time_ms")) / 2);
+				}
+				catch (Exception f)
+				{
+				}
+			}
+		}
+
 		fc = raf.getChannel();
 		synchronized (fc)
 		{
@@ -112,7 +121,26 @@ public class ArchiveIterator implements Iterator<LogRec>
 				fc.close();
 				raf.close();
 
-				raf = new RandomAccessFile(this.files.get(index), "r");
+				while (true)
+				{
+					try
+					{
+						raf = new RandomAccessFile(this.files.get(index), "r");
+						break;
+					}
+					catch (FileNotFoundException e)
+					{
+						ResourceManager.panic = true;
+						try
+						{
+							Thread.sleep(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("rm_sleep_time_ms")) / 2);
+						}
+						catch (Exception f)
+						{
+						}
+					}
+				}
+
 				fc = raf.getChannel();
 				synchronized (fc)
 				{

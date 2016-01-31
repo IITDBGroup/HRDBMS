@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import com.exascale.exceptions.LockAbortException;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
@@ -16,9 +15,11 @@ import com.exascale.logging.LogRec;
 import com.exascale.logging.StartLogRec;
 import com.exascale.logging.TruncateLogRec;
 import com.exascale.managers.BufferManager;
+import com.exascale.managers.BufferManager.RequestPagesThread;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LockManager;
 import com.exascale.managers.LogManager;
+import com.exascale.managers.SubBufferManager;
 import com.exascale.misc.ScalableStampedReentrantRWLock;
 import com.exascale.optimizer.MetaData;
 
@@ -27,11 +28,14 @@ public class Transaction implements Serializable
 	public static final int ISOLATION_RR = 0, ISOLATION_CS = 1, ISOLATION_UR = 2;
 	private static AtomicLong nextTxNum;
 	public static HashMap<Long, Long> txList = new HashMap<Long, Long>();
+	public static boolean reorder;
+	public ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
 
 	static
 	{
 		try
 		{
+			reorder = HRDBMSWorker.getHParms().getProperty("enable_col_reordering").equals("true");
 			nextTxNum = new AtomicLong(System.currentTimeMillis() * 1000);
 			while (nextTxNum.get() % MetaData.myCoordNum() != 0)
 			{
@@ -84,12 +88,7 @@ public class Transaction implements Serializable
 
 	public Transaction(long txnum)
 	{
-		Transaction.txListLock.readLock().lock();
-		{
-			this.txnum = txnum;
-		}
-		Transaction.txListLock.readLock().unlock();
-
+		this.txnum = txnum; // no read lock needed?
 		level = Transaction.ISOLATION_RR;
 	}
 
@@ -140,6 +139,10 @@ public class Transaction implements Serializable
 	public void commit() throws Exception
 	{
 		LogManager.commit(txnum);
+		for (SubBufferManager sbm : BufferManager.managers)
+		{
+			sbm.lock.lock();
+		}
 		Transaction.txListLock.writeLock().lock();
 		{
 			try
@@ -152,15 +155,28 @@ public class Transaction implements Serializable
 			catch (Exception e)
 			{
 				Transaction.txListLock.writeLock().unlock();
+				for (SubBufferManager sbm : BufferManager.managers)
+				{
+					sbm.lock.unlock();
+				}
 				throw e;
 			}
 		}
 		Transaction.txListLock.writeLock().unlock();
+		for (SubBufferManager sbm : BufferManager.managers)
+		{
+			sbm.trimBP();
+			sbm.lock.unlock();
+		}
 	}
 
 	public void commitNoFlush() throws Exception
 	{
 		LogManager.commitNoFlush(txnum);
+		for (SubBufferManager sbm : BufferManager.managers)
+		{
+			sbm.lock.lock();
+		}
 		Transaction.txListLock.writeLock().lock();
 		{
 			try
@@ -173,10 +189,19 @@ public class Transaction implements Serializable
 			catch (Exception e)
 			{
 				Transaction.txListLock.writeLock().unlock();
+				for (SubBufferManager sbm : BufferManager.managers)
+				{
+					sbm.lock.unlock();
+				}
 				throw e;
 			}
 		}
 		Transaction.txListLock.writeLock().unlock();
+		for (SubBufferManager sbm : BufferManager.managers)
+		{
+			sbm.trimBP();
+			sbm.lock.unlock();
+		}
 	}
 
 	public DeleteLogRec delete(byte[] before, byte[] after, int off, Block b) throws Exception
@@ -200,6 +225,12 @@ public class Transaction implements Serializable
 		}
 		Transaction.txListLock.writeLock().unlock();
 		return LogManager.delete(txnum, b, off, before, after);
+	}
+
+	public void dummyRead(Block b, Schema schema) throws LockAbortException, Exception
+	{
+		final Page p = this.getPage(b);
+		schema.dummyRead(this, p);
 	}
 
 	@Override
@@ -274,6 +305,54 @@ public class Transaction implements Serializable
 
 		return p;
 	}
+	
+	public HashMap<Integer, Integer> getColOrder(Block bl) throws Exception
+	{
+		final Block b = new Block(bl.fileName(), 0);
+		requestPage(b);
+
+		final HeaderPage hp = readHeaderPage(b, 1);
+		ArrayList<Integer> order = hp.getColOrder();
+		HashMap<Integer, Integer> retval = new HashMap<Integer, Integer>();
+		int index = 0;
+		for (int i : order)
+		{
+			retval.put(i, index);
+			index++;
+		}
+		
+		return retval;
+	}
+
+	public Page[] getPage(Block b, ArrayList<Integer> cols) throws Exception
+	{
+		Page[] retval = new Page[cols.size()];
+		
+		if (!reorder)
+		{
+			int pos = 0;
+			for (int col : cols)
+			{
+				retval[pos++] = getPage(new Block(b.fileName(), b.number() + col));
+			}
+		}
+		else
+		{
+			HashMap<Integer, Integer> map = colMap.get(b.fileName());
+			if (map == null)
+			{
+				map = getColOrder(b);
+				colMap.put(b.fileName(), map);
+			}
+			int pos = 0;
+			for (int col : cols)
+			{
+				retval[pos++] = getPage(new Block(b.fileName(), b.number() + map.get(col)));
+			}
+		}
+
+		return retval;
+	}
 
 	@Override
 	public int hashCode()
@@ -322,7 +401,98 @@ public class Transaction implements Serializable
 			LockManager.unlockSLock(b, txnum);
 		}
 	}
-	
+
+	public void read(Block b, Schema schema, ArrayList<Integer> cols, boolean forIter) throws Exception
+	{
+		if (!reorder)
+		{
+			for (int col : cols)
+			{
+				Block b2 = new Block(b.fileName(), b.number() + col);
+				if (level == ISOLATION_RR || level == ISOLATION_CS)
+				{
+					LockManager.sLock(b2, txnum);
+				}
+				final Page p = this.getPage(b2);
+				schema.add(col, p);
+			}
+		}
+		else
+		{
+			HashMap<Integer, Integer> map = colMap.get(b.fileName());
+			if (map == null)
+			{
+				map = getColOrder(b);
+				colMap.put(b.fileName(), map);
+			}
+			for (int col : cols)
+			{
+				Block b2 = new Block(b.fileName(), b.number() + map.get(col));
+				if (level == ISOLATION_RR || level == ISOLATION_CS)
+				{
+					LockManager.sLock(b2, txnum);
+				}
+				final Page p = this.getPage(b2);
+				schema.add(col, p);
+			}
+		}
+
+		if (forIter)
+		{
+			schema.read(this, true);
+		}
+		else
+		{
+			schema.read(this);
+		}
+	}
+
+	public void read(Block b, Schema schema, ArrayList<Integer> cols, boolean forIter, boolean lock) throws Exception
+	{
+		if (!reorder)
+		{
+			for (int col : cols)
+			{
+				Block b2 = new Block(b.fileName(), b.number() + col);
+				LockManager.xLock(b2, txnum);
+				final Page p = this.getPage(b2);
+				schema.add(col, p);
+			}
+		}
+		else
+		{
+			HashMap<Integer, Integer> map = colMap.get(b.fileName());
+			if (map == null)
+			{
+				map = getColOrder(b);
+				colMap.put(b.fileName(), map);
+			}
+			for (int col : cols)
+			{
+				Block b2 = new Block(b.fileName(), b.number() + map.get(col));
+				LockManager.xLock(b2, txnum);
+				final Page p = this.getPage(b2);
+				schema.add(col, p);
+			}
+		}
+
+		if (forIter)
+		{
+			schema.read(this, true);
+		}
+		else
+		{
+			schema.read(this);
+		}
+	}
+
+	public void read(Block b, Schema schema, boolean lock) throws LockAbortException, Exception
+	{
+		LockManager.xLock(b, txnum);
+		final Page p = this.getPage(b);
+		schema.read(this, p);
+	}
+
 	public void read2(Block b, Schema schema, Page p) throws LockAbortException, Exception
 	{
 		if (level == ISOLATION_RR || level == ISOLATION_CS)
@@ -334,19 +504,6 @@ public class Transaction implements Serializable
 		{
 			LockManager.unlockSLock(b, txnum);
 		}
-	}
-	
-	public void dummyRead(Block b, Schema schema) throws LockAbortException, Exception
-	{
-		final Page p = this.getPage(b);
-		schema.dummyRead(this, p);
-	}
-
-	public void read(Block b, Schema schema, boolean lock) throws LockAbortException, Exception
-	{
-		LockManager.xLock(b, txnum);
-		final Page p = this.getPage(b);
-		schema.read(this, p);
 	}
 
 	public HeaderPage readHeaderPage(Block b, int type) throws LockAbortException, Exception
@@ -377,6 +534,11 @@ public class Transaction implements Serializable
 
 	public void releaseLocksAndPins() throws Exception
 	{
+		for (SubBufferManager sbm : BufferManager.managers)
+		{
+			sbm.lock.lock();
+		}
+
 		Transaction.txListLock.writeLock().lock();
 		{
 			try
@@ -387,10 +549,18 @@ public class Transaction implements Serializable
 			catch (Exception e)
 			{
 				Transaction.txListLock.writeLock().unlock();
+				for (SubBufferManager sbm : BufferManager.managers)
+				{
+					sbm.lock.unlock();
+				}
 				throw e;
 			}
 		}
 		Transaction.txListLock.writeLock().unlock();
+		for (SubBufferManager sbm : BufferManager.managers)
+		{
+			sbm.lock.unlock();
+		}
 	}
 
 	public void requestPage(Block b) throws Exception
@@ -406,38 +576,214 @@ public class Transaction implements Serializable
 		BufferManager.requestPage(b, this.number());
 	}
 
+	public void requestPage(Block b, ArrayList<Integer> cols) throws Exception
+	{
+		if (!reorder)
+		{
+			for (int col : cols)
+			{
+				BufferManager.requestPage(new Block(b.fileName(), b.number() + col), this.number());
+			}
+		}
+		else
+		{
+			HashMap<Integer, Integer> map = colMap.get(b.fileName());
+			if (map == null)
+			{
+				map = getColOrder(b);
+				colMap.put(b.fileName(), map);
+			}
+			for (int col : cols)
+			{
+				BufferManager.requestPage(new Block(b.fileName(), b.number() + map.get(col)), this.number());
+			}
+		}
+	}
+
 	public void requestPages(Block[] bs) throws Exception
 	{
-		for (Block b : bs)
+		// HRDBMSWorker.logger.debug("Short TX request pages starting");
+		ArrayList<Block> bs1 = new ArrayList<Block>();
+		ArrayList<Block> bs2 = new ArrayList<Block>();
+		int i = 0;
+		while (i < bs.length)
 		{
-			if (b.number() < 0)
+			Block b = bs[i];
+			int num = b.number();
+			if (num % 3 == 0)
 			{
-				Exception e = new Exception("Negative block number requested: " + b.number());
-				HRDBMSWorker.logger.debug("", e);
-				throw e;
+				if (i + 2 < bs.length && bs[i + 1].number() == num + 1 && bs[i + 2].number() == num + 2)
+				{
+					bs2.add(b);
+					i += 3;
+				}
+				else
+				{
+					bs1.add(b);
+					i++;
+				}
+			}
+			else
+			{
+				bs1.add(b);
+				i++;
 			}
 		}
 
-		BufferManager.requestPages(bs, this.number());
+		if (bs1.size() > 0)
+		{
+			Block[] b1 = bs1.toArray(new Block[bs1.size()]);
+			BufferManager.requestPages(b1, this.number());
+		}
+
+		if (bs2.size() > 0)
+		{
+			Block[] b2 = bs2.toArray(new Block[bs2.size()]);
+			BufferManager.request3Pages(b2, this.number());
+		}
+
+		// HRDBMSWorker.logger.debug("Short TX request pages ending");
 	}
-	
+
+	public RequestPagesThread requestPages(Block[] bs, ArrayList<Integer> cols) throws Exception
+	{
+		Block[] bs2 = new Block[bs.length * cols.size()];
+		int pos = 0;
+		for (Block b : bs)
+		{
+			if (!reorder)
+			{
+				for (int col : cols)
+				{
+					bs2[pos++] = new Block(b.fileName(), b.number() + col);
+				}
+			}
+			else
+			{
+				HashMap<Integer, Integer> map = colMap.get(b.fileName());
+				if (map == null)
+				{
+					map = getColOrder(b);
+					colMap.put(b.fileName(), map);
+				}
+				for (int col : cols)
+				{
+					bs2[pos++] = new Block(b.fileName(), b.number() + map.get(col));
+				}
+			}
+		}
+
+		return BufferManager.requestPages(bs2, this.number());
+	}
+
+	public RequestPagesThread requestPages(Block[] bs, ArrayList<Integer> cols, int layoutSize) throws Exception
+	{
+		ArrayList<Integer> newCols = null;
+		boolean build = false;
+		Block[] bs2 = new Block[bs.length * cols.size()];
+		int pos = 0;
+		for (Block b : bs)
+		{
+			if (!reorder)
+			{
+				for (int col : cols)
+				{
+					bs2[pos++] = new Block(b.fileName(), b.number() + col);
+				}
+			}
+			else
+			{
+				if (newCols == null)
+				{
+					newCols = new ArrayList<Integer>();
+					build = true;
+				}
+				else
+				{
+					build = false;
+				}
+				HashMap<Integer, Integer> map = colMap.get(b.fileName());
+				if (map == null)
+				{
+					map = getColOrder(b);
+					colMap.put(b.fileName(), map);
+				}
+				for (int col : cols)
+				{
+					int newCol = map.get(col);
+					bs2[pos++] = new Block(b.fileName(), b.number() + newCol);
+					
+					if (build)
+					{
+						newCols.add(newCol);
+					}
+				}
+			}
+		}
+		
+		if (!reorder)
+		{
+			return BufferManager.requestPages(bs2, this.number(), cols, layoutSize);
+		}
+		else
+		{
+			return BufferManager.requestPages(bs2, this.number(), newCols, layoutSize);
+		}
+	}
+
 	public void requestPages(Block[] bs, Schema[] schemas, int schemaIndex, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos) throws Exception
 	{
-		//for (Block b : bs)
-		//{
-			//if (b.number() < 0)
-			//{
-			//	Exception e = new Exception("Negative block number requested: " + b.number());
-			//	HRDBMSWorker.logger.debug("", e);
-			//	throw e;
-			//}
-		//}
+		// BufferManager.requestPages(bs, this, schemas, schemaIndex, schemaMap,
+		// fetchPos);
+		// HRDBMSWorker.logger.debug("Long TX request pages starting");
+		ArrayList<Block> bs1 = new ArrayList<Block>();
+		ArrayList<Block> bs2 = new ArrayList<Block>();
+		int i = 0;
+		while (i < bs.length)
+		{
+			Block b = bs[i];
+			int num = b.number();
+			if (num % 3 == 0)
+			{
+				if (i + 2 < bs.length && bs[i + 1].number() == num + 1 && bs[i + 2].number() == num + 2)
+				{
+					bs2.add(b);
+					i += 3;
+				}
+				else
+				{
+					bs1.add(b);
+					i++;
+				}
+			}
+			else
+			{
+				bs1.add(b);
+				i++;
+			}
+		}
 
-		BufferManager.requestPages(bs, this, schemas, schemaIndex, schemaMap, fetchPos);
+		if (bs1.size() > 0)
+		{
+			Block[] b1 = bs1.toArray(new Block[bs1.size()]);
+			BufferManager.requestPages(b1, this, schemas, schemaIndex, schemaMap, fetchPos);
+		}
+
+		if (bs2.size() > 0)
+		{
+			Block[] b2 = bs2.toArray(new Block[bs2.size()]);
+			BufferManager.request3Pages(b2, this, schemas, schemaIndex + bs1.size(), schemaMap, fetchPos);
+		}
+
+		// HRDBMSWorker.logger.debug("Long TX request pages ending");
 	}
 
 	public void rollback() throws Exception
 	{
+		for (SubBufferManager sbm : BufferManager.managers)
+		{
+			sbm.lock.lock();
+		}
 		Transaction.txListLock.writeLock().lock();
 		{
 			try
@@ -457,10 +803,18 @@ public class Transaction implements Serializable
 			catch (Exception e)
 			{
 				Transaction.txListLock.writeLock().unlock();
+				for (SubBufferManager sbm : BufferManager.managers)
+				{
+					sbm.lock.unlock();
+				}
 				throw e;
 			}
 		}
 		Transaction.txListLock.writeLock().unlock();
+		for (SubBufferManager sbm : BufferManager.managers)
+		{
+			sbm.lock.unlock();
+		}
 	}
 
 	public void setIsolationLevel(int level)

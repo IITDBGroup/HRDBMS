@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.tables.Plan;
@@ -39,6 +40,8 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 	private transient volatile boolean forceDone;
 
 	private volatile boolean startCalled = false;
+	private transient AtomicLong received;
+	private transient volatile boolean demReceived;
 
 	private DataEndMarker startCalledLock = new DataEndMarker();
 
@@ -50,6 +53,7 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 		cols2Types.put(col, "LONG");
 		cols2Pos.put(col, 0);
 		pos2Col.put(0, col);
+		received = new AtomicLong(0);
 	}
 
 	public static IndexOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -66,6 +70,8 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 		value.device = OperatorUtils.readInt(in);
 		value.startCalled = OperatorUtils.readBool(in);
 		value.startCalledLock = new DataEndMarker();
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
 		return value;
 	}
 
@@ -182,6 +188,14 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 		if (!forceDone)
 		{
 			Object o = index.next();
+			if (o instanceof DataEndMarker)
+			{
+				demReceived = true;
+			}
+			else
+			{
+				received.getAndIncrement();
+			}
 			if (o instanceof Exception)
 			{
 				throw (Exception)o;
@@ -202,9 +216,21 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
 	}
 
 	@Override

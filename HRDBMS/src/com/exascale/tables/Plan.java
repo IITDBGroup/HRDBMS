@@ -2,7 +2,6 @@ package com.exascale.tables;
 
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import com.exascale.managers.HRDBMSWorker;
@@ -40,28 +39,21 @@ public class Plan implements Serializable
 		//
 		// old2New = null;
 	}
-	
-	public void setSample(long sPer)
+
+	public void addNode(int node)
 	{
-		for (Operator op : trees)
-		{
-			setSample(op, sPer);
-		}
+		touchedNodes.put(node, node);
 	}
-	
-	private void setSample(Operator op, long sPer)
+
+	public ArrayList<Operator> cloneArray(ArrayList<Operator> source)
 	{
-		if (op instanceof TableScanOperator)
+		ArrayList<Operator> retval = new ArrayList<Operator>(source.size());
+		for (Operator tree : source)
 		{
-			((TableScanOperator)op).setSample(sPer);
+			retval.add(clone(tree));
 		}
-		else
-		{
-			for (Operator o : op.children())
-			{
-				setSample(o, sPer);
-			}
-		}
+
+		return retval;
 	}
 
 	/*
@@ -90,25 +82,9 @@ public class Plan implements Serializable
 	 * old2New.get(old); if (replace != null) { s.setID(replace); } else {
 	 * replace = Phase4.id.getAndIncrement(); s.setID(replace); old2New.put(old,
 	 * replace); } }
-	 *
+	 * 
 	 * for (Operator o : op.children()) { updateIDs(o); } }
 	 */
-
-	public void addNode(int node)
-	{
-		touchedNodes.put(node, node);
-	}
-
-	public ArrayList<Operator> cloneArray(ArrayList<Operator> source)
-	{
-		ArrayList<Operator> retval = new ArrayList<Operator>(source.size());
-		for (Operator tree : source)
-		{
-			retval.add(clone(tree));
-		}
-
-		return retval;
-	}
 
 	@Override
 	public synchronized boolean equals(Object rhs)
@@ -196,6 +172,14 @@ public class Plan implements Serializable
 		return reserved;
 	}
 
+	public void setSample(long sPer)
+	{
+		for (Operator op : trees)
+		{
+			setSample(op, sPer);
+		}
+	}
+
 	private Operator clone(Operator op)
 	{
 		final Operator clone = op.clone();
@@ -241,5 +225,20 @@ public class Plan implements Serializable
 		}
 
 		return clone;
+	}
+
+	private void setSample(Operator op, long sPer)
+	{
+		if (op instanceof TableScanOperator)
+		{
+			((TableScanOperator)op).setSample(sPer);
+		}
+		else
+		{
+			for (Operator o : op.children())
+			{
+				setSample(o, sPer);
+			}
+		}
 	}
 }

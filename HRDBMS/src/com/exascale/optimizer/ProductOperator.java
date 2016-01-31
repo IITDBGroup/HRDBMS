@@ -1,6 +1,7 @@
 package com.exascale.optimizer;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
@@ -17,6 +18,7 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
@@ -69,24 +71,18 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	private transient HashSet<HashMap<Filter, Filter>> hshm = null;
 	private transient Boolean semi = null;
 	private transient Boolean anti = null;
+	private transient AtomicLong received;
+	private transient volatile boolean demReceived;
 
 	private int rightChildCard = 16;
+	private int leftChildCard = 16;
 
 	private boolean cardSet = false;
 
 	public ProductOperator(MetaData meta)
 	{
 		this.meta = meta;
-	}
-	
-	public void setSemi()
-	{
-		semi = new Boolean(true);
-	}
-	
-	public void setAnti()
-	{
-		anti = new Boolean(true);
+		received = new AtomicLong(0);
 	}
 
 	public static ProductOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -102,12 +98,10 @@ public final class ProductOperator extends JoinOperator implements Serializable
 		value.node = OperatorUtils.readInt(in);
 		value.rightChildCard = OperatorUtils.readInt(in);
 		value.cardSet = OperatorUtils.readBool(in);
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
+		value.leftChildCard = OperatorUtils.readInt(in);
 		return value;
-	}
-	
-	public void setHSHM(HashSet<HashMap<Filter, Filter>> hshm)
-	{
-		this.hshm = hshm;
 	}
 
 	@Override
@@ -173,6 +167,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 		retval.node = node;
 		retval.rightChildCard = rightChildCard;
 		retval.cardSet = cardSet;
+		retval.leftChildCard = leftChildCard;
 		return retval;
 	}
 
@@ -295,9 +290,21 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
 	}
 
 	@Override
@@ -355,12 +362,23 @@ public final class ProductOperator extends JoinOperator implements Serializable
 		OperatorUtils.writeInt(node, out);
 		OperatorUtils.writeInt(rightChildCard, out);
 		OperatorUtils.writeBool(cardSet, out);
+		OperatorUtils.writeInt(leftChildCard, out);
+	}
+
+	public void setAnti()
+	{
+		anti = new Boolean(true);
 	}
 
 	@Override
 	public void setChildPos(int pos)
 	{
 		childPos = pos;
+	}
+
+	public void setHSHM(HashSet<HashMap<Filter, Filter>> hshm)
+	{
+		this.hshm = hshm;
 	}
 
 	@Override
@@ -374,7 +392,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	{
 	}
 
-	public boolean setRightChildCard(int card)
+	public boolean setRightChildCard(int card, int card2)
 	{
 		if (cardSet)
 		{
@@ -383,7 +401,13 @@ public final class ProductOperator extends JoinOperator implements Serializable
 
 		cardSet = true;
 		rightChildCard = card;
+		leftChildCard = card2;
 		return true;
+	}
+
+	public void setSemi()
+	{
+		semi = new Boolean(true);
 	}
 
 	@Override
@@ -396,7 +420,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 		{
 			inMem = false;
 		}
-		
+
 		if (inMem)
 		{
 			NUM_RT_THREADS = 4 * ResourceManager.cpus;
@@ -497,325 +521,52 @@ public final class ProductOperator extends JoinOperator implements Serializable
 			}
 		}
 	}
-	
-	private class WriteThread extends HRDBMSThread
+
+	private class LeftThread extends HRDBMSThread
 	{
-		private SPSCQueue q;
-		private boolean ok = true;
-		private Exception e;
-		
-		public WriteThread(SPSCQueue q)
+		private final BufferedLinkedBlockingQueue q;
+		private HashSet<ArrayList<Object>> toRemove = null;
+
+		public LeftThread(BufferedLinkedBlockingQueue q)
 		{
 			this.q = q;
 		}
-		
-		public boolean getOK()
+
+		public LeftThread(BufferedLinkedBlockingQueue q, HashSet<ArrayList<Object>> toRemove)
 		{
-			return ok;
+			this.q = q;
+			this.toRemove = toRemove;
 		}
-		
-		public Exception getException()
-		{
-			return e;
-		}
-		
-		private void createFilesAndChannels(String name) throws Exception
-		{
-			for (String dir : ResourceManager.TEMP_DIRS)
-			{
-				String fn = dir + name;
-				RandomAccessFile raf = new RandomAccessFile(fn, "rw");
-				rafs.put(fn, raf);
-				FileChannel fc = raf.getChannel();
-				fcs.put(fn, fc);
-			}
-		}
-		
+
+		@Override
 		public void run()
 		{
 			try
 			{
-				//until we get DEM, write all data to disk
-				ArrayList<ArrayList<ArrayList<Object>>> rows = new ArrayList<ArrayList<ArrayList<Object>>>();
-				byte[] types1 = new byte[children.get(0).getPos2Col().size()];
-				int j = 0;
-				for (String col : children.get(0).getPos2Col().values())
+				ArrayList<SubLeftThread> threads = new ArrayList<SubLeftThread>();
+				for (FileChannel fc : fcs.values())
 				{
-					String type = children.get(0).getCols2Types().get(col);
-					if (type.equals("INT"))
+					SubLeftThread thread = new SubLeftThread(q, fc, toRemove);
+					thread.start();
+					threads.add(thread);
+				}
+
+				for (SubLeftThread thread : threads)
+				{
+					thread.join();
+					if (!thread.getOK())
 					{
-						types1[j] = (byte)1;
-					}
-					else if (type.equals("FLOAT"))
-					{
-						types1[j] = (byte)2;
-					}
-					else if (type.equals("CHAR"))
-					{
-						types1[j] = (byte)4;
-					}
-					else if (type.equals("LONG"))
-					{
-						types1[j] = (byte)0;
-					}
-					else if (type.equals("DATE"))
-					{
-						types1[j] = (byte)3;
-					}
-					else
-					{
-						outBuffer.put(new Exception("Unknown type: " + type));
+						q.put(thread.getException());
 						return;
 					}
-				
-					j++;
-				}
-				rafs = new ConcurrentHashMap<String, RandomAccessFile>();
-				fcs = new ConcurrentHashMap<String, FileChannel>();
-				types = types1;
-				int i = 0;
-				int mod = ResourceManager.TEMP_DIRS.size();
-				int limit = (int)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")) / 2) / mod;
-				while (i < mod)
-				{
-					rows.add(new ArrayList<ArrayList<Object>>(limit));
-					i++;
-				}
-			
-				String name = this.toString() + System.currentTimeMillis() + ".ext";
-				createFilesAndChannels(name);
-				ArrayList<SubWriteThread> threads = new ArrayList<SubWriteThread>();
-			
-				i = 0;
-				while (true)
-				{
-					Object o = q.take();
-					if (o instanceof DataEndMarker)
-					{
-						if (threads.size() != 0)
-						{
-							for (SubWriteThread thread : threads)
-							{
-								thread.join();
-								if (!thread.getOK())
-								{
-									ok = false;
-									this.e = thread.getException();
-									return;
-								}
-							}
-						
-							threads.clear();
-						}
-					
-						//flush
-						j = 0;
-						for (String dir : ResourceManager.TEMP_DIRS)
-						{
-							SubWriteThread thread = new SubWriteThread(dir + name, rows.get(j), types1);
-							thread.start();
-							threads.add(thread);
-							j++;
-						}
-					
-						for (SubWriteThread thread : threads)
-						{
-							thread.join();
-							if (!thread.getOK())
-							{
-								ok = false;
-								this.e = thread.getException();
-								return;
-							}
-						}	
-					
-						return;
-					}
-					else
-					{
-						rows.get(i % mod).add((ArrayList<Object>)o);
-						if (i % mod == mod - 1 && rows.get(0).size() >= limit)
-						{
-							if (threads.size() != 0)
-							{
-								for (SubWriteThread thread : threads)
-								{
-									thread.join();
-									if (!thread.getOK())
-									{
-										ok = false;
-										this.e = thread.getException();
-										return;
-									}
-								}
-							
-								threads.clear();
-							}
-						
-							//flush
-							j = 0;
-							for (String dir : ResourceManager.TEMP_DIRS)
-							{
-								SubWriteThread thread = new SubWriteThread(dir + name, rows.get(j), types1);
-								thread.start();
-								threads.add(thread);
-								j++;
-							}
-						
-							rows.clear();
-							j = 0;
-							while (j < mod)
-							{
-								rows.add(new ArrayList<ArrayList<Object>>(limit));
-								j++;
-							}
-						}
-						i++;
-					}
-				}
-			}
-			catch(Exception e)
-			{
-				ok = false;
-				this.e = e;
-			}
-		}
-	}
-	
-	private class SubWriteThread extends HRDBMSThread
-	{
-		private String fn;
-		private ArrayList<ArrayList<Object>> rows;
-		private boolean ok = true;
-		private Exception e;
-		private byte[] types;
-		
-		public SubWriteThread(String fn, ArrayList<ArrayList<Object>> rows, byte[] types)
-		{
-			this.fn = fn;
-			this.rows = rows;
-			this.types = types;
-		}
-		
-		public void run()
-		{
-			try
-			{
-				FileChannel fc = fcs.get(fn);
-				byte[] data = rsToBytes(rows, types);
-				ByteBuffer bb = ByteBuffer.wrap(data);
-				fc.write(bb);
-			}
-			catch(Exception e)
-			{
-				ok = false;
-				this.e = e;
-			}
-		}
-		
-		public boolean getOK()
-		{
-			return ok;
-		}
-		
-		public Exception getException()
-		{
-			return e;
-		}
-		
-		private final byte[] rsToBytes(ArrayList<ArrayList<Object>> rows, final byte[] types) throws Exception
-		{
-			final ArrayList<byte[]> results = new ArrayList<byte[]>(rows.size());
-			final ArrayList<byte[]> bytes = new ArrayList<byte[]>();
-			final ArrayList<Integer> stringCols = new ArrayList<Integer>(rows.get(0).size());
-			int startSize = 5;
-			int a = 0;
-			for (byte b : types)
-			{
-				if (b == 4)
-				{
-					startSize += 4;
-					stringCols.add(a);
-				}
-				else if (b == 1 || b == 3)
-				{
-					startSize += 4;
-				}
-				else
-				{
-					startSize += 8;
-				}
-				
-				a++;
-			}
-			
-			for (ArrayList<Object> val : rows)
-			{
-				int size = startSize;
-				for (int y : stringCols)
-				{
-					Object o = val.get(y);
-					byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
-					size += b.length;
-					bytes.add(b);
 				}
 
-				final byte[] retval = new byte[size];
-				final ByteBuffer retvalBB = ByteBuffer.wrap(retval);
-				retvalBB.putInt(size - 4);
-				int x = 0;
-				int i = 0;
-				retvalBB.put((byte)1); //present
-				for (final Object o : val)
-				{
-					if (types[i] == 0)
-					{
-						retvalBB.putLong((Long)o);
-					}
-					else if (types[i] == 1)
-					{
-						retvalBB.putInt((Integer)o);
-					}
-					else if (types[i] == 2)
-					{
-						retvalBB.putDouble((Double)o);
-					}
-					else if (types[i] == 3)
-					{
-						retvalBB.putInt(((MyDate)o).getTime());
-					}
-					else if (types[i] == 4)
-					{
-						byte[] temp = bytes.get(x++);
-						retvalBB.putInt(temp.length);
-						retvalBB.put(temp);
-					}
-					else
-					{
-						throw new Exception("Unknown type: " + types[i]);
-					}
-
-					i++;
-				}
-
-				results.add(retval);
-				bytes.clear();
+				q.put(new DataEndMarker());
 			}
-
-			int count = 0;
-			for (final byte[] ba : results)
+			catch (Exception e)
 			{
-				count += ba.length;
+				q.put(e);
 			}
-			final byte[] retval = new byte[count];
-			int retvalPos = 0;
-			for (final byte[] ba : results)
-			{
-				System.arraycopy(ba, 0, retval, retvalPos, ba.length);
-				retvalPos += ba.length;
-			}
-
-			return retval;
 		}
 	}
 
@@ -832,12 +583,12 @@ public final class ProductOperator extends JoinOperator implements Serializable
 				{
 					cnf = new CNFFilter(hshm, meta, cols2Pos, ProductOperator.this);
 				}
-				
+
 				if ((semi != null || anti != null) && !inMem)
 				{
 					toRemove = new HashSet<ArrayList<Object>>();
 				}
-				
+
 				SPSCQueue writeQueue = null;
 				BufferedLinkedBlockingQueue readQueue = null;
 				WriteThread wt = null;
@@ -849,7 +600,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 					wt = new WriteThread(writeQueue);
 					wt.start();
 				}
-				
+
 				while (true)
 				{
 					final Operator left = children.get(0);
@@ -857,6 +608,14 @@ public final class ProductOperator extends JoinOperator implements Serializable
 					if (direct)
 					{
 						o = left.next(ProductOperator.this);
+						if (o instanceof DataEndMarker)
+						{
+							demReceived = true;
+						}
+						else
+						{
+							received.getAndIncrement();
+						}
 					}
 					else
 					{
@@ -889,14 +648,14 @@ public final class ProductOperator extends JoinOperator implements Serializable
 							}
 							final ArrayList<Object> orow = inBuffer.get(i);
 							i++;
-							final ArrayList<Object> rRow = (ArrayList<Object>)orow;
+							final ArrayList<Object> rRow = orow;
 
 							if (orow == null)
 							{
 								LockSupport.parkNanos(500);
 								continue;
 							}
-							
+
 							if (cnf == null || cnf.passes(lRow, rRow))
 							{
 								if (semi != null)
@@ -906,7 +665,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 									{
 										toRemove.add(lRow);
 									}
-									
+
 									break;
 								}
 								else if (anti != null)
@@ -927,7 +686,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 								}
 							}
 						}
-						
+
 						if (anti != null && !found && inMem)
 						{
 							outBuffer.put(lRow);
@@ -940,13 +699,21 @@ public final class ProductOperator extends JoinOperator implements Serializable
 						if (direct)
 						{
 							o = left.next(ProductOperator.this);
+							if (o instanceof DataEndMarker)
+							{
+								demReceived = true;
+							}
+							else
+							{
+								received.getAndIncrement();
+							}
 						}
 						else
 						{
 							o = readQueue.take();
 						}
 					}
-				
+
 					if (!inMem)
 					{
 						readersDone = false;
@@ -958,13 +725,13 @@ public final class ProductOperator extends JoinOperator implements Serializable
 								allDone = false;
 							}
 						}
-					
+
 						if (!allDone)
 						{
-							//start new reader threads
+							// start new reader threads
 							new StartReadersThread().start();
 						}
-					
+
 						if (wt != null)
 						{
 							writeQueue.put(new DataEndMarker());
@@ -975,7 +742,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 							}
 							wt = null;
 						}
-					
+
 						direct = false;
 						if (allDone)
 						{
@@ -990,7 +757,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 						}
 						else
 						{
-							//start new LeftThread and loop
+							// start new LeftThread and loop
 							if (toRemove == null || toRemove.size() == 0)
 							{
 								new LeftThread(readQueue).start();
@@ -1021,19 +788,19 @@ public final class ProductOperator extends JoinOperator implements Serializable
 				return;
 			}
 		}
-		
+
 		private void cleanupExternal() throws Exception
 		{
 			for (FileChannel fc : fcs.values())
 			{
 				fc.close();
 			}
-			
+
 			for (RandomAccessFile raf : rafs.values())
 			{
 				raf.close();
 			}
-			
+
 			for (String fn : rafs.keySet())
 			{
 				new File(fn).delete();
@@ -1044,12 +811,12 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	private final class ReaderThread extends ThreadPoolThread
 	{
 		private boolean done = false;
-		
+
 		public boolean getDone()
 		{
 			return done;
 		}
-		
+
 		@Override
 		public void run()
 		{
@@ -1057,12 +824,28 @@ public final class ProductOperator extends JoinOperator implements Serializable
 			{
 				final Operator child = children.get(1);
 				Object o = child.next(ProductOperator.this);
+				if (o instanceof DataEndMarker)
+				{
+					demReceived = true;
+				}
+				else
+				{
+					received.getAndIncrement();
+				}
 				while (!(o instanceof DataEndMarker) && (inMem || inBuffer.size() < inBuffer.capacity()))
 				{
 					inBuffer.add((ArrayList<Object>)o);
 					o = child.next(ProductOperator.this);
+					if (o instanceof DataEndMarker)
+					{
+						demReceived = true;
+					}
+					else
+					{
+						received.getAndIncrement();
+					}
 				}
-				
+
 				if (o instanceof DataEndMarker)
 				{
 					done = true;
@@ -1082,9 +865,10 @@ public final class ProductOperator extends JoinOperator implements Serializable
 			}
 		}
 	}
-	
+
 	private class StartReadersThread extends HRDBMSThread
 	{
+		@Override
 		public void run()
 		{
 			int i = 0;
@@ -1116,69 +900,33 @@ public final class ProductOperator extends JoinOperator implements Serializable
 			readersDone = true;
 		}
 	}
-	
-	private class LeftThread extends HRDBMSThread
-	{
-		private BufferedLinkedBlockingQueue q;
-		private HashSet<ArrayList<Object>> toRemove = null;
-		
-		public LeftThread(BufferedLinkedBlockingQueue q)
-		{
-			this.q = q;
-		}
-		
-		public LeftThread(BufferedLinkedBlockingQueue q, HashSet<ArrayList<Object>> toRemove)
-		{
-			this.q = q;
-			this.toRemove = toRemove;
-		}
-		
-		public void run()
-		{
-			try
-			{
-				ArrayList<SubLeftThread> threads = new ArrayList<SubLeftThread>();
-				for (FileChannel fc : fcs.values())
-				{
-					SubLeftThread thread = new SubLeftThread(q, fc, toRemove);
-					thread.start();
-					threads.add(thread);
-				}
-				
-				for (SubLeftThread thread : threads)
-				{
-					thread.join();
-					if (!thread.getOK())
-					{
-						q.put(thread.getException());
-						return;
-					}
-				}
-				
-				q.put(new DataEndMarker());
-			}
-			catch(Exception e)
-			{
-				q.put(e);
-			}
-		}
-	}
-	
+
 	private class SubLeftThread extends HRDBMSThread
 	{
-		private BufferedLinkedBlockingQueue q;
-		private FileChannel fc;
+		private final BufferedLinkedBlockingQueue q;
+		private final FileChannel fc;
 		private boolean ok = true;
 		private Exception e;
-		private HashSet<ArrayList<Object>> toRemove;
-	
+		private final HashSet<ArrayList<Object>> toRemove;
+
 		public SubLeftThread(BufferedLinkedBlockingQueue q, FileChannel fc, HashSet<ArrayList<Object>> toRemove)
 		{
 			this.q = q;
 			this.fc = fc;
 			this.toRemove = toRemove;
 		}
-		
+
+		public Exception getException()
+		{
+			return e;
+		}
+
+		public boolean getOK()
+		{
+			return ok;
+		}
+
+		@Override
 		public void run()
 		{
 			try
@@ -1211,23 +959,13 @@ public final class ProductOperator extends JoinOperator implements Serializable
 					}
 				}
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				ok = false;
 				this.e = e;
 			}
 		}
-		
-		public boolean getOK()
-		{
-			return ok;
-		}
-		
-		public Exception getException()
-		{
-			return e;
-		}
-		
+
 		private final Object fromBytes(byte[] val, byte[] types) throws Exception
 		{
 			final ByteBuffer bb = ByteBuffer.wrap(val);
@@ -1302,6 +1040,348 @@ public final class ProductOperator extends JoinOperator implements Serializable
 			else
 			{
 				return null;
+			}
+		}
+	}
+
+	private class SubWriteThread extends HRDBMSThread
+	{
+		private final String fn;
+		private final ArrayList<ArrayList<Object>> rows;
+		private boolean ok = true;
+		private Exception e;
+		private final byte[] types;
+
+		public SubWriteThread(String fn, ArrayList<ArrayList<Object>> rows, byte[] types)
+		{
+			this.fn = fn;
+			this.rows = rows;
+			this.types = types;
+		}
+
+		public Exception getException()
+		{
+			return e;
+		}
+
+		public boolean getOK()
+		{
+			return ok;
+		}
+
+		@Override
+		public void run()
+		{
+			try
+			{
+				FileChannel fc = fcs.get(fn);
+				byte[] data = rsToBytes(rows, types);
+				ByteBuffer bb = ByteBuffer.wrap(data);
+				fc.write(bb);
+			}
+			catch (Exception e)
+			{
+				ok = false;
+				this.e = e;
+			}
+		}
+
+		private final byte[] rsToBytes(ArrayList<ArrayList<Object>> rows, final byte[] types) throws Exception
+		{
+			final ArrayList<byte[]> results = new ArrayList<byte[]>(rows.size());
+			final ArrayList<byte[]> bytes = new ArrayList<byte[]>();
+			final ArrayList<Integer> stringCols = new ArrayList<Integer>(rows.get(0).size());
+			int startSize = 5;
+			int a = 0;
+			for (byte b : types)
+			{
+				if (b == 4)
+				{
+					startSize += 4;
+					stringCols.add(a);
+				}
+				else if (b == 1 || b == 3)
+				{
+					startSize += 4;
+				}
+				else
+				{
+					startSize += 8;
+				}
+
+				a++;
+			}
+
+			for (ArrayList<Object> val : rows)
+			{
+				int size = startSize;
+				for (int y : stringCols)
+				{
+					Object o = val.get(y);
+					byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
+					size += b.length;
+					bytes.add(b);
+				}
+
+				final byte[] retval = new byte[size];
+				final ByteBuffer retvalBB = ByteBuffer.wrap(retval);
+				retvalBB.putInt(size - 4);
+				int x = 0;
+				int i = 0;
+				retvalBB.put((byte)1); // present
+				for (final Object o : val)
+				{
+					if (types[i] == 0)
+					{
+						retvalBB.putLong((Long)o);
+					}
+					else if (types[i] == 1)
+					{
+						retvalBB.putInt((Integer)o);
+					}
+					else if (types[i] == 2)
+					{
+						retvalBB.putDouble((Double)o);
+					}
+					else if (types[i] == 3)
+					{
+						retvalBB.putInt(((MyDate)o).getTime());
+					}
+					else if (types[i] == 4)
+					{
+						byte[] temp = bytes.get(x++);
+						retvalBB.putInt(temp.length);
+						retvalBB.put(temp);
+					}
+					else
+					{
+						throw new Exception("Unknown type: " + types[i]);
+					}
+
+					i++;
+				}
+
+				results.add(retval);
+				bytes.clear();
+			}
+
+			int count = 0;
+			for (final byte[] ba : results)
+			{
+				count += ba.length;
+			}
+			final byte[] retval = new byte[count];
+			int retvalPos = 0;
+			for (final byte[] ba : results)
+			{
+				System.arraycopy(ba, 0, retval, retvalPos, ba.length);
+				retvalPos += ba.length;
+			}
+
+			return retval;
+		}
+	}
+
+	private class WriteThread extends HRDBMSThread
+	{
+		private final SPSCQueue q;
+		private boolean ok = true;
+		private Exception e;
+
+		public WriteThread(SPSCQueue q)
+		{
+			this.q = q;
+		}
+
+		public Exception getException()
+		{
+			return e;
+		}
+
+		public boolean getOK()
+		{
+			return ok;
+		}
+
+		@Override
+		public void run()
+		{
+			try
+			{
+				// until we get DEM, write all data to disk
+				ArrayList<ArrayList<ArrayList<Object>>> rows = new ArrayList<ArrayList<ArrayList<Object>>>();
+				byte[] types1 = new byte[children.get(0).getPos2Col().size()];
+				int j = 0;
+				for (String col : children.get(0).getPos2Col().values())
+				{
+					String type = children.get(0).getCols2Types().get(col);
+					if (type.equals("INT"))
+					{
+						types1[j] = (byte)1;
+					}
+					else if (type.equals("FLOAT"))
+					{
+						types1[j] = (byte)2;
+					}
+					else if (type.equals("CHAR"))
+					{
+						types1[j] = (byte)4;
+					}
+					else if (type.equals("LONG"))
+					{
+						types1[j] = (byte)0;
+					}
+					else if (type.equals("DATE"))
+					{
+						types1[j] = (byte)3;
+					}
+					else
+					{
+						outBuffer.put(new Exception("Unknown type: " + type));
+						return;
+					}
+
+					j++;
+				}
+				rafs = new ConcurrentHashMap<String, RandomAccessFile>();
+				fcs = new ConcurrentHashMap<String, FileChannel>();
+				types = types1;
+				int i = 0;
+				int mod = ResourceManager.TEMP_DIRS.size();
+				int limit = (int)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")) / 2) / mod;
+				while (i < mod)
+				{
+					rows.add(new ArrayList<ArrayList<Object>>(limit));
+					i++;
+				}
+
+				String name = this.toString() + System.currentTimeMillis() + ".ext";
+				createFilesAndChannels(name);
+				ArrayList<SubWriteThread> threads = new ArrayList<SubWriteThread>();
+
+				i = 0;
+				while (true)
+				{
+					Object o = q.take();
+					if (o instanceof DataEndMarker)
+					{
+						if (threads.size() != 0)
+						{
+							for (SubWriteThread thread : threads)
+							{
+								thread.join();
+								if (!thread.getOK())
+								{
+									ok = false;
+									this.e = thread.getException();
+									return;
+								}
+							}
+
+							threads.clear();
+						}
+
+						// flush
+						j = 0;
+						for (String dir : ResourceManager.TEMP_DIRS)
+						{
+							SubWriteThread thread = new SubWriteThread(dir + name, rows.get(j), types1);
+							thread.start();
+							threads.add(thread);
+							j++;
+						}
+
+						for (SubWriteThread thread : threads)
+						{
+							thread.join();
+							if (!thread.getOK())
+							{
+								ok = false;
+								this.e = thread.getException();
+								return;
+							}
+						}
+
+						return;
+					}
+					else
+					{
+						rows.get(i % mod).add((ArrayList<Object>)o);
+						if (i % mod == mod - 1 && rows.get(0).size() >= limit)
+						{
+							if (threads.size() != 0)
+							{
+								for (SubWriteThread thread : threads)
+								{
+									thread.join();
+									if (!thread.getOK())
+									{
+										ok = false;
+										this.e = thread.getException();
+										return;
+									}
+								}
+
+								threads.clear();
+							}
+
+							// flush
+							j = 0;
+							for (String dir : ResourceManager.TEMP_DIRS)
+							{
+								SubWriteThread thread = new SubWriteThread(dir + name, rows.get(j), types1);
+								thread.start();
+								threads.add(thread);
+								j++;
+							}
+
+							rows.clear();
+							j = 0;
+							while (j < mod)
+							{
+								rows.add(new ArrayList<ArrayList<Object>>(limit));
+								j++;
+							}
+						}
+						i++;
+					}
+				}
+			}
+			catch (Exception e)
+			{
+				ok = false;
+				this.e = e;
+			}
+		}
+
+		private void createFilesAndChannels(String name) throws Exception
+		{
+			for (String dir : ResourceManager.TEMP_DIRS)
+			{
+				String fn = dir + name;
+				RandomAccessFile raf = null;
+				while (true)
+				{
+					try
+					{
+						raf = new RandomAccessFile(fn, "rw");
+						break;
+					}
+					catch (FileNotFoundException e)
+					{
+						ResourceManager.panic = true;
+						try
+						{
+							Thread.sleep(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("rm_sleep_time_ms")) / 2);
+						}
+						catch (Exception f)
+						{
+						}
+					}
+				}
+				rafs.put(fn, raf);
+				FileChannel fc = raf.getChannel();
+				fcs.put(fn, fc);
 			}
 		}
 	}

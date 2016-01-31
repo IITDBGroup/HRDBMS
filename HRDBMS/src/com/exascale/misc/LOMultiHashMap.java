@@ -42,14 +42,14 @@ public class LOMultiHashMap<K, V>
 
 	public void multiPut(K key, V val)
 	{
-		if (map.containsKey(key))
+		ConcurrentHashMap<V, V> vector = map.get(key);
+		if (vector != null)
 		{
-			final ConcurrentHashMap<V, V> vector = map.get(key);
 			vector.put(val, val);
 		}
 		else
 		{
-			ConcurrentHashMap<V, V> vector = new ConcurrentHashMap<V, V>(16, 0.75f, 6 * ResourceManager.cpus);
+			vector = new ConcurrentHashMap<V, V>(16, 0.75f, 6 * ResourceManager.cpus);
 			vector.put(val, val);
 			if (map.putIfAbsent(key, vector) != null)
 			{

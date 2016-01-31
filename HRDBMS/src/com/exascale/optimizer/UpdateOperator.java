@@ -10,7 +10,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -18,7 +17,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
 import com.exascale.filesystem.RID;
 import com.exascale.managers.HRDBMSWorker;
-import com.exascale.managers.ResourceManager;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MultiHashMap;
 import com.exascale.optimizer.MetaData.PartitionMetaData;
@@ -222,9 +220,21 @@ public final class UpdateOperator implements Operator, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return 0;
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return false;
 	}
 
 	@Override
@@ -296,6 +306,7 @@ public final class UpdateOperator implements Operator, Serializable
 		TreeMap<Integer, String> pos2Col = MetaData.cols2PosFlip(cols2Pos);
 		HashMap<String, String> cols2Types = new MetaData().getCols2TypesForTable(schema, table, tx);
 		PartitionMetaData spmd = new MetaData().getPartMeta(schema, table, tx);
+		int type = meta.getTypeForTable(schema, table, tx);
 		for (Map.Entry entry : cols2Types.entrySet())
 		{
 			if (entry.getValue().equals("CHAR"))
@@ -306,7 +317,7 @@ public final class UpdateOperator implements Operator, Serializable
 		}
 
 		PartitionMetaData pmeta = new MetaData().new PartitionMetaData(schema, table, tx);
-	
+
 		int numNodes = MetaData.numWorkerNodes;
 		Object o = child.next(this);
 		while (!(o instanceof DataEndMarker))
@@ -413,7 +424,7 @@ public final class UpdateOperator implements Operator, Serializable
 			num.incrementAndGet();
 			if (map.size() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes")))
 			{
-				flush(indexes, spmd, cols2Pos);
+				flush(indexes, spmd, cols2Pos, pos2Col, cols2Types, type);
 				if (num.get() == Integer.MIN_VALUE)
 				{
 					done = true;
@@ -422,20 +433,20 @@ public final class UpdateOperator implements Operator, Serializable
 			}
 			else if (map.totalSize() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_batch")))
 			{
-				flush(indexes, spmd, cols2Pos);
+				flush(indexes, spmd, cols2Pos, pos2Col, cols2Types, type);
 				if (num.get() == Integer.MIN_VALUE)
 				{
 					done = true;
 					return;
 				}
 			}
-			
+
 			o = child.next(this);
 		}
 
 		if (map.totalSize() > 0)
 		{
-			flush(indexes, spmd, cols2Pos);
+			flush(indexes, spmd, cols2Pos, pos2Col, cols2Types, type);
 		}
 
 		done = true;
@@ -499,7 +510,7 @@ public final class UpdateOperator implements Operator, Serializable
 		}
 	}
 
-	private void flush(ArrayList<String> indexes, PartitionMetaData spmd, HashMap<String, Integer> cols2Pos) throws Exception
+	private void flush(ArrayList<String> indexes, PartitionMetaData spmd, HashMap<String, Integer> cols2Pos, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type) throws Exception
 	{
 		ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
 		for (Object o : map.getKeySet())
@@ -539,12 +550,12 @@ public final class UpdateOperator implements Operator, Serializable
 
 				for (Integer coord : coords)
 				{
-					threads2.add(new FlushThread2(list, indexes, coord, cols2Pos, spmd));
+					threads2.add(new FlushThread2(list, indexes, coord, cols2Pos, spmd, pos2Col, cols2Types, type));
 				}
 			}
 			else
 			{
-				threads2.add(new FlushThread2(list, indexes, node, cols2Pos, spmd));
+				threads2.add(new FlushThread2(list, indexes, node, cols2Pos, spmd, pos2Col, cols2Types, type));
 			}
 		}
 
@@ -754,15 +765,21 @@ public final class UpdateOperator implements Operator, Serializable
 		private boolean ok = true;
 		private final int node;
 		private final HashMap<String, Integer> cols2Pos;
-		PartitionMetaData spmd;
+		private final PartitionMetaData spmd;
+		private final TreeMap<Integer, String> pos2Col;
+		private final HashMap<String, String> cols2Types;
+		private final int type;
 
-		public FlushThread2(Set<ArrayList<Object>> list, ArrayList<String> indexes, int node, HashMap<String, Integer> cols2Pos, PartitionMetaData spmd)
+		public FlushThread2(Set<ArrayList<Object>> list, ArrayList<String> indexes, int node, HashMap<String, Integer> cols2Pos, PartitionMetaData spmd, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type)
 		{
 			this.list = list;
 			this.indexes = indexes;
 			this.node = node;
 			this.cols2Pos = cols2Pos;
 			this.spmd = spmd;
+			this.pos2Col = pos2Col;
+			this.cols2Types = cols2Types;
+			this.type = type;
 		}
 
 		public boolean getOK()
@@ -798,6 +815,7 @@ public final class UpdateOperator implements Operator, Serializable
 				out.write(longToBytes(tx.number()));
 				out.write(stringToBytes(schema));
 				out.write(stringToBytes(table));
+				out.write(intToBytes(type));
 				ObjectOutputStream objOut = new ObjectOutputStream(out);
 				objOut.writeObject(indexes);
 				objOut.writeObject(new ArrayList(list));
@@ -806,6 +824,8 @@ public final class UpdateOperator implements Operator, Serializable
 				objOut.writeObject(orders);
 				objOut.writeObject(cols2Pos);
 				objOut.writeObject(spmd);
+				objOut.writeObject(pos2Col);
+				objOut.writeObject(cols2Types);
 				objOut.flush();
 				out.flush();
 				getConfirmation(sock);

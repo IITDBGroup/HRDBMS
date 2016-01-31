@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.gpu.Kernel;
 import com.exascale.gpu.Rootbeer;
 import com.exascale.managers.HRDBMSWorker;
@@ -56,6 +57,8 @@ public final class ExtendOperator implements Operator, Serializable
 	private volatile boolean startDone = false;
 
 	private transient volatile ArrayList<Double> literals;
+	private transient AtomicLong received;
+	private transient volatile boolean demReceived;
 
 	public ExtendOperator(String prefix, String name, MetaData meta)
 	{
@@ -68,6 +71,7 @@ public final class ExtendOperator implements Operator, Serializable
 		{
 			master.push(token);
 		}
+		received = new AtomicLong(0);
 	}
 
 	public static ExtendOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -85,6 +89,8 @@ public final class ExtendOperator implements Operator, Serializable
 		value.tokens = OperatorUtils.deserializeFST(in, prev);
 		value.master = OperatorUtils.deserializeADS(in, prev);
 		value.startDone = OperatorUtils.readBool(in);
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
 		return value;
 	}
 
@@ -286,9 +292,21 @@ public final class ExtendOperator implements Operator, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
 	}
 
 	@Override
@@ -380,36 +398,6 @@ public final class ExtendOperator implements Operator, Serializable
 		else
 		{
 			new NonGPUThread().start();
-		}
-	}
-	
-	private class NonGPUThread extends HRDBMSThread
-	{
-		public void run()
-		{
-			ArrayList<GPUThread> threads = new ArrayList<GPUThread>();
-			int z = 0;
-			final int limit = Runtime.getRuntime().availableProcessors();
-			while (z < limit)
-			{
-				GPUThread thread = new GPUThread(false);
-				thread.start();
-				threads.add(thread);
-				z++;
-			}
-			
-			z = 0;
-			while (z < limit)
-			{
-				try
-				{
-					threads.get(z++).join();
-				}
-				catch(Exception e)
-				{}
-			}
-			
-			queue.put(new DataEndMarker());
 		}
 	}
 
@@ -647,13 +635,13 @@ public final class ExtendOperator implements Operator, Serializable
 
 	private final class GPUThread extends ThreadPoolThread
 	{
-		private boolean sendDEM;
-		
+		private final boolean sendDEM;
+
 		public GPUThread(boolean sendDEM)
 		{
 			this.sendDEM = sendDEM;
 		}
-		
+
 		@Override
 		public void run()
 		{
@@ -666,6 +654,14 @@ public final class ExtendOperator implements Operator, Serializable
 				try
 				{
 					o = child.next(ExtendOperator.this);
+					if (o instanceof DataEndMarker)
+					{
+						demReceived = true;
+					}
+					else
+					{
+						received.getAndIncrement();
+					}
 				}
 				catch (final Exception e)
 				{
@@ -795,6 +791,38 @@ public final class ExtendOperator implements Operator, Serializable
 					}
 				}
 			}
+		}
+	}
+
+	private class NonGPUThread extends HRDBMSThread
+	{
+		@Override
+		public void run()
+		{
+			ArrayList<GPUThread> threads = new ArrayList<GPUThread>();
+			int z = 0;
+			final int limit = Runtime.getRuntime().availableProcessors();
+			while (z < limit)
+			{
+				GPUThread thread = new GPUThread(false);
+				thread.start();
+				threads.add(thread);
+				z++;
+			}
+
+			z = 0;
+			while (z < limit)
+			{
+				try
+				{
+					threads.get(z++).join();
+				}
+				catch (Exception e)
+				{
+				}
+			}
+
+			queue.put(new DataEndMarker());
 		}
 	}
 }

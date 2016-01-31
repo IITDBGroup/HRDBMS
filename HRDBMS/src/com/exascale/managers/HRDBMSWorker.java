@@ -13,6 +13,7 @@ import org.apache.log4j.PatternLayout;
 import com.exascale.misc.HParms;
 import com.exascale.optimizer.SQLParser;
 import com.exascale.optimizer.SortOperator;
+import com.exascale.tables.Schema;
 import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.StartCoordsThread;
 import com.exascale.threads.StartWorkersThread;
@@ -136,8 +137,9 @@ public class HRDBMSWorker
 		{
 			start -= 10000;
 		}
-		
+
 		new FileManager();
+		new Schema.CVarcharFV();
 		addThread(new BufferManager(true));
 		addThread(new XAManager());
 		connectionThread = addThread(new ConnectionManager());
@@ -149,10 +151,10 @@ public class HRDBMSWorker
 		logger.info("Lock Manager initialization complete.");
 		resourceThread = addThread(new ResourceManager());
 
-		if (type == TYPE_MASTER || type == TYPE_COORD)
-		{
-			addThread(new MaintenanceManager());
-		}
+		// if (type == TYPE_MASTER || type == TYPE_COORD)
+		// {
+		// addThread(new MaintenanceManager());
+		// }
 
 		SortOperator.init();
 

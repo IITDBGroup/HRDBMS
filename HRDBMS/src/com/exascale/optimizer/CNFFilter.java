@@ -282,7 +282,7 @@ public class CNFFilter implements Serializable
 		int i = 8;
 		int z = 0;
 		int limit = val.size();
-		//for (final Object o : val)
+		// for (final Object o : val)
 		while (z < limit)
 		{
 			Object o = val.get(z++);
@@ -364,7 +364,7 @@ public class CNFFilter implements Serializable
 		int x = 0;
 		z = 0;
 		limit = val.size();
-		//for (final Object o : val)
+		// for (final Object o : val)
 		while (z < limit)
 		{
 			Object o = val.get(z++);
@@ -590,7 +590,7 @@ public class CNFFilter implements Serializable
 	{
 		int z = 0;
 		final int limit = filters.size();
-		//for (final ArrayList<Filter> filter : filters)
+		// for (final ArrayList<Filter> filter : filters)
 		while (z < limit)
 		{
 			final ArrayList<Filter> filter = filters.get(z++);
@@ -608,7 +608,7 @@ public class CNFFilter implements Serializable
 	{
 		int z = 0;
 		final int limit = filters.size();
-		//for (final ArrayList<Filter> filter : filters)
+		// for (final ArrayList<Filter> filter : filters)
 		while (z < limit)
 		{
 			final ArrayList<Filter> filter = filters.get(z++);
@@ -724,7 +724,7 @@ public class CNFFilter implements Serializable
 		{
 			int z = 0;
 			final int limit = filter.size();
-			//for (final Filter f : filter)
+			// for (final Filter f : filter)
 			while (z < limit)
 			{
 				final Filter f = filter.get(z++);
@@ -749,7 +749,7 @@ public class CNFFilter implements Serializable
 		{
 			int z = 0;
 			final int limit = filter.size();
-			//for (final Filter f : filter)
+			// for (final Filter f : filter)
 			while (z < limit)
 			{
 				final Filter f = filter.get(z++);

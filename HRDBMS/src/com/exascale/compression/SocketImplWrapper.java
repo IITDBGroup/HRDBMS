@@ -115,7 +115,7 @@ public final class SocketImplWrapper extends SocketImpl
 		switch (optID)
 		{
 
-		// case SocketOptions.SO_BINDADDR: read only!
+			// case SocketOptions.SO_BINDADDR: read only!
 
 			case SocketOptions.TCP_NODELAY:
 				socket.setTcpNoDelay(bval);
@@ -125,10 +125,10 @@ public final class SocketImplWrapper extends SocketImpl
 				socket.setReuseAddress(bval);
 				break;
 
-			// case SocketOptions.SO_BROADCAST: ?? -> not supported
-			// case SocketOptions.IP_MULTICAST_IF:
-			// case SocketOptions.IP_MULTICAST_IF2:
-			// case SocketOptions.IP_MULTICAST_LOOP:
+				// case SocketOptions.SO_BROADCAST: ?? -> not supported
+				// case SocketOptions.IP_MULTICAST_IF:
+				// case SocketOptions.IP_MULTICAST_IF2:
+				// case SocketOptions.IP_MULTICAST_LOOP:
 
 			case SocketOptions.IP_TOS:
 				socket.setTrafficClass(ival);

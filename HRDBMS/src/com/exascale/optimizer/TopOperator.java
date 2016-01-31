@@ -40,11 +40,14 @@ public final class TopOperator implements Operator, Serializable
 	private int node;
 
 	private transient volatile boolean demSent;
+	private transient AtomicLong received;
+	private transient volatile boolean demReceived;
 
 	public TopOperator(long numVals, MetaData meta)
 	{
 		this.remaining = new AtomicLong(numVals);
 		this.meta = meta;
+		received = new AtomicLong(0);
 	}
 
 	public static TopOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -58,6 +61,8 @@ public final class TopOperator implements Operator, Serializable
 		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
 		value.remaining = new AtomicLong(OperatorUtils.readLong(in));
 		value.node = OperatorUtils.readInt(in);
+		value.received = new AtomicLong(0);
+		value.demReceived = false;
 		return value;
 	}
 
@@ -163,13 +168,23 @@ public final class TopOperator implements Operator, Serializable
 			{
 				demSent = true;
 				remaining.set(0);
+				demReceived = true;
+			}
+			else
+			{
+				received.getAndIncrement();
 			}
 
 			if (retval instanceof Exception)
 			{
+				HRDBMSWorker.logger.debug("", (Exception)retval);
 				throw (Exception)retval;
 			}
 			return retval;
+		}
+		else
+		{
+			demReceived = true;
 		}
 
 		if (demSent)
@@ -179,6 +194,7 @@ public final class TopOperator implements Operator, Serializable
 		else
 		{
 			child.nextAll(TopOperator.this);
+			demSent = true;
 			return new DataEndMarker();
 		}
 	}
@@ -195,9 +211,21 @@ public final class TopOperator implements Operator, Serializable
 	}
 
 	@Override
+	public long numRecsReceived()
+	{
+		return received.get();
+	}
+
+	@Override
 	public Operator parent()
 	{
 		return parent;
+	}
+
+	@Override
+	public boolean receivedDEM()
+	{
+		return demReceived;
 	}
 
 	@Override
