@@ -44,6 +44,7 @@ public final class TableScanOperator implements Operator, Serializable
 {
 	private static int PREFETCH_REQUEST_SIZE_STATIC;
 	private static int PAGES_IN_ADVANCE_STATIC;
+	public static AtomicInteger tsoCount = new AtomicInteger(0);
 
 	private static sun.misc.Unsafe unsafe;
 	private static long offset;
@@ -1767,10 +1768,14 @@ public final class TableScanOperator implements Operator, Serializable
 					int get3 = get;
 					int skip3 = skip;
 
-					PREFETCH_REQUEST_SIZE = layout.size() * PREFETCH_REQUEST_SIZE_STATIC / cols.size();
+					PREFETCH_REQUEST_SIZE = PREFETCH_REQUEST_SIZE_STATIC * layout.size() / cols.size();
+					if (PREFETCH_REQUEST_SIZE < layout.size() * 2)
+					{
+						PREFETCH_REQUEST_SIZE = layout.size() * 2;
+					}
+					int MAX_PAGES_IN_ADVANCE = PREFETCH_REQUEST_SIZE * 2;
 
 					RequestPagesThread raThread = null;
-					int MAX_PAGES_IN_ADVANCE = PREFETCH_REQUEST_SIZE * 2;
 
 					while (onPage < numBlocks)
 					{
@@ -1782,6 +1787,7 @@ public final class TableScanOperator implements Operator, Serializable
 							}
 
 							BufferManager.updateProgress(this, onPage);
+							
 							if (!sample)
 							{
 								// Block[] toRequest = new Block[lastRequested +
@@ -3136,14 +3142,25 @@ public final class TableScanOperator implements Operator, Serializable
 		@Override
 		public final void run()
 		{
-			if (tType == 0)
+			tsoCount.incrementAndGet();
+			
+			try
 			{
-				rowTableRT();
+				if (tType == 0)
+				{
+					rowTableRT();
+				}
+				else
+				{
+					colTableRT();
+				}
 			}
-			else
+			catch(Exception e)
 			{
-				colTableRT();
+				HRDBMSWorker.logger.debug("", e);
 			}
+			
+			tsoCount.decrementAndGet();
 		}
 	}
 

@@ -3400,8 +3400,8 @@ public final class MetaData implements Serializable
 			// sock = new Socket(hostname,
 			// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			sock = new Socket();
-			sock.setReceiveBufferSize(262144);
-			sock.setSendBufferSize(262144);
+			sock.setReceiveBufferSize(4194304);
+			sock.setSendBufferSize(4194304);
 			sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "POPINDEX        ".getBytes(StandardCharsets.UTF_8);
@@ -3887,8 +3887,8 @@ public final class MetaData implements Serializable
 			// sock = new Socket(hostname,
 			// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			sock = new Socket();
-			sock.setReceiveBufferSize(262144);
-			sock.setSendBufferSize(262144);
+			sock.setReceiveBufferSize(4194304);
+			sock.setSendBufferSize(4194304);
 			sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "NEWINDEX        ".getBytes(StandardCharsets.UTF_8);
@@ -3982,8 +3982,8 @@ public final class MetaData implements Serializable
 			// sock = new Socket(hostname,
 			// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			sock = new Socket();
-			sock.setReceiveBufferSize(262144);
-			sock.setSendBufferSize(262144);
+			sock.setReceiveBufferSize(4194304);
+			sock.setSendBufferSize(4194304);
 			sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "NEWTABLE        ".getBytes(StandardCharsets.UTF_8);
@@ -5438,9 +5438,11 @@ public final class MetaData implements Serializable
 			numNodeGroups = 0;
 			int setNum = 0;
 			nodeGroupHashMap = new HashMap<Integer, ArrayList<Integer>>();
+			int expectedNumNodesInGroup = -1;
 			while (tokens2.hasMoreTokens())
 			{
 				String nodesInGroup = tokens2.nextToken();
+				int nodeCount = 0;
 				nodeGroupSet.add(setNum);
 				numNodeGroups++;
 
@@ -5455,9 +5457,18 @@ public final class MetaData implements Serializable
 						throw new Exception("Invalid node number: " + node);
 					}
 					nodeListForGroup.add(node);
+					nodeCount++;
 				}
 				nodeGroupHashMap.put(setNum, nodeListForGroup);
 				setNum++;
+				if (expectedNumNodesInGroup == -1)
+				{
+					expectedNumNodesInGroup = nodeCount;
+				}
+				else if (expectedNumNodesInGroup != nodeCount)
+				{
+					throw new Exception("Expected " + expectedNumNodesInGroup + " nodes in node group but found " + nodeCount + " nodes");
+				}
 			}
 
 			if (numNodeGroups == 1)
@@ -5706,7 +5717,8 @@ public final class MetaData implements Serializable
 							if (updateCount == -1)
 							{
 								XAManager.rollback(tx);
-								tx = new Transaction(Transaction.ISOLATION_UR);
+								//tx = new Transaction(Transaction.ISOLATION_UR);
+								return;
 							}
 							else if (updateCount == 1)
 							{
@@ -5721,7 +5733,7 @@ public final class MetaData implements Serializable
 								return;
 							}
 
-							Thread.sleep(random.nextInt(60000));
+							//Thread.sleep(random.nextInt(60000));
 						}
 					}
 				}
@@ -5828,7 +5840,8 @@ public final class MetaData implements Serializable
 							if (updateCount == -1)
 							{
 								XAManager.rollback(tx);
-								tx = new Transaction(Transaction.ISOLATION_UR);
+								//tx = new Transaction(Transaction.ISOLATION_UR);
+								return;
 							}
 							else if (updateCount == 1)
 							{
@@ -5843,7 +5856,7 @@ public final class MetaData implements Serializable
 								return;
 							}
 
-							Thread.sleep(random.nextInt(60000));
+							//Thread.sleep(random.nextInt(60000));
 						}
 					}
 				}
@@ -5950,7 +5963,8 @@ public final class MetaData implements Serializable
 							if (updateCount == -1)
 							{
 								XAManager.rollback(tx);
-								tx = new Transaction(Transaction.ISOLATION_UR);
+								//tx = new Transaction(Transaction.ISOLATION_UR);
+								return;
 							}
 							else if (updateCount == 1)
 							{
@@ -5965,7 +5979,7 @@ public final class MetaData implements Serializable
 								return;
 							}
 
-							Thread.sleep(random.nextInt(60000));
+							//Thread.sleep(random.nextInt(60000));
 						}
 					}
 				}
@@ -6070,7 +6084,8 @@ public final class MetaData implements Serializable
 						if (updateCount == -1)
 						{
 							XAManager.rollback(tx);
-							tx = new Transaction(Transaction.ISOLATION_UR);
+							//tx = new Transaction(Transaction.ISOLATION_UR);
+							return;
 						}
 						else if (updateCount == 1)
 						{
@@ -6085,7 +6100,7 @@ public final class MetaData implements Serializable
 							return;
 						}
 
-						Thread.sleep(random.nextInt(60000));
+						//Thread.sleep(random.nextInt(60000));
 					}
 				}
 			}
@@ -6301,7 +6316,8 @@ public final class MetaData implements Serializable
 					if (updateCount == -1)
 					{
 						XAManager.rollback(tx);
-						tx = new Transaction(Transaction.ISOLATION_UR);
+						//tx = new Transaction(Transaction.ISOLATION_UR);
+						return;
 					}
 					else if (updateCount == 1)
 					{
@@ -6536,7 +6552,8 @@ public final class MetaData implements Serializable
 						if (updateCount == -1)
 						{
 							XAManager.rollback(tx);
-							tx = new Transaction(Transaction.ISOLATION_UR);
+							//tx = new Transaction(Transaction.ISOLATION_UR);
+							return;
 						}
 						else if (updateCount == 1)
 						{
@@ -6551,7 +6568,7 @@ public final class MetaData implements Serializable
 							return;
 						}
 
-						Thread.sleep(random.nextInt(60000));
+						//Thread.sleep(random.nextInt(60000));
 					}
 				}
 			}
@@ -6683,7 +6700,8 @@ public final class MetaData implements Serializable
 					if (updateCount == -1)
 					{
 						XAManager.rollback(tx);
-						tx = new Transaction(Transaction.ISOLATION_UR);
+						//tx = new Transaction(Transaction.ISOLATION_UR);
+						return;
 					}
 					else if (updateCount == 1)
 					{
@@ -6698,7 +6716,7 @@ public final class MetaData implements Serializable
 						return;
 					}
 
-					Thread.sleep(random.nextInt(60000));
+					//Thread.sleep(random.nextInt(60000));
 				}
 			}
 			catch (Exception e)

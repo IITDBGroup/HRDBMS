@@ -54,7 +54,7 @@ public class CatalogCode
 			final int port = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("catalog_sync_port"));
 			HRDBMSWorker.logger.debug("Attempting to listen on port " + port);
 			listen = new ServerSocket();
-			listen.setReceiveBufferSize(262144);
+			listen.setReceiveBufferSize(4194304);
 			listen.bind(new InetSocketAddress(port));
 			HRDBMSWorker.logger.debug("ServerSocket created.  Now attempting accept()");
 			final Socket listenSock = listen.accept();
@@ -1192,8 +1192,8 @@ public class CatalogCode
 				final int port = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("catalog_sync_port"));
 				HRDBMSWorker.logger.debug("Attempting to create connection to " + host + " on port " + port);
 				final Socket sock = new Socket();
-				sock.setReceiveBufferSize(262144);
-				sock.setSendBufferSize(262144);
+				sock.setReceiveBufferSize(4194304);
+				sock.setSendBufferSize(4194304);
 				HRDBMSWorker.logger.debug("Socket created.");
 				while (true)
 				{

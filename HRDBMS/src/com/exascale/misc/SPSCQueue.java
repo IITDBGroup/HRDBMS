@@ -41,7 +41,13 @@ public class SPSCQueue
 	{
 		while (tail - head > length)
 		{
-			LockSupport.parkNanos(500);
+			try
+			{
+				Thread.sleep(1);
+			}
+			catch (InterruptedException e)
+			{
+			}
 		}
 
 		q[(int)(tail & (length - 1))] = o;
@@ -52,7 +58,13 @@ public class SPSCQueue
 	{
 		while (head + 1 == tail)
 		{
-			LockSupport.parkNanos(500);
+			try
+			{
+				Thread.sleep(1);
+			}
+			catch (InterruptedException e)
+			{
+			}
 		}
 		final int index = (int)((head + 1) & (length - 1));
 		Object retval = q[index];

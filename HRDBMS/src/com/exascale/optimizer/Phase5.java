@@ -651,6 +651,7 @@ public final class Phase5
 
 	public void optimize() throws Exception
 	{
+		setTableTypes(root, new HashSet<Operator>());
 		addIndexesToTableScans();
 		// addIndexesToJoins();
 		turnOffDistinctUnion(root, false, new HashSet<Operator>());
@@ -661,7 +662,6 @@ public final class Phase5
 		setSpecificCoord(root, new HashSet<Operator>());
 		// Phase1.printTree(root, 0);
 		sortLimit(root, new HashSet<Operator>());
-		setTableTypes(root, new HashSet<Operator>());
 		indexOnlyScan(root, new HashSet<Operator>());
 		pruneTree(root, new IdentityHashMap<Operator, Operator>());
 	}
@@ -1996,10 +1996,18 @@ public final class Phase5
 					if (rcolumn == null)
 					{
 						// if (likely > (12.0 / 53.0) || !f.op().equals("E"))
-						if (likely > (1.0 / 10.0))
+						//if (likely > (1.0 / 10.0))
+						//{
+						//}
+						//else
+						//{
+						//	HRDBMSWorker.logger.debug("Wanted to use an index on " + lcolumn + " but none existed");
+						//}
+						if (likely <= (1.0 / 10.0) && tOp.getType() == 0)
 						{
+							HRDBMSWorker.logger.debug("Wanted to use an index on " + lcolumn + " but none existed");
 						}
-						else
+						else if (likely <= 0.0003 && tOp.getType() != 0)
 						{
 							HRDBMSWorker.logger.debug("Wanted to use an index on " + lcolumn + " but none existed");
 						}
@@ -2017,6 +2025,11 @@ public final class Phase5
 							// if (likely > (12.0 / 53.0) ||
 							// !f.op().equals("E"))
 							if (likely > (1.0 / 10.0))
+							{
+								doIt = false;
+							}
+							
+							if (likely > 0.0003 && tOp.getType() != 0)
 							{
 								doIt = false;
 							}

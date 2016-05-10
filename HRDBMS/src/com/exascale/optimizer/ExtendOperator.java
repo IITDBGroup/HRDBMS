@@ -801,7 +801,13 @@ public final class ExtendOperator implements Operator, Serializable
 		{
 			ArrayList<GPUThread> threads = new ArrayList<GPUThread>();
 			int z = 0;
-			final int limit = Runtime.getRuntime().availableProcessors();
+			int limit = Runtime.getRuntime().availableProcessors();
+			int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("extend_max_par"));
+			if (limit > max)
+			{
+				limit = max;
+			}
+			
 			while (z < limit)
 			{
 				GPUThread thread = new GPUThread(false);

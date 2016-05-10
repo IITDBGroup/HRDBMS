@@ -5,12 +5,18 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class BloomFilter
 {
-	private byte[] bits;
+	private byte[][] bits;
 	private ConcurrentHashMap<Long, ArrayList<Object>> cache;
 
 	public BloomFilter()
 	{
-		bits = new byte[256 * 1024 * 1024];
+		bits = new byte[32][];
+		int i = 0;
+		while (i < 32)
+		{
+			bits[i] = new byte[8 * 1024 * 1024];
+			i++;
+		}
 	}
 
 	public BloomFilter(boolean flag)
@@ -23,7 +29,7 @@ public class BloomFilter
 		long offset = hash & 0x7FFFFFFFl;
 		int bytePos = (int)(offset >> 3);
 		int bitPos = (int)(offset & 0x07);
-		bits[bytePos] |= (byte)(1 << bitPos);
+		bits[bytePos >>> 23][bytePos & 0x7fffff] |= (byte)(1 << bitPos);
 		return;
 	}
 
@@ -37,7 +43,7 @@ public class BloomFilter
 		long offset = hash & 0x7FFFFFFFl;
 		int bytePos = (int)(offset >> 3);
 		int bitPos = (int)(offset & 0x07);
-		return (bits[bytePos] & ((byte)(1 << bitPos))) != 0;
+		return (bits[bytePos >>> 23][bytePos & 0x7fffff] & ((byte)(1 << bitPos))) != 0;
 	}
 
 	public boolean passes(long hash, ArrayList<Object> val)

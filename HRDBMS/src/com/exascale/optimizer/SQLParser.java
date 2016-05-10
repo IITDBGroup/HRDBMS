@@ -6381,6 +6381,27 @@ public class SQLParser
 		}
 
 		op = buildOperatorTreeFromSelectClause(select.getSelect(), op, select, subquery);
+		
+		boolean ok = true;
+		String badCol = null;
+		
+		/*
+		for (String col : op.getCols2Pos().keySet())
+		{
+			if (!col.contains("."))
+			{
+				ok = false;
+				badCol = col;
+				break;
+			}
+		}
+		
+		if (!ok)
+		{
+			throw new Exception("Error processing the column " + badCol + " in the select clause. It does not contain a period.");
+		}
+		*/
+		
 		// handle orderBy
 		if (select.getOrderBy() != null)
 		{

@@ -1,10 +1,15 @@
 package com.exascale.misc;
 
+import java.util.concurrent.locks.ReentrantLock;
+
 public class BigDecimalReplacement
 {
 	private long[] data;
 	private boolean pos;
 	private short decPos;
+	private volatile boolean queued = false;
+	private volatile BigDecimalReplacement queue = null;
+	private ReentrantLock lock = new ReentrantLock();
 
 	public BigDecimalReplacement(double val)
 	{
@@ -31,8 +36,26 @@ public class BigDecimalReplacement
 		this.decPos = decPos;
 	}
 
-	public synchronized void add(BigDecimalReplacement val)
+	public void add(BigDecimalReplacement val)
 	{
+		if (!lock.tryLock())
+		{
+			if (!queued)
+			{
+				synchronized(this)
+				{
+					if (!queued)
+					{
+						queue = new BigDecimalReplacement(0.0);
+						queued = true;
+					}
+				}
+			}
+			
+			queue.add(val);
+			return;
+		}
+		
 		BigDecimalReplacement rhs = null;
 		short resDecPos;
 		if (this.decPos < val.decPos)
@@ -190,10 +213,185 @@ public class BigDecimalReplacement
 		// return new BigDecimalReplacement(result, resultPos, resDecPos);
 		this.pos = resultPos;
 		this.decPos = resDecPos;
+		lock.unlock();
+	}
+	
+	private synchronized void resolveQueue()
+	{
+		if (queue.queued)
+		{
+			queue.resolveQueue();
+		}
+		
+		BigDecimalReplacement val = queue;
+		BigDecimalReplacement rhs = null;
+		short resDecPos;
+		if (this.decPos < val.decPos)
+		{
+			moveDec(val);
+			rhs = val;
+			resDecPos = val.decPos;
+		}
+		else if (val.decPos < this.decPos)
+		{
+			rhs = moveDec(val, this);
+			resDecPos = this.decPos;
+		}
+		else
+		{
+			rhs = val;
+			resDecPos = this.decPos;
+		}
+
+		short max = (short)Math.max(data.length, rhs.data.length);
+		short min = (short)Math.min(data.length, rhs.data.length);
+		boolean lhsMin = (data.length == min);
+		int i = 0;
+		short carry = 0;
+		Boolean resultPos = null;
+		boolean lhsPos = pos;
+		boolean rhsPos = rhs.pos;
+		if (lhsPos && rhsPos)
+		{
+			resultPos = true;
+		}
+		else if (!lhsPos && !rhsPos)
+		{
+			resultPos = false;
+		}
+
+		if (!lhsPos)
+		{
+			if (lhsMin)
+			{
+				negate(rhs);
+			}
+			else
+			{
+				negate();
+			}
+		}
+
+		if (!rhsPos)
+		{
+			if (lhsMin)
+			{
+				rhs = negate(rhs, rhs);
+			}
+			else
+			{
+				rhs = negate(rhs, this);
+			}
+		}
+
+		// System.out.print("LHS = ");
+		// for (long digit : lhs.data)
+		// {
+		// System.out.print(" " + digit + " ");
+		// }
+
+		// System.out.println("");
+		// System.out.print("RHS = ");
+		// for (long digit : rhs.data)
+		// {
+		// System.out.print(" " + digit + " ");
+		// }
+
+		// System.out.println("");
+		long[] result = null;
+		if (data.length == rhs.data.length)
+		{
+			result = data;
+		}
+		else
+		{
+			result = new long[max];
+		}
+
+		while (i < min)
+		{
+			result[i] = data[i] + rhs.data[i] + carry;
+			if ((result[i] & 0x8000000000000000L) != 0)
+			{
+				carry = 1;
+				result[i] = (result[i] & 0x7FFFFFFFFFFFFFFFL);
+			}
+			else
+			{
+				carry = 0;
+			}
+
+			i++;
+		}
+
+		while (i < max)
+		{
+			if (lhsMin)
+			{
+				result[i] = rhs.data[i] + carry;
+				if ((result[i] & 0x8000000000000000L) != 0)
+				{
+					carry = 1;
+					result[i] = (result[i] & 0x7FFFFFFFFFFFFFFFL);
+				}
+				else
+				{
+					carry = 0;
+				}
+			}
+			else
+			{
+				result[i] = data[i] + carry;
+				if ((result[i] & 0x8000000000000000L) != 0)
+				{
+					carry = 1;
+					result[i] = (result[i] & 0x7FFFFFFFFFFFFFFFL);
+				}
+				else
+				{
+					carry = 0;
+				}
+			}
+
+			i++;
+		}
+
+		this.data = result;
+		if (carry == 1 && resultPos != null)
+		{
+			extendWithCarry();
+		}
+		else if (carry == 1)
+		{
+			resultPos = false;
+			unNegate();
+		}
+		else
+		{
+			resultPos = true;
+		}
+
+		// System.out.print("Result = ");
+		// for (long digit : result)
+		// {
+		// System.out.print(" " + digit + " ");
+		// }
+
+		// System.out.println("");
+		// return new BigDecimalReplacement(result, resultPos, resDecPos);
+		this.pos = resultPos;
+		this.decPos = resDecPos;
+		this.queue = null;
+		this.queued = false;
 	}
 
 	public double doubleValue()
 	{
+		if (queued)
+		{
+			resolveQueue();
+		}
+		
 		long bits;
 		if (pos)
 		{

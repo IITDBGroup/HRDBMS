@@ -12,6 +12,7 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
 import java.lang.reflect.Field;
+import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.StandardCharsets;
@@ -189,15 +190,18 @@ public final class ResourceManager extends HRDBMSThread
 			long openFiles = Integer.parseInt(crunchifyWriter.toString().trim());
 			HRDBMSWorker.logger.debug("Open files - " + openFiles);
 			long maxOpen = Long.parseLong(HRDBMSWorker.getHParms().getProperty("max_open_files"));
-			double factor = 0.5;
+			double factor = 0.75;
 			closeSomeFiles(openFiles, maxOpen, factor);
 		}
 
-		for (CompressedFileChannel cfc : FileManager.openFiles.values())
+		if (!FileManager.SCFC)
 		{
-			cfc.accesses.set(0);
-			cfc.didRead3.set(false);
-			cfc.aoOK.set(true);
+			for (FileChannel cfc : FileManager.openFiles.values())
+			{
+				((CompressedFileChannel)cfc).accesses.set(0);
+				((CompressedFileChannel)cfc).didRead3.set(false);
+				((CompressedFileChannel)cfc).aoOK.set(true);
+			}
 		}
 	}
 
@@ -223,30 +227,30 @@ public final class ResourceManager extends HRDBMSThread
 			unpin = op.receivedDEM();
 		}
 		
-		String line = "";
+		StringBuilder line = new StringBuilder();
 		int i = 0;
 		while (i < indent)
 		{
-			line += " ";
+			line.append(" ");
 			i++;
 		}
 
-		line += op;
-		line += " : Received " + op.numRecsReceived() + " records. Received DataEndMarker? " + op.receivedDEM();
-		HRDBMSWorker.logger.debug(line);
+		line.append(op);
+		line.append(" : Received " + op.numRecsReceived() + " records. Received DataEndMarker? " + op.receivedDEM());
+		HRDBMSWorker.logger.debug(line.toString());
 
 		if (( op instanceof SemiJoinOperator) || (op instanceof AntiJoinOperator) || (op instanceof NestedLoopJoinOperator) || (op.children() != null && op.children().size() > 0 && !(op.children().get(0) instanceof NetworkSendOperator)))
 		{
-			line = "";
+			line = new StringBuilder();
 			i = 0;
 			while (i < indent)
 			{
-				line += " ";
+				line.append(" ");
 				i++;
 			}
 
-			line += "(";
-			HRDBMSWorker.logger.debug(line);
+			line.append("(");
+			HRDBMSWorker.logger.debug(line.toString());
 
 			if (op instanceof SemiJoinOperator && ((SemiJoinOperator)op).dynamicOp != null)
 			{
@@ -280,16 +284,16 @@ public final class ResourceManager extends HRDBMSThread
 				}
 			}
 
-			line = "";
+			line = new StringBuilder();
 			i = 0;
 			while (i < indent)
 			{
-				line += " ";
+				line.append(" ");
 				i++;
 			}
 
-			line += ")";
-			HRDBMSWorker.logger.debug(line);
+			line.append(")");
+			HRDBMSWorker.logger.debug(line.toString());
 		}
 		
 		return unpin;
@@ -313,16 +317,16 @@ public final class ResourceManager extends HRDBMSThread
 		long totalAccesses = 0;
 		long totalFiles = 0;
 		HashMap<CompressedFileChannel, Long> cfc2Open = new HashMap<CompressedFileChannel, Long>();
-		for (CompressedFileChannel cfc : FileManager.openFiles.values())
+		for (FileChannel cfc : FileManager.openFiles.values())
 		{
-			long get = cfc.accesses.get();
+			long get = ((CompressedFileChannel)cfc).accesses.get();
 			if (get == 0)
 			{
 				get = 1;
 			}
-			cfc2Open.put(cfc, get);
+			cfc2Open.put((CompressedFileChannel)cfc, get);
 			totalAccesses += get;
-			totalFiles += cfc.fcs_size.get();
+			totalFiles += ((CompressedFileChannel)cfc).fcs_size.get();
 		}
 
 		long otherFiles = numOpen - totalFiles;
@@ -596,13 +600,17 @@ public final class ResourceManager extends HRDBMSThread
 				// last = temp;
 				//
 				HRDBMSWorker.logger.debug(((Runtime.getRuntime().freeMemory()) * 100.0) / (maxMemory * 1.0) + "% free - skipped " + TableScanOperator.skippedPages.get() + " pages");
-				try
+				
+				if (!FileManager.SCFC)
 				{
-					checkOpenFiles();
-				}
-				catch (Exception e)
-				{
-					HRDBMSWorker.logger.debug("", e);
+					try
+					{
+						checkOpenFiles();
+					}
+					catch (Exception e)
+					{
+						HRDBMSWorker.logger.debug("", e);
+					}
 				}
 				// for (SubBufferManager sbm : BufferManager.managers)
 				// {

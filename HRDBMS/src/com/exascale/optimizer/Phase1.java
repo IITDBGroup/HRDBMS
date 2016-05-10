@@ -581,11 +581,12 @@ public final class Phase1
 							rights.add(filter.rightColumn());
 						}
 
-						likelihood *= (card(left) * card(right));
+						likelihood *= (card(left) * card(right) * adjust(left, right));
 						break;
 					}
 				}
 
+				/*
 				if (left != null)
 				{
 					for (SelectOperator s2 : selects)
@@ -643,6 +644,7 @@ public final class Phase1
 						}
 					}
 				}
+				*/
 
 				/*
 				 * if (lefts.size() > 0 && rights.size() > 0) { String leftTable
@@ -718,7 +720,7 @@ public final class Phase1
 						{
 							pairs.add(pair);
 						}
-						likelihood *= (card(left) * card(right));
+						likelihood *= (card(left) * card(right) * adjust(left, right));
 					}
 					else if (current.getCols2Pos().containsKey(filter.rightColumn()))
 					{
@@ -739,13 +741,14 @@ public final class Phase1
 						{
 							pairs.add(pair);
 						}
-						likelihood *= (card(left) * card(right));
+						likelihood *= (card(left) * card(right) * adjust(left, right));
 					}
 
 					break;
 				}
 			}
 
+			/*
 			if (left != null)
 			{
 				for (SelectOperator s2 : selects)
@@ -778,6 +781,7 @@ public final class Phase1
 					}
 				}
 			}
+			*/
 
 			// HRDBMSWorker.logger.debug("Estimated join cardinality = " +
 			// likelihood); //DEBUG
@@ -832,11 +836,12 @@ public final class Phase1
 						rights.add(filter.rightColumn());
 					}
 
-					likelihood *= (card(left) * card(right));
+					likelihood *= (card(left) * card(right) * adjust(left, right));
 					break;
 				}
 			}
 
+			/*
 			if (left != null)
 			{
 				for (SelectOperator s2 : selects)
@@ -894,6 +899,7 @@ public final class Phase1
 					}
 				}
 			}
+			*/
 
 			/*
 			 * if (lefts.size() > 0 && rights.size() > 0) { String leftTable =
@@ -934,6 +940,65 @@ public final class Phase1
 
 		selects.remove(minSelect);
 		return minSelect;
+	}
+	
+	private double adjust(Operator left, Operator right) throws Exception
+	{
+		double retval = 1.0;
+		if (card(left) < card(right))
+		{
+			Operator op = left;
+			while (true)
+			{
+				if (op instanceof SelectOperator)
+				{
+					retval *= ((SelectOperator)op).likelihood(tx);
+				}
+				else if (op instanceof ProjectOperator)
+				{}
+				else if (op instanceof RenameOperator)
+				{}
+				else if (op instanceof ReorderOperator)
+				{}
+				else if (op instanceof TableScanOperator)
+				{
+					return retval;
+				}
+				else
+				{
+					return 1.0;
+				}
+				
+				op = op.children().get(0);
+			}
+		}
+		else
+		{
+			Operator op = right;
+			while (true)
+			{
+				if (op instanceof SelectOperator)
+				{
+					retval *= ((SelectOperator)op).likelihood(tx);
+				}
+				else if (op instanceof ProjectOperator)
+				{}
+				else if (op instanceof RenameOperator)
+				{}
+				else if (op instanceof ReorderOperator)
+				{}
+				else if (op instanceof TableScanOperator)
+				{
+					return retval;
+				}
+				else
+				{
+					return 1.0;
+				}
+				
+				op = op.children().get(0);
+			}
+		}
 	}
 
 	private void getReferences(Operator o, HashSet<String> references)

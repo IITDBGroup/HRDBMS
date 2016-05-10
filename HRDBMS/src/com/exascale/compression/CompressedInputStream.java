@@ -36,6 +36,11 @@ public final class CompressedInputStream extends FilterInputStream
 		read(buff, 0, 1);
 		return buff[0];
 	}
+	
+	public int available() throws IOException
+	{
+		return limit - index + in.available();
+	}
 
 	@Override
 	public int read(byte[] b, int off, int len) throws IOException

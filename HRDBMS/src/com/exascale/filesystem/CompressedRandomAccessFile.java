@@ -3,6 +3,7 @@ package com.exascale.filesystem;
 import java.io.File;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
+import com.exascale.managers.FileManager;
 
 public class CompressedRandomAccessFile
 {
@@ -34,11 +35,25 @@ public class CompressedRandomAccessFile
 	{
 		if (suffix == -1)
 		{
-			return new CompressedFileChannel(file);
+			if (FileManager.SCFC)
+			{
+				return new SparseCompressedFileChannel2(file);
+			}
+			else
+			{
+				return new CompressedFileChannel(file);
+			}
 		}
 		else
 		{
-			return new CompressedFileChannel(file, suffix);
+			if (FileManager.SCFC)
+			{
+				return new SparseCompressedFileChannel2(file, suffix);
+			}
+			else
+			{
+				return new CompressedFileChannel(file, suffix);
+			}
 		}
 	}
 }

@@ -960,7 +960,7 @@ public final class Phase4
 			HRDBMSWorker.logger.error("", e);
 			throw e;
 		}
-		makeHierarchical2(r);
+		//makeHierarchical2(r);
 		makeHierarchical(r);
 		// cCache.clear();
 		return false;
@@ -1208,7 +1208,7 @@ public final class Phase4
 			HRDBMSWorker.logger.error("", e);
 			throw e;
 		}
-		makeHierarchical2(r);
+		//makeHierarchical2(r);
 		makeHierarchical(r);
 		// cCache.clear();
 		return false;
@@ -1558,13 +1558,14 @@ public final class Phase4
 			return new ArrayList<TableScanOperator>();
 		}
 
-		touched.add(op);
 		if (op instanceof TableScanOperator)
 		{
 			ArrayList<TableScanOperator> retval = new ArrayList<TableScanOperator>();
 			retval.add((TableScanOperator)op);
 			return retval;
 		}
+		
+		touched.add(op);
 
 		if (op.children().size() == 1)
 		{
@@ -1800,7 +1801,7 @@ public final class Phase4
 			HRDBMSWorker.logger.error("", e);
 			throw e;
 		}
-		makeHierarchical2(r);
+		//makeHierarchical2(r);
 		makeHierarchical(r);
 		// cCache.clear();
 		return false;
@@ -1822,7 +1823,7 @@ public final class Phase4
 		final MultiOperator parent = (MultiOperator)receive.parent();
 
 		long pCard = card(parent);
-		if ((!noLargeUpstreamJoins(parent) || upstreamRedistSort(parent) || pCard > (long)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("sort_gb_factor")))) && parent.getKeys().size() > 0)
+		if ((!noLargeUpstreamJoins(parent) || upstreamRedistSort(parent) || card(receive) > MAX_LOCAL_SORT || pCard > (long)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("sort_gb_factor")))) && parent.getKeys().size() > 0)
 		{
 			final ArrayList<String> cols2 = new ArrayList<String>(parent.getKeys());
 			final int starting = getStartingNode(MetaData.numWorkerNodes);
@@ -2017,7 +2018,7 @@ public final class Phase4
 					HRDBMSWorker.logger.error("", e);
 					throw e;
 				}
-				makeHierarchical2(receive);
+				//makeHierarchical2(receive);
 				makeHierarchical(receive);
 			}
 			return false;
@@ -2512,7 +2513,7 @@ public final class Phase4
 			HRDBMSWorker.logger.error("", e);
 			throw e;
 		}
-		makeHierarchical2(r);
+		//makeHierarchical2(r);
 		makeHierarchical(r);
 		// cCache.clear();
 		return false;
@@ -2598,8 +2599,8 @@ public final class Phase4
 					try
 					{
 						newSend.add(newReceive);
-						newReceive.setNode(newSend.getNode());
 						receive.add(newSend);
+						newReceive.setNode(node);
 					}
 					catch (final Exception e)
 					{
@@ -2608,6 +2609,23 @@ public final class Phase4
 					}
 					newReceive = new NetworkReceiveOperator(meta);
 					i = 0;
+				}
+			}
+			
+			if (i != 0)
+			{
+				int node = Math.abs(ThreadLocalRandom.current().nextInt()) % MetaData.numWorkerNodes;
+				final NetworkSendOperator newSend = new NetworkSendOperator(node, meta);
+				try
+				{
+					newSend.add(newReceive);
+					receive.add(newSend);
+					newReceive.setNode(node);
+				}
+				catch (final Exception e)
+				{
+					HRDBMSWorker.logger.error("", e);
+					throw e;
 				}
 			}
 			makeHierarchical(receive);
@@ -3626,7 +3644,7 @@ public final class Phase4
 			HRDBMSWorker.logger.error("", e);
 			throw e;
 		}
-		makeHierarchical2(r);
+		//makeHierarchical2(r);
 		makeHierarchical(r);
 		// cCache.clear();
 		return false;
@@ -3929,8 +3947,8 @@ public final class Phase4
 	private void removeUnneededHash() throws Exception
 	{
 		ArrayList<TableScanOperator> tables = getTables(root, new HashSet<Operator>());
-		HashSet<TableScanOperator> temp = new HashSet<TableScanOperator>(tables);
-		for (TableScanOperator table : temp)
+		//HashSet<TableScanOperator> temp = new HashSet<TableScanOperator>(tables);
+		for (TableScanOperator table : tables)
 		{
 			if (table.noNodeGroupSet() && table.allNodes() && table.nodeIsHash())
 			{
@@ -3956,8 +3974,8 @@ public final class Phase4
 						}
 					}
 				}
-				// HRDBMSWorker.logger.debug("Looking at " + table);
-				// HRDBMSWorker.logger.debug("Original hash is " + current);
+				//HRDBMSWorker.logger.debug("Looking at " + table);
+				//HRDBMSWorker.logger.debug("Original hash is " + current);
 				Operator up = table.firstParent();
 				doneWithTable: while (true)
 				{
@@ -3977,7 +3995,7 @@ public final class Phase4
 									current.add(index, newName);
 								}
 							}
-							// HRDBMSWorker.logger.debug("Current has changed to "
+							//HRDBMSWorker.logger.debug("Current has changed to "
 							// + current);
 						}
 
@@ -3986,7 +4004,7 @@ public final class Phase4
 							// take things out of current except for ones that
 							// are also in the group by
 							current.retainAll(((MultiOperator)up).getKeys());
-							// HRDBMSWorker.logger.debug("Current has changed to "
+							//HRDBMSWorker.logger.debug("Current has changed to "
 							// + current);
 						}
 
@@ -4004,7 +4022,7 @@ public final class Phase4
 						{
 							if (((NetworkHashAndSendOperator)up).getHashCols().equals(current) && current.size() > 0)
 							{
-								// HRDBMSWorker.logger.debug("Removing " + up);
+								//HRDBMSWorker.logger.debug("Removing " + up);
 								// remove sends and receives
 								Operator grandParent = null;
 								for (Operator parent : (ArrayList<Operator>)((NetworkHashAndSendOperator)up).parents().clone())
@@ -4036,10 +4054,10 @@ public final class Phase4
 							}
 							else
 							{
-								// HRDBMSWorker.logger.debug("Hashes don't match: "
+								//HRDBMSWorker.logger.debug("Hashes don't match: "
 								// + up);
 								current = (ArrayList<String>)((NetworkHashAndSendOperator)up).getHashCols().clone();
-								// HRDBMSWorker.logger.debug("Current has changed to "
+								//HRDBMSWorker.logger.debug("Current has changed to "
 								// + current);
 								// set up to the parent that is on my node
 								for (Operator parent : ((NetworkHashAndSendOperator)up).parents())
@@ -4053,16 +4071,16 @@ public final class Phase4
 						}
 						else
 						{
-							// HRDBMSWorker.logger.debug("Hash and send does not use all nodes. Size = "
+							//HRDBMSWorker.logger.debug("Hash and send does not use all nodes. Size = "
 							// +
 							// ((NetworkHashAndSendOperator)up).parents().size());
-							// HRDBMSWorker.logger.debug(up);
+							//HRDBMSWorker.logger.debug(up);
 							break;
 						}
 					}
 					else
 					{
-						// HRDBMSWorker.logger.debug("Not a hash and send: " +
+						//HRDBMSWorker.logger.debug("Not a hash and send: " +
 						// up);
 						break;
 					}

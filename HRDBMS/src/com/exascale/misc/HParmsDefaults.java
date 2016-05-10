@@ -43,9 +43,9 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("max_local_no_hash_product", "10000000");
 		retval.setProperty("max_local_sort", "2500000");
 		retval.setProperty("parallel_sort_min_rows", Integer.toString((int)(2500 * Math.pow(Math.pow(Runtime.getRuntime().availableProcessors(), 2), 1.0 / 3.0))));
-		retval.setProperty("prefetch_request_size", "16");
+		retval.setProperty("prefetch_request_size", "24");
 		retval.setProperty("pages_in_advance", "1");
-		retval.setProperty("getpage_attempts", "300000");
+		retval.setProperty("getpage_attempts", "30000");
 		retval.setProperty("getpage_fail_sleep_time_ms", "1");
 		retval.setProperty("archive_dir", "/home/hrdbms/");
 		retval.setProperty("hrdbms_user", "hrdbms");
@@ -60,7 +60,7 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("max_load_average", Integer.toString(25 * Runtime.getRuntime().availableProcessors()));
 		retval.setProperty("critical_mem_percent", "15");
 		retval.setProperty("stack_size", "2M");
-		retval.setProperty("jvm_args", "");
+		retval.setProperty("jvm_args", "-XX:+UseG1GC");
 		retval.setProperty("external_factor", "2.4");
 		retval.setProperty("hash_external_factor", "12.5");
 		retval.setProperty("max_queued_load_flush_threads", "5");
@@ -70,10 +70,21 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("batches_per_check", "4");
 		retval.setProperty("create_index_batch_size", "1000000");
 		retval.setProperty("num_fcs_per_cfc", "1024");
-		retval.setProperty("max_open_files", "102400");
+		retval.setProperty("max_open_files", "100000");
 		retval.setProperty("bp_trim_sleep_ms", "300000");
 		retval.setProperty("enable_cvarchar_compression", "true");
 		retval.setProperty("enable_col_reordering", "true");
+		retval.setProperty("hjo_bucket_size_shift", "5");
+		retval.setProperty("mo_bucket_size_shift", "5");
+		retval.setProperty("max_concurrent_writers_per_temp_disk", "3");
+		retval.setProperty("mo_max_par", Integer.toString(Runtime.getRuntime().availableProcessors()));
+		retval.setProperty("hjo_max_par", Integer.toString(Runtime.getRuntime().availableProcessors()));
+		retval.setProperty("scfc", "true");
+		retval.setProperty("use_direct_buffers_for_flush", "true");
+		retval.setProperty("num_direct", "20000");
+		retval.setProperty("num_sbms", "256");
+		retval.setProperty("extend_max_par", Integer.toString(Runtime.getRuntime().availableProcessors()));
+		retval.setProperty("agg_max_par", Integer.toString(Runtime.getRuntime().availableProcessors()));
 		HParmsDefaults.retval = retval;
 		return retval;
 	}

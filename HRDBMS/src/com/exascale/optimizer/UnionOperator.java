@@ -655,7 +655,7 @@ public final class UnionOperator implements Operator, Serializable
 				ArrayList<FileChannel> fs = fcs.get(fileNum);
 				for (FileChannel f : fs)
 				{
-					FileChannel fc = new BufferedFileChannel(f);
+					FileChannel fc = new BufferedFileChannel(f, 8*1024*1024);
 					fc.position(0);
 					ByteBuffer bb1 = ByteBuffer.allocate(4);
 					while (true)

@@ -13,6 +13,7 @@ import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
@@ -360,7 +361,7 @@ public class CompressedFileChannel extends FileChannel
 					bufferedBlock = block;
 					buffer = target;
 					bufferSize = bytes >> 17;
-				bufferLock.writeLock().unlock();
+					bufferLock.writeLock().unlock();
 				}
 			}
 			else
@@ -1582,6 +1583,8 @@ public class CompressedFileChannel extends FileChannel
 		{
 			return retval;
 		}
+		
+		//HRDBMSWorker.logger.debug("Suffix " + suffix + " was opened by OA");
 
 		RandomAccessFile raf = null;
 		while (true)
@@ -1632,8 +1635,13 @@ public class CompressedFileChannel extends FileChannel
 		FileChannel retval = fcs.get(suffix);
 		if (retval != null)
 		{
+			//HRDBMSWorker.logger.debug("Suffix " + suffix + " was found in cache");
 			return retval;
 		}
+		
+		//ArrayList<Integer> set = new ArrayList<Integer>(fcs.keySet());
+		//Collections.sort(set);
+		//HRDBMSWorker.logger.debug("Looking for FC suffix " + suffix + " but only had " + set);
 
 		RandomAccessFile raf = null;
 		while (true)
@@ -1949,6 +1957,7 @@ public class CompressedFileChannel extends FileChannel
 					while (i < ResourceManager.MAX_FCS && j <= z)
 					{
 						CompressedFileChannel.this.getFC(j++, false);
+						Thread.sleep(1);
 						i++;
 					}
 				}
@@ -1968,6 +1977,7 @@ public class CompressedFileChannel extends FileChannel
 					for (Integer block : aoBlocks.keySet())
 					{
 						CompressedFileChannel.this.getFC(block, false);
+						Thread.sleep(1);
 						aoBlocks.remove(block);
 						i++;
 

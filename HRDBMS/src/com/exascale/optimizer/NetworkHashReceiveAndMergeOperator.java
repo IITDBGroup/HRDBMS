@@ -268,8 +268,8 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 							// Socket(meta.getHostNameForNode(child.getNode()),
 							// WORKER_PORT);
 							sock = new Socket();
-							sock.setReceiveBufferSize(262144);
-							sock.setSendBufferSize(262144);
+							sock.setReceiveBufferSize(4194304);
+							sock.setSendBufferSize(4194304);
 							sock.connect(new InetSocketAddress(meta.getHostNameForNode(child.getNode()), WORKER_PORT));
 						}
 						catch (final java.net.ConnectException e)

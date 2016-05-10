@@ -52,6 +52,12 @@ public final class SemiJoinOperator implements Operator, Serializable
 	private boolean cardSet = false;
 	public transient Operator dynamicOp;
 	private int leftChildCard = 16;
+	private long txnum;
+	
+	public void setTXNum(long txnum)
+	{
+		this.txnum = txnum;
+	}
 
 	public SemiJoinOperator(ArrayList<String> cols, MetaData meta)
 	{
@@ -101,6 +107,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 		value.alreadySorted = OperatorUtils.readBool(in);
 		value.cardSet = OperatorUtils.readBool(in);
 		value.leftChildCard = OperatorUtils.readInt(in);
+		value.txnum = OperatorUtils.readLong(in);
 		return value;
 	}
 
@@ -161,6 +168,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 		retval.rightChildCard = rightChildCard;
 		retval.cardSet = cardSet;
 		retval.leftChildCard = leftChildCard;
+		retval.txnum = txnum;
 		return retval;
 	}
 
@@ -502,6 +510,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 		OperatorUtils.writeBool(alreadySorted, out);
 		OperatorUtils.writeBool(cardSet, out);
 		OperatorUtils.writeInt(leftChildCard, out);
+		OperatorUtils.writeLong(txnum, out);
 	}
 
 	@Override
@@ -672,6 +681,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 			ArrayList<String> lefts = this.getJoinForChild(children.get(0));
 			ArrayList<String> rights = this.getJoinForChild(children.get(1));
 			dynamicOp = new HashJoinOperator(lefts.get(0), rights.get(0), meta);
+			((HashJoinOperator)dynamicOp).setTXNum(txnum);
 			if (lefts.size() > 1)
 			{
 				int i = 1;
@@ -714,6 +724,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 			// not implemented - add sort to the below
 			// prod w/ existence + filter + remove from left
 			dynamicOp = new ProductOperator(meta);
+			((ProductOperator)dynamicOp).setTXNum(txnum);
 			Operator left = children.get(0);
 			Operator right = children.get(1);
 			removeChild(left);
@@ -746,6 +757,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 		{
 			// prod w/ existence + filter + remove from left
 			dynamicOp = new ProductOperator(meta);
+			((ProductOperator)dynamicOp).setTXNum(txnum);
 			Operator left = children.get(0);
 			Operator right = children.get(1);
 			removeChild(left);

@@ -3060,6 +3060,14 @@ public final class Index implements Serializable
 
 		public IndexRecord(String file, int block, int offset, Transaction tx) throws Exception
 		{
+			//DEBUG
+			if (block > 16000000)
+			{
+				Exception e = new Exception();
+				HRDBMSWorker.logger.debug("Unusually high block num requested in IndexRecord constructor", e);
+			}
+			//DEBUG
+			
 			this.tx = tx;
 			b = new Block(file, block);
 			off = offset;
@@ -3091,6 +3099,14 @@ public final class Index implements Serializable
 
 		public IndexRecord(String file, int block, int offset, Transaction tx, boolean x) throws Exception
 		{
+			//DEBUG
+			if (block > 16000000)
+			{
+				Exception e = new Exception();
+				HRDBMSWorker.logger.debug("Unusually high block num requested in IndexRecord constructor", e);
+			}
+			//DEBUG
+			
 			this.tx = tx;
 			b = new Block(file, block);
 			p = myPages.get(b);
@@ -3129,6 +3145,14 @@ public final class Index implements Serializable
 
 		public IndexRecord(String file, int block, int offset, Transaction tx, boolean x, Page p) throws Exception
 		{
+			//DEBUG
+			if (block > 16000000)
+			{
+				Exception e = new Exception();
+				HRDBMSWorker.logger.debug("Unusually high block num requested in IndexRecord constructor", e);
+			}
+			//DEBUG
+			
 			this.tx = tx;
 			this.p = p;
 			if (p == null)

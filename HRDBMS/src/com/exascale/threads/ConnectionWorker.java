@@ -41,8 +41,10 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.LockSupport;
 import com.exascale.filesystem.Block;
+import com.exascale.filesystem.CompressedFileChannel;
 import com.exascale.filesystem.Page;
 import com.exascale.filesystem.RID;
+import com.exascale.filesystem.SparseCompressedFileChannel2;
 import com.exascale.logging.LogIterator;
 import com.exascale.logging.LogRec;
 import com.exascale.managers.BufferManager;
@@ -501,8 +503,8 @@ public class ConnectionWorker extends HRDBMSThread
 			// sock = new Socket(hostname,
 			// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			sock = new Socket();
-			sock.setReceiveBufferSize(262144);
-			sock.setSendBufferSize(262144);
+			sock.setReceiveBufferSize(4194304);
+			sock.setSendBufferSize(4194304);
 			sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "LCOMMIT         ".getBytes(StandardCharsets.UTF_8);
@@ -563,8 +565,8 @@ public class ConnectionWorker extends HRDBMSThread
 			// sock = new Socket(hostname,
 			// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			sock = new Socket();
-			sock.setReceiveBufferSize(262144);
-			sock.setSendBufferSize(262144);
+			sock.setReceiveBufferSize(4194304);
+			sock.setSendBufferSize(4194304);
 			sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "LROLLBCK        ".getBytes(StandardCharsets.UTF_8);
@@ -678,8 +680,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// Socket sock2 = new Socket(hostname,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					Socket sock2 = new Socket();
-					sock2.setReceiveBufferSize(262144);
-					sock2.setSendBufferSize(262144);
+					sock2.setReceiveBufferSize(4194304);
+					sock2.setSendBufferSize(4194304);
 					sock2.setSoTimeout(5000 / coords.size());
 					sock2.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock2.getOutputStream();
@@ -3020,6 +3022,8 @@ public class ConnectionWorker extends HRDBMSThread
 		ArrayList<String> indexes;
 		byte[] devBytes = new byte[4];
 		int device;
+		HashMap<String, String> cols2Types;
+		int type;
 
 		try
 		{
@@ -3047,6 +3051,8 @@ public class ConnectionWorker extends HRDBMSThread
 			types = ldmd.types;
 			orders = ldmd.orders;
 			indexes = ldmd.indexes;
+			cols2Types = ldmd.cols2Types;
+			type = ldmd.type;
 		}
 		catch (Exception e)
 		{
@@ -3054,10 +3060,6 @@ public class ConnectionWorker extends HRDBMSThread
 			return;
 		}
 
-		// FIXME
-		HashMap<String, String> cols2Types = null;
-		int type = 0;
-		// FIXME
 		FlushLoadThread thread = new FlushLoadThread(list, new Transaction(txNum), schema, table, keys, types, orders, indexes, cols2Pos, device, pos2Col, cols2Types, type);
 		thread.run();
 
@@ -7702,11 +7704,35 @@ public class ConnectionWorker extends HRDBMSThread
 					}
 				}
 
-				FileManager.getFile(fn).copyFromFC(FileManager.getFile(newFN));
+				FileChannel fc = FileManager.getFile(fn);
+				if (FileManager.SCFC)
+				{
+					((SparseCompressedFileChannel2)fc).copyFromFC((SparseCompressedFileChannel2)FileManager.getFile(newFN));
+				}
+				else
+				{
+					((CompressedFileChannel)fc).copyFromFC((CompressedFileChannel)FileManager.getFile(newFN));
+				}
 
 				for (String fn2 : indexFNs)
 				{
-					FileManager.getFile(fn2).copyFromFC(FileManager.getFile(fn2 + ".new"));
+					fc = FileManager.getFile(fn2);
+					if (FileManager.SCFC)
+					{
+						((SparseCompressedFileChannel2)fc).copyFromFC((SparseCompressedFileChannel2)FileManager.getFile(fn2 + ".new"));
+					}
+					else
+					{
+						((CompressedFileChannel)fc).copyFromFC((CompressedFileChannel)FileManager.getFile(fn2 + ".new"));
+					}
+				}
+				
+				for (Block b : TableScanOperator.noResults.getKeySet())
+				{
+					if (b.fileName().equals(fn))
+					{
+						TableScanOperator.noResults.remove(b);
+					}
 				}
 			}
 			catch (Exception e)
@@ -7738,8 +7764,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket((String)o,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "CHECKPNT        ".getBytes(StandardCharsets.UTF_8);
@@ -7784,8 +7810,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket(hostname,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "PREPARE         ".getBytes(StandardCharsets.UTF_8);
@@ -7844,8 +7870,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket((String)o,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "LCOMMIT         ".getBytes(StandardCharsets.UTF_8);
@@ -7892,8 +7918,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket(hostname,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "LCOMMIT         ".getBytes(StandardCharsets.UTF_8);
@@ -7965,8 +7991,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket((String)o,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "DELFIIDX        ".getBytes(StandardCharsets.UTF_8);
@@ -8012,8 +8038,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket(hostname,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "DELFIIDX        ".getBytes(StandardCharsets.UTF_8);
@@ -8074,8 +8100,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket((String)o,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "DELFITBL        ".getBytes(StandardCharsets.UTF_8);
@@ -8121,8 +8147,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket(hostname,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "DELFITBL        ".getBytes(StandardCharsets.UTF_8);
@@ -8198,8 +8224,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket((String)o,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "NEWINDEX        ".getBytes(StandardCharsets.UTF_8);
@@ -8249,8 +8275,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket(hostname,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "NEWINDEX        ".getBytes(StandardCharsets.UTF_8);
@@ -8328,8 +8354,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket((String)o,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "NEWTABLE        ".getBytes(StandardCharsets.UTF_8);
@@ -8384,8 +8410,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket(hostname,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "NEWTABLE        ".getBytes(StandardCharsets.UTF_8);
@@ -8478,8 +8504,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket((String)o,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "POPINDEX        ".getBytes(StandardCharsets.UTF_8);
@@ -8536,8 +8562,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket(hostname,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "POPINDEX        ".getBytes(StandardCharsets.UTF_8);
@@ -8607,8 +8633,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket((String)o,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "SETLDMD         ".getBytes(StandardCharsets.UTF_8);
@@ -8656,8 +8682,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket(hostname,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "SETLDMD         ".getBytes(StandardCharsets.UTF_8);
@@ -8756,8 +8782,8 @@ public class ConnectionWorker extends HRDBMSThread
 				// sock = new Socket(hostname,
 				// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				sock = new Socket();
-				sock.setReceiveBufferSize(262144);
-				sock.setSendBufferSize(262144);
+				sock.setReceiveBufferSize(4194304);
+				sock.setSendBufferSize(4194304);
 				sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "MDELETE         ".getBytes(StandardCharsets.UTF_8);
@@ -8860,8 +8886,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket((String)o,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "PREPARE         ".getBytes(StandardCharsets.UTF_8);
@@ -8909,8 +8935,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket(hostname,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "PREPARE         ".getBytes(StandardCharsets.UTF_8);
@@ -8994,8 +9020,8 @@ public class ConnectionWorker extends HRDBMSThread
 				// Socket sock = new Socket(host,
 				// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				Socket sock = new Socket();
-				sock.setReceiveBufferSize(262144);
-				sock.setSendBufferSize(262144);
+				sock.setReceiveBufferSize(4194304);
+				sock.setSendBufferSize(4194304);
 				sock.connect(new InetSocketAddress(host, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "PUT2            ".getBytes(StandardCharsets.UTF_8);
@@ -9071,8 +9097,8 @@ public class ConnectionWorker extends HRDBMSThread
 				// Socket sock = new Socket(host,
 				// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				Socket sock = new Socket();
-				sock.setReceiveBufferSize(262144);
-				sock.setSendBufferSize(262144);
+				sock.setReceiveBufferSize(4194304);
+				sock.setSendBufferSize(4194304);
 				sock.connect(new InetSocketAddress(host, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "REMOVE2         ".getBytes(StandardCharsets.UTF_8);
@@ -9131,8 +9157,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket((String)o,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "DELLDMD         ".getBytes(StandardCharsets.UTF_8);
@@ -9179,8 +9205,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket(hostname,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "DELLDMD         ".getBytes(StandardCharsets.UTF_8);
@@ -9258,8 +9284,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket((String)o,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "REORG           ".getBytes(StandardCharsets.UTF_8);
@@ -9313,8 +9339,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket(hostname,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "REORG           ".getBytes(StandardCharsets.UTF_8);
@@ -9379,8 +9405,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket((String)o,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "LROLLBCK        ".getBytes(StandardCharsets.UTF_8);
@@ -9427,8 +9453,8 @@ public class ConnectionWorker extends HRDBMSThread
 					// sock = new Socket(hostname,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 					OutputStream out = sock.getOutputStream();
 					byte[] outMsg = "LROLLBCK        ".getBytes(StandardCharsets.UTF_8);

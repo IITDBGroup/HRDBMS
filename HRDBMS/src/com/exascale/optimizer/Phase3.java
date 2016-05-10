@@ -1613,7 +1613,7 @@ public final class Phase3
 					HRDBMSWorker.logger.error("", e);
 					throw e;
 				}
-				makeHierarchical2(receive);
+				//makeHierarchical2(receive);
 				makeHierarchical(receive);
 				return true;
 			}
@@ -1772,7 +1772,7 @@ public final class Phase3
 					HRDBMSWorker.logger.error("", e);
 					throw e;
 				}
-				makeHierarchical2(receive);
+				//makeHierarchical2(receive);
 				makeHierarchical(receive);
 			}
 			return false;
@@ -2621,6 +2621,7 @@ public final class Phase3
 					{
 						newSend.add(newReceive);
 						receive.add(newSend);
+						newReceive.setNode(node);
 					}
 					catch (final Exception e)
 					{
@@ -2629,6 +2630,23 @@ public final class Phase3
 					}
 					newReceive = new NetworkReceiveOperator(meta);
 					i = 0;
+				}
+			}
+			
+			if (i != 0)
+			{
+				int node = Math.abs(ThreadLocalRandom.current().nextInt()) % MetaData.numWorkerNodes;
+				final NetworkSendOperator newSend = new NetworkSendOperator(node, meta);
+				try
+				{
+					newSend.add(newReceive);
+					receive.add(newSend);
+					newReceive.setNode(node);
+				}
+				catch (final Exception e)
+				{
+					HRDBMSWorker.logger.error("", e);
+					throw e;
 				}
 			}
 			makeHierarchical(receive);

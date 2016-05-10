@@ -59,6 +59,7 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 		value.cd = cs.newDecoder();
 		value.received = new AtomicLong(0);
 		value.demReceived = false;
+		value.txnum = OperatorUtils.readLong(in);
 		return value;
 	}
 
@@ -68,6 +69,7 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 		final NetworkHashReceiveOperator retval = new NetworkHashReceiveOperator(ID, meta);
 		retval.node = node;
 		retval.send = send;
+		retval.txnum = txnum;
 		return retval;
 	}
 
@@ -151,6 +153,7 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 		OperatorUtils.writeInt(node, out);
 		OperatorUtils.writeInt(ID, out);
 		OperatorUtils.writeBool(send, out);
+		OperatorUtils.writeLong(txnum, out);
 	}
 
 	public void setID(int ID)
@@ -186,8 +189,8 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 							// Socket(meta.getHostNameForNode(child.getNode()),
 							// WORKER_PORT);
 							sock = new Socket();
-							sock.setReceiveBufferSize(262144);
-							sock.setSendBufferSize(262144);
+							sock.setReceiveBufferSize(4194304);
+							sock.setSendBufferSize(4194304);
 							sock.connect(new InetSocketAddress(meta.getHostNameForNode(child.getNode()), WORKER_PORT));
 						}
 						catch (final java.net.ConnectException e)

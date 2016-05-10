@@ -927,7 +927,7 @@ public final class ExceptOperator implements Operator, Serializable
 				ArrayList<FileChannel> fs = fcs.get(fileNum);
 				for (FileChannel f : fs)
 				{
-					FileChannel fc = new BufferedFileChannel(f);
+					FileChannel fc = new BufferedFileChannel(f, 8*1024*1024);
 					HashSet<ArrayList<Object>> set = new HashSet<ArrayList<Object>>();
 					sets.add(set);
 					fc.position(0);

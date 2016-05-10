@@ -109,6 +109,48 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 			throw e;
 		}
 	}
+	
+	public boolean putNow(Object o)
+	{
+		if (closed)
+		{
+			return true;
+		}
+		try
+		{
+			if (o == null)
+			{
+				Exception e = new Exception("Null object placed on queue");
+				HRDBMSWorker.logger.error("Null object placed on queue", e);
+				return true;
+			}
+
+			if (o instanceof ArrayList && ((ArrayList)o).size() == 0)
+			{
+				HRDBMSWorker.logger.debug("ArrayList of size zero was placed on queue");
+				return true;
+			}
+
+			ArrayAndIndex oa = threadLocal.get(Thread.currentThread());
+			if (oa == null)
+			{
+				oa = new ArrayAndIndex();
+				threadLocal.put(Thread.currentThread(), oa);
+			}
+
+			return oa.putNow(o, threadLocal);
+		}
+		catch (Exception e)
+		{
+			if (closed)
+			{
+				return true;
+			}
+
+			HRDBMSWorker.logger.debug("", e);
+			throw e;
+		}
+	}
 
 	public void put(Object o)
 	{
@@ -209,6 +251,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 			this.oa = oa;
 		}
 
+		@SuppressWarnings("unchecked")
 		private synchronized void flush()
 		{
 			while (true)
@@ -386,16 +429,103 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 				}
 			}
 		}
+		
+		@SuppressWarnings("unchecked")
+		private boolean putNow(Object o, ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal)
+		{
+			if (o instanceof DataEndMarker || o instanceof Exception)
+			{
+				while (true)
+				{
+					boolean ok = true;
+					ok = flushAll(threadLocal, o);
+
+					if (ok)
+					{
+						break;
+					}
+
+					try
+					{
+						Thread.sleep(RETRY_TIME);
+					}
+					catch (Exception e)
+					{
+					}
+				}
+			}
+			else if (o instanceof AggregateThread && ((AggregateThread)o).isEnd())
+			{
+				while (true)
+				{
+					boolean ok = true;
+					ok = flushAll(threadLocal, o);
+
+					if (ok)
+					{
+						break;
+					}
+
+					try
+					{
+						Thread.sleep(RETRY_TIME);
+					}
+					catch (Exception e)
+					{
+					}
+				}
+			}
+			else
+			{
+				synchronized (this)
+				{
+					if (index != BLOCK_SIZE-1)
+					{
+						oa[index++] = o;
+						return true;
+					}
+					
+					synchronized(q)
+					{
+						if (q.remainingCapacity() == 0)
+						{
+							return false;
+						}
+						oa[index++] = o;
+
+						while (true)
+						{
+							try
+							{
+								if (this.oa[0] != null)
+								{
+									q.put(this.oa);
+									this.oa = new Object[BLOCK_SIZE];
+									this.index = 0;
+								}
+
+								break;
+							}
+							catch (final Exception e)
+							{
+							}
+						}
+					}
+				}
+			}
+			
+			return true;
+		}
 
 		private synchronized Object take() throws Exception
 		{
 			if (index < BLOCK_SIZE && oa[index] != null)
 			{
 				Object retval = oa[index++];
-				if (retval == null)
-				{
-					throw new Exception("OA.take() returning null value first path");
-				}
+				//if (retval == null)
+				//{
+				//	throw new Exception("OA.take() returning null value first path");
+				//}
 
 				return retval;
 			}

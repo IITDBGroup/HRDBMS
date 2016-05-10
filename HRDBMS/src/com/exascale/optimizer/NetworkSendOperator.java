@@ -473,10 +473,14 @@ public class NetworkSendOperator implements Operator, Serializable
 			byte[] data = null;
 			try
 			{
-				data = e.getMessage().getBytes(StandardCharsets.UTF_8);
-				if (data == null)
+				HRDBMSWorker.logger.debug("", (Exception)v);
+				if (e.getMessage() == null)
 				{
 					data = "No message".getBytes(StandardCharsets.UTF_8);
+				}
+				else
+				{
+					data = e.getMessage().getBytes(StandardCharsets.UTF_8);
 				}
 			}
 			catch (Exception f)

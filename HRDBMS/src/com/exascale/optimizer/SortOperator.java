@@ -19,8 +19,10 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.LockSupport;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 import com.exascale.misc.BinomialHeap;
@@ -29,7 +31,9 @@ import com.exascale.misc.BufferedLinkedBlockingQueue;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MyDate;
 import com.exascale.tables.Plan;
+import com.exascale.tables.Schema;
 import com.exascale.threads.HRDBMSThread;
+import com.exascale.threads.TempThread;
 import com.exascale.threads.ThreadPoolThread;
 
 public final class SortOperator implements Operator, Serializable
@@ -78,6 +82,12 @@ public final class SortOperator implements Operator, Serializable
 	private long limit = 0;
 	private transient AtomicLong received;
 	private transient volatile boolean demReceived;
+	private long txnum;
+	
+	public void setTXNum(long txnum)
+	{
+		this.txnum = txnum;
+	}
 
 	public SortOperator(ArrayList<String> sortCols, ArrayList<Boolean> orders, MetaData meta)
 	{
@@ -106,6 +116,7 @@ public final class SortOperator implements Operator, Serializable
 		value.limit = OperatorUtils.readLong(in);
 		value.received = new AtomicLong(0);
 		value.demReceived = false;
+		value.txnum = OperatorUtils.readLong(in);
 		return value;
 	}
 
@@ -211,6 +222,7 @@ public final class SortOperator implements Operator, Serializable
 		retval.childCard = childCard;
 		retval.cardSet = cardSet;
 		retval.limit = limit;
+		retval.txnum = txnum;
 		return retval;
 	}
 
@@ -452,6 +464,7 @@ public final class SortOperator implements Operator, Serializable
 		OperatorUtils.writeInt(childCard, out);
 		OperatorUtils.writeBool(cardSet, out);
 		OperatorUtils.writeLong(limit, out);
+		OperatorUtils.writeLong(txnum, out);
 	}
 
 	public boolean setChildCard(int card)
@@ -1171,6 +1184,7 @@ public final class SortOperator implements Operator, Serializable
 
 		private void externalSort(double percentInMem)
 		{
+			ConcurrentHashMap<WriteDataThread, WriteDataThread> threads = new ConcurrentHashMap<WriteDataThread, WriteDataThread>();
 			ArrayList<ArrayList<ArrayList<Object>>> bins = new ArrayList<ArrayList<ArrayList<Object>>>();
 			HRDBMSWorker.logger.debug("Doing external sort");
 			double factor = Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor"));
@@ -1307,7 +1321,8 @@ public final class SortOperator implements Operator, Serializable
 					{
 						byte[] data = rsToBytes(result, types);
 						WriteDataThread thread = new WriteDataThread(fn, data, map2, map3);
-						thread.start();
+						TempThread.start(thread, txnum);
+						threads.put(thread, thread);
 						map.put(fn, thread);
 						result.clear();
 					}
@@ -1425,13 +1440,13 @@ public final class SortOperator implements Operator, Serializable
 				if (types[i] == 0)
 				{
 					// long
-					final Long o = bb.getLong();
+					final Long o = getCLong(bb);
 					retval.add(o);
 				}
 				else if (types[i] == 1)
 				{
 					// integer
-					final Integer o = bb.getInt();
+					final Integer o = getCInt(bb);
 					retval.add(o);
 				}
 				else if (types[i] == 2)
@@ -1443,24 +1458,38 @@ public final class SortOperator implements Operator, Serializable
 				else if (types[i] == 3)
 				{
 					// date
-					final MyDate o = new MyDate(bb.getInt());
+					final MyDate o = new MyDate(getMedium(bb));
 					retval.add(o);
 				}
 				else if (types[i] == 4)
 				{
 					// string
-					final int length = bb.getInt();
-					final byte[] temp = new byte[length];
+					int length = getCInt(bb);
+					
+					byte[] temp = new byte[length];
 					bb.get(temp);
-					try
+					
+					if (!Schema.CVarcharFV.compress)
 					{
+						try
+						{
+							final String o = new String(temp, StandardCharsets.UTF_8);
+							retval.add(o);
+						}
+						catch (final Exception e)
+						{
+							HRDBMSWorker.logger.error("", e);
+							throw e;
+						}
+					}
+					else
+					{
+						byte[] out = new byte[temp.length << 1];
+						int clen = Schema.CVarcharFV.decompress(temp, temp.length, out);
+						temp = new byte[clen];
+						System.arraycopy(out, 0, temp, 0, clen);
 						final String o = new String(temp, StandardCharsets.UTF_8);
 						retval.add(o);
-					}
-					catch (final Exception e)
-					{
-						HRDBMSWorker.logger.error("", e);
-						throw e;
 					}
 				}
 				else
@@ -1474,6 +1503,106 @@ public final class SortOperator implements Operator, Serializable
 			}
 
 			return retval;
+		}
+		
+		private int getMedium(ByteBuffer bb)
+		{
+			int retval = ((bb.getShort() & 0xffff) << 8);
+			retval += (bb.get() & 0xff);
+			return retval;
+		}
+		
+		private long getCLong(ByteBuffer bb)
+		{
+			int temp = (bb.get() & 0xff);
+			int length = (temp >>> 4);
+			if (length == 1)
+			{
+				return (temp & 0x0f);
+			}
+			else if (length == 9)
+			{
+				return bb.getLong();
+			}
+			else
+			{
+				long retval = (temp & 0x0f);
+				if (length == 2)
+				{
+					retval = (retval << 8);
+					retval += (bb.get() & 0xff);
+				}
+				else if (length == 3)
+				{
+					retval = (retval << 16);
+					retval += (bb.getShort() & 0xffff);
+				}
+				else if (length == 4)
+				{
+					retval = (retval << 24);
+					retval += getMedium(bb);
+				}
+				else if (length == 5)
+				{
+					retval = (retval << 32);
+					retval += (bb.getInt() & 0xffffffffl);
+				}
+				else if (length == 6)
+				{
+					retval = (retval << 40);
+					retval += ((bb.get() & 0xffl) << 32);
+					retval += (bb.getInt() & 0xffffffffl);
+				}
+				else if (length == 7)
+				{
+					retval = (retval << 48);
+					retval += ((bb.getShort() & 0xffffl) << 32);
+					retval += (bb.getInt() & 0xffffffffl);
+				}
+				else
+				{
+					retval = (retval << 56);
+					retval += ((getMedium(bb) & 0xffffffl) << 32);
+					retval += (bb.getInt() & 0xffffffffl);
+				}
+				
+				return retval;
+			}
+		}
+		
+		private int getCInt(ByteBuffer bb)
+		{
+			int temp = (bb.get() & 0xff);
+			int length = (temp >>> 5);
+			if (length == 1)
+			{
+				return (temp & 0x1f);
+			}
+			else if (length == 5)
+			{
+				return bb.getInt();
+			}
+			else
+			{
+				int retval = (temp & 0x1f);
+				if (length == 2)
+				{
+					retval = (retval << 8);
+					retval += (bb.get() & 0xff);
+				}
+				else if (length == 3)
+				{
+					retval = (retval << 16);
+					retval += (bb.getShort() & 0xffff);
+				}
+				else
+				{
+					retval = (retval << 24);
+					retval += getMedium(bb);
+				}
+				
+				return retval;
+			}
 		}
 
 		private void mergeIntoResult(Collection<HRDBMSThread> readThreads)
@@ -1544,8 +1673,8 @@ public final class SortOperator implements Operator, Serializable
 
 		private final byte[] rsToBytes(ArrayList<ArrayList<Object>> rows, final byte[] types) throws Exception
 		{
-			final ArrayList<byte[]> results = new ArrayList<byte[]>(rows.size());
-			final ArrayList<byte[]> bytes = new ArrayList<byte[]>();
+			final ArrayList<ByteBuffer> results = new ArrayList<ByteBuffer>(rows.size());
+			ArrayList<byte[]> bytes = new ArrayList<byte[]>();
 			final ArrayList<Integer> stringCols = new ArrayList<Integer>(rows.get(0).size());
 			int startSize = 4;
 			int a = 0;
@@ -1568,35 +1697,40 @@ public final class SortOperator implements Operator, Serializable
 				a++;
 			}
 
-			int z = 0;
-			final int limit = rows.size();
-			// for (ArrayList<Object> val : rows)
-			while (z < limit)
+			for (ArrayList<Object> val : rows)
 			{
-				ArrayList<Object> val = rows.get(z++);
 				int size = startSize;
 				for (int y : stringCols)
 				{
 					Object o = val.get(y);
 					byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
+					if (Schema.CVarcharFV.compress)
+					{
+						byte[] out = new byte[b.length * 3 + 1];
+						int clen = Schema.CVarcharFV.compress(b, b.length, out);
+						b = new byte[clen];
+						System.arraycopy(out, 0, b, 0, clen);
+					}
 					size += b.length;
 					bytes.add(b);
 				}
 
 				final byte[] retval = new byte[size];
 				final ByteBuffer retvalBB = ByteBuffer.wrap(retval);
-				retvalBB.putInt(size - 4);
+				//retvalBB.putInt(size - 4);
 				int x = 0;
 				int i = 0;
 				for (final Object o : val)
 				{
 					if (types[i] == 0)
 					{
-						retvalBB.putLong((Long)o);
+						//retvalBB.putLong((Long)o);
+						putCLong(retvalBB, (Long)o);
 					}
 					else if (types[i] == 1)
 					{
-						retvalBB.putInt((Integer)o);
+						//retvalBB.putInt((Integer)o);
+						putCInt(retvalBB, (Integer)o);
 					}
 					else if (types[i] == 2)
 					{
@@ -1604,12 +1738,15 @@ public final class SortOperator implements Operator, Serializable
 					}
 					else if (types[i] == 3)
 					{
-						retvalBB.putInt(((MyDate)o).getTime());
+						int value = ((MyDate)o).getTime();
+						//retvalBB.putInt(value);
+						putMedium(retvalBB, value);
 					}
 					else if (types[i] == 4)
 					{
 						byte[] temp = bytes.get(x++);
-						retvalBB.putInt(temp.length);
+						//retvalBB.putInt(temp.length);
+						putCInt(retvalBB, temp.length);
 						retvalBB.put(temp);
 					}
 					else
@@ -1620,24 +1757,131 @@ public final class SortOperator implements Operator, Serializable
 					i++;
 				}
 
-				results.add(retval);
+				results.add(retvalBB);
 				bytes.clear();
 			}
 
 			int count = 0;
-			for (final byte[] ba : results)
+			for (ByteBuffer bb : results)
 			{
-				count += ba.length;
+				count += (bb.position() + 4);
 			}
 			final byte[] retval = new byte[count];
+			ByteBuffer retvalBB = ByteBuffer.wrap(retval);
 			int retvalPos = 0;
-			for (final byte[] ba : results)
+			for (ByteBuffer bb : results)
 			{
-				System.arraycopy(ba, 0, retval, retvalPos, ba.length);
-				retvalPos += ba.length;
+				byte[] ba = bb.array();
+				retvalBB.position(retvalPos);
+				retvalBB.putInt(bb.position());
+				retvalPos += 4;
+				System.arraycopy(ba, 0, retval, retvalPos, bb.position());
+				retvalPos += bb.position();
 			}
 
 			return retval;
+		}
+		
+		private void putCLong(ByteBuffer bb, long val)
+		{
+			if (val <= 15)
+			{
+				//1 byte
+				val |= 0x10;
+				bb.put((byte)val);
+			}
+			else if (val <= 4095)
+			{
+				//2 bytes
+				val |= 0x2000;
+				bb.putShort((short)val);
+			}
+			else if (val <= 0xfffff)
+			{
+				//3 bytes
+				val |= 0x300000;
+				putMedium(bb, (int)val);
+			}
+			else if (val <= 0xfffffff)
+			{
+				//4 bytes
+				val |= 0x40000000;
+				bb.putInt((int)val);
+			}
+			else if (val <= 0xfffffffffl)
+			{
+				//5 bytes
+				val |= 0x5000000000l;
+				bb.put((byte)(val >>> 32));
+				bb.putInt((int)val);
+			}
+			else if (val <= 0xfffffffffffl)
+			{
+				//6 bytes
+				val |= 0x600000000000l;
+				bb.putShort((short)(val >>> 32));
+				bb.putInt((int)val);
+			}
+			else if (val <= 0xfffffffffffffl)
+			{
+				//7 bytes
+				val |= 0x70000000000000l;
+				putMedium(bb, (int)(val >> 32));
+				bb.putInt((int)val);
+			}
+			else if (val <= 0xfffffffffffffffl)
+			{
+				//8 bytes
+				val |= 0x8000000000000000l;
+				bb.putLong(val);
+			}
+			else
+			{
+				//9 bytes
+				bb.put((byte)0x90);
+				bb.putLong(val);
+			}
+		}
+		
+		private void putCInt(ByteBuffer bb, int val)
+		{
+			if (val <= 31)
+			{
+				//1 byte
+				val |= 0x20;
+				bb.put((byte)val);
+			}
+			else if (val <= 8191)
+			{
+				//2 bytes
+				val |= 0x4000;
+				bb.putShort((short)val);
+			}
+			else if (val <= 0x1fffff)
+			{
+				//3 bytes
+				val |= 0x600000;
+				putMedium(bb, val);
+			}
+			else if (val <= 0x1FFFFFFF)
+			{
+				//4 bytes
+				val |= 0x80000000;
+				bb.putInt(val);
+			}
+			else
+			{
+				//5 bytes
+				bb.put((byte)0xa0);
+				bb.putInt(val);
+			}
+		}
+		
+		private void putMedium(ByteBuffer bb, int val)
+		{
+			bb.put((byte)((val & 0xff0000) >> 16));
+			bb.put((byte)((val & 0xff00) >> 8));
+			bb.put((byte)(val & 0xff));
 		}
 
 		private final class CopyThread extends ThreadPoolThread
@@ -1905,7 +2149,7 @@ public final class SortOperator implements Operator, Serializable
 				try
 				{
 					FileChannel f = map3.get(fn);
-					FileChannel fc = new BufferedFileChannel(f);
+					FileChannel fc = new BufferedFileChannel(f, 8*1024*1024);
 					//
 					fc.position(offset);
 					int i = 0;
