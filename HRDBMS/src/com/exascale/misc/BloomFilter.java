@@ -24,12 +24,18 @@ public class BloomFilter
 		cache = new ConcurrentHashMap<Long, ArrayList<Object>>(4 * 1024 * 1024, 1.0f);
 	}
 
-	public synchronized void add(long hash)
+	public void add(long hash)
 	{
 		long offset = hash & 0x7FFFFFFFl;
 		int bytePos = (int)(offset >> 3);
 		int bitPos = (int)(offset & 0x07);
-		bits[bytePos >>> 23][bytePos & 0x7fffff] |= (byte)(1 << bitPos);
+		int x = bytePos >>> 23;
+		int y = bytePos & 0x7fffff;
+		byte val = (byte)(1 << bitPos);
+		synchronized(bits)
+		{
+			bits[x][y] |= val;
+		}
 		return;
 	}
 

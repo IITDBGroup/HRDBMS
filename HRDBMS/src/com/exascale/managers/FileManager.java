@@ -18,7 +18,6 @@ import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import com.exascale.filesystem.Block;
-import com.exascale.filesystem.CompressedFileChannel;
 import com.exascale.filesystem.CompressedRandomAccessFile;
 import com.exascale.filesystem.Page;
 import com.exascale.filesystem.SparseCompressedFileChannel2;
@@ -134,7 +133,7 @@ public class FileManager
 
 		// write page to bufferpool
 		Block b = new Block(fn, retval);
-		int hash = (b.hashCode2() & 0x7FFFFFFF) % BufferManager.managers.length;
+		int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % BufferManager.managers.length;
 		BufferManager.managers[hash].pinFromMemory(b, tx.number(), data);
 		numBlocks.put(fn, retval + 1);
 

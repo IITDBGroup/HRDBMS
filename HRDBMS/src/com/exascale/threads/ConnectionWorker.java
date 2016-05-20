@@ -41,7 +41,6 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.LockSupport;
 import com.exascale.filesystem.Block;
-import com.exascale.filesystem.CompressedFileChannel;
 import com.exascale.filesystem.Page;
 import com.exascale.filesystem.RID;
 import com.exascale.filesystem.SparseCompressedFileChannel2;
@@ -90,7 +89,6 @@ public class ConnectionWorker extends HRDBMSThread
 	private static int PREFETCH_REQUEST_SIZE;
 	private static int PAGES_IN_ADVANCE;
 	private static ConcurrentHashMap<String, LoadMetaData> ldmds = new ConcurrentHashMap<String, LoadMetaData>(16, 0.75f, 6 * ResourceManager.cpus);
-	private static int maxLoad = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_load_average"));
 	private static long MAX_PAGES;
 	private static final ConcurrentHashMap<Long, Exception> loadExceptions = new ConcurrentHashMap<Long, Exception>(16, 0.75f, 64 * ResourceManager.cpus);
 	private static final ConcurrentHashMap<FlushLoadThread, FlushLoadThread> flThreads = new ConcurrentHashMap<FlushLoadThread, FlushLoadThread>(12000000, 0.75f, 64 * ResourceManager.cpus);
@@ -7705,26 +7703,12 @@ public class ConnectionWorker extends HRDBMSThread
 				}
 
 				FileChannel fc = FileManager.getFile(fn);
-				if (FileManager.SCFC)
-				{
-					((SparseCompressedFileChannel2)fc).copyFromFC((SparseCompressedFileChannel2)FileManager.getFile(newFN));
-				}
-				else
-				{
-					((CompressedFileChannel)fc).copyFromFC((CompressedFileChannel)FileManager.getFile(newFN));
-				}
+				((SparseCompressedFileChannel2)fc).copyFromFC((SparseCompressedFileChannel2)FileManager.getFile(newFN));
 
 				for (String fn2 : indexFNs)
 				{
 					fc = FileManager.getFile(fn2);
-					if (FileManager.SCFC)
-					{
-						((SparseCompressedFileChannel2)fc).copyFromFC((SparseCompressedFileChannel2)FileManager.getFile(fn2 + ".new"));
-					}
-					else
-					{
-						((CompressedFileChannel)fc).copyFromFC((CompressedFileChannel)FileManager.getFile(fn2 + ".new"));
-					}
+					((SparseCompressedFileChannel2)fc).copyFromFC((SparseCompressedFileChannel2)FileManager.getFile(fn2 + ".new"));
 				}
 				
 				for (Block b : TableScanOperator.noResults.getKeySet())

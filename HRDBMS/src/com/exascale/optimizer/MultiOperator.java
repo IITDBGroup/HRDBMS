@@ -958,9 +958,16 @@ public final class MultiOperator implements Operator, Serializable
 		{
 			//int numBins = 257;
 			int numBins = this.childCard / 3000000;
-			if (numBins < 128)
+			if (numBins < 257)
 			{
-				numBins = this.childCard / 250000;
+				if (this.childCard / 250000 < 257)
+				{
+					numBins = this.childCard / 250000;
+				}
+				else
+				{
+					numBins = 257;
+				}
 			}
 			
 			if (numBins < 2)
@@ -1045,22 +1052,37 @@ public final class MultiOperator implements Operator, Serializable
 			while (z < limit)
 			{
 				ArrayList<ArrayList<Object>> data = lbins.get(z++);
+				//if (numPar1 == -1)
+				//{
+				//	//numPar1 = data.size() / 250000;
+				//}
+
+				//if (numPar1 == 0)
+				//{
+				//	numPar1 = 1;
+				//}
+
+				//if (numPar1 > maxPar)
+				//{
+				//	numPar1 = maxPar;
+				//}
+
 				if (numPar1 == -1)
 				{
-					numPar1 = data.size() / 250000;
+					numPar1 = (int)(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("queue_size")) * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")) * numBins / NUM_GROUPS);
+					if (numPar1 < 1)
+					{
+						numPar1 = 1;
+					}
+				
+					if (numPar1 > maxPar)
+					{
+						numPar1 = maxPar;
+					}
+					
+					numPar2 = maxPar / numPar1;
 				}
-
-				if (numPar1 == 0)
-				{
-					numPar1 = 1;
-				}
-
-				if (numPar1 > maxPar)
-				{
-					numPar1 = maxPar;
-				}
-
-				numPar2 = maxPar / numPar1;
+				
 
 				ExternalProcessThread thread = new ExternalProcessThread(data, numPar1);
 				int pri = Thread.MAX_PRIORITY - epThreads.size();
@@ -1068,7 +1090,7 @@ public final class MultiOperator implements Operator, Serializable
 				{
 					pri = Thread.NORM_PRIORITY;
 				}
-				thread.setPriority(pri);
+				//thread.setPriority(pri);
 				thread.start();
 				epThreads.add(thread);
 
@@ -1097,7 +1119,22 @@ public final class MultiOperator implements Operator, Serializable
 			lbins = null;
 			int i = inMemBins;
 			ArrayList<ReadDataThread> leftThreads = new ArrayList<ReadDataThread>();
-			numPar1 = -1;
+			//numPar1 = -1;
+			if (numPar1 == -1)
+			{
+				numPar1 = (int)(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("queue_size")) * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")) * numBins / NUM_GROUPS);
+				if (numPar1 < 1)
+				{
+					numPar1 = 1;
+				}
+			
+				if (numPar1 > maxPar)
+				{
+					numPar1 = maxPar;
+				}
+				
+				numPar2 = maxPar / numPar1;
+			}
 
 			while (i < numBins)
 			{
@@ -1107,18 +1144,18 @@ public final class MultiOperator implements Operator, Serializable
 				{
 					pri = Thread.NORM_PRIORITY;
 				}
-				thread4.setPriority(pri);
+				//thread4.setPriority(pri);
 				thread4.start();
 				leftThreads.add(thread4);
 				i++;
 
-				if (numPar1 == -1)
-				{
-					thread4.join();
-					numPar1 = thread4.getNumPar();
-				}
+				//if (numPar1 == -1)
+				//{
+				//	thread4.join();
+				//	numPar1 = thread4.getNumPar();
+				//}
 
-				if (leftThreads.size() >= numPar1)
+				if (leftThreads.size() >= numPar1 || (ResourceManager.criticalMem() && leftThreads.size() > 0))
 				{
 					int k = leftThreads.size() - 1;
 					while (k >= 0)
@@ -1131,8 +1168,17 @@ public final class MultiOperator implements Operator, Serializable
 
 						k--;
 					}
+					
+					if (ResourceManager.criticalMem() && leftThreads.size() > 0)
+					{
+						numPar1 = leftThreads.size();
+						if (numPar1 > 1)
+						{
+							numPar1--;
+						}
+					}
 
-					if (leftThreads.size() >= numPar1)
+					while (leftThreads.size() >= numPar1)
 					{
 						leftThreads.get(0).join();
 						leftThreads.remove(0);
@@ -1680,10 +1726,10 @@ public final class MultiOperator implements Operator, Serializable
 		@Override
 		public void run()
 		{
-			if (pri != -1)
-			{
-				Thread.currentThread().setPriority(pri);
-			}
+			//if (pri != -1)
+			//{
+			//	Thread.currentThread().setPriority(pri);
+			//}
 			try
 			{
 				if (par == 1)
@@ -2641,10 +2687,10 @@ public final class MultiOperator implements Operator, Serializable
 		@Override
 		public void run()
 		{
-			if (pri != -1)
-			{
-				Thread.currentThread().setPriority(pri);
-			}
+			//if (pri != -1)
+			//{
+			//	Thread.currentThread().setPriority(pri);
+			//}
 			try
 			{
 				HashSet<ArrayList<Object>> groups = new HashSet<ArrayList<Object>>();

@@ -318,7 +318,7 @@ public class BufferManager extends HRDBMSThread
 
 	public static void unpin(Page p, long txnum)
 	{
-		int hash = (p.block().hashCode2() & 0x7FFFFFFF) % mLength;
+		int hash = (p.block().fileName().hashCode() & 0x7FFFFFFF) % mLength;
 		managers[hash].unpin(p, txnum);
 	}
 
@@ -397,7 +397,7 @@ public class BufferManager extends HRDBMSThread
 
 	public static void write(Page p, int off, byte[] data)
 	{
-		int hash = (p.block().hashCode2() & 0x7FFFFFFF) % mLength;
+		int hash = (p.block().fileName().hashCode() & 0x7FFFFFFF) % mLength;
 		managers[hash].write(p, off, data);
 	}
 

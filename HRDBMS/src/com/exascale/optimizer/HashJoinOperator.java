@@ -1276,10 +1276,10 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			ArrayList<ArrayList<ArrayList<Object>>> lbins = thread1.getBins();
 
 			ReadDataThread thread3 = new ReadDataThread(channels1.get(0), types1, lbins, inMemBins, 0);
-			thread3.setPriority(Thread.MAX_PRIORITY);
+			//thread3.setPriority(Thread.MAX_PRIORITY);
 			thread3.start();
 			ReadDataThread thread4 = new ReadDataThread(channels1.get(1), types1, lbins, inMemBins, 1);
-			thread4.setPriority(Thread.MAX_PRIORITY-1);
+			//thread4.setPriority(Thread.MAX_PRIORITY-1);
 			thread4.start();
 			ArrayList<ReadDataThread> leftThreads = new ArrayList<ReadDataThread>();
 			leftThreads.add(thread3);
@@ -1305,10 +1305,10 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			ArrayList<ArrayList<ArrayList<Object>>> rbins = thread2.getBins();
 
 			HashDataThread thread5 = new HashDataThread(channels2.get(0), types2, rbins, inMemBins, 0);
-			thread5.setPriority(Thread.MAX_PRIORITY);
+			//thread5.setPriority(Thread.MAX_PRIORITY);
 			thread5.start();
 			HashDataThread thread6 = new HashDataThread(channels2.get(1), types2, rbins, inMemBins, 1);
-			thread6.setPriority(Thread.MAX_PRIORITY-1);
+			//thread6.setPriority(Thread.MAX_PRIORITY-1);
 			thread6.start();
 			ArrayList<HashDataThread> rightThreads = new ArrayList<HashDataThread>();
 			rightThreads.add(thread5);
@@ -1393,7 +1393,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 				{
 					pri = Thread.NORM_PRIORITY;
 				}
-				ept.setPriority(pri);
+				//ept.setPriority(pri);
 				ept.start();
 				epThreads.add(ept);
 
@@ -1411,8 +1411,8 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					{
 						rp = Thread.NORM_PRIORITY;
 					}
-					left2.setPriority(lp);
-					right2.setPriority(rp);
+					//left2.setPriority(lp);
+					//right2.setPriority(rp);
 					i++;
 					left2.start();
 					right2.start();
@@ -2455,10 +2455,10 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		@Override
 		public void run()
 		{
-			if (pri != -1)
-			{
-				Thread.currentThread().setPriority(pri);
-			}
+			//if (pri != -1)
+			//{
+			//	Thread.currentThread().setPriority(pri);
+			//}
 			try
 			{
 				if (par == 1)
@@ -2707,7 +2707,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		{
 			// HRDBMSWorker.logger.debug(HashJoinOperator.this +
 			// ": HashDataThread #" + index + " starting");
-			Thread.currentThread().setPriority(pri);
+			//Thread.currentThread().setPriority(pri);
 			try
 			{
 				if (index < binsInMem)
@@ -3552,7 +3552,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		{
 			// HRDBMSWorker.logger.debug(HashJoinOperator.this +
 			// ": ReadDataThread #" + index + " started");
-			Thread.currentThread().setPriority(pri);
+			//Thread.currentThread().setPriority(pri);
 			if (index < inMemBins)
 			{
 				data = bins.get(index);

@@ -553,7 +553,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 
 					if (row instanceof Exception)
 					{
-						HRDBMSWorker.logger.debug("", (Exception)row);
+						HRDBMSWorker.logger.debug("Exception received from " + sock.getRemoteSocketAddress(), (Exception)row);
 						outBuffer.put(row);
 						return;
 					}

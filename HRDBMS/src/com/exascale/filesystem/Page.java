@@ -17,7 +17,7 @@ import com.exascale.threads.ReadThread;
 
 public class Page
 {
-	public static final int BLOCK_SIZE = 128 * 1024; // match btrfs compression
+	public static final int BLOCK_SIZE = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("page_size"));
 	private static sun.misc.Unsafe unsafe;
 	private static long offset;
 	static

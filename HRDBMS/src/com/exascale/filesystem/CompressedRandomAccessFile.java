@@ -35,25 +35,11 @@ public class CompressedRandomAccessFile
 	{
 		if (suffix == -1)
 		{
-			if (FileManager.SCFC)
-			{
-				return new SparseCompressedFileChannel2(file);
-			}
-			else
-			{
-				return new CompressedFileChannel(file);
-			}
+			return new SparseCompressedFileChannel2(file);
 		}
 		else
 		{
-			if (FileManager.SCFC)
-			{
-				return new SparseCompressedFileChannel2(file, suffix);
-			}
-			else
-			{
-				return new CompressedFileChannel(file, suffix);
-			}
+			return new SparseCompressedFileChannel2(file, suffix);
 		}
 	}
 }

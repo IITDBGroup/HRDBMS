@@ -44,12 +44,13 @@ public class SparseCompressedFileChannel2 extends FileChannel
 	private static LZ4Factory factory;
 	private static long SLOT_SIZE;
 	private static ArrayBlockingQueue<ByteBuffer> cache = new ArrayBlockingQueue<ByteBuffer>(2048);
+	private static ArrayBlockingQueue<ByteBuffer> cache2 = new ArrayBlockingQueue<ByteBuffer>(2048);
 
 	static
 	{
 		factory = LZ4Factory.nativeInstance();
 		LZ4Compressor comp = factory.fastCompressor();
-		int slot = comp.maxCompressedLength(128 * 1024);
+		int slot = comp.maxCompressedLength(Page.BLOCK_SIZE);
 		if (slot % 4096 != 0)
 		{
 			slot += (4096 - (slot % 4096));
@@ -59,11 +60,12 @@ public class SparseCompressedFileChannel2 extends FileChannel
 		SLOT_SIZE = slot;
 
 		int i = 0;
-		while (i < 100)
+		while (i < Runtime.getRuntime().availableProcessors())
 		{
 			try
 			{
 				cache.put(ByteBuffer.allocate((int)SLOT_SIZE));
+				cache2.put(ByteBuffer.allocate((int)SLOT_SIZE * 3));
 			}
 			catch (InterruptedException e)
 			{
@@ -81,24 +83,53 @@ public class SparseCompressedFileChannel2 extends FileChannel
 
 	private static ByteBuffer allocateByteBuffer(int size)
 	{
-		ByteBuffer retval = cache.poll();
-		if (retval != null)
+		if (size == SLOT_SIZE)
 		{
-			if (retval.capacity() >= size)
+			ByteBuffer retval = cache.poll();
+			if (retval != null)
+			{
+				retval.position(0);
+				return retval;
+			}
+
+			retval = cache2.poll();
+			if (retval != null)
 			{
 				retval.position(0);
 				retval.limit(size);
 				return retval;
 			}
+			
+			return ByteBuffer.allocate((int)SLOT_SIZE);
 		}
-
-		return ByteBuffer.allocate(size);
+		else
+		{
+			ByteBuffer retval = cache2.poll();
+			if (retval != null)
+			{
+				if (retval.capacity() >= size)
+				{
+					retval.position(0);
+					retval.limit(size);
+					return retval;
+				}
+			}
+			
+			return ByteBuffer.allocate(size);
+		}
 	}
 
 	private static void deallocateByteBuffer(ByteBuffer bb)
 	{
-		bb.limit(bb.capacity());
-		cache.offer(bb);
+		if (bb.capacity() == SLOT_SIZE)
+		{
+			cache.offer(bb);
+		}
+		else
+		{
+			bb.limit(bb.capacity());
+			cache2.offer(bb);
+		}
 	}
 
 	public SparseCompressedFileChannel2(File file) throws IOException
@@ -166,7 +197,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 			BufferManager.invalidateFile(fn);
 			long size = source.size();
 			long offset = 0;
-			ByteBuffer bb = ByteBuffer.allocate(128 * 1024);
+			ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
 			while (offset < size)
 			{
 				bb.position(0);
@@ -177,7 +208,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 			}
 
 			force(false);
-			FileManager.numBlocks.put(fn, (int)(offset / (128 * 1024)));
+			FileManager.numBlocks.put(fn, (int)(offset / Page.BLOCK_SIZE));
 			FileManager.removeFile(source.fn);
 			BufferManager.invalidateFile(source.fn);
 		}
@@ -232,7 +263,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 		try
 		{
 			boolean closed = false;
-			int page = (int)(arg1 >> 17);
+			int page = (int)(arg1 / Page.BLOCK_SIZE);
 			lock.readLock().lock();
 			try
 			{
@@ -258,7 +289,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 					// byte[] target = new byte[128 * 1024];
 					try
 					{
-						decomp.decompress(bb.array(), 0, arg0.array(), 0, 128 * 1024);
+						decomp.decompress(bb.array(), 0, arg0.array(), 0, Page.BLOCK_SIZE);
 						deallocateByteBuffer(bb);
 					}
 					catch (Exception e)
@@ -302,7 +333,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 		try
 		{
 			boolean closed = false;
-			int page = (int)(arg1 >> 17);
+			int page = (int)(arg1 / Page.BLOCK_SIZE);
 			lock.readLock().lock();
 			try
 			{
@@ -336,7 +367,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 						i = 0;
 						while (i < num)
 						{
-							decomp.decompress(bb.array(), i * (int)SLOT_SIZE, bbs[i].array(), 0, 128 * 1024);
+							decomp.decompress(bb.array(), i * (int)SLOT_SIZE, bbs[i].array(), 0, Page.BLOCK_SIZE);
 							i++;
 						}
 						deallocateByteBuffer(bb);
@@ -392,7 +423,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 		try
 		{
 			boolean closed = false;
-			int page = (int)(arg1 >> 17);
+			int page = (int)(arg1 / Page.BLOCK_SIZE);
 
 			lock.readLock().lock();
 			try
@@ -419,7 +450,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 					// byte[] target = new byte[128 * 1024 * 3]; // 3 pages
 					try
 					{
-						decomp.decompress(bb.array(), 0, arg0.array(), 0, 128 * 1024);
+						decomp.decompress(bb.array(), 0, arg0.array(), 0, Page.BLOCK_SIZE);
 						deallocateByteBuffer(bb);
 					}
 					catch (Exception e)
@@ -467,16 +498,16 @@ public class SparseCompressedFileChannel2 extends FileChannel
 	public int read3(ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3, long arg1) throws IOException
 	{
 		read(bb, arg1);
-		read(bb2, arg1 + 128 * 1024);
-		read(bb3, arg1 + 256 * 1024);
+		read(bb2, arg1 + Page.BLOCK_SIZE);
+		read(bb3, arg1 + Page.BLOCK_SIZE * 2);
 		return bb.capacity();
 	}
 
 	public int read3(ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3, long arg1, ArrayList<Integer> cols, int layoutSize) throws IOException
 	{
 		read(bb, arg1, cols, layoutSize);
-		read(bb2, arg1 + 128 * 1024, cols, layoutSize);
-		read(bb3, arg1 + 256 * 1024, cols, layoutSize);
+		read(bb2, arg1 + Page.BLOCK_SIZE, cols, layoutSize);
+		read(bb3, arg1 + Page.BLOCK_SIZE * 2, cols, layoutSize);
 		return bb.capacity();
 	}
 
@@ -484,7 +515,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 	public long size() throws IOException
 	{
 		lock.readLock().lock();
-		long retval = length * 128L * 1024L;
+		long retval = length * 1L * Page.BLOCK_SIZE;
 		lock.readLock().unlock();
 		return retval;
 	}
@@ -508,7 +539,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 		try
 		{
 			pos = arg0;
-			int desiredPages = (int)(arg0 / (128 * 1024));
+			int desiredPages = (int)(arg0 / Page.BLOCK_SIZE);
 			theFC.truncate(desiredPages * SLOT_SIZE);
 			length = desiredPages;
 		}
@@ -551,13 +582,13 @@ public class SparseCompressedFileChannel2 extends FileChannel
 	public int write(ByteBuffer arg0, long arg1) throws IOException
 	{
 		// multi-page write
-		if (arg0.capacity() > (128 * 1024))
+		if (arg0.capacity() > Page.BLOCK_SIZE)
 		{
 			return multiPageWrite(arg0, arg1);
 		}
 
 		boolean closed = false;
-		int page = (int)(arg1 >> 17);
+		int page = (int)(arg1 / Page.BLOCK_SIZE);
 
 		lock.readLock().lock();
 
@@ -585,11 +616,6 @@ public class SparseCompressedFileChannel2 extends FileChannel
 				// int oldSize = (int)fc.size();
 				byte[] data = comp.compress(arg0.array());
 
-				if (arg0.array().length != 128 * 1024)
-				{
-					throw new IOException("Wrong array length in SCFC write: " + arg0.array().length);
-				}
-
 				ByteBuffer bb = ByteBuffer.wrap(data);
 				FileChannel fc = theFC;
 				fc.write(bb, page * SLOT_SIZE);
@@ -610,10 +636,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 				{
 					LZ4Compressor comp = factory.fastCompressor();
 					byte[] data = comp.compress(arg0.array());
-					if (arg0.array().length != 128 * 1024)
-					{
-						throw new IOException("Wrong array length in SCFC write: " + arg0.array().length);
-					}
+
 					ByteBuffer bb = ByteBuffer.wrap(data);
 					FileChannel fc = theFC;
 					// Process p = Runtime.getRuntime().exec("dd if=/dev/zero
@@ -660,15 +683,15 @@ public class SparseCompressedFileChannel2 extends FileChannel
 	{
 		try
 		{
-			int pages = input.capacity() / (128 * 1024);
+			int pages = input.capacity() / Page.BLOCK_SIZE;
 			int i = 0;
-			byte[] data = new byte[128 * 1024];
+			byte[] data = new byte[Page.BLOCK_SIZE];
 			ByteBuffer bb;
 			while (i < pages)
 			{
-				System.arraycopy(input.array(), i * 128 * 1024, data, 0, 128 * 1024);
+				System.arraycopy(input.array(), i * Page.BLOCK_SIZE, data, 0, Page.BLOCK_SIZE);
 				bb = ByteBuffer.wrap(data);
-				write(bb, offset + i * 128 * 1024);
+				write(bb, offset + i * Page.BLOCK_SIZE);
 				i++;
 			}
 		}

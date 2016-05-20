@@ -21,22 +21,32 @@ public class TempThread extends HRDBMSThread
 	
 	static
 	{
-		FACTOR = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_concurrent_writers_per_temp_disk"));
-		if (HRDBMSWorker.getHParms().getProperty("use_direct_buffers_for_flush").equals("true"))
+		try
 		{
-			int total = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("num_direct"));
-			int i = 0;
-			while (i < total)
+			FACTOR = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_concurrent_writers_per_temp_disk"));
+			if (HRDBMSWorker.getHParms().getProperty("use_direct_buffers_for_flush").equals("true"))
 			{
-				try
+				int total = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("num_direct"));
+				int i = 0;
+				while (i < total)
 				{
-					cache.put(ByteBuffer.allocateDirect(8 * 1024 * 1024));
+					try
+					{
+						cache.put(ByteBuffer.allocateDirect(8 * 1024 * 1024));
+					}
+					catch(Exception e)
+					{
+						throw e;
+					}
+					i++;
+					HRDBMSWorker.logger.debug("Allocate direct " + i);
 				}
-				catch(Exception e)
-				{}
-				i++;
-				HRDBMSWorker.logger.debug("Allocate direct " + i);
 			}
+		}
+		catch(Throwable f)
+		{
+			HRDBMSWorker.logger.debug("", f);
+			System.exit(1);;
 		}
 	}
 	

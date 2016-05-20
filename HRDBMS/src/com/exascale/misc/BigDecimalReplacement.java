@@ -66,7 +66,9 @@ public class BigDecimalReplacement
 		}
 		else if (val.decPos < this.decPos)
 		{
-			rhs = moveDec(val, this);
+			//rhs = moveDec(val, this);
+			val.moveDec(this);
+			rhs = val;
 			resDecPos = this.decPos;
 		}
 		else
@@ -234,7 +236,9 @@ public class BigDecimalReplacement
 		}
 		else if (val.decPos < this.decPos)
 		{
-			rhs = moveDec(val, this);
+			//rhs = moveDec(val, this);
+			val.moveDec(this);
+			rhs = val;
 			resDecPos = this.decPos;
 		}
 		else
@@ -541,58 +545,6 @@ public class BigDecimalReplacement
 
 		data = result;
 		decPos = toMatch.decPos;
-	}
-
-	private BigDecimalReplacement moveDec(BigDecimalReplacement toMove, BigDecimalReplacement toMatch)
-	{
-		int canMove = Long.numberOfLeadingZeros(toMove.data[toMove.data.length - 1]) - 1;
-		int distance = toMatch.decPos - toMove.decPos;
-		// long[] result = null;
-		if (distance <= canMove)
-		{
-			// result = new long[toMove.data.length];
-			int i = toMove.data.length - 1;
-			long mask = 1;
-			mask = (mask << distance) - 1;
-			mask = (mask << (63 - distance));
-			int shift = 63 - distance;
-			while (i >= 0)
-			{
-				toMove.data[i] = (toMove.data[i] << distance);
-				if (i > 0)
-				{
-					toMove.data[i] += ((toMove.data[i - 1] & mask) >> shift);
-				}
-				toMove.data[i] = (toMove.data[i] & 0x7FFFFFFFFFFFFFFFL);
-				i--;
-			}
-
-			toMove.decPos = toMatch.decPos;
-			return toMove;
-		}
-
-		if (distance > 63)
-		{
-			toMove = lowOrderZeroes(toMove, distance);
-			distance = toMatch.decPos - toMove.decPos;
-		}
-
-		long[] result = new long[toMove.data.length + 1];
-
-		int i = 0;
-		long mask = 1;
-		mask = (mask << distance) - 1;
-		mask = (mask << (63 - distance));
-		while (i < toMove.data.length)
-		{
-			// get everything that will shift out
-			long temp = (toMove.data[i] & mask);
-			result[i] += ((toMove.data[i] << distance) & 0x7FFFFFFFFFFFFFFFL);
-			result[i + 1] = (temp >> (63 - distance));
-			i++;
-		}
-
-		return new BigDecimalReplacement(result, toMove.pos, toMatch.decPos);
 	}
 
 	private void negate()

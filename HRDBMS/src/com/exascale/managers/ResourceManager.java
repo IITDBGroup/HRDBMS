@@ -26,7 +26,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import com.exascale.filesystem.CompressedFileChannel;
 import com.exascale.misc.HParms;
 import com.exascale.optimizer.AntiJoinOperator;
 import com.exascale.optimizer.NestedLoopJoinOperator;
@@ -41,7 +40,6 @@ import com.exascale.threads.ThreadPoolThread;
 public final class ResourceManager extends HRDBMSThread
 {
 	private static int SLEEP_TIME;
-	private static int LOW_PERCENT_FREE;
 	private static int CRITICAL_PERCENT_FREE = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("critical_mem_percent"));
 	public static int QUEUE_SIZE;
 	public static int CUDA_SIZE;
@@ -63,7 +61,6 @@ public final class ResourceManager extends HRDBMSThread
 	private static long lastSystemGC = 0;
 	public static volatile boolean panic = false;
 	private static IdentityHashMap<Operator, Operator> ops = new IdentityHashMap<Operator, Operator>();
-	public static int MAX_FCS;
 
 	static
 	{
@@ -75,14 +72,12 @@ public final class ResourceManager extends HRDBMSThread
 			final Field fieldToUpdate = String.class.getDeclaredField("value");
 			// get unsafe offset to this field
 			offset = unsafe.objectFieldOffset(fieldToUpdate);
-			MAX_FCS = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("num_fcs_per_cfc"));
 		}
 		catch (final Exception e)
 		{
 			unsafe = null;
 		}
 		final HParms hparms = HRDBMSWorker.getHParms();
-		LOW_PERCENT_FREE = Integer.parseInt(hparms.getProperty("low_mem_percent")); // 30
 		SLEEP_TIME = Integer.parseInt(hparms.getProperty("rm_sleep_time_ms")); // 10000
 		PROFILE = (hparms.getProperty("profile")).equals("true");
 		DEADLOCK_DETECT = (hparms.getProperty("detect_thread_deadlocks")).equals("true");
@@ -127,80 +122,6 @@ public final class ResourceManager extends HRDBMSThread
 				{
 					new File(dir, file).delete();
 				}
-			}
-		}
-	}
-
-	public static void checkOpenFiles() throws Exception
-	{
-		ProcessBuilder crunchifyProcessBuilder = null;
-
-		crunchifyProcessBuilder = new ProcessBuilder("/bin/bash", "-c", "bc -l  <<< \"`cat /proc/sys/fs/file-nr | cut -f1` - `cat /proc/sys/fs/file-nr | cut -f2`\"");
-		crunchifyProcessBuilder.redirectErrorStream(true);
-		Writer crunchifyWriter = null;
-		try
-		{
-			Process process = crunchifyProcessBuilder.start();
-			if (true)
-			{
-				InputStream crunchifyStream = process.getInputStream();
-
-				if (crunchifyStream != null)
-				{
-					crunchifyWriter = new StringWriter();
-
-					char[] crunchifyBuffer = new char[2048];
-					try
-					{
-						Reader crunchifyReader = new BufferedReader(new InputStreamReader(crunchifyStream, StandardCharsets.UTF_8));
-						int count;
-						while ((count = crunchifyReader.read(crunchifyBuffer)) != -1)
-						{
-							crunchifyWriter.write(crunchifyBuffer, 0, count);
-						}
-					}
-					finally
-					{
-						crunchifyStream.close();
-					}
-					crunchifyWriter.toString();
-					crunchifyStream.close();
-				}
-			}
-		}
-		catch (Exception e)
-		{
-			panic = true;
-		}
-		if (crunchifyWriter == null)
-		{
-			panic = true;
-		}
-
-		if (panic)
-		{
-			panic = false;
-			long maxOpen = Long.parseLong(HRDBMSWorker.getHParms().getProperty("max_open_files"));
-			long openFiles = maxOpen;
-			double factor = 0;
-			closeSomeFiles(openFiles, maxOpen, factor);
-		}
-		else
-		{
-			long openFiles = Integer.parseInt(crunchifyWriter.toString().trim());
-			HRDBMSWorker.logger.debug("Open files - " + openFiles);
-			long maxOpen = Long.parseLong(HRDBMSWorker.getHParms().getProperty("max_open_files"));
-			double factor = 0.75;
-			closeSomeFiles(openFiles, maxOpen, factor);
-		}
-
-		if (!FileManager.SCFC)
-		{
-			for (FileChannel cfc : FileManager.openFiles.values())
-			{
-				((CompressedFileChannel)cfc).accesses.set(0);
-				((CompressedFileChannel)cfc).didRead3.set(false);
-				((CompressedFileChannel)cfc).aoOK.set(true);
 			}
 		}
 	}
@@ -299,98 +220,11 @@ public final class ResourceManager extends HRDBMSThread
 		return unpin;
 	}
 
-	public static boolean lowMem()
-	{
-		return ((Runtime.getRuntime().freeMemory()) * 100.0) / (maxMemory * 1.0) < LOW_PERCENT_FREE;
-	}
-
 	public static void registerOperator(Operator op)
 	{
 		synchronized (ops)
 		{
 			ops.put(op, op);
-		}
-	}
-
-	private static void closeSomeFiles(long numOpen, long maxOpen, double factor)
-	{
-		long totalAccesses = 0;
-		long totalFiles = 0;
-		HashMap<CompressedFileChannel, Long> cfc2Open = new HashMap<CompressedFileChannel, Long>();
-		for (FileChannel cfc : FileManager.openFiles.values())
-		{
-			long get = ((CompressedFileChannel)cfc).accesses.get();
-			if (get == 0)
-			{
-				get = 1;
-			}
-			cfc2Open.put((CompressedFileChannel)cfc, get);
-			totalAccesses += get;
-			totalFiles += ((CompressedFileChannel)cfc).fcs_size.get();
-		}
-
-		long otherFiles = numOpen - totalFiles;
-		HRDBMSWorker.logger.debug("Open files - " + numOpen + "\tOther files - " + otherFiles);
-		if (otherFiles < 0)
-		{
-			otherFiles = 0;
-		}
-		long target = (long)(maxOpen * factor);
-		target -= otherFiles;
-		if (target < 1)
-		{
-			target = 1;
-		}
-
-		for (CompressedFileChannel cfc : cfc2Open.keySet())
-		{
-			Long get = cfc2Open.get(cfc);
-			double pct = get * 1.0 / totalAccesses;
-			int num = (int)(pct * target);
-			if (num == 0)
-			{
-				num = 1;
-			}
-
-			int realNum = num;
-
-			if (num > MAX_FCS)
-			{
-				num = MAX_FCS;
-			}
-
-			cfc.MAX_FCS = num;
-			int current = cfc.fcs_size.get();
-			if (current > num && numOpen > maxOpen * factor)
-			{
-				// HRDBMSWorker.logger.debug("Current = " + current +
-				// "\tTarget = " + num);
-				if (cfc.trimInProgress.compareAndSet(false, true))
-				{
-					cfc.new TrimFCSThread().start();
-					// HRDBMSWorker.logger.debug("Starting trim thread");
-				}
-				else
-				{
-					// HRDBMSWorker.logger.debug("Unable to start trim thread");
-				}
-			}
-			else if (cfc.aoOK.get() && current + MAX_FCS < realNum && cfc.didRead3.get() && !cfc.fn.endsWith("indx"))
-			{
-				if (cfc.oaInProgress.compareAndSet(false, true))
-				{
-					cfc.new OpenAheadThread().start();
-					numOpen += (MAX_FCS + 500);
-				}
-			}
-			else if (current + MAX_FCS < realNum && cfc.aoBlocks.size() > 0)
-			{
-				if (cfc.oaInProgress.compareAndSet(false, true))
-				{
-					cfc.new OpenAheadThread(true).start();
-					numOpen += (MAX_FCS + 500);
-				}
-			}
 		}
 	}
 
@@ -601,17 +435,6 @@ public final class ResourceManager extends HRDBMSThread
 				//
 				HRDBMSWorker.logger.debug(((Runtime.getRuntime().freeMemory()) * 100.0) / (maxMemory * 1.0) + "% free - skipped " + TableScanOperator.skippedPages.get() + " pages");
 				
-				if (!FileManager.SCFC)
-				{
-					try
-					{
-						checkOpenFiles();
-					}
-					catch (Exception e)
-					{
-						HRDBMSWorker.logger.debug("", e);
-					}
-				}
 				// for (SubBufferManager sbm : BufferManager.managers)
 				// {
 				// HRDBMSWorker.logger.debug("Owner is " +

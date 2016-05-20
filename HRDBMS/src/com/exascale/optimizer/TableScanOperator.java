@@ -1964,7 +1964,15 @@ public final class TableScanOperator implements Operator, Serializable
 							{
 								if (!getRID)
 								{
-									row.add(r.get(rowToIterator.get(j)).getValue());
+									try
+									{
+										row.add(r.get(rowToIterator.get(j)).getValue());
+									}
+									catch(NullPointerException e)
+									{
+										HRDBMSWorker.logger.debug("Row is " + r);
+										throw e;
+									}
 								}
 								else
 								{

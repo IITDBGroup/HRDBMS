@@ -108,8 +108,6 @@ public class HRDBMSWorker
 			logger.error("Could not load HParms", e);
 			System.exit(1);
 		}
-		
-		TempThread.initialize();
 
 		try
 		{
@@ -182,6 +180,7 @@ public class HRDBMSWorker
 			i++;
 		}
 
+		TempThread.initialize();
 		hibernate();
 	}
 

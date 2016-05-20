@@ -46,7 +46,6 @@ public class SubBufferManager
 
 		pageLookup = new HashMap<Block, Integer>(numAvailable);
 		lock = new ReentrantLock();
-		new TrimBPThread().start();
 	}
 
 	public boolean cleanPage(int i) throws Exception
@@ -961,12 +960,17 @@ public class SubBufferManager
 						boolean ok = true;
 						while (i < num)
 						{
-							int index = findExistingPage(new Block(fn, page++));
+							Block block = new Block(fn, page++);
+							int index = findExistingPage(block);
 							if (index != -1)
 							{
 								ok = false;
 								break;
 							}
+							//else
+							//{
+							//	HRDBMSWorker.logger.debug("Couldn't find " + block + " in " + pageLookup); //DEBUG
+							//}
 							
 							i++;
 						}
@@ -1676,6 +1680,7 @@ public class SubBufferManager
 						}
 
 						pageLookup.put(b, index);
+						//HRDBMSWorker.logger.debug("Page lookup has " + pageLookup); //DEBUG
 						final long lsn = LogManager.getLSN();
 						bp[index].pin(lsn, txnum);
 						myBuffers.multiPut(txnum, bp[index]);
@@ -2458,26 +2463,6 @@ public class SubBufferManager
 			HRDBMSWorker.logger.debug("", e);
 			lock.unlock();
 			throw e;
-		}
-	}
-
-	public class TrimBPThread extends HRDBMSThread
-	{
-		@Override
-		public void run()
-		{
-			int sleep = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("bp_trim_sleep_ms"));
-			while (true)
-			{
-				try
-				{
-					Thread.sleep(sleep);
-				}
-				catch (Exception e)
-				{
-				}
-				trimBP();
-			}
 		}
 	}
 

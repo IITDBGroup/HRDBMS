@@ -5,7 +5,6 @@ import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 import com.exascale.filesystem.Block;
-import com.exascale.filesystem.CompressedFileChannel;
 import com.exascale.filesystem.Page;
 import com.exascale.filesystem.SparseCompressedFileChannel2;
 import com.exascale.managers.FileManager;
@@ -118,12 +117,12 @@ public class Read3Thread extends HRDBMSThread
 				return;
 			}
 			
-			if (rank > 0 && rankSize > 1)
-			{
-				double pos = 1.0 - (((rank-1) * 1.0) / ((rankSize-1) * 1.0));
-				int pri = (int)(pos * (Thread.MAX_PRIORITY - Thread.NORM_PRIORITY) + Thread.NORM_PRIORITY);
-				Thread.currentThread().setPriority(pri);
-			}
+			//if (rank > 0 && rankSize > 1)
+			//{
+			//	double pos = 1.0 - (((rank-1) * 1.0) / ((rankSize-1) * 1.0));
+			//	int pri = (int)(pos * (Thread.MAX_PRIORITY - Thread.NORM_PRIORITY) + Thread.NORM_PRIORITY);
+			//	Thread.currentThread().setPriority(pri);
+			//}
 
 			bb.clear();
 			bb2.clear();
@@ -143,25 +142,11 @@ public class Read3Thread extends HRDBMSThread
 
 			if (cols == null)
 			{
-				if (FileManager.SCFC)
-				{
-					((SparseCompressedFileChannel2)fc).read3(bb, bb2, bb3, ((long)b.number()) * bb.capacity());
-				}
-				else
-				{
-					((CompressedFileChannel)fc).read3(bb, bb2, bb3, ((long)b.number()) * bb.capacity());
-				}
+				((SparseCompressedFileChannel2)fc).read3(bb, bb2, bb3, ((long)b.number()) * bb.capacity());
 			}
 			else
 			{
-				if (FileManager.SCFC)
-				{
-					((SparseCompressedFileChannel2)fc).read3(bb, bb2, bb3, ((long)b.number()) * bb.capacity(), cols, layoutSize);
-				}
-				else
-				{
-					((CompressedFileChannel)fc).read3(bb, bb2, bb3, ((long)b.number()) * bb.capacity(), cols, layoutSize);
-				}
+				((SparseCompressedFileChannel2)fc).read3(bb, bb2, bb3, ((long)b.number()) * bb.capacity(), cols, layoutSize);
 			}
 			p.setReady();
 			p2.setReady();

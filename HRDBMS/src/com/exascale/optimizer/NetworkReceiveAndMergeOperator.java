@@ -29,6 +29,7 @@ import com.exascale.threads.ThreadPoolThread;
 public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator implements Operator, Serializable
 {
 	private static Charset cs = StandardCharsets.UTF_8;
+	private static int SQUEUE_SIZE;
 
 	private static long offset;
 
@@ -43,6 +44,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 			final Field fieldToUpdate = String.class.getDeclaredField("value");
 			// get unsafe offset to this field
 			offset = unsafe.objectFieldOffset(fieldToUpdate);
+			SQUEUE_SIZE = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("nram_spsc_queue_size"));
 		}
 		catch (Exception e)
 		{
@@ -281,9 +283,9 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 	public class ALOO
 	{
 		private final ArrayList<Object> alo;
-		private final Operator op;
+		private final int op;
 
-		public ALOO(ArrayList<Object> alo, Operator op)
+		public ALOO(ArrayList<Object> alo, int op)
 		{
 			this.alo = alo;
 			this.op = op;
@@ -300,7 +302,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 			return alo;
 		}
 
-		public Operator getOp()
+		public int getOp()
 		{
 			return op;
 		}
@@ -449,24 +451,27 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 		{
 			try
 			{
-				HashMap<Operator, ReadThread2> map = new HashMap<Operator, ReadThread2>();
+				//HashMap<Integer, ReadThread2> map = new HashMap<Integer, ReadThread2>();
+				ReadThread2[] map = new ReadThread2[children.size()];
+				int i = 0;
 				for (Operator op : children)
 				{
 					ReadThread2 thread = new ReadThread2(op);
 					thread.start();
-					map.put(op, thread);
+					map[i++] = thread;
 				}
 
+				i = 0;
 				for (final Operator op : children)
 				{
 					try
 					{
-						Object o = map.get(op).q.take();
+						Object o = map[i].q.take();
 
 						if (o instanceof ArrayList)
 						{
 							final ArrayList<Object> row = (ArrayList<Object>)o;
-							rows.insert(new ALOO(row, op));
+							rows.insert(new ALOO(row, i));
 						}
 						else if (o instanceof Exception)
 						{
@@ -477,6 +482,8 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 							HRDBMSWorker.logger.debug("Unknown object in NRAM: " + o);
 							throw new Exception("Unknown object in NRAM: " + o);
 						}
+						
+						i++;
 					}
 					catch (Exception e)
 					{
@@ -521,12 +528,13 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 					}
 					try
 					{
-						Object o = map.get(minEntry.getOp()).q.take();
+						int op = minEntry.getOp();
+						Object o = map[op].q.take();
 
 						if (o instanceof ArrayList)
 						{
 							final ArrayList<Object> row = (ArrayList<Object>)o;
-							rows.insert(new ALOO(row, minEntry.getOp()));
+							rows.insert(new ALOO(row, op));
 						}
 						else if (o instanceof Exception)
 						{
@@ -552,10 +560,17 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 					}
 				}
 			}
-			catch (Exception g)
+			catch (Throwable g)
 			{
 				HRDBMSWorker.logger.debug("", g);
-				outBuffer.put(g);
+				if (g instanceof Exception)
+				{
+					outBuffer.put(g);
+				}
+				else
+				{
+					outBuffer.put(new Exception(g));
+				}
 			}
 		}
 	}
@@ -563,7 +578,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 	private class ReadThread2 extends HRDBMSThread
 	{
 		private final Operator op;
-		public SPSCQueue q = new SPSCQueue(ResourceManager.QUEUE_SIZE);
+		public SPSCQueue q = new SPSCQueue(SQUEUE_SIZE);
 
 		public ReadThread2(Operator op)
 		{

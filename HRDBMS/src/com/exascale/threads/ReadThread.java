@@ -5,7 +5,6 @@ import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 import com.exascale.filesystem.Block;
-import com.exascale.filesystem.CompressedFileChannel;
 import com.exascale.filesystem.Page;
 import com.exascale.filesystem.SparseCompressedFileChannel2;
 import com.exascale.managers.FileManager;
@@ -115,20 +114,20 @@ public class ReadThread extends HRDBMSThread
 			
 			if (consecutive)
 			{
-				if (rank > 0 && rankSize > 1)
-				{
-					try
-					{
-						double pos = 1.0 - (((rank-1) * 1.0) / ((rankSize-1) * 1.0));
-						int pri = (int)(pos * (Thread.MAX_PRIORITY - Thread.NORM_PRIORITY) + Thread.NORM_PRIORITY);
-						Thread.currentThread().setPriority(pri);
-					}
-					catch(Exception f)
-					{
-						HRDBMSWorker.logger.debug("Error setting priority: Rank is " + rank + " RankSize is " + rankSize);
-						throw f;
-					}
-				}
+				//if (rank > 0 && rankSize > 1)
+				//{
+				//	try
+				//	{
+				//		double pos = 1.0 - (((rank-1) * 1.0) / ((rankSize-1) * 1.0));
+				//		int pri = (int)(pos * (Thread.MAX_PRIORITY - Thread.NORM_PRIORITY) + Thread.NORM_PRIORITY);
+				//		Thread.currentThread().setPriority(pri);
+				//	}
+				//	catch(Exception f)
+				//	{
+				//		HRDBMSWorker.logger.debug("Error setting priority: Rank is " + rank + " RankSize is " + rankSize);
+				//		throw f;
+				//	}
+				//}
 				
 				b = p.block();
 				bb = p.buffer();
@@ -155,20 +154,20 @@ public class ReadThread extends HRDBMSThread
 				return;
 			}
 			
-			if (rank > 0 && rankSize > 1)
-			{
-				try
-				{
-					double pos = 1.0 - (((rank-1) * 1.0) / ((rankSize-1) * 1.0));
-					int pri = (int)(pos * (Thread.MAX_PRIORITY - Thread.NORM_PRIORITY) + Thread.NORM_PRIORITY);
-					Thread.currentThread().setPriority(pri);
-				}
-				catch(Exception f)
-				{
-					HRDBMSWorker.logger.debug("Error setting priority: Rank is " + rank + " RankSize is " + rankSize);
-					throw f;
-				}
-			}
+			//if (rank > 0 && rankSize > 1)
+			//{
+			//	try
+			//	{
+			//		double pos = 1.0 - (((rank-1) * 1.0) / ((rankSize-1) * 1.0));
+			//		int pri = (int)(pos * (Thread.MAX_PRIORITY - Thread.NORM_PRIORITY) + Thread.NORM_PRIORITY);
+			//		Thread.currentThread().setPriority(pri);
+			//	}
+			//	catch(Exception f)
+			//	{
+			//		HRDBMSWorker.logger.debug("Error setting priority: Rank is " + rank + " RankSize is " + rankSize);
+			//		throw f;
+			//	}
+			//}
 			
 			bb.clear();
 			bb.position(0);
@@ -184,14 +183,7 @@ public class ReadThread extends HRDBMSThread
 
 			if (cols != null)
 			{
-				if (FileManager.SCFC)
-				{
-					((SparseCompressedFileChannel2)fc).read(bb, ((long)b.number()) * bb.capacity(), cols, layoutSize);
-				}
-				else
-				{
-					((CompressedFileChannel)fc).read(bb, ((long)b.number()) * bb.capacity(), cols, layoutSize);
-				}
+				((SparseCompressedFileChannel2)fc).read(bb, ((long)b.number()) * bb.capacity(), cols, layoutSize);
 			}
 			else
 			{
