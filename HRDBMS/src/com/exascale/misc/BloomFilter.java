@@ -32,7 +32,7 @@ public class BloomFilter
 		int x = bytePos >>> 23;
 		int y = bytePos & 0x7fffff;
 		byte val = (byte)(1 << bitPos);
-		synchronized(bits)
+		synchronized(bits[x])
 		{
 			bits[x][y] |= val;
 		}
