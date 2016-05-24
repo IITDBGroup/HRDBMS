@@ -1982,9 +1982,9 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 
 	private List<ArrayList<Object>> getCandidates(List<byte[]> bCandidates, byte[] types) throws Exception
 	{
-		ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>(bCandidates.size());
-		int z = 0;
 		final int limit = bCandidates.size();
+		ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>(limit);
+		int z = 0;
 		while (z < limit)
 		{
 			byte[] b = bCandidates.get(z++);
@@ -2004,10 +2004,10 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 
 	private final ArrayList<ArrayList<Object>> getCandidates(long hash, byte[] types) throws Exception
 	{
-		final ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>();
 		List<byte[]> list = buckets.get(hash);
-		int z = 0;
 		final int limit = list.size();
+		final ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>(limit);
+		int z = 0;
 		while (z < limit)
 		{
 			retval.add((ArrayList<Object>)fromBytes2(list.get(z++), types));

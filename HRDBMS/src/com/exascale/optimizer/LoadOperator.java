@@ -30,6 +30,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.Job;
@@ -67,7 +68,7 @@ public final class LoadOperator implements Operator, Serializable
 	private transient Plan plan;
 	private final String schema;
 	private final String table;
-	private final AtomicInteger num = new AtomicInteger(0);
+	private final AtomicLong num = new AtomicLong(0);
 	private volatile boolean done = false;
 	private final LOMultiHashMap map = new LOMultiHashMap<Long, ArrayList<Object>>();
 	private Transaction tx;
@@ -604,7 +605,7 @@ public final class LoadOperator implements Operator, Serializable
 			LockSupport.parkNanos(500);
 		}
 
-		if (num.get() == Integer.MIN_VALUE)
+		if (num.get() == Long.MIN_VALUE)
 		{
 			throw new Exception("An error occured during a load operation");
 		}
@@ -614,9 +615,9 @@ public final class LoadOperator implements Operator, Serializable
 			return new DataEndMarker();
 		}
 
-		int retval = num.get();
+		long retval = num.get();
 		num.set(-1);
-		return retval;
+		return new Integer((int)retval);
 	}
 
 	@Override
@@ -872,7 +873,7 @@ public final class LoadOperator implements Operator, Serializable
 
 		if (!allOK)
 		{
-			num.set(Integer.MIN_VALUE);
+			num.set(Long.MIN_VALUE);
 		}
 
 		for (String index : indexNames)
@@ -908,7 +909,7 @@ public final class LoadOperator implements Operator, Serializable
 				HRDBMSWorker.logger.debug("Sending DELLDMD");
 				tree = makeTree(workerNodes);
 				sendRemoveLDMD(tree, key, tx);
-				num.set(Integer.MIN_VALUE);
+				num.set(Long.MIN_VALUE);
 				done = true;
 				return;
 			}
@@ -966,12 +967,12 @@ public final class LoadOperator implements Operator, Serializable
 				if (!allOK)
 				{
 					HRDBMSWorker.logger.debug("MR returned an error");
-					num.set(Integer.MIN_VALUE);
+					num.set(Long.MIN_VALUE);
 				}
 				else
 				{
 					HRDBMSWorker.logger.debug("MR was successful");
-					num.set((int)job.getCounters().findCounter("org.apache.hadoop.mapred.Task$Counter", "MAP_INPUT_RECORDS").getValue());
+					num.set(job.getCounters().findCounter("org.apache.hadoop.mapred.Task$Counter", "MAP_INPUT_RECORDS").getValue());
 					ArrayList<String> indexNames = new ArrayList<String>();
 					for (String s : indexes)
 					{
@@ -983,7 +984,7 @@ public final class LoadOperator implements Operator, Serializable
 					{
 						meta.populateIndex(schema, index, table, tx, cols2Pos);
 					}
-					if (num.get() == Integer.MIN_VALUE)
+					if (num.get() == Long.MIN_VALUE)
 					{
 						num.getAndIncrement();
 					}
@@ -996,7 +997,7 @@ public final class LoadOperator implements Operator, Serializable
 				HRDBMSWorker.logger.debug("An exception occurred while building and submitting the MR job", f);
 				tree = makeTree(workerNodes);
 				sendRemoveLDMD(tree, key, tx);
-				num.set(Integer.MIN_VALUE);
+				num.set(Long.MIN_VALUE);
 				done = true;
 				return;
 			}
@@ -1004,7 +1005,7 @@ public final class LoadOperator implements Operator, Serializable
 		catch (Exception e)
 		{
 			HRDBMSWorker.logger.debug("An exception occurred prior to building the MR job", e);
-			num.set(Integer.MIN_VALUE);
+			num.set(Long.MIN_VALUE);
 			done = true;
 		}
 	}
@@ -1524,7 +1525,7 @@ public final class LoadOperator implements Operator, Serializable
 		private final HashMap<Integer, Integer> pos2Length;
 		private final ArrayList<String> indexes;
 		private boolean ok = true;
-		private volatile int num = 0;
+		private volatile long num = 0;
 		private final HashMap<String, Integer> cols2Pos;
 		PartitionMetaData spmd;
 		private final ArrayList<ArrayList<String>> keys;
@@ -1549,7 +1550,7 @@ public final class LoadOperator implements Operator, Serializable
 			this.type = type;
 		}
 
-		public int getNum()
+		public long getNum()
 		{
 			return num;
 		}
