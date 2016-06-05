@@ -3,7 +3,9 @@ package com.exascale.optimizer;
 import java.io.BufferedOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.PrintWriter;
 import java.io.Serializable;
+import java.io.StringWriter;
 import java.lang.reflect.Field;
 import java.net.Socket;
 import java.nio.ByteBuffer;
@@ -29,6 +31,7 @@ public class NetworkSendOperator implements Operator, Serializable
 	protected static Charset cs = StandardCharsets.UTF_8;
 	private static sun.misc.Unsafe unsafe;
 	private static long offset;
+
 	static
 	{
 		try
@@ -476,7 +479,10 @@ public class NetworkSendOperator implements Operator, Serializable
 				HRDBMSWorker.logger.debug("", (Exception)v);
 				if (e.getMessage() == null)
 				{
-					data = "No message".getBytes(StandardCharsets.UTF_8);
+					StringWriter sw = new StringWriter();
+					PrintWriter pw = new PrintWriter(sw);
+					e.printStackTrace(pw);
+					data = sw.toString().getBytes(StandardCharsets.UTF_8);
 				}
 				else
 				{

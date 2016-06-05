@@ -50,11 +50,6 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	public transient Operator dynamicOp;
 	private int leftChildCard = 16;
 	private long txnum;
-	
-	public void setTXNum(long txnum)
-	{
-		this.txnum = txnum;
-	}
 
 	public NestedLoopJoinOperator(ArrayList<Filter> filters, MetaData meta)
 	{
@@ -465,6 +460,11 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		rightChildCard = card;
 		leftChildCard = card2;
 		return true;
+	}
+
+	public void setTXNum(long txnum)
+	{
+		this.txnum = txnum;
 	}
 
 	public ArrayList<String> sortKeys()

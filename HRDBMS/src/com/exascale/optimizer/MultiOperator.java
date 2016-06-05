@@ -957,18 +957,8 @@ public final class MultiOperator implements Operator, Serializable
 		try
 		{
 			//int numBins = 257;
-			int numBins = this.childCard / 3000000;
-			if (numBins < 257)
-			{
-				if (this.childCard / 250000 < 257)
-				{
-					numBins = this.childCard / 250000;
-				}
-				else
-				{
-					numBins = 257;
-				}
-			}
+			int numBins = this.childCard / Integer.parseInt(HRDBMSWorker.getHParms().getProperty("mo_bin_size"));
+			//numBins *= groupCols.size();
 			
 			if (numBins < 2)
 			{
@@ -1052,37 +1042,22 @@ public final class MultiOperator implements Operator, Serializable
 			while (z < limit)
 			{
 				ArrayList<ArrayList<Object>> data = lbins.get(z++);
-				//if (numPar1 == -1)
-				//{
-				//	//numPar1 = data.size() / 250000;
-				//}
-
-				//if (numPar1 == 0)
-				//{
-				//	numPar1 = 1;
-				//}
-
-				//if (numPar1 > maxPar)
-				//{
-				//	numPar1 = maxPar;
-				//}
-
 				if (numPar1 == -1)
 				{
-					numPar1 = (int)(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("queue_size")) * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")) * numBins / NUM_GROUPS);
-					if (numPar1 < 1)
-					{
-						numPar1 = 1;
-					}
-				
-					if (numPar1 > maxPar)
-					{
-						numPar1 = maxPar;
-					}
-					
-					numPar2 = maxPar / numPar1;
+					numPar1 = data.size() / 250000;
 				}
-				
+
+				if (numPar1 == 0)
+				{
+					numPar1 = 1;
+				}
+
+				if (numPar1 > maxPar)
+				{
+					numPar1 = maxPar;
+				}
+
+				numPar2 = maxPar / numPar1;
 
 				ExternalProcessThread thread = new ExternalProcessThread(data, numPar1);
 				int pri = Thread.MAX_PRIORITY - epThreads.size();
@@ -1090,7 +1065,7 @@ public final class MultiOperator implements Operator, Serializable
 				{
 					pri = Thread.NORM_PRIORITY;
 				}
-				//thread.setPriority(pri);
+				thread.setPriority(pri);
 				thread.start();
 				epThreads.add(thread);
 
@@ -1119,22 +1094,7 @@ public final class MultiOperator implements Operator, Serializable
 			lbins = null;
 			int i = inMemBins;
 			ArrayList<ReadDataThread> leftThreads = new ArrayList<ReadDataThread>();
-			//numPar1 = -1;
-			if (numPar1 == -1)
-			{
-				numPar1 = (int)(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("queue_size")) * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")) * numBins / NUM_GROUPS);
-				if (numPar1 < 1)
-				{
-					numPar1 = 1;
-				}
-			
-				if (numPar1 > maxPar)
-				{
-					numPar1 = maxPar;
-				}
-				
-				numPar2 = maxPar / numPar1;
-			}
+			numPar1 = -1;
 
 			while (i < numBins)
 			{
@@ -1144,18 +1104,18 @@ public final class MultiOperator implements Operator, Serializable
 				{
 					pri = Thread.NORM_PRIORITY;
 				}
-				//thread4.setPriority(pri);
+				thread4.setPriority(pri);
 				thread4.start();
 				leftThreads.add(thread4);
 				i++;
 
-				//if (numPar1 == -1)
-				//{
-				//	thread4.join();
-				//	numPar1 = thread4.getNumPar();
-				//}
+				if (numPar1 == -1)
+				{
+					thread4.join();
+					numPar1 = thread4.getNumPar();
+				}
 
-				if (leftThreads.size() >= numPar1 || (ResourceManager.criticalMem() && leftThreads.size() > 0))
+				if (leftThreads.size() >= numPar1)
 				{
 					int k = leftThreads.size() - 1;
 					while (k >= 0)
@@ -1168,17 +1128,8 @@ public final class MultiOperator implements Operator, Serializable
 
 						k--;
 					}
-					
-					if (ResourceManager.criticalMem() && leftThreads.size() > 0)
-					{
-						numPar1 = leftThreads.size();
-						if (numPar1 > 1)
-						{
-							numPar1--;
-						}
-					}
 
-					while (leftThreads.size() >= numPar1)
+					if (leftThreads.size() >= numPar1)
 					{
 						leftThreads.get(0).join();
 						leftThreads.remove(0);
@@ -1726,10 +1677,10 @@ public final class MultiOperator implements Operator, Serializable
 		@Override
 		public void run()
 		{
-			//if (pri != -1)
-			//{
-			//	Thread.currentThread().setPriority(pri);
-			//}
+			if (pri != -1)
+			{
+				Thread.currentThread().setPriority(pri);
+			}
 			try
 			{
 				if (par == 1)
@@ -2687,16 +2638,15 @@ public final class MultiOperator implements Operator, Serializable
 		@Override
 		public void run()
 		{
-			//if (pri != -1)
-			//{
-			//	Thread.currentThread().setPriority(pri);
-			//}
+			if (pri != -1)
+			{
+				Thread.currentThread().setPriority(pri);
+			}
 			try
 			{
-				HashSet<ArrayList<Object>> groups = new HashSet<ArrayList<Object>>();
+				ConcurrentHashMap<ArrayList<Object>, Integer> groups = new ConcurrentHashMap<ArrayList<Object>, Integer>();
 				AggregateResultThread[] threads = new AggregateResultThread[ops.size()];
-				ArrayList<Integer> groupPos = null;
-				groupPos = new ArrayList<Integer>(groupCols.size());
+				ArrayList<Integer> groupPos = new ArrayList<Integer>(groupCols.size());
 				for (final String groupCol : groupCols)
 				{
 					groupPos.add(child.getCols2Pos().get(groupCol));
@@ -2710,6 +2660,7 @@ public final class MultiOperator implements Operator, Serializable
 				}
 
 				fc.position(0);
+				ConcurrentHashMap<byte[], Integer> bas = new ConcurrentHashMap<byte[], Integer>();
 				ByteBuffer bb1 = ByteBuffer.allocate(4);
 				while (true)
 				{
@@ -2723,33 +2674,13 @@ public final class MultiOperator implements Operator, Serializable
 					num++;
 					ByteBuffer bb = ByteBuffer.allocate(length);
 					fc.read(bb);
-					ArrayList<Object> row = (ArrayList<Object>)fromBytes(bb.array(), types);
-					final ArrayList<Object> groupKeys = new ArrayList<Object>();
-
-					try
-					{
-						for (final int pos : groupPos)
-						{
-							groupKeys.add(row.get(pos));
-						}
-					}
-					catch (Exception e)
-					{
-						HRDBMSWorker.logger.debug("Trying to group on " + groupCols);
-						HRDBMSWorker.logger.debug("Child.getCols2Pos() = " + child.getCols2Pos());
-						throw e;
-					}
-
-					groups.add(groupKeys);
-					// groups.add(groupKeys);
-
-					for (final AggregateResultThread thread : threads)
-					{
-						thread.put(row, groupKeys);
-					}
+					bas.put(bb.array(), Integer.valueOf(1));
 				}
+				
+				bas.forEachKey(20000, (k)->process(k, groups, groupPos, threads));
+				//bas = null;
 
-				for (final Object k : groups)
+				for (final Object k : groups.keySet())
 				// for (Object k : groups.getArray())
 				{
 					final ArrayList<Object> keys = (ArrayList<Object>)k;
@@ -2766,16 +2697,53 @@ public final class MultiOperator implements Operator, Serializable
 
 					readBuffer.put(row);
 				}
+				
+				//groups.clear();
 
-				for (final AggregateResultThread thread : threads)
-				{
-					thread.close();
-				}
+				//for (final AggregateResultThread thread : threads)
+				//{
+				//	thread.close();
+				//}
 			}
 			catch (Exception e)
 			{
 				ok = false;
 				this.e = e;
+			}
+		}
+		
+		private void process(byte[] k, ConcurrentHashMap<ArrayList<Object>, Integer> groups, ArrayList<Integer> groupPos, AggregateResultThread[] threads)
+		{
+			try
+			{
+				ArrayList<Object> row = (ArrayList<Object>)fromBytes(k, types);
+				final ArrayList<Object> groupKeys = new ArrayList<Object>();
+
+				try
+				{
+					for (final int pos : groupPos)
+					{
+						groupKeys.add(row.get(pos));
+					}
+				}
+				catch (Exception e)
+				{
+					HRDBMSWorker.logger.debug("Trying to group on " + groupCols);
+					HRDBMSWorker.logger.debug("Child.getCols2Pos() = " + child.getCols2Pos());
+					throw e;
+				}
+
+				groups.put(groupKeys, Integer.valueOf(1));
+				// groups.add(groupKeys);
+
+				for (final AggregateResultThread thread : threads)
+				{
+					thread.put(row, groupKeys);
+				}
+			}
+			catch (Exception e)
+			{
+				throw new RuntimeException(e);
 			}
 		}
 	}

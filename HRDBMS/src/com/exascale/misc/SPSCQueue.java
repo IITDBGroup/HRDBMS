@@ -1,8 +1,5 @@
 package com.exascale.misc;
 
-import java.util.concurrent.locks.LockSupport;
-import com.exascale.managers.HRDBMSWorker;
-
 public class SPSCQueue
 {
 	private final Object[] q;

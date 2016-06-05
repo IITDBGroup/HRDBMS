@@ -17,6 +17,7 @@ import com.exascale.misc.Utils;
 public class Filter implements Cloneable, Serializable
 {
 	private static sun.misc.Unsafe unsafe;
+
 	static
 	{
 		try

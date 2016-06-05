@@ -25,7 +25,7 @@ public class BufferedFileChannel extends FileChannel
 		intermediaryBufferPosition = 0;
 		intermediaryBufferSize = 0;
 	}
-	
+
 	public BufferedFileChannel(FileChannel source, int size) throws IOException
 	{
 		this.source = source;
@@ -97,15 +97,21 @@ public class BufferedFileChannel extends FileChannel
 				}
 			}
 		}
-		int retval = ( read == 0 && dst.limit() > 0 ? -1 : read);
+		int retval = (read == 0 && dst.limit() > 0 ? -1 : read);
 		if (retval == -1)
 		{
 			intermediaryBuffer = null;
 		}
-		
+
 		return retval;
 	}
-	
+
+	@Override
+	public int read(ByteBuffer dst, long position) throws IOException
+	{
+		throw new UnsupportedOperationException();
+	}
+
 	public int read(ByteBuffer dst, Object lock) throws IOException
 	{
 		int read = 0;
@@ -120,19 +126,13 @@ public class BufferedFileChannel extends FileChannel
 				}
 			}
 		}
-		int retval = ( read == 0 && dst.limit() > 0 ? -1 : read);
+		int retval = (read == 0 && dst.limit() > 0 ? -1 : read);
 		if (retval == -1)
 		{
 			intermediaryBuffer = null;
 		}
-		
-		return retval;
-	}
 
-	@Override
-	public int read(ByteBuffer dst, long position) throws IOException
-	{
-		throw new UnsupportedOperationException();
+		return retval;
 	}
 
 	@Override
@@ -197,11 +197,11 @@ public class BufferedFileChannel extends FileChannel
 		intermediaryBufferSize = result == -1 ? 0 : result;
 		return result;
 	}
-	
+
 	private int fillUpIntermediaryBuffer(Object lock) throws IOException
 	{
 		int result = 0;
-		synchronized(lock)
+		synchronized (lock)
 		{
 			result = source.read(ByteBuffer.wrap(intermediaryBuffer));
 		}

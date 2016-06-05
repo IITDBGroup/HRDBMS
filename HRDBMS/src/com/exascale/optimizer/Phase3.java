@@ -15,7 +15,14 @@ public final class Phase3
 {
 	protected static final int MAX_INCOMING_CONNECTIONS = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes")); // 100
 	private static final int MAX_LOCAL_NO_HASH_PRODUCT = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_local_no_hash_product")); // 1000000
-	private static final int MAX_LOCAL_LEFT_HASH = (int)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")));
+	// private static final int MAX_LOCAL_LEFT_HASH =
+	// (int)(ResourceManager.QUEUE_SIZE *
+	// Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")));
+	private static final int MAX_LOCAL_LEFT_HASH = 2; // when stats are way off,
+														// you get 1 per node,
+														// so set this to 2 to
+														// effectively turn this
+														// off
 	private static final int MAX_LOCAL_SORT = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_local_sort")); // 1000000
 	private static Random random = new Random(System.currentTimeMillis());
 	private static final long MAX_GB = (long)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("sort_gb_factor")));
@@ -117,7 +124,7 @@ public final class Phase3
 			{
 				retval = card(op.children().get(0));
 			}
-			
+
 			if (retval < card(op.children().get(1)))
 			{
 				retval = card(op.children().get(1));
@@ -181,7 +188,7 @@ public final class Phase3
 			{
 				retval = card(op.children().get(0));
 			}
-			
+
 			if (retval < card(op.children().get(1)))
 			{
 				retval = card(op.children().get(1));
@@ -1613,7 +1620,7 @@ public final class Phase3
 					HRDBMSWorker.logger.error("", e);
 					throw e;
 				}
-				//makeHierarchical2(receive);
+				// makeHierarchical2(receive);
 				makeHierarchical(receive);
 				return true;
 			}
@@ -1772,7 +1779,7 @@ public final class Phase3
 					HRDBMSWorker.logger.error("", e);
 					throw e;
 				}
-				//makeHierarchical2(receive);
+				// makeHierarchical2(receive);
 				makeHierarchical(receive);
 			}
 			return false;
@@ -2303,7 +2310,8 @@ public final class Phase3
 			final SemiJoinOperator parent = (SemiJoinOperator)receive.parent();
 			if (!containsNoSend(parent.children().get(0)) || !containsNoSend(parent.children().get(1)))
 			{
-				// HRDBMSWorker.logger.debug("Both sides must not have sends, but at least 1 of them does");
+				// HRDBMSWorker.logger.debug("Both sides must not have sends,
+				// but at least 1 of them does");
 				return false;
 			}
 			final ArrayList<String> lefts = parent.getLefts();
@@ -2315,7 +2323,8 @@ public final class Phase3
 				String temp = meta.getTableForCol(lefts.get(i), parent);
 				if (temp == null)
 				{
-					// HRDBMSWorker.logger.debug("Could not figure out table for "
+					// HRDBMSWorker.logger.debug("Could not figure out table for
+					// "
 					// + lefts.get(i));
 					return false;
 				}
@@ -2323,7 +2332,8 @@ public final class Phase3
 				temp = meta.getTableForCol(rights.get(i), parent);
 				if (temp == null)
 				{
-					// HRDBMSWorker.logger.debug("Could not figure out table for "
+					// HRDBMSWorker.logger.debug("Could not figure out table for
+					// "
 					// + rights.get(i));
 					return false;
 				}
@@ -2632,7 +2642,7 @@ public final class Phase3
 					i = 0;
 				}
 			}
-			
+
 			if (i != 0)
 			{
 				int node = Math.abs(ThreadLocalRandom.current().nextInt()) % MetaData.numWorkerNodes;
@@ -2650,190 +2660,6 @@ public final class Phase3
 				}
 			}
 			makeHierarchical(receive);
-		}
-	}
-
-	private void makeHierarchical2(NetworkReceiveOperator op) throws Exception
-	{
-		// NetworkHashAndSend -> NetworkHashReceive
-		ArrayList<NetworkHashReceiveOperator> lreceives = new ArrayList<NetworkHashReceiveOperator>();
-		ArrayList<NetworkReceiveOperator> lreceives2 = new ArrayList<NetworkReceiveOperator>();
-		ArrayList<NetworkHashReceiveOperator> rreceives = new ArrayList<NetworkHashReceiveOperator>();
-		ArrayList<NetworkReceiveOperator> rreceives2 = new ArrayList<NetworkReceiveOperator>();
-		ArrayList<NetworkHashAndSendOperator> lsends2 = new ArrayList<NetworkHashAndSendOperator>();
-		ArrayList<NetworkHashAndSendOperator> rsends2 = new ArrayList<NetworkHashAndSendOperator>();
-		int lstart = 0;
-		int rstart = 0;
-		for (final Operator child : op.children())
-		{
-			if (child.children().get(0).children().get(0) instanceof NetworkHashReceiveOperator)
-			{
-				lreceives.add((NetworkHashReceiveOperator)child.children().get(0).children().get(0));
-			}
-			if (child.children().size() > 1)
-			{
-				if (child.children().get(0).children().get(1) instanceof NetworkHashReceiveOperator)
-				{
-					rreceives.add((NetworkHashReceiveOperator)child.children().get(0).children().get(1));
-				}
-			}
-		}
-
-		boolean dol = true;
-		boolean dor = true;
-		if (lreceives.size() == 0)
-		{
-			dol = false;
-		}
-		if (rreceives.size() == 0)
-		{
-			dor = false;
-		}
-
-		final ArrayList<NetworkHashAndSendOperator> lsends = new ArrayList<NetworkHashAndSendOperator>(lreceives.get(0).children().size());
-		if (dol)
-		{
-			for (final Operator o : lreceives.get(0).children())
-			{
-				lsends.add((NetworkHashAndSendOperator)o);
-			}
-		}
-
-		final ArrayList<NetworkHashAndSendOperator> rsends = new ArrayList<NetworkHashAndSendOperator>();
-		if (dor)
-		{
-			for (final Operator o : rreceives.get(0).children())
-			{
-				rsends.add((NetworkHashAndSendOperator)o);
-			}
-		}
-
-		if (dol)
-		{
-			if (lsends.size() > Phase3.MAX_INCOMING_CONNECTIONS)
-			{
-				int numMiddle = Phase3.MAX_INCOMING_CONNECTIONS;
-				int lstarting = getStartingNode(numMiddle);
-				lstart = lstarting;
-				int numPerMiddle = lsends.size() / numMiddle;
-				if (lsends.size() % numMiddle != 0)
-				{
-					numPerMiddle++;
-				}
-
-				int count = 0;
-				NetworkReceiveOperator current = new NetworkReceiveOperator(meta);
-				lreceives2.add(current);
-				current.setNode(lstarting);
-				for (NetworkHashAndSendOperator send : lsends)
-				{
-					Operator child = send.children().get(0);
-					send.removeChild(child);
-					NetworkSendOperator newSend = new NetworkSendOperator(child.getNode(), meta);
-					newSend.add(child);
-					current.add(newSend);
-					count++;
-
-					if (count == numPerMiddle)
-					{
-						lstarting++;
-						current = new NetworkReceiveOperator(meta);
-						lreceives2.add(current);
-					}
-				}
-			}
-		}
-
-		if (dor)
-		{
-			if (rsends.size() > Phase3.MAX_INCOMING_CONNECTIONS)
-			{
-				int numMiddle = Phase3.MAX_INCOMING_CONNECTIONS;
-				int rstarting = getStartingNode(numMiddle);
-				rstart = rstarting;
-				int numPerMiddle = rsends.size() / numMiddle;
-				if (rsends.size() % numMiddle != 0)
-				{
-					numPerMiddle++;
-				}
-
-				int count = 0;
-				NetworkReceiveOperator current = new NetworkReceiveOperator(meta);
-				rreceives2.add(current);
-				current.setNode(rstarting);
-				for (NetworkHashAndSendOperator send : rsends)
-				{
-					Operator child = send.children().get(0);
-					send.removeChild(child);
-					NetworkSendOperator newSend = new NetworkSendOperator(child.getNode(), meta);
-					newSend.add(child);
-					current.add(newSend);
-					count++;
-
-					if (count == numPerMiddle)
-					{
-						rstarting++;
-						current = new NetworkReceiveOperator(meta);
-						rreceives2.add(current);
-					}
-				}
-			}
-		}
-
-		if (lreceives2.size() > 0)
-		{
-			for (NetworkReceiveOperator r : lreceives2)
-			{
-				makeHierarchical(r);
-				NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(lsends.get(0).getHashCols(), lsends.get(0).getID(), lstart, lreceives.size(), meta);
-				send.add(r);
-				send.setNode(r.getNode());
-				lsends2.add(send);
-			}
-		}
-
-		if (rreceives2.size() > 0)
-		{
-			for (NetworkReceiveOperator r : rreceives2)
-			{
-				makeHierarchical(r);
-				NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(rsends.get(0).getHashCols(), rsends.get(0).getID(), rstart, rreceives.size(), meta);
-				send.add(r);
-				send.setNode(r.getNode());
-				rsends2.add(send);
-			}
-		}
-
-		if (lsends2.size() > 0)
-		{
-			for (NetworkHashReceiveOperator r : lreceives)
-			{
-				Operator parent = r.parent();
-				parent.removeChild(r);
-				NetworkHashReceiveOperator newReceive = r.clone();
-				for (NetworkHashAndSendOperator s : lsends2)
-				{
-					newReceive.add(s);
-				}
-
-				parent.add(newReceive);
-			}
-		}
-
-		if (rsends2.size() > 0)
-		{
-			for (NetworkHashReceiveOperator r : rreceives)
-			{
-				Operator parent = r.parent();
-				parent.removeChild(r);
-				NetworkHashReceiveOperator newReceive = r.clone();
-				for (NetworkHashAndSendOperator s : rsends2)
-				{
-					newReceive.add(s);
-				}
-
-				parent.add(newReceive);
-			}
 		}
 	}
 
@@ -3590,7 +3416,7 @@ public final class Phase3
 	 * node) { HRDBMSWorker.logger.debug("P3 sanity check failed");
 	 * Phase1.printTree(root, 0); throw new Exception("P3 sanity check failed");
 	 * }
-	 * 
+	 *
 	 * for (Operator o : op.children()) { sanityCheck(o, node); } } }
 	 */
 

@@ -1,21 +1,22 @@
 package com.exascale.threads;
 
-import java.util.concurrent.atomic.AtomicInteger;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.BigDecimalReplacement;
 
 public class WarmUpThread extends HRDBMSThread
 {
 	private boolean stop = true;
-	
+
 	public WarmUpThread()
-	{}
-	
+	{
+	}
+
 	public WarmUpThread(boolean stop)
 	{
 		this.stop = stop;
 	}
-	
+
+	@Override
 	public void run()
 	{
 		HRDBMSWorker.logger.debug("Warm up thread started");
@@ -26,7 +27,7 @@ public class WarmUpThread extends HRDBMSThread
 		{
 			ais[i++] = new BigDecimalReplacement(Math.PI * i);
 		}
-		
+
 		i = 0;
 		while (true)
 		{

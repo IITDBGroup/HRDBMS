@@ -29,6 +29,7 @@ public final class CreateTableOperator implements Operator, Serializable
 	private final String deviceExp;
 	private final int type;
 	private ArrayList<Integer> colOrder;
+	private ArrayList<Integer> organization;
 
 	public CreateTableOperator(String schema, String table, ArrayList<ColDef> defs, ArrayList<String> pks, String nodeGroupExp, String nodeExp, String deviceExp, MetaData meta)
 	{
@@ -55,7 +56,7 @@ public final class CreateTableOperator implements Operator, Serializable
 		this.deviceExp = deviceExp;
 		this.type = type;
 	}
-	
+
 	public CreateTableOperator(String schema, String table, ArrayList<ColDef> defs, ArrayList<String> pks, String nodeGroupExp, String nodeExp, String deviceExp, MetaData meta, int type, ArrayList<Integer> colOrder)
 	{
 		this.meta = meta;
@@ -151,7 +152,7 @@ public final class CreateTableOperator implements Operator, Serializable
 		if (!done)
 		{
 			done = true;
-			meta.createTable(schema, table, defs, pks, tx, nodeGroupExp, nodeExp, deviceExp, type, colOrder);
+			meta.createTable(schema, table, defs, pks, tx, nodeGroupExp, nodeExp, deviceExp, type, colOrder, organization);
 			return 1;
 		}
 		else
@@ -220,6 +221,11 @@ public final class CreateTableOperator implements Operator, Serializable
 	public void setNode(int node)
 	{
 		this.node = node;
+	}
+
+	public void setOrganization(ArrayList<Integer> organization)
+	{
+		this.organization = organization;
 	}
 
 	@Override

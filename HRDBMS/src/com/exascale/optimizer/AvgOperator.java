@@ -131,8 +131,8 @@ public final class AvgOperator implements AggregateOperator, Serializable
 		// DiskBackedALOHashMap<AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
 		// private final DiskBackedALOHashMap<AtomicLong> counts = new
 		// DiskBackedALOHashMap<AtomicLong>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
-		private final ConcurrentHashMap<ArrayList<Object>, BigDecimalReplacement> sums = new ConcurrentHashMap<ArrayList<Object>, BigDecimalReplacement>();
-		private final ConcurrentHashMap<ArrayList<Object>, AtomicLong> counts = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS, 0.75f, 6 * ResourceManager.cpus);
+		private ConcurrentHashMap<ArrayList<Object>, BigDecimalReplacement> sums = new ConcurrentHashMap<ArrayList<Object>, BigDecimalReplacement>();
+		private ConcurrentHashMap<ArrayList<Object>, AtomicLong> counts = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS, 0.75f, 6 * ResourceManager.cpus);
 		private final int pos;
 
 		public AvgHashThread(HashMap<String, Integer> cols2Pos)
@@ -159,6 +159,8 @@ public final class AvgOperator implements AggregateOperator, Serializable
 		{
 			// sums.close();
 			// counts.close();
+			sums = null;
+			counts = null;
 		}
 
 		@Override

@@ -38,10 +38,10 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	protected static final int WORKER_PORT = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"));
 
 	protected static Charset cs = StandardCharsets.UTF_8;
-
 	protected static long offset;
 
 	private static sun.misc.Unsafe unsafe;
+
 	static
 	{
 		try
@@ -58,6 +58,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 			unsafe = null;
 		}
 	}
+	protected CharsetDecoder cd = cs.newDecoder();
 	protected MetaData meta;
 	protected ArrayList<Operator> children = new ArrayList<Operator>();
 	protected Operator parent;
@@ -77,16 +78,10 @@ public class NetworkReceiveOperator implements Operator, Serializable
 
 	protected int node;
 
-	protected CharsetDecoder cd = cs.newDecoder();
 	protected transient AtomicLong received;
 	protected transient volatile boolean demReceived;
 	protected transient long txnum;
 	protected transient Object[] readThrottle;
-	
-	public void setTXNum(long txnum)
-	{
-		this.txnum = txnum;
-	}
 
 	public NetworkReceiveOperator(MetaData meta)
 	{
@@ -385,6 +380,11 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	{
 	}
 
+	public void setTXNum(long txnum)
+	{
+		this.txnum = txnum;
+	}
+
 	@Override
 	public void start() throws Exception
 	{
@@ -459,13 +459,51 @@ public class NetworkReceiveOperator implements Operator, Serializable
 		return ret;
 	}
 
+	private static class OverflowThread extends HRDBMSThread
+	{
+		private final FileChannel overFC;
+		private final ByteBuffer buff;
+		private boolean ok = true;
+		private Exception e;
+
+		public OverflowThread(FileChannel overFC, ByteBuffer buff)
+		{
+			this.overFC = overFC;
+			this.buff = buff;
+		}
+
+		public Exception getException()
+		{
+			return e;
+		}
+
+		public boolean getOK()
+		{
+			return ok;
+		}
+
+		@Override
+		public void run()
+		{
+			try
+			{
+				overFC.write(buff);
+			}
+			catch (Exception e)
+			{
+				ok = false;
+				this.e = e;
+			}
+		}
+	}
+
 	private final class ReadThread extends ThreadPoolThread
 	{
 		private Operator op;
 		private Socket sock;
 		private InputStream in;
 		private FileChannel overFC;
-		private Random random = new Random();
+		private final Random random = new Random();
 		private String fn;
 		private ByteBuffer buff;
 
@@ -485,7 +523,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 				op = null;
 				final byte[] sizeBuff = new byte[4];
 				byte[] data = null;
-				
+
 				while (true)
 				{
 					int count = 0;
@@ -559,7 +597,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 					}
 
 					boolean ok = outBuffer.putNow(row);
-					
+
 					if (!ok)
 					{
 						if (overFC == null)
@@ -567,18 +605,18 @@ public class NetworkReceiveOperator implements Operator, Serializable
 							int j = random.nextInt(ResourceManager.TEMP_DIRS.size());
 							fn = ResourceManager.TEMP_DIRS.get(j) + this.hashCode() + "" + System.currentTimeMillis() + ".overflow";
 							overFC = new RandomAccessFile(fn, "rw").getChannel();
-							buff = ByteBuffer.allocate(9*1024*1024);
+							buff = ByteBuffer.allocate(9 * 1024 * 1024);
 						}
-						
+
 						buff.put(sizeBuff);
 						buff.put(data, 0, size);
-						
-						if (buff.position() >= 8*1024*1024)
+
+						if (buff.position() >= 8 * 1024 * 1024)
 						{
 							int pos = buff.position();
 							buff.position(0);
 							buff.limit(pos);
-							//overFC.write(buff);
+							// overFC.write(buff);
 							OverflowThread thread = new OverflowThread(overFC, buff);
 							TempThread.start(thread, txnum);
 							thread.join();
@@ -588,26 +626,26 @@ public class NetworkReceiveOperator implements Operator, Serializable
 								return;
 							}
 							buff.position(0);
-							buff.limit(9*1024*1024);
+							buff.limit(9 * 1024 * 1024);
 						}
 					}
-					
+
 					// readCounter.getAndIncrement();
 				}
-				
+
 				if (overFC == null)
 				{
 					long end = System.currentTimeMillis();
-					HRDBMSWorker.logger.debug("NRO ReadThread for " + sock.getRemoteSocketAddress() + " took " + ((end-start) / 1000) + "s");
+					HRDBMSWorker.logger.debug("NRO ReadThread for " + sock.getRemoteSocketAddress() + " took " + ((end - start) / 1000) + "s");
 					return;
 				}
-				
+
 				if (buff.position() != 0)
 				{
 					int pos = buff.position();
 					buff.position(0);
 					buff.limit(pos);
-					//overFC.write(buff);
+					// overFC.write(buff);
 					OverflowThread thread = new OverflowThread(overFC, buff);
 					TempThread.start(thread, txnum);
 					thread.join();
@@ -617,43 +655,43 @@ public class NetworkReceiveOperator implements Operator, Serializable
 						return;
 					}
 				}
-				
+
 				buff = null;
-				BufferedFileChannel overFC2 = new BufferedFileChannel(overFC, 8*1024*1024);
+				BufferedFileChannel overFC2 = new BufferedFileChannel(overFC, 8 * 1024 * 1024);
 				overFC2.position(0);
 				while (true)
 				{
 					ByteBuffer bb = ByteBuffer.wrap(sizeBuff);
 					int x = random.nextInt(ResourceManager.TEMP_DIRS.size());
-					
-					//synchronized(readThrottle[x])
-					//{
-						if (overFC2.read(bb, readThrottle[x]) == -1)
-						{
-							break;
-						}
-						
-						final int size = bytesToInt(sizeBuff);
 
-						if (data == null || data.length < size)
-						{
-							data = new byte[size];
-						}
-						
-						bb = ByteBuffer.wrap(data);
-						bb.limit(size);
-						overFC2.read(bb, readThrottle[x]);
-					//}
-					
+					// synchronized(readThrottle[x])
+					// {
+					if (overFC2.read(bb, readThrottle[x]) == -1)
+					{
+						break;
+					}
+
+					final int size = bytesToInt(sizeBuff);
+
+					if (data == null || data.length < size)
+					{
+						data = new byte[size];
+					}
+
+					bb = ByteBuffer.wrap(data);
+					bb.limit(size);
+					overFC2.read(bb, readThrottle[x]);
+					// }
+
 					final Object row = fromBytes(data);
 
 					outBuffer.put(row);
 				}
-				
+
 				overFC2.close();
 				new File(fn).delete();
 				long end = System.currentTimeMillis();
-				HRDBMSWorker.logger.debug("NRO ReadThread for " + sock.getRemoteSocketAddress() + " took " + ((end-start) / 1000) + "s");
+				HRDBMSWorker.logger.debug("NRO ReadThread for " + sock.getRemoteSocketAddress() + " took " + ((end - start) / 1000) + "s");
 			}
 			catch (final Exception e)
 			{
@@ -783,7 +821,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 			{
 				readThrottle[i++] = new Object();
 			}
-			
+
 			for (final Operator op : children)
 			{
 				final ReadThread readThread = new ReadThread(op);
@@ -830,43 +868,6 @@ public class NetworkReceiveOperator implements Operator, Serializable
 					HRDBMSWorker.logger.debug("", e);
 				}
 			}
-		}
-	}
-	
-	private static class OverflowThread extends HRDBMSThread
-	{
-		private FileChannel overFC;
-		private ByteBuffer buff;
-		private boolean ok = true;
-		private Exception e;
-		
-		public OverflowThread(FileChannel overFC, ByteBuffer buff)
-		{
-			this.overFC = overFC;
-			this.buff = buff;
-		}
-		
-		public void run()
-		{
-			try
-			{
-				overFC.write(buff);
-			}
-			catch(Exception e)
-			{
-				ok = false;
-				this.e = e;
-			}
-		}
-		
-		public boolean getOK()
-		{
-			return ok;
-		}
-		
-		public Exception getException()
-		{
-			return e;
 		}
 	}
 }

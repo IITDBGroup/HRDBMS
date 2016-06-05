@@ -13,7 +13,10 @@ import com.exascale.tables.Transaction;
 public final class Phase4
 {
 	private static final int MAX_LOCAL_NO_HASH_PRODUCT = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_local_no_hash_product")); // 1000000
-	private static final int MAX_LOCAL_LEFT_HASH = (int)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")));
+	// private static final int MAX_LOCAL_LEFT_HASH =
+	// (int)(ResourceManager.QUEUE_SIZE *
+	// Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")));
+	private static final int MAX_LOCAL_LEFT_HASH = 2;
 	private static final int MAX_LOCAL_SORT = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_local_sort")); // 1000000
 	public static AtomicInteger id = new AtomicInteger(0);
 	private final RootOperator root;
@@ -160,7 +163,7 @@ public final class Phase4
 			{
 				retval = card(op.children().get(0));
 			}
-			
+
 			if (retval < card(op.children().get(1)))
 			{
 				retval = card(op.children().get(1));
@@ -231,7 +234,7 @@ public final class Phase4
 			{
 				retval = card(op.children().get(0));
 			}
-			
+
 			if (retval < card(op.children().get(1)))
 			{
 				retval = card(op.children().get(1));
@@ -960,7 +963,7 @@ public final class Phase4
 			HRDBMSWorker.logger.error("", e);
 			throw e;
 		}
-		//makeHierarchical2(r);
+		// makeHierarchical2(r);
 		makeHierarchical(r);
 		// cCache.clear();
 		return false;
@@ -1208,7 +1211,7 @@ public final class Phase4
 			HRDBMSWorker.logger.error("", e);
 			throw e;
 		}
-		//makeHierarchical2(r);
+		// makeHierarchical2(r);
 		makeHierarchical(r);
 		// cCache.clear();
 		return false;
@@ -1564,7 +1567,7 @@ public final class Phase4
 			retval.add((TableScanOperator)op);
 			return retval;
 		}
-		
+
 		touched.add(op);
 
 		if (op.children().size() == 1)
@@ -1801,7 +1804,7 @@ public final class Phase4
 			HRDBMSWorker.logger.error("", e);
 			throw e;
 		}
-		//makeHierarchical2(r);
+		// makeHierarchical2(r);
 		makeHierarchical(r);
 		// cCache.clear();
 		return false;
@@ -2018,7 +2021,7 @@ public final class Phase4
 					HRDBMSWorker.logger.error("", e);
 					throw e;
 				}
-				//makeHierarchical2(receive);
+				// makeHierarchical2(receive);
 				makeHierarchical(receive);
 			}
 			return false;
@@ -2513,7 +2516,7 @@ public final class Phase4
 			HRDBMSWorker.logger.error("", e);
 			throw e;
 		}
-		//makeHierarchical2(r);
+		// makeHierarchical2(r);
 		makeHierarchical(r);
 		// cCache.clear();
 		return false;
@@ -2611,7 +2614,7 @@ public final class Phase4
 					i = 0;
 				}
 			}
-			
+
 			if (i != 0)
 			{
 				int node = Math.abs(ThreadLocalRandom.current().nextInt()) % MetaData.numWorkerNodes;
@@ -2630,214 +2633,6 @@ public final class Phase4
 			}
 			makeHierarchical(receive);
 		}
-	}
-
-	private void makeHierarchical2(NetworkReceiveOperator op) throws Exception
-	{
-		// NetworkHashAndSend -> NetworkHashReceive
-		ArrayList<NetworkHashReceiveOperator> lreceives = new ArrayList<NetworkHashReceiveOperator>();
-		ArrayList<NetworkReceiveOperator> lreceives2 = new ArrayList<NetworkReceiveOperator>();
-		ArrayList<NetworkHashReceiveOperator> rreceives = new ArrayList<NetworkHashReceiveOperator>();
-		ArrayList<NetworkReceiveOperator> rreceives2 = new ArrayList<NetworkReceiveOperator>();
-		ArrayList<NetworkHashAndSendOperator> lsends2 = new ArrayList<NetworkHashAndSendOperator>();
-		ArrayList<NetworkHashAndSendOperator> rsends2 = new ArrayList<NetworkHashAndSendOperator>();
-		int lstart = 0;
-		int rstart = 0;
-		for (final Operator child : op.children())
-		{
-			if (child.children().get(0).children().get(0) instanceof NetworkHashReceiveOperator)
-			{
-				lreceives.add((NetworkHashReceiveOperator)child.children().get(0).children().get(0));
-			}
-			if (child.children().size() > 1)
-			{
-				if (child.children().get(0).children().get(1) instanceof NetworkHashReceiveOperator)
-				{
-					rreceives.add((NetworkHashReceiveOperator)child.children().get(0).children().get(1));
-				}
-			}
-		}
-
-		boolean dol = true;
-		boolean dor = true;
-		if (lreceives.size() == 0)
-		{
-			dol = false;
-		}
-		if (rreceives.size() == 0)
-		{
-			dor = false;
-		}
-
-		final ArrayList<NetworkHashAndSendOperator> lsends = new ArrayList<NetworkHashAndSendOperator>(lreceives.get(0).children().size());
-		if (dol)
-		{
-			for (final Operator o : lreceives.get(0).children())
-			{
-				lsends.add((NetworkHashAndSendOperator)o);
-			}
-		}
-
-		final ArrayList<NetworkHashAndSendOperator> rsends = new ArrayList<NetworkHashAndSendOperator>();
-		if (dor)
-		{
-			for (final Operator o : rreceives.get(0).children())
-			{
-				rsends.add((NetworkHashAndSendOperator)o);
-			}
-		}
-
-		if (dol)
-		{
-			if (lsends.size() > Phase3.MAX_INCOMING_CONNECTIONS)
-			{
-				int numMiddle = Phase3.MAX_INCOMING_CONNECTIONS;
-				int lstarting = getStartingNode(numMiddle);
-				lstart = lstarting;
-				int numPerMiddle = lsends.size() / numMiddle;
-				if (lsends.size() % numMiddle != 0)
-				{
-					numPerMiddle++;
-				}
-
-				int count = 0;
-				NetworkReceiveOperator current = new NetworkReceiveOperator(meta);
-				lreceives2.add(current);
-				current.setNode(lstarting);
-				for (NetworkHashAndSendOperator send : lsends)
-				{
-					Operator child = send.children().get(0);
-					send.removeChild(child);
-					NetworkSendOperator newSend = new NetworkSendOperator(child.getNode(), meta);
-					newSend.add(child);
-					current.add(newSend);
-					count++;
-
-					if (count == numPerMiddle)
-					{
-						lstarting++;
-						current = new NetworkReceiveOperator(meta);
-						lreceives2.add(current);
-					}
-				}
-			}
-		}
-
-		if (dor)
-		{
-			if (rsends.size() > Phase3.MAX_INCOMING_CONNECTIONS)
-			{
-				int numMiddle = Phase3.MAX_INCOMING_CONNECTIONS;
-				int rstarting = getStartingNode(numMiddle);
-				rstart = rstarting;
-				int numPerMiddle = rsends.size() / numMiddle;
-				if (rsends.size() % numMiddle != 0)
-				{
-					numPerMiddle++;
-				}
-
-				int count = 0;
-				NetworkReceiveOperator current = new NetworkReceiveOperator(meta);
-				rreceives2.add(current);
-				current.setNode(rstarting);
-				for (NetworkHashAndSendOperator send : rsends)
-				{
-					Operator child = send.children().get(0);
-					send.removeChild(child);
-					NetworkSendOperator newSend = new NetworkSendOperator(child.getNode(), meta);
-					newSend.add(child);
-					current.add(newSend);
-					count++;
-
-					if (count == numPerMiddle)
-					{
-						rstarting++;
-						current = new NetworkReceiveOperator(meta);
-						rreceives2.add(current);
-					}
-				}
-			}
-		}
-
-		if (lreceives2.size() > 0)
-		{
-			for (NetworkReceiveOperator r : lreceives2)
-			{
-				makeHierarchical(r);
-				NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(lsends.get(0).getHashCols(), lreceives.size(), lsends.get(0).getID(), lstart, meta);
-				send.add(r);
-				send.setNode(r.getNode());
-				lsends2.add(send);
-			}
-		}
-
-		if (rreceives2.size() > 0)
-		{
-			for (NetworkReceiveOperator r : rreceives2)
-			{
-				makeHierarchical(r);
-				NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(rsends.get(0).getHashCols(), rreceives.size(), rsends.get(0).getID(), rstart, meta);
-				send.add(r);
-				send.setNode(r.getNode());
-				rsends2.add(send);
-			}
-		}
-
-		if (lsends2.size() > 0)
-		{
-			for (NetworkHashReceiveOperator r : lreceives)
-			{
-				Operator parent = r.parent();
-				parent.removeChild(r);
-				NetworkHashReceiveOperator newReceive = r.clone();
-				for (NetworkHashAndSendOperator s : lsends2)
-				{
-					newReceive.add(s);
-				}
-
-				parent.add(newReceive);
-				newReceive.setNode(parent.getNode());
-			}
-		}
-
-		if (rsends2.size() > 0)
-		{
-			for (NetworkHashReceiveOperator r : rreceives)
-			{
-				Operator parent = r.parent();
-				parent.removeChild(r);
-				NetworkHashReceiveOperator newReceive = r.clone();
-				for (NetworkHashAndSendOperator s : rsends2)
-				{
-					newReceive.add(s);
-				}
-
-				parent.add(newReceive);
-				newReceive.setNode(parent.getNode());
-			}
-		}
-
-		// cCache.clear();
-	}
-	
-	private boolean upstreamRedistSort(Operator op) throws Exception
-	{
-		Operator o = op.parent();
-		while (!(o instanceof RootOperator))
-		{
-			if (o instanceof SortOperator)
-			{
-				long card = card(o);
-				if (card > MAX_LOCAL_SORT)
-				{
-					return true;
-				}
-			}
-			
-			o = o.parent();
-		}
-		
-		return false;
 	}
 
 	private boolean noLargeUpstreamJoins(Operator op) throws Exception
@@ -3311,10 +3106,8 @@ public final class Phase4
 						if (l + r <= MAX_LOCAL_LEFT_HASH && noLargeUpstreamJoins(op))
 						{
 							HRDBMSWorker.logger.debug("SemiJoin uses partial hash, but is not pushed down because...");
-							HRDBMSWorker.logger.debug("Left card = " +
-									card(op.children().get(0)));
-							HRDBMSWorker.logger.debug("Right card = " +
-									card(op.children().get(1)));
+							HRDBMSWorker.logger.debug("Left card = " + card(op.children().get(0)));
+							HRDBMSWorker.logger.debug("Right card = " + card(op.children().get(1)));
 							continue;
 						}
 					}
@@ -3330,10 +3123,8 @@ public final class Phase4
 					else if (l * r > 0 && l * r <= MAX_LOCAL_NO_HASH_PRODUCT && noLargeUpstreamJoins(op))
 					{
 						HRDBMSWorker.logger.debug("SemiJoin uses NL, but is not pushed down because...");
-						HRDBMSWorker.logger.debug("Left card = " +
-						card(op.children().get(0)));
-						HRDBMSWorker.logger.debug("Right card = " +
-						card(op.children().get(1)));
+						HRDBMSWorker.logger.debug("Left card = " + card(op.children().get(0)));
+						HRDBMSWorker.logger.debug("Right card = " + card(op.children().get(1)));
 						continue;
 					}
 
@@ -3364,7 +3155,8 @@ public final class Phase4
 					{
 						if (l + r <= MAX_LOCAL_LEFT_HASH && noLargeUpstreamJoins(op))
 						{
-							// HRDBMSWorker.logger.debug("AntiJoin uses partial hash, but is not pushed down because...");
+							// HRDBMSWorker.logger.debug("AntiJoin uses partial
+							// hash, but is not pushed down because...");
 							// HRDBMSWorker.logger.debug("Left card = " +
 							// card(op.children().get(0)));
 							// HRDBMSWorker.logger.debug("Right card = " +
@@ -3376,14 +3168,16 @@ public final class Phase4
 					{
 						if (card(op) <= MAX_LOCAL_NO_HASH_PRODUCT && r <= MAX_LOCAL_SORT && noLargeUpstreamJoins(op))
 						{
-							// HRDBMSWorker.logger.debug("AntiJoin uses sort, but is not pushed down because...");
+							// HRDBMSWorker.logger.debug("AntiJoin uses sort,
+							// but is not pushed down because...");
 							// HRDBMSWorker.logger.debug("Card = " + card(op));
 							continue;
 						}
 					}
 					else if (l * r > 0 && l * r <= MAX_LOCAL_NO_HASH_PRODUCT && noLargeUpstreamJoins(op))
 					{
-						// HRDBMSWorker.logger.debug("AntiJoin uses NL, but is not pushed down because...");
+						// HRDBMSWorker.logger.debug("AntiJoin uses NL, but is
+						// not pushed down because...");
 						// HRDBMSWorker.logger.debug("Left card = " +
 						// card(op.children().get(0)));
 						// HRDBMSWorker.logger.debug("Right card = " +
@@ -3644,7 +3438,7 @@ public final class Phase4
 			HRDBMSWorker.logger.error("", e);
 			throw e;
 		}
-		//makeHierarchical2(r);
+		// makeHierarchical2(r);
 		makeHierarchical(r);
 		// cCache.clear();
 		return false;
@@ -3947,7 +3741,8 @@ public final class Phase4
 	private void removeUnneededHash() throws Exception
 	{
 		ArrayList<TableScanOperator> tables = getTables(root, new HashSet<Operator>());
-		//HashSet<TableScanOperator> temp = new HashSet<TableScanOperator>(tables);
+		// HashSet<TableScanOperator> temp = new
+		// HashSet<TableScanOperator>(tables);
 		for (TableScanOperator table : tables)
 		{
 			if (table.noNodeGroupSet() && table.allNodes() && table.nodeIsHash())
@@ -3974,8 +3769,8 @@ public final class Phase4
 						}
 					}
 				}
-				//HRDBMSWorker.logger.debug("Looking at " + table);
-				//HRDBMSWorker.logger.debug("Original hash is " + current);
+				// HRDBMSWorker.logger.debug("Looking at " + table);
+				// HRDBMSWorker.logger.debug("Original hash is " + current);
 				Operator up = table.firstParent();
 				doneWithTable: while (true)
 				{
@@ -3995,7 +3790,8 @@ public final class Phase4
 									current.add(index, newName);
 								}
 							}
-							//HRDBMSWorker.logger.debug("Current has changed to "
+							// HRDBMSWorker.logger.debug("Current has changed to
+							// "
 							// + current);
 						}
 
@@ -4004,7 +3800,8 @@ public final class Phase4
 							// take things out of current except for ones that
 							// are also in the group by
 							current.retainAll(((MultiOperator)up).getKeys());
-							//HRDBMSWorker.logger.debug("Current has changed to "
+							// HRDBMSWorker.logger.debug("Current has changed to
+							// "
 							// + current);
 						}
 
@@ -4022,7 +3819,7 @@ public final class Phase4
 						{
 							if (((NetworkHashAndSendOperator)up).getHashCols().equals(current) && current.size() > 0)
 							{
-								//HRDBMSWorker.logger.debug("Removing " + up);
+								// HRDBMSWorker.logger.debug("Removing " + up);
 								// remove sends and receives
 								Operator grandParent = null;
 								for (Operator parent : (ArrayList<Operator>)((NetworkHashAndSendOperator)up).parents().clone())
@@ -4054,10 +3851,12 @@ public final class Phase4
 							}
 							else
 							{
-								//HRDBMSWorker.logger.debug("Hashes don't match: "
+								// HRDBMSWorker.logger.debug("Hashes don't
+								// match: "
 								// + up);
 								current = (ArrayList<String>)((NetworkHashAndSendOperator)up).getHashCols().clone();
-								//HRDBMSWorker.logger.debug("Current has changed to "
+								// HRDBMSWorker.logger.debug("Current has
+								// changed to "
 								// + current);
 								// set up to the parent that is on my node
 								for (Operator parent : ((NetworkHashAndSendOperator)up).parents())
@@ -4071,16 +3870,17 @@ public final class Phase4
 						}
 						else
 						{
-							//HRDBMSWorker.logger.debug("Hash and send does not use all nodes. Size = "
+							// HRDBMSWorker.logger.debug("Hash and send does not
+							// use all nodes. Size = "
 							// +
 							// ((NetworkHashAndSendOperator)up).parents().size());
-							//HRDBMSWorker.logger.debug(up);
+							// HRDBMSWorker.logger.debug(up);
 							break;
 						}
 					}
 					else
 					{
-						//HRDBMSWorker.logger.debug("Not a hash and send: " +
+						// HRDBMSWorker.logger.debug("Not a hash and send: " +
 						// up);
 						break;
 					}
@@ -4103,22 +3903,6 @@ public final class Phase4
 			setNodeForTree(o, node, touched);
 		}
 	}
-
-	/*
-	 * private void sanityCheck(Operator op, int node) throws Exception { if (op
-	 * instanceof NetworkSendOperator) { node = op.getNode(); for (Operator o :
-	 * op.children()) { sanityCheck(o, node); } } else { if (op.getNode() !=
-	 * node) { HRDBMSWorker.logger.debug("P4 sanity check failed");
-	 * HRDBMSWorker.logger.debug("Parent is " + op.parent() + " (" +
-	 * op.parent().getNode() + ")");
-	 * HRDBMSWorker.logger.debug("Children are..."); for (Operator o :
-	 * op.parent().children()) { if (o == op) {
-	 * HRDBMSWorker.logger.debug("***** " + o + " (" + o.getNode() + ") *****");
-	 * } else { HRDBMSWorker.logger.debug(o + " (" + o.getNode() + ")"); } }
-	 * throw new Exception("P4 sanity check failed"); }
-	 * 
-	 * for (Operator o : op.children()) { sanityCheck(o, node); } } }
-	 */
 
 	private void swapLeftRight(Operator op, HashSet<Operator> touched) throws Exception
 	{
@@ -4179,6 +3963,21 @@ public final class Phase4
 		}
 	}
 
+	/*
+	 * private void sanityCheck(Operator op, int node) throws Exception { if (op
+	 * instanceof NetworkSendOperator) { node = op.getNode(); for (Operator o :
+	 * op.children()) { sanityCheck(o, node); } } else { if (op.getNode() !=
+	 * node) { HRDBMSWorker.logger.debug("P4 sanity check failed");
+	 * HRDBMSWorker.logger.debug("Parent is " + op.parent() + " (" +
+	 * op.parent().getNode() + ")"); HRDBMSWorker.logger.debug("Children are..."
+	 * ); for (Operator o : op.parent().children()) { if (o == op) {
+	 * HRDBMSWorker.logger.debug("***** " + o + " (" + o.getNode() + ") *****");
+	 * } else { HRDBMSWorker.logger.debug(o + " (" + o.getNode() + ")"); } }
+	 * throw new Exception("P4 sanity check failed"); }
+	 *
+	 * for (Operator o : op.children()) { sanityCheck(o, node); } } }
+	 */
+
 	private boolean treeContains(Operator root, Operator op, HashSet<Operator> touched)
 	{
 		if (touched.contains(root))
@@ -4199,6 +3998,26 @@ public final class Phase4
 			{
 				return true;
 			}
+		}
+
+		return false;
+	}
+
+	private boolean upstreamRedistSort(Operator op) throws Exception
+	{
+		Operator o = op.parent();
+		while (!(o instanceof RootOperator))
+		{
+			if (o instanceof SortOperator)
+			{
+				long card = card(o);
+				if (card > MAX_LOCAL_SORT)
+				{
+					return true;
+				}
+			}
+
+			o = o.parent();
 		}
 
 		return false;

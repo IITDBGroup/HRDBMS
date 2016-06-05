@@ -30,6 +30,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 	private static long offset;
 
 	private static sun.misc.Unsafe unsafe;
+
 	static
 	{
 		try

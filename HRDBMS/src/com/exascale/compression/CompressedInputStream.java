@@ -11,6 +11,7 @@ import net.jpountz.lz4.LZ4FastDecompressor;
 public final class CompressedInputStream extends FilterInputStream
 {
 	private static LZ4Factory factory;
+
 	static
 	{
 		factory = LZ4Factory.nativeInstance();
@@ -30,16 +31,17 @@ public final class CompressedInputStream extends FilterInputStream
 	}
 
 	@Override
+	public int available() throws IOException
+	{
+		return limit - index + in.available();
+	}
+
+	@Override
 	public int read() throws IOException
 	{
 		byte[] buff = new byte[1];
 		read(buff, 0, 1);
 		return buff[0];
-	}
-	
-	public int available() throws IOException
-	{
-		return limit - index + in.available();
 	}
 
 	@Override

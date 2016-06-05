@@ -53,11 +53,6 @@ public final class AntiJoinOperator implements Operator, Serializable
 	public transient Operator dynamicOp;
 	private int leftChildCard = 16;
 	private long txnum;
-	
-	public void setTXNum(long txnum)
-	{
-		this.txnum = txnum;
-	}
 
 	public AntiJoinOperator(ArrayList<String> cols, MetaData meta)
 	{
@@ -368,7 +363,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 			}
 			return retval;
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
 			return null;
 		}
@@ -544,6 +539,11 @@ public final class AntiJoinOperator implements Operator, Serializable
 		rightChildCard = card;
 		leftChildCard = card2;
 		return true;
+	}
+
+	public void setTXNum(long txnum)
+	{
+		this.txnum = txnum;
 	}
 
 	public ArrayList<String> sortKeys()

@@ -448,7 +448,8 @@ public final class LoadOperator implements Operator, Serializable
 					retvalBB.putLong((Long)o);
 					// if ((Long)o < 0)
 					// {
-					// HRDBMSWorker.logger.debug("Negative long value in rsToBytes: "
+					// HRDBMSWorker.logger.debug("Negative long value in
+					// rsToBytes: "
 					// + o);
 					// }
 				}
@@ -457,7 +458,8 @@ public final class LoadOperator implements Operator, Serializable
 					retvalBB.putInt((Integer)o);
 					// if ((Integer)o < 0)
 					// {
-					// HRDBMSWorker.logger.debug("Negative int value in rsToBytes: "
+					// HRDBMSWorker.logger.debug("Negative int value in
+					// rsToBytes: "
 					// + o);
 					// }
 				}
@@ -763,6 +765,7 @@ public final class LoadOperator implements Operator, Serializable
 		if (glob.startsWith("hdfs://"))
 		{
 			doHDFS(schema, table, tx, pos2Col, cols2Types, pos2Length, keys, types, orders, indexes, type);
+			meta.cluster(schema, table, tx, pos2Col, cols2Types, type);
 			return;
 		}
 
@@ -875,6 +878,8 @@ public final class LoadOperator implements Operator, Serializable
 		{
 			num.set(Long.MIN_VALUE);
 		}
+
+		meta.cluster(schema, table, tx, pos2Col, cols2Types, type);
 
 		for (String index : indexNames)
 		{
@@ -1380,7 +1385,7 @@ public final class LoadOperator implements Operator, Serializable
 						sock.connect(new InetSocketAddress(hostname, PORT_NUMBER));
 						break;
 					}
-					catch(ConnectException e)
+					catch (ConnectException e)
 					{
 						i++;
 						if (i == 60)

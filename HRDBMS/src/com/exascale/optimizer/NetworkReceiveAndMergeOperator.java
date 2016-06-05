@@ -18,7 +18,6 @@ import java.util.IdentityHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedInputStream;
 import com.exascale.managers.HRDBMSWorker;
-import com.exascale.managers.ResourceManager;
 import com.exascale.misc.BinomialHeap;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MyDate;
@@ -34,6 +33,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 	private static long offset;
 
 	private static sun.misc.Unsafe unsafe;
+
 	static
 	{
 		try
@@ -451,7 +451,8 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 		{
 			try
 			{
-				//HashMap<Integer, ReadThread2> map = new HashMap<Integer, ReadThread2>();
+				// HashMap<Integer, ReadThread2> map = new HashMap<Integer,
+				// ReadThread2>();
 				ReadThread2[] map = new ReadThread2[children.size()];
 				int i = 0;
 				for (Operator op : children)
@@ -482,7 +483,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 							HRDBMSWorker.logger.debug("Unknown object in NRAM: " + o);
 							throw new Exception("Unknown object in NRAM: " + o);
 						}
-						
+
 						i++;
 					}
 					catch (Exception e)

@@ -194,7 +194,8 @@ public class ConnectionManager extends HRDBMSThread
 				}
 				final Socket sock = server.accept();
 				sock.setSendBufferSize(4194304);
-				// HRDBMSWorker.logger.debug("Connection Manager accepted a connection.");
+				// HRDBMSWorker.logger.debug("Connection Manager accepted a
+				// connection.");
 				if (accepting)
 				{
 					HRDBMSWorker.addThread(new ConnectionWorker(sock));
