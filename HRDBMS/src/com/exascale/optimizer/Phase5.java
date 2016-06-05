@@ -150,7 +150,7 @@ public final class Phase5
 			{
 				retval = card(op.children().get(0));
 			}
-			
+
 			if (retval < card(op.children().get(1)))
 			{
 				retval = card(op.children().get(1));
@@ -237,7 +237,7 @@ public final class Phase5
 			{
 				retval = card(op.children().get(0));
 			}
-			
+
 			if (retval < card(op.children().get(1)))
 			{
 				retval = card(op.children().get(1));
@@ -306,7 +306,7 @@ public final class Phase5
 			{
 				retval = 1;
 			}
-			
+
 			if (retval < 0)
 			{
 				retval = Long.MAX_VALUE;
@@ -734,7 +734,7 @@ public final class Phase5
 						doubleCheckCNF(table);
 						final boolean indexOnly = indexOnly(table);
 						System.out.println("Using indexes.");
-						//printIndexes(table);
+						// printIndexes(table);
 						if (!indexOnly)
 						{
 							addSort(table);
@@ -1223,6 +1223,7 @@ public final class Phase5
 			HRDBMSWorker.logger.debug("MultiOp with card = " + card);
 			if (card > MAX_GB)
 			{
+				HRDBMSWorker.logger.debug("External MO by factor " + ((card * 1.0) / MAX_GB) + "x");
 				MultiOperator mop = (MultiOperator)op;
 				mop.setExternal();
 			}
@@ -1682,13 +1683,12 @@ public final class Phase5
 	 * op.children()) { sanityCheck(o, node); } } else { if (op.getNode() !=
 	 * node) { HRDBMSWorker.logger.debug("P5 sanity check failed");
 	 * HRDBMSWorker.logger.debug("Parent is " + op.parent() + " (" +
-	 * op.parent().getNode() + ")");
-	 * HRDBMSWorker.logger.debug("Children are..."); for (Operator o :
-	 * op.parent().children()) { if (o == op) {
+	 * op.parent().getNode() + ")"); HRDBMSWorker.logger.debug("Children are..."
+	 * ); for (Operator o : op.parent().children()) { if (o == op) {
 	 * HRDBMSWorker.logger.debug("***** " + o + " (" + o.getNode() + ") *****");
 	 * } else { HRDBMSWorker.logger.debug(o + " (" + o.getNode() + ")"); } }
 	 * throw new Exception("P5 sanity check failed"); }
-	 * 
+	 *
 	 * for (Operator o : op.children()) { sanityCheck(o, node); } } }
 	 */
 
@@ -1996,13 +1996,14 @@ public final class Phase5
 					if (rcolumn == null)
 					{
 						// if (likely > (12.0 / 53.0) || !f.op().equals("E"))
-						//if (likely > (1.0 / 10.0))
-						//{
-						//}
-						//else
-						//{
-						//	HRDBMSWorker.logger.debug("Wanted to use an index on " + lcolumn + " but none existed");
-						//}
+						// if (likely > (1.0 / 10.0))
+						// {
+						// }
+						// else
+						// {
+						// HRDBMSWorker.logger.debug("Wanted to use an index on
+						// " + lcolumn + " but none existed");
+						// }
 						if (likely <= (1.0 / 10.0) && tOp.getType() == 0)
 						{
 							HRDBMSWorker.logger.debug("Wanted to use an index on " + lcolumn + " but none existed");
@@ -2028,7 +2029,7 @@ public final class Phase5
 							{
 								doIt = false;
 							}
-							
+
 							if (likely > 0.0003 && tOp.getType() != 0)
 							{
 								doIt = false;

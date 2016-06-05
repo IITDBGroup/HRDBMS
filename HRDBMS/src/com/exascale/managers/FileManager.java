@@ -20,7 +20,6 @@ import javax.tools.ToolProvider;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.CompressedRandomAccessFile;
 import com.exascale.filesystem.Page;
-import com.exascale.filesystem.SparseCompressedFileChannel2;
 import com.exascale.logging.ExtendLogRec;
 import com.exascale.misc.CatalogCode;
 import com.exascale.tables.Schema;
@@ -32,10 +31,10 @@ import com.exascale.threads.ReadThread;
 public class FileManager
 {
 	private static File[] dirs;
-	public static final boolean SCFC; 
+	public static final boolean SCFC;
 	public static ConcurrentHashMap<String, FileChannel> openFiles = new ConcurrentHashMap<String, FileChannel>();
 	public static ConcurrentHashMap<String, Integer> numBlocks = new ConcurrentHashMap<String, Integer>(2000, 0.75f, 64 * ResourceManager.cpus);
-	
+
 	static
 	{
 		SCFC = HRDBMSWorker.getHParms().getProperty("scfc").equals("true");
@@ -238,7 +237,7 @@ public class FileManager
 					final CompressedRandomAccessFile f = new CompressedRandomAccessFile(table, "rw");
 					fc = f.getChannel();
 					long size = fc.size();
-					HRDBMSWorker.logger.debug("Size of " + filename + " is " + size); //DEBUG
+					HRDBMSWorker.logger.debug("Size of " + filename + " is " + size); // DEBUG
 					numBlocks.put(filename, (int)(size / Page.BLOCK_SIZE));
 					openFiles.put(filename, fc);
 				}
@@ -283,21 +282,6 @@ public class FileManager
 		retval.start();
 		return retval;
 	}
-	
-	public static ReadThread read(Page p, Block b, ByteBuffer bb, int rank, int rankSize) throws Exception
-	{
-		// final FileChannel fc = FileManager.getFile(b.fileName());
-		// if (b.number() > numBlocks.get(b.fileName()) + 1)
-		// {
-		// throw new IOException("Trying to read block " + b.number() + " from "
-		// + b.fileName() + " which doesn't exist");
-		// }
-		ReadThread retval = new ReadThread(p, b, bb);
-		retval.setRank(rank);
-		retval.setRankSize(rankSize);
-		retval.start();
-		return retval;
-	}
 
 	public static ReadThread read(Page p, Block b, ByteBuffer bb, ArrayList<Integer> cols, int layoutSize) throws Exception
 	{
@@ -311,7 +295,7 @@ public class FileManager
 		retval.start();
 		return retval;
 	}
-	
+
 	public static ReadThread read(Page p, Block b, ByteBuffer bb, ArrayList<Integer> cols, int layoutSize, int rank, int rankSize) throws Exception
 	{
 		// final FileChannel fc = FileManager.getFile(b.fileName());
@@ -338,12 +322,27 @@ public class FileManager
 		new ReadThread(p, b, bb).run();
 	}
 
+	public static ReadThread read(Page p, Block b, ByteBuffer bb, int rank, int rankSize) throws Exception
+	{
+		// final FileChannel fc = FileManager.getFile(b.fileName());
+		// if (b.number() > numBlocks.get(b.fileName()) + 1)
+		// {
+		// throw new IOException("Trying to read block " + b.number() + " from "
+		// + b.fileName() + " which doesn't exist");
+		// }
+		ReadThread retval = new ReadThread(p, b, bb);
+		retval.setRank(rank);
+		retval.setRankSize(rankSize);
+		retval.start();
+		return retval;
+	}
+
 	public static void read(Page p, Block b, ByteBuffer bb, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos) throws Exception
 	{
 		ReadThread retval = new ReadThread(p, b, bb, schema, schemaMap, tx, fetchPos);
 		retval.start();
 	}
-	
+
 	public static void read(Page p, Block b, ByteBuffer bb, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos, int rank, int rankSize) throws Exception
 	{
 		ReadThread retval = new ReadThread(p, b, bb, schema, schemaMap, tx, fetchPos);
@@ -352,19 +351,6 @@ public class FileManager
 		retval.start();
 	}
 
-	public static Read3Thread read3(Page p, Page p2, Page p3, Block b, ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3) throws Exception
-	{
-		// final FileChannel fc = FileManager.getFile(b.fileName());
-		// if (b.number() > numBlocks.get(b.fileName()) + 1)
-		// {
-		// throw new IOException("Trying to read block " + b.number() + " from "
-		// + b.fileName() + " which doesn't exist");
-		// }
-		Read3Thread retval = new Read3Thread(p, p2, p3, b, bb, bb2, bb3);
-		retval.start();
-		return retval;
-	}
-	
 	public static ReadThread read(Page p, int num, ArrayList<Integer> indexes, Page[] bp, int rank, int rankSize) throws Exception
 	{
 		// final FileChannel fc = FileManager.getFile(b.fileName());
@@ -377,8 +363,8 @@ public class FileManager
 		retval.start();
 		return retval;
 	}
-	
-	public static Read3Thread read3(Page p, Page p2, Page p3, Block b, ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3, int rank, int rankSize) throws Exception
+
+	public static Read3Thread read3(Page p, Page p2, Page p3, Block b, ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3) throws Exception
 	{
 		// final FileChannel fc = FileManager.getFile(b.fileName());
 		// if (b.number() > numBlocks.get(b.fileName()) + 1)
@@ -387,8 +373,6 @@ public class FileManager
 		// + b.fileName() + " which doesn't exist");
 		// }
 		Read3Thread retval = new Read3Thread(p, p2, p3, b, bb, bb2, bb3);
-		retval.setRank(rank);
-		retval.setRankSize(rankSize);
 		retval.start();
 		return retval;
 	}
@@ -406,12 +390,27 @@ public class FileManager
 		return retval;
 	}
 
+	public static Read3Thread read3(Page p, Page p2, Page p3, Block b, ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3, int rank, int rankSize) throws Exception
+	{
+		// final FileChannel fc = FileManager.getFile(b.fileName());
+		// if (b.number() > numBlocks.get(b.fileName()) + 1)
+		// {
+		// throw new IOException("Trying to read block " + b.number() + " from "
+		// + b.fileName() + " which doesn't exist");
+		// }
+		Read3Thread retval = new Read3Thread(p, p2, p3, b, bb, bb2, bb3);
+		retval.setRank(rank);
+		retval.setRankSize(rankSize);
+		retval.start();
+		return retval;
+	}
+
 	public static void read3(Page p, Page p2, Page p3, Block b, ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3, Schema schema1, Schema schema2, Schema schema3, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos) throws Exception
 	{
 		Read3Thread retval = new Read3Thread(p, p2, p3, b, bb, bb2, bb3, schema1, schema2, schema3, schemaMap, tx, fetchPos);
 		retval.start();
 	}
-	
+
 	public static void read3(Page p, Page p2, Page p3, Block b, ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3, Schema schema1, Schema schema2, Schema schema3, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos, int rank, int rankSize) throws Exception
 	{
 		Read3Thread retval = new Read3Thread(p, p2, p3, b, bb, bb2, bb3, schema1, schema2, schema3, schemaMap, tx, fetchPos);

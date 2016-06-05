@@ -249,7 +249,7 @@ public class XAWorker extends HRDBMSThread
 		else if (op instanceof SemiJoinOperator)
 		{
 			((SemiJoinOperator)op).setTXNum(tx.number());
-		}	
+		}
 		else if (op instanceof AntiJoinOperator)
 		{
 			((AntiJoinOperator)op).setTXNum(tx.number());

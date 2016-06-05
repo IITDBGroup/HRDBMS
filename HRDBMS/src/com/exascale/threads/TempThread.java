@@ -3,7 +3,6 @@ package com.exascale.threads;
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Map.Entry;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -14,11 +13,9 @@ import com.exascale.managers.ResourceManager;
 public class TempThread extends HRDBMSThread
 {
 	private static ConcurrentHashMap<Long, ArrayList<HRDBMSThread>> threads = new ConcurrentHashMap<Long, ArrayList<HRDBMSThread>>();
-	private HRDBMSThread thread;
-	private long txnum;
 	private static int FACTOR;
 	private static ArrayBlockingQueue<ByteBuffer> cache = new ArrayBlockingQueue<ByteBuffer>(1000000);
-	
+
 	static
 	{
 		try
@@ -34,38 +31,53 @@ public class TempThread extends HRDBMSThread
 					{
 						cache.put(ByteBuffer.allocateDirect(8 * 1024 * 1024));
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						throw e;
 					}
 					i++;
-					HRDBMSWorker.logger.debug("Allocate direct " + i);
+
+					if (i % 100 == 0)
+					{
+						HRDBMSWorker.logger.debug("Allocate direct " + i);
+					}
 				}
 			}
 		}
-		catch(Throwable f)
+		catch (Throwable f)
 		{
 			HRDBMSWorker.logger.debug("", f);
-			System.exit(1);;
+			System.exit(1);
+			;
 		}
 	}
-	
-	public static void initialize()
-	{
-		HRDBMSWorker.logger.debug("TempThread initialize");
-	}
-	
+	private final HRDBMSThread thread;
+
+	private final long txnum;
+
 	public TempThread(HRDBMSThread thread, long txnum)
 	{
 		this.thread = thread;
 		this.txnum = txnum;
 	}
-	
-	public static void start(HRDBMSThread thread, long txnum)
+
+	public static void freeDirect(ByteBuffer bb)
 	{
-		new TempThread(thread, txnum).run();
+		if (!cache.offer(bb))
+		{
+			try
+			{
+				Field cleanerField = bb.getClass().getDeclaredField("cleaner");
+				cleanerField.setAccessible(true);
+				sun.misc.Cleaner cleaner = (sun.misc.Cleaner)cleanerField.get(bb);
+				cleaner.clean();
+			}
+			catch (Exception e)
+			{
+			}
+		}
 	}
-	
+
 	public static ByteBuffer getDirect()
 	{
 		ByteBuffer retval = cache.poll();
@@ -79,28 +91,23 @@ public class TempThread extends HRDBMSThread
 			return retval;
 		}
 	}
-	
-	public static void freeDirect(ByteBuffer bb)
+
+	public static void initialize()
 	{
-		if (!cache.offer(bb))
-		{
-			try
-			{
-				Field cleanerField = bb.getClass().getDeclaredField("cleaner");
-				cleanerField.setAccessible(true);
-				sun.misc.Cleaner cleaner = (sun.misc.Cleaner) cleanerField.get(bb);
-				cleaner.clean();
-			}
-			catch(Exception e)
-			{}
-		}
+		HRDBMSWorker.logger.debug("TempThread initialize");
 	}
-	
+
+	public static void start(HRDBMSThread thread, long txnum)
+	{
+		new TempThread(thread, txnum).run();
+	}
+
+	@Override
 	public void run()
 	{
 		while (true)
 		{
-			synchronized(threads)
+			synchronized (threads)
 			{
 				ArrayList<HRDBMSThread> al = threads.get(txnum);
 				if (al == null)
@@ -131,15 +138,16 @@ public class TempThread extends HRDBMSThread
 								{
 									t.join();
 								}
-								catch(Exception e)
-								{}
-								
+								catch (Exception e)
+								{
+								}
+
 								al.remove(i);
 							}
-							
+
 							i--;
 						}
-						
+
 						if (al.size() < (ResourceManager.TEMP_DIRS.size() * FACTOR))
 						{
 							thread.start();
@@ -148,11 +156,11 @@ public class TempThread extends HRDBMSThread
 						}
 					}
 				}
-				
+
 				for (Entry entry : threads.entrySet())
 				{
 					ArrayList<HRDBMSThread> al2 = (ArrayList<HRDBMSThread>)entry.getValue();
-					
+
 					if (al2 != al)
 					{
 						int i = al2.size() - 1;
@@ -165,23 +173,24 @@ public class TempThread extends HRDBMSThread
 								{
 									t.join();
 								}
-								catch(Exception e)
-								{}
-							
+								catch (Exception e)
+								{
+								}
+
 								al2.remove(i);
 							}
-						
+
 							i--;
 						}
 					}
-					
+
 					if (al2.size() == 0)
 					{
-						threads.remove((Long)entry.getKey());
+						threads.remove(entry.getKey());
 					}
 				}
 			}
-			
+
 			LockSupport.parkNanos(1);
 		}
 	}

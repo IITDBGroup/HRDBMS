@@ -2,7 +2,6 @@ package com.exascale.managers;
 
 import java.util.ArrayList;
 import java.util.Enumeration;
-import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -91,7 +90,7 @@ public class HRDBMSWorker
 		BasicConfigurator.configure();
 		fa = new RollingFileAppender(new PatternLayout("%d{ISO8601}\t%p\t%C{1}: %m%n"), "hrdbms.log", true);
 		((RollingFileAppender)fa).setMaxBackupIndex(1);
-		((RollingFileAppender)fa).setMaximumFileSize(2*1024L*1024L*1024L);
+		((RollingFileAppender)fa).setMaximumFileSize(2 * 1024L * 1024L * 1024L);
 		fa.activateOptions();
 		logger.addAppender(fa);
 		logger.setLevel(Level.ALL);
@@ -152,7 +151,7 @@ public class HRDBMSWorker
 			String key = (String)props.nextElement();
 			HRDBMSWorker.logger.debug(key + "-> " + hparms.getProperty(key));
 		}
-		
+
 		new FileManager();
 		new Schema.CVarcharFV();
 		addThread(new BufferManager(true));
@@ -172,7 +171,7 @@ public class HRDBMSWorker
 		// }
 
 		SortOperator.init();
-		
+
 		int i = 0;
 		while (i < Runtime.getRuntime().availableProcessors())
 		{

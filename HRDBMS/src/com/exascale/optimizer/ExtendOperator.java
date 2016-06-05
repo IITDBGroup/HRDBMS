@@ -575,7 +575,8 @@ public final class ExtendOperator implements Operator, Serializable
 								ds = new ArrayList<Double>();
 							}
 							final double d = Double.parseDouble(temp);
-							// System.out.println("Parsed a literal numeric value and got "
+							// System.out.println("Parsed a literal numeric
+							// value and got "
 							// + d);
 							execStack.push(d);
 							ds.add(d);
@@ -807,7 +808,7 @@ public final class ExtendOperator implements Operator, Serializable
 			{
 				limit = max;
 			}
-			
+
 			while (z < limit)
 			{
 				GPUThread thread = new GPUThread(false);

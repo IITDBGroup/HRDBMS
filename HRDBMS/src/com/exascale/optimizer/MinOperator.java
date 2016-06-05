@@ -209,7 +209,7 @@ public final class MinOperator implements AggregateOperator, Serializable
 	{
 		// private final DiskBackedALOHashMap<AtomicDouble> mins = new
 		// DiskBackedALOHashMap<AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
-		private final HashMap<ArrayList<Object>, Object> mins = new HashMap<ArrayList<Object>, Object>();
+		private HashMap<ArrayList<Object>, Object> mins = new HashMap<ArrayList<Object>, Object>();
 		private final HashMap<String, Integer> cols2Pos;
 		private int pos;
 
@@ -231,6 +231,7 @@ public final class MinOperator implements AggregateOperator, Serializable
 		public void close()
 		{
 			// mins.close();
+			mins = null;
 		}
 
 		@Override

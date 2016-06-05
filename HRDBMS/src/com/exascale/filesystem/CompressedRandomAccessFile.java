@@ -3,7 +3,6 @@ package com.exascale.filesystem;
 import java.io.File;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
-import com.exascale.managers.FileManager;
 
 public class CompressedRandomAccessFile
 {

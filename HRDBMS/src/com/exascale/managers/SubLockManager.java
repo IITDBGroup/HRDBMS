@@ -117,7 +117,8 @@ public class SubLockManager
 					// if (current - start >= TIMEOUT)
 					// {
 					// lock.unlock();
-					// HRDBMSWorker.logger.warn("Timed out trying to obtain sLock on "
+					// HRDBMSWorker.logger.warn("Timed out trying to obtain
+					// sLock on "
 					// + b);
 					// throw new LockAbortException();
 					// }
@@ -259,27 +260,27 @@ public class SubLockManager
 	/*
 	 * public void releaseUnusedXLocks(Transaction tx, Index index) {
 	 * lock.lock(); HashSet<Block> xlocks = xTXsToBlocks.get(tx.number());
-	 * 
+	 *
 	 * if (xlocks != null) { for (Block block : (HashSet<Block>)xlocks.clone())
 	 * { if (!index.changedBlocks.contains(block)) { unlockXLock(block,
 	 * tx.number()); index.myPages.remove(block); } } }
-	 * 
+	 *
 	 * lock.unlock(); }
-	 * 
+	 *
 	 * public void unlockXLock(Block b, long txnum) { lock.lock();
 	 * HashSet<Block> array = xTXsToBlocks.get(txnum);
-	 * 
+	 *
 	 * if (array == null) { lock.unlock(); return; } else { array.remove(b); if
 	 * (array.size() == 0) { xTXsToBlocks.remove(txnum); } }
-	 * 
+	 *
 	 * xBlocksToTXs.remove(b);
-	 * 
+	 *
 	 * ArrayList<Thread> threads = waitList.get(b); if (threads != null) {
 	 * Thread thread = threads.remove(0); inverseWaitList.remove(thread); Long
 	 * tx = threads2Txs.remove(thread); txs2Threads.remove(tx); if
 	 * (threads.size() == 0) { waitList.remove(b); } synchronized(thread) {
 	 * thread.notify(); } }
-	 * 
+	 *
 	 * lock.unlock(); }
 	 */
 
@@ -325,7 +326,8 @@ public class SubLockManager
 					// if (current - start >= TIMEOUT)
 					// {
 					// lock.unlock();
-					// HRDBMSWorker.logger.warn("Timed out trying to obtain xLock on "
+					// HRDBMSWorker.logger.warn("Timed out trying to obtain
+					// xLock on "
 					// + b);
 					// throw new LockAbortException();
 					// }
@@ -398,7 +400,8 @@ public class SubLockManager
 						// if (current - start >= TIMEOUT)
 						// {
 						// lock.unlock();
-						// HRDBMSWorker.logger.warn("Timed out trying to obtain xLock on "
+						// HRDBMSWorker.logger.warn("Timed out trying to obtain
+						// xLock on "
 						// + b);
 						// throw new LockAbortException();
 						// }

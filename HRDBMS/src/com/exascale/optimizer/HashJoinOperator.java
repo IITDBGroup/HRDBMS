@@ -18,14 +18,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.Vector;
-import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 import com.exascale.misc.BloomFilter;
@@ -105,11 +103,6 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 	private transient AtomicLong received;
 	private transient volatile boolean demReceived;
 	private long txnum;
-	
-	public void setTXNum(long txnum)
-	{
-		this.txnum = txnum;
-	}
 
 	public HashJoinOperator(String left, String right, MetaData meta) throws Exception
 	{
@@ -162,6 +155,209 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		return value;
 	}
 
+	private static int getCInt(ByteBuffer bb)
+	{
+		int temp = (bb.get() & 0xff);
+		int length = (temp >>> 5);
+		if (length == 1)
+		{
+			return (temp & 0x1f);
+		}
+		else if (length == 5)
+		{
+			return bb.getInt();
+		}
+		else
+		{
+			int retval = (temp & 0x1f);
+			if (length == 2)
+			{
+				retval = (retval << 8);
+				retval += (bb.get() & 0xff);
+			}
+			else if (length == 3)
+			{
+				retval = (retval << 16);
+				retval += (bb.getShort() & 0xffff);
+			}
+			else
+			{
+				retval = (retval << 24);
+				retval += getMedium(bb);
+			}
+
+			return retval;
+		}
+	}
+
+	private static int getCInt(ByteBuffer bb, int pos)
+	{
+		int temp = (bb.get(pos) & 0xff);
+		int length = (temp >>> 5);
+		if (length == 1)
+		{
+			return (temp & 0x1f);
+		}
+		else if (length == 5)
+		{
+			return bb.getInt(pos + 1);
+		}
+		else
+		{
+			int retval = (temp & 0x1f);
+			if (length == 2)
+			{
+				retval = (retval << 8);
+				retval += (bb.get(pos + 1) & 0xff);
+			}
+			else if (length == 3)
+			{
+				retval = (retval << 16);
+				retval += (bb.getShort(pos + 1) & 0xffff);
+			}
+			else
+			{
+				retval = (retval << 24);
+				retval += getMedium(bb, pos + 1);
+			}
+
+			return retval;
+		}
+	}
+
+	private static long getCLong(ByteBuffer bb)
+	{
+		int temp = (bb.get() & 0xff);
+		int length = (temp >>> 4);
+		if (length == 1)
+		{
+			return (temp & 0x0f);
+		}
+		else if (length == 9)
+		{
+			return bb.getLong();
+		}
+		else
+		{
+			long retval = (temp & 0x0f);
+			if (length == 2)
+			{
+				retval = (retval << 8);
+				retval += (bb.get() & 0xff);
+			}
+			else if (length == 3)
+			{
+				retval = (retval << 16);
+				retval += (bb.getShort() & 0xffff);
+			}
+			else if (length == 4)
+			{
+				retval = (retval << 24);
+				retval += getMedium(bb);
+			}
+			else if (length == 5)
+			{
+				retval = (retval << 32);
+				retval += (bb.getInt() & 0xffffffffl);
+			}
+			else if (length == 6)
+			{
+				retval = (retval << 40);
+				retval += ((bb.get() & 0xffl) << 32);
+				retval += (bb.getInt() & 0xffffffffl);
+			}
+			else if (length == 7)
+			{
+				retval = (retval << 48);
+				retval += ((bb.getShort() & 0xffffl) << 32);
+				retval += (bb.getInt() & 0xffffffffl);
+			}
+			else
+			{
+				retval = (retval << 56);
+				retval += ((getMedium(bb) & 0xffffffl) << 32);
+				retval += (bb.getInt() & 0xffffffffl);
+			}
+
+			return retval;
+		}
+	}
+
+	private static long getCLong(ByteBuffer bb, int pos)
+	{
+		int temp = (bb.get(pos) & 0xff);
+		int length = (temp >>> 4);
+		if (length == 1)
+		{
+			return (temp & 0x0f);
+		}
+		else if (length == 9)
+		{
+			return bb.getLong(pos + 1);
+		}
+		else
+		{
+			long retval = (temp & 0x0f);
+			if (length == 2)
+			{
+				retval = (retval << 8);
+				retval += (bb.get(pos + 1) & 0xff);
+			}
+			else if (length == 3)
+			{
+				retval = (retval << 16);
+				retval += (bb.getShort(pos + 1) & 0xffff);
+			}
+			else if (length == 4)
+			{
+				retval = (retval << 24);
+				retval += getMedium(bb, pos + 1);
+			}
+			else if (length == 5)
+			{
+				retval = (retval << 32);
+				retval += (bb.getInt(pos + 1) & 0xffffffffl);
+			}
+			else if (length == 6)
+			{
+				retval = (retval << 40);
+				retval += ((bb.get(pos + 1) & 0xffl) << 32);
+				retval += (bb.getInt(pos + 2) & 0xffffffffl);
+			}
+			else if (length == 7)
+			{
+				retval = (retval << 48);
+				retval += ((bb.getShort(pos + 1) & 0xffffl) << 32);
+				retval += (bb.getInt(pos + 3) & 0xffffffffl);
+			}
+			else
+			{
+				retval = (retval << 56);
+				retval += ((getMedium(bb, pos + 1) & 0xffffffl) << 32);
+				retval += (bb.getInt(pos + 4) & 0xffffffffl);
+			}
+
+			return retval;
+		}
+	}
+
+	private static int getMedium(ByteBuffer bb)
+	{
+		int retval = ((bb.getShort() & 0xffff) << 8);
+		retval += (bb.get() & 0xff);
+		return retval;
+	}
+
+	private static int getMedium(ByteBuffer bb, int pos)
+	{
+		// int retval = (hb[pos] << 16) | ((hb[pos + 1] & 0xff) << 8) | ((hb[pos
+		// + 2] & 0xff));
+		bb.position(pos);
+		int retval = ((bb.getShort() & 0xffff) << 8);
+		retval += (bb.get() & 0xff);
+		return retval;
+	}
+
 	private static long hash(Object key) throws Exception
 	{
 		long eHash;
@@ -184,6 +380,108 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		}
 
 		return eHash;
+	}
+
+	private static void putCInt(ByteBuffer bb, int val)
+	{
+		if (val <= 31)
+		{
+			// 1 byte
+			val |= 0x20;
+			bb.put((byte)val);
+		}
+		else if (val <= 8191)
+		{
+			// 2 bytes
+			val |= 0x4000;
+			bb.putShort((short)val);
+		}
+		else if (val <= 0x1fffff)
+		{
+			// 3 bytes
+			val |= 0x600000;
+			putMedium(bb, val);
+		}
+		else if (val <= 0x1FFFFFFF)
+		{
+			// 4 bytes
+			val |= 0x80000000;
+			bb.putInt(val);
+		}
+		else
+		{
+			// 5 bytes
+			bb.put((byte)0xa0);
+			bb.putInt(val);
+		}
+	}
+
+	private static void putCLong(ByteBuffer bb, long val)
+	{
+		if (val <= 15)
+		{
+			// 1 byte
+			val |= 0x10;
+			bb.put((byte)val);
+		}
+		else if (val <= 4095)
+		{
+			// 2 bytes
+			val |= 0x2000;
+			bb.putShort((short)val);
+		}
+		else if (val <= 0xfffff)
+		{
+			// 3 bytes
+			val |= 0x300000;
+			putMedium(bb, (int)val);
+		}
+		else if (val <= 0xfffffff)
+		{
+			// 4 bytes
+			val |= 0x40000000;
+			bb.putInt((int)val);
+		}
+		else if (val <= 0xfffffffffl)
+		{
+			// 5 bytes
+			val |= 0x5000000000l;
+			bb.put((byte)(val >>> 32));
+			bb.putInt((int)val);
+		}
+		else if (val <= 0xfffffffffffl)
+		{
+			// 6 bytes
+			val |= 0x600000000000l;
+			bb.putShort((short)(val >>> 32));
+			bb.putInt((int)val);
+		}
+		else if (val <= 0xfffffffffffffl)
+		{
+			// 7 bytes
+			val |= 0x70000000000000l;
+			putMedium(bb, (int)(val >> 32));
+			bb.putInt((int)val);
+		}
+		else if (val <= 0xfffffffffffffffl)
+		{
+			// 8 bytes
+			val |= 0x8000000000000000l;
+			bb.putLong(val);
+		}
+		else
+		{
+			// 9 bytes
+			bb.put((byte)0x90);
+			bb.putLong(val);
+		}
+	}
+
+	private static void putMedium(ByteBuffer bb, int val)
+	{
+		bb.put((byte)((val & 0xff0000) >> 16));
+		bb.put((byte)((val & 0xff00) >> 8));
+		bb.put((byte)(val & 0xff));
 	}
 
 	private static final byte[] toBytes(Object v) throws Exception
@@ -939,6 +1237,11 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		semi = new Boolean(true);
 	}
 
+	public void setTXNum(long txnum)
+	{
+		this.txnum = txnum;
+	}
+
 	@Override
 	public void start() throws Exception
 	{
@@ -962,11 +1265,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 
 			outBuffer = new BufferedLinkedBlockingQueue(ResourceManager.QUEUE_SIZE);
 
-			if (ResourceManager.criticalMem())
-			{
-				new ExternalThread().start();
-			}
-			else if (rightChildCard > ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")))
+			if (rightChildCard > ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")))
 			{
 				HRDBMSWorker.logger.debug("External HJO factor: " + (rightChildCard / (ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")))));
 				// double percentInMem = ResourceManager.QUEUE_SIZE *
@@ -1163,17 +1462,12 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			// numBins = 8192;
 			// }
 			// HRDBMSWorker.logger.debug("Using numBins = " + numBins);
-			int numBins = (int)(leftChildCard / 100000);
+			int numBins = leftChildCard / Integer.parseInt(HRDBMSWorker.getHParms().getProperty("hjo_bin_size"));
 			if (numBins < 2)
 			{
 				numBins = 2;
 			}
-			
-			if (numBins > 1600)
-			{
-				numBins = 1600;
-			}
-			
+
 			int inMemBins = (int)(numBins * percentInMem);
 			byte[] types1 = new byte[children.get(0).getPos2Col().size()];
 			int j = 0;
@@ -1276,10 +1570,10 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			ArrayList<ArrayList<ArrayList<Object>>> lbins = thread1.getBins();
 
 			ReadDataThread thread3 = new ReadDataThread(channels1.get(0), types1, lbins, inMemBins, 0);
-			//thread3.setPriority(Thread.MAX_PRIORITY);
+			// thread3.setPriority(Thread.MAX_PRIORITY);
 			thread3.start();
 			ReadDataThread thread4 = new ReadDataThread(channels1.get(1), types1, lbins, inMemBins, 1);
-			//thread4.setPriority(Thread.MAX_PRIORITY-1);
+			// thread4.setPriority(Thread.MAX_PRIORITY-1);
 			thread4.start();
 			ArrayList<ReadDataThread> leftThreads = new ArrayList<ReadDataThread>();
 			leftThreads.add(thread3);
@@ -1305,10 +1599,10 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			ArrayList<ArrayList<ArrayList<Object>>> rbins = thread2.getBins();
 
 			HashDataThread thread5 = new HashDataThread(channels2.get(0), types2, rbins, inMemBins, 0);
-			//thread5.setPriority(Thread.MAX_PRIORITY);
+			// thread5.setPriority(Thread.MAX_PRIORITY);
 			thread5.start();
 			HashDataThread thread6 = new HashDataThread(channels2.get(1), types2, rbins, inMemBins, 1);
-			//thread6.setPriority(Thread.MAX_PRIORITY-1);
+			// thread6.setPriority(Thread.MAX_PRIORITY-1);
 			thread6.start();
 			ArrayList<HashDataThread> rightThreads = new ArrayList<HashDataThread>();
 			rightThreads.add(thread5);
@@ -1318,12 +1612,12 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			ArrayList<ExternalProcessThread> epThreads = new ArrayList<ExternalProcessThread>();
 
 			int maxPar = Runtime.getRuntime().availableProcessors();
-			
+
 			if (maxPar > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("hjo_max_par")))
 			{
 				maxPar = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("hjo_max_par"));
 			}
-			
+
 			int numPar1 = -1;
 			int numPar2 = -1;
 
@@ -1393,7 +1687,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 				{
 					pri = Thread.NORM_PRIORITY;
 				}
-				//ept.setPriority(pri);
+				// ept.setPriority(pri);
 				ept.start();
 				epThreads.add(ept);
 
@@ -1411,8 +1705,8 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					{
 						rp = Thread.NORM_PRIORITY;
 					}
-					//left2.setPriority(lp);
-					//right2.setPriority(rp);
+					// left2.setPriority(lp);
+					// right2.setPriority(rp);
 					i++;
 					left2.start();
 					right2.start();
@@ -1560,10 +1854,10 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			{
 				// string
 				int length = getCInt(bb);
-				
+
 				byte[] temp = new byte[length];
 				bb.get(temp);
-				
+
 				if (!Schema.CVarcharFV.compress)
 				{
 					try
@@ -1599,7 +1893,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 
 		return retval;
 	}
-	
+
 	private final Object fromBytes2(byte[] val, byte[] types) throws Exception
 	{
 		final ByteBuffer bb = ByteBuffer.wrap(val);
@@ -1642,10 +1936,10 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			{
 				// string
 				int length = bb.getInt();
-				
+
 				byte[] temp = new byte[length];
 				bb.get(temp);
-				
+
 				try
 				{
 					final String o = new String(temp, StandardCharsets.UTF_8);
@@ -1670,316 +1964,6 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		return retval;
 	}
 
-	private final Object fromBytes(byte[] val, byte[] types, int[] poses) throws Exception
-	{
-		final ByteBuffer bb = ByteBuffer.wrap(val);
-		final int numFields = types.length;
-
-		if (numFields == 0)
-		{
-			return new ArrayList<Object>();
-		}
-
-		final ArrayList<Object> retval = new ArrayList<Object>(poses.length);
-		int[] offsets = new int[types.length];
-		int i = 0;
-		int pos = 0;
-		while (i < offsets.length)
-		{
-			offsets[i] = pos;
-			if (types[i] == 2)
-			{
-				pos += 8;
-			}
-			else if (types[i] == 0)
-			{
-				pos += ((bb.get(pos) & 0xff) >>> 4);
-			}
-			else if (types[i] == 3)
-			{
-				pos += 3;
-			}
-			else if (types[i] == 1)
-			{
-				pos += ((bb.get(pos) & 0xff) >>> 5);
-			}
-			else
-			{
-				// type 4
-				int lenlen = ((bb.get(pos) & 0xff) >>> 5);
-				int length = getCInt(bb, pos);
-				pos += (lenlen + length);
-			}
-
-			i++;
-		}
-
-		for (int pos2 : poses)
-		{
-			pos = offsets[pos2];
-			if (types[pos2] == 0)
-			{
-				// long
-				final Long o = getCLong(bb, pos);
-				retval.add(o);
-			}
-			else if (types[pos2] == 1)
-			{
-				// integer
-				final Integer o = getCInt(bb, pos);
-				retval.add(o);
-			}
-			else if (types[pos2] == 2)
-			{
-				// double
-				final Double o = bb.getDouble(pos);
-				retval.add(o);
-			}
-			else if (types[pos2] == 3)
-			{
-				// date
-				final MyDate o = new MyDate(getMedium(bb, pos));
-				retval.add(o);
-			}
-			else
-			{
-				// string
-				int lenlen = ((bb.get(pos) & 0xff) >>> 5);
-				int length = getCInt(bb, pos);
-				byte[] temp = new byte[length];
-				bb.position(pos + lenlen);
-				bb.get(temp);
-				
-				if (!Schema.CVarcharFV.compress)
-				{
-					try
-					{
-						final String o = new String(temp, StandardCharsets.UTF_8);
-						retval.add(o);
-					}
-					catch (final Exception e)
-					{
-						HRDBMSWorker.logger.error("", e);
-						throw e;
-					}
-				}
-				else
-				{
-					byte[] out = new byte[temp.length << 1];
-					int clen = Schema.CVarcharFV.decompress(temp, temp.length, out);
-					temp = new byte[clen];
-					System.arraycopy(out, 0, temp, 0, clen);
-					final String o = new String(temp, StandardCharsets.UTF_8);
-					retval.add(o);
-				}
-			}
-		}
-
-		return retval;
-	}
-	
-	private static int getMedium(ByteBuffer bb, int pos)
-	{
-		//int retval = (hb[pos] << 16) | ((hb[pos + 1] & 0xff) << 8) | ((hb[pos + 2] & 0xff));
-		bb.position(pos);
-		int retval = ((bb.getShort() & 0xffff) << 8);
-		retval += (bb.get() & 0xff);
-		return retval;
-	}
-	
-	private static int getMedium(ByteBuffer bb)
-	{
-		int retval = ((bb.getShort() & 0xffff) << 8);
-		retval += (bb.get() & 0xff);
-		return retval;
-	}
-	
-	private static long getCLong(ByteBuffer bb)
-	{
-		int temp = (bb.get() & 0xff);
-		int length = (temp >>> 4);
-		if (length == 1)
-		{
-			return (temp & 0x0f);
-		}
-		else if (length == 9)
-		{
-			return bb.getLong();
-		}
-		else
-		{
-			long retval = (temp & 0x0f);
-			if (length == 2)
-			{
-				retval = (retval << 8);
-				retval += (bb.get() & 0xff);
-			}
-			else if (length == 3)
-			{
-				retval = (retval << 16);
-				retval += (bb.getShort() & 0xffff);
-			}
-			else if (length == 4)
-			{
-				retval = (retval << 24);
-				retval += getMedium(bb);
-			}
-			else if (length == 5)
-			{
-				retval = (retval << 32);
-				retval += (bb.getInt() & 0xffffffffl);
-			}
-			else if (length == 6)
-			{
-				retval = (retval << 40);
-				retval += ((bb.get() & 0xffl) << 32);
-				retval += (bb.getInt() & 0xffffffffl);
-			}
-			else if (length == 7)
-			{
-				retval = (retval << 48);
-				retval += ((bb.getShort() & 0xffffl) << 32);
-				retval += (bb.getInt() & 0xffffffffl);
-			}
-			else
-			{
-				retval = (retval << 56);
-				retval += ((getMedium(bb) & 0xffffffl) << 32);
-				retval += (bb.getInt() & 0xffffffffl);
-			}
-			
-			return retval;
-		}
-	}
-	
-	private static int getCInt(ByteBuffer bb)
-	{
-		int temp = (bb.get() & 0xff);
-		int length = (temp >>> 5);
-		if (length == 1)
-		{
-			return (temp & 0x1f);
-		}
-		else if (length == 5)
-		{
-			return bb.getInt();
-		}
-		else
-		{
-			int retval = (temp & 0x1f);
-			if (length == 2)
-			{
-				retval = (retval << 8);
-				retval += (bb.get() & 0xff);
-			}
-			else if (length == 3)
-			{
-				retval = (retval << 16);
-				retval += (bb.getShort() & 0xffff);
-			}
-			else
-			{
-				retval = (retval << 24);
-				retval += getMedium(bb);
-			}
-			
-			return retval;
-		}
-	}
-	
-	private static long getCLong(ByteBuffer bb, int pos)
-	{
-		int temp = (bb.get(pos) & 0xff);
-		int length = (temp >>> 4);
-		if (length == 1)
-		{
-			return (temp & 0x0f);
-		}
-		else if (length == 9)
-		{
-			return bb.getLong(pos+1);
-		}
-		else
-		{
-			long retval = (temp & 0x0f);
-			if (length == 2)
-			{
-				retval = (retval << 8);
-				retval += (bb.get(pos+1) & 0xff);
-			}
-			else if (length == 3)
-			{
-				retval = (retval << 16);
-				retval += (bb.getShort(pos+1) & 0xffff);
-			}
-			else if (length == 4)
-			{
-				retval = (retval << 24);
-				retval += getMedium(bb, pos+1);
-			}
-			else if (length == 5)
-			{
-				retval = (retval << 32);
-				retval += (bb.getInt(pos+1) & 0xffffffffl);
-			}
-			else if (length == 6)
-			{
-				retval = (retval << 40);
-				retval += ((bb.get(pos+1) & 0xffl) << 32);
-				retval += (bb.getInt(pos+2) & 0xffffffffl);
-			}
-			else if (length == 7)
-			{
-				retval = (retval << 48);
-				retval += ((bb.getShort(pos+1) & 0xffffl) << 32);
-				retval += (bb.getInt(pos+3) & 0xffffffffl);
-			}
-			else
-			{
-				retval = (retval << 56);
-				retval += ((getMedium(bb, pos+1) & 0xffffffl) << 32);
-				retval += (bb.getInt(pos+4) & 0xffffffffl);
-			}
-			
-			return retval;
-		}
-	}
-	
-	private static int getCInt(ByteBuffer bb, int pos)
-	{
-		int temp = (bb.get(pos) & 0xff);
-		int length = (temp >>> 5);
-		if (length == 1)
-		{
-			return (temp & 0x1f);
-		}
-		else if (length == 5)
-		{
-			return bb.getInt(pos+1);
-		}
-		else
-		{
-			int retval = (temp & 0x1f);
-			if (length == 2)
-			{
-				retval = (retval << 8);
-				retval += (bb.get(pos+1) & 0xff);
-			}
-			else if (length == 3)
-			{
-				retval = (retval << 16);
-				retval += (bb.getShort(pos+1) & 0xffff);
-			}
-			else
-			{
-				retval = (retval << 24);
-				retval += getMedium(bb, pos+1);
-			}
-			
-			return retval;
-		}
-	}
-
 	private List<ArrayList<Object>> getCandidates(List<byte[]> bCandidates, byte[] types) throws Exception
 	{
 		final int limit = bCandidates.size();
@@ -1992,7 +1976,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			{
 				retval.add((ArrayList<Object>)fromBytes2(b, types));
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 				throw e;
@@ -2224,19 +2208,19 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 
 			final byte[] retval = new byte[size];
 			final ByteBuffer retvalBB = ByteBuffer.wrap(retval);
-			//retvalBB.putInt(size - 4);
+			// retvalBB.putInt(size - 4);
 			int x = 0;
 			int i = 0;
 			for (final Object o : val)
 			{
 				if (types[i] == 0)
 				{
-					//retvalBB.putLong((Long)o);
+					// retvalBB.putLong((Long)o);
 					putCLong(retvalBB, (Long)o);
 				}
 				else if (types[i] == 1)
 				{
-					//retvalBB.putInt((Integer)o);
+					// retvalBB.putInt((Integer)o);
 					putCInt(retvalBB, (Integer)o);
 				}
 				else if (types[i] == 2)
@@ -2246,13 +2230,13 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 				else if (types[i] == 3)
 				{
 					int value = ((MyDate)o).getTime();
-					//retvalBB.putInt(value);
+					// retvalBB.putInt(value);
 					putMedium(retvalBB, value);
 				}
 				else if (types[i] == 4)
 				{
 					byte[] temp = bytes.get(x++);
-					//retvalBB.putInt(temp.length);
+					// retvalBB.putInt(temp.length);
 					putCInt(retvalBB, temp.length);
 					retvalBB.put(temp);
 				}
@@ -2287,108 +2271,6 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		}
 
 		return retval;
-	}
-	
-	private static void putCLong(ByteBuffer bb, long val)
-	{
-		if (val <= 15)
-		{
-			//1 byte
-			val |= 0x10;
-			bb.put((byte)val);
-		}
-		else if (val <= 4095)
-		{
-			//2 bytes
-			val |= 0x2000;
-			bb.putShort((short)val);
-		}
-		else if (val <= 0xfffff)
-		{
-			//3 bytes
-			val |= 0x300000;
-			putMedium(bb, (int)val);
-		}
-		else if (val <= 0xfffffff)
-		{
-			//4 bytes
-			val |= 0x40000000;
-			bb.putInt((int)val);
-		}
-		else if (val <= 0xfffffffffl)
-		{
-			//5 bytes
-			val |= 0x5000000000l;
-			bb.put((byte)(val >>> 32));
-			bb.putInt((int)val);
-		}
-		else if (val <= 0xfffffffffffl)
-		{
-			//6 bytes
-			val |= 0x600000000000l;
-			bb.putShort((short)(val >>> 32));
-			bb.putInt((int)val);
-		}
-		else if (val <= 0xfffffffffffffl)
-		{
-			//7 bytes
-			val |= 0x70000000000000l;
-			putMedium(bb, (int)(val >> 32));
-			bb.putInt((int)val);
-		}
-		else if (val <= 0xfffffffffffffffl)
-		{
-			//8 bytes
-			val |= 0x8000000000000000l;
-			bb.putLong(val);
-		}
-		else
-		{
-			//9 bytes
-			bb.put((byte)0x90);
-			bb.putLong(val);
-		}
-	}
-	
-	private static void putCInt(ByteBuffer bb, int val)
-	{
-		if (val <= 31)
-		{
-			//1 byte
-			val |= 0x20;
-			bb.put((byte)val);
-		}
-		else if (val <= 8191)
-		{
-			//2 bytes
-			val |= 0x4000;
-			bb.putShort((short)val);
-		}
-		else if (val <= 0x1fffff)
-		{
-			//3 bytes
-			val |= 0x600000;
-			putMedium(bb, val);
-		}
-		else if (val <= 0x1FFFFFFF)
-		{
-			//4 bytes
-			val |= 0x80000000;
-			bb.putInt(val);
-		}
-		else
-		{
-			//5 bytes
-			bb.put((byte)0xa0);
-			bb.putInt(val);
-		}
-	}
-	
-	private static void putMedium(ByteBuffer bb, int val)
-	{
-		bb.put((byte)((val & 0xff0000) >> 16));
-		bb.put((byte)((val & 0xff00) >> 8));
-		bb.put((byte)(val & 0xff));
 	}
 
 	private final void writeToHashTable(long hash, byte[] row) throws Exception
@@ -2437,7 +2319,6 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		private final HashDataThread right;
 		private final byte[] types;
 		private final int par;
-		private int pri;
 
 		public ExternalProcessThread(ReadDataThread left, HashDataThread right, byte[] types, int par)
 		{
@@ -2446,19 +2327,14 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			this.types = types;
 			this.par = par;
 		}
-		
-		public void setPriority(int pri)
-		{
-			this.pri = pri;
-		}
 
 		@Override
 		public void run()
 		{
-			//if (pri != -1)
-			//{
-			//	Thread.currentThread().setPriority(pri);
-			//}
+			// if (pri != -1)
+			// {
+			// Thread.currentThread().setPriority(pri);
+			// }
 			try
 			{
 				if (par == 1)
@@ -2531,11 +2407,6 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 	{
 		private final double percentInMem;
 
-		public ExternalThread()
-		{
-			percentInMem = 0;
-		}
-
 		public ExternalThread(double percentInMem)
 		{
 			this.percentInMem = percentInMem;
@@ -2555,7 +2426,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		private final FileChannel fc;
 		private boolean ok = true;
 		private Exception e;
-		private ByteBuffer direct;
+		private final ByteBuffer direct;
 		private boolean force = false;
 
 		public FlushBinThread(ArrayList<ArrayList<Object>> bin, byte[] types, FileChannel fc, ByteBuffer direct)
@@ -2565,7 +2436,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			this.fc = fc;
 			this.direct = direct;
 		}
-		
+
 		public FlushBinThread(ArrayList<ArrayList<Object>> bin, byte[] types, FileChannel fc, ByteBuffer direct, boolean force)
 		{
 			this.types = types;
@@ -2588,13 +2459,14 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		@Override
 		public void run()
 		{
-			//Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
+			// Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
 			try
 			{
 				byte[] data = rsToBytes(bin, types);
-				//HRDBMSWorker.logger.debug("HJO bin flush size = " + (data.length * 1.0 / 1048576) + "MB");
+				// HRDBMSWorker.logger.debug("HJO bin flush size = " +
+				// (data.length * 1.0 / 1048576) + "MB");
 				bin = null;
-				
+
 				if (direct == null)
 				{
 					// fc.position(fc.size());
@@ -2609,12 +2481,12 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 						{
 							direct.put(data);
 						}
-						catch(Exception e)
+						catch (Exception e)
 						{
 							HRDBMSWorker.logger.debug("", e);
 							HRDBMSWorker.logger.debug("Capacity: " + direct.capacity() + " Limit: " + direct.limit() + " Position: " + direct.position() + " Write size: " + data.length);
 						}
-						
+
 						if (force)
 						{
 							direct.limit(direct.position());
@@ -2632,7 +2504,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 							fc.write(direct);
 							direct.limit(direct.capacity());
 						}
-						
+
 						if (!force && data.length <= 8 * 1024 * 1024)
 						{
 							direct.position(0);
@@ -2665,21 +2537,15 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		private final ArrayList<ArrayList<ArrayList<Object>>> bins;
 		private final int binsInMem;
 		private final int index;
-		private int pri;
 
 		public HashDataThread(FileChannel fc, byte[] types, ArrayList<ArrayList<ArrayList<Object>>> bins, int binsInMem, int index) throws Exception
 		{
-			this.fc = new BufferedFileChannel(fc, 8*1024*1024);
+			this.fc = new BufferedFileChannel(fc, 8 * 1024 * 1024);
 			this.types = types;
 			data = new HJOMultiHashMap<Long, byte[]>();
 			this.bins = bins;
 			this.binsInMem = binsInMem;
 			this.index = index;
-		}
-		
-		public void setPriority(int pri)
-		{
-			this.pri = pri;
 		}
 
 		public void clear()
@@ -2707,7 +2573,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		{
 			// HRDBMSWorker.logger.debug(HashJoinOperator.this +
 			// ": HashDataThread #" + index + " starting");
-			//Thread.currentThread().setPriority(pri);
+			// Thread.currentThread().setPriority(pri);
 			try
 			{
 				if (index < binsInMem)
@@ -2780,11 +2646,11 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					{
 						row = (ArrayList<Object>)fromBytes(bb.array(), types);
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						HRDBMSWorker.logger.debug("", e);
 					}
-					
+
 					for (int pos : poses)
 					{
 						row2.add(row.get(pos));
@@ -2950,7 +2816,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 				directs.add(null);
 				i++;
 			}
-			
+
 			if (HRDBMSWorker.getHParms().getProperty("use_direct_buffers_for_flush").equals("true"))
 			{
 				i = 0;
@@ -2960,7 +2826,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					i++;
 				}
 			}
-			
+
 			i = 0;
 			ArrayList<SubLeftThread> slThreads = new ArrayList<SubLeftThread>();
 			while (i < 1)
@@ -3050,10 +2916,10 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					}
 
 					int x = (int)(hash % numBins);
-					
+
 					rwLock.readLock().lock();
 					ArrayList<ArrayList<Object>> bin = bins.get(x);
-					synchronized(bin)
+					synchronized (bin)
 					{
 						// writeToHashTable(hash, (ArrayList<Object>)o);
 						bin.add((ArrayList<Object>)o);
@@ -3096,11 +2962,11 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 						received.getAndIncrement();
 					}
 				}
-				
+
 				for (SubLeftThread t : slThreads)
 				{
 					t.join();
-					
+
 					if (!t.getOK())
 					{
 						throw t.getException();
@@ -3155,10 +3021,10 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					{
 						TempThread.freeDirect(bb);
 					}
-					
+
 					i++;
 				}
-				
+
 				i = numBins - 1;
 				while (i >= inMemBins)
 				{
@@ -3172,168 +3038,6 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 				this.e = e;
 			}
 		}
-	}
-	
-	private final class SubLeftThread extends HRDBMSThread
-	{
-		private LeftThread leftThread;
-		private ConcurrentHashMap<Integer, FlushBinThread> threads;
-		private final int size;
-		private boolean ok = true;
-		private Exception e;
-		
-		public SubLeftThread(LeftThread leftThread, ConcurrentHashMap<Integer, FlushBinThread> threads, int size)
-		{
-			this.leftThread = leftThread;
-			this.threads = threads;
-			this.size = size;
-		}
-		
-		public boolean getOK()
-		{
-			return ok;
-		}
-		
-		public Exception getException()
-		{
-			return e;
-		}
-		
-		public void run()
-		{
-			try
-			{
-				final Operator child = children.get(0);
-				final HashMap<String, Integer> childCols2Pos = child.getCols2Pos();
-				Object o = child.next(HashJoinOperator.this);
-				if (o instanceof DataEndMarker)
-				{
-					demReceived = true;
-					// HRDBMSWorker.logger.debug(HashJoinOperator.this +
-					// " LeftThread received DEM");
-				}
-				else
-				{
-					received.getAndIncrement();
-				}
-
-				int[] poses = new int[lefts.size()];
-				int i = 0;
-				for (String col : lefts)
-				{
-					poses[i] = childCols2Pos.get(col);
-					i++;
-				}
-				final ArrayList<Object> key = new ArrayList<Object>(lefts.size());
-				while (!(o instanceof DataEndMarker))
-				{
-					i = 0;
-					key.clear();
-					for (int pos : poses)
-					{
-						try
-						{
-							key.add(((ArrayList<Object>)o).get(pos));
-							i++;
-						}
-						catch (Exception e)
-						{
-							HRDBMSWorker.logger.debug("Failed to find a column in " + childCols2Pos);
-							throw e;
-						}
-					}
-
-					final long hash = 0x7FFFFFFFFFFFFFFFL & hash(key);
-					if (leftThread.tempBF != null)
-					{
-						leftThread.tempBF.add(hash); 
-					}
-					if (anti == null && bf != null && !bf.passes(hash)) 
-					{
-						o = child.next(HashJoinOperator.this);
-						if (o instanceof DataEndMarker)
-						{
-							demReceived = true;
-							// HRDBMSWorker.logger.debug(HashJoinOperator.this +
-							// " LeftThread received DEM");
-						}
-						else
-						{
-							received.getAndIncrement();
-						}
-						continue;
-					}
-					else if (anti != null && bf != null && !bf.passes(hash, key)) 
-					{
-						o = child.next(HashJoinOperator.this);
-						if (o instanceof DataEndMarker)
-						{
-							demReceived = true;
-							// HRDBMSWorker.logger.debug(HashJoinOperator.this +
-							// " LeftThread received DEM");
-						}
-						else
-						{
-							received.getAndIncrement();
-						}
-						continue;
-					}
-
-					int x = (int)(hash % leftThread.numBins);
-					
-					leftThread.rwLock.readLock().lock();
-					ArrayList<ArrayList<Object>> bin = leftThread.bins.get(x);
-					synchronized(bin)
-					{
-						// writeToHashTable(hash, (ArrayList<Object>)o);
-						bin.add((ArrayList<Object>)o);
-					}
-					leftThread.rwLock.readLock().unlock();
-
-					if (x >= leftThread.inMemBins && bin.size() >= size)
-					{
-						leftThread.rwLock.writeLock().lock();
-						bin = leftThread.bins.get(x);
-						if (bin.size() >= size)
-						{
-							FlushBinThread thread = new FlushBinThread(bin, leftThread.types, leftThread.channels.get(x), leftThread.directs.get(x));
-							if (threads.putIfAbsent(x, thread) != null)
-							{
-								threads.get(x).join();
-								if (!threads.get(x).getOK())
-								{
-									leftThread.rwLock.writeLock().unlock();
-									throw threads.get(x).getException();
-								}
-
-								threads.put(x, thread);
-							}
-							TempThread.start(thread, txnum);
-							leftThread.bins.set(x, new ArrayList<ArrayList<Object>>(size));
-						}
-						leftThread.rwLock.writeLock().unlock();
-					}
-
-					o = child.next(HashJoinOperator.this);
-					if (o instanceof DataEndMarker)
-					{
-						demReceived = true;
-						// HRDBMSWorker.logger.debug(HashJoinOperator.this +
-						// " LeftThread received DEM");
-					}
-					else
-					{
-						received.getAndIncrement();
-					}
-				}
-			}
-			catch(Exception e)
-			{
-				ok = false;
-				this.e = e;
-			}
-		}
-		
 	}
 
 	private final class ProcessThread extends ThreadPoolThread
@@ -3510,21 +3214,15 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		private final ArrayList<ArrayList<ArrayList<Object>>> bins;
 		private final int inMemBins;
 		public int index;
-		private int pri;
 
 		public ReadDataThread(FileChannel fc, byte[] types, ArrayList<ArrayList<ArrayList<Object>>> bins, int inMemBins, int index) throws Exception
 		{
-			this.fc = new BufferedFileChannel(fc, 8*1024*1024);
+			this.fc = new BufferedFileChannel(fc, 8 * 1024 * 1024);
 			data = new ArrayList<ArrayList<Object>>();
 			this.types = types;
 			this.bins = bins;
 			this.inMemBins = inMemBins;
 			this.index = index;
-		}
-		
-		public void setPriority(int pri)
-		{
-			this.pri = pri;
 		}
 
 		public void clear()
@@ -3552,7 +3250,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		{
 			// HRDBMSWorker.logger.debug(HashJoinOperator.this +
 			// ": ReadDataThread #" + index + " started");
-			//Thread.currentThread().setPriority(pri);
+			// Thread.currentThread().setPriority(pri);
 			if (index < inMemBins)
 			{
 				data = bins.get(index);
@@ -3593,7 +3291,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					{
 						row = (ArrayList<Object>)fromBytes(bb.array(), types);
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						HRDBMSWorker.logger.debug("", e);
 					}
@@ -3804,7 +3502,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 				directs.add(null);
 				i++;
 			}
-			
+
 			if (HRDBMSWorker.getHParms().getProperty("use_direct_buffers_for_flush").equals("true"))
 			{
 				i = 0;
@@ -3814,7 +3512,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					i++;
 				}
 			}
-			
+
 			ArrayList<SubRightThread> srThreads = new ArrayList<SubRightThread>();
 			i = 0;
 			while (i < 1)
@@ -3849,7 +3547,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					i++;
 				}
 				final ArrayList<Object> key = new ArrayList<Object>(rights.size());
-				
+
 				while (!(o instanceof DataEndMarker))
 				{
 					i = 0;
@@ -3894,10 +3592,10 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 						continue;
 					}
 					int x = (int)(hash % numBins);
-					
+
 					rwLock.readLock().lock();
 					ArrayList<ArrayList<Object>> bin = bins.get(x);
-					synchronized(bin)
+					synchronized (bin)
 					{
 						// writeToHashTable(hash, (ArrayList<Object>)o);
 						bin.add((ArrayList<Object>)o);
@@ -3925,7 +3623,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 							TempThread.start(thread, txnum);
 							bins.set(x, new ArrayList<ArrayList<Object>>(size));
 						}
-						
+
 						rwLock.writeLock().unlock();
 					}
 
@@ -3941,7 +3639,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 						received.getAndIncrement();
 					}
 				}
-				
+
 				for (SubRightThread t : srThreads)
 				{
 					t.join();
@@ -3986,7 +3684,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 
 				// HRDBMSWorker.logger.debug(HashJoinOperator.this +
 				// " RightThread wrote everything to disk");
-				
+
 				// everything is written
 				i = 0;
 				while (i < numBins)
@@ -3996,10 +3694,10 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					{
 						TempThread.freeDirect(bb);
 					}
-					
+
 					i++;
 				}
-				
+
 				i = numBins - 1;
 				while (i >= inMemBins)
 				{
@@ -4014,32 +3712,196 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			}
 		}
 	}
-	
-	private final class SubRightThread extends HRDBMSThread
+
+	private final class SubLeftThread extends HRDBMSThread
 	{
-		private RightThread rightThread;
-		private ConcurrentHashMap<Integer, FlushBinThread> threads;
+		private final LeftThread leftThread;
+		private final ConcurrentHashMap<Integer, FlushBinThread> threads;
 		private final int size;
 		private boolean ok = true;
 		private Exception e;
-		
+
+		public SubLeftThread(LeftThread leftThread, ConcurrentHashMap<Integer, FlushBinThread> threads, int size)
+		{
+			this.leftThread = leftThread;
+			this.threads = threads;
+			this.size = size;
+		}
+
+		public Exception getException()
+		{
+			return e;
+		}
+
+		public boolean getOK()
+		{
+			return ok;
+		}
+
+		@Override
+		public void run()
+		{
+			try
+			{
+				final Operator child = children.get(0);
+				final HashMap<String, Integer> childCols2Pos = child.getCols2Pos();
+				Object o = child.next(HashJoinOperator.this);
+				if (o instanceof DataEndMarker)
+				{
+					demReceived = true;
+					// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+					// " LeftThread received DEM");
+				}
+				else
+				{
+					received.getAndIncrement();
+				}
+
+				int[] poses = new int[lefts.size()];
+				int i = 0;
+				for (String col : lefts)
+				{
+					poses[i] = childCols2Pos.get(col);
+					i++;
+				}
+				final ArrayList<Object> key = new ArrayList<Object>(lefts.size());
+				while (!(o instanceof DataEndMarker))
+				{
+					i = 0;
+					key.clear();
+					for (int pos : poses)
+					{
+						try
+						{
+							key.add(((ArrayList<Object>)o).get(pos));
+							i++;
+						}
+						catch (Exception e)
+						{
+							HRDBMSWorker.logger.debug("Failed to find a column in " + childCols2Pos);
+							throw e;
+						}
+					}
+
+					final long hash = 0x7FFFFFFFFFFFFFFFL & hash(key);
+					if (leftThread.tempBF != null)
+					{
+						leftThread.tempBF.add(hash);
+					}
+					if (anti == null && bf != null && !bf.passes(hash))
+					{
+						o = child.next(HashJoinOperator.this);
+						if (o instanceof DataEndMarker)
+						{
+							demReceived = true;
+							// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+							// " LeftThread received DEM");
+						}
+						else
+						{
+							received.getAndIncrement();
+						}
+						continue;
+					}
+					else if (anti != null && bf != null && !bf.passes(hash, key))
+					{
+						o = child.next(HashJoinOperator.this);
+						if (o instanceof DataEndMarker)
+						{
+							demReceived = true;
+							// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+							// " LeftThread received DEM");
+						}
+						else
+						{
+							received.getAndIncrement();
+						}
+						continue;
+					}
+
+					int x = (int)(hash % leftThread.numBins);
+
+					leftThread.rwLock.readLock().lock();
+					ArrayList<ArrayList<Object>> bin = leftThread.bins.get(x);
+					synchronized (bin)
+					{
+						// writeToHashTable(hash, (ArrayList<Object>)o);
+						bin.add((ArrayList<Object>)o);
+					}
+					leftThread.rwLock.readLock().unlock();
+
+					if (x >= leftThread.inMemBins && bin.size() >= size)
+					{
+						leftThread.rwLock.writeLock().lock();
+						bin = leftThread.bins.get(x);
+						if (bin.size() >= size)
+						{
+							FlushBinThread thread = new FlushBinThread(bin, leftThread.types, leftThread.channels.get(x), leftThread.directs.get(x));
+							if (threads.putIfAbsent(x, thread) != null)
+							{
+								threads.get(x).join();
+								if (!threads.get(x).getOK())
+								{
+									leftThread.rwLock.writeLock().unlock();
+									throw threads.get(x).getException();
+								}
+
+								threads.put(x, thread);
+							}
+							TempThread.start(thread, txnum);
+							leftThread.bins.set(x, new ArrayList<ArrayList<Object>>(size));
+						}
+						leftThread.rwLock.writeLock().unlock();
+					}
+
+					o = child.next(HashJoinOperator.this);
+					if (o instanceof DataEndMarker)
+					{
+						demReceived = true;
+						// HRDBMSWorker.logger.debug(HashJoinOperator.this +
+						// " LeftThread received DEM");
+					}
+					else
+					{
+						received.getAndIncrement();
+					}
+				}
+			}
+			catch (Exception e)
+			{
+				ok = false;
+				this.e = e;
+			}
+		}
+
+	}
+
+	private final class SubRightThread extends HRDBMSThread
+	{
+		private final RightThread rightThread;
+		private final ConcurrentHashMap<Integer, FlushBinThread> threads;
+		private final int size;
+		private boolean ok = true;
+		private Exception e;
+
 		public SubRightThread(RightThread rightThread, ConcurrentHashMap<Integer, FlushBinThread> threads, int size)
 		{
 			this.rightThread = rightThread;
 			this.threads = threads;
 			this.size = size;
 		}
-		
-		public boolean getOK()
-		{
-			return ok;
-		}
-		
+
 		public Exception getException()
 		{
 			return e;
 		}
-		
+
+		public boolean getOK()
+		{
+			return ok;
+		}
+
+		@Override
 		public void run()
 		{
 			try
@@ -4066,7 +3928,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					i++;
 				}
 				final ArrayList<Object> key = new ArrayList<Object>(rights.size());
-				
+
 				while (!(o instanceof DataEndMarker))
 				{
 					i = 0;
@@ -4111,10 +3973,10 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 						continue;
 					}
 					int x = (int)(hash % rightThread.numBins);
-					
+
 					rightThread.rwLock.readLock().lock();
 					ArrayList<ArrayList<Object>> bin = rightThread.bins.get(x);
-					synchronized(bin)
+					synchronized (bin)
 					{
 						// writeToHashTable(hash, (ArrayList<Object>)o);
 						bin.add((ArrayList<Object>)o);
@@ -4142,7 +4004,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 							TempThread.start(thread, txnum);
 							rightThread.bins.set(x, new ArrayList<ArrayList<Object>>(size));
 						}
-						
+
 						rightThread.rwLock.writeLock().unlock();
 					}
 
@@ -4159,7 +4021,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					}
 				}
 			}
-			catch(Exception e)
+			catch (Exception e)
 			{
 				ok = false;
 				this.e = e;

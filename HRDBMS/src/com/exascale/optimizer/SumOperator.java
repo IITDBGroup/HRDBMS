@@ -147,7 +147,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 	{
 		// private final DiskBackedALOHashMap<AtomicDouble> results = new
 		// DiskBackedALOHashMap<AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
-		private final ConcurrentHashMap<ArrayList<Object>, Object> results = new ConcurrentHashMap<ArrayList<Object>, Object>();
+		private ConcurrentHashMap<ArrayList<Object>, Object> results = new ConcurrentHashMap<ArrayList<Object>, Object>();
 		private final HashMap<String, Integer> cols2Pos;
 		private int pos;
 
@@ -183,7 +183,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 		@Override
 		public void close()
 		{
-			// results.close();
+			results = null;
 		}
 
 		@Override
@@ -308,7 +308,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 				 * synchronized (results) { final Long ad =
 				 * (Long)results.get(group); if (ad != null) {
 				 * results.put(group, ad + val); return; }
-				 * 
+				 *
 				 * results.put(group, val); }
 				 */
 				final AtomicLong al = (AtomicLong)results.get(group);

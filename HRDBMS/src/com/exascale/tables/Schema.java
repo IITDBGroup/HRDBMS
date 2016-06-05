@@ -1,8 +1,6 @@
 package com.exascale.tables;
 
-import java.io.BufferedReader;
 import java.io.FileInputStream;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
@@ -42,7 +40,6 @@ import com.exascale.misc.MyDate;
 import com.exascale.misc.SPSCQueue;
 import com.exascale.optimizer.TableScanOperator;
 import com.exascale.threads.HRDBMSThread;
-import com.exascale.threads.ReadThread;
 
 public class Schema
 {
@@ -111,66 +108,6 @@ public class Schema
 	private int cachedLenLen = -1;
 	private TreeSet<RID> copy = null;
 
-	public Schema clone()
-	{
-		Schema retval = new Schema(colTypes);
-		retval.nextRecNum = nextRecNum;
-		retval.headEnd = headEnd;
-		retval.dataStart = dataStart;
-		retval.modTime = modTime;
-		retval.blockType = blockType;
-		retval.rowIDListOff = rowIDListOff;
-		retval.offArrayOff = offArrayOff;
-		retval.colIDs = colIDs;
-		retval.colIDListSize = colIDListSize;
-		retval.rowIDListSize = rowIDListSize;
-		retval.rowIDs = rowIDs;
-		retval.offsetArray = offsetArray;
-		retval.offsetArrayRows = offsetArrayRows;
-		retval.p = p;
-		retval.colIDToIndex = colIDToIndex;
-		retval.rowIDToIndex = rowIDToIndex;
-		retval.tx = tx;
-		retval.myDev = myDev;
-		retval.myNode = myNode;
-		retval.rowIDsSet = rowIDsSet;
-		retval.nodeNumber = nodeNumber;
-		retval.deviceNumber = deviceNumber;
-		retval.pageGroup = pageGroup;
-		retval.addOpen = addOpen;
-		retval.pPrev = pPrev;
-		retval.recCache = recCache;
-		retval.offsetArraySet = offsetArraySet;
-		retval.rowIDToIndexSet = rowIDToIndexSet;
-		retval.rowIDSet = rowIDSet;
-		retval.fixed = fixed;
-		retval.headerBytes = headerBytes;
-		retval.colOrder = colOrder;
-		retval.rowIDsAL = rowIDsAL;
-		retval.cachedLenLen = cachedLenLen;
-		retval.copy = copy;
-		return retval;
-	}
-
-	public void makeNull()
-	{
-		colIDs = null;
-		rowIDs = null;
-		offsetArray = null;
-		p = null;
-		colIDToIndex = null;
-		rowIDToIndex = null;
-		tx = null;
-		pageGroup = null;
-		pPrev = null;
-		recCache = null;
-		offsetArraySet = null;
-		rowIDToIndexSet = null;
-		rowIDSet = null;
-		rowIDsAL = null;
-		copy = null;
-	}
-
 	public Schema(Map<Integer, DataType> map)
 	{
 		colTypes = map;
@@ -223,6 +160,48 @@ public class Schema
 		}
 
 		pageGroup.put(colNum, p);
+	}
+
+	@Override
+	public Schema clone()
+	{
+		Schema retval = new Schema(colTypes);
+		retval.nextRecNum = nextRecNum;
+		retval.headEnd = headEnd;
+		retval.dataStart = dataStart;
+		retval.modTime = modTime;
+		retval.blockType = blockType;
+		retval.rowIDListOff = rowIDListOff;
+		retval.offArrayOff = offArrayOff;
+		retval.colIDs = colIDs;
+		retval.colIDListSize = colIDListSize;
+		retval.rowIDListSize = rowIDListSize;
+		retval.rowIDs = rowIDs;
+		retval.offsetArray = offsetArray;
+		retval.offsetArrayRows = offsetArrayRows;
+		retval.p = p;
+		retval.colIDToIndex = colIDToIndex;
+		retval.rowIDToIndex = rowIDToIndex;
+		retval.tx = tx;
+		retval.myDev = myDev;
+		retval.myNode = myNode;
+		retval.rowIDsSet = rowIDsSet;
+		retval.nodeNumber = nodeNumber;
+		retval.deviceNumber = deviceNumber;
+		retval.pageGroup = pageGroup;
+		retval.addOpen = addOpen;
+		retval.pPrev = pPrev;
+		retval.recCache = recCache;
+		retval.offsetArraySet = offsetArraySet;
+		retval.rowIDToIndexSet = rowIDToIndexSet;
+		retval.rowIDSet = rowIDSet;
+		retval.fixed = fixed;
+		retval.headerBytes = headerBytes;
+		retval.colOrder = colOrder;
+		retval.rowIDsAL = rowIDsAL;
+		retval.cachedLenLen = cachedLenLen;
+		retval.copy = copy;
+		return retval;
 	}
 
 	public void close() throws Exception
@@ -1397,6 +1376,25 @@ public class Schema
 		}
 	}
 
+	public void makeNull()
+	{
+		colIDs = null;
+		rowIDs = null;
+		offsetArray = null;
+		p = null;
+		colIDToIndex = null;
+		rowIDToIndex = null;
+		tx = null;
+		pageGroup = null;
+		pPrev = null;
+		recCache = null;
+		offsetArraySet = null;
+		rowIDToIndexSet = null;
+		rowIDSet = null;
+		rowIDsAL = null;
+		copy = null;
+	}
+
 	public void massDelete() throws Exception
 	{
 		// TableScanOperator.noResults.remove(p.block());
@@ -1678,18 +1676,17 @@ public class Schema
 			// i++;
 			// }
 
-			boolean first = true;
-
 			int colPos = 0;
 			ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
-
-			recCache = new ConcurrentHashMap<RID, ArrayList<FieldValue>>((int)(rowIDListSize * 1.35));
 
 			for (Map.Entry entry2 : pageGroup.entrySet())
 			{
 				if (colPos == 0)
 				{
 					this.p = (Page)entry2.getValue();
+					int pos = 1;
+					rowIDListSize = p.getMedium(pos);
+					recCache = new ConcurrentHashMap<RID, ArrayList<FieldValue>>((int)(rowIDListSize * 1.35));
 					if (myNode == -1 || myNode == -2)
 					{
 						getNodeNumber();
@@ -1718,158 +1715,11 @@ public class Schema
 					throw thread.getExcetpion();
 				}
 			}
-
-			int x = Schema.ReadThread.master;
 		}
 		catch (Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			throw e;
-		}
-	}
-
-	private static class ReadThread extends HRDBMSThread
-	{
-		private Page page;
-		private int colPos;
-		private int colNum;
-		private boolean ok = true;
-		private Exception e;
-		public static volatile int master = 0;
-		private Schema schema;
-
-		public ReadThread(Page page, int colPos, int colNum, Schema schema)
-		{
-			this.page = page;
-			this.colPos = colPos;
-			this.colNum = colNum;
-			this.schema = schema;
-		}
-
-		public boolean getOK()
-		{
-			return ok;
-		}
-
-		public Exception getExcetpion()
-		{
-			return e;
-		}
-
-		public void run()
-		{
-			try
-			{
-				Schema s = schema.clone();
-				s.cachedLenLen = -1;
-
-				int pos = 1;
-				s.rowIDListOff = 1;
-				s.p = page;
-				s.rowIDListSize = s.p.getMedium(pos);
-
-				pos += 3;
-				s.rowIDToIndex = new LinkedHashMap<RID, Integer>((int)(s.rowIDListSize * 1.35));
-				s.offsetArray = new int[s.rowIDListSize][1];
-				s.offsetArrayRows = s.rowIDListSize;
-				int i = 0;
-				s.setRowIDsCT(colNum);
-				for (final RID rid : s.rowIDsAL)
-				{
-					if (i >= s.rowIDListSize)
-					{
-						break;
-					}
-					s.rowIDToIndex.put(rid, i);
-					i++;
-				}
-				// pos += (3 * s.rowIDListSize);
-
-				// i = 0;
-				// for (final RID rid : rowIDs)
-				// {
-				// rowIDToIndex.put(rid, i);
-				// i++;
-				// }
-
-				Map<Integer, DataType> colTypesBackup = s.colTypes;
-				s.colTypes = new HashMap<Integer, DataType>();
-				s.colTypes.put(0, colTypesBackup.get(colNum));
-
-				DataType dt = s.colTypes.get(s.colIDs[0]);
-
-				for (Map.Entry entry : s.rowIDToIndex.entrySet())
-				{
-					RID rid = (RID)entry.getKey();
-					int index = (int)entry.getValue();
-
-					Row row2 = s.new Row(index);
-					try
-					{
-						FieldValue fv = row2.getCol(0, dt);
-
-						try
-						{
-							ArrayList<FieldValue> alfv = s.recCache.get(rid);
-							if (alfv == null)
-							{
-								alfv = new ArrayList<FieldValue>(s.pageGroup.size());
-								int j = 0;
-								while (j < s.pageGroup.size())
-								{
-									alfv.add(null);
-									j++;
-								}
-
-								ArrayList<FieldValue> alfv2 = s.recCache.putIfAbsent(rid, alfv);
-								if (alfv2 != null)
-								{
-									alfv = alfv2;
-								}
-							}
-
-							// synchronized(alfv)
-							// {
-							alfv.set(colPos, fv);
-							// }
-						}
-						catch (Exception e)
-						{
-							HRDBMSWorker.logger.debug("Error find rid = " + rid + " in " + s.recCache + " during col table read");
-
-							HRDBMSWorker.logger.debug("Page group info follows:");
-							for (Page p2 : s.pageGroup.values())
-							{
-								HRDBMSWorker.logger.debug("Block: " + p2.block() + " Pinned: " + p2.isPinned() + " Ready: " + p2.isReady());
-							}
-							throw e;
-						}
-					}
-					catch (Exception f)
-					{
-						String string = "Probable error reading column data, offset array is [";
-						for (int[] array : s.offsetArray)
-						{
-							string += (array[0] + ",");
-						}
-
-						string += "]";
-
-						HRDBMSWorker.logger.debug(string, f);
-						throw f;
-					}
-				}
-
-				// s.colTypes = colTypesBackup;
-				s.makeNull();
-				master = colPos;
-			}
-			catch (Exception e)
-			{
-				ok = false;
-				this.e = e;
-				HRDBMSWorker.logger.debug("", e);
-			}
 		}
 	}
 
@@ -2238,6 +2088,20 @@ public class Schema
 		return i + 1;
 	}
 
+	private ArrayList<Integer> getColOrder() throws Exception
+	{
+		if (colOrder == null)
+		{
+			final Block b = new Block(p.block().fileName(), 0);
+			tx.requestPage(b);
+
+			final HeaderPage hp = tx.readHeaderPage(b, blockType);
+			colOrder = hp.getColOrder();
+		}
+
+		return colOrder;
+	}
+
 	private int getDeviceNumber() throws LockAbortException, Exception
 	{
 		if (myDev == -1)
@@ -2264,20 +2128,6 @@ public class Schema
 		}
 
 		return headerBytes;
-	}
-
-	private ArrayList<Integer> getColOrder() throws Exception
-	{
-		if (colOrder == null)
-		{
-			final Block b = new Block(p.block().fileName(), 0);
-			tx.requestPage(b);
-
-			final HeaderPage hp = tx.readHeaderPage(b, blockType);
-			colOrder = hp.getColOrder();
-		}
-
-		return colOrder;
 	}
 
 	private int getNodeNumber() throws LockAbortException, Exception
@@ -2326,7 +2176,7 @@ public class Schema
 				vals[pos] = new CVarcharFV((VarcharFV)vals[pos], this);
 			}
 			dataStart -= vals[pos].size();
-			
+
 			int headEnd = 9 + (rowIDsAL.size() * 6);
 
 			if (headEnd >= dataStart)
@@ -2784,7 +2634,7 @@ public class Schema
 
 	public static class CVarcharFV extends FieldValue
 	{
-		public static boolean compress;
+		public static final boolean compress = HRDBMSWorker.getHParms().getProperty("enable_cvarchar_compression").equals("true");
 		private final static int NUM_SYM = 668;
 		// private static HashMap<Integer, Integer> freq = new HashMap<Integer,
 		// Integer>();
@@ -2817,7 +2667,6 @@ public class Schema
 		static
 		{
 			HRDBMSWorker.logger.debug("CVarcharFV start init");
-			compress = HRDBMSWorker.getHParms().getProperty("enable_cvarchar_compression").equals("true");
 			codeExtended['t']['h'] = 256;
 			codeExtended['T']['H'] = 257;
 			codeExtended['t']['H'] = 258;
@@ -3282,7 +3131,7 @@ public class Schema
 			 * freq.put(124, 16); freq.put(125, 61); freq.put(126, 8);
 			 * freq.put(127, 2); int i = 128; while (i < 256) { freq.put(i++,
 			 * 1); }
-			 * 
+			 *
 			 * freq.put(256, 47342); //th freq.put(257, 47342); //TH
 			 * freq.put(258, 47342); //tH freq.put(259, 47342); //Th
 			 * freq.put(260, 40933); //he freq.put(261, 40933); //HE
@@ -3472,17 +3321,17 @@ public class Schema
 			 * freq.put(663, 7868); //tiON freq.put(664, 7868); //TIOn
 			 * freq.put(665, 7868); //TIoN freq.put(666, 7868); //TiON
 			 * freq.put(667, 7868); //tION
-			 * 
+			 *
 			 * buildTree(); for (int key : freq.keySet()) { tree =
 			 * treeParts.get(key); }
-			 * 
+			 *
 			 * TreeMap<Integer, String> codes = new TreeMap<Integer, String>();
 			 * traverse(tree, codes, ""); for (Entry entry : codes.entrySet()) {
 			 * encodeLength[(Integer)entry.getKey()] =
 			 * ((String)entry.getValue()).length();
 			 * encode[(Integer)entry.getKey()] =
 			 * Integer.parseInt((String)entry.getValue(), 2); }
-			 * 
+			 *
 			 * freq.clear(); treeParts.clear(); long start1 =
 			 * System.currentTimeMillis(); buildDecode1(); long end1 =
 			 * System.currentTimeMillis(); System.out.println(
@@ -3493,13 +3342,13 @@ public class Schema
 			 * "s"); buildDecode3(); tree = null; long end =
 			 * System.currentTimeMillis(); System.out.println("Init took " +
 			 * (((end - start) * 1.0) / 1000.0) + "s");
-			 * 
+			 *
 			 * i = 0; int maxLength = 0; while (i < NUM_SYM) {
 			 * System.out.println("encode[" + i + "] = " + encode[i]);
 			 * System.out.println("encodeLength[" + i + "] = " +
 			 * encodeLength[i]); if (encodeLength[i] > maxLength) { maxLength =
 			 * encodeLength[i]; } i++; }
-			 * 
+			 *
 			 * System.out.println("MAXLENGTH = " + maxLength); try {
 			 * writeDataFile(); } catch(Exception e) { e.printStackTrace(); }
 			 */
@@ -5101,6 +4950,156 @@ public class Schema
 			}
 
 			return 0;
+		}
+	}
+
+	private static class ReadThread extends HRDBMSThread
+	{
+		public static volatile int master = 0;
+		private final Page page;
+		private final int colPos;
+		private final int colNum;
+		private boolean ok = true;
+		private Exception e;
+		private final Schema schema;
+
+		public ReadThread(Page page, int colPos, int colNum, Schema schema)
+		{
+			this.page = page;
+			this.colPos = colPos;
+			this.colNum = colNum;
+			this.schema = schema;
+		}
+
+		public Exception getExcetpion()
+		{
+			return e;
+		}
+
+		public boolean getOK()
+		{
+			return ok;
+		}
+
+		@Override
+		public void run()
+		{
+			try
+			{
+				Schema s = schema.clone();
+				s.cachedLenLen = -1;
+
+				int pos = 1;
+				s.rowIDListOff = 1;
+				s.p = page;
+				s.rowIDListSize = s.p.getMedium(pos);
+
+				pos += 3;
+				s.rowIDToIndex = new LinkedHashMap<RID, Integer>((int)(s.rowIDListSize * 1.35));
+				s.offsetArray = new int[s.rowIDListSize][1];
+				s.offsetArrayRows = s.rowIDListSize;
+				int i = 0;
+				s.setRowIDsCT(colNum);
+				for (final RID rid : s.rowIDsAL)
+				{
+					if (i >= s.rowIDListSize)
+					{
+						break;
+					}
+					s.rowIDToIndex.put(rid, i);
+					i++;
+				}
+				// pos += (3 * s.rowIDListSize);
+
+				// i = 0;
+				// for (final RID rid : rowIDs)
+				// {
+				// rowIDToIndex.put(rid, i);
+				// i++;
+				// }
+
+				Map<Integer, DataType> colTypesBackup = s.colTypes;
+				s.colTypes = new HashMap<Integer, DataType>();
+				s.colTypes.put(0, colTypesBackup.get(colNum));
+
+				DataType dt = s.colTypes.get(s.colIDs[0]);
+
+				for (Map.Entry entry : s.rowIDToIndex.entrySet())
+				{
+					RID rid = (RID)entry.getKey();
+					int index = (int)entry.getValue();
+
+					Row row2 = s.new Row(index);
+					try
+					{
+						FieldValue fv = row2.getCol(0, dt);
+						if (!fv.exists())
+						{
+							continue;
+						}
+
+						try
+						{
+							ArrayList<FieldValue> alfv = s.recCache.get(rid);
+							if (alfv == null)
+							{
+								alfv = new ArrayList<FieldValue>(s.pageGroup.size());
+								int j = 0;
+								while (j < s.pageGroup.size())
+								{
+									alfv.add(null);
+									j++;
+								}
+
+								ArrayList<FieldValue> alfv2 = s.recCache.putIfAbsent(rid, alfv);
+								if (alfv2 != null)
+								{
+									alfv = alfv2;
+								}
+							}
+
+							synchronized(alfv)
+							{
+								alfv.set(colPos, fv);
+							}
+						}
+						catch (Exception e)
+						{
+							HRDBMSWorker.logger.debug("Error find rid = " + rid + " in " + s.recCache + " during col table read");
+
+							HRDBMSWorker.logger.debug("Page group info follows:");
+							for (Page p2 : s.pageGroup.values())
+							{
+								HRDBMSWorker.logger.debug("Block: " + p2.block() + " Pinned: " + p2.isPinned() + " Ready: " + p2.isReady());
+							}
+							throw e;
+						}
+					}
+					catch (Exception f)
+					{
+						String string = "Probable error reading column data, offset array is [";
+						for (int[] array : s.offsetArray)
+						{
+							string += (array[0] + ",");
+						}
+
+						string += "]";
+
+						HRDBMSWorker.logger.debug(string, f);
+						throw f;
+					}
+				}
+
+				// s.colTypes = colTypesBackup;
+				s.makeNull();
+				master = colPos;
+			}
+			catch (Exception e)
+			{
+				ok = false;
+				this.e = e;
+				HRDBMSWorker.logger.debug("", e);
+			}
 		}
 	}
 

@@ -65,6 +65,7 @@ public final class MetaData implements Serializable
 	private static HashMap<String, String> getColTypeCache = new HashMap<String, String>();
 	private static HashMap<String, Object> getDistCache = new HashMap<String, Object>();
 	private static int numDevices;
+
 	static
 	{
 		try
@@ -123,7 +124,8 @@ public final class MetaData implements Serializable
 		}
 		catch (Exception e)
 		{
-			// HRDBMSWorker.logger.fatal("Error during static metadata initialization",
+			// HRDBMSWorker.logger.fatal("Error during static metadata
+			// initialization",
 			// e);
 			// System.exit(1);
 		}
@@ -1250,6 +1252,84 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
+	public void cluster(String schema, String table, Transaction tx, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type) throws Exception
+	{
+		ArrayList<Integer> nodes = getWorkerNodes();
+		ArrayList<Object> tree = makeTree(nodes);
+		ArrayList<Socket> sockets = new ArrayList<Socket>();
+
+		int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
+
+		for (Object o : tree)
+		{
+			ArrayList<Object> list;
+			if (o instanceof Integer)
+			{
+				list = new ArrayList<Object>(1);
+				list.add(o);
+			}
+			else
+			{
+				list = (ArrayList<Object>)o;
+			}
+
+			Object obj = list.get(0);
+			while (obj instanceof ArrayList)
+			{
+				obj = ((ArrayList)obj).get(0);
+			}
+
+			Socket sock;
+			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
+			// sock = new Socket(hostname,
+			// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			sock = new Socket();
+			sock.setReceiveBufferSize(4194304);
+			sock.setSendBufferSize(4194304);
+			sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
+			OutputStream out = sock.getOutputStream();
+			byte[] outMsg = "CLUSTER         ".getBytes(StandardCharsets.UTF_8);
+			outMsg[8] = 0;
+			outMsg[9] = 0;
+			outMsg[10] = 0;
+			outMsg[11] = 0;
+			outMsg[12] = 0;
+			outMsg[13] = 0;
+			outMsg[14] = 0;
+			outMsg[15] = 0;
+			out.write(outMsg);
+			out.write(longToBytes(tx.number()));
+			out.write(stringToBytes(schema));
+			out.write(stringToBytes(table));
+			out.write(intToBytes(type));
+			ObjectOutputStream objOut = new ObjectOutputStream(out);
+			objOut.writeObject(convertToHosts(list, tx));
+			objOut.writeObject(pos2Col);
+			objOut.writeObject(cols2Types);
+			objOut.flush();
+			out.flush();
+			sockets.add(sock);
+
+			if (sockets.size() >= max)
+			{
+				sock = sockets.get(0);
+				out = sock.getOutputStream();
+				getConfirmation(sock);
+				objOut.close();
+				sock.close();
+				sockets.remove(0);
+			}
+		}
+
+		for (Socket sock : sockets)
+		{
+			OutputStream out = sock.getOutputStream();
+			getConfirmation(sock);
+			out.close();
+			sock.close();
+		}
+	}
+
 	public void createIndex(String schema, String table, String index, ArrayList<IndexDef> defs, boolean unique, Transaction tx) throws Exception
 	{
 		Integer tableID = getTableIDCache.get(schema + "." + table);
@@ -1274,7 +1354,7 @@ public final class MetaData implements Serializable
 		populateIndex(schema, index, table, tx, cols2Pos);
 	}
 
-	public void createTable(String schema, String table, ArrayList<ColDef> defs, ArrayList<String> pks, Transaction tx, String nodeGroupExp, String nodeExp, String deviceExp, int tType, ArrayList<Integer> colOrder) throws Exception
+	public void createTable(String schema, String table, ArrayList<ColDef> defs, ArrayList<String> pks, Transaction tx, String nodeGroupExp, String nodeExp, String deviceExp, int tType, ArrayList<Integer> colOrder, ArrayList<Integer> organization) throws Exception
 	{
 		// validate expressions
 		HashMap<String, String> cols2Types = new HashMap<String, String>();
@@ -1360,7 +1440,7 @@ public final class MetaData implements Serializable
 		{
 			indexID = PlanCacheManager.getNextIndexID().setParms(tableID).execute(tx);
 			PlanCacheManager.getInsertIndex().setParms(indexID, "PK" + table, tableID, true).execute(tx);
-		
+
 			HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
 			int pos = 0;
 			for (String col : pks)
@@ -1371,7 +1451,7 @@ public final class MetaData implements Serializable
 			}
 		}
 
-		buildTable(schema, table, defs.size(), tx, tType, defs, colOrder);
+		buildTable(schema, table, defs.size(), tx, tType, defs, colOrder, organization);
 
 		if (pks != null && pks.size() != 0)
 		{
@@ -2574,6 +2654,11 @@ public final class MetaData implements Serializable
 		return likelihood(filters, op.getGenerated(), tx, tree);
 	}
 
+	// public static int getNumNodes(Transaction tx) throws Exception
+	// {
+	// return PlanCacheManager.getCountWorkerNodes().setParms().execute(tx);
+	// }
+
 	public double likelihood(ArrayList<Filter> filters, Transaction tx, Operator tree) throws Exception
 	{
 		double sum = 0;
@@ -2590,11 +2675,6 @@ public final class MetaData implements Serializable
 
 		return sum;
 	}
-
-	// public static int getNumNodes(Transaction tx) throws Exception
-	// {
-	// return PlanCacheManager.getCountWorkerNodes().setParms().execute(tx);
-	// }
 
 	// likelihood of a row directly out of the table passing this test
 	public double likelihood(Filter filter, HashMap<String, Double> generated, Transaction tx, Operator tree) throws Exception
@@ -3939,7 +4019,7 @@ public final class MetaData implements Serializable
 		}
 	}
 
-	private void buildTable(String schema, String table, int numCols, Transaction tx, int tType, ArrayList<ColDef> defs, ArrayList<Integer> colOrder) throws Exception
+	private void buildTable(String schema, String table, int numCols, Transaction tx, int tType, ArrayList<ColDef> defs, ArrayList<Integer> colOrder, ArrayList<Integer> organization) throws Exception
 	{
 		if (tType != 0 && colOrder == null)
 		{
@@ -3950,7 +4030,12 @@ public final class MetaData implements Serializable
 				colOrder.add(i++);
 			}
 		}
-		
+
+		if (tType != 0 && organization == null)
+		{
+			organization = new ArrayList<Integer>();
+		}
+
 		String fn = schema + "." + table + ".tbl";
 		ArrayList<Integer> nodes = getNodesForTable(schema, table, tx);
 		ArrayList<Integer> devices = MetaData.getDevicesForTable(schema, table, tx);
@@ -4007,6 +4092,8 @@ public final class MetaData implements Serializable
 			if (tType != 0)
 			{
 				objOut.writeObject(colOrder);
+				objOut.writeObject(organization);
+				HRDBMSWorker.logger.debug("Sending message to create table with organization: " + organization);
 			}
 			objOut.flush();
 			out.flush();
@@ -5717,7 +5804,8 @@ public final class MetaData implements Serializable
 							if (updateCount == -1)
 							{
 								XAManager.rollback(tx);
-								//tx = new Transaction(Transaction.ISOLATION_UR);
+								// tx = new
+								// Transaction(Transaction.ISOLATION_UR);
 								return;
 							}
 							else if (updateCount == 1)
@@ -5733,7 +5821,7 @@ public final class MetaData implements Serializable
 								return;
 							}
 
-							//Thread.sleep(random.nextInt(60000));
+							// Thread.sleep(random.nextInt(60000));
 						}
 					}
 				}
@@ -5840,7 +5928,8 @@ public final class MetaData implements Serializable
 							if (updateCount == -1)
 							{
 								XAManager.rollback(tx);
-								//tx = new Transaction(Transaction.ISOLATION_UR);
+								// tx = new
+								// Transaction(Transaction.ISOLATION_UR);
 								return;
 							}
 							else if (updateCount == 1)
@@ -5856,7 +5945,7 @@ public final class MetaData implements Serializable
 								return;
 							}
 
-							//Thread.sleep(random.nextInt(60000));
+							// Thread.sleep(random.nextInt(60000));
 						}
 					}
 				}
@@ -5963,7 +6052,8 @@ public final class MetaData implements Serializable
 							if (updateCount == -1)
 							{
 								XAManager.rollback(tx);
-								//tx = new Transaction(Transaction.ISOLATION_UR);
+								// tx = new
+								// Transaction(Transaction.ISOLATION_UR);
 								return;
 							}
 							else if (updateCount == 1)
@@ -5979,7 +6069,7 @@ public final class MetaData implements Serializable
 								return;
 							}
 
-							//Thread.sleep(random.nextInt(60000));
+							// Thread.sleep(random.nextInt(60000));
 						}
 					}
 				}
@@ -6084,7 +6174,7 @@ public final class MetaData implements Serializable
 						if (updateCount == -1)
 						{
 							XAManager.rollback(tx);
-							//tx = new Transaction(Transaction.ISOLATION_UR);
+							// tx = new Transaction(Transaction.ISOLATION_UR);
 							return;
 						}
 						else if (updateCount == 1)
@@ -6100,7 +6190,7 @@ public final class MetaData implements Serializable
 							return;
 						}
 
-						//Thread.sleep(random.nextInt(60000));
+						// Thread.sleep(random.nextInt(60000));
 					}
 				}
 			}
@@ -6316,7 +6406,7 @@ public final class MetaData implements Serializable
 					if (updateCount == -1)
 					{
 						XAManager.rollback(tx);
-						//tx = new Transaction(Transaction.ISOLATION_UR);
+						// tx = new Transaction(Transaction.ISOLATION_UR);
 						return;
 					}
 					else if (updateCount == 1)
@@ -6552,7 +6642,7 @@ public final class MetaData implements Serializable
 						if (updateCount == -1)
 						{
 							XAManager.rollback(tx);
-							//tx = new Transaction(Transaction.ISOLATION_UR);
+							// tx = new Transaction(Transaction.ISOLATION_UR);
 							return;
 						}
 						else if (updateCount == 1)
@@ -6568,7 +6658,7 @@ public final class MetaData implements Serializable
 							return;
 						}
 
-						//Thread.sleep(random.nextInt(60000));
+						// Thread.sleep(random.nextInt(60000));
 					}
 				}
 			}
@@ -6700,7 +6790,7 @@ public final class MetaData implements Serializable
 					if (updateCount == -1)
 					{
 						XAManager.rollback(tx);
-						//tx = new Transaction(Transaction.ISOLATION_UR);
+						// tx = new Transaction(Transaction.ISOLATION_UR);
 						return;
 					}
 					else if (updateCount == 1)
@@ -6716,7 +6806,7 @@ public final class MetaData implements Serializable
 						return;
 					}
 
-					//Thread.sleep(random.nextInt(60000));
+					// Thread.sleep(random.nextInt(60000));
 				}
 			}
 			catch (Exception e)

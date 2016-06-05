@@ -18,6 +18,7 @@ import com.exascale.tables.Plan;
 public final class ProjectOperator implements Operator, Serializable
 {
 	private static sun.misc.Unsafe unsafe;
+
 	static
 	{
 		try

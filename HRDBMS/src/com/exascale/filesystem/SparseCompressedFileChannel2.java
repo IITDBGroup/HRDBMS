@@ -1,43 +1,26 @@
 package com.exascale.filesystem;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
-import java.nio.channels.ClosedChannelException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.TreeMap;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
-import net.jpountz.lz4.LZ4Compressor;
-import net.jpountz.lz4.LZ4Factory;
-import net.jpountz.lz4.LZ4FastDecompressor;
-import net.jpountz.lz4.LZ4SafeDecompressor;
 import com.exascale.managers.BufferManager;
 import com.exascale.managers.FileManager;
 import com.exascale.managers.HRDBMSWorker;
-import com.exascale.managers.ResourceManager;
-import com.exascale.misc.ScalableStampedRWLock;
 import com.exascale.misc.ScalableStampedReentrantRWLock;
-import com.exascale.threads.HRDBMSThread;
+import net.jpountz.lz4.LZ4Compressor;
+import net.jpountz.lz4.LZ4Factory;
+import net.jpountz.lz4.LZ4FastDecompressor;
 
 public class SparseCompressedFileChannel2 extends FileChannel
 {
@@ -81,57 +64,6 @@ public class SparseCompressedFileChannel2 extends FileChannel
 	private final ScalableStampedReentrantRWLock lock = new ScalableStampedReentrantRWLock();
 	private final ConcurrentHashMap<Integer, Integer> writeLocks = new ConcurrentHashMap<Integer, Integer>();
 
-	private static ByteBuffer allocateByteBuffer(int size)
-	{
-		if (size == SLOT_SIZE)
-		{
-			ByteBuffer retval = cache.poll();
-			if (retval != null)
-			{
-				retval.position(0);
-				return retval;
-			}
-
-			retval = cache2.poll();
-			if (retval != null)
-			{
-				retval.position(0);
-				retval.limit(size);
-				return retval;
-			}
-			
-			return ByteBuffer.allocate((int)SLOT_SIZE);
-		}
-		else
-		{
-			ByteBuffer retval = cache2.poll();
-			if (retval != null)
-			{
-				if (retval.capacity() >= size)
-				{
-					retval.position(0);
-					retval.limit(size);
-					return retval;
-				}
-			}
-			
-			return ByteBuffer.allocate(size);
-		}
-	}
-
-	private static void deallocateByteBuffer(ByteBuffer bb)
-	{
-		if (bb.capacity() == SLOT_SIZE)
-		{
-			cache.offer(bb);
-		}
-		else
-		{
-			bb.limit(bb.capacity());
-			cache2.offer(bb);
-		}
-	}
-
 	public SparseCompressedFileChannel2(File file) throws IOException
 	{
 		this.fn = file.getAbsolutePath();
@@ -167,9 +99,11 @@ public class SparseCompressedFileChannel2 extends FileChannel
 		{
 			length = 0;
 			// HRDBMSWorker.logger.debug("Opened " + fn + " with length = 0");
-			RandomAccessFile raf = new RandomAccessFile(this.fn + ".0","rw");
+			RandomAccessFile raf = new RandomAccessFile(this.fn + ".0", "rw");
 			theFC = raf.getChannel();
-			//theFC = FileChannel.open(theFile.toPath(), StandardOpenOption.SPARSE, StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE);
+			// theFC = FileChannel.open(theFile.toPath(),
+			// StandardOpenOption.SPARSE, StandardOpenOption.CREATE,
+			// StandardOpenOption.READ, StandardOpenOption.WRITE);
 			return;
 		}
 
@@ -178,14 +112,67 @@ public class SparseCompressedFileChannel2 extends FileChannel
 		{
 			length++;
 		}
-		//theFC = FileChannel.open(theFile.toPath(), StandardOpenOption.SPARSE, StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE);
-		RandomAccessFile raf = new RandomAccessFile(this.fn + ".0","rw");
+		// theFC = FileChannel.open(theFile.toPath(), StandardOpenOption.SPARSE,
+		// StandardOpenOption.CREATE, StandardOpenOption.READ,
+		// StandardOpenOption.WRITE);
+		RandomAccessFile raf = new RandomAccessFile(this.fn + ".0", "rw");
 		theFC = raf.getChannel();
 	}
 
 	public SparseCompressedFileChannel2(File file, int suffix) throws IOException
 	{
 		this(file);
+	}
+
+	private static ByteBuffer allocateByteBuffer(int size)
+	{
+		if (size == SLOT_SIZE)
+		{
+			ByteBuffer retval = cache.poll();
+			if (retval != null)
+			{
+				retval.position(0);
+				return retval;
+			}
+
+			retval = cache2.poll();
+			if (retval != null)
+			{
+				retval.position(0);
+				retval.limit(size);
+				return retval;
+			}
+
+			return ByteBuffer.allocate((int)SLOT_SIZE);
+		}
+		else
+		{
+			ByteBuffer retval = cache2.poll();
+			if (retval != null)
+			{
+				if (retval.capacity() >= size)
+				{
+					retval.position(0);
+					retval.limit(size);
+					return retval;
+				}
+			}
+
+			return ByteBuffer.allocate(size);
+		}
+	}
+
+	private static void deallocateByteBuffer(ByteBuffer bb)
+	{
+		if (bb.capacity() == SLOT_SIZE)
+		{
+			cache.offer(bb);
+		}
+		else
+		{
+			bb.limit(bb.capacity());
+			cache2.offer(bb);
+		}
 	}
 
 	public void copyFromFC(SparseCompressedFileChannel2 source) throws Exception
@@ -297,7 +284,8 @@ public class SparseCompressedFileChannel2 extends FileChannel
 						// HRDBMSWorker.logger.debug("Block = " + block);
 						HRDBMSWorker.logger.debug("FC = " + fc);
 						HRDBMSWorker.logger.debug("", e);
-						// HRDBMSWorker.logger.debug("FC.size() = " + fc.size());
+						// HRDBMSWorker.logger.debug("FC.size() = " +
+						// fc.size());
 						writeLocks.remove(page);
 						lock.readLock().unlock();
 						closed = true;
@@ -320,96 +308,6 @@ public class SparseCompressedFileChannel2 extends FileChannel
 			writeLocks.remove(page);
 			lock.readLock().unlock();
 			return arg0.capacity();
-		}
-		catch (Throwable e)
-		{
-			HRDBMSWorker.logger.error("", e);
-			throw new IOException(e);
-		}
-	}
-	
-	public int read(ByteBuffer[] bbs, long arg1) throws IOException
-	{
-		try
-		{
-			boolean closed = false;
-			int page = (int)(arg1 / Page.BLOCK_SIZE);
-			lock.readLock().lock();
-			try
-			{
-				int i = 0;
-				int num = bbs.length;
-				while (i < num)
-				{
-					while (writeLocks.putIfAbsent(page + i, page + i) != null)
-					{
-						LockSupport.parkNanos(500);
-					}
-					
-					i++;
-				}
-
-				{
-					// full block
-					// LZ4SafeDecompressor decomp = factory.safeDecompressor();
-					LZ4FastDecompressor decomp = factory.fastDecompressor();
-					// int mod = block & 31;
-					FileChannel fc = theFC;
-
-					ByteBuffer bb = allocateByteBuffer((int)SLOT_SIZE * num);
-					fc.read(bb, page * SLOT_SIZE);
-					// bb.position(bb.array().length - (int)SLOT_SIZE);
-					// int size = bb.getInt();
-
-					// byte[] target = new byte[128 * 1024];
-					try
-					{
-						i = 0;
-						while (i < num)
-						{
-							decomp.decompress(bb.array(), i * (int)SLOT_SIZE, bbs[i].array(), 0, Page.BLOCK_SIZE);
-							i++;
-						}
-						deallocateByteBuffer(bb);
-					}
-					catch (Exception e)
-					{
-						// HRDBMSWorker.logger.debug("Block = " + block);
-						HRDBMSWorker.logger.debug("FC = " + fc);
-						HRDBMSWorker.logger.debug("", e);
-						// HRDBMSWorker.logger.debug("FC.size() = " + fc.size());
-						i = 0;
-						while (i < num)
-						{
-							writeLocks.remove(page + i);
-							i++;
-						}
-						lock.readLock().unlock();
-						closed = true;
-						throw e;
-					}
-				}
-			}
-			catch (Exception e)
-			{
-				if (!closed)
-				{
-					writeLocks.remove(page);
-					lock.readLock().unlock();
-				}
-
-				HRDBMSWorker.logger.debug("", e);
-				throw e;
-			}
-
-			int i = 0;
-			while (i < bbs.length)
-			{
-				writeLocks.remove(page + i);
-				i++;
-			}
-			lock.readLock().unlock();
-			return bbs[0].capacity();
 		}
 		catch (Throwable e)
 		{
@@ -458,7 +356,8 @@ public class SparseCompressedFileChannel2 extends FileChannel
 						// HRDBMSWorker.logger.debug("Block = " + block);
 						HRDBMSWorker.logger.debug("FC = " + fc);
 						HRDBMSWorker.logger.debug("", e);
-						// HRDBMSWorker.logger.debug("FC.size() = " + fc.size());
+						// HRDBMSWorker.logger.debug("FC.size() = " +
+						// fc.size());
 						writeLocks.remove(page);
 						lock.readLock().unlock();
 						closed = true;
@@ -493,6 +392,97 @@ public class SparseCompressedFileChannel2 extends FileChannel
 	public long read(ByteBuffer[] arg0, int arg1, int arg2) throws IOException
 	{
 		throw new IOException("Unsupported operation");
+	}
+
+	public int read(ByteBuffer[] bbs, long arg1) throws IOException
+	{
+		try
+		{
+			boolean closed = false;
+			int page = (int)(arg1 / Page.BLOCK_SIZE);
+			lock.readLock().lock();
+			try
+			{
+				int i = 0;
+				int num = bbs.length;
+				while (i < num)
+				{
+					while (writeLocks.putIfAbsent(page + i, page + i) != null)
+					{
+						LockSupport.parkNanos(500);
+					}
+
+					i++;
+				}
+
+				{
+					// full block
+					// LZ4SafeDecompressor decomp = factory.safeDecompressor();
+					LZ4FastDecompressor decomp = factory.fastDecompressor();
+					// int mod = block & 31;
+					FileChannel fc = theFC;
+
+					ByteBuffer bb = allocateByteBuffer((int)SLOT_SIZE * num);
+					fc.read(bb, page * SLOT_SIZE);
+					// bb.position(bb.array().length - (int)SLOT_SIZE);
+					// int size = bb.getInt();
+
+					// byte[] target = new byte[128 * 1024];
+					try
+					{
+						i = 0;
+						while (i < num)
+						{
+							decomp.decompress(bb.array(), i * (int)SLOT_SIZE, bbs[i].array(), 0, Page.BLOCK_SIZE);
+							i++;
+						}
+						deallocateByteBuffer(bb);
+					}
+					catch (Exception e)
+					{
+						// HRDBMSWorker.logger.debug("Block = " + block);
+						HRDBMSWorker.logger.debug("FC = " + fc);
+						HRDBMSWorker.logger.debug("", e);
+						// HRDBMSWorker.logger.debug("FC.size() = " +
+						// fc.size());
+						i = 0;
+						while (i < num)
+						{
+							writeLocks.remove(page + i);
+							i++;
+						}
+						lock.readLock().unlock();
+						closed = true;
+						throw e;
+					}
+				}
+			}
+			catch (Exception e)
+			{
+				if (!closed)
+				{
+					writeLocks.remove(page);
+					lock.readLock().unlock();
+				}
+
+				HRDBMSWorker.logger.debug("", e);
+				throw e;
+			}
+
+			int i = 0;
+			while (i < bbs.length)
+			{
+				writeLocks.remove(page + i);
+				i++;
+			}
+			lock.readLock().unlock();
+			return bbs[0].capacity();
+		}
+		catch (Throwable e)
+		{
+			HRDBMSWorker.logger.error("", e);
+			throw new IOException(e);
+		}
 	}
 
 	public int read3(ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3, long arg1) throws IOException

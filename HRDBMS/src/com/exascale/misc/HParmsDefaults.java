@@ -59,7 +59,7 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("stack_size", "2M");
 		retval.setProperty("jvm_args", "-XX:+UseG1GC -XX:G1HeapRegionSize=32m -XX:+ParallelRefProcEnabled -XX:MaxDirectMemorySize=327772160000");
 		retval.setProperty("external_factor", "68.0");
-		retval.setProperty("hash_external_factor", "140.0");
+		retval.setProperty("hash_external_factor", "120.0");
 		retval.setProperty("max_queued_load_flush_threads", "5");
 		retval.setProperty("sort_gb_factor", "68.0");
 		retval.setProperty("java_path", "");
@@ -71,7 +71,7 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("hjo_bucket_size_shift", "0");
 		retval.setProperty("mo_bucket_size_shift", "0");
 		retval.setProperty("max_concurrent_writers_per_temp_disk", "3");
-		retval.setProperty("mo_max_par", Integer.toString(Runtime.getRuntime().availableProcessors()));
+		retval.setProperty("mo_max_par", "1");
 		retval.setProperty("hjo_max_par", Integer.toString(Runtime.getRuntime().availableProcessors() / 2));
 		retval.setProperty("scfc", "true");
 		retval.setProperty("use_direct_buffers_for_flush", "false");
@@ -79,8 +79,13 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("num_sbms", "256");
 		retval.setProperty("extend_max_par", Integer.toString(Runtime.getRuntime().availableProcessors()));
 		retval.setProperty("agg_max_par", Integer.toString(Runtime.getRuntime().availableProcessors()));
-		retval.setProperty("page_size", "131072");
+		retval.setProperty("page_size", "2093056");
 		retval.setProperty("nram_spsc_queue_size", "125000");
+		retval.setProperty("max_pbpe_time", "5");
+		retval.setProperty("sort_bucket_size", "300000");
+		retval.setProperty("pbpe_externalize_interval_s", "60");
+		retval.setProperty("hjo_bin_size", "100000");
+		retval.setProperty("mo_bin_size", "1000000");
 		HParmsDefaults.retval = retval;
 		return retval;
 	}

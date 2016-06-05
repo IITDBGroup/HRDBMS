@@ -16,6 +16,7 @@ import com.exascale.misc.DataEndMarker;
 public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 {
 	private static sun.misc.Unsafe unsafe;
+
 	static
 	{
 		try

@@ -1,18 +1,11 @@
 package com.exascale.managers;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.PrintWriter;
-import java.io.Reader;
-import java.io.StringWriter;
-import java.io.Writer;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
 import java.lang.reflect.Field;
-import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.StandardCharsets;
@@ -33,7 +26,6 @@ import com.exascale.optimizer.NetworkSendOperator;
 import com.exascale.optimizer.Operator;
 import com.exascale.optimizer.SemiJoinOperator;
 import com.exascale.optimizer.TableScanOperator;
-import com.exascale.tables.Transaction;
 import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.ThreadPoolThread;
 
@@ -54,11 +46,9 @@ public final class ResourceManager extends HRDBMSThread
 	public static final AtomicInteger objID = new AtomicInteger(0);
 	public static final long maxMemory;
 	public static volatile AtomicInteger NO_OFFLOAD = new AtomicInteger(0);
-	private static long GC_TIME;
 	private static Charset cs = StandardCharsets.UTF_8;
 	private static sun.misc.Unsafe unsafe;
 	private static long offset;
-	private static long lastSystemGC = 0;
 	public static volatile boolean panic = false;
 	private static IdentityHashMap<Operator, Operator> ops = new IdentityHashMap<Operator, Operator>();
 
@@ -87,7 +77,6 @@ public final class ResourceManager extends HRDBMSThread
 		cpus = Runtime.getRuntime().availableProcessors();
 		pool = Executors.newCachedThreadPool();
 		maxMemory = Runtime.getRuntime().maxMemory();
-		GC_TIME = 30000;
 		if (GPU)
 		{
 			HRDBMSWorker.logger.debug("Going to load CUDA code");
@@ -141,83 +130,90 @@ public final class ResourceManager extends HRDBMSThread
 
 	public static boolean display(Operator op, int indent)
 	{
-		boolean unpin = true;
-		
-		if (op instanceof TableScanOperator)
+		try
 		{
-			unpin = op.receivedDEM();
-		}
-		
-		StringBuilder line = new StringBuilder();
-		int i = 0;
-		while (i < indent)
-		{
-			line.append(" ");
-			i++;
-		}
+			boolean unpin = true;
 
-		line.append(op);
-		line.append(" : Received " + op.numRecsReceived() + " records. Received DataEndMarker? " + op.receivedDEM());
-		HRDBMSWorker.logger.debug(line.toString());
+			if (op instanceof TableScanOperator)
+			{
+				unpin = op.receivedDEM();
+			}
 
-		if (( op instanceof SemiJoinOperator) || (op instanceof AntiJoinOperator) || (op instanceof NestedLoopJoinOperator) || (op.children() != null && op.children().size() > 0 && !(op.children().get(0) instanceof NetworkSendOperator)))
-		{
-			line = new StringBuilder();
-			i = 0;
+			StringBuilder line = new StringBuilder();
+			int i = 0;
 			while (i < indent)
 			{
 				line.append(" ");
 				i++;
 			}
 
-			line.append("(");
+			line.append(op);
+			line.append(" : Received " + op.numRecsReceived() + " records. Received DataEndMarker? " + op.receivedDEM());
 			HRDBMSWorker.logger.debug(line.toString());
 
-			if (op instanceof SemiJoinOperator && ((SemiJoinOperator)op).dynamicOp != null)
+			if ((op instanceof SemiJoinOperator) || (op instanceof AntiJoinOperator) || (op instanceof NestedLoopJoinOperator) || (op.children() != null && op.children().size() > 0 && !(op.children().get(0) instanceof NetworkSendOperator)))
 			{
-				if (!display(((SemiJoinOperator)op).dynamicOp, indent + 3))
+				line = new StringBuilder();
+				i = 0;
+				while (i < indent)
 				{
-					unpin = false;
+					line.append(" ");
+					i++;
 				}
-			}
-			else if (op instanceof AntiJoinOperator && ((AntiJoinOperator)op).dynamicOp != null)
-			{
-				if (!display(((AntiJoinOperator)op).dynamicOp, indent + 3))
+
+				line.append("(");
+				HRDBMSWorker.logger.debug(line.toString());
+
+				if (op instanceof SemiJoinOperator && ((SemiJoinOperator)op).dynamicOp != null)
 				{
-					unpin = false;
-				}
-			}
-			else if (op instanceof NestedLoopJoinOperator && ((NestedLoopJoinOperator)op).dynamicOp != null)
-			{
-				if (!display(((NestedLoopJoinOperator)op).dynamicOp, indent + 3))
-				{
-					unpin = false;
-				}
-			}
-			else
-			{
-				for (Operator child : op.children())
-				{
-					if (!display(child, indent + 3))
+					if (!display(((SemiJoinOperator)op).dynamicOp, indent + 3))
 					{
 						unpin = false;
 					}
 				}
+				else if (op instanceof AntiJoinOperator && ((AntiJoinOperator)op).dynamicOp != null)
+				{
+					if (!display(((AntiJoinOperator)op).dynamicOp, indent + 3))
+					{
+						unpin = false;
+					}
+				}
+				else if (op instanceof NestedLoopJoinOperator && ((NestedLoopJoinOperator)op).dynamicOp != null)
+				{
+					if (!display(((NestedLoopJoinOperator)op).dynamicOp, indent + 3))
+					{
+						unpin = false;
+					}
+				}
+				else
+				{
+					for (Operator child : op.children())
+					{
+						if (!display(child, indent + 3))
+						{
+							unpin = false;
+						}
+					}
+				}
+
+				line = new StringBuilder();
+				i = 0;
+				while (i < indent)
+				{
+					line.append(" ");
+					i++;
+				}
+
+				line.append(")");
+				HRDBMSWorker.logger.debug(line.toString());
 			}
 
-			line = new StringBuilder();
-			i = 0;
-			while (i < indent)
-			{
-				line.append(" ");
-				i++;
-			}
-
-			line.append(")");
-			HRDBMSWorker.logger.debug(line.toString());
+			return unpin;
 		}
-		
-		return unpin;
+		catch (Exception e)
+		{
+			return false;
+		}
 	}
 
 	public static void registerOperator(Operator op)
@@ -230,12 +226,10 @@ public final class ResourceManager extends HRDBMSThread
 
 	private static void displayQueryProgress()
 	{
-		boolean unpin = true;
 		if (HRDBMSWorker.type != HRDBMSWorker.TYPE_WORKER)
 		{
-			unpin = false;
 		}
-		
+
 		synchronized (ops)
 		{
 			for (Operator op : ops.keySet())
@@ -244,7 +238,6 @@ public final class ResourceManager extends HRDBMSThread
 				{
 					if (!display(op, 0))
 					{
-						unpin = false;
 					}
 				}
 				catch (Exception e)
@@ -253,30 +246,17 @@ public final class ResourceManager extends HRDBMSThread
 				}
 			}
 		}
-		
+
 		/*
-		if (unpin)
-		{
-			for (SubBufferManager sbm : BufferManager.managers)
-			{
-				sbm.lock.lock();
-			}
-			
-			try
-			{
-				BufferManager.unpinAll();
-			}
-			catch(Exception e)
-			{
-				HRDBMSWorker.logger.debug("", e);
-			}
-			
-			for (SubBufferManager sbm : BufferManager.managers)
-			{
-				sbm.lock.unlock();
-			}
-		}
-		*/
+		 * if (unpin) { for (SubBufferManager sbm : BufferManager.managers) {
+		 * sbm.lock.lock(); }
+		 * 
+		 * try { BufferManager.unpinAll(); } catch(Exception e) {
+		 * HRDBMSWorker.logger.debug("", e); }
+		 * 
+		 * for (SubBufferManager sbm : BufferManager.managers) {
+		 * sbm.lock.unlock(); } }
+		 */
 	}
 
 	private static void setDirs(String list)
@@ -434,7 +414,7 @@ public final class ResourceManager extends HRDBMSThread
 				// last = temp;
 				//
 				HRDBMSWorker.logger.debug(((Runtime.getRuntime().freeMemory()) * 100.0) / (maxMemory * 1.0) + "% free - skipped " + TableScanOperator.skippedPages.get() + " pages");
-				
+
 				// for (SubBufferManager sbm : BufferManager.managers)
 				// {
 				// HRDBMSWorker.logger.debug("Owner is " +

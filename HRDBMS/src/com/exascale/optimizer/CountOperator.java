@@ -144,7 +144,7 @@ public final class CountOperator implements AggregateOperator, Serializable
 	{
 		// private final DiskBackedALOHashMap<AtomicLong> results = new
 		// DiskBackedALOHashMap<AtomicLong>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
-		private final ConcurrentHashMap<ArrayList<Object>, AtomicLong> results = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS, 0.75f, 6 * ResourceManager.cpus);
+		private ConcurrentHashMap<ArrayList<Object>, AtomicLong> results = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS, 0.75f, 6 * ResourceManager.cpus);
 		private int pos;
 
 		public CountHashThread(HashMap<String, Integer> cols2Pos)
@@ -159,6 +159,7 @@ public final class CountOperator implements AggregateOperator, Serializable
 		public void close()
 		{
 			// results.close();
+			results = null;
 		}
 
 		@Override

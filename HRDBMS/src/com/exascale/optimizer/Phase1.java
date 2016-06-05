@@ -127,7 +127,7 @@ public final class Phase1
 			{
 				retval = card(op.children().get(0));
 			}
-			
+
 			if (retval < card(op.children().get(1)))
 			{
 				retval = card(op.children().get(1));
@@ -191,7 +191,7 @@ public final class Phase1
 			{
 				retval = card(op.children().get(0));
 			}
-			
+
 			if (retval < card(op.children().get(1)))
 			{
 				retval = card(op.children().get(1));
@@ -367,6 +367,71 @@ public final class Phase1
 
 		// HRDBMSWorker.logger.debug("Upon exiting P1:"); //DEBUG
 		// printTree(root, 0); //DEBUG
+	}
+
+	private double adjust(Operator left, Operator right) throws Exception
+	{
+		double retval = 1.0;
+		if (card(left) < card(right))
+		{
+			Operator op = left;
+			while (true)
+			{
+				if (op instanceof SelectOperator)
+				{
+					retval *= ((SelectOperator)op).likelihood(tx);
+				}
+				else if (op instanceof ProjectOperator)
+				{
+				}
+				else if (op instanceof RenameOperator)
+				{
+				}
+				else if (op instanceof ReorderOperator)
+				{
+				}
+				else if (op instanceof TableScanOperator)
+				{
+					return retval;
+				}
+				else
+				{
+					return 1.0;
+				}
+
+				op = op.children().get(0);
+			}
+		}
+		else
+		{
+			Operator op = right;
+			while (true)
+			{
+				if (op instanceof SelectOperator)
+				{
+					retval *= ((SelectOperator)op).likelihood(tx);
+				}
+				else if (op instanceof ProjectOperator)
+				{
+				}
+				else if (op instanceof RenameOperator)
+				{
+				}
+				else if (op instanceof ReorderOperator)
+				{
+				}
+				else if (op instanceof TableScanOperator)
+				{
+					return retval;
+				}
+				else
+				{
+					return 1.0;
+				}
+
+				op = op.children().get(0);
+			}
+		}
 	}
 
 	private boolean anyHope(Operator op)
@@ -587,69 +652,31 @@ public final class Phase1
 				}
 
 				/*
-				if (left != null)
-				{
-					for (SelectOperator s2 : selects)
-					{
-						if (s2 != select)
-						{
-							ArrayList<Filter> filters2 = s2.getFilter();
-							Operator l2 = null;
-							Operator r2 = null;
-							for (Filter f2 : filters2)
-							{
-								if (f2.leftIsColumn() && f2.rightIsColumn())
-								{
-									l2 = getSubtreeForCol(f2.leftColumn(), subtrees);
-									r2 = getSubtreeForCol(f2.rightColumn(), subtrees);
-									if ((l2 == left && r2 == right) || (l2 == right && r2 == left))
-									{
-										if (l2 == left && r2 == right)
-										{
-											if (filters2.size() == 1 && f2.op().equals("E") && lefts.size() > 0)
-											{
-												lefts.add(f2.leftColumn());
-												rights.add(f2.rightColumn());
-											}
-											else
-											{
-												lefts.clear();
-												rights.clear();
-											}
-										}
-										else
-										{
-											if (filters2.size() == 1 && f2.op().equals("E") && lefts.size() > 0)
-											{
-												rights.add(f2.leftColumn());
-												lefts.add(f2.rightColumn());
-											}
-											else
-											{
-												lefts.clear();
-												rights.clear();
-											}
-										}
-										Double temp = likelihoodCache.get(s2.getFilter());
-										if (temp == null)
-										{
-											temp = meta.likelihood(new ArrayList<Filter>(s2.getFilter()), tx, clone);
-											likelihoodCache.put(s2.getFilter(), temp);
-										}
-										likelihood *= temp;
-										break;
-									}
-								}
-							}
-						}
-					}
-				}
-				*/
+				 * if (left != null) { for (SelectOperator s2 : selects) { if
+				 * (s2 != select) { ArrayList<Filter> filters2 = s2.getFilter();
+				 * Operator l2 = null; Operator r2 = null; for (Filter f2 :
+				 * filters2) { if (f2.leftIsColumn() && f2.rightIsColumn()) { l2
+				 * = getSubtreeForCol(f2.leftColumn(), subtrees); r2 =
+				 * getSubtreeForCol(f2.rightColumn(), subtrees); if ((l2 == left
+				 * && r2 == right) || (l2 == right && r2 == left)) { if (l2 ==
+				 * left && r2 == right) { if (filters2.size() == 1 &&
+				 * f2.op().equals("E") && lefts.size() > 0) {
+				 * lefts.add(f2.leftColumn()); rights.add(f2.rightColumn()); }
+				 * else { lefts.clear(); rights.clear(); } } else { if
+				 * (filters2.size() == 1 && f2.op().equals("E") && lefts.size()
+				 * > 0) { rights.add(f2.leftColumn());
+				 * lefts.add(f2.rightColumn()); } else { lefts.clear();
+				 * rights.clear(); } } Double temp =
+				 * likelihoodCache.get(s2.getFilter()); if (temp == null) { temp
+				 * = meta.likelihood(new ArrayList<Filter>(s2.getFilter()), tx,
+				 * clone); likelihoodCache.put(s2.getFilter(), temp); }
+				 * likelihood *= temp; break; } } } } } }
+				 */
 
 				/*
 				 * if (lefts.size() > 0 && rights.size() > 0) { String leftTable
 				 * = getTable(left); String rightTable = getTable(right);
-				 * 
+				 *
 				 * if (leftTable != null && rightTable != null) { String lschema
 				 * = leftTable.substring(0, leftTable.indexOf('.')); String
 				 * ltable = leftTable.substring(leftTable.indexOf('.') + 1);
@@ -659,7 +686,7 @@ public final class Phase1
 				 * PartitionMetaData lpmd = meta.getPartMeta(lschema, ltable,
 				 * tx); PartitionMetaData rpmd = meta.getPartMeta(rschema,
 				 * rtable, tx);
-				 * 
+				 *
 				 * if (lpmd.noNodeGroupSet() && rpmd.noNodeGroupSet()) { if
 				 * (lpmd.getNodeHash() != null &&
 				 * lefts.equals(lpmd.getNodeHash()) && rpmd.getNodeHash() !=
@@ -681,8 +708,8 @@ public final class Phase1
 			/*
 			 * if (minColocated <= minLikelihood * 2) { //
 			 * HRDBMSWorker.logger.debug("Chose " + minColocated); //DEBUG
-			 * minSelect = minSelect2; } else { //
-			 * HRDBMSWorker.logger.debug("Chose " + minLikelihood); //DEBUG }
+			 * minSelect = minSelect2; } else { // HRDBMSWorker.logger.debug(
+			 * "Chose " + minLikelihood); //DEBUG }
 			 */
 
 			selects.remove(minSelect);
@@ -749,39 +776,19 @@ public final class Phase1
 			}
 
 			/*
-			if (left != null)
-			{
-				for (SelectOperator s2 : selects)
-				{
-					if (s2 != select)
-					{
-						ArrayList<Filter> filters2 = s2.getFilter();
-						Operator l2 = null;
-						Operator r2 = null;
-						for (Filter f2 : filters2)
-						{
-							if (f2.leftIsColumn() && f2.rightIsColumn())
-							{
-								l2 = getSubtreeForCol(f2.leftColumn(), subtrees);
-								r2 = getSubtreeForCol(f2.rightColumn(), subtrees);
-								if ((l2 == left && r2 == right) || (l2 == right && r2 == left))
-								{
-									Double temp = likelihoodCache.get(s2.getFilter());
-									if (temp == null)
-									{
-										temp = meta.likelihood(new ArrayList<Filter>(s2.getFilter()), tx, clone);
-										likelihoodCache.put(s2.getFilter(), temp);
-									}
-
-									likelihood *= temp;
-									break;
-								}
-							}
-						}
-					}
-				}
-			}
-			*/
+			 * if (left != null) { for (SelectOperator s2 : selects) { if (s2 !=
+			 * select) { ArrayList<Filter> filters2 = s2.getFilter(); Operator
+			 * l2 = null; Operator r2 = null; for (Filter f2 : filters2) { if
+			 * (f2.leftIsColumn() && f2.rightIsColumn()) { l2 =
+			 * getSubtreeForCol(f2.leftColumn(), subtrees); r2 =
+			 * getSubtreeForCol(f2.rightColumn(), subtrees); if ((l2 == left &&
+			 * r2 == right) || (l2 == right && r2 == left)) { Double temp =
+			 * likelihoodCache.get(s2.getFilter()); if (temp == null) { temp =
+			 * meta.likelihood(new ArrayList<Filter>(s2.getFilter()), tx,
+			 * clone); likelihoodCache.put(s2.getFilter(), temp); }
+			 * 
+			 * likelihood *= temp; break; } } } } } }
+			 */
 
 			// HRDBMSWorker.logger.debug("Estimated join cardinality = " +
 			// likelihood); //DEBUG
@@ -842,69 +849,30 @@ public final class Phase1
 			}
 
 			/*
-			if (left != null)
-			{
-				for (SelectOperator s2 : selects)
-				{
-					if (s2 != select)
-					{
-						ArrayList<Filter> filters2 = s2.getFilter();
-						Operator l2 = null;
-						Operator r2 = null;
-						for (Filter f2 : filters2)
-						{
-							if (f2.leftIsColumn() && f2.rightIsColumn())
-							{
-								l2 = getSubtreeForCol(f2.leftColumn(), subtrees);
-								r2 = getSubtreeForCol(f2.rightColumn(), subtrees);
-								if ((l2 == left && r2 == right) || (l2 == right && r2 == left))
-								{
-									if (l2 == left && r2 == right)
-									{
-										if (filters2.size() == 1 && f2.op().equals("E") && lefts.size() > 0)
-										{
-											lefts.add(f2.leftColumn());
-											rights.add(f2.rightColumn());
-										}
-										else
-										{
-											lefts.clear();
-											rights.clear();
-										}
-									}
-									else
-									{
-										if (filters2.size() == 1 && f2.op().equals("E") && lefts.size() > 0)
-										{
-											rights.add(f2.leftColumn());
-											lefts.add(f2.rightColumn());
-										}
-										else
-										{
-											lefts.clear();
-											rights.clear();
-										}
-									}
-									Double temp = likelihoodCache.get(s2.getFilter());
-									if (temp == null)
-									{
-										temp = meta.likelihood(new ArrayList<Filter>(s2.getFilter()), tx, clone);
-										likelihoodCache.put(s2.getFilter(), temp);
-									}
-									likelihood *= temp;
-									break;
-								}
-							}
-						}
-					}
-				}
-			}
-			*/
+			 * if (left != null) { for (SelectOperator s2 : selects) { if (s2 !=
+			 * select) { ArrayList<Filter> filters2 = s2.getFilter(); Operator
+			 * l2 = null; Operator r2 = null; for (Filter f2 : filters2) { if
+			 * (f2.leftIsColumn() && f2.rightIsColumn()) { l2 =
+			 * getSubtreeForCol(f2.leftColumn(), subtrees); r2 =
+			 * getSubtreeForCol(f2.rightColumn(), subtrees); if ((l2 == left &&
+			 * r2 == right) || (l2 == right && r2 == left)) { if (l2 == left &&
+			 * r2 == right) { if (filters2.size() == 1 && f2.op().equals("E") &&
+			 * lefts.size() > 0) { lefts.add(f2.leftColumn());
+			 * rights.add(f2.rightColumn()); } else { lefts.clear();
+			 * rights.clear(); } } else { if (filters2.size() == 1 &&
+			 * f2.op().equals("E") && lefts.size() > 0) {
+			 * rights.add(f2.leftColumn()); lefts.add(f2.rightColumn()); } else
+			 * { lefts.clear(); rights.clear(); } } Double temp =
+			 * likelihoodCache.get(s2.getFilter()); if (temp == null) { temp =
+			 * meta.likelihood(new ArrayList<Filter>(s2.getFilter()), tx,
+			 * clone); likelihoodCache.put(s2.getFilter(), temp); } likelihood
+			 * *= temp; break; } } } } } }
+			 */
 
 			/*
 			 * if (lefts.size() > 0 && rights.size() > 0) { String leftTable =
 			 * getTable(left); String rightTable = getTable(right);
-			 * 
+			 *
 			 * if (leftTable != null && rightTable != null) { String lschema =
 			 * leftTable.substring(0, leftTable.indexOf('.')); String ltable =
 			 * leftTable.substring(leftTable.indexOf('.') + 1); String rschema =
@@ -912,7 +880,7 @@ public final class Phase1
 			 * rightTable.substring(rightTable.indexOf('.') + 1);
 			 * PartitionMetaData lpmd = meta.getPartMeta(lschema, ltable, tx);
 			 * PartitionMetaData rpmd = meta.getPartMeta(rschema, rtable, tx);
-			 * 
+			 *
 			 * if (lpmd.noNodeGroupSet() && rpmd.noNodeGroupSet()) { if
 			 * (lpmd.getNodeHash() != null && lefts.equals(lpmd.getNodeHash())
 			 * && rpmd.getNodeHash() != null &&
@@ -940,65 +908,6 @@ public final class Phase1
 
 		selects.remove(minSelect);
 		return minSelect;
-	}
-	
-	private double adjust(Operator left, Operator right) throws Exception
-	{
-		double retval = 1.0;
-		if (card(left) < card(right))
-		{
-			Operator op = left;
-			while (true)
-			{
-				if (op instanceof SelectOperator)
-				{
-					retval *= ((SelectOperator)op).likelihood(tx);
-				}
-				else if (op instanceof ProjectOperator)
-				{}
-				else if (op instanceof RenameOperator)
-				{}
-				else if (op instanceof ReorderOperator)
-				{}
-				else if (op instanceof TableScanOperator)
-				{
-					return retval;
-				}
-				else
-				{
-					return 1.0;
-				}
-				
-				op = op.children().get(0);
-			}
-		}
-		else
-		{
-			Operator op = right;
-			while (true)
-			{
-				if (op instanceof SelectOperator)
-				{
-					retval *= ((SelectOperator)op).likelihood(tx);
-				}
-				else if (op instanceof ProjectOperator)
-				{}
-				else if (op instanceof RenameOperator)
-				{}
-				else if (op instanceof ReorderOperator)
-				{}
-				else if (op instanceof TableScanOperator)
-				{
-					return retval;
-				}
-				else
-				{
-					return 1.0;
-				}
-				
-				op = op.children().get(0);
-			}
-		}
 	}
 
 	private void getReferences(Operator o, HashSet<String> references)
@@ -1038,7 +947,8 @@ public final class Phase1
 				final Operator child = op.children().get(0);
 				if (child instanceof TableScanOperator)
 				{
-					// System.out.println("That had a TableScanOperator as a child");
+					// System.out.println("That had a TableScanOperator as a
+					// child");
 					final Operator parent = op;
 					op = child;
 					final Operator grandParent = parent.parent();
@@ -1318,7 +1228,7 @@ public final class Phase1
 
 			int i = 0;
 			while (i < child.children().size())
-				// for (Operator grandChild : grandChildren)
+			// for (Operator grandChild : grandChildren)
 			{
 				final Operator grandChild = child.children().get(i);
 				// can I push down to be a parent of this operator?
@@ -1485,7 +1395,7 @@ public final class Phase1
 
 			int i = 0;
 			while (i < child.children().size())
-				// for (Operator grandChild : grandChildren)
+			// for (Operator grandChild : grandChildren)
 			{
 				final Operator grandChild = child.children().get(i);
 				// can I push down to be a parent of this operator?
