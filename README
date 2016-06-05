@@ -47,7 +47,7 @@ profile - this defaults to the value false.  If you set it to true, you will get
 
 detect_thread_deadlocks - defaults to false.  For debugging only.
 
-queue_size - HRDBMS internally uses a bunch of custom multi-producer/multi-consumer blocking queues.  This is the max size of each of these queues.  This value can have a big impact on performance.  The default is 125000 and seems to give good performance results, but more testing could definitely be done in this space, especially seeing how the optimal queue size changes with different heap sizes.
+queue_size - HRDBMS internally uses a bunch of custom multi-producer/multi-consumer blocking queues.  This is the max size of each of these queues.  This value can have a big impact on performance.  The default is 125000 and seems to give good performance results, but more testing could definitely be done in this space, especially seeing how the optimal queue size changes with different heap sizes. You may want to consider using a larger queue size on your coordinator nodes. My testing has shown good results with using a size of 500000 on the coordinator nodes.
 
 cuda_batch_size - how many rows we batch up before we send a job off to the GPU for parallel processing.  The only part of HRDBMS that can currently run on a GPU is arithmetic expression processing.  The default value is 30720.  It's been so long since I turned on the CUDA feature (it's off by default) that I don't remember how or why this value was chosen.  Testers welcome!
 
@@ -130,7 +130,7 @@ mo_bucket_size_shift - the same parameter but for aggregation operations.  The d
 
 max_concurrent_writers_per_temp_disk - exactly what it sounds like.  When someone needs to write to a temp disk, it creates a temp thread and registers it with the temp thread manager.  They get scheduled across the various temp disks as there are availabilities.  The temp thread manager makes sure there are never more that this many concurrent writers on any given temp disk.  Depending on your hardware it may be a good idea to keep this low, or you may be able to crank it up very high.  Cranking it up to higher values will increase memory usage as well though.  The default value is 3.
 
-mo_max_par - the max number of parallel threads that can be used to process external aggregations.  The default value is the number of cores on the server.  From a performance point of view this is good as this processing does scale well.  However, higher values do increase memory usage.  Setting this to a value higher than the number of cores on the server does no good.
+mo_max_par - the default value is 1. Leave this set to 1. It is deprecated and will be removed.
 
 hjo_max_par - the max number of parallel threads that can be used to process external hash joins.  This same limit gets applied to both the threads that read in both the data for the left side of the join and the threads that read in data for the right side of the join and build the in-memory hash table.  So you could actually have 2x this number of concurrent threads running.  The default value is the number of cores that the server has divided by two.  You can set this as high as the number of cores that the server has, and you might can slightly better performance if you have plenty of memory to work with.  But, if your memory is constrained, the additional memory usage will cause degraded performance.
 
@@ -144,9 +144,19 @@ extend_max_par - the max number of parallel threads to use for performing arithm
 
 agg_max_par - the max number of parallel threads that can be used to perform in-memory aggregations.  The default is currently the number of cores on the server.  Testing shows that again this is a good setting, at least for 1 concurrent user.
 
-page_size - the page size to use.  All bufferpool pages will be this size.  All table and index pages will be this size.  The size is specified in bytes.  The default value is 131072 (128kb).  Values larger than 64MB can cause integer overflow errors in certain rare though possible situations. I've had a lot of success with 2MB pages, although larger pages do use much more memory.
+page_size - the page size to use.  All bufferpool pages will be this size.  All table and index pages will be this size.  The size is specified in bytes.  The default value is 2093056 (2044kb).  Values larger than 64MB can cause integer overflow errors in certain rare though possible situations. Larger pages do use more memory.
 
 nram_spsc_queue_size - when a coordinator node does a merge sort of all the sorted results from each worker node, it usually can't do the sort as fast as the data is coming in.  To help, it spills incoming rows into some very fast single producer/single consumer queues.  There is one for each worker node participating in the sort.  This parameter sets the maximum number of rows that each queue can hold before we take a break from receiving more data.  Making these queues bigger significantly improves coordinator merge sort performance, but obviously uses much more memory.  The default value is 125000.
+
+max_pbpe_time - the maximum amount of time in milliseconds that HRDBMS will spend trying to do predicate based page elimination for a page set. This parameter only comes into play for column tables. If you use larger page sizes, it's safer to make this parameter larger.  The default is 5ms.
+
+pbpe_externalize_interval_s - the pbpe cache is hardened to disk every this many seconds. The default value is 60.
+
+sort_bucket_size - the number of rows that get sorted individually before being passed into the mergesort when HRDBMS has to do an external sort. The default value is 300000.
+
+hjo_bin_size - the number of rows per bin when HRDBMS does an external hash join. The default value is 100000.
+
+mo_bin_size - the number of rows per bins when HRDBMS does an external aggregation. The default value is 1000000.
 
 STARTING HRDBMS
 Log on to any of the coordinator nodes as the HRDBMS user.  Go to the install directory for that node.  Issue the following commands...
@@ -160,9 +170,11 @@ Each node will write a debug log in its install directory called hrdbms.log.
 SQL SYNTAX
 For starters you probably want to create some tables.
 
-CREATE [COLUMN] TABLE schema.table(col def, col def, ..., [PRIMARY KEY(col, col,...)]) [COLORDER(int, int, ...)] groupExp nodeExp devExp
+CREATE [COLUMN] TABLE schema.table(col def, col def, ..., [PRIMARY KEY(col, col,...)]) [COLORDER(int, int, ...)] [ORGANIZATION(int, int, ...)] groupExp nodeExp devExp
 
 Syntax in []s is optional.  Column definitions are pretty much standard as with any database.  Primary keys can be defined as part of a column definition or as a separate PRIMARY KEY clause.  If you use the COLORDER clause, it takes a list of integers, 1 through the number of columns in the tables.  The list specifies the orders in which to physically stored the columns, and it only makes sense for a column table.  For example COLORDER(2,3,1) says store the second column first, followed by the third column, and then the first column.
+
+If you use the ORGANIZATION cluase, it takes a list of integers as well. Again the integers are representing columns from the column definition list.  The first column has a value of 1.  The ORGANIZATION clause specifies a sort order for how data should be loaded into the table.  For example ORGANIZATION(3,2) says that when loading data, sort it first by column 3 and then by column 2 and load it in that order.  
 
 The groupExp, nodeExp, and devExp clauses are explained next are used to tell HRDBMS how to distribute the data across the cluster.  They use a rather expressive language that can actually result in quite a number of possibilities.  I really need to write a separate document explaining this language.  For now, I will just explain how to do the most basic distribution.
 
