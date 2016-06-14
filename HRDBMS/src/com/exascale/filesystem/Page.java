@@ -5,7 +5,6 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReentrantLock;
 import com.exascale.managers.FileManager;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LogManager;
@@ -619,42 +618,25 @@ public class Page
 
 			if (modifiedBy >= 0)
 			{
-				if (log)
-				{
-					LogManager.flush(lsn);
-				}
-				FileManager.write(blk, contents);
-				modifiedBy = -1;
+				flush();
 			}
 
-			i = 1;
-			while (i < num)
-			{
-				Page p2 = bp[indexes.get(i)];
-				if (p2.modifiedBy >= 0)
-				{
-					if (log)
-					{
-						LogManager.flush(p2.lsn);
-					}
-					FileManager.write(p2.blk, p2.contents);
-					p2.modifiedBy = -1;
-				}
-
-				i++;
-			}
-
-			blk = b;
 			i = 1;
 			int page = b.number() + 1;
 			while (i < num)
 			{
 				Page p2 = bp[indexes.get(i)];
+				if (p2.modifiedBy >= 0)
+				{
+					p2.flush();
+				}
+
 				p2.blk = new Block(b.fileName(), page++);
 				p2.readDone = false;
 				i++;
 			}
 
+			blk = b;
 			readDone = false;
 			retval = FileManager.read(this, num, indexes, bp, rank, rankSize);
 			pins.clear();
@@ -1073,5 +1055,12 @@ public class Page
 		byte[] hb = (byte[])unsafe.getObject(contents, offset);
 		System.arraycopy(hb, srcOff, hb, destOff, len);
 		lock.writeLock().unlock();
+	}
+
+	private void flush() throws Exception
+	{
+		LogManager.flush(lsn);
+		FileManager.write(blk, contents);
+		modifiedBy = -1;
 	}
 }

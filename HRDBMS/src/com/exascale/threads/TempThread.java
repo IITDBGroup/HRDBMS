@@ -113,48 +113,15 @@ public class TempThread extends HRDBMSThread
 				if (al == null)
 				{
 					al = new ArrayList<HRDBMSThread>();
+					threads.put(txnum, al);
 					thread.start();
 					al.add(thread);
-					threads.put(txnum, al);
 					return;
 				}
-				else
+
+				if (tryHandleNow(al))
 				{
-					if (al.size() < (ResourceManager.TEMP_DIRS.size() * FACTOR))
-					{
-						thread.start();
-						al.add(thread);
-						return;
-					}
-					else
-					{
-						int i = al.size() - 1;
-						while (i >= 0)
-						{
-							HRDBMSThread t = al.get(i);
-							if (t.isDone())
-							{
-								try
-								{
-									t.join();
-								}
-								catch (Exception e)
-								{
-								}
-
-								al.remove(i);
-							}
-
-							i--;
-						}
-
-						if (al.size() < (ResourceManager.TEMP_DIRS.size() * FACTOR))
-						{
-							thread.start();
-							al.add(thread);
-							return;
-						}
-					}
+					return;
 				}
 
 				for (Entry entry : threads.entrySet())
@@ -193,5 +160,46 @@ public class TempThread extends HRDBMSThread
 
 			LockSupport.parkNanos(1);
 		}
+	}
+
+	private boolean tryHandleNow(ArrayList<HRDBMSThread> al)
+	{
+		if (al.size() < (ResourceManager.TEMP_DIRS.size() * FACTOR))
+		{
+			thread.start();
+			al.add(thread);
+			return true;
+		}
+		else
+		{
+			int i = al.size() - 1;
+			while (i >= 0)
+			{
+				HRDBMSThread t = al.get(i);
+				if (t.isDone())
+				{
+					try
+					{
+						t.join();
+					}
+					catch (Exception e)
+					{
+					}
+
+					al.remove(i);
+				}
+
+				i--;
+			}
+
+			if (al.size() < (ResourceManager.TEMP_DIRS.size() * FACTOR))
+			{
+				thread.start();
+				al.add(thread);
+				return true;
+			}
+		}
+
+		return false;
 	}
 }

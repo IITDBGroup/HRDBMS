@@ -90,8 +90,8 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 	private ArrayList<Index> dynamicIndexes;
 	private transient ArrayList<ArrayList<Object>> queuedRows;
 	private transient MySimpleDateFormat sdf;
-	private int rightChildCard = 16;
-	private int leftChildCard = 16;
+	private long rightChildCard = 16;
+	private long leftChildCard = 16;
 	private boolean cardSet = false;
 	private transient Vector<Operator> clones;
 	private transient Vector<AtomicBoolean> lockVector;
@@ -146,11 +146,11 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		value.node = OperatorUtils.readInt(in);
 		value.indexAccess = OperatorUtils.readBool(in);
 		value.dynamicIndexes = OperatorUtils.deserializeALIndx(in, prev);
-		value.rightChildCard = OperatorUtils.readInt(in);
+		value.rightChildCard = OperatorUtils.readLong(in);
 		value.cardSet = OperatorUtils.readBool(in);
 		value.received = new AtomicLong(0);
 		value.demReceived = false;
-		value.leftChildCard = OperatorUtils.readInt(in);
+		value.leftChildCard = OperatorUtils.readLong(in);
 		value.txnum = OperatorUtils.readLong(in);
 		return value;
 	}
@@ -184,41 +184,6 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			{
 				retval = (retval << 24);
 				retval += getMedium(bb);
-			}
-
-			return retval;
-		}
-	}
-
-	private static int getCInt(ByteBuffer bb, int pos)
-	{
-		int temp = (bb.get(pos) & 0xff);
-		int length = (temp >>> 5);
-		if (length == 1)
-		{
-			return (temp & 0x1f);
-		}
-		else if (length == 5)
-		{
-			return bb.getInt(pos + 1);
-		}
-		else
-		{
-			int retval = (temp & 0x1f);
-			if (length == 2)
-			{
-				retval = (retval << 8);
-				retval += (bb.get(pos + 1) & 0xff);
-			}
-			else if (length == 3)
-			{
-				retval = (retval << 16);
-				retval += (bb.getShort(pos + 1) & 0xffff);
-			}
-			else
-			{
-				retval = (retval << 24);
-				retval += getMedium(bb, pos + 1);
 			}
 
 			return retval;
@@ -277,64 +242,6 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 				retval = (retval << 56);
 				retval += ((getMedium(bb) & 0xffffffl) << 32);
 				retval += (bb.getInt() & 0xffffffffl);
-			}
-
-			return retval;
-		}
-	}
-
-	private static long getCLong(ByteBuffer bb, int pos)
-	{
-		int temp = (bb.get(pos) & 0xff);
-		int length = (temp >>> 4);
-		if (length == 1)
-		{
-			return (temp & 0x0f);
-		}
-		else if (length == 9)
-		{
-			return bb.getLong(pos + 1);
-		}
-		else
-		{
-			long retval = (temp & 0x0f);
-			if (length == 2)
-			{
-				retval = (retval << 8);
-				retval += (bb.get(pos + 1) & 0xff);
-			}
-			else if (length == 3)
-			{
-				retval = (retval << 16);
-				retval += (bb.getShort(pos + 1) & 0xffff);
-			}
-			else if (length == 4)
-			{
-				retval = (retval << 24);
-				retval += getMedium(bb, pos + 1);
-			}
-			else if (length == 5)
-			{
-				retval = (retval << 32);
-				retval += (bb.getInt(pos + 1) & 0xffffffffl);
-			}
-			else if (length == 6)
-			{
-				retval = (retval << 40);
-				retval += ((bb.get(pos + 1) & 0xffl) << 32);
-				retval += (bb.getInt(pos + 2) & 0xffffffffl);
-			}
-			else if (length == 7)
-			{
-				retval = (retval << 48);
-				retval += ((bb.getShort(pos + 1) & 0xffffl) << 32);
-				retval += (bb.getInt(pos + 3) & 0xffffffffl);
-			}
-			else
-			{
-				retval = (retval << 56);
-				retval += ((getMedium(bb, pos + 1) & 0xffffffl) << 32);
-				retval += (bb.getInt(pos + 4) & 0xffffffffl);
 			}
 
 			return retval;
@@ -494,17 +401,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		}
 		else
 		{
-			final byte[] retval = new byte[9];
-			retval[0] = 0;
-			retval[1] = 0;
-			retval[2] = 0;
-			retval[3] = 5;
-			retval[4] = 0;
-			retval[5] = 0;
-			retval[6] = 0;
-			retval[7] = 1;
-			retval[8] = 5;
-			return retval;
+			return toBytesDEM();
 		}
 
 		int size = 0;
@@ -552,30 +449,8 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					bytes.add(b);
 				}
 			}
-			// else if (o instanceof AtomicLong)
-			// {
-			// header[i] = (byte)6;
-			// size += 8;
-			// }
-			// else if (o instanceof AtomicBigDecimal)
-			// {
-			// header[i] = (byte)7;
-			// size += 8;
-			// }
-			else if (o instanceof ArrayList)
-			{
-				if (((ArrayList)o).size() != 0)
-				{
-					Exception e = new Exception("Non-zero size ArrayList in toBytes()");
-					HRDBMSWorker.logger.error("Non-zero size ArrayList in toBytes()", e);
-					throw e;
-				}
-				header[i] = (byte)8;
-			}
 			else
 			{
-				HRDBMSWorker.logger.error("Unknown type " + o.getClass() + " in toBytes()");
-				HRDBMSWorker.logger.error(o);
 				throw new Exception("Unknown type " + o.getClass() + " in toBytes()");
 			}
 
@@ -621,21 +496,25 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 				retvalBB.putInt(temp.length);
 				retvalBB.put(temp);
 			}
-			// else if (retval[i] == 6)
-			// {
-			// retvalBB.putLong(((AtomicLong)o).get());
-			// }
-			// else if (retval[i] == 7)
-			// {
-			// retvalBB.putDouble(((AtomicBigDecimal)o).get().doubleValue());
-			// }
-			else if (header[i] == 8)
-			{
-			}
 
 			i++;
 		}
 
+		return retval;
+	}
+
+	private static byte[] toBytesDEM()
+	{
+		final byte[] retval = new byte[9];
+		retval[0] = 0;
+		retval[1] = 0;
+		retval[2] = 0;
+		retval[3] = 5;
+		retval[4] = 0;
+		retval[5] = 0;
+		retval[6] = 0;
+		retval[7] = 1;
+		retval[8] = 5;
 		return retval;
 	}
 
@@ -896,95 +775,6 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 	@Override
 	public Object next(Operator op) throws Exception
 	{
-		if (indexAccess)
-		{
-			synchronized (queuedRows)
-			{
-				if (queuedRows.size() > 0)
-				{
-					Object obj = queuedRows.remove(0);
-					if (obj instanceof Exception)
-					{
-						throw (Exception)obj;
-					}
-
-					return obj;
-				}
-			}
-
-			while (true)
-			{
-				final Object o = children.get(0).next(this);
-				if (o instanceof DataEndMarker)
-				{
-					return o;
-				}
-
-				if (o instanceof Exception)
-				{
-					throw (Exception)o;
-				}
-
-				final ArrayList<Filter> dynamics = new ArrayList<Filter>(rights.size());
-				int i = 0;
-				for (final String right : rights)
-				{
-					final Object leftVal = ((ArrayList<Object>)o).get(children.get(0).getCols2Pos().get(lefts.get(i)));
-					String leftString = null;
-					if (leftVal instanceof Integer || leftVal instanceof Long || leftVal instanceof Double)
-					{
-						leftString = leftVal.toString();
-					}
-					else if (leftVal instanceof String)
-					{
-						leftString = "'" + leftVal + "'";
-					}
-					else if (leftVal instanceof MyDate)
-					{
-						leftString = sdf.format(leftVal);
-					}
-					final Filter f = new Filter(leftString, "E", right);
-					dynamics.add(f);
-					i++;
-				}
-
-				Operator clone = null;
-
-				clone = getClone();
-				synchronized (clone)
-				{
-					clone.reset();
-					for (final Index index : dynamicIndexes(children.get(1), clone.children().get(0)))
-					{
-						index.setDelayedConditions(deepClone(dynamics));
-					}
-
-					Object o2 = clone.next(this);
-
-					while (!(o2 instanceof DataEndMarker))
-					{
-						final ArrayList<Object> out = new ArrayList<Object>(((ArrayList<Object>)o).size() + ((ArrayList<Object>)o2).size());
-						out.addAll((ArrayList<Object>)o);
-						out.addAll((ArrayList<Object>)o2);
-						synchronized (queuedRows)
-						{
-							queuedRows.add(out);
-						}
-						o2 = clone.next(this);
-					}
-
-					freeClone(clone);
-				}
-				synchronized (queuedRows)
-				{
-					if (queuedRows.size() > 0)
-					{
-						return queuedRows.remove(0);
-					}
-				}
-			}
-		}
-
 		Object o;
 		o = outBuffer.take();
 
@@ -1180,9 +970,9 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		OperatorUtils.writeInt(node, out);
 		OperatorUtils.writeBool(indexAccess, out);
 		OperatorUtils.serializeALIndx(dynamicIndexes, out, prev);
-		OperatorUtils.writeInt(rightChildCard, out);
+		OperatorUtils.writeLong(rightChildCard, out);
 		OperatorUtils.writeBool(cardSet, out);
-		OperatorUtils.writeInt(leftChildCard, out);
+		OperatorUtils.writeLong(leftChildCard, out);
 		OperatorUtils.writeLong(txnum, out);
 	}
 
@@ -1219,7 +1009,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 	{
 	}
 
-	public boolean setRightChildCard(int card, int card2)
+	public boolean setRightChildCard(long card, long card2)
 	{
 		if (cardSet)
 		{
@@ -1403,40 +1193,6 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		return retval;
 	}
 
-	private ArrayList<Filter> deepClone(ArrayList<Filter> in)
-	{
-		final ArrayList<Filter> out = new ArrayList<Filter>();
-		for (final Filter f : in)
-		{
-			out.add(f.clone());
-		}
-
-		return out;
-	}
-
-	private ArrayList<Index> dynamicIndexes(Operator model, Operator actual)
-	{
-		final ArrayList<Index> retval = new ArrayList<Index>(dynamicIndexes.size());
-		if (model instanceof IndexOperator)
-		{
-			if (dynamicIndexes.contains(((IndexOperator)model).index))
-			{
-				retval.add(((IndexOperator)actual).index);
-			}
-		}
-		else
-		{
-			int i = 0;
-			for (final Operator o : model.children())
-			{
-				retval.addAll(dynamicIndexes(o, actual.children().get(i)));
-				i++;
-			}
-		}
-
-		return retval;
-	}
-
 	private void external(double percentInMem)
 	{
 		numHJO.incrementAndGet();
@@ -1462,7 +1218,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			// numBins = 8192;
 			// }
 			// HRDBMSWorker.logger.debug("Using numBins = " + numBins);
-			int numBins = leftChildCard / Integer.parseInt(HRDBMSWorker.getHParms().getProperty("hjo_bin_size"));
+			int numBins = (int)(leftChildCard / Integer.parseInt(HRDBMSWorker.getHParms().getProperty("hjo_bin_size")));
 			if (numBins < 2)
 			{
 				numBins = 2;
@@ -1786,32 +1542,6 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		numHJO.decrementAndGet();
 	}
 
-	private void freeClone(Operator clone) throws Exception
-	{
-		synchronized (clones)
-		{
-			int i = 0;
-			final int size = clones.size();
-			while (i < size)
-			{
-				final Operator o = clones.get(i);
-				if (clone == o)
-				{
-					if (!lockVector.get(i).get())
-					{
-						Exception e = new Exception("About to unlock an unlocked lock");
-						HRDBMSWorker.logger.error("About to unlock an unlocked lock", e);
-						throw e;
-					}
-					lockVector.get(i).set(false);
-					return;
-				}
-
-				i++;
-			}
-		}
-	}
-
 	private final Object fromBytes(byte[] val, byte[] types) throws Exception
 	{
 		final ByteBuffer bb = ByteBuffer.wrap(val);
@@ -1826,29 +1556,26 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		int i = 0;
 		while (i < numFields)
 		{
+			Object o = null;
 			if (types[i] == 0)
 			{
 				// long
-				final Long o = getCLong(bb);
-				retval.add(o);
+				o = getCLong(bb);
 			}
 			else if (types[i] == 1)
 			{
 				// integer
-				final Integer o = getCInt(bb);
-				retval.add(o);
+				o = getCInt(bb);
 			}
 			else if (types[i] == 2)
 			{
 				// double
-				final Double o = bb.getDouble();
-				retval.add(o);
+				o = bb.getDouble();
 			}
 			else if (types[i] == 3)
 			{
 				// date
-				final MyDate o = new MyDate(getMedium(bb));
-				retval.add(o);
+				o = new MyDate(getMedium(bb));
 			}
 			else if (types[i] == 4)
 			{
@@ -1860,16 +1587,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 
 				if (!Schema.CVarcharFV.compress)
 				{
-					try
-					{
-						final String o = new String(temp, StandardCharsets.UTF_8);
-						retval.add(o);
-					}
-					catch (final Exception e)
-					{
-						HRDBMSWorker.logger.error("", e);
-						throw e;
-					}
+					o = new String(temp, StandardCharsets.UTF_8);
 				}
 				else
 				{
@@ -1877,17 +1595,15 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					int clen = Schema.CVarcharFV.decompress(temp, temp.length, out);
 					temp = new byte[clen];
 					System.arraycopy(out, 0, temp, 0, clen);
-					final String o = new String(temp, StandardCharsets.UTF_8);
-					retval.add(o);
+					o = new String(temp, StandardCharsets.UTF_8);
 				}
 			}
 			else
 			{
-				HRDBMSWorker.logger.error("Unknown type in fromBytes(): " + types[i]);
-				HRDBMSWorker.logger.debug("So far the row is " + retval);
 				throw new Exception("Unknown type in fromBytes(): " + types[i]);
 			}
 
+			retval.add(o);
 			i++;
 		}
 
@@ -1998,54 +1714,6 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		}
 
 		return retval;
-	}
-
-	private Operator getClone() throws Exception
-	{
-		synchronized (clones)
-		{
-			int i = 0;
-			final int size = lockVector.size();
-			while (i < size)
-			{
-				final AtomicBoolean lock = lockVector.get(i);
-
-				if (!lock.get())
-				{
-					if (lock.compareAndSet(false, true))
-					{
-						final Operator retval = clones.get(i);
-						return retval;
-					}
-				}
-
-				i++;
-			}
-
-			Operator clone = clone(children.get(1));
-			final RootOperator root = new RootOperator(meta);
-			try
-			{
-				root.add(clone);
-			}
-			catch (final Exception e)
-			{
-				HRDBMSWorker.logger.error("", e);
-				throw e;
-			}
-			if (clone instanceof TableScanOperator)
-			{
-				if (((TableScanOperator)children.get(1)).orderedFilters.size() > 0)
-				{
-					((TableScanOperator)clone).setCNFForParent(root, ((TableScanOperator)children.get(1)).getCNFForParent(this));
-				}
-			}
-			clone = root;
-			clones.add(clone);
-			lockVector.add(new AtomicBoolean(true));
-
-			return clone;
-		}
 	}
 
 	private String getLeftForRight(String right)

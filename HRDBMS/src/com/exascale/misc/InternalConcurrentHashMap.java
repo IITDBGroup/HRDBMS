@@ -198,9 +198,9 @@ import java.util.stream.Stream;
  * All arguments to all task methods must be non-null.
  *
  * <p>
- * This class is a member of the
- * <a href="{@docRoot} /../technotes/guides/collections/index.html"> Java
- * Collections Framework</a>.
+ * This class is a member of the <a href=
+ * "{@docRoot} /../technotes/guides/collections/index.html"> Java Collections
+ * Framework</a>.
  *
  * @since 1.5
  * @author Doug Lea

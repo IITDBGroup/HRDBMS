@@ -9,7 +9,7 @@ public class BigDecimalReplacement
 	private short decPos;
 	private volatile boolean queued = false;
 	private volatile BigDecimalReplacement queue = null;
-	private ReentrantLock lock = new ReentrantLock();
+	private final ReentrantLock lock = new ReentrantLock();
 
 	public BigDecimalReplacement(double val)
 	{
@@ -40,22 +40,10 @@ public class BigDecimalReplacement
 	{
 		if (!lock.tryLock())
 		{
-			if (!queued)
-			{
-				synchronized(this)
-				{
-					if (!queued)
-					{
-						queue = new BigDecimalReplacement(0.0);
-						queued = true;
-					}
-				}
-			}
-			
-			queue.add(val);
+			delayedAdd(val);
 			return;
 		}
-		
+
 		BigDecimalReplacement rhs = null;
 		short resDecPos;
 		if (this.decPos < val.decPos)
@@ -66,7 +54,7 @@ public class BigDecimalReplacement
 		}
 		else if (val.decPos < this.decPos)
 		{
-			//rhs = moveDec(val, this);
+			// rhs = moveDec(val, this);
 			val.moveDec(this);
 			rhs = val;
 			resDecPos = this.decPos;
@@ -118,20 +106,6 @@ public class BigDecimalReplacement
 			}
 		}
 
-		// System.out.print("LHS = ");
-		// for (long digit : lhs.data)
-		// {
-		// System.out.print(" " + digit + " ");
-		// }
-
-		// System.out.println("");
-		// System.out.print("RHS = ");
-		// for (long digit : rhs.data)
-		// {
-		// System.out.print(" " + digit + " ");
-		// }
-
-		// System.out.println("");
 		long[] result = null;
 		if (data.length == rhs.data.length)
 		{
@@ -158,33 +132,26 @@ public class BigDecimalReplacement
 			i++;
 		}
 
+		long[] theOne = null;
+		if (lhsMin)
+		{
+			theOne = rhs.data;
+		}
+		else
+		{
+			theOne = data;
+		}
 		while (i < max)
 		{
-			if (lhsMin)
+			result[i] = theOne[i] + carry;
+			if ((result[i] & 0x8000000000000000L) != 0)
 			{
-				result[i] = rhs.data[i] + carry;
-				if ((result[i] & 0x8000000000000000L) != 0)
-				{
-					carry = 1;
-					result[i] = (result[i] & 0x7FFFFFFFFFFFFFFFL);
-				}
-				else
-				{
-					carry = 0;
-				}
+				carry = 1;
+				result[i] = (result[i] & 0x7FFFFFFFFFFFFFFFL);
 			}
 			else
 			{
-				result[i] = data[i] + carry;
-				if ((result[i] & 0x8000000000000000L) != 0)
-				{
-					carry = 1;
-					result[i] = (result[i] & 0x7FFFFFFFFFFFFFFFL);
-				}
-				else
-				{
-					carry = 0;
-				}
+				carry = 0;
 			}
 
 			i++;
@@ -205,188 +172,9 @@ public class BigDecimalReplacement
 			resultPos = true;
 		}
 
-		// System.out.print("Result = ");
-		// for (long digit : result)
-		// {
-		// System.out.print(" " + digit + " ");
-		// }
-
-		// System.out.println("");
-		// return new BigDecimalReplacement(result, resultPos, resDecPos);
 		this.pos = resultPos;
 		this.decPos = resDecPos;
 		lock.unlock();
-	}
-	
-	private synchronized void resolveQueue()
-	{
-		if (queue.queued)
-		{
-			queue.resolveQueue();
-		}
-		
-		BigDecimalReplacement val = queue;
-		BigDecimalReplacement rhs = null;
-		short resDecPos;
-		if (this.decPos < val.decPos)
-		{
-			moveDec(val);
-			rhs = val;
-			resDecPos = val.decPos;
-		}
-		else if (val.decPos < this.decPos)
-		{
-			//rhs = moveDec(val, this);
-			val.moveDec(this);
-			rhs = val;
-			resDecPos = this.decPos;
-		}
-		else
-		{
-			rhs = val;
-			resDecPos = this.decPos;
-		}
-
-		short max = (short)Math.max(data.length, rhs.data.length);
-		short min = (short)Math.min(data.length, rhs.data.length);
-		boolean lhsMin = (data.length == min);
-		int i = 0;
-		short carry = 0;
-		Boolean resultPos = null;
-		boolean lhsPos = pos;
-		boolean rhsPos = rhs.pos;
-		if (lhsPos && rhsPos)
-		{
-			resultPos = true;
-		}
-		else if (!lhsPos && !rhsPos)
-		{
-			resultPos = false;
-		}
-
-		if (!lhsPos)
-		{
-			if (lhsMin)
-			{
-				negate(rhs);
-			}
-			else
-			{
-				negate();
-			}
-		}
-
-		if (!rhsPos)
-		{
-			if (lhsMin)
-			{
-				rhs = negate(rhs, rhs);
-			}
-			else
-			{
-				rhs = negate(rhs, this);
-			}
-		}
-
-		// System.out.print("LHS = ");
-		// for (long digit : lhs.data)
-		// {
-		// System.out.print(" " + digit + " ");
-		// }
-
-		// System.out.println("");
-		// System.out.print("RHS = ");
-		// for (long digit : rhs.data)
-		// {
-		// System.out.print(" " + digit + " ");
-		// }
-
-		// System.out.println("");
-		long[] result = null;
-		if (data.length == rhs.data.length)
-		{
-			result = data;
-		}
-		else
-		{
-			result = new long[max];
-		}
-
-		while (i < min)
-		{
-			result[i] = data[i] + rhs.data[i] + carry;
-			if ((result[i] & 0x8000000000000000L) != 0)
-			{
-				carry = 1;
-				result[i] = (result[i] & 0x7FFFFFFFFFFFFFFFL);
-			}
-			else
-			{
-				carry = 0;
-			}
-
-			i++;
-		}
-
-		while (i < max)
-		{
-			if (lhsMin)
-			{
-				result[i] = rhs.data[i] + carry;
-				if ((result[i] & 0x8000000000000000L) != 0)
-				{
-					carry = 1;
-					result[i] = (result[i] & 0x7FFFFFFFFFFFFFFFL);
-				}
-				else
-				{
-					carry = 0;
-				}
-			}
-			else
-			{
-				result[i] = data[i] + carry;
-				if ((result[i] & 0x8000000000000000L) != 0)
-				{
-					carry = 1;
-					result[i] = (result[i] & 0x7FFFFFFFFFFFFFFFL);
-				}
-				else
-				{
-					carry = 0;
-				}
-			}
-
-			i++;
-		}
-
-		this.data = result;
-		if (carry == 1 && resultPos != null)
-		{
-			extendWithCarry();
-		}
-		else if (carry == 1)
-		{
-			resultPos = false;
-			unNegate();
-		}
-		else
-		{
-			resultPos = true;
-		}
-
-		// System.out.print("Result = ");
-		// for (long digit : result)
-		// {
-		// System.out.print(" " + digit + " ");
-		// }
-
-		// System.out.println("");
-		// return new BigDecimalReplacement(result, resultPos, resDecPos);
-		this.pos = resultPos;
-		this.decPos = resDecPos;
-		this.queue = null;
-		this.queued = false;
 	}
 
 	public double doubleValue()
@@ -395,7 +183,7 @@ public class BigDecimalReplacement
 		{
 			resolveQueue();
 		}
-		
+
 		long bits;
 		if (pos)
 		{
@@ -469,20 +257,30 @@ public class BigDecimalReplacement
 		return Double.longBitsToDouble(bits);
 	}
 
+	private void delayedAdd(BigDecimalReplacement val)
+	{
+		if (!queued)
+		{
+			synchronized (this)
+			{
+				if (!queued)
+				{
+					queue = new BigDecimalReplacement(0.0);
+					queued = true;
+				}
+			}
+		}
+
+		queue.add(val);
+		return;
+	}
+
 	private void extendWithCarry()
 	{
 		long[] newData = new long[data.length + 1];
 		System.arraycopy(data, 0, newData, 0, data.length);
 		newData[data.length] = 1;
 		this.data = newData;
-	}
-
-	private BigDecimalReplacement lowOrderZeroes(BigDecimalReplacement toMove, int distance)
-	{
-		int toAdd = distance / 63;
-		long[] result = new long[toMove.data.length + toAdd];
-		System.arraycopy(toMove.data, 0, result, toAdd, toMove.data.length);
-		return new BigDecimalReplacement(result, toMove.pos, (short)(toMove.decPos + toAdd * 63));
 	}
 
 	private void lowOrderZeroes(int distance)
@@ -672,6 +470,177 @@ public class BigDecimalReplacement
 		long[] temp = new long[needed];
 		System.arraycopy(data, 0, temp, 0, data.length);
 		data = temp;
+	}
+
+	private synchronized void resolveQueue()
+	{
+		if (queue.queued)
+		{
+			queue.resolveQueue();
+		}
+
+		BigDecimalReplacement val = queue;
+		BigDecimalReplacement rhs = null;
+		short resDecPos;
+		if (this.decPos < val.decPos)
+		{
+			moveDec(val);
+			rhs = val;
+			resDecPos = val.decPos;
+		}
+		else if (val.decPos < this.decPos)
+		{
+			// rhs = moveDec(val, this);
+			val.moveDec(this);
+			rhs = val;
+			resDecPos = this.decPos;
+		}
+		else
+		{
+			rhs = val;
+			resDecPos = this.decPos;
+		}
+
+		short max = (short)Math.max(data.length, rhs.data.length);
+		short min = (short)Math.min(data.length, rhs.data.length);
+		boolean lhsMin = (data.length == min);
+		int i = 0;
+		short carry = 0;
+		Boolean resultPos = null;
+		boolean lhsPos = pos;
+		boolean rhsPos = rhs.pos;
+		if (lhsPos && rhsPos)
+		{
+			resultPos = true;
+		}
+		else if (!lhsPos && !rhsPos)
+		{
+			resultPos = false;
+		}
+
+		if (!lhsPos)
+		{
+			if (lhsMin)
+			{
+				negate(rhs);
+			}
+			else
+			{
+				negate();
+			}
+		}
+
+		if (!rhsPos)
+		{
+			if (lhsMin)
+			{
+				rhs = negate(rhs, rhs);
+			}
+			else
+			{
+				rhs = negate(rhs, this);
+			}
+		}
+
+		// System.out.print("LHS = ");
+		// for (long digit : lhs.data)
+		// {
+		// System.out.print(" " + digit + " ");
+		// }
+
+		// System.out.println("");
+		// System.out.print("RHS = ");
+		// for (long digit : rhs.data)
+		// {
+		// System.out.print(" " + digit + " ");
+		// }
+
+		// System.out.println("");
+		long[] result = null;
+		if (data.length == rhs.data.length)
+		{
+			result = data;
+		}
+		else
+		{
+			result = new long[max];
+		}
+
+		while (i < min)
+		{
+			result[i] = data[i] + rhs.data[i] + carry;
+			if ((result[i] & 0x8000000000000000L) != 0)
+			{
+				carry = 1;
+				result[i] = (result[i] & 0x7FFFFFFFFFFFFFFFL);
+			}
+			else
+			{
+				carry = 0;
+			}
+
+			i++;
+		}
+
+		while (i < max)
+		{
+			if (lhsMin)
+			{
+				result[i] = rhs.data[i] + carry;
+				if ((result[i] & 0x8000000000000000L) != 0)
+				{
+					carry = 1;
+					result[i] = (result[i] & 0x7FFFFFFFFFFFFFFFL);
+				}
+				else
+				{
+					carry = 0;
+				}
+			}
+			else
+			{
+				result[i] = data[i] + carry;
+				if ((result[i] & 0x8000000000000000L) != 0)
+				{
+					carry = 1;
+					result[i] = (result[i] & 0x7FFFFFFFFFFFFFFFL);
+				}
+				else
+				{
+					carry = 0;
+				}
+			}
+
+			i++;
+		}
+
+		this.data = result;
+		if (carry == 1 && resultPos != null)
+		{
+			extendWithCarry();
+		}
+		else if (carry == 1)
+		{
+			resultPos = false;
+			unNegate();
+		}
+		else
+		{
+			resultPos = true;
+		}
+
+		// System.out.print("Result = ");
+		// for (long digit : result)
+		// {
+		// System.out.print(" " + digit + " ");
+		// }
+
+		// System.out.println("");
+		// return new BigDecimalReplacement(result, resultPos, resDecPos);
+		this.pos = resultPos;
+		this.decPos = resDecPos;
+		this.queue = null;
+		this.queued = false;
 	}
 
 	private void underflow()

@@ -57,7 +57,7 @@ public final class UnionOperator implements Operator, Serializable
 	private transient BufferedLinkedBlockingQueue buffer;
 	private transient ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>> set;
 	// private final AtomicLong counter = new AtomicLong(0);
-	private int estimate = 16;
+	private long estimate = 16;
 	private transient ArrayList<ReadThread> threads;
 	private boolean startDone = false;
 	private boolean estimateSet = false;
@@ -89,7 +89,7 @@ public final class UnionOperator implements Operator, Serializable
 		value.parent = OperatorUtils.deserializeOperator(in, prev);
 		value.node = OperatorUtils.readInt(in);
 		value.distinct = OperatorUtils.readBool(in);
-		value.estimate = OperatorUtils.readInt(in);
+		value.estimate = OperatorUtils.readLong(in);
 		value.startDone = OperatorUtils.readBool(in);
 		value.estimateSet = OperatorUtils.readBool(in);
 		value.received = new AtomicLong(0);
@@ -327,7 +327,7 @@ public final class UnionOperator implements Operator, Serializable
 		parent.serialize(out, prev);
 		OperatorUtils.writeInt(node, out);
 		OperatorUtils.writeBool(distinct, out);
-		OperatorUtils.writeInt(estimate, out);
+		OperatorUtils.writeLong(estimate, out);
 		OperatorUtils.writeBool(startDone, out);
 		OperatorUtils.writeBool(estimateSet, out);
 	}
@@ -342,7 +342,7 @@ public final class UnionOperator implements Operator, Serializable
 		this.distinct = distinct;
 	}
 
-	public boolean setEstimate(int estimate)
+	public boolean setEstimate(long estimate)
 	{
 		if (estimateSet)
 		{
@@ -426,7 +426,7 @@ public final class UnionOperator implements Operator, Serializable
 
 				if (inMem)
 				{
-					set = new ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>>(estimate, 1.0f, children.size());
+					set = new ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>>((int)estimate, 1.0f, children.size());
 				}
 				else
 				{

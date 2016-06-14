@@ -407,6 +407,41 @@ public final class ExtendOperator implements Operator, Serializable
 		return "ExtendOperator: " + name + "=" + prefix;
 	}
 
+	private Object notCached(String temp, ArrayList<Object> row, ArrayList<Integer> p)
+	{
+		Integer x = cols2Pos.get(temp);
+		if (x == null)
+		{
+			int count = 0;
+			if (temp.startsWith("."))
+			{
+				temp = temp.substring(1);
+			}
+			for (String col : cols2Pos.keySet())
+			{
+				String origCol = col;
+				if (col.contains("."))
+				{
+					col = col.substring(col.indexOf('.') + 1);
+					if (col.equals(temp))
+					{
+						count++;
+						if (count == 1)
+						{
+							x = cols2Pos.get(origCol);
+						}
+						else
+						{
+							queue.put(new Exception("Column " + temp + " is ambiguous"));
+						}
+					}
+				}
+			}
+		}
+		p.add(x);
+		return row.get(x);
+	}
+
 	private final Double parsePrefixDouble(ArrayList<Object> row)
 	{
 		ArrayList<Integer> p = null;
@@ -465,28 +500,7 @@ public final class ExtendOperator implements Operator, Serializable
 						{
 							x = poses.get(i);
 							i++;
-
 							field = row.get(x);
-							if (field instanceof Long)
-							{
-								execStack.push(new Double(((Long)field).longValue()));
-							}
-							else if (field instanceof Integer)
-							{
-								execStack.push(new Double(((Integer)field).intValue()));
-							}
-							else if (field instanceof Double)
-							{
-								execStack.push(field);
-							}
-							else
-							{
-								HRDBMSWorker.logger.error("Unknown type in ExtendOperator: " + field.getClass());
-								HRDBMSWorker.logger.error("Row: " + row);
-								HRDBMSWorker.logger.error("Cols2Pos: " + cols2Pos);
-								queue.put(new Exception("Unknown type in ExtendOperator: " + field.getClass()));
-								return 0D;
-							}
 						}
 						else
 						{
@@ -494,72 +508,26 @@ public final class ExtendOperator implements Operator, Serializable
 							{
 								p = new ArrayList<Integer>();
 							}
-							try
-							{
-								// System.out.println("Fetching field " + temp +
-								// " from " + cols2Pos);
-								// System.out.println("Row is " + row);
-								x = cols2Pos.get(temp);
-								if (x == null)
-								{
-									int count = 0;
-									if (temp.startsWith("."))
-									{
-										temp = temp.substring(1);
-									}
-									for (String col : cols2Pos.keySet())
-									{
-										String origCol = col;
-										if (col.contains("."))
-										{
-											col = col.substring(col.indexOf('.') + 1);
-											if (col.equals(temp))
-											{
-												count++;
-												if (count == 1)
-												{
-													x = cols2Pos.get(origCol);
-												}
-												else
-												{
-													queue.put(new Exception("Column " + temp + " is ambiguous"));
-												}
-											}
-										}
-									}
-								}
-								p.add(x);
-								field = row.get(x);
-								// System.out.println("Fetched value is " +
-								// field);
-							}
-							catch (final Exception e)
-							{
-								HRDBMSWorker.logger.error("Error getting column " + temp + " from row " + row, e);
-								HRDBMSWorker.logger.error("Cols2Pos = " + cols2Pos);
-								queue.put(e);
-								return 0D;
-							}
-							if (field instanceof Long)
-							{
-								execStack.push(new Double(((Long)field).longValue()));
-							}
-							else if (field instanceof Integer)
-							{
-								execStack.push(new Double(((Integer)field).intValue()));
-							}
-							else if (field instanceof Double)
-							{
-								execStack.push(field);
-							}
-							else
-							{
-								HRDBMSWorker.logger.error("Unknown type in ExtendOperator: " + field.getClass());
-								HRDBMSWorker.logger.error("Row: " + row);
-								HRDBMSWorker.logger.error("Cols2Pos: " + cols2Pos);
-								queue.put(new Exception("Unknown type in ExtendOperator: " + field.getClass()));
-								return 0D;
-							}
+
+							field = notCached(temp, row, p);
+						}
+
+						if (field instanceof Long)
+						{
+							execStack.push(new Double(((Long)field).longValue()));
+						}
+						else if (field instanceof Integer)
+						{
+							execStack.push(new Double(((Integer)field).intValue()));
+						}
+						else if (field instanceof Double)
+						{
+							execStack.push(field);
+						}
+						else
+						{
+							queue.put(new Exception("Unknown type in ExtendOperator: " + field.getClass()));
+							return 0D;
 						}
 					}
 					else

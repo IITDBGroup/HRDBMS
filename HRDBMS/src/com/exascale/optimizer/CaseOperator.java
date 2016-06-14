@@ -270,99 +270,36 @@ public final class CaseOperator implements Operator, Serializable
 			int z = 0;
 			final int limit = filters.size();
 			// for (final HashSet<HashMap<Filter, Filter>> aCase : filters)
-			while (z < limit)
+			while (z <= limit)
 			{
-				final HashSet<HashMap<Filter, Filter>> aCase = filters.get(z++);
-				if (passesCase((ArrayList<Object>)o, cols2Pos, aCase))
+				if (z == limit || passesCase((ArrayList<Object>)o, cols2Pos, filters.get(z++)))
 				{
 					Object obj = results.get(i);
 					if (obj instanceof String && ((String)obj).startsWith("\u0000"))
 					{
 						obj = getColumn(((String)obj).substring(1), (ArrayList<Object>)o);
-						if (obj instanceof Integer && type.equals("LONG"))
-						{
-							((ArrayList<Object>)o).add(new Long((Integer)obj));
-						}
-						else if (obj instanceof Integer && type.equalsIgnoreCase("FLOAT"))
-						{
-							((ArrayList<Object>)o).add(new Double((Integer)obj));
-						}
-						else if (obj instanceof Long && type.equals("FLOAT"))
-						{
-							((ArrayList<Object>)o).add(new Double((Long)obj));
-						}
-						else
-						{
-							((ArrayList<Object>)o).add(obj);
-						}
-						return o;
 					}
-					else
+
+					if (obj instanceof Integer && type.equals("LONG"))
 					{
-						if (obj instanceof Integer && type.equals("LONG"))
-						{
-							((ArrayList<Object>)o).add(new Long((Integer)obj));
-						}
-						else if (obj instanceof Integer && type.equalsIgnoreCase("FLOAT"))
-						{
-							((ArrayList<Object>)o).add(new Double((Integer)obj));
-						}
-						else if (obj instanceof Long && type.equals("FLOAT"))
-						{
-							((ArrayList<Object>)o).add(new Double((Long)obj));
-						}
-						else
-						{
-							((ArrayList<Object>)o).add(obj);
-						}
-						return o;
+						obj = new Long((Integer)obj);
 					}
+					else if (obj instanceof Integer && type.equals("FLOAT"))
+					{
+						obj = new Double((Integer)obj);
+					}
+					else if (obj instanceof Long && type.equals("FLOAT"))
+					{
+						obj = new Double((Long)obj);
+					}
+
+					((ArrayList<Object>)o).add(obj);
+					return o;
 				}
 				i++;
 			}
 
-			Object obj = results.get(i);
-			if (obj instanceof String && ((String)obj).startsWith("\u0000"))
-			{
-				obj = getColumn(((String)obj).substring(1), (ArrayList<Object>)o);
-				if (obj instanceof Integer && type.equals("LONG"))
-				{
-					((ArrayList<Object>)o).add(new Long((Integer)obj));
-				}
-				else if (obj instanceof Integer && type.equalsIgnoreCase("FLOAT"))
-				{
-					((ArrayList<Object>)o).add(new Double((Integer)obj));
-				}
-				else if (obj instanceof Long && type.equals("FLOAT"))
-				{
-					((ArrayList<Object>)o).add(new Double((Long)obj));
-				}
-				else
-				{
-					((ArrayList<Object>)o).add(obj);
-				}
-				return o;
-			}
-			else
-			{
-				if (obj instanceof Integer && type.equals("LONG"))
-				{
-					((ArrayList<Object>)o).add(new Long((Integer)obj));
-				}
-				else if (obj instanceof Integer && type.equalsIgnoreCase("FLOAT"))
-				{
-					((ArrayList<Object>)o).add(new Double((Integer)obj));
-				}
-				else if (obj instanceof Long && type.equals("FLOAT"))
-				{
-					((ArrayList<Object>)o).add(new Double((Long)obj));
-				}
-				else
-				{
-					((ArrayList<Object>)o).add(obj);
-				}
-				return o;
-			}
+			return null;
 		}
 		else if (o instanceof Exception)
 		{

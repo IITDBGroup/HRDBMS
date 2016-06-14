@@ -458,6 +458,56 @@ public class NetworkSendOperator implements Operator, Serializable
 		return "NetworkSendOperator(" + node + ")";
 	}
 
+	private byte[] toBytesDEM()
+	{
+		final byte[] retval = new byte[9];
+		retval[0] = 0;
+		retval[1] = 0;
+		retval[2] = 0;
+		retval[3] = 5;
+		retval[4] = 0;
+		retval[5] = 0;
+		retval[6] = 0;
+		retval[7] = 1;
+		retval[8] = 5;
+		return retval;
+	}
+
+	private byte[] toBytesException(Object v)
+	{
+		Exception e = (Exception)v;
+		byte[] data = null;
+		try
+		{
+			HRDBMSWorker.logger.debug("", (Exception)v);
+			if (e.getMessage() == null)
+			{
+				StringWriter sw = new StringWriter();
+				PrintWriter pw = new PrintWriter(sw);
+				e.printStackTrace(pw);
+				data = sw.toString().getBytes(StandardCharsets.UTF_8);
+			}
+			else
+			{
+				data = e.getMessage().getBytes(StandardCharsets.UTF_8);
+			}
+		}
+		catch (Exception f)
+		{
+		}
+
+		int dataLen = data.length;
+		int recLen = 9 + dataLen;
+		ByteBuffer bb = ByteBuffer.allocate(recLen + 4);
+		bb.position(0);
+		bb.putInt(recLen);
+		bb.putInt(1);
+		bb.put((byte)10);
+		bb.putInt(dataLen);
+		bb.put(data);
+		return bb.array();
+	}
+
 	protected byte[] toBytes(Object v) throws Exception
 	{
 		ArrayList<byte[]> bytes = null;
@@ -472,51 +522,11 @@ public class NetworkSendOperator implements Operator, Serializable
 		}
 		else if (v instanceof Exception)
 		{
-			Exception e = (Exception)v;
-			byte[] data = null;
-			try
-			{
-				HRDBMSWorker.logger.debug("", (Exception)v);
-				if (e.getMessage() == null)
-				{
-					StringWriter sw = new StringWriter();
-					PrintWriter pw = new PrintWriter(sw);
-					e.printStackTrace(pw);
-					data = sw.toString().getBytes(StandardCharsets.UTF_8);
-				}
-				else
-				{
-					data = e.getMessage().getBytes(StandardCharsets.UTF_8);
-				}
-			}
-			catch (Exception f)
-			{
-			}
-
-			int dataLen = data.length;
-			int recLen = 9 + dataLen;
-			ByteBuffer bb = ByteBuffer.allocate(recLen + 4);
-			bb.position(0);
-			bb.putInt(recLen);
-			bb.putInt(1);
-			bb.put((byte)10);
-			bb.putInt(dataLen);
-			bb.put(data);
-			return bb.array();
+			return toBytesException(v);
 		}
 		else
 		{
-			final byte[] retval = new byte[9];
-			retval[0] = 0;
-			retval[1] = 0;
-			retval[2] = 0;
-			retval[3] = 5;
-			retval[4] = 0;
-			retval[5] = 0;
-			retval[6] = 0;
-			retval[7] = 1;
-			retval[8] = 5;
-			return retval;
+			return toBytesDEM();
 		}
 
 		int size = val.size() + 8;
@@ -569,8 +579,6 @@ public class NetworkSendOperator implements Operator, Serializable
 			}
 			else
 			{
-				HRDBMSWorker.logger.error("Unknown type " + o.getClass() + " in toBytes()");
-				HRDBMSWorker.logger.error(o);
 				throw new Exception("Unknown type " + o.getClass() + " in toBytes()");
 			}
 

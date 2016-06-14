@@ -79,9 +79,9 @@ import java.util.RandomAccess;
  * detect bugs.</i>
  *
  * <p>
- * This class is a member of the
- * <a href="{@docRoot} /../technotes/guides/collections/index.html"> Java
- * Collections Framework</a>.
+ * This class is a member of the <a href=
+ * "{@docRoot} /../technotes/guides/collections/index.html"> Java Collections
+ * Framework</a>.
  *
  * @author Josh Bloch
  * @author Neal Gafter

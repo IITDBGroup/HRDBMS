@@ -15,7 +15,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 {
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#AddSub}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -24,7 +24,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#any}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -33,7 +33,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#caseCase}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -42,7 +42,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#CaseExp}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -51,7 +51,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#char2}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -60,7 +60,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#Col1Part}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -69,7 +69,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#Col2Part}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -78,7 +78,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#colDef}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -87,7 +87,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#colList}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -96,7 +96,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#ColLiteral}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -105,7 +105,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#colOrder}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -114,7 +114,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#columnSet}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -124,7 +124,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#commonTableExpression}
 	 * .
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -133,7 +133,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#Concat}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -143,7 +143,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#connectedSearchClause}
 	 * .
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -152,7 +152,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#connectedSelect}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -161,7 +161,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#correlationClause}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -170,7 +170,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#CountDistinct}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -179,7 +179,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#CountStar}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -188,7 +188,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#createIndex}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -197,7 +197,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#createTable}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -206,7 +206,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#createView}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -215,7 +215,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#CrossJoin}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -224,7 +224,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#CrossJoinP}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -233,7 +233,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#dataType}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -242,7 +242,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#date2}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -251,7 +251,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#delete}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -260,7 +260,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#deviceExp}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -269,7 +269,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#dropIndex}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -278,7 +278,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#dropTable}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -287,7 +287,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#dropView}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -296,7 +296,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#ExistsPredicate}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -305,7 +305,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#ExpSelect}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -314,7 +314,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#fetchFirst}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -323,7 +323,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#float2}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -332,7 +332,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#fromClause}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -341,7 +341,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#fullSelect}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -350,7 +350,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#Function}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -359,7 +359,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#groupBy}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -368,7 +368,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#groupDef}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -377,7 +377,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#groupExp}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -386,7 +386,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#hashExp}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -395,7 +395,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#havingClause}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -404,7 +404,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#identifier}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -413,7 +413,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#indexDef}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -422,7 +422,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#insert}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -431,7 +431,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#int2}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -440,7 +440,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#integerSet}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -449,7 +449,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#IsLiteral}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -458,7 +458,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#IsSingleTable}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -467,7 +467,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#Join}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -476,7 +476,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#JoinP}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -485,7 +485,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#List}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -494,7 +494,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#load}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -503,7 +503,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#long2}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -512,7 +512,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#MulDiv}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -521,7 +521,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#NestedTable}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -530,7 +530,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#nodeExp}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -539,7 +539,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#NormalPredicate}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -548,7 +548,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#notNull}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -557,7 +557,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#NullExp}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -566,7 +566,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#NullPredicate}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -575,7 +575,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#NumericLiteral}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -584,7 +584,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#operator}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -593,7 +593,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#orderBy}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -602,7 +602,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#organization}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -611,7 +611,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#PExpression}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -620,7 +620,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#primary}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -629,7 +629,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#primaryKey}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -638,7 +638,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#rangeExp}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -647,7 +647,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#rangeSet}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -656,7 +656,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#rangeType}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -665,7 +665,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#realGroupExp}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -674,7 +674,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#realNodeExp}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -683,7 +683,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#remainder}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -692,7 +692,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#runstats}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -701,7 +701,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#searchClause}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -710,7 +710,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#searchCondition}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -719,7 +719,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#select}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -728,7 +728,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#selectClause}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -737,7 +737,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#SelectColumn}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -746,7 +746,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#SelectExpression}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -755,7 +755,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#selecthow}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -764,7 +764,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#singleTable}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -773,7 +773,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#SortKeyCol}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -782,7 +782,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#SortKeyInt}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -791,7 +791,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#StringLiteral}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -800,7 +800,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#subSelect}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -809,7 +809,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#Table1Part}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -818,7 +818,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#Table2Part}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -827,7 +827,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#update}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result
@@ -836,7 +836,7 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T>
 
 	/**
 	 * Visit a parse tree produced by {@link SelectParser#whereClause}.
-	 * 
+	 *
 	 * @param ctx
 	 *            the parse tree
 	 * @return the visitor result

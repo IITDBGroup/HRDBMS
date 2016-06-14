@@ -396,93 +396,56 @@ public class SparseCompressedFileChannel2 extends FileChannel
 
 	public int read(ByteBuffer[] bbs, long arg1) throws IOException
 	{
+		Exception ex = null;
+		int page = (int)(arg1 / Page.BLOCK_SIZE);
 		try
 		{
-			boolean closed = false;
-			int page = (int)(arg1 / Page.BLOCK_SIZE);
 			lock.readLock().lock();
-			try
-			{
-				int i = 0;
-				int num = bbs.length;
-				while (i < num)
-				{
-					while (writeLocks.putIfAbsent(page + i, page + i) != null)
-					{
-						LockSupport.parkNanos(500);
-					}
-
-					i++;
-				}
-
-				{
-					// full block
-					// LZ4SafeDecompressor decomp = factory.safeDecompressor();
-					LZ4FastDecompressor decomp = factory.fastDecompressor();
-					// int mod = block & 31;
-					FileChannel fc = theFC;
-
-					ByteBuffer bb = allocateByteBuffer((int)SLOT_SIZE * num);
-					fc.read(bb, page * SLOT_SIZE);
-					// bb.position(bb.array().length - (int)SLOT_SIZE);
-					// int size = bb.getInt();
-
-					// byte[] target = new byte[128 * 1024];
-					try
-					{
-						i = 0;
-						while (i < num)
-						{
-							decomp.decompress(bb.array(), i * (int)SLOT_SIZE, bbs[i].array(), 0, Page.BLOCK_SIZE);
-							i++;
-						}
-						deallocateByteBuffer(bb);
-					}
-					catch (Exception e)
-					{
-						// HRDBMSWorker.logger.debug("Block = " + block);
-						HRDBMSWorker.logger.debug("FC = " + fc);
-						HRDBMSWorker.logger.debug("", e);
-						// HRDBMSWorker.logger.debug("FC.size() = " +
-						// fc.size());
-						i = 0;
-						while (i < num)
-						{
-							writeLocks.remove(page + i);
-							i++;
-						}
-						lock.readLock().unlock();
-						closed = true;
-						throw e;
-					}
-				}
-			}
-			catch (Exception e)
-			{
-				if (!closed)
-				{
-					writeLocks.remove(page);
-					lock.readLock().unlock();
-				}
-
-				HRDBMSWorker.logger.debug("", e);
-				throw e;
-			}
-
 			int i = 0;
-			while (i < bbs.length)
+			int num = bbs.length;
+			while (i < num)
 			{
-				writeLocks.remove(page + i);
+				while (writeLocks.putIfAbsent(page + i, page + i) != null)
+				{
+					LockSupport.parkNanos(500);
+				}
+
 				i++;
 			}
-			lock.readLock().unlock();
-			return bbs[0].capacity();
+
+			LZ4FastDecompressor decomp = factory.fastDecompressor();
+			FileChannel fc = theFC;
+
+			ByteBuffer bb = allocateByteBuffer((int)SLOT_SIZE * num);
+			fc.read(bb, page * SLOT_SIZE);
+
+			i = 0;
+			while (i < num)
+			{
+				decomp.decompress(bb.array(), i * (int)SLOT_SIZE, bbs[i].array(), 0, Page.BLOCK_SIZE);
+				i++;
+			}
+			deallocateByteBuffer(bb);
 		}
-		catch (Throwable e)
+		catch (Exception e)
 		{
-			HRDBMSWorker.logger.error("", e);
-			throw new IOException(e);
+			ex = e;
 		}
+
+		int i = 0;
+		while (i < bbs.length)
+		{
+			writeLocks.remove(page + i);
+			i++;
+		}
+		lock.readLock().unlock();
+
+		if (ex != null)
+		{
+			throw new IOException(ex);
+		}
+
+		return bbs[0].capacity();
 	}
 
 	public int read3(ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3, long arg1) throws IOException

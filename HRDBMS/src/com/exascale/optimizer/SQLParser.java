@@ -6410,7 +6410,7 @@ public class SQLParser
 		/*
 		 * for (String col : op.getCols2Pos().keySet()) { if
 		 * (!col.contains(".")) { ok = false; badCol = col; break; } }
-		 * 
+		 *
 		 * if (!ok) { throw new Exception("Error processing the column " +
 		 * badCol + " in the select clause. It does not contain a period."); }
 		 */

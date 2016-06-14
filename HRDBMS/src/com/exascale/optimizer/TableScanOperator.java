@@ -73,7 +73,7 @@ public final class TableScanOperator implements Operator, Serializable
 			final Field fieldToUpdate = ArrayList.class.getDeclaredField("elementData");
 			// get unsafe offset to this field
 			offset = unsafe.objectFieldOffset(fieldToUpdate);
-			
+
 			File file = new File("pbpe.dat");
 			if (file.exists())
 			{
@@ -83,7 +83,7 @@ public final class TableScanOperator implements Operator, Serializable
 					noResults = (MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>>)in.readObject();
 					in.close();
 				}
-				catch(Exception e)
+				catch (Exception e)
 				{
 					noResults = new MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>>();
 				}
@@ -92,7 +92,7 @@ public final class TableScanOperator implements Operator, Serializable
 			{
 				noResults = new MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>>();
 			}
-			
+
 			new PBPEThread().start();
 		}
 		catch (Exception e)
@@ -100,39 +100,11 @@ public final class TableScanOperator implements Operator, Serializable
 			HRDBMSWorker.logger.debug("", e);
 		}
 	}
-	
-	private static class PBPEThread extends HRDBMSThread
-	{
-		public void run()
-		{
-			int sleep = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_externalize_interval_s")) * 1000;
-			while (true)
-			{
-				try
-				{
-					Thread.sleep(sleep);
-				}
-				catch(InterruptedException e)
-				{}
-				
-				try
-				{
-					ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream("pbpe.dat.new", false));
-					out.writeObject(noResults);
-					out.close();
-					new File("pbpe.dat.new").renameTo(new File("pbpe.dat"));
-				}
-				catch(Exception e)
-				{
-					HRDBMSWorker.logger.warn("", e);
-				}
-			}
-		}
-	}
-	
+
 	private int PREFETCH_REQUEST_SIZE;
 
 	private int PAGES_IN_ADVANCE;
+
 	private HashMap<String, String> cols2Types = new HashMap<String, String>();
 	private HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
 	private TreeMap<Integer, String> pos2Col = new TreeMap<Integer, String>();
@@ -179,7 +151,6 @@ public final class TableScanOperator implements Operator, Serializable
 	private transient AtomicLong received;
 	private transient volatile boolean demReceived;
 	private int tType = 0;
-
 	private volatile transient HashSet<Integer> referencesHash = null;
 
 	public TableScanOperator(String schema, String name, MetaData meta, HashMap<String, Integer> cols2Pos, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, TreeMap<Integer, String> tablePos2Col, HashMap<String, String> tableCols2Types, HashMap<String, Integer> tableCols2Pos) throws Exception
@@ -196,15 +167,6 @@ public final class TableScanOperator implements Operator, Serializable
 		received = new AtomicLong(0);
 	}
 
-	// private static long MAX_PAGES;
-
-	// static
-	// {
-	// MAX_PAGES =
-	// (Long.parseLong(HRDBMSWorker.getHParms().getProperty("bp_pages")) /
-	// MetaData.getNumDevices()) / 15;
-	// }
-
 	public TableScanOperator(String schema, String name, MetaData meta, Transaction tx) throws Exception
 	{
 		this.meta = meta;
@@ -218,6 +180,15 @@ public final class TableScanOperator implements Operator, Serializable
 		tableCols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
 		received = new AtomicLong(0);
 	}
+
+	// private static long MAX_PAGES;
+
+	// static
+	// {
+	// MAX_PAGES =
+	// (Long.parseLong(HRDBMSWorker.getHParms().getProperty("bp_pages")) /
+	// MetaData.getNumDevices()) / 15;
+	// }
 
 	public TableScanOperator(String schema, String name, MetaData meta, Transaction tx, boolean releaseLocks) throws Exception
 	{
@@ -2029,45 +2000,49 @@ public final class TableScanOperator implements Operator, Serializable
 								}
 							}
 							row.clear();
-							while (j < size)
-							{
-								if (!getRID)
-								{
-									try
-									{
-										row.add(r.get(rowToIterator.get(j)).getValue());
-									}
-									catch (NullPointerException e)
-									{
-										HRDBMSWorker.logger.debug("Row is " + r);
-										throw e;
-									}
-								}
-								else
-								{
-									if (j >= 4)
-									{
 
-										row.add(r.get(rowToIterator.get(j)).getValue());
-									}
-									else if (j == 0)
+							synchronized (r)
+							{
+								while (j < size)
+								{
+									if (!getRID)
 									{
-										row.add(rid.getNode());
+										try
+										{
+											row.add(r.get(rowToIterator.get(j)).getValue());
+										}
+										catch (NullPointerException e)
+										{
+											HRDBMSWorker.logger.debug("Row is " + r);
+											throw e;
+										}
 									}
-									else if (j == 1)
+									else
 									{
-										row.add(rid.getDevice());
+										if (j >= 4)
+										{
+
+											row.add(r.get(rowToIterator.get(j)).getValue());
+										}
+										else if (j == 0)
+										{
+											row.add(rid.getNode());
+										}
+										else if (j == 1)
+										{
+											row.add(rid.getDevice());
+										}
+										else if (j == 2)
+										{
+											row.add(rid.getBlockNum());
+										}
+										else if (j == 3)
+										{
+											row.add(rid.getRecNum());
+										}
 									}
-									else if (j == 2)
-									{
-										row.add(rid.getBlockNum());
-									}
-									else if (j == 3)
-									{
-										row.add(rid.getRecNum());
-									}
+									j++;
 								}
-								j++;
 							}
 
 							{
@@ -3589,6 +3564,37 @@ public final class TableScanOperator implements Operator, Serializable
 				{
 				}
 				return;
+			}
+		}
+	}
+
+	private static class PBPEThread extends HRDBMSThread
+	{
+		@Override
+		public void run()
+		{
+			int sleep = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_externalize_interval_s")) * 1000;
+			while (true)
+			{
+				try
+				{
+					Thread.sleep(sleep);
+				}
+				catch (InterruptedException e)
+				{
+				}
+
+				try
+				{
+					ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream("pbpe.dat.new", false));
+					out.writeObject(noResults);
+					out.close();
+					new File("pbpe.dat.new").renameTo(new File("pbpe.dat"));
+				}
+				catch (Exception e)
+				{
+					HRDBMSWorker.logger.warn("", e);
+				}
 			}
 		}
 	}

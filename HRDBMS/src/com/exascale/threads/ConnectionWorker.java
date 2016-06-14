@@ -1688,6 +1688,133 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 	}
 
+	private void cluster()
+	{
+		byte[] lenBytes = new byte[4];
+		int len;
+		byte[] bytes;
+		String schema;
+		String table;
+		ArrayList<Object> tree;
+		Transaction tx;
+		byte[] txBytes = new byte[8];
+		int type;
+		TreeMap<Integer, String> pos2Col;
+		HashMap<String, String> cols2Types;
+
+		try
+		{
+			readNonCoord(txBytes);
+			tx = new Transaction(bytesToLong(txBytes));
+			readNonCoord(lenBytes);
+			len = bytesToInt(lenBytes);
+			bytes = new byte[len];
+			readNonCoord(bytes);
+			schema = new String(bytes, StandardCharsets.UTF_8);
+			readNonCoord(lenBytes);
+			len = bytesToInt(lenBytes);
+			bytes = new byte[len];
+			readNonCoord(bytes);
+			table = new String(bytes, StandardCharsets.UTF_8);
+			readNonCoord(lenBytes);
+			type = bytesToInt(lenBytes);
+			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
+			tree = (ArrayList<Object>)objIn.readObject();
+			pos2Col = (TreeMap<Integer, String>)objIn.readObject();
+			cols2Types = (HashMap<String, String>)objIn.readObject();
+
+			ArrayList<FlushLoadThread> threads = new ArrayList<FlushLoadThread>();
+			new MetaData();
+			final int limit = MetaData.getNumDevices();
+
+			int device = 0;
+			while (device < limit)
+			{
+				threads.add(new FlushLoadThread(tx, schema, table, device, pos2Col, cols2Types, type));
+				device++;
+			}
+
+			for (FlushLoadThread thread : threads)
+			{
+				thread.start();
+			}
+
+			// ///////////////////////////////////////////
+			Object obj = tree.get(0);
+			while (obj instanceof ArrayList)
+			{
+				obj = ((ArrayList)obj).get(0);
+			}
+
+			removeFromTree((String)obj, tree, null); // also delete parents if
+			// now empty
+
+			ArrayList<SendHierClusterThread> threads2 = new ArrayList<SendHierClusterThread>();
+			for (Object o : tree)
+			{
+				threads2.add(new SendHierClusterThread(schema, table, pos2Col, cols2Types, o, tx, type));
+			}
+
+			for (SendHierClusterThread thread : threads2)
+			{
+				thread.start();
+			}
+
+			boolean allOK = true;
+			for (SendHierClusterThread thread : threads2)
+			{
+				while (true)
+				{
+					try
+					{
+						thread.join();
+						break;
+					}
+					catch (InterruptedException e)
+					{
+					}
+				}
+				if (!thread.getOK())
+				{
+					allOK = false;
+				}
+			}
+			// /////////////////////////////
+
+			for (FlushLoadThread thread : threads)
+			{
+				thread.join();
+				if (!thread.getOK())
+				{
+					allOK = false;
+				}
+			}
+
+			if (allOK)
+			{
+				sendOK();
+			}
+			else
+			{
+				sendNo();
+				try
+				{
+					sock.close();
+				}
+				catch (Exception f)
+				{
+				}
+			}
+		}
+		catch (Exception e)
+		{
+			HRDBMSWorker.logger.debug("", e);
+			HRDBMSWorker.logger.debug("Sending NO");
+			sendNo();
+			return;
+		}
+	}
+
 	private void delete()
 	{
 		byte[] txBytes = new byte[8];
@@ -2740,107 +2867,6 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 	}
 
-	private final Object fromBytes(byte[] val) throws Exception
-	{
-		final ByteBuffer bb = ByteBuffer.wrap(val);
-		final int numFields = bb.getInt();
-
-		if (numFields == 0)
-		{
-			return new ArrayList<Object>();
-		}
-
-		bb.position(bb.position() + numFields);
-		final byte[] bytes = bb.array();
-		if (bytes[4] == 5)
-		{
-			return new DataEndMarker();
-		}
-		final ArrayList<Object> retval = new ArrayList<Object>(numFields);
-		int i = 0;
-		while (i < numFields)
-		{
-			if (bytes[i + 4] == 0)
-			{
-				// long
-				final Long o = bb.getLong();
-				retval.add(o);
-			}
-			else if (bytes[i + 4] == 1)
-			{
-				// integer
-				final Integer o = bb.getInt();
-				retval.add(o);
-			}
-			else if (bytes[i + 4] == 2)
-			{
-				// double
-				final Double o = bb.getDouble();
-				retval.add(o);
-			}
-			else if (bytes[i + 4] == 3)
-			{
-				// date
-				final MyDate o = new MyDate(bb.getInt());
-				retval.add(o);
-			}
-			else if (bytes[i + 4] == 4)
-			{
-				// string
-				final int length = bb.getInt();
-				final byte[] temp = new byte[length];
-				final char[] ca = new char[length];
-				bb.get(temp);
-				try
-				{
-					String o = (String)unsafe.allocateInstance(String.class);
-					int clen = ((sun.nio.cs.ArrayDecoder)scd).decode(temp, 0, length, ca);
-					if (clen == ca.length)
-					{
-						unsafe.putObject(o, soffset, ca);
-					}
-					else
-					{
-						char[] v = Arrays.copyOf(ca, clen);
-						unsafe.putObject(o, soffset, v);
-					}
-					retval.add(o);
-				}
-				catch (final Exception e)
-				{
-					HRDBMSWorker.logger.error("", e);
-					throw e;
-				}
-			}
-			// else if (bytes[i + 4] == 6)
-			// {
-			// // AtomicLong
-			// final long o = bb.getLong();
-			// retval.add(new AtomicLong(o));
-			// }
-			// else if (bytes[i + 4] == 7)
-			// {
-			// // AtomicDouble
-			// final double o = bb.getDouble();
-			// retval.add(new AtomicBigDecimal(new BigDecimalReplacement(o)));
-			// }
-			else if (bytes[i + 4] == 8)
-			{
-				// Empty ArrayList
-				retval.add(new ArrayList<Object>());
-			}
-			else
-			{
-				HRDBMSWorker.logger.error("Unknown type in fromBytes()");
-				throw new Exception("Unknown type in fromBytes()");
-			}
-
-			i++;
-		}
-
-		return retval;
-	}
-
 	private void get()
 	{
 		byte[] tableLen = new byte[4];
@@ -3231,7 +3257,7 @@ public class ConnectionWorker extends HRDBMSThread
 		String table = null;
 		byte[] schemaData = null;
 		byte[] tableData = null;
-		//ArrayList<ArrayList<Object>> list = null;
+		// ArrayList<ArrayList<Object>> list = null;
 		ByteBuffer list = null;
 		TreeMap<Integer, String> pos2Col = null;
 		HashMap<String, String> cols2Types = null;
@@ -3256,7 +3282,7 @@ public class ConnectionWorker extends HRDBMSThread
 			table = new String(tableData, StandardCharsets.UTF_8);
 			readNonCoord(tableLenBytes);
 			type = bytesToInt(tableLenBytes);
-			//list = readRS();
+			// list = readRS();
 			list = readRawRS();
 			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
 			objIn.readObject();
@@ -3293,8 +3319,8 @@ public class ConnectionWorker extends HRDBMSThread
 				LockSupport.parkNanos(500);
 			}
 		}
-		//thread.run();
-		//boolean allOK = thread.getOK();
+		// thread.run();
+		// boolean allOK = thread.getOK();
 
 		try
 		{
@@ -3309,7 +3335,7 @@ public class ConnectionWorker extends HRDBMSThread
 
 			fc.write(list);
 		}
-		catch(Exception e)
+		catch (Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			sendNo();
@@ -3835,133 +3861,6 @@ public class ConnectionWorker extends HRDBMSThread
 			// /////////////////////////////
 
 			for (CreateTableThread thread : threads)
-			{
-				thread.join();
-				if (!thread.getOK())
-				{
-					allOK = false;
-				}
-			}
-
-			if (allOK)
-			{
-				sendOK();
-			}
-			else
-			{
-				sendNo();
-				try
-				{
-					sock.close();
-				}
-				catch (Exception f)
-				{
-				}
-			}
-		}
-		catch (Exception e)
-		{
-			HRDBMSWorker.logger.debug("", e);
-			HRDBMSWorker.logger.debug("Sending NO");
-			sendNo();
-			return;
-		}
-	}
-
-	private void cluster()
-	{
-		byte[] lenBytes = new byte[4];
-		int len;
-		byte[] bytes;
-		String schema;
-		String table;
-		ArrayList<Object> tree;
-		Transaction tx;
-		byte[] txBytes = new byte[8];
-		int type;
-		TreeMap<Integer, String> pos2Col;
-		HashMap<String, String> cols2Types;
-
-		try
-		{
-			readNonCoord(txBytes);
-			tx = new Transaction(bytesToLong(txBytes));
-			readNonCoord(lenBytes);
-			len = bytesToInt(lenBytes);
-			bytes = new byte[len];
-			readNonCoord(bytes);
-			schema = new String(bytes, StandardCharsets.UTF_8);
-			readNonCoord(lenBytes);
-			len = bytesToInt(lenBytes);
-			bytes = new byte[len];
-			readNonCoord(bytes);
-			table = new String(bytes, StandardCharsets.UTF_8);
-			readNonCoord(lenBytes);
-			type = bytesToInt(lenBytes);
-			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
-			tree = (ArrayList<Object>)objIn.readObject();
-			pos2Col = (TreeMap<Integer, String>)objIn.readObject();
-			cols2Types = (HashMap<String, String>)objIn.readObject();
-
-			ArrayList<FlushLoadThread> threads = new ArrayList<FlushLoadThread>();
-			new MetaData();
-			final int limit = MetaData.getNumDevices();
-
-			int device = 0;
-			while (device < limit)
-			{
-				threads.add(new FlushLoadThread(tx, schema, table, device, pos2Col, cols2Types, type));
-				device++;
-			}
-
-			for (FlushLoadThread thread : threads)
-			{
-				thread.start();
-			}
-
-			// ///////////////////////////////////////////
-			Object obj = tree.get(0);
-			while (obj instanceof ArrayList)
-			{
-				obj = ((ArrayList)obj).get(0);
-			}
-
-			removeFromTree((String)obj, tree, null); // also delete parents if
-			// now empty
-
-			ArrayList<SendHierClusterThread> threads2 = new ArrayList<SendHierClusterThread>();
-			for (Object o : tree)
-			{
-				threads2.add(new SendHierClusterThread(schema, table, pos2Col, cols2Types, o, tx, type));
-			}
-
-			for (SendHierClusterThread thread : threads2)
-			{
-				thread.start();
-			}
-
-			boolean allOK = true;
-			for (SendHierClusterThread thread : threads2)
-			{
-				while (true)
-				{
-					try
-					{
-						thread.join();
-						break;
-					}
-					catch (InterruptedException e)
-					{
-					}
-				}
-				if (!thread.getOK())
-				{
-					allOK = false;
-				}
-			}
-			// /////////////////////////////
-
-			for (FlushLoadThread thread : threads)
 			{
 				thread.join();
 				if (!thread.getOK())
@@ -6568,7 +6467,6 @@ public class ConnectionWorker extends HRDBMSThread
 		TreeMap<Integer, String> pos2Col;
 		HashMap<String, String> cols2Types;
 		int type;
-		private Exception e = null;
 
 		// LinkedBlockingQueue<Object> queue = new
 		// LinkedBlockingQueue<Object>();
@@ -6752,7 +6650,6 @@ public class ConnectionWorker extends HRDBMSThread
 					if (o instanceof Exception)
 					{
 						ok = false;
-						e = (Exception)o;
 					}
 
 					bfcOp.close();
@@ -6901,7 +6798,6 @@ public class ConnectionWorker extends HRDBMSThread
 					if (o instanceof Exception)
 					{
 						ok = false;
-						e = (Exception)o;
 					}
 
 					top.close();
@@ -6913,7 +6809,6 @@ public class ConnectionWorker extends HRDBMSThread
 			catch (Exception e)
 			{
 				ok = false;
-				this.e = e;
 				HRDBMSWorker.logger.debug("", e);
 			}
 		}
@@ -8497,134 +8392,6 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 	}
 
-	private static class SendHierNewIndexThread extends HRDBMSThread
-	{
-		private final byte[] ncBytes;
-		private final byte[] uBytes;
-		private final byte[] fnLenBytes;
-		private final byte[] fnBytes;
-		ArrayList<Integer> devices;
-		Object o;
-		boolean ok = true;
-		Transaction tx;
-
-		public SendHierNewIndexThread(byte[] ncBytes, byte[] uBytes, byte[] fnLenBytes, byte[] fnBytes, ArrayList<Integer> devices, Object o, Transaction tx)
-		{
-			this.ncBytes = ncBytes;
-			this.uBytes = uBytes;
-			this.fnLenBytes = fnLenBytes;
-			this.fnBytes = fnBytes;
-			this.devices = devices;
-			this.o = o;
-			this.tx = tx;
-		}
-
-		public boolean getOK()
-		{
-			return ok;
-		}
-
-		@Override
-		public void run()
-		{
-			if (o instanceof String)
-			{
-				Socket sock = null;
-				try
-				{
-					// sock = new Socket((String)o,
-					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
-					sock = new Socket();
-					sock.setReceiveBufferSize(4194304);
-					sock.setSendBufferSize(4194304);
-					sock.connect(new InetSocketAddress((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
-					OutputStream out = sock.getOutputStream();
-					byte[] outMsg = "NEWINDEX        ".getBytes(StandardCharsets.UTF_8);
-					outMsg[8] = 0;
-					outMsg[9] = 0;
-					outMsg[10] = 0;
-					outMsg[11] = 0;
-					outMsg[12] = 0;
-					outMsg[13] = 0;
-					outMsg[14] = 0;
-					outMsg[15] = 0;
-					out.write(outMsg);
-					out.write(longToBytes(tx.number()));
-					out.write(ncBytes);
-					out.write(uBytes);
-					out.write(fnLenBytes);
-					out.write(fnBytes);
-					ObjectOutputStream objOut = new ObjectOutputStream(out);
-					objOut.writeObject(devices);
-					ArrayList<Object> alo = new ArrayList<Object>(1);
-					alo.add(o);
-					objOut.writeObject(alo);
-					objOut.flush();
-					out.flush();
-					getConfirmation(sock);
-					objOut.close();
-					sock.close();
-				}
-				catch (Exception e)
-				{
-					HRDBMSWorker.logger.debug("", e);
-					ok = false;
-				}
-			}
-			else if (((ArrayList<Object>)o).size() > 0)
-			{
-				Socket sock = null;
-				Object obj2 = ((ArrayList<Object>)o).get(0);
-				while (obj2 instanceof ArrayList)
-				{
-					obj2 = ((ArrayList<Object>)obj2).get(0);
-				}
-
-				String hostname = (String)obj2;
-				try
-				{
-					// sock = new Socket(hostname,
-					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
-					sock = new Socket();
-					sock.setReceiveBufferSize(4194304);
-					sock.setSendBufferSize(4194304);
-					sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
-					OutputStream out = sock.getOutputStream();
-					byte[] outMsg = "NEWINDEX        ".getBytes(StandardCharsets.UTF_8);
-					outMsg[8] = 0;
-					outMsg[9] = 0;
-					outMsg[10] = 0;
-					outMsg[11] = 0;
-					outMsg[12] = 0;
-					outMsg[13] = 0;
-					outMsg[14] = 0;
-					outMsg[15] = 0;
-					out.write(outMsg);
-					out.write(longToBytes(tx.number()));
-					out.write(ncBytes);
-					out.write(uBytes);
-					out.write(fnLenBytes);
-					out.write(fnBytes);
-					ObjectOutputStream objOut = new ObjectOutputStream(out);
-					objOut.writeObject(devices);
-					objOut.writeObject(o);
-					objOut.flush();
-					out.flush();
-					getConfirmation(sock);
-					objOut.close();
-					sock.close();
-				}
-				catch (Exception e)
-				{
-					HRDBMSWorker.logger.debug("", e);
-					ok = false;
-				}
-			}
-		}
-	}
-
-	// SendHierClusterThread(schema, table, pos2Col, cols2Types, o, tx, type)
-
 	private static class SendHierClusterThread extends HRDBMSThread
 	{
 		private final String schema;
@@ -8737,6 +8504,134 @@ public class ConnectionWorker extends HRDBMSThread
 					objOut.writeObject(o);
 					objOut.writeObject(pos2Col);
 					objOut.writeObject(cols2Types);
+					objOut.flush();
+					out.flush();
+					getConfirmation(sock);
+					objOut.close();
+					sock.close();
+				}
+				catch (Exception e)
+				{
+					HRDBMSWorker.logger.debug("", e);
+					ok = false;
+				}
+			}
+		}
+	}
+
+	// SendHierClusterThread(schema, table, pos2Col, cols2Types, o, tx, type)
+
+	private static class SendHierNewIndexThread extends HRDBMSThread
+	{
+		private final byte[] ncBytes;
+		private final byte[] uBytes;
+		private final byte[] fnLenBytes;
+		private final byte[] fnBytes;
+		ArrayList<Integer> devices;
+		Object o;
+		boolean ok = true;
+		Transaction tx;
+
+		public SendHierNewIndexThread(byte[] ncBytes, byte[] uBytes, byte[] fnLenBytes, byte[] fnBytes, ArrayList<Integer> devices, Object o, Transaction tx)
+		{
+			this.ncBytes = ncBytes;
+			this.uBytes = uBytes;
+			this.fnLenBytes = fnLenBytes;
+			this.fnBytes = fnBytes;
+			this.devices = devices;
+			this.o = o;
+			this.tx = tx;
+		}
+
+		public boolean getOK()
+		{
+			return ok;
+		}
+
+		@Override
+		public void run()
+		{
+			if (o instanceof String)
+			{
+				Socket sock = null;
+				try
+				{
+					// sock = new Socket((String)o,
+					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = new Socket();
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
+					sock.connect(new InetSocketAddress((String)o, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
+					OutputStream out = sock.getOutputStream();
+					byte[] outMsg = "NEWINDEX        ".getBytes(StandardCharsets.UTF_8);
+					outMsg[8] = 0;
+					outMsg[9] = 0;
+					outMsg[10] = 0;
+					outMsg[11] = 0;
+					outMsg[12] = 0;
+					outMsg[13] = 0;
+					outMsg[14] = 0;
+					outMsg[15] = 0;
+					out.write(outMsg);
+					out.write(longToBytes(tx.number()));
+					out.write(ncBytes);
+					out.write(uBytes);
+					out.write(fnLenBytes);
+					out.write(fnBytes);
+					ObjectOutputStream objOut = new ObjectOutputStream(out);
+					objOut.writeObject(devices);
+					ArrayList<Object> alo = new ArrayList<Object>(1);
+					alo.add(o);
+					objOut.writeObject(alo);
+					objOut.flush();
+					out.flush();
+					getConfirmation(sock);
+					objOut.close();
+					sock.close();
+				}
+				catch (Exception e)
+				{
+					HRDBMSWorker.logger.debug("", e);
+					ok = false;
+				}
+			}
+			else if (((ArrayList<Object>)o).size() > 0)
+			{
+				Socket sock = null;
+				Object obj2 = ((ArrayList<Object>)o).get(0);
+				while (obj2 instanceof ArrayList)
+				{
+					obj2 = ((ArrayList<Object>)obj2).get(0);
+				}
+
+				String hostname = (String)obj2;
+				try
+				{
+					// sock = new Socket(hostname,
+					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					sock = new Socket();
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
+					sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
+					OutputStream out = sock.getOutputStream();
+					byte[] outMsg = "NEWINDEX        ".getBytes(StandardCharsets.UTF_8);
+					outMsg[8] = 0;
+					outMsg[9] = 0;
+					outMsg[10] = 0;
+					outMsg[11] = 0;
+					outMsg[12] = 0;
+					outMsg[13] = 0;
+					outMsg[14] = 0;
+					outMsg[15] = 0;
+					out.write(outMsg);
+					out.write(longToBytes(tx.number()));
+					out.write(ncBytes);
+					out.write(uBytes);
+					out.write(fnLenBytes);
+					out.write(fnBytes);
+					ObjectOutputStream objOut = new ObjectOutputStream(out);
+					objOut.writeObject(devices);
+					objOut.writeObject(o);
 					objOut.flush();
 					out.flush();
 					getConfirmation(sock);
