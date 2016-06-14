@@ -635,18 +635,7 @@ public class SubBufferManager
 
 						if (!ok)
 						{
-							page = b.number();
-							i = 0;
-							ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
-							while (i < num)
-							{
-								ReadThread thread = pin(new Block(fn, page++), txnum);
-								threads.add(thread);
-								i++;
-							}
-
-							retval = new ReadThread(threads);
-							retval.start();
+							retval = bail(b, num, txnum);
 							lock.unlock();
 							return retval;
 						}
@@ -2163,6 +2152,24 @@ public class SubBufferManager
 		p.buffer().put(data);
 	}
 
+	private ReadThread bail(Block b, int num, long txnum) throws Exception
+	{
+		int page = b.number();
+		int i = 0;
+		String fn = b.fileName();
+		ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
+		while (i < num)
+		{
+			ReadThread thread = pin(new Block(fn, page++), txnum);
+			threads.add(thread);
+			i++;
+		}
+
+		ReadThread retval = new ReadThread(threads);
+		retval.start();
+		return retval;
+	}
+
 	private int chooseUnpinnedPage(String newFN)
 	{
 		lock.lock();
@@ -2275,9 +2282,14 @@ public class SubBufferManager
 
 				int initialClock = clock;
 				boolean start = true;
+				boolean attempt2 = false;
 
-				while (start || clock != initialClock)
+				while (!attempt2 || clock != initialClock)
 				{
+					if (clock == initialClock && !start)
+					{
+						attempt2 = true;
+					}
 					start = false;
 					Page p = bp[clock];
 					int index = clock;
@@ -2286,7 +2298,7 @@ public class SubBufferManager
 					{
 						clock = 0;
 					}
-					if (p.block() != null && !p.isPinned() && !BufferManager.isInterest(p.block()) && !retval.contains(index))
+					if (!p.isPinned() && !retval.contains(index) && (attempt2 || (p.block() != null && !BufferManager.isInterest(p.block()))))
 					{
 						retval.add(index);
 						i++;
@@ -2294,54 +2306,12 @@ public class SubBufferManager
 					}
 				}
 
-				start = true;
-
-				while (start || clock != initialClock)
-				{
-					start = false;
-					Page p = bp[clock];
-					int index = clock;
-					clock++;
-					if (clock == bp.length)
-					{
-						clock = 0;
-					}
-					if (!p.isPinned() && !retval.contains(index))
-					{
-						retval.add(index);
-						i++;
-						continue outer;
-					}
-				}
-
-				// expand bufferpool
-				int newLength = (int)(bp.length * 1.1);
-				if (newLength < bp.length + num)
-				{
-					newLength = bp.length + num;
-				}
-
-				Page[] bp2 = new Page[newLength];
-				System.arraycopy(bp, 0, bp2, 0, bp.length);
-				int z = bp.length;
-				final int limit = bp2.length;
-				while (z < limit)
-				{
-					bp2[z++] = new Page();
-				}
-
-				int j = bp.length;
-				while (i < num)
-				{
-					retval.add(j++);
-					i++;
-				}
-
-				bp = bp2;
+				expandBP(i, num, retval);
+				lock.unlock();
+				return retval;
 			}
 			catch (Throwable e)
 			{
-				HRDBMSWorker.logger.debug("", e);
 				lock.unlock();
 				throw e;
 			}
@@ -2451,6 +2421,34 @@ public class SubBufferManager
 
 		lock.unlock();
 		return retval;
+	}
+
+	private void expandBP(int i, int num, ArrayList<Integer> retval)
+	{
+		// expand bufferpool
+		int newLength = (int)(bp.length * 1.1);
+		if (newLength < bp.length + num)
+		{
+			newLength = bp.length + num;
+		}
+
+		Page[] bp2 = new Page[newLength];
+		System.arraycopy(bp, 0, bp2, 0, bp.length);
+		int z = bp.length;
+		final int limit = bp2.length;
+		while (z < limit)
+		{
+			bp2[z++] = new Page();
+		}
+
+		int j = bp.length;
+		while (i < num)
+		{
+			retval.add(j++);
+			i++;
+		}
+
+		bp = bp2;
 	}
 
 	private int findExistingPage(Block b)

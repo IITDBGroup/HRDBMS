@@ -300,58 +300,6 @@ public class Score
 		System.out.println("New score for LINEITEM(7) was " + score);
 	}
 
-	private static ArrayList<ArrayList<Integer>> permutations(ArrayList<Integer> arr)
-	{
-		ArrayList<ArrayList<Integer>> resultList = new ArrayList<ArrayList<Integer>>();
-		int l = arr.size();
-		if (l == 0)
-		{
-			return resultList;
-		}
-
-		if (l == 1)
-		{
-			resultList.add(arr);
-			return resultList;
-		}
-
-		ArrayList<Integer> subClone = new ArrayList<Integer>();
-		int i = 1;
-		while (i < l)
-		{
-			subClone.add(arr.get(i++));
-		}
-
-		for (i = 0; i < l; ++i)
-		{
-			int e = arr.get(i);
-			if (i > 0)
-			{
-				subClone.set(i - 1, arr.get(0));
-			}
-			ArrayList<ArrayList<Integer>> subPermutations = permutations(subClone);
-			for (ArrayList<Integer> sc : subPermutations)
-			{
-				ArrayList<Integer> clone = new ArrayList<Integer>();
-				clone.add(e);
-				int j = 0;
-				while (j < l - 1)
-				{
-					clone.add(sc.get(j++));
-				}
-
-				resultList.add(clone);
-			}
-
-			if (i > 0)
-			{
-				subClone.set(i - 1, e);
-			}
-		}
-
-		return resultList;
-	}
-
 	private static int score(ArrayList<Integer> order, ArrayList<ArrayList<Integer>> accesses)
 	{
 		ArrayList<Integer> disk = new ArrayList<Integer>();

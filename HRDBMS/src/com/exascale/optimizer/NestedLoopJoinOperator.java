@@ -44,11 +44,11 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	private int node;
 	private boolean indexAccess = false;
 	private ArrayList<Index> dynamicIndexes;
-	private int rightChildCard = 16;
+	private long rightChildCard = 16;
 	private boolean alreadySorted = false;
 	private boolean cardSet = false;
 	public transient Operator dynamicOp;
-	private int leftChildCard = 16;
+	private long leftChildCard = 16;
 	private long txnum;
 
 	public NestedLoopJoinOperator(ArrayList<Filter> filters, MetaData meta)
@@ -84,10 +84,10 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		value.node = OperatorUtils.readInt(in);
 		value.indexAccess = OperatorUtils.readBool(in);
 		value.dynamicIndexes = OperatorUtils.deserializeALIndx(in, prev);
-		value.rightChildCard = OperatorUtils.readInt(in);
+		value.rightChildCard = OperatorUtils.readLong(in);
 		value.alreadySorted = OperatorUtils.readBool(in);
 		value.cardSet = OperatorUtils.readBool(in);
-		value.leftChildCard = OperatorUtils.readInt(in);
+		value.leftChildCard = OperatorUtils.readLong(in);
 		value.txnum = OperatorUtils.readLong(in);
 		return value;
 	}
@@ -419,10 +419,10 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		OperatorUtils.writeInt(node, out);
 		OperatorUtils.writeBool(indexAccess, out);
 		OperatorUtils.serializeALIndx(dynamicIndexes, out, prev);
-		OperatorUtils.writeInt(rightChildCard, out);
+		OperatorUtils.writeLong(rightChildCard, out);
 		OperatorUtils.writeBool(alreadySorted, out);
 		OperatorUtils.writeBool(cardSet, out);
-		OperatorUtils.writeInt(leftChildCard, out);
+		OperatorUtils.writeLong(leftChildCard, out);
 		OperatorUtils.writeLong(txnum, out);
 	}
 
@@ -449,7 +449,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	{
 	}
 
-	public boolean setRightChildCard(int card, int card2)
+	public boolean setRightChildCard(long card, long card2)
 	{
 		if (cardSet)
 		{

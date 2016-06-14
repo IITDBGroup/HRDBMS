@@ -222,10 +222,7 @@ public class XAWorker extends HRDBMSThread
 		}
 
 		visited.add(op);
-		if (tx == null)
-		{
-			throw new Exception("Null tx in setPlanAndTransaction");
-		}
+
 		if (op instanceof TableScanOperator)
 		{
 			((TableScanOperator)op).setTransaction(tx);

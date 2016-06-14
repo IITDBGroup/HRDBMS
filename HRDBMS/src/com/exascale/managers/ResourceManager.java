@@ -250,10 +250,10 @@ public final class ResourceManager extends HRDBMSThread
 		/*
 		 * if (unpin) { for (SubBufferManager sbm : BufferManager.managers) {
 		 * sbm.lock.lock(); }
-		 * 
+		 *
 		 * try { BufferManager.unpinAll(); } catch(Exception e) {
 		 * HRDBMSWorker.logger.debug("", e); }
-		 * 
+		 *
 		 * for (SubBufferManager sbm : BufferManager.managers) {
 		 * sbm.lock.unlock(); } }
 		 */

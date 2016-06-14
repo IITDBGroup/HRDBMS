@@ -712,13 +712,6 @@ public class NetworkReceiveOperator implements Operator, Serializable
 			final ByteBuffer bb = ByteBuffer.wrap(val);
 			final int numFields = bb.getInt();
 
-			if (numFields < 0)
-			{
-				HRDBMSWorker.logger.error("Negative number of fields in fromBytes()");
-				HRDBMSWorker.logger.error("NumFields = " + numFields);
-				throw new Exception("Negative number of fields in fromBytes()");
-			}
-
 			bb.position(bb.position() + numFields);
 			final byte[] bytes = bb.array();
 			if (bytes[4] == 5)
@@ -727,46 +720,33 @@ public class NetworkReceiveOperator implements Operator, Serializable
 			}
 			if (bytes[4] == 10)
 			{
-				final int length = bb.getInt();
-				final byte[] temp = new byte[length];
-				bb.get(temp);
-				try
-				{
-					final String o = new String(temp, StandardCharsets.UTF_8);
-					return new Exception(o);
-				}
-				catch (final Exception e)
-				{
-					throw e;
-				}
+				return fromBytesException(bb);
 			}
 			final ArrayList<Object> retval = new ArrayList<Object>(numFields);
 			int i = 0;
+
 			while (i < numFields)
 			{
+				Object o = null;
 				if (bytes[i + 4] == 0)
 				{
 					// long
-					final Long o = bb.getLong();
-					retval.add(o);
+					o = bb.getLong();
 				}
 				else if (bytes[i + 4] == 1)
 				{
 					// integer
-					final Integer o = bb.getInt();
-					retval.add(o);
+					o = bb.getInt();
 				}
 				else if (bytes[i + 4] == 2)
 				{
 					// double
-					final Double o = bb.getDouble();
-					retval.add(o);
+					o = bb.getDouble();
 				}
 				else if (bytes[i + 4] == 3)
 				{
 					// date
-					final MyDate o = new MyDate(bb.getInt());
-					retval.add(o);
+					o = new MyDate(bb.getInt());
 				}
 				else if (bytes[i + 4] == 4)
 				{
@@ -775,37 +755,39 @@ public class NetworkReceiveOperator implements Operator, Serializable
 					final byte[] temp = new byte[length];
 					final char[] ca = new char[length];
 					bb.get(temp);
-					try
+					String value = (String)unsafe.allocateInstance(String.class);
+					int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(temp, 0, length, ca);
+					if (clen == ca.length)
 					{
-						String value = (String)unsafe.allocateInstance(String.class);
-						int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(temp, 0, length, ca);
-						if (clen == ca.length)
-						{
-							unsafe.putObject(value, offset, ca);
-						}
-						else
-						{
-							char[] v = Arrays.copyOf(ca, clen);
-							unsafe.putObject(value, offset, v);
-						}
-						retval.add(value);
+						unsafe.putObject(value, offset, ca);
 					}
-					catch (final Exception e)
+					else
 					{
-						HRDBMSWorker.logger.error("", e);
-						throw e;
+						char[] v = Arrays.copyOf(ca, clen);
+						unsafe.putObject(value, offset, v);
 					}
+
+					o = value;
 				}
 				else
 				{
-					HRDBMSWorker.logger.error("Unknown type " + bytes[i + 4] + " in fromBytes()");
 					throw new Exception("Unknown type " + bytes[i + 4] + " in fromBytes()");
 				}
 
+				retval.add(o);
 				i++;
 			}
 
 			return retval;
+		}
+
+		private Object fromBytesException(ByteBuffer bb) throws Exception
+		{
+			final int length = bb.getInt();
+			final byte[] temp = new byte[length];
+			bb.get(temp);
+			final String o = new String(temp, StandardCharsets.UTF_8);
+			return new Exception(o);
 		}
 	}
 

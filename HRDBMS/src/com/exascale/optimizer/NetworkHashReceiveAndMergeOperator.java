@@ -18,7 +18,7 @@ import java.util.IdentityHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedInputStream;
 import com.exascale.managers.HRDBMSWorker;
-import com.exascale.misc.BinomialHeap;
+import com.exascale.misc.AuxPairingHeap;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MyDate;
 import com.exascale.threads.ThreadPoolThread;
@@ -488,7 +488,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 		// HashMap<Operator, ArrayList<Object>>();
 		// private final TreeMap<ArrayList<Object>, Operator> rows = new
 		// TreeMap<ArrayList<Object>, Operator>(new MergeComparator());
-		private final BinomialHeap<ALOO> rows = new BinomialHeap<ALOO>(new MergeComparator());
+		private final AuxPairingHeap<ALOO> rows = new AuxPairingHeap<ALOO>(new MergeComparator());
 		private ALOO minEntry;
 
 		public ReadThread(ArrayList<Operator> children)

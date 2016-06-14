@@ -562,39 +562,18 @@ public class Schema
 	public FieldValue getField(int rowIndex, int colIndex) throws Exception
 	{
 		DataType dt = null;
-		int type;
-
-		try
-		{
-			dt = colTypes.get(colIDs[colIndex]);
-			type = dt.getType();
-		}
-		catch (Exception e)
-		{
-			HRDBMSWorker.logger.warn("Unable to retrieve field", e);
-			HRDBMSWorker.logger.warn("We are on row " + rowIndex);
-			HRDBMSWorker.logger.warn("Looking for colIndex " + colIndex);
-			HRDBMSWorker.logger.warn("The colIDs array is ");
-			int i = 0;
-			while (i < colIDs.length)
-			{
-				HRDBMSWorker.logger.warn("" + colIDs[i]);
-				i++;
-			}
-
-			HRDBMSWorker.logger.warn("ColTypes is " + colTypes);
-			throw e;
-		}
+		dt = colTypes.get(colIDs[colIndex]);
+		int type = dt.getType();
 
 		if (type == DataType.BIGINT)
 		{
 			return new BigintFV(rowIndex, colIndex, this);
 		}
 
-		if (type == DataType.BINARY)
-		{
-			return new BinaryFV(rowIndex, colIndex, dt.getLength(), this);
-		}
+		// if (type == DataType.BINARY)
+		// {
+		// return new BinaryFV(rowIndex, colIndex, dt.getLength(), this);
+		// }
 
 		if (type == DataType.DATE)
 		// TODO || type == DataType.TIME || type == DataType.TIMESTAMP)
@@ -602,10 +581,11 @@ public class Schema
 			return new DateFV(rowIndex, colIndex, this);
 		}
 
-		if (type == DataType.DECIMAL)
-		{
-			return new DecimalFV(rowIndex, colIndex, dt.getLength(), dt.getScale(), this);
-		}
+		// if (type == DataType.DECIMAL)
+		// {
+		// return new DecimalFV(rowIndex, colIndex, dt.getLength(),
+		// dt.getScale(), this);
+		// }
 
 		if (type == DataType.DOUBLE)
 		{
@@ -627,10 +607,10 @@ public class Schema
 			return new SmallintFV(rowIndex, colIndex, this);
 		}
 
-		if (type == DataType.VARBINARY)
-		{
-			return new VarbinaryFV(rowIndex, colIndex, this);
-		}
+		// if (type == DataType.VARBINARY)
+		// {
+		// return new VarbinaryFV(rowIndex, colIndex, this);
+		// }
 
 		if (type == DataType.VARCHAR)
 		{
@@ -1683,15 +1663,7 @@ public class Schema
 			{
 				if (colPos == 0)
 				{
-					this.p = (Page)entry2.getValue();
-					int pos = 1;
-					rowIDListSize = p.getMedium(pos);
-					recCache = new ConcurrentHashMap<RID, ArrayList<FieldValue>>((int)(rowIDListSize * 1.35));
-					if (myNode == -1 || myNode == -2)
-					{
-						getNodeNumber();
-						getDeviceNumber();
-					}
+					colPos0(entry2);
 				}
 
 				int colNum = (int)entry2.getKey();
@@ -2053,6 +2025,19 @@ public class Schema
 		p2.write(0, buff.array(), tx.number(), LogManager.getLSN());
 
 		return bl;
+	}
+
+	private void colPos0(Map.Entry entry2) throws Exception
+	{
+		this.p = (Page)entry2.getValue();
+		int pos = 1;
+		rowIDListSize = p.getMedium(pos);
+		recCache = new ConcurrentHashMap<RID, ArrayList<FieldValue>>((int)(rowIDListSize * 1.35));
+		if (myNode == -1 || myNode == -2)
+		{
+			getNodeNumber();
+			getDeviceNumber();
+		}
 	}
 
 	private int findNextFreeRecNum(int justUsed) throws Exception
@@ -3399,12 +3384,6 @@ public class Schema
 					len = (s.p.getInt(off - 1) & 0x00ffffff);
 				}
 
-				// if (s.p.block().number() == 2)
-				// {
-				// HRDBMSWorker.logger.debug("Reading row - offset was " + off +
-				// " lenlen was " + lenlen + " len was " + len);
-				// }
-
 				if (len == 0)
 				{
 					value = new String();
@@ -3413,73 +3392,28 @@ public class Schema
 				{
 					if (!compress)
 					{
-						char[] ca = new char[len];
-						final byte[] temp = new byte[len];
-						bytes = temp;
-						size = lenlen + len;
-						s.p.get(off + lenlen, temp);
-						try
-						{
-							// value = new String(temp, "UTF-8");
-							value = (String)unsafe.allocateInstance(String.class);
-							int clen = ((sun.nio.cs.ArrayDecoder)s.cd).decode(temp, 0, len, ca);
-							if (clen == ca.length)
-							{
-								unsafe.putObject(value, Schema.offset, ca);
-							}
-							else
-							{
-								char[] v = Arrays.copyOf(ca, clen);
-								unsafe.putObject(value, Schema.offset, v);
-							}
-						}
-						catch (final Exception e)
-						{
-							throw e;
-						}
+						doNotCompressed(len, lenlen, s);
 					}
 					else
 					{
-						try
+						// HRDBMSWorker.logger.debug("Entering...");
+						byte[] temp = new byte[len];
+						size = lenlen + len;
+						s.p.get(off + lenlen, temp);
+
+						byte[] temp2 = new byte[len << 1];
+						len = decompress(temp, len, temp2);
+
+						char[] ca = new char[len];
+						int clen = ((sun.nio.cs.ArrayDecoder)s.cd).decode(temp2, 0, len, ca);
+						if (clen == ca.length)
 						{
-							// HRDBMSWorker.logger.debug("Entering...");
-							byte[] temp = new byte[len];
-							size = lenlen + len;
-							s.p.get(off + lenlen, temp);
-
-							byte[] temp2 = new byte[len << 1];
-							len = decompress(temp, len, temp2);
-							if (len < 0)
-							{
-								Exception e = new Exception("Length of " + len + " returned by decompress");
-								throw e;
-							}
-
-							char[] ca = new char[len];
-							// bytes = temp2; //Do we need this? I don't think
-							// so...
-
-							// value =
-							// (String)unsafe.allocateInstance(String.class);
-							int clen = ((sun.nio.cs.ArrayDecoder)s.cd).decode(temp2, 0, len, ca);
-							if (clen == ca.length)
-							{
-								value = new String(ca);
-							}
-							else
-							{
-								char[] v = Arrays.copyOf(ca, clen);
-								value = new String(v);
-							}
-
-							// HRDBMSWorker.logger.debug("Compressed length was
-							// " + (size - lenlen) + " uncomp length was " + len
-							// + " string is: " + value);
+							value = new String(ca);
 						}
-						catch (final Throwable e)
+						else
 						{
-							HRDBMSWorker.logger.debug("", e);
-							throw e;
+							char[] v = Arrays.copyOf(ca, clen);
+							value = new String(v);
 						}
 					}
 				}
@@ -3955,6 +3889,26 @@ public class Schema
 			return 0;
 		}
 
+		private void doNotCompressed(int len, int lenlen, Schema s) throws Exception
+		{
+			char[] ca = new char[len];
+			final byte[] temp = new byte[len];
+			bytes = temp;
+			size = lenlen + len;
+			s.p.get(off + lenlen, temp);
+			value = (String)unsafe.allocateInstance(String.class);
+			int clen = ((sun.nio.cs.ArrayDecoder)s.cd).decode(temp, 0, len, ca);
+			if (clen == ca.length)
+			{
+				unsafe.putObject(value, Schema.offset, ca);
+			}
+			else
+			{
+				char[] v = Arrays.copyOf(ca, clen);
+				unsafe.putObject(value, Schema.offset, v);
+			}
+		}
+
 		private static class Code
 		{
 			public byte[] bytes;
@@ -4419,95 +4373,73 @@ public class Schema
 
 		public FieldValue getCol(int id) throws Exception
 		{
-			// return getField(index, colIDToIndex.get(id));
-			int rowIndex = index;
-			// int colIndex = colIDToIndex.get(id);
-			int colIndex = id;
-
 			if (cache != null)
 			{
-				return cache[colIndex];
+				return cache[id];
 			}
 
 			DataType dt = null;
 			int type;
 
-			try
-			{
-				dt = colTypes.get(colIDs[colIndex]);
-				type = dt.getType();
-			}
-			catch (Exception e)
-			{
-				HRDBMSWorker.logger.warn("Unable to retrieve field", e);
-				HRDBMSWorker.logger.warn("We are on row " + rowIndex);
-				HRDBMSWorker.logger.warn("Looking for colIndex " + colIndex);
-				HRDBMSWorker.logger.warn("The colIDs array is ");
-				int i = 0;
-				while (i < colIDs.length)
-				{
-					HRDBMSWorker.logger.warn("" + colIDs[i]);
-					i++;
-				}
-
-				HRDBMSWorker.logger.warn("ColTypes is " + colTypes);
-				throw e;
-			}
+			dt = colTypes.get(colIDs[id]);
+			type = dt.getType();
 
 			if (type == DataType.BIGINT)
 			{
-				return new BigintFV(rowIndex, colIndex, Schema.this);
+				return new BigintFV(index, id, Schema.this);
 			}
 
-			if (type == DataType.BINARY)
-			{
-				return new BinaryFV(rowIndex, colIndex, dt.getLength(), Schema.this);
-			}
+			// if (type == DataType.BINARY)
+			// {
+			// return new BinaryFV(rowIndex, colIndex, dt.getLength(),
+			// Schema.this);
+			// }
 
 			if (type == DataType.DATE)
 			// TODO || type == DataType.TIME || type == DataType.TIMESTAMP)
 			{
-				return new DateFV(rowIndex, colIndex, Schema.this);
+				return new DateFV(index, id, Schema.this);
 			}
 
-			if (type == DataType.DECIMAL)
-			{
-				return new DecimalFV(rowIndex, colIndex, dt.getLength(), dt.getScale(), Schema.this);
-			}
+			// if (type == DataType.DECIMAL)
+			// {
+			// return new DecimalFV(rowIndex, colIndex, dt.getLength(),
+			// dt.getScale(), Schema.this);
+			// }
 
 			if (type == DataType.DOUBLE)
 			{
-				return new DoubleFV(rowIndex, colIndex, Schema.this);
+				return new DoubleFV(index, id, Schema.this);
 			}
 
 			if (type == DataType.FLOAT)
 			{
-				return new FloatFV(rowIndex, colIndex, Schema.this);
+				return new FloatFV(index, id, Schema.this);
 			}
 
 			if (type == DataType.INTEGER)
 			{
-				return new IntegerFV(rowIndex, colIndex, Schema.this);
+				return new IntegerFV(index, id, Schema.this);
 			}
 
 			if (type == DataType.SMALLINT)
 			{
-				return new SmallintFV(rowIndex, colIndex, Schema.this);
+				return new SmallintFV(index, id, Schema.this);
 			}
 
-			if (type == DataType.VARBINARY)
-			{
-				return new VarbinaryFV(rowIndex, colIndex, Schema.this);
-			}
+			// if (type == DataType.VARBINARY)
+			// {
+			// return new VarbinaryFV(rowIndex, colIndex, Schema.this);
+			// }
 
 			if (type == DataType.VARCHAR)
 			{
-				return new VarcharFV(rowIndex, colIndex, Schema.this);
+				return new VarcharFV(index, id, Schema.this);
 			}
 
 			if (type == DataType.CVARCHAR)
 			{
-				CVarcharFV retval = new CVarcharFV(rowIndex, colIndex, Schema.this);
+				CVarcharFV retval = new CVarcharFV(index, id, Schema.this);
 
 				// if (p.block().number() == 2)
 				// {
@@ -4524,93 +4456,71 @@ public class Schema
 
 		public FieldValue getCol(int id, DataType dt) throws Exception
 		{
-			// return getField(index, colIDToIndex.get(id));
-			int rowIndex = index;
-			// int colIndex = colIDToIndex.get(id);
-			int colIndex = id;
-
 			if (cache != null)
 			{
-				return cache[colIndex];
+				return cache[id];
 			}
 
 			int type;
 
-			try
-			{
-				type = dt.getType();
-			}
-			catch (Exception e)
-			{
-				HRDBMSWorker.logger.warn("Unable to retrieve field", e);
-				HRDBMSWorker.logger.warn("We are on row " + rowIndex);
-				HRDBMSWorker.logger.warn("Looking for colIndex " + colIndex);
-				HRDBMSWorker.logger.warn("The colIDs array is ");
-				int i = 0;
-				while (i < colIDs.length)
-				{
-					HRDBMSWorker.logger.warn("" + colIDs[i]);
-					i++;
-				}
-
-				HRDBMSWorker.logger.warn("ColTypes is " + colTypes);
-				throw e;
-			}
+			type = dt.getType();
 
 			if (type == DataType.BIGINT)
 			{
-				return new BigintFV(rowIndex, colIndex, Schema.this);
+				return new BigintFV(index, id, Schema.this);
 			}
 
-			if (type == DataType.BINARY)
-			{
-				return new BinaryFV(rowIndex, colIndex, dt.getLength(), Schema.this);
-			}
+			// if (type == DataType.BINARY)
+			// {
+			// return new BinaryFV(rowIndex, colIndex, dt.getLength(),
+			// Schema.this);
+			// }
 
 			if (type == DataType.DATE)
 			// TODO || type == DataType.TIME || type == DataType.TIMESTAMP)
 			{
-				return new DateFV(rowIndex, colIndex, Schema.this);
+				return new DateFV(index, id, Schema.this);
 			}
 
-			if (type == DataType.DECIMAL)
-			{
-				return new DecimalFV(rowIndex, colIndex, dt.getLength(), dt.getScale(), Schema.this);
-			}
+			// if (type == DataType.DECIMAL)
+			// {
+			// return new DecimalFV(rowIndex, colIndex, dt.getLength(),
+			// dt.getScale(), Schema.this);
+			// }
 
 			if (type == DataType.DOUBLE)
 			{
-				return new DoubleFV(rowIndex, colIndex, Schema.this);
+				return new DoubleFV(index, id, Schema.this);
 			}
 
 			if (type == DataType.FLOAT)
 			{
-				return new FloatFV(rowIndex, colIndex, Schema.this);
+				return new FloatFV(index, id, Schema.this);
 			}
 
 			if (type == DataType.INTEGER)
 			{
-				return new IntegerFV(rowIndex, colIndex, Schema.this);
+				return new IntegerFV(index, id, Schema.this);
 			}
 
 			if (type == DataType.SMALLINT)
 			{
-				return new SmallintFV(rowIndex, colIndex, Schema.this);
+				return new SmallintFV(index, id, Schema.this);
 			}
 
-			if (type == DataType.VARBINARY)
-			{
-				return new VarbinaryFV(rowIndex, colIndex, Schema.this);
-			}
+			// if (type == DataType.VARBINARY)
+			// {
+			// return new VarbinaryFV(rowIndex, colIndex, Schema.this);
+			// }
 
 			if (type == DataType.VARCHAR)
 			{
-				return new VarcharFV(rowIndex, colIndex, Schema.this);
+				return new VarcharFV(index, id, Schema.this);
 			}
 
 			if (type == DataType.CVARCHAR)
 			{
-				CVarcharFV retval = new CVarcharFV(rowIndex, colIndex, Schema.this);
+				CVarcharFV retval = new CVarcharFV(index, id, Schema.this);
 
 				// if (p.block().number() == 2)
 				// {
@@ -4955,7 +4865,6 @@ public class Schema
 
 	private static class ReadThread extends HRDBMSThread
 	{
-		public static volatile int master = 0;
 		private final Page page;
 		private final int colPos;
 		private final int colNum;
@@ -5058,7 +4967,7 @@ public class Schema
 								}
 							}
 
-							synchronized(alfv)
+							synchronized (alfv)
 							{
 								alfv.set(colPos, fv);
 							}
@@ -5092,7 +5001,6 @@ public class Schema
 
 				// s.colTypes = colTypesBackup;
 				s.makeNull();
-				master = colPos;
 			}
 			catch (Exception e)
 			{

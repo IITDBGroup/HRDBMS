@@ -15,11 +15,9 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.LockSupport;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 import com.exascale.misc.BufferedFileChannel;
@@ -51,7 +49,7 @@ public final class MultiOperator implements Operator, Serializable
 			unsafe = (sun.misc.Unsafe)f.get(null);
 			SHIFT = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("mo_bucket_size_shift"));
 			HRDBMSWorker.logger.debug("MO SHIFT is " + SHIFT);
-			
+
 			NUM_HGBR_THREADS = ResourceManager.cpus;
 			int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("agg_max_par"));
 			if (NUM_HGBR_THREADS > max)
@@ -76,8 +74,8 @@ public final class MultiOperator implements Operator, Serializable
 	private transient volatile BufferedLinkedBlockingQueue readBuffer;
 	private boolean sorted;
 	private int node;
-	private int NUM_GROUPS = 16;
-	private int childCard = 16 * 16;
+	private long NUM_GROUPS = 16;
+	private long childCard = 16 * 16;
 	private transient ArrayList<String> externalFiles;
 	private boolean external = false;
 
@@ -87,11 +85,6 @@ public final class MultiOperator implements Operator, Serializable
 	private transient AtomicLong received;
 	private transient volatile boolean demReceived;
 	private long txnum;
-
-	public void setTXNum(long txnum)
-	{
-		this.txnum = txnum;
-	}
 
 	public MultiOperator(ArrayList<AggregateOperator> ops, ArrayList<String> groupCols, MetaData meta, boolean sorted)
 	{
@@ -115,8 +108,8 @@ public final class MultiOperator implements Operator, Serializable
 		value.groupCols = OperatorUtils.deserializeALS(in, prev);
 		value.sorted = OperatorUtils.readBool(in);
 		value.node = OperatorUtils.readInt(in);
-		value.NUM_GROUPS = OperatorUtils.readInt(in);
-		value.childCard = OperatorUtils.readInt(in);
+		value.NUM_GROUPS = OperatorUtils.readLong(in);
+		value.childCard = OperatorUtils.readLong(in);
 		value.cardSet = OperatorUtils.readBool(in);
 		value.startDone = OperatorUtils.readBool(in);
 		value.external = OperatorUtils.readBool(in);
@@ -124,6 +117,106 @@ public final class MultiOperator implements Operator, Serializable
 		value.demReceived = false;
 		value.txnum = OperatorUtils.readLong(in);
 		return value;
+	}
+
+	private static int getCInt(ByteBuffer bb)
+	{
+		int temp = (bb.get() & 0xff);
+		int length = (temp >>> 5);
+		if (length == 1)
+		{
+			return (temp & 0x1f);
+		}
+		else if (length == 5)
+		{
+			return bb.getInt();
+		}
+		else
+		{
+			int retval = (temp & 0x1f);
+			if (length == 2)
+			{
+				retval = (retval << 8);
+				retval += (bb.get() & 0xff);
+			}
+			else if (length == 3)
+			{
+				retval = (retval << 16);
+				retval += (bb.getShort() & 0xffff);
+			}
+			else
+			{
+				retval = (retval << 24);
+				retval += getMedium(bb);
+			}
+
+			return retval;
+		}
+	}
+
+	private static long getCLong(ByteBuffer bb)
+	{
+		int temp = (bb.get() & 0xff);
+		int length = (temp >>> 4);
+		if (length == 1)
+		{
+			return (temp & 0x0f);
+		}
+		else if (length == 9)
+		{
+			return bb.getLong();
+		}
+		else
+		{
+			long retval = (temp & 0x0f);
+			if (length == 2)
+			{
+				retval = (retval << 8);
+				retval += (bb.get() & 0xff);
+			}
+			else if (length == 3)
+			{
+				retval = (retval << 16);
+				retval += (bb.getShort() & 0xffff);
+			}
+			else if (length == 4)
+			{
+				retval = (retval << 24);
+				retval += getMedium(bb);
+			}
+			else if (length == 5)
+			{
+				retval = (retval << 32);
+				retval += (bb.getInt() & 0xffffffffl);
+			}
+			else if (length == 6)
+			{
+				retval = (retval << 40);
+				retval += ((bb.get() & 0xffl) << 32);
+				retval += (bb.getInt() & 0xffffffffl);
+			}
+			else if (length == 7)
+			{
+				retval = (retval << 48);
+				retval += ((bb.getShort() & 0xffffl) << 32);
+				retval += (bb.getInt() & 0xffffffffl);
+			}
+			else
+			{
+				retval = (retval << 56);
+				retval += ((getMedium(bb) & 0xffffffl) << 32);
+				retval += (bb.getInt() & 0xffffffffl);
+			}
+
+			return retval;
+		}
+	}
+
+	private static int getMedium(ByteBuffer bb)
+	{
+		int retval = ((bb.getShort() & 0xffff) << 8);
+		retval += (bb.get() & 0xff);
+		return retval;
 	}
 
 	private static long hash(Object key) throws Exception
@@ -150,6 +243,108 @@ public final class MultiOperator implements Operator, Serializable
 		return eHash;
 	}
 
+	private static void putCInt(ByteBuffer bb, int val)
+	{
+		if (val <= 31)
+		{
+			// 1 byte
+			val |= 0x20;
+			bb.put((byte)val);
+		}
+		else if (val <= 8191)
+		{
+			// 2 bytes
+			val |= 0x4000;
+			bb.putShort((short)val);
+		}
+		else if (val <= 0x1fffff)
+		{
+			// 3 bytes
+			val |= 0x600000;
+			putMedium(bb, val);
+		}
+		else if (val <= 0x1FFFFFFF)
+		{
+			// 4 bytes
+			val |= 0x80000000;
+			bb.putInt(val);
+		}
+		else
+		{
+			// 5 bytes
+			bb.put((byte)0xa0);
+			bb.putInt(val);
+		}
+	}
+
+	private static void putCLong(ByteBuffer bb, long val)
+	{
+		if (val <= 15)
+		{
+			// 1 byte
+			val |= 0x10;
+			bb.put((byte)val);
+		}
+		else if (val <= 4095)
+		{
+			// 2 bytes
+			val |= 0x2000;
+			bb.putShort((short)val);
+		}
+		else if (val <= 0xfffff)
+		{
+			// 3 bytes
+			val |= 0x300000;
+			putMedium(bb, (int)val);
+		}
+		else if (val <= 0xfffffff)
+		{
+			// 4 bytes
+			val |= 0x40000000;
+			bb.putInt((int)val);
+		}
+		else if (val <= 0xfffffffffl)
+		{
+			// 5 bytes
+			val |= 0x5000000000l;
+			bb.put((byte)(val >>> 32));
+			bb.putInt((int)val);
+		}
+		else if (val <= 0xfffffffffffl)
+		{
+			// 6 bytes
+			val |= 0x600000000000l;
+			bb.putShort((short)(val >>> 32));
+			bb.putInt((int)val);
+		}
+		else if (val <= 0xfffffffffffffl)
+		{
+			// 7 bytes
+			val |= 0x70000000000000l;
+			putMedium(bb, (int)(val >> 32));
+			bb.putInt((int)val);
+		}
+		else if (val <= 0xfffffffffffffffl)
+		{
+			// 8 bytes
+			val |= 0x8000000000000000l;
+			bb.putLong(val);
+		}
+		else
+		{
+			// 9 bytes
+			bb.put((byte)0x90);
+			bb.putLong(val);
+		}
+	}
+
+	private static void putMedium(ByteBuffer bb, int val)
+	{
+		bb.put((byte)((val & 0xff0000) >> 16));
+		bb.put((byte)((val & 0xff00) >> 8));
+		bb.put((byte)(val & 0xff));
+	}
+
 	private static final byte[] toBytes(Object v) throws Exception
 	{
 		ArrayList<byte[]> bytes = null;
@@ -160,17 +355,7 @@ public final class MultiOperator implements Operator, Serializable
 		}
 		else
 		{
-			final byte[] retval = new byte[9];
-			retval[0] = 0;
-			retval[1] = 0;
-			retval[2] = 0;
-			retval[3] = 5;
-			retval[4] = 0;
-			retval[5] = 0;
-			retval[6] = 0;
-			retval[7] = 1;
-			retval[8] = 5;
-			return retval;
+			return toBytesDEM();
 		}
 
 		int size = 0;
@@ -218,30 +403,8 @@ public final class MultiOperator implements Operator, Serializable
 					bytes.add(b);
 				}
 			}
-			// else if (o instanceof AtomicLong)
-			// {
-			// header[i] = (byte)6;
-			// size += 8;
-			// }
-			// else if (o instanceof AtomicBigDecimal)
-			// {
-			// header[i] = (byte)7;
-			// size += 8;
-			// }
-			else if (o instanceof ArrayList)
-			{
-				if (((ArrayList)o).size() != 0)
-				{
-					Exception e = new Exception("Non-zero size ArrayList in toBytes()");
-					HRDBMSWorker.logger.error("Non-zero size ArrayList in toBytes()", e);
-					throw e;
-				}
-				header[i] = (byte)8;
-			}
 			else
 			{
-				HRDBMSWorker.logger.error("Unknown type " + o.getClass() + " in toBytes()");
-				HRDBMSWorker.logger.error(o);
 				throw new Exception("Unknown type " + o.getClass() + " in toBytes()");
 			}
 
@@ -287,21 +450,25 @@ public final class MultiOperator implements Operator, Serializable
 				retvalBB.putInt(temp.length);
 				retvalBB.put(temp);
 			}
-			// else if (retval[i] == 6)
-			// {
-			// retvalBB.putLong(((AtomicLong)o).get());
-			// }
-			// else if (retval[i] == 7)
-			// {
-			// retvalBB.putDouble(((AtomicBigDecimal)o).get().doubleValue());
-			// }
-			else if (header[i] == 8)
-			{
-			}
 
 			i++;
 		}
 
+		return retval;
+	}
+
+	private static byte[] toBytesDEM()
+	{
+		final byte[] retval = new byte[9];
+		retval[0] = 0;
+		retval[1] = 0;
+		retval[2] = 0;
+		retval[3] = 5;
+		retval[4] = 0;
+		retval[5] = 0;
+		retval[6] = 0;
+		retval[7] = 1;
+		retval[8] = 5;
 		return retval;
 	}
 
@@ -787,8 +954,8 @@ public final class MultiOperator implements Operator, Serializable
 		OperatorUtils.serializeALS(groupCols, out, prev);
 		OperatorUtils.writeBool(sorted, out);
 		OperatorUtils.writeInt(node, out);
-		OperatorUtils.writeInt(NUM_GROUPS, out);
-		OperatorUtils.writeInt(childCard, out);
+		OperatorUtils.writeLong(NUM_GROUPS, out);
+		OperatorUtils.writeLong(childCard, out);
 		OperatorUtils.writeBool(cardSet, out);
 		OperatorUtils.writeBool(startDone, out);
 		OperatorUtils.writeBool(external, out);
@@ -811,7 +978,7 @@ public final class MultiOperator implements Operator, Serializable
 		this.node = node;
 	}
 
-	public boolean setNumGroupsAndChildCard(int groups, int childCard)
+	public boolean setNumGroupsAndChildCard(long groups, long childCard)
 	{
 		if (cardSet)
 		{
@@ -841,6 +1008,11 @@ public final class MultiOperator implements Operator, Serializable
 	public void setSorted()
 	{
 		sorted = true;
+	}
+
+	public void setTXNum(long txnum)
+	{
+		this.txnum = txnum;
 	}
 
 	@Override
@@ -956,15 +1128,15 @@ public final class MultiOperator implements Operator, Serializable
 	{
 		try
 		{
-			//int numBins = 257;
-			int numBins = this.childCard / Integer.parseInt(HRDBMSWorker.getHParms().getProperty("mo_bin_size"));
-			//numBins *= groupCols.size();
-			
+			// int numBins = 257;
+			int numBins = (int)(this.childCard / Integer.parseInt(HRDBMSWorker.getHParms().getProperty("mo_bin_size")));
+			// numBins *= groupCols.size();
+
 			if (numBins < 2)
 			{
 				numBins = 2;
 			}
-			
+
 			int inMemBins = (int)(numBins * percentInMem);
 			byte[] types1 = new byte[child.getPos2Col().size()];
 			int j = 0;
@@ -1202,29 +1374,26 @@ public final class MultiOperator implements Operator, Serializable
 		int i = 0;
 		while (i < numFields)
 		{
+			Object o = null;
 			if (types[i] == 0)
 			{
 				// long
-				final Long o = getCLong(bb);
-				retval.add(o);
+				o = getCLong(bb);
 			}
 			else if (types[i] == 1)
 			{
 				// integer
-				final Integer o = getCInt(bb);
-				retval.add(o);
+				o = getCInt(bb);
 			}
 			else if (types[i] == 2)
 			{
 				// double
-				final Double o = bb.getDouble();
-				retval.add(o);
+				o = bb.getDouble();
 			}
 			else if (types[i] == 3)
 			{
 				// date
-				final MyDate o = new MyDate(getMedium(bb));
-				retval.add(o);
+				o = new MyDate(getMedium(bb));
 			}
 			else if (types[i] == 4)
 			{
@@ -1236,16 +1405,7 @@ public final class MultiOperator implements Operator, Serializable
 
 				if (!Schema.CVarcharFV.compress)
 				{
-					try
-					{
-						final String o = new String(temp, StandardCharsets.UTF_8);
-						retval.add(o);
-					}
-					catch (final Exception e)
-					{
-						HRDBMSWorker.logger.error("", e);
-						throw e;
-					}
+					o = new String(temp, StandardCharsets.UTF_8);
 				}
 				else
 				{
@@ -1253,121 +1413,19 @@ public final class MultiOperator implements Operator, Serializable
 					int clen = Schema.CVarcharFV.decompress(temp, temp.length, out);
 					temp = new byte[clen];
 					System.arraycopy(out, 0, temp, 0, clen);
-					final String o = new String(temp, StandardCharsets.UTF_8);
-					retval.add(o);
+					o = new String(temp, StandardCharsets.UTF_8);
 				}
 			}
 			else
 			{
-				HRDBMSWorker.logger.error("Unknown type in fromBytes(): " + types[i]);
-				HRDBMSWorker.logger.debug("So far the row is " + retval);
 				throw new Exception("Unknown type in fromBytes(): " + types[i]);
 			}
 
+			retval.add(o);
 			i++;
 		}
 
 		return retval;
-	}
-
-	private static int getMedium(ByteBuffer bb)
-	{
-		int retval = ((bb.getShort() & 0xffff) << 8);
-		retval += (bb.get() & 0xff);
-		return retval;
-	}
-
-	private static long getCLong(ByteBuffer bb)
-	{
-		int temp = (bb.get() & 0xff);
-		int length = (temp >>> 4);
-		if (length == 1)
-		{
-			return (temp & 0x0f);
-		}
-		else if (length == 9)
-		{
-			return bb.getLong();
-		}
-		else
-		{
-			long retval = (temp & 0x0f);
-			if (length == 2)
-			{
-				retval = (retval << 8);
-				retval += (bb.get() & 0xff);
-			}
-			else if (length == 3)
-			{
-				retval = (retval << 16);
-				retval += (bb.getShort() & 0xffff);
-			}
-			else if (length == 4)
-			{
-				retval = (retval << 24);
-				retval += getMedium(bb);
-			}
-			else if (length == 5)
-			{
-				retval = (retval << 32);
-				retval += (bb.getInt() & 0xffffffffl);
-			}
-			else if (length == 6)
-			{
-				retval = (retval << 40);
-				retval += ((bb.get() & 0xffl) << 32);
-				retval += (bb.getInt() & 0xffffffffl);
-			}
-			else if (length == 7)
-			{
-				retval = (retval << 48);
-				retval += ((bb.getShort() & 0xffffl) << 32);
-				retval += (bb.getInt() & 0xffffffffl);
-			}
-			else
-			{
-				retval = (retval << 56);
-				retval += ((getMedium(bb) & 0xffffffl) << 32);
-				retval += (bb.getInt() & 0xffffffffl);
-			}
-
-			return retval;
-		}
-	}
-
-	private static int getCInt(ByteBuffer bb)
-	{
-		int temp = (bb.get() & 0xff);
-		int length = (temp >>> 5);
-		if (length == 1)
-		{
-			return (temp & 0x1f);
-		}
-		else if (length == 5)
-		{
-			return bb.getInt();
-		}
-		else
-		{
-			int retval = (temp & 0x1f);
-			if (length == 2)
-			{
-				retval = (retval << 8);
-				retval += (bb.get() & 0xff);
-			}
-			else if (length == 3)
-			{
-				retval = (retval << 16);
-				retval += (bb.getShort() & 0xffff);
-			}
-			else
-			{
-				retval = (retval << 24);
-				retval += getMedium(bb);
-			}
-
-			return retval;
-		}
 	}
 
 	private void init()
@@ -1486,108 +1544,6 @@ public final class MultiOperator implements Operator, Serializable
 		return retval;
 	}
 
-	private static void putCLong(ByteBuffer bb, long val)
-	{
-		if (val <= 15)
-		{
-			// 1 byte
-			val |= 0x10;
-			bb.put((byte)val);
-		}
-		else if (val <= 4095)
-		{
-			// 2 bytes
-			val |= 0x2000;
-			bb.putShort((short)val);
-		}
-		else if (val <= 0xfffff)
-		{
-			// 3 bytes
-			val |= 0x300000;
-			putMedium(bb, (int)val);
-		}
-		else if (val <= 0xfffffff)
-		{
-			// 4 bytes
-			val |= 0x40000000;
-			bb.putInt((int)val);
-		}
-		else if (val <= 0xfffffffffl)
-		{
-			// 5 bytes
-			val |= 0x5000000000l;
-			bb.put((byte)(val >>> 32));
-			bb.putInt((int)val);
-		}
-		else if (val <= 0xfffffffffffl)
-		{
-			// 6 bytes
-			val |= 0x600000000000l;
-			bb.putShort((short)(val >>> 32));
-			bb.putInt((int)val);
-		}
-		else if (val <= 0xfffffffffffffl)
-		{
-			// 7 bytes
-			val |= 0x70000000000000l;
-			putMedium(bb, (int)(val >> 32));
-			bb.putInt((int)val);
-		}
-		else if (val <= 0xfffffffffffffffl)
-		{
-			// 8 bytes
-			val |= 0x8000000000000000l;
-			bb.putLong(val);
-		}
-		else
-		{
-			// 9 bytes
-			bb.put((byte)0x90);
-			bb.putLong(val);
-		}
-	}
-
-	private static void putCInt(ByteBuffer bb, int val)
-	{
-		if (val <= 31)
-		{
-			// 1 byte
-			val |= 0x20;
-			bb.put((byte)val);
-		}
-		else if (val <= 8191)
-		{
-			// 2 bytes
-			val |= 0x4000;
-			bb.putShort((short)val);
-		}
-		else if (val <= 0x1fffff)
-		{
-			// 3 bytes
-			val |= 0x600000;
-			putMedium(bb, val);
-		}
-		else if (val <= 0x1FFFFFFF)
-		{
-			// 4 bytes
-			val |= 0x80000000;
-			bb.putInt(val);
-		}
-		else
-		{
-			// 5 bytes
-			bb.put((byte)0xa0);
-			bb.putInt(val);
-		}
-	}
-
-	private static void putMedium(ByteBuffer bb, int val)
-	{
-		bb.put((byte)((val & 0xff0000) >> 16));
-		bb.put((byte)((val & 0xff00) >> 8));
-		bb.put((byte)(val & 0xff));
-	}
-
 	public final class AggregateThread
 	{
 		private final ArrayList<ThreadPoolThread> threads = new ArrayList<ThreadPoolThread>();
@@ -1669,11 +1625,6 @@ public final class MultiOperator implements Operator, Serializable
 			this.par = par;
 		}
 
-		public void setPriority(int pri)
-		{
-			this.pri = pri;
-		}
-
 		@Override
 		public void run()
 		{
@@ -1734,6 +1685,11 @@ public final class MultiOperator implements Operator, Serializable
 			{
 				readBuffer.put(e);
 			}
+		}
+
+		public void setPriority(int pri)
+		{
+			this.pri = pri;
 		}
 
 		private void process(ArrayList<ArrayList<Object>> probe, int start, int end) throws Exception
@@ -1882,7 +1838,7 @@ public final class MultiOperator implements Operator, Serializable
 		private final FileChannel fc;
 		private boolean ok = true;
 		private Exception e;
-		private ByteBuffer direct;
+		private final ByteBuffer direct;
 		private boolean force = false;
 
 		public FlushBinThread(ArrayList<ArrayList<Object>> bin, byte[] types, FileChannel fc, ByteBuffer direct)
@@ -1892,7 +1848,7 @@ public final class MultiOperator implements Operator, Serializable
 			this.fc = fc;
 			this.direct = direct;
 		}
-		
+
 		public FlushBinThread(ArrayList<ArrayList<Object>> bin, byte[] types, FileChannel fc, ByteBuffer direct, boolean force)
 		{
 			this.types = types;
@@ -1915,13 +1871,14 @@ public final class MultiOperator implements Operator, Serializable
 		@Override
 		public void run()
 		{
-			//Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
+			// Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
 			try
 			{
 				byte[] data = rsToBytes(bin, types);
-				//HRDBMSWorker.logger.debug("HJO bin flush size = " + (data.length * 1.0 / 1048576) + "MB");
+				// HRDBMSWorker.logger.debug("HJO bin flush size = " +
+				// (data.length * 1.0 / 1048576) + "MB");
 				bin = null;
-				
+
 				if (direct == null)
 				{
 					// fc.position(fc.size());
@@ -1936,12 +1893,12 @@ public final class MultiOperator implements Operator, Serializable
 						{
 							direct.put(data);
 						}
-						catch(Exception e)
+						catch (Exception e)
 						{
 							HRDBMSWorker.logger.debug("", e);
 							HRDBMSWorker.logger.debug("Capacity: " + direct.capacity() + " Limit: " + direct.limit() + " Position: " + direct.position() + " Write size: " + data.length);
 						}
-						
+
 						if (force)
 						{
 							direct.limit(direct.position());
@@ -1959,7 +1916,7 @@ public final class MultiOperator implements Operator, Serializable
 							fc.write(direct);
 							direct.limit(direct.capacity());
 						}
-						
+
 						if (!force && data.length <= 8 * 1024 * 1024)
 						{
 							direct.position(0);
@@ -1987,7 +1944,7 @@ public final class MultiOperator implements Operator, Serializable
 		// private volatile DiskBackedHashSet groups =
 		// ResourceManager.newDiskBackedHashSet(true, NUM_GROUPS > 0 ?
 		// NUM_GROUPS : 16);
-		private volatile ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>> groups = new ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>>(NUM_GROUPS, 0.75f, 6 * ResourceManager.cpus);
+		private volatile ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>> groups = new ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>>(NUM_GROUPS <= Integer.MAX_VALUE ? (int)NUM_GROUPS : Integer.MAX_VALUE, 0.75f, 6 * ResourceManager.cpus);
 
 		private final AggregateResultThread[] threads = new AggregateResultThread[ops.size()];
 
@@ -2302,7 +2259,7 @@ public final class MultiOperator implements Operator, Serializable
 				directs.add(null);
 				i++;
 			}
-			
+
 			if (HRDBMSWorker.getHParms().getProperty("use_direct_buffers_for_flush").equals("true"))
 			{
 				i = 0;
@@ -2312,7 +2269,7 @@ public final class MultiOperator implements Operator, Serializable
 					i++;
 				}
 			}
-			
+
 			ArrayList<SubLeftThread> slThreads = new ArrayList<SubLeftThread>();
 			i = 0;
 			while (i < 1)
@@ -2366,7 +2323,7 @@ public final class MultiOperator implements Operator, Serializable
 					int x = (int)(hash % numBins);
 					rwLock.readLock().lock();
 					ArrayList<ArrayList<Object>> bin = bins.get(x);
-					synchronized(bin)
+					synchronized (bin)
 					{
 						// writeToHashTable(hash, (ArrayList<Object>)o);
 						bin.add((ArrayList<Object>)o);
@@ -2394,7 +2351,7 @@ public final class MultiOperator implements Operator, Serializable
 							TempThread.start(thread, txnum);
 							bins.set(x, new ArrayList<ArrayList<Object>>(size));
 						}
-						
+
 						rwLock.writeLock().unlock();
 					}
 
@@ -2408,7 +2365,7 @@ public final class MultiOperator implements Operator, Serializable
 						received.getAndIncrement();
 					}
 				}
-				
+
 				for (SubLeftThread t : slThreads)
 				{
 					t.join();
@@ -2458,10 +2415,10 @@ public final class MultiOperator implements Operator, Serializable
 					{
 						TempThread.freeDirect(bb);
 					}
-					
+
 					i++;
 				}
-				
+
 				i = numBins - 1;
 				while (i >= inMemBins)
 				{
@@ -2476,133 +2433,10 @@ public final class MultiOperator implements Operator, Serializable
 			}
 		}
 	}
-	
-	private class SubLeftThread extends HRDBMSThread
-	{
-		private LeftThread leftThread;
-		private ConcurrentHashMap<Integer, FlushBinThread> threads;
-		private final int size;
-		private boolean ok = true;
-		private Exception e;
-		
-		public SubLeftThread(LeftThread leftThread, ConcurrentHashMap<Integer, FlushBinThread> threads, int size)
-		{
-			this.leftThread = leftThread;
-			this.threads = threads;
-			this.size = size;
-		}
-		
-		public boolean getOK()
-		{
-			return ok;
-		}
-		
-		public Exception getException()
-		{
-			return e;
-		}
-		
-		public void run()
-		{
-			try
-			{
-				final HashMap<String, Integer> childCols2Pos = child.getCols2Pos();
-				Object o = child.next(MultiOperator.this);
-				if (o instanceof DataEndMarker)
-				{
-					demReceived = true;
-				}
-				else
-				{
-					received.getAndIncrement();
-				}
-
-				int[] poses = new int[groupCols.size()];
-				int i = 0;
-				for (String col : groupCols)
-				{
-					poses[i] = childCols2Pos.get(col);
-					i++;
-				}
-				final ArrayList<Object> key = new ArrayList<Object>(groupCols.size());
-				while (!(o instanceof DataEndMarker))
-				{
-					i = 0;
-					key.clear();
-					for (int pos : poses)
-					{
-						try
-						{
-							key.add(((ArrayList<Object>)o).get(pos));
-							i++;
-						}
-						catch (Exception e)
-						{
-							HRDBMSWorker.logger.debug("Failed to find a column in " + childCols2Pos);
-							throw e;
-						}
-					}
-
-					final long hash = 0x7FFFFFFFFFFFFFFFL & hash(key);
-					int x = (int)(hash % leftThread.numBins);
-					leftThread.rwLock.readLock().lock();
-					ArrayList<ArrayList<Object>> bin = leftThread.bins.get(x);
-					synchronized(bin)
-					{
-						// writeToHashTable(hash, (ArrayList<Object>)o);
-						bin.add((ArrayList<Object>)o);
-					}
-					leftThread.rwLock.readLock().unlock();
-
-					if (x >= leftThread.inMemBins && bin.size() >= size)
-					{
-						leftThread.rwLock.writeLock().lock();
-						bin = leftThread.bins.get(x);
-						if (bin.size() >= size)
-						{
-							FlushBinThread thread = new FlushBinThread(bin, leftThread.types, leftThread.channels.get(x), leftThread.directs.get(x));
-							if (threads.putIfAbsent(x, thread) != null)
-							{
-								threads.get(x).join();
-								if (!threads.get(x).getOK())
-								{
-									leftThread.rwLock.writeLock().unlock();
-									throw threads.get(x).getException();
-								}
-
-								threads.put(x, thread);
-							}
-							TempThread.start(thread, txnum);
-							leftThread.bins.set(x, new ArrayList<ArrayList<Object>>(size));
-						}
-						
-						leftThread.rwLock.writeLock().unlock();
-					}
-
-					o = child.next(MultiOperator.this);
-					if (o instanceof DataEndMarker)
-					{
-						demReceived = true;
-					}
-					else
-					{
-						received.getAndIncrement();
-					}
-				}
-			}
-			catch(Exception e)
-			{
-				ok = false;
-				this.e = e;
-			}
-		}
-	}
 
 	private class ReadDataThread extends HRDBMSThread
 	{
 		private final FileChannel fc;
-		private boolean ok = true;
-		private Exception e;
 		private final byte[] types;
 		private int num = 0;
 		private int pri = -1;
@@ -2611,11 +2445,6 @@ public final class MultiOperator implements Operator, Serializable
 		{
 			this.fc = new BufferedFileChannel(fc, 8 * 1024 * 1024);
 			this.types = types;
-		}
-
-		public void setPriority(int pri)
-		{
-			this.pri = pri;
 		}
 
 		public int getNumPar()
@@ -2676,9 +2505,9 @@ public final class MultiOperator implements Operator, Serializable
 					fc.read(bb);
 					bas.put(bb.array(), Integer.valueOf(1));
 				}
-				
-				bas.forEachKey(20000, (k)->process(k, groups, groupPos, threads));
-				//bas = null;
+
+				bas.forEachKey(20000, (k) -> process(k, groups, groupPos, threads));
+				// bas = null;
 
 				for (final Object k : groups.keySet())
 				// for (Object k : groups.getArray())
@@ -2697,21 +2526,24 @@ public final class MultiOperator implements Operator, Serializable
 
 					readBuffer.put(row);
 				}
-				
-				//groups.clear();
 
-				//for (final AggregateResultThread thread : threads)
-				//{
-				//	thread.close();
-				//}
+				// groups.clear();
+
+				// for (final AggregateResultThread thread : threads)
+				// {
+				// thread.close();
+				// }
 			}
 			catch (Exception e)
 			{
-				ok = false;
-				this.e = e;
 			}
 		}
-		
+
+		public void setPriority(int pri)
+		{
+			this.pri = pri;
+		}
+
 		private void process(byte[] k, ConcurrentHashMap<ArrayList<Object>, Integer> groups, ArrayList<Integer> groupPos, AggregateResultThread[] threads)
 		{
 			try
@@ -2744,6 +2576,128 @@ public final class MultiOperator implements Operator, Serializable
 			catch (Exception e)
 			{
 				throw new RuntimeException(e);
+			}
+		}
+	}
+
+	private class SubLeftThread extends HRDBMSThread
+	{
+		private final LeftThread leftThread;
+		private final ConcurrentHashMap<Integer, FlushBinThread> threads;
+		private final int size;
+		private boolean ok = true;
+		private Exception e;
+
+		public SubLeftThread(LeftThread leftThread, ConcurrentHashMap<Integer, FlushBinThread> threads, int size)
+		{
+			this.leftThread = leftThread;
+			this.threads = threads;
+			this.size = size;
+		}
+
+		public Exception getException()
+		{
+			return e;
+		}
+
+		public boolean getOK()
+		{
+			return ok;
+		}
+
+		@Override
+		public void run()
+		{
+			try
+			{
+				final HashMap<String, Integer> childCols2Pos = child.getCols2Pos();
+				Object o = child.next(MultiOperator.this);
+				if (o instanceof DataEndMarker)
+				{
+					demReceived = true;
+				}
+				else
+				{
+					received.getAndIncrement();
+				}
+
+				int[] poses = new int[groupCols.size()];
+				int i = 0;
+				for (String col : groupCols)
+				{
+					poses[i] = childCols2Pos.get(col);
+					i++;
+				}
+				final ArrayList<Object> key = new ArrayList<Object>(groupCols.size());
+				while (!(o instanceof DataEndMarker))
+				{
+					i = 0;
+					key.clear();
+					for (int pos : poses)
+					{
+						try
+						{
+							key.add(((ArrayList<Object>)o).get(pos));
+							i++;
+						}
+						catch (Exception e)
+						{
+							HRDBMSWorker.logger.debug("Failed to find a column in " + childCols2Pos);
+							throw e;
+						}
+					}
+
+					final long hash = 0x7FFFFFFFFFFFFFFFL & hash(key);
+					int x = (int)(hash % leftThread.numBins);
+					leftThread.rwLock.readLock().lock();
+					ArrayList<ArrayList<Object>> bin = leftThread.bins.get(x);
+					synchronized (bin)
+					{
+						// writeToHashTable(hash, (ArrayList<Object>)o);
+						bin.add((ArrayList<Object>)o);
+					}
+					leftThread.rwLock.readLock().unlock();
+
+					if (x >= leftThread.inMemBins && bin.size() >= size)
+					{
+						leftThread.rwLock.writeLock().lock();
+						bin = leftThread.bins.get(x);
+						if (bin.size() >= size)
+						{
+							FlushBinThread thread = new FlushBinThread(bin, leftThread.types, leftThread.channels.get(x), leftThread.directs.get(x));
+							if (threads.putIfAbsent(x, thread) != null)
+							{
+								threads.get(x).join();
+								if (!threads.get(x).getOK())
+								{
+									leftThread.rwLock.writeLock().unlock();
+									throw threads.get(x).getException();
+								}
+
+								threads.put(x, thread);
+							}
+							TempThread.start(thread, txnum);
+							leftThread.bins.set(x, new ArrayList<ArrayList<Object>>(size));
+						}
+
+						leftThread.rwLock.writeLock().unlock();
+					}
+
+					o = child.next(MultiOperator.this);
+					if (o instanceof DataEndMarker)
+					{
+						demReceived = true;
+					}
+					else
+					{
+						received.getAndIncrement();
+					}
+				}
+			}
+			catch (Exception e)
+			{
+				ok = false;
+				this.e = e;
 			}
 		}
 	}

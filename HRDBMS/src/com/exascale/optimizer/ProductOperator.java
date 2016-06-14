@@ -76,8 +76,8 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	private transient AtomicLong received;
 	private transient volatile boolean demReceived;
 
-	private int rightChildCard = 16;
-	private int leftChildCard = 16;
+	private long rightChildCard = 16;
+	private long leftChildCard = 16;
 
 	private boolean cardSet = false;
 	private long txnum;
@@ -99,11 +99,11 @@ public final class ProductOperator extends JoinOperator implements Serializable
 		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
 		value.childPos = OperatorUtils.readInt(in);
 		value.node = OperatorUtils.readInt(in);
-		value.rightChildCard = OperatorUtils.readInt(in);
+		value.rightChildCard = OperatorUtils.readLong(in);
 		value.cardSet = OperatorUtils.readBool(in);
 		value.received = new AtomicLong(0);
 		value.demReceived = false;
-		value.leftChildCard = OperatorUtils.readInt(in);
+		value.leftChildCard = OperatorUtils.readLong(in);
 		value.txnum = OperatorUtils.readLong(in);
 		return value;
 	}
@@ -365,9 +365,9 @@ public final class ProductOperator extends JoinOperator implements Serializable
 		OperatorUtils.serializeTM(pos2Col, out, prev);
 		OperatorUtils.writeInt(childPos, out);
 		OperatorUtils.writeInt(node, out);
-		OperatorUtils.writeInt(rightChildCard, out);
+		OperatorUtils.writeLong(rightChildCard, out);
 		OperatorUtils.writeBool(cardSet, out);
-		OperatorUtils.writeInt(leftChildCard, out);
+		OperatorUtils.writeLong(leftChildCard, out);
 		OperatorUtils.writeLong(txnum, out);
 	}
 
@@ -398,7 +398,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	{
 	}
 
-	public boolean setRightChildCard(int card, int card2)
+	public boolean setRightChildCard(long card, long card2)
 	{
 		if (cardSet)
 		{

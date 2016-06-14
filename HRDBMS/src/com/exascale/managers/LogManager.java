@@ -1232,51 +1232,19 @@ public class LogManager extends HRDBMSThread
 		/*
 		 * while (true) { final String msg = in.poll(); if (msg != null) {
 		 * processMessage(msg); }
-		 * 
+		 *
 		 * for (final Map.Entry<String, ArrayDeque<LogRec>> entry :
 		 * logs.entrySet()) { final ArrayDeque<LogRec> list = entry.getValue();
 		 * final String fn = entry.getKey(); LogRec last = null; last =
 		 * list.peekLast();
-		 * 
+		 *
 		 * if (last != null) { try { flush(last.lsn(), fn); } catch (Exception
 		 * e) { HRDBMSWorker.logger.fatal("Failure flushing logs", e);
 		 * System.exit(1); } } }
-		 * 
+		 *
 		 * try { Thread.sleep(sleepSecs * 1000); } catch (final
 		 * InterruptedException e) { } }
 		 */
-	}
-
-	private void addLog(String cmd)
-	{
-		final String fn = cmd.substring(8);
-		final File log = new File(fn);
-		if (!log.exists())
-		{
-			try
-			{
-				log.createNewFile();
-			}
-			catch (final Exception e)
-			{
-				HRDBMSWorker.logger.error("Error creating log file " + log, e);
-				// in = null;
-				this.terminate();
-				return;
-			}
-		}
-		try
-		{
-			getFile(fn);
-			recover(fn);
-		}
-		catch (final Exception e)
-		{
-			HRDBMSWorker.logger.error("Error recovery secondary log " + fn, e);
-			// in = null;
-			this.terminate();
-			return;
-		}
 	}
 
 	private static class BlockAndTransaction

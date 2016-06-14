@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
-import com.exascale.misc.BinomialHeap;
+import com.exascale.misc.AuxPairingHeap;
 import com.exascale.misc.BufferedFileChannel;
 import com.exascale.misc.BufferedLinkedBlockingQueue;
 import com.exascale.misc.DataEndMarker;
@@ -75,7 +75,7 @@ public final class SortOperator implements Operator, Serializable
 	private transient volatile boolean isClosed;
 	private transient volatile boolean done;
 	private int node;
-	private int childCard = 16;
+	private long childCard = 16;
 	private boolean cardSet = false;
 	private transient ArrayList<String> externalFiles;
 	private long limit = 0;
@@ -105,7 +105,7 @@ public final class SortOperator implements Operator, Serializable
 		value.orders = OperatorUtils.deserializeALB(in, prev);
 		value.sortPos = OperatorUtils.deserializeIntArray(in, prev);
 		value.node = OperatorUtils.readInt(in);
-		value.childCard = OperatorUtils.readInt(in);
+		value.childCard = OperatorUtils.readLong(in);
 		value.cardSet = OperatorUtils.readBool(in);
 		value.limit = OperatorUtils.readLong(in);
 		value.received = new AtomicLong(0);
@@ -455,13 +455,13 @@ public final class SortOperator implements Operator, Serializable
 		OperatorUtils.serializeALB(orders, out, prev);
 		OperatorUtils.serializeIntArray(sortPos, out, prev);
 		OperatorUtils.writeInt(node, out);
-		OperatorUtils.writeInt(childCard, out);
+		OperatorUtils.writeLong(childCard, out);
 		OperatorUtils.writeBool(cardSet, out);
 		OperatorUtils.writeLong(limit, out);
 		OperatorUtils.writeLong(txnum, out);
 	}
 
-	public boolean setChildCard(int card)
+	public boolean setChildCard(long card)
 	{
 		if (cardSet)
 		{
@@ -533,7 +533,7 @@ public final class SortOperator implements Operator, Serializable
 		try
 		{
 			ReverseComparator cmp = new ReverseComparator();
-			BinomialHeap<ArrayList<Object>> bh = new BinomialHeap<ArrayList<Object>>(cmp);
+			AuxPairingHeap<ArrayList<Object>> bh = new AuxPairingHeap<ArrayList<Object>>(cmp);
 			Object o = child.next(this);
 			if (o instanceof DataEndMarker)
 			{
@@ -558,7 +558,7 @@ public final class SortOperator implements Operator, Serializable
 				}
 				else
 				{
-					int result = cmp.compare(row, bh.peek());
+					int result = cmp.compare(row, bh.findMin());
 					if (result > 0)
 					{
 						bh.insert(row);
@@ -730,7 +730,7 @@ public final class SortOperator implements Operator, Serializable
 	private void mergeIntoResult(ArrayList<ArrayList<ArrayList<Object>>> results)
 	{
 		int[] poses = new int[results.size()];
-		BinomialHeap<ALOO> rows = new BinomialHeap<ALOO>(new MergeComparator());
+		AuxPairingHeap<ALOO> rows = new AuxPairingHeap<ALOO>(new MergeComparator());
 		ALOO minEntry;
 		int i = 0;
 		for (ArrayList<ArrayList<Object>> result : results)
@@ -1123,7 +1123,7 @@ public final class SortOperator implements Operator, Serializable
 				if (result == null)
 				{
 					// result = ResourceManager.newDiskBackedArray(childCard);
-					result = new ArrayList<ArrayList<Object>>(childCard);
+					result = new ArrayList<ArrayList<Object>>((int)childCard);
 				}
 				int i = 0;
 
@@ -1190,7 +1190,7 @@ public final class SortOperator implements Operator, Serializable
 			// Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor"));
 			// int size = (int)(ResourceManager.QUEUE_SIZE * factor);
 			int size = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("sort_bucket_size"));
-			int numInMem = (int)((childCard * percentInMem) / size);
+			int numInMem = 0;
 			externalFiles = new ArrayList<String>();
 			result = new ArrayList<ArrayList<Object>>(size);
 			ConcurrentHashMap<String, HRDBMSThread> map = new ConcurrentHashMap<String, HRDBMSThread>();
@@ -1608,7 +1608,7 @@ public final class SortOperator implements Operator, Serializable
 
 		private void mergeIntoResult(Collection<HRDBMSThread> readThreads)
 		{
-			BinomialHeap<ALOO> rows = new BinomialHeap<ALOO>(new MergeComparator());
+			AuxPairingHeap<ALOO> rows = new AuxPairingHeap<ALOO>(new MergeComparator());
 			ALOO minEntry;
 			for (final HRDBMSThread op : readThreads)
 			{

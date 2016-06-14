@@ -54,7 +54,7 @@ public final class ExceptOperator implements Operator, Serializable
 	private int node;
 	private transient ArrayList<HashSet<ArrayList<Object>>> sets;
 	private transient BufferedLinkedBlockingQueue buffer;
-	private int estimate = 16;
+	private long estimate = 16;
 	private transient volatile boolean inited;
 	private volatile boolean startDone = false;
 	private transient boolean inMem;
@@ -87,7 +87,7 @@ public final class ExceptOperator implements Operator, Serializable
 		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
 		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
 		value.node = OperatorUtils.readInt(in);
-		value.estimate = OperatorUtils.readInt(in);
+		value.estimate = OperatorUtils.readLong(in);
 		value.startDone = OperatorUtils.readBool(in);
 		value.childPos = OperatorUtils.readInt(in);
 		value.estimateSet = OperatorUtils.readBool(in);
@@ -344,7 +344,7 @@ public final class ExceptOperator implements Operator, Serializable
 		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
 		OperatorUtils.serializeTM(pos2Col, out, prev);
 		OperatorUtils.writeInt(node, out);
-		OperatorUtils.writeInt(estimate, out);
+		OperatorUtils.writeLong(estimate, out);
 		OperatorUtils.writeBool(startDone, out);
 		OperatorUtils.writeInt(childPos, out);
 		OperatorUtils.writeBool(estimateSet, out);
@@ -356,7 +356,7 @@ public final class ExceptOperator implements Operator, Serializable
 		childPos = pos;
 	}
 
-	public boolean setEstimate(int estimate)
+	public boolean setEstimate(long estimate)
 	{
 		if (estimateSet)
 		{

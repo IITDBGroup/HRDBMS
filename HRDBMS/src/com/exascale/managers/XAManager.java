@@ -610,11 +610,7 @@ public class XAManager extends HRDBMSThread
 			return list;
 		}
 		complete.add(o);
-		if (o instanceof NetworkSendOperator)
-		{
-			list.add(o.getNode());
-		}
-		else if (o instanceof NetworkReceiveOperator)
+		if ((o instanceof NetworkSendOperator) || (o instanceof NetworkReceiveOperator))
 		{
 			list.add(o.getNode());
 		}
