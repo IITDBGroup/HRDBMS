@@ -50,13 +50,25 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 
 	private boolean send = false;
 	private ArrayList<String> sortCols;
-	private ArrayList<Boolean> orders;
-
+	private boolean[] orders;
 	private int ID;
-
 	private int[] sortPos;
 
 	public NetworkHashReceiveAndMergeOperator(int ID, ArrayList<String> sortCols, ArrayList<Boolean> orders, MetaData meta)
+	{
+		super(meta);
+		this.sortCols = sortCols;
+		this.orders = new boolean[orders.size()];
+		int i = 0;
+		for (boolean b : orders)
+		{
+			this.orders[i++] = b;
+		}
+		this.ID = ID;
+		received = new AtomicLong(0);
+	}
+
+	public NetworkHashReceiveAndMergeOperator(int ID, ArrayList<String> sortCols, boolean[] orders, MetaData meta)
 	{
 		super(meta);
 		this.sortCols = sortCols;
@@ -79,7 +91,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 		value.start = OperatorUtils.readLong(in);
 		value.node = OperatorUtils.readInt(in);
 		value.sortCols = OperatorUtils.deserializeALS(in, prev);
-		value.orders = OperatorUtils.deserializeALB(in, prev);
+		value.orders = OperatorUtils.deserializeBoolArray(in, prev);
 		value.ID = OperatorUtils.readInt(in);
 		value.sortPos = OperatorUtils.deserializeIntArray(in, prev);
 		value.send = OperatorUtils.readBool(in);
@@ -230,7 +242,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 		OperatorUtils.writeLong(start, out);
 		OperatorUtils.writeInt(node, out);
 		OperatorUtils.serializeALS(sortCols, out, prev);
-		OperatorUtils.serializeALB(orders, out, prev);
+		OperatorUtils.serializeBoolArray(orders, out, prev);
 		OperatorUtils.writeInt(ID, out);
 		OperatorUtils.serializeIntArray(sortPos, out, prev);
 		OperatorUtils.writeBool(send, out);
@@ -451,7 +463,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 					lField.toString();
 				}
 
-				if (orders.get(i))
+				if (orders[i])
 				{
 					if (result > 0)
 					{
