@@ -1146,36 +1146,7 @@ public final class Phase3
 			return true;
 		}
 
-		boolean ok = true;
-		for (Operator child : receive.parent().children())
-		{
-			if (!isAllAny(child) || !containsNoSend(child))
-			{
-				ok = false;
-				break;
-			}
-		}
-
-		if (!ok)
-		{
-			return false;
-		}
-
-		final ArrayList<TableScanOperator> tables = new ArrayList<TableScanOperator>();
-		for (Operator child : receive.parent().children())
-		{
-			tables.addAll(getTableOperators(child));
-		}
-
-		final int node = tables.get(0).getNode();
-		for (final TableScanOperator table : tables)
-		{
-			table.setNode(node);
-			setNodeForSend(table, node);
-		}
-
-		pushAcross2(receive);
-		return true;
+		return false;
 	}
 
 	private boolean handleHash(NetworkReceiveOperator receive) throws Exception
@@ -1355,36 +1326,7 @@ public final class Phase3
 			return true;
 		}
 
-		boolean ok = true;
-		for (Operator child : receive.parent().children())
-		{
-			if (!isAllAny(child) || !containsNoSend(child))
-			{
-				ok = false;
-				break;
-			}
-		}
-
-		if (!ok)
-		{
-			return false;
-		}
-
-		final ArrayList<TableScanOperator> tables = new ArrayList<TableScanOperator>();
-		for (Operator child : receive.parent().children())
-		{
-			tables.addAll(getTableOperators(child));
-		}
-
-		final int node = tables.get(0).getNode();
-		for (final TableScanOperator table : tables)
-		{
-			table.setNode(node);
-			setNodeForSend(table, node);
-		}
-
-		pushAcross2(receive);
-		return true;
+		return false;
 	}
 
 	private boolean handleMulti(NetworkReceiveOperator receive) throws Exception
@@ -2459,6 +2401,16 @@ public final class Phase3
 			pushAcross(receive);
 			return true;
 		}
+		
+		if (((UnionOperator)receive.parent()).isDistinct())
+		{
+			HRDBMSWorker.logger.debug("P3 union is distinct");
+			return false;
+		}
+		else
+		{
+			HRDBMSWorker.logger.debug("P3 union is not distinct");
+		}
 
 		boolean ok = true;
 		for (Operator child : receive.parent().children())
@@ -2472,11 +2424,6 @@ public final class Phase3
 
 		if (!ok)
 		{
-			if (((UnionOperator)receive.parent()).isDistinct())
-			{
-				return false;
-			}
-
 			Operator parent = receive.parent();
 			for (Operator child : parent.children())
 			{

@@ -367,7 +367,8 @@ public final class LoadOperator implements Operator, Serializable
 
 	private static final byte[] rsToBytes(Set<ArrayList<Object>> rows) throws Exception
 	{
-		final ArrayList<byte[]> results = new ArrayList<byte[]>(rows.size());
+		final ByteBuffer[] results = new ByteBuffer[rows.size()];
+		int rIndex = 0;
 		ArrayList<byte[]> bytes = new ArrayList<byte[]>();
 		for (ArrayList<Object> val : rows)
 		{
@@ -492,21 +493,22 @@ public final class LoadOperator implements Operator, Serializable
 				i++;
 			}
 
-			results.add(retval);
+			results[rIndex++] = retvalBB;
 		}
 
 		int count = 0;
-		for (final byte[] ba : results)
+		for (final ByteBuffer bb : results)
 		{
-			count += ba.length;
+			count += bb.capacity();
 		}
 		final byte[] retval = new byte[count + 4];
 		ByteBuffer temp = ByteBuffer.allocate(4);
-		temp.asIntBuffer().put(results.size());
+		temp.asIntBuffer().put(results.length);
 		System.arraycopy(temp.array(), 0, retval, 0, 4);
 		int retvalPos = 4;
-		for (final byte[] ba : results)
+		for (final ByteBuffer bb : results)
 		{
+			byte[] ba = bb.array();
 			System.arraycopy(ba, 0, retval, retvalPos, ba.length);
 			retvalPos += ba.length;
 		}

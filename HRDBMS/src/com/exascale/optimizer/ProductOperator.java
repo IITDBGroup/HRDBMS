@@ -1306,7 +1306,8 @@ public final class ProductOperator extends JoinOperator implements Serializable
 
 		private final byte[] rsToBytes(ArrayList<ArrayList<Object>> rows, final byte[] types) throws Exception
 		{
-			final ArrayList<ByteBuffer> results = new ArrayList<ByteBuffer>(rows.size());
+			final ByteBuffer[] results = new ByteBuffer[rows.size()];
+			int rIndex = 0;
 			ArrayList<byte[]> bytes = new ArrayList<byte[]>();
 			final ArrayList<Integer> stringCols = new ArrayList<Integer>(rows.get(0).size());
 			int startSize = 4;
@@ -1390,7 +1391,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 					i++;
 				}
 
-				results.add(retvalBB);
+				results[rIndex++] = retvalBB;
 				bytes.clear();
 			}
 

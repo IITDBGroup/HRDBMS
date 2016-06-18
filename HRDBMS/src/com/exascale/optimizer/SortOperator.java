@@ -65,7 +65,7 @@ public final class SortOperator implements Operator, Serializable
 	private boolean startDone = false;
 	private transient boolean closeDone;
 	private ArrayList<String> sortCols;
-	private ArrayList<Boolean> orders;
+	private boolean[] orders;
 	private transient SortThread sortThread;
 	private transient volatile BufferedLinkedBlockingQueue readBuffer;
 	private transient volatile ArrayList<ArrayList<Object>> result;
@@ -86,6 +86,19 @@ public final class SortOperator implements Operator, Serializable
 	public SortOperator(ArrayList<String> sortCols, ArrayList<Boolean> orders, MetaData meta)
 	{
 		this.sortCols = sortCols;
+		this.orders = new boolean[orders.size()];
+		int i = 0;
+		for (boolean b : orders)
+		{
+			this.orders[i++] = b;
+		}
+		this.meta = meta;
+		received = new AtomicLong(0);
+	}
+
+	public SortOperator(ArrayList<String> sortCols, boolean[] orders, MetaData meta)
+	{
+		this.sortCols = sortCols;
 		this.orders = orders;
 		this.meta = meta;
 		received = new AtomicLong(0);
@@ -102,7 +115,7 @@ public final class SortOperator implements Operator, Serializable
 		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
 		value.startDone = OperatorUtils.readBool(in);
 		value.sortCols = OperatorUtils.deserializeALS(in, prev);
-		value.orders = OperatorUtils.deserializeALB(in, prev);
+		value.orders = OperatorUtils.deserializeBoolArray(in, prev);
 		value.sortPos = OperatorUtils.deserializeIntArray(in, prev);
 		value.node = OperatorUtils.readInt(in);
 		value.childCard = OperatorUtils.readLong(in);
@@ -211,7 +224,7 @@ public final class SortOperator implements Operator, Serializable
 	@Override
 	public SortOperator clone()
 	{
-		final SortOperator retval = new SortOperator((ArrayList<String>)sortCols.clone(), (ArrayList<Boolean>)orders.clone(), meta);
+		final SortOperator retval = new SortOperator((ArrayList<String>)sortCols.clone(), orders.clone(), meta);
 		retval.node = node;
 		retval.childCard = childCard;
 		retval.cardSet = cardSet;
@@ -294,7 +307,13 @@ public final class SortOperator implements Operator, Serializable
 
 	public ArrayList<Boolean> getOrders()
 	{
-		return orders;
+		ArrayList<Boolean> retval = new ArrayList<Boolean>(orders.length);
+		for (boolean b : orders)
+		{
+			retval.add(b);
+		}
+
+		return retval;
 	}
 
 	@Override
@@ -452,7 +471,7 @@ public final class SortOperator implements Operator, Serializable
 		OperatorUtils.serializeTM(pos2Col, out, prev);
 		OperatorUtils.writeBool(startDone, out);
 		OperatorUtils.serializeALS(sortCols, out, prev);
-		OperatorUtils.serializeALB(orders, out, prev);
+		OperatorUtils.serializeBoolArray(orders, out, prev);
 		OperatorUtils.serializeIntArray(sortPos, out, prev);
 		OperatorUtils.writeInt(node, out);
 		OperatorUtils.writeLong(childCard, out);
@@ -889,7 +908,7 @@ public final class SortOperator implements Operator, Serializable
 					lField.toString();
 				}
 
-				if (orders.get(i))
+				if (orders[i])
 				{
 					if (result > 0)
 					{
@@ -966,7 +985,7 @@ public final class SortOperator implements Operator, Serializable
 					lField.toString();
 				}
 
-				if (orders.get(i))
+				if (orders[i])
 				{
 					if (result > 0)
 					{
@@ -1043,7 +1062,7 @@ public final class SortOperator implements Operator, Serializable
 					lField.toString();
 				}
 
-				if (orders.get(i))
+				if (orders[i])
 				{
 					if (result > 0)
 					{
@@ -1776,7 +1795,8 @@ public final class SortOperator implements Operator, Serializable
 
 		private final byte[] rsToBytes(ArrayList<ArrayList<Object>> rows, final byte[] types) throws Exception
 		{
-			final ArrayList<ByteBuffer> results = new ArrayList<ByteBuffer>(rows.size());
+			final ByteBuffer[] results = new ByteBuffer[rows.size()];
+			int rIndex = 0;
 			ArrayList<byte[]> bytes = new ArrayList<byte[]>();
 			final ArrayList<Integer> stringCols = new ArrayList<Integer>(rows.get(0).size());
 			int startSize = 4;
@@ -1860,7 +1880,7 @@ public final class SortOperator implements Operator, Serializable
 					i++;
 				}
 
-				results.add(retvalBB);
+				results[rIndex++] = retvalBB;
 				bytes.clear();
 			}
 
@@ -1987,7 +2007,7 @@ public final class SortOperator implements Operator, Serializable
 						lField.toString();
 					}
 
-					if (orders.get(i))
+					if (orders[i])
 					{
 						if (result > 0)
 						{

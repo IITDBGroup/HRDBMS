@@ -97,7 +97,7 @@ public class Schema
 	private TreeMap<Integer, Page> pageGroup = new TreeMap<Integer, Page>();
 	private boolean addOpen = true;
 	private ArrayList<Page> pPrev;
-	private ConcurrentHashMap<RID, ArrayList<FieldValue>> recCache;
+	private ConcurrentHashMap<RID, FieldValue[]> recCache;
 	private HashMap<Integer, int[][]> offsetArraySet;
 	private HashMap<Integer, Map<RID, Integer>> rowIDToIndexSet;
 	private HashMap<Integer, ArrayList<RID>> rowIDSet;
@@ -326,12 +326,12 @@ public class Schema
 		return new ColIterator();
 	}
 
-	public Iterator<ArrayList<FieldValue>> colTableIterator()
+	public Iterator<FieldValue[]> colTableIterator()
 	{
 		return recCache.values().iterator();
 	}
 
-	public Iterator<Entry<RID, ArrayList<FieldValue>>> colTableIteratorWithRIDs()
+	public Iterator<Entry<RID, FieldValue[]>> colTableIteratorWithRIDs()
 	{
 		return recCache.entrySet().iterator();
 	}
@@ -2032,7 +2032,7 @@ public class Schema
 		this.p = (Page)entry2.getValue();
 		int pos = 1;
 		rowIDListSize = p.getMedium(pos);
-		recCache = new ConcurrentHashMap<RID, ArrayList<FieldValue>>((int)(rowIDListSize * 1.35));
+		recCache = new ConcurrentHashMap<RID, FieldValue[]>((int)(rowIDListSize * 1.35));
 		if (myNode == -1 || myNode == -2)
 		{
 			getNodeNumber();
@@ -2280,6 +2280,55 @@ public class Schema
 		}
 
 		rowIDsSet = true;
+	}
+
+	private RID[] setRowIDsCTExact(int colNum) throws Exception
+	{
+		// copy = new TreeSet<RID>(new RIDComparator());
+		int i = 0;
+		int pos = rowIDListOff + 3;
+		RID[] retval = new RID[rowIDListSize];
+		int pnum = p.block().number();
+		String pfn = p.block().fileName();
+		Block pblk = p.block();
+		int mColNum = -1;
+		HashMap<Integer, Integer> map = null;
+		if (Transaction.reorder)
+		{
+			map = tx.colMap.get(pfn);
+			if (map == null)
+			{
+				map = tx.getColOrder(pblk);
+				tx.colMap.put(pfn, map);
+			}
+			mColNum = map.get(colNum);
+		}
+
+		while (i < rowIDListSize)
+		{
+			int id = p.getMedium(pos);
+
+			if (!Transaction.reorder)
+			{
+				retval[i] = new RID(myNode, myDev, pnum - colNum, id);
+			}
+			else
+			{
+				retval[i] = new RID(myNode, myDev, pnum - mColNum, id);
+			}
+			// copy.add(rowIDsAL.get(i));
+			offsetArray[i][0] = p.getMedium(pos + 3);
+			if (offsetArray[i][0] == 0x00ffffff)
+			{
+				offsetArray[i][0] = -1;
+			}
+
+			i++;
+			pos += 6;
+		}
+
+		rowIDsSet = true;
+		return retval;
 	}
 
 	private void updateHeader(RID rid, FieldValue[] vals, int nextRecNum, int off, int length) throws RecNumOverflowException, LockAbortException, Exception
@@ -4908,24 +4957,12 @@ public class Schema
 				s.offsetArray = new int[s.rowIDListSize][1];
 				s.offsetArrayRows = s.rowIDListSize;
 				int i = 0;
-				s.setRowIDsCT(colNum);
-				for (final RID rid : s.rowIDsAL)
+				RID[] exact = s.setRowIDsCTExact(colNum);
+				for (final RID rid : exact)
 				{
-					if (i >= s.rowIDListSize)
-					{
-						break;
-					}
 					s.rowIDToIndex.put(rid, i);
 					i++;
 				}
-				// pos += (3 * s.rowIDListSize);
-
-				// i = 0;
-				// for (final RID rid : rowIDs)
-				// {
-				// rowIDToIndex.put(rid, i);
-				// i++;
-				// }
 
 				Map<Integer, DataType> colTypesBackup = s.colTypes;
 				s.colTypes = new HashMap<Integer, DataType>();
@@ -4949,18 +4986,23 @@ public class Schema
 
 						try
 						{
-							ArrayList<FieldValue> alfv = s.recCache.get(rid);
+							// ArrayList<FieldValue> alfv = s.recCache.get(rid);
+							FieldValue[] alfv = s.recCache.get(rid);
 							if (alfv == null)
 							{
-								alfv = new ArrayList<FieldValue>(s.pageGroup.size());
-								int j = 0;
-								while (j < s.pageGroup.size())
-								{
-									alfv.add(null);
-									j++;
-								}
+								// alfv = new
+								// ArrayList<FieldValue>(s.pageGroup.size());
+								alfv = new FieldValue[s.pageGroup.size()];
+								// int j = 0;
+								// while (j < s.pageGroup.size())
+								// {
+								// alfv.add(null);
+								// j++;
+								// }
 
-								ArrayList<FieldValue> alfv2 = s.recCache.putIfAbsent(rid, alfv);
+								// ArrayList<FieldValue> alfv2 =
+								// s.recCache.putIfAbsent(rid, alfv);
+								FieldValue[] alfv2 = s.recCache.putIfAbsent(rid, alfv);
 								if (alfv2 != null)
 								{
 									alfv = alfv2;
@@ -4969,13 +5011,12 @@ public class Schema
 
 							synchronized (alfv)
 							{
-								alfv.set(colPos, fv);
+								alfv[colPos] = fv;
 							}
 						}
 						catch (Exception e)
 						{
 							HRDBMSWorker.logger.debug("Error find rid = " + rid + " in " + s.recCache + " during col table read");
-
 							HRDBMSWorker.logger.debug("Page group info follows:");
 							for (Page p2 : s.pageGroup.values())
 							{

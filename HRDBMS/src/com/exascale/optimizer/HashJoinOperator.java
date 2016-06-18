@@ -255,16 +255,6 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		return retval;
 	}
 
-	private static int getMedium(ByteBuffer bb, int pos)
-	{
-		// int retval = (hb[pos] << 16) | ((hb[pos + 1] & 0xff) << 8) | ((hb[pos
-		// + 2] & 0xff));
-		bb.position(pos);
-		int retval = ((bb.getShort() & 0xffff) << 8);
-		retval += (bb.get() & 0xff);
-		return retval;
-	}
-
 	private static long hash(Object key) throws Exception
 	{
 		long eHash;
@@ -1091,53 +1081,6 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		return "HashJoinOperator: " + lefts.toString() + "," + rights.toString();
 	}
 
-	private Operator clone(Operator op)
-	{
-		final Operator clone = op.clone();
-		int i = 0;
-		for (final Operator o : op.children())
-		{
-			try
-			{
-				clone.add(clone(o));
-				clone.setChildPos(op.getChildPos());
-				if (o instanceof TableScanOperator)
-				{
-					final CNFFilter cnf = ((TableScanOperator)o).getCNFForParent(op);
-					if (cnf != null)
-					{
-						final Operator child = clone.children().get(i);
-						((TableScanOperator)child).setCNFForParent(clone, cnf);
-					}
-				}
-
-				if (op instanceof TableScanOperator)
-				{
-					final Operator child = clone.children().get(i);
-					int device = -1;
-
-					for (final Map.Entry entry : (((TableScanOperator)op).device2Child).entrySet())
-					{
-						if (entry.getValue() == o)
-						{
-							device = (Integer)entry.getKey();
-						}
-					}
-					((TableScanOperator)clone).setChildForDevice(device, child);
-				}
-			}
-			catch (final Exception e)
-			{
-				HRDBMSWorker.logger.error("", e);
-				return null;
-			}
-
-			i++;
-		}
-
-		return clone;
-	}
-
 	private ArrayList<FileChannel> createChannels(ArrayList<RandomAccessFile> files)
 	{
 		ArrayList<FileChannel> retval = new ArrayList<FileChannel>(files.size());
@@ -1680,17 +1623,18 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		return retval;
 	}
 
-	private List<ArrayList<Object>> getCandidates(List<byte[]> bCandidates, byte[] types) throws Exception
+	private ArrayList<Object>[] getCandidates(List<byte[]> bCandidates, byte[] types) throws Exception
 	{
 		final int limit = bCandidates.size();
-		ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>(limit);
+		ArrayList<Object>[] retval = new ArrayList[limit];
 		int z = 0;
 		while (z < limit)
 		{
-			byte[] b = bCandidates.get(z++);
+			byte[] b = bCandidates.get(z);
 			try
 			{
-				retval.add((ArrayList<Object>)fromBytes2(b, types));
+				retval[z] = ((ArrayList<Object>)fromBytes2(b, types));
+				z++;
 			}
 			catch (Exception e)
 			{
@@ -1702,15 +1646,16 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		return retval;
 	}
 
-	private final ArrayList<ArrayList<Object>> getCandidates(long hash, byte[] types) throws Exception
+	private final ArrayList<Object>[] getCandidates(long hash, byte[] types) throws Exception
 	{
 		List<byte[]> list = buckets.get(hash);
 		final int limit = list.size();
-		final ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>(limit);
+		final ArrayList<Object>[] retval = new ArrayList[limit];
 		int z = 0;
 		while (z < limit)
 		{
-			retval.add((ArrayList<Object>)fromBytes2(list.get(z++), types));
+			retval[z] = ((ArrayList<Object>)fromBytes2(list.get(z), types));
+			z++;
 		}
 
 		return retval;
@@ -1784,14 +1729,14 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			}
 
 			final long hash = hash(key);
-			List<ArrayList<Object>> candidates = getCandidates(table.get(hash), types);
+			ArrayList<Object>[] candidates = getCandidates(table.get(hash), types);
 			boolean found = false;
-			final int limit = candidates.size();
+			final int limit = candidates.length;
 			int at = 0;
 			// for (final ArrayList<Object> rRow : candidates)
 			while (at < limit)
 			{
-				ArrayList<Object> rRow = candidates.get(at);
+				ArrayList<Object> rRow = candidates[at];
 				if (cnfFilters.passes(row, rRow))
 				{
 					if (semi != null)
@@ -1832,7 +1777,8 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 
 	private final byte[] rsToBytes(ArrayList<ArrayList<Object>> rows, final byte[] types) throws Exception
 	{
-		final ArrayList<ByteBuffer> results = new ArrayList<ByteBuffer>(rows.size());
+		final ByteBuffer[] results = new ByteBuffer[rows.size()];
+		int rIndex = 0;
 		ArrayList<byte[]> bytes = new ArrayList<byte[]>();
 		final ArrayList<Integer> stringCols = new ArrayList<Integer>(rows.get(0).size());
 		int startSize = 4;
@@ -1916,7 +1862,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 				i++;
 			}
 
-			results.add(retvalBB);
+			results[rIndex++] = retvalBB;
 			bytes.clear();
 		}
 
@@ -2801,15 +2747,15 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					}
 
 					final long hash = 0x7FFFFFFFFFFFFFFFL & hash(key);
-					final ArrayList<ArrayList<Object>> candidates = getCandidates(hash, types2);
+					final ArrayList<Object>[] candidates = getCandidates(hash, types2);
 
 					boolean found = false;
 					int at = 0;
-					final int limit = candidates.size();
+					final int limit = candidates.length;
 					// for (final ArrayList<Object> rRow : candidates)
 					while (at < limit)
 					{
-						ArrayList<Object> rRow = candidates.get(at);
+						ArrayList<Object> rRow = candidates[at];
 						if (cnfFilters.passes(lRow, rRow))
 						{
 							if (semi != null)

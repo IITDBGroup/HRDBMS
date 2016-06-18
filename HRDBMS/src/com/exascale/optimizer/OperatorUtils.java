@@ -102,6 +102,7 @@ public class OperatorUtils
 	// 80 - HMIntOp
 	// 81 - Operator null
 	// 82 - Index null;
+	// 83 - BoolArray
 
 	public static int bytesToInt(byte[] val)
 	{
@@ -538,6 +539,38 @@ public class OperatorUtils
 		while (i < size)
 		{
 			retval.add(readString(in, prev));
+			i++;
+		}
+
+		return retval;
+	}
+
+	public static boolean[] deserializeBoolArray(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		int type = getType(in);
+		if (type == 0)
+		{
+			return (boolean[])readReference(in, prev);
+		}
+
+		if (type != 83)
+		{
+			throw new Exception("Corrupted stream. Expected type 83 but received " + type);
+		}
+
+		long id = readLong(in);
+		if (id == -1)
+		{
+			return null;
+		}
+
+		int size = readShort(in);
+		boolean[] retval = new boolean[size];
+		prev.put(id, retval);
+		int i = 0;
+		while (i < size)
+		{
+			retval[i] = readBool(in);
 			i++;
 		}
 
@@ -1779,6 +1812,33 @@ public class OperatorUtils
 		for (String entry : als)
 		{
 			writeString(entry, out, prev);
+		}
+
+		return;
+	}
+
+	public static void serializeBoolArray(boolean[] als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		if (als == null)
+		{
+			writeType(83, out);
+			writeLong(-1, out);
+			return;
+		}
+
+		Long id = prev.get(als);
+		if (id != null)
+		{
+			serializeReference(id, out);
+			return;
+		}
+
+		writeType(83, out);
+		prev.put(als, writeID(out));
+		writeShort(als.length, out);
+		for (boolean entry : als)
+		{
+			writeBool(entry, out);
 		}
 
 		return;

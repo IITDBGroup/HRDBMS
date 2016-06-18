@@ -7573,12 +7573,12 @@ public class ConnectionWorker extends HRDBMSThread
 						}
 
 						tx.read(new Block(tFn, onPage++), sch, cols, true);
-						Iterator<Entry<RID, ArrayList<FieldValue>>> rit = sch.colTableIteratorWithRIDs();
+						Iterator<Entry<RID, FieldValue[]>> rit = sch.colTableIteratorWithRIDs();
 						while (rit.hasNext())
 						{
 							Map.Entry entry = rit.next();
 							RID rid = (RID)entry.getKey();
-							ArrayList<FieldValue> urow = (ArrayList<FieldValue>)entry.getValue();
+							FieldValue[] urow = (FieldValue[])entry.getValue();
 							count++;
 							if (count == MAX_PAGES)
 							{
