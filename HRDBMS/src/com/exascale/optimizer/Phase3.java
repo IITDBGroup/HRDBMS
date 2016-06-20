@@ -1140,12 +1140,6 @@ public final class Phase3
 
 	private boolean handleExcept(NetworkReceiveOperator receive) throws Exception
 	{
-		if (receive.parent().children().size() == 1)
-		{
-			pushAcross(receive);
-			return true;
-		}
-
 		return false;
 	}
 
@@ -1320,12 +1314,6 @@ public final class Phase3
 
 	private boolean handleIntersect(NetworkReceiveOperator receive) throws Exception
 	{
-		if (receive.parent().children().size() == 1)
-		{
-			pushAcross(receive);
-			return true;
-		}
-
 		return false;
 	}
 
@@ -2395,21 +2383,10 @@ public final class Phase3
 	}
 
 	private boolean handleUnion(NetworkReceiveOperator receive) throws Exception
-	{
-		if (receive.parent().children().size() == 1)
-		{
-			pushAcross(receive);
-			return true;
-		}
-		
+	{	
 		if (((UnionOperator)receive.parent()).isDistinct())
 		{
-			HRDBMSWorker.logger.debug("P3 union is distinct");
 			return false;
-		}
-		else
-		{
-			HRDBMSWorker.logger.debug("P3 union is not distinct");
 		}
 
 		boolean ok = true;
