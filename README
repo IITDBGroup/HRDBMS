@@ -19,7 +19,7 @@ cc077.cooley, W, rack1, /home/hrdbms
 
 The first field is the hostname or ip of the node.  The second field is C or W for whether the node is a coordinator or a worker.  The third field is the name of the rack that the node is on.  The fourth field is the "install directory" for HRDBMS on that node.  This is the directory where the HRDBMS.jar file exists on that node.  Distribute this nodes.cfg file to all nodes.  It needs to exist in the install directory on each node and it needs to be identical on all nodes.
 
-2)	Distribute the HRDBMS.jar file to all nodes.  Make sure to put it in whatever the install directory is for each node.
+2)	Distribute the HRDBMS.jar file and the huffman.dat file to all nodes.  Make sure to put it in whatever the install directory is for each node.
 3)	Set up passwordless ssh for the userid that you will run HRDBMS under between each coordinator node and each worker node.
 4)	Make sure each node supports a hard limit in ulimit for the HRDBMS userid for max processes of 100000.  We will never get anywhere near that, but I just picked a really high number.
 5)	On each node you also need to have a file called hparms in the install directory.  This file specifies the value for system parameters that you wish to override from the defaults.  There are a few that you will definitely need to override.  In a simple installation, you can get by with having this file be identical on all nodes.  In more complex installations, that might not work.  The format for the file is keyword=value, with one keyword per line and no space between the keyword, the equals sign, and the value.
@@ -79,7 +79,7 @@ archive_dir - this is the directory where archive logs are written.  In an ideal
 
 hrdbms_user - this is the userid that HRDBMS will run under.  This needs to be the same userid on all nodes.  You need to be logged in as this user when you start HRDBMS.  The default value is hrdbms.
 
-Xmx_string - this is the size of the Java heap.  The default value is 24g.  It is highly recommended that you do not use a value smaller than 24g.  You should also not use a value higher than 75% of your total system memory.
+Xmx_string - this is the size of the Java heap.  The default value is 32g.  It is highly recommended that you do not use a value smaller than 24g.  You should also not use a value higher than 75% of your total system memory.
 
 number_of_coords - this is the number of coordinator nodes that you have.  I know I could change my code so that it just counts the number of C entries in the nodes.cfg file but I haven't done that yet, so you have to deal with it for now.  The default value is 1.
 
@@ -101,7 +101,7 @@ stack_size - the stack size for Java threads.  HRDBMS has some very recursive st
 
 jvm_args - this is a place to pass arguments to the JVM besides stack and heap size parameters.  If you override, this keep in mind that you probably want to put back all the stuff from the default and then add whatever you were trying to add.  Most of the stuff in the default is very important!  The default value is...
 
--XX:+UseG1GC -XX:G1HeapRegionSize=32m -XX:+ParallelRefProcEnabled -XX:MaxDirectMemorySize=327772160000
+-XX:+UseG1GC -XX:G1HeapRegionSize=32m -XX:+ParallelRefProcEnabled -XX:MaxDirectMemorySize=327772160000 -XX:+AggressiveOpts
 It's probably fine for most purposes, unless you have a really, really big machine and want to make use of a whole ton of the direct buffer feature (discussed soon).
 
 external_factor - this is where things get fun.  This is used to decide whether aggregation operations are done in memory or not.  The logic is that you take the value of queue_size and you multiply it by external_factor.  If the estimated output cardinality of the aggregation operation is less than this number, it will be done in memory.  If it is bigger than this number, it will be done externally.  The default value is 68.0 (it's a floating point value), and was tuned using the default queue_size and default heap size.
@@ -156,14 +156,14 @@ sort_bucket_size - the number of rows that get sorted individually before being 
 
 hjo_bin_size - the number of rows per bin when HRDBMS does an external hash join. The default value is 100000.
 
-mo_bin_size - the number of rows per bins when HRDBMS does an external aggregation. The default value is 1000000.
+mo_bin_size - the number of rows per bins when HRDBMS does an external aggregation. The default value is 3000000.
 
 STARTING HRDBMS
 Log on to any of the coordinator nodes as the HRDBMS user.  Go to the install directory for that node.  Issue the following commands...
 
 ulimit -n <your max_open_files value>
 ulimit -u 100000
-nohup java -XX:+UseG1GC -XX:G1HeapRegionSize=32m -XX:+ParallelRefProcEnabled -XX:MaxDirectMemorySize=327772160000 -Xmx<your heap size> -Xms<your heap size> -Xss<your stack size> -cp HRDBMS.jar:. com.exascale.managers.HRDBMSWorker 0 &
+nohup java -XX:+UseG1GC -XX:G1HeapRegionSize=32m -XX:+ParallelRefProcEnabled -XX:MaxDirectMemorySize=327772160000 -XX:+AggressiveOpts -Xmx<your heap size> -Xms<your heap size> -Xss<your stack size> -cp HRDBMS.jar:. com.exascale.managers.HRDBMSWorker 0 &
 
 Each node will write a debug log in its install directory called hrdbms.log.
 
