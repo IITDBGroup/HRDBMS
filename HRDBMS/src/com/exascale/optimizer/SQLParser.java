@@ -178,6 +178,12 @@ public class SQLParser
 			Operator op = buildOperatorTreeFromCreateTable((CreateTable)stmt);
 			return op;
 		}
+		
+		if (stmt instanceof CreateExternalTable)
+		{
+			Operator op = buildOperatorTreeFromCreateExternalTable((CreateExternalTable)stmt);
+			return op;
+		}
 
 		if (stmt instanceof DropTable)
 		{
@@ -1186,6 +1192,56 @@ public class SQLParser
 		}
 
 		return new CreateTableOperator(schema, tbl, colDefs, orderedPks, createTable.getNodeGroupExp(), createTable.getNodeExp(), createTable.getDeviceExp(), meta, createTable.getType());
+	}
+	
+	private Operator buildOperatorTreeFromCreateExternalTable(CreateExternalTable createExternalTable) throws Exception
+	{
+		TableName table = createExternalTable.getTable();
+		String schema = null;
+		String tbl = null;
+		if (table.getSchema() == null)
+		{
+			schema = new MetaData(connection).getCurrentSchema();
+			tbl = table.getName();
+		}
+		else
+		{
+			schema = table.getSchema();
+			tbl = table.getName();
+		}
+
+		if (meta.verifyTableExistence(schema, tbl, tx) || meta.verifyViewExistence(schema, tbl, tx))
+		{
+			throw new ParseException("External Table already exists");
+		}
+		
+		ArrayList<ColDef> colDefs = createExternalTable.getCols();
+		HashSet<String> colNames = new HashSet<String>();
+		for (ColDef def : colDefs)
+		{
+			String col = def.getCol().getColumn();
+			if (def.getCol().getTable() != null)
+			{
+				throw new ParseException("Column names cannot be qualified with table names in a CREATE TABLE statement");
+			}
+
+			if (!colNames.add(col))
+			{
+				throw new ParseException("CREATE TABLE statement had a duplicate column names");
+			}
+
+			if (def.isNullable() && def.isPK())
+			{
+				throw new ParseException("A column cannot be nullable and part of the primary key");
+			}
+		}
+		
+		if(createExternalTable.getGeneralExtTableSpec() != null)
+		{
+			return new CreateExternalTableOperator(meta, schema, tbl, colDefs, createExternalTable.getGeneralExtTableSpec().getSourceList() , createExternalTable.getGeneralExtTableSpec().getAnyString(), createExternalTable.getGeneralExtTableSpec().getFilePathIdentifier());
+		}
+		
+		return new CreateExternalTableOperator(meta, schema, tbl, colDefs, createExternalTable.getJavaClassExtTableSpec().getJavaClassName() , createExternalTable.getJavaClassExtTableSpec().getKeyValueList());
 	}
 
 	private Operator buildOperatorTreeFromCreateView(CreateView createView) throws Exception

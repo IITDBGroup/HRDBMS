@@ -223,6 +223,30 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 			return new CreateTable(table, cols, pk, nodeGroupExp, nodeExp, deviceExp, type, colOrder);
 		}
 	}
+	
+	public CreateExternalTable visitCreateExternalTable(SelectParser.CreateExternalTableContext ctx)
+	{
+		TableName table = (TableName)visit(ctx.tableName());
+		ArrayList<ColDef> cols = new ArrayList<ColDef>();
+		for (SelectParser.ColDefContext context : ctx.colDef())
+		{
+			cols.add((ColDef)visit(context));
+		}
+		
+		if(ctx.generalExtTableSpec() != null)
+		{
+			GeneralExtTableSpec generalExtTableSpec =
+					(GeneralExtTableSpec)visit(ctx.generalExtTableSpec());
+			return new CreateExternalTable(table, cols, generalExtTableSpec);
+		}		
+		else
+		{
+			JavaClassExtTableSpec javaClassExtTableSpec = 
+					(JavaClassExtTableSpec)visit(ctx.javaClassExtTableSpec());			
+			return new CreateExternalTable(table, cols, javaClassExtTableSpec);
+		}		
+	}
+	
 
 	@Override
 	public CreateView visitCreateView(SelectParser.CreateViewContext ctx)

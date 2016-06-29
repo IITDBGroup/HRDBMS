@@ -1273,6 +1273,31 @@ public final class MetaData implements Serializable
 		buildIndex(schema, index, table, defs.size(), unique, tx);
 		populateIndex(schema, index, table, tx, cols2Pos);
 	}
+	
+	public void createExternalTable(String schema, String table, ArrayList<ColDef> defs, String sourceList, String anyString, String filePathIdentifier, String javaClassName, Map<String, String> keyValueList) throws Exception
+	{
+		HashMap<String, String> cols2Types = new HashMap<String, String>();
+		for (ColDef def : defs)
+		{
+			String name = def.getCol().getColumn();
+			String type = def.getType();
+			if (type.equals("LONG"))
+			{
+				type = "BIGINT";
+			}
+			else if (type.equals("FLOAT"))
+			{
+				type = "DOUBLE";
+			}
+			else if (type.startsWith("CHAR"))
+			{
+				type = "VARCHAR";
+			}
+
+			cols2Types.put(name, type);
+		}
+		
+	}
 
 	public void createTable(String schema, String table, ArrayList<ColDef> defs, ArrayList<String> pks, Transaction tx, String nodeGroupExp, String nodeExp, String deviceExp, int tType, ArrayList<Integer> colOrder) throws Exception
 	{

@@ -1,11 +1,20 @@
 grammar Select;
 
-select : insert | update | delete | createTable | createIndex | createView | dropTable | dropIndex | dropView | load | runstats | (('WITH' commonTableExpression (',' commonTableExpression)*)? fullSelect) ;
+select : insert | update | delete | createTable | createExternalTable | createIndex | createView | dropTable | dropIndex | dropView | load | runstats | (('WITH' commonTableExpression (',' commonTableExpression)*)? fullSelect) ;
 runstats : 'RUNSTATS' 'ON' tableName ;
 insert : 'INSERT' 'INTO' tableName (('FROM'? fullSelect) | ('VALUES' '(' expression (',' expression)* ')')) ;
 update : 'UPDATE' tableName 'SET' (columnName | colList) EQUALS expression whereClause? ;
 delete : 'DELETE' 'FROM' tableName whereClause? ;
 createTable : 'CREATE' COLUMN? 'TABLE' tableName '(' colDef (',' colDef)* (',' primaryKey)? ')' colOrder? groupExp? nodeExp deviceExp ;
+
+createExternalTable : 'CREATE' 'EXTERNAL' 'TABLE' tableName '(' colDef (',' colDef)* ')' (generalExtTableSpec | javaClassExtTableSpec) ;
+generalExtTableSpec: 'IMPORT' 'FROM' sourceList 'FIELDS' 'DELIMITED' 'BY' anything 'ROWS' 'DELIMITED' 'BY' anything 'FILE' 'PATH' FILEPATHIDENTIFIER ;
+javaClassExtTableSpec: 'USING' javaClassName 'WITH' 'PARAMETERS' '(' keyValueList ')' ;
+javaClassName: JAVACLASSNAMEIDENTIFIER ('.' JAVACLASSNAMEIDENTIFIER)* '.java' ;
+keyValueList: anything ':' anything (',' anything ':' anything)*;
+anything : . ;
+sourceList : 'local' | 'hdfs' | 's3' ;
+
 colOrder : COLORDER '(' INTEGER (',' INTEGER)* ')' ;
 groupExp : NONE | realGroupExp ;
 realGroupExp :  '{' groupDef ('|' groupDef)* '}' (',' (hashExp | rangeType))? ;
@@ -145,4 +154,6 @@ RANGE : 'RANGE' ;
 DATE : 'DATE' ;
 COLORDER : 'COLORDER' ;
 IDENTIFIER : [A-Z]([A-Z] | [0-9] | '_')* ;
+JAVACLASSNAMEIDENTIFIER : ([a-z] | [A-Z] | '_' | '$') ([a-z] | [A-Z] | [0-9] | '_' | '$')* ;
+FILEPATHIDENTIFIER : ANY ('/' ANY)* ;
 ANY : . ;
