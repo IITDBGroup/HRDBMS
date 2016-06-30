@@ -3798,8 +3798,8 @@ public final class MetaData implements Serializable
 		if (tType != 0 && colOrder == null)
 		{
 			colOrder = new ArrayList<Integer>();
-			int i = 0;
-			while (i < numCols)
+			int i = 1;
+			while (i <= numCols)
 			{
 				colOrder.add(i++);
 			}
