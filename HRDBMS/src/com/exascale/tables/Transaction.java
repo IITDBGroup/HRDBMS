@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.exceptions.LockAbortException;
@@ -28,14 +29,12 @@ public class Transaction implements Serializable
 	public static final int ISOLATION_RR = 0, ISOLATION_CS = 1, ISOLATION_UR = 2;
 	private static AtomicLong nextTxNum;
 	public static HashMap<Long, Long> txList = new HashMap<Long, Long>();
-	public static boolean reorder;
-	public ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
+	public static final boolean reorder = HRDBMSWorker.getHParms().getProperty("enable_col_reordering").equals("true");
 
 	static
 	{
 		try
 		{
-			reorder = HRDBMSWorker.getHParms().getProperty("enable_col_reordering").equals("true");
 			nextTxNum = new AtomicLong(System.currentTimeMillis() * 1000);
 			while (nextTxNum.get() % MetaData.myCoordNum() != 0)
 			{
@@ -55,6 +54,8 @@ public class Transaction implements Serializable
 	}
 
 	public static ScalableStampedReentrantRWLock txListLock = new ScalableStampedReentrantRWLock();
+
+	public ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
 
 	private final long txnum;
 	public int level;
@@ -264,6 +265,24 @@ public class Transaction implements Serializable
 		return retval;
 	}
 
+	public HashMap<Integer, Integer> getColOrder(Block bl) throws Exception
+	{
+		final Block b = new Block(bl.fileName(), 0);
+		requestPage(b);
+
+		final HeaderPage hp = readHeaderPage(b, 1);
+		ArrayList<Integer> order = hp.getColOrder();
+		HashMap<Integer, Integer> retval = new HashMap<Integer, Integer>();
+		int index = 0;
+		for (int i : order)
+		{
+			retval.put(i, index);
+			index++;
+		}
+
+		return retval;
+	}
+
 	public int getIsolationLevel()
 	{
 		return level;
@@ -277,7 +296,35 @@ public class Transaction implements Serializable
 			HRDBMSWorker.logger.debug("", e);
 			throw e;
 		}
+
+		// HRDBMSWorker.logger.debug("Trying to get block: " + b);
 		Page p = BufferManager.getPage(b, txnum);
+
+		if (p == null)
+		{
+			int sleeps = 0;
+			final int attempts = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("getpage_attempts"));
+			while (p == null && sleeps < attempts)
+			{
+				try
+				{
+					Thread.sleep(Long.parseLong(HRDBMSWorker.getHParms().getProperty("getpage_fail_sleep_time_ms")));
+				}
+				catch (final InterruptedException e)
+				{
+				}
+
+				p = BufferManager.getPage(b, txnum);
+				sleeps++;
+			}
+		}
+
+		if (p == null)
+		{
+			BufferManager.requestPage(b, this.number());
+		}
+
+		p = BufferManager.getPage(b, txnum);
 
 		if (p == null)
 		{
@@ -305,29 +352,11 @@ public class Transaction implements Serializable
 
 		return p;
 	}
-	
-	public HashMap<Integer, Integer> getColOrder(Block bl) throws Exception
-	{
-		final Block b = new Block(bl.fileName(), 0);
-		requestPage(b);
-
-		final HeaderPage hp = readHeaderPage(b, 1);
-		ArrayList<Integer> order = hp.getColOrder();
-		HashMap<Integer, Integer> retval = new HashMap<Integer, Integer>();
-		int index = 0;
-		for (int i : order)
-		{
-			retval.put(i, index);
-			index++;
-		}
-		
-		return retval;
-	}
 
 	public Page[] getPage(Block b, ArrayList<Integer> cols) throws Exception
 	{
 		Page[] retval = new Page[cols.size()];
-		
+
 		if (!reorder)
 		{
 			int pos = 0;
@@ -578,11 +607,14 @@ public class Transaction implements Serializable
 
 	public void requestPage(Block b, ArrayList<Integer> cols) throws Exception
 	{
+		TreeSet<Integer> pages = new TreeSet<Integer>();
 		if (!reorder)
 		{
 			for (int col : cols)
 			{
-				BufferManager.requestPage(new Block(b.fileName(), b.number() + col), this.number());
+				// BufferManager.requestPage(new Block(b.fileName(), b.number()
+				// + col), this.number());
+				pages.add(b.number() + col);
 			}
 		}
 		else
@@ -595,8 +627,38 @@ public class Transaction implements Serializable
 			}
 			for (int col : cols)
 			{
-				BufferManager.requestPage(new Block(b.fileName(), b.number() + map.get(col)), this.number());
+				// BufferManager.requestPage(new Block(b.fileName(), b.number()
+				// + map.get(col)), this.number());
+				pages.add(b.number() + map.get(col));
 			}
+		}
+
+		ArrayList<Integer> set = new ArrayList<Integer>();
+		for (int page : pages)
+		{
+			if (set.size() == 0)
+			{
+				set.add(page);
+			}
+			else
+			{
+				int prev = set.get(set.size() - 1);
+				if (page == prev + 1)
+				{
+					set.add(page);
+				}
+				else
+				{
+					BufferManager.requestConsecutivePages(new Block(b.fileName(), set.get(0)), this.number(), set.size());
+					set = new ArrayList<Integer>();
+					set.add(page);
+				}
+			}
+		}
+
+		if (set.size() != 0)
+		{
+			BufferManager.requestConsecutivePages(new Block(b.fileName(), set.get(0)), this.number(), set.size());
 		}
 	}
 
@@ -712,7 +774,7 @@ public class Transaction implements Serializable
 				{
 					int newCol = map.get(col);
 					bs2[pos++] = new Block(b.fileName(), b.number() + newCol);
-					
+
 					if (build)
 					{
 						newCols.add(newCol);
@@ -720,15 +782,71 @@ public class Transaction implements Serializable
 				}
 			}
 		}
-		
-		if (!reorder)
+
+		TreeSet<Integer> pages = new TreeSet<Integer>();
+		for (Block b : bs2)
 		{
-			return BufferManager.requestPages(bs2, this.number(), cols, layoutSize);
+			pages.add(b.number());
 		}
-		else
+
+		ArrayList<Integer> set = new ArrayList<Integer>();
+		int rank = 0;
+		ArrayList<RequestPagesThread> threads = new ArrayList<RequestPagesThread>();
+		for (int page : pages)
 		{
-			return BufferManager.requestPages(bs2, this.number(), newCols, layoutSize);
+			if (set.size() == 0)
+			{
+				set.add(page);
+			}
+			else
+			{
+				int prev = set.get(set.size() - 1);
+				if (page == prev + 1)
+				{
+					set.add(page);
+				}
+				else
+				{
+					if (!reorder)
+					{
+						threads.add(BufferManager.requestConsecutivePages(new Block(bs2[0].fileName(), set.get(0)), this.number(), set.size(), cols, layoutSize, rank));
+					}
+					else
+					{
+						threads.add(BufferManager.requestConsecutivePages(new Block(bs2[0].fileName(), set.get(0)), this.number(), set.size(), newCols, layoutSize, rank));
+					}
+					set = new ArrayList<Integer>();
+					set.add(page);
+					rank++;
+				}
+			}
 		}
+
+		if (set.size() != 0)
+		{
+			if (!reorder)
+			{
+				threads.add(BufferManager.requestConsecutivePages(new Block(bs2[0].fileName(), set.get(0)), this.number(), set.size(), cols, layoutSize, rank));
+			}
+			else
+			{
+				threads.add(BufferManager.requestConsecutivePages(new Block(bs2[0].fileName(), set.get(0)), this.number(), set.size(), newCols, layoutSize, rank));
+			}
+		}
+
+		// if (!reorder)
+		// {
+		// return BufferManager.requestPages(bs2, this.number(), cols,
+		// layoutSize);
+		// }
+		// else
+		// {
+		// return BufferManager.requestPages(bs2, this.number(), newCols,
+		// layoutSize);
+		// }
+		RequestPagesThread retval = new BufferManager.RequestPagesThread(threads);
+		retval.start();
+		return retval;
 	}
 
 	public void requestPages(Block[] bs, Schema[] schemas, int schemaIndex, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos) throws Exception

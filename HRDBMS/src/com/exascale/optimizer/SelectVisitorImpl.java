@@ -81,6 +81,18 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
+	public ArrayList<Integer> visitColOrder(SelectParser.ColOrderContext ctx)
+	{
+		ArrayList<Integer> colOrder = new ArrayList<Integer>();
+		for (TerminalNode node : ctx.INTEGER())
+		{
+			colOrder.add(Integer.parseInt(node.getText().trim()));
+		}
+
+		return colOrder;
+	}
+
+	@Override
 	public CTE visitCommonTableExpression(SelectParser.CommonTableExpressionContext ctx)
 	{
 		String tableName = ctx.IDENTIFIER().getText();
@@ -163,17 +175,6 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 		}
 		return new CreateIndex(index, table, defs, unique);
 	}
-	
-	public ArrayList<Integer> visitColOrder(SelectParser.ColOrderContext ctx)
-	{
-		ArrayList<Integer> colOrder = new ArrayList<Integer>();
-		for (TerminalNode node : ctx.INTEGER())
-		{
-			colOrder.add(Integer.parseInt(node.getText().trim()));
-		}
-		
-		return colOrder;
-	}
 
 	@Override
 	public CreateTable visitCreateTable(SelectParser.CreateTableContext ctx)
@@ -207,21 +208,30 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 		{
 			type = 1;
 		}
-		
+
 		ArrayList<Integer> colOrder = null;
 		if (ctx.colOrder() != null)
 		{
 			colOrder = (ArrayList<Integer>)visit(ctx.colOrder());
 		}
 
+		CreateTable retval = null;
 		if (colOrder == null)
 		{
-			return new CreateTable(table, cols, pk, nodeGroupExp, nodeExp, deviceExp, type);
+			retval = new CreateTable(table, cols, pk, nodeGroupExp, nodeExp, deviceExp, type);
 		}
 		else
 		{
-			return new CreateTable(table, cols, pk, nodeGroupExp, nodeExp, deviceExp, type, colOrder);
+			retval = new CreateTable(table, cols, pk, nodeGroupExp, nodeExp, deviceExp, type, colOrder);
 		}
+
+		if (ctx.organization() != null)
+		{
+			ArrayList<Integer> organization = (ArrayList<Integer>)visit(ctx.organization());
+			retval.setOrganization(organization);
+		}
+
+		return retval;
 	}
 	
 	public CreateExternalTable visitCreateExternalTable(SelectParser.CreateExternalTableContext ctx)
@@ -753,6 +763,18 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 		}
 
 		return new OrderBy(keys);
+	}
+
+	@Override
+	public ArrayList<Integer> visitOrganization(SelectParser.OrganizationContext ctx)
+	{
+		ArrayList<Integer> organization = new ArrayList<Integer>();
+		for (TerminalNode node : ctx.INTEGER())
+		{
+			organization.add(Integer.parseInt(node.getText().trim()));
+		}
+
+		return organization;
 	}
 
 	@Override

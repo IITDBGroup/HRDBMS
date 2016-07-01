@@ -56,7 +56,7 @@ public class StartWorkersThread extends HRDBMSThread
 				{
 					HRDBMSWorker.getHParms().getProperty("hrdbms_user");
 					HRDBMSWorker.logger.info("Starting worker " + host);
-					final String command1 = "cd " + wd + "; ulimit -n 102400; ulimit -u 3000000; nohup " + cmd + " -Xmx" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xms" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xss" + HRDBMSWorker.getHParms().getProperty("stack_size") + " " + HRDBMSWorker.getHParms().getProperty("jvm_args") + " -cp HRDBMS.jar:. com.exascale.managers.HRDBMSWorker " + HRDBMSWorker.TYPE_WORKER + " > /dev/null 2>&1 &";
+					final String command1 = "cd " + wd + "; ulimit -n " + HRDBMSWorker.getHParms().getProperty("max_open_files") + "; ulimit -u 100000; nohup " + cmd + " -Xmx" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xms" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xss" + HRDBMSWorker.getHParms().getProperty("stack_size") + " " + HRDBMSWorker.getHParms().getProperty("jvm_args") + " -cp HRDBMS.jar:. com.exascale.managers.HRDBMSWorker " + HRDBMSWorker.TYPE_WORKER + " &";
 					try
 					{
 

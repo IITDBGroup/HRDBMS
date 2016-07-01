@@ -1,6 +1,11 @@
 package com.exascale.optimizer;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Field;
@@ -38,18 +43,22 @@ import com.exascale.tables.Schema.FieldValue;
 import com.exascale.tables.Schema.Row;
 import com.exascale.tables.Schema.RowIterator;
 import com.exascale.tables.Transaction;
+import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.ThreadPoolThread;
 
 public final class TableScanOperator implements Operator, Serializable
 {
 	private static int PREFETCH_REQUEST_SIZE_STATIC;
 	private static int PAGES_IN_ADVANCE_STATIC;
+	private static int MAX_PBPE_TIME;
+	public static AtomicInteger tsoCount = new AtomicInteger(0);
 
 	private static sun.misc.Unsafe unsafe;
 	private static long offset;
 
-	public static MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>> noResults = new MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>>();
+	public static MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>> noResults;
 	public static AtomicInteger skippedPages = new AtomicInteger(0);
+
 	static
 	{
 		try
@@ -57,21 +66,45 @@ public final class TableScanOperator implements Operator, Serializable
 			HParms hparms = HRDBMSWorker.getHParms();
 			PREFETCH_REQUEST_SIZE_STATIC = Integer.parseInt(hparms.getProperty("prefetch_request_size")); // 80
 			PAGES_IN_ADVANCE_STATIC = Integer.parseInt(hparms.getProperty("pages_in_advance")); // 40
+			MAX_PBPE_TIME = Integer.parseInt(hparms.getProperty("max_pbpe_time"));
 			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
 			f.setAccessible(true);
 			unsafe = (sun.misc.Unsafe)f.get(null);
 			final Field fieldToUpdate = ArrayList.class.getDeclaredField("elementData");
 			// get unsafe offset to this field
 			offset = unsafe.objectFieldOffset(fieldToUpdate);
+
+			File file = new File("pbpe.dat");
+			if (file.exists())
+			{
+				try
+				{
+					ObjectInputStream in = new ObjectInputStream(new FileInputStream("pbpe.dat"));
+					noResults = (MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>>)in.readObject();
+					in.close();
+				}
+				catch (Exception e)
+				{
+					noResults = new MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>>();
+				}
+			}
+			else
+			{
+				noResults = new MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>>();
+			}
+
+			new PBPEThread().start();
 		}
 		catch (Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 		}
 	}
+
 	private int PREFETCH_REQUEST_SIZE;
 
 	private int PAGES_IN_ADVANCE;
+
 	private HashMap<String, String> cols2Types = new HashMap<String, String>();
 	private HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
 	private TreeMap<Integer, String> pos2Col = new TreeMap<Integer, String>();
@@ -118,7 +151,6 @@ public final class TableScanOperator implements Operator, Serializable
 	private transient AtomicLong received;
 	private transient volatile boolean demReceived;
 	private int tType = 0;
-
 	private volatile transient HashSet<Integer> referencesHash = null;
 
 	public TableScanOperator(String schema, String name, MetaData meta, HashMap<String, Integer> cols2Pos, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, TreeMap<Integer, String> tablePos2Col, HashMap<String, String> tableCols2Types, HashMap<String, Integer> tableCols2Pos) throws Exception
@@ -135,15 +167,6 @@ public final class TableScanOperator implements Operator, Serializable
 		received = new AtomicLong(0);
 	}
 
-	// private static long MAX_PAGES;
-
-	// static
-	// {
-	// MAX_PAGES =
-	// (Long.parseLong(HRDBMSWorker.getHParms().getProperty("bp_pages")) /
-	// MetaData.getNumDevices()) / 15;
-	// }
-
 	public TableScanOperator(String schema, String name, MetaData meta, Transaction tx) throws Exception
 	{
 		this.meta = meta;
@@ -157,6 +180,15 @@ public final class TableScanOperator implements Operator, Serializable
 		tableCols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
 		received = new AtomicLong(0);
 	}
+
+	// private static long MAX_PAGES;
+
+	// static
+	// {
+	// MAX_PAGES =
+	// (Long.parseLong(HRDBMSWorker.getHParms().getProperty("bp_pages")) /
+	// MetaData.getNumDevices()) / 15;
+	// }
 
 	public TableScanOperator(String schema, String name, MetaData meta, Transaction tx, boolean releaseLocks) throws Exception
 	{
@@ -426,7 +458,7 @@ public final class TableScanOperator implements Operator, Serializable
 
 	@Override
 	public void close() throws Exception
-	{	
+	{
 		for (final Operator o : children)
 		{
 			try
@@ -1424,7 +1456,7 @@ public final class TableScanOperator implements Operator, Serializable
 				retval += (", (" + entry.getValue().toString()) + ")";
 			}
 		}
-		
+
 		retval += (" : " + cols2Pos);
 
 		return retval;
@@ -1767,10 +1799,15 @@ public final class TableScanOperator implements Operator, Serializable
 					int get3 = get;
 					int skip3 = skip;
 
-					PREFETCH_REQUEST_SIZE = layout.size() * PREFETCH_REQUEST_SIZE_STATIC / cols.size();
+					PREFETCH_REQUEST_SIZE = PREFETCH_REQUEST_SIZE_STATIC * layout.size() / cols.size();
+					if (PREFETCH_REQUEST_SIZE < layout.size() * 2)
+					{
+						PREFETCH_REQUEST_SIZE = layout.size() * 2;
+					}
+					int MAX_PAGES_IN_ADVANCE = PREFETCH_REQUEST_SIZE * 2;
 
 					RequestPagesThread raThread = null;
-					int MAX_PAGES_IN_ADVANCE = PREFETCH_REQUEST_SIZE * 2;
+					ArrayList<Integer> skipped = new ArrayList<Integer>();
 
 					while (onPage < numBlocks)
 					{
@@ -1782,6 +1819,7 @@ public final class TableScanOperator implements Operator, Serializable
 							}
 
 							BufferManager.updateProgress(this, onPage);
+
 							if (!sample)
 							{
 								// Block[] toRequest = new Block[lastRequested +
@@ -1796,11 +1834,12 @@ public final class TableScanOperator implements Operator, Serializable
 									if ((lastRequested + i + 1) % layout.size() == 1)
 									{
 										Block block = new Block(in, lastRequested + i + 1);
-										if (hshm != null)
+										if (hshm != null && filter != null)
 										{
 											Set<HashSet<HashMap<Filter, Filter>>> filters = noResults.get(block);
-											if (filter != null && filters.contains(hshm))
+											if (filters.size() > 0 && !canSatisfy(hshm, filters))
 											{
+												skipped.add(lastRequested + i + 1);
 												i++;
 												continue;
 											}
@@ -1894,8 +1933,15 @@ public final class TableScanOperator implements Operator, Serializable
 						Block thisBlock = new Block(in, onPage);
 						if (hshm != null)
 						{
-							Set<HashSet<HashMap<Filter, Filter>>> filters = noResults.get(thisBlock);
-							if (filter != null && filters.contains(hshm))
+							// Set<HashSet<HashMap<Filter, Filter>>> filters =
+							// noResults.get(thisBlock);
+							// if (filter != null && !canSatisfy(hshm, filters))
+							// {
+							// skippedPages.getAndIncrement();
+							// onPage += layout.size();
+							// continue;
+							// }
+							if (skipped.contains(onPage))
 							{
 								skippedPages.getAndIncrement();
 								onPage += layout.size();
@@ -1920,17 +1966,17 @@ public final class TableScanOperator implements Operator, Serializable
 						outer: while (rit.hasNext())
 						{
 							Object o = rit.next();
-							ArrayList<FieldValue> r = null;
+							FieldValue[] r = null;
 							RID rid = null;
 							if (getRID)
 							{
 								Map.Entry entry = (Map.Entry)o;
 								rid = (RID)entry.getKey();
-								r = (ArrayList<FieldValue>)entry.getValue();
+								r = (FieldValue[])entry.getValue();
 							}
 							else
 							{
-								r = (ArrayList<FieldValue>)o;
+								r = (FieldValue[])o;
 							}
 
 							int j = 0;
@@ -1939,7 +1985,7 @@ public final class TableScanOperator implements Operator, Serializable
 							{
 								size = fetchPos.size();
 							}
-							catch(Exception e)
+							catch (Exception e)
 							{
 								if (forceDone)
 								{
@@ -1954,37 +2000,49 @@ public final class TableScanOperator implements Operator, Serializable
 								}
 							}
 							row.clear();
-							while (j < size)
-							{
-								if (!getRID)
-								{
-									row.add(r.get(rowToIterator.get(j)).getValue());
-								}
-								else
-								{
-									if (j >= 4)
-									{
 
-										row.add(r.get(rowToIterator.get(j)).getValue());
-									}
-									else if (j == 0)
+							synchronized (r)
+							{
+								while (j < size)
+								{
+									if (!getRID)
 									{
-										row.add(rid.getNode());
+										try
+										{
+											row.add(r[rowToIterator.get(j)].getValue());
+										}
+										catch (NullPointerException e)
+										{
+											HRDBMSWorker.logger.debug("Row is " + r);
+											throw e;
+										}
 									}
-									else if (j == 1)
+									else
 									{
-										row.add(rid.getDevice());
+										if (j >= 4)
+										{
+
+											row.add(r[rowToIterator.get(j)].getValue());
+										}
+										else if (j == 0)
+										{
+											row.add(rid.getNode());
+										}
+										else if (j == 1)
+										{
+											row.add(rid.getDevice());
+										}
+										else if (j == 2)
+										{
+											row.add(rid.getBlockNum());
+										}
+										else if (j == 3)
+										{
+											row.add(rid.getRecNum());
+										}
 									}
-									else if (j == 2)
-									{
-										row.add(rid.getBlockNum());
-									}
-									else if (j == 3)
-									{
-										row.add(rid.getRecNum());
-									}
+									j++;
 								}
-								j++;
 							}
 
 							{
@@ -3136,14 +3194,305 @@ public final class TableScanOperator implements Operator, Serializable
 		@Override
 		public final void run()
 		{
-			if (tType == 0)
+			tsoCount.incrementAndGet();
+
+			try
 			{
-				rowTableRT();
+				if (tType == 0)
+				{
+					rowTableRT();
+				}
+				else
+				{
+					colTableRT();
+				}
 			}
-			else
+			catch (Exception e)
 			{
-				colTableRT();
+				HRDBMSWorker.logger.debug("", e);
 			}
+
+			tsoCount.decrementAndGet();
+		}
+
+		private boolean canSatisfy(HashSet<HashMap<Filter, Filter>> hshm, Set<HashSet<HashMap<Filter, Filter>>> filters)
+		{
+			if (filters.contains(hshm))
+			{
+				HRDBMSWorker.logger.debug("Skipping page because of exact match");
+				return false;
+			}
+
+			long start = System.currentTimeMillis();
+			ArrayList<Filter> ands = new ArrayList<Filter>();
+			for (HashMap<Filter, Filter> hm : hshm)
+			{
+				if (hm.size() == 1)
+				{
+					for (Filter f : hm.keySet())
+					{
+						if (f.leftIsColumn() && !f.rightIsColumn() && (f.op().equals("E") || f.op().equals("G") || f.op().equals("L") || f.op().equals("GE") || f.op().equals("LE")))
+						{
+							ands.add(f);
+						}
+					}
+				}
+			}
+
+			if (ands.size() == 0)
+			{
+				return true;
+			}
+
+			long end = System.currentTimeMillis();
+			if (end - start > MAX_PBPE_TIME)
+			{
+				return true;
+			}
+
+			// if we can prove that one of the filters in "ands" cannot be
+			// satisfied, we can return false
+			ArrayList<Filter> notSatisfied = new ArrayList<Filter>();
+			ArrayList<Filter> ranges = new ArrayList<Filter>();
+			for (HashSet<HashMap<Filter, Filter>> hshm2 : filters)
+			{
+				if (hshm2.size() == 1)
+				{
+					for (HashMap<Filter, Filter> hm : hshm2)
+					{
+						if (hm.size() == 1)
+						{
+							for (Filter f : hm.keySet())
+							{
+								if (f.leftIsColumn() && !f.rightIsColumn())
+								{
+									notSatisfied.add(f);
+								}
+							}
+						}
+					}
+				}
+				else if (hshm2.size() == 2)
+				{
+					Filter l = null;
+					Filter g = null;
+					String col = null;
+					for (HashMap<Filter, Filter> hm : hshm2)
+					{
+						if (hm.size() == 1)
+						{
+							for (Filter f : hm.keySet())
+							{
+								if (f.leftIsColumn() && !f.rightIsColumn())
+								{
+									if (f.op().equals("L") || f.op().equals("LE"))
+									{
+										if (col == null || f.leftColumn().equals(col))
+										{
+											l = f;
+											col = f.leftColumn();
+										}
+									}
+									else if (f.op().equals("G") || f.op().equals("GE"))
+									{
+										if (col == null || f.leftColumn().equals(col))
+										{
+											g = f;
+											col = f.leftColumn();
+										}
+									}
+								}
+							}
+						}
+					}
+
+					if (l != null && g != null)
+					{
+						ranges.add(g);
+						ranges.add(l);
+					}
+				}
+			}
+
+			end = System.currentTimeMillis();
+			if (end - start > MAX_PBPE_TIME)
+			{
+				return true;
+			}
+
+			if (notSatisfied.size() > 0)
+			{
+				for (Filter ns : notSatisfied)
+				{
+					for (Filter f : ands)
+					{
+						if (f.equals(ns))
+						{
+							HRDBMSWorker.logger.debug("Skipping page because of exact match of anded predicate");
+							return false;
+						}
+
+						if (ns.leftColumn().equals(f.leftColumn()))
+						{
+							if (ns.op().equals("G"))
+							{
+								Object nsVal = ns.rightLiteral();
+								if (f.op().equals("E") || f.op().equals("G") || f.op().equals("GE"))
+								{
+									Object fVal = f.rightLiteral();
+									if (((Comparable)nsVal).compareTo(fVal) < 0)
+									{
+										HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
+										return false;
+									}
+
+								}
+							}
+							else if (ns.op().equals("GE"))
+							{
+								Object nsVal = ns.rightLiteral();
+								if (f.op().equals("E") || f.op().equals("G") || f.op().equals("GE"))
+								{
+									Object fVal = f.rightLiteral();
+									if (((Comparable)nsVal).compareTo(fVal) < 1)
+									{
+										HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
+										return false;
+									}
+
+								}
+							}
+							else if (ns.op().equals("L"))
+							{
+								Object nsVal = ns.rightLiteral();
+								if (f.op().equals("E") || f.op().equals("L") || f.op().equals("LE"))
+								{
+									Object fVal = f.rightLiteral();
+									if (((Comparable)nsVal).compareTo(fVal) > 0)
+									{
+										HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
+										return false;
+									}
+
+								}
+							}
+							else if (ns.op().equals("LE"))
+							{
+								Object nsVal = ns.rightLiteral();
+								if (f.op().equals("E") || f.op().equals("L") || f.op().equals("LE"))
+								{
+									Object fVal = f.rightLiteral();
+									if (((Comparable)nsVal).compareTo(fVal) > -1)
+									{
+										HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
+										return false;
+									}
+
+								}
+							}
+						}
+					}
+
+					end = System.currentTimeMillis();
+					if (end - start > MAX_PBPE_TIME)
+					{
+						return true;
+					}
+				}
+			}
+
+			boolean foundL = false;
+			boolean foundG = false;
+			int gIndex = -1;
+			String col = null;
+			if (ranges.size() > 0)
+			{
+				int index = 0;
+				for (Filter ns : ranges)
+				{
+					for (Filter f : ands)
+					{
+						if (ns.leftColumn().equals(f.leftColumn()))
+						{
+							if (ns.op().equals("G"))
+							{
+								Object nsVal = ns.rightLiteral();
+								if (f.op().equals("G") || f.op().equals("GE"))
+								{
+									Object fVal = f.rightLiteral();
+									if (((Comparable)nsVal).compareTo(fVal) < 0)
+									{
+										foundG = true;
+										gIndex = index;
+										HRDBMSWorker.logger.debug("Found G = " + ns);
+										col = f.leftColumn();
+									}
+
+								}
+							}
+							else if (ns.op().equals("GE"))
+							{
+								Object nsVal = ns.rightLiteral();
+								if (f.op().equals("G") || f.op().equals("GE"))
+								{
+									Object fVal = f.rightLiteral();
+									if (((Comparable)nsVal).compareTo(fVal) < 1)
+									{
+										foundG = true;
+										gIndex = index;
+										HRDBMSWorker.logger.debug("Found G = " + ns);
+										col = f.leftColumn();
+									}
+
+								}
+							}
+							else if (ns.op().equals("L"))
+							{
+								Object nsVal = ns.rightLiteral();
+								if (f.op().equals("L") || f.op().equals("LE"))
+								{
+									Object fVal = f.rightLiteral();
+									if (((Comparable)nsVal).compareTo(fVal) > 0)
+									{
+										if (index == gIndex+1 && f.leftColumn().equals(col))
+										{
+											HRDBMSWorker.logger.debug("Found L = " + ns);
+											return false;
+										}
+									}
+
+								}
+							}
+							else if (ns.op().equals("LE"))
+							{
+								Object nsVal = ns.rightLiteral();
+								if (f.op().equals("L") || f.op().equals("LE"))
+								{
+									Object fVal = f.rightLiteral();
+									if (((Comparable)nsVal).compareTo(fVal) > -1)
+									{
+										if (index == gIndex+1 && f.leftColumn().equals(col))
+										{
+											HRDBMSWorker.logger.debug("Found L = " + ns);
+											return false;
+										}
+									}
+
+								}
+							}
+						}
+					}
+
+					index++;
+					end = System.currentTimeMillis();
+					if (end - start > MAX_PBPE_TIME)
+					{
+						return true;
+					}
+				}
+			}
+
+			return true;
 		}
 	}
 
@@ -3217,6 +3566,37 @@ public final class TableScanOperator implements Operator, Serializable
 				{
 				}
 				return;
+			}
+		}
+	}
+
+	private static class PBPEThread extends HRDBMSThread
+	{
+		@Override
+		public void run()
+		{
+			int sleep = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_externalize_interval_s")) * 1000;
+			while (true)
+			{
+				try
+				{
+					Thread.sleep(sleep);
+				}
+				catch (InterruptedException e)
+				{
+				}
+
+				try
+				{
+					ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream("pbpe.dat.new", false));
+					out.writeObject(noResults);
+					out.close();
+					new File("pbpe.dat.new").renameTo(new File("pbpe.dat"));
+				}
+				catch (Exception e)
+				{
+					HRDBMSWorker.logger.warn("", e);
+				}
 			}
 		}
 	}

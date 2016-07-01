@@ -1539,7 +1539,7 @@ public final class Index implements Serializable
 			{
 				col2 = filter.rightColumn();
 				val = filter.leftLiteral();
-				
+
 				if (op2.equals("L"))
 				{
 					op2 = "G";
@@ -2155,7 +2155,8 @@ public final class Index implements Serializable
 				final long temp = ((Long)keys[i].getValue());
 				// if (temp < 0)
 				// {
-				// HRDBMSWorker.logger.debug("Writing negative long in genKeyBytes");
+				// HRDBMSWorker.logger.debug("Writing negative long in
+				// genKeyBytes");
 				// }
 				bb.putLong(temp);
 			}
@@ -3060,6 +3061,14 @@ public final class Index implements Serializable
 
 		public IndexRecord(String file, int block, int offset, Transaction tx) throws Exception
 		{
+			// DEBUG
+			if (block > 16000000)
+			{
+				Exception e = new Exception();
+				HRDBMSWorker.logger.debug("Unusually high block num requested in IndexRecord constructor", e);
+			}
+			// DEBUG
+
 			this.tx = tx;
 			b = new Block(file, block);
 			off = offset;
@@ -3091,6 +3100,14 @@ public final class Index implements Serializable
 
 		public IndexRecord(String file, int block, int offset, Transaction tx, boolean x) throws Exception
 		{
+			// DEBUG
+			if (block > 16000000)
+			{
+				Exception e = new Exception();
+				HRDBMSWorker.logger.debug("Unusually high block num requested in IndexRecord constructor", e);
+			}
+			// DEBUG
+
 			this.tx = tx;
 			b = new Block(file, block);
 			p = myPages.get(b);
@@ -3129,6 +3146,14 @@ public final class Index implements Serializable
 
 		public IndexRecord(String file, int block, int offset, Transaction tx, boolean x, Page p) throws Exception
 		{
+			// DEBUG
+			if (block > 16000000)
+			{
+				Exception e = new Exception();
+				HRDBMSWorker.logger.debug("Unusually high block num requested in IndexRecord constructor", e);
+			}
+			// DEBUG
+
 			this.tx = tx;
 			this.p = p;
 			if (p == null)
@@ -3299,7 +3324,8 @@ public final class Index implements Serializable
 						final int temp = p.getInt(o);
 						// if (temp < 0)
 						// {
-						// HRDBMSWorker.logger.debug("Read negativge int from index");
+						// HRDBMSWorker.logger.debug("Read negativge int from
+						// index");
 						// }
 						retval.add(temp);
 						o += 4;
@@ -3335,7 +3361,8 @@ public final class Index implements Serializable
 						final long temp = p.getLong(o);
 						// if (temp < 0)
 						// {
-						// HRDBMSWorker.logger.debug("Read negative long from index: "
+						// HRDBMSWorker.logger.debug("Read negative long from
+						// index: "
 						// + temp);
 						// }
 						retval.add(temp);

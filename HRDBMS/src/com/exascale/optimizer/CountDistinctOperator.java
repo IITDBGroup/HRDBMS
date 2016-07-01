@@ -45,9 +45,9 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 	private String output;
 	private transient final MetaData meta;
 
-	private int NUM_GROUPS = 16;
+	private long NUM_GROUPS = 16;
 
-	private int childCard = 16 * 16;
+	private long childCard = 16 * 16;
 
 	public CountDistinctOperator(String input, String output, MetaData meta)
 	{
@@ -62,8 +62,8 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 		prev.put(OperatorUtils.readLong(in), value);
 		value.input = OperatorUtils.readString(in, prev);
 		value.output = OperatorUtils.readString(in, prev);
-		value.NUM_GROUPS = OperatorUtils.readInt(in);
-		value.childCard = OperatorUtils.readInt(in);
+		value.NUM_GROUPS = OperatorUtils.readLong(in);
+		value.childCard = OperatorUtils.readLong(in);
 		return value;
 	}
 
@@ -117,11 +117,11 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.writeString(input, out, prev);
 		OperatorUtils.writeString(output, out, prev);
-		OperatorUtils.writeInt(NUM_GROUPS, out);
-		OperatorUtils.writeInt(childCard, out);
+		OperatorUtils.writeLong(NUM_GROUPS, out);
+		OperatorUtils.writeLong(childCard, out);
 	}
 
-	public void setChildCard(int card)
+	public void setChildCard(long card)
 	{
 		childCard = card;
 	}
@@ -139,7 +139,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 	}
 
 	@Override
-	public void setNumGroups(int groups)
+	public void setNumGroups(long groups)
 	{
 		NUM_GROUPS = groups;
 	}
@@ -148,8 +148,8 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 	{
 		// private final DiskBackedALOHashMap<AtomicLong> results = new
 		// DiskBackedALOHashMap<AtomicLong>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
-		private final ConcurrentHashMap<ArrayList<Object>, AtomicLong> results = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS, 0.75f, 6 * ResourceManager.cpus);
-		private ConcurrentHashMap<byte[], byte[]> hashSet;
+		private ConcurrentHashMap<ArrayList<Object>, AtomicLong> results = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS <= Integer.MAX_VALUE ? (int)NUM_GROUPS : Integer.MAX_VALUE, 0.75f, 6 * ResourceManager.cpus);
+		private ConcurrentHashMap<ByteBuffer, ByteBuffer> hashSet;
 		private final int pos;
 		private boolean inMem = true;
 		private ArrayList<String> externalFiles;
@@ -176,7 +176,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 
 			if (inMem)
 			{
-				hashSet = new ConcurrentHashMap<byte[], byte[]>(childCard);
+				hashSet = new ConcurrentHashMap<ByteBuffer, ByteBuffer>(childCard <= Integer.MAX_VALUE ? (int)childCard : Integer.MAX_VALUE);
 			}
 			else
 			{
@@ -207,6 +207,8 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 		@Override
 		public void close()
 		{
+			hashSet = null;
+			results = null;
 		}
 
 		@Override
@@ -407,7 +409,8 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 					types = types1;
 				}
 				byte[] c = toBytes(consolidated, types);
-				if (hashSet.putIfAbsent(c, c) == null)
+				ByteBuffer bb = ByteBuffer.wrap(c);
+				if (hashSet.putIfAbsent(bb, bb) == null)
 				{
 					final AtomicLong al = results.get(group);
 					if (al != null)
@@ -617,17 +620,6 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 					retvalBB.putInt(temp.length);
 					retvalBB.put(temp);
 				}
-				// else if (retval[i] == 6)
-				// {
-				// retvalBB.putLong(((AtomicLong)o).get());
-				// }
-				// else if (retval[i] == 7)
-				// {
-				// retvalBB.putDouble(((AtomicBigDecimal)o).get().doubleValue());
-				// }
-				else if (types[i] == 8)
-				{
-				}
 
 				i++;
 			}
@@ -704,6 +696,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 		@Override
 		public void run()
 		{
+			// Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
 			try
 			{
 				int length = 0;
@@ -752,7 +745,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 		{
 			try
 			{
-				this.fc = new BufferedFileChannel(fc);
+				this.fc = new BufferedFileChannel(fc, 8 * 1024 * 1024);
 			}
 			catch (Exception e)
 			{

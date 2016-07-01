@@ -1158,19 +1158,21 @@ public class SQLParser
 				}
 			}
 		}
-		
+
 		if (createTable.getType() != 0 && colDefs.size() > 26212)
 		{
 			throw new ParseException("Maximum number of columns for a column table is 26212");
 		}
-		
+
+		CreateTableOperator retval = null;
+
 		if (createTable.getType() != 0 && createTable.getColOrder() != null)
 		{
 			if (colDefs.size() != createTable.getColOrder().size())
 			{
 				throw new ParseException("Explicit COLORDER defined on a column table but it had the wrong number of columns");
 			}
-			
+
 			int z = 1;
 			boolean ok = true;
 			ArrayList<Integer> colOrder = createTable.getColOrder();
@@ -1182,16 +1184,39 @@ public class SQLParser
 					break;
 				}
 			}
-			
+
 			if (!ok)
 			{
 				throw new ParseException("COLORDER clause is the right size but is invalid");
 			}
-			
-			return new CreateTableOperator(schema, tbl, colDefs, orderedPks, createTable.getNodeGroupExp(), createTable.getNodeExp(), createTable.getDeviceExp(), meta, createTable.getType(), colOrder); 
+
+			retval = new CreateTableOperator(schema, tbl, colDefs, orderedPks, createTable.getNodeGroupExp(), createTable.getNodeExp(), createTable.getDeviceExp(), meta, createTable.getType(), colOrder);
+		}
+		else
+		{
+			retval = new CreateTableOperator(schema, tbl, colDefs, orderedPks, createTable.getNodeGroupExp(), createTable.getNodeExp(), createTable.getDeviceExp(), meta, createTable.getType());
 		}
 
-		return new CreateTableOperator(schema, tbl, colDefs, orderedPks, createTable.getNodeGroupExp(), createTable.getNodeExp(), createTable.getDeviceExp(), meta, createTable.getType());
+		if (createTable.getType() != 0 && createTable.getOrganization() != null)
+		{
+			ArrayList<Integer> organization = createTable.getOrganization();
+			if (organization.size() < 1 || organization.size() > colDefs.size())
+			{
+				throw new ParseException("ORGANIZATION clause has an invalid size");
+			}
+
+			for (int index : organization)
+			{
+				if (index < 1 || index > colDefs.size())
+				{
+					throw new ParseException("There is an invalid entry in the ORGANIZATION clause (" + index + ")");
+				}
+			}
+
+			retval.setOrganization(organization);
+		}
+
+		return retval;
 	}
 	
 	private Operator buildOperatorTreeFromCreateExternalTable(CreateExternalTable createExternalTable) throws Exception
@@ -6437,6 +6462,15 @@ public class SQLParser
 		}
 
 		op = buildOperatorTreeFromSelectClause(select.getSelect(), op, select, subquery);
+
+		/*
+		 * for (String col : op.getCols2Pos().keySet()) { if
+		 * (!col.contains(".")) { ok = false; badCol = col; break; } }
+		 *
+		 * if (!ok) { throw new Exception("Error processing the column " +
+		 * badCol + " in the select clause. It does not contain a period."); }
+		 */
+
 		// handle orderBy
 		if (select.getOrderBy() != null)
 		{

@@ -20,6 +20,7 @@ import com.exascale.misc.MurmurHash;
 public final class NetworkHashAndSendOperator extends NetworkSendOperator
 {
 	private static sun.misc.Unsafe unsafe;
+
 	static
 	{
 		try

@@ -75,147 +75,29 @@ public final class Phase1
 
 	public long card(Operator op) throws Exception
 	{
-		if (op instanceof AntiJoinOperator)
-		{
-			return card(op.children().get(0));
-		}
-
-		if (op instanceof CaseOperator)
-		{
-			return card(op.children().get(0));
-		}
-
-		if (op instanceof ConcatOperator)
-		{
-			return card(op.children().get(0));
-		}
-
-		if (op instanceof DateMathOperator)
-		{
-			return card(op.children().get(0));
-		}
-
-		if (op instanceof ExceptOperator)
-		{
-			return card(op.children().get(0));
-		}
-
-		if (op instanceof ExtendOperator)
-		{
-			return card(op.children().get(0));
-		}
-
-		if (op instanceof ExtendObjectOperator)
-		{
-			return card(op.children().get(0));
-		}
-
 		if (op instanceof HashJoinOperator)
 		{
-			HashSet<HashMap<Filter, Filter>> hshm = ((HashJoinOperator)op).getHSHM();
-			double max = -1;
-			for (HashMap<Filter, Filter> hm : hshm)
-			{
-				double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
-				if (temp > max)
-				{
-					max = temp;
-				}
-			}
-			long retval = (long)(card(op.children().get(0)) * max * card(op.children().get(1)));
-			if (retval < card(op.children().get(0)))
-			{
-				retval = card(op.children().get(0));
-			}
-			
-			if (retval < card(op.children().get(1)))
-			{
-				retval = card(op.children().get(1));
-			}
-			if (retval == 0)
-			{
-				retval = 1;
-			}
-			return retval;
+			return cardHJO(op);
 		}
 
 		if (op instanceof IntersectOperator)
 		{
-			long lCard = card(op.children().get(0));
-			long rCard = card(op.children().get(1));
-
-			if (lCard <= rCard)
-			{
-				if (lCard == 0)
-				{
-					lCard = 1;
-				}
-				return lCard;
-			}
-			else
-			{
-				if (rCard == 0)
-				{
-					rCard = 1;
-				}
-				return rCard;
-			}
+			return cardSetI(op);
 		}
 
 		if (op instanceof MultiOperator)
 		{
-			// return card(op.children().get(0));
-			final long groupCard = meta.getColgroupCard(((MultiOperator)op).getKeys(), root, tx, op);
-			if (groupCard > card(op.children().get(0)))
-			{
-				return card(op.children().get(0));
-			}
-
-			return groupCard;
+			return cardMO(op);
 		}
 
 		if (op instanceof NestedLoopJoinOperator)
 		{
-			HashSet<HashMap<Filter, Filter>> hshm = ((NestedLoopJoinOperator)op).getHSHM();
-			double max = -1;
-			for (HashMap<Filter, Filter> hm : hshm)
-			{
-				double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
-				if (temp > max)
-				{
-					max = temp;
-				}
-			}
-			long retval = (long)(card(op.children().get(0)) * max * card(op.children().get(1)));
-			if (retval < card(op.children().get(0)))
-			{
-				retval = card(op.children().get(0));
-			}
-			
-			if (retval < card(op.children().get(1)))
-			{
-				retval = card(op.children().get(1));
-			}
-			if (retval == 0)
-			{
-				retval = 1;
-			}
-			return retval;
+			return cardNL(op);
 		}
 
 		if (op instanceof NetworkReceiveOperator)
 		{
-			long retval = 0;
-			for (final Operator o : op.children())
-			{
-				retval += card(o);
-			}
-
-			if (retval == 0)
-			{
-				retval = 1;
-			}
-			return retval;
+			return cardRX(op);
 		}
 
 		if (op instanceof NetworkHashAndSendOperator)
@@ -228,42 +110,9 @@ public final class Phase1
 			return card(op.children().get(0)) / ((NetworkSendRROperator)op).parents().size();
 		}
 
-		if (op instanceof NetworkSendOperator)
-		{
-			return card(op.children().get(0));
-		}
-
 		if (op instanceof ProductOperator)
 		{
-			long temp = card(op.children().get(0)) * card(op.children().get(1));
-			if (temp < 0)
-			{
-				return Long.MAX_VALUE;
-			}
-			else
-			{
-				return temp;
-			}
-		}
-
-		if (op instanceof ProjectOperator)
-		{
-			return card(op.children().get(0));
-		}
-
-		if (op instanceof RenameOperator)
-		{
-			return card(op.children().get(0));
-		}
-
-		if (op instanceof ReorderOperator)
-		{
-			return card(op.children().get(0));
-		}
-
-		if (op instanceof RootOperator)
-		{
-			return card(op.children().get(0));
+			return cardX(op);
 		}
 
 		if (op instanceof SelectOperator)
@@ -271,73 +120,22 @@ public final class Phase1
 			return (long)(((SelectOperator)op).likelihood(root, tx) * card(op.children().get(0)));
 		}
 
-		if (op instanceof SemiJoinOperator)
-		{
-			return card(op.children().get(0));
-		}
-
-		if (op instanceof SortOperator)
-		{
-			return card(op.children().get(0));
-		}
-
-		if (op instanceof SubstringOperator)
-		{
-			return card(op.children().get(0));
-		}
-
 		if (op instanceof TopOperator)
 		{
-			long retval = ((TopOperator)op).getRemaining();
-			long retval2 = card(op.children().get(0));
-
-			if (retval2 < retval)
-			{
-				if (retval2 == 0)
-				{
-					retval2 = 1;
-				}
-				return retval2;
-			}
-			else
-			{
-				if (retval == 0)
-				{
-					retval = 1;
-				}
-				return retval;
-			}
+			return cardTop(op);
 		}
 
 		if (op instanceof UnionOperator)
 		{
-			long retval = 0;
-			for (final Operator o : op.children())
-			{
-				retval += card(o);
-			}
-
-			if (retval == 0)
-			{
-				retval = 1;
-			}
-			return retval;
-		}
-
-		if (op instanceof YearOperator)
-		{
-			return card(op.children().get(0));
+			return cardUnion(op);
 		}
 
 		if (op instanceof TableScanOperator)
 		{
-			PartitionMetaData pmd = meta.getPartMeta(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx);
-			int numNodes = pmd.getNumNodes();
-			return (long)((1.0 / numNodes) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx));
+			return cardTSO(op);
 		}
 
-		HRDBMSWorker.logger.error("Unknown operator in card() in Phase1: " + op.getClass());
-		throw new Exception("Unknown operator in card() in Phase1: " + op.getClass());
+		return card(op.children().get(0));
 	}
 
 	public void optimize() throws Exception
@@ -369,6 +167,71 @@ public final class Phase1
 		// printTree(root, 0); //DEBUG
 	}
 
+	private double adjust(Operator left, Operator right) throws Exception
+	{
+		double retval = 1.0;
+		if (card(left) < card(right))
+		{
+			Operator op = left;
+			while (true)
+			{
+				if (op instanceof SelectOperator)
+				{
+					retval *= ((SelectOperator)op).likelihood(tx);
+				}
+				else if (op instanceof ProjectOperator)
+				{
+				}
+				else if (op instanceof RenameOperator)
+				{
+				}
+				else if (op instanceof ReorderOperator)
+				{
+				}
+				else if (op instanceof TableScanOperator)
+				{
+					return retval;
+				}
+				else
+				{
+					return 1.0;
+				}
+
+				op = op.children().get(0);
+			}
+		}
+		else
+		{
+			Operator op = right;
+			while (true)
+			{
+				if (op instanceof SelectOperator)
+				{
+					retval *= ((SelectOperator)op).likelihood(tx);
+				}
+				else if (op instanceof ProjectOperator)
+				{
+				}
+				else if (op instanceof RenameOperator)
+				{
+				}
+				else if (op instanceof ReorderOperator)
+				{
+				}
+				else if (op instanceof TableScanOperator)
+				{
+					return retval;
+				}
+				else
+				{
+					return 1.0;
+				}
+
+				op = op.children().get(0);
+			}
+		}
+	}
+
 	private boolean anyHope(Operator op)
 	{
 		while (op instanceof SelectOperator)
@@ -382,6 +245,171 @@ public final class Phase1
 		}
 
 		return true;
+	}
+
+	private long cardHJO(Operator op) throws Exception
+	{
+		HashSet<HashMap<Filter, Filter>> hshm = ((HashJoinOperator)op).getHSHM();
+		double max = -1;
+		for (HashMap<Filter, Filter> hm : hshm)
+		{
+			double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
+			if (temp > max)
+			{
+				max = temp;
+			}
+		}
+		long retval = (long)(card(op.children().get(0)) * max * card(op.children().get(1)));
+		if (retval < card(op.children().get(0)))
+		{
+			retval = card(op.children().get(0));
+		}
+
+		if (retval < card(op.children().get(1)))
+		{
+			retval = card(op.children().get(1));
+		}
+		if (retval == 0)
+		{
+			retval = 1;
+		}
+		return retval;
+	}
+
+	private long cardMO(Operator op) throws Exception
+	{
+		final long groupCard = meta.getColgroupCard(((MultiOperator)op).getKeys(), root, tx, op);
+		if (groupCard > card(op.children().get(0)))
+		{
+			return card(op.children().get(0));
+		}
+
+		return groupCard;
+	}
+
+	private long cardNL(Operator op) throws Exception
+	{
+		HashSet<HashMap<Filter, Filter>> hshm = ((NestedLoopJoinOperator)op).getHSHM();
+		double max = -1;
+		for (HashMap<Filter, Filter> hm : hshm)
+		{
+			double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
+			if (temp > max)
+			{
+				max = temp;
+			}
+		}
+		long retval = (long)(card(op.children().get(0)) * max * card(op.children().get(1)));
+		if (retval < card(op.children().get(0)))
+		{
+			retval = card(op.children().get(0));
+		}
+
+		if (retval < card(op.children().get(1)))
+		{
+			retval = card(op.children().get(1));
+		}
+		if (retval == 0)
+		{
+			retval = 1;
+		}
+		return retval;
+	}
+
+	private long cardRX(Operator op) throws Exception
+	{
+		long retval = 0;
+		for (final Operator o : op.children())
+		{
+			retval += card(o);
+		}
+
+		if (retval == 0)
+		{
+			retval = 1;
+		}
+		return retval;
+	}
+
+	private long cardSetI(Operator op) throws Exception
+	{
+		long lCard = card(op.children().get(0));
+		long rCard = card(op.children().get(1));
+
+		if (lCard <= rCard)
+		{
+			if (lCard == 0)
+			{
+				lCard = 1;
+			}
+			return lCard;
+		}
+		else
+		{
+			if (rCard == 0)
+			{
+				rCard = 1;
+			}
+			return rCard;
+		}
+	}
+
+	private long cardTop(Operator op) throws Exception
+	{
+		long retval = ((TopOperator)op).getRemaining();
+		long retval2 = card(op.children().get(0));
+
+		if (retval2 < retval)
+		{
+			if (retval2 == 0)
+			{
+				retval2 = 1;
+			}
+			return retval2;
+		}
+		else
+		{
+			if (retval == 0)
+			{
+				retval = 1;
+			}
+			return retval;
+		}
+	}
+
+	private long cardTSO(Operator op) throws Exception
+	{
+		PartitionMetaData pmd = meta.getPartMeta(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx);
+		int numNodes = pmd.getNumNodes();
+		return (long)((1.0 / numNodes) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx));
+	}
+
+	private long cardUnion(Operator op) throws Exception
+	{
+		long retval = 0;
+		for (final Operator o : op.children())
+		{
+			retval += card(o);
+		}
+
+		if (retval == 0)
+		{
+			retval = 1;
+		}
+		return retval;
+	}
+
+	private long cardX(Operator op) throws Exception
+	{
+		long temp = card(op.children().get(0)) * card(op.children().get(1));
+		if (temp < 0)
+		{
+			return Long.MAX_VALUE;
+		}
+		else
+		{
+			return temp;
+		}
 	}
 
 	private Operator cloneTree(Operator op) throws Exception
@@ -581,73 +609,37 @@ public final class Phase1
 							rights.add(filter.rightColumn());
 						}
 
-						likelihood *= (card(left) * card(right));
+						likelihood *= (card(left) * card(right) * adjust(left, right));
 						break;
 					}
 				}
 
-				if (left != null)
-				{
-					for (SelectOperator s2 : selects)
-					{
-						if (s2 != select)
-						{
-							ArrayList<Filter> filters2 = s2.getFilter();
-							Operator l2 = null;
-							Operator r2 = null;
-							for (Filter f2 : filters2)
-							{
-								if (f2.leftIsColumn() && f2.rightIsColumn())
-								{
-									l2 = getSubtreeForCol(f2.leftColumn(), subtrees);
-									r2 = getSubtreeForCol(f2.rightColumn(), subtrees);
-									if ((l2 == left && r2 == right) || (l2 == right && r2 == left))
-									{
-										if (l2 == left && r2 == right)
-										{
-											if (filters2.size() == 1 && f2.op().equals("E") && lefts.size() > 0)
-											{
-												lefts.add(f2.leftColumn());
-												rights.add(f2.rightColumn());
-											}
-											else
-											{
-												lefts.clear();
-												rights.clear();
-											}
-										}
-										else
-										{
-											if (filters2.size() == 1 && f2.op().equals("E") && lefts.size() > 0)
-											{
-												rights.add(f2.leftColumn());
-												lefts.add(f2.rightColumn());
-											}
-											else
-											{
-												lefts.clear();
-												rights.clear();
-											}
-										}
-										Double temp = likelihoodCache.get(s2.getFilter());
-										if (temp == null)
-										{
-											temp = meta.likelihood(new ArrayList<Filter>(s2.getFilter()), tx, clone);
-											likelihoodCache.put(s2.getFilter(), temp);
-										}
-										likelihood *= temp;
-										break;
-									}
-								}
-							}
-						}
-					}
-				}
+				/*
+				 * if (left != null) { for (SelectOperator s2 : selects) { if
+				 * (s2 != select) { ArrayList<Filter> filters2 = s2.getFilter();
+				 * Operator l2 = null; Operator r2 = null; for (Filter f2 :
+				 * filters2) { if (f2.leftIsColumn() && f2.rightIsColumn()) { l2
+				 * = getSubtreeForCol(f2.leftColumn(), subtrees); r2 =
+				 * getSubtreeForCol(f2.rightColumn(), subtrees); if ((l2 == left
+				 * && r2 == right) || (l2 == right && r2 == left)) { if (l2 ==
+				 * left && r2 == right) { if (filters2.size() == 1 &&
+				 * f2.op().equals("E") && lefts.size() > 0) {
+				 * lefts.add(f2.leftColumn()); rights.add(f2.rightColumn()); }
+				 * else { lefts.clear(); rights.clear(); } } else { if
+				 * (filters2.size() == 1 && f2.op().equals("E") && lefts.size()
+				 * > 0) { rights.add(f2.leftColumn());
+				 * lefts.add(f2.rightColumn()); } else { lefts.clear();
+				 * rights.clear(); } } Double temp =
+				 * likelihoodCache.get(s2.getFilter()); if (temp == null) { temp
+				 * = meta.likelihood(new ArrayList<Filter>(s2.getFilter()), tx,
+				 * clone); likelihoodCache.put(s2.getFilter(), temp); }
+				 * likelihood *= temp; break; } } } } } }
+				 */
 
 				/*
 				 * if (lefts.size() > 0 && rights.size() > 0) { String leftTable
 				 * = getTable(left); String rightTable = getTable(right);
-				 * 
+				 *
 				 * if (leftTable != null && rightTable != null) { String lschema
 				 * = leftTable.substring(0, leftTable.indexOf('.')); String
 				 * ltable = leftTable.substring(leftTable.indexOf('.') + 1);
@@ -657,7 +649,7 @@ public final class Phase1
 				 * PartitionMetaData lpmd = meta.getPartMeta(lschema, ltable,
 				 * tx); PartitionMetaData rpmd = meta.getPartMeta(rschema,
 				 * rtable, tx);
-				 * 
+				 *
 				 * if (lpmd.noNodeGroupSet() && rpmd.noNodeGroupSet()) { if
 				 * (lpmd.getNodeHash() != null &&
 				 * lefts.equals(lpmd.getNodeHash()) && rpmd.getNodeHash() !=
@@ -679,8 +671,8 @@ public final class Phase1
 			/*
 			 * if (minColocated <= minLikelihood * 2) { //
 			 * HRDBMSWorker.logger.debug("Chose " + minColocated); //DEBUG
-			 * minSelect = minSelect2; } else { //
-			 * HRDBMSWorker.logger.debug("Chose " + minLikelihood); //DEBUG }
+			 * minSelect = minSelect2; } else { // HRDBMSWorker.logger.debug(
+			 * "Chose " + minLikelihood); //DEBUG }
 			 */
 
 			selects.remove(minSelect);
@@ -718,7 +710,7 @@ public final class Phase1
 						{
 							pairs.add(pair);
 						}
-						likelihood *= (card(left) * card(right));
+						likelihood *= (card(left) * card(right) * adjust(left, right));
 					}
 					else if (current.getCols2Pos().containsKey(filter.rightColumn()))
 					{
@@ -739,45 +731,27 @@ public final class Phase1
 						{
 							pairs.add(pair);
 						}
-						likelihood *= (card(left) * card(right));
+						likelihood *= (card(left) * card(right) * adjust(left, right));
 					}
 
 					break;
 				}
 			}
 
-			if (left != null)
-			{
-				for (SelectOperator s2 : selects)
-				{
-					if (s2 != select)
-					{
-						ArrayList<Filter> filters2 = s2.getFilter();
-						Operator l2 = null;
-						Operator r2 = null;
-						for (Filter f2 : filters2)
-						{
-							if (f2.leftIsColumn() && f2.rightIsColumn())
-							{
-								l2 = getSubtreeForCol(f2.leftColumn(), subtrees);
-								r2 = getSubtreeForCol(f2.rightColumn(), subtrees);
-								if ((l2 == left && r2 == right) || (l2 == right && r2 == left))
-								{
-									Double temp = likelihoodCache.get(s2.getFilter());
-									if (temp == null)
-									{
-										temp = meta.likelihood(new ArrayList<Filter>(s2.getFilter()), tx, clone);
-										likelihoodCache.put(s2.getFilter(), temp);
-									}
-
-									likelihood *= temp;
-									break;
-								}
-							}
-						}
-					}
-				}
-			}
+			/*
+			 * if (left != null) { for (SelectOperator s2 : selects) { if (s2 !=
+			 * select) { ArrayList<Filter> filters2 = s2.getFilter(); Operator
+			 * l2 = null; Operator r2 = null; for (Filter f2 : filters2) { if
+			 * (f2.leftIsColumn() && f2.rightIsColumn()) { l2 =
+			 * getSubtreeForCol(f2.leftColumn(), subtrees); r2 =
+			 * getSubtreeForCol(f2.rightColumn(), subtrees); if ((l2 == left &&
+			 * r2 == right) || (l2 == right && r2 == left)) { Double temp =
+			 * likelihoodCache.get(s2.getFilter()); if (temp == null) { temp =
+			 * meta.likelihood(new ArrayList<Filter>(s2.getFilter()), tx,
+			 * clone); likelihoodCache.put(s2.getFilter(), temp); }
+			 *
+			 * likelihood *= temp; break; } } } } } }
+			 */
 
 			// HRDBMSWorker.logger.debug("Estimated join cardinality = " +
 			// likelihood); //DEBUG
@@ -832,73 +806,36 @@ public final class Phase1
 						rights.add(filter.rightColumn());
 					}
 
-					likelihood *= (card(left) * card(right));
+					likelihood *= (card(left) * card(right) * adjust(left, right));
 					break;
 				}
 			}
 
-			if (left != null)
-			{
-				for (SelectOperator s2 : selects)
-				{
-					if (s2 != select)
-					{
-						ArrayList<Filter> filters2 = s2.getFilter();
-						Operator l2 = null;
-						Operator r2 = null;
-						for (Filter f2 : filters2)
-						{
-							if (f2.leftIsColumn() && f2.rightIsColumn())
-							{
-								l2 = getSubtreeForCol(f2.leftColumn(), subtrees);
-								r2 = getSubtreeForCol(f2.rightColumn(), subtrees);
-								if ((l2 == left && r2 == right) || (l2 == right && r2 == left))
-								{
-									if (l2 == left && r2 == right)
-									{
-										if (filters2.size() == 1 && f2.op().equals("E") && lefts.size() > 0)
-										{
-											lefts.add(f2.leftColumn());
-											rights.add(f2.rightColumn());
-										}
-										else
-										{
-											lefts.clear();
-											rights.clear();
-										}
-									}
-									else
-									{
-										if (filters2.size() == 1 && f2.op().equals("E") && lefts.size() > 0)
-										{
-											rights.add(f2.leftColumn());
-											lefts.add(f2.rightColumn());
-										}
-										else
-										{
-											lefts.clear();
-											rights.clear();
-										}
-									}
-									Double temp = likelihoodCache.get(s2.getFilter());
-									if (temp == null)
-									{
-										temp = meta.likelihood(new ArrayList<Filter>(s2.getFilter()), tx, clone);
-										likelihoodCache.put(s2.getFilter(), temp);
-									}
-									likelihood *= temp;
-									break;
-								}
-							}
-						}
-					}
-				}
-			}
+			/*
+			 * if (left != null) { for (SelectOperator s2 : selects) { if (s2 !=
+			 * select) { ArrayList<Filter> filters2 = s2.getFilter(); Operator
+			 * l2 = null; Operator r2 = null; for (Filter f2 : filters2) { if
+			 * (f2.leftIsColumn() && f2.rightIsColumn()) { l2 =
+			 * getSubtreeForCol(f2.leftColumn(), subtrees); r2 =
+			 * getSubtreeForCol(f2.rightColumn(), subtrees); if ((l2 == left &&
+			 * r2 == right) || (l2 == right && r2 == left)) { if (l2 == left &&
+			 * r2 == right) { if (filters2.size() == 1 && f2.op().equals("E") &&
+			 * lefts.size() > 0) { lefts.add(f2.leftColumn());
+			 * rights.add(f2.rightColumn()); } else { lefts.clear();
+			 * rights.clear(); } } else { if (filters2.size() == 1 &&
+			 * f2.op().equals("E") && lefts.size() > 0) {
+			 * rights.add(f2.leftColumn()); lefts.add(f2.rightColumn()); } else
+			 * { lefts.clear(); rights.clear(); } } Double temp =
+			 * likelihoodCache.get(s2.getFilter()); if (temp == null) { temp =
+			 * meta.likelihood(new ArrayList<Filter>(s2.getFilter()), tx,
+			 * clone); likelihoodCache.put(s2.getFilter(), temp); } likelihood
+			 * *= temp; break; } } } } } }
+			 */
 
 			/*
 			 * if (lefts.size() > 0 && rights.size() > 0) { String leftTable =
 			 * getTable(left); String rightTable = getTable(right);
-			 * 
+			 *
 			 * if (leftTable != null && rightTable != null) { String lschema =
 			 * leftTable.substring(0, leftTable.indexOf('.')); String ltable =
 			 * leftTable.substring(leftTable.indexOf('.') + 1); String rschema =
@@ -906,7 +843,7 @@ public final class Phase1
 			 * rightTable.substring(rightTable.indexOf('.') + 1);
 			 * PartitionMetaData lpmd = meta.getPartMeta(lschema, ltable, tx);
 			 * PartitionMetaData rpmd = meta.getPartMeta(rschema, rtable, tx);
-			 * 
+			 *
 			 * if (lpmd.noNodeGroupSet() && rpmd.noNodeGroupSet()) { if
 			 * (lpmd.getNodeHash() != null && lefts.equals(lpmd.getNodeHash())
 			 * && rpmd.getNodeHash() != null &&
@@ -973,7 +910,8 @@ public final class Phase1
 				final Operator child = op.children().get(0);
 				if (child instanceof TableScanOperator)
 				{
-					// System.out.println("That had a TableScanOperator as a child");
+					// System.out.println("That had a TableScanOperator as a
+					// child");
 					final Operator parent = op;
 					op = child;
 					final Operator grandParent = parent.parent();
@@ -1253,7 +1191,7 @@ public final class Phase1
 
 			int i = 0;
 			while (i < child.children().size())
-				// for (Operator grandChild : grandChildren)
+			// for (Operator grandChild : grandChildren)
 			{
 				final Operator grandChild = child.children().get(i);
 				// can I push down to be a parent of this operator?
@@ -1420,7 +1358,7 @@ public final class Phase1
 
 			int i = 0;
 			while (i < child.children().size())
-				// for (Operator grandChild : grandChildren)
+			// for (Operator grandChild : grandChildren)
 			{
 				final Operator grandChild = child.children().get(i);
 				// can I push down to be a parent of this operator?

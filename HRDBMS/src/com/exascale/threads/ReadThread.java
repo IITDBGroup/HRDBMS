@@ -5,8 +5,8 @@ import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 import com.exascale.filesystem.Block;
-import com.exascale.filesystem.CompressedFileChannel;
 import com.exascale.filesystem.Page;
+import com.exascale.filesystem.SparseCompressedFileChannel2;
 import com.exascale.managers.FileManager;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.tables.Schema;
@@ -14,9 +14,9 @@ import com.exascale.tables.Transaction;
 
 public class ReadThread extends HRDBMSThread
 {
-	private final Page p;
-	private final Block b;
-	private final ByteBuffer bb;
+	private Page p;
+	private Block b;
+	private ByteBuffer bb;
 	private boolean ok = true;
 	private Schema schema;
 	private ConcurrentHashMap<Integer, Schema> schemaMap;
@@ -24,6 +24,16 @@ public class ReadThread extends HRDBMSThread
 	private ArrayList<Integer> fetchPos;
 	private ArrayList<Integer> cols;
 	private int layoutSize;
+	private ArrayList<ReadThread> subThreads;
+	private boolean consecutive = false;
+	private int num = -1;
+	private ArrayList<Integer> indexes;
+	private Page[] bp;
+
+	public ReadThread(ArrayList<ReadThread> subThreads)
+	{
+		this.subThreads = subThreads;
+	}
 
 	public ReadThread(Page p, Block b, ByteBuffer bb)
 	{
@@ -58,6 +68,15 @@ public class ReadThread extends HRDBMSThread
 		this.fetchPos = fetchPos;
 	}
 
+	public ReadThread(Page p, int num, ArrayList<Integer> indexes, Page[] bp, int rank, int rankSize)
+	{
+		this.p = p;
+		this.num = num;
+		this.indexes = indexes;
+		this.bp = bp;
+		this.consecutive = true;
+	}
+
 	public boolean getOK()
 	{
 		return ok;
@@ -68,6 +87,78 @@ public class ReadThread extends HRDBMSThread
 	{
 		try
 		{
+			if (subThreads != null)
+			{
+				for (ReadThread thread : subThreads)
+				{
+					thread.join();
+				}
+
+				this.terminate();
+				return;
+			}
+
+			if (consecutive)
+			{
+				// if (rank > 0 && rankSize > 1)
+				// {
+				// try
+				// {
+				// double pos = 1.0 - (((rank-1) * 1.0) / ((rankSize-1) * 1.0));
+				// int pri = (int)(pos * (Thread.MAX_PRIORITY -
+				// Thread.NORM_PRIORITY) + Thread.NORM_PRIORITY);
+				// Thread.currentThread().setPriority(pri);
+				// }
+				// catch(Exception f)
+				// {
+				// HRDBMSWorker.logger.debug("Error setting priority: Rank is "
+				// + rank + " RankSize is " + rankSize);
+				// throw f;
+				// }
+				// }
+
+				b = p.block();
+				bb = p.buffer();
+				final FileChannel fc = FileManager.getFile(b.fileName());
+				ByteBuffer[] bbs = new ByteBuffer[num];
+				bbs[0] = bb;
+				int i = 1;
+				while (i < num)
+				{
+					bbs[i] = bp[indexes.get(i)].buffer();
+					i++;
+				}
+
+				((SparseCompressedFileChannel2)fc).read(bbs, ((long)b.number()) * bb.capacity());
+
+				i = 0;
+				while (i < num)
+				{
+					bp[indexes.get(i)].setReady();
+					i++;
+				}
+
+				this.terminate();
+				return;
+			}
+
+			// if (rank > 0 && rankSize > 1)
+			// {
+			// try
+			// {
+			// double pos = 1.0 - (((rank-1) * 1.0) / ((rankSize-1) * 1.0));
+			// int pri = (int)(pos * (Thread.MAX_PRIORITY -
+			// Thread.NORM_PRIORITY) + Thread.NORM_PRIORITY);
+			// Thread.currentThread().setPriority(pri);
+			// }
+			// catch(Exception f)
+			// {
+			// HRDBMSWorker.logger.debug("Error setting priority: Rank is " +
+			// rank + " RankSize is " + rankSize);
+			// throw f;
+			// }
+			// }
+
 			bb.clear();
 			bb.position(0);
 
@@ -82,7 +173,7 @@ public class ReadThread extends HRDBMSThread
 
 			if (cols != null)
 			{
-				((CompressedFileChannel)fc).read(bb, ((long)b.number()) * bb.capacity(), cols, layoutSize);
+				((SparseCompressedFileChannel2)fc).read(bb, ((long)b.number()) * bb.capacity(), cols, layoutSize);
 			}
 			else
 			{
@@ -110,5 +201,13 @@ public class ReadThread extends HRDBMSThread
 			return;
 		}
 		return;
+	}
+
+	public void setRank(int rank)
+	{
+	}
+
+	public void setRankSize(int rankSize)
+	{
 	}
 }

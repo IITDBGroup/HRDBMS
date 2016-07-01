@@ -1,14 +1,13 @@
 package com.exascale.testing;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
 
 public class ColOrderP
 {
 	public static void main(String[] args)
 	{
-		//supplier
+		// supplier
 		ArrayList<Integer> columns = new ArrayList<Integer>();
 		columns.add(0);
 		columns.add(1);
@@ -76,10 +75,10 @@ public class ColOrderP
 		access.add(1);
 		access.add(3);
 		accesses.add(access);
-		
+
 		ArrayList<Integer> result = doIt(columns, accesses);
 		displayResults("SUPPLIER", result);
-		
+
 		columns = new ArrayList<Integer>();
 		columns.add(0);
 		columns.add(1);
@@ -117,10 +116,10 @@ public class ColOrderP
 		access.add(1);
 		access.add(2);
 		accesses.add(access);
-		
+
 		result = doIt(columns, accesses);
 		displayResults("PARTSUPP", result);
-		
+
 		columns = new ArrayList<Integer>();
 		columns.add(0);
 		columns.add(1);
@@ -169,10 +168,10 @@ public class ColOrderP
 		access.add(4);
 		access.add(5);
 		accesses.add(access);
-		
+
 		result = doIt(columns, accesses);
 		displayResults("CUSTOMER", result);
-		
+
 		columns = new ArrayList<Integer>();
 		columns.add(0);
 		columns.add(1);
@@ -226,10 +225,10 @@ public class ColOrderP
 		access.add(0);
 		access.add(1);
 		accesses.add(access);
-		
+
 		result = doIt(columns, accesses);
 		displayResults("PART", result);
-		
+
 		columns = new ArrayList<Integer>();
 		columns.add(0);
 		columns.add(1);
@@ -295,10 +294,10 @@ public class ColOrderP
 		long start = System.currentTimeMillis();
 		result = doIt(columns, accesses);
 		long end = System.currentTimeMillis();
-		System.out.println((end-start) + "ms");
+		System.out.println((end - start) + "ms");
 		displayResults("ORDERS", result);
 	}
-	
+
 	private static void displayResults(String table, ArrayList<Integer> result)
 	{
 		String out = table + " = COLORDER(" + (result.get(0) + 1);
@@ -307,21 +306,20 @@ public class ColOrderP
 		{
 			out += ("," + (result.get(i++) + 1));
 		}
-		
+
 		out += ")";
-		
+
 		System.out.println(out);
 	}
-	
+
 	private static ArrayList<Integer> doIt(ArrayList<Integer> columns, ArrayList<ArrayList<Integer>> accesses)
-	{	
+	{
 		int lowScore = Integer.MAX_VALUE;
 		ArrayList<Integer> lowOrder = null;
 		ArrayList<ArrayList<Integer>> perms = permutations(columns);
 		int size = perms.size();
 		System.out.println(size + " permutations");
-		
-		int i = 0;
+
 		for (ArrayList<Integer> order : perms)
 		{
 			int score = score(order, accesses);
@@ -330,25 +328,75 @@ public class ColOrderP
 				lowScore = score;
 				lowOrder = order;
 			}
-			
-			i++;
-			
-			//if (i % 1000 == 0)
-			//{
-			//	System.out.println("Completed " + i + "/" + size);
-			//}
+
+			// if (i % 1000 == 0)
+			// {
+			// System.out.println("Completed " + i + "/" + size);
+			// }
 		}
-		
+
 		return lowOrder;
 	}
-	
+
+	private static ArrayList<ArrayList<Integer>> permutations(ArrayList<Integer> arr)
+	{
+		ArrayList<ArrayList<Integer>> resultList = new ArrayList<ArrayList<Integer>>();
+		int l = arr.size();
+		if (l == 0)
+		{
+			return resultList;
+		}
+
+		if (l == 1)
+		{
+			resultList.add(arr);
+			return resultList;
+		}
+
+		ArrayList<Integer> subClone = new ArrayList<Integer>();
+		int i = 1;
+		while (i < l)
+		{
+			subClone.add(arr.get(i++));
+		}
+
+		for (i = 0; i < l; ++i)
+		{
+			int e = arr.get(i);
+			if (i > 0)
+			{
+				subClone.set(i - 1, arr.get(0));
+			}
+			ArrayList<ArrayList<Integer>> subPermutations = permutations(subClone);
+			for (ArrayList<Integer> sc : subPermutations)
+			{
+				ArrayList<Integer> clone = new ArrayList<Integer>();
+				clone.add(e);
+				int j = 0;
+				while (j < l - 1)
+				{
+					clone.add(sc.get(j++));
+				}
+
+				resultList.add(clone);
+			}
+
+			if (i > 0)
+			{
+				subClone.set(i - 1, e);
+			}
+		}
+
+		return resultList;
+	}
+
 	private static int score(ArrayList<Integer> order, ArrayList<ArrayList<Integer>> accesses)
 	{
 		ArrayList<Integer> disk = new ArrayList<Integer>();
 		disk.add(-1);
 		disk.addAll(order);
 		int copies = 1;
-		
+
 		if (disk.size() % 3 == 1)
 		{
 			disk.addAll(order);
@@ -362,7 +410,7 @@ public class ColOrderP
 				copies++;
 			}
 		}
-		
+
 		int score = 0;
 		for (ArrayList<Integer> access : accesses)
 		{
@@ -382,72 +430,20 @@ public class ColOrderP
 							found++;
 						}
 					}
-					catch(Exception e)
+					catch (Exception e)
 					{
 						System.out.println("Looking for " + col + " in " + disk);
 						System.out.println("Found " + found + " instances");
 						System.out.println("But there should be " + copies);
 					}
-					
+
 					i++;
 				}
 			}
-			
+
 			score += sbs.size();
 		}
-		
+
 		return score;
-	}
-	
-	private static ArrayList<ArrayList<Integer>> permutations(ArrayList<Integer> arr)
-	{
-		ArrayList<ArrayList<Integer>> resultList = new ArrayList<ArrayList<Integer>>();
-		int l = arr.size();
-		if (l == 0)
-		{
-			return resultList;
-		}
-		
-		if (l == 1)
-		{
-			resultList.add(arr);
-			return resultList;
-		}
-		
-		ArrayList<Integer> subClone = new ArrayList<Integer>();
-		int i = 1;
-		while (i < l)
-		{
-			subClone.add(arr.get(i++));
-		}
-		
-		for ( i = 0; i < l; ++i )
-		{
-			int e = arr.get(i);
-			if (i > 0)
-			{
-				subClone.set(i-1, arr.get(0));
-			}
-			ArrayList<ArrayList<Integer>> subPermutations = permutations(subClone);
-			for (ArrayList<Integer> sc : subPermutations)
-			{
-				ArrayList<Integer> clone = new ArrayList<Integer>();
-				clone.add(e);
-				int j = 0;
-				while (j < l-1)
-				{
-					clone.add(sc.get(j++));
-				}
-				
-				resultList.add(clone);
-			}
-			
-			if (i > 0)
-			{
-				subClone.set(i-1, e);
-			}
-		}
-		
-		return resultList;
 	}
 }

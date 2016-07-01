@@ -681,8 +681,8 @@ public class HRDBMSConnection implements Connection
 			sock.close();
 
 			this.sock = new Socket();
-			this.sock.setReceiveBufferSize(262144);
-			this.sock.setSendBufferSize(262144);
+			this.sock.setReceiveBufferSize(4194304);
+			this.sock.setSendBufferSize(4194304);
 			this.sock.connect(new InetSocketAddress(newHost, portNum));
 			in = new BufferedInputStream(sock.getInputStream());
 			out = new BufferedOutputStream(sock.getOutputStream());

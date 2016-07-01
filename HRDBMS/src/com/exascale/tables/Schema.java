@@ -1,8 +1,6 @@
 package com.exascale.tables;
 
-import java.io.BufferedReader;
 import java.io.FileInputStream;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
@@ -18,10 +16,12 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.LockSupport;
 import com.exascale.exceptions.LockAbortException;
 import com.exascale.exceptions.RecNumOverflowException;
@@ -43,12 +43,13 @@ import com.exascale.threads.HRDBMSThread;
 
 public class Schema
 {
-	private static final int ROWS_TO_ALLOCATE = 1024;
-	private static final int ROWS_TO_ALLOCATE_COL = 5500;
+	private static final int ROWS_TO_ALLOCATE = (int)(1024 * (Page.BLOCK_SIZE * 1.0) / (128.0 * 1024.0));
+	private static final int ROWS_TO_ALLOCATE_COL = (int)(5500 * (Page.BLOCK_SIZE * 1.0) / (128.0 * 1024.0));
 	public static final byte TYPE_ROW = 0, TYPE_COL = 1;
 	private static Charset cs = StandardCharsets.UTF_8;
 	private static sun.misc.Unsafe unsafe;
 	private static long offset;
+
 	static
 	{
 		try
@@ -84,7 +85,7 @@ public class Schema
 	private int[][] offsetArray;
 	private int offsetArrayRows;
 	private Page p;
-	private final Map<Integer, Integer> colIDToIndex = new HashMap<Integer, Integer>();
+	private Map<Integer, Integer> colIDToIndex = new HashMap<Integer, Integer>();
 	private Map<RID, Integer> rowIDToIndex = null;
 	private Transaction tx;
 	private volatile int myDev = -1;
@@ -93,10 +94,10 @@ public class Schema
 	private final CharsetDecoder cd = cs.newDecoder();
 	private int nodeNumber = -2;
 	private int deviceNumber = -2;
-	private final TreeMap<Integer, Page> pageGroup = new TreeMap<Integer, Page>();
+	private TreeMap<Integer, Page> pageGroup = new TreeMap<Integer, Page>();
 	private boolean addOpen = true;
 	private ArrayList<Page> pPrev;
-	private HashMap<RID, ArrayList<FieldValue>> recCache;
+	private ConcurrentHashMap<RID, FieldValue[]> recCache;
 	private HashMap<Integer, int[][]> offsetArraySet;
 	private HashMap<Integer, Map<RID, Integer>> rowIDToIndexSet;
 	private HashMap<Integer, ArrayList<RID>> rowIDSet;
@@ -105,7 +106,6 @@ public class Schema
 	private ArrayList<Integer> colOrder;
 	private ArrayList<RID> rowIDsAL;
 	private int cachedLenLen = -1;
-
 	private TreeSet<RID> copy = null;
 
 	public Schema(Map<Integer, DataType> map)
@@ -160,6 +160,48 @@ public class Schema
 		}
 
 		pageGroup.put(colNum, p);
+	}
+
+	@Override
+	public Schema clone()
+	{
+		Schema retval = new Schema(colTypes);
+		retval.nextRecNum = nextRecNum;
+		retval.headEnd = headEnd;
+		retval.dataStart = dataStart;
+		retval.modTime = modTime;
+		retval.blockType = blockType;
+		retval.rowIDListOff = rowIDListOff;
+		retval.offArrayOff = offArrayOff;
+		retval.colIDs = colIDs;
+		retval.colIDListSize = colIDListSize;
+		retval.rowIDListSize = rowIDListSize;
+		retval.rowIDs = rowIDs;
+		retval.offsetArray = offsetArray;
+		retval.offsetArrayRows = offsetArrayRows;
+		retval.p = p;
+		retval.colIDToIndex = colIDToIndex;
+		retval.rowIDToIndex = rowIDToIndex;
+		retval.tx = tx;
+		retval.myDev = myDev;
+		retval.myNode = myNode;
+		retval.rowIDsSet = rowIDsSet;
+		retval.nodeNumber = nodeNumber;
+		retval.deviceNumber = deviceNumber;
+		retval.pageGroup = pageGroup;
+		retval.addOpen = addOpen;
+		retval.pPrev = pPrev;
+		retval.recCache = recCache;
+		retval.offsetArraySet = offsetArraySet;
+		retval.rowIDToIndexSet = rowIDToIndexSet;
+		retval.rowIDSet = rowIDSet;
+		retval.fixed = fixed;
+		retval.headerBytes = headerBytes;
+		retval.colOrder = colOrder;
+		retval.rowIDsAL = rowIDsAL;
+		retval.cachedLenLen = cachedLenLen;
+		retval.copy = copy;
+		return retval;
 	}
 
 	public void close() throws Exception
@@ -284,19 +326,19 @@ public class Schema
 		return new ColIterator();
 	}
 
-	public Iterator<ArrayList<FieldValue>> colTableIterator()
+	public Iterator<FieldValue[]> colTableIterator()
 	{
 		return recCache.values().iterator();
 	}
 
-	public Iterator<Entry<RID, ArrayList<FieldValue>>> colTableIteratorWithRIDs()
+	public Iterator<Entry<RID, FieldValue[]>> colTableIteratorWithRIDs()
 	{
 		return recCache.entrySet().iterator();
 	}
 
 	public void deleteRow(RID id) throws LockAbortException, Exception
 	{
-		TableScanOperator.noResults.remove(p.block());
+		// TableScanOperator.noResults.remove(p.block());
 		byte[] before;
 		byte[] after;
 		int off;
@@ -383,11 +425,12 @@ public class Schema
 				throw e;
 			}
 			offsetArray = offsetArraySet.get(colNum);
-			offArrayOff = 4 + (rowIDToIndex.size() << 1);
-			off = offArrayOff + (index << 1);
-			before = new byte[2];
+			// offArrayOff = 4 + (rowIDToIndex.size() * 3);
+			// off = offArrayOff + (index * 3);
+			off = 4 + index * 6 + 3;
+			before = new byte[3];
 			p.get(off, before);
-			after = new byte[2];
+			after = new byte[3];
 			int i = 0;
 			final int l1 = after.length;
 			while (i < l1)
@@ -425,9 +468,10 @@ public class Schema
 				throw e;
 			}
 			offsetArray = offsetArraySet.get(colNum);
-			offArrayOff = 4 + (rowIDToIndex.size() << 1);
-			off = offArrayOff + (index << 1);
-			after = new byte[2];
+			// offArrayOff = 4 + (rowIDToIndex.size() * 3);
+			// off = offArrayOff + (index * 3);
+			off = 4 + index * 6 + 3;
+			after = new byte[3];
 			int i = 0;
 			final int l1 = after.length;
 			while (i < l1)
@@ -443,7 +487,7 @@ public class Schema
 
 	public void deleteRowNoLog(RID id) throws LockAbortException, Exception
 	{
-		TableScanOperator.noResults.remove(p.block());
+		// TableScanOperator.noResults.remove(p.block());
 		byte[] after;
 		int off;
 		if (rowIDToIndex == null)
@@ -518,50 +562,30 @@ public class Schema
 	public FieldValue getField(int rowIndex, int colIndex) throws Exception
 	{
 		DataType dt = null;
-		int type;
-
-		try
-		{
-			dt = colTypes.get(colIDs[colIndex]);
-			type = dt.getType();
-		}
-		catch (Exception e)
-		{
-			HRDBMSWorker.logger.warn("Unable to retrieve field", e);
-			HRDBMSWorker.logger.warn("We are on row " + rowIndex);
-			HRDBMSWorker.logger.warn("Looking for colIndex " + colIndex);
-			HRDBMSWorker.logger.warn("The colIDs array is ");
-			int i = 0;
-			while (i < colIDs.length)
-			{
-				HRDBMSWorker.logger.warn("" + colIDs[i]);
-				i++;
-			}
-
-			HRDBMSWorker.logger.warn("ColTypes is " + colTypes);
-			throw e;
-		}
+		dt = colTypes.get(colIDs[colIndex]);
+		int type = dt.getType();
 
 		if (type == DataType.BIGINT)
 		{
 			return new BigintFV(rowIndex, colIndex, this);
 		}
 
-		if (type == DataType.BINARY)
-		{
-			return new BinaryFV(rowIndex, colIndex, dt.getLength(), this);
-		}
+		// if (type == DataType.BINARY)
+		// {
+		// return new BinaryFV(rowIndex, colIndex, dt.getLength(), this);
+		// }
 
 		if (type == DataType.DATE)
-			// TODO || type == DataType.TIME || type == DataType.TIMESTAMP)
+		// TODO || type == DataType.TIME || type == DataType.TIMESTAMP)
 		{
 			return new DateFV(rowIndex, colIndex, this);
 		}
 
-		if (type == DataType.DECIMAL)
-		{
-			return new DecimalFV(rowIndex, colIndex, dt.getLength(), dt.getScale(), this);
-		}
+		// if (type == DataType.DECIMAL)
+		// {
+		// return new DecimalFV(rowIndex, colIndex, dt.getLength(),
+		// dt.getScale(), this);
+		// }
 
 		if (type == DataType.DOUBLE)
 		{
@@ -583,10 +607,10 @@ public class Schema
 			return new SmallintFV(rowIndex, colIndex, this);
 		}
 
-		if (type == DataType.VARBINARY)
-		{
-			return new VarbinaryFV(rowIndex, colIndex, this);
-		}
+		// if (type == DataType.VARBINARY)
+		// {
+		// return new VarbinaryFV(rowIndex, colIndex, this);
+		// }
 
 		if (type == DataType.VARCHAR)
 		{
@@ -596,12 +620,12 @@ public class Schema
 		if (type == DataType.CVARCHAR)
 		{
 			CVarcharFV retval = new CVarcharFV(rowIndex, colIndex, this);
-			
-			//if (p.block().number() == 2)
-			//{
-			//	HRDBMSWorker.logger.debug("Returned value is: " + retval.value);
-			//}
-		
+
+			// if (p.block().number() == 2)
+			// {
+			// HRDBMSWorker.logger.debug("Returned value is: " + retval.value);
+			// }
+
 			return retval;
 		}
 
@@ -689,11 +713,10 @@ public class Schema
 			length += val.size();
 		}
 
-		TableScanOperator.noResults.remove(p.block());
-
 		final Integer off = hasEnoughSpace(headerGrowthPerRow(), length);
 		if (off != null)
 		{
+			TableScanOperator.noResults.remove(p.block());
 			int node;
 			if (nodeNumber == -2)
 			{
@@ -764,11 +787,10 @@ public class Schema
 			length += val.size();
 		}
 
-		TableScanOperator.noResults.remove(p.block());
-
 		final Integer off = hasEnoughSpace(headerGrowthPerRow(), length);
 		if (off != null)
 		{
+			TableScanOperator.noResults.remove(p.block());
 			int node;
 			if (nodeNumber == -2)
 			{
@@ -831,11 +853,10 @@ public class Schema
 
 	public RID insertRowColTable(FieldValue[] vals) throws Exception
 	{
-		TableScanOperator.noResults.remove(p.block());
-
 		final ArrayList<Integer> offs = hasEnoughSpace(vals);
 		if (offs != null)
 		{
+			TableScanOperator.noResults.remove(p.block());
 			int node;
 			if (nodeNumber == -2)
 			{
@@ -892,7 +913,7 @@ public class Schema
 
 				rid = new RID(node, dev, p.block().number(), nextRecNum);
 			}
-			
+
 			int length = vals[0].size();
 			int off = offs.get(0);
 			byte[] before = new byte[length];
@@ -911,34 +932,33 @@ public class Schema
 			LogRec rec = tx.insert(before, after, off, p.block());
 			p.write(off, after, tx.number(), rec.lsn());
 
-			int offArrayLen = rowIDsAL.size() << 1;
-			after = new byte[offArrayLen];
-			int offArrayOff = 4 + (rowIDsAL.size() << 1);
-			p.get(offArrayOff, after);
-			before = new byte[offArrayLen];
-			p.get(offArrayOff + 2, before);
-			rec = tx.insert(before, after, offArrayOff + 2, p.block());
-			p.write(offArrayOff + 2, after, tx.number(), rec.lsn());
-			before = new byte[3];
-			off = 6 + (rowIDsAL.size() << 2);
+			// int offArrayLen = rowIDsAL.size() * 3;
+			// after = new byte[offArrayLen];
+			// int offArrayOff = 4 + (rowIDsAL.size() * 3);
+			// p.get(offArrayOff, after);
+			// before = new byte[offArrayLen];
+			// p.get(offArrayOff + 3, before);
+			// rec = tx.insert(before, after, offArrayOff + 3, p.block());
+			// p.write(offArrayOff + 3, after, tx.number(), rec.lsn());
+			before = new byte[6];
+			off = 4 + (rowIDsAL.size() * 6);
 			p.get(off, before);
-			after = new byte[2];
+			after = new byte[6];
 			ByteBuffer bb = ByteBuffer.wrap(after);
 			bb.position(0);
-			//putMedium(bb, offs.get(0));
-			short o = (short)((offs.get(0) >>> 1) & 0xffff);
-			bb.putShort(o);
+			putMedium(bb, rid.getRecNum());
+			putMedium(bb, offs.get(0));
 			rec = tx.insert(before, after, off, p.block());
 			p.write(off, after, tx.number(), rec.lsn());
 
-			before = new byte[2];
-			off = 4 + (rowIDsAL.size() << 1);
-			p.get(off, before);
-			after = new byte[2];
-			bb = ByteBuffer.wrap(after);
-			bb.position(0);
+			// before = new byte[3];
+			// off = 4 + (rowIDsAL.size() * 3);
+			// p.get(off, before);
+			// after = new byte[3];
+			// bb = ByteBuffer.wrap(after);
+			// bb.position(0);
 			// putMedium(bb, rid.getRecNum());
-			bb.putShort((short)rid.getRecNum());
+			// bb.putShort((short)rid.getRecNum());
 			// System.arraycopy(after, 0, after, 9, 3);
 			// bb.position(0);
 			// putMedium(bb, rid.getBlockNum());
@@ -948,8 +968,8 @@ public class Schema
 			// System.arraycopy(after, 0, after, 3, 3);
 			// bb.position(0);
 			// putMedium(bb, rid.getNode());
-			rec = tx.insert(before, after, off, p.block());
-			p.write(off, after, tx.number(), rec.lsn());
+			// rec = tx.insert(before, after, off, p.block());
+			// p.write(off, after, tx.number(), rec.lsn());
 
 			before = new byte[3];
 			after = new byte[3];
@@ -1009,34 +1029,35 @@ public class Schema
 				rec = tx.insert(before, after, off, p.block());
 				p.write(off, after, tx.number(), rec.lsn());
 
-				offArrayLen = rowIDsAL.size() << 1;
-				after = new byte[offArrayLen];
-				offArrayOff = 4 + (rowIDsAL.size() << 1);
-				p.get(offArrayOff, after);
-				before = new byte[offArrayLen];
-				p.get(offArrayOff + 2, before);
-				rec = tx.insert(before, after, offArrayOff + 2, p.block());
-				p.write(offArrayOff + 2, after, tx.number(), rec.lsn());
-				before = new byte[2];
-				off = 6 + (rowIDsAL.size() << 2);
+				// offArrayLen = rowIDsAL.size() * 3;
+				// after = new byte[offArrayLen];
+				// offArrayOff = 4 + (rowIDsAL.size() * 3);
+				// p.get(offArrayOff, after);
+				// before = new byte[offArrayLen];
+				// p.get(offArrayOff + 3, before);
+				// rec = tx.insert(before, after, offArrayOff + 3, p.block());
+				// p.write(offArrayOff + 3, after, tx.number(), rec.lsn());
+				before = new byte[6];
+				off = 4 + (rowIDsAL.size() * 6);
 				p.get(off, before);
-				after = new byte[2];
+				after = new byte[6];
 				bb = ByteBuffer.wrap(after);
 				bb.position(0);
-				//putMedium(bb, offs.get(pos));
-				o = (short)((offs.get(pos) >>> 1) & 0xffff);
-				bb.putShort(o);
+				putMedium(bb, rid.getRecNum());
+				putMedium(bb, offs.get(pos));
+				// o = (short)((offs.get(pos) >>> 1) & 0xffff);
+				// bb.putShort(o);
 				rec = tx.insert(before, after, off, p.block());
 				p.write(off, after, tx.number(), rec.lsn());
 
-				before = new byte[2];
-				off = 4 + (rowIDsAL.size() << 1);
-				p.get(off, before);
-				after = new byte[2];
-				bb = ByteBuffer.wrap(after);
-				bb.position(0);
+				// before = new byte[3];
+				// off = 4 + (rowIDsAL.size() * 3);
+				// p.get(off, before);
+				// after = new byte[3];
+				// bb = ByteBuffer.wrap(after);
+				// bb.position(0);
 				// putMedium(bb, rid.getRecNum());
-				bb.putShort((short)rid.getRecNum());
+				// bb.putShort((short)rid.getRecNum());
 				// System.arraycopy(after, 0, after, 9, 3);
 				// bb.position(0);
 				// putMedium(bb, rid.getBlockNum());
@@ -1046,8 +1067,8 @@ public class Schema
 				// System.arraycopy(after, 0, after, 3, 3);
 				// bb.position(0);
 				// putMedium(bb, rid.getNode());
-				rec = tx.insert(before, after, off, p.block());
-				p.write(off, after, tx.number(), rec.lsn());
+				// rec = tx.insert(before, after, off, p.block());
+				// p.write(off, after, tx.number(), rec.lsn());
 
 				before = new byte[3];
 				after = new byte[3];
@@ -1093,11 +1114,10 @@ public class Schema
 
 	public RID insertRowColTableAppend(FieldValue[] vals) throws Exception
 	{
-		TableScanOperator.noResults.remove(p.block());
-
 		final ArrayList<Integer> offs = hasEnoughSpace(vals);
 		if (offs != null)
 		{
+			TableScanOperator.noResults.remove(p.block());
 			int node;
 			if (nodeNumber == -2)
 			{
@@ -1154,7 +1174,7 @@ public class Schema
 
 				rid = new RID(node, dev, p.block().number(), nextRecNum);
 			}
-			
+
 			int length = vals[0].size();
 			int off = offs.get(0);
 			byte[] after = new byte[length];
@@ -1169,30 +1189,33 @@ public class Schema
 			}
 			p.write(off, after, tx.number(), LogManager.getLSN());
 			//
-			//if (p.block().number() == 3)
-			//{
-			//	HRDBMSWorker.logger.debug(p.block().fileName() + ": Wrote " + after.length + " bytes at offset " + off);
-			//}
+			// if (p.block().number() == 3)
+			// {
+			// HRDBMSWorker.logger.debug(p.block().fileName() + ": Wrote " +
+			// after.length + " bytes at offset " + off);
+			// }
 			//
 
-			int offArrayLen = rowIDsAL.size() << 1;
-			int offArrayOff = 4 + (rowIDsAL.size() << 1);
-			p.writeShift(offArrayOff, offArrayOff + 2, offArrayLen, tx.number(), LogManager.getLSN());
-			off = 6 + (rowIDsAL.size() << 2);
-			after = new byte[2];
+			// int offArrayLen = rowIDsAL.size() * 3;
+			// int offArrayOff = 4 + (rowIDsAL.size() * 3);
+			// p.writeShift(offArrayOff, offArrayOff + 3, offArrayLen,
+			// tx.number(), LogManager.getLSN());
+			off = 4 + (rowIDsAL.size() * 6);
+			after = new byte[6];
 			ByteBuffer bb = ByteBuffer.wrap(after);
 			bb.position(0);
-			//putMedium(bb, offs.get(0));
-			short o = (short)((offs.get(0) >>> 1) & 0xffff);
-			bb.putShort(o);
+			putMedium(bb, rid.getRecNum());
+			putMedium(bb, offs.get(0));
+			// short o = (short)((offs.get(0) >>> 1) & 0xffff);
+			// bb.putShort(o);
 			p.write(off, after, tx.number(), LogManager.getLSN());
 
-			off = 4 + (rowIDsAL.size() << 1);
-			after = new byte[2];
-			bb = ByteBuffer.wrap(after);
-			bb.position(0);
+			// off = 4 + (rowIDsAL.size() * 3);
+			// after = new byte[3];
+			// bb = ByteBuffer.wrap(after);
+			// bb.position(0);
 			// putMedium(bb, rid.getRecNum());
-			bb.putShort((short)rid.getRecNum());
+			// bb.putShort((short)rid.getRecNum());
 			// System.arraycopy(after, 0, after, 9, 3);
 			// bb.position(0);
 			// putMedium(bb, rid.getBlockNum());
@@ -1202,7 +1225,7 @@ public class Schema
 			// System.arraycopy(after, 0, after, 3, 3);
 			// bb.position(0);
 			// putMedium(bb, rid.getNode());
-			p.write(off, after, tx.number(), LogManager.getLSN());
+			// p.write(off, after, tx.number(), LogManager.getLSN());
 
 			after = new byte[3];
 			off = 1;
@@ -1255,30 +1278,33 @@ public class Schema
 				}
 				p.write(off, after, tx.number(), LogManager.getLSN());
 				//
-				//if (p.block().number() == 3)
-				//{
-				//	HRDBMSWorker.logger.debug(p.block().fileName() + ": Wrote " + after.length + " bytes at offset " + off);
-				//}
+				// if (p.block().number() == 3)
+				// {
+				// HRDBMSWorker.logger.debug(p.block().fileName() + ": Wrote " +
+				// after.length + " bytes at offset " + off);
+				// }
 				//
 
-				offArrayLen = rowIDsAL.size() << 1;
-				offArrayOff = 4 + (rowIDsAL.size() << 1);
-				p.writeShift(offArrayOff, offArrayOff + 2, offArrayLen, tx.number(), LogManager.getLSN());
-				off = 6 + (rowIDsAL.size() << 2);
-				after = new byte[2];
+				// offArrayLen = rowIDsAL.size() * 3;
+				// offArrayOff = 4 + (rowIDsAL.size() * 3);
+				// p.writeShift(offArrayOff, offArrayOff + 3, offArrayLen,
+				// tx.number(), LogManager.getLSN());
+				off = 4 + (rowIDsAL.size() * 6);
+				after = new byte[6];
 				bb = ByteBuffer.wrap(after);
 				bb.position(0);
-				//putMedium(bb, offs.get(pos));
-				o = (short)((offs.get(pos) >>> 1) & 0xffff);
-				bb.putShort(o);
+				putMedium(bb, rid.getRecNum());
+				putMedium(bb, offs.get(pos));
+				// o = (short)((offs.get(pos) >>> 1) & 0xffff);
+				// bb.putShort(o);
 				p.write(off, after, tx.number(), LogManager.getLSN());
 
-				off = 4 + (rowIDsAL.size() << 1);
-				after = new byte[2];
-				bb = ByteBuffer.wrap(after);
-				bb.position(0);
+				// off = 4 + (rowIDsAL.size() * 3);
+				// after = new byte[3];
+				// bb = ByteBuffer.wrap(after);
+				// bb.position(0);
 				// putMedium(bb, rid.getRecNum());
-				bb.putShort((short)rid.getRecNum());
+				// bb.putShort((short)rid.getRecNum());
 				// System.arraycopy(after, 0, after, 9, 3);
 				// bb.position(0);
 				// putMedium(bb, rid.getBlockNum());
@@ -1288,7 +1314,7 @@ public class Schema
 				// System.arraycopy(after, 0, after, 3, 3);
 				// bb.position(0);
 				// putMedium(bb, rid.getNode());
-				p.write(off, after, tx.number(), LogManager.getLSN());
+				// p.write(off, after, tx.number(), LogManager.getLSN());
 
 				after = new byte[3];
 				off = 1;
@@ -1330,6 +1356,25 @@ public class Schema
 		}
 	}
 
+	public void makeNull()
+	{
+		colIDs = null;
+		rowIDs = null;
+		offsetArray = null;
+		p = null;
+		colIDToIndex = null;
+		rowIDToIndex = null;
+		tx = null;
+		pageGroup = null;
+		pPrev = null;
+		recCache = null;
+		offsetArraySet = null;
+		rowIDToIndexSet = null;
+		rowIDSet = null;
+		rowIDsAL = null;
+		copy = null;
+	}
+
 	public void massDelete() throws Exception
 	{
 		// TableScanOperator.noResults.remove(p.block());
@@ -1341,8 +1386,9 @@ public class Schema
 			byte[] after;
 			rowIDToIndex = rowIDToIndexSet.get(colNum);
 			offsetArray = offsetArraySet.get(colNum);
-			offArrayOff = 4 + (rowIDToIndex.size() << 1);
-			int offArrayLen = (rowIDToIndex.size() << 1);
+			// offArrayOff = 4 + (rowIDToIndex.size() * 3);
+			offArrayOff = 4;
+			int offArrayLen = (rowIDToIndex.size() * 6);
 			before = new byte[offArrayLen];
 			p.get(offArrayOff, before);
 			after = new byte[offArrayLen];
@@ -1378,8 +1424,8 @@ public class Schema
 			byte[] after;
 			rowIDToIndex = rowIDToIndexSet.get(colNum);
 			offsetArray = offsetArraySet.get(colNum);
-			offArrayOff = 4 + (rowIDToIndex.size() << 1);
-			int offArrayLen = rowIDToIndex.size() << 1;
+			offArrayOff = 4;
+			int offArrayLen = rowIDToIndex.size() * 6;
 			after = new byte[offArrayLen];
 			int i = 0;
 			final int l1 = after.length;
@@ -1498,29 +1544,8 @@ public class Schema
 				rowIDListOff = 1;
 				rowIDListSize = p.getMedium(pos);
 				pos += 3;
-				rowIDToIndex = new HashMap<RID, Integer>();
+				rowIDToIndex = new LinkedHashMap<RID, Integer>((int)(rowIDListSize * 1.35));
 				rowIDs = null;
-				int i = 0;
-				setRowIDsCT(colNum);
-				for (final RID rid : rowIDsAL)
-				{
-					if (i >= rowIDListSize)
-					{
-						break;
-					}
-					rowIDToIndex.put(rid, i);
-					i++;
-				}
-				rowIDSet.put(colNum, rowIDsAL);
-				rowIDToIndexSet.put(colNum, rowIDToIndex);
-				pos += (2 * rowIDListSize);
-
-				// i = 0;
-				// for (final RID rid : rowIDs)
-				// {
-				// rowIDToIndex.put(rid, i);
-				// i++;
-				// }
 
 				int y = 1;
 				while (y * ROWS_TO_ALLOCATE_COL < rowIDListSize)
@@ -1536,17 +1561,28 @@ public class Schema
 					offsetArray = new int[y * ROWS_TO_ALLOCATE_COL][1];
 				}
 				offsetArrayRows = rowIDListSize;
-				int row = 0;
-				while (row < rowIDListSize)
+
+				int i = 0;
+				setRowIDsCT(colNum);
+				for (final RID rid : rowIDsAL)
 				{
-					offsetArray[row][0] = (p.getShort(pos) & 0x0000ffff) << 1;
-					if (offsetArray[row][0] == 0x0001fffe)
+					if (i >= rowIDListSize)
 					{
-						offsetArray[row][0] = -1;
+						break;
 					}
-					pos += 2;
-					row++;
+					rowIDToIndex.put(rid, i);
+					i++;
 				}
+				rowIDSet.put(colNum, rowIDsAL);
+				rowIDToIndexSet.put(colNum, rowIDToIndex);
+				// pos += (3 * rowIDListSize);
+
+				// i = 0;
+				// for (final RID rid : rowIDs)
+				// {
+				// rowIDToIndex.put(rid, i);
+				// i++;
+				// }
 
 				offsetArraySet.put(colNum, offsetArray);
 				offsetArray = null;
@@ -1561,8 +1597,11 @@ public class Schema
 
 	public void read(Transaction tx, boolean forIter) throws Exception
 	{
+		offsetArraySet = null;
+		rowIDSet = null;
+		rowIDToIndexSet = null;
 		addOpen = false;
-		recCache = new HashMap<RID, ArrayList<FieldValue>>();
+
 		try
 		{
 			rowIDsSet = false;
@@ -1617,103 +1656,36 @@ public class Schema
 			// i++;
 			// }
 
-			boolean first = true;
+			int colPos = 0;
+			ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
 
 			for (Map.Entry entry2 : pageGroup.entrySet())
 			{
+				if (colPos == 0)
+				{
+					colPos0(entry2);
+				}
+
 				int colNum = (int)entry2.getKey();
-				this.p = (Page)entry2.getValue();
-				cachedLenLen = -1;
+				// this.p = (Page)entry2.getValue();
+				ReadThread thread = new ReadThread((Page)entry2.getValue(), colPos, colNum, this);
+				thread.start();
+				threads.add(thread);
 
-				if (myNode == -1 || myNode == -2)
-				{
-					getNodeNumber();
-					getDeviceNumber();
-				}
-
-				int pos = 1;
-				rowIDListOff = 1;
-				rowIDListSize = p.getMedium(pos);
-				pos += 3;
-				rowIDToIndex = new HashMap<RID, Integer>();
-				int i = 0;
-				setRowIDsCT(colNum);
-				for (final RID rid : rowIDsAL)
-				{
-					if (i >= rowIDListSize)
-					{
-						break;
-					}
-					rowIDToIndex.put(rid, i);
-					i++;
-				}
-				pos += (2 * rowIDListSize);
-
-				// i = 0;
-				// for (final RID rid : rowIDs)
+				// if (colPos == 0)
 				// {
-				// rowIDToIndex.put(rid, i);
-				// i++;
+				// Thread.sleep(100);
 				// }
+				colPos++;
+			}
 
-				int y = 1;
-				while (y * ROWS_TO_ALLOCATE_COL < rowIDListSize)
+			for (ReadThread thread : threads)
+			{
+				thread.join();
+				if (!thread.getOK())
 				{
-					y++;
+					throw thread.getExcetpion();
 				}
-
-				if (offsetArray != null && offsetArray.length >= (y * ROWS_TO_ALLOCATE_COL))
-				{
-				}
-				else
-				{
-					offsetArray = new int[y * ROWS_TO_ALLOCATE_COL][1];
-				}
-				offsetArrayRows = rowIDListSize;
-				int row = 0;
-				while (row < rowIDListSize)
-				{
-					offsetArray[row][0] = (p.getShort(pos) & 0x0000ffff) << 1;
-					if (offsetArray[row][0] == 0x0001fffe)
-					{
-						offsetArray[row][0] = -1;
-					}
-					pos += 2;
-					row++;
-				}
-
-				Map<Integer, DataType> colTypesBackup = colTypes;
-				colTypes = new HashMap<Integer, DataType>();
-				colTypes.put(0, colTypesBackup.get(colNum));
-
-				for (Map.Entry entry : rowIDToIndex.entrySet())
-				{
-					RID rid = (RID)entry.getKey();
-					int index = (int)entry.getValue();
-
-					Row row2 = new Row(index);
-					FieldValue fv = row2.getCol(0);
-
-					if (first)
-					{
-						if (fv.exists())
-						{
-							// TODO - handle nulls
-							ArrayList<FieldValue> alfv = new ArrayList<FieldValue>();
-							alfv.add(fv);
-							recCache.put(rid, alfv);
-						}
-					}
-					else
-					{
-						ArrayList<FieldValue> alfv = recCache.get(rid);
-						alfv.add(fv);
-					}
-				}
-
-				colTypes = colTypesBackup;
-
-				first = false;
 			}
 		}
 		catch (Exception e)
@@ -1874,7 +1846,7 @@ public class Schema
 
 		Block bl = new Block(fn, newBlockNum);
 		LockManager.xLock(bl, tx.number());
-		TableScanOperator.noResults.remove(p.block());
+		// TableScanOperator.noResults.remove(p.block());
 		tx.requestPage(bl);
 		Page p2 = null;
 		try
@@ -2037,7 +2009,7 @@ public class Schema
 
 		Block bl = new Block(fn, newBlockNum);
 		LockManager.xLock(bl, tx.number());
-		TableScanOperator.noResults.remove(p.block());
+		// TableScanOperator.noResults.remove(p.block());
 		tx.requestPage(bl);
 		Page p2 = null;
 		try
@@ -2053,6 +2025,19 @@ public class Schema
 		p2.write(0, buff.array(), tx.number(), LogManager.getLSN());
 
 		return bl;
+	}
+
+	private void colPos0(Map.Entry entry2) throws Exception
+	{
+		this.p = (Page)entry2.getValue();
+		int pos = 1;
+		rowIDListSize = p.getMedium(pos);
+		recCache = new ConcurrentHashMap<RID, FieldValue[]>((int)(rowIDListSize * 1.35));
+		if (myNode == -1 || myNode == -2)
+		{
+			getNodeNumber();
+			getDeviceNumber();
+		}
 	}
 
 	private int findNextFreeRecNum(int justUsed) throws Exception
@@ -2088,6 +2073,20 @@ public class Schema
 		return i + 1;
 	}
 
+	private ArrayList<Integer> getColOrder() throws Exception
+	{
+		if (colOrder == null)
+		{
+			final Block b = new Block(p.block().fileName(), 0);
+			tx.requestPage(b);
+
+			final HeaderPage hp = tx.readHeaderPage(b, blockType);
+			colOrder = hp.getColOrder();
+		}
+
+		return colOrder;
+	}
+
 	private int getDeviceNumber() throws LockAbortException, Exception
 	{
 		if (myDev == -1)
@@ -2115,20 +2114,6 @@ public class Schema
 
 		return headerBytes;
 	}
-	
-	private ArrayList<Integer> getColOrder() throws Exception
-	{
-		if (colOrder == null)
-		{
-			final Block b = new Block(p.block().fileName(), 0);
-			tx.requestPage(b);
-
-			final HeaderPage hp = tx.readHeaderPage(b, blockType);
-			colOrder = hp.getColOrder();
-		}
-		
-		return colOrder;
-	}
 
 	private int getNodeNumber() throws LockAbortException, Exception
 	{
@@ -2150,7 +2135,7 @@ public class Schema
 		int pos = 0;
 		while (pos < pageGroup.size())
 		{
-			int dataStart = 128 * 1024;
+			int dataStart = Page.BLOCK_SIZE;
 			rowIDsAL = rowIDSet.get(pos);
 			offsetArray = offsetArraySet.get(pos);
 			int i = rowIDsAL.size() - 1;
@@ -2176,13 +2161,8 @@ public class Schema
 				vals[pos] = new CVarcharFV((VarcharFV)vals[pos], this);
 			}
 			dataStart -= vals[pos].size();
-			
-			if ((dataStart % 2) == 1)
-			{
-				dataStart--;
-			}
-			
-			int headEnd = 7 + (rowIDsAL.size() << 2);
+
+			int headEnd = 9 + (rowIDsAL.size() * 6);
 
 			if (headEnd >= dataStart)
 			{
@@ -2256,35 +2236,99 @@ public class Schema
 
 	private void setRowIDsCT(int colNum) throws Exception
 	{
-		//copy = new TreeSet<RID>(new RIDComparator());
+		// copy = new TreeSet<RID>(new RIDComparator());
 		int i = 0;
 		int pos = rowIDListOff + 3;
-		rowIDsAL = new ArrayList<RID>();
+		rowIDsAL = new ArrayList<RID>(rowIDListSize);
+		int pnum = p.block().number();
+		String pfn = p.block().fileName();
+		Block pblk = p.block();
+		int mColNum = -1;
+		HashMap<Integer, Integer> map = null;
+		if (Transaction.reorder)
+		{
+			map = tx.colMap.get(pfn);
+			if (map == null)
+			{
+				map = tx.getColOrder(pblk);
+				tx.colMap.put(pfn, map);
+			}
+			mColNum = map.get(colNum);
+		}
 
 		while (i < rowIDListSize)
 		{
-			int id = p.getShort(pos);
-			pos += 2;
+			int id = p.getMedium(pos);
+
 			if (!Transaction.reorder)
 			{
-				rowIDsAL.add(new RID(myNode, myDev, p.block().number() - colNum, id));
+				rowIDsAL.add(new RID(myNode, myDev, pnum - colNum, id));
 			}
 			else
 			{
-				HashMap<Integer, Integer> map = tx.colMap.get(p.block().fileName());
-				if (map == null)
-				{
-					map = tx.getColOrder(p.block());
-					tx.colMap.put(p.block().fileName(), map);
-				}
-				
-				rowIDsAL.add(new RID(myNode, myDev, p.block().number() - map.get(colNum), id));
+				rowIDsAL.add(new RID(myNode, myDev, pnum - mColNum, id));
 			}
-			//copy.add(rowIDsAL.get(i));
+			// copy.add(rowIDsAL.get(i));
+			offsetArray[i][0] = p.getMedium(pos + 3);
+			if (offsetArray[i][0] == 0x00ffffff)
+			{
+				offsetArray[i][0] = -1;
+			}
+
 			i++;
+			pos += 6;
 		}
 
 		rowIDsSet = true;
+	}
+
+	private RID[] setRowIDsCTExact(int colNum) throws Exception
+	{
+		// copy = new TreeSet<RID>(new RIDComparator());
+		int i = 0;
+		int pos = rowIDListOff + 3;
+		RID[] retval = new RID[rowIDListSize];
+		int pnum = p.block().number();
+		String pfn = p.block().fileName();
+		Block pblk = p.block();
+		int mColNum = -1;
+		HashMap<Integer, Integer> map = null;
+		if (Transaction.reorder)
+		{
+			map = tx.colMap.get(pfn);
+			if (map == null)
+			{
+				map = tx.getColOrder(pblk);
+				tx.colMap.put(pfn, map);
+			}
+			mColNum = map.get(colNum);
+		}
+
+		while (i < rowIDListSize)
+		{
+			int id = p.getMedium(pos);
+
+			if (!Transaction.reorder)
+			{
+				retval[i] = new RID(myNode, myDev, pnum - colNum, id);
+			}
+			else
+			{
+				retval[i] = new RID(myNode, myDev, pnum - mColNum, id);
+			}
+			// copy.add(rowIDsAL.get(i));
+			offsetArray[i][0] = p.getMedium(pos + 3);
+			if (offsetArray[i][0] == 0x00ffffff)
+			{
+				offsetArray[i][0] = -1;
+			}
+
+			i++;
+			pos += 6;
+		}
+
+		rowIDsSet = true;
+		return retval;
 	}
 
 	private void updateHeader(RID rid, FieldValue[] vals, int nextRecNum, int off, int length) throws RecNumOverflowException, LockAbortException, Exception
@@ -2307,7 +2351,7 @@ public class Schema
 		final byte[] after = new byte[before.length];
 
 		// copy(after,0,
-				// ByteBuffer.allocate(4).putInt(this.nextRecNum).array()); //nextRecNum
+		// ByteBuffer.allocate(4).putInt(this.nextRecNum).array()); //nextRecNum
 		ByteBuffer x = ByteBuffer.allocate(3);
 		x.position(0);
 		putMedium(x, this.nextRecNum);
@@ -2624,7 +2668,7 @@ public class Schema
 
 	public static class CVarcharFV extends FieldValue
 	{
-		public static boolean compress;
+		public static final boolean compress = HRDBMSWorker.getHParms().getProperty("enable_cvarchar_compression").equals("true");
 		private final static int NUM_SYM = 668;
 		// private static HashMap<Integer, Integer> freq = new HashMap<Integer,
 		// Integer>();
@@ -2634,15 +2678,29 @@ public class Schema
 		private final static int[] encode = new int[NUM_SYM];
 		private final static int[] encodeLength = new int[NUM_SYM];
 		private final static int[] masks = { 0, 0x01, 0x03, 0x07, 0x0f, 0x1f, 0x3f, 0x7f, 0xff, 0x01ff, 0x03ff, 0x07ff, 0x0fff, 0x1fff, 0x3fff, 0x7fff, 0xffff, 0x01ffff, 0x03ffff, 0x07ffff, 0x0fffff, 0x1fffff, 0x3fffff, 0x7fffff, 0xffffff, 0x01ffffff, 0x03ffffff, 0x07ffffff, 0x0fffffff, 0x1fffffff, 0x3fffffff, 0x7fffffff, 0xffffffff };
-		//private final static long[] masks2 = { 0, 0x01, 0x03, 0x07, 0x0f, 0x1f, 0x3f, 0x7f, 0xff, 0x01ff, 0x03ff, 0x07ff, 0x0fff, 0x1fff, 0x3fff, 0x7fff, 0xffff, 0x01ffff, 0x03ffff, 0x07ffff, 0x0fffff, 0x1fffff, 0x3fffff, 0x7fffff, 0xffffff, 0x01ffffff, 0x03ffffff, 0x07ffffff, 0x0fffffff, 0x1fffffff, 0x3fffffff, 0x7fffffff, 0xffffffffL, 0x01ffffffffL, 0x03ffffffffL, 0x07ffffffffL, 0x0fffffffffL, 0x1fffffffffL, 0x3fffffffffL, 0x7fffffffffL, 0xffffffffffL, 0x01ffffffffffL, 0x03ffffffffffL, 0x07ffffffffffL, 0x0fffffffffffL, 0x1fffffffffffL, 0x3fffffffffffL, 0x7fffffffffffL, 0xffffffffffffL, 0x01ffffffffffffL, 0x03ffffffffffffL, 0x07ffffffffffffL, 0x0fffffffffffffL, 0x1fffffffffffffL, 0x3fffffffffffffL, 0x7fffffffffffffL, 0xffffffffffffffL, 0x01ffffffffffffffL, 0x03ffffffffffffffL, 0x07ffffffffffffffL, 0x0fffffffffffffffL, 0x1fffffffffffffffL, 0x3fffffffffffffffL, 0x7fffffffffffffffL, 0xffffffffffffffffL };
+		// private final static long[] masks2 = { 0, 0x01, 0x03, 0x07, 0x0f,
+		// 0x1f, 0x3f, 0x7f, 0xff, 0x01ff, 0x03ff, 0x07ff, 0x0fff, 0x1fff,
+		// 0x3fff, 0x7fff, 0xffff, 0x01ffff, 0x03ffff, 0x07ffff, 0x0fffff,
+		// 0x1fffff, 0x3fffff, 0x7fffff, 0xffffff, 0x01ffffff, 0x03ffffff,
+		// 0x07ffffff, 0x0fffffff, 0x1fffffff, 0x3fffffff, 0x7fffffff,
+		// 0xffffffffL, 0x01ffffffffL, 0x03ffffffffL, 0x07ffffffffL,
+		// 0x0fffffffffL, 0x1fffffffffL, 0x3fffffffffL, 0x7fffffffffL,
+		// 0xffffffffffL, 0x01ffffffffffL, 0x03ffffffffffL, 0x07ffffffffffL,
+		// 0x0fffffffffffL, 0x1fffffffffffL, 0x3fffffffffffL, 0x7fffffffffffL,
+		// 0xffffffffffffL, 0x01ffffffffffffL, 0x03ffffffffffffL,
+		// 0x07ffffffffffffL, 0x0fffffffffffffL, 0x1fffffffffffffL,
+		// 0x3fffffffffffffL, 0x7fffffffffffffL, 0xffffffffffffffL,
+		// 0x01ffffffffffffffL, 0x03ffffffffffffffL, 0x07ffffffffffffffL,
+		// 0x0fffffffffffffffL, 0x1fffffffffffffffL, 0x3fffffffffffffffL,
+		// 0x7fffffffffffffffL, 0xffffffffffffffffL };
 		private final static Code[] decode3 = new Code[16777216];
 		private final static int[][] codeExtended = new int[256][256];
 		private final static int[][] codeExtended2 = new int[NUM_SYM - 256][256];
 		private final static int[][] codeExtended3 = new int[NUM_SYM - 256][256];
+
 		static
 		{
 			HRDBMSWorker.logger.debug("CVarcharFV start init");
-			compress = HRDBMSWorker.getHParms().getProperty("enable_cvarchar_compression").equals("true");
 			codeExtended['t']['h'] = 256;
 			codeExtended['T']['H'] = 257;
 			codeExtended['t']['H'] = 258;
@@ -3064,18 +3122,19 @@ public class Schema
 			// 4 - ascii normal but unlikely in DB
 
 			/*
-			 * freq.put(0, 100000); freq.put(1, 2); freq.put(2, 2); freq.put(3, 2);
-			 * freq.put(4, 2); freq.put(5, 2); freq.put(6, 2); freq.put(7, 2);
-			 * freq.put(8, 2); freq.put(9, 3); freq.put(10, 2); freq.put(11, 2);
-			 * freq.put(12, 2); freq.put(13, 2); freq.put(14, 2); freq.put(15, 2);
-			 * freq.put(16, 2); freq.put(17, 2); freq.put(18, 2); freq.put(19, 2);
-			 * freq.put(20, 2); freq.put(21, 2); freq.put(22, 2); freq.put(23, 2);
-			 * freq.put(24, 2); freq.put(25, 2); freq.put(26, 2); freq.put(27, 2);
-			 * freq.put(28, 2); freq.put(29, 2); freq.put(30, 2); freq.put(31, 2);
-			 * freq.put(32, 407934); freq.put(33, 170); freq.put(34, 4);
-			 * freq.put(35, 425); freq.put(36, 1333); freq.put(37, 380);
-			 * freq.put(38, 536); freq.put(39, 4); freq.put(40, 5176); freq.put(41,
-			 * 5307); freq.put(42, 1493); freq.put(43, 511); freq.put(44, 17546);
+			 * freq.put(0, 100000); freq.put(1, 2); freq.put(2, 2); freq.put(3,
+			 * 2); freq.put(4, 2); freq.put(5, 2); freq.put(6, 2); freq.put(7,
+			 * 2); freq.put(8, 2); freq.put(9, 3); freq.put(10, 2); freq.put(11,
+			 * 2); freq.put(12, 2); freq.put(13, 2); freq.put(14, 2);
+			 * freq.put(15, 2); freq.put(16, 2); freq.put(17, 2); freq.put(18,
+			 * 2); freq.put(19, 2); freq.put(20, 2); freq.put(21, 2);
+			 * freq.put(22, 2); freq.put(23, 2); freq.put(24, 2); freq.put(25,
+			 * 2); freq.put(26, 2); freq.put(27, 2); freq.put(28, 2);
+			 * freq.put(29, 2); freq.put(30, 2); freq.put(31, 2); freq.put(32,
+			 * 407934); freq.put(33, 170); freq.put(34, 4); freq.put(35, 425);
+			 * freq.put(36, 1333); freq.put(37, 380); freq.put(38, 536);
+			 * freq.put(39, 4); freq.put(40, 5176); freq.put(41, 5307);
+			 * freq.put(42, 1493); freq.put(43, 511); freq.put(44, 17546);
 			 * freq.put(45, 32638); freq.put(46, 35940); freq.put(47, 3681);
 			 * freq.put(48, 50000); freq.put(49, 50000); freq.put(50, 50000);
 			 * freq.put(51, 50000); freq.put(52, 50000); freq.put(53, 50000);
@@ -3091,94 +3150,113 @@ public class Schema
 			 * freq.put(81, 2525); freq.put(82, 107187); freq.put(83, 113326);
 			 * freq.put(84, 159271); freq.put(85, 51835); freq.put(86, 22228);
 			 * freq.put(87, 36979); freq.put(88, 5450); freq.put(89, 27646);
-			 * freq.put(90, 1597); freq.put(91, 205); freq.put(92, 37); freq.put(93,
-			 * 210); freq.put(94, 8); freq.put(95, 2755); freq.put(96, 4);
-			 * freq.put(97, 130731); freq.put(98, 29367); freq.put(99, 59494);
-			 * freq.put(100, 67066); freq.put(101, 210175); freq.put(102, 35981);
-			 * freq.put(103, 41523); freq.put(104, 70732); freq.put(105, 124119);
-			 * freq.put(106, 6163); freq.put(107, 17680); freq.put(108, 79926);
-			 * freq.put(109, 47446); freq.put(110, 123062); freq.put(111, 141497);
-			 * freq.put(112, 43002); freq.put(113, 2525); freq.put(114, 107187);
-			 * freq.put(115, 113326); freq.put(116, 159271); freq.put(117, 51835);
+			 * freq.put(90, 1597); freq.put(91, 205); freq.put(92, 37);
+			 * freq.put(93, 210); freq.put(94, 8); freq.put(95, 2755);
+			 * freq.put(96, 4); freq.put(97, 130731); freq.put(98, 29367);
+			 * freq.put(99, 59494); freq.put(100, 67066); freq.put(101, 210175);
+			 * freq.put(102, 35981); freq.put(103, 41523); freq.put(104, 70732);
+			 * freq.put(105, 124119); freq.put(106, 6163); freq.put(107, 17680);
+			 * freq.put(108, 79926); freq.put(109, 47446); freq.put(110,
+			 * 123062); freq.put(111, 141497); freq.put(112, 43002);
+			 * freq.put(113, 2525); freq.put(114, 107187); freq.put(115,
+			 * 113326); freq.put(116, 159271); freq.put(117, 51835);
 			 * freq.put(118, 22228); freq.put(119, 36979); freq.put(120, 5450);
 			 * freq.put(121, 27646); freq.put(122, 1597); freq.put(123, 62);
-			 * freq.put(124, 16); freq.put(125, 61); freq.put(126, 8); freq.put(127,
-			 * 2); int i = 128; while (i < 256) { freq.put(i++, 1); }
-			 * 
-			 * freq.put(256, 47342); //th freq.put(257, 47342); //TH freq.put(258,
-			 * 47342); //tH freq.put(259, 47342); //Th freq.put(260, 40933); //he
-			 * freq.put(261, 40933); //HE freq.put(262, 40933); //hE freq.put(263,
-			 * 40933); //He freq.put(264, 32681); //THE freq.put(265, 32681); //the
-			 * freq.put(266, 32681); //The freq.put(267, 32681); //tHe freq.put(268,
-			 * 32681); //thE freq.put(269, 32681); //THe freq.put(270, 32681); //tHE
-			 * freq.put(271, 32681); //ThE freq.put(272, 32386); //in freq.put(273,
-			 * 32386); //IN freq.put(274, 32386); //In freq.put(275, 32386); //iN
-			 * freq.put(276, 27267); //er freq.put(277, 27267); //ER freq.put(278,
-			 * 27267); //Er freq.put(279, 27267); //eR freq.put(280, 26427); //an
-			 * freq.put(281, 26427); //AN freq.put(282, 26427); //An freq.put(283,
-			 * 26427); //aN freq.put(284, 24686); //re freq.put(285, 24686); //RE
-			 * freq.put(286, 24686); //Re freq.put(287, 24686); //rE freq.put(288,
-			 * 23404); //on freq.put(289, 23404); //ON freq.put(290, 23404); //On
-			 * freq.put(291, 23404); //oN freq.put(292, 19792); //at freq.put(293,
-			 * 19792); //AT freq.put(294, 19792); //At freq.put(295, 19792); //aT
-			 * freq.put(296, 19359); //en freq.put(297, 19359); //EN freq.put(298,
-			 * 19359); //En freq.put(299, 19359); //eN freq.put(300, 18002); //nd
-			 * freq.put(301, 18002); //ND freq.put(302, 18002); //Nd freq.put(303,
-			 * 18002); //nD freq.put(304, 17873); //ti freq.put(305, 17873); //TI
-			 * freq.put(306, 17873); //Ti freq.put(307, 17873); //tI freq.put(308,
-			 * 17830); //es freq.put(309, 17830); //ES freq.put(310, 17830); //Es
-			 * freq.put(311, 17830); //eS freq.put(312, 16994); //or freq.put(313,
-			 * 16994); //OR freq.put(314, 16994); //Or freq.put(315, 16994); //oR
-			 * freq.put(316, 16040); //te freq.put(317, 16040); //TE freq.put(318,
-			 * 16040); //Te freq.put(319, 16040); //tE freq.put(320, 15642); //of
-			 * freq.put(321, 15642); //OF freq.put(322, 15642); //Of freq.put(323,
-			 * 15642); //oF freq.put(324, 15550); //ed freq.put(325, 15550); //ED
-			 * freq.put(326, 15550); //Ed freq.put(327, 15550); //eD freq.put(328,
-			 * 15022); //is freq.put(329, 15022); //IS freq.put(330, 15022); //Is
-			 * freq.put(331, 15022); //iS freq.put(332, 14953); //it freq.put(333,
-			 * 14953); //IT freq.put(334, 14953); //It freq.put(335, 14953); //iT
-			 * freq.put(336, 14476); //al freq.put(337, 14476); //AL freq.put(338,
-			 * 14476); //Al freq.put(339, 14476); //aL freq.put(340, 14309); //ar
-			 * freq.put(341, 14309); //AR freq.put(342, 14309); //Ar freq.put(343,
-			 * 14309); //aR freq.put(344, 14024); //st freq.put(345, 14024); //ST
-			 * freq.put(346, 14024); //St freq.put(347, 14024); //sT freq.put(348,
-			 * 13862); //to freq.put(349, 13862); //TO freq.put(350, 13862); //To
-			 * freq.put(351, 13862); //tO freq.put(352, 13861); //nt freq.put(353,
-			 * 13861); //NT freq.put(354, 13861); //Nt freq.put(355, 13861); //nT
-			 * freq.put(356, 12687); //ng freq.put(357, 12687); //NG freq.put(358,
-			 * 12687); //Ng freq.put(359, 12687); //nG freq.put(360, 12496); //and
-			 * freq.put(361, 12496); //AND freq.put(362, 12496); //And freq.put(363,
-			 * 12496); //aNd freq.put(364, 12496); //anD freq.put(365, 12496); //ANd
-			 * freq.put(366, 12496); //aND freq.put(367, 12496); //AnD freq.put(368,
-			 * 12408); //se freq.put(369, 12408); //SE freq.put(370, 12408); //Se
-			 * freq.put(371, 12408); //sE freq.put(372, 12324); //ha freq.put(373,
-			 * 12324); //HA freq.put(374, 12324); //Ha freq.put(375, 12324); //hA
-			 * freq.put(376, 11596); //as freq.put(377, 11596); //AS freq.put(378,
-			 * 11596); //As freq.put(379, 11596); //aS freq.put(380, 11582); //ou
-			 * freq.put(381, 11582); //OU freq.put(382, 11582); //Ou freq.put(383,
-			 * 11582); //oU freq.put(384, 11115); //io freq.put(385, 11115); //IO
-			 * freq.put(386, 11115); //Io freq.put(387, 11115); //iO freq.put(388,
-			 * 11039); //le freq.put(389, 11039); //LE freq.put(390, 11039); //Le
-			 * freq.put(391, 11039); //lE freq.put(392, 10986); //ve freq.put(393,
-			 * 10986); //VE freq.put(394, 10986); //Ve freq.put(395, 10986); //vE
-			 * freq.put(396, 10568); //co freq.put(397, 10568); //CO freq.put(398,
-			 * 10568); //Co freq.put(399, 10568); //cO freq.put(400, 10557); //me
-			 * freq.put(401, 10557); //ME freq.put(402, 10557); //Me freq.put(403,
-			 * 10557); //mE freq.put(404, 10181); //de freq.put(405, 10181); //DE
-			 * freq.put(406, 10181); //De freq.put(407, 10181); //dE freq.put(408,
-			 * 10160); //hi freq.put(409, 10160); //HI freq.put(410, 10160); //Hi
-			 * freq.put(411, 10160); //hI freq.put(412, 9686); //ri freq.put(413,
-			 * 9686); //RI freq.put(414, 9686); //Ri freq.put(415, 9686); //rI
-			 * freq.put(416, 9674); //ro freq.put(417, 9674); //RO freq.put(418,
-			 * 9674); //Ro freq.put(419, 9674); //rO freq.put(420, 9301); //ic
-			 * freq.put(421, 9301); //IC freq.put(422, 9301); //Ic freq.put(423,
-			 * 9301); //iC freq.put(424, 10051); //ing freq.put(425, 10051); //ING
-			 * freq.put(426, 10051); //Ing freq.put(427, 10051); //iNg freq.put(428,
-			 * 10051); //inG freq.put(429, 10051); //INg freq.put(430, 10051); //iNG
-			 * freq.put(431, 10051); //InG freq.put(432, 9654); //ion freq.put(433,
-			 * 9654); //ION freq.put(434, 9654); //Ion freq.put(435, 9654); //iOn
-			 * freq.put(436, 9654); //ioN freq.put(437, 9654); //IOn freq.put(438,
-			 * 9654); //iON freq.put(439, 9654); //IoN freq.put(440, 9208); //ne
+			 * freq.put(124, 16); freq.put(125, 61); freq.put(126, 8);
+			 * freq.put(127, 2); int i = 128; while (i < 256) { freq.put(i++,
+			 * 1); }
+			 *
+			 * freq.put(256, 47342); //th freq.put(257, 47342); //TH
+			 * freq.put(258, 47342); //tH freq.put(259, 47342); //Th
+			 * freq.put(260, 40933); //he freq.put(261, 40933); //HE
+			 * freq.put(262, 40933); //hE freq.put(263, 40933); //He
+			 * freq.put(264, 32681); //THE freq.put(265, 32681); //the
+			 * freq.put(266, 32681); //The freq.put(267, 32681); //tHe
+			 * freq.put(268, 32681); //thE freq.put(269, 32681); //THe
+			 * freq.put(270, 32681); //tHE freq.put(271, 32681); //ThE
+			 * freq.put(272, 32386); //in freq.put(273, 32386); //IN
+			 * freq.put(274, 32386); //In freq.put(275, 32386); //iN
+			 * freq.put(276, 27267); //er freq.put(277, 27267); //ER
+			 * freq.put(278, 27267); //Er freq.put(279, 27267); //eR
+			 * freq.put(280, 26427); //an freq.put(281, 26427); //AN
+			 * freq.put(282, 26427); //An freq.put(283, 26427); //aN
+			 * freq.put(284, 24686); //re freq.put(285, 24686); //RE
+			 * freq.put(286, 24686); //Re freq.put(287, 24686); //rE
+			 * freq.put(288, 23404); //on freq.put(289, 23404); //ON
+			 * freq.put(290, 23404); //On freq.put(291, 23404); //oN
+			 * freq.put(292, 19792); //at freq.put(293, 19792); //AT
+			 * freq.put(294, 19792); //At freq.put(295, 19792); //aT
+			 * freq.put(296, 19359); //en freq.put(297, 19359); //EN
+			 * freq.put(298, 19359); //En freq.put(299, 19359); //eN
+			 * freq.put(300, 18002); //nd freq.put(301, 18002); //ND
+			 * freq.put(302, 18002); //Nd freq.put(303, 18002); //nD
+			 * freq.put(304, 17873); //ti freq.put(305, 17873); //TI
+			 * freq.put(306, 17873); //Ti freq.put(307, 17873); //tI
+			 * freq.put(308, 17830); //es freq.put(309, 17830); //ES
+			 * freq.put(310, 17830); //Es freq.put(311, 17830); //eS
+			 * freq.put(312, 16994); //or freq.put(313, 16994); //OR
+			 * freq.put(314, 16994); //Or freq.put(315, 16994); //oR
+			 * freq.put(316, 16040); //te freq.put(317, 16040); //TE
+			 * freq.put(318, 16040); //Te freq.put(319, 16040); //tE
+			 * freq.put(320, 15642); //of freq.put(321, 15642); //OF
+			 * freq.put(322, 15642); //Of freq.put(323, 15642); //oF
+			 * freq.put(324, 15550); //ed freq.put(325, 15550); //ED
+			 * freq.put(326, 15550); //Ed freq.put(327, 15550); //eD
+			 * freq.put(328, 15022); //is freq.put(329, 15022); //IS
+			 * freq.put(330, 15022); //Is freq.put(331, 15022); //iS
+			 * freq.put(332, 14953); //it freq.put(333, 14953); //IT
+			 * freq.put(334, 14953); //It freq.put(335, 14953); //iT
+			 * freq.put(336, 14476); //al freq.put(337, 14476); //AL
+			 * freq.put(338, 14476); //Al freq.put(339, 14476); //aL
+			 * freq.put(340, 14309); //ar freq.put(341, 14309); //AR
+			 * freq.put(342, 14309); //Ar freq.put(343, 14309); //aR
+			 * freq.put(344, 14024); //st freq.put(345, 14024); //ST
+			 * freq.put(346, 14024); //St freq.put(347, 14024); //sT
+			 * freq.put(348, 13862); //to freq.put(349, 13862); //TO
+			 * freq.put(350, 13862); //To freq.put(351, 13862); //tO
+			 * freq.put(352, 13861); //nt freq.put(353, 13861); //NT
+			 * freq.put(354, 13861); //Nt freq.put(355, 13861); //nT
+			 * freq.put(356, 12687); //ng freq.put(357, 12687); //NG
+			 * freq.put(358, 12687); //Ng freq.put(359, 12687); //nG
+			 * freq.put(360, 12496); //and freq.put(361, 12496); //AND
+			 * freq.put(362, 12496); //And freq.put(363, 12496); //aNd
+			 * freq.put(364, 12496); //anD freq.put(365, 12496); //ANd
+			 * freq.put(366, 12496); //aND freq.put(367, 12496); //AnD
+			 * freq.put(368, 12408); //se freq.put(369, 12408); //SE
+			 * freq.put(370, 12408); //Se freq.put(371, 12408); //sE
+			 * freq.put(372, 12324); //ha freq.put(373, 12324); //HA
+			 * freq.put(374, 12324); //Ha freq.put(375, 12324); //hA
+			 * freq.put(376, 11596); //as freq.put(377, 11596); //AS
+			 * freq.put(378, 11596); //As freq.put(379, 11596); //aS
+			 * freq.put(380, 11582); //ou freq.put(381, 11582); //OU
+			 * freq.put(382, 11582); //Ou freq.put(383, 11582); //oU
+			 * freq.put(384, 11115); //io freq.put(385, 11115); //IO
+			 * freq.put(386, 11115); //Io freq.put(387, 11115); //iO
+			 * freq.put(388, 11039); //le freq.put(389, 11039); //LE
+			 * freq.put(390, 11039); //Le freq.put(391, 11039); //lE
+			 * freq.put(392, 10986); //ve freq.put(393, 10986); //VE
+			 * freq.put(394, 10986); //Ve freq.put(395, 10986); //vE
+			 * freq.put(396, 10568); //co freq.put(397, 10568); //CO
+			 * freq.put(398, 10568); //Co freq.put(399, 10568); //cO
+			 * freq.put(400, 10557); //me freq.put(401, 10557); //ME
+			 * freq.put(402, 10557); //Me freq.put(403, 10557); //mE
+			 * freq.put(404, 10181); //de freq.put(405, 10181); //DE
+			 * freq.put(406, 10181); //De freq.put(407, 10181); //dE
+			 * freq.put(408, 10160); //hi freq.put(409, 10160); //HI
+			 * freq.put(410, 10160); //Hi freq.put(411, 10160); //hI
+			 * freq.put(412, 9686); //ri freq.put(413, 9686); //RI freq.put(414,
+			 * 9686); //Ri freq.put(415, 9686); //rI freq.put(416, 9674); //ro
+			 * freq.put(417, 9674); //RO freq.put(418, 9674); //Ro freq.put(419,
+			 * 9674); //rO freq.put(420, 9301); //ic freq.put(421, 9301); //IC
+			 * freq.put(422, 9301); //Ic freq.put(423, 9301); //iC freq.put(424,
+			 * 10051); //ing freq.put(425, 10051); //ING freq.put(426, 10051);
+			 * //Ing freq.put(427, 10051); //iNg freq.put(428, 10051); //inG
+			 * freq.put(429, 10051); //INg freq.put(430, 10051); //iNG
+			 * freq.put(431, 10051); //InG freq.put(432, 9654); //ion
+			 * freq.put(433, 9654); //ION freq.put(434, 9654); //Ion
+			 * freq.put(435, 9654); //iOn freq.put(436, 9654); //ioN
+			 * freq.put(437, 9654); //IOn freq.put(438, 9654); //iON
+			 * freq.put(439, 9654); //IoN freq.put(440, 9208); //ne
 			 * freq.put(441, 9208); //NE freq.put(442, 9208); //Ne freq.put(443,
 			 * 9208); //nE freq.put(444, 9161); //ea freq.put(445, 9161); //EA
 			 * freq.put(446, 9161); //Ea freq.put(447, 9161); //eA freq.put(448,
@@ -3248,56 +3326,63 @@ public class Schema
 			 * 5127); //gE freq.put(604, 5120); //ie freq.put(605, 5120); //IE
 			 * freq.put(606, 5120); //Ie freq.put(607, 5120); //iE freq.put(608,
 			 * 5042); //wh freq.put(609, 5042); //WH freq.put(610, 5042); //Wh
-			 * freq.put(611, 5042); //wH freq.put(612, 7941); //tio freq.put(613,
-			 * 7941); //TIO freq.put(614, 7941); //Tio freq.put(615, 7941); //tIo
-			 * freq.put(616, 7941); //tiO freq.put(617, 7941); //TIo freq.put(618,
-			 * 7941); //TiO freq.put(619, 7941); //tIO freq.put(620, 7324); //ent
-			 * freq.put(621, 7324); //ENT freq.put(622, 7324); //Ent freq.put(623,
-			 * 7324); //eNt freq.put(634, 7324); //enT freq.put(625, 7324); //ENt
-			 * freq.put(626, 7324); //EnT freq.put(627, 7324); //eNT freq.put(628,
-			 * 5560); //ati freq.put(629, 5560); //ATI freq.put(630, 5560); //Ati
-			 * freq.put(631, 5560); //aTi freq.put(632, 5560); //atI freq.put(633,
-			 * 5560); //ATi freq.put(634, 5560); //AtI freq.put(635, 5560); //aTI
-			 * freq.put(636, 5359); //for freq.put(637, 5359); //FOR freq.put(638,
-			 * 5359); //For freq.put(639, 5359); //fOr freq.put(640, 5359); //foR
-			 * freq.put(641, 5359); //FOr freq.put(642, 5359); //FoR freq.put(643,
-			 * 5359); //fOR freq.put(644, 5156); //her freq.put(645, 5156); //HER
-			 * freq.put(646, 5156); //Her freq.put(647, 5156); //hEr freq.put(648,
-			 * 5156); //heR freq.put(649, 5156); //HEr freq.put(650, 5156); //HeR
-			 * freq.put(651, 5156); //hER freq.put(652, 7868); //tion freq.put(653,
-			 * 7868); //TION freq.put(654, 7868); //Tion freq.put(655, 7868); //tIon
-			 * freq.put(656, 7868); //tiOn freq.put(657, 7868); //tioN freq.put(658,
-			 * 7868); //TIon freq.put(659, 7868); //TiOn freq.put(660, 7868); //TioN
-			 * freq.put(661, 7868); //tIOn freq.put(662, 7868); //tIoN freq.put(663,
-			 * 7868); //tiON freq.put(664, 7868); //TIOn freq.put(665, 7868); //TIoN
-			 * freq.put(666, 7868); //TiON freq.put(667, 7868); //tION
-			 * 
+			 * freq.put(611, 5042); //wH freq.put(612, 7941); //tio
+			 * freq.put(613, 7941); //TIO freq.put(614, 7941); //Tio
+			 * freq.put(615, 7941); //tIo freq.put(616, 7941); //tiO
+			 * freq.put(617, 7941); //TIo freq.put(618, 7941); //TiO
+			 * freq.put(619, 7941); //tIO freq.put(620, 7324); //ent
+			 * freq.put(621, 7324); //ENT freq.put(622, 7324); //Ent
+			 * freq.put(623, 7324); //eNt freq.put(634, 7324); //enT
+			 * freq.put(625, 7324); //ENt freq.put(626, 7324); //EnT
+			 * freq.put(627, 7324); //eNT freq.put(628, 5560); //ati
+			 * freq.put(629, 5560); //ATI freq.put(630, 5560); //Ati
+			 * freq.put(631, 5560); //aTi freq.put(632, 5560); //atI
+			 * freq.put(633, 5560); //ATi freq.put(634, 5560); //AtI
+			 * freq.put(635, 5560); //aTI freq.put(636, 5359); //for
+			 * freq.put(637, 5359); //FOR freq.put(638, 5359); //For
+			 * freq.put(639, 5359); //fOr freq.put(640, 5359); //foR
+			 * freq.put(641, 5359); //FOr freq.put(642, 5359); //FoR
+			 * freq.put(643, 5359); //fOR freq.put(644, 5156); //her
+			 * freq.put(645, 5156); //HER freq.put(646, 5156); //Her
+			 * freq.put(647, 5156); //hEr freq.put(648, 5156); //heR
+			 * freq.put(649, 5156); //HEr freq.put(650, 5156); //HeR
+			 * freq.put(651, 5156); //hER freq.put(652, 7868); //tion
+			 * freq.put(653, 7868); //TION freq.put(654, 7868); //Tion
+			 * freq.put(655, 7868); //tIon freq.put(656, 7868); //tiOn
+			 * freq.put(657, 7868); //tioN freq.put(658, 7868); //TIon
+			 * freq.put(659, 7868); //TiOn freq.put(660, 7868); //TioN
+			 * freq.put(661, 7868); //tIOn freq.put(662, 7868); //tIoN
+			 * freq.put(663, 7868); //tiON freq.put(664, 7868); //TIOn
+			 * freq.put(665, 7868); //TIoN freq.put(666, 7868); //TiON
+			 * freq.put(667, 7868); //tION
+			 *
 			 * buildTree(); for (int key : freq.keySet()) { tree =
 			 * treeParts.get(key); }
-			 * 
+			 *
 			 * TreeMap<Integer, String> codes = new TreeMap<Integer, String>();
 			 * traverse(tree, codes, ""); for (Entry entry : codes.entrySet()) {
 			 * encodeLength[(Integer)entry.getKey()] =
-			 * ((String)entry.getValue()).length(); encode[(Integer)entry.getKey()]
-			 * = Integer.parseInt((String)entry.getValue(), 2); }
-			 * 
+			 * ((String)entry.getValue()).length();
+			 * encode[(Integer)entry.getKey()] =
+			 * Integer.parseInt((String)entry.getValue(), 2); }
+			 *
 			 * freq.clear(); treeParts.clear(); long start1 =
 			 * System.currentTimeMillis(); buildDecode1(); long end1 =
-			 * System.currentTimeMillis(); System.out.println("buildDecode1() took "
-			 * + (((end1 - start1) * 1.0) / 1000.0) + "s"); long start2 =
-			 * System.currentTimeMillis(); buildDecode2(); long end2 =
-			 * System.currentTimeMillis(); System.out.println("buildDecode2() took "
-			 * + (((end2 - start2) * 1.0) / 1000.0) + "s"); buildDecode3(); tree =
-			 * null; long end = System.currentTimeMillis();
-			 * System.out.println("Init took " + (((end - start) * 1.0) / 1000.0) +
-			 * "s");
-			 * 
+			 * System.currentTimeMillis(); System.out.println(
+			 * "buildDecode1() took " + (((end1 - start1) * 1.0) / 1000.0) +
+			 * "s"); long start2 = System.currentTimeMillis(); buildDecode2();
+			 * long end2 = System.currentTimeMillis(); System.out.println(
+			 * "buildDecode2() took " + (((end2 - start2) * 1.0) / 1000.0) +
+			 * "s"); buildDecode3(); tree = null; long end =
+			 * System.currentTimeMillis(); System.out.println("Init took " +
+			 * (((end - start) * 1.0) / 1000.0) + "s");
+			 *
 			 * i = 0; int maxLength = 0; while (i < NUM_SYM) {
 			 * System.out.println("encode[" + i + "] = " + encode[i]);
-			 * System.out.println("encodeLength[" + i + "] = " + encodeLength[i]);
-			 * if (encodeLength[i] > maxLength) { maxLength = encodeLength[i]; }
-			 * i++; }
-			 * 
+			 * System.out.println("encodeLength[" + i + "] = " +
+			 * encodeLength[i]); if (encodeLength[i] > maxLength) { maxLength =
+			 * encodeLength[i]; } i++; }
+			 *
 			 * System.out.println("MAXLENGTH = " + maxLength); try {
 			 * writeDataFile(); } catch(Exception e) { e.printStackTrace(); }
 			 */
@@ -3347,12 +3432,7 @@ public class Schema
 				{
 					len = (s.p.getInt(off - 1) & 0x00ffffff);
 				}
-				
-				//if (s.p.block().number() == 2)
-				//{
-				//	HRDBMSWorker.logger.debug("Reading row - offset was " + off + " lenlen was " + lenlen + " len was " + len); 
-				//}
-				
+
 				if (len == 0)
 				{
 					value = new String();
@@ -3361,71 +3441,28 @@ public class Schema
 				{
 					if (!compress)
 					{
-						char[] ca = new char[len];
-						final byte[] temp = new byte[len];
-						bytes = temp;
-						size = lenlen + len;
-						s.p.get(off + lenlen, temp);
-						try
-						{
-							// value = new String(temp, "UTF-8");
-							value = (String)unsafe.allocateInstance(String.class);
-							int clen = ((sun.nio.cs.ArrayDecoder)s.cd).decode(temp, 0, len, ca);
-							if (clen == ca.length)
-							{
-								unsafe.putObject(value, Schema.offset, ca);
-							}
-							else
-							{
-								char[] v = Arrays.copyOf(ca, clen);
-								unsafe.putObject(value, Schema.offset, v);
-							}
-						}
-						catch (final Exception e)
-						{
-							throw e;
-						}
+						doNotCompressed(len, lenlen, s);
 					}
 					else
 					{
-						try
+						// HRDBMSWorker.logger.debug("Entering...");
+						byte[] temp = new byte[len];
+						size = lenlen + len;
+						s.p.get(off + lenlen, temp);
+
+						byte[] temp2 = new byte[len << 1];
+						len = decompress(temp, len, temp2);
+
+						char[] ca = new char[len];
+						int clen = ((sun.nio.cs.ArrayDecoder)s.cd).decode(temp2, 0, len, ca);
+						if (clen == ca.length)
 						{
-							//HRDBMSWorker.logger.debug("Entering...");
-							byte[] temp = new byte[len];
-							size = lenlen + len;
-							s.p.get(off + lenlen, temp);
-							
-							byte[] temp2 = new byte[len << 1];
-							len = decompress(temp, len, temp2);
-							if (len < 0)
-							{
-								Exception e = new Exception("Length of " + len + " returned by decompress");
-								throw e;
-							}
-
-							char[] ca = new char[len];
-							// bytes = temp2; //Do we need this? I don't think
-							// so...
-
-							// value =
-							// (String)unsafe.allocateInstance(String.class);
-							int clen = ((sun.nio.cs.ArrayDecoder)s.cd).decode(temp2, 0, len, ca);
-							if (clen == ca.length)
-							{
-								value = new String(ca);
-							}
-							else
-							{
-								char[] v = Arrays.copyOf(ca, clen);
-								value = new String(v);
-							}
-							
-							//HRDBMSWorker.logger.debug("Compressed length was " + (size - lenlen) + " uncomp length was " + len + " string is: " + value);
+							value = new String(ca);
 						}
-						catch (final Throwable e)
+						else
 						{
-							HRDBMSWorker.logger.debug("", e);
-							throw e;
+							char[] v = Arrays.copyOf(ca, clen);
+							value = new String(v);
 						}
 					}
 				}
@@ -3473,7 +3510,7 @@ public class Schema
 			}
 		}
 
-		private static int compress(byte[] in, int inLen, byte[] out)
+		public static int compress(byte[] in, int inLen, byte[] out)
 		{
 			int retval = 0;
 			int i = 0;
@@ -3617,7 +3654,7 @@ public class Schema
 			return retval;
 		}
 
-		private static int decompress(byte[] in, int inLen, byte[] out) throws Exception
+		public static int decompress(byte[] in, int inLen, byte[] out) throws Exception
 		{
 			int i = 0;
 			int o = 0;
@@ -3639,20 +3676,20 @@ public class Schema
 					remainder = (remainder >>> (remLen - 24));
 					value = 0;
 				}
-				else 
+				else
 				{
 					final int free = 24 - remLen;
 					value = (remainder << (free));
 					int free2 = (inLen - i) << 3;
-					
+
 					if (free2 > free)
 					{
 						free2 = free;
 					}
-					
+
 					if (free2 > 16)
 					{
-						shift = ((bb.getShort(i) & 0xffff) << 8) | (bb.get(i+2) & 0xff);
+						shift = ((bb.getShort(i) & 0xffff) << 8) | (bb.get(i + 2) & 0xff);
 						i += 3;
 						remainder = (shift >>> remLen);
 						shiftLen = remLen;
@@ -3692,7 +3729,7 @@ public class Schema
 						remainder = 0;
 					}
 				}
-				
+
 				value |= remainder;
 				code = decode3[value];
 
@@ -3715,18 +3752,19 @@ public class Schema
 				}
 
 				remLen = 24 - code.used;
-				
-				//if (code.used == 0)
-				//{
-				//	HRDBMSWorker.logger.debug("CODE.USED = ZERO for value " + value);
-				//}
-				
+
+				// if (code.used == 0)
+				// {
+				// HRDBMSWorker.logger.debug("CODE.USED = ZERO for value " +
+				// value);
+				// }
+
 				remainder = value & masks[remLen];
 				remainder = ((remainder << shiftLen) | shift);
 				remLen += shiftLen;
 			}
 		}
-		
+
 		private static Code readCode(ByteBuffer bb, InputStream in) throws Exception
 		{
 			int size = 0;
@@ -3788,10 +3826,11 @@ public class Schema
 			code.used = used;
 			return code;
 		}
-		
+
 		private static void readDataFile() throws Exception
 		{
-			//InputStream in = CVarcharFV.class.getResourceAsStream("/com/exascale/huffman/huffman.dat");
+			// InputStream in =
+			// CVarcharFV.class.getResourceAsStream("/com/exascale/huffman/huffman.dat");
 			InputStream in = new FileInputStream("huffman.dat");
 			ByteBuffer bb = ByteBuffer.allocate(NUM_SYM * 4);
 			in.read(bb.array());
@@ -3867,11 +3906,14 @@ public class Schema
 				int start = 4 - lenlen;
 
 				System.arraycopy(val, start, buff, off, lenlen);
-				
-				//if (s.p.block().number() == 2)
-				//{
-				//	HRDBMSWorker.logger.debug("Writing length = " + stringBytes.length + " byte = " + (buff[off] & 0xff) + " buffer = " + val[0] + " " + val[1] + " " + val[2] + " " + val[3] + " LENLEN = " + lenlen); //DEBUG
-				//}
+
+				// if (s.p.block().number() == 2)
+				// {
+				// HRDBMSWorker.logger.debug("Writing length = " +
+				// stringBytes.length + " byte = " + (buff[off] & 0xff) + "
+				// buffer = " + val[0] + " " + val[1] + " " + val[2] + " " +
+				// val[3] + " LENLEN = " + lenlen); //DEBUG
+				// }
 
 				// i = 0;
 				// final int length = stringBytes.length;
@@ -3884,7 +3926,7 @@ public class Schema
 				{
 					System.arraycopy(stringBytes, 0, buff, off + lenlen, stringBytes.length);
 				}
-				catch(Exception e)
+				catch (Exception e)
 				{
 					HRDBMSWorker.logger.debug("Offset is " + off + " lenlen is " + lenlen + " bytes length is " + stringBytes.length + " buffer size is " + buff.length);
 					throw e;
@@ -3894,6 +3936,26 @@ public class Schema
 			}
 
 			return 0;
+		}
+
+		private void doNotCompressed(int len, int lenlen, Schema s) throws Exception
+		{
+			char[] ca = new char[len];
+			final byte[] temp = new byte[len];
+			bytes = temp;
+			size = lenlen + len;
+			s.p.get(off + lenlen, temp);
+			value = (String)unsafe.allocateInstance(String.class);
+			int clen = ((sun.nio.cs.ArrayDecoder)s.cd).decode(temp, 0, len, ca);
+			if (clen == ca.length)
+			{
+				unsafe.putObject(value, Schema.offset, ca);
+			}
+			else
+			{
+				char[] v = Arrays.copyOf(ca, clen);
+				unsafe.putObject(value, Schema.offset, v);
+			}
 		}
 
 		private static class Code
@@ -4360,100 +4422,160 @@ public class Schema
 
 		public FieldValue getCol(int id) throws Exception
 		{
-			// return getField(index, colIDToIndex.get(id));
-			int rowIndex = index;
-			// int colIndex = colIDToIndex.get(id);
-			int colIndex = id;
-
 			if (cache != null)
 			{
-				return cache[colIndex];
+				return cache[id];
 			}
 
 			DataType dt = null;
 			int type;
 
-			try
-			{
-				dt = colTypes.get(colIDs[colIndex]);
-				type = dt.getType();
-			}
-			catch (Exception e)
-			{
-				HRDBMSWorker.logger.warn("Unable to retrieve field", e);
-				HRDBMSWorker.logger.warn("We are on row " + rowIndex);
-				HRDBMSWorker.logger.warn("Looking for colIndex " + colIndex);
-				HRDBMSWorker.logger.warn("The colIDs array is ");
-				int i = 0;
-				while (i < colIDs.length)
-				{
-					HRDBMSWorker.logger.warn("" + colIDs[i]);
-					i++;
-				}
-
-				HRDBMSWorker.logger.warn("ColTypes is " + colTypes);
-				throw e;
-			}
+			dt = colTypes.get(colIDs[id]);
+			type = dt.getType();
 
 			if (type == DataType.BIGINT)
 			{
-				return new BigintFV(rowIndex, colIndex, Schema.this);
+				return new BigintFV(index, id, Schema.this);
 			}
 
-			if (type == DataType.BINARY)
-			{
-				return new BinaryFV(rowIndex, colIndex, dt.getLength(), Schema.this);
-			}
+			// if (type == DataType.BINARY)
+			// {
+			// return new BinaryFV(rowIndex, colIndex, dt.getLength(),
+			// Schema.this);
+			// }
 
 			if (type == DataType.DATE)
-				// TODO || type == DataType.TIME || type == DataType.TIMESTAMP)
+			// TODO || type == DataType.TIME || type == DataType.TIMESTAMP)
 			{
-				return new DateFV(rowIndex, colIndex, Schema.this);
+				return new DateFV(index, id, Schema.this);
 			}
 
-			if (type == DataType.DECIMAL)
-			{
-				return new DecimalFV(rowIndex, colIndex, dt.getLength(), dt.getScale(), Schema.this);
-			}
+			// if (type == DataType.DECIMAL)
+			// {
+			// return new DecimalFV(rowIndex, colIndex, dt.getLength(),
+			// dt.getScale(), Schema.this);
+			// }
 
 			if (type == DataType.DOUBLE)
 			{
-				return new DoubleFV(rowIndex, colIndex, Schema.this);
+				return new DoubleFV(index, id, Schema.this);
 			}
 
 			if (type == DataType.FLOAT)
 			{
-				return new FloatFV(rowIndex, colIndex, Schema.this);
+				return new FloatFV(index, id, Schema.this);
 			}
 
 			if (type == DataType.INTEGER)
 			{
-				return new IntegerFV(rowIndex, colIndex, Schema.this);
+				return new IntegerFV(index, id, Schema.this);
 			}
 
 			if (type == DataType.SMALLINT)
 			{
-				return new SmallintFV(rowIndex, colIndex, Schema.this);
+				return new SmallintFV(index, id, Schema.this);
 			}
 
-			if (type == DataType.VARBINARY)
-			{
-				return new VarbinaryFV(rowIndex, colIndex, Schema.this);
-			}
+			// if (type == DataType.VARBINARY)
+			// {
+			// return new VarbinaryFV(rowIndex, colIndex, Schema.this);
+			// }
 
 			if (type == DataType.VARCHAR)
 			{
-				return new VarcharFV(rowIndex, colIndex, Schema.this);
+				return new VarcharFV(index, id, Schema.this);
 			}
 
 			if (type == DataType.CVARCHAR)
 			{
-				CVarcharFV retval = new CVarcharFV(rowIndex, colIndex, Schema.this);
+				CVarcharFV retval = new CVarcharFV(index, id, Schema.this);
 
-				//if (p.block().number() == 2)
-				//{
-				//	HRDBMSWorker.logger.debug("Returned value is: " + retval.value);
-				//}
+				// if (p.block().number() == 2)
+				// {
+				// HRDBMSWorker.logger.debug("Returned value is: " +
+				// retval.value);
+				// }
+
+				return retval;
+			}
+
+			HRDBMSWorker.logger.error("Unknown data type in Schema.getField()");
+			return null;
+		}
+
+		public FieldValue getCol(int id, DataType dt) throws Exception
+		{
+			if (cache != null)
+			{
+				return cache[id];
+			}
+
+			int type;
+
+			type = dt.getType();
+
+			if (type == DataType.BIGINT)
+			{
+				return new BigintFV(index, id, Schema.this);
+			}
+
+			// if (type == DataType.BINARY)
+			// {
+			// return new BinaryFV(rowIndex, colIndex, dt.getLength(),
+			// Schema.this);
+			// }
+
+			if (type == DataType.DATE)
+			// TODO || type == DataType.TIME || type == DataType.TIMESTAMP)
+			{
+				return new DateFV(index, id, Schema.this);
+			}
+
+			// if (type == DataType.DECIMAL)
+			// {
+			// return new DecimalFV(rowIndex, colIndex, dt.getLength(),
+			// dt.getScale(), Schema.this);
+			// }
+
+			if (type == DataType.DOUBLE)
+			{
+				return new DoubleFV(index, id, Schema.this);
+			}
+
+			if (type == DataType.FLOAT)
+			{
+				return new FloatFV(index, id, Schema.this);
+			}
+
+			if (type == DataType.INTEGER)
+			{
+				return new IntegerFV(index, id, Schema.this);
+			}
+
+			if (type == DataType.SMALLINT)
+			{
+				return new SmallintFV(index, id, Schema.this);
+			}
+
+			// if (type == DataType.VARBINARY)
+			// {
+			// return new VarbinaryFV(rowIndex, colIndex, Schema.this);
+			// }
+
+			if (type == DataType.VARCHAR)
+			{
+				return new VarcharFV(index, id, Schema.this);
+			}
+
+			if (type == DataType.CVARCHAR)
+			{
+				CVarcharFV retval = new CVarcharFV(index, id, Schema.this);
+
+				// if (p.block().number() == 2)
+				// {
+				// HRDBMSWorker.logger.debug("Returned value is: " +
+				// retval.value);
+				// }
 
 				return retval;
 			}
@@ -4787,6 +4909,146 @@ public class Schema
 			}
 
 			return 0;
+		}
+	}
+
+	private static class ReadThread extends HRDBMSThread
+	{
+		private final Page page;
+		private final int colPos;
+		private final int colNum;
+		private boolean ok = true;
+		private Exception e;
+		private final Schema schema;
+
+		public ReadThread(Page page, int colPos, int colNum, Schema schema)
+		{
+			this.page = page;
+			this.colPos = colPos;
+			this.colNum = colNum;
+			this.schema = schema;
+		}
+
+		public Exception getExcetpion()
+		{
+			return e;
+		}
+
+		public boolean getOK()
+		{
+			return ok;
+		}
+
+		@Override
+		public void run()
+		{
+			try
+			{
+				Schema s = schema.clone();
+				s.cachedLenLen = -1;
+
+				int pos = 1;
+				s.rowIDListOff = 1;
+				s.p = page;
+				s.rowIDListSize = s.p.getMedium(pos);
+
+				pos += 3;
+				s.rowIDToIndex = new LinkedHashMap<RID, Integer>((int)(s.rowIDListSize * 1.35));
+				s.offsetArray = new int[s.rowIDListSize][1];
+				s.offsetArrayRows = s.rowIDListSize;
+				int i = 0;
+				RID[] exact = s.setRowIDsCTExact(colNum);
+				for (final RID rid : exact)
+				{
+					s.rowIDToIndex.put(rid, i);
+					i++;
+				}
+
+				Map<Integer, DataType> colTypesBackup = s.colTypes;
+				s.colTypes = new HashMap<Integer, DataType>();
+				s.colTypes.put(0, colTypesBackup.get(colNum));
+
+				DataType dt = s.colTypes.get(s.colIDs[0]);
+
+				for (Map.Entry entry : s.rowIDToIndex.entrySet())
+				{
+					RID rid = (RID)entry.getKey();
+					int index = (int)entry.getValue();
+
+					Row row2 = s.new Row(index);
+					try
+					{
+						FieldValue fv = row2.getCol(0, dt);
+						if (!fv.exists())
+						{
+							continue;
+						}
+
+						try
+						{
+							// ArrayList<FieldValue> alfv = s.recCache.get(rid);
+							FieldValue[] alfv = s.recCache.get(rid);
+							if (alfv == null)
+							{
+								// alfv = new
+								// ArrayList<FieldValue>(s.pageGroup.size());
+								alfv = new FieldValue[s.pageGroup.size()];
+								// int j = 0;
+								// while (j < s.pageGroup.size())
+								// {
+								// alfv.add(null);
+								// j++;
+								// }
+
+								// ArrayList<FieldValue> alfv2 =
+								// s.recCache.putIfAbsent(rid, alfv);
+								FieldValue[] alfv2 = s.recCache.putIfAbsent(rid, alfv);
+								if (alfv2 != null)
+								{
+									alfv = alfv2;
+								}
+							}
+
+							synchronized (alfv)
+							{
+								alfv[colPos] = fv;
+							}
+						}
+						catch (Exception e)
+						{
+							HRDBMSWorker.logger.debug("Error find rid = " + rid + " in " + s.recCache + " during col table read");
+							HRDBMSWorker.logger.debug("Page group info follows:");
+							for (Page p2 : s.pageGroup.values())
+							{
+								HRDBMSWorker.logger.debug("Block: " + p2.block() + " Pinned: " + p2.isPinned() + " Ready: " + p2.isReady());
+							}
+							throw e;
+						}
+					}
+					catch (Exception f)
+					{
+						String string = "Probable error reading column data, offset array is [";
+						for (int[] array : s.offsetArray)
+						{
+							string += (array[0] + ",");
+						}
+
+						string += "]";
+
+						HRDBMSWorker.logger.debug(string, f);
+						throw f;
+					}
+				}
+
+				// s.colTypes = colTypesBackup;
+				s.makeNull();
+			}
+			catch (Exception e)
+			{
+				ok = false;
+				this.e = e;
+				HRDBMSWorker.logger.debug("", e);
+			}
 		}
 	}
 

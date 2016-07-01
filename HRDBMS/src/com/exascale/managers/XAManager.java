@@ -73,8 +73,8 @@ public class XAManager extends HRDBMSThread
 					// sock = new Socket(xa.getHost(),
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress(xa.getHost(), PORT_NUMBER));
 					break;
 				}
@@ -610,11 +610,7 @@ public class XAManager extends HRDBMSThread
 			return list;
 		}
 		complete.add(o);
-		if (o instanceof NetworkSendOperator)
-		{
-			list.add(o.getNode());
-		}
-		else if (o instanceof NetworkReceiveOperator)
+		if ((o instanceof NetworkSendOperator) || (o instanceof NetworkReceiveOperator))
 		{
 			list.add(o.getNode());
 		}
@@ -841,8 +837,8 @@ public class XAManager extends HRDBMSThread
 			// sock = new Socket(hostname,
 			// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			sock = new Socket();
-			sock.setReceiveBufferSize(262144);
-			sock.setSendBufferSize(262144);
+			sock.setReceiveBufferSize(4194304);
+			sock.setSendBufferSize(4194304);
 			sock.connect(new InetSocketAddress(hostname, PORT_NUMBER));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "CHECKPNT        ".getBytes(StandardCharsets.UTF_8);
@@ -926,8 +922,8 @@ public class XAManager extends HRDBMSThread
 					// sock = new Socket(hostname,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress(hostname, PORT_NUMBER));
 					break;
 				}
@@ -1189,8 +1185,8 @@ public class XAManager extends HRDBMSThread
 			// sock = new Socket(hostname,
 			// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			sock = new Socket();
-			sock.setReceiveBufferSize(262144);
-			sock.setSendBufferSize(262144);
+			sock.setReceiveBufferSize(4194304);
+			sock.setSendBufferSize(4194304);
 			sock.connect(new InetSocketAddress(hostname, PORT_NUMBER));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "PREPARE         ".getBytes(StandardCharsets.UTF_8);
@@ -1253,8 +1249,8 @@ public class XAManager extends HRDBMSThread
 					// sock = new Socket(hostname,
 					// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 					sock = new Socket();
-					sock.setReceiveBufferSize(262144);
-					sock.setSendBufferSize(262144);
+					sock.setReceiveBufferSize(4194304);
+					sock.setSendBufferSize(4194304);
 					sock.connect(new InetSocketAddress(hostname, PORT_NUMBER));
 					break;
 				}

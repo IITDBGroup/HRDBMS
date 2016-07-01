@@ -439,11 +439,11 @@ public class BuildDecode
 			 * = 0; out += "{"; while (j < line.length()) { char c =
 			 * line.charAt(j); out += ("'" + c + "'"); if (j < line.length() -
 			 * 1) { out += ","; }
-			 * 
+			 *
 			 * j++; } out += "},"; line = in.readLine(); i++;
-			 * 
+			 *
 			 * if (i == 8) { System.out.println(out); out = ""; i = 0; } }
-			 * 
+			 *
 			 * System.out.println(out);
 			 */
 		}
