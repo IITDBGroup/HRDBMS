@@ -8,6 +8,7 @@ import java.io.InputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
+import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.ByteBuffer;
@@ -29,6 +30,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.Job;
@@ -66,7 +68,7 @@ public final class LoadOperator implements Operator, Serializable
 	private transient Plan plan;
 	private final String schema;
 	private final String table;
-	private final AtomicInteger num = new AtomicInteger(0);
+	private final AtomicLong num = new AtomicLong(0);
 	private volatile boolean done = false;
 	private final LOMultiHashMap map = new LOMultiHashMap<Long, ArrayList<Object>>();
 	private Transaction tx;
@@ -127,8 +129,8 @@ public final class LoadOperator implements Operator, Serializable
 			// sock = new Socket(hostname,
 			// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			sock = new Socket();
-			sock.setReceiveBufferSize(262144);
-			sock.setSendBufferSize(262144);
+			sock.setReceiveBufferSize(4194304);
+			sock.setSendBufferSize(4194304);
 			sock.connect(new InetSocketAddress(hostname, PORT_NUMBER));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "SETLDMD         ".getBytes(StandardCharsets.UTF_8);
@@ -187,8 +189,8 @@ public final class LoadOperator implements Operator, Serializable
 			// sock = new Socket(hostname,
 			// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			sock = new Socket();
-			sock.setReceiveBufferSize(262144);
-			sock.setSendBufferSize(262144);
+			sock.setReceiveBufferSize(4194304);
+			sock.setSendBufferSize(4194304);
 			sock.connect(new InetSocketAddress(hostname, PORT_NUMBER));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "DELLDMD         ".getBytes(StandardCharsets.UTF_8);
@@ -365,7 +367,8 @@ public final class LoadOperator implements Operator, Serializable
 
 	private static final byte[] rsToBytes(Set<ArrayList<Object>> rows) throws Exception
 	{
-		final ArrayList<byte[]> results = new ArrayList<byte[]>(rows.size());
+		final ByteBuffer[] results = new ByteBuffer[rows.size()];
+		int rIndex = 0;
 		ArrayList<byte[]> bytes = new ArrayList<byte[]>();
 		for (ArrayList<Object> val : rows)
 		{
@@ -446,7 +449,8 @@ public final class LoadOperator implements Operator, Serializable
 					retvalBB.putLong((Long)o);
 					// if ((Long)o < 0)
 					// {
-					// HRDBMSWorker.logger.debug("Negative long value in rsToBytes: "
+					// HRDBMSWorker.logger.debug("Negative long value in
+					// rsToBytes: "
 					// + o);
 					// }
 				}
@@ -455,7 +459,8 @@ public final class LoadOperator implements Operator, Serializable
 					retvalBB.putInt((Integer)o);
 					// if ((Integer)o < 0)
 					// {
-					// HRDBMSWorker.logger.debug("Negative int value in rsToBytes: "
+					// HRDBMSWorker.logger.debug("Negative int value in
+					// rsToBytes: "
 					// + o);
 					// }
 				}
@@ -488,21 +493,22 @@ public final class LoadOperator implements Operator, Serializable
 				i++;
 			}
 
-			results.add(retval);
+			results[rIndex++] = retvalBB;
 		}
 
 		int count = 0;
-		for (final byte[] ba : results)
+		for (final ByteBuffer bb : results)
 		{
-			count += ba.length;
+			count += bb.capacity();
 		}
 		final byte[] retval = new byte[count + 4];
 		ByteBuffer temp = ByteBuffer.allocate(4);
-		temp.asIntBuffer().put(results.size());
+		temp.asIntBuffer().put(results.length);
 		System.arraycopy(temp.array(), 0, retval, 0, 4);
 		int retvalPos = 4;
-		for (final byte[] ba : results)
+		for (final ByteBuffer bb : results)
 		{
+			byte[] ba = bb.array();
 			System.arraycopy(ba, 0, retval, retvalPos, ba.length);
 			retvalPos += ba.length;
 		}
@@ -603,7 +609,7 @@ public final class LoadOperator implements Operator, Serializable
 			LockSupport.parkNanos(500);
 		}
 
-		if (num.get() == Integer.MIN_VALUE)
+		if (num.get() == Long.MIN_VALUE)
 		{
 			throw new Exception("An error occured during a load operation");
 		}
@@ -613,9 +619,9 @@ public final class LoadOperator implements Operator, Serializable
 			return new DataEndMarker();
 		}
 
-		int retval = num.get();
+		long retval = num.get();
 		num.set(-1);
-		return retval;
+		return new Integer((int)retval);
 	}
 
 	@Override
@@ -760,7 +766,8 @@ public final class LoadOperator implements Operator, Serializable
 
 		if (glob.startsWith("hdfs://"))
 		{
-			doHDFS(schema, table, tx, pos2Col, cols2Types, pos2Length, keys, types, orders, indexes);
+			doHDFS(schema, table, tx, pos2Col, cols2Types, pos2Length, keys, types, orders, indexes, type);
+			meta.cluster(schema, table, tx, pos2Col, cols2Types, type);
 			return;
 		}
 
@@ -871,8 +878,10 @@ public final class LoadOperator implements Operator, Serializable
 
 		if (!allOK)
 		{
-			num.set(Integer.MIN_VALUE);
+			num.set(Long.MIN_VALUE);
 		}
+
+		meta.cluster(schema, table, tx, pos2Col, cols2Types, type);
 
 		for (String index : indexNames)
 		{
@@ -888,7 +897,7 @@ public final class LoadOperator implements Operator, Serializable
 		return "InsertOperator";
 	}
 
-	private void doHDFS(String schema, String table, Transaction tx, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, HashMap<Integer, Integer> pos2Length, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes)
+	private void doHDFS(String schema, String table, Transaction tx, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, HashMap<Integer, Integer> pos2Length, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes, int type)
 	{
 		try
 		{
@@ -897,7 +906,7 @@ public final class LoadOperator implements Operator, Serializable
 			PartitionMetaData pmd = md.getPartMeta(schema, table, tx);
 			ArrayList<Integer> coordNodes = MetaData.getCoordNodes();
 			ArrayList<Integer> workerNodes = MetaData.getWorkerNodes();
-			LoadMetaData ldmd = new LoadMetaData(workerNodes.size(), delimiter, pos2Col, cols2Types, pos2Length, pmd, workerNodes, coordNodes, tx.number(), keys, types, orders, indexes);
+			LoadMetaData ldmd = new LoadMetaData(workerNodes.size(), delimiter, pos2Col, cols2Types, pos2Length, pmd, workerNodes, coordNodes, tx.number(), keys, types, orders, indexes, type);
 			String key = schema + "." + table;
 			// send LoadMetaData everywhere
 			ArrayList<Object> tree = makeTree(workerNodes);
@@ -907,7 +916,7 @@ public final class LoadOperator implements Operator, Serializable
 				HRDBMSWorker.logger.debug("Sending DELLDMD");
 				tree = makeTree(workerNodes);
 				sendRemoveLDMD(tree, key, tx);
-				num.set(Integer.MIN_VALUE);
+				num.set(Long.MIN_VALUE);
 				done = true;
 				return;
 			}
@@ -921,6 +930,7 @@ public final class LoadOperator implements Operator, Serializable
 				conf.addResource(new org.apache.hadoop.fs.Path("/usr/local/hadoop-2.5.1/etc/hadoop/core-site.xml"));
 				conf.addResource(new org.apache.hadoop.fs.Path("/usr/local/hadoop-2.5.1/etc/hadoop/hdfs-site.xml"));
 				conf.addResource(new org.apache.hadoop.fs.Path("/usr/local/hadoop-2.5.1/etc/hadoop/yarn-site.xml"));
+				conf.addResource(new org.apache.hadoop.fs.Path("/usr/local/hadoop-2.5.1/etc/hadoop/mapreduce-site.xml"));
 				conf.set("hrdbms.port", HRDBMSWorker.getHParms().getProperty("port_number"));
 				String hrdbmsHome = System.getProperty("user.dir");
 				if (!hrdbmsHome.endsWith("/"))
@@ -964,13 +974,24 @@ public final class LoadOperator implements Operator, Serializable
 				if (!allOK)
 				{
 					HRDBMSWorker.logger.debug("MR returned an error");
-					num.set(Integer.MIN_VALUE);
+					num.set(Long.MIN_VALUE);
 				}
 				else
 				{
 					HRDBMSWorker.logger.debug("MR was successful");
-					num.set((int)job.getCounters().findCounter("org.apache.hadoop.mapred.Task$Counter", "MAP_INPUT_RECORDS").getValue());
-					if (num.get() == Integer.MIN_VALUE)
+					num.set(job.getCounters().findCounter("org.apache.hadoop.mapred.Task$Counter", "MAP_INPUT_RECORDS").getValue());
+					ArrayList<String> indexNames = new ArrayList<String>();
+					for (String s : indexes)
+					{
+						int start = s.indexOf('.') + 1;
+						int end = s.indexOf('.', start);
+						indexNames.add(s.substring(start, end));
+					}
+					for (String index : indexNames)
+					{
+						meta.populateIndex(schema, index, table, tx, cols2Pos);
+					}
+					if (num.get() == Long.MIN_VALUE)
 					{
 						num.getAndIncrement();
 					}
@@ -983,7 +1004,7 @@ public final class LoadOperator implements Operator, Serializable
 				HRDBMSWorker.logger.debug("An exception occurred while building and submitting the MR job", f);
 				tree = makeTree(workerNodes);
 				sendRemoveLDMD(tree, key, tx);
-				num.set(Integer.MIN_VALUE);
+				num.set(Long.MIN_VALUE);
 				done = true;
 				return;
 			}
@@ -991,7 +1012,7 @@ public final class LoadOperator implements Operator, Serializable
 		catch (Exception e)
 		{
 			HRDBMSWorker.logger.debug("An exception occurred prior to building the MR job", e);
-			num.set(Integer.MIN_VALUE);
+			num.set(Long.MIN_VALUE);
 			done = true;
 		}
 	}
@@ -1355,10 +1376,27 @@ public final class LoadOperator implements Operator, Serializable
 				String hostname = new MetaData().getHostNameForNode(node, tx);
 				// sock = new Socket(hostname,
 				// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
-				sock = new Socket();
-				sock.setReceiveBufferSize(262144);
-				sock.setSendBufferSize(262144);
-				sock.connect(new InetSocketAddress(hostname, PORT_NUMBER));
+				int i = 0;
+				while (true)
+				{
+					try
+					{
+						sock = new Socket();
+						sock.setReceiveBufferSize(4194304);
+						sock.setSendBufferSize(4194304);
+						sock.connect(new InetSocketAddress(hostname, PORT_NUMBER));
+						break;
+					}
+					catch (ConnectException e)
+					{
+						i++;
+						if (i == 60)
+						{
+							throw e;
+						}
+						Thread.sleep(5000);
+					}
+				}
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "LOAD            ".getBytes(StandardCharsets.UTF_8);
 				outMsg[8] = 0;
@@ -1494,7 +1532,7 @@ public final class LoadOperator implements Operator, Serializable
 		private final HashMap<Integer, Integer> pos2Length;
 		private final ArrayList<String> indexes;
 		private boolean ok = true;
-		private volatile int num = 0;
+		private volatile long num = 0;
 		private final HashMap<String, Integer> cols2Pos;
 		PartitionMetaData spmd;
 		private final ArrayList<ArrayList<String>> keys;
@@ -1519,7 +1557,7 @@ public final class LoadOperator implements Operator, Serializable
 			this.type = type;
 		}
 
-		public int getNum()
+		public long getNum()
 		{
 			return num;
 		}

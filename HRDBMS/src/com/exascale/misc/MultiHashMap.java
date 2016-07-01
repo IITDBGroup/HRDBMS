@@ -1,12 +1,13 @@
 package com.exascale.misc;
 
+import java.io.Serializable;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import com.exascale.managers.ResourceManager;
 
-public class MultiHashMap<K, V>
+public class MultiHashMap<K, V> implements Serializable
 {
 	private final ConcurrentHashMap<K, ConcurrentHashMap<V, V>> map;
 	private final AtomicInteger size = new AtomicInteger(0);

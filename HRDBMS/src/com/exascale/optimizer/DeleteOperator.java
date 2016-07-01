@@ -459,8 +459,8 @@ public final class DeleteOperator implements Operator, Serializable
 				// sock = new Socket(hostname,
 				// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				sock = new Socket();
-				sock.setReceiveBufferSize(262144);
-				sock.setSendBufferSize(262144);
+				sock.setReceiveBufferSize(4194304);
+				sock.setSendBufferSize(4194304);
 				sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 				OutputStream out = sock.getOutputStream();
 				byte[] outMsg = "DELETE          ".getBytes(StandardCharsets.UTF_8);

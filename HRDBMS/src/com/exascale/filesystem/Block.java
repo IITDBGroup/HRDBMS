@@ -1,12 +1,13 @@
 package com.exascale.filesystem;
 
+import java.io.Serializable;
 import java.util.StringTokenizer;
 
-public class Block
+public class Block implements Serializable
 {
 	private final String filename;
 	private final int blknum;
-	private volatile String string;
+	private transient volatile String string;
 
 	public Block(String str)
 	{

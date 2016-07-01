@@ -359,8 +359,8 @@ public class LoadMapper extends Mapper<LongWritable, Text, MyLongWritable, ALOWr
 	{
 		// Socket sock = new Socket("localhost", Integer.parseInt(portString));
 		Socket sock = new Socket();
-		sock.setReceiveBufferSize(262144);
-		sock.setSendBufferSize(262144);
+		sock.setReceiveBufferSize(4194304);
+		sock.setSendBufferSize(4194304);
 		sock.connect(new InetSocketAddress("localhost", Integer.parseInt(portString)));
 		OutputStream out = sock.getOutputStream();
 		byte[] outMsg = "GETLDMD         ".getBytes(StandardCharsets.UTF_8);

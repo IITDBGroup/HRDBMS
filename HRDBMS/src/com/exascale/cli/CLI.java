@@ -122,6 +122,10 @@ public class CLI
 
 	private static void processCommand(String cmd)
 	{
+		if (cmd.trim().equals(""))
+		{
+			return;
+		}
 		if (startsWithIgnoreCase(cmd, "CONNECT TO "))
 		{
 			connectTo(cmd);

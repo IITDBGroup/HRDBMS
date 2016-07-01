@@ -35,7 +35,7 @@ public final class AvgOperator implements AggregateOperator, Serializable
 
 	private transient final MetaData meta;
 
-	private int NUM_GROUPS = 16;
+	private long NUM_GROUPS = 16;
 
 	public AvgOperator(String input, String output, MetaData meta)
 	{
@@ -50,7 +50,7 @@ public final class AvgOperator implements AggregateOperator, Serializable
 		prev.put(OperatorUtils.readLong(in), value);
 		value.input = OperatorUtils.readString(in, prev);
 		value.output = OperatorUtils.readString(in, prev);
-		value.NUM_GROUPS = OperatorUtils.readInt(in);
+		value.NUM_GROUPS = OperatorUtils.readLong(in);
 		return value;
 	}
 
@@ -104,7 +104,7 @@ public final class AvgOperator implements AggregateOperator, Serializable
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.writeString(input, out, prev);
 		OperatorUtils.writeString(output, out, prev);
-		OperatorUtils.writeInt(NUM_GROUPS, out);
+		OperatorUtils.writeLong(NUM_GROUPS, out);
 	}
 
 	@Override
@@ -120,7 +120,7 @@ public final class AvgOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public void setNumGroups(int groups)
+	public void setNumGroups(long groups)
 	{
 		NUM_GROUPS = groups;
 	}
@@ -131,8 +131,8 @@ public final class AvgOperator implements AggregateOperator, Serializable
 		// DiskBackedALOHashMap<AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
 		// private final DiskBackedALOHashMap<AtomicLong> counts = new
 		// DiskBackedALOHashMap<AtomicLong>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
-		private final ConcurrentHashMap<ArrayList<Object>, BigDecimalReplacement> sums = new ConcurrentHashMap<ArrayList<Object>, BigDecimalReplacement>();
-		private final ConcurrentHashMap<ArrayList<Object>, AtomicLong> counts = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS, 0.75f, 6 * ResourceManager.cpus);
+		private ConcurrentHashMap<ArrayList<Object>, BigDecimalReplacement> sums = new ConcurrentHashMap<ArrayList<Object>, BigDecimalReplacement>();
+		private ConcurrentHashMap<ArrayList<Object>, AtomicLong> counts = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS <= Integer.MAX_VALUE ? (int)NUM_GROUPS : Integer.MAX_VALUE, 0.75f, 6 * ResourceManager.cpus);
 		private final int pos;
 
 		public AvgHashThread(HashMap<String, Integer> cols2Pos)
@@ -159,6 +159,8 @@ public final class AvgOperator implements AggregateOperator, Serializable
 		{
 			// sums.close();
 			// counts.close();
+			sums = null;
+			counts = null;
 		}
 
 		@Override

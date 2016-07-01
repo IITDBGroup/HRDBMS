@@ -1720,13 +1720,15 @@ public class PlanCacheManager
 	// public static CoordNodesPlan getCoordNodes()
 	// {
 	// return new
-	// CoordNodesPlan(checkPlanCache("SELECT NODEID FROM SYS.NODES WHERE NODEID < -1"));
+	// CoordNodesPlan(checkPlanCache("SELECT NODEID FROM SYS.NODES WHERE NODEID
+	// < -1"));
 	// }
 
 	// public static CountWorkerNodesPlan getCountWorkerNodes()
 	// {
 	// return new
-	// CountWorkerNodesPlan(checkPlanCache("SELECT COUNT(*) FROM SYS.NODES WHERE NODEID >= 0"));
+	// CountWorkerNodesPlan(checkPlanCache("SELECT COUNT(*) FROM SYS.NODES WHERE
+	// NODEID >= 0"));
 	// }
 
 	public static DeleteColDistPlan getDeleteColDist()
@@ -1787,7 +1789,8 @@ public class PlanCacheManager
 	// public static HostLookupPlan getHostLookup()
 	// {
 	// return new
-	// HostLookupPlan(checkPlanCache("SELECT HOSTNAME FROM SYS.NODES WHERE NODEID = ?"));
+	// HostLookupPlan(checkPlanCache("SELECT HOSTNAME FROM SYS.NODES WHERE
+	// NODEID = ?"));
 	// }
 
 	public static IndexCardPlan getIndexCard()
@@ -1958,7 +1961,8 @@ public class PlanCacheManager
 	// public static WorkerNodesPlan getWorkerNodes()
 	// {
 	// return new
-	// WorkerNodesPlan(checkPlanCache("SELECT NODEID FROM SYS.NODES WHERE NODEID >= 0"));
+	// WorkerNodesPlan(checkPlanCache("SELECT NODEID FROM SYS.NODES WHERE NODEID
+	// >= 0"));
 	// }
 
 	public static void invalidate()

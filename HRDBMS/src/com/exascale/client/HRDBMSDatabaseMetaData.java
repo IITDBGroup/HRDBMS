@@ -5,6 +5,7 @@ import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.RowIdLifetime;
 import java.sql.SQLException;
+import com.exascale.filesystem.Page;
 
 public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 {
@@ -324,7 +325,7 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	@Override
 	public int getMaxRowSize() throws SQLException
 	{
-		return 128 * 1024;
+		return Page.BLOCK_SIZE;
 	}
 
 	@Override

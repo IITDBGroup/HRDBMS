@@ -1,11 +1,12 @@
 grammar Select;
 
-select : insert | update | delete | createTable | createIndex | createView | dropTable | dropIndex | dropView | load | runstats | (('WITH' commonTableExpression (',' commonTableExpression)*)? fullSelect) ;
+select : (insert EOF) | (update EOF) | (delete EOF) | (createTable EOF) | (createIndex EOF) | (createView EOF) | (dropTable EOF) | (dropIndex EOF) | (dropView EOF) | (load EOF) | (runstats EOF) | ((('WITH' commonTableExpression (',' commonTableExpression)*)? fullSelect) EOF);
 runstats : 'RUNSTATS' 'ON' tableName ;
 insert : 'INSERT' 'INTO' tableName (('FROM'? fullSelect) | ('VALUES' '(' expression (',' expression)* ')')) ;
 update : 'UPDATE' tableName 'SET' (columnName | colList) EQUALS expression whereClause? ;
 delete : 'DELETE' 'FROM' tableName whereClause? ;
-createTable : 'CREATE' COLUMN? 'TABLE' tableName '(' colDef (',' colDef)* (',' primaryKey)? ')' colOrder? groupExp? nodeExp deviceExp ;
+createTable : 'CREATE' COLUMN? 'TABLE' tableName '(' colDef (',' colDef)* (',' primaryKey)? ')' colOrder? organization? groupExp? nodeExp deviceExp ;
+organization : ORGANIZATION '(' INTEGER (',' INTEGER)* ')' ;
 colOrder : COLORDER '(' INTEGER (',' INTEGER)* ')' ;
 groupExp : NONE | realGroupExp ;
 realGroupExp :  '{' groupDef ('|' groupDef)* '}' (',' (hashExp | rangeType))? ;
@@ -144,5 +145,6 @@ HASH : 'HASH' ;
 RANGE : 'RANGE' ;
 DATE : 'DATE' ;
 COLORDER : 'COLORDER' ;
+ORGANIZATION : 'ORGANIZATION' ;
 IDENTIFIER : [A-Z]([A-Z] | [0-9] | '_')* ;
 ANY : . ;

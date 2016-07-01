@@ -23,6 +23,7 @@ public class HRDBMSStatement implements Statement
 	private static Charset cs = StandardCharsets.UTF_8;
 	private static sun.misc.Unsafe unsafe;
 	private static long offset;
+
 	static
 	{
 		try

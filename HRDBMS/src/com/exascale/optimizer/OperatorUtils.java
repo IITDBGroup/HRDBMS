@@ -102,6 +102,7 @@ public class OperatorUtils
 	// 80 - HMIntOp
 	// 81 - Operator null
 	// 82 - Index null;
+	// 83 - BoolArray
 
 	public static int bytesToInt(byte[] val)
 	{
@@ -544,6 +545,38 @@ public class OperatorUtils
 		return retval;
 	}
 
+	public static boolean[] deserializeBoolArray(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		int type = getType(in);
+		if (type == 0)
+		{
+			return (boolean[])readReference(in, prev);
+		}
+
+		if (type != 83)
+		{
+			throw new Exception("Corrupted stream. Expected type 83 but received " + type);
+		}
+
+		long id = readLong(in);
+		if (id == -1)
+		{
+			return null;
+		}
+
+		int size = readShort(in);
+		boolean[] retval = new boolean[size];
+		prev.put(id, retval);
+		int i = 0;
+		while (i < size)
+		{
+			retval[i] = readBool(in);
+			i++;
+		}
+
+		return retval;
+	}
+
 	public static CNFFilter deserializeCNF(InputStream in, HashMap<Long, Object> prev) throws Exception
 	{
 		int type = getType(in);
@@ -893,159 +926,159 @@ public class OperatorUtils
 		int type = getType(in);
 		switch (type)
 		{
-		// 0 - reference
+			// 0 - reference
 			case 0:
 				return (Operator)readReference(in, prev);
-				// 1 - AntiJoin
+			// 1 - AntiJoin
 			case 1:
 				return AntiJoinOperator.deserialize(in, prev);
-				// 2 - HMStringString
-				// 3 - String
-				// 4 - HMStringInt
-				// 5 - TreeMap
-				// 6 - ALS
-				// 7 - ALI
-				// 8 - HSHM
-				// 9 - HMF
-				// 10 - ALIndx
-				// 11 - ALHSHM
-				// 12 - Double null
-				// 13 - Double
-				// 14 - Long null
-				// 15 - Long
-				// 16 - Integer null
-				// 17 - Integer
-				// 18 - MyDate null
-				// 19 - MyDate
-				// 20 - Case
+			// 2 - HMStringString
+			// 3 - String
+			// 4 - HMStringInt
+			// 5 - TreeMap
+			// 6 - ALS
+			// 7 - ALI
+			// 8 - HSHM
+			// 9 - HMF
+			// 10 - ALIndx
+			// 11 - ALHSHM
+			// 12 - Double null
+			// 13 - Double
+			// 14 - Long null
+			// 15 - Long
+			// 16 - Integer null
+			// 17 - Integer
+			// 18 - MyDate null
+			// 19 - MyDate
+			// 20 - Case
 			case 20:
 				return CaseOperator.deserialize(in, prev);
-				// 21 - Concat
+			// 21 - Concat
 			case 21:
 				return ConcatOperator.deserialize(in, prev);
-				// 22 - DateMath
+			// 22 - DateMath
 			case 22:
 				return DateMathOperator.deserialize(in, prev);
-				// 23 - DEMOperator
+			// 23 - DEMOperator
 			case 23:
 				return DEMOperator.deserialize(in, prev);
-				// 24 - DummyOperator
+			// 24 - DummyOperator
 			case 24:
 				return DummyOperator.deserialize(in, prev);
-				// 25 - Except
+			// 25 - Except
 			case 25:
 				return ExceptOperator.deserialize(in, prev);
-				// 26 - ExtendObject
+			// 26 - ExtendObject
 			case 26:
 				return ExtendObjectOperator.deserialize(in, prev);
-				// 27 - Extend
+			// 27 - Extend
 			case 27:
 				return ExtendOperator.deserialize(in, prev);
-				// 28 - FST null
-				// 29 - ADS
-				// 30 - IndexOperator
+			// 28 - FST null
+			// 29 - ADS
+			// 30 - IndexOperator
 			case 30:
 				return IndexOperator.deserialize(in, prev);
-				// 31 - Intersect
+			// 31 - Intersect
 			case 31:
 				return IntersectOperator.deserialize(in, prev);
-				// 32 - ALOp
-				// 33 - Multi
+			// 32 - ALOp
+			// 33 - Multi
 			case 33:
 				return MultiOperator.deserialize(in, prev);
-				// 34 - ALAgOp
-				// 35 - NRO
+			// 34 - ALAgOp
+			// 35 - NRO
 			case 35:
 				return NetworkReceiveOperator.deserialize(in, prev);
-				// 36 - NSO
+			// 36 - NSO
 			case 36:
 				return NetworkSendOperator.deserialize(in, prev);
-				// 37 - Project
+			// 37 - Project
 			case 37:
 				return ProjectOperator.deserialize(in, prev);
-				// 38 - Rename
+			// 38 - Rename
 			case 38:
 				return RenameOperator.deserialize(in, prev);
-				// 39 - Reorder
+			// 39 - Reorder
 			case 39:
 				return ReorderOperator.deserialize(in, prev);
-				// 40 - Root
+			// 40 - Root
 			case 40:
 				return RootOperator.deserialize(in, prev);
-				// 41 - Select
+			// 41 - Select
 			case 41:
 				return SelectOperator.deserialize(in, prev);
-				// 42 - ALF
-				// 43 - HSO
-				// 44 - Sort
+			// 42 - ALF
+			// 43 - HSO
+			// 44 - Sort
 			case 44:
 				return SortOperator.deserialize(in, prev);
-				// 45 - ALB
-				// 46 - IntArray
-				// 47 - Substring
+			// 45 - ALB
+			// 46 - IntArray
+			// 47 - Substring
 			case 47:
 				return SubstringOperator.deserialize(in, prev);
-				// 48 - Top
+			// 48 - Top
 			case 48:
 				return TopOperator.deserialize(in, prev);
-				// 49 - Union
+			// 49 - Union
 			case 49:
 				return UnionOperator.deserialize(in, prev);
-				// 50 - Year
+			// 50 - Year
 			case 50:
 				return YearOperator.deserialize(in, prev);
-				// 51 - Avg
-				// 52 - CountDistinct
-				// 53 - Count
-				// 54 - Max
-				// 55 - Min
-				// 56 - Sum
-				// 57 - SJO
+			// 51 - Avg
+			// 52 - CountDistinct
+			// 53 - Count
+			// 54 - Max
+			// 55 - Min
+			// 56 - Sum
+			// 57 - SJO
 			case 57:
 				return SemiJoinOperator.deserialize(in, prev);
-				// 58 - Product
+			// 58 - Product
 			case 58:
 				return ProductOperator.deserialize(in, prev);
-				// 59 - NL
+			// 59 - NL
 			case 59:
 				return NestedLoopJoinOperator.deserialize(in, prev);
-				// 60 - HJO
+			// 60 - HJO
 			case 60:
 				return HashJoinOperator.deserialize(in, prev);
-				// 61 - CNF null
-				// 62 - FST
-				// 63 - CNF
-				// 64 - Index
-				// 65 - Filter
-				// 66 - StringArray
-				// 67 - ALALF
-				// 68 - HSS
-				// 69 - Filter null
-				// 70 - Bool null
-				// 71 - Bool class
-				// 72 - NHAS
+			// 61 - CNF null
+			// 62 - FST
+			// 63 - CNF
+			// 64 - Index
+			// 65 - Filter
+			// 66 - StringArray
+			// 67 - ALALF
+			// 68 - HSS
+			// 69 - Filter null
+			// 70 - Bool null
+			// 71 - Bool class
+			// 72 - NHAS
 			case 72:
 				return NetworkHashAndSendOperator.deserialize(in, prev);
-				// 73 - NHRAM
+			// 73 - NHRAM
 			case 73:
 				return NetworkHashReceiveAndMergeOperator.deserialize(in, prev);
-				// 74 - NHRO
+			// 74 - NHRO
 			case 74:
 				return NetworkHashReceiveOperator.deserialize(in, prev);
-				// 75 - NRAM
+			// 75 - NRAM
 			case 75:
 				return NetworkReceiveAndMergeOperator.deserialize(in, prev);
-				// 76 - NSMO
+			// 76 - NSMO
 			case 76:
 				return NetworkSendMultipleOperator.deserialize(in, prev);
-				// 77 - NSRR
+			// 77 - NSRR
 			case 77:
 				return NetworkSendRROperator.deserialize(in, prev);
-				// 78 - TSO
+			// 78 - TSO
 			case 78:
 				return TableScanOperator.deserialize(in, prev);
-				// 79 - HMOpCNF
-				// 80 - HMIntOp
+			// 79 - HMOpCNF
+			// 80 - HMIntOp
 			case 81:
 				return null;
 			default:
@@ -1779,6 +1812,33 @@ public class OperatorUtils
 		for (String entry : als)
 		{
 			writeString(entry, out, prev);
+		}
+
+		return;
+	}
+
+	public static void serializeBoolArray(boolean[] als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		if (als == null)
+		{
+			writeType(83, out);
+			writeLong(-1, out);
+			return;
+		}
+
+		Long id = prev.get(als);
+		if (id != null)
+		{
+			serializeReference(id, out);
+			return;
+		}
+
+		writeType(83, out);
+		prev.put(als, writeID(out));
+		writeShort(als.length, out);
+		for (boolean entry : als)
+		{
+			writeBool(entry, out);
 		}
 
 		return;

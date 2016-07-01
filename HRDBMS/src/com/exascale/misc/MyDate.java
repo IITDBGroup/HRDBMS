@@ -20,7 +20,18 @@ public class MyDate implements Comparable, Serializable
 	public int compareTo(Object r)
 	{
 		final MyDate rhs = (MyDate)r;
-		return Integer.compare(time, rhs.time);
+		if (time == rhs.time)
+		{
+			return 0;
+		}
+		else if (time > rhs.time)
+		{
+			return 1;
+		}
+		else
+		{
+			return -1;
+		}
 	}
 
 	@Override
