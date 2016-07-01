@@ -19,6 +19,7 @@ import com.exascale.misc.DataEndMarker;
 public final class NetworkSendRROperator extends NetworkSendOperator
 {
 	private static sun.misc.Unsafe unsafe;
+
 	static
 	{
 		try

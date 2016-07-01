@@ -1,6 +1,7 @@
 package com.exascale.managers;
 
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -10,6 +11,7 @@ import org.apache.log4j.FileAppender;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.apache.log4j.PatternLayout;
+import org.apache.log4j.RollingFileAppender;
 import com.exascale.misc.HParms;
 import com.exascale.optimizer.SQLParser;
 import com.exascale.optimizer.SortOperator;
@@ -17,6 +19,8 @@ import com.exascale.tables.Schema;
 import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.StartCoordsThread;
 import com.exascale.threads.StartWorkersThread;
+import com.exascale.threads.TempThread;
+import com.exascale.threads.WarmUpThread;
 
 public class HRDBMSWorker
 {
@@ -84,7 +88,9 @@ public class HRDBMSWorker
 	{
 		logger = Logger.getLogger("LOG");
 		BasicConfigurator.configure();
-		fa = new FileAppender(new PatternLayout("%d{ISO8601}\t%p\t%C{1}: %m%n"), "hrdbms.log");
+		fa = new RollingFileAppender(new PatternLayout("%d{ISO8601}\t%p\t%C{1}: %m%n"), "hrdbms.log", true);
+		((RollingFileAppender)fa).setMaxBackupIndex(1);
+		((RollingFileAppender)fa).setMaximumFileSize(2 * 1024L * 1024L * 1024L);
 		fa.activateOptions();
 		logger.addAppender(fa);
 		logger.setLevel(Level.ALL);
@@ -94,6 +100,7 @@ public class HRDBMSWorker
 		try
 		{
 			hparms = HParms.getHParms();
+			HRDBMSWorker.getHParms().setProperty("scfc", "true");
 		}
 		catch (final Exception e)
 		{
@@ -138,6 +145,13 @@ public class HRDBMSWorker
 			start -= 10000;
 		}
 
+		Enumeration props = hparms.propertyNames();
+		while (props.hasMoreElements())
+		{
+			String key = (String)props.nextElement();
+			HRDBMSWorker.logger.debug(key + "-> " + hparms.getProperty(key));
+		}
+
 		new FileManager();
 		new Schema.CVarcharFV();
 		addThread(new BufferManager(true));
@@ -158,6 +172,14 @@ public class HRDBMSWorker
 
 		SortOperator.init();
 
+		int i = 0;
+		while (i < Runtime.getRuntime().availableProcessors())
+		{
+			new WarmUpThread().start();
+			i++;
+		}
+
+		TempThread.initialize();
 		hibernate();
 	}
 

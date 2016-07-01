@@ -16,6 +16,7 @@ import com.exascale.tables.Plan;
 public final class TopOperator implements Operator, Serializable
 {
 	private static sun.misc.Unsafe unsafe;
+
 	static
 	{
 		try

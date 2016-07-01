@@ -14,9 +14,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
@@ -45,7 +43,8 @@ public class LogManager extends HRDBMSThread
 	public static Map<String, FileChannel> openFiles = new HashMap<String, FileChannel>();
 	public static String filename;
 	public static ConcurrentHashMap<String, ArrayDeque<LogRec>> logs = new ConcurrentHashMap<String, ArrayDeque<LogRec>>();
-	private static BlockingQueue<String> in = new LinkedBlockingQueue<String>();
+	// private static BlockingQueue<String> in = new
+	// LinkedBlockingQueue<String>();
 	public static Boolean noArchive = false;
 	// public static Object noArchiveLock = new Object();
 	public static int openIters = 0;
@@ -683,11 +682,6 @@ public class LogManager extends HRDBMSThread
 		return fc;
 	}
 
-	public static BlockingQueue<String> getInputQueue()
-	{
-		return in;
-	}
-
 	public static long getLSN()
 	{
 		return last_lsn.incrementAndGet();
@@ -1170,7 +1164,7 @@ public class LogManager extends HRDBMSThread
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("Error creating the active log file.", e);
-				in = null;
+				// in = null;
 				System.exit(1);
 				return;
 			}
@@ -1182,7 +1176,7 @@ public class LogManager extends HRDBMSThread
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("Error getting a FileChannel for " + filename, e);
-			in = null;
+			// in = null;
 			System.exit(1);
 			return;
 		}
@@ -1199,7 +1193,7 @@ public class LogManager extends HRDBMSThread
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("Error creating the xa log file.", e);
-					in = null;
+					// in = null;
 					System.exit(1);
 					return;
 				}
@@ -1211,13 +1205,12 @@ public class LogManager extends HRDBMSThread
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("Error getting a FileChannel for " + filename2, e);
-				in = null;
+				// in = null;
 				System.exit(1);
 				return;
 			}
 		}
 
-		final int sleepSecs = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("log_clean_sleep_secs"));
 		try
 		{
 			recover(); // sync on everything possible to delay every synchronous
@@ -1230,96 +1223,28 @@ public class LogManager extends HRDBMSThread
 		catch (final Throwable e)
 		{
 			HRDBMSWorker.logger.error("Error during log recovery.", e);
-			in = null;
+			// in = null;
 			System.exit(1);
 			return;
 		}
 
 		HRDBMSWorker.logger.info("Log Manager initialization complete.");
-		while (true)
-		{
-			final String msg = in.poll();
-			if (msg != null)
-			{
-				processMessage(msg);
-			}
-
-			for (final Map.Entry<String, ArrayDeque<LogRec>> entry : logs.entrySet())
-			{
-				final ArrayDeque<LogRec> list = entry.getValue();
-				final String fn = entry.getKey();
-				LogRec last = null;
-				last = list.peekLast();
-
-				if (last != null)
-				{
-					try
-					{
-						flush(last.lsn(), fn);
-					}
-					catch (Exception e)
-					{
-						HRDBMSWorker.logger.fatal("Failure flushing logs", e);
-						System.exit(1);
-					}
-				}
-			}
-
-			try
-			{
-				Thread.sleep(sleepSecs * 1000);
-			}
-			catch (final InterruptedException e)
-			{
-			}
-		}
-	}
-
-	private void addLog(String cmd)
-	{
-		final String fn = cmd.substring(8);
-		final File log = new File(fn);
-		if (!log.exists())
-		{
-			try
-			{
-				log.createNewFile();
-			}
-			catch (final Exception e)
-			{
-				HRDBMSWorker.logger.error("Error creating log file " + log, e);
-				in = null;
-				this.terminate();
-				return;
-			}
-		}
-		try
-		{
-			getFile(fn);
-			recover(fn);
-		}
-		catch (final Exception e)
-		{
-			HRDBMSWorker.logger.error("Error recovery secondary log " + fn, e);
-			in = null;
-			this.terminate();
-			return;
-		}
-	}
-
-	private void processMessage(String cmd)
-	{
-		if (cmd.startsWith("ADD LOG"))
-		{
-			addLog(cmd);
-		}
-		else
-		{
-			HRDBMSWorker.logger.error("Unknown message received by Log Manager: " + cmd);
-			in = null;
-			this.terminate();
-			return;
-		}
+		/*
+		 * while (true) { final String msg = in.poll(); if (msg != null) {
+		 * processMessage(msg); }
+		 *
+		 * for (final Map.Entry<String, ArrayDeque<LogRec>> entry :
+		 * logs.entrySet()) { final ArrayDeque<LogRec> list = entry.getValue();
+		 * final String fn = entry.getKey(); LogRec last = null; last =
+		 * list.peekLast();
+		 *
+		 * if (last != null) { try { flush(last.lsn(), fn); } catch (Exception
+		 * e) { HRDBMSWorker.logger.fatal("Failure flushing logs", e);
+		 * System.exit(1); } } }
+		 *
+		 * try { Thread.sleep(sleepSecs * 1000); } catch (final
+		 * InterruptedException e) { } }
+		 */
 	}
 
 	private static class BlockAndTransaction

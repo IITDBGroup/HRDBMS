@@ -65,13 +65,13 @@ public class MyThreadLocalRandom extends Random
 	 * MyThreadLocalRandom sequence. The dual use is a marriage of convenience,
 	 * but is a simple and efficient way of reducing application-level overhead
 	 * and footprint of most concurrent programs.
-	 * 
+	 *
 	 * Even though this class subclasses java.util.Random, it uses the same
 	 * basic algorithm as java.util.SplittableRandom. (See its internal
 	 * documentation for explanations, which are not repeated here.) Because
 	 * MyThreadLocalRandoms are not splittable though, we use only a single
 	 * 64bit gamma.
-	 * 
+	 *
 	 * Because this class is in a different package than class Thread, field
 	 * access methods use Unsafe to bypass access control rules. To conform to
 	 * the requirements of the Random superclass constructor, the common static
@@ -81,11 +81,11 @@ public class MyThreadLocalRandom extends Random
 	 * there is only a static singleton. But we generate a serial form
 	 * containing "rnd" and "initialized" fields to ensure compatibility across
 	 * versions.
-	 * 
+	 *
 	 * Implementations of non-core methods are mostly the same as in
 	 * SplittableRandom, that were in part derived from a previous version of
 	 * this class.
-	 * 
+	 *
 	 * The nextLocalGaussian ThreadLocal supports the very rarely used
 	 * nextGaussian method by providing a holder for the second of a pair of
 	 * them. As is true for the base class version of this method, this
@@ -136,10 +136,10 @@ public class MyThreadLocalRandom extends Random
 	private static final long serialVersionUID = -5851777807851030925L;
 
 	/**
-	 * @serialField
-	 *                  rnd long seed for random computations
-	 * @serialField
-	 *                  initialized boolean always true
+	 * @serialField rnd
+	 *                  long seed for random computations
+	 * @serialField initialized
+	 *                  boolean always true
 	 */
 	private static final ObjectStreamField[] serialPersistentFields = { new ObjectStreamField("rnd", long.class), new ObjectStreamField("initialized", boolean.class), };
 
@@ -841,7 +841,7 @@ public class MyThreadLocalRandom extends Random
 	 * adaptive spin/block sequences for which a cheap RNG suffices and for
 	 * which it could in principle disrupt user-visible statistical properties
 	 * of the main MyThreadLocalRandom if we were to use it.
-	 * 
+	 *
 	 * Note: Because of package-protection issues, versions of some these
 	 * methods also appear in some subpackage classes.
 	 */

@@ -55,6 +55,7 @@ public class Cluster
 	private static final Log LOG = LogFactory.getLog(Cluster.class);;
 
 	private static ServiceLoader<ClientProtocolProvider> frameworkLoader = ServiceLoader.load(ClientProtocolProvider.class);
+
 	static
 	{
 		ConfigUtil.loadResources();

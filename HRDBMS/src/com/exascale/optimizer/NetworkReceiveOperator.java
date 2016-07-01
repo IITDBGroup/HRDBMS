@@ -1,13 +1,16 @@
 package com.exascale.optimizer;
 
 import java.io.BufferedInputStream;
+import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.RandomAccessFile;
 import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.StandardCharsets;
@@ -15,15 +18,19 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.Random;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedInputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
+import com.exascale.misc.BufferedFileChannel;
 import com.exascale.misc.BufferedLinkedBlockingQueue;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MyDate;
 import com.exascale.tables.Plan;
+import com.exascale.threads.HRDBMSThread;
+import com.exascale.threads.TempThread;
 import com.exascale.threads.ThreadPoolThread;
 
 public class NetworkReceiveOperator implements Operator, Serializable
@@ -31,10 +38,10 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	protected static final int WORKER_PORT = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"));
 
 	protected static Charset cs = StandardCharsets.UTF_8;
-
 	protected static long offset;
 
 	private static sun.misc.Unsafe unsafe;
+
 	static
 	{
 		try
@@ -51,6 +58,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 			unsafe = null;
 		}
 	}
+	protected CharsetDecoder cd = cs.newDecoder();
 	protected MetaData meta;
 	protected ArrayList<Operator> children = new ArrayList<Operator>();
 	protected Operator parent;
@@ -70,9 +78,10 @@ public class NetworkReceiveOperator implements Operator, Serializable
 
 	protected int node;
 
-	protected CharsetDecoder cd = cs.newDecoder();
 	protected transient AtomicLong received;
 	protected transient volatile boolean demReceived;
+	protected transient long txnum;
+	protected transient Object[] readThrottle;
 
 	public NetworkReceiveOperator(MetaData meta)
 	{
@@ -101,6 +110,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 		value.cd = cs.newDecoder();
 		value.received = new AtomicLong(0);
 		value.demReceived = false;
+		value.txnum = OperatorUtils.readLong(in);
 		return value;
 	}
 
@@ -149,6 +159,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	{
 		final NetworkReceiveOperator retval = new NetworkReceiveOperator(meta);
 		retval.node = node;
+		retval.txnum = txnum;
 		return retval;
 	}
 
@@ -345,6 +356,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 		OperatorUtils.writeBool(fullyStarted, out);
 		OperatorUtils.writeLong(start, out);
 		OperatorUtils.writeInt(node, out);
+		OperatorUtils.writeLong(txnum, out);
 	}
 
 	@Override
@@ -366,6 +378,11 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	@Override
 	public void setPlan(Plan plan)
 	{
+	}
+
+	public void setTXNum(long txnum)
+	{
+		this.txnum = txnum;
 	}
 
 	@Override
@@ -391,8 +408,8 @@ public class NetworkReceiveOperator implements Operator, Serializable
 						// Socket(meta.getHostNameForNode(child.getNode()),
 						// WORKER_PORT);
 						Socket sock = new Socket();
-						sock.setReceiveBufferSize(262144);
-						sock.setSendBufferSize(262144);
+						sock.setReceiveBufferSize(4194304);
+						sock.setSendBufferSize(4194304);
 						sock.connect(new InetSocketAddress(meta.getHostNameForNode(child.getNode()), WORKER_PORT));
 						socks.put(child, sock);
 						final OutputStream out = sock.getOutputStream();
@@ -442,10 +459,53 @@ public class NetworkReceiveOperator implements Operator, Serializable
 		return ret;
 	}
 
+	private static class OverflowThread extends HRDBMSThread
+	{
+		private final FileChannel overFC;
+		private final ByteBuffer buff;
+		private boolean ok = true;
+		private Exception e;
+
+		public OverflowThread(FileChannel overFC, ByteBuffer buff)
+		{
+			this.overFC = overFC;
+			this.buff = buff;
+		}
+
+		public Exception getException()
+		{
+			return e;
+		}
+
+		public boolean getOK()
+		{
+			return ok;
+		}
+
+		@Override
+		public void run()
+		{
+			try
+			{
+				overFC.write(buff);
+			}
+			catch (Exception e)
+			{
+				ok = false;
+				this.e = e;
+			}
+		}
+	}
+
 	private final class ReadThread extends ThreadPoolThread
 	{
 		private Operator op;
 		private Socket sock;
+		private InputStream in;
+		private FileChannel overFC;
+		private final Random random = new Random();
+		private String fn;
+		private ByteBuffer buff;
 
 		public ReadThread(Operator op)
 		{
@@ -455,14 +515,15 @@ public class NetworkReceiveOperator implements Operator, Serializable
 		@Override
 		public void run()
 		{
+			long start = System.currentTimeMillis();
 			try
 			{
-				final InputStream i = ins.get(op);
-				InputStream in = new CompressedInputStream(i);
 				sock = socks.get(op);
+				in = new CompressedInputStream(ins.get(op));
 				op = null;
 				final byte[] sizeBuff = new byte[4];
 				byte[] data = null;
+
 				while (true)
 				{
 					int count = 0;
@@ -495,6 +556,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 								HRDBMSWorker.logger.error("Early EOF reading from socket", e);
 								HRDBMSWorker.logger.error("", f);
 								outBuffer.put(new Exception(e));
+								return;
 							}
 						}
 					}
@@ -524,19 +586,112 @@ public class NetworkReceiveOperator implements Operator, Serializable
 
 					if (row instanceof DataEndMarker)
 					{
-						return;
+						break;
 					}
 
 					if (row instanceof Exception)
 					{
-						HRDBMSWorker.logger.debug("", (Exception)row);
+						HRDBMSWorker.logger.debug("Exception received from " + sock.getRemoteSocketAddress(), (Exception)row);
 						outBuffer.put(row);
 						return;
 					}
 
-					outBuffer.put(row);
+					boolean ok = outBuffer.putNow(row);
+
+					if (!ok)
+					{
+						if (overFC == null)
+						{
+							int j = random.nextInt(ResourceManager.TEMP_DIRS.size());
+							fn = ResourceManager.TEMP_DIRS.get(j) + this.hashCode() + "" + System.currentTimeMillis() + ".overflow";
+							overFC = new RandomAccessFile(fn, "rw").getChannel();
+							buff = ByteBuffer.allocate(9 * 1024 * 1024);
+						}
+
+						buff.put(sizeBuff);
+						buff.put(data, 0, size);
+
+						if (buff.position() >= 8 * 1024 * 1024)
+						{
+							int pos = buff.position();
+							buff.position(0);
+							buff.limit(pos);
+							// overFC.write(buff);
+							OverflowThread thread = new OverflowThread(overFC, buff);
+							TempThread.start(thread, txnum);
+							thread.join();
+							if (!thread.getOK())
+							{
+								outBuffer.put(thread.getException());
+								return;
+							}
+							buff.position(0);
+							buff.limit(9 * 1024 * 1024);
+						}
+					}
+
 					// readCounter.getAndIncrement();
 				}
+
+				if (overFC == null)
+				{
+					long end = System.currentTimeMillis();
+					HRDBMSWorker.logger.debug("NRO ReadThread for " + sock.getRemoteSocketAddress() + " took " + ((end - start) / 1000) + "s");
+					return;
+				}
+
+				if (buff.position() != 0)
+				{
+					int pos = buff.position();
+					buff.position(0);
+					buff.limit(pos);
+					// overFC.write(buff);
+					OverflowThread thread = new OverflowThread(overFC, buff);
+					TempThread.start(thread, txnum);
+					thread.join();
+					if (!thread.getOK())
+					{
+						outBuffer.put(thread.getException());
+						return;
+					}
+				}
+
+				buff = null;
+				BufferedFileChannel overFC2 = new BufferedFileChannel(overFC, 8 * 1024 * 1024);
+				overFC2.position(0);
+				while (true)
+				{
+					ByteBuffer bb = ByteBuffer.wrap(sizeBuff);
+					int x = random.nextInt(ResourceManager.TEMP_DIRS.size());
+
+					// synchronized(readThrottle[x])
+					// {
+					if (overFC2.read(bb, readThrottle[x]) == -1)
+					{
+						break;
+					}
+
+					final int size = bytesToInt(sizeBuff);
+
+					if (data == null || data.length < size)
+					{
+						data = new byte[size];
+					}
+
+					bb = ByteBuffer.wrap(data);
+					bb.limit(size);
+					overFC2.read(bb, readThrottle[x]);
+					// }
+
+					final Object row = fromBytes(data);
+
+					outBuffer.put(row);
+				}
+
+				overFC2.close();
+				new File(fn).delete();
+				long end = System.currentTimeMillis();
+				HRDBMSWorker.logger.debug("NRO ReadThread for " + sock.getRemoteSocketAddress() + " took " + ((end - start) / 1000) + "s");
 			}
 			catch (final Exception e)
 			{
@@ -557,13 +712,6 @@ public class NetworkReceiveOperator implements Operator, Serializable
 			final ByteBuffer bb = ByteBuffer.wrap(val);
 			final int numFields = bb.getInt();
 
-			if (numFields < 0)
-			{
-				HRDBMSWorker.logger.error("Negative number of fields in fromBytes()");
-				HRDBMSWorker.logger.error("NumFields = " + numFields);
-				throw new Exception("Negative number of fields in fromBytes()");
-			}
-
 			bb.position(bb.position() + numFields);
 			final byte[] bytes = bb.array();
 			if (bytes[4] == 5)
@@ -572,46 +720,33 @@ public class NetworkReceiveOperator implements Operator, Serializable
 			}
 			if (bytes[4] == 10)
 			{
-				final int length = bb.getInt();
-				final byte[] temp = new byte[length];
-				bb.get(temp);
-				try
-				{
-					final String o = new String(temp, StandardCharsets.UTF_8);
-					return new Exception(o);
-				}
-				catch (final Exception e)
-				{
-					throw e;
-				}
+				return fromBytesException(bb);
 			}
 			final ArrayList<Object> retval = new ArrayList<Object>(numFields);
 			int i = 0;
+
 			while (i < numFields)
 			{
+				Object o = null;
 				if (bytes[i + 4] == 0)
 				{
 					// long
-					final Long o = bb.getLong();
-					retval.add(o);
+					o = bb.getLong();
 				}
 				else if (bytes[i + 4] == 1)
 				{
 					// integer
-					final Integer o = bb.getInt();
-					retval.add(o);
+					o = bb.getInt();
 				}
 				else if (bytes[i + 4] == 2)
 				{
 					// double
-					final Double o = bb.getDouble();
-					retval.add(o);
+					o = bb.getDouble();
 				}
 				else if (bytes[i + 4] == 3)
 				{
 					// date
-					final MyDate o = new MyDate(bb.getInt());
-					retval.add(o);
+					o = new MyDate(bb.getInt());
 				}
 				else if (bytes[i + 4] == 4)
 				{
@@ -620,37 +755,39 @@ public class NetworkReceiveOperator implements Operator, Serializable
 					final byte[] temp = new byte[length];
 					final char[] ca = new char[length];
 					bb.get(temp);
-					try
+					String value = (String)unsafe.allocateInstance(String.class);
+					int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(temp, 0, length, ca);
+					if (clen == ca.length)
 					{
-						String value = (String)unsafe.allocateInstance(String.class);
-						int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(temp, 0, length, ca);
-						if (clen == ca.length)
-						{
-							unsafe.putObject(value, offset, ca);
-						}
-						else
-						{
-							char[] v = Arrays.copyOf(ca, clen);
-							unsafe.putObject(value, offset, v);
-						}
-						retval.add(value);
+						unsafe.putObject(value, offset, ca);
 					}
-					catch (final Exception e)
+					else
 					{
-						HRDBMSWorker.logger.error("", e);
-						throw e;
+						char[] v = Arrays.copyOf(ca, clen);
+						unsafe.putObject(value, offset, v);
 					}
+
+					o = value;
 				}
 				else
 				{
-					HRDBMSWorker.logger.error("Unknown type " + bytes[i + 4] + " in fromBytes()");
 					throw new Exception("Unknown type " + bytes[i + 4] + " in fromBytes()");
 				}
 
+				retval.add(o);
 				i++;
 			}
 
 			return retval;
+		}
+
+		private Object fromBytesException(ByteBuffer bb) throws Exception
+		{
+			final int length = bb.getInt();
+			final byte[] temp = new byte[length];
+			bb.get(temp);
+			final String o = new String(temp, StandardCharsets.UTF_8);
+			return new Exception(o);
 		}
 	}
 
@@ -660,6 +797,13 @@ public class NetworkReceiveOperator implements Operator, Serializable
 		public void run()
 		{
 			start = System.currentTimeMillis();
+			readThrottle = new Object[ResourceManager.TEMP_DIRS.size()];
+			int i = 0;
+			while (i < readThrottle.length)
+			{
+				readThrottle[i++] = new Object();
+			}
+
 			for (final Operator op : children)
 			{
 				final ReadThread readThread = new ReadThread(op);
@@ -698,10 +842,12 @@ public class NetworkReceiveOperator implements Operator, Serializable
 				try
 				{
 					outBuffer.put(new DataEndMarker());
+					HRDBMSWorker.logger.debug("Wrote DEM: " + NetworkReceiveOperator.this.toString());
 					break;
 				}
 				catch (final Exception e)
 				{
+					HRDBMSWorker.logger.debug("", e);
 				}
 			}
 		}

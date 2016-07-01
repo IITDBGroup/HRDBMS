@@ -11,6 +11,7 @@ import com.exascale.optimizer.OperatorUtils;
 public final class FastStringTokenizer implements Serializable
 {
 	private static sun.misc.Unsafe unsafe;
+
 	static
 	{
 		try

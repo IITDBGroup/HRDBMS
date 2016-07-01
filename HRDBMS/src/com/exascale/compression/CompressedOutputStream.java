@@ -10,6 +10,7 @@ import net.jpountz.lz4.LZ4Factory;
 public final class CompressedOutputStream extends FilterOutputStream
 {
 	private static LZ4Factory factory;
+
 	static
 	{
 		factory = LZ4Factory.nativeInstance();

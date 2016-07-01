@@ -34,11 +34,11 @@ public class CompressedRandomAccessFile
 	{
 		if (suffix == -1)
 		{
-			return new CompressedFileChannel(file);
+			return new SparseCompressedFileChannel2(file);
 		}
 		else
 		{
-			return new CompressedFileChannel(file, suffix);
+			return new SparseCompressedFileChannel2(file, suffix);
 		}
 	}
 }

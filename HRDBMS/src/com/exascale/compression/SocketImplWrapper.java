@@ -68,10 +68,10 @@ public final class SocketImplWrapper extends SocketImpl
 				return socket.getLocalAddress();
 			case SocketOptions.SO_REUSEADDR:
 				return Boolean.valueOf(socket.getReuseAddress());
-				// case SocketOptions.SO_BROADCAST: ?? -> not supported
-				// case SocketOptions.IP_MULTICAST_IF:
-				// case SocketOptions.IP_MULTICAST_IF2:
-				// case SocketOptions.IP_MULTICAST_LOOP:
+			// case SocketOptions.SO_BROADCAST: ?? -> not supported
+			// case SocketOptions.IP_MULTICAST_IF:
+			// case SocketOptions.IP_MULTICAST_IF2:
+			// case SocketOptions.IP_MULTICAST_LOOP:
 			case SocketOptions.IP_TOS:
 				return Integer.valueOf(socket.getTrafficClass());
 			case SocketOptions.SO_LINGER:
@@ -125,10 +125,10 @@ public final class SocketImplWrapper extends SocketImpl
 				socket.setReuseAddress(bval);
 				break;
 
-				// case SocketOptions.SO_BROADCAST: ?? -> not supported
-				// case SocketOptions.IP_MULTICAST_IF:
-				// case SocketOptions.IP_MULTICAST_IF2:
-				// case SocketOptions.IP_MULTICAST_LOOP:
+			// case SocketOptions.SO_BROADCAST: ?? -> not supported
+			// case SocketOptions.IP_MULTICAST_IF:
+			// case SocketOptions.IP_MULTICAST_IF2:
+			// case SocketOptions.IP_MULTICAST_LOOP:
 
 			case SocketOptions.IP_TOS:
 				socket.setTrafficClass(ival);
