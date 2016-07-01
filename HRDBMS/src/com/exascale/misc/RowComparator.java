@@ -7,15 +7,22 @@ import com.exascale.managers.HRDBMSWorker;
 public final class RowComparator implements Comparator
 {
 
-	private final ArrayList<Boolean> orders;
-	private final ArrayList<String> types;
+	private final boolean[] orders;
+	private final String[] types;
 
 	// private MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
 
 	public RowComparator(ArrayList<Boolean> orders, ArrayList<String> types)
 	{
-		this.orders = orders;
-		this.types = types;
+		this.orders = new boolean[orders.size()];
+		this.types = new String[types.size()];
+		int i = 0;
+		while (i < orders.size())
+		{
+			this.orders[i] = orders.get(i);
+			this.types[i] = types.get(i);
+			i++;
+		}
 	}
 
 	@Override
@@ -23,7 +30,7 @@ public final class RowComparator implements Comparator
 	{
 		int result;
 
-		final int size = types.size();
+		final int size = types.length;
 		ArrayList<Object> lhs = null;
 		ArrayList<Object> rhs = null;
 		int i = 0;
@@ -37,7 +44,7 @@ public final class RowComparator implements Comparator
 			lhs = new ArrayList<Object>(size);
 			while (i < size)
 			{
-				final String type = types.get(i);
+				final String type = types[i];
 				if (type.equals("INT"))
 				{
 					lhs.add(Utils.parseInt(((String[])arg0)[i]));
@@ -81,7 +88,7 @@ public final class RowComparator implements Comparator
 			i = 0;
 			while (i < size)
 			{
-				final String type = types.get(i);
+				final String type = types[i];
 				if (type.equals("INT"))
 				{
 					rhs.add(Utils.parseInt(((String[])arg1)[i]));
@@ -148,7 +155,7 @@ public final class RowComparator implements Comparator
 				result = 0;
 			}
 
-			if (orders.get(i))
+			if (orders[i])
 			{
 				if (result > 0)
 				{
@@ -181,7 +188,7 @@ public final class RowComparator implements Comparator
 	{
 		int result;
 
-		final int size = types.size();
+		final int size = types.length;
 		HRDBMSWorker.logger.debug("Type is " + types);
 		ArrayList<Object> lhs = null;
 		ArrayList<Object> rhs = null;
@@ -196,7 +203,7 @@ public final class RowComparator implements Comparator
 			lhs = new ArrayList<Object>(size);
 			while (i < size)
 			{
-				final String type = types.get(i);
+				final String type = types[i];
 				if (type.equals("INT"))
 				{
 					lhs.add(Utils.parseInt(((String[])arg0)[i]));
@@ -240,7 +247,7 @@ public final class RowComparator implements Comparator
 			i = 0;
 			while (i < size)
 			{
-				final String type = types.get(i);
+				final String type = types[i];
 				if (type.equals("INT"))
 				{
 					rhs.add(Utils.parseInt(((String[])arg1)[i]));
@@ -309,7 +316,7 @@ public final class RowComparator implements Comparator
 				result = 0;
 			}
 
-			if (orders.get(i))
+			if (orders[i])
 			{
 				if (result > 0)
 				{

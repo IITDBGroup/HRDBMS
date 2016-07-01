@@ -96,8 +96,8 @@ public class ConnectionManager extends HRDBMSThread
 		HRDBMSWorker.logger.debug("In rmiCall(), creating connection to " + host + " on port " + port);
 		// final Socket sock = new Socket();
 		Socket sock = new Socket();
-		sock.setReceiveBufferSize(262144);
-		sock.setSendBufferSize(262144);
+		sock.setReceiveBufferSize(4194304);
+		sock.setSendBufferSize(4194304);
 		sock.connect(new InetSocketAddress(host, port));
 		HRDBMSWorker.logger.debug("Connection successful.");
 		sock.getOutputStream().write(data);
@@ -182,7 +182,7 @@ public class ConnectionManager extends HRDBMSThread
 		try
 		{
 			final ServerSocket server = new ServerSocket();
-			server.setReceiveBufferSize(262144);
+			server.setReceiveBufferSize(4194304);
 			server.bind(new InetSocketAddress(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 			HRDBMSWorker.logger.info("Connection Manager initialization complete.");
 			while (true)
@@ -193,8 +193,9 @@ public class ConnectionManager extends HRDBMSThread
 					processMessage(msg);
 				}
 				final Socket sock = server.accept();
-				sock.setSendBufferSize(262144);
-				// HRDBMSWorker.logger.debug("Connection Manager accepted a connection.");
+				sock.setSendBufferSize(4194304);
+				// HRDBMSWorker.logger.debug("Connection Manager accepted a
+				// connection.");
 				if (accepting)
 				{
 					HRDBMSWorker.addThread(new ConnectionWorker(sock));

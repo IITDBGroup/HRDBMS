@@ -65,8 +65,8 @@ public class HRDBMSDriver implements Driver
 			try
 			{
 				sock = new Socket();
-				sock.setReceiveBufferSize(262144);
-				sock.setSendBufferSize(262144);
+				sock.setReceiveBufferSize(4194304);
+				sock.setSendBufferSize(4194304);
 				sock.connect(new InetSocketAddress(hostname, portNum));
 			}
 			catch (Exception e)

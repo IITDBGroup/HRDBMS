@@ -65,6 +65,7 @@ public final class MetaData implements Serializable
 	private static HashMap<String, String> getColTypeCache = new HashMap<String, String>();
 	private static HashMap<String, Object> getDistCache = new HashMap<String, Object>();
 	private static int numDevices;
+
 	static
 	{
 		try
@@ -123,7 +124,8 @@ public final class MetaData implements Serializable
 		}
 		catch (Exception e)
 		{
-			// HRDBMSWorker.logger.fatal("Error during static metadata initialization",
+			// HRDBMSWorker.logger.fatal("Error during static metadata
+			// initialization",
 			// e);
 			// System.exit(1);
 		}
@@ -1250,6 +1252,84 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
+	public void cluster(String schema, String table, Transaction tx, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type) throws Exception
+	{
+		ArrayList<Integer> nodes = getWorkerNodes();
+		ArrayList<Object> tree = makeTree(nodes);
+		ArrayList<Socket> sockets = new ArrayList<Socket>();
+
+		int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
+
+		for (Object o : tree)
+		{
+			ArrayList<Object> list;
+			if (o instanceof Integer)
+			{
+				list = new ArrayList<Object>(1);
+				list.add(o);
+			}
+			else
+			{
+				list = (ArrayList<Object>)o;
+			}
+
+			Object obj = list.get(0);
+			while (obj instanceof ArrayList)
+			{
+				obj = ((ArrayList)obj).get(0);
+			}
+
+			Socket sock;
+			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
+			// sock = new Socket(hostname,
+			// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+			sock = new Socket();
+			sock.setReceiveBufferSize(4194304);
+			sock.setSendBufferSize(4194304);
+			sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
+			OutputStream out = sock.getOutputStream();
+			byte[] outMsg = "CLUSTER         ".getBytes(StandardCharsets.UTF_8);
+			outMsg[8] = 0;
+			outMsg[9] = 0;
+			outMsg[10] = 0;
+			outMsg[11] = 0;
+			outMsg[12] = 0;
+			outMsg[13] = 0;
+			outMsg[14] = 0;
+			outMsg[15] = 0;
+			out.write(outMsg);
+			out.write(longToBytes(tx.number()));
+			out.write(stringToBytes(schema));
+			out.write(stringToBytes(table));
+			out.write(intToBytes(type));
+			ObjectOutputStream objOut = new ObjectOutputStream(out);
+			objOut.writeObject(convertToHosts(list, tx));
+			objOut.writeObject(pos2Col);
+			objOut.writeObject(cols2Types);
+			objOut.flush();
+			out.flush();
+			sockets.add(sock);
+
+			if (sockets.size() >= max)
+			{
+				sock = sockets.get(0);
+				out = sock.getOutputStream();
+				getConfirmation(sock);
+				objOut.close();
+				sock.close();
+				sockets.remove(0);
+			}
+		}
+
+		for (Socket sock : sockets)
+		{
+			OutputStream out = sock.getOutputStream();
+			getConfirmation(sock);
+			out.close();
+			sock.close();
+		}
+	}
+
 	public void createIndex(String schema, String table, String index, ArrayList<IndexDef> defs, boolean unique, Transaction tx) throws Exception
 	{
 		Integer tableID = getTableIDCache.get(schema + "." + table);
@@ -1274,7 +1354,7 @@ public final class MetaData implements Serializable
 		populateIndex(schema, index, table, tx, cols2Pos);
 	}
 
-	public void createTable(String schema, String table, ArrayList<ColDef> defs, ArrayList<String> pks, Transaction tx, String nodeGroupExp, String nodeExp, String deviceExp, int tType, ArrayList<Integer> colOrder) throws Exception
+	public void createTable(String schema, String table, ArrayList<ColDef> defs, ArrayList<String> pks, Transaction tx, String nodeGroupExp, String nodeExp, String deviceExp, int tType, ArrayList<Integer> colOrder, ArrayList<Integer> organization) throws Exception
 	{
 		// validate expressions
 		HashMap<String, String> cols2Types = new HashMap<String, String>();
@@ -1360,7 +1440,7 @@ public final class MetaData implements Serializable
 		{
 			indexID = PlanCacheManager.getNextIndexID().setParms(tableID).execute(tx);
 			PlanCacheManager.getInsertIndex().setParms(indexID, "PK" + table, tableID, true).execute(tx);
-		
+
 			HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
 			int pos = 0;
 			for (String col : pks)
@@ -1371,7 +1451,7 @@ public final class MetaData implements Serializable
 			}
 		}
 
-		buildTable(schema, table, defs.size(), tx, tType, defs, colOrder);
+		buildTable(schema, table, defs.size(), tx, tType, defs, colOrder, organization);
 
 		if (pks != null && pks.size() != 0)
 		{
@@ -2574,6 +2654,11 @@ public final class MetaData implements Serializable
 		return likelihood(filters, op.getGenerated(), tx, tree);
 	}
 
+	// public static int getNumNodes(Transaction tx) throws Exception
+	// {
+	// return PlanCacheManager.getCountWorkerNodes().setParms().execute(tx);
+	// }
+
 	public double likelihood(ArrayList<Filter> filters, Transaction tx, Operator tree) throws Exception
 	{
 		double sum = 0;
@@ -2591,11 +2676,6 @@ public final class MetaData implements Serializable
 		return sum;
 	}
 
-	// public static int getNumNodes(Transaction tx) throws Exception
-	// {
-	// return PlanCacheManager.getCountWorkerNodes().setParms().execute(tx);
-	// }
-
 	// likelihood of a row directly out of the table passing this test
 	public double likelihood(Filter filter, HashMap<String, Double> generated, Transaction tx, Operator tree) throws Exception
 	{
@@ -2605,12 +2685,6 @@ public final class MetaData implements Serializable
 		if (filter instanceof ConstantFilter)
 		{
 			final double retval = ((ConstantFilter)filter).getLikelihood();
-			if (retval < 0)
-			{
-				Exception e = new Exception();
-				HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-				System.exit(1);
-			}
 			return retval;
 		}
 
@@ -2666,23 +2740,10 @@ public final class MetaData implements Serializable
 			if (filter.leftIsColumn() && filter.rightIsColumn())
 			{
 				final double retval = 1.0 / smaller(leftCard, rightCard);
-				if (retval < 0)
-				{
-					Exception e = new Exception();
-					HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-					System.exit(1);
-				}
-
 				return retval;
 			}
 
 			final double retval = 1.0 / bigger(leftCard, rightCard);
-			if (retval < 0)
-			{
-				Exception e = new Exception();
-				HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-				System.exit(1);
-			}
 			return retval;
 		}
 
@@ -2691,23 +2752,10 @@ public final class MetaData implements Serializable
 			if (filter.leftIsColumn() && filter.rightIsColumn())
 			{
 				final double retval = 1.0 - (1.0 / smaller(leftCard, rightCard));
-				if (retval < 0)
-				{
-					Exception e = new Exception();
-					HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-					System.exit(1);
-				}
-
 				return retval;
 			}
 
 			final double retval = 1.0 - 1.0 / bigger(leftCard, rightCard);
-			if (retval < 0)
-			{
-				Exception e = new Exception();
-				HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-				System.exit(1);
-			}
 			return retval;
 		}
 
@@ -2725,12 +2773,6 @@ public final class MetaData implements Serializable
 					final double right = filter.getRightNumber();
 					final String left = filter.leftColumn();
 					final double retval = percentBelow(left, right, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
 					return retval;
 				}
 				else if (filter.rightIsDate())
@@ -2738,12 +2780,6 @@ public final class MetaData implements Serializable
 					final MyDate right = filter.getRightDate();
 					final String left = filter.leftColumn();
 					final double retval = percentBelow(left, right, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
 					return retval;
 				}
 				else
@@ -2752,12 +2788,6 @@ public final class MetaData implements Serializable
 					final String right = filter.getRightString();
 					final String left = filter.leftColumn();
 					final double retval = percentBelow(left, right, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
 					return retval;
 				}
 			}
@@ -2768,12 +2798,6 @@ public final class MetaData implements Serializable
 					final double left = filter.getLeftNumber();
 					final String right = filter.rightColumn();
 					final double retval = percentAbove(right, left, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
 					return retval;
 				}
 				else if (filter.leftIsDate())
@@ -2781,12 +2805,6 @@ public final class MetaData implements Serializable
 					final MyDate left = filter.getLeftDate();
 					final String right = filter.rightColumn();
 					final double retval = percentAbove(right, left, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
 					return retval;
 				}
 				else
@@ -2795,12 +2813,6 @@ public final class MetaData implements Serializable
 					final String left = filter.getLeftString();
 					final String right = filter.rightColumn();
 					final double retval = percentAbove(right, left, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
 					return retval;
 				}
 			}
@@ -2820,12 +2832,6 @@ public final class MetaData implements Serializable
 					final double right = filter.getRightNumber();
 					final String left = filter.leftColumn();
 					final double retval = percentAbove(left, right, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
 					return retval;
 				}
 				else if (filter.rightIsDate())
@@ -2833,12 +2839,6 @@ public final class MetaData implements Serializable
 					final MyDate right = filter.getRightDate();
 					final String left = filter.leftColumn();
 					final double retval = percentAbove(left, right, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
 					return retval;
 				}
 				else
@@ -2847,12 +2847,6 @@ public final class MetaData implements Serializable
 					final String right = filter.getRightString();
 					final String left = filter.leftColumn();
 					final double retval = percentAbove(left, right, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
 					return retval;
 				}
 			}
@@ -2863,12 +2857,6 @@ public final class MetaData implements Serializable
 					final double left = filter.getLeftNumber();
 					final String right = filter.rightColumn();
 					final double retval = percentBelow(right, left, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
 					return retval;
 				}
 				else if (filter.leftIsDate())
@@ -2876,12 +2864,6 @@ public final class MetaData implements Serializable
 					final MyDate left = filter.getLeftDate();
 					final String right = filter.rightColumn();
 					final double retval = percentBelow(right, left, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
 					return retval;
 				}
 				else
@@ -2890,12 +2872,6 @@ public final class MetaData implements Serializable
 					final String left = filter.getLeftString();
 					final String right = filter.rightColumn();
 					final double retval = percentBelow(right, left, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
 					return retval;
 				}
 			}
@@ -2911,9 +2887,7 @@ public final class MetaData implements Serializable
 			return 0.95;
 		}
 
-		HRDBMSWorker.logger.error("Unknown operator in likelihood()");
-		System.exit(1);
-		return 0;
+		throw new Exception("Unknown operator in likelihood()");
 	}
 
 	public double likelihood(Filter filter, RootOperator op, Transaction tx, Operator tree) throws Exception
@@ -2929,13 +2903,7 @@ public final class MetaData implements Serializable
 
 		if (filter instanceof ConstantFilter)
 		{
-			final double retval = ((ConstantFilter)filter).getLikelihood();
-			if (retval < 0)
-			{
-				Exception e = new Exception();
-				HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-				System.exit(1);
-			}
+			((ConstantFilter)filter).getLikelihood();
 		}
 
 		if (filter.alwaysTrue())
@@ -2990,24 +2958,10 @@ public final class MetaData implements Serializable
 			if (filter.leftIsColumn() && filter.rightIsColumn())
 			{
 				final double retval = 1.0 / smaller(leftCard, rightCard);
-				if (retval < 0)
-				{
-					Exception e = new Exception();
-					HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-					System.exit(1);
-				}
-
 				return retval;
 			}
 
 			final double retval = 1.0 / bigger(leftCard, rightCard);
-			if (retval < 0)
-			{
-				Exception e = new Exception();
-				HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-				System.exit(1);
-			}
-
 			return retval;
 		}
 
@@ -3016,24 +2970,10 @@ public final class MetaData implements Serializable
 			if (filter.leftIsColumn() && filter.rightIsColumn())
 			{
 				final double retval = 1.0 - (1.0 / smaller(leftCard, rightCard));
-				if (retval < 0)
-				{
-					Exception e = new Exception();
-					HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-					System.exit(1);
-				}
-
 				return retval;
 			}
 
 			final double retval = 1.0 - 1.0 / bigger(leftCard, rightCard);
-			if (retval < 0)
-			{
-				Exception e = new Exception();
-				HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-				System.exit(1);
-			}
-
 			return retval;
 		}
 
@@ -3051,13 +2991,6 @@ public final class MetaData implements Serializable
 					final double right = filter.getRightNumber();
 					final String left = filter.leftColumn();
 					final double retval = percentBelow(left, right, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
-
 					return retval;
 				}
 				else if (filter.rightIsDate())
@@ -3065,13 +2998,6 @@ public final class MetaData implements Serializable
 					final MyDate right = filter.getRightDate();
 					final String left = filter.leftColumn();
 					final double retval = percentBelow(left, right, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
-
 					return retval;
 				}
 				else
@@ -3080,13 +3006,6 @@ public final class MetaData implements Serializable
 					final String right = filter.getRightString();
 					final String left = filter.leftColumn();
 					final double retval = percentBelow(left, right, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
-
 					return retval;
 				}
 			}
@@ -3097,13 +3016,6 @@ public final class MetaData implements Serializable
 					final double left = filter.getLeftNumber();
 					final String right = filter.rightColumn();
 					final double retval = percentAbove(right, left, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
-
 					return retval;
 				}
 				else if (filter.leftIsDate())
@@ -3111,13 +3023,6 @@ public final class MetaData implements Serializable
 					final MyDate left = filter.getLeftDate();
 					final String right = filter.rightColumn();
 					final double retval = percentAbove(right, left, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
-
 					return retval;
 				}
 				else
@@ -3126,13 +3031,6 @@ public final class MetaData implements Serializable
 					final String left = filter.getLeftString();
 					final String right = filter.rightColumn();
 					final double retval = percentAbove(right, left, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
-
 					return retval;
 				}
 			}
@@ -3152,13 +3050,6 @@ public final class MetaData implements Serializable
 					final double right = filter.getRightNumber();
 					final String left = filter.leftColumn();
 					final double retval = percentAbove(left, right, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
-
 					return retval;
 				}
 				else if (filter.rightIsDate())
@@ -3166,13 +3057,6 @@ public final class MetaData implements Serializable
 					final MyDate right = filter.getRightDate();
 					final String left = filter.leftColumn();
 					final double retval = percentAbove(left, right, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
-
 					return retval;
 				}
 				else
@@ -3181,13 +3065,6 @@ public final class MetaData implements Serializable
 					final String right = filter.getRightString();
 					final String left = filter.leftColumn();
 					final double retval = percentAbove(left, right, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
-
 					return retval;
 				}
 			}
@@ -3198,13 +3075,6 @@ public final class MetaData implements Serializable
 					final double left = filter.getLeftNumber();
 					final String right = filter.rightColumn();
 					final double retval = percentBelow(right, left, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
-
 					return retval;
 				}
 				else if (filter.leftIsDate())
@@ -3212,13 +3082,6 @@ public final class MetaData implements Serializable
 					final MyDate left = filter.getLeftDate();
 					final String right = filter.rightColumn();
 					final double retval = percentBelow(right, left, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
-
 					return retval;
 				}
 				else
@@ -3227,13 +3090,6 @@ public final class MetaData implements Serializable
 					final String left = filter.getLeftString();
 					final String right = filter.rightColumn();
 					final double retval = percentBelow(right, left, tx, tree);
-					if (retval < 0)
-					{
-						Exception e = new Exception();
-						HRDBMSWorker.logger.error("ERROR: likelihood(" + filter + ")" + " returned " + retval, e);
-						System.exit(1);
-					}
-
 					return retval;
 				}
 			}
@@ -3249,9 +3105,7 @@ public final class MetaData implements Serializable
 			return 0.95;
 		}
 
-		HRDBMSWorker.logger.error("Unknown operator in likelihood()");
-		System.exit(1);
-		return 0;
+		throw new Exception("Unknown operator in likelihood()");
 	}
 
 	public double likelihood(HashSet<HashMap<Filter, Filter>> hshm, HashMap<String, Double> generated, Transaction tx, Operator tree) throws Exception
@@ -3400,8 +3254,8 @@ public final class MetaData implements Serializable
 			// sock = new Socket(hostname,
 			// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			sock = new Socket();
-			sock.setReceiveBufferSize(262144);
-			sock.setSendBufferSize(262144);
+			sock.setReceiveBufferSize(4194304);
+			sock.setSendBufferSize(4194304);
 			sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "POPINDEX        ".getBytes(StandardCharsets.UTF_8);
@@ -3887,8 +3741,8 @@ public final class MetaData implements Serializable
 			// sock = new Socket(hostname,
 			// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			sock = new Socket();
-			sock.setReceiveBufferSize(262144);
-			sock.setSendBufferSize(262144);
+			sock.setReceiveBufferSize(4194304);
+			sock.setSendBufferSize(4194304);
 			sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "NEWINDEX        ".getBytes(StandardCharsets.UTF_8);
@@ -3939,18 +3793,23 @@ public final class MetaData implements Serializable
 		}
 	}
 
-	private void buildTable(String schema, String table, int numCols, Transaction tx, int tType, ArrayList<ColDef> defs, ArrayList<Integer> colOrder) throws Exception
+	private void buildTable(String schema, String table, int numCols, Transaction tx, int tType, ArrayList<ColDef> defs, ArrayList<Integer> colOrder, ArrayList<Integer> organization) throws Exception
 	{
 		if (tType != 0 && colOrder == null)
 		{
 			colOrder = new ArrayList<Integer>();
-			int i = 0;
-			while (i < numCols)
+			int i = 1;
+			while (i <= numCols)
 			{
 				colOrder.add(i++);
 			}
 		}
-		
+
+		if (tType != 0 && organization == null)
+		{
+			organization = new ArrayList<Integer>();
+		}
+
 		String fn = schema + "." + table + ".tbl";
 		ArrayList<Integer> nodes = getNodesForTable(schema, table, tx);
 		ArrayList<Integer> devices = MetaData.getDevicesForTable(schema, table, tx);
@@ -3982,8 +3841,8 @@ public final class MetaData implements Serializable
 			// sock = new Socket(hostname,
 			// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			sock = new Socket();
-			sock.setReceiveBufferSize(262144);
-			sock.setSendBufferSize(262144);
+			sock.setReceiveBufferSize(4194304);
+			sock.setSendBufferSize(4194304);
 			sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 			OutputStream out = sock.getOutputStream();
 			byte[] outMsg = "NEWTABLE        ".getBytes(StandardCharsets.UTF_8);
@@ -4007,6 +3866,8 @@ public final class MetaData implements Serializable
 			if (tType != 0)
 			{
 				objOut.writeObject(colOrder);
+				objOut.writeObject(organization);
+				HRDBMSWorker.logger.debug("Sending message to create table with organization: " + organization);
 			}
 			objOut.flush();
 			out.flush();
@@ -4124,6 +3985,24 @@ public final class MetaData implements Serializable
 		}
 
 		return retval;
+	}
+
+	private void defaultDate(ArrayList<MyDate> retval)
+	{
+		retval.add(new MyDate(1960, 1, 1));
+		retval.add(new MyDate(2000, 1, 1));
+		retval.add(new MyDate(2020, 1, 1));
+		retval.add(new MyDate(2040, 1, 1));
+		retval.add(new MyDate(2060, 1, 1));
+	}
+
+	private void defaultDouble(ArrayList<Double> retval)
+	{
+		retval.add(Double.MIN_VALUE);
+		retval.add(Double.MIN_VALUE / 2);
+		retval.add(0D);
+		retval.add(Double.MAX_VALUE / 2);
+		retval.add(Double.MAX_VALUE);
 	}
 
 	private Operator doWork(Operator op, HashMap<Operator, ArrayList<String>> tables, HashMap<Operator, ArrayList<ArrayList<Filter>>> filters, HashMap<Operator, HashMap<String, Double>> retvals, Transaction tx, Operator tree) throws Exception
@@ -4408,11 +4287,7 @@ public final class MetaData implements Serializable
 		String ST = getTableForCol(col, tree);
 		if (ST == null)
 		{
-			retval.add(new MyDate(1960, 1, 1));
-			retval.add(new MyDate(2000, 1, 1));
-			retval.add(new MyDate(2020, 1, 1));
-			retval.add(new MyDate(2040, 1, 1));
-			retval.add(new MyDate(2060, 1, 1));
+			defaultDate(retval);
 			return retval;
 		}
 		String schema = ST.substring(0, ST.indexOf('.'));
@@ -4425,12 +4300,7 @@ public final class MetaData implements Serializable
 		}
 		if (o instanceof DataEndMarker)
 		{
-
-			retval.add(new MyDate(1960, 1, 1));
-			retval.add(new MyDate(2000, 1, 1));
-			retval.add(new MyDate(2020, 1, 1));
-			retval.add(new MyDate(2040, 1, 1));
-			retval.add(new MyDate(2060, 1, 1));
+			defaultDate(retval);
 		}
 		else
 		{
@@ -4454,11 +4324,7 @@ public final class MetaData implements Serializable
 		String ST = getTableForCol(col, tree);
 		if (ST == null)
 		{
-			retval.add(Double.MIN_VALUE);
-			retval.add(Double.MIN_VALUE / 2);
-			retval.add(0D);
-			retval.add(Double.MAX_VALUE / 2);
-			retval.add(Double.MAX_VALUE);
+			defaultDouble(retval);
 			return retval;
 		}
 		String schema = ST.substring(0, ST.indexOf('.'));
@@ -4471,12 +4337,7 @@ public final class MetaData implements Serializable
 		}
 		if (o instanceof DataEndMarker)
 		{
-
-			retval.add(Double.MIN_VALUE);
-			retval.add(Double.MIN_VALUE / 2);
-			retval.add(0D);
-			retval.add(Double.MAX_VALUE / 2);
-			retval.add(Double.MAX_VALUE);
+			defaultDouble(retval);
 		}
 		else
 		{
@@ -5092,6 +4953,63 @@ public final class MetaData implements Serializable
 			return nodeGroupSet.get(0) == NODEGROUP_NONE;
 		}
 
+		private void otherNG(String exp) throws Exception
+		{
+			final FastStringTokenizer tokens = new FastStringTokenizer(exp, ",", false);
+			String set = tokens.nextToken().substring(1);
+			set = set.substring(0, set.length() - 1);
+			StringTokenizer tokens2 = new StringTokenizer(set, "{}", false);
+			nodeGroupSet = new ArrayList<Integer>();
+			numNodeGroups = 0;
+			int setNum = 0;
+			nodeGroupHashMap = new HashMap<Integer, ArrayList<Integer>>();
+			while (tokens2.hasMoreTokens())
+			{
+				String nodesInGroup = tokens2.nextToken();
+				nodeGroupSet.add(setNum);
+				numNodeGroups++;
+
+				ArrayList<Integer> nodeListForGroup = new ArrayList<Integer>();
+				FastStringTokenizer tokens3 = new FastStringTokenizer(nodesInGroup, "|", false);
+				while (tokens3.hasMoreTokens())
+				{
+					String token = tokens3.nextToken();
+					nodeListForGroup.add(Integer.parseInt(token));
+				}
+				nodeGroupHashMap.put(setNum, nodeListForGroup);
+				setNum++;
+			}
+
+			if (numNodeGroups == 1)
+			{
+				return;
+			}
+
+			final String type = tokens.nextToken();
+			if (type.equals("HASH"))
+			{
+				set = tokens.nextToken().substring(1);
+				set = set.substring(0, set.length() - 1);
+				tokens2 = new StringTokenizer(set, "|", false);
+				nodeGroupHash = new ArrayList<String>();
+				while (tokens2.hasMoreTokens())
+				{
+					nodeGroupHash.add(tokens2.nextToken());
+				}
+			}
+			else if (type.equals("RANGE"))
+			{
+				nodeGroupRangeCol = tokens.nextToken();
+				set = tokens.nextToken().substring(1);
+				set = set.substring(0, set.length() - 1);
+				nodeGroupRange = convertRangeStringToObject(set, schema, table, nodeGroupRangeCol, tx);
+			}
+			else
+			{
+				throw new Exception("Node group type was not range or hash");
+			}
+		}
+
 		private void setDData(String exp) throws Exception
 		{
 			final FastStringTokenizer tokens = new FastStringTokenizer(exp, ",", false);
@@ -5105,16 +5023,7 @@ public final class MetaData implements Serializable
 			}
 			else
 			{
-				String set = first.substring(1);
-				set = set.substring(0, set.length() - 1);
-				final FastStringTokenizer tokens2 = new FastStringTokenizer(set, "|", false);
-				deviceSet = new ArrayList<Integer>(tokens2.allTokens().length);
-				numDevices = 0;
-				while (tokens2.hasMoreTokens())
-				{
-					deviceSet.add(Utils.parseInt(tokens2.nextToken()));
-					numDevices++;
-				}
+				setDNotAll(first);
 			}
 
 			if (numDevices == 1)
@@ -5136,10 +5045,7 @@ public final class MetaData implements Serializable
 			}
 			else
 			{
-				deviceRangeCol = tokens.nextToken();
-				String set = tokens.nextToken().substring(1);
-				set = set.substring(0, set.length() - 1);
-				deviceRange = convertRangeStringToObject(set, schema, table, deviceRangeCol, tx);
+				setDNotHash(tokens);
 			}
 		}
 
@@ -5212,6 +5118,28 @@ public final class MetaData implements Serializable
 			}
 		}
 
+		private void setDNotAll(String first)
+		{
+			String set = first.substring(1);
+			set = set.substring(0, set.length() - 1);
+			final FastStringTokenizer tokens2 = new FastStringTokenizer(set, "|", false);
+			deviceSet = new ArrayList<Integer>(tokens2.allTokens().length);
+			numDevices = 0;
+			while (tokens2.hasMoreTokens())
+			{
+				deviceSet.add(Utils.parseInt(tokens2.nextToken()));
+				numDevices++;
+			}
+		}
+
+		private void setDNotHash(FastStringTokenizer tokens) throws Exception
+		{
+			deviceRangeCol = tokens.nextToken();
+			String set = tokens.nextToken().substring(1);
+			set = set.substring(0, set.length() - 1);
+			deviceRange = convertRangeStringToObject(set, schema, table, deviceRangeCol, tx);
+		}
+
 		private void setNData(String exp) throws Exception
 		{
 			final FastStringTokenizer tokens = new FastStringTokenizer(exp, ",", false);
@@ -5233,16 +5161,7 @@ public final class MetaData implements Serializable
 			}
 			else
 			{
-				String set = first.substring(1);
-				set = set.substring(0, set.length() - 1);
-				final FastStringTokenizer tokens2 = new FastStringTokenizer(set, "|", false);
-				nodeSet = new ArrayList<Integer>(tokens2.allTokens().length);
-				numNodes = 0;
-				while (tokens2.hasMoreTokens())
-				{
-					nodeSet.add(Integer.parseInt(tokens2.nextToken()));
-					numNodes++;
-				}
+				setNNotAA(exp, first);
 			}
 
 			if (numNodes == 1)
@@ -5264,10 +5183,7 @@ public final class MetaData implements Serializable
 			}
 			else
 			{
-				nodeRangeCol = tokens.nextToken();
-				String set = tokens.nextToken().substring(1);
-				set = set.substring(0, set.length() - 1);
-				nodeRange = convertRangeStringToObject(set, schema, table, nodeRangeCol, tx);
+				setNNotHash(tokens);
 			}
 		}
 
@@ -5366,59 +5282,7 @@ public final class MetaData implements Serializable
 				return;
 			}
 
-			final FastStringTokenizer tokens = new FastStringTokenizer(exp, ",", false);
-			String set = tokens.nextToken().substring(1);
-			set = set.substring(0, set.length() - 1);
-			StringTokenizer tokens2 = new StringTokenizer(set, "{}", false);
-			nodeGroupSet = new ArrayList<Integer>();
-			numNodeGroups = 0;
-			int setNum = 0;
-			nodeGroupHashMap = new HashMap<Integer, ArrayList<Integer>>();
-			while (tokens2.hasMoreTokens())
-			{
-				String nodesInGroup = tokens2.nextToken();
-				nodeGroupSet.add(setNum);
-				numNodeGroups++;
-
-				ArrayList<Integer> nodeListForGroup = new ArrayList<Integer>();
-				FastStringTokenizer tokens3 = new FastStringTokenizer(nodesInGroup, "|", false);
-				while (tokens3.hasMoreTokens())
-				{
-					String token = tokens3.nextToken();
-					nodeListForGroup.add(Integer.parseInt(token));
-				}
-				nodeGroupHashMap.put(setNum, nodeListForGroup);
-				setNum++;
-			}
-
-			if (numNodeGroups == 1)
-			{
-				return;
-			}
-
-			final String type = tokens.nextToken();
-			if (type.equals("HASH"))
-			{
-				set = tokens.nextToken().substring(1);
-				set = set.substring(0, set.length() - 1);
-				tokens2 = new StringTokenizer(set, "|", false);
-				nodeGroupHash = new ArrayList<String>();
-				while (tokens2.hasMoreTokens())
-				{
-					nodeGroupHash.add(tokens2.nextToken());
-				}
-			}
-			else if (type.equals("RANGE"))
-			{
-				nodeGroupRangeCol = tokens.nextToken();
-				set = tokens.nextToken().substring(1);
-				set = set.substring(0, set.length() - 1);
-				nodeGroupRange = convertRangeStringToObject(set, schema, table, nodeGroupRangeCol, tx);
-			}
-			else
-			{
-				throw new Exception("Node group type was not range or hash");
-			}
+			otherNG(exp);
 		}
 
 		private void setNGData2(String exp, HashMap<String, String> cols2Types) throws Exception
@@ -5438,9 +5302,11 @@ public final class MetaData implements Serializable
 			numNodeGroups = 0;
 			int setNum = 0;
 			nodeGroupHashMap = new HashMap<Integer, ArrayList<Integer>>();
+			int expectedNumNodesInGroup = -1;
 			while (tokens2.hasMoreTokens())
 			{
 				String nodesInGroup = tokens2.nextToken();
+				int nodeCount = 0;
 				nodeGroupSet.add(setNum);
 				numNodeGroups++;
 
@@ -5455,9 +5321,18 @@ public final class MetaData implements Serializable
 						throw new Exception("Invalid node number: " + node);
 					}
 					nodeListForGroup.add(node);
+					nodeCount++;
 				}
 				nodeGroupHashMap.put(setNum, nodeListForGroup);
 				setNum++;
+				if (expectedNumNodesInGroup == -1)
+				{
+					expectedNumNodesInGroup = nodeCount;
+				}
+				else if (expectedNumNodesInGroup != nodeCount)
+				{
+					throw new Exception("Expected " + expectedNumNodesInGroup + " nodes in node group but found " + nodeCount + " nodes");
+				}
 			}
 
 			if (numNodeGroups == 1)
@@ -5502,6 +5377,28 @@ public final class MetaData implements Serializable
 			{
 				throw new Exception("Node group type was not range or hash");
 			}
+		}
+
+		private void setNNotAA(String exp, String first)
+		{
+			String set = first.substring(1);
+			set = set.substring(0, set.length() - 1);
+			final FastStringTokenizer tokens2 = new FastStringTokenizer(set, "|", false);
+			nodeSet = new ArrayList<Integer>(tokens2.allTokens().length);
+			numNodes = 0;
+			while (tokens2.hasMoreTokens())
+			{
+				nodeSet.add(Integer.parseInt(tokens2.nextToken()));
+				numNodes++;
+			}
+		}
+
+		private void setNNotHash(FastStringTokenizer tokens) throws Exception
+		{
+			nodeRangeCol = tokens.nextToken();
+			String set = tokens.nextToken().substring(1);
+			set = set.substring(0, set.length() - 1);
+			nodeRange = convertRangeStringToObject(set, schema, table, nodeRangeCol, tx);
 		}
 	}
 
@@ -5706,7 +5603,9 @@ public final class MetaData implements Serializable
 							if (updateCount == -1)
 							{
 								XAManager.rollback(tx);
-								tx = new Transaction(Transaction.ISOLATION_UR);
+								// tx = new
+								// Transaction(Transaction.ISOLATION_UR);
+								return;
 							}
 							else if (updateCount == 1)
 							{
@@ -5721,7 +5620,7 @@ public final class MetaData implements Serializable
 								return;
 							}
 
-							Thread.sleep(random.nextInt(60000));
+							// Thread.sleep(random.nextInt(60000));
 						}
 					}
 				}
@@ -5828,7 +5727,9 @@ public final class MetaData implements Serializable
 							if (updateCount == -1)
 							{
 								XAManager.rollback(tx);
-								tx = new Transaction(Transaction.ISOLATION_UR);
+								// tx = new
+								// Transaction(Transaction.ISOLATION_UR);
+								return;
 							}
 							else if (updateCount == 1)
 							{
@@ -5843,7 +5744,7 @@ public final class MetaData implements Serializable
 								return;
 							}
 
-							Thread.sleep(random.nextInt(60000));
+							// Thread.sleep(random.nextInt(60000));
 						}
 					}
 				}
@@ -5950,7 +5851,9 @@ public final class MetaData implements Serializable
 							if (updateCount == -1)
 							{
 								XAManager.rollback(tx);
-								tx = new Transaction(Transaction.ISOLATION_UR);
+								// tx = new
+								// Transaction(Transaction.ISOLATION_UR);
+								return;
 							}
 							else if (updateCount == 1)
 							{
@@ -5965,7 +5868,7 @@ public final class MetaData implements Serializable
 								return;
 							}
 
-							Thread.sleep(random.nextInt(60000));
+							// Thread.sleep(random.nextInt(60000));
 						}
 					}
 				}
@@ -6070,7 +5973,8 @@ public final class MetaData implements Serializable
 						if (updateCount == -1)
 						{
 							XAManager.rollback(tx);
-							tx = new Transaction(Transaction.ISOLATION_UR);
+							// tx = new Transaction(Transaction.ISOLATION_UR);
+							return;
 						}
 						else if (updateCount == 1)
 						{
@@ -6085,7 +5989,7 @@ public final class MetaData implements Serializable
 							return;
 						}
 
-						Thread.sleep(random.nextInt(60000));
+						// Thread.sleep(random.nextInt(60000));
 					}
 				}
 			}
@@ -6301,7 +6205,8 @@ public final class MetaData implements Serializable
 					if (updateCount == -1)
 					{
 						XAManager.rollback(tx);
-						tx = new Transaction(Transaction.ISOLATION_UR);
+						// tx = new Transaction(Transaction.ISOLATION_UR);
+						return;
 					}
 					else if (updateCount == 1)
 					{
@@ -6536,7 +6441,8 @@ public final class MetaData implements Serializable
 						if (updateCount == -1)
 						{
 							XAManager.rollback(tx);
-							tx = new Transaction(Transaction.ISOLATION_UR);
+							// tx = new Transaction(Transaction.ISOLATION_UR);
+							return;
 						}
 						else if (updateCount == 1)
 						{
@@ -6551,7 +6457,7 @@ public final class MetaData implements Serializable
 							return;
 						}
 
-						Thread.sleep(random.nextInt(60000));
+						// Thread.sleep(random.nextInt(60000));
 					}
 				}
 			}
@@ -6683,7 +6589,8 @@ public final class MetaData implements Serializable
 					if (updateCount == -1)
 					{
 						XAManager.rollback(tx);
-						tx = new Transaction(Transaction.ISOLATION_UR);
+						// tx = new Transaction(Transaction.ISOLATION_UR);
+						return;
 					}
 					else if (updateCount == 1)
 					{
@@ -6698,7 +6605,7 @@ public final class MetaData implements Serializable
 						return;
 					}
 
-					Thread.sleep(random.nextInt(60000));
+					// Thread.sleep(random.nextInt(60000));
 				}
 			}
 			catch (Exception e)

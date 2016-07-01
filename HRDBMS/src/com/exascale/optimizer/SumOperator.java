@@ -36,7 +36,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 
 	private boolean isInt;
 
-	private int NUM_GROUPS = 16;
+	private long NUM_GROUPS = 16;
 
 	public SumOperator(String input, String output, MetaData meta, boolean isInt)
 	{
@@ -52,7 +52,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 		prev.put(OperatorUtils.readLong(in), value);
 		value.input = OperatorUtils.readString(in, prev);
 		value.output = OperatorUtils.readString(in, prev);
-		value.NUM_GROUPS = OperatorUtils.readInt(in);
+		value.NUM_GROUPS = OperatorUtils.readLong(in);
 		value.isInt = OperatorUtils.readBool(in);
 		return value;
 	}
@@ -116,7 +116,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.writeString(input, out, prev);
 		OperatorUtils.writeString(output, out, prev);
-		OperatorUtils.writeInt(NUM_GROUPS, out);
+		OperatorUtils.writeLong(NUM_GROUPS, out);
 		OperatorUtils.writeBool(isInt, out);
 	}
 
@@ -138,7 +138,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public void setNumGroups(int groups)
+	public void setNumGroups(long groups)
 	{
 		NUM_GROUPS = groups;
 	}
@@ -147,7 +147,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 	{
 		// private final DiskBackedALOHashMap<AtomicDouble> results = new
 		// DiskBackedALOHashMap<AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
-		private final ConcurrentHashMap<ArrayList<Object>, Object> results = new ConcurrentHashMap<ArrayList<Object>, Object>();
+		private ConcurrentHashMap<ArrayList<Object>, Object> results = new ConcurrentHashMap<ArrayList<Object>, Object>();
 		private final HashMap<String, Integer> cols2Pos;
 		private int pos;
 
@@ -183,7 +183,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 		@Override
 		public void close()
 		{
-			// results.close();
+			results = null;
 		}
 
 		@Override
@@ -222,105 +222,68 @@ public final class SumOperator implements AggregateOperator, Serializable
 		@Override
 		public final void put(ArrayList<Object> row, ArrayList<Object> group) throws Exception
 		{
-			Object o = null;
-			try
-			{
-				o = row.get(pos);
-			}
-			catch (final Exception e)
-			{
-				HRDBMSWorker.logger.error("Pos is " + pos, e);
-				HRDBMSWorker.logger.error("Cols2Pos is " + cols2Pos);
-				HRDBMSWorker.logger.error("Input is " + input);
-				HRDBMSWorker.logger.error("Row is " + row);
-				throw e;
-			}
-
 			if (!isInt)
 			{
-				BigDecimalReplacement val;
-				if (o instanceof Integer)
-				{
-					val = new BigDecimalReplacement((Integer)o);
-				}
-				else if (o instanceof Long)
-				{
-					val = new BigDecimalReplacement((Long)o);
-				}
-				else
-				{
-					try
-					{
-						val = new BigDecimalReplacement((Double)o);
-					}
-					catch (Exception e)
-					{
-						HRDBMSWorker.logger.debug("Was expecting a numeric in position " + pos + " of " + row);
-						HRDBMSWorker.logger.debug("Cols2Pos is " + cols2Pos);
-						HRDBMSWorker.logger.debug("Input is " + input);
-						throw e;
-					}
-				}
-
-				// final AtomicBigDecimal ad =
-				// (AtomicBigDecimal)results.get(group);
-				// synchronized (results)
-				// {
-				// sdf
-				// BigDecimalReplacement ad =
-				// (BigDecimalReplacement)results.get(group);
-				// if (ad != null)
-				// {
-				// ad.add(val);
-				// return;
-				// }
-				// else
-				// {
-				// results.put(group, val);
-				// return;
-				// }
-				// }
-				final BigDecimalReplacement ad = (BigDecimalReplacement)results.get(group);
-				if (ad != null)
-				{
-					ad.add(val);
-					return;
-				}
-
-				if (results.putIfAbsent(group, val) != null)
-				{
-					((BigDecimalReplacement)results.get(group)).add(val);
-				}
+				doublePut(row, group);
 			}
 			else
 			{
-				Long val;
-				if (o instanceof Integer)
-				{
-					val = new Long((Integer)o);
-				}
-				else
-				{
-					val = (Long)o;
-				}
+				intPut(row, group);
+			}
+		}
 
-				/*
-				 * synchronized (results) { final Long ad =
-				 * (Long)results.get(group); if (ad != null) {
-				 * results.put(group, ad + val); return; }
-				 * 
-				 * results.put(group, val); }
-				 */
-				final AtomicLong al = (AtomicLong)results.get(group);
-				if (al != null)
-				{
-					al.addAndGet(val);
-					return;
-				}
-				if (results.putIfAbsent(group, new AtomicLong(val)) != null)
-				{
-					((AtomicLong)results.get(group)).addAndGet(val);
-				}
+		private void doublePut(ArrayList<Object> row, ArrayList<Object> group) throws Exception
+		{
+			Object o = row.get(pos);
+			BigDecimalReplacement val;
+			if (o instanceof Integer)
+			{
+				val = new BigDecimalReplacement((Integer)o);
+			}
+			else if (o instanceof Long)
+			{
+				val = new BigDecimalReplacement((Long)o);
+			}
+			else
+			{
+				val = new BigDecimalReplacement((Double)o);
+			}
+
+			final BigDecimalReplacement ad = (BigDecimalReplacement)results.get(group);
+			if (ad != null)
+			{
+				ad.add(val);
+				return;
+			}
+
+			if (results.putIfAbsent(group, val) != null)
+			{
+				((BigDecimalReplacement)results.get(group)).add(val);
+			}
+		}
+
+		private void intPut(ArrayList<Object> row, ArrayList<Object> group) throws Exception
+		{
+			Object o = row.get(pos);
+			Long val;
+			if (o instanceof Integer)
+			{
+				val = new Long((Integer)o);
+			}
+			else
+			{
+				val = (Long)o;
+			}
+
+			final AtomicLong al = (AtomicLong)results.get(group);
+			if (al != null)
+			{
+				al.addAndGet(val);
+				return;
+			}
+			if (results.putIfAbsent(group, new AtomicLong(val)) != null)
+			{
+				((AtomicLong)results.get(group)).addAndGet(val);
 			}
 		}
 	}

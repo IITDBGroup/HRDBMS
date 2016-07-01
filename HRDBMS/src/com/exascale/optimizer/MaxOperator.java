@@ -38,7 +38,7 @@ public final class MaxOperator implements AggregateOperator, Serializable
 
 	private boolean isDate;
 
-	private int NUM_GROUPS = 16;
+	private long NUM_GROUPS = 16;
 
 	public MaxOperator(String input, String output, MetaData meta, boolean isInt)
 	{
@@ -70,7 +70,7 @@ public final class MaxOperator implements AggregateOperator, Serializable
 		prev.put(OperatorUtils.readLong(in), value);
 		value.input = OperatorUtils.readString(in, prev);
 		value.output = OperatorUtils.readString(in, prev);
-		value.NUM_GROUPS = OperatorUtils.readInt(in);
+		value.NUM_GROUPS = OperatorUtils.readLong(in);
 		value.isInt = OperatorUtils.readBool(in);
 		value.isLong = OperatorUtils.readBool(in);
 		value.isFloat = OperatorUtils.readBool(in);
@@ -155,7 +155,7 @@ public final class MaxOperator implements AggregateOperator, Serializable
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.writeString(input, out, prev);
 		OperatorUtils.writeString(output, out, prev);
-		OperatorUtils.writeInt(NUM_GROUPS, out);
+		OperatorUtils.writeLong(NUM_GROUPS, out);
 		OperatorUtils.writeBool(isInt, out);
 		OperatorUtils.writeBool(isLong, out);
 		OperatorUtils.writeBool(isFloat, out);
@@ -201,7 +201,7 @@ public final class MaxOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public void setNumGroups(int groups)
+	public void setNumGroups(long groups)
 	{
 		NUM_GROUPS = groups;
 	}
@@ -210,7 +210,7 @@ public final class MaxOperator implements AggregateOperator, Serializable
 	{
 		// private final DiskBackedALOHashMap<AtomicDouble> maxes = new
 		// DiskBackedALOHashMap<AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
-		private final HashMap<ArrayList<Object>, Object> maxes = new HashMap<ArrayList<Object>, Object>();
+		private HashMap<ArrayList<Object>, Object> maxes = new HashMap<ArrayList<Object>, Object>();
 		private final HashMap<String, Integer> cols2Pos;
 		private int pos;
 
@@ -232,6 +232,7 @@ public final class MaxOperator implements AggregateOperator, Serializable
 		public void close()
 		{
 			// maxes.close();
+			maxes = null;
 		}
 
 		@Override

@@ -86,7 +86,7 @@ public final class BufferedRandomAccessFile
 	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
-	 * */
+	 */
 	public BufferedRandomAccessFile(File file, String mode) throws IOException
 	{
 		this(file, mode, 512);
@@ -108,7 +108,7 @@ public final class BufferedRandomAccessFile
 	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
-	 * */
+	 */
 	public BufferedRandomAccessFile(File file, String mode, int bufferSize) throws IOException
 	{
 		fileName = file.getName();
@@ -143,7 +143,7 @@ public final class BufferedRandomAccessFile
 	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
-	 * */
+	 */
 	public BufferedRandomAccessFile(String name, String mode) throws IOException
 	{
 		this(name, mode, 512);
@@ -165,7 +165,7 @@ public final class BufferedRandomAccessFile
 	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
-	 * */
+	 */
 	public BufferedRandomAccessFile(String name, String mode, int bufferSize) throws IOException
 	{
 		this(new File(name), mode, bufferSize);
@@ -243,7 +243,7 @@ public final class BufferedRandomAccessFile
 	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
-	 * */
+	 */
 	public final double readDouble() throws IOException, EOFException
 	{
 		return Double.longBitsToDouble(((long)read() << 56) | ((long)read() << 48) | ((long)read() << 40) | ((long)read() << 32) | ((long)read() << 24) | ((long)read() << 16) | ((long)read() << 8) | (read()));
@@ -262,7 +262,7 @@ public final class BufferedRandomAccessFile
 	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
-	 * */
+	 */
 	public final float readFloat() throws EOFException, IOException
 	{
 		return Float.intBitsToFloat((read() << 24) | (read() << 16) | (read() << 8) | (read()));
@@ -280,7 +280,7 @@ public final class BufferedRandomAccessFile
 	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
-	 * */
+	 */
 	public final int readInt() throws IOException, EOFException
 	{
 		return ((read() << 24) | (read() << 16) | (read() << 8) | read());
@@ -351,7 +351,7 @@ public final class BufferedRandomAccessFile
 	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
-	 * */
+	 */
 	public final long readLong() throws IOException, EOFException
 	{
 		return (((long)read() << 56) | ((long)read() << 48) | ((long)read() << 40) | ((long)read() << 32) | ((long)read() << 24) | ((long)read() << 16) | ((long)read() << 8) | (read()));
@@ -369,7 +369,7 @@ public final class BufferedRandomAccessFile
 	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
-	 * */
+	 */
 	public final short readShort() throws IOException, EOFException
 	{
 		return (short)((read() << 8) | (read()));
@@ -389,7 +389,7 @@ public final class BufferedRandomAccessFile
 	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
-	 * */
+	 */
 	public final long readUnsignedInt() throws IOException, EOFException
 	{
 		return (read() << 24) | (read() << 16) | (read() << 8) | read();
@@ -409,7 +409,7 @@ public final class BufferedRandomAccessFile
 	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
-	 * */
+	 */
 	public final int readUnsignedShort() throws IOException, EOFException
 	{
 		return ((read() << 8) | read());
@@ -560,7 +560,7 @@ public final class BufferedRandomAccessFile
 	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
-	 * */
+	 */
 	public final void writeDouble(double v) throws IOException
 	{
 		final long longV = Double.doubleToLongBits(v);
@@ -584,7 +584,7 @@ public final class BufferedRandomAccessFile
 	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
-	 * */
+	 */
 	public final void writeFloat(float v) throws IOException
 	{
 		final int intV = Float.floatToIntBits(v);
@@ -604,7 +604,7 @@ public final class BufferedRandomAccessFile
 	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
-	 * */
+	 */
 	public final void writeInt(int v) throws IOException
 	{
 		write(v >>> 24);
@@ -622,7 +622,7 @@ public final class BufferedRandomAccessFile
 	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
-	 * */
+	 */
 	public final void writeLong(long v) throws IOException
 	{
 		write((int)(v >>> 56));
@@ -651,7 +651,7 @@ public final class BufferedRandomAccessFile
 	 *
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
-	 * */
+	 */
 	public final void writeShort(int v) throws IOException
 	{
 		write(v >>> 8);

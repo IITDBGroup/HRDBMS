@@ -16,6 +16,7 @@ import com.exascale.tables.Plan;
 public final class IndexOperator implements Operator, Cloneable, Serializable
 {
 	private static sun.misc.Unsafe unsafe;
+
 	static
 	{
 		try

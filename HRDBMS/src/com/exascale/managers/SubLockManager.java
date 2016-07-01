@@ -110,59 +110,8 @@ public class SubLockManager
 			Long xTx = xBlocksToTXs.get(b); // does someone have an xLock?
 			if (xTx != null)
 			{
-				if (xTx.longValue() != txnum)
+				if (waitOnXLock(b, txnum, xTx))
 				{
-					HRDBMSWorker.logger.debug("Can't get sLock on " + b + " for transaction " + txnum + " because " + xTx + " has an xLock");
-					// long current = System.currentTimeMillis();
-					// if (current - start >= TIMEOUT)
-					// {
-					// lock.unlock();
-					// HRDBMSWorker.logger.warn("Timed out trying to obtain sLock on "
-					// + b);
-					// throw new LockAbortException();
-					// }
-
-					// long myTimeout = TIMEOUT - (current - start);
-					ArrayList<Thread> threads = waitList.get(b);
-					if (threads == null)
-					{
-						threads = new ArrayList<Thread>();
-						threads.add(Thread.currentThread());
-						waitList.put(b, threads);
-					}
-					else
-					{
-						threads.add(Thread.currentThread());
-					}
-
-					inverseWaitList.put(Thread.currentThread(), b);
-					threads2Txs.put(Thread.currentThread(), txnum);
-					txs2Threads.put(txnum, Thread.currentThread());
-
-					synchronized (Thread.currentThread())
-					{
-						lock.unlock();
-
-						try
-						{
-							Thread.currentThread().wait();
-						}
-						catch (Exception e)
-						{
-						}
-					}
-
-					lock.lock();
-					if (LockManager.killed.containsKey(Thread.currentThread()))
-					{
-						LockManager.killed.remove(Thread.currentThread());
-						lock.unlock();
-						throw new LockAbortException();
-					}
-				}
-				else
-				{
-					lock.unlock();
 					return;
 				}
 			}
@@ -256,33 +205,6 @@ public class SubLockManager
 		lock.unlock();
 	}
 
-	/*
-	 * public void releaseUnusedXLocks(Transaction tx, Index index) {
-	 * lock.lock(); HashSet<Block> xlocks = xTXsToBlocks.get(tx.number());
-	 * 
-	 * if (xlocks != null) { for (Block block : (HashSet<Block>)xlocks.clone())
-	 * { if (!index.changedBlocks.contains(block)) { unlockXLock(block,
-	 * tx.number()); index.myPages.remove(block); } } }
-	 * 
-	 * lock.unlock(); }
-	 * 
-	 * public void unlockXLock(Block b, long txnum) { lock.lock();
-	 * HashSet<Block> array = xTXsToBlocks.get(txnum);
-	 * 
-	 * if (array == null) { lock.unlock(); return; } else { array.remove(b); if
-	 * (array.size() == 0) { xTXsToBlocks.remove(txnum); } }
-	 * 
-	 * xBlocksToTXs.remove(b);
-	 * 
-	 * ArrayList<Thread> threads = waitList.get(b); if (threads != null) {
-	 * Thread thread = threads.remove(0); inverseWaitList.remove(thread); Long
-	 * tx = threads2Txs.remove(thread); txs2Threads.remove(tx); if
-	 * (threads.size() == 0) { waitList.remove(b); } synchronized(thread) {
-	 * thread.notify(); } }
-	 * 
-	 * lock.unlock(); }
-	 */
-
 	public void verifyClear()
 	{
 		lock.lock();
@@ -300,6 +222,33 @@ public class SubLockManager
 		}
 		lock.unlock();
 	}
+
+	/*
+	 * public void releaseUnusedXLocks(Transaction tx, Index index) {
+	 * lock.lock(); HashSet<Block> xlocks = xTXsToBlocks.get(tx.number());
+	 *
+	 * if (xlocks != null) { for (Block block : (HashSet<Block>)xlocks.clone())
+	 * { if (!index.changedBlocks.contains(block)) { unlockXLock(block,
+	 * tx.number()); index.myPages.remove(block); } } }
+	 *
+	 * lock.unlock(); }
+	 *
+	 * public void unlockXLock(Block b, long txnum) { lock.lock();
+	 * HashSet<Block> array = xTXsToBlocks.get(txnum);
+	 *
+	 * if (array == null) { lock.unlock(); return; } else { array.remove(b); if
+	 * (array.size() == 0) { xTXsToBlocks.remove(txnum); } }
+	 *
+	 * xBlocksToTXs.remove(b);
+	 *
+	 * ArrayList<Thread> threads = waitList.get(b); if (threads != null) {
+	 * Thread thread = threads.remove(0); inverseWaitList.remove(thread); Long
+	 * tx = threads2Txs.remove(thread); txs2Threads.remove(tx); if
+	 * (threads.size() == 0) { waitList.remove(b); } synchronized(thread) {
+	 * thread.notify(); } }
+	 *
+	 * lock.unlock(); }
+	 */
 
 	public void xLock(Block b, long txnum) throws LockAbortException
 	{
@@ -325,7 +274,8 @@ public class SubLockManager
 					// if (current - start >= TIMEOUT)
 					// {
 					// lock.unlock();
-					// HRDBMSWorker.logger.warn("Timed out trying to obtain xLock on "
+					// HRDBMSWorker.logger.warn("Timed out trying to obtain
+					// xLock on "
 					// + b);
 					// throw new LockAbortException();
 					// }
@@ -398,7 +348,8 @@ public class SubLockManager
 						// if (current - start >= TIMEOUT)
 						// {
 						// lock.unlock();
-						// HRDBMSWorker.logger.warn("Timed out trying to obtain xLock on "
+						// HRDBMSWorker.logger.warn("Timed out trying to obtain
+						// xLock on "
 						// + b);
 						// throw new LockAbortException();
 						// }
@@ -463,5 +414,57 @@ public class SubLockManager
 		}
 
 		lock.unlock();
+	}
+
+	private boolean waitOnXLock(Block b, long txnum, Long xTx) throws LockAbortException
+	{
+		if (xTx.longValue() != txnum)
+		{
+			HRDBMSWorker.logger.debug("Can't get sLock on " + b + " for transaction " + txnum + " because " + xTx + " has an xLock");
+
+			ArrayList<Thread> threads = waitList.get(b);
+			if (threads == null)
+			{
+				threads = new ArrayList<Thread>();
+				threads.add(Thread.currentThread());
+				waitList.put(b, threads);
+			}
+			else
+			{
+				threads.add(Thread.currentThread());
+			}
+
+			inverseWaitList.put(Thread.currentThread(), b);
+			threads2Txs.put(Thread.currentThread(), txnum);
+			txs2Threads.put(txnum, Thread.currentThread());
+
+			synchronized (Thread.currentThread())
+			{
+				lock.unlock();
+
+				try
+				{
+					Thread.currentThread().wait();
+				}
+				catch (Exception e)
+				{
+				}
+			}
+
+			lock.lock();
+			if (LockManager.killed.containsKey(Thread.currentThread()))
+			{
+				LockManager.killed.remove(Thread.currentThread());
+				lock.unlock();
+				throw new LockAbortException();
+			}
+
+			return false;
+		}
+		else
+		{
+			lock.unlock();
+			return true;
+		}
 	}
 }

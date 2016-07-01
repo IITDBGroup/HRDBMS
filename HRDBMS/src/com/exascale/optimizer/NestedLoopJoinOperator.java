@@ -44,11 +44,12 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	private int node;
 	private boolean indexAccess = false;
 	private ArrayList<Index> dynamicIndexes;
-	private int rightChildCard = 16;
+	private long rightChildCard = 16;
 	private boolean alreadySorted = false;
 	private boolean cardSet = false;
 	public transient Operator dynamicOp;
-	private int leftChildCard = 16;
+	private long leftChildCard = 16;
+	private long txnum;
 
 	public NestedLoopJoinOperator(ArrayList<Filter> filters, MetaData meta)
 	{
@@ -83,10 +84,11 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		value.node = OperatorUtils.readInt(in);
 		value.indexAccess = OperatorUtils.readBool(in);
 		value.dynamicIndexes = OperatorUtils.deserializeALIndx(in, prev);
-		value.rightChildCard = OperatorUtils.readInt(in);
+		value.rightChildCard = OperatorUtils.readLong(in);
 		value.alreadySorted = OperatorUtils.readBool(in);
 		value.cardSet = OperatorUtils.readBool(in);
-		value.leftChildCard = OperatorUtils.readInt(in);
+		value.leftChildCard = OperatorUtils.readLong(in);
+		value.txnum = OperatorUtils.readLong(in);
 		return value;
 	}
 
@@ -188,6 +190,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		retval.rightChildCard = rightChildCard;
 		retval.cardSet = cardSet;
 		retval.leftChildCard = leftChildCard;
+		retval.txnum = txnum;
 		return retval;
 	}
 
@@ -416,10 +419,11 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		OperatorUtils.writeInt(node, out);
 		OperatorUtils.writeBool(indexAccess, out);
 		OperatorUtils.serializeALIndx(dynamicIndexes, out, prev);
-		OperatorUtils.writeInt(rightChildCard, out);
+		OperatorUtils.writeLong(rightChildCard, out);
 		OperatorUtils.writeBool(alreadySorted, out);
 		OperatorUtils.writeBool(cardSet, out);
-		OperatorUtils.writeInt(leftChildCard, out);
+		OperatorUtils.writeLong(leftChildCard, out);
+		OperatorUtils.writeLong(txnum, out);
 	}
 
 	@Override
@@ -445,7 +449,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	{
 	}
 
-	public boolean setRightChildCard(int card, int card2)
+	public boolean setRightChildCard(long card, long card2)
 	{
 		if (cardSet)
 		{
@@ -456,6 +460,11 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		rightChildCard = card;
 		leftChildCard = card2;
 		return true;
+	}
+
+	public void setTXNum(long txnum)
+	{
+		this.txnum = txnum;
 	}
 
 	public ArrayList<String> sortKeys()
@@ -576,6 +585,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		if (!usesHash && !usesSort)
 		{
 			dynamicOp = new ProductOperator(meta);
+			((ProductOperator)dynamicOp).setTXNum(txnum);
 			Operator left = children.get(0);
 			Operator right = children.get(1);
 			removeChild(left);
@@ -608,6 +618,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			ArrayList<String> lefts = this.getJoinForChild(children.get(0));
 			ArrayList<String> rights = this.getJoinForChild(children.get(1));
 			dynamicOp = new HashJoinOperator(lefts.get(0), rights.get(0), meta);
+			((HashJoinOperator)dynamicOp).setTXNum(txnum);
 			if (lefts.size() > 1)
 			{
 				int i = 1;
@@ -648,6 +659,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		else
 		{
 			dynamicOp = new ProductOperator(meta);
+			((ProductOperator)dynamicOp).setTXNum(txnum);
 			Operator left = children.get(0);
 			Operator right = children.get(1);
 			removeChild(left);

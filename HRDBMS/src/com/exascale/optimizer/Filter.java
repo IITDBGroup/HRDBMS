@@ -17,6 +17,7 @@ import com.exascale.misc.Utils;
 public class Filter implements Cloneable, Serializable
 {
 	private static sun.misc.Unsafe unsafe;
+
 	static
 	{
 		try
@@ -263,7 +264,6 @@ public class Filter implements Cloneable, Serializable
 	{
 		if (cols2Pos == null)
 		{
-			HRDBMSWorker.logger.error("Filter.passes() called with null cols2Pos!");
 			throw new Exception("Filter.passes() called with null cols2Pos!");
 		}
 		if (always)
@@ -285,195 +285,30 @@ public class Filter implements Cloneable, Serializable
 
 			if (lo instanceof MyDate)
 			{
-				if (dVal2 != null)
-				{
-					return compare((MyDate)lo, dVal2);
-				}
-				else
-				{
-					if (posVal2 == -1)
-					{
-						posVal2 = cols2Pos.get(colVal2);
-					}
-
-					final int pos2 = posVal2;
-					final MyDate ro = (MyDate)get(lRow, rRow, pos2);
-					return compare((MyDate)lo, ro);
-				}
+				return passesDate(cols2Pos, lo, lRow, rRow);
 			}
 			else if (lo instanceof String)
 			{
-				if (colVal2 != null)
-				{
-					if (posVal2 == -1)
-					{
-						try
-						{
-							posVal2 = cols2Pos.get(colVal2);
-						}
-						catch (final Exception e)
-						{
-							HRDBMSWorker.logger.error("Error looking up column " + colVal2 + " in " + cols2Pos, e);
-							throw e;
-						}
-					}
-
-					final int pos2 = posVal2;
-					String ro = null;
-					try
-					{
-						ro = (String)get(lRow, rRow, pos2);
-					}
-					catch (final Exception e)
-					{
-						HRDBMSWorker.logger.error("Error fetching column from row in Filter", e);
-						throw e;
-					}
-					return compare((String)lo, ro);
-				}
-				else
-				{
-					return compare((String)lo, val2);
-				}
+				return passesString(cols2Pos, lo, lRow, rRow);
 			}
 			else if (lo instanceof Double)
 			{
-				if (fVal2 != null)
-				{
-					return compare((Double)lo, fVal2);
-				}
-				else if (lVal2 != null)
-				{
-					return compare((Double)lo, new Double(lVal2));
-				}
-				else
-				{
-					if (posVal2 == -1)
-					{
-						posVal2 = cols2Pos.get(colVal2);
-					}
-
-					final int pos2 = posVal2;
-					final Object o = get(lRow, rRow, pos2);
-					try
-					{
-						return compare((Double)lo, new Double(((Number)o).doubleValue()));
-					}
-					catch (final Exception e)
-					{
-						HRDBMSWorker.logger.error(this.toString(), e);
-						throw e;
-					}
-				}
+				return passesDouble(cols2Pos, lo, lRow, rRow);
 			}
 			else if (lo instanceof Long)
 			{
-				if (fVal2 != null)
-				{
-					return compare(new Double((Long)lo), fVal2);
-				}
-				else if (lVal2 != null)
-				{
-					return compare((Long)lo, lVal2);
-				}
-				else
-				{
-					if (posVal2 == -1)
-					{
-						posVal2 = cols2Pos.get(colVal2);
-					}
-
-					final int pos2 = posVal2;
-					final Object o = get(lRow, rRow, pos2);
-					return compare(((Long)lo).doubleValue(), ((Number)o).doubleValue());
-				}
+				return passesLong(cols2Pos, lo, lRow, rRow);
 			}
 			else if (lo instanceof Integer)
 			{
-				if (fVal2 != null)
-				{
-					return compare(new Double((Integer)lo), fVal2);
-				}
-				else if (lVal2 != null)
-				{
-					return compare(new Long((Integer)lo), lVal2);
-				}
-				else
-				{
-					if (posVal2 == -1)
-					{
-						try
-						{
-							posVal2 = cols2Pos.get(colVal2);
-						}
-						catch (final Exception e)
-						{
-							HRDBMSWorker.logger.error("Error fetching position from colsPos in Filter");
-							HRDBMSWorker.logger.error(cols2Pos);
-							HRDBMSWorker.logger.error(colVal2);
-							throw e;
-						}
-					}
-
-					final int pos2 = posVal2;
-					final Object o = get(lRow, rRow, pos2);
-					return compare(((Integer)lo).doubleValue(), ((Number)o).doubleValue());
-				}
+				return passesInteger(cols2Pos, lo, lRow, rRow);
 			}
 
 			throw new Exception("How did I get here!");
 		}
-		else if (lVal1 != null)
-		{
-			// left hand side is an int
-			// right hand side is a column
-			if (posVal2 == -1)
-			{
-				posVal2 = cols2Pos.get(colVal2);
-			}
-
-			final int pos = posVal2;
-			final Object o = get(lRow, rRow, pos);
-			return compare(lVal1.doubleValue(), ((Number)o).doubleValue());
-		}
-		else if (dVal1 != null)
-		{
-			// left hand side is a date
-			// right hand side is a column
-			if (posVal2 == -1)
-			{
-				posVal2 = cols2Pos.get(colVal2);
-			}
-
-			final int pos = posVal2;
-			final MyDate o = (MyDate)get(lRow, rRow, pos);
-			return compare(dVal1, o);
-		}
-		else if (fVal1 != null)
-		{
-			// the left side is a floating point value
-			// the ride side is a column
-			if (posVal2 == -1)
-			{
-				posVal2 = cols2Pos.get(colVal2);
-			}
-
-			final int pos = posVal2;
-			final Object o = get(lRow, rRow, pos);
-			return compare(fVal1, new Double(((Number)o).doubleValue()));
-		}
 		else
 		{
-			// left hand side is string literal in val1
-			// right hand side is a column
-			if (posVal2 == -1)
-			{
-				posVal2 = cols2Pos.get(colVal2);
-			}
-
-			final int pos = posVal2;
-			final String o = (String)get(lRow, rRow, pos);
-			return compare(dVal1, o);
+			return doBackwards(cols2Pos, lRow, rRow);
 		}
 	}
 
@@ -494,15 +329,7 @@ public class Filter implements Cloneable, Serializable
 			// left side is a column
 			if (posVal1 == -1)
 			{
-				try
-				{
-					posVal1 = cols2Pos.get(colVal1);
-				}
-				catch (final Exception e)
-				{
-					HRDBMSWorker.logger.error("Failed to lookup " + colVal1 + " in " + cols2Pos);
-					throw e;
-				}
+				posVal1 = cols2Pos.get(colVal1);
 			}
 
 			final int pos1 = posVal1;
@@ -510,207 +337,30 @@ public class Filter implements Cloneable, Serializable
 
 			if (lo instanceof MyDate)
 			{
-				if (dVal2 != null)
-				{
-					return compare((MyDate)lo, dVal2);
-				}
-				else
-				{
-					if (posVal2 == -1)
-					{
-						posVal2 = cols2Pos.get(colVal2);
-					}
-
-					final int pos2 = posVal2;
-					final MyDate ro = (MyDate)row.get(pos2);
-					return compare((MyDate)lo, ro);
-				}
+				return passesDate2(cols2Pos, lo, row);
 			}
 			else if (lo instanceof String)
 			{
-				if (colVal2 != null)
-				{
-					if (posVal2 == -1)
-					{
-						try
-						{
-							posVal2 = cols2Pos.get(colVal2);
-						}
-						catch (final Exception e)
-						{
-							HRDBMSWorker.logger.error("Error looking up column " + colVal2 + " in " + cols2Pos);
-							throw e;
-						}
-					}
-
-					final int pos2 = posVal2;
-					String ro = null;
-					try
-					{
-						ro = (String)row.get(pos2);
-					}
-					catch (final Exception e)
-					{
-						HRDBMSWorker.logger.error("Error fetching column from row in Filter", e);
-						throw e;
-					}
-					return compare((String)lo, ro);
-				}
-				else
-				{
-					return compare((String)lo, val2);
-				}
+				return passesString2(cols2Pos, lo, row);
 			}
 			else if (lo instanceof Double)
 			{
-				if (fVal2 != null)
-				{
-					return compare((Double)lo, fVal2);
-				}
-				else if (lVal2 != null)
-				{
-					return compare((Double)lo, new Double(lVal2));
-				}
-				else
-				{
-					if (posVal2 == -1)
-					{
-						try
-						{
-							posVal2 = cols2Pos.get(colVal2);
-						}
-						catch (final Exception e)
-						{
-							HRDBMSWorker.logger.error(this.toString(), e);
-							HRDBMSWorker.logger.error(colVal2);
-							HRDBMSWorker.logger.error(cols2Pos);
-							throw e;
-						}
-					}
-
-					final int pos2 = posVal2;
-					final Object o = row.get(pos2);
-					try
-					{
-						return compare((Double)lo, new Double(((Number)o).doubleValue()));
-					}
-					catch (final Exception e)
-					{
-						HRDBMSWorker.logger.error(this.toString(), e);
-						throw e;
-					}
-				}
+				return passesDouble2(cols2Pos, lo, row);
 			}
 			else if (lo instanceof Long)
 			{
-				if (fVal2 != null)
-				{
-					return compare(new Double((Long)lo), fVal2);
-				}
-				else if (lVal2 != null)
-				{
-					return compare((Long)lo, lVal2);
-				}
-				else
-				{
-					if (posVal2 == -1)
-					{
-						posVal2 = cols2Pos.get(colVal2);
-					}
-
-					final int pos2 = posVal2;
-					final Object o = row.get(pos2);
-					return compare(((Long)lo).doubleValue(), ((Number)o).doubleValue());
-				}
+				return passesLong2(cols2Pos, lo, row);
 			}
 			else if (lo instanceof Integer)
 			{
-				if (fVal2 != null)
-				{
-					return compare(new Double((Integer)lo), fVal2);
-				}
-				else if (lVal2 != null)
-				{
-					return compare(new Long((Integer)lo), lVal2);
-				}
-				else
-				{
-					if (posVal2 == -1)
-					{
-						try
-						{
-							posVal2 = cols2Pos.get(colVal2);
-						}
-						catch (final Exception e)
-						{
-							HRDBMSWorker.logger.error("Error fetching position from colsPos in Filter", e);
-							throw e;
-						}
-					}
-
-					final int pos2 = posVal2;
-					final Object o = row.get(pos2);
-					return compare(((Integer)lo).doubleValue(), ((Number)o).doubleValue());
-				}
+				return passesInteger2(cols2Pos, lo, row);
 			}
 
-			HRDBMSWorker.logger.debug("How did I get here?");
-			HRDBMSWorker.logger.debug("LO = " + lo);
 			throw new Exception("How did I get here!");
-		}
-		else if (lVal1 != null)
-		{
-			// left hand side is an int
-			// right hand side is a column
-			if (posVal2 == -1)
-			{
-				posVal2 = cols2Pos.get(colVal2);
-			}
-
-			final int pos = posVal2;
-			final Object o = row.get(pos);
-
-			return compare(lVal1.doubleValue(), ((Number)o).doubleValue());
-		}
-		else if (dVal1 != null)
-		{
-			// left hand side is a date
-			// right hand side is a column
-			if (posVal2 == -1)
-			{
-				posVal2 = cols2Pos.get(colVal2);
-			}
-
-			final int pos = posVal2;
-			final MyDate o = (MyDate)row.get(pos);
-			return compare(dVal1, o);
-		}
-		else if (fVal1 != null)
-		{
-			// the left side is a floating point value
-			// the ride side is a column
-			if (posVal2 == -1)
-			{
-				posVal2 = cols2Pos.get(colVal2);
-			}
-
-			final int pos = posVal2;
-			final Object o = row.get(pos);
-
-			return compare(fVal1, new Double(((Number)o).doubleValue()));
 		}
 		else
 		{
-			// left hand side is string literal in val1
-			// right hand side is a column
-			if (posVal2 == -1)
-			{
-				posVal2 = cols2Pos.get(colVal2);
-			}
-
-			final int pos = posVal2;
-			final String o = (String)row.get(pos);
-			return compare(dVal1, o);
+			return doBackwards2(cols2Pos, row);
 		}
 	}
 
@@ -905,6 +555,120 @@ public class Filter implements Cloneable, Serializable
 		throw new Exception("Unknown op type in Filter");
 	}
 
+	private boolean doBackwards(HashMap<String, Integer> cols2Pos, ArrayList<Object> lRow, ArrayList<Object> rRow) throws Exception
+	{
+		if (lVal1 != null)
+		{
+			// left hand side is an int
+			// right hand side is a column
+			if (posVal2 == -1)
+			{
+				posVal2 = cols2Pos.get(colVal2);
+			}
+
+			final int pos = posVal2;
+			final Object o = get(lRow, rRow, pos);
+			return compare(lVal1.doubleValue(), ((Number)o).doubleValue());
+		}
+		else if (dVal1 != null)
+		{
+			// left hand side is a date
+			// right hand side is a column
+			if (posVal2 == -1)
+			{
+				posVal2 = cols2Pos.get(colVal2);
+			}
+
+			final int pos = posVal2;
+			final MyDate o = (MyDate)get(lRow, rRow, pos);
+			return compare(dVal1, o);
+		}
+		else if (fVal1 != null)
+		{
+			// the left side is a floating point value
+			// the ride side is a column
+			if (posVal2 == -1)
+			{
+				posVal2 = cols2Pos.get(colVal2);
+			}
+
+			final int pos = posVal2;
+			final Object o = get(lRow, rRow, pos);
+			return compare(fVal1, new Double(((Number)o).doubleValue()));
+		}
+		else
+		{
+			// left hand side is string literal in val1
+			// right hand side is a column
+			if (posVal2 == -1)
+			{
+				posVal2 = cols2Pos.get(colVal2);
+			}
+
+			final int pos = posVal2;
+			final String o = (String)get(lRow, rRow, pos);
+			return compare(dVal1, o);
+		}
+	}
+
+	private boolean doBackwards2(HashMap<String, Integer> cols2Pos, ArrayList<Object> row) throws Exception
+	{
+		if (lVal1 != null)
+		{
+			// left hand side is an int
+			// right hand side is a column
+			if (posVal2 == -1)
+			{
+				posVal2 = cols2Pos.get(colVal2);
+			}
+
+			final int pos = posVal2;
+			final Object o = row.get(pos);
+
+			return compare(lVal1.doubleValue(), ((Number)o).doubleValue());
+		}
+		else if (dVal1 != null)
+		{
+			// left hand side is a date
+			// right hand side is a column
+			if (posVal2 == -1)
+			{
+				posVal2 = cols2Pos.get(colVal2);
+			}
+
+			final int pos = posVal2;
+			final MyDate o = (MyDate)row.get(pos);
+			return compare(dVal1, o);
+		}
+		else if (fVal1 != null)
+		{
+			// the left side is a floating point value
+			// the ride side is a column
+			if (posVal2 == -1)
+			{
+				posVal2 = cols2Pos.get(colVal2);
+			}
+
+			final int pos = posVal2;
+			final Object o = row.get(pos);
+
+			return compare(fVal1, new Double(((Number)o).doubleValue()));
+		}
+		else
+		{
+			// left hand side is string literal in val1
+			// right hand side is a column
+			if (posVal2 == -1)
+			{
+				posVal2 = cols2Pos.get(colVal2);
+			}
+
+			final int pos = posVal2;
+			final String o = (String)row.get(pos);
+			return compare(dVal1, o);
+		}
+	}
+
 	private Object get(ArrayList<Object> lRow, ArrayList<Object> rRow, int pos)
 	{
 		if (pos < lRow.size())
@@ -914,6 +678,53 @@ public class Filter implements Cloneable, Serializable
 		else
 		{
 			return rRow.get(pos - lRow.size());
+		}
+	}
+
+	private void lessCommon() throws Exception
+	{
+		if (fVal1 != null)
+		{
+			if (fVal2 != null)
+			{
+				always = true;
+				alwaysVal = compare(fVal1, fVal2);
+			}
+			else if (lVal2 != null)
+			{
+				always = true;
+				alwaysVal = compare(fVal1, new Double(lVal2));
+			}
+		}
+		else if (lVal1 != null)
+		{
+			if (lVal2 != null)
+			{
+				always = true;
+				alwaysVal = compare(lVal1, lVal2);
+			}
+			else if (fVal2 != null)
+			{
+				always = true;
+				alwaysVal = compare(new Double(lVal1), fVal2);
+			}
+		}
+		else if (dVal1 != null)
+		{
+			if (dVal2 != null)
+			{
+				always = true;
+				alwaysVal = compare(dVal1, dVal2);
+			}
+		}
+		else if (colVal1 == null)
+		{
+			// string literal
+			if (lVal2 == null && dVal2 == null && fVal2 == null && colVal2 == null)
+			{
+				always = true;
+				alwaysVal = compare(val1, val2);
+			}
 		}
 	}
 
@@ -981,52 +792,223 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 
-	private void setAlwaysVars() throws Exception
+	private boolean passesDate(HashMap<String, Integer> cols2Pos, Object lo, ArrayList<Object> lRow, ArrayList<Object> rRow) throws Exception
 	{
-		if (fVal1 != null)
+		if (dVal2 != null)
 		{
-			if (fVal2 != null)
-			{
-				always = true;
-				alwaysVal = compare(fVal1, fVal2);
-			}
-			else if (lVal2 != null)
-			{
-				always = true;
-				alwaysVal = compare(fVal1, new Double(lVal2));
-			}
-		}
-		else if (lVal1 != null)
-		{
-			if (lVal2 != null)
-			{
-				always = true;
-				alwaysVal = compare(lVal1, lVal2);
-			}
-			else if (fVal2 != null)
-			{
-				always = true;
-				alwaysVal = compare(new Double(lVal1), fVal2);
-			}
-		}
-		else if (dVal1 != null)
-		{
-			if (dVal2 != null)
-			{
-				always = true;
-				alwaysVal = compare(dVal1, dVal2);
-			}
-		}
-		else if (colVal1 == null)
-		{
-			// string literal
-			if (lVal2 == null && dVal2 == null && fVal2 == null && colVal2 == null)
-			{
-				always = true;
-				alwaysVal = compare(val1, val2);
-			}
+			return compare((MyDate)lo, dVal2);
 		}
 		else
+		{
+			if (posVal2 == -1)
+			{
+				posVal2 = cols2Pos.get(colVal2);
+			}
+
+			final int pos2 = posVal2;
+			final MyDate ro = (MyDate)get(lRow, rRow, pos2);
+			return compare((MyDate)lo, ro);
+		}
+	}
+
+	private boolean passesDate2(HashMap<String, Integer> cols2Pos, Object lo, ArrayList<Object> row) throws Exception
+	{
+		if (dVal2 != null)
+		{
+			return compare((MyDate)lo, dVal2);
+		}
+		else
+		{
+			if (posVal2 == -1)
+			{
+				posVal2 = cols2Pos.get(colVal2);
+			}
+
+			final int pos2 = posVal2;
+			final MyDate ro = (MyDate)row.get(pos2);
+			return compare((MyDate)lo, ro);
+		}
+	}
+
+	private boolean passesDouble(HashMap<String, Integer> cols2Pos, Object lo, ArrayList<Object> lRow, ArrayList<Object> rRow) throws Exception
+	{
+		if (fVal2 != null)
+		{
+			return compare((Double)lo, fVal2);
+		}
+		else if (lVal2 != null)
+		{
+			return compare((Double)lo, new Double(lVal2));
+		}
+		else
+		{
+			if (posVal2 == -1)
+			{
+				posVal2 = cols2Pos.get(colVal2);
+			}
+
+			final int pos2 = posVal2;
+			final Object o = get(lRow, rRow, pos2);
+			return compare((Double)lo, new Double(((Number)o).doubleValue()));
+		}
+	}
+
+	private boolean passesDouble2(HashMap<String, Integer> cols2Pos, Object lo, ArrayList<Object> row) throws Exception
+	{
+		if (fVal2 != null)
+		{
+			return compare((Double)lo, fVal2);
+		}
+		else if (lVal2 != null)
+		{
+			return compare((Double)lo, new Double(lVal2));
+		}
+		else
+		{
+			if (posVal2 == -1)
+			{
+				posVal2 = cols2Pos.get(colVal2);
+			}
+
+			final int pos2 = posVal2;
+			final Object o = row.get(pos2);
+			return compare((Double)lo, new Double(((Number)o).doubleValue()));
+		}
+	}
+
+	private boolean passesInteger(HashMap<String, Integer> cols2Pos, Object lo, ArrayList<Object> lRow, ArrayList<Object> rRow) throws Exception
+	{
+		if (fVal2 != null)
+		{
+			return compare(new Double((Integer)lo), fVal2);
+		}
+		else if (lVal2 != null)
+		{
+			return compare(new Long((Integer)lo), lVal2);
+		}
+		else
+		{
+			if (posVal2 == -1)
+			{
+				posVal2 = cols2Pos.get(colVal2);
+			}
+
+			final int pos2 = posVal2;
+			final Object o = get(lRow, rRow, pos2);
+			return compare(((Integer)lo).doubleValue(), ((Number)o).doubleValue());
+		}
+	}
+
+	private boolean passesInteger2(HashMap<String, Integer> cols2Pos, Object lo, ArrayList<Object> row) throws Exception
+	{
+		if (fVal2 != null)
+		{
+			return compare(new Double((Integer)lo), fVal2);
+		}
+		else if (lVal2 != null)
+		{
+			return compare(new Long((Integer)lo), lVal2);
+		}
+		else
+		{
+			if (posVal2 == -1)
+			{
+				posVal2 = cols2Pos.get(colVal2);
+			}
+
+			final int pos2 = posVal2;
+			final Object o = row.get(pos2);
+			return compare(((Integer)lo).doubleValue(), ((Number)o).doubleValue());
+		}
+	}
+
+	private boolean passesLong(HashMap<String, Integer> cols2Pos, Object lo, ArrayList<Object> lRow, ArrayList<Object> rRow) throws Exception
+	{
+		if (fVal2 != null)
+		{
+			return compare(new Double((Long)lo), fVal2);
+		}
+		else if (lVal2 != null)
+		{
+			return compare((Long)lo, lVal2);
+		}
+		else
+		{
+			if (posVal2 == -1)
+			{
+				posVal2 = cols2Pos.get(colVal2);
+			}
+
+			final int pos2 = posVal2;
+			final Object o = get(lRow, rRow, pos2);
+			return compare(((Long)lo).doubleValue(), ((Number)o).doubleValue());
+		}
+	}
+
+	private boolean passesLong2(HashMap<String, Integer> cols2Pos, Object lo, ArrayList<Object> row) throws Exception
+	{
+		if (fVal2 != null)
+		{
+			return compare(new Double((Long)lo), fVal2);
+		}
+		else if (lVal2 != null)
+		{
+			return compare((Long)lo, lVal2);
+		}
+		else
+		{
+			if (posVal2 == -1)
+			{
+				posVal2 = cols2Pos.get(colVal2);
+			}
+
+			final int pos2 = posVal2;
+			final Object o = row.get(pos2);
+			return compare(((Long)lo).doubleValue(), ((Number)o).doubleValue());
+		}
+	}
+
+	private boolean passesString(HashMap<String, Integer> cols2Pos, Object lo, ArrayList<Object> lRow, ArrayList<Object> rRow) throws Exception
+	{
+		if (colVal2 != null)
+		{
+			if (posVal2 == -1)
+			{
+				posVal2 = cols2Pos.get(colVal2);
+			}
+
+			final int pos2 = posVal2;
+			String ro = (String)get(lRow, rRow, pos2);
+			return compare((String)lo, ro);
+		}
+		else
+		{
+			return compare((String)lo, val2);
+		}
+	}
+
+	private boolean passesString2(HashMap<String, Integer> cols2Pos, Object lo, ArrayList<Object> row) throws Exception
+	{
+		if (colVal2 != null)
+		{
+			if (posVal2 == -1)
+			{
+				posVal2 = cols2Pos.get(colVal2);
+			}
+
+			final int pos2 = posVal2;
+			String ro = (String)row.get(pos2);
+			return compare((String)lo, ro);
+		}
+		else
+		{
+			return compare((String)lo, val2);
+		}
+	}
+
+	private void setAlwaysVars() throws Exception
+	{
+		if (colVal1 != null)
 		{
 			if (colVal2 != null)
 			{
@@ -1044,6 +1026,10 @@ public class Filter implements Cloneable, Serializable
 					}
 				}
 			}
+		}
+		else
+		{
+			lessCommon();
 		}
 	}
 

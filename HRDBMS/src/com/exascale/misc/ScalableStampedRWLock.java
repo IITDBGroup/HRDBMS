@@ -230,8 +230,8 @@ public class ScalableStampedRWLock implements ReadWriteLock, java.io.Serializabl
 	 * and returns immediately with the value {@code true} if and only if no
 	 * other thread is attempting a read lock, setting the write lock
 	 * {@code reentrantWriterCount} to one. If another thread is attempting a
-	 * read lock, this function <b>may yield until the read lock is
-	 * released</b>.
+	 * read lock, this function <b>may yield until the read lock is released</b>
+	 * .
 	 *
 	 * <p>
 	 * If the write lock is held by another thread then the current thread

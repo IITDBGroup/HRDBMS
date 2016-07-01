@@ -18,6 +18,7 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 {
 	private static int HASH_THRESHOLD = 10;
 	private static sun.misc.Unsafe unsafe;
+
 	static
 	{
 		try

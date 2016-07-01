@@ -8,6 +8,7 @@ import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.SPSCQueue;
+import com.exascale.optimizer.AntiJoinOperator;
 import com.exascale.optimizer.CreateIndexOperator;
 import com.exascale.optimizer.CreateTableOperator;
 import com.exascale.optimizer.CreateViewOperator;
@@ -15,12 +16,19 @@ import com.exascale.optimizer.DeleteOperator;
 import com.exascale.optimizer.DropIndexOperator;
 import com.exascale.optimizer.DropTableOperator;
 import com.exascale.optimizer.DropViewOperator;
+import com.exascale.optimizer.HashJoinOperator;
 import com.exascale.optimizer.IndexOperator;
 import com.exascale.optimizer.InsertOperator;
 import com.exascale.optimizer.LoadOperator;
 import com.exascale.optimizer.MassDeleteOperator;
+import com.exascale.optimizer.MultiOperator;
+import com.exascale.optimizer.NestedLoopJoinOperator;
+import com.exascale.optimizer.NetworkReceiveOperator;
 import com.exascale.optimizer.Operator;
+import com.exascale.optimizer.ProductOperator;
 import com.exascale.optimizer.RunstatsOperator;
+import com.exascale.optimizer.SemiJoinOperator;
+import com.exascale.optimizer.SortOperator;
 import com.exascale.optimizer.TableScanOperator;
 import com.exascale.optimizer.UpdateOperator;
 import com.exascale.tables.Plan;
@@ -214,13 +222,42 @@ public class XAWorker extends HRDBMSThread
 		}
 
 		visited.add(op);
-		if (tx == null)
-		{
-			throw new Exception("Null tx in setPlanAndTransaction");
-		}
+
 		if (op instanceof TableScanOperator)
 		{
 			((TableScanOperator)op).setTransaction(tx);
+		}
+		else if (op instanceof HashJoinOperator)
+		{
+			((HashJoinOperator)op).setTXNum(tx.number());
+		}
+		else if (op instanceof MultiOperator)
+		{
+			((MultiOperator)op).setTXNum(tx.number());
+		}
+		else if (op instanceof SortOperator)
+		{
+			((SortOperator)op).setTXNum(tx.number());
+		}
+		else if (op instanceof ProductOperator)
+		{
+			((ProductOperator)op).setTXNum(tx.number());
+		}
+		else if (op instanceof SemiJoinOperator)
+		{
+			((SemiJoinOperator)op).setTXNum(tx.number());
+		}
+		else if (op instanceof AntiJoinOperator)
+		{
+			((AntiJoinOperator)op).setTXNum(tx.number());
+		}
+		else if (op instanceof NestedLoopJoinOperator)
+		{
+			((NestedLoopJoinOperator)op).setTXNum(tx.number());
+		}
+		else if (op instanceof NetworkReceiveOperator)
+		{
+			((NetworkReceiveOperator)op).setTXNum(tx.number());
 		}
 		else if (op instanceof IndexOperator)
 		{

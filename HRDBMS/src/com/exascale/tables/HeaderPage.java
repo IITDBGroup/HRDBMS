@@ -2,6 +2,7 @@ package com.exascale.tables;
 
 import java.util.ArrayList;
 import com.exascale.filesystem.Page;
+import com.exascale.managers.HRDBMSWorker;
 
 public class HeaderPage
 {
@@ -17,6 +18,46 @@ public class HeaderPage
 			node = p.getInt(0); // first page contains node and device number
 			device = p.getInt(4);
 		}
+	}
+
+	public ArrayList<Integer> getClustering()
+	{
+		int pageSize = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("page_size"));
+		if (pageSize < 252 * 1024)
+		{
+			return new ArrayList<Integer>();
+		}
+
+		int pos = 131072;
+		int size = p.getInt(pos);
+		pos += 4;
+		ArrayList<Integer> retval = new ArrayList<Integer>(size);
+		int i = 0;
+		while (i < size)
+		{
+			retval.add(p.getInt(pos) - 1);
+			pos += 4;
+			i++;
+		}
+
+		return retval;
+	}
+
+	public ArrayList<Integer> getColOrder()
+	{
+		int pos = 26220;
+		int size = p.getInt(pos);
+		pos += 4;
+		ArrayList<Integer> retval = new ArrayList<Integer>(size);
+		int i = 0;
+		while (i < size)
+		{
+			retval.add(p.getInt(pos));
+			pos += 4;
+			i++;
+		}
+
+		return retval;
 	}
 
 	public int getDeviceNumber()
@@ -35,23 +76,6 @@ public class HeaderPage
 			i++;
 		}
 
-		return retval;
-	}
-	
-	public ArrayList<Integer> getColOrder()
-	{
-		int pos = 26220;
-		int size = p.getInt(pos);
-		pos += 4;
-		ArrayList<Integer> retval = new ArrayList<Integer>();
-		int i = 0;
-		while (i < size)
-		{
-			retval.add(p.getInt(pos));
-			pos += 4;
-			i++;
-		}
-		
 		return retval;
 	}
 

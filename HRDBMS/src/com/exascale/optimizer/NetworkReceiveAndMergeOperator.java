@@ -18,8 +18,7 @@ import java.util.IdentityHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedInputStream;
 import com.exascale.managers.HRDBMSWorker;
-import com.exascale.managers.ResourceManager;
-import com.exascale.misc.BinomialHeap;
+import com.exascale.misc.AuxPairingHeap;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MyDate;
 import com.exascale.misc.SPSCQueue;
@@ -29,10 +28,12 @@ import com.exascale.threads.ThreadPoolThread;
 public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator implements Operator, Serializable
 {
 	private static Charset cs = StandardCharsets.UTF_8;
+	private static int SQUEUE_SIZE;
 
 	private static long offset;
 
 	private static sun.misc.Unsafe unsafe;
+
 	static
 	{
 		try
@@ -43,6 +44,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 			final Field fieldToUpdate = String.class.getDeclaredField("value");
 			// get unsafe offset to this field
 			offset = unsafe.objectFieldOffset(fieldToUpdate);
+			SQUEUE_SIZE = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("nram_spsc_queue_size"));
 		}
 		catch (Exception e)
 		{
@@ -51,11 +53,24 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 	}
 	private ArrayList<String> sortCols;
 
-	private ArrayList<Boolean> orders;
+	private boolean[] orders;
 
 	private int[] sortPos;
 
 	public NetworkReceiveAndMergeOperator(ArrayList<String> sortCols, ArrayList<Boolean> orders, MetaData meta)
+	{
+		super(meta);
+		this.sortCols = sortCols;
+		this.orders = new boolean[orders.size()];
+		int i = 0;
+		for (boolean b : orders)
+		{
+			this.orders[i++] = b;
+		}
+		received = new AtomicLong(0);
+	}
+
+	public NetworkReceiveAndMergeOperator(ArrayList<String> sortCols, boolean[] orders, MetaData meta)
 	{
 		super(meta);
 		this.sortCols = sortCols;
@@ -77,7 +92,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 		value.start = OperatorUtils.readLong(in);
 		value.node = OperatorUtils.readInt(in);
 		value.sortCols = OperatorUtils.deserializeALS(in, prev);
-		value.orders = OperatorUtils.deserializeALB(in, prev);
+		value.orders = OperatorUtils.deserializeBoolArray(in, prev);
 		value.sortPos = OperatorUtils.deserializeIntArray(in, prev);
 		value.cd = cs.newDecoder();
 		value.received = new AtomicLong(0);
@@ -213,7 +228,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 		OperatorUtils.writeLong(start, out);
 		OperatorUtils.writeInt(node, out);
 		OperatorUtils.serializeALS(sortCols, out, prev);
-		OperatorUtils.serializeALB(orders, out, prev);
+		OperatorUtils.serializeBoolArray(orders, out, prev);
 		OperatorUtils.serializeIntArray(sortPos, out, prev);
 	}
 
@@ -236,8 +251,8 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 						// Socket(meta.getHostNameForNode(child.getNode()),
 						// WORKER_PORT);
 						Socket sock = new Socket();
-						sock.setReceiveBufferSize(262144);
-						sock.setSendBufferSize(262144);
+						sock.setReceiveBufferSize(4194304);
+						sock.setSendBufferSize(4194304);
 						sock.connect(new InetSocketAddress(meta.getHostNameForNode(child.getNode()), WORKER_PORT));
 						socks.put(child, sock);
 						final OutputStream out = sock.getOutputStream();
@@ -281,9 +296,9 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 	public class ALOO
 	{
 		private final ArrayList<Object> alo;
-		private final Operator op;
+		private final int op;
 
-		public ALOO(ArrayList<Object> alo, Operator op)
+		public ALOO(ArrayList<Object> alo, int op)
 		{
 			this.alo = alo;
 			this.op = op;
@@ -300,7 +315,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 			return alo;
 		}
 
-		public Operator getOp()
+		public int getOp()
 		{
 			return op;
 		}
@@ -393,7 +408,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 						lField.toString();
 					}
 
-					if (orders.get(i))
+					if (orders[i])
 					{
 						if (result > 0)
 						{
@@ -436,7 +451,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 		// HashMap<Operator, ArrayList<Object>>();
 		// private final TreeMap<ArrayList<Object>, Operator> rows = new
 		// TreeMap<ArrayList<Object>, Operator>(new MergeComparator());
-		private final BinomialHeap<ALOO> rows = new BinomialHeap<ALOO>(new MergeComparator());
+		private final AuxPairingHeap<ALOO> rows = new AuxPairingHeap<ALOO>(new MergeComparator());
 		private ALOO minEntry;
 
 		public ReadThread(ArrayList<Operator> children)
@@ -449,24 +464,28 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 		{
 			try
 			{
-				HashMap<Operator, ReadThread2> map = new HashMap<Operator, ReadThread2>();
+				// HashMap<Integer, ReadThread2> map = new HashMap<Integer,
+				// ReadThread2>();
+				ReadThread2[] map = new ReadThread2[children.size()];
+				int i = 0;
 				for (Operator op : children)
 				{
 					ReadThread2 thread = new ReadThread2(op);
 					thread.start();
-					map.put(op, thread);
+					map[i++] = thread;
 				}
 
+				i = 0;
 				for (final Operator op : children)
 				{
 					try
 					{
-						Object o = map.get(op).q.take();
+						Object o = map[i].q.take();
 
 						if (o instanceof ArrayList)
 						{
 							final ArrayList<Object> row = (ArrayList<Object>)o;
-							rows.insert(new ALOO(row, op));
+							rows.insert(new ALOO(row, i));
 						}
 						else if (o instanceof Exception)
 						{
@@ -477,6 +496,8 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 							HRDBMSWorker.logger.debug("Unknown object in NRAM: " + o);
 							throw new Exception("Unknown object in NRAM: " + o);
 						}
+
+						i++;
 					}
 					catch (Exception e)
 					{
@@ -521,12 +542,13 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 					}
 					try
 					{
-						Object o = map.get(minEntry.getOp()).q.take();
+						int op = minEntry.getOp();
+						Object o = map[op].q.take();
 
 						if (o instanceof ArrayList)
 						{
 							final ArrayList<Object> row = (ArrayList<Object>)o;
-							rows.insert(new ALOO(row, minEntry.getOp()));
+							rows.insert(new ALOO(row, op));
 						}
 						else if (o instanceof Exception)
 						{
@@ -552,10 +574,17 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 					}
 				}
 			}
-			catch (Exception g)
+			catch (Throwable g)
 			{
 				HRDBMSWorker.logger.debug("", g);
-				outBuffer.put(g);
+				if (g instanceof Exception)
+				{
+					outBuffer.put(g);
+				}
+				else
+				{
+					outBuffer.put(new Exception(g));
+				}
 			}
 		}
 	}
@@ -563,7 +592,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 	private class ReadThread2 extends HRDBMSThread
 	{
 		private final Operator op;
-		public SPSCQueue q = new SPSCQueue(ResourceManager.QUEUE_SIZE);
+		public SPSCQueue q = new SPSCQueue(SQUEUE_SIZE);
 
 		public ReadThread2(Operator op)
 		{
