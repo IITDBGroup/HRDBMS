@@ -88,7 +88,7 @@ public class StartWorkersThread extends HRDBMSThread
 						// channel.disconnect();
 						// session.disconnect();
 						HRDBMSWorker.logger.info("Command: " + "ssh -n -f " + host + "  \"sh -c '" + command1 + "'\"");
-						Runtime.getRuntime().exec(new String[] { "bash", "-c", "ssh -n -f " + host + "  \"sh -c '" + command1 + "'\"" });
+						Runtime.getRuntime().exec(new String[] { "bash", "-c", "ssh -n -f " + host + "  \"bash -c '" + command1 + "'\"" });
 					}
 					catch (final Exception e)
 					{
