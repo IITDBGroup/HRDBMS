@@ -1309,6 +1309,37 @@ public class PlanCacheManager
 			trees.add(root);
 			p = new Plan(true, trees);
 			addPlan("SELECT TABLEID FROM SYS.TABLES WHERE SCHEMA = ? AND TABNAME = ?", p);
+			
+			// getExternalTableInfo
+			meta = new MetaData();
+			keys = new ArrayList<String>();
+			types = new ArrayList<String>();
+			orders = new ArrayList<Boolean>();
+			keys.add("EXTERNALTABLES.TABLEID");
+			types.add("INT");
+			orders.add(true);
+			index = new Index("SYS.PKEXTERNALTABLES.indx", keys, types, orders);
+			iOp = new IndexOperator(index, meta);
+			iOp.setNode(-1);
+			iOp.setDevice(0);
+			tOp = new TableScanOperator("SYS", "EXTERNALTABLES", meta, tx);
+			devs = new ArrayList<Integer>();
+			devs.add(0);
+			tOp.addActiveDevices(devs);
+			tOp.setChildForDevice(0, iOp);
+			needed = new ArrayList<String>();
+			needed.add("EXTERNALTABLES.JAVACLASSNAME");
+			needed.add("EXTERNALTABLES.PARAMETERS");
+			tOp.setNeededCols(needed);
+			tOp.setNode(-1);
+			tOp.setPhase2Done();
+			tOp.add(iOp);
+			root = new RootOperator(meta);
+			root.add(tOp);
+			trees = new ArrayList<Operator>();
+			trees.add(root);
+			p = new Plan(true, trees);
+			addPlan("SELECT JAVACLASSNAME, PARAMETERS FROM SYS.EXTERNALTABLES WHERE TABLEID = ?", p);
 
 			// getVerifyViewExist
 			meta = new MetaData();
@@ -1691,6 +1722,21 @@ public class PlanCacheManager
 			throw e;
 		}
 	}
+	
+	public static InsertExternalTablePlan getInsertExternalTable()
+	{
+		return new InsertExternalTablePlan();
+	}
+	
+	public static DeleteExternalTablePlan getDeleteExternalTable()
+	{
+		return new DeleteExternalTablePlan();
+	}
+	
+	public static ExternalTableInfoPlan getExternalTableInfo()
+	{
+		return new ExternalTableInfoPlan(checkPlanCache("SELECT JAVACLASSNAME, PARAMETERS FROM SYS.EXTERNALTABLES WHERE TABLEID = ?"));
+	}
 
 	public static CheckIndexForColPlan getCheckIndexForCol()
 	{
@@ -2029,7 +2075,7 @@ public class PlanCacheManager
 
 		public Object execute(Transaction tx) throws Exception
 		{
-			if (tableID >= 0 && tableID <= 12)
+			if (tableID >= 0 && tableID <= 13)
 			{
 				if (indexID == 0)
 				{
@@ -2120,6 +2166,13 @@ public class PlanCacheManager
 					else if (tableID == 12)
 					{
 						if (colID >= 0 && colID <= 1)
+						{
+							return new ArrayList<Object>();
+						}
+					}
+					else if (tableID == 13)
+					{
+						if (colID == 0)
 						{
 							return new ArrayList<Object>();
 						}
@@ -2338,6 +2391,21 @@ public class PlanCacheManager
 					row = new ArrayList<Object>();
 					row.add("TYPE");
 					row.add(3);
+					retval.add(row);
+				}
+				else if (table.equals("EXTERNALTABLES"))
+				{
+					ArrayList<Object> row = new ArrayList<Object>();
+					row.add("TABLEID");
+					row.add(0);
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("JAVACLASSNAME");
+					row.add(1);
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("PARAMETERS");
+					row.add(2);
 					retval.add(row);
 				}
 				else if (table.equals("COLUMNS"))
@@ -2691,6 +2759,21 @@ public class PlanCacheManager
 					retval.add(row);
 					row = new ArrayList<Object>();
 					row.add("TYPE");
+					row.add("VARCHAR");
+					retval.add(row);
+				}
+				else if (table.equals("EXTERNALTABLES"))
+				{
+					ArrayList<Object> row = new ArrayList<Object>();
+					row.add("TABLEID");
+					row.add("INT");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("JAVACLASSNAME");
+					row.add("VARCHAR");
+					retval.add(row);
+					row = new ArrayList<Object>();
+					row.add("PARAMETERS");
 					row.add("VARCHAR");
 					retval.add(row);
 				}
@@ -3463,6 +3546,30 @@ public class PlanCacheManager
 			return this;
 		}
 	}
+	
+	public static class DeleteExternalTablePlan
+	{
+		private int tableID;
+
+		public void execute(Transaction tx) throws Exception
+		{
+			String sql = "DELETE FROM SYS.TABLES WHERE TABLEID = " + tableID;
+			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			worker.start();
+			worker.join();
+			int updateCount = worker.getUpdateCount();
+			if (updateCount == -1)
+			{
+				throw worker.getException();
+			}
+		}
+
+		public DeleteExternalTablePlan setParms(int tableID)
+		{
+			this.tableID = tableID;
+			return this;
+		}
+	}
 
 	public static class DeleteTableStatsPlan
 	{
@@ -3808,6 +3915,10 @@ public class PlanCacheManager
 					{
 						return 2;
 					}
+					else if (tableID == 13)
+					{
+						return 1;
+					}
 				}
 				else if (indexID == 1)
 				{
@@ -3920,6 +4031,11 @@ public class PlanCacheManager
 					retval.add(row);
 					row = new ArrayList<Object>();
 					row.add("TABNAME");
+					retval.add(row);
+				}
+				else if (name.equals("EXTERNALTABLES"))
+				{
+					row.add("TABLEID");
 					retval.add(row);
 				}
 				else if (name.equals("INDEXES"))
@@ -4116,6 +4232,11 @@ public class PlanCacheManager
 					row.add(0);
 					retval.add(row);
 				}
+				else if (name.equals("EXTERNALTABLES"))
+				{
+					row.add(0);
+					retval.add(row);
+				}
 				else if (name.equals("INDEXES"))
 				{
 					row.add(0);
@@ -4287,6 +4408,11 @@ public class PlanCacheManager
 				if (table.equals("TABLES"))
 				{
 					row.add("PKTABLES");
+					retval.add(row);
+				}
+				else if (table.equals("EXTERNALTABLES"))
+				{
+					row.add("PKEXTERNALTABLES");
 					retval.add(row);
 				}
 				else if (table.equals("INDEXES"))
@@ -4622,6 +4748,34 @@ public class PlanCacheManager
 			return this;
 		}
 	}
+	
+	public static class InsertExternalTablePlan
+	{
+		private int tableID;
+		private String javaClassName;
+		private String parameters;
+
+		public void execute(Transaction tx) throws Exception
+		{
+			String sql = "INSERT INTO SYS.EXTERNALTABLES VALUES(" + tableID + "," + "'" + javaClassName + "'" + "," + "'" + parameters + "')";
+			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			worker.start();
+			worker.join();
+			int updateCount = worker.getUpdateCount();
+			if (updateCount == -1)
+			{
+				throw worker.getException();
+			}
+		}
+
+		public InsertExternalTablePlan setParms(int tableID, String javaClassName, String parameters)
+		{
+			this.tableID = tableID;
+			this.javaClassName = javaClassName;
+			this.parameters = parameters;
+			return this;
+		}
+	}
 
 	public static class InsertViewPlan
 	{
@@ -4772,6 +4926,11 @@ public class PlanCacheManager
 				else if (tableID == 9 && indexID == 0)
 				{
 					row.add("FIRST");
+					retval.add(row);
+				}
+				else if (tableID == 13 && indexID == 0)
+				{
+					row.add("TABLEID");
 					retval.add(row);
 				}
 				else
@@ -5002,6 +5161,12 @@ public class PlanCacheManager
 					row.add("FIRST");
 					retval.add(row);
 				}
+				else if (name.equals("PKEXTERNALTABLES"))
+				{
+					row.add("EXTERNALTABLES");
+					row.add("TABLEID");
+					retval.add(row);
+				}
 				else
 				{
 					throw new Exception("Index not found");
@@ -5128,6 +5293,18 @@ public class PlanCacheManager
 					if (col.equals("TYPE"))
 					{
 						return 1;
+					}
+				}
+				else if (table.equals("EXTERNALTABLES"))
+				{
+					if (col.equals("JAVACLASSNAME"))
+					{
+						return 4096;
+					}
+
+					if (col.equals("PARAMETERS"))
+					{
+						return 65536;
 					}
 				}
 				else if (table.equals("COLUMNS"))
@@ -5609,6 +5786,11 @@ public class PlanCacheManager
 					row.add("A");
 					retval.add(row);
 				}
+				else if (name.equals("PKEXTERNALTABLES"))
+				{
+					row.add("A");
+					retval.add(row);
+				}
 				else if (name.equals("PKINDEXES"))
 				{
 					row.add("A");
@@ -5911,6 +6093,12 @@ public class PlanCacheManager
 				if (name.equals("PKTABLES"))
 				{
 					retval.add(0);
+					retval.add(0);
+					return retval;
+				}
+				else if (name.equals("PKEXTERNALTABLES"))
+				{
+					retval.add(13);
 					retval.add(0);
 					return retval;
 				}
@@ -6227,6 +6415,10 @@ public class PlanCacheManager
 				{
 					return 9;
 				}
+				else if (name.equals("EXTERNALTABLES"))
+				{
+					return 13;
+				}
 
 				throw new Exception("Table not found: " + schema + "." + name);
 			}
@@ -6510,6 +6702,11 @@ public class PlanCacheManager
 					row.add("INT");
 					retval.add(row);
 				}
+				else if (name.equals("PKEXTERNALTABLES"))
+				{
+					row.add("INT");
+					retval.add(row);
+				}
 				else
 				{
 					throw new Exception("Index not found");
@@ -6630,6 +6827,11 @@ public class PlanCacheManager
 				if (table.equals("TABLES"))
 				{
 					row.add("PKTABLES");
+					retval.add(row);
+				}
+				else if (table.equals("EXTERNALTABLES"))
+				{
+					row.add("PKEXTERNALTABLES");
 					retval.add(row);
 				}
 				else if (table.equals("INDEXES"))
@@ -6793,6 +6995,12 @@ public class PlanCacheManager
 				if (table.equals("TABLES"))
 				{
 					row.add("PKTABLES");
+					row.add(true);
+					retval.add(row);
+				}
+				else if (table.equals("EXTERNALTABLES"))
+				{
+					row.add("PKEXTERNALTABLES");
 					row.add(true);
 					retval.add(row);
 				}
@@ -6977,6 +7185,10 @@ public class PlanCacheManager
 				{
 					return retval;
 				}
+				else if (name.equals("PKEXTERNALTABLES"))
+				{
+					return retval;
+				}
 				else if (name.equals("PKINDEXES"))
 				{
 					return retval;
@@ -7129,6 +7341,10 @@ public class PlanCacheManager
 				{
 					return retval;
 				}
+				else if (name.equals("EXTERNALTABLES"))
+				{
+					return retval;
+				}
 				else if (name.equals("INDEXES"))
 				{
 					return retval;
@@ -7236,6 +7452,72 @@ public class PlanCacheManager
 			Index index = ((IndexOperator)op).getIndex();
 			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
 			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + name + "'"));
+			return this;
+		}
+	}
+	
+	public static class ExternalTableInfoPlan
+	{
+		private final Plan p;
+		private int tableID;
+
+		public ExternalTableInfoPlan(Plan p)
+		{
+			this.p = p;
+		}
+
+		public Object execute(Transaction tx) throws Exception
+		{
+			int iso = tx.getIsolationLevel();
+			tx.setIsolationLevel(Transaction.ISOLATION_RR);
+			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			worker.start();
+			ArrayList<Object> cmd = new ArrayList<Object>(2);
+			cmd.add("NEXT");
+			cmd.add(1);
+			worker.in.put(cmd);
+
+			Object obj = null;
+			while (true)
+			{
+				try
+				{
+					obj = worker.out.take();
+					break;
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+
+			if (obj instanceof Exception)
+			{
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+				throw (Exception)obj;
+			}
+
+			cmd = new ArrayList<Object>(1);
+			cmd.add("CLOSE");
+			worker.in.put(cmd);
+			tx.setIsolationLevel(iso);
+			return obj;
+		}
+
+		public ExternalTableInfoPlan setParms(int tableID) throws Exception
+		{
+			this.tableID = tableID;
+			
+			Operator op = p.getTrees().get(0);
+			while (op.children().size() != 0)
+			{
+				op = op.children().get(0);
+			}
+
+			Index index = ((IndexOperator)op).getIndex();
+			index.setCondition(new Filter("EXTERNALTABLES.TABLEID", "E", Integer.toString(tableID)));
 			return this;
 		}
 	}

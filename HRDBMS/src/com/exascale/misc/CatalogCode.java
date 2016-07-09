@@ -75,14 +75,14 @@ public class CatalogCode
 
 		final String in =
 		// SYS.TABLES(ID, SCHEMA, NAME, TYPE)
-		"SYS.TABLES(INT, VARCHAR, VARCHAR, VARCHAR)\n" + "13\n" + "(0, SYS, TABLES, R)\n" + "(1, SYS, COLUMNS, R)\n" + "(2, SYS, INDEXES, R)\n" + "(3, SYS, INDEXCOLS, R)\n" + "(4, SYS, VIEWS, R)\n" + "(5, SYS, TABLESTATS, R)\n" + "(6, SYS, NODES, R)\n" + "(7, SYS, COLSTATS, R)\n" + "(8, SYS, COLDIST, R)\n" + "(9, SYS, BACKUPS, R)\n" + "(10, SYS, NODESTATE, R)\n" + "(11, SYS, PARTITIONING, R)\n" + "(12, SYS, INDEXSTATS, R)\n"
+		"SYS.TABLES(INT, VARCHAR, VARCHAR, VARCHAR)\n" + "14\n" + "(0, SYS, TABLES, R)\n" + "(1, SYS, COLUMNS, R)\n" + "(2, SYS, INDEXES, R)\n" + "(3, SYS, INDEXCOLS, R)\n" + "(4, SYS, VIEWS, R)\n" + "(5, SYS, TABLESTATS, R)\n" + "(6, SYS, NODES, R)\n" + "(7, SYS, COLSTATS, R)\n" + "(8, SYS, COLDIST, R)\n" + "(9, SYS, BACKUPS, R)\n" + "(10, SYS, NODESTATE, R)\n" + "(11, SYS, PARTITIONING, R)\n" + "(12, SYS, INDEXSTATS, R)\n" + "(13, SYS, EXTERNALTABLES, R)\n"
 
 		+ "SYS.BACKUPS(INT, INT, INT)\n" + "0\n"
 
 		+ "SYS.NODESTATE(INT, VARCHAR)\n" + "0\n"
 
 		// SYS.COLUMNS(COLID, TABLEID, NAME, TYPE, LENGTH, SCALE, PKPOS, NULL)
-		+ "SYS.COLUMNS(INT, INT, VARCHAR, VARCHAR, INT, INT, INT, VARCHAR)\n" + "53\n" + "(0, 1, COLID, INT, 4, 0, -1, N)\n" + "(1, 1, TABLEID, INT, 4, 0, 0, N)\n" + "(2, 1, COLNAME, VARCHAR, 128, 0, 1, N)\n" + "(3, 1, COLTYPE, VARCHAR, 16, 0, -1, N)\n" + "(4, 1, LENGTH, INT, 4, 0, -1, N)\n" + "(5, 1, SCALE, INT, 4, 0, -1, N)\n" + "(6, 1, PKPOS, INT, 4, 0, -1, N)\n" + "(7, 1, NULLABLE, VARCHAR, 1, 0, -1, N)\n"
+		+ "SYS.COLUMNS(INT, INT, VARCHAR, VARCHAR, INT, INT, INT, VARCHAR)\n" + "56\n" + "(0, 1, COLID, INT, 4, 0, -1, N)\n" + "(1, 1, TABLEID, INT, 4, 0, 0, N)\n" + "(2, 1, COLNAME, VARCHAR, 128, 0, 1, N)\n" + "(3, 1, COLTYPE, VARCHAR, 16, 0, -1, N)\n" + "(4, 1, LENGTH, INT, 4, 0, -1, N)\n" + "(5, 1, SCALE, INT, 4, 0, -1, N)\n" + "(6, 1, PKPOS, INT, 4, 0, -1, N)\n" + "(7, 1, NULLABLE, VARCHAR, 1, 0, -1, N)\n"
 
 		+ "(0, 0, TABLEID, INT, 4, 0, -1, N)\n" + "(1, 0, SCHEMA, VARCHAR, 128, 0, 0, N)\n" + "(2, 0, TABNAME, VARCHAR, 128, 0, 1, N)\n" + "(3, 0, TYPE, VARCHAR, 1, 0, -1, N)\n"
 
@@ -107,32 +107,44 @@ public class CatalogCode
 		+ "(0, 11, TABLEID, INT, 4, 0, 0, N)\n" + "(1, 11, GROUPEXP, VARCHAR, 8192, 0, -1, N)\n" + "(2, 11, NODEEXP, VARCHAR, 8192, 0, -1, N)\n" + "(3, 11, DEVICEEXP, VARCHAR, 8192, 0, -1, N)\n"
 
 		+ "(0, 12, TABLEID, INT, 4, 0, 0, N)\n" + "(1, 12, INDEXID, INT, 4, 0, 1, N)\n" + "(2, 12, NUMDISTINCT, BIGINT, 8, 0, -1, N)\n"
+		
+		+ "(0, 13, TABLEID, INT, 4, 0, 0, N)\n" + "(1, 13, JAVACLASSNAME, VARCHAR, 4096, 0, -1, N)\n" + "(2, 13, PARAMETERS, VARCHAR, 65536, 0, -1, N)\n"
 
 		+ "SYS.VIEWS(INT, VARCHAR, VARCHAR, VARCHAR)\n" + "0\n"
 
-		+ "SYS.INDEXES(INT, VARCHAR, INT, VARCHAR)\n" + "15\n" + "(0, PKTABLES, 0, Y)\n" + "(0, PKCOLUMNS, 1, Y)\n" + "(0, PKINDEXES, 2, Y)\n" + "(0, PKINDEXCOLS, 3, Y)\n" + "(0, PKVIEWS, 4, Y)\n" + "(0, PKTABLESTATS, 5, Y)\n" + "(0, PKNODES, 6, Y)\n" + "(0, PKCOLSTATS, 7, Y)\n" + "(0, PKCOLDIST, 8, Y)\n" + "(0, PKBACKUPS, 9, Y)\n" + "(0, PKNODESTATE, 10, Y)\n" + "(0, PKPARTITIONING, 11, Y)\n" + "(0, PKINDEXSTATS, 12, Y)\n" + "(1, SKNODES, 6, Y)\n" + "(1, SKINDEXES, 2, N)\n"
+		+ "SYS.INDEXES(INT, VARCHAR, INT, VARCHAR)\n" + "16\n" + "(0, PKTABLES, 0, Y)\n" + "(0, PKCOLUMNS, 1, Y)\n" + "(0, PKINDEXES, 2, Y)\n" + "(0, PKINDEXCOLS, 3, Y)\n" + "(0, PKVIEWS, 4, Y)\n" + "(0, PKTABLESTATS, 5, Y)\n" + "(0, PKNODES, 6, Y)\n" + "(0, PKCOLSTATS, 7, Y)\n" + "(0, PKCOLDIST, 8, Y)\n" + "(0, PKBACKUPS, 9, Y)\n" + "(0, PKNODESTATE, 10, Y)\n" + "(0, PKPARTITIONING, 11, Y)\n" + "(0, PKINDEXSTATS, 12, Y)\n" + "(1, SKNODES, 6, Y)\n" + "(1, SKINDEXES, 2, N)\n" + "(0, PKEXTERNALTABLES, 13, Y)\n"
 
-		+ "SYS.INDEXCOLS(INT, INT, INT, INT, VARCHAR)\n" + "24\n" + "(0, 0, 1, 0, A)\n" // TABLES(SCHEMA,
-		// NAME)
-		+ "(0, 0, 2, 1, A)\n" + "(0, 1, 1, 0, A)\n" // COLUMNS(TABLEID,
-		// COLNAME)
-		+ "(0, 1, 2, 1, A)\n" + "(0, 2, 1, 1, A)\n" // INDEXES(TABLEID,
-		// INDEXNAME)
-		+ "(0, 2, 2, 0, A)\n" + "(0, 3, 0, 1, A)\n" // INDEXCOLS(TABLE,
-		// INDEX, COL)
-		+ "(0, 3, 1, 0, A)\n" + "(0, 3, 2, 2, A)\n" + "(0, 4, 1, 0, A)\n" // VIEWS(SCHEMA,
-		// NAME)
+		+ "SYS.INDEXCOLS(INT, INT, INT, INT, VARCHAR)\n" + "25\n" + "(0, 0, 1, 0, A)\n" // TABLES(SCHEMA, NAME)
+		
+		+ "(0, 0, 2, 1, A)\n" + "(0, 1, 1, 0, A)\n" // COLUMNS(TABLEID, COLNAME)
+		
+		+ "(0, 1, 2, 1, A)\n" + "(0, 2, 1, 1, A)\n" // INDEXES(TABLEID, INDEXNAME)
+		
+		+ "(0, 2, 2, 0, A)\n" + "(0, 3, 0, 1, A)\n" // INDEXCOLS(TABLE, INDEX, COL)
+		
+		+ "(0, 3, 1, 0, A)\n" + "(0, 3, 2, 2, A)\n" + "(0, 4, 1, 0, A)\n" // VIEWS(SCHEMA, NAME)
+		
 		+ "(0, 4, 2, 1, A)\n" + "(0, 5, 0, 0, A)\n" // TABLESTATS(ID)
+		
 		+ "(0, 6, 1, 0, A)\n" // NODES(HOSTNAME)
+		
 		+ "(0, 7, 0, 0, A)\n" // COLSTATS(TABLE, COL)
-		+ "(0, 7, 1, 1, A)\n" + "(0, 8, 0, 0, A)\n" // COLDIST(TABLE,
-		// COL)
+		
+		+ "(0, 7, 1, 1, A)\n" + "(0, 8, 0, 0, A)\n" // COLDIST(TABLE, COL)
+		
 		+ "(0, 8, 1, 1, A)\n" + "(0, 9, 0, 0, A)\n" // BACKUPS(FIRST)
+		
 		+ "(0, 10, 0, 0, A)\n" // NODESTATE(NODE)
+		
 		+ "(0, 11, 0, 0, A)\n" // PARTITIONING(TABLE)
+		
 		+ "(0, 12, 0, 0, A)\n" // INDEXSTATS(TABLE, INDEX)
+		
 		+ "(0, 12, 1, 1, A)\n" + "(1, 6, 0, 0, A)\n" // NODES(NODEID)
+		
 		+ "(1, 2, 1, 0, A)\n" // INDEXES(INDEXNAME)
+		
+		+ "(0, 13, 0, 0, A)\n" //EXTERNALTABLES(TABLEID)
 
 		+ "SYS.TABLESTATS(INT, BIGINT)\n" + "0\n"
 
@@ -142,9 +154,11 @@ public class CatalogCode
 
 		+ "SYS.COLDIST(INT, INT, VARCHAR, VARCHAR, VARCHAR, VARCHAR, VARCHAR)\n" + "0\n"
 
-		+ "SYS.PARTITIONING(INT, VARCHAR, VARCHAR, VARCHAR)\n" + "13\n" + "(0, NONE, {-1}, {0})\n" + "(1, NONE, {-1}, {0})\n" + "(2, NONE, {-1}, {0})\n" + "(3, NONE, {-1}, {0})\n" + "(4, NONE, {-1}, {0})\n" + "(5, NONE, {-1}, {0})\n" + "(6, NONE, {-1}, {0})\n" + "(7, NONE, {-1}, {0})\n" + "(8, NONE, {-1}, {0})\n" + "(9, NONE, {-1}, {0})\n" + "(10, NONE, {-1}, {0})\n" + "(11, NONE, {-1}, {0})\n" + "(12, NONE, {-1}, {0})\n"
+		+ "SYS.PARTITIONING(INT, VARCHAR, VARCHAR, VARCHAR)\n" + "14\n" + "(0, NONE, {-1}, {0})\n" + "(1, NONE, {-1}, {0})\n" + "(2, NONE, {-1}, {0})\n" + "(3, NONE, {-1}, {0})\n" + "(4, NONE, {-1}, {0})\n" + "(5, NONE, {-1}, {0})\n" + "(6, NONE, {-1}, {0})\n" + "(7, NONE, {-1}, {0})\n" + "(8, NONE, {-1}, {0})\n" + "(9, NONE, {-1}, {0})\n" + "(10, NONE, {-1}, {0})\n" + "(11, NONE, {-1}, {0})\n" + "(12, NONE, {-1}, {0})\n" + "(13, NONE, {-1}, {0})\n"
 
-		+ "SYS.INDEXSTATS(INT, INT, BIGINT)\n" + "0\n";
+		+ "SYS.INDEXSTATS(INT, INT, BIGINT)\n" + "0\n" 
+		
+		+ "SYS.EXTERNALTABLES(INT, VARCHAR, VARCHAR)\n" + "0\n";
 
 		final PrintWriter out = new PrintWriter(new FileWriter("CatalogCreator.java", false));
 
@@ -794,6 +808,30 @@ public class CatalogCode
 					vars.put("!coldistfkc!", card);
 				}
 			}
+			else if (var.equals("!externaltablesfkc!"))
+			{
+				long card;
+				
+				card = getFullKeyCard("SYS.EXTERNALTABLES");
+				if (card != -1)
+				{
+					vars.put("!externaltablesfkc!", card);
+				}
+			}
+			else if (var.equals("!externaltablesrows!"))
+			{
+				int i = 0;
+				for (final String header : tableLines)
+				{
+					if (header.startsWith("SYS.EXTERNALTABLES"))
+					{
+						vars.put("!externaltablesrows!", new Long(data.get(i).size()));
+						break;
+					}
+
+					i++;
+				}
+			}
 		}
 
 		HRDBMSWorker.logger.debug("Calling createColStatVars()");
@@ -1144,6 +1182,10 @@ public class CatalogCode
 			{
 				row += "!coldistfkc!)";
 			}
+			else if (token.equals("EXTERNALTABLES"))
+			{
+				row += "!externaltablesfkc!)";
+			}
 			else
 			{
 				HRDBMSWorker.logger.error("Unknown table: " + token);
@@ -1487,6 +1529,10 @@ public class CatalogCode
 			else if (token.equals("COLDIST"))
 			{
 				row += "!coldistrows!)";
+			}
+			else if (token.equals("EXTERNALTABLES"))
+			{
+				row += "!externaltablesrows!)";
 			}
 			else
 			{
