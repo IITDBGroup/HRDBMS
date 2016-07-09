@@ -15,7 +15,7 @@ public class InsertTest
 		long start = System.currentTimeMillis();
 		new Scanner(System.in);
 		Class.forName("com.exascale.client.HRDBMSDriver");
-		conn = DriverManager.getConnection("jdbc:hrdbms://172.31.20.103:3232");
+		conn = DriverManager.getConnection("jdbc:hrdbms://localhost:3232");
 		conn.setAutoCommit(false);
 
 		Statement stmt = conn.createStatement();
