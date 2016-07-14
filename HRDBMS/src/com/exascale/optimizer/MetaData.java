@@ -1354,7 +1354,7 @@ public final class MetaData implements Serializable
 		populateIndex(schema, index, table, tx, cols2Pos);
 	}
 	
-	public void createExternalTable(String schema, String table, ArrayList<ColDef> defs, String sourceList, String anyString, String filePathIdentifier, String javaClassName, Map<String, String> keyValueList) throws Exception
+	public void createExternalTable(String schema, String table, ArrayList<ColDef> defs, Transaction tx, String sourceList, String anyString, String filePathIdentifier, String javaClassName, Map<String, String> keyValueList) throws Exception
 	{
 		HashMap<String, String> cols2Types = new HashMap<String, String>();
 		for (ColDef def : defs)

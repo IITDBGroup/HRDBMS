@@ -148,7 +148,7 @@ public final class CreateExternalTableOperator implements Operator, Serializable
 		if (!done)
 		{
 			done = true;
-			meta.createExternalTable(schema, table, cols, sourceList, anyString, filePathIdentifier, javaClassName, keyValueList);
+			meta.createExternalTable(schema, table, cols, tx, sourceList, anyString, filePathIdentifier, javaClassName, keyValueList);
 			return 1;
 		}
 		else
