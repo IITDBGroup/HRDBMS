@@ -1376,6 +1376,86 @@ public final class MetaData implements Serializable
 
 			cols2Types.put(name, type);
 		}
+		new MetaData().new PartitionMetaData(schema, table, "none", "any", "ALL,HASH,{col}", tx, cols2Types);
+		// tables
+		// cols
+		// indexes
+		// indexcols
+		// partitioning
+		int tableID = PlanCacheManager.getNextTableID().setParms().execute(tx);
+		String typeFlag = "E";
+		if (tType == 1)
+		{
+			typeFlag = "C";
+		}
+
+		PlanCacheManager.getInsertTable().setParms(tableID, schema, table, typeFlag).execute(tx);
+		int colID = 0;
+		for (ColDef def : defs)
+		{
+			// INT, LONG, FLOAT, DATE, CHAR(x)
+			// COLID, TABLEID, NAME, TYPE, LENGTH, SCALE, PKPOS, NULLABLE
+			String name = def.getCol().getColumn();
+			String type = def.getType();
+			int length = 0;
+			int scale = 0;
+			if (type.equals("LONG"))
+			{
+				type = "BIGINT";
+				length = 8;
+			}
+			else if (type.equals("FLOAT"))
+			{
+				type = "DOUBLE";
+				length = 8;
+			}
+			else if (type.equals("INT"))
+			{
+				length = 4;
+			}
+			else if (type.equals("DATE"))
+			{
+				length = 8;
+			}
+			else if (type.startsWith("CHAR"))
+			{
+				length = Integer.parseInt(type.substring(5, type.length() - 1));
+				type = "VARCHAR";
+			}
+
+			int pkpos = -1;
+			/*if (pks.contains(name))
+			{
+				pkpos = pks.indexOf(name);
+			}*/
+
+			PlanCacheManager.getInsertCol().setParms(colID, tableID, name, type, length, scale, pkpos, def.isNullable()).execute(tx);
+			colID++;
+		}
+
+		PlanCacheManager.getInsertPartition().setParms(tableID, "none", "any", "ALL,HASH,{col}").execute(tx);
+		int indexID = -1;
+		if (pks != null && pks.size() != 0)
+		{
+			indexID = PlanCacheManager.getNextIndexID().setParms(tableID).execute(tx);
+			PlanCacheManager.getInsertIndex().setParms(indexID, "PK" + table, tableID, true).execute(tx);
+
+			HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
+			int pos = 0;
+			for (String col : pks)
+			{
+				colID = cols2Pos.get(table + "." + col);
+				PlanCacheManager.getInsertIndexCol().setParms(indexID, tableID, colID, pos, true).execute(tx);
+				pos++;
+			}
+		}
+
+		buildTable(schema, table, defs.size(), tx, tType, defs, colOrder, organization);
+
+		if (pks != null && pks.size() != 0)
+		{
+			buildIndex(schema, "PK" + table, table, pks.size(), true, tx);
+		}
 		
 	}
 
