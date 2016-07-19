@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Map;
+import java.util.Properties;
 import java.util.TreeMap;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.tables.Plan;
@@ -33,7 +34,7 @@ public final class CreateExternalTableOperator implements Operator, Serializable
 	
 	
 	
-	public CreateExternalTableOperator(MetaData meta, String schema, String table, ArrayList<ColDef> cols, String sourceList, String anyString, String filePathIdentifier, String javaClassName, Map<String, String> keyValueList)
+	public CreateExternalTableOperator(MetaData meta, String schema, String table, ArrayList<ColDef> cols, String sourceList, String anyString, String filePathIdentifier, String javaClassName, Properties keyValueList)
 	{
 		this.meta = meta;
 		this.schema = schema;
