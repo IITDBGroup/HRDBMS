@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.StringTokenizer;
@@ -1354,7 +1355,7 @@ public final class MetaData implements Serializable
 		populateIndex(schema, index, table, tx, cols2Pos);
 	}
 	
-	public void createExternalTable(String schema, String table, ArrayList<ColDef> defs, Transaction tx, String sourceList, String anyString, String filePathIdentifier, String javaClassName, Map<String, String> keyValueList) throws Exception
+	public void createExternalTable(String schema, String table, ArrayList<ColDef> defs,Transaction tx, String sourceList, String anyString, String filePathIdentifier, String javaClassName, Properties keyValueList) throws Exception
 	{
 		HashMap<String, String> cols2Types = new HashMap<String, String>();
 		for (ColDef def : defs)
@@ -1384,10 +1385,6 @@ public final class MetaData implements Serializable
 		// partitioning
 		int tableID = PlanCacheManager.getNextTableID().setParms().execute(tx);
 		String typeFlag = "E";
-		if (tType == 1)
-		{
-			typeFlag = "C";
-		}
 
 		PlanCacheManager.getInsertTable().setParms(tableID, schema, table, typeFlag).execute(tx);
 		int colID = 0;
@@ -1433,31 +1430,34 @@ public final class MetaData implements Serializable
 			colID++;
 		}
 
-		PlanCacheManager.getInsertPartition().setParms(tableID, "none", "any", "ALL,HASH,{col}").execute(tx);
-		int indexID = -1;
-		if (pks != null && pks.size() != 0)
-		{
-			indexID = PlanCacheManager.getNextIndexID().setParms(tableID).execute(tx);
-			PlanCacheManager.getInsertIndex().setParms(indexID, "PK" + table, tableID, true).execute(tx);
+		String partColName = defs.get(0).getCol().getColumn();
+		
+		PlanCacheManager.getInsertPartition().setParms(tableID, "NONE", "ANY", "ALL,HASH,{"+ partColName +"}").execute(tx);
+		// int indexID = -1;
+		// if (pks != null && pks.size() != 0)
+		// {
+		// 	indexID = PlanCacheManager.getNextIndexID().setParms(tableID).execute(tx);
+		// 	PlanCacheManager.getInsertIndex().setParms(indexID, "PK" + table, tableID, true).execute(tx);
 
-			HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
-			int pos = 0;
-			for (String col : pks)
-			{
-				colID = cols2Pos.get(table + "." + col);
-				PlanCacheManager.getInsertIndexCol().setParms(indexID, tableID, colID, pos, true).execute(tx);
-				pos++;
-			}
-		}
+		// 	HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
+		// 	int pos = 0;
+		// 	for (String col : pks)
+		// 	{
+		// 		colID = cols2Pos.get(table + "." + col);
+		// 		PlanCacheManager.getInsertIndexCol().setParms(indexID, tableID, colID, pos, true).execute(tx);
+		// 		pos++;
+		// 	}
+		// }
 
-		buildTable(schema, table, defs.size(), tx, tType, defs, colOrder, organization);
+		// buildTable(schema, table, defs.size(), tx, tType, defs, colOrder, organization);
 
-		if (pks != null && pks.size() != 0)
-		{
-			buildIndex(schema, "PK" + table, table, pks.size(), true, tx);
-		}
+		// if (pks != null && pks.size() != 0)
+		// {
+		// 	buildIndex(schema, "PK" + table, table, pks.size(), true, tx);
+		// }
 		
 	}
+
 
 	public void createTable(String schema, String table, ArrayList<ColDef> defs, ArrayList<String> pks, Transaction tx, String nodeGroupExp, String nodeExp, String deviceExp, int tType, ArrayList<Integer> colOrder, ArrayList<Integer> organization) throws Exception
 	{

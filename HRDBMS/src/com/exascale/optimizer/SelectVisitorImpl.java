@@ -5,6 +5,7 @@ import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.misc.Interval;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import com.exascale.misc.Utils;
+import com.exascale.optimizer.externalTable.CreateExternalTable;
 
 public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 {

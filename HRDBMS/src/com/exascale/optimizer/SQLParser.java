@@ -16,6 +16,7 @@ import org.antlr.v4.runtime.tree.ParseTree;
 import com.exascale.exceptions.ParseException;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DateParser;
+import com.exascale.optimizer.externalTable.CreateExternalTable;
 import com.exascale.tables.SQL;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.ConnectionWorker;
