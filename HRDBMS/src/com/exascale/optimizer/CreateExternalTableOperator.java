@@ -30,7 +30,7 @@ public final class CreateExternalTableOperator implements Operator, Serializable
 	private String anyString;
 	private String filePathIdentifier;
 	private String javaClassName;
-	private Map<String, String> keyValueList;	
+	private Properties keyValueList;	
 	
 	
 	
@@ -58,7 +58,7 @@ public final class CreateExternalTableOperator implements Operator, Serializable
 		this.filePathIdentifier = filePathIdentifier;
 	}	
 	
-	public CreateExternalTableOperator(MetaData meta, String schema, String table, ArrayList<ColDef> cols, String javaClassName, Map<String, String> keyValueList)
+	public CreateExternalTableOperator(MetaData meta, String schema, String table, ArrayList<ColDef> cols, String javaClassName, Properties keyValueList)
 	{
 		this.meta = meta;
 		this.schema = schema;
