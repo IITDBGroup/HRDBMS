@@ -1,13 +1,14 @@
 package com.exascale.optimizer;
 
 import java.util.Map;
+import java.util.Properties;
 
 public class JavaClassExtTableSpec
 {
 	private final String javaClassName;
-	private final Map<String, String> keyValueList;
+	private final Properties keyValueList;
 	
-	public JavaClassExtTableSpec(String javaClassName, Map<String, String> keyValueList)
+	public JavaClassExtTableSpec(String javaClassName, Properties keyValueList)
 	{
 		this.javaClassName = javaClassName;
 		this.keyValueList = keyValueList;
@@ -18,7 +19,7 @@ public class JavaClassExtTableSpec
 		return javaClassName;
 	}
 
-	public Map<String, String> getKeyValueList()
+	public Properties getKeyValueList()
 	{
 		return keyValueList;
 	}
