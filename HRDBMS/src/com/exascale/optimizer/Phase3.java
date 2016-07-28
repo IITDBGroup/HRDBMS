@@ -664,7 +664,7 @@ public final class Phase3
 			long newCard = card(newOp);
 
 			HRDBMSWorker.logger.debug("Considering l with reduction " + (newCard * 1.0) / (prev * 1.0));
-			if (newCard < MAX_GB && (newCard * 1.0) / (prev * 1.0) <= 0.5)
+			if (scoreGBPT(newCard, prev))
 			{
 				doLeft(mop, hjop, l, r, newOp);
 				HRDBMSWorker.logger.debug("Doing pushdown across the left side");
@@ -685,7 +685,7 @@ public final class Phase3
 			long newCard = card(newOp);
 
 			HRDBMSWorker.logger.debug("Considering r with reduction " + (newCard * 1.0) / (prev * 1.0));
-			if (newCard < MAX_GB && (newCard * 1.0) / (prev * 1.0) <= 0.5)
+			if (scoreGBPT(newCard, prev))
 			{
 				doRight(mop, hjop, l, r, newOp);
 				HRDBMSWorker.logger.debug("Doing pushdown across the right side");
@@ -701,6 +701,24 @@ public final class Phase3
 		hjop.add(l);
 		hjop.add(r);
 		mop.add(hjop);
+	}
+	
+	private boolean scoreGBPT(long newCard, long prev)
+	{
+		long currentCost = prev;
+		long newCost = 2 * newCard;
+		
+		if (newCard >= MAX_GB)
+		{
+			newCost += 4 * newCard;
+		}
+		
+		if (newCost < currentCost)
+		{
+			return true;
+		}
+		
+		return false;
 	}
 
 	private void doRight(MultiOperator parent, HashJoinOperator hjop, Operator l, Operator r, MultiOperator pClone) throws Exception

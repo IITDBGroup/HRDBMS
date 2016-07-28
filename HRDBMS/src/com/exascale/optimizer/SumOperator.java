@@ -293,6 +293,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 		private final ArrayList<ArrayList<Object>> rows;
 		private final HashMap<String, Integer> cols2Pos;
 		private BigDecimalReplacement result;
+		private long result2;
 
 		public SumThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos)
 		{
@@ -310,7 +311,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 		{
 			if (isInt)
 			{
-				return (long)result.doubleValue();
+				return result2;
 			}
 
 			return result.doubleValue();
@@ -320,7 +321,15 @@ public final class SumOperator implements AggregateOperator, Serializable
 		public void run()
 		{
 			final int pos = cols2Pos.get(input);
-			result = new BigDecimalReplacement(0);
+			
+			if (isInt)
+			{
+				result2 = 0;
+			}
+			else
+			{
+				result = new BigDecimalReplacement(0);
+			}
 
 			int z = 0;
 			final int limit = rows.size();
@@ -334,11 +343,11 @@ public final class SumOperator implements AggregateOperator, Serializable
 					final Object o = row.get(pos);
 					if (o instanceof Integer)
 					{
-						result.add(new BigDecimalReplacement((Integer)o));
+						result2 += ((Integer)o);
 					}
 					else if (o instanceof Long)
 					{
-						result.add(new BigDecimalReplacement((Long)o));
+						result2 += ((Long)o);
 					}
 					else
 					{

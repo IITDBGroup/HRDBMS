@@ -8,6 +8,7 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -19,8 +20,10 @@ import com.exascale.logging.ReadyLogRec;
 import com.exascale.logging.XAAbortLogRec;
 import com.exascale.logging.XACommitLogRec;
 import com.exascale.misc.MultiHashMap;
+import com.exascale.misc.VHJOMultiHashMap;
 import com.exascale.optimizer.CreateIndexOperator;
 import com.exascale.optimizer.DeleteOperator;
+import com.exascale.optimizer.ExtendOperator;
 import com.exascale.optimizer.InsertOperator;
 import com.exascale.optimizer.LoadOperator;
 import com.exascale.optimizer.MassDeleteOperator;
@@ -45,7 +48,7 @@ import com.exascale.threads.XAWorker;
 
 public class XAManager extends HRDBMSThread
 {
-	public static MultiHashMap<Transaction, Plan> txs = new MultiHashMap<Transaction, Plan>();
+	public static VHJOMultiHashMap<Transaction, Plan> txs = new VHJOMultiHashMap<Transaction, Plan>();
 	public static volatile boolean rP1 = false;
 	public static volatile boolean rP2 = false;
 	public static BlockingQueue<Object> in = new LinkedBlockingQueue<Object>();
@@ -164,7 +167,7 @@ public class XAManager extends HRDBMSThread
 
 	public static void commit(Transaction tx) throws Exception
 	{
-		Set<Plan> ps = txs.get(tx);
+		List<Plan> ps = txs.get(tx);
 		if (ps == null || ps.size() == 0)
 		{
 			throw new Exception("The XAManager does not own this transaction");
@@ -205,16 +208,19 @@ public class XAManager extends HRDBMSThread
 
 	public static XAWorker executeAuthorizedUpdate(String sql, Transaction tx) throws Exception
 	{
-		String sql2 = new SQL(sql).toString();
+		SQL sql3 = new SQL(sql);
+		String sql2 = sql3.toString();
+		
 		if (sql2.startsWith("SELECT") || sql2.startsWith("WITH"))
 		{
 			throw new Exception("SELECT statement is not allowed");
 		}
 
-		SQLParser parse = new SQLParser(sql2, null, tx);
+		SQLParser parse = new SQLParser(sql3, null, tx);
 		parse.authorize();
-		Operator op = parse.parse();
+		ArrayList<Operator> array = parse.parse();
 		String table = null;
+		Operator op = array.get(0);
 		if (op instanceof InsertOperator)
 		{
 			table = ((InsertOperator)op).getTable();
@@ -240,8 +246,6 @@ public class XAManager extends HRDBMSThread
 		{
 		}
 
-		ArrayList<Operator> array = new ArrayList<Operator>(1);
-		array.add(op);
 		Plan plan = new Plan(false, array);
 		txs.multiPut(tx, plan);
 		return new XAWorker(plan, tx, false);
@@ -255,7 +259,8 @@ public class XAManager extends HRDBMSThread
 
 	public static XAWorker executeQuery(String sql, Transaction tx, ConnectionWorker conn) throws Exception
 	{
-		String sql2 = new SQL(sql).toString();
+		SQL sql3 = new SQL(sql);
+		String sql2 = sql3.toString();
 		if (!(sql2.startsWith("SELECT") || sql2.startsWith("WITH")))
 		{
 			throw new Exception("Not a select statement");
@@ -268,10 +273,11 @@ public class XAManager extends HRDBMSThread
 			try
 			{
 				// HRDBMSWorker.logger.debug("Did not find plan in cache");
-				SQLParser parse = new SQLParser(sql2, conn, tx);
+				SQLParser parse = new SQLParser(sql3, conn, tx);
 				// HRDBMSWorker.logger.debug("Created SQL parser");
-				Operator op = parse.parse();
+				ArrayList<Operator> array = parse.parse();
 				// HRDBMSWorker.logger.debug("Parsing completed");
+				Operator op = array.get(0);
 				Phase1 p1 = new Phase1((RootOperator)op, tx);
 				p1.optimize();
 				// HRDBMSWorker.logger.debug("Phase 1 completed");
@@ -284,8 +290,6 @@ public class XAManager extends HRDBMSThread
 				new Phase5((RootOperator)op, tx, p1.likelihoodCache).optimize();
 				// HRDBMSWorker.logger.debug("Phase 5 completed");
 				// Phase1.printTree(op, 0); // DEBUG
-				ArrayList<Operator> array = new ArrayList<Operator>(1);
-				array.add(op);
 				plan = new Plan(false, array);
 
 				// if (parse.doesNotUseCurrentSchema())
@@ -310,7 +314,8 @@ public class XAManager extends HRDBMSThread
 
 	public static XAWorker executeQuery(String sql, Transaction tx, ConnectionWorker conn, long sPer) throws Exception
 	{
-		String sql2 = new SQL(sql).toString();
+		SQL sql3 = new SQL(sql);
+		String sql2 = sql3.toString();
 		if (!(sql2.startsWith("SELECT") || sql2.startsWith("WITH")))
 		{
 			throw new Exception("Not a select statement");
@@ -323,9 +328,10 @@ public class XAManager extends HRDBMSThread
 			try
 			{
 				// HRDBMSWorker.logger.debug("Did not find plan in cache");
-				SQLParser parse = new SQLParser(sql2, conn, tx);
+				SQLParser parse = new SQLParser(sql3, conn, tx);
 				// HRDBMSWorker.logger.debug("Created SQL parser");
-				Operator op = parse.parse();
+				ArrayList<Operator> array = parse.parse();
+				Operator op = array.get(0);
 				// HRDBMSWorker.logger.debug("Parsing completed");
 				Phase1 p1 = new Phase1((RootOperator)op, tx);
 				p1.optimize();
@@ -339,8 +345,6 @@ public class XAManager extends HRDBMSThread
 				new Phase5((RootOperator)op, tx, p1.likelihoodCache).optimize();
 				// HRDBMSWorker.logger.debug("Phase 5 completed");
 				// Phase1.printTree(op, 0); // DEBUG
-				ArrayList<Operator> array = new ArrayList<Operator>(1);
-				array.add(op);
 				plan = new Plan(false, array);
 
 				// if (parse.doesNotUseCurrentSchema())
@@ -366,24 +370,80 @@ public class XAManager extends HRDBMSThread
 
 	public static XAWorker executeUpdate(String sql, Transaction tx, ConnectionWorker conn) throws Exception
 	{
-		String sql2 = new SQL(sql).toString();
+		SQL sql3 = new SQL(sql);
+		String sql2 = sql3.toString();
 		if (sql2.startsWith("SELECT") || sql2.startsWith("WITH"))
 		{
 			throw new Exception("SELECT statement is not allowed");
 		}
 
+		SQLParser parse = null;
 		if (sql2.startsWith("CREATE KEY/VALUE PAIR"))
 		{
 			sql2 = rewriteKeyValue(sql2);
+			parse = new SQLParser(sql2, conn, tx);
 		}
-
-		SQLParser parse = new SQLParser(sql2, conn, tx);
-		Operator op = parse.parse();
-		ArrayList<Operator> array = new ArrayList<Operator>(1);
-		array.add(op);
+		else
+		{
+			parse = new SQLParser(sql3, conn, tx);
+		}
+		
+		ArrayList<Operator> array = parse.parse();
 		Plan plan = new Plan(false, array);
 		txs.multiPut(tx, plan);
 		return new XAWorker(plan, tx, false);
+	}
+	
+	public static XAWorker executeUpdateInline(String sql, Transaction tx, ConnectionWorker conn) throws Exception
+	{
+		SQL sql3 = new SQL(sql);
+		String sql2 = sql3.toString();
+		if (sql2.startsWith("SELECT") || sql2.startsWith("WITH"))
+		{
+			throw new Exception("SELECT statement is not allowed");
+		}
+
+		SQLParser parse = null;
+		if (sql2.startsWith("CREATE KEY/VALUE PAIR"))
+		{
+			sql2 = rewriteKeyValue(sql2);
+			parse = new SQLParser(sql2, conn, tx);
+		}
+		else
+		{
+			parse = new SQLParser(sql3, conn, tx);
+		}
+
+		ArrayList<Operator> array = parse.parse();
+		Plan plan = new Plan(false, array);
+		txs.multiPut(tx, plan);
+		XAWorker retval =  new XAWorker(plan, tx, false);
+		//if (sql2.startsWith("INSERT "))
+		//{
+		//	if (InsertOperator.allOwnersPresent(tx, ((InsertOperator)op).getSchema(), ((InsertOperator)op).getTable()))
+		//	{
+		//		if (containsSingleThreadedExtend(op))
+		//		{
+		//			retval.setRunInline();
+		//		}
+		//	}
+		//}
+		return retval;
+	}
+	
+	private static boolean containsSingleThreadedExtend(Operator op)
+	{
+		if (op instanceof ExtendOperator)
+		{
+			return ((ExtendOperator)op).isSingleThreaded();
+		}
+		
+		if (op.children().size() > 0)
+		{
+			return containsSingleThreadedExtend(op.children().get(0));
+		}
+		
+		return false;
 	}
 
 	public static void phase2(long txnum, ArrayList<Integer> nodes)
@@ -400,7 +460,7 @@ public class XAManager extends HRDBMSThread
 
 	public static void rollback(Transaction tx) throws Exception
 	{
-		Set<Plan> ps = txs.get(tx);
+		List<Plan> ps = txs.get(tx);
 		if (ps == null || ps.size() == 0)
 		{
 			return;
@@ -1071,7 +1131,7 @@ public class XAManager extends HRDBMSThread
 				HRDBMSWorker.logger.error("Unable to flush XA log when writing commit record!", e);
 			}
 
-			txs.remove(tx);
+			txs.multiRemove(tx);
 
 			ArrayList<SendCommitThread> threads2 = new ArrayList<SendCommitThread>();
 			for (Object o : tree)
@@ -1112,7 +1172,7 @@ public class XAManager extends HRDBMSThread
 				HRDBMSWorker.logger.error("Unable to flush XA log when writing abort record!", e);
 			}
 
-			txs.remove(tx);
+			txs.multiRemove(tx);
 
 			for (Object o : tree)
 			{
@@ -1333,7 +1393,7 @@ public class XAManager extends HRDBMSThread
 			HRDBMSWorker.logger.error("Unable to flush XA log when writing abort record!", e);
 		}
 
-		txs.remove(tx);
+		txs.multiRemove(tx);
 		ArrayList<SendRollbackThread> threads2 = new ArrayList<SendRollbackThread>();
 		for (Object o : tree)
 		{
@@ -1362,7 +1422,7 @@ public class XAManager extends HRDBMSThread
 
 	private static void sendRollbacksP2(ArrayList<Object> tree, Transaction tx)
 	{
-		txs.remove(tx);
+		txs.multiRemove(tx);
 		ArrayList<SendRollbackThread> threads = new ArrayList<SendRollbackThread>();
 		for (Object o : tree)
 		{

@@ -6,6 +6,7 @@ public class Insert extends SQLStatement
 {
 	private final TableName table;
 	private ArrayList<Expression> exps;
+	private ArrayList<ArrayList<Expression>> mExps;
 	private boolean fromSelect = false;
 	private FullSelect select;
 
@@ -13,6 +14,12 @@ public class Insert extends SQLStatement
 	{
 		this.table = table;
 		this.exps = exps;
+	}
+	
+	public Insert(TableName table, ArrayList<ArrayList<Expression>> mExps, boolean multi)
+	{
+		this.table = table;
+		this.mExps = mExps;
 	}
 
 	public Insert(TableName table, FullSelect select)
@@ -26,10 +33,20 @@ public class Insert extends SQLStatement
 	{
 		return fromSelect;
 	}
+	
+	public boolean isMulti()
+	{
+		return (mExps != null);
+	}
 
 	public ArrayList<Expression> getExpressions()
 	{
 		return exps;
+	}
+	
+	public ArrayList<ArrayList<Expression>> getMultiExpressions()
+	{
+		return mExps;
 	}
 
 	public FullSelect getSelect()

@@ -76,7 +76,7 @@ public class IOThread extends HRDBMSThread
 			HRDBMSWorker.logger.error("Error occurred in an I/O thread.", e);
 		}
 
-		this.terminate();
+		//this.terminate();
 		return;
 	}
 }

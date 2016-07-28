@@ -50,6 +50,13 @@ public class SQLParser
 		this.connection = connection;
 		this.tx = tx;
 	}
+	
+	public SQLParser(SQL sql, ConnectionWorker connection, Transaction tx)
+	{
+		this.sql = sql;
+		this.connection = connection;
+		this.tx = tx;
+	}
 
 	public static void printTree(Operator op, int indent)
 	{
@@ -105,7 +112,7 @@ public class SQLParser
 		return doesNotUseCurrentSchema;
 	}
 
-	public Operator parse() throws Exception
+	public ArrayList<Operator> parse() throws Exception
 	{
 		ANTLRInputStream input = new ANTLRInputStream(sql.toString());
 		SelectLexer lexer = new SelectLexer(input);
@@ -122,7 +129,9 @@ public class SQLParser
 			RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
 			retval.add(op);
 			// printTree(op, 0); // DEBUG
-			return retval;
+			ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			ops.add(retval);
+			return ops;
 		}
 
 		if (stmt instanceof Insert)
@@ -133,7 +142,7 @@ public class SQLParser
 			{
 				throw new ParseException("Catalog updates are not allowed");
 			}
-			Operator op = buildOperatorTreeFromInsert((Insert)stmt);
+			ArrayList<Operator> op = buildOperatorTreeFromInsert((Insert)stmt);
 			return op;
 		}
 
@@ -146,7 +155,9 @@ public class SQLParser
 				throw new ParseException("Catalog updates are not allowed");
 			}
 			Operator op = buildOperatorTreeFromUpdate((Update)stmt);
-			return op;
+			ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			ops.add(op);
+			return ops;
 		}
 
 		if (stmt instanceof Delete)
@@ -158,13 +169,17 @@ public class SQLParser
 				throw new ParseException("Catalog updates are not allowed");
 			}
 			Operator op = buildOperatorTreeFromDelete((Delete)stmt);
-			return op;
+			ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			ops.add(op);
+			return ops;
 		}
 
 		if (stmt instanceof Runstats)
 		{
 			Operator op = buildOperatorTreeFromRunstats((Runstats)stmt);
-			return op;
+			ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			ops.add(op);
+			return ops;
 		}
 
 		if (stmt instanceof CreateTable)
@@ -176,7 +191,9 @@ public class SQLParser
 				throw new ParseException("You cannot create new tables in the SYS schema");
 			}
 			Operator op = buildOperatorTreeFromCreateTable((CreateTable)stmt);
-			return op;
+			ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			ops.add(op);
+			return ops;
 		}
 
 		if (stmt instanceof DropTable)
@@ -188,37 +205,49 @@ public class SQLParser
 				throw new ParseException("You cannot drop tables in the SYS schema");
 			}
 			Operator op = buildOperatorTreeFromDropTable((DropTable)stmt);
-			return op;
+			ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			ops.add(op);
+			return ops;
 		}
 
 		if (stmt instanceof CreateIndex)
 		{
 			Operator op = buildOperatorTreeFromCreateIndex((CreateIndex)stmt);
-			return op;
+			ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			ops.add(op);
+			return ops;
 		}
 
 		if (stmt instanceof DropIndex)
 		{
 			Operator op = buildOperatorTreeFromDropIndex((DropIndex)stmt);
-			return op;
+			ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			ops.add(op);
+			return ops;
 		}
 
 		if (stmt instanceof CreateView)
 		{
 			Operator op = buildOperatorTreeFromCreateView((CreateView)stmt);
-			return op;
+			ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			ops.add(op);
+			return ops;
 		}
 
 		if (stmt instanceof DropView)
 		{
 			Operator op = buildOperatorTreeFromDropView((DropView)stmt);
-			return op;
+			ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			ops.add(op);
+			return ops;
 		}
 
 		if (stmt instanceof Load)
 		{
 			Operator op = buildOperatorTreeFromLoad((Load)stmt);
-			return op;
+			ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			ops.add(op);
+			return ops;
 		}
 
 		return null;
@@ -3982,7 +4011,7 @@ public class SQLParser
 		return buildOperatorTreeFromSearchCondition(search, op, sub);
 	}
 
-	private Operator buildOperatorTreeFromInsert(Insert insert) throws Exception
+	private ArrayList<Operator> buildOperatorTreeFromInsert(Insert insert) throws Exception
 	{
 		TableName table = insert.getTable();
 		String schema = null;
@@ -4024,44 +4053,127 @@ public class SQLParser
 			Operator child = retval.children().get(0);
 			retval.removeChild(child);
 			iOp.add(child);
-			return iOp;
+			ArrayList<Operator> iOps = new ArrayList<Operator>(1);
+			iOps.add(iOp);
+			return iOps;
 		}
 		else
 		{
-			Operator op = new DummyOperator(meta);
-			for (Expression exp : insert.getExpressions())
+			if (!insert.isMulti())
 			{
-				OperatorTypeAndName otan = buildOperatorTreeFromExpression(exp, null, null);
-				if (otan.getType() != SQLParser.TYPE_INLINE && otan.getType() != SQLParser.TYPE_DATE)
+				Operator op = new DummyOperator(meta);
+				for (Expression exp : insert.getExpressions())
 				{
-					throw new ParseException("Invalid expression in insert statement");
+					OperatorTypeAndName otan = buildOperatorTreeFromExpression(exp, null, null);
+					if (otan.getType() != SQLParser.TYPE_INLINE && otan.getType() != SQLParser.TYPE_DATE)
+					{
+						throw new ParseException("Invalid expression in insert statement");
+					}
+
+					if (otan.getType() == SQLParser.TYPE_DATE)
+					{
+						SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+						String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
+						String name = "._E" + suffix++;
+						ExtendObjectOperator operator = new ExtendObjectOperator(DateParser.parse(dateString), name, meta);
+						operator.add(op);
+						op = operator;
+					}
+					else
+					{
+						Operator operator = (Operator)otan.getOp();
+						operator.add(op);
+						op = operator;
+					}
 				}
 
-				if (otan.getType() == SQLParser.TYPE_DATE)
+				if (!meta.verifyInsert(schema, tbl, op, tx))
 				{
-					SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-					String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
-					String name = "._E" + suffix++;
-					ExtendObjectOperator operator = new ExtendObjectOperator(DateParser.parse(dateString), name, meta);
-					operator.add(op);
-					op = operator;
+					throw new ParseException("The number of columns and/or data types from the select portion do not match the table being inserted into");
 				}
-				else
+			
+				Operator temp = op;
+				while (temp.children() != null && temp.children().size() > 0)
 				{
-					Operator operator = (Operator)otan.getOp();
-					operator.add(op);
-					op = operator;
+					if (temp instanceof ExtendOperator)
+					{
+						((ExtendOperator)temp).setSingleThreaded();
+					}
+				
+					temp = temp.children().get(0);
 				}
+			
+				if (temp instanceof ExtendOperator)
+				{
+					((ExtendOperator)temp).setSingleThreaded();
+				}
+
+				Operator iOp = new InsertOperator(schema, tbl, meta);
+				iOp.add(op);
+				ArrayList<Operator> iOps = new ArrayList<Operator>(1);
+				iOps.add(iOp);
+				return iOps;
 			}
-
-			if (!meta.verifyInsert(schema, tbl, op, tx))
+			else
 			{
-				throw new ParseException("The number of columns and/or data types from the select portion do not match the table being inserted into");
-			}
+				//multi-row insert
+				ArrayList<Operator> iOps = new ArrayList<Operator>(1);
+				for (ArrayList<Expression> exps : insert.getMultiExpressions())
+				{
+					Operator op = new DummyOperator(meta);
+					for (Expression exp : exps)
+					{
+						OperatorTypeAndName otan = buildOperatorTreeFromExpression(exp, null, null);
+						if (otan.getType() != SQLParser.TYPE_INLINE && otan.getType() != SQLParser.TYPE_DATE)
+						{
+							throw new ParseException("Invalid expression in insert statement");
+						}
 
-			Operator iOp = new InsertOperator(schema, tbl, meta);
-			iOp.add(op);
-			return iOp;
+						if (otan.getType() == SQLParser.TYPE_DATE)
+						{
+							SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+							String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
+							String name = "._E" + suffix++;
+							ExtendObjectOperator operator = new ExtendObjectOperator(DateParser.parse(dateString), name, meta);
+							operator.add(op);
+							op = operator;
+						}
+						else
+						{
+							Operator operator = (Operator)otan.getOp();
+							operator.add(op);
+							op = operator;
+						}
+					}
+
+					if (!meta.verifyInsert(schema, tbl, op, tx))
+					{
+						throw new ParseException("The number of columns and/or data types from the select portion do not match the table being inserted into");
+					}
+			
+					Operator temp = op;
+					while (temp.children() != null && temp.children().size() > 0)
+					{
+						if (temp instanceof ExtendOperator)
+						{
+							((ExtendOperator)temp).setSingleThreaded();
+						}
+				
+						temp = temp.children().get(0);
+					}
+			
+					if (temp instanceof ExtendOperator)
+					{
+						((ExtendOperator)temp).setSingleThreaded();
+					}
+
+					Operator iOp = new InsertOperator(schema, tbl, meta);
+					iOp.add(op);
+					iOps.add(iOp);
+				}
+				
+				return iOps;
+			}
 		}
 	}
 
@@ -6322,7 +6434,7 @@ public class SQLParser
 			Operator op = null;
 			try
 			{
-				op = viewParser.parse();
+				op = viewParser.parse().get(0);
 			}
 			catch (Exception e)
 			{

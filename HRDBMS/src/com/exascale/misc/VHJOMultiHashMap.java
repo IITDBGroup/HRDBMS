@@ -35,6 +35,11 @@ public class VHJOMultiHashMap<K, V>
 			return retval;
 		}
 	}
+	
+	public void multiRemove(K key)
+	{
+		map.remove(key);
+	}
 
 	public void multiPut(K key, V val)
 	{

@@ -39,6 +39,7 @@ public class HRDBMSConnection implements Connection
 	private Socket sock;
 	protected HRDBMSResultSet rs;
 	protected boolean txIsReadOnly = true;
+	protected boolean delayDML = false;
 	int portNum;
 
 	public HRDBMSConnection(Socket sock, String user, String pwd, int portNum, String force) throws Exception
@@ -139,6 +140,37 @@ public class HRDBMSConnection implements Connection
 		}
 
 		txIsReadOnly = true;
+	}
+	
+	public void saveDMLResponseTillCommit() throws SQLException
+	{
+		if (closed)
+		{
+			throw new SQLException("saveDMLResponseTillCommit() called on closed connection");
+		}
+		
+		if (autoCommit)
+		{
+			throw new SQLException("Can't delay DML responses with auto-commit turned on");
+		}
+
+		delayDML = true;
+		sendDelayDML();
+	}
+	
+	public void doPacing() throws SQLException
+	{
+		if (closed)
+		{
+			throw new SQLException("doPacing() called on closed connection");
+		}
+		
+		if (!delayDML)
+		{
+			throw new SQLException("Can't do pacing without delayed DML responses");
+		}
+		
+		sendPacing();
 	}
 
 	@Override
@@ -846,6 +878,52 @@ public class HRDBMSConnection implements Connection
 		{
 		}
 		this.openTransaction = false;
+	}
+	
+	private void sendDelayDML() throws SQLException
+	{
+		try
+		{
+			byte[] outMsg = "DELAYDML        ".getBytes(StandardCharsets.UTF_8);
+			outMsg[8] = 0;
+			outMsg[9] = 0;
+			outMsg[10] = 0;
+			outMsg[11] = 0;
+			outMsg[12] = 0;
+			outMsg[13] = 0;
+			outMsg[14] = 0;
+			outMsg[15] = 0;
+			out.write(outMsg);
+			out.flush();
+			getConfirmation();
+		}
+		catch (Exception e)
+		{
+			throw new SQLException("Error sending request to server!");
+		}
+	}
+	
+	private void sendPacing() throws SQLException
+	{
+		try
+		{
+			byte[] outMsg = "PACING          ".getBytes(StandardCharsets.UTF_8);
+			outMsg[8] = 0;
+			outMsg[9] = 0;
+			outMsg[10] = 0;
+			outMsg[11] = 0;
+			outMsg[12] = 0;
+			outMsg[13] = 0;
+			outMsg[14] = 0;
+			outMsg[15] = 0;
+			out.write(outMsg);
+			out.flush();
+			getConfirmation();
+		}
+		catch (Exception e)
+		{
+			throw new SQLException("Error sending request to server!");
+		}
 	}
 
 	private void sendCommit() throws SQLException

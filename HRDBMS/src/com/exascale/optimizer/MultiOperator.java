@@ -10,10 +10,13 @@ import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
@@ -230,7 +233,7 @@ public final class MultiOperator implements Operator, Serializable
 		{
 			if (key instanceof ArrayList)
 			{
-				byte[] data = toBytes(key);
+				byte[] data = toBytesForHash((ArrayList<Object>)key);
 				eHash = MurmurHash.hash64(data, data.length);
 			}
 			else
@@ -241,6 +244,43 @@ public final class MultiOperator implements Operator, Serializable
 		}
 
 		return eHash;
+	}
+	
+	private static byte[] toBytesForHash(ArrayList<Object> key)
+	{
+		StringBuilder sb = new StringBuilder();
+		for (Object o : key)
+		{
+			if (o instanceof Double)
+			{
+				DecimalFormat df = new DecimalFormat("0", DecimalFormatSymbols.getInstance(Locale.ENGLISH));
+				df.setMaximumFractionDigits(340); //340 = DecimalFormat.DOUBLE_FRACTION_DIGITS
+
+				sb.append(df.format((Double)o));
+				sb.append((char)0);
+			}
+			else if (o instanceof Number)
+			{
+				sb.append(o);
+				sb.append((char)0);
+			}
+			else
+			{
+				sb.append(o.toString());
+				sb.append((char)0);
+			}
+		}
+		
+		final int z = sb.length();
+		byte[] retval = new byte[z];
+		int i = 0;
+		while (i < z)
+		{
+			retval[i] = (byte)sb.charAt(i);
+			i++;
+		}
+		
+		return retval;
 	}
 
 	private static void putCInt(ByteBuffer bb, int val)
@@ -1232,12 +1272,12 @@ public final class MultiOperator implements Operator, Serializable
 				numPar2 = maxPar / numPar1;
 
 				ExternalProcessThread thread = new ExternalProcessThread(data, numPar1);
-				int pri = Thread.MAX_PRIORITY - epThreads.size();
-				if (pri < Thread.NORM_PRIORITY)
-				{
-					pri = Thread.NORM_PRIORITY;
-				}
-				thread.setPriority(pri);
+				//int pri = Thread.MAX_PRIORITY - epThreads.size();
+				//if (pri < Thread.NORM_PRIORITY)
+				//{
+				//	pri = Thread.NORM_PRIORITY;
+				//}
+				//thread.setPriority(pri);
 				thread.start();
 				epThreads.add(thread);
 
@@ -1271,12 +1311,12 @@ public final class MultiOperator implements Operator, Serializable
 			while (i < numBins)
 			{
 				ReadDataThread thread4 = new ReadDataThread(channels1.get(i), types1);
-				int pri = Thread.MAX_PRIORITY - leftThreads.size();
-				if (pri < Thread.NORM_PRIORITY)
-				{
-					pri = Thread.NORM_PRIORITY;
-				}
-				thread4.setPriority(pri);
+				//int pri = Thread.MAX_PRIORITY - leftThreads.size();
+				//if (pri < Thread.NORM_PRIORITY)
+				//{
+				//	pri = Thread.NORM_PRIORITY;
+				//}
+				//thread4.setPriority(pri);
 				thread4.start();
 				leftThreads.add(thread4);
 				i++;
@@ -1629,10 +1669,10 @@ public final class MultiOperator implements Operator, Serializable
 		@Override
 		public void run()
 		{
-			if (pri != -1)
-			{
-				Thread.currentThread().setPriority(pri);
-			}
+			//if (pri != -1)
+			//{
+			//	Thread.currentThread().setPriority(pri);
+			//}
 			try
 			{
 				if (par == 1)
@@ -2468,10 +2508,10 @@ public final class MultiOperator implements Operator, Serializable
 		@Override
 		public void run()
 		{
-			if (pri != -1)
-			{
-				Thread.currentThread().setPriority(pri);
-			}
+			//if (pri != -1)
+			//{
+			//	Thread.currentThread().setPriority(pri);
+			//}
 			try
 			{
 				ConcurrentHashMap<ArrayList<Object>, Integer> groups = new ConcurrentHashMap<ArrayList<Object>, Integer>();

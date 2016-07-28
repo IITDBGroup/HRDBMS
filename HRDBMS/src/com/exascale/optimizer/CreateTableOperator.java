@@ -152,7 +152,11 @@ public final class CreateTableOperator implements Operator, Serializable
 		if (!done)
 		{
 			done = true;
+			MetaData.tableMetaLock.lock();
 			meta.createTable(schema, table, defs, pks, tx, nodeGroupExp, nodeExp, deviceExp, type, colOrder, organization);
+			MetaData.tableTypeCache.remove(schema + "." + table);
+			MetaData.tableExistenceCache.remove(schema + "." + table);
+			MetaData.tableMetaLock.unlock();
 			return 1;
 		}
 		else

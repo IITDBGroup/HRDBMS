@@ -2,6 +2,7 @@ package com.exascale.misc;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import com.exascale.managers.ResourceManager;
@@ -54,6 +55,11 @@ public class HJOMultiHashMap<K, V>
 		}
 
 		size.getAndIncrement();
+	}
+	
+	public Set<K> getKeySet()
+	{
+		return map.keySet();
 	}
 
 	public void multiRemove(K key)

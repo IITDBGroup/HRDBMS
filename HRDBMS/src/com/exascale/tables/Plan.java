@@ -9,6 +9,7 @@ import com.exascale.misc.DataEndMarker;
 import com.exascale.optimizer.CNFFilter;
 import com.exascale.optimizer.Operator;
 import com.exascale.optimizer.TableScanOperator;
+import com.exascale.threads.HRDBMSThread;
 
 public class Plan implements Serializable
 {
@@ -141,6 +142,65 @@ public class Plan implements Serializable
 		int updateCount = (Integer)retval.next(retval);
 		retval.close();
 		return updateCount;
+	}
+	
+	public ArrayList<SubXAThread> executeMultiNoResult() throws Exception
+	{
+		int i = 0;
+		final int size = trees.size();
+		ArrayList<SubXAThread> threads = new ArrayList<SubXAThread>(trees.size() - 1);
+		while (i < size - 1)
+		{
+			SubXAThread thread = new SubXAThread(trees.get(i));
+			thread.start();
+			threads.add(thread);
+			i++;
+		}
+
+		Operator retval = trees.get(size - 1);
+		retval.start();
+		int updateCount = (Integer)retval.next(retval);
+		retval.close();
+		return threads;
+	}
+	
+	public static class SubXAThread extends HRDBMSThread
+	{
+		private Operator tree;
+		private boolean ok = true;
+		private Exception e;
+		
+		public SubXAThread(Operator tree)
+		{
+			this.tree = tree;
+		}
+		
+		public void run()
+		{
+			try
+			{
+				tree.start();
+				while (!(tree.next(tree) instanceof DataEndMarker))
+				{
+				}
+				tree.close();
+			}
+			catch(Exception e)
+			{
+				ok = false;
+				this.e = e;
+			}
+		}
+		
+		public boolean getOK()
+		{
+			return ok;
+		}
+		
+		public Exception getException()
+		{
+			return e;
+		}
 	}
 
 	public long getTimeStamp()

@@ -254,39 +254,45 @@ public class HRDBMSStatement implements Statement
 					conn.openTransaction = true;
 				}
 				conn.txIsReadOnly = false;
-				try
+				
+				if (!conn.delayDML)
 				{
-					this.getConfirmation();
-					int retval;
 					try
 					{
-						retval = receiveInt();
+						this.getConfirmation();
+						int retval;
+						try
+						{
+							retval = receiveInt();
+						}
+						catch (Exception g)
+						{
+							throw new SQLException("Failed to retrieve response from server");
+						}
+						this.updateCount = retval;
+						if (conn.autoCommit)
+						{
+							conn.commit();
+						}
+						return false;
 					}
-					catch (Exception g)
+					catch (Exception e)
 					{
-						throw new SQLException("Failed to retrieve response from server");
+						if (e instanceof SQLException)
+						{
+							throw e;
+						}
+						e = receiveException();
+						conn.rollback();
+						if (result != null)
+						{
+							result.close();
+						}
+						throw new SQLException(e.getMessage());
 					}
-					this.updateCount = retval;
-					if (conn.autoCommit)
-					{
-						conn.commit();
-					}
-					return false;
 				}
-				catch (Exception e)
-				{
-					if (e instanceof SQLException)
-					{
-						throw e;
-					}
-					e = receiveException();
-					conn.rollback();
-					if (result != null)
-					{
-						result.close();
-					}
-					throw new SQLException(e.getMessage());
-				}
+				
+				return false;
 			}
 			catch (Exception f)
 			{
@@ -452,39 +458,45 @@ public class HRDBMSStatement implements Statement
 				conn.openTransaction = true;
 			}
 			conn.txIsReadOnly = false;
-			try
+			
+			if (!conn.delayDML)
 			{
-				this.getConfirmation();
-				int retval;
 				try
 				{
-					retval = receiveInt();
+					this.getConfirmation();
+					int retval;
+					try
+					{
+						retval = receiveInt();
+					}
+					catch (Exception g)
+					{
+						throw new SQLException("Failed to retrieve response from server");
+					}
+					this.updateCount = retval;
+					if (conn.autoCommit)
+					{
+						conn.commit();
+					}
+					return retval;
 				}
-				catch (Exception g)
+				catch (Exception e)
 				{
-					throw new SQLException("Failed to retrieve response from server");
+					if (e instanceof SQLException)
+					{
+						throw e;
+					}
+					e = receiveException();
+					conn.rollback();
+					if (result != null)
+					{
+						result.close();
+					}
+					throw new SQLException(e.getMessage());
 				}
-				this.updateCount = retval;
-				if (conn.autoCommit)
-				{
-					conn.commit();
-				}
-				return retval;
 			}
-			catch (Exception e)
-			{
-				if (e instanceof SQLException)
-				{
-					throw e;
-				}
-				e = receiveException();
-				conn.rollback();
-				if (result != null)
-				{
-					result.close();
-				}
-				throw new SQLException(e.getMessage());
-			}
+			
+			return -1;
 		}
 		catch (Exception f)
 		{

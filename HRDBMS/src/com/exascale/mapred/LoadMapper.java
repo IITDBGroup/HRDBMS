@@ -8,8 +8,11 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
@@ -122,7 +125,7 @@ public class LoadMapper extends Mapper<LongWritable, Text, MyLongWritable, ALOWr
 		{
 			if (key instanceof ArrayList)
 			{
-				byte[] data = toBytes(key);
+				byte[] data = toBytesForHash((ArrayList<Object>)key);
 				eHash = MurmurHash.hash64(data, data.length);
 			}
 			else
@@ -133,6 +136,43 @@ public class LoadMapper extends Mapper<LongWritable, Text, MyLongWritable, ALOWr
 		}
 
 		return eHash;
+	}
+	
+	private static byte[] toBytesForHash(ArrayList<Object> key)
+	{
+		StringBuilder sb = new StringBuilder();
+		for (Object o : key)
+		{
+			if (o instanceof Double)
+			{
+				DecimalFormat df = new DecimalFormat("0", DecimalFormatSymbols.getInstance(Locale.ENGLISH));
+				df.setMaximumFractionDigits(340); //340 = DecimalFormat.DOUBLE_FRACTION_DIGITS
+
+				sb.append(df.format((Double)o));
+				sb.append((char)0);
+			}
+			else if (o instanceof Number)
+			{
+				sb.append(o);
+				sb.append((char)0);
+			}
+			else
+			{
+				sb.append(o.toString());
+				sb.append((char)0);
+			}
+		}
+		
+		final int z = sb.length();
+		byte[] retval = new byte[z];
+		int i = 0;
+		while (i < z)
+		{
+			retval[i] = (byte)sb.charAt(i);
+			i++;
+		}
+		
+		return retval;
 	}
 
 	private static byte[] intToBytes(int val)

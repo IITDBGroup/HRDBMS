@@ -103,6 +103,7 @@ public class OperatorUtils
 	// 81 - Operator null
 	// 82 - Index null;
 	// 83 - BoolArray
+	// 84 - ALALO
 
 	public static int bytesToInt(byte[] val)
 	{
@@ -253,6 +254,102 @@ public class OperatorUtils
 		while (i < size)
 		{
 			retval.add(deserializeALF(in, prev));
+			i++;
+		}
+
+		return retval;
+	}
+	
+	public static ArrayList<ArrayList<Object>> deserializeALALO(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		int type = getType(in);
+		if (type == 0)
+		{
+			return (ArrayList<ArrayList<Object>>)readReference(in, prev);
+		}
+
+		if (type != 84)
+		{
+			throw new Exception("Corrupted stream. Expected type 84 but received " + type);
+		}
+
+		long id = readLong(in);
+		if (id == -1)
+		{
+			return null;
+		}
+
+		int size = readShort(in);
+		ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>(size);
+		prev.put(id, retval);
+		int i = 0;
+		while (i < size)
+		{
+			retval.add(deserializeALO(in, prev));
+			i++;
+		}
+
+		return retval;
+	}
+	
+	public static ArrayList<ArrayList<String>> deserializeALALS(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		int type = getType(in);
+		if (type == 0)
+		{
+			return (ArrayList<ArrayList<String>>)readReference(in, prev);
+		}
+
+		if (type != 85)
+		{
+			throw new Exception("Corrupted stream. Expected type 85 but received " + type);
+		}
+
+		long id = readLong(in);
+		if (id == -1)
+		{
+			return null;
+		}
+
+		int size = readShort(in);
+		ArrayList<ArrayList<String>> retval = new ArrayList<ArrayList<String>>(size);
+		prev.put(id, retval);
+		int i = 0;
+		while (i < size)
+		{
+			retval.add(deserializeALS(in, prev));
+			i++;
+		}
+
+		return retval;
+	}
+	
+	public static ArrayList<ArrayList<Boolean>> deserializeALALB(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		int type = getType(in);
+		if (type == 0)
+		{
+			return (ArrayList<ArrayList<Boolean>>)readReference(in, prev);
+		}
+
+		if (type != 86)
+		{
+			throw new Exception("Corrupted stream. Expected type 86 but received " + type);
+		}
+
+		long id = readLong(in);
+		if (id == -1)
+		{
+			return null;
+		}
+
+		int size = readShort(in);
+		ArrayList<ArrayList<Boolean>> retval = new ArrayList<ArrayList<Boolean>>(size);
+		prev.put(id, retval);
+		int i = 0;
+		while (i < size)
+		{
+			retval.add(deserializeALB(in, prev));
 			i++;
 		}
 
@@ -1528,7 +1625,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(7, out);
+			writeType(67, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -1546,6 +1643,87 @@ public class OperatorUtils
 		for (ArrayList<Filter> entry : als)
 		{
 			serializeALF(entry, out, prev);
+		}
+
+		return;
+	}
+	
+	public static void serializeALALO(ArrayList<ArrayList<Object>> als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		if (als == null)
+		{
+			writeType(84, out);
+			writeLong(-1, out);
+			return;
+		}
+
+		Long id = prev.get(als);
+		if (id != null)
+		{
+			serializeReference(id, out);
+			return;
+		}
+
+		writeType(84, out);
+		prev.put(als, writeID(out));
+		writeShort(als.size(), out);
+		for (ArrayList<Object> entry : als)
+		{
+			serializeALO(entry, out, prev);
+		}
+
+		return;
+	}
+	
+	public static void serializeALALS(ArrayList<ArrayList<String>> als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		if (als == null)
+		{
+			writeType(85, out);
+			writeLong(-1, out);
+			return;
+		}
+
+		Long id = prev.get(als);
+		if (id != null)
+		{
+			serializeReference(id, out);
+			return;
+		}
+
+		writeType(85, out);
+		prev.put(als, writeID(out));
+		writeShort(als.size(), out);
+		for (ArrayList<String> entry : als)
+		{
+			serializeALS(entry, out, prev);
+		}
+
+		return;
+	}
+	
+	public static void serializeALALB(ArrayList<ArrayList<Boolean>> als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		if (als == null)
+		{
+			writeType(86, out);
+			writeLong(-1, out);
+			return;
+		}
+
+		Long id = prev.get(als);
+		if (id != null)
+		{
+			serializeReference(id, out);
+			return;
+		}
+
+		writeType(86, out);
+		prev.put(als, writeID(out));
+		writeShort(als.size(), out);
+		for (ArrayList<Boolean> entry : als)
+		{
+			serializeALB(entry, out, prev);
 		}
 
 		return;

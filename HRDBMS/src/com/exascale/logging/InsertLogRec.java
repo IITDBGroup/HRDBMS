@@ -38,11 +38,11 @@ public class InsertLogRec extends LogRec
 	private byte[] before;
 	private byte[] after;
 
-	private final CharsetEncoder ce = cs.newEncoder();
+	//private final CharsetEncoder ce = cs.newEncoder();
 
 	public InsertLogRec(long txnum, Block b, int off, byte[] before, byte[] after) throws Exception
 	{
-		super(LogRec.INSERT, txnum, ByteBuffer.allocate(28 + b.toString().getBytes(StandardCharsets.UTF_8).length + 12 + 2 * before.length));
+		super(LogRec.INSERT, txnum, ByteBuffer.allocate(28 + (b.toString().length() << 1) + 12 + (before.length << 1)));
 		if (before.length != after.length)
 		{
 			throw new Exception("Before and after images length do not match");
@@ -58,19 +58,16 @@ public class InsertLogRec extends LogRec
 		// byte[] bbytes = b.toString().getBytes("UTF-8");
 		// final int blen = bbytes.length;
 		String string = b.toString();
-		byte[] ba = new byte[string.length() << 2];
-		char[] value = (char[])unsafe.getObject(string, offset);
-		int blen = ((sun.nio.cs.ArrayEncoder)ce).encode(value, 0, value.length, ba);
-		byte[] bbytes = Arrays.copyOf(ba, blen);
-		buff.putInt(blen);
-		try
+		//byte[] ba = new byte[string.length() << 2];
+		//char[] value = (char[])unsafe.getObject(string, offset);
+		//int blen = ((sun.nio.cs.ArrayEncoder)ce).encode(value, 0, value.length, ba);
+		//byte[] bbytes = Arrays.copyOf(ba, blen);
+		final int z = string.length();
+		buff.putInt(z);
+		int i = 0;
+		while (i < z)
 		{
-			buff.put(bbytes);
-		}
-		catch (final Exception e)
-		{
-			HRDBMSWorker.logger.error("Error converting bytes to UTF-8 string in InsertLogRec constructor.", e);
-			return;
+			buff.putChar(string.charAt(i++));
 		}
 
 		buff.putInt(before.length);

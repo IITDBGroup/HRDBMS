@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import com.exascale.filesystem.Page;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 import com.exascale.tables.Transaction;
@@ -1743,13 +1744,30 @@ public final class Phase5
 						// HRDBMSWorker.logger.debug("Wanted to use an index on
 						// " + lcolumn + " but none existed");
 						// }
-						if (likely <= (1.0 / 10.0) && tOp.getType() == 0)
+						//if (likely <= (1.0 / 10.0) && tOp.getType() == 0)
+						//{
+						//	HRDBMSWorker.logger.debug("Wanted to use an index on " + lcolumn + " but none existed");
+						//}
+						if (tOp.getType() == 0)
 						{
-							HRDBMSWorker.logger.debug("Wanted to use an index on " + lcolumn + " but none existed");
+							long ct = card(tOp);
+							double currentCost = ct / 165;
+							double newCost = Math.E * Math.log(ct) + 2 * likely * ct;
+							if (newCost < currentCost)
+							{
+								HRDBMSWorker.logger.debug("Wanted to use an index on " + lcolumn + " but none existed");
+							}
 						}
-						else if (likely <= 0.0003 && tOp.getType() != 0)
+						else
 						{
-							HRDBMSWorker.logger.debug("Wanted to use an index on " + lcolumn + " but none existed");
+							//HRDBMSWorker.logger.debug("Wanted to use an index on " + lcolumn + " but none existed");
+							long ct = card(tOp);
+							double currentCost = tOp.getCols2Pos().size() * ct / (5500 * (Page.BLOCK_SIZE * 1.0) / (128.0 * 1024.0));
+							double newCost = Math.E * Math.log(ct) + likely * ct + tOp.getCols2Pos().size() * likely * ct;
+							if (newCost < currentCost)
+							{
+								HRDBMSWorker.logger.debug("Wanted to use an index on " + lcolumn + " but none existed");
+							}
 						}
 					}
 
@@ -1758,30 +1776,33 @@ public final class Phase5
 				else
 				{
 					// determine if this index is better than a tablescan
+					doIt = false;
 					if (rcolumn == null)
 					{
 						if (index.getKeys().get(0).equals(lcolumn))
 						{
-							// if (likely > (12.0 / 53.0) ||
-							// !f.op().equals("E"))
-							if (likely > (1.0 / 10.0))
+							if (tOp.getType() == 0)
 							{
-								doIt = false;
+								long ct = card(tOp);
+								double currentCost = ct / 165;
+								double newCost = Math.E * Math.log(ct) + 2 * likely * ct;
+								if (newCost < currentCost)
+								{
+									doIt = true;
+								}
 							}
-
-							if (likely > 0.0003 && tOp.getType() != 0)
+							else
 							{
-								doIt = false;
+								//HRDBMSWorker.logger.debug("Wanted to use an index on " + lcolumn + " but none existed");
+								long ct = card(tOp);
+								double currentCost = tOp.getCols2Pos().size() * ct / (5500 * (Page.BLOCK_SIZE * 1.0) / (128.0 * 1024.0));
+								double newCost = Math.E * Math.log(ct) + likely * ct + tOp.getCols2Pos().size() * likely * ct;
+								if (newCost < currentCost)
+								{
+									doIt = true;
+								}
 							}
 						}
-						else
-						{
-							doIt = false;
-						}
-					}
-					else
-					{
-						doIt = false;
 					}
 
 					if (doIt)

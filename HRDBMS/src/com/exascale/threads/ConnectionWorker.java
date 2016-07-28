@@ -1,5 +1,6 @@
 package com.exascale.threads;
 
+import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -25,6 +26,8 @@ import java.nio.charset.CharsetEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.sql.Connection;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -32,7 +35,11 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Random;
@@ -58,6 +65,7 @@ import com.exascale.managers.XAManager;
 import com.exascale.misc.BufferedFileChannel;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.FastStringTokenizer;
+import com.exascale.misc.HJOMultiHashMap;
 import com.exascale.misc.HParms;
 import com.exascale.misc.MultiHashMap;
 import com.exascale.misc.MurmurHash;
@@ -69,6 +77,7 @@ import com.exascale.optimizer.Filter;
 import com.exascale.optimizer.Index;
 import com.exascale.optimizer.Index.IndexRecord;
 import com.exascale.optimizer.IndexOperator;
+import com.exascale.optimizer.InsertOperator;
 import com.exascale.optimizer.LoadMetaData;
 import com.exascale.optimizer.MetaData;
 import com.exascale.optimizer.MetaData.PartitionMetaData;
@@ -98,12 +107,16 @@ public class ConnectionWorker extends HRDBMSThread
 	private static long MAX_PAGES;
 	private static final ConcurrentHashMap<Long, Exception> loadExceptions = new ConcurrentHashMap<Long, Exception>(16, 0.75f, 64 * ResourceManager.cpus);
 	private static final ConcurrentHashMap<FlushLoadThread, FlushLoadThread> flThreads = new ConcurrentHashMap<FlushLoadThread, FlushLoadThread>(12000000, 0.75f, 64 * ResourceManager.cpus);
+	private static final ConcurrentHashMap<String, String> dmlTx = new ConcurrentHashMap<String, String>();
+	private static final ConcurrentHashMap<Transaction, Transaction> delayedTxs = new ConcurrentHashMap<Transaction, Transaction>();
 	private static sun.misc.Unsafe unsafe;
 	private static long soffset;
 	private static Charset scs = StandardCharsets.UTF_8;
 	private static int BATCHES_PER_CHECK;
 	private static HashMap<Integer, Integer> disk2BatchCount = new HashMap<Integer, Integer>();
 	private static ConcurrentHashMap<String, FileChannel> loadFCs = new ConcurrentHashMap<String, FileChannel>();
+	private static ConcurrentHashMap<ConnectionWorker, ConnectionWorker> delayedDML = new ConcurrentHashMap<ConnectionWorker, ConnectionWorker>();
+	private static HJOMultiHashMap<ConnectionWorker, XAWorker> delayedWorkers = new HJOMultiHashMap<ConnectionWorker, XAWorker>();;
 
 	static
 	{
@@ -139,6 +152,11 @@ public class ConnectionWorker extends HRDBMSThread
 	{
 		this.description = "Connection Worker";
 		this.sock = sock2;
+	}
+	
+	public static boolean isDelayed(Transaction tx)
+	{
+		return delayedTxs.containsKey(tx);
 	}
 
 	public static double parseUptimeResult(String uptimeCmdResult) throws Exception
@@ -814,6 +832,28 @@ public class ConnectionWorker extends HRDBMSThread
 
 		try
 		{
+			if (delayedDML.contains(this))
+			{
+				List<XAWorker> workers = delayedWorkers.get(this);
+				for (XAWorker worker : workers)
+				{
+					InsertOperator.wakeUpDelayed(tx);
+					worker.join();
+					int updateCount = worker.getUpdateCount();
+
+					if (updateCount == -1)
+					{
+						sendNo();
+						//returnExceptionToClient(worker.getException());
+						delayedWorkers.multiRemove(this);
+						return;
+					}
+				}
+				
+				delayedWorkers.multiRemove(this);
+				delayedTxs.remove(tx);
+			}
+			
 			XAManager.commit(tx);
 			tx = null;
 		}
@@ -825,12 +865,63 @@ public class ConnectionWorker extends HRDBMSThread
 
 		sendOK();
 	}
+	
+	public void doPacing()
+	{
+		if (tx == null)
+		{
+			sendOK();
+			return;
+		}
+
+		try
+		{
+			if (delayedDML.contains(this))
+			{
+				InsertOperator.wakeUpDelayed(tx);
+			}
+		}
+		catch (Exception e)
+		{
+			HRDBMSWorker.logger.debug("", e);
+		}
+
+		sendOK();
+	}
+	
+	public void delayDML()
+	{
+		ConnectionWorker.delayedDML.put(this, this);
+		sendOK();
+	}
 
 	public void doRollback()
 	{
 		if (tx == null)
 		{
 			sendOK();
+		}
+		
+		if (delayedDML.contains(this))
+		{
+			List<XAWorker> workers = delayedWorkers.get(this);
+			for (XAWorker worker : workers)
+			{
+				while (true)
+				{
+					try
+					{
+						InsertOperator.wakeUpDelayed(tx);
+						worker.join();
+						break;
+					}
+					catch(InterruptedException e)
+					{}
+				}
+			}
+			
+			delayedWorkers.multiRemove(this);
+			delayedTxs.remove(tx);
 		}
 
 		try
@@ -866,22 +957,22 @@ public class ConnectionWorker extends HRDBMSThread
 		// HRDBMSWorker.logger.debug("New connection worker is up and running");
 		try
 		{
+			InputStream in = null;
+			try
+			{
+				in = sock.getInputStream();
+			}
+			catch (java.net.SocketException e)
+			{
+			}
+			
 			while (true)
 			{
 				final byte[] cmd = new byte[8];
-				InputStream in = null;
-				try
-				{
-					in = sock.getInputStream();
-				}
-				catch (java.net.SocketException e)
-				{
-				}
 
 				int num = 0;
 				try
 				{
-					sock.getOutputStream();
 					num = in.read(cmd);
 				}
 				catch (Exception e)
@@ -901,6 +992,11 @@ public class ConnectionWorker extends HRDBMSThread
 							{
 							}
 						}
+					}
+					
+					if (tx != null)
+					{
+						doRollback();
 					}
 					sock.close();
 					this.terminate();
@@ -939,7 +1035,13 @@ public class ConnectionWorker extends HRDBMSThread
 				}
 				final String command = new String(cmd, StandardCharsets.UTF_8);
 				// HRDBMSWorker.logger.debug("Received " + num + " bytes");
-				HRDBMSWorker.logger.debug("Command: " + command);
+				
+				if (command.equals("EXECUTEU") || command.equals("INSERT  ") || command.equals("UPDATE  ") || command.equals("DELETE  ") || command.equals("PACING  "))
+				{}
+				else
+				{
+					HRDBMSWorker.logger.debug("Command: " + command);
+				}
 
 				final byte[] fromBytes = new byte[4];
 				final byte[] toBytes = new byte[4];
@@ -1185,6 +1287,22 @@ public class ConnectionWorker extends HRDBMSThread
 						Thread.sleep(1000);
 					}
 					doCommit();
+				}
+				else if (command.equals("DELAYDML"))
+				{
+					while (!XAManager.rP2)
+					{
+						Thread.sleep(1000);
+					}
+					delayDML();
+				}
+				else if (command.equals("PACING  "))
+				{
+					while (!XAManager.rP2)
+					{
+						Thread.sleep(1000);
+					}
+					doPacing();
 				}
 				else if (command.equals("CHECKPNT"))
 				{
@@ -1874,10 +1992,23 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 
 		ArrayList<FlushDeleteThread> threads = new ArrayList<FlushDeleteThread>();
-		for (Object o : map.getKeySet())
+		ArrayList<String> dmlTxStrs = new ArrayList<String>();
+		ArrayList<Integer> sorted = new ArrayList(map.getKeySet());
+		Collections.sort(sorted);
+		for (Object o : sorted)
 		{
 			int device = (Integer)o;
 			threads.add(new FlushDeleteThread(map.get(device), tx, schema, table, keys, types, orders, indexes, pos2Col, cols2Types, type));
+			String dmlTxStr = Long.toString(tx.number()) + "~" + device + "~" + schema + "." + table;
+			if (dmlTx.putIfAbsent(dmlTxStr, dmlTxStr) != null)
+			{
+				while (dmlTx.putIfAbsent(dmlTxStr, dmlTxStr) != null)
+				{
+					LockSupport.parkNanos(1);
+				}
+			}
+			
+			dmlTxStrs.add(dmlTxStr);
 		}
 
 		for (FlushDeleteThread thread : threads)
@@ -1903,6 +2034,11 @@ public class ConnectionWorker extends HRDBMSThread
 			{
 				allOK = false;
 			}
+		}
+		
+		for (String s : dmlTxStrs)
+		{
+			dmlTx.remove(s);
 		}
 
 		if (allOK)
@@ -2789,7 +2925,7 @@ public class ConnectionWorker extends HRDBMSThread
 			// HRDBMSWorker.logger.debug("About to create XAWorker");
 			worker = XAManager.executeQuery(sql, tx, this);
 			// HRDBMSWorker.logger.debug("XAWorker created");
-			HRDBMSWorker.addThread(worker);
+			worker.start();
 			// HRDBMSWorker.logger.debug("XAWorker started");
 			this.sendOK();
 			// HRDBMSWorker.logger.debug("OK sent to client");
@@ -2841,9 +2977,22 @@ public class ConnectionWorker extends HRDBMSThread
 					}
 				}
 			}
-
-			worker = XAManager.executeUpdate(sql, tx, this);
-			HRDBMSWorker.addThread(worker);
+			
+			if (delayedDML.contains(this))
+			{
+				worker = XAManager.executeUpdate(sql, tx, this);
+				worker.start();
+				delayedTxs.put(tx, tx);
+				delayedWorkers.multiPut(this, worker);
+				worker = null;
+				return;
+			}
+			else
+			{
+				worker = XAManager.executeUpdate(sql, tx, this);
+				worker.start();
+			}
+			
 			worker.join();
 			int updateCount = worker.getUpdateCount();
 
@@ -3116,7 +3265,7 @@ public class ConnectionWorker extends HRDBMSThread
 		return;
 	}
 
-	private long hash(Object key) throws Exception
+	private static long hash(Object key) throws Exception
 	{
 		long eHash;
 		if (key == null)
@@ -3127,7 +3276,7 @@ public class ConnectionWorker extends HRDBMSThread
 		{
 			if (key instanceof ArrayList)
 			{
-				byte[] data = toBytes(key);
+				byte[] data = toBytesForHash((ArrayList<Object>)key);
 				eHash = MurmurHash.hash64(data, data.length);
 			}
 			else
@@ -3138,6 +3287,43 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 
 		return eHash;
+	}
+	
+	private static byte[] toBytesForHash(ArrayList<Object> key)
+	{
+		StringBuilder sb = new StringBuilder();
+		for (Object o : key)
+		{
+			if (o instanceof Double)
+			{
+				DecimalFormat df = new DecimalFormat("0", DecimalFormatSymbols.getInstance(Locale.ENGLISH));
+				df.setMaximumFractionDigits(340); //340 = DecimalFormat.DOUBLE_FRACTION_DIGITS
+
+				sb.append(df.format((Double)o));
+				sb.append((char)0);
+			}
+			else if (o instanceof Number)
+			{
+				sb.append(o);
+				sb.append((char)0);
+			}
+			else
+			{
+				sb.append(o.toString());
+				sb.append((char)0);
+			}
+		}
+		
+		final int z = sb.length();
+		byte[] retval = new byte[z];
+		int i = 0;
+		while (i < z)
+		{
+			retval[i] = (byte)sb.charAt(i);
+			i++;
+		}
+		
+		return retval;
 	}
 
 	private void insert() throws Exception
@@ -3162,50 +3348,102 @@ public class ConnectionWorker extends HRDBMSThread
 		TreeMap<Integer, String> pos2Col = null;
 		HashMap<String, String> cols2Types = null;
 		int type;
+		String ngExp;
+		String nExp;
+		String dExp;
 		try
 		{
-			readNonCoord(txBytes);
+			InputStream in = new BufferedInputStream(sock.getInputStream());
+			readNonCoord(txBytes, in);
 			txNum = bytesToLong(txBytes);
-			readNonCoord(schemaLenBytes);
+			readNonCoord(schemaLenBytes, in);
 			schemaLength = bytesToInt(schemaLenBytes);
 			schemaData = new byte[schemaLength];
-			readNonCoord(schemaData);
+			readNonCoord(schemaData, in);
 			schema = new String(schemaData, StandardCharsets.UTF_8);
-			readNonCoord(tableLenBytes);
+			readNonCoord(tableLenBytes, in);
 			tableLength = bytesToInt(tableLenBytes);
 			tableData = new byte[tableLength];
-			readNonCoord(tableData);
+			readNonCoord(tableData, in);
 			table = new String(tableData, StandardCharsets.UTF_8);
-			readNonCoord(tableLenBytes);
+			readNonCoord(tableLenBytes, in);
 			type = bytesToInt(tableLenBytes);
-			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
-			indexes = (ArrayList<String>)objIn.readObject();
-			list = (ArrayList<ArrayList<Object>>)objIn.readObject();
-			keys = (ArrayList<ArrayList<String>>)objIn.readObject();
-			types = (ArrayList<ArrayList<String>>)objIn.readObject();
-			orders = (ArrayList<ArrayList<Boolean>>)objIn.readObject();
-			cols2Pos = (HashMap<String, Integer>)objIn.readObject();
-			partMeta = ((PartitionMetaData)objIn.readObject());
-			pos2Col = (TreeMap<Integer, String>)objIn.readObject();
-			cols2Types = (HashMap<String, String>)objIn.readObject();
+			
+			readNonCoord(tableLenBytes, in);
+			tableLength = bytesToInt(tableLenBytes);
+			tableData = new byte[tableLength];
+			readNonCoord(tableData, in);
+			ngExp = new String(tableData, StandardCharsets.UTF_8);
+			readNonCoord(tableLenBytes, in);
+			tableLength = bytesToInt(tableLenBytes);
+			tableData = new byte[tableLength];
+			readNonCoord(tableData, in);
+			nExp = new String(tableData, StandardCharsets.UTF_8);
+			readNonCoord(tableLenBytes, in);
+			tableLength = bytesToInt(tableLenBytes);
+			tableData = new byte[tableLength];
+			readNonCoord(tableData, in);
+			dExp = new String(tableData, StandardCharsets.UTF_8);
+			HashMap<Long, Object> prev = new HashMap<Long, Object>();
+			indexes = OperatorUtils.deserializeALS(in, prev);
+			list = OperatorUtils.deserializeALALO(in, prev);
+			keys = OperatorUtils.deserializeALALS(in, prev);
+			types = OperatorUtils.deserializeALALS(in, prev);
+			orders = OperatorUtils.deserializeALALB(in, prev);
+			cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+			pos2Col = OperatorUtils.deserializeTM(in, prev);
+			cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+			//ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
+			//indexes = (ArrayList<String>)objIn.readObject();
+			//list = (ArrayList<ArrayList<Object>>)objIn.readObject();
+			//keys = (ArrayList<ArrayList<String>>)objIn.readObject();
+			//types = (ArrayList<ArrayList<String>>)objIn.readObject();
+			//orders = (ArrayList<ArrayList<Boolean>>)objIn.readObject();
+			//cols2Pos = (HashMap<String, Integer>)objIn.readObject();
+			//pos2Col = (TreeMap<Integer, String>)objIn.readObject();
+			//cols2Types = (HashMap<String, String>)objIn.readObject();
+			
+			HashMap<String, String> cols2Types2 = new HashMap<String, String>();
+			for (Map.Entry entry : cols2Types.entrySet())
+			{
+				String col = (String)entry.getKey();
+				col = col.substring(col.indexOf('.') + 1);
+				cols2Types2.put(col, (String)entry.getValue());
+			}
+			
+			partMeta = new MetaData().new PartitionMetaData(schema, table, ngExp, nExp, dExp, new Transaction(txNum), cols2Types2);
 		}
 		catch (Exception e)
 		{
+			HRDBMSWorker.logger.debug("", e);
 			sendNo();
 			return;
 		}
 
-		MultiHashMap<Integer, ArrayList<Object>> map = new MultiHashMap<Integer, ArrayList<Object>>();
+		HJOMultiHashMap<Integer, ArrayList<Object>> map = new HJOMultiHashMap<Integer, ArrayList<Object>>();
 		for (ArrayList<Object> row : list)
 		{
 			map.multiPut(MetaData.determineDevice(row, partMeta, cols2Pos), row);
 		}
 
 		ArrayList<FlushInsertThread> threads = new ArrayList<FlushInsertThread>();
-		for (Object o : map.getKeySet())
+		ArrayList<String> dmlTxStrs = new ArrayList<String>();
+		ArrayList<Integer> sorted = new ArrayList(map.getKeySet());
+		Collections.sort(sorted);
+		for (Object o : sorted)
 		{
 			int device = (Integer)o;
 			threads.add(new FlushInsertThread(map.get(device), new Transaction(txNum), schema, table, keys, types, orders, indexes, cols2Pos, device, pos2Col, cols2Types, type));
+			String dmlTxStr = Long.toString(txNum) + "~" + device + "~" + schema + "." + table;
+			if (dmlTx.putIfAbsent(dmlTxStr, dmlTxStr) != null)
+			{
+				while (dmlTx.putIfAbsent(dmlTxStr, dmlTxStr) != null)
+				{
+					LockSupport.parkNanos(1);
+				}
+			}
+			
+			dmlTxStrs.add(dmlTxStr);
 		}
 
 		for (FlushInsertThread thread : threads)
@@ -3231,6 +3469,11 @@ public class ConnectionWorker extends HRDBMSThread
 			{
 				allOK = false;
 			}
+		}
+		
+		for (String s : dmlTxStrs)
+		{
+			dmlTx.remove(s);
 		}
 
 		if (allOK)
@@ -3579,14 +3822,27 @@ public class ConnectionWorker extends HRDBMSThread
 		if (allOK)
 		{
 			try
-			{
+			{	
 				// mass delete table and indexes
 				File[] dirs = getDirs(HRDBMSWorker.getHParms().getProperty("data_directories"));
 				ArrayList<MassDeleteThread> threads1 = new ArrayList<MassDeleteThread>();
+				ArrayList<String> dmlTxStrs = new ArrayList<String>();
+				int device = 0;
 				for (File dir : dirs)
 				{
 					File dir2 = new File(dir, schema + "." + table + ".tbl");
 					threads1.add(new MassDeleteThread(dir2, tx, indexes, keys, types, orders, pos2Col, cols2Types, logged, type));
+					String dmlTxStr = Long.toString(tx.number()) + "~" + device + "~" + schema + "." + table;
+					if (dmlTx.putIfAbsent(dmlTxStr, dmlTxStr) != null)
+					{
+						while (dmlTx.putIfAbsent(dmlTxStr, dmlTxStr) != null)
+						{
+							LockSupport.parkNanos(1);
+						}
+					}
+					
+					dmlTxStrs.add(dmlTxStr);
+					device++;
 				}
 
 				for (MassDeleteThread thread : threads1)
@@ -3613,6 +3869,11 @@ public class ConnectionWorker extends HRDBMSThread
 					{
 						allOK = false;
 					}
+				}
+				
+				for (String s : dmlTxStrs)
+				{
+					dmlTx.remove(s);
 				}
 
 				if (!allOK)
@@ -4459,6 +4720,24 @@ public class ConnectionWorker extends HRDBMSThread
 		while (count < length)
 		{
 			int temp = sock.getInputStream().read(arg, count, arg.length - count);
+			if (temp == -1)
+			{
+				throw new Exception("Hit end of stream when reading from socket");
+			}
+			else
+			{
+				count += temp;
+			}
+		}
+	}
+	
+	private void readNonCoord(byte[] arg, InputStream in) throws Exception
+	{
+		int count = 0;
+		final int length = arg.length;
+		while (count < length)
+		{
+			int temp = in.read(arg, count, arg.length - count);
 			if (temp == -1)
 			{
 				throw new Exception("Hit end of stream when reading from socket");
@@ -5622,10 +5901,23 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 
 		ArrayList<FlushDeleteThread> threads = new ArrayList<FlushDeleteThread>();
-		for (Object o : map.getKeySet())
+		ArrayList<String> dmlTxStrs = new ArrayList<String>();
+		ArrayList<Integer> sorted = new ArrayList(map.getKeySet());
+		Collections.sort(sorted);
+		for (Object o : sorted)
 		{
 			int device = (Integer)o;
 			threads.add(new FlushDeleteThread(map.get(device), tx, schema, table, keys, types, orders, indexes, pos2Col, cols2Types, type));
+			String dmlTxStr = Long.toString(tx.number()) + "~" + device + "~" + schema + "." + table;
+			if (dmlTx.putIfAbsent(dmlTxStr, dmlTxStr) != null)
+			{
+				while (dmlTx.putIfAbsent(dmlTxStr, dmlTxStr) != null)
+				{
+					LockSupport.parkNanos(1);
+				}
+			}
+			
+			dmlTxStrs.add(dmlTxStr);
 		}
 
 		for (FlushDeleteThread thread : threads)
@@ -5655,12 +5947,17 @@ public class ConnectionWorker extends HRDBMSThread
 
 		if (!allOK)
 		{
+			for (String s : dmlTxStrs)
+			{
+				dmlTx.remove(s);
+			}
 			sendNo();
+			return;
 		}
 
 		if (list2 != null)
 		{
-			MultiHashMap<Integer, ArrayList<Object>> map2 = new MultiHashMap<Integer, ArrayList<Object>>();
+			HJOMultiHashMap<Integer, ArrayList<Object>> map2 = new HJOMultiHashMap<Integer, ArrayList<Object>>();
 			for (ArrayList<Object> row : list2)
 			{
 				map2.multiPut(MetaData.determineDevice(row, pmd, cols2Pos), row);
@@ -5697,6 +5994,11 @@ public class ConnectionWorker extends HRDBMSThread
 				}
 			}
 		}
+		
+		for (String s : dmlTxStrs)
+		{
+			dmlTx.remove(s);
+		}
 
 		if (allOK)
 		{
@@ -5714,7 +6016,7 @@ public class ConnectionWorker extends HRDBMSThread
 	protected void terminate()
 	{
 		MetaData.removeDefaultSchema(this);
-		super.terminate();
+		//super.terminate();
 	}
 
 	public static class CreateIndexThread extends HRDBMSThread
@@ -6253,14 +6555,14 @@ public class ConnectionWorker extends HRDBMSThread
 		ArrayList<ArrayList<String>> types;
 		ArrayList<ArrayList<Boolean>> orders;
 		ArrayList<String> indexes;
-		Set<ArrayList<Object>> list;
+		List<ArrayList<Object>> list;
 		HashMap<String, Integer> cols2Pos;
 		int num;
 		TreeMap<Integer, String> pos2Col;
 		HashMap<String, String> cols2Types;
 		int type;
 
-		public FlushInsertThread(Set<ArrayList<Object>> list, Transaction tx, String schema, String table, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes, HashMap<String, Integer> cols2Pos, int num, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type)
+		public FlushInsertThread(List<ArrayList<Object>> list, Transaction tx, String schema, String table, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes, HashMap<String, Integer> cols2Pos, int num, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type)
 		{
 			this.list = list;
 			this.tx = tx;
@@ -6300,29 +6602,30 @@ public class ConnectionWorker extends HRDBMSThread
 						FileManager.getFile(tfn);
 						maxPlus = FileManager.numBlocks.get(tfn);
 					}
-					maxPlus -= 2;
-					int block = 4096;
-					try
-					{
-						block = 1 + random.nextInt(maxPlus + 1);
-					}
-					catch (Exception e)
-					{
-						HRDBMSWorker.logger.debug("tfn = " + tfn);
-						HRDBMSWorker.logger.debug("FileManager says " + FileManager.numBlocks.get(tfn));
-						HRDBMSWorker.logger.debug("maxPlus = " + maxPlus);
-						throw e;
-					}
+
+					int block = maxPlus - 1;
+	
 					// request block
 					HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
 					Schema sch = new Schema(layout, MetaData.myNodeNum(), num);
 					Block toRequest = new Block(tfn, block);
+					//HRDBMSWorker.logger.debug("Requesting " + toRequest);
 					tx.requestPage(toRequest);
 					tx.read(toRequest, sch, true);
 					raiks = new ArrayList<RIDAndIndexKeys>();
 					for (ArrayList<Object> row : list)
 					{
 						RID rid = sch.insertRow(aloToFieldValues(row));
+						if (rid.getBlockNum() != block)
+						{
+							block = rid.getBlockNum();
+							toRequest = new Block(tfn, block);
+							//HRDBMSWorker.logger.debug("Row was placed on " + toRequest + " instead");
+							tx.requestPage(toRequest);;
+							sch = new Schema(layout, MetaData.myNodeNum(), num);
+							tx.read(toRequest, sch, true);
+						}
+						
 						ArrayList<ArrayList<Object>> indexKeys = new ArrayList<ArrayList<Object>>();
 						int i = 0;
 						for (String index : indexes)
@@ -6404,6 +6707,15 @@ public class ConnectionWorker extends HRDBMSThread
 					for (ArrayList<Object> row : list)
 					{
 						RID rid = sch.insertRowColTable(aloToFieldValues(row));
+						if (rid.getBlockNum() != block)
+						{
+							block = rid.getBlockNum();
+							toRequest = new Block(tfn, block);
+							tx.requestPage(toRequest, new ArrayList<Integer>(pos2Col.keySet()));
+							sch = new Schema(layout, MetaData.myNodeNum(), num);
+							tx.read(toRequest, sch, new ArrayList<Integer>(pos2Col.keySet()), false, true);
+						}
+						
 						ArrayList<ArrayList<Object>> indexKeys = new ArrayList<ArrayList<Object>>();
 						int i = 0;
 						for (String index : indexes)

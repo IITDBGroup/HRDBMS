@@ -219,7 +219,7 @@ public class SubBufferManager
 						if (index == -1)
 						{
 							// if
-							// (!Transaction.txListLock.writeLock().tryLock())
+							// (!Transaction.txListLock.tryLock())
 							// {
 							// wait = true;
 							// continue;
@@ -250,7 +250,7 @@ public class SubBufferManager
 							}
 							catch (Exception e)
 							{
-								// Transaction.txListLock.writeLock().unlock();
+								// Transaction.txListLock.unlock();
 								lock.unlock();
 								throw e;
 							}
@@ -259,7 +259,7 @@ public class SubBufferManager
 							final long lsn = LogManager.getLSN();
 							bp[index].pin(lsn, txnum);
 							myBuffers.multiPut(txnum, bp[index]);
-							// Transaction.txListLock.writeLock().unlock();
+							// Transaction.txListLock.unlock();
 							lock.unlock();
 							return retval;
 						}
@@ -317,7 +317,7 @@ public class SubBufferManager
 						if (index == -1)
 						{
 							// if
-							// (!Transaction.txListLock.writeLock().tryLock())
+							// (!Transaction.txListLock.tryLock())
 							// {
 							// wait = true;
 							// continue;
@@ -348,7 +348,7 @@ public class SubBufferManager
 							}
 							catch (Exception e)
 							{
-								// Transaction.txListLock.writeLock().unlock();
+								// Transaction.txListLock.unlock();
 								lock.unlock();
 								throw e;
 							}
@@ -357,7 +357,7 @@ public class SubBufferManager
 							final long lsn = LogManager.getLSN();
 							bp[index].pin(lsn, txnum);
 							myBuffers.multiPut(txnum, bp[index]);
-							// Transaction.txListLock.writeLock().unlock();
+							// Transaction.txListLock.unlock();
 							lock.unlock();
 							return retval;
 						}
@@ -415,7 +415,7 @@ public class SubBufferManager
 						if (index == -1)
 						{
 							// if
-							// (!Transaction.txListLock.writeLock().tryLock())
+							// (!Transaction.txListLock.tryLock())
 							// {
 							// wait = true;
 							// continue;
@@ -446,7 +446,7 @@ public class SubBufferManager
 							}
 							catch (Exception e)
 							{
-								// Transaction.txListLock.writeLock().unlock();
+								// Transaction.txListLock.unlock();
 								lock.unlock();
 								throw e;
 							}
@@ -455,7 +455,7 @@ public class SubBufferManager
 							final long lsn = LogManager.getLSN();
 							bp[index].pin(lsn, txnum);
 							myBuffers.multiPut(txnum, bp[index]);
-							// Transaction.txListLock.writeLock().unlock();
+							// Transaction.txListLock.unlock();
 							lock.unlock();
 							return retval;
 						}
@@ -513,7 +513,7 @@ public class SubBufferManager
 						if (index == -1)
 						{
 							// if
-							// (!Transaction.txListLock.writeLock().tryLock())
+							// (!Transaction.txListLock.tryLock())
 							// {
 							// wait = true;
 							// continue;
@@ -544,7 +544,7 @@ public class SubBufferManager
 							}
 							catch (Exception e)
 							{
-								// Transaction.txListLock.writeLock().unlock();
+								// Transaction.txListLock.unlock();
 								lock.unlock();
 								throw e;
 							}
@@ -553,7 +553,7 @@ public class SubBufferManager
 							final long lsn = LogManager.getLSN();
 							bp[index].pin(lsn, txnum);
 							myBuffers.multiPut(txnum, bp[index]);
-							// Transaction.txListLock.writeLock().unlock();
+							// Transaction.txListLock.unlock();
 							lock.unlock();
 							return retval;
 						}
@@ -642,7 +642,7 @@ public class SubBufferManager
 
 						{
 							// if
-							// (!Transaction.txListLock.writeLock().tryLock())
+							// (!Transaction.txListLock.tryLock())
 							// {
 							// wait = true;
 							// continue;
@@ -675,7 +675,7 @@ public class SubBufferManager
 							}
 							catch (Exception e)
 							{
-								// Transaction.txListLock.writeLock().unlock();
+								// Transaction.txListLock.unlock();
 								throw e;
 							}
 
@@ -705,7 +705,7 @@ public class SubBufferManager
 								i++;
 							}
 
-							// Transaction.txListLock.writeLock().unlock();
+							// Transaction.txListLock.unlock();
 							lock.unlock();
 							// HRDBMSWorker.logger.debug("Short SBM pin3
 							// ending");
@@ -750,7 +750,7 @@ public class SubBufferManager
 						if (index == -1)
 						{
 							// if
-							// (!Transaction.txListLock.writeLock().tryLock())
+							// (!Transaction.txListLock.tryLock())
 							// {
 							// wait = true;
 							// continue;
@@ -781,7 +781,7 @@ public class SubBufferManager
 							}
 							catch (Exception e)
 							{
-								// Transaction.txListLock.writeLock().unlock();
+								// Transaction.txListLock.unlock();
 								lock.unlock();
 								throw e;
 							}
@@ -789,7 +789,7 @@ public class SubBufferManager
 							final long lsn = LogManager.getLSN();
 							bp[index].pin(lsn, txnum);
 							myBuffers.multiPut(txnum, bp[index]);
-							// Transaction.txListLock.writeLock().unlock();
+							// Transaction.txListLock.unlock();
 							lock.unlock();
 							return;
 						}
@@ -848,7 +848,7 @@ public class SubBufferManager
 						if (index == -1)
 						{
 							// if
-							// (!Transaction.txListLock.writeLock().tryLock())
+							// (!Transaction.txListLock.tryLock())
 							// {
 							// wait = true;
 							// continue;
@@ -879,7 +879,7 @@ public class SubBufferManager
 							}
 							catch (Exception e)
 							{
-								// Transaction.txListLock.writeLock().unlock();
+								// Transaction.txListLock.unlock();
 								lock.unlock();
 								throw e;
 							}
@@ -887,7 +887,7 @@ public class SubBufferManager
 							final long lsn = LogManager.getLSN();
 							bp[index].pin(lsn, txnum);
 							myBuffers.multiPut(txnum, bp[index]);
-							// Transaction.txListLock.writeLock().unlock();
+							// Transaction.txListLock.unlock();
 							lock.unlock();
 							return;
 						}
@@ -983,7 +983,7 @@ public class SubBufferManager
 
 						{
 							// if
-							// (!Transaction.txListLock.writeLock().tryLock())
+							// (!Transaction.txListLock.tryLock())
 							// {
 							// wait = true;
 							// continue;
@@ -1033,7 +1033,7 @@ public class SubBufferManager
 							}
 							catch (Exception e)
 							{
-								// Transaction.txListLock.writeLock().unlock();
+								// Transaction.txListLock.unlock();
 								lock.unlock();
 								throw e;
 							}
@@ -1050,7 +1050,7 @@ public class SubBufferManager
 							myBuffers.multiPut(txnum, bp[index]);
 							myBuffers.multiPut(txnum, bp[index2]);
 							myBuffers.multiPut(txnum, bp[index3]);
-							// Transaction.txListLock.writeLock().unlock();
+							// Transaction.txListLock.unlock();
 							lock.unlock();
 							// HRDBMSWorker.logger.debug("Short SBM pin3
 							// ending");
@@ -1132,7 +1132,7 @@ public class SubBufferManager
 
 						{
 							// if
-							// (!Transaction.txListLock.writeLock().tryLock())
+							// (!Transaction.txListLock.tryLock())
 							// {
 							// wait = true;
 							// continue;
@@ -1182,7 +1182,7 @@ public class SubBufferManager
 							}
 							catch (Exception e)
 							{
-								// Transaction.txListLock.writeLock().unlock();
+								// Transaction.txListLock.unlock();
 								lock.unlock();
 								throw e;
 							}
@@ -1199,7 +1199,7 @@ public class SubBufferManager
 							myBuffers.multiPut(txnum, bp[index]);
 							myBuffers.multiPut(txnum, bp[index2]);
 							myBuffers.multiPut(txnum, bp[index3]);
-							// Transaction.txListLock.writeLock().unlock();
+							// Transaction.txListLock.unlock();
 							lock.unlock();
 							// HRDBMSWorker.logger.debug("Short SBM pin3
 							// ending");
@@ -1281,7 +1281,7 @@ public class SubBufferManager
 
 						{
 							// if
-							// (!Transaction.txListLock.writeLock().tryLock())
+							// (!Transaction.txListLock.tryLock())
 							// {
 							// wait = true;
 							// continue;
@@ -1331,7 +1331,7 @@ public class SubBufferManager
 							}
 							catch (Exception e)
 							{
-								// Transaction.txListLock.writeLock().unlock();
+								// Transaction.txListLock.unlock();
 								lock.unlock();
 								throw e;
 							}
@@ -1348,7 +1348,7 @@ public class SubBufferManager
 							myBuffers.multiPut(txnum, bp[index]);
 							myBuffers.multiPut(txnum, bp[index2]);
 							myBuffers.multiPut(txnum, bp[index3]);
-							// Transaction.txListLock.writeLock().unlock();
+							// Transaction.txListLock.unlock();
 							lock.unlock();
 							// HRDBMSWorker.logger.debug("Short SBM pin3
 							// ending");
@@ -1407,7 +1407,7 @@ public class SubBufferManager
 
 						{
 							// if
-							// (!Transaction.txListLock.writeLock().tryLock())
+							// (!Transaction.txListLock.tryLock())
 							// {
 							// wait = true;
 							// continue;
@@ -1457,7 +1457,7 @@ public class SubBufferManager
 							}
 							catch (Exception e)
 							{
-								// Transaction.txListLock.writeLock().unlock();
+								// Transaction.txListLock.unlock();
 								lock.unlock();
 								throw e;
 							}
@@ -1473,7 +1473,7 @@ public class SubBufferManager
 							myBuffers.multiPut(txnum, bp[index]);
 							myBuffers.multiPut(txnum, bp[index2]);
 							myBuffers.multiPut(txnum, bp[index3]);
-							// Transaction.txListLock.writeLock().unlock();
+							// Transaction.txListLock.unlock();
 							lock.unlock();
 							// HRDBMSWorker.logger.debug("Long SBM pin3
 							// ending");
@@ -1532,7 +1532,7 @@ public class SubBufferManager
 
 						{
 							// if
-							// (!Transaction.txListLock.writeLock().tryLock())
+							// (!Transaction.txListLock.tryLock())
 							// {
 							// wait = true;
 							// continue;
@@ -1582,7 +1582,7 @@ public class SubBufferManager
 							}
 							catch (Exception e)
 							{
-								// Transaction.txListLock.writeLock().unlock();
+								// Transaction.txListLock.unlock();
 								lock.unlock();
 								throw e;
 							}
@@ -1598,7 +1598,7 @@ public class SubBufferManager
 							myBuffers.multiPut(txnum, bp[index]);
 							myBuffers.multiPut(txnum, bp[index2]);
 							myBuffers.multiPut(txnum, bp[index3]);
-							// Transaction.txListLock.writeLock().unlock();
+							// Transaction.txListLock.unlock();
 							lock.unlock();
 							// HRDBMSWorker.logger.debug("Long SBM pin3
 							// ending");
@@ -1640,7 +1640,7 @@ public class SubBufferManager
 					{
 						int index;
 
-						// if (!Transaction.txListLock.writeLock().tryLock())
+						// if (!Transaction.txListLock.tryLock())
 						// {
 						// wait = true;
 						// continue;
@@ -1671,7 +1671,7 @@ public class SubBufferManager
 						}
 						catch (Exception e)
 						{
-							// Transaction.txListLock.writeLock().unlock();
+							// Transaction.txListLock.unlock();
 							lock.unlock();
 							throw e;
 						}
@@ -1682,7 +1682,7 @@ public class SubBufferManager
 						final long lsn = LogManager.getLSN();
 						bp[index].pin(lsn, txnum);
 						myBuffers.multiPut(txnum, bp[index]);
-						// Transaction.txListLock.writeLock().unlock();
+						// Transaction.txListLock.unlock();
 						lock.unlock();
 						return;
 					}
@@ -1723,7 +1723,7 @@ public class SubBufferManager
 						if (index == -1)
 						{
 							// if
-							// (!Transaction.txListLock.writeLock().tryLock())
+							// (!Transaction.txListLock.tryLock())
 							// {
 							// wait = true;
 							// continue;
@@ -1756,14 +1756,14 @@ public class SubBufferManager
 							bp[index].pin(lsn, txnum);
 							myBuffers.multiPut(txnum, bp[index]);
 							lock.unlock();
-							// Transaction.txListLock.writeLock().unlock();
+							// Transaction.txListLock.unlock();
 							try
 							{
 								bp[index].assignToBlockSync(b, log);
 							}
 							catch (Exception e)
 							{
-								// Transaction.txListLock.writeLock().unlock();
+								// Transaction.txListLock.unlock();
 								lock.unlock();
 								throw e;
 							}
@@ -1823,7 +1823,7 @@ public class SubBufferManager
 						if (index == -1)
 						{
 							// if
-							// (!Transaction.txListLock.writeLock().tryLock())
+							// (!Transaction.txListLock.tryLock())
 							// {
 							// wait = true;
 							// continue;
@@ -1855,7 +1855,7 @@ public class SubBufferManager
 							final long lsn = LogManager.getLSN();
 							bp[index].pin(lsn, txnum);
 							myBuffers.multiPut(txnum, bp[index]);
-							// Transaction.txListLock.writeLock().unlock();
+							// Transaction.txListLock.unlock();
 							lock.unlock();
 							try
 							{
@@ -1863,7 +1863,7 @@ public class SubBufferManager
 							}
 							catch (Exception e)
 							{
-								// Transaction.txListLock.writeLock().unlock();
+								// Transaction.txListLock.unlock();
 								lock.unlock();
 								throw e;
 							}

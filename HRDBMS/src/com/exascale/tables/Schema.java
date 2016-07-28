@@ -43,7 +43,7 @@ import com.exascale.threads.HRDBMSThread;
 
 public class Schema
 {
-	private static final int ROWS_TO_ALLOCATE = (int)(1024 * (Page.BLOCK_SIZE * 1.0) / (128.0 * 1024.0));
+	private static final int ROWS_TO_ALLOCATE = 165;
 	private static final int ROWS_TO_ALLOCATE_COL = (int)(5500 * (Page.BLOCK_SIZE * 1.0) / (128.0 * 1024.0));
 	public static final byte TYPE_ROW = 0, TYPE_COL = 1;
 	private static Charset cs = StandardCharsets.UTF_8;
@@ -415,6 +415,7 @@ public class Schema
 			int off;
 			int index = -1;
 			rowIDToIndex = rowIDToIndexSet.get(colNum);
+			rowIDsAL = rowIDSet.get(colNum);
 			try
 			{
 				index = rowIDToIndex.get(id);
@@ -422,6 +423,7 @@ public class Schema
 			catch (Exception e)
 			{
 				HRDBMSWorker.logger.debug("Looking for rid = " + id + " in " + rowIDToIndex, e);
+				HRDBMSWorker.logger.debug("RowIDsAL is " + rowIDsAL);
 				throw e;
 			}
 			offsetArray = offsetArraySet.get(colNum);
@@ -989,6 +991,8 @@ public class Schema
 				int[][] newOA = new int[offsetArray.length * 2][1];
 				System.arraycopy(offsetArray, 0, newOA, 0, offsetArray.length);
 				newOA[rowIDsAL.size() - 1][0] = offs.get(0);
+				offsetArray = newOA;
+				p.offsetArray = offsetArray;
 				offsetArraySet.put(0, newOA);
 			}
 			else
@@ -1086,6 +1090,8 @@ public class Schema
 					int[][] newOA = new int[offsetArray.length * 2][1];
 					System.arraycopy(offsetArray, 0, newOA, 0, offsetArray.length);
 					newOA[rowIDsAL.size() - 1][0] = offs.get(pos);
+					offsetArray = newOA;
+					p.offsetArray = offsetArray;
 					offsetArraySet.put(pos, newOA);
 				}
 				else
@@ -1553,17 +1559,21 @@ public class Schema
 					y++;
 				}
 
-				if (offsetArray != null && offsetArray.length >= (y * ROWS_TO_ALLOCATE_COL))
+				if (p.offsetArray == null)
 				{
+					p.offsetArray = new int[y * ROWS_TO_ALLOCATE_COL][1];
+					offsetArray = p.offsetArray;
+					offsetArrayRows = rowIDListSize;
+					setRowIDsCT(colNum);
 				}
 				else
 				{
-					offsetArray = new int[y * ROWS_TO_ALLOCATE_COL][1];
+					rowIDsAL = p.rowIDsAL;
+					offsetArray = p.offsetArray;
+					offsetArrayRows = rowIDListSize;
 				}
-				offsetArrayRows = rowIDListSize;
 
 				int i = 0;
-				setRowIDsCT(colNum);
 				for (final RID rid : rowIDsAL)
 				{
 					if (i >= rowIDListSize)
@@ -1762,26 +1772,30 @@ public class Schema
 				y++;
 			}
 
-			if (offsetArray != null && offsetArray.length >= (y * ROWS_TO_ALLOCATE))
+			if (p.offsetArray == null)
 			{
+				p.offsetArray = new int[y * ROWS_TO_ALLOCATE][colIDListSize];
+				offsetArray = p.offsetArray;
+				offsetArrayRows = rowIDListSize;
+				
+				int row = 0;
+				while (row < rowIDListSize)
+				{
+					z = 0;
+					while (z < colIDListSize)
+					{
+						offsetArray[row][z++] = p.getMedium(pos);
+						pos += 3;
+					}
+					// p.get(pos, offsetArray[row]);
+					// pos += (4 * colIDListSize);
+					row++;
+				}
 			}
 			else
 			{
-				offsetArray = new int[y * ROWS_TO_ALLOCATE][colIDListSize];
-			}
-			offsetArrayRows = rowIDListSize;
-			int row = 0;
-			while (row < rowIDListSize)
-			{
-				z = 0;
-				while (z < colIDListSize)
-				{
-					offsetArray[row][z++] = p.getMedium(pos);
-					pos += 3;
-				}
-				// p.get(pos, offsetArray[row]);
-				// pos += (4 * colIDListSize);
-				row++;
+				offsetArray = p.offsetArray;
+				offsetArrayRows = rowIDListSize;
 			}
 		}
 		catch (Exception e)
@@ -2187,6 +2201,11 @@ public class Schema
 		{
 			headEnd = p.getMedium(4);
 		}
+		
+		if (headEnd + (Page.BLOCK_SIZE - dataStart) > (32 * 1024))
+		{
+			return null;
+		}
 
 		int start = dataStart - data;
 		int end = headEnd + head;
@@ -2216,17 +2235,11 @@ public class Schema
 		{
 			rowIDs = new RID[rowIDListSize];
 		}
-		int[] rid = new int[4];
+
+		int[] ints = p.getMediums(pos, rowIDListSize << 2);
 		while (i < rowIDListSize)
 		{
-			int z = 0;
-			while (z < 4)
-			{
-				rid[z++] = p.getMedium(pos);
-				pos += 3;
-			}
-
-			rowIDs[i] = new RID(rid[0], rid[1], rid[2], rid[3]);
+			rowIDs[i] = new RID(ints[i << 2], ints[(i << 2) + 1], ints[(i << 2) + 2], ints[(i << 2) + 3]);
 			copy.add(rowIDs[i]);
 			i++;
 		}
@@ -2239,7 +2252,8 @@ public class Schema
 		// copy = new TreeSet<RID>(new RIDComparator());
 		int i = 0;
 		int pos = rowIDListOff + 3;
-		rowIDsAL = new ArrayList<RID>(rowIDListSize);
+		p.rowIDsAL = new ArrayList<RID>(rowIDListSize);
+		rowIDsAL = p.rowIDsAL;
 		int pnum = p.block().number();
 		String pfn = p.block().fileName();
 		Block pblk = p.block();
@@ -2255,10 +2269,12 @@ public class Schema
 			}
 			mColNum = map.get(colNum);
 		}
+		
+		int[] ints = p.getMediums(pos, rowIDListSize << 1);
 
 		while (i < rowIDListSize)
 		{
-			int id = p.getMedium(pos);
+			int id = ints[i << 1];
 
 			if (!Transaction.reorder)
 			{
@@ -2269,14 +2285,14 @@ public class Schema
 				rowIDsAL.add(new RID(myNode, myDev, pnum - mColNum, id));
 			}
 			// copy.add(rowIDsAL.get(i));
-			offsetArray[i][0] = p.getMedium(pos + 3);
+			//offsetArray[i][0] = p.getMedium(pos + 3);
+			offsetArray[i][0] = ints[(i << 1) + 1];
 			if (offsetArray[i][0] == 0x00ffffff)
 			{
 				offsetArray[i][0] = -1;
 			}
 
 			i++;
-			pos += 6;
 		}
 
 		rowIDsSet = true;
@@ -2433,19 +2449,20 @@ public class Schema
 		}
 
 		int k = 0;
+		ByteBuffer temp = ByteBuffer.allocate(offsetArray[0].length * 3 * offsetArrayRows);
 		while (k < offsetArrayRows)
 		{
 			int[] row = offsetArray[k];
-			ByteBuffer temp = ByteBuffer.allocate(row.length * 3);
 			int z = 0;
 			while (z < row.length)
 			{
 				putMedium(temp, row[z++]);
 			}
-			System.arraycopy(temp.array(), 0, after, i, 3 * row.length);
-			i += (3 * row.length);
+			
 			k++;
 		}
+		
+		System.arraycopy(temp.array(), 0, after, i, offsetArray[0].length * 3 * offsetArrayRows);
 
 		final InsertLogRec rec = tx.insert(before, after, 1, p.block());
 		p.write(1, after, tx.number(), rec.lsn());
@@ -2499,6 +2516,7 @@ public class Schema
 			}
 
 			offsetArray = newOA;
+			p.offsetArray = newOA;
 			offsetArrayRows++;
 		}
 	}
@@ -4954,14 +4972,30 @@ public class Schema
 
 				pos += 3;
 				s.rowIDToIndex = new LinkedHashMap<RID, Integer>((int)(s.rowIDListSize * 1.35));
-				s.offsetArray = new int[s.rowIDListSize][1];
-				s.offsetArrayRows = s.rowIDListSize;
-				int i = 0;
-				RID[] exact = s.setRowIDsCTExact(colNum);
-				for (final RID rid : exact)
+				
+				if (s.p.offsetArray == null)
 				{
-					s.rowIDToIndex.put(rid, i);
-					i++;
+					s.offsetArray = new int[s.rowIDListSize][1];
+					s.offsetArrayRows = s.rowIDListSize;
+					int i = 0;
+					RID[] exact = s.setRowIDsCTExact(colNum);
+					for (final RID rid : exact)
+					{
+						s.rowIDToIndex.put(rid, i);
+						i++;
+					}
+				}
+				else
+				{
+					s.offsetArray = s.p.offsetArray;
+					s.offsetArrayRows = s.rowIDListSize;
+					int i = 0;
+					RID[] exact = s.setRowIDsCTExact(colNum);
+					for (final RID rid : exact)
+					{
+						s.rowIDToIndex.put(rid, i);
+						i++;
+					}
 				}
 
 				Map<Integer, DataType> colTypesBackup = s.colTypes;

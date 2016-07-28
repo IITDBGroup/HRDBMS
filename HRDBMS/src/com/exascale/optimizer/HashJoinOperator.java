@@ -10,11 +10,14 @@ import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.Vector;
@@ -266,7 +269,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		{
 			if (key instanceof ArrayList)
 			{
-				byte[] data = toBytes(key);
+				byte[] data = toBytesForHash((ArrayList<Object>)key);
 				eHash = MurmurHash.hash64(data, data.length);
 			}
 			else
@@ -277,6 +280,43 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		}
 
 		return eHash;
+	}
+	
+	private static byte[] toBytesForHash(ArrayList<Object> key)
+	{
+		StringBuilder sb = new StringBuilder();
+		for (Object o : key)
+		{
+			if (o instanceof Double)
+			{
+				DecimalFormat df = new DecimalFormat("0", DecimalFormatSymbols.getInstance(Locale.ENGLISH));
+				df.setMaximumFractionDigits(340); //340 = DecimalFormat.DOUBLE_FRACTION_DIGITS
+
+				sb.append(df.format((Double)o));
+				sb.append((char)0);
+			}
+			else if (o instanceof Number)
+			{
+				sb.append(o);
+				sb.append((char)0);
+			}
+			else
+			{
+				sb.append(o.toString());
+				sb.append((char)0);
+			}
+		}
+		
+		final int z = sb.length();
+		byte[] retval = new byte[z];
+		int i = 0;
+		while (i < z)
+		{
+			retval[i] = (byte)sb.charAt(i);
+			i++;
+		}
+		
+		return retval;
 	}
 
 	private static void putCInt(ByteBuffer bb, int val)
@@ -1025,7 +1065,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 	@Override
 	public void start() throws Exception
 	{
-		HRDBMSWorker.logger.debug("Starting HJO(" + leftChildCard + ", " + rightChildCard + ")");
+		//HRDBMSWorker.logger.debug("Starting HJO(" + leftChildCard + ", " + rightChildCard + ")");
 		NUM_RT_THREADS = ResourceManager.cpus;
 		NUM_PTHREADS = ResourceManager.cpus;
 		readersDone = false;
@@ -1381,11 +1421,11 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 					}
 				}
 
-				int pri = Thread.MAX_PRIORITY - epThreads.size();
-				if (pri < Thread.NORM_PRIORITY)
-				{
-					pri = Thread.NORM_PRIORITY;
-				}
+				//int pri = Thread.MAX_PRIORITY - epThreads.size();
+				//if (pri < Thread.NORM_PRIORITY)
+				//{
+				//	pri = Thread.NORM_PRIORITY;
+				//}
 				// ept.setPriority(pri);
 				ept.start();
 				epThreads.add(ept);
@@ -1394,16 +1434,16 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 				{
 					ReadDataThread left2 = new ReadDataThread(channels1.get(i), types1, lbins, inMemBins, i);
 					HashDataThread right2 = new HashDataThread(channels2.get(i), types2, rbins, inMemBins, i);
-					int lp = Thread.MAX_PRIORITY - leftThreads.size();
-					int rp = Thread.MAX_PRIORITY - rightThreads.size();
-					if (lp < Thread.NORM_PRIORITY)
-					{
-						lp = Thread.NORM_PRIORITY;
-					}
-					if (rp < Thread.NORM_PRIORITY)
-					{
-						rp = Thread.NORM_PRIORITY;
-					}
+					//int lp = Thread.MAX_PRIORITY - leftThreads.size();
+					//int rp = Thread.MAX_PRIORITY - rightThreads.size();
+					//if (lp < Thread.NORM_PRIORITY)
+					//{
+					//	lp = Thread.NORM_PRIORITY;
+					//}
+					//if (rp < Thread.NORM_PRIORITY)
+					//{
+					//	rp = Thread.NORM_PRIORITY;
+					//}
 					// left2.setPriority(lp);
 					// right2.setPriority(rp);
 					i++;

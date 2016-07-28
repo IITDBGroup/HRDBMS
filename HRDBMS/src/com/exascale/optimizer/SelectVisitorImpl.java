@@ -467,12 +467,32 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 		{
 			return new Insert((TableName)visit(ctx.tableName()), (FullSelect)visit(ctx.fullSelect()));
 		}
-		ArrayList<Expression> exps = new ArrayList<Expression>();
-		for (SelectParser.ExpressionContext exp : ctx.expression())
+		
+		if (ctx.valuesList().size() == 1)
 		{
-			exps.add((Expression)visit(exp));
+			ArrayList<Expression> exps = new ArrayList<Expression>();
+			for (SelectParser.ExpressionContext exp : ctx.valuesList().get(0).expression())
+			{
+				exps.add((Expression)visit(exp));
+			}
+			return new Insert((TableName)visit(ctx.tableName()), exps);
 		}
-		return new Insert((TableName)visit(ctx.tableName()), exps);
+		else
+		{
+			ArrayList<ArrayList<Expression>> mExps = new ArrayList<ArrayList<Expression>>();
+			for (SelectParser.ValuesListContext ctx2 : ctx.valuesList())
+			{
+				ArrayList<Expression> exps = new ArrayList<Expression>();
+				for (SelectParser.ExpressionContext exp : ctx2.expression())
+				{
+					exps.add((Expression)visit(exp));
+				}
+				
+				mExps.add(exps);
+			}
+			
+			return new Insert((TableName)visit(ctx.tableName()), mExps, true);
+		}
 	}
 
 	@Override

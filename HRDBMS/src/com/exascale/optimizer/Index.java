@@ -391,7 +391,13 @@ public final class Index implements Serializable
 	{
 		setEqualsPosMulti(keys);
 		IndexRecord rec = line;
-		if (rec.keysMatch(keys))
+		
+		while (!rec.isNull() && rec.isTombstone())
+		{
+			rec = rec.next();
+		}
+		
+		if (!rec.isNull() && rec.keysMatch(keys))
 		{
 			return rec;
 		}
@@ -2317,25 +2323,24 @@ public final class Index implements Serializable
 		int headOff = p.getInt(13);
 		line = new IndexRecord(fileName, headBlock, headOff, tx);
 		// DEBUG
-		// HRDBMSWorker.logger.debug("Doing partial positioning for " + val);
+		//HRDBMSWorker.logger.debug("Doing partial positioning for " + val);
 		// DEBUG
-		IndexRecord prev = null;
+		IndexRecord prev = line;
 
 		while (true)
 		{
-			// line is start rec
-			int cmp = 0;
+			int cmp = 1;
+			
 			if (!line.isStart())
 			{
 				ArrayList<Object> k = line.getKeys(types);
 				// DEBUG
-				// HRDBMSWorker.logger.debug("Key is " + k);
+				//HRDBMSWorker.logger.debug("Key is " + k);
 				// DEBUG
 				Object key = k.get(keys.indexOf(col));
 				// DEBUG
-				// HRDBMSWorker.logger.debug("Pulled out " + key);
+				//HRDBMSWorker.logger.debug("Pulled out " + key);
 				// DEBUG
-
 				if (val instanceof Long && key instanceof Integer)
 				{
 					key = ((Integer)key).longValue();
@@ -2346,66 +2351,51 @@ public final class Index implements Serializable
 				}
 				cmp = ((Comparable)val).compareTo(key);
 				// DEBUG
-				// HRDBMSWorker.logger.debug("Comparing " + val + " to " + key);
+				//HRDBMSWorker.logger.debug("Comparing " + val + " to " + key);
 				// HRDBMSWorker.logger.debug("Result is " + cmp);
 				// DEBUG
-
-				if (cmp > 0)
-				{
-					IndexRecord next = line.next();
-					if (next.isNull())
-					{
-						IndexRecord down = line.getDown();
-						if (down.isNull())
-						{
-							return;
-						}
-						else
-						{
-							line = down;
-							// prev = null;
-						}
-					}
-					else
-					{
-						prev = line;
-						line = next;
-					}
-				}
-				else
-				{
-					IndexRecord down = prev.getDown();
-					if (down.isNull())
-					{
-						return;
-					}
-					else
-					{
-						prev = down;
-						line = down.next();
-					}
-				}
 			}
-			else
+
+			if (cmp > 0)
 			{
 				IndexRecord next = line.next();
 				if (next.isNull())
 				{
+					//HRDBMSWorker.logger.debug("Hit end of level");
 					IndexRecord down = line.getDown();
 					if (down.isNull())
 					{
+						//HRDBMSWorker.logger.debug("Already at leaf");
 						return;
 					}
 					else
 					{
 						line = down;
-						// prev = null;
+						prev = down;
+						//HRDBMSWorker.logger.debug("Moving down");
 					}
 				}
 				else
 				{
 					prev = line;
 					line = next;
+					//HRDBMSWorker.logger.debug("Moving right");
+				}
+			}
+			else
+			{
+				IndexRecord down = prev.getDown();
+
+				if (down.isNull())
+				{
+					//HRDBMSWorker.logger.debug("Already at leaf");
+					return;
+				}
+				else
+				{
+					line = down;
+					prev = down;
+					//HRDBMSWorker.logger.debug("Moving down");
 				}
 			}
 		}
@@ -2415,17 +2405,46 @@ public final class Index implements Serializable
 	{
 		Block b = new Block(fileName, 0);
 		Page p = myPages.get(b);
-		tx.requestPage(b);
-		p = tx.getPage(b);
+		
+		if (p == null)
+		{
+			LockManager.sLock(b, tx.number());
+			tx.requestPage(b);
+			p = tx.getPage(b);
+		}
+		
 		int headBlock = p.getInt(9);
 		int headOff = p.getInt(13);
 		line = new IndexRecord(fileName, headBlock, headOff, tx);
-		IndexRecord prev = null;
+		IndexRecord prev = line;
+		
+		//HRDBMSWorker.logger.debug("Looking for " + vals);
 
 		while (true)
 		{
-			// line is start rec
-			int cmp = 0;
+			//if (!line.isStart())
+			//{
+			//	HRDBMSWorker.logger.debug("Line is " + line.getKeys(types));
+			//}
+			//else
+			//{
+			//	HRDBMSWorker.logger.debug("Line is start");
+			//}
+			//if (prev == null)
+			//{
+			//	HRDBMSWorker.logger.debug("Prev is null");
+			//}
+			//else if (!prev.isStart())
+			//{
+			//	HRDBMSWorker.logger.debug("Prev is " + prev.getKeys(types));
+			//}
+			//else
+			//{
+			//	HRDBMSWorker.logger.debug("Prev is start");
+			//}
+			
+			int cmp = 1;
+			
 			if (!line.isStart())
 			{
 				cmp = compare(vals, line.getKeys(types));
@@ -2434,93 +2453,45 @@ public final class Index implements Serializable
 				// line.getKeys(types));
 				// HRDBMSWorker.logger.debug("Result is " + cmp);
 				// DEBUG
-				if (cmp > 0)
-				{
-					IndexRecord next = line.next();
-					if (next.isNull())
-					{
-						IndexRecord down = line.getDown();
-						if (down.isNull())
-						{
-							return;
-						}
-						else
-						{
-							line = down;
-							// prev = null;
-						}
-					}
-					else
-					{
-						prev = line;
-						line = next;
-					}
-				}
-				else if (cmp == 0)
-				{
-					if (isUnique())
-					{
-						while (true)
-						{
-							IndexRecord down = line.getDown();
-							if (down.isNull())
-							{
-								return;
-							}
-							else
-							{
-								line = down;
-							}
-						}
-					}
-					else
-					{
-						IndexRecord down = prev.getDown();
-						if (down.isNull())
-						{
-							return;
-						}
-						else
-						{
-							prev = down;
-							line = down.next();
-						}
-					}
-				}
-				else
-				{
-					IndexRecord down = prev.getDown();
-					if (down.isNull())
-					{
-						return;
-					}
-					else
-					{
-						prev = down;
-						line = down.next();
-					}
-				}
 			}
-			else
+			if (cmp > 0)
 			{
 				IndexRecord next = line.next();
 				if (next.isNull())
 				{
+					//HRDBMSWorker.logger.debug("At end of level");
 					IndexRecord down = line.getDown();
 					if (down.isNull())
 					{
+						//HRDBMSWorker.logger.debug("At leaf so returning");
 						return;
 					}
 					else
 					{
+						//HRDBMSWorker.logger.debug("Moving down");
 						line = down;
-						// prev = null;
+						prev = down;
 					}
 				}
 				else
 				{
+					//HRDBMSWorker.logger.debug("Moving right");
 					prev = line;
 					line = next;
+				}
+			}
+			else
+			{
+				//HRDBMSWorker.logger.debug("Moving down");
+				IndexRecord down = prev.getDown();
+				if (down.isNull())
+				{
+					return;
+				}
+				else
+				{
+					prev = down;
+					line = down;
 				}
 			}
 		}
@@ -2554,12 +2525,11 @@ public final class Index implements Serializable
 		int headBlock = p.getInt(9);
 		int headOff = p.getInt(13);
 		line = new IndexRecord(fileName, headBlock, headOff, tx, true);
-		IndexRecord prev = null;
+		IndexRecord prev = line;
 
 		while (true)
 		{
-			// line is start rec
-			int cmp = 0;
+			int cmp = 1;
 			if (!line.isStart())
 			{
 				cmp = compare(vals, line.getKeys(types));
@@ -2568,74 +2538,8 @@ public final class Index implements Serializable
 				// line.getKeys(types));
 				// HRDBMSWorker.logger.debug("Result is " + cmp);
 				// DEBUG
-				if (cmp > 0)
-				{
-					IndexRecord next = line.next(true);
-					if (next.isNull())
-					{
-						IndexRecord down = line.getDown(true);
-						if (down.isNull())
-						{
-							return;
-						}
-						else
-						{
-							line = down;
-							// prev = null;
-						}
-					}
-					else
-					{
-						prev = line;
-						line = next;
-					}
-				}
-				else if (cmp == 0)
-				{
-					if (isUnique())
-					{
-						while (true)
-						{
-							IndexRecord down = line.getDown(true);
-							if (down.isNull())
-							{
-								return;
-							}
-							else
-							{
-								line = down;
-							}
-						}
-					}
-					else
-					{
-						IndexRecord down = prev.getDown(true);
-						if (down.isNull())
-						{
-							return;
-						}
-						else
-						{
-							prev = down;
-							line = down.next(true);
-						}
-					}
-				}
-				else
-				{
-					IndexRecord down = prev.getDown(true);
-					if (down.isNull())
-					{
-						return;
-					}
-					else
-					{
-						prev = down;
-						line = down.next(true);
-					}
-				}
 			}
-			else
+			if (cmp > 0)
 			{
 				IndexRecord next = line.next(true);
 				if (next.isNull())
@@ -2648,13 +2552,26 @@ public final class Index implements Serializable
 					else
 					{
 						line = down;
-						// prev = null;
+						prev = down;
 					}
 				}
 				else
 				{
 					prev = line;
 					line = next;
+				}
+			}
+			else
+			{
+				IndexRecord down = prev.getDown(true);
+				if (down.isNull())
+				{
+					return;
+				}
+				else
+				{
+					prev = down;
+					line = down;
 				}
 			}
 		}
@@ -2718,6 +2635,7 @@ public final class Index implements Serializable
 			switchOp();
 		}
 
+		//HRDBMSWorker.logger.debug("OP = " + op + ", secondary size = " + secondary.size() + ", keys size = " + keys.size());
 		if (op.equals("E") && secondary.size() > 0 && (secondary.size() + 1) == keys.size())
 		{
 			boolean multiPos = true;
@@ -2735,12 +2653,14 @@ public final class Index implements Serializable
 					}
 					else
 					{
+						//HRDBMSWorker.logger.debug("COL TO COL COMPARISON: " + f2);
 						multiPos = false;
 						break;
 					}
 				}
 				else
 				{
+					//HRDBMSWorker.logger.debug("Inequality comparison: " + f2);
 					multiPos = false;
 					break;
 				}
@@ -3062,11 +2982,11 @@ public final class Index implements Serializable
 		public IndexRecord(String file, int block, int offset, Transaction tx) throws Exception
 		{
 			// DEBUG
-			if (block > 16000000)
-			{
-				Exception e = new Exception();
-				HRDBMSWorker.logger.debug("Unusually high block num requested in IndexRecord constructor", e);
-			}
+			//if (block > 16000000)
+			//{
+			//	Exception e = new Exception();
+			//	HRDBMSWorker.logger.debug("Unusually high block num requested in IndexRecord constructor", e);
+			//}
 			// DEBUG
 
 			this.tx = tx;
@@ -3101,11 +3021,11 @@ public final class Index implements Serializable
 		public IndexRecord(String file, int block, int offset, Transaction tx, boolean x) throws Exception
 		{
 			// DEBUG
-			if (block > 16000000)
-			{
-				Exception e = new Exception();
-				HRDBMSWorker.logger.debug("Unusually high block num requested in IndexRecord constructor", e);
-			}
+			//if (block > 16000000)
+			//{
+			//	Exception e = new Exception();
+			//	HRDBMSWorker.logger.debug("Unusually high block num requested in IndexRecord constructor", e);
+			//}
 			// DEBUG
 
 			this.tx = tx;
@@ -3147,11 +3067,11 @@ public final class Index implements Serializable
 		public IndexRecord(String file, int block, int offset, Transaction tx, boolean x, Page p) throws Exception
 		{
 			// DEBUG
-			if (block > 16000000)
-			{
-				Exception e = new Exception();
-				HRDBMSWorker.logger.debug("Unusually high block num requested in IndexRecord constructor", e);
-			}
+			//if (block > 16000000)
+			//{
+			//	Exception e = new Exception();
+			//	HRDBMSWorker.logger.debug("Unusually high block num requested in IndexRecord constructor", e);
+			//}
 			// DEBUG
 
 			this.tx = tx;
@@ -3343,6 +3263,7 @@ public final class Index implements Serializable
 						byte[] bytes = new byte[length];
 						p.get(o, bytes);
 						String value = (String)unsafe.allocateInstance(String.class);
+						@SuppressWarnings("restriction")
 						int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(bytes, 0, length, ca);
 						if (clen == ca.length)
 						{

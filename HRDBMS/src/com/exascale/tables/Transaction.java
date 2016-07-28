@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 import com.exascale.exceptions.LockAbortException;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
@@ -28,7 +29,7 @@ public class Transaction implements Serializable
 {
 	public static final int ISOLATION_RR = 0, ISOLATION_CS = 1, ISOLATION_UR = 2;
 	private static AtomicLong nextTxNum;
-	public static HashMap<Long, Long> txList = new HashMap<Long, Long>();
+	public static ConcurrentHashMap<Long, Long> txList = new ConcurrentHashMap<Long, Long>();
 	public static final boolean reorder = HRDBMSWorker.getHParms().getProperty("enable_col_reordering").equals("true");
 
 	static
@@ -53,7 +54,7 @@ public class Transaction implements Serializable
 		}
 	}
 
-	public static ScalableStampedReentrantRWLock txListLock = new ScalableStampedReentrantRWLock();
+	public static Object txListLock = new Object();
 
 	public ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
 
@@ -70,11 +71,12 @@ public class Transaction implements Serializable
 		}
 		this.level = level;
 		txnum = nextTx();
-		Transaction.txListLock.writeLock().lock();
+		//Transaction.txListLock.lock();
+		synchronized(txListLock)
 		{
 			txList.put(txnum, txnum);
 		}
-		Transaction.txListLock.writeLock().unlock();
+		//Transaction.txListLock.unlock();
 		LogRec rec = new StartLogRec(txnum);
 		LogManager.write(rec);
 		String filename = HRDBMSWorker.getHParms().getProperty("log_dir");
@@ -144,7 +146,8 @@ public class Transaction implements Serializable
 		{
 			sbm.lock.lock();
 		}
-		Transaction.txListLock.writeLock().lock();
+		//Transaction.txListLock.lock();
+		synchronized(txListLock)
 		{
 			try
 			{
@@ -155,7 +158,7 @@ public class Transaction implements Serializable
 			}
 			catch (Exception e)
 			{
-				Transaction.txListLock.writeLock().unlock();
+				//Transaction.txListLock.unlock();
 				for (SubBufferManager sbm : BufferManager.managers)
 				{
 					sbm.lock.unlock();
@@ -163,7 +166,7 @@ public class Transaction implements Serializable
 				throw e;
 			}
 		}
-		Transaction.txListLock.writeLock().unlock();
+		//Transaction.txListLock.unlock();
 		for (SubBufferManager sbm : BufferManager.managers)
 		{
 			sbm.trimBP();
@@ -178,7 +181,8 @@ public class Transaction implements Serializable
 		{
 			sbm.lock.lock();
 		}
-		Transaction.txListLock.writeLock().lock();
+		//Transaction.txListLock.lock();
+		synchronized(txListLock)
 		{
 			try
 			{
@@ -189,7 +193,7 @@ public class Transaction implements Serializable
 			}
 			catch (Exception e)
 			{
-				Transaction.txListLock.writeLock().unlock();
+				//Transaction.txListLock.unlock();
 				for (SubBufferManager sbm : BufferManager.managers)
 				{
 					sbm.lock.unlock();
@@ -197,7 +201,7 @@ public class Transaction implements Serializable
 				throw e;
 			}
 		}
-		Transaction.txListLock.writeLock().unlock();
+		//Transaction.txListLock.unlock();
 		for (SubBufferManager sbm : BufferManager.managers)
 		{
 			sbm.trimBP();
@@ -207,24 +211,28 @@ public class Transaction implements Serializable
 
 	public DeleteLogRec delete(byte[] before, byte[] after, int off, Block b) throws Exception
 	{
-		Transaction.txListLock.writeLock().lock();
+		if (!txList.containsKey(txnum))
 		{
-			try
+			//Transaction.txListLock.lock();
+			synchronized(txListLock)
 			{
-				if (!txList.containsKey(txnum))
+				try
 				{
-					txList.put(txnum, txnum);
-					LogRec rec = new StartLogRec(txnum);
-					LogManager.write(rec);
+					if (!txList.containsKey(txnum))
+					{
+						txList.put(txnum, txnum);
+						LogRec rec = new StartLogRec(txnum);
+						LogManager.write(rec);
+					}
+				}
+				catch (Exception e)
+				{
+					//Transaction.txListLock.unlock();
+					throw e;
 				}
 			}
-			catch (Exception e)
-			{
-				Transaction.txListLock.writeLock().unlock();
-				throw e;
-			}
+			//Transaction.txListLock.unlock();
 		}
-		Transaction.txListLock.writeLock().unlock();
 		return LogManager.delete(txnum, b, off, before, after);
 	}
 
@@ -391,24 +399,28 @@ public class Transaction implements Serializable
 
 	public InsertLogRec insert(byte[] before, byte[] after, int off, Block b) throws Exception
 	{
-		Transaction.txListLock.writeLock().lock();
+		if (!txList.containsKey(txnum))
 		{
-			try
+			//Transaction.txListLock.lock();
+			synchronized(txListLock)
 			{
-				if (!txList.containsKey(txnum))
+				try
 				{
-					txList.put(txnum, txnum);
-					LogRec rec = new StartLogRec(txnum);
-					LogManager.write(rec);
+					if (!txList.containsKey(txnum))
+					{
+						txList.put(txnum, txnum);
+						LogRec rec = new StartLogRec(txnum);
+						LogManager.write(rec);
+					}
+				}
+				catch (Exception e)
+				{
+					//Transaction.txListLock.unlock();
+					throw e;
 				}
 			}
-			catch (Exception e)
-			{
-				Transaction.txListLock.writeLock().unlock();
-				throw e;
-			}
+			//Transaction.txListLock.unlock();
 		}
-		Transaction.txListLock.writeLock().unlock();
 		return LogManager.insert(txnum, b, off, before, after);
 	}
 
@@ -568,7 +580,8 @@ public class Transaction implements Serializable
 			sbm.lock.lock();
 		}
 
-		Transaction.txListLock.writeLock().lock();
+		//Transaction.txListLock.lock();
+		synchronized(txListLock)
 		{
 			try
 			{
@@ -577,7 +590,7 @@ public class Transaction implements Serializable
 			}
 			catch (Exception e)
 			{
-				Transaction.txListLock.writeLock().unlock();
+				//Transaction.txListLock.unlock();
 				for (SubBufferManager sbm : BufferManager.managers)
 				{
 					sbm.lock.unlock();
@@ -585,7 +598,7 @@ public class Transaction implements Serializable
 				throw e;
 			}
 		}
-		Transaction.txListLock.writeLock().unlock();
+		//Transaction.txListLock.unlock();
 		for (SubBufferManager sbm : BufferManager.managers)
 		{
 			sbm.lock.unlock();
@@ -902,7 +915,8 @@ public class Transaction implements Serializable
 		{
 			sbm.lock.lock();
 		}
-		Transaction.txListLock.writeLock().lock();
+		//Transaction.txListLock.lock();
+		synchronized(txListLock)
 		{
 			try
 			{
@@ -920,7 +934,7 @@ public class Transaction implements Serializable
 			}
 			catch (Exception e)
 			{
-				Transaction.txListLock.writeLock().unlock();
+				//Transaction.txListLock.unlock();
 				for (SubBufferManager sbm : BufferManager.managers)
 				{
 					sbm.lock.unlock();
@@ -928,7 +942,7 @@ public class Transaction implements Serializable
 				throw e;
 			}
 		}
-		Transaction.txListLock.writeLock().unlock();
+		//Transaction.txListLock.unlock();
 		for (SubBufferManager sbm : BufferManager.managers)
 		{
 			sbm.lock.unlock();
@@ -942,24 +956,28 @@ public class Transaction implements Serializable
 
 	public TruncateLogRec truncate(Block b) throws Exception
 	{
-		Transaction.txListLock.writeLock().lock();
+		if (!txList.containsKey(txnum))
 		{
-			try
+			//Transaction.txListLock.lock();
+			synchronized(txListLock)
 			{
-				if (!txList.containsKey(txnum))
+				try
 				{
-					txList.put(txnum, txnum);
-					LogRec rec = new StartLogRec(txnum);
-					LogManager.write(rec);
+					if (!txList.containsKey(txnum))
+					{
+						txList.put(txnum, txnum);
+						LogRec rec = new StartLogRec(txnum);
+						LogManager.write(rec);
+					}
+				}
+				catch (Exception e)
+				{
+					//Transaction.txListLock.unlock();
+					throw e;
 				}
 			}
-			catch (Exception e)
-			{
-				Transaction.txListLock.writeLock().unlock();
-				throw e;
-			}
+			//Transaction.txListLock.unlock();
 		}
-		Transaction.txListLock.writeLock().unlock();
 		return LogManager.truncate(txnum, b);
 	}
 

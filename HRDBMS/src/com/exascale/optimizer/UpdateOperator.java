@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -18,6 +19,7 @@ import java.util.concurrent.locks.LockSupport;
 import com.exascale.filesystem.RID;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.HJOMultiHashMap;
 import com.exascale.misc.MultiHashMap;
 import com.exascale.optimizer.MetaData.PartitionMetaData;
 import com.exascale.tables.Plan;
@@ -38,8 +40,8 @@ public final class UpdateOperator implements Operator, Serializable
 	private final String table;
 	private final AtomicInteger num = new AtomicInteger(0);
 	private boolean done = false;
-	private MultiHashMap map = new MultiHashMap<Integer, RIDAndIndexKeys>();
-	private MultiHashMap map2 = new MultiHashMap<Integer, ArrayList<Object>>();
+	private HJOMultiHashMap map = new HJOMultiHashMap<Integer, RIDAndIndexKeys>();
+	private HJOMultiHashMap map2 = new HJOMultiHashMap<Integer, ArrayList<Object>>();
 	private Transaction tx;
 	private ArrayList<Column> cols;
 	private ArrayList<String> buildList;
@@ -516,21 +518,21 @@ public final class UpdateOperator implements Operator, Serializable
 		for (Object o : map.getKeySet())
 		{
 			int node = (Integer)o;
-			Set<RIDAndIndexKeys> list = map.get(node);
-			Set<ArrayList<Object>> list2 = map2.get(node);
-			map2.remove(node);
+			List<RIDAndIndexKeys> list = map.get(node);
+			List<ArrayList<Object>> list2 = map2.get(node);
+			map2.multiRemove(node);
 			if (node == -1)
 			{
 				ArrayList<Integer> coords = MetaData.getCoordNodes();
 
 				for (Integer coord : coords)
 				{
-					threads.add(new FlushThread(list, indexes, coord, list2, cols2Pos, spmd));
+					threads.add(new FlushThread(list, indexes, coord, list2, cols2Pos, spmd, pos2Col, cols2Types, type));
 				}
 			}
 			else
 			{
-				threads.add(new FlushThread(list, indexes, node, list2, cols2Pos, spmd));
+				threads.add(new FlushThread(list, indexes, node, list2, cols2Pos, spmd, pos2Col, cols2Types, type));
 			}
 		}
 
@@ -543,7 +545,7 @@ public final class UpdateOperator implements Operator, Serializable
 		for (Object o : map2.getKeySet())
 		{
 			int node = (Integer)o;
-			Set<ArrayList<Object>> list = map2.get(node);
+			List<ArrayList<Object>> list = map2.get(node);
 			if (node == -1)
 			{
 				ArrayList<Integer> coords = MetaData.getCoordNodes();
@@ -630,15 +632,18 @@ public final class UpdateOperator implements Operator, Serializable
 
 	private class FlushThread extends HRDBMSThread
 	{
-		private final Set<RIDAndIndexKeys> list;
+		private final List<RIDAndIndexKeys> list;
 		private final ArrayList<String> indexes;
 		private boolean ok = true;
 		private final int node;
-		private final Set<ArrayList<Object>> list2;
+		private final List<ArrayList<Object>> list2;
 		private final HashMap<String, Integer> cols2Pos;
 		private final PartitionMetaData pmd;
+		private final HashMap<String, String> cols2Types;
+		private final int type;
+		private final TreeMap<Integer, String> pos2Col;
 
-		public FlushThread(Set<RIDAndIndexKeys> list, ArrayList<String> indexes, int node, Set<ArrayList<Object>> list2, HashMap<String, Integer> cols2Pos, PartitionMetaData pmd)
+		public FlushThread(List<RIDAndIndexKeys> list, ArrayList<String> indexes, int node, List<ArrayList<Object>> list2, HashMap<String, Integer> cols2Pos, PartitionMetaData pmd, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type)
 		{
 			this.list = list;
 			this.indexes = indexes;
@@ -646,6 +651,9 @@ public final class UpdateOperator implements Operator, Serializable
 			this.list2 = list2;
 			this.cols2Pos = cols2Pos;
 			this.pmd = pmd;
+			this.pos2Col = pos2Col;
+			this.cols2Types = cols2Types;
+			this.type = type;
 		}
 
 		public boolean getOK()
@@ -681,6 +689,7 @@ public final class UpdateOperator implements Operator, Serializable
 				out.write(longToBytes(tx.number()));
 				out.write(stringToBytes(schema));
 				out.write(stringToBytes(table));
+				out.write(intToBytes(type));
 				ObjectOutputStream objOut = new ObjectOutputStream(out);
 				objOut.writeObject(indexes);
 				objOut.writeObject(new ArrayList(list));
@@ -690,6 +699,8 @@ public final class UpdateOperator implements Operator, Serializable
 				objOut.writeObject(new ArrayList(list2));
 				objOut.writeObject(cols2Pos);
 				objOut.writeObject(pmd);
+				objOut.writeObject(pos2Col);
+				objOut.writeObject(cols2Types);
 				objOut.flush();
 				out.flush();
 				getConfirmation(sock);
@@ -760,7 +771,7 @@ public final class UpdateOperator implements Operator, Serializable
 
 	private class FlushThread2 extends HRDBMSThread
 	{
-		private final Set<ArrayList<Object>> list;
+		private final List<ArrayList<Object>> list;
 		private final ArrayList<String> indexes;
 		private boolean ok = true;
 		private final int node;
@@ -770,7 +781,7 @@ public final class UpdateOperator implements Operator, Serializable
 		private final HashMap<String, String> cols2Types;
 		private final int type;
 
-		public FlushThread2(Set<ArrayList<Object>> list, ArrayList<String> indexes, int node, HashMap<String, Integer> cols2Pos, PartitionMetaData spmd, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type)
+		public FlushThread2(List<ArrayList<Object>> list, ArrayList<String> indexes, int node, HashMap<String, Integer> cols2Pos, PartitionMetaData spmd, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type)
 		{
 			this.list = list;
 			this.indexes = indexes;
@@ -816,20 +827,31 @@ public final class UpdateOperator implements Operator, Serializable
 				out.write(stringToBytes(schema));
 				out.write(stringToBytes(table));
 				out.write(intToBytes(type));
-				ObjectOutputStream objOut = new ObjectOutputStream(out);
-				objOut.writeObject(indexes);
-				objOut.writeObject(new ArrayList(list));
-				objOut.writeObject(keys);
-				objOut.writeObject(types);
-				objOut.writeObject(orders);
-				objOut.writeObject(cols2Pos);
-				objOut.writeObject(spmd);
-				objOut.writeObject(pos2Col);
-				objOut.writeObject(cols2Types);
-				objOut.flush();
+				out.write(stringToBytes(spmd.getNGExp()));
+				out.write(stringToBytes(spmd.getNExp()));
+				out.write(stringToBytes(spmd.getDExp()));
+				IdentityHashMap<Object, Long> prev = new IdentityHashMap<Object, Long>();
+				OperatorUtils.serializeALS(indexes, out, prev);
+				OperatorUtils.serializeALALO(new ArrayList(list), out, prev);
+				OperatorUtils.serializeALALS(keys, out, prev);
+				OperatorUtils.serializeALALS(types, out, prev);
+				OperatorUtils.serializeALALB(orders, out, prev);
+				OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+				OperatorUtils.serializeTM(pos2Col, out, prev);
+				OperatorUtils.serializeStringHM(cols2Types, out, prev);
+				//ObjectOutputStream objOut = new ObjectOutputStream(out);
+				//objOut.writeObject(indexes);
+				//objOut.writeObject(new ArrayList(list));
+				//objOut.writeObject(keys);
+				//objOut.writeObject(types);
+				//objOut.writeObject(orders);
+				//objOut.writeObject(cols2Pos);
+				//objOut.writeObject(pos2Col);
+				//objOut.writeObject(cols2Types);
+				//objOut.flush();
 				out.flush();
 				getConfirmation(sock);
-				objOut.close();
+				//objOut.close();
 				sock.close();
 			}
 			catch (Exception e)
