@@ -46,7 +46,8 @@ public class Page
 	private volatile long timePinned = -1;
 	private volatile long lsn;
 	private ScalableStampedReentrantRWLock lock;
-
+	public ArrayList<RID> rowIDsAL;
+	public int[][] offsetArray;
 	private volatile boolean readDone = false;
 
 	public Page()
@@ -70,6 +71,8 @@ public class Page
 	public ReadThread assignToBlock(Block b, boolean log) throws Exception
 	{
 		lock.writeLock().lock();
+		rowIDsAL = null;
+		offsetArray = null;
 		if (modifiedBy >= 0)
 		{
 			if (b != null)
@@ -97,6 +100,8 @@ public class Page
 	public ReadThread assignToBlock(Block b, boolean log, ArrayList<Integer> cols, int layoutSize) throws Exception
 	{
 		lock.writeLock().lock();
+		rowIDsAL = null;
+		offsetArray = null;
 		if (modifiedBy >= 0)
 		{
 			if (b != null)
@@ -124,6 +129,8 @@ public class Page
 	public ReadThread assignToBlock(Block b, boolean log, ArrayList<Integer> cols, int layoutSize, int rank, int rankSize) throws Exception
 	{
 		lock.writeLock().lock();
+		rowIDsAL = null;
+		offsetArray = null;
 		if (modifiedBy >= 0)
 		{
 			if (b != null)
@@ -151,6 +158,8 @@ public class Page
 	public void assignToBlock(Block b, boolean log, boolean flag) throws Exception
 	{
 		lock.writeLock().lock();
+		rowIDsAL = null;
+		offsetArray = null;
 		if (modifiedBy >= 0)
 		{
 			if (b != null)
@@ -176,6 +185,8 @@ public class Page
 	public ReadThread assignToBlock(Block b, boolean log, int rank, int rankSize) throws Exception
 	{
 		lock.writeLock().lock();
+		rowIDsAL = null;
+		offsetArray = null;
 		if (modifiedBy >= 0)
 		{
 			if (b != null)
@@ -204,6 +215,8 @@ public class Page
 	{
 		lock.writeLock().lock();
 		{
+			rowIDsAL = null;
+			offsetArray = null;
 			if (modifiedBy >= 0)
 			{
 				if (b != null)
@@ -232,6 +245,8 @@ public class Page
 	{
 		lock.writeLock().lock();
 		{
+			rowIDsAL = null;
+			offsetArray = null;
 			if (modifiedBy >= 0)
 			{
 				if (b != null)
@@ -267,6 +282,12 @@ public class Page
 			{
 				p3.lock.writeLock().lock();
 				{
+					rowIDsAL = null;
+					offsetArray = null;
+					p2.rowIDsAL = null;
+					p2.offsetArray = null;
+					p3.rowIDsAL = null;
+					p3.offsetArray = null;
 					if (modifiedBy >= 0)
 					{
 						if (log)
@@ -331,6 +352,12 @@ public class Page
 			{
 				p3.lock.writeLock().lock();
 				{
+					rowIDsAL = null;
+					offsetArray = null;
+					p2.rowIDsAL = null;
+					p2.offsetArray = null;
+					p3.rowIDsAL = null;
+					p3.offsetArray = null;
 					if (modifiedBy >= 0)
 					{
 						if (log)
@@ -395,6 +422,12 @@ public class Page
 			{
 				p3.lock.writeLock().lock();
 				{
+					rowIDsAL = null;
+					offsetArray = null;
+					p2.rowIDsAL = null;
+					p2.offsetArray = null;
+					p3.rowIDsAL = null;
+					p3.offsetArray = null;
 					if (modifiedBy >= 0)
 					{
 						if (log)
@@ -459,6 +492,12 @@ public class Page
 				{
 					p3.lock.writeLock().lock();
 					{
+						rowIDsAL = null;
+						offsetArray = null;
+						p2.rowIDsAL = null;
+						p2.offsetArray = null;
+						p3.rowIDsAL = null;
+						p3.offsetArray = null;
 						if (modifiedBy >= 0)
 						{
 							if (log)
@@ -524,6 +563,12 @@ public class Page
 				{
 					p3.lock.writeLock().lock();
 					{
+						rowIDsAL = null;
+						offsetArray = null;
+						p2.rowIDsAL = null;
+						p2.offsetArray = null;
+						p3.rowIDsAL = null;
+						p3.offsetArray = null;
 						if (modifiedBy >= 0)
 						{
 							if (log)
@@ -583,6 +628,8 @@ public class Page
 		// FileManager.getFile(b.fileName());
 
 		lock.writeLock().lock();
+		rowIDsAL = null;
+		offsetArray = null;
 		if (modifiedBy >= 0)
 		{
 			if (log)
@@ -609,10 +656,14 @@ public class Page
 		try
 		{
 			this.lock.writeLock().lock();
+			rowIDsAL = null;
+			offsetArray = null;
 			int i = 1;
 			while (i < num)
 			{
 				bp[indexes.get(i)].lock.writeLock().lock();
+				bp[indexes.get(i)].rowIDsAL = null;
+				bp[indexes.get(i)].offsetArray = null;
 				i++;
 			}
 
@@ -670,6 +721,8 @@ public class Page
 	public void assignToBlockSync(Block b, boolean log) throws Exception
 	{
 		lock.writeLock().lock();
+		rowIDsAL = null;
+		offsetArray = null;
 		if (b != null)
 		{
 			FileManager.readSync(this, b, contents);
@@ -681,6 +734,8 @@ public class Page
 	{
 		lock.writeLock().lock();
 		{
+			rowIDsAL = null;
+			offsetArray = null;
 			if (b != null)
 			{
 				FileManager.readSync(this, b, contents, schema, schemaMap, tx, fetchPos);
@@ -855,6 +910,26 @@ public class Page
 		lock.readLock().unlock();
 		return retval;
 	}
+	
+	public int[] getMediums(int pos, int num)
+	{
+		lock.readLock().lock();
+		while (!readDone)
+		{
+		}
+
+		byte[] hb = (byte[])unsafe.getObject(contents, offset);
+		int[] retval = new int[num];
+		int i = 0;
+		while (i < num)
+		{
+			retval[i] = (hb[pos] << 16) | ((hb[pos + 1] & 0xff) << 8) | ((hb[pos + 2] & 0xff));
+			pos += 3;
+			i++;
+		}
+		lock.readLock().unlock();
+		return retval;
+	}
 
 	public short getShort(int pos)
 	{
@@ -924,6 +999,8 @@ public class Page
 	public void preAssignToBlock(Block b, boolean log) throws Exception
 	{
 		lock.writeLock().lock();
+		rowIDsAL = null;
+		offsetArray = null;
 		if (modifiedBy >= 0)
 		{
 			if (b != null)

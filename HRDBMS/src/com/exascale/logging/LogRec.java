@@ -160,20 +160,12 @@ public class LogRec implements Comparable<LogRec>
 		if (type == INSERT)
 		{
 			buffer.position(28);
-			byte[] bytes = new byte[buffer.getInt()];
-			buffer.get(bytes);
-			Block block;
-			try
-			{
-				block = new Block(new String(bytes, StandardCharsets.UTF_8));
-			}
-			catch (final Exception e)
-			{
-				HRDBMSWorker.logger.error("Error converting bytes to UTF-8 string in LogRec.rebuild().", e);
-				return null;
-			}
+			char[] bytes2 = new char[buffer.getInt()];
+			buffer.asCharBuffer().get(bytes2);
+			Block block = new Block(new String(bytes2));
+			buffer.position(32 + (bytes2.length << 1));
 			final int imageSize = buffer.getInt();
-			bytes = new byte[imageSize];
+			byte[] bytes = new byte[imageSize];
 			buffer.get(bytes);
 			final byte[] after = new byte[imageSize];
 			buffer.get(after);

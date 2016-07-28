@@ -14,14 +14,18 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
+import java.util.concurrent.locks.ReentrantLock;
 import com.exascale.exceptions.ParseException;
 import com.exascale.filesystem.Block;
 import com.exascale.managers.BufferManager;
@@ -65,6 +69,9 @@ public final class MetaData implements Serializable
 	private static HashMap<String, String> getColTypeCache = new HashMap<String, String>();
 	private static HashMap<String, Object> getDistCache = new HashMap<String, Object>();
 	private static int numDevices;
+	static ReentrantLock tableMetaLock = new ReentrantLock();
+	static HashMap<String, Boolean> tableExistenceCache = new HashMap<String, Boolean>();
+	static HashMap<String, Integer> tableTypeCache = new HashMap<String, Integer>();
 
 	static
 	{
@@ -986,7 +993,7 @@ public final class MetaData implements Serializable
 		{
 			if (key instanceof ArrayList)
 			{
-				byte[] data = toBytes(key);
+				byte[] data = toBytesForHash((ArrayList<Object>)key);
 				eHash = MurmurHash.hash64(data, data.length);
 			}
 			else
@@ -997,6 +1004,43 @@ public final class MetaData implements Serializable
 		}
 
 		return eHash;
+	}
+	
+	private static byte[] toBytesForHash(ArrayList<Object> key)
+	{
+		StringBuilder sb = new StringBuilder();
+		for (Object o : key)
+		{
+			if (o instanceof Double)
+			{
+				DecimalFormat df = new DecimalFormat("0", DecimalFormatSymbols.getInstance(Locale.ENGLISH));
+				df.setMaximumFractionDigits(340); //340 = DecimalFormat.DOUBLE_FRACTION_DIGITS
+
+				sb.append(df.format((Double)o));
+				sb.append((char)0);
+			}
+			else if (o instanceof Number)
+			{
+				sb.append(o);
+				sb.append((char)0);
+			}
+			else
+			{
+				sb.append(o.toString());
+				sb.append((char)0);
+			}
+		}
+		
+		final int z = sb.length();
+		byte[] retval = new byte[z];
+		int i = 0;
+		while (i < z)
+		{
+			retval[i] = (byte)sb.charAt(i);
+			i++;
+		}
+		
+		return retval;
 	}
 
 	private static byte[] intToBytes(int val)
@@ -2478,7 +2522,24 @@ public final class MetaData implements Serializable
 
 	public int getTypeForTable(String schema, String table, Transaction tx) throws Exception
 	{
-		return PlanCacheManager.getTableType().setParms(schema, table).execute(tx);
+		boolean haveLock = tableMetaLock.tryLock();
+		if (haveLock)
+		{
+			Integer result = tableTypeCache.get(schema + "." + table);
+			if (result != null)
+			{
+				tableMetaLock.unlock();
+				return result;
+			}
+		}
+		
+		int result = PlanCacheManager.getTableType().setParms(schema, table).execute(tx);
+		if (haveLock)
+		{
+			tableTypeCache.put(schema + "." + table, result);
+			tableMetaLock.unlock();
+		}
+		return result;
 	}
 
 	public ArrayList<ArrayList<String>> getTypes(ArrayList<String> indexes, Transaction tx) throws Exception
@@ -3544,12 +3605,33 @@ public final class MetaData implements Serializable
 
 	public boolean verifyTableExistence(String schema, String name, Transaction tx) throws Exception
 	{
+		boolean haveLock = tableMetaLock.tryLock();
+		if (haveLock)
+		{
+			Boolean result = tableExistenceCache.get(schema + "." + name);
+			if (result != null)
+			{
+				tableMetaLock.unlock();
+				return result;
+			}
+		}
+		
 		Object o = PlanCacheManager.getVerifyTableExist().setParms(schema, name).execute(tx);
 		if (o instanceof DataEndMarker)
 		{
+			if (haveLock)
+			{
+				tableExistenceCache.put(schema + "." + name, false);
+				tableMetaLock.unlock();
+			}
 			return false;
 		}
 
+		if (haveLock)
+		{
+			tableExistenceCache.put(schema + "." + name, true);
+			tableMetaLock.unlock();
+		}
 		return true;
 	}
 
@@ -4792,6 +4874,21 @@ public final class MetaData implements Serializable
 			setNData(nExp);
 			setDData(dExp);
 		}
+		
+		public String getNGExp()
+		{
+			return ngExp;
+		}
+		
+		public String getNExp()
+		{
+			return nExp;
+		}
+		
+		public String getDExp()
+		{
+			return dExp;
+		}
 
 		public boolean allDevices()
 		{
@@ -5246,7 +5343,7 @@ public final class MetaData implements Serializable
 					String col = tokens2.nextToken();
 					if (!cols2Types.containsKey(col))
 					{
-						throw new Exception("Hash column " + col + " does not exist!");
+						throw new Exception("Hash column " + col + " does not exist in " + cols2Types);
 					}
 					nodeHash.add(col);
 				}

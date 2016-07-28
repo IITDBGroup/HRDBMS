@@ -17,6 +17,8 @@ import java.util.StringTokenizer;
 import java.util.TreeSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.misc.HParms;
@@ -28,6 +30,7 @@ import com.exascale.optimizer.SemiJoinOperator;
 import com.exascale.optimizer.TableScanOperator;
 import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.ThreadPoolThread;
+import java.util.concurrent.ThreadPoolExecutor;
 
 public final class ResourceManager extends HRDBMSThread
 {
@@ -75,7 +78,9 @@ public final class ResourceManager extends HRDBMSThread
 		CUDA_SIZE = Integer.parseInt(hparms.getProperty("cuda_batch_size")); // 30720
 		GPU = (hparms.getProperty("gpu_offload")).equals("true");
 		cpus = Runtime.getRuntime().availableProcessors();
-		pool = Executors.newCachedThreadPool();
+		pool = new ThreadPoolExecutor(0, Integer.MAX_VALUE,
+                60, TimeUnit.SECONDS,
+                new SynchronousQueue<Runnable>());
 		maxMemory = Runtime.getRuntime().maxMemory();
 		if (GPU)
 		{

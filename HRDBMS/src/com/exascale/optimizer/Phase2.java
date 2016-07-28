@@ -173,11 +173,15 @@ public final class Phase2
 		{
 			if (filter != null && filter.hashFiltersPartitions(t.getNodeHash()))
 			{
+				//HRDBMSWorker.logger.debug("Hash DOES filter partitions");
 				if (t.allNodes())
 				{
 					for (final ArrayList<Integer> nodeList : nodeLists)
 					{
-						t.addActiveNodeForParent(nodeList.get((int)(filter.getPartitionHash() % nodeList.size())), o);
+						int pos = (int)(filter.getPartitionHash() % nodeList.size());
+						t.addActiveNodeForParent(nodeList.get(pos), o);
+						//HRDBMSWorker.logger.debug("Nodelist is " + nodeList);
+						//HRDBMSWorker.logger.debug("Only need to look at node " + nodeList.get(pos) + " in position " + pos);
 					}
 				}
 				else

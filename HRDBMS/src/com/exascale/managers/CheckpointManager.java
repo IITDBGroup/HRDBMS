@@ -34,7 +34,8 @@ public class CheckpointManager extends HRDBMSThread
 			sbm.lock.lock();
 		}
 
-		Transaction.txListLock.writeLock().lock();
+		//Transaction.txListLock.lock();
+		synchronized(Transaction.txListLock)
 		{
 			try
 			{
@@ -80,7 +81,7 @@ public class CheckpointManager extends HRDBMSThread
 				return;
 			}
 		}
-		Transaction.txListLock.writeLock().unlock();
+		//Transaction.txListLock.unlock();
 		for (SubBufferManager sbm : BufferManager.managers)
 		{
 			sbm.lock.unlock();

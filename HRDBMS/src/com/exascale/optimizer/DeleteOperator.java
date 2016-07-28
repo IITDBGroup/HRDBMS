@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -17,6 +18,7 @@ import java.util.concurrent.locks.LockSupport;
 import com.exascale.filesystem.RID;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.HJOMultiHashMap;
 import com.exascale.misc.MultiHashMap;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Transaction;
@@ -35,7 +37,7 @@ public final class DeleteOperator implements Operator, Serializable
 	private final String table;
 	private final AtomicInteger num = new AtomicInteger(0);
 	private boolean done = false;
-	private MultiHashMap map = new MultiHashMap<Integer, RIDAndIndexKeys>();
+	private HJOMultiHashMap map = new HJOMultiHashMap<Integer, RIDAndIndexKeys>();
 	private Transaction tx;
 
 	public DeleteOperator(String schema, String table, MetaData meta)
@@ -356,7 +358,7 @@ public final class DeleteOperator implements Operator, Serializable
 		for (Object o : map.getKeySet())
 		{
 			int node = (Integer)o;
-			Set<RIDAndIndexKeys> list = map.get(node);
+			List<RIDAndIndexKeys> list = map.get(node);
 			if (node == -1)
 			{
 				ArrayList<Integer> coords = MetaData.getCoordNodes();
@@ -419,7 +421,7 @@ public final class DeleteOperator implements Operator, Serializable
 
 	private class FlushThread extends HRDBMSThread
 	{
-		private final Set<RIDAndIndexKeys> list;
+		private final List<RIDAndIndexKeys> list;
 		private final ArrayList<String> indexes;
 		private boolean ok = true;
 		private final int node;
@@ -430,7 +432,7 @@ public final class DeleteOperator implements Operator, Serializable
 		private final HashMap<String, String> tC2T;
 		private final int type;
 
-		public FlushThread(Set<RIDAndIndexKeys> list, ArrayList<String> indexes, int node, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, TreeMap<Integer, String> tP2C, HashMap<String, String> tC2T, int type)
+		public FlushThread(List<RIDAndIndexKeys> list, ArrayList<String> indexes, int node, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, TreeMap<Integer, String> tP2C, HashMap<String, String> tC2T, int type)
 		{
 			this.list = list;
 			this.indexes = indexes;

@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -365,7 +366,7 @@ public final class LoadOperator implements Operator, Serializable
 		return tokens.allTokens().length;
 	}
 
-	private static final byte[] rsToBytes(Set<ArrayList<Object>> rows) throws Exception
+	private static final byte[] rsToBytes(List<ArrayList<Object>> rows) throws Exception
 	{
 		final ByteBuffer[] results = new ByteBuffer[rows.size()];
 		int rIndex = 0;
@@ -1211,7 +1212,7 @@ public final class LoadOperator implements Operator, Serializable
 					for (Object o : map.getKeySet())
 					{
 						long key = (Long)o;
-						Set<ArrayList<Object>> list = map.get(key);
+						List<ArrayList<Object>> list = map.get(key);
 						threads.add(new FlushThread(list, indexes, key, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type));
 					}
 
@@ -1323,7 +1324,7 @@ public final class LoadOperator implements Operator, Serializable
 
 	private class FlushThread extends HRDBMSThread
 	{
-		private Set<ArrayList<Object>> list;
+		private List<ArrayList<Object>> list;
 		private ArrayList<String> indexes;
 		private boolean ok = true;
 		private final long key;
@@ -1335,7 +1336,7 @@ public final class LoadOperator implements Operator, Serializable
 		private final HashMap<String, String> cols2Types;
 		private final int type;
 
-		public FlushThread(Set<ArrayList<Object>> list, ArrayList<String> indexes, long key, HashMap<String, Integer> cols2Pos, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type)
+		public FlushThread(List<ArrayList<Object>> list, ArrayList<String> indexes, long key, HashMap<String, Integer> cols2Pos, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type)
 		{
 			this.list = list;
 			this.indexes = indexes;

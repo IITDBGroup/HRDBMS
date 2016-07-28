@@ -6,10 +6,13 @@ import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.Locale;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MurmurHash;
@@ -174,7 +177,7 @@ public class CNFFilter implements Serializable
 		{
 			if (key instanceof ArrayList)
 			{
-				byte[] data = toBytes(key);
+				byte[] data = toBytesForHash((ArrayList<Object>)key);
 				eHash = MurmurHash.hash64(data, data.length);
 			}
 			else
@@ -185,6 +188,43 @@ public class CNFFilter implements Serializable
 		}
 
 		return eHash;
+	}
+	
+	private static byte[] toBytesForHash(ArrayList<Object> key)
+	{
+		StringBuilder sb = new StringBuilder();
+		for (Object o : key)
+		{
+			if (o instanceof Double)
+			{
+				DecimalFormat df = new DecimalFormat("0", DecimalFormatSymbols.getInstance(Locale.ENGLISH));
+				df.setMaximumFractionDigits(340); //340 = DecimalFormat.DOUBLE_FRACTION_DIGITS
+
+				sb.append(df.format((Double)o));
+				sb.append((char)0);
+			}
+			else if (o instanceof Number)
+			{
+				sb.append(o);
+				sb.append((char)0);
+			}
+			else
+			{
+				sb.append(o.toString());
+				sb.append((char)0);
+			}
+		}
+		
+		final int z = sb.length();
+		byte[] retval = new byte[z];
+		int i = 0;
+		while (i < z)
+		{
+			retval[i] = (byte)sb.charAt(i);
+			i++;
+		}
+		
+		return retval;
 	}
 
 	// is x < y ?

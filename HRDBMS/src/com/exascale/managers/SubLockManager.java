@@ -18,6 +18,7 @@ public class SubLockManager
 	public HashMap<Thread, Block> inverseWaitList = new HashMap<Thread, Block>();
 	public HashMap<Thread, Long> threads2Txs = new HashMap<Thread, Long>();
 	public HashMap<Long, Thread> txs2Threads = new HashMap<Long, Thread>();
+	private static long TIMEOUT = Long.parseLong(HRDBMSWorker.getHParms().getProperty("lock_timeout_ms"));
 
 	// private static final long TIMEOUT =
 	// Long.parseLong(HRDBMSWorker.getHParms().getProperty("deadlock_timeout_secs"))
@@ -96,7 +97,7 @@ public class SubLockManager
 
 	public void sLock(Block b, long txnum) throws LockAbortException
 	{
-		// long start = System.currentTimeMillis();
+		long start = System.currentTimeMillis();
 		lock.lock();
 		HashSet<Long> set = sBlocksToTXs.get(b);
 		if (set != null && set.contains(txnum))
@@ -107,6 +108,13 @@ public class SubLockManager
 
 		while (true)
 		{
+			long end = System.currentTimeMillis();
+			if (end-start > TIMEOUT)
+			{
+				lock.unlock();
+				throw new LockAbortException();
+			}
+			
 			Long xTx = xBlocksToTXs.get(b); // does someone have an xLock?
 			if (xTx != null)
 			{
@@ -252,7 +260,7 @@ public class SubLockManager
 
 	public void xLock(Block b, long txnum) throws LockAbortException
 	{
-		// long start = System.currentTimeMillis();
+		long start = System.currentTimeMillis();
 		lock.lock();
 		Long set = xBlocksToTXs.get(b);
 		if (set != null && set.longValue() == txnum)
@@ -263,6 +271,13 @@ public class SubLockManager
 
 		while (true)
 		{
+			long end = System.currentTimeMillis();
+			if (end-start > TIMEOUT)
+			{
+				lock.unlock();
+				throw new LockAbortException();
+			}
+			
 			Long tx = xBlocksToTXs.get(b);
 			if (tx != null)
 			{
@@ -304,7 +319,7 @@ public class SubLockManager
 
 						try
 						{
-							Thread.currentThread().wait();
+							Thread.currentThread().wait(TIMEOUT);
 						}
 						catch (Exception e)
 						{
@@ -378,7 +393,7 @@ public class SubLockManager
 
 							try
 							{
-								Thread.currentThread().wait();
+								Thread.currentThread().wait(TIMEOUT);
 							}
 							catch (Exception e)
 							{
@@ -444,7 +459,7 @@ public class SubLockManager
 
 				try
 				{
-					Thread.currentThread().wait();
+					Thread.currentThread().wait(TIMEOUT);
 				}
 				catch (Exception e)
 				{

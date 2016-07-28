@@ -198,7 +198,7 @@ public class ConnectionManager extends HRDBMSThread
 				// connection.");
 				if (accepting)
 				{
-					HRDBMSWorker.addThread(new ConnectionWorker(sock));
+					new ConnectionWorker(sock).start();
 				}
 				else
 				{

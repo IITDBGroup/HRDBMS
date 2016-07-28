@@ -5,6 +5,7 @@ import java.sql.DriverManager;
 import java.sql.Statement;
 import java.util.Random;
 import java.util.Scanner;
+import com.exascale.client.HRDBMSConnection;
 
 public class InsertTest
 {
@@ -12,65 +13,90 @@ public class InsertTest
 
 	public static void main(String[] args) throws Exception
 	{
+		int count = Integer.parseInt(args[0]);
+		int pacingRate = Integer.parseInt(args[1]);
+		int commitRate = Integer.parseInt(args[3]);
+		int startNum = Integer.parseInt(args[2]);
 		long start = System.currentTimeMillis();
-		new Scanner(System.in);
+		int batching = Integer.parseInt(args[4]);
+
 		Class.forName("com.exascale.client.HRDBMSDriver");
-		conn = DriverManager.getConnection("jdbc:hrdbms://172.31.20.103:3232");
+		conn = DriverManager.getConnection("jdbc:hrdbms://localhost:3232");
 		conn.setAutoCommit(false);
+		((HRDBMSConnection)conn).saveDMLResponseTillCommit();
 
 		Statement stmt = conn.createStatement();
 		Random random = new Random();
 		int i = 0;
-		while (i < 30000)
+		while (i < count)
 		{
-			stmt.executeUpdate("INSERT INTO JASON.TEST1 VALUES(" + i + ", " + random.nextInt() + ")");
+			StringBuilder sql = new StringBuilder();
+			sql.append("INSERT INTO JASON.TEST1 VALUES(" + (i+startNum) + ", " + random.nextInt() + ")");
 			i++;
+			int j = 1;
+			while (j < batching)
+			{
+				if (i % 100 == 0)
+				{
+					System.out.println(i);
+				}
+				
+				sql.append(", (" + (i+startNum) + ", " + random.nextInt() + ")");
+				j++;
+				i++;
+			}
+			stmt.executeUpdate(sql.toString());
+			
 			if (i % 100 == 0)
 			{
 				System.out.println(i);
-
-				if (i % 10000 == 0)
-				{
-					conn.commit();
-				}
+			}
+			
+			if (i % commitRate == 0)
+			{
+				conn.commit();
+			}
+			else if (i % pacingRate == 0)
+			{
+				((HRDBMSConnection)conn).doPacing();
 			}
 		}
 
 		long end1 = System.currentTimeMillis();
 
-		i = 0;
-		while (i < 30000)
-		{
-			stmt.executeUpdate("UPDATE JASON.TEST1 SET COL2 = " + random.nextInt() + " WHERE COL1 = " + i);
-			i++;
-			if (i % 100 == 0)
-			{
-				System.out.println(i);
-
-				if (i % 10000 == 0)
-				{
-					conn.commit();
-				}
-			}
-		}
+		//i = 0;
+		//while (i < count)
+		//{
+		//	stmt.executeUpdate("UPDATE JASON.TEST1 SET COL2 = " + random.nextInt() + " WHERE COL1 = " + i);
+		//	i++;
+		//	if (i % 100 == 0)
+		//	{
+		//		System.out.println(i);
+		//	}
+		
+		//	if (i % commitRate == 0)
+		//	{
+		//		conn.commit();
+		//	}
+		//}
 
 		long end2 = System.currentTimeMillis();
 
-		i = 0;
-		while (i < 30000)
-		{
-			stmt.executeUpdate("DELETE FROM JASON.TEST1 WHERE COL1 = " + i);
-			i++;
-			if (i % 100 == 0)
-			{
-				System.out.println(i);
-
-				if (i % 10000 == 0)
-				{
-					conn.commit();
-				}
-			}
-		}
+		//i = 0;
+		//while (i < count)
+		//{
+		//	stmt.executeUpdate("DELETE FROM JASON.TEST1 WHERE COL1 = " + i);
+		//	i++;
+		//	if (i % 100 == 0)
+		//	{
+		//		System.out.println(i);
+		//	}
+		
+		//	if (i % commitRate == 0)
+		//	{
+		//		conn.commit();
+		//	}
+		//}
 
 		stmt.close();
 		conn.close();

@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
@@ -42,13 +43,15 @@ public class LogManager extends HRDBMSThread
 	private static AtomicLong last_lsn;
 	public static Map<String, FileChannel> openFiles = new HashMap<String, FileChannel>();
 	public static String filename;
-	public static ConcurrentHashMap<String, ArrayDeque<LogRec>> logs = new ConcurrentHashMap<String, ArrayDeque<LogRec>>();
+	public static ConcurrentHashMap<String, LinkedBlockingDeque<LogRec>> logs = new ConcurrentHashMap<String, LinkedBlockingDeque<LogRec>>();
 	// private static BlockingQueue<String> in = new
 	// LinkedBlockingQueue<String>();
 	public static Boolean noArchive = false;
 	// public static Object noArchiveLock = new Object();
 	public static int openIters = 0;
 	public static volatile boolean recoverDone = false;
+	private static volatile long masterLSN = 0;
+	private static Object masterLSNLock = new Object();
 
 	static
 	{
@@ -75,7 +78,8 @@ public class LogManager extends HRDBMSThread
 		while (true)
 		{
 			// synchronized(noArchiveLock)
-			Transaction.txListLock.writeLock().lock();
+			//Transaction.txListLock.lock();
+			synchronized(Transaction.txListLock)
 			{
 				try
 				{
@@ -84,7 +88,7 @@ public class LogManager extends HRDBMSThread
 						continue;
 					}
 
-					final ArrayDeque<LogRec> list = logs.get(fn);
+					final LinkedBlockingDeque<LogRec> list = logs.get(fn);
 
 					if (list != null)
 					{
@@ -216,7 +220,7 @@ public class LogManager extends HRDBMSThread
 							fc2.write(bb);
 						}
 
-						Transaction.txListLock.writeLock().unlock();
+						//Transaction.txListLock.unlock();
 						return f;
 					}
 					else
@@ -236,12 +240,12 @@ public class LogManager extends HRDBMSThread
 					size.position(0);
 					fc2.write(size);
 
-					Transaction.txListLock.writeLock().unlock();
+					//Transaction.txListLock.unlock();
 					return f;
 				}
 				catch (Exception e)
 				{
-					Transaction.txListLock.writeLock().unlock();
+					//Transaction.txListLock.unlock();
 					throw e;
 				}
 			}
@@ -315,9 +319,17 @@ public class LogManager extends HRDBMSThread
 
 	public static void flush(long lsn, String fn) throws IOException
 	{
-		final ArrayDeque<LogRec> list = logs.get(fn);
+		synchronized(masterLSNLock)
+		{
+			if (lsn > masterLSN)
+			{
+				masterLSN = lsn;
+			}
+		}
+		final LinkedBlockingDeque<LogRec> list = logs.get(fn);
 		// synchronized (noArchiveLock)
-		Transaction.txListLock.writeLock().lock();
+		//Transaction.txListLock.lock();
+		synchronized(Transaction.txListLock)
 		{
 			try
 			{
@@ -326,10 +338,10 @@ public class LogManager extends HRDBMSThread
 				final FileChannel fc = getFile(fn);
 				// synchronized (Transaction.txList)
 				{
-					while (list.size() > 0)
+					while (!list.isEmpty())
 					{
 						LogRec rec = list.getFirst();
-						if (rec.lsn() <= lsn)
+						if (rec.lsn() <= masterLSN)
 						{
 							ordered.put(rec, rec);
 							if (rec.type() == LogRec.INSERT)
@@ -380,7 +392,8 @@ public class LogManager extends HRDBMSThread
 
 				if (ordered.size() == 0)
 				{
-					Transaction.txListLock.writeLock().unlock();
+					//Transaction.txListLock.unlock();
+					fc.force(false);
 					return;
 				}
 
@@ -454,18 +467,27 @@ public class LogManager extends HRDBMSThread
 			}
 			catch (Exception e)
 			{
-				Transaction.txListLock.writeLock().unlock();
+				//Transaction.txListLock.unlock();
 				throw e;
 			}
 		}
-		Transaction.txListLock.writeLock().unlock();
+		//Transaction.txListLock.unlock();
 	}
 
 	public static void flushNoForce(long lsn, String fn) throws IOException
 	{
-		final ArrayDeque<LogRec> list = logs.get(fn);
+		final LinkedBlockingDeque<LogRec> list = logs.get(fn);
+		
+		synchronized(masterLSNLock)
+		{
+			if (lsn > masterLSN)
+			{
+				masterLSN = lsn;
+			}
+		}
 		// synchronized (noArchiveLock)
-		Transaction.txListLock.writeLock().lock();
+		//Transaction.txListLock.lock();
+		synchronized(Transaction.txListLock)
 		{
 			try
 			{
@@ -474,10 +496,10 @@ public class LogManager extends HRDBMSThread
 				final FileChannel fc = getFile(fn);
 				// synchronized (Transaction.txList)
 				{
-					while (list.size() > 0)
+					while (!list.isEmpty())
 					{
 						LogRec rec = list.getFirst();
-						if (rec.lsn() <= lsn)
+						if (rec.lsn() <= masterLSN)
 						{
 							ordered.put(rec, rec);
 							if (rec.type() == LogRec.INSERT)
@@ -528,7 +550,7 @@ public class LogManager extends HRDBMSThread
 
 				if (ordered.size() == 0)
 				{
-					Transaction.txListLock.writeLock().unlock();
+					//Transaction.txListLock.unlock();
 					return;
 				}
 
@@ -602,11 +624,11 @@ public class LogManager extends HRDBMSThread
 			}
 			catch (Exception e)
 			{
-				Transaction.txListLock.writeLock().unlock();
+				//Transaction.txListLock.unlock();
 				throw e;
 			}
 		}
-		Transaction.txListLock.writeLock().unlock();
+		//Transaction.txListLock.unlock();
 	}
 
 	public static Iterator<LogRec> forwardIterator()
@@ -676,7 +698,7 @@ public class LogManager extends HRDBMSThread
 			}
 			fc = f.getChannel();
 			openFiles.put(filename, fc);
-			logs.put(filename, new ArrayDeque<LogRec>());
+			logs.put(filename, new LinkedBlockingDeque<LogRec>());
 		}
 
 		return fc;
@@ -843,16 +865,17 @@ public class LogManager extends HRDBMSThread
 
 	public static long write(LogRec rec, String fn)
 	{
-		final ArrayDeque<LogRec> list = logs.get(fn);
+		final LinkedBlockingDeque<LogRec> list = logs.get(fn);
 		rec.setTimeStamp(System.currentTimeMillis());
 		long retval;
 		retval = getLSN();
 		rec.setLSN(retval);
-		Transaction.txListLock.writeLock().lock();
-		{
+		//Transaction.txListLock.lock();
+		//synchronized(Transaction.txListLock)
+		//{
 			list.add(rec);
-		}
-		Transaction.txListLock.writeLock().unlock();
+		//}
+		//Transaction.txListLock.unlock();
 
 		return retval;
 	}
@@ -876,203 +899,206 @@ public class LogManager extends HRDBMSThread
 		final HashSet<Long> needsCommit = new HashSet<Long>();
 		HashSet<String> truncated = new HashSet<String>();
 		HashMap<String, Long> trunc2LSN = new HashMap<String, Long>();
-		Transaction.txListLock.writeLock().lock();
-		while (fn != null)
+		//Transaction.txListLock.lock();
+		synchronized(Transaction.txListLock)
 		{
-			logs.get(fn);
+			while (fn != null)
 			{
-				try
+				logs.get(fn);
 				{
-					final Iterator<LogRec> iter = iterator(fn, false);
-					while (iter.hasNext())
+					try
 					{
-						final LogRec rec = iter.next();
-						if (rec.type() == LogRec.COMMIT)
+						final Iterator<LogRec> iter = iterator(fn, false);
+						while (iter.hasNext())
 						{
-							if (rollbackList.contains(rec.txnum()))
+							final LogRec rec = iter.next();
+							if (rec.type() == LogRec.COMMIT)
 							{
-								HRDBMSWorker.logger.debug("Found a COMMIT record for " + rec.txnum() + ", but we already processed an abort");
-							}
-							else
-							{
-								commitList.add(rec.txnum());
-								HRDBMSWorker.logger.debug("Saw COMMIT for " + rec.txnum());
-							}
-						}
-						else if (rec.type() == LogRec.ROLLB || rec.type() == LogRec.NOTREADY)
-						{
-							if (commitList.contains(rec.txnum()))
-							{
-								HRDBMSWorker.logger.debug("Found an abort record for " + rec.txnum() + " but we already processed a COMMIT");
-							}
-							else
-							{
-								rollbackList.add(rec.txnum());
-								HRDBMSWorker.logger.debug("Saw ROLLB/NOTREADY for " + rec.txnum());
-							}
-						}
-						else if (rec.type() == LogRec.TRUNCATE)
-						{
-							if (commitList.contains(rec.txnum()))
-							{
-								TruncateLogRec trunc = (TruncateLogRec)rec.rebuild();
-								truncated.add(trunc.getBlock().fileName());
-								trunc2LSN.put(trunc.getBlock().fileName(), trunc.lsn());
-							}
-						}
-						else if (rec.type() == LogRec.READY)
-						{
-							if (rollbackList.contains(rec.txnum()) || commitList.contains(rec.txnum()))
-							{
-							}
-							else
-							{
-								ReadyLogRec xa = (ReadyLogRec)rec.rebuild();
-								if (XAManager.askXAManager(xa))
+								if (rollbackList.contains(rec.txnum()))
+								{
+									HRDBMSWorker.logger.debug("Found a COMMIT record for " + rec.txnum() + ", but we already processed an abort");
+								}
+								else
 								{
 									commitList.add(rec.txnum());
-									needsCommit.add(rec.txnum());
-									HRDBMSWorker.logger.debug("Saw READY for " + rec.txnum() + " decided it was a COMMIT");
+									//HRDBMSWorker.logger.debug("Saw COMMIT for " + rec.txnum());
+								}
+							}
+							else if (rec.type() == LogRec.ROLLB || rec.type() == LogRec.NOTREADY)
+							{
+								if (commitList.contains(rec.txnum()))
+								{
+									HRDBMSWorker.logger.debug("Found an abort record for " + rec.txnum() + " but we already processed a COMMIT");
 								}
 								else
 								{
 									rollbackList.add(rec.txnum());
-									HRDBMSWorker.logger.debug("Saw READY for " + rec.txnum() + " decided it was a ROLLB");
+									HRDBMSWorker.logger.debug("Saw ROLLB/NOTREADY for " + rec.txnum());
 								}
 							}
-						}
-						else if (rec.type() == LogRec.XACOMMIT)
-						{
-							if (rollbackList.contains(rec.txnum()))
+							else if (rec.type() == LogRec.TRUNCATE)
 							{
-								HRDBMSWorker.logger.debug("Found an XACOMMIT record for " + rec.txnum() + " but we already processed an abort");
-							}
-							else
-							{
-								if (!commitList.contains(rec.txnum()))
+								if (commitList.contains(rec.txnum()))
 								{
-									HRDBMSWorker.logger.debug("Saw XACOMMIT for " + rec.txnum());
-									XACommitLogRec xa = (XACommitLogRec)rec.rebuild();
-									// XAManager.phase2(xa.txnum(),
-									// xa.getNodes());
-									XAManager.in.put("COMMIT");
-									XAManager.in.put(xa.txnum());
-									XAManager.in.put(xa.getNodes());
-									commitList.add(rec.txnum());
+									TruncateLogRec trunc = (TruncateLogRec)rec.rebuild();
+									truncated.add(trunc.getBlock().fileName());
+									trunc2LSN.put(trunc.getBlock().fileName(), trunc.lsn());
 								}
 							}
-						}
-						else if (rec.type() == LogRec.XAABORT)
-						{
-							if (commitList.contains(rec.txnum()))
+							else if (rec.type() == LogRec.READY)
 							{
-								HRDBMSWorker.logger.debug("Found an XAABORT record for " + rec.txnum() + " but we already processed a COMMIT");
-							}
-							else
-							{
-								if (!rollbackList.contains(rec.txnum()))
+								if (rollbackList.contains(rec.txnum()) || commitList.contains(rec.txnum()))
 								{
-									HRDBMSWorker.logger.debug("Saw XAABORT for " + rec.txnum());
-									XAAbortLogRec xa = (XAAbortLogRec)rec.rebuild();
-									// XAManager.rollbackP2(xa.txnum(),
-									// xa.getNodes());
-									XAManager.in.put("ROLLBACK");
-									XAManager.in.put(xa.txnum());
-									XAManager.in.put(xa.getNodes());
+								}
+								else
+								{
+									ReadyLogRec xa = (ReadyLogRec)rec.rebuild();
+									if (XAManager.askXAManager(xa))
+									{
+										commitList.add(rec.txnum());
+										needsCommit.add(rec.txnum());
+										HRDBMSWorker.logger.debug("Saw READY for " + rec.txnum() + " decided it was a COMMIT");
+									}
+									else
+									{
+										rollbackList.add(rec.txnum());
+										HRDBMSWorker.logger.debug("Saw READY for " + rec.txnum() + " decided it was a ROLLB");
+									}
+								}
+							}
+							else if (rec.type() == LogRec.XACOMMIT)
+							{
+								if (rollbackList.contains(rec.txnum()))
+								{
+									HRDBMSWorker.logger.debug("Found an XACOMMIT record for " + rec.txnum() + " but we already processed an abort");
+								}
+								else
+								{
+									if (!commitList.contains(rec.txnum()))
+									{
+										HRDBMSWorker.logger.debug("Saw XACOMMIT for " + rec.txnum());
+										XACommitLogRec xa = (XACommitLogRec)rec.rebuild();
+										// XAManager.phase2(xa.txnum(),
+										// xa.getNodes());
+										XAManager.in.put("COMMIT");
+										XAManager.in.put(xa.txnum());
+										XAManager.in.put(xa.getNodes());
+										commitList.add(rec.txnum());
+									}
+								}
+							}
+							else if (rec.type() == LogRec.XAABORT)
+							{
+								if (commitList.contains(rec.txnum()))
+								{
+									HRDBMSWorker.logger.debug("Found an XAABORT record for " + rec.txnum() + " but we already processed a COMMIT");
+								}
+								else
+								{
+									if (!rollbackList.contains(rec.txnum()))
+									{
+										HRDBMSWorker.logger.debug("Saw XAABORT for " + rec.txnum());
+										XAAbortLogRec xa = (XAAbortLogRec)rec.rebuild();
+										// XAManager.rollbackP2(xa.txnum(),
+										// xa.getNodes());
+										XAManager.in.put("ROLLBACK");
+										XAManager.in.put(xa.txnum());
+										XAManager.in.put(xa.getNodes());
+										rollbackList.add(rec.txnum());
+									}
+								}
+							}
+							else if (rec.type() == LogRec.PREPARE)
+							{
+								if (rollbackList.contains(rec.txnum()) || commitList.contains(rec.txnum()))
+								{
+								}
+								else
+								{
+									HRDBMSWorker.logger.debug("Saw PREPARE for " + rec.txnum());
+									PrepareLogRec xa = (PrepareLogRec)rec.rebuild();
+									XAManager.rollback(xa.txnum(), xa.getNodes());
 									rollbackList.add(rec.txnum());
 								}
 							}
+							// else if (rec.type() == LogRec.INSERT || rec.type() ==
+							// LogRec.DELETE || rec.type() == LogRec.EXTEND)
+							// {
+							// if ((!commitList.contains(rec.txnum())) &&
+							// (!rollbackList.contains(rec.txnum())))
+							// {
+							// HRDBMSWorker.logger.debug("Saw stranded changes for "
+							// +
+							// rec.txnum());
+							// rec.rebuild().undo();
+							// }
+							// }
 						}
-						else if (rec.type() == LogRec.PREPARE)
+
+						final Iterator<LogRec> iter2 = forwardIterator(fn);
+						((LogIterator)iter).close();
+
+						while (iter2.hasNext())
 						{
-							if (rollbackList.contains(rec.txnum()) || commitList.contains(rec.txnum()))
+							final LogRec rec = iter2.next();
+							if (rec.type() == LogRec.INSERT)
 							{
+								if (commitList.contains(rec.txnum()))
+								{
+									InsertLogRec i = (InsertLogRec)rec.rebuild();
+									if (!truncated.contains(i.getBlock().fileName()) || i.lsn() > trunc2LSN.get(i.getBlock().fileName()))
+									{
+										i.redo();
+									}
+								}
 							}
-							else
+							else if (rec.type() == LogRec.DELETE)
 							{
-								HRDBMSWorker.logger.debug("Saw PREPARE for " + rec.txnum());
-								PrepareLogRec xa = (PrepareLogRec)rec.rebuild();
-								XAManager.rollback(xa.txnum(), xa.getNodes());
-								rollbackList.add(rec.txnum());
+								if (commitList.contains(rec.txnum()))
+								{
+									DeleteLogRec i = (DeleteLogRec)rec.rebuild();
+									if (!truncated.contains(i.getBlock().fileName()) || i.lsn() > trunc2LSN.get(i.getBlock().fileName()))
+									{
+										i.redo();
+									}
+								}
+							}
+							else if (rec.type() == LogRec.EXTEND)
+							{
+								if (commitList.contains(rec.txnum()))
+								{
+									ExtendLogRec i = (ExtendLogRec)rec.rebuild();
+									if (!truncated.contains(i.getBlock().fileName()) || i.lsn() > trunc2LSN.get(i.getBlock().fileName()))
+									{
+										i.redo();
+									}
+								}
 							}
 						}
-						// else if (rec.type() == LogRec.INSERT || rec.type() ==
-						// LogRec.DELETE || rec.type() == LogRec.EXTEND)
-						// {
-						// if ((!commitList.contains(rec.txnum())) &&
-						// (!rollbackList.contains(rec.txnum())))
-						// {
-						// HRDBMSWorker.logger.debug("Saw stranded changes for "
-						// +
-						// rec.txnum());
-						// rec.rebuild().undo();
-						// }
-						// }
+
+						((ForwardLogIterator)iter2).close();
+						for (long txnum : needsCommit)
+						{
+							LogManager.commit(txnum);
+						}	
+
+						needsCommit.clear();
+						// final LogRec rec = new NQCheckLogRec(new
+						// HashSet<Long>());
+						// write(rec, fn);
+						// flush(rec.lsn(), fn);
+						fn = oldFN;
+						oldFN = null;
 					}
-
-					final Iterator<LogRec> iter2 = forwardIterator(fn);
-					((LogIterator)iter).close();
-
-					while (iter2.hasNext())
+					catch (Exception e)
 					{
-						final LogRec rec = iter2.next();
-						if (rec.type() == LogRec.INSERT)
-						{
-							if (commitList.contains(rec.txnum()))
-							{
-								InsertLogRec i = (InsertLogRec)rec.rebuild();
-								if (!truncated.contains(i.getBlock().fileName()) || i.lsn() > trunc2LSN.get(i.getBlock().fileName()))
-								{
-									i.redo();
-								}
-							}
-						}
-						else if (rec.type() == LogRec.DELETE)
-						{
-							if (commitList.contains(rec.txnum()))
-							{
-								DeleteLogRec i = (DeleteLogRec)rec.rebuild();
-								if (!truncated.contains(i.getBlock().fileName()) || i.lsn() > trunc2LSN.get(i.getBlock().fileName()))
-								{
-									i.redo();
-								}
-							}
-						}
-						else if (rec.type() == LogRec.EXTEND)
-						{
-							if (commitList.contains(rec.txnum()))
-							{
-								ExtendLogRec i = (ExtendLogRec)rec.rebuild();
-								if (!truncated.contains(i.getBlock().fileName()) || i.lsn() > trunc2LSN.get(i.getBlock().fileName()))
-								{
-									i.redo();
-								}
-							}
-						}
+						//Transaction.txListLock.unlock();
+						throw e;
 					}
-
-					((ForwardLogIterator)iter2).close();
-					for (long txnum : needsCommit)
-					{
-						LogManager.commit(txnum);
-					}
-
-					needsCommit.clear();
-					// final LogRec rec = new NQCheckLogRec(new
-					// HashSet<Long>());
-					// write(rec, fn);
-					// flush(rec.lsn(), fn);
-					fn = oldFN;
-					oldFN = null;
-				}
-				catch (Exception e)
-				{
-					Transaction.txListLock.writeLock().unlock();
-					throw e;
 				}
 			}
 		}
-		Transaction.txListLock.writeLock().unlock();
+		//Transaction.txListLock.unlock();
 	}
 
 	// public static void writeStartRecIfNeeded(long txnum)

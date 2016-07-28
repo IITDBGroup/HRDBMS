@@ -109,7 +109,11 @@ public final class DropTableOperator implements Operator, Serializable
 		if (!done)
 		{
 			done = true;
+			MetaData.tableMetaLock.lock();
 			MetaData.dropTable(schema, table, tx);
+			MetaData.tableExistenceCache.remove(schema + "." + table);
+			MetaData.tableTypeCache.remove(schema + "." + table);
+			MetaData.tableMetaLock.unlock();
 			return 1;
 		}
 		else

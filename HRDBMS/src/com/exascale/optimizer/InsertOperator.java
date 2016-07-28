@@ -1,5 +1,6 @@
 package com.exascale.optimizer;
 
+import java.io.BufferedOutputStream;
 import java.io.InputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
@@ -10,17 +11,21 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.HJOMultiHashMap;
 import com.exascale.misc.MultiHashMap;
 import com.exascale.optimizer.MetaData.PartitionMetaData;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Transaction;
+import com.exascale.threads.ConnectionWorker;
 import com.exascale.threads.HRDBMSThread;
 
 public final class InsertOperator implements Operator, Serializable
@@ -37,14 +42,83 @@ public final class InsertOperator implements Operator, Serializable
 	private final String table;
 	private final AtomicInteger num = new AtomicInteger(0);
 	private boolean done = false;
-	private MultiHashMap map = new MultiHashMap<Integer, ArrayList<Object>>();
+	private HJOMultiHashMap map = new HJOMultiHashMap<Integer, ArrayList<Object>>();
 	private Transaction tx;
+	private static ConcurrentHashMap<String, InetSocketAddress> addrCache = new ConcurrentHashMap<String, InetSocketAddress>();
+	private static HashMap<Long, HashMap<String, InsertOperator>> txDelayedMaps = new HashMap<Long, HashMap<String, InsertOperator>>();
+	private static IdentityHashMap<InsertOperator, List<ArrayList<Object>>> delayedRows = new IdentityHashMap<InsertOperator, List<ArrayList<Object>>>();
 
 	public InsertOperator(String schema, String table, MetaData meta)
 	{
 		this.schema = schema;
 		this.table = table;
 		this.meta = meta;
+	}
+	
+	private static boolean registerDelayed(InsertOperator caller, String schema, String table, int node, Transaction tx, List<ArrayList<Object>> rows)
+	{
+		synchronized(txDelayedMaps)
+		{
+			String key = schema + "." + table + "~" + node;
+			HashMap<String, InsertOperator> map = txDelayedMaps.get(tx.number());
+			if (map == null)
+			{
+				map = new HashMap<String, InsertOperator>();
+				map.put(key, caller);
+				delayedRows.put(caller, rows);
+				txDelayedMaps.put(tx.number(), map);
+				return true;
+			}
+			
+			InsertOperator owner = map.get(key);
+			if (owner == null)
+			{
+				map.put(key, caller);
+				delayedRows.put(caller, rows);
+				return true;
+			}
+			
+			delayedRows.get(owner).add(rows.get(0));
+			return false;
+		}
+	}
+	
+	private static List<ArrayList<Object>> deregister(InsertOperator owner, String schema, String table, int node, Transaction tx)
+	{
+		synchronized(txDelayedMaps)
+		{
+			List<ArrayList<Object>> retval = delayedRows.remove(owner);
+			HashMap<String, InsertOperator> map = txDelayedMaps.get(tx.number());
+			String key = schema + "." + table + "~" + node;
+			map.remove(key);
+			if (map.size() == 0)
+			{
+				txDelayedMaps.remove(tx.number());
+			}
+			
+			return retval;
+		}
+	}
+	
+	public static void wakeUpDelayed(Transaction tx)
+	{
+		synchronized(txDelayedMaps)
+		{
+			HashMap<String, InsertOperator> map = txDelayedMaps.get(tx.number());
+			
+			if (map == null)
+			{
+				return;
+			}
+			
+			for (InsertOperator io : map.values())
+			{
+				synchronized(io)
+				{
+					io.notify();
+				}
+			}
+		}
 	}
 
 	private static byte[] intToBytes(int val)
@@ -163,6 +237,11 @@ public final class InsertOperator implements Operator, Serializable
 	{
 		return table;
 	}
+	
+	public String getSchema()
+	{
+		return schema;
+	}
 
 	@Override
 	// @?Parallel
@@ -172,6 +251,8 @@ public final class InsertOperator implements Operator, Serializable
 		{
 			LockSupport.parkNanos(500);
 		}
+		
+		//HRDBMSWorker.logger.debug("IO is about to return: " + num.get());
 
 		if (num.get() == Integer.MIN_VALUE)
 		{
@@ -340,7 +421,15 @@ public final class InsertOperator implements Operator, Serializable
 			o = child.next(this);
 		}
 
-		if (map.totalSize() > 0)
+		if (!ConnectionWorker.isDelayed(tx) && map.totalSize() > 0)
+		{
+			flush(indexes, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
+		}
+		else if (ConnectionWorker.isDelayed(tx) && map.totalSize() == 1)
+		{
+			delayedFlush(indexes, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
+		}
+		else if (ConnectionWorker.isDelayed(tx) && map.totalSize() > 1)
 		{
 			flush(indexes, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
 		}
@@ -412,7 +501,7 @@ public final class InsertOperator implements Operator, Serializable
 		for (Object o : map.getKeySet())
 		{
 			int node = (Integer)o;
-			Set<ArrayList<Object>> list = map.get(node);
+			List<ArrayList<Object>> list = map.get(node);
 			threads.add(new FlushThread(list, indexes, node, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type));
 		}
 
@@ -443,6 +532,54 @@ public final class InsertOperator implements Operator, Serializable
 
 		map.clear();
 	}
+	
+	private void delayedFlush(ArrayList<String> indexes, HashMap<String, Integer> cols2Pos, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type)
+	{
+		FlushThread thread = null;
+		int node = -1;
+		for (Object o : map.getKeySet())
+		{
+			node = (Integer)o;
+			List<ArrayList<Object>> list = map.get(node);
+			boolean owner = InsertOperator.registerDelayed(this, schema, table, node, tx, list);
+			if (!owner)
+			{
+				return;
+			}
+		}
+
+		synchronized(this)
+		{
+			try
+			{
+				wait();
+			}
+			catch(InterruptedException e)
+			{}
+		}
+		
+		List<ArrayList<Object>> list = InsertOperator.deregister(this, schema, table, node, tx);
+		thread = new FlushThread(list, indexes, node, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
+		thread.start();
+
+		while (true)
+		{
+			try
+			{
+				thread.join();
+				break;
+			}
+			catch (InterruptedException e)
+			{
+			}
+		}
+		
+		if (!thread.getOK())
+		{
+			//HRDBMSWorker.logger.debug("IO setting num to MIN_VALUE");
+			num.set(Integer.MIN_VALUE);
+		}
+	}
 
 	private byte[] stringToBytes(String string)
 	{
@@ -463,7 +600,7 @@ public final class InsertOperator implements Operator, Serializable
 
 	private class FlushThread extends HRDBMSThread
 	{
-		private final Set<ArrayList<Object>> list;
+		private final List<ArrayList<Object>> list;
 		private final ArrayList<String> indexes;
 		private boolean ok = true;
 		private final int node;
@@ -476,7 +613,7 @@ public final class InsertOperator implements Operator, Serializable
 		private final HashMap<String, String> cols2Types;
 		private final int type;
 
-		public FlushThread(Set<ArrayList<Object>> list, ArrayList<String> indexes, int node, HashMap<String, Integer> cols2Pos, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type)
+		public FlushThread(List<ArrayList<Object>> list, ArrayList<String> indexes, int node, HashMap<String, Integer> cols2Pos, PartitionMetaData spmd, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type)
 		{
 			this.list = list;
 			this.indexes = indexes;
@@ -509,8 +646,14 @@ public final class InsertOperator implements Operator, Serializable
 				sock = new Socket();
 				sock.setReceiveBufferSize(4194304);
 				sock.setSendBufferSize(4194304);
-				sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
-				OutputStream out = sock.getOutputStream();
+				InetSocketAddress inetAddr = addrCache.get(hostname);
+				if (inetAddr == null)
+				{
+					inetAddr = new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
+					addrCache.put(hostname, inetAddr);
+				}
+				sock.connect(inetAddr);
+				OutputStream out = new BufferedOutputStream(sock.getOutputStream());
 				byte[] outMsg = "INSERT          ".getBytes(StandardCharsets.UTF_8);
 				outMsg[8] = 0;
 				outMsg[9] = 0;
@@ -525,20 +668,32 @@ public final class InsertOperator implements Operator, Serializable
 				out.write(stringToBytes(schema));
 				out.write(stringToBytes(table));
 				out.write(intToBytes(type));
-				ObjectOutputStream objOut = new ObjectOutputStream(out);
-				objOut.writeObject(indexes);
-				objOut.writeObject(new ArrayList(list));
-				objOut.writeObject(keys);
-				objOut.writeObject(types);
-				objOut.writeObject(orders);
-				objOut.writeObject(cols2Pos);
-				objOut.writeObject(spmd);
-				objOut.writeObject(pos2Col);
-				objOut.writeObject(cols2Types);
-				objOut.flush();
+				out.write(stringToBytes(spmd.getNGExp()));
+				out.write(stringToBytes(spmd.getNExp()));
+				out.write(stringToBytes(spmd.getDExp()));
+				IdentityHashMap<Object, Long> prev = new IdentityHashMap<Object, Long>();
+				OperatorUtils.serializeALS(indexes, out, prev);
+				OperatorUtils.serializeALALO(new ArrayList(list), out, prev);
+				OperatorUtils.serializeALALS(keys, out, prev);
+				OperatorUtils.serializeALALS(types, out, prev);
+				OperatorUtils.serializeALALB(orders, out, prev);
+				OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+				OperatorUtils.serializeTM(pos2Col, out, prev);
+				OperatorUtils.serializeStringHM(cols2Types, out, prev);
+				//ObjectOutputStream objOut = new ObjectOutputStream(out);
+				//objOut.writeObject(indexes);
+				//objOut.writeObject(new ArrayList(list));
+				//objOut.writeObject(keys);
+				//objOut.writeObject(types);
+				//objOut.writeObject(orders);
+				//objOut.writeObject(cols2Pos);
+				//objOut.writeObject(pos2Col);
+				//objOut.writeObject(cols2Types);
+				//objOut.flush();
 				out.flush();
 				getConfirmation(sock);
-				objOut.close();
+				//objOut.close();
+				out.close();
 				sock.close();
 			}
 			catch (Exception e)

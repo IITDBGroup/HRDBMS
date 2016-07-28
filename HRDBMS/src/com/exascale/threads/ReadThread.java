@@ -94,7 +94,7 @@ public class ReadThread extends HRDBMSThread
 					thread.join();
 				}
 
-				this.terminate();
+				//this.terminate();
 				return;
 			}
 
@@ -138,7 +138,7 @@ public class ReadThread extends HRDBMSThread
 					i++;
 				}
 
-				this.terminate();
+				//this.terminate();
 				return;
 			}
 
@@ -191,13 +191,13 @@ public class ReadThread extends HRDBMSThread
 				schemaMap.put(p.block().number(), schema);
 				schema.prepRowIter(fetchPos);
 			}
-			this.terminate();
+			//this.terminate();
 		}
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.warn("I/O error occurred trying to read file: " + b.fileName() + ":" + b.number(), e);
 			ok = false;
-			this.terminate();
+			//this.terminate();
 			return;
 		}
 		return;

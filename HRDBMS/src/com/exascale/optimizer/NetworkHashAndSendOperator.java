@@ -7,9 +7,12 @@ import java.io.OutputStream;
 import java.lang.reflect.Field;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedOutputStream;
@@ -490,7 +493,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		return "NetworkHashAndSendOperator(" + node + ") " + hashCols + " ID = " + id;
 	}
 
-	private long hash(Object key) throws Exception
+	private static long hash(Object key) throws Exception
 	{
 		long eHash;
 		if (key == null)
@@ -501,7 +504,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		{
 			if (key instanceof ArrayList)
 			{
-				byte[] data = toBytes(key);
+				byte[] data = toBytesForHash((ArrayList<Object>)key);
 				eHash = MurmurHash.hash64(data, data.length);
 			}
 			else
@@ -512,5 +515,42 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		}
 
 		return eHash;
+	}
+	
+	private static byte[] toBytesForHash(ArrayList<Object> key)
+	{
+		StringBuilder sb = new StringBuilder();
+		for (Object o : key)
+		{
+			if (o instanceof Double)
+			{
+				DecimalFormat df = new DecimalFormat("0", DecimalFormatSymbols.getInstance(Locale.ENGLISH));
+				df.setMaximumFractionDigits(340); //340 = DecimalFormat.DOUBLE_FRACTION_DIGITS
+
+				sb.append(df.format((Double)o));
+				sb.append((char)0);
+			}
+			else if (o instanceof Number)
+			{
+				sb.append(o);
+				sb.append((char)0);
+			}
+			else
+			{
+				sb.append(o.toString());
+				sb.append((char)0);
+			}
+		}
+		
+		final int z = sb.length();
+		byte[] retval = new byte[z];
+		int i = 0;
+		while (i < z)
+		{
+			retval[i] = (byte)sb.charAt(i);
+			i++;
+		}
+		
+		return retval;
 	}
 }

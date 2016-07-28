@@ -28,7 +28,7 @@ public class KillDB
 					System.exit(1);
 				}
 
-				String cmd = "pkill java";
+				String cmd = "pkill -9 java";
 
 				// if (type.equals("C"))
 				{

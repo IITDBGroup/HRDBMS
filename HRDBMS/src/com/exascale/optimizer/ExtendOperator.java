@@ -59,6 +59,7 @@ public final class ExtendOperator implements Operator, Serializable
 	private transient volatile ArrayList<Double> literals;
 	private transient AtomicLong received;
 	private transient volatile boolean demReceived;
+	private boolean singleThreaded = false;
 
 	public ExtendOperator(String prefix, String name, MetaData meta)
 	{
@@ -89,9 +90,15 @@ public final class ExtendOperator implements Operator, Serializable
 		value.tokens = OperatorUtils.deserializeFST(in, prev);
 		value.master = OperatorUtils.deserializeADS(in, prev);
 		value.startDone = OperatorUtils.readBool(in);
+		value.singleThreaded = OperatorUtils.readBool(in);
 		value.received = new AtomicLong(0);
 		value.demReceived = false;
 		return value;
+	}
+	
+	public boolean isSingleThreaded()
+	{
+		return singleThreaded;
 	}
 
 	@Override
@@ -131,6 +138,7 @@ public final class ExtendOperator implements Operator, Serializable
 		final ExtendOperator retval = new ExtendOperator(prefix, name, meta);
 		retval.node = node;
 		retval.tokens = tokens.clone();
+		retval.singleThreaded = singleThreaded;
 		return retval;
 	}
 
@@ -367,6 +375,7 @@ public final class ExtendOperator implements Operator, Serializable
 		OperatorUtils.serializeFST(tokens, out, prev);
 		OperatorUtils.serializeADS(master, out, prev);
 		OperatorUtils.writeBool(startDone, out);
+		OperatorUtils.writeBool(singleThreaded, out);
 	}
 
 	@Override
@@ -384,6 +393,11 @@ public final class ExtendOperator implements Operator, Serializable
 	public void setPlan(Plan plan)
 	{
 	}
+	
+	public void setSingleThreaded()
+	{
+		singleThreaded = true;
+	}
 
 	@Override
 	public void start() throws Exception
@@ -391,13 +405,20 @@ public final class ExtendOperator implements Operator, Serializable
 		startDone = true;
 		child.start();
 		queue = new BufferedLinkedBlockingQueue(ResourceManager.QUEUE_SIZE);
-		if (ResourceManager.GPU)
+		if (!singleThreaded && ResourceManager.GPU)
 		{
 			new GPUThread(true).start();
 		}
 		else
 		{
-			new NonGPUThread().start();
+			if (singleThreaded)
+			{
+				new NonGPUThread().run();
+			}
+			else
+			{
+				new NonGPUThread().start();
+			}
 		}
 	}
 
@@ -614,7 +635,11 @@ public final class ExtendOperator implements Operator, Serializable
 		@Override
 		public void run()
 		{
-			final List<Kernel> jobs = new ArrayList<Kernel>(ResourceManager.CUDA_SIZE);
+			List<Kernel> jobs = null;
+			if (ResourceManager.GPU)
+			{
+				jobs = new ArrayList<Kernel>(ResourceManager.CUDA_SIZE);
+			}
 			final ArrayList<Double> calced = new ArrayList<Double>();
 			int i = 0;
 			while (true)
@@ -768,6 +793,13 @@ public final class ExtendOperator implements Operator, Serializable
 		@Override
 		public void run()
 		{
+			if (singleThreaded)
+			{
+				new GPUThread(false).run();
+				queue.put(new DataEndMarker());
+				return;
+			}
+			
 			ArrayList<GPUThread> threads = new ArrayList<GPUThread>();
 			int z = 0;
 			int limit = Runtime.getRuntime().availableProcessors();
