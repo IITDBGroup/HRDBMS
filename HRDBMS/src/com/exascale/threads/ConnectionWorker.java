@@ -87,6 +87,7 @@ import com.exascale.optimizer.Operator;
 import com.exascale.optimizer.OperatorUtils;
 import com.exascale.optimizer.RIDAndIndexKeys;
 import com.exascale.optimizer.RootOperator;
+import com.exascale.optimizer.RoutingOperator;
 import com.exascale.optimizer.SortOperator;
 import com.exascale.optimizer.TableScanOperator;
 import com.exascale.tables.DataType;
@@ -100,7 +101,7 @@ import com.sun.management.OperatingSystemMXBean;
 
 public class ConnectionWorker extends HRDBMSThread
 {
-	private static ConcurrentHashMap<Integer, NetworkSendOperator> sends;
+	private static ConcurrentHashMap<Integer, Operator> sends;
 	private static int PREFETCH_REQUEST_SIZE;
 	private static int PAGES_IN_ADVANCE;
 	private static ConcurrentHashMap<String, LoadMetaData> ldmds = new ConcurrentHashMap<String, LoadMetaData>(16, 0.75f, 6 * ResourceManager.cpus);
@@ -120,7 +121,7 @@ public class ConnectionWorker extends HRDBMSThread
 
 	static
 	{
-		sends = new ConcurrentHashMap<Integer, NetworkSendOperator>();
+		sends = new ConcurrentHashMap<Integer, Operator>();
 		HParms hparms = HRDBMSWorker.getHParms();
 		PREFETCH_REQUEST_SIZE = Integer.parseInt(hparms.getProperty("prefetch_request_size")); // 80
 		PAGES_IN_ADVANCE = Integer.parseInt(hparms.getProperty("pages_in_advance")); // 40
@@ -1167,11 +1168,11 @@ public class ConnectionWorker extends HRDBMSThread
 					num = in.read(idBytes);
 					if (num != 4)
 					{
-						throw new Exception("Received less than 4 bytes when reading id field in SNDRMTTR command.");
+						throw new Exception("Received less than 4 bytes when reading id field in ROUTING command.");
 					}
 
 					final int id = bytesToInt(idBytes);
-					NetworkSendOperator send = sends.get(id);
+					Operator send = sends.get(id);
 					while (send == null)
 					{
 						LockSupport.parkNanos(500);
@@ -1179,26 +1180,53 @@ public class ConnectionWorker extends HRDBMSThread
 					}
 					// System.out.println("Adding connection from " + from +
 					// " to " + send + " = " + sock);
-					send.addConnection(from, sock);
+					if (send instanceof NetworkSendOperator)
+					{
+						((NetworkSendOperator)send).addConnection(from, sock);
+					}
+					else
+					{
+						((RoutingOperator)send).addConnection(from, sock);
+					}
 					while (!XAManager.rP2)
 					{
 						Thread.sleep(1000);
 					}
 					synchronized (send)
 					{
-						if (send.notStarted() && send.hasAllConnections())
+						if (send instanceof NetworkSendOperator)
 						{
-							ResourceManager.registerOperator(send);
-							send.start();
-							try
+							if (((NetworkSendOperator)send).notStarted() && ((NetworkSendOperator)send).hasAllConnections())
 							{
-								send.close();
-								ResourceManager.deregisterOperator(send);
+								ResourceManager.registerOperator(send);
+								send.start();
+								try
+								{
+									send.close();
+									ResourceManager.deregisterOperator(send);
+								}
+								catch (Exception e)
+								{
+								}
+								sends.remove(id);
 							}
-							catch (Exception e)
+						}
+						else
+						{
+							if (((RoutingOperator)send).notStarted() && ((RoutingOperator)send).hasAllConnections())
 							{
+								ResourceManager.registerOperator(send);
+								send.start();
+								try
+								{
+									send.close();
+									ResourceManager.deregisterOperator(send);
+								}
+								catch (Exception e)
+								{
+								}
+								sends.remove(id);
 							}
-							sends.remove(id);
 						}
 					}
 				}
@@ -1208,42 +1236,223 @@ public class ConnectionWorker extends HRDBMSThread
 					num = in.read(idBytes);
 					if (num != 4)
 					{
-						throw new Exception("Received less than 4 bytes when reading id field in SNDRMTTR command.");
+						throw new Exception("Received less than 4 bytes when reading id field in ROUTING command.");
 					}
 
 					final int id = bytesToInt(idBytes);
 					HashMap<Long, Object> map = new HashMap<Long, Object>();
-					NetworkSendOperator op = (NetworkSendOperator)OperatorUtils.deserializeOperator(in, map);
+					Operator op = OperatorUtils.deserializeOperator(in, map);
 					map.clear();
 					map = null;
 					if (sends.putIfAbsent(id, op) == null)
 					{
-						op.startChildren();
+						if (op instanceof NetworkSendOperator)
+						{
+							((NetworkSendOperator)op).startChildren();
+						}
+						else
+						{
+							((RoutingOperator)op).startChildren();
+						}
 					}
 
-					final NetworkSendOperator send = sends.get(id);
+					final Operator send = sends.get(id);
 					// System.out.println("Adding connection from " + from +
 					// " to " + send + " = " + sock);
-					send.addConnection(from, sock);
+					if (send instanceof NetworkSendOperator)
+					{
+						((NetworkSendOperator)send).addConnection(from, sock);
+					}
+					else
+					{
+						((RoutingOperator)send).addConnection(from, sock);
+					}
 					while (!XAManager.rP2)
 					{
 						Thread.sleep(1000);
 					}
 					synchronized (send)
 					{
-						if (send.notStarted() && send.hasAllConnections())
+						if (send instanceof NetworkSendOperator)
 						{
-							ResourceManager.registerOperator(send);
-							send.start();
-							try
+							if (((NetworkSendOperator)send).notStarted() && ((NetworkSendOperator)send).hasAllConnections())
 							{
-								send.close();
-								ResourceManager.deregisterOperator(send);
+								ResourceManager.registerOperator(send);
+								send.start();
+								try
+								{
+									send.close();
+									ResourceManager.deregisterOperator(send);
+								}
+								catch (Exception e)
+								{
+								}
+								sends.remove(id);
 							}
-							catch (Exception e)
+						}
+						else
+						{
+							if (((RoutingOperator)send).notStarted() && ((RoutingOperator)send).hasAllConnections())
 							{
+								ResourceManager.registerOperator(send);
+								send.start();
+								try
+								{
+									send.close();
+									ResourceManager.deregisterOperator(send);
+								}
+								catch (Exception e)
+								{
+								}
+								sends.remove(id);
 							}
-							sends.remove(id);
+						}
+					}
+				}
+				else if (command.equals("ROUTING2"))
+				{
+					final byte[] idBytes = new byte[4];
+					num = in.read(idBytes);
+					if (num != 4)
+					{
+						throw new Exception("Received less than 4 bytes when reading id field in ROUTING command.");
+					}
+
+					final int id = bytesToInt(idBytes);
+					Operator send = sends.get(id);
+					while (send == null)
+					{
+						LockSupport.parkNanos(500);
+						send = sends.get(id);
+					}
+					// System.out.println("Adding connection from " + from +
+					// " to " + send + " = " + sock);
+					if (send instanceof NetworkSendOperator)
+					{
+						((NetworkSendOperator)send).addConnection(from, sock);
+					}
+					else
+					{
+						((RoutingOperator)send).addConnection(from, sock);
+					}
+					while (!XAManager.rP2)
+					{
+						Thread.sleep(1000);
+					}
+					synchronized (send)
+					{
+						if (send instanceof NetworkSendOperator)
+						{
+							if (((NetworkSendOperator)send).notStarted() && ((NetworkSendOperator)send).hasAllConnections())
+							{
+								ResourceManager.registerOperator(send);
+								send.start();
+								try
+								{
+									send.close();
+									ResourceManager.deregisterOperator(send);
+								}
+								catch (Exception e)
+								{
+								}
+								sends.remove(id);
+							}
+						}
+						else
+						{
+							if (((RoutingOperator)send).notStarted() && ((RoutingOperator)send).hasAllConnections())
+							{
+								ResourceManager.registerOperator(send);
+								send.start();
+								try
+								{
+									send.close();
+									ResourceManager.deregisterOperator(send);
+								}
+								catch (Exception e)
+								{
+								}
+								sends.remove(id);
+							}
+						}
+					}
+				}
+				else if (command.equals("ROUTING "))
+				{
+					final byte[] idBytes = new byte[4];
+					num = in.read(idBytes);
+					if (num != 4)
+					{
+						throw new Exception("Received less than 4 bytes when reading id field in ROUTING command.");
+					}
+
+					final int id = bytesToInt(idBytes);
+					HashMap<Long, Object> map = new HashMap<Long, Object>();
+					Operator op = OperatorUtils.deserializeOperator(in, map);
+					map.clear();
+					map = null;
+					if (sends.putIfAbsent(id, op) == null)
+					{
+						if (op instanceof NetworkSendOperator)
+						{
+							((NetworkSendOperator)op).startChildren();
+						}
+						else
+						{
+							((RoutingOperator)op).startChildren();
+						}
+					}
+
+					final Operator send = sends.get(id);
+					// System.out.println("Adding connection from " + from +
+					// " to " + send + " = " + sock);
+					if (send instanceof NetworkSendOperator)
+					{
+						((NetworkSendOperator)send).addConnection(from, sock);
+					}
+					else
+					{
+						((RoutingOperator)send).addConnection(from, sock);
+					}
+					while (!XAManager.rP2)
+					{
+						Thread.sleep(1000);
+					}
+					synchronized (send)
+					{
+						if (send instanceof NetworkSendOperator)
+						{
+							if (((NetworkSendOperator)send).notStarted() && ((NetworkSendOperator)send).hasAllConnections())
+							{
+								ResourceManager.registerOperator(send);
+								send.start();
+								try
+								{
+									send.close();
+									ResourceManager.deregisterOperator(send);
+								}
+								catch (Exception e)
+								{
+								}
+								sends.remove(id);
+							}
+						}
+						else
+						{
+							if (((RoutingOperator)send).notStarted() && ((RoutingOperator)send).hasAllConnections())
+							{
+								ResourceManager.registerOperator(send);
+								send.start();
+								try
+								{
+									send.close();
+									ResourceManager.deregisterOperator(send);
+								}
+								catch (Exception e)
+								{
+								}
+								sends.remove(id);
+							}
 						}
 					}
 				}

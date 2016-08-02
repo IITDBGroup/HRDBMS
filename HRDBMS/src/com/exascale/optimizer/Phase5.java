@@ -19,6 +19,7 @@ public final class Phase5
 	private final Transaction tx;
 	private final HashMap<ArrayList<Filter>, Double> likelihoodCache;
 	private final HashMap<String, Integer> typeCache = new HashMap<String, Integer>();
+	private static final int N_MAX = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 
 	public Phase5(RootOperator root, Transaction tx, HashMap<ArrayList<Filter>, Double> likelihoodCache)
 	{
@@ -67,6 +68,7 @@ public final class Phase5
 		// addIndexesToJoins();
 		turnOffDistinctUnion(root, false, new HashSet<Operator>());
 		largeGBs(root, new HashSet<Operator>());
+		doMToNForAll(root, new HashSet<Operator>());
 		setCards(root, new HashSet<Operator>());
 		setNumParents(root);
 		// sanityCheck(root, -1);
@@ -75,6 +77,143 @@ public final class Phase5
 		sortLimit(root, new HashSet<Operator>());
 		indexOnlyScan(root, new HashSet<Operator>());
 		pruneTree(root, new IdentityHashMap<Operator, Operator>());
+	}
+	
+	private void doMToNForAll(Operator op, HashSet<Operator> visited) throws Exception
+	{
+		if (op instanceof NetworkSendOperator)
+		{
+			if (visited.contains(op))
+			{
+				return;
+			}
+
+			visited.add(op);
+		}
+
+		if (op instanceof NetworkReceiveOperator && op.getClass().equals(NetworkHashReceiveOperator.class) && (op.children().get(0) instanceof NetworkHashAndSendOperator))
+		{
+			doMToN((NetworkHashReceiveOperator)op);
+		}
+		
+		for (Operator o : op.children())
+		{
+			doMToNForAll(o, visited);
+		}
+	}
+	
+	private void doMToN(NetworkHashReceiveOperator receive) throws Exception
+	{
+		if (receive.children().size() > N_MAX)
+		{
+			HashSet<NetworkHashAndSendOperator> sends = new HashSet<NetworkHashAndSendOperator>();
+			HashSet<NetworkHashReceiveOperator> receives = new HashSet<NetworkHashReceiveOperator>();
+			gatherSendsAndReceives(receive, sends, receives);
+			buildNetwork(sends, receives);
+		}
+	}
+	
+	private void gatherSendsAndReceives(NetworkHashReceiveOperator op, HashSet<NetworkHashAndSendOperator> sends, HashSet<NetworkHashReceiveOperator> receives) throws Exception
+	{
+		for (Operator o : op.children())
+		{
+			sends.add((NetworkHashAndSendOperator)o);
+			ArrayList<Operator> parents = ((NetworkHashAndSendOperator)o).parents();
+			for (Operator o2 : parents)
+			{
+				receives.add((NetworkHashReceiveOperator)o2);
+			}
+		}
+	}
+	
+	private void buildNetwork(HashSet<NetworkHashAndSendOperator> sends, HashSet<NetworkHashReceiveOperator> receives) throws Exception
+	{
+		for (Operator o : receives)
+		{
+			for (Operator o2 : (ArrayList<Operator>)o.children().clone())
+			{
+				o2.removeChild(o2);
+			}
+		}
+		
+		ArrayList<RoutingOperator> current = new ArrayList<RoutingOperator>();
+		int fromID = Phase4.id.getAndIncrement();
+		for (NetworkHashAndSendOperator o : sends)
+		{
+			Operator child = o.children().get(0);
+			o.removeChild(child);
+			RoutingOperator route = new RoutingOperator(meta);
+			route.setNode(o.getNode());
+			route.setFirst(o.getHashCols());
+			route.setFromID(fromID);
+			route.setStarting(o.getStarting());
+			route.setNumNodes(o.getNumNodes());
+			route.add(child);
+			current.add(route);
+		}
+		
+		int layers = 1;
+		int toID;
+		while (layers < ResourceManager.MAX_HOPS)
+		{
+			//build another layer
+			HashMap<Integer, RoutingOperator> nodeToOp = new HashMap<Integer, RoutingOperator>();
+			toID = fromID;
+			fromID = Phase4.id.getAndIncrement();
+			for (Operator o : current)
+			{
+				ArrayList<Integer> targets = ResourceManager.getNetworkTargetsForNode(o.getNode());
+				for (int x : targets)
+				{
+					RoutingOperator route = nodeToOp.get(x);
+					if (route == null)
+					{
+						route = new RoutingOperator(meta);
+						route.setNode(x);
+						route.setToID(toID);
+						route.setFromID(fromID);
+						nodeToOp.put(x, route);
+					}
+					
+					route.add(o);
+				}
+			}
+			
+			layers++;
+			current = new ArrayList<RoutingOperator>(nodeToOp.values());
+		}
+		
+		for (NetworkHashReceiveOperator o : receives)
+		{
+			fromID = o.getID();
+			break;
+		}
+		
+		for (RoutingOperator o : current)
+		{
+			o.setLast();
+			o.setFromID(fromID);
+		}
+		
+		//connect to receives
+		HashMap<Integer, NetworkHashReceiveOperator> nodeToReceives = new HashMap<Integer, NetworkHashReceiveOperator>();
+		for (NetworkHashReceiveOperator o : receives)
+		{
+			nodeToReceives.put(o.getNode(), o);
+		}
+		
+		for (RoutingOperator o : current)
+		{
+			ArrayList<Integer> targets = ResourceManager.getNetworkTargetsForNode(o.getNode());
+			for (int x : targets)
+			{
+				NetworkHashReceiveOperator nhro = nodeToReceives.get(x);
+				if (nhro != null)
+				{
+					nhro.add(o);
+				}
+			}
+		}
 	}
 
 	public void printTree(Operator op, int indent) throws Exception
@@ -553,6 +692,23 @@ public final class Phase5
 		cCache.put(op, retval);
 		return retval;
 	}
+	
+	private long cardTX2(Operator op) throws Exception
+	{
+		long card = 0;
+		for (Operator o : op.children())
+		{
+			card += card(o);
+		}
+		
+		long retval = card / ((RoutingOperator)op).parents().size();
+		if (retval == 0)
+		{
+			retval = 1;
+		}
+		cCache.put(op, retval);
+		return retval;
+	}
 
 	private long cardTXRR(Operator op) throws Exception
 	{
@@ -987,6 +1143,16 @@ public final class Phase5
 
 			touched.add(op);
 		}
+		
+		if (op instanceof RoutingOperator)
+		{
+			if (touched.contains(op))
+			{
+				return;
+			}
+
+			touched.add(op);
+		}
 
 		if (op instanceof TableScanOperator && op.children().size() == 0)
 		{
@@ -1090,6 +1256,11 @@ public final class Phase5
 		{
 			return cardTX(op);
 		}
+		
+		if (op instanceof RoutingOperator)
+		{
+			return cardTX2(op);
+		}
 
 		if (op instanceof NetworkSendRROperator)
 		{
@@ -1162,6 +1333,22 @@ public final class Phase5
 			else
 			{
 				((NetworkHashReceiveAndMergeOperator)op).setSend();
+				for (Operator o2 : op.children())
+				{
+					covered.put(o2, o2);
+				}
+			}
+		}
+		else if (op instanceof RoutingOperator)
+		{
+			Operator o = op.children().get(0);
+			if (covered.containsKey(o))
+			{
+				return;
+			}
+			else
+			{
+				((RoutingOperator)op).setSend();
 				for (Operator o2 : op.children())
 				{
 					covered.put(o2, o2);
@@ -1259,6 +1446,16 @@ public final class Phase5
 	private void setCards(Operator op, HashSet<Operator> touched) throws Exception
 	{
 		if (op instanceof NetworkSendOperator)
+		{
+			if (touched.contains(op))
+			{
+				return;
+			}
+
+			touched.add(op);
+		}
+		
+		if (op instanceof RoutingOperator)
 		{
 			if (touched.contains(op))
 			{
@@ -1457,6 +1654,15 @@ public final class Phase5
 			}
 			((NetworkSendOperator)op).clearParent();
 		}
+		
+		if (op instanceof RoutingOperator)
+		{
+			if (!((RoutingOperator)op).setNumParents())
+			{
+				return;
+			}
+			((RoutingOperator)op).clearParent();
+		}
 
 		for (final Operator o : op.children())
 		{
@@ -1467,6 +1673,16 @@ public final class Phase5
 	private void setSpecificCoord(Operator op, HashSet<Operator> touched) throws Exception
 	{
 		if (op instanceof NetworkSendOperator)
+		{
+			if (touched.contains(op))
+			{
+				return;
+			}
+
+			touched.add(op);
+		}
+		
+		if (op instanceof RoutingOperator)
 		{
 			if (touched.contains(op))
 			{
@@ -1522,6 +1738,16 @@ public final class Phase5
 	private void sortLimit(Operator op, HashSet<Operator> touched)
 	{
 		if (op instanceof NetworkSendOperator)
+		{
+			if (touched.contains(op))
+			{
+				return;
+			}
+
+			touched.add(op);
+		}
+		
+		if (op instanceof RoutingOperator)
 		{
 			if (touched.contains(op))
 			{
