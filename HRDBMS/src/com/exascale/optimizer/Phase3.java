@@ -139,10 +139,10 @@ public final class Phase3
 	{
 		pushDownGB(root);
 		final ArrayList<NetworkReceiveOperator> receives = getReceives(root);
-		for (final NetworkReceiveOperator receive : receives)
-		{
-			makeHierarchical(receive);
-		}
+		//for (final NetworkReceiveOperator receive : receives)
+		//{
+		//	makeHierarchical(receive);
+		//}
 		pushUpReceives();
 		// collapseDuplicates(root);
 		assignNodes(root, -1);
@@ -1532,7 +1532,8 @@ public final class Phase3
 					throw e;
 				}
 				// makeHierarchical2(receive);
-				makeHierarchical(receive);
+				//makeHierarchical(receive);
+				//doMToN(receive);
 				return true;
 			}
 			else
@@ -1691,7 +1692,8 @@ public final class Phase3
 					throw e;
 				}
 				// makeHierarchical2(receive);
-				makeHierarchical(receive);
+				//makeHierarchical(receive);
+				//doMToN(receive);
 			}
 			return false;
 		}
@@ -1837,6 +1839,8 @@ public final class Phase3
 			HRDBMSWorker.logger.error("", e);
 			throw e;
 		}
+		
+		makeHierarchical(receive);
 		return false;
 	}
 
@@ -2484,6 +2488,11 @@ public final class Phase3
 
 	private void makeHierarchical(NetworkReceiveOperator receive) throws Exception
 	{
+		if ((receive instanceof NetworkHashReceiveAndMergeOperator) || (receive instanceof NetworkHashReceiveOperator))
+		{
+			return;
+		}
+		
 		if (receive.children().size() > MAX_INCOMING_CONNECTIONS)
 		{
 			int numMiddle = receive.children().size() / MAX_INCOMING_CONNECTIONS;
@@ -2514,6 +2523,13 @@ public final class Phase3
 			}
 
 			int i = 0;
+			ArrayList<Integer> notUsed = new ArrayList<Integer>();
+			while (i < MetaData.numWorkerNodes)
+			{
+				notUsed.add(i++);
+			}
+			
+			i = 0;
 			while (sends.size() > 0)
 			{
 				try
@@ -2530,33 +2546,45 @@ public final class Phase3
 
 				if (i == numPerMiddle)
 				{
-					int node = Math.abs(ThreadLocalRandom.current().nextInt()) % MetaData.numWorkerNodes;
+					int slot = ThreadLocalRandom.current().nextInt(notUsed.size());
+					int node = notUsed.get(slot);
+					notUsed.remove(slot);
+					
+					newReceive.setNode(node);
 					final NetworkSendOperator newSend = new NetworkSendOperator(node, meta);
 					try
 					{
 						newSend.add(newReceive);
 						receive.add(newSend);
-						newReceive.setNode(node);
 					}
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
 						throw e;
 					}
-					newReceive = new NetworkReceiveOperator(meta);
+					if (receive instanceof NetworkReceiveAndMergeOperator)
+					{
+						newReceive = receive.clone();
+					}
+					else
+					{
+						newReceive = new NetworkReceiveOperator(meta);
+					}
 					i = 0;
 				}
 			}
 
 			if (i != 0)
 			{
-				int node = Math.abs(ThreadLocalRandom.current().nextInt()) % MetaData.numWorkerNodes;
+				int slot = ThreadLocalRandom.current().nextInt(notUsed.size());
+				int node = notUsed.get(slot);
+				notUsed.remove(slot);
+				newReceive.setNode(node);
 				final NetworkSendOperator newSend = new NetworkSendOperator(node, meta);
 				try
 				{
 					newSend.add(newReceive);
 					receive.add(newSend);
-					newReceive.setNode(node);
 				}
 				catch (final Exception e)
 				{

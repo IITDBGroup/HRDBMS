@@ -104,6 +104,7 @@ public class OperatorUtils
 	// 82 - Index null;
 	// 83 - BoolArray
 	// 84 - ALALO
+	// 85 - Routing
 
 	public static int bytesToInt(byte[] val)
 	{
@@ -1178,6 +1179,8 @@ public class OperatorUtils
 			// 80 - HMIntOp
 			case 81:
 				return null;
+			case 85:
+				return RoutingOperator.deserialize(in, prev);
 			default:
 				throw new Exception("Unknown type in deserialize operator: " + type);
 		}

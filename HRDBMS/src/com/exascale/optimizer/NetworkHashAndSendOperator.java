@@ -66,6 +66,11 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		this.meta = meta;
 		received = new AtomicLong(0);
 	}
+	
+	public int getNumNodes()
+	{
+		return numNodes;
+	}
 
 	public static NetworkHashAndSendOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
 	{

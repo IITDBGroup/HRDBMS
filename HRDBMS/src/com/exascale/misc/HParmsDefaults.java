@@ -87,6 +87,8 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("hjo_bin_size", "100000");
 		retval.setProperty("mo_bin_size", "3000000");
 		retval.setProperty("lock_timeout_ms", "60000");
+		retval.setProperty("max_rr", "1200");
+		retval.setProperty("initial_max_hops", "3");
 		HParmsDefaults.retval = retval;
 		return retval;
 	}

@@ -18,6 +18,7 @@ public final class Phase4
 	// Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")));
 	private static final int MAX_LOCAL_LEFT_HASH = 2;
 	private static final int MAX_LOCAL_SORT = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_local_sort")); // 1000000
+	private static final int MAX_RR = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_rr"));
 	public static AtomicInteger id = new AtomicInteger(0);
 	private final RootOperator root;
 	private final MetaData meta;
@@ -78,6 +79,7 @@ public final class Phase4
 		allIntersectionsHave2Children(root, new HashSet<Operator>());
 		pushUpReceives();
 		redistributeSorts();
+		makeHierarchicalForAll(root, new HashSet<Operator>());
 		removeLocalSendReceive(root, new HashSet<Operator>());
 		removeDuplicateReorders(root, new HashSet<Operator>());
 		// HRDBMSWorker.logger.debug("Before removing hashes");
@@ -91,6 +93,29 @@ public final class Phase4
 		// Phase1.printTree(root, 0);
 		// sanityCheck(root, -1);
 		swapLeftRight(root, new HashSet<Operator>());
+	}
+	
+	private void makeHierarchicalForAll(Operator op, HashSet<Operator> visited) throws Exception
+	{
+		if (op instanceof NetworkSendOperator)
+		{
+			if (visited.contains(op))
+			{
+				return;
+			}
+
+			visited.add(op);
+		}
+
+		if (op instanceof NetworkReceiveOperator && (op.getClass().equals(NetworkReceiveOperator.class) || op.getClass().equals(NetworkReceiveAndMergeOperator.class)))
+		{
+			makeHierarchical((NetworkReceiveOperator)op);
+		}
+		
+		for (Operator o : op.children())
+		{
+			makeHierarchicalForAll(o, visited);
+		}
 	}
 
 	private void allIntersectionsHave2Children(Operator op, HashSet<Operator> touched) throws Exception
@@ -791,7 +816,7 @@ public final class Phase4
 			throw e;
 		}
 		// makeHierarchical2(r);
-		makeHierarchical(r);
+		//makeHierarchical(r);
 		// cCache.clear();
 		return false;
 	}
@@ -1039,7 +1064,7 @@ public final class Phase4
 			throw e;
 		}
 		// makeHierarchical2(r);
-		makeHierarchical(r);
+		//makeHierarchical(r);
 		// cCache.clear();
 		return false;
 	}
@@ -1164,7 +1189,7 @@ public final class Phase4
 				throw e;
 			}
 
-			makeHierarchical(r);
+			//makeHierarchical(r);
 			// cCache.clear();
 			return false;
 		}
@@ -1176,6 +1201,10 @@ public final class Phase4
 	{
 		long numNodes = card / MAX_LOCAL_SORT;
 		numNodes++;
+		if (numNodes > MAX_RR)
+		{
+			numNodes = MAX_RR;
+		}
 		final int starting = getStartingNode(numNodes);
 		final Operator parent = op.parent();
 		parent.removeChild(op);
@@ -1632,7 +1661,7 @@ public final class Phase4
 			throw e;
 		}
 		// makeHierarchical2(r);
-		makeHierarchical(r);
+		//makeHierarchical(r);
 		// cCache.clear();
 		return false;
 	}
@@ -1742,6 +1771,7 @@ public final class Phase4
 				throw e;
 			}
 			// cCache.clear();
+			//makeHierarchical(receive);
 			return true;
 		}
 
@@ -1849,7 +1879,7 @@ public final class Phase4
 					throw e;
 				}
 				// makeHierarchical2(receive);
-				makeHierarchical(receive);
+				//makeHierarchical(receive);
 			}
 			return false;
 		}
@@ -2354,7 +2384,7 @@ public final class Phase4
 			throw e;
 		}
 		// makeHierarchical2(r);
-		makeHierarchical(r);
+		//makeHierarchical(r);
 		// cCache.clear();
 		return false;
 	}
@@ -2388,6 +2418,11 @@ public final class Phase4
 
 	private void makeHierarchical(NetworkReceiveOperator receive) throws Exception
 	{
+		if ((receive instanceof NetworkHashReceiveAndMergeOperator) || (receive instanceof NetworkHashReceiveOperator))
+		{
+			return;
+		}
+		
 		if (receive.children().size() > MAX_INCOMING_CONNECTIONS)
 		{
 			int numMiddle = receive.children().size() / MAX_INCOMING_CONNECTIONS;
@@ -2418,6 +2453,13 @@ public final class Phase4
 			}
 
 			int i = 0;
+			ArrayList<Integer> notUsed = new ArrayList<Integer>();
+			while (i < MetaData.numWorkerNodes)
+			{
+				notUsed.add(i++);
+			}
+			
+			i = 0;
 			while (sends.size() > 0)
 			{
 				try
@@ -2434,33 +2476,45 @@ public final class Phase4
 
 				if (i == numPerMiddle)
 				{
-					int node = Math.abs(ThreadLocalRandom.current().nextInt()) % MetaData.numWorkerNodes;
+					int slot = ThreadLocalRandom.current().nextInt(notUsed.size());
+					int node = notUsed.get(slot);
+					notUsed.remove(slot);
+					
+					newReceive.setNode(node);
 					final NetworkSendOperator newSend = new NetworkSendOperator(node, meta);
 					try
 					{
 						newSend.add(newReceive);
 						receive.add(newSend);
-						newReceive.setNode(node);
 					}
 					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.error("", e);
 						throw e;
 					}
-					newReceive = new NetworkReceiveOperator(meta);
+					if (receive instanceof NetworkReceiveAndMergeOperator)
+					{
+						newReceive = receive.clone();
+					}
+					else
+					{
+						newReceive = new NetworkReceiveOperator(meta);
+					}
 					i = 0;
 				}
 			}
 
 			if (i != 0)
 			{
-				int node = Math.abs(ThreadLocalRandom.current().nextInt()) % MetaData.numWorkerNodes;
+				int slot = ThreadLocalRandom.current().nextInt(notUsed.size());
+				int node = notUsed.get(slot);
+				notUsed.remove(slot);
+				newReceive.setNode(node);
 				final NetworkSendOperator newSend = new NetworkSendOperator(node, meta);
 				try
 				{
 					newSend.add(newReceive);
 					receive.add(newSend);
-					newReceive.setNode(node);
 				}
 				catch (final Exception e)
 				{
@@ -3351,7 +3405,7 @@ public final class Phase4
 			throw e;
 		}
 		// makeHierarchical2(r);
-		makeHierarchical(r);
+		//makeHierarchical(r);
 		// cCache.clear();
 		return false;
 	}
@@ -3485,7 +3539,7 @@ public final class Phase4
 				throw e;
 			}
 
-			makeHierarchical(r);
+			//makeHierarchical(r);
 			// cCache.clear();
 			return false;
 		}

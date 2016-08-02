@@ -37,6 +37,7 @@ import com.exascale.optimizer.Phase3;
 import com.exascale.optimizer.Phase4;
 import com.exascale.optimizer.Phase5;
 import com.exascale.optimizer.RootOperator;
+import com.exascale.optimizer.RoutingOperator;
 import com.exascale.optimizer.SQLParser;
 import com.exascale.optimizer.UpdateOperator;
 import com.exascale.tables.Plan;
@@ -670,7 +671,7 @@ public class XAManager extends HRDBMSThread
 			return list;
 		}
 		complete.add(o);
-		if ((o instanceof NetworkSendOperator) || (o instanceof NetworkReceiveOperator))
+		if ((o instanceof NetworkSendOperator) || (o instanceof NetworkReceiveOperator) || (o instanceof RoutingOperator))
 		{
 			list.add(o.getNode());
 		}

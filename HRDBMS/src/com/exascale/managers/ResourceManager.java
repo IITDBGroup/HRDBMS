@@ -11,10 +11,13 @@ import java.nio.charset.CharsetEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Map;
+import java.util.Random;
 import java.util.StringTokenizer;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.SynchronousQueue;
@@ -23,6 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.misc.HParms;
 import com.exascale.optimizer.AntiJoinOperator;
+import com.exascale.optimizer.MetaData;
 import com.exascale.optimizer.NestedLoopJoinOperator;
 import com.exascale.optimizer.NetworkSendOperator;
 import com.exascale.optimizer.Operator;
@@ -54,6 +58,16 @@ public final class ResourceManager extends HRDBMSThread
 	private static long offset;
 	public static volatile boolean panic = false;
 	private static IdentityHashMap<Operator, Operator> ops = new IdentityHashMap<Operator, Operator>();
+	private static HashMap<Integer, HashSet<Integer>> links = new HashMap<Integer, HashSet<Integer>>();
+	private static HashMap<Link, AtomicInteger> util = new HashMap<Link, AtomicInteger>();
+	private static HashSet<Integer> goodDistances = new HashSet<Integer>();
+	private static HashSet<Integer> okDistances = new HashSet<Integer>();
+	private static Random random = new Random();
+	private static int nodes;
+	private static int nMax;
+	public static volatile int MAX_HOPS = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("initial_max_hops"));  
+	private static ConcurrentHashMap<Link, ArrayList<Integer>> routes = new ConcurrentHashMap<Link, ArrayList<Integer>>();
+	private final CharsetEncoder ce = cs.newEncoder();
 
 	static
 	{
@@ -98,8 +112,73 @@ public final class ResourceManager extends HRDBMSThread
 			HRDBMSWorker.logger.debug("CUDA code loaded");
 		}
 	}
-
-	private final CharsetEncoder ce = cs.newEncoder();
+	
+	public static ArrayList<Integer> getRoute(int from, int to)
+	{
+		Link link = new Link(from, to);
+		ArrayList<Integer> retval = routes.get(link);
+		if (retval != null)
+		{
+			return retval;
+		}
+		
+		retval = computeRoute(from, to);
+		routes.putIfAbsent(link, retval);
+		return retval;
+	}
+	
+	private static ArrayList<Integer> computeRoute(int from, int to)
+	{
+		ArrayList<Integer> retval = new ArrayList<Integer>();
+		int current = from;
+		while (current != to)
+		{
+			HashSet<Integer> receive = links.get(current);
+			int temp = computeSendTo(to, receive);
+			retval.add(temp);
+			//used current -> temp
+			current = temp;
+		}
+		
+		return retval;
+	}
+	
+	public static ArrayList<Integer> getNetworkTargetsForNode(int source)
+	{
+		ArrayList<Integer> retval = new ArrayList<Integer>();
+		retval.add(source);
+		HashSet<Integer> targets = links.get(source);
+		retval.addAll(targets);
+		return retval;
+	}
+	
+	private static class Link
+	{
+		private int a;
+		private int b;
+		
+		public Link(int a, int b)
+		{
+			this.a = a;
+			this.b = b;
+		}
+		
+		public boolean equals(Object r)
+		{
+			Link rhs = (Link)r;
+			return a == rhs.a && b == rhs.b;
+		}
+		
+		public int hashCode()
+		{
+			return (a << 15) + b;
+		}
+		
+		public String toString()
+		{
+			return "(" + a + ", " + b + ")";
+		}
+	}
 
 	public ResourceManager()
 	{
@@ -115,6 +194,74 @@ public final class ResourceManager extends HRDBMSThread
 				if (file.endsWith("tmp"))
 				{
 					new File(dir, file).delete();
+				}
+			}
+		}
+		
+		nodes = MetaData.numWorkerNodes;
+		nMax = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
+		
+		//build broadcast network
+		int i = 0;
+		while (i < nodes)
+		{
+			HashSet<Integer> receive = links.get(i);
+			if (receive == null)
+			{
+				receive = new HashSet<Integer>();
+				links.put(i, receive);
+			}
+			
+			int k = 0;
+			double x = Math.pow(nodes * 1.0, (2.0 / (nMax * 1.0)));
+			while (Math.pow(x, k) <= (nodes))
+			{
+				int offset = (int)Math.round(Math.pow(x, k));
+				offset = offset % nodes;
+				
+				if (offset > (nodes / 2))
+				{
+					goodDistances.add(nodes - offset);
+				}
+				else
+				{
+					goodDistances.add(offset);
+				}
+				int target = i + offset;
+				target = target % nodes;
+				if (target != i)
+				{
+					receive.add(target);
+					HashSet<Integer> receive2 = links.get(target);
+					if (receive2 == null)
+					{
+						receive2 = new HashSet<Integer>();
+						links.put(target, receive2);
+					}
+					
+					receive2.add(i);
+				}
+				
+				k++;
+			}
+			
+			i++;
+		}
+		
+		for (int distance1 : goodDistances)
+		{
+			for (int distance2 : goodDistances)
+			{
+				int value = distance1 + distance2;
+				value = value % nodes;
+				if (value > (nodes / 2))
+				{
+					value = nodes - value;
+					okDistances.add(value);
+				}
+				else
+				{
+					okDistances.add(value);
 				}
 			}
 		}
@@ -328,6 +475,182 @@ public final class ResourceManager extends HRDBMSThread
 		// {
 		// }
 		// }
+		
+			//System.out.println("Calculating hops");
+			AtomicInteger min = new AtomicInteger(Integer.MAX_VALUE);
+			AtomicInteger max = new AtomicInteger(Integer.MIN_VALUE);
+			AtomicInteger count = new AtomicInteger(0);
+			AtomicLong total = new AtomicLong(0);
+			ArrayList<HopThread> threads = new ArrayList<HopThread>();
+			threads.add(new HopThread(0, nodes / 3, min, max, count, total));
+			threads.add(new HopThread(nodes / 3, 2 * nodes / 3, min, max, count, total));
+			threads.add(new HopThread(2 * nodes / 3, nodes, min, max, count, total));
+			
+			for (HopThread thread : threads)
+			{
+				thread.start();
+			}
+			
+			for (HopThread thread : threads)
+			{
+				while (true)
+				{
+					try
+					{
+						thread.join();
+						break;
+					}
+					catch(InterruptedException e)
+					{}
+				}
+			}
+			
+			//System.out.println("Min hops = " + min.get() + ", max hops = " + max.get() + ", average hops = " + (total.get() * 1.0 / count.get()));
+			MAX_HOPS = max.get();
+			HRDBMSWorker.logger.info("Max hops is " + MAX_HOPS);
+	}
+	
+	private static class HopThread extends Thread
+	{
+		private int start;
+		private int stop;
+		AtomicInteger min;
+		AtomicInteger max;
+		AtomicInteger count;
+		AtomicLong total;
+		
+		public HopThread(int start, int stop, AtomicInteger min, AtomicInteger max, AtomicInteger count, AtomicLong total)
+		{
+			this.start = start;
+			this.stop = stop;
+			this.min = min;
+			this.max = max;
+			this.count = count;
+			this.total = total;
+		}
+		
+		public void run()
+		{
+			int i = start;
+			while (i < stop)
+			{
+				int j = 0;
+				while (j < nodes)
+				{
+					if (i != j)
+					{
+						//compute hops from i to j
+						
+						int current = i;
+						int hops = 0;
+						ArrayList<Integer> route = new ArrayList<Integer>();
+						while (current != j)
+						{
+							HashSet<Integer> receive = links.get(current);
+							int temp = computeSendTo(j, receive);
+							route.add(temp);
+							hops++;
+							//used current -> temp
+							synchronized(util)
+							{
+								AtomicInteger ai = util.get(new Link(current, temp));
+								if (ai == null)
+								{
+									ai = new AtomicInteger(0);
+									util.put(new Link(current, temp), ai);
+								}
+							
+								ai.getAndIncrement();
+							}
+							current = temp;
+						}
+						
+						routes.putIfAbsent(new Link(i, j), route);
+						
+						//count hops and update util
+						//int hops = aStarSearch(i, j);
+						
+						synchronized(min)
+						{
+							if (hops < min.get())
+							{
+								min.set(hops);
+							}
+						}
+						
+						synchronized(max)
+						{
+							if (hops > max.get())
+							{
+								max.set(hops);
+							}
+						}
+						
+						count.getAndIncrement();
+						total.addAndGet(hops);
+					}
+					
+					j++;
+				}
+				
+				i++;
+				
+				if (i % 100 == 0)
+				{
+					System.out.println(i);
+				}
+			}
+		}
+	}
+	
+	private static int computeSendTo(int target, HashSet<Integer> list)
+	{
+		int minDifference = Integer.MAX_VALUE;
+		int retval = -1;
+		ArrayList<Integer> goldenOptions = new ArrayList<Integer>();
+		ArrayList<Integer> silverOptions = new ArrayList<Integer>();
+		
+		for (int option : list)
+		{
+			int distance = Math.abs(target - option);
+			if (distance > (nodes / 2))
+			{
+				distance = nodes - distance;
+			}
+			
+			if (distance < minDifference)
+			{
+				minDifference = distance;
+				retval = option;
+				
+				if (distance == 0)
+				{
+					return option;
+				}
+			}
+			
+			if (goodDistances.contains(distance))
+			{
+				goldenOptions.add(option);
+			}
+			
+			if (okDistances.contains(distance))
+			{
+				silverOptions.add(option);
+			}
+		}
+		
+		if (goldenOptions.size() > 0)
+		{
+			return goldenOptions.get(random.nextInt(goldenOptions.size()));
+		}
+		
+		if (silverOptions.size() > 0)
+		{
+			return silverOptions.get(random.nextInt(silverOptions.size()));
+		}
+		
+		return retval;
 	}
 
 	private static final class DeadlockThread extends ThreadPoolThread
