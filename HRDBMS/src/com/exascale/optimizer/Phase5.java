@@ -152,9 +152,11 @@ public final class Phase5
 			current.add(route);
 		}
 		
+		int maxHops = ResourceManager.MAX_HOPS;
+		
 		int layers = 1;
 		int toID;
-		while (layers < ResourceManager.MAX_HOPS)
+		while (layers < maxHops)
 		{
 			//build another layer
 			HashMap<Integer, RoutingOperator> nodeToOp = new HashMap<Integer, RoutingOperator>();

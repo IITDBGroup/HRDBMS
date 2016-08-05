@@ -152,6 +152,15 @@ public final class ResourceManager extends HRDBMSThread
 		return retval;
 	}
 	
+	public static ArrayList<Integer> getAlternateMiddlemen(int source, int target, int primary)
+	{
+		HashSet<Integer> middlemen = links.get(source);
+		HashSet<Integer> middlemen2 = links.get(target);
+		middlemen.retainAll(middlemen2);
+		middlemen.remove(primary);
+		return new ArrayList<Integer>(middlemen);
+	}
+	
 	private static class Link
 	{
 		private int a;
