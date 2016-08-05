@@ -95,6 +95,7 @@ public final class RoutingOperator implements Operator
 	private transient ArrayList<ReadThread> threads;
 	private boolean send = false;
 	private transient OutputStream[] outs2;
+	private transient ConcurrentHashMap<Integer, AtomicLong> usage;
 
 	public RoutingOperator(MetaData meta) throws Exception
 	{
@@ -388,6 +389,8 @@ public final class RoutingOperator implements Operator
 			}
 			i++;
 		}
+		
+		usage = new ConcurrentHashMap<Integer, AtomicLong>();
 		try
 		{
 			if (error)
@@ -447,7 +450,49 @@ public final class RoutingOperator implements Operator
 
 						final int finalDest = (int)(starting + ((0x7FFFFFFFFFFFFFFFL & hash(key)) % numNodes));
 						ArrayList<Integer> route = ResourceManager.getRoute(node, finalDest);
-						final OutputStream out = outs2[route.get(0)];
+						int nextHop = route.get(0);
+						if (route.size() >= 2)
+						{
+							int twoHops = route.get(1);
+							ArrayList<Integer> alternatives = ResourceManager.getAlternateMiddlemen(node, twoHops, nextHop);
+							AtomicLong primaryUsage = usage.get(nextHop);
+							if (primaryUsage == null)
+							{
+								primaryUsage = new AtomicLong(0);
+								usage.put(nextHop, primaryUsage);
+							}
+							
+							long pu = primaryUsage.get();
+							long bestAltUsage = Long.MAX_VALUE;
+							int bestAlt = -1;
+							for (int alt : alternatives)
+							{
+								AtomicLong altUsage = usage.get(alt);
+								if (altUsage == null)
+								{
+									altUsage = new AtomicLong(0);
+									usage.put(alt, altUsage);
+								}
+								
+								long au = altUsage.get();
+								if (au < bestAltUsage)
+								{
+									bestAltUsage = au;
+									bestAlt = alt;
+								}
+							}
+							
+							if (bestAltUsage < pu)
+							{
+								nextHop = bestAlt;
+								usage.get(bestAlt).incrementAndGet();
+							}
+							else
+							{
+								primaryUsage.incrementAndGet();
+							}
+						}
+						final OutputStream out = outs2[nextHop];
 						obj = toBytes((ArrayList<Object>)o, route);
 						out.write(obj);
 
@@ -1234,6 +1279,48 @@ public final class RoutingOperator implements Operator
 					ByteBuffer bb = ByteBuffer.wrap(data);
 					int nextHop = bb.getInt(size-4);
 					size -= 4;
+					
+					if (!last)
+					{
+						int twoHops = bb.getInt(size-4);
+						ArrayList<Integer> alternatives = ResourceManager.getAlternateMiddlemen(node, twoHops, nextHop);
+						AtomicLong primaryUsage = usage.get(nextHop);
+						if (primaryUsage == null)
+						{
+							primaryUsage = new AtomicLong(0);
+							usage.put(nextHop, primaryUsage);
+						}
+						
+						long pu = primaryUsage.get();
+						long bestAltUsage = Long.MAX_VALUE;
+						int bestAlt = -1;
+						for (int alt : alternatives)
+						{
+							AtomicLong altUsage = usage.get(alt);
+							if (altUsage == null)
+							{
+								altUsage = new AtomicLong(0);
+								usage.put(alt, altUsage);
+							}
+							
+							long au = altUsage.get();
+							if (au < bestAltUsage)
+							{
+								bestAltUsage = au;
+								bestAlt = alt;
+							}
+						}
+						
+						if (bestAltUsage < pu)
+						{
+							nextHop = bestAlt;
+							usage.get(bestAlt).incrementAndGet();
+						}
+						else
+						{
+							primaryUsage.incrementAndGet();
+						}
+					}
 
 					route(data, size, nextHop);
 				}
