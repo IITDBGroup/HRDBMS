@@ -858,6 +858,17 @@ public class Schema
 		final ArrayList<Integer> offs = hasEnoughSpace(vals);
 		if (offs != null)
 		{
+			if (Transaction.reorder)
+			{
+				ArrayList<Integer> colOrder = this.getColOrder();
+				int first = colOrder.get(0);
+				this.p = pageGroup.get(first);
+			}
+			else
+			{
+				this.p = pageGroup.get(0);
+			}
+				
 			TableScanOperator.noResults.remove(p.block());
 			int node;
 			if (nodeNumber == -2)
@@ -885,7 +896,6 @@ public class Schema
 				ArrayList<Integer> colOrder = this.getColOrder();
 				int first = colOrder.get(0);
 				rowIDsAL = rowIDSet.get(first);
-				this.p = pageGroup.get(first);
 				cachedLenLen = -1;
 				nextRecNum = 0;
 
@@ -903,7 +913,6 @@ public class Schema
 			else
 			{
 				rowIDsAL = rowIDSet.get(0);
-				this.p = pageGroup.get(0);
 				cachedLenLen = -1;
 				nextRecNum = 0;
 
@@ -1103,6 +1112,8 @@ public class Schema
 				rowIDToIndex.put(rid, rowIDsAL.size() - 1);
 				pos++;
 			}
+			
+			//HRDBMSWorker.logger.debug("Insert is returning RID = " + rid);
 			return rid;
 		}
 		else
@@ -1123,6 +1134,17 @@ public class Schema
 		final ArrayList<Integer> offs = hasEnoughSpace(vals);
 		if (offs != null)
 		{
+			if (Transaction.reorder)
+			{
+				ArrayList<Integer> colOrder = this.getColOrder();
+				int first = colOrder.get(0);
+				this.p = pageGroup.get(first);
+			}
+			else
+			{
+				this.p = pageGroup.get(0);
+			}
+			
 			TableScanOperator.noResults.remove(p.block());
 			int node;
 			if (nodeNumber == -2)
@@ -1150,7 +1172,6 @@ public class Schema
 				ArrayList<Integer> colOrder = this.getColOrder();
 				int first = colOrder.get(0);
 				rowIDsAL = rowIDSet.get(first);
-				this.p = pageGroup.get(first);
 				cachedLenLen = -1;
 				nextRecNum = 0;
 
@@ -1168,7 +1189,6 @@ public class Schema
 			else
 			{
 				rowIDsAL = rowIDSet.get(0);
-				this.p = pageGroup.get(0);
 				cachedLenLen = -1;
 				nextRecNum = 0;
 
@@ -1549,6 +1569,7 @@ public class Schema
 				int pos = 1;
 				rowIDListOff = 1;
 				rowIDListSize = p.getMedium(pos);
+				//HRDBMSWorker.logger.debug("Row id list size is " + rowIDListSize + " for page " + p);
 				pos += 3;
 				rowIDToIndex = new LinkedHashMap<RID, Integer>((int)(rowIDListSize * 1.35));
 				rowIDs = null;
@@ -1565,13 +1586,31 @@ public class Schema
 					offsetArray = p.offsetArray;
 					offsetArrayRows = rowIDListSize;
 					setRowIDsCT(colNum);
+					//HRDBMSWorker.logger.debug("Created offsetArray for page " + p);
+					//if (p.block().number() == 3)
+					//{
+					//	Exception e = new Exception();
+					//	HRDBMSWorker.logger.debug("Accessing page 3", e);
+					//	HRDBMSWorker.logger.debug("Page group is " + pageGroup);
+					//}
+					//
+					//if (p.block().number() == 0)
+					//{
+					//	Exception e = new Exception();
+					//	HRDBMSWorker.logger.debug("Accessing page 0", e);
+					//	HRDBMSWorker.logger.debug("Page group is " + pageGroup);
+					//}
 				}
 				else
 				{
 					rowIDsAL = p.rowIDsAL;
 					offsetArray = p.offsetArray;
 					offsetArrayRows = rowIDListSize;
+					//HRDBMSWorker.logger.debug("Reusing cached offsetArray for page " + p);
 				}
+				
+				//HRDBMSWorker.logger.debug("RowIDsAL size is " + rowIDsAL.size() + " for page " + p);
+				//HRDBMSWorker.logger.debug("RIDs returned by non-iterator read is " + rowIDsAL);
 
 				int i = 0;
 				for (final RID rid : rowIDsAL)
@@ -2270,6 +2309,8 @@ public class Schema
 			mColNum = map.get(colNum);
 		}
 		
+		//HRDBMSWorker.logger.debug("pnum = " + pnum + ", colNum = " + colNum + ", mColNum = " + mColNum + ", calculated page = " + (pnum - mColNum) + ", map = " + map);
+		
 		int[] ints = p.getMediums(pos, rowIDListSize << 1);
 
 		while (i < rowIDListSize)
@@ -2319,6 +2360,10 @@ public class Schema
 			}
 			mColNum = map.get(colNum);
 		}
+		
+		//HRDBMSWorker.logger.debug("Setting RIDs.  Actual page is " + pnum + ", calculated page is " + pnum + "-" + mColNum + "=" + (pnum - mColNum));;
+		//HRDBMSWorker.logger.debug("Actual colNum is " + colNum);
+		//HRDBMSWorker.logger.debug("Column map is " + map);
 
 		while (i < rowIDListSize)
 		{
@@ -4997,6 +5042,8 @@ public class Schema
 						i++;
 					}
 				}
+				
+				//HRDBMSWorker.logger.debug("RIDs returned by iterator read: " + s.rowIDToIndex);
 
 				Map<Integer, DataType> colTypesBackup = s.colTypes;
 				s.colTypes = new HashMap<Integer, DataType>();

@@ -1140,4 +1140,9 @@ public class Page
 		FileManager.write(blk, contents);
 		modifiedBy = -1;
 	}
+	
+	public String toString()
+	{
+		return blk.toString();
+	}
 }
