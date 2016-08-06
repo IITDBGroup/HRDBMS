@@ -1304,8 +1304,28 @@ public final class TableScanOperator implements Operator, Serializable
 		i = 0;
 		for (final String col : needed)
 		{
-			cols2Pos.put(col, i);
-			pos2Col.put(i, col);
+			int j = i;
+			if (col.equals("_RID1"))
+			{
+				j = 0;
+			}
+			
+			if (col.equals("_RID2"))
+			{
+				j = 1;
+			}
+			
+			if (col.equals("_RID3"))
+			{
+				j = 2;
+			}
+			
+			if (col.equals("_RID4"))
+			{
+				j = 3;
+			}
+			cols2Pos.put(col, j);
+			pos2Col.put(j, col);
 			tempCols2Types.put(col, cols2Types.get(col));
 			i++;
 		}
@@ -1738,6 +1758,8 @@ public final class TableScanOperator implements Operator, Serializable
 					rowToIterator.put(index, pos);
 					pos++;
 				}
+				
+				//HRDBMSWorker.logger.debug("COLS is " + cols + ", fetchPos is " + fetchPos);
 			}
 
 			try
@@ -2183,6 +2205,7 @@ public final class TableScanOperator implements Operator, Serializable
 							long partialRid = (Long)(((ArrayList<Object>)o).get(0));
 							int blockNum = (int)(partialRid >> 32);
 							int recNum = (int)(partialRid & 0xFFFFFFFF);
+							//HRDBMSWorker.logger.debug("Col table index fetch for block " + blockNum + " and record " + recNum + " with cols = " + cols);
 							if (blockNum != currentPage)
 							{
 								Block b = new Block(in2, blockNum);
@@ -2238,6 +2261,9 @@ public final class TableScanOperator implements Operator, Serializable
 									throw e;
 								}
 							}
+							
+							//HRDBMSWorker.logger.debug("Row returned by index fetch is " + row);
+							//HRDBMSWorker.logger.debug("Pos2Col is " + TableScanOperator.this.getPos2Col());
 
 							if (!optimize)
 							{
@@ -3219,7 +3245,7 @@ public final class TableScanOperator implements Operator, Serializable
 		{
 			if (filters.contains(hshm))
 			{
-				HRDBMSWorker.logger.debug("Skipping page because of exact match");
+				//HRDBMSWorker.logger.debug("Skipping page because of exact match");
 				return false;
 			}
 
@@ -3328,7 +3354,7 @@ public final class TableScanOperator implements Operator, Serializable
 					{
 						if (f.equals(ns))
 						{
-							HRDBMSWorker.logger.debug("Skipping page because of exact match of anded predicate");
+							//HRDBMSWorker.logger.debug("Skipping page because of exact match of anded predicate");
 							return false;
 						}
 
@@ -3342,7 +3368,7 @@ public final class TableScanOperator implements Operator, Serializable
 									Object fVal = f.rightLiteral();
 									if (((Comparable)nsVal).compareTo(fVal) < 0)
 									{
-										HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
+										//HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
 										return false;
 									}
 
@@ -3356,7 +3382,7 @@ public final class TableScanOperator implements Operator, Serializable
 									Object fVal = f.rightLiteral();
 									if (((Comparable)nsVal).compareTo(fVal) < 1)
 									{
-										HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
+										//HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
 										return false;
 									}
 
@@ -3370,7 +3396,7 @@ public final class TableScanOperator implements Operator, Serializable
 									Object fVal = f.rightLiteral();
 									if (((Comparable)nsVal).compareTo(fVal) > 0)
 									{
-										HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
+										//HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
 										return false;
 									}
 
@@ -3384,7 +3410,7 @@ public final class TableScanOperator implements Operator, Serializable
 									Object fVal = f.rightLiteral();
 									if (((Comparable)nsVal).compareTo(fVal) > -1)
 									{
-										HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
+										//HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
 										return false;
 									}
 
@@ -3424,7 +3450,7 @@ public final class TableScanOperator implements Operator, Serializable
 									{
 										foundG = true;
 										gIndex = index;
-										HRDBMSWorker.logger.debug("Found G = " + ns);
+										//HRDBMSWorker.logger.debug("Found G = " + ns);
 										col = f.leftColumn();
 									}
 
@@ -3440,7 +3466,7 @@ public final class TableScanOperator implements Operator, Serializable
 									{
 										foundG = true;
 										gIndex = index;
-										HRDBMSWorker.logger.debug("Found G = " + ns);
+										//HRDBMSWorker.logger.debug("Found G = " + ns);
 										col = f.leftColumn();
 									}
 
@@ -3456,7 +3482,7 @@ public final class TableScanOperator implements Operator, Serializable
 									{
 										if (index == gIndex+1 && f.leftColumn().equals(col))
 										{
-											HRDBMSWorker.logger.debug("Found L = " + ns);
+											//HRDBMSWorker.logger.debug("Found L = " + ns);
 											return false;
 										}
 									}
@@ -3473,7 +3499,7 @@ public final class TableScanOperator implements Operator, Serializable
 									{
 										if (index == gIndex+1 && f.leftColumn().equals(col))
 										{
-											HRDBMSWorker.logger.debug("Found L = " + ns);
+											//HRDBMSWorker.logger.debug("Found L = " + ns);
 											return false;
 										}
 									}
