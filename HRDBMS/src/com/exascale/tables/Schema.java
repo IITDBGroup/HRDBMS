@@ -1770,7 +1770,14 @@ public class Schema
 			colIDListSize = p.getMedium(pos);
 			pos += 3;
 			int i = 0;
-			colIDs = new int[colIDListSize];
+			try
+			{
+				colIDs = new int[colIDListSize];
+			}
+			catch(NegativeArraySizeException e)
+			{
+				HRDBMSWorker.logger.debug("Page = " + this.p);
+			}
 
 			// p.get(pos, colIDs);
 			// pos += (4 * colIDListSize);
@@ -2300,11 +2307,21 @@ public class Schema
 		HashMap<Integer, Integer> map = null;
 		if (Transaction.reorder)
 		{
-			map = tx.colMap.get(pfn);
+			ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = null;
+			synchronized(Transaction.colMaps)
+			{
+				colMap = Transaction.colMaps.get(tx);
+				if (colMap == null)
+				{
+					colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
+					Transaction.colMaps.put(tx, colMap);
+				}
+			}
+			map = colMap.get(pfn);
 			if (map == null)
 			{
 				map = tx.getColOrder(pblk);
-				tx.colMap.put(pfn, map);
+				colMap.put(pfn, map);
 			}
 			mColNum = map.get(colNum);
 		}
@@ -2352,11 +2369,21 @@ public class Schema
 		HashMap<Integer, Integer> map = null;
 		if (Transaction.reorder)
 		{
-			map = tx.colMap.get(pfn);
+			ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = null;
+			synchronized(Transaction.colMaps)
+			{
+				colMap = Transaction.colMaps.get(tx);
+				if (colMap == null)
+				{
+					colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
+					Transaction.colMaps.put(tx, colMap);
+				}
+			}
+			map = colMap.get(pfn);
 			if (map == null)
 			{
 				map = tx.getColOrder(pblk);
-				tx.colMap.put(pfn, map);
+				colMap.put(pfn, map);
 			}
 			mColNum = map.get(colNum);
 		}
@@ -2364,10 +2391,12 @@ public class Schema
 		//HRDBMSWorker.logger.debug("Setting RIDs.  Actual page is " + pnum + ", calculated page is " + pnum + "-" + mColNum + "=" + (pnum - mColNum));;
 		//HRDBMSWorker.logger.debug("Actual colNum is " + colNum);
 		//HRDBMSWorker.logger.debug("Column map is " + map);
+		
+		int[] ints = p.getMediums(pos, rowIDListSize << 1);
 
 		while (i < rowIDListSize)
 		{
-			int id = p.getMedium(pos);
+			int id = ints[i << 1];
 
 			if (!Transaction.reorder)
 			{
@@ -2378,7 +2407,7 @@ public class Schema
 				retval[i] = new RID(myNode, myDev, pnum - mColNum, id);
 			}
 			// copy.add(rowIDsAL.get(i));
-			offsetArray[i][0] = p.getMedium(pos + 3);
+			offsetArray[i][0] = ints[(i << 1) + 1];
 			if (offsetArray[i][0] == 0x00ffffff)
 			{
 				offsetArray[i][0] = -1;

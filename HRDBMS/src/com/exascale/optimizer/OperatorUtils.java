@@ -105,6 +105,9 @@ public class OperatorUtils
 	// 83 - BoolArray
 	// 84 - ALALO
 	// 85 - Routing
+	// 86 - Null String
+	// 87 - ALRAIK
+	// 88 - RAIK
 
 	public static int bytesToInt(byte[] val)
 	{
@@ -415,6 +418,38 @@ public class OperatorUtils
 		while (i < size)
 		{
 			retval.add(Filter.deserialize(in, prev)); // have not read type
+			i++;
+		}
+
+		return retval;
+	}
+	
+	public static ArrayList<RIDAndIndexKeys> deserializeALRAIK(InputStream in, HashMap<Long, Object> prev) throws Exception
+	{
+		int type = getType(in);
+		if (type == 0)
+		{
+			return (ArrayList<RIDAndIndexKeys>)readReference(in, prev);
+		}
+
+		if (type != 87)
+		{
+			throw new Exception("Corrupted stream. Expected type 87 but received " + type);
+		}
+
+		long id = readLong(in);
+		if (id == -1)
+		{
+			return null;
+		}
+
+		int size = readShort(in);
+		ArrayList<RIDAndIndexKeys> retval = new ArrayList<RIDAndIndexKeys>(size);
+		prev.put(id, retval);
+		int i = 0;
+		while (i < size)
+		{
+			retval.add(RIDAndIndexKeys.deserialize(in, prev)); // have not read type
 			i++;
 		}
 
@@ -1519,11 +1554,11 @@ public class OperatorUtils
 		return obj;
 	}
 
-	public static short readShort(InputStream in) throws Exception
+	public static int readShort(InputStream in) throws Exception
 	{
-		byte[] data = new byte[2];
+		byte[] data = new byte[4];
 		read(data, in);
-		return bytesToShort(data);
+		return bytesToInt(data);
 	}
 
 	public static String readString(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -1533,6 +1568,11 @@ public class OperatorUtils
 		{
 			return (String)readReference(in, prev);
 		}
+		
+		if (type == 86)
+		{
+			return null;
+		}
 
 		if (type != 3)
 		{
@@ -1540,11 +1580,6 @@ public class OperatorUtils
 		}
 
 		long id = readLong(in);
-		if (id == -1)
-		{
-			return null;
-		}
-
 		int size = readShort(in);
 		byte[] data = new byte[size];
 		read(data, in);
@@ -1779,6 +1814,33 @@ public class OperatorUtils
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
 		for (Filter entry : als)
+		{
+			entry.serialize(out, prev);
+		}
+
+		return;
+	}
+	
+	public static void serializeALRAIK(ArrayList<RIDAndIndexKeys> als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		if (als == null)
+		{
+			writeType(87, out);
+			writeLong(-1, out);
+			return;
+		}
+
+		Long id = prev.get(als);
+		if (id != null)
+		{
+			serializeReference(id, out);
+			return;
+		}
+
+		writeType(87, out);
+		prev.put(als, writeID(out));
+		writeShort(als.size(), out);
+		for (RIDAndIndexKeys entry : als)
 		{
 			entry.serialize(out, prev);
 		}
@@ -2555,17 +2617,16 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void writeShort(int i, OutputStream out) throws Exception
+	public static void writeShort(int i, OutputStream out) throws Exception //now writes int
 	{
-		out.write(shortToBytes((short)i));
+		out.write(intToBytes(i));
 	}
 
 	public static void writeString(String s, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (s == null)
 		{
-			writeType(3, out);
-			writeLong(-1, out);
+			writeType(86, out);
 			return;
 		}
 

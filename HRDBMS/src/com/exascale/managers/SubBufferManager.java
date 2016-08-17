@@ -6,11 +6,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import com.exascale.exceptions.BufferPoolExhaustedException;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
 import com.exascale.misc.MultiHashMap;
+import com.exascale.misc.ScalableStampedReentrantRWLock;
 import com.exascale.tables.Schema;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.HRDBMSThread;
@@ -26,7 +28,8 @@ public class SubBufferManager
 	private final boolean log;
 	private final MultiHashMap<Long, Page> myBuffers;
 	private volatile int clock = 0;
-	public ReentrantLock lock;
+	private ScalableStampedReentrantRWLock lock2 = new ScalableStampedReentrantRWLock();
+	public Lock lock;
 
 	public SubBufferManager(boolean log)
 	{
@@ -45,7 +48,7 @@ public class SubBufferManager
 		}
 
 		pageLookup = new HashMap<Block, Integer>(numAvailable);
-		lock = new ReentrantLock();
+		lock = lock2.writeLock();
 	}
 
 	public boolean cleanPage(int i) throws Exception
@@ -2204,8 +2207,19 @@ public class SubBufferManager
 				}
 				if (!p.isPinned() && !BufferManager.isInterest(p.block()))
 				{
-					lock.unlock();
-					return index;
+					if ((!XAManager.rP1) || (!XAManager.rP2))
+					{
+						if (p.block() == null)
+						{
+							lock.unlock();
+							return index;
+						}
+					}
+					else
+					{
+						lock.unlock();
+						return index;
+					}
 				}
 			}
 
@@ -2223,8 +2237,19 @@ public class SubBufferManager
 				}
 				if (!p.isPinned())
 				{
-					lock.unlock();
-					return index;
+					if ((!XAManager.rP1) || (!XAManager.rP2))
+					{
+						if (p.block() == null)
+						{
+							lock.unlock();
+							return index;
+						}
+					}
+					else
+					{
+						lock.unlock();
+						return index;
+					}
 				}
 			}
 
@@ -2300,9 +2325,21 @@ public class SubBufferManager
 					}
 					if (!p.isPinned() && !retval.contains(index) && (attempt2 || (p.block() != null && !BufferManager.isInterest(p.block()))))
 					{
-						retval.add(index);
-						i++;
-						continue outer;
+						if ((!XAManager.rP1) || (!XAManager.rP2))
+						{
+							if (p.block() == null)
+							{
+								retval.add(index);
+								i++;
+								continue outer;
+							}
+						}
+						else
+						{
+							retval.add(index);
+							i++;
+							continue outer;
+						}
 					}
 				}
 

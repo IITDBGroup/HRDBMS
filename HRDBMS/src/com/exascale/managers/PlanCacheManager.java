@@ -2248,8 +2248,7 @@ public class PlanCacheManager
 				cmd.add("CLOSE");
 				worker.in.put(cmd);
 				tx.setIsolationLevel(iso);
-
-				throw new Exception("No column statistics");
+				return -1;
 			}
 
 			if (obj instanceof Exception)

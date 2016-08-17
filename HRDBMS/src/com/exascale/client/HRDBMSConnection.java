@@ -922,7 +922,7 @@ public class HRDBMSConnection implements Connection
 		}
 		catch (Exception e)
 		{
-			throw new SQLException("Error sending request to server!");
+			throw new SQLException("Error sending request to server!", e);
 		}
 	}
 

@@ -47,20 +47,20 @@ public class SQL
 		out = out.replace('\f', ' ');
 		int i = 0;
 		int whitespaceCount = 0;
-		String out2 = "";
+		StringBuilder out2 = new StringBuilder();
 		final int length = out.length();
 		while (i < length)
 		{
 			if (out.charAt(i) != ' ')
 			{
 				whitespaceCount = 0;
-				out2 += out.charAt(i);
+				out2.append(out.charAt(i));
 			}
 			else
 			{
 				if (whitespaceCount == 0)
 				{
-					out2 += ' ';
+					out2.append(' ');
 					whitespaceCount = 1;
 				}
 				else
@@ -71,12 +71,12 @@ public class SQL
 			i++;
 		}
 
-		return out2;
+		return out2.toString();
 	}
 
 	private String toUpperCaseExceptQuoted(String in)
 	{
-		String out = "";
+		StringBuilder out = new StringBuilder();
 		int i = 0;
 		boolean quoted = false;
 		int quoteType = 0;
@@ -87,11 +87,11 @@ public class SQL
 			{
 				if (!quoted)
 				{
-					out += Character.toUpperCase(in.charAt(i));
+					out.append(Character.toUpperCase(in.charAt(i)));
 				}
 				else
 				{
-					out += in.charAt(i);
+					out.append(in.charAt(i));
 				}
 			}
 			else
@@ -102,18 +102,18 @@ public class SQL
 					{
 						quoteType = 1;
 						quoted = true;
-						out += '\'';
+						out.append('\'');
 					}
 					else if (in.charAt(i) == '"' && ((i + 1) == in.length() || in.charAt(i + 1) != '"'))
 					{
 						quoteType = 2;
 						quoted = true;
-						out += '"';
+						out.append('"');
 					}
 					else
 					{
-						out += in.charAt(i);
-						out += in.charAt(i + 1);
+						out.append(in.charAt(i));
+						out.append(in.charAt(i + 1));
 						i++;
 					}
 				}
@@ -123,15 +123,15 @@ public class SQL
 					{
 						quoteType = 0;
 						quoted = false;
-						out += '\'';
+						out.append('\'');
 					}
 					else if (in.charAt(i) == '"')
 					{
-						out += '"';
+						out.append('"');
 					}
 					else
 					{
-						out += "\'\'";
+						out.append("\'\'");
 						i++;
 					}
 				}
@@ -141,15 +141,15 @@ public class SQL
 					{
 						quoteType = 0;
 						quoted = false;
-						out += '"';
+						out.append('"');
 					}
 					else if (in.charAt(i) == '\'')
 					{
-						out += '\'';
+						out.append('\'');
 					}
 					else
 					{
-						out += "\"\"";
+						out.append("\"\"");
 						i++;
 					}
 				}
@@ -158,6 +158,6 @@ public class SQL
 			i++;
 		}
 
-		return out;
+		return out.toString();
 	}
 }

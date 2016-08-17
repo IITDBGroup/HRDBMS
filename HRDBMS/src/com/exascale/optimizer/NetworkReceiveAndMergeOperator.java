@@ -1,6 +1,7 @@
 package com.exascale.optimizer;
 
 import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
@@ -256,7 +257,8 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 						sock.connect(new InetSocketAddress(meta.getHostNameForNode(child.getNode()), WORKER_PORT));
 						socks.put(child, sock);
 						final OutputStream out = sock.getOutputStream();
-						outs.put(child, out);
+						BufferedOutputStream out2 = new BufferedOutputStream(out);
+						outs.put(child, out2);
 						final InputStream in = sock.getInputStream();
 						ins.put(child, new BufferedInputStream(in, 65536));
 						final byte[] command = "REMOTTRE".getBytes(StandardCharsets.UTF_8);
@@ -266,13 +268,13 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 						System.arraycopy(command, 0, data, 0, 8);
 						System.arraycopy(from, 0, data, 8, 4);
 						System.arraycopy(to, 0, data, 12, 4);
-						out.write(data);
-						out.flush();
+						out2.write(data);
+						//out.flush();
 						IdentityHashMap<Object, Long> map = new IdentityHashMap<Object, Long>();
-						child.serialize(out, map);
+						child.serialize(out2, map);
 						map.clear();
 						map = null;
-						out.flush();
+						out2.flush();
 					}
 
 					new InitThread().start();

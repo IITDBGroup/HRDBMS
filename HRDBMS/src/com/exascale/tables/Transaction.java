@@ -5,6 +5,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.TreeSet;
+import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
@@ -56,7 +57,7 @@ public class Transaction implements Serializable
 
 	public static Object txListLock = new Object();
 
-	public ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
+	public static WeakHashMap<Transaction, ConcurrentHashMap<String, HashMap<Integer, Integer>>> colMaps = new WeakHashMap<Transaction, ConcurrentHashMap<String, HashMap<Integer, Integer>>>();
 
 	private final long txnum;
 	public int level;
@@ -375,6 +376,16 @@ public class Transaction implements Serializable
 		}
 		else
 		{
+			ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = null;
+			synchronized(colMaps)
+			{
+				colMap = colMaps.get(this);
+				if (colMap == null)
+				{
+					colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
+					colMaps.put(this, colMap);
+				}
+			}
 			HashMap<Integer, Integer> map = colMap.get(b.fileName());
 			if (map == null)
 			{
@@ -460,6 +471,16 @@ public class Transaction implements Serializable
 		}
 		else
 		{
+			ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = null;
+			synchronized(colMaps)
+			{
+				colMap = colMaps.get(this);
+				if (colMap == null)
+				{
+					colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
+					colMaps.put(this, colMap);
+				}
+			}
 			HashMap<Integer, Integer> map = colMap.get(b.fileName());
 			if (map == null)
 			{
@@ -502,6 +523,16 @@ public class Transaction implements Serializable
 		}
 		else
 		{
+			ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = null;
+			synchronized(colMaps)
+			{
+				colMap = colMaps.get(this);
+				if (colMap == null)
+				{
+					colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
+					colMaps.put(this, colMap);
+				}
+			}
 			HashMap<Integer, Integer> map = colMap.get(b.fileName());
 			if (map == null)
 			{
@@ -632,6 +663,16 @@ public class Transaction implements Serializable
 		}
 		else
 		{
+			ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = null;
+			synchronized(colMaps)
+			{
+				colMap = colMaps.get(this);
+				if (colMap == null)
+				{
+					colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
+					colMaps.put(this, colMap);
+				}
+			}
 			HashMap<Integer, Integer> map = colMap.get(b.fileName());
 			if (map == null)
 			{
@@ -735,6 +776,16 @@ public class Transaction implements Serializable
 			}
 			else
 			{
+				ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = null;
+				synchronized(colMaps)
+				{
+					colMap = colMaps.get(this);
+					if (colMap == null)
+					{
+						colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
+						colMaps.put(this, colMap);
+					}
+				}
 				HashMap<Integer, Integer> map = colMap.get(b.fileName());
 				if (map == null)
 				{
@@ -776,6 +827,16 @@ public class Transaction implements Serializable
 				else
 				{
 					build = false;
+				}
+				ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = null;
+				synchronized(colMaps)
+				{
+					colMap = colMaps.get(this);
+					if (colMap == null)
+					{
+						colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
+						colMaps.put(this, colMap);
+					}
 				}
 				HashMap<Integer, Integer> map = colMap.get(b.fileName());
 				if (map == null)

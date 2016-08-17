@@ -12,15 +12,19 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ConcurrentHashMap;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.HJOMultiHashMap;
 import com.exascale.misc.MurmurHash;
 import com.exascale.misc.MyDate;
 
 public class CNFFilter implements Serializable
 {
 	private static sun.misc.Unsafe unsafe;
+	private static final int HASH_THRESHOLD = 10;
 
 	static
 	{
@@ -51,6 +55,9 @@ public class CNFFilter implements Serializable
 	private DataEndMarker hshmLock = new DataEndMarker();
 
 	private volatile HashSet<String> references;
+	private volatile IdentityHashMap<ArrayList<Filter>, Boolean> hashEligibleCache;
+	private volatile IdentityHashMap<ArrayList<Filter>, Integer> hashColPos;
+	private volatile IdentityHashMap<ArrayList<Filter>, HJOMultiHashMap<Integer, Filter>> hashMapCache;
 
 	public CNFFilter()
 	{
@@ -87,11 +94,7 @@ public class CNFFilter implements Serializable
 		prev.put(OperatorUtils.readLong(in), value);
 		value.filters = OperatorUtils.deserializeALALF(in, prev);
 		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
-		value.partHash = OperatorUtils.deserializeALO(in, prev);
-		value.rangeFilters = OperatorUtils.deserializeALF(in, prev);
-		value.hshm = OperatorUtils.deserializeHSHM(in, prev);
 		value.hshmLock = new DataEndMarker();
-		value.references = OperatorUtils.deserializeHSS(in, prev);
 		return value;
 	}
 
@@ -721,11 +724,6 @@ public class CNFFilter implements Serializable
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.serializeALALF(filters, out, prev);
 		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
-		OperatorUtils.serializeALO(partHash, out, prev);
-		OperatorUtils.serializeALF(rangeFilters, out, prev);
-		OperatorUtils.serializeHSHM(hshm, out, prev);
-		// recreate hshmLock
-		OperatorUtils.serializeHSS(references, out, prev);
 	}
 
 	public void setHSHM(HashSet<HashMap<Filter, Filter>> hshm)
@@ -757,11 +755,220 @@ public class CNFFilter implements Serializable
 	{
 		this.cols2Pos = cols2Pos;
 	}
+	
+	private boolean hashEligible(ArrayList<Filter> filter)
+	{
+		if (hashEligibleCache == null)
+		{
+			hashEligibleCache = new IdentityHashMap<ArrayList<Filter>, Boolean>();
+		}
+		
+		Boolean retval = null;
+		synchronized(hashEligibleCache)
+		{
+			retval = hashEligibleCache.get(filter);
+		}
+		if (retval != null)
+		{
+			return retval;
+		}
+		
+		//are all disjuncts col/literal and is the col always the same?
+		boolean ret = true;
+		String col = null;
+		for (Filter f : filter)
+		{
+			if (f.leftIsColumn() && !f.rightIsColumn())
+			{
+				String c = f.leftColumn();
+				if (col == null)
+				{
+					col = c;
+				}
+				else if (!c.equals(col))
+				{
+					ret = false;
+					break;
+				}
+			}
+			else if (!f.leftIsColumn() && f.rightIsColumn())
+			{
+				String c = f.rightColumn();
+				if (col == null)
+				{
+					col = c;
+				}
+				else if (!c.equals(col))
+				{
+					ret = false;
+					break;
+				}
+			}
+		}
+		
+		synchronized(hashEligibleCache)
+		{
+			hashEligibleCache.put(filter, ret);
+		}
+		return ret;
+	}
+	
+	private int computeHashColPos(ArrayList<Filter> filter)
+	{
+		Filter f = filter.get(0);
+		if (f.leftIsColumn())
+		{
+			return cols2Pos.get(f.leftColumn());
+		}
+		
+		return cols2Pos.get(f.rightColumn());
+	}
+	
+	private boolean passesOredConditionHash(ArrayList<Filter> filter, ArrayList<Object> row) throws Exception
+	{
+		if (hashColPos == null)
+		{
+			hashColPos = new IdentityHashMap<ArrayList<Filter>, Integer>();
+		}
+		Integer colPos = null;
+		synchronized(hashColPos)
+		{
+			colPos = hashColPos.get(filter);
+		}
+		if (colPos == null)
+		{
+			colPos = computeHashColPos(filter);
+			synchronized(hashColPos)
+			{
+				hashColPos.put(filter, colPos);
+			}
+		}
+		
+		Object obj = row.get(colPos);
+		int code = obj.hashCode();
+		if (hashMapCache == null)
+		{
+			hashMapCache = new IdentityHashMap<ArrayList<Filter>, HJOMultiHashMap<Integer, Filter>>();
+		}
+		HJOMultiHashMap<Integer, Filter> hashedFilters = null;
+		synchronized(hashMapCache)
+		{
+			hashedFilters = hashMapCache.get(filter);
+		}
+		if (hashedFilters == null)
+		{
+			hashedFilters = computeHashedFilters(filter);
+			synchronized(hashMapCache)
+			{
+				hashMapCache.put(filter, hashedFilters);
+			}
+		}
+		
+		List<Filter> validFilters = hashedFilters.get(code);
+		for (Filter f : validFilters)
+		{
+			if (f.passes(row, cols2Pos))
+			{
+				return true;
+			}
+		}
+		
+		return false;
+	}
+	
+	private boolean passesOredConditionHash(ArrayList<Filter> filter, ArrayList<Object> lRow, ArrayList<Object> rRow) throws Exception
+	{
+		if (hashColPos == null)
+		{
+			hashColPos = new IdentityHashMap<ArrayList<Filter>, Integer>();
+		}
+		Integer colPos = null;
+		synchronized(hashColPos)
+		{
+			colPos = hashColPos.get(filter);
+		}
+		if (colPos == null)
+		{
+			colPos = computeHashColPos(filter);
+			synchronized(hashColPos)
+			{
+				hashColPos.put(filter, colPos);
+			}
+		}
+		
+		Object obj = null;
+		if (colPos < lRow.size())
+		{
+			obj = lRow.get(colPos);
+		}
+		else
+		{
+			obj = rRow.get(colPos - lRow.size());
+		}
+		int code = obj.hashCode();
+		if (hashMapCache == null)
+		{
+			hashMapCache = new IdentityHashMap<ArrayList<Filter>, HJOMultiHashMap<Integer, Filter>>();
+		}
+		HJOMultiHashMap<Integer, Filter> hashedFilters = null;
+		synchronized(hashMapCache)
+		{
+			hashedFilters = hashMapCache.get(filter);
+		}
+		if (hashedFilters == null)
+		{
+			hashedFilters = computeHashedFilters(filter);
+			synchronized(hashMapCache)
+			{
+				hashMapCache.put(filter, hashedFilters);
+			}
+		}
+		
+		List<Filter> validFilters = hashedFilters.get(code);
+		for (Filter f : validFilters)
+		{
+			if (f.passes(lRow, rRow, cols2Pos))
+			{
+				return true;
+			}
+		}
+		
+		return false;
+	}
+	
+	private HJOMultiHashMap<Integer, Filter> computeHashedFilters(ArrayList<Filter> filter)
+	{
+		HJOMultiHashMap<Integer, Filter> retval = new HJOMultiHashMap<Integer, Filter>();
+		for (Filter f : filter)
+		{
+			if (f.leftIsColumn())
+			{
+				Object o = f.rightLiteral();
+				int code = o.hashCode();
+				retval.multiPut(code, f);
+			}
+			else
+			{
+				Object o = f.leftLiteral();
+				int code = o.hashCode();
+				retval.multiPut(code, f);
+			}
+		}
+		
+		return retval;
+	}
 
 	private final boolean passesOredCondition(ArrayList<Filter> filter, ArrayList<Object> row) throws Exception
 	{
 		try
 		{
+			if (filter.size() >= HASH_THRESHOLD)
+			{
+				if (hashEligible(filter))
+				{
+					return passesOredConditionHash(filter, row);
+				}
+			}
 			int z = 0;
 			final int limit = filter.size();
 			// for (final Filter f : filter)
@@ -787,6 +994,13 @@ public class CNFFilter implements Serializable
 	{
 		try
 		{
+			if (filter.size() >= HASH_THRESHOLD)
+			{
+				if (hashEligible(filter))
+				{
+					return passesOredConditionHash(filter, lRow, rRow);
+				}
+			}
 			int z = 0;
 			final int limit = filter.size();
 			// for (final Filter f : filter)

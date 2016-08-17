@@ -25,6 +25,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import com.exascale.exceptions.ParseException;
 import com.exascale.filesystem.Block;
@@ -51,27 +52,27 @@ public final class MetaData implements Serializable
 	public static int numWorkerNodes = 0;
 	private static ArrayList<Integer> coords = new ArrayList<Integer>();
 	private static ArrayList<Integer> workers = new ArrayList<Integer>();
-	private static HashMap<String, ArrayList<Object>> getPartitioningCache = new HashMap<String, ArrayList<Object>>();
-	private static HashMap<String, ArrayList<Object>> getIndexesCache = new HashMap<String, ArrayList<Object>>();
-	private static HashMap<String, ArrayList<Object>> getUniqueIndexesCache = new HashMap<String, ArrayList<Object>>();
-	private static HashMap<String, ArrayList<Object>> getKeysCache = new HashMap<String, ArrayList<Object>>();
-	private static HashMap<String, ArrayList<Object>> getTypesCache = new HashMap<String, ArrayList<Object>>();
-	private static HashMap<String, ArrayList<Object>> getOrdersCache = new HashMap<String, ArrayList<Object>>();
-	private static HashMap<String, ArrayList<Object>> getIndexColsForTableCache = new HashMap<String, ArrayList<Object>>();
-	private static HashMap<String, Integer> getLengthCache = new HashMap<String, Integer>();
-	private static HashMap<String, Integer> getTableIDCache = new HashMap<String, Integer>();
-	private static HashMap<String, Long> getColCardCache = new HashMap<String, Long>();
-	private static HashMap<String, ArrayList<Object>> getIndexIDsForTableCache = new HashMap<String, ArrayList<Object>>();
-	private static HashMap<String, ArrayList<Object>> getCols2PosForTableCache = new HashMap<String, ArrayList<Object>>();
-	private static HashMap<String, ArrayList<Object>> getCols2TypesCache = new HashMap<String, ArrayList<Object>>();
-	private static HashMap<String, ArrayList<Object>> getUniqueCache = new HashMap<String, ArrayList<Object>>();
-	private static HashMap<String, Long> getTableCardCache = new HashMap<String, Long>();
-	private static HashMap<String, String> getColTypeCache = new HashMap<String, String>();
-	private static HashMap<String, Object> getDistCache = new HashMap<String, Object>();
+	private static ConcurrentHashMap<String, ArrayList<Object>> getPartitioningCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, ArrayList<Object>> getIndexesCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, ArrayList<Object>> getUniqueIndexesCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, ArrayList<Object>> getKeysCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, ArrayList<Object>> getTypesCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, ArrayList<Object>> getOrdersCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, ArrayList<Object>> getIndexColsForTableCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, Integer> getLengthCache = new ConcurrentHashMap<String, Integer>();
+	private static ConcurrentHashMap<String, Integer> getTableIDCache = new ConcurrentHashMap<String, Integer>();
+	private static ConcurrentHashMap<String, Long> getColCardCache = new ConcurrentHashMap<String, Long>();
+	private static ConcurrentHashMap<String, ArrayList<Object>> getIndexIDsForTableCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, ArrayList<Object>> getCols2PosForTableCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, ArrayList<Object>> getCols2TypesCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, ArrayList<Object>> getUniqueCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, Long> getTableCardCache = new ConcurrentHashMap<String, Long>();
+	private static ConcurrentHashMap<String, String> getColTypeCache = new ConcurrentHashMap<String, String>();
+	private static ConcurrentHashMap<String, Object> getDistCache = new ConcurrentHashMap<String, Object>();
 	private static int numDevices;
 	static ReentrantLock tableMetaLock = new ReentrantLock();
-	static HashMap<String, Boolean> tableExistenceCache = new HashMap<String, Boolean>();
-	static HashMap<String, Integer> tableTypeCache = new HashMap<String, Integer>();
+	static ConcurrentHashMap<String, Boolean> tableExistenceCache = new ConcurrentHashMap<String, Boolean>();
+	static ConcurrentHashMap<String, Integer> tableTypeCache = new ConcurrentHashMap<String, Integer>();
 
 	static
 	{
@@ -1668,17 +1669,21 @@ public final class MetaData implements Serializable
 			if (card == null)
 			{
 				card = PlanCacheManager.getColCard().setParms(schema, table, c).execute(tx);
-				getColCardCache.put(schema + "." + table + "." + c, card);
+				if (card != -1)
+				{
+					getColCardCache.put(schema + "." + table + "." + c, card);
+					return card;
+				}
+				else if (generated.containsKey(col))
+				{
+					return (generated.get(col).longValue());
+				}
+				
+				getColCardCache.put(schema + "." + table + "." + c, 1000000l);
 			}
-			return card;
 		}
 		catch (Exception e)
 		{
-		}
-
-		if (generated.containsKey(col))
-		{
-			return (generated.get(col).longValue());
 		}
 
 		// HRDBMSWorker.logger.warn("Can't find cardinality for " + schema + "."
@@ -1699,18 +1704,23 @@ public final class MetaData implements Serializable
 			if (card == null)
 			{
 				card = PlanCacheManager.getColCard().setParms(schema, table, col).execute(tx);
-				getColCardCache.put(schema + "." + table + "." + col, card);
+				
+				if (card != -1)
+				{
+					getColCardCache.put(schema + "." + table + "." + col, card);
+					return card;
+				}
+				else if (generated.containsKey(col))
+				{
+					return (generated.get(col).longValue());
+				}
+				
+				getColCardCache.put(schema + "." + table + "." + col, 1000000l);
 			}
-			return card;
 		}
 		catch (Exception e)
 		{
 			// HRDBMSWorker.logger.debug("", e);
-		}
-
-		if (generated.containsKey(col))
-		{
-			return (generated.get(col).longValue());
 		}
 
 		// HRDBMSWorker.logger.warn("Can't find cardinality for " + schema + "."
@@ -6268,11 +6278,8 @@ public final class MetaData implements Serializable
 				Random random = new Random();
 				while (updateCount == -1)
 				{
-					try
-					{
-						PlanCacheManager.getColCard().setParms(schema, table, col).execute(tx);
-					}
-					catch (Exception e)
+					long cardTest = PlanCacheManager.getColCard().setParms(schema, table, col).execute(tx);
+					if (cardTest == -1)
 					{
 						sql = "INSERT INTO SYS.COLSTATS VALUES(" + tableID + "," + colID + "," + card + ")";
 						XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);

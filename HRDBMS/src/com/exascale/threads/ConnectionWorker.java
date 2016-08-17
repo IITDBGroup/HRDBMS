@@ -73,6 +73,7 @@ import com.exascale.misc.MyDate;
 import com.exascale.misc.SPSCQueue;
 import com.exascale.optimizer.BFCOperator;
 import com.exascale.optimizer.ColDef;
+import com.exascale.optimizer.DeleteOperator;
 import com.exascale.optimizer.Filter;
 import com.exascale.optimizer.Index;
 import com.exascale.optimizer.Index.IndexRecord;
@@ -766,7 +767,7 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 		catch (Exception e)
 		{
-			HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
+			//HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
 			try
 			{
 				sock.close();
@@ -805,7 +806,7 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 		catch (Exception e)
 		{
-			HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
+			//HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
 			try
 			{
 				sock.close();
@@ -835,19 +836,44 @@ public class ConnectionWorker extends HRDBMSThread
 		{
 			if (delayedDML.contains(this))
 			{
-				List<XAWorker> workers = delayedWorkers.get(this);
-				for (XAWorker worker : workers)
+				IdentityHashMap covered = new IdentityHashMap<XAWorker, XAWorker>();
+				while (true)
 				{
-					InsertOperator.wakeUpDelayed(tx);
-					worker.join();
-					int updateCount = worker.getUpdateCount();
-
-					if (updateCount == -1)
+					List<XAWorker> workers = delayedWorkers.get(this);
+					ArrayList<XAWorker> clone = new ArrayList<XAWorker>(workers);
+					
+					boolean didSomething = false;
+					for (XAWorker worker : clone)
 					{
-						sendNo();
-						//returnExceptionToClient(worker.getException());
-						delayedWorkers.multiRemove(this);
-						return;
+						if (covered.containsKey(worker))
+						{
+							continue;
+						}
+						
+						didSomething = true;
+						InsertOperator.wakeUpDelayed(tx);
+						DeleteOperator.wakeUpDelayed(tx);
+						boolean joined = worker.join(1);
+						
+						if (joined)
+						{
+							int updateCount = worker.getUpdateCount();
+
+							if (updateCount == -1)
+							{
+								sendNo();
+								//returnExceptionToClient(worker.getException());
+								delayedWorkers.multiRemove(this);
+								return;
+							}
+							
+							covered.put(worker, worker);
+						}
+					}
+					
+					if (!didSomething)
+					{
+						break;
 					}
 				}
 				
@@ -879,7 +905,42 @@ public class ConnectionWorker extends HRDBMSThread
 		{
 			if (delayedDML.contains(this))
 			{
-				InsertOperator.wakeUpDelayed(tx);
+				List<XAWorker> workers = delayedWorkers.get(this);
+				
+				while (true)
+				{
+					if (workers.size() == 0)
+					{
+						break;
+					}
+					ArrayList<XAWorker> clone = new ArrayList<XAWorker>(workers);
+					int i = 0;
+					for (XAWorker worker : clone)
+					{
+						InsertOperator.wakeUpDelayed(tx);
+						DeleteOperator.wakeUpDelayed(tx);
+						boolean joined = worker.join(1);
+						if (joined && worker.getUpdateCount() == -1)
+						{
+							sendNo();
+							return;
+						}
+					
+						if (!joined)
+						{
+							break;
+						}
+					
+						i++;
+					}
+				
+					int j = 0;
+					while (j < i)
+					{
+						workers.remove(0);
+						j++;
+					}
+				}
 			}
 		}
 		catch (Exception e)
@@ -905,19 +966,44 @@ public class ConnectionWorker extends HRDBMSThread
 		
 		if (delayedDML.contains(this))
 		{
-			List<XAWorker> workers = delayedWorkers.get(this);
-			for (XAWorker worker : workers)
+			IdentityHashMap<XAWorker, XAWorker> covered = new IdentityHashMap<XAWorker, XAWorker>();
+			while (true)
 			{
-				while (true)
+				List<XAWorker> workers = delayedWorkers.get(this);
+				ArrayList<XAWorker> clone = new ArrayList<XAWorker>(workers);
+				boolean didSomething = false;
+				for (XAWorker worker : clone)
 				{
-					try
+					if (covered.containsKey(worker))
 					{
-						InsertOperator.wakeUpDelayed(tx);
-						worker.join();
-						break;
+						continue;
 					}
-					catch(InterruptedException e)
-					{}
+					
+					didSomething = true;
+					
+					boolean joined = false;
+					while (true)
+					{
+						try
+						{
+							InsertOperator.wakeUpDelayed(tx);
+							DeleteOperator.wakeUpDelayed(tx);
+							joined = worker.join(1);
+							break;
+						}
+						catch(InterruptedException e)
+						{}
+					}
+					
+					if (joined)
+					{
+						covered.put(worker, worker);
+					}
+				}
+				
+				if (!didSomething)
+				{
+					break;
 				}
 			}
 			
@@ -1017,6 +1103,10 @@ public class ConnectionWorker extends HRDBMSThread
 						cmd2.add("CLOSE");
 						worker.in.put(cmd2);
 					}
+					if (tx != null)
+					{
+						doRollback();
+					}
 					this.terminate();
 					return;
 				}
@@ -1030,6 +1120,10 @@ public class ConnectionWorker extends HRDBMSThread
 						ArrayList<Object> cmd2 = new ArrayList<Object>(1);
 						cmd2.add("CLOSE");
 						worker.in.put(cmd2);
+					}
+					if (tx != null)
+					{
+						doRollback();
 					}
 					this.terminate();
 					return;
@@ -1059,6 +1153,10 @@ public class ConnectionWorker extends HRDBMSThread
 						cmd2.add("CLOSE");
 						worker.in.put(cmd2);
 					}
+					if (tx != null)
+					{
+						doRollback();
+					}
 					this.terminate();
 					return;
 				}
@@ -1074,6 +1172,10 @@ public class ConnectionWorker extends HRDBMSThread
 						ArrayList<Object> cmd2 = new ArrayList<Object>(1);
 						cmd2.add("CLOSE");
 						worker.in.put(cmd2);
+					}
+					if (tx != null)
+					{
+						doRollback();
 					}
 					this.terminate();
 					return;
@@ -1465,6 +1567,10 @@ public class ConnectionWorker extends HRDBMSThread
 						cmd2.add("CLOSE");
 						worker.in.put(cmd2);
 					}
+					if (tx != null)
+					{
+						doRollback();
+					}
 					HRDBMSWorker.logger.debug("Received request to terminate connection");
 					this.terminate();
 					return;
@@ -1761,7 +1867,7 @@ public class ConnectionWorker extends HRDBMSThread
 				{
 				}
 			}
-			HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
+			//HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
 			if (worker != null)
 			{
 				ArrayList<Object> cmd2 = new ArrayList<Object>(1);
@@ -1777,6 +1883,10 @@ public class ConnectionWorker extends HRDBMSThread
 					{
 					}
 				}
+			}
+			if (tx != null)
+			{
+				doRollback();
 			}
 			this.terminate();
 			return;
@@ -2164,32 +2274,42 @@ public class ConnectionWorker extends HRDBMSThread
 		int type;
 		try
 		{
-			readNonCoord(txBytes);
+			InputStream in = new BufferedInputStream(sock.getInputStream());
+			readNonCoord(txBytes, in);
 			txNum = bytesToLong(txBytes);
 			tx = new Transaction(txNum);
-			readNonCoord(schemaLenBytes);
+			readNonCoord(schemaLenBytes, in);
 			schemaLength = bytesToInt(schemaLenBytes);
 			schemaData = new byte[schemaLength];
-			readNonCoord(schemaData);
+			readNonCoord(schemaData, in);
 			schema = new String(schemaData, StandardCharsets.UTF_8);
-			readNonCoord(tableLenBytes);
+			readNonCoord(tableLenBytes, in);
 			tableLength = bytesToInt(tableLenBytes);
 			tableData = new byte[tableLength];
-			readNonCoord(tableData);
+			readNonCoord(tableData, in);
 			table = new String(tableData, StandardCharsets.UTF_8);
-			readNonCoord(tableLenBytes);
+			readNonCoord(tableLenBytes, in);
 			type = bytesToInt(tableLenBytes);
-			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
-			indexes = (ArrayList<String>)objIn.readObject();
-			raiks = (ArrayList<RIDAndIndexKeys>)objIn.readObject();
-			keys = (ArrayList<ArrayList<String>>)objIn.readObject();
-			types = (ArrayList<ArrayList<String>>)objIn.readObject();
-			orders = (ArrayList<ArrayList<Boolean>>)objIn.readObject();
-			pos2Col = (TreeMap<Integer, String>)objIn.readObject();
-			cols2Types = (HashMap<String, String>)objIn.readObject();
+			//ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
+			HashMap<Long, Object> prev = new HashMap<Long, Object>();
+			indexes = OperatorUtils.deserializeALS(in, prev);
+			//indexes = (ArrayList<String>)objIn.readObject();
+			raiks = OperatorUtils.deserializeALRAIK(in, prev);
+			//raiks = (ArrayList<RIDAndIndexKeys>)objIn.readObject();
+			keys = OperatorUtils.deserializeALALS(in, prev);
+			//keys = (ArrayList<ArrayList<String>>)objIn.readObject();
+			types = OperatorUtils.deserializeALALS(in, prev);
+			//types = (ArrayList<ArrayList<String>>)objIn.readObject();
+			orders = OperatorUtils.deserializeALALB(in, prev);
+			//orders = (ArrayList<ArrayList<Boolean>>)objIn.readObject();
+			pos2Col = OperatorUtils.deserializeTM(in, prev);
+			//pos2Col = (TreeMap<Integer, String>)objIn.readObject();
+			cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+			//cols2Types = (HashMap<String, String>)objIn.readObject();
 		}
 		catch (Exception e)
 		{
+			HRDBMSWorker.logger.debug("", e);
 			sendNo();
 			return;
 		}
@@ -2242,6 +2362,8 @@ public class ConnectionWorker extends HRDBMSThread
 			if (!thread.getOK())
 			{
 				allOK = false;
+				Exception e = thread.getException();
+				HRDBMSWorker.logger.debug("", e);
 			}
 		}
 		
@@ -2686,7 +2808,7 @@ public class ConnectionWorker extends HRDBMSThread
 			}
 			catch (final Exception e)
 			{
-				HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
+				//HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
 				if (tx != null)
 				{
 					try
@@ -2809,7 +2931,7 @@ public class ConnectionWorker extends HRDBMSThread
 			}
 			catch (final Exception e)
 			{
-				HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
+				//HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
 				if (tx != null)
 				{
 					try
@@ -2919,7 +3041,7 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 		catch (Exception e)
 		{
-			HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
+			//HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
 			if (tx != null)
 			{
 				try
@@ -4873,7 +4995,7 @@ public class ConnectionWorker extends HRDBMSThread
 			}
 			catch (final Exception e)
 			{
-				HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
+				//HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
 				if (tx != null)
 				{
 					try
@@ -5402,7 +5524,7 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 		catch (Exception f)
 		{
-			HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
+			//HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
 			if (tx != null)
 			{
 				try
@@ -5460,7 +5582,7 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 		catch (Exception e)
 		{
-			HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
+			//HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
 			if (tx != null)
 			{
 				try
@@ -5517,7 +5639,7 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 		catch (Exception e)
 		{
-			HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
+			//HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
 			if (tx != null)
 			{
 				try
@@ -5574,7 +5696,7 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 		catch (Exception e)
 		{
-			HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
+			//HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
 			if (tx != null)
 			{
 				try
@@ -5633,7 +5755,7 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 		catch (Exception e)
 		{
-			HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
+			//HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
 			if (tx != null)
 			{
 				try
@@ -5812,7 +5934,7 @@ public class ConnectionWorker extends HRDBMSThread
 			}
 			catch (final Exception e)
 			{
-				HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
+				//HRDBMSWorker.logger.debug("Terminating connection due to exception", e);
 				if (tx != null)
 				{
 					try
@@ -6664,6 +6786,7 @@ public class ConnectionWorker extends HRDBMSThread
 		Set<RIDAndIndexKeys> raiks;
 		TreeMap<Integer, String> pos2Col;
 		int type;
+		private Exception e;
 
 		public FlushDeleteThread(Set<RIDAndIndexKeys> raiks, Transaction tx, String schema, String table, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type)
 		{
@@ -6693,6 +6816,7 @@ public class ConnectionWorker extends HRDBMSThread
 				MultiHashMap<Integer, RIDAndIndexKeys> map = new MultiHashMap<Integer, RIDAndIndexKeys>();
 				for (RIDAndIndexKeys raik : raiks)
 				{
+					//HRDBMSWorker.logger.debug("About to delete RID = " + raik.getRID()); //DEBUG
 					map.multiPut(raik.getRID().getBlockNum(), raik);
 				}
 
@@ -6749,8 +6873,14 @@ public class ConnectionWorker extends HRDBMSThread
 			catch (Exception e)
 			{
 				ok = false;
+				this.e = e;
 				HRDBMSWorker.logger.debug("", e);
 			}
+		}
+		
+		public Exception getException()
+		{
+			return e;
 		}
 	}
 
@@ -7034,11 +7164,11 @@ public class ConnectionWorker extends HRDBMSThread
 		{
 			try
 			{
-				HRDBMSWorker.logger.debug("FlushLoad thread started with type = " + type);
+				//HRDBMSWorker.logger.debug("FlushLoad thread started with type = " + type);
 				MetaData meta = new MetaData();
 				FileChannel fc = loadFCs.remove(meta.getDevicePath(num) + schema + "." + table + ".tmp");
 				String tmpFile = meta.getDevicePath(num) + schema + "." + table + ".tmp";
-				HRDBMSWorker.logger.debug("FC length for " + tmpFile + " = " + fc.size());
+				//HRDBMSWorker.logger.debug("FC length for " + tmpFile + " = " + fc.size());
 				if (fc == null)
 				{
 					return;
@@ -7190,7 +7320,7 @@ public class ConnectionWorker extends HRDBMSThread
 					tx.requestPage(b);
 					final HeaderPage hp = tx.readHeaderPage(b, 1);
 					ArrayList<Integer> intClustering = hp.getClustering();
-					HRDBMSWorker.logger.debug("Header page returned an organization of: " + intClustering);
+					//HRDBMSWorker.logger.debug("Header page returned an organization of: " + intClustering);
 					Operator top = bfcOp;
 					if (intClustering.size() != 0)
 					{
@@ -7214,7 +7344,7 @@ public class ConnectionWorker extends HRDBMSThread
 							icc = (int)cc;
 						}
 						sort.setChildCard(icc);
-						HRDBMSWorker.logger.debug("Set sort child card to " + icc);
+						//HRDBMSWorker.logger.debug("Set sort child card to " + icc);
 						sort.add(top);
 						top = sort;
 					}

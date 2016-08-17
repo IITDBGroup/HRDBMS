@@ -1255,6 +1255,20 @@ public final class TableScanOperator implements Operator, Serializable
 
 	public void setNeededCols(ArrayList<String> needed)
 	{
+		if (getRID)
+		{
+			ArrayList<String> newNeeded = new ArrayList<String>(needed.size());
+			needed.remove(0);
+			needed.remove(0);
+			needed.remove(0);
+			needed.remove(0);
+			newNeeded.add("_RID1");
+			newNeeded.add("_RID2");
+			newNeeded.add("_RID3");
+			newNeeded.add("_RID4");
+			newNeeded.addAll(needed);
+			needed = newNeeded;
+		}
 		fetchPos = new ArrayList<Integer>(needed.size());
 		for (final String col : needed)
 		{
@@ -1304,28 +1318,8 @@ public final class TableScanOperator implements Operator, Serializable
 		i = 0;
 		for (final String col : needed)
 		{
-			int j = i;
-			if (col.equals("_RID1"))
-			{
-				j = 0;
-			}
-			
-			if (col.equals("_RID2"))
-			{
-				j = 1;
-			}
-			
-			if (col.equals("_RID3"))
-			{
-				j = 2;
-			}
-			
-			if (col.equals("_RID4"))
-			{
-				j = 3;
-			}
-			cols2Pos.put(col, j);
-			pos2Col.put(j, col);
+			cols2Pos.put(col, i);
+			pos2Col.put(i, col);
 			tempCols2Types.put(col, cols2Types.get(col));
 			i++;
 		}
@@ -1648,6 +1642,13 @@ public final class TableScanOperator implements Operator, Serializable
 
 		public void colTableRT()
 		{
+			if (TableScanOperator.this.getRID)
+			{
+				if (!pos2Col.get(0).equals("_RID1") || !pos2Col.get(1).equals("_RID2") || !pos2Col.get(2).equals("_RID3") || !pos2Col.get(3).equals("_RID4"))
+				{
+					HRDBMSWorker.logger.debug("Col table internal error: order of RID cols is wrong");
+				}
+			}
 			new ArrayList<ReaderThread>();
 			CNFFilter filter = orderedFilters.get(parents.get(0));
 			boolean neededPosNeeded = true;
@@ -2381,7 +2382,8 @@ public final class TableScanOperator implements Operator, Serializable
 			boolean neededPosNeeded = true;
 			int get = 0;
 			int skip = 0;
-			boolean checkNoResults = (filter != null && !(filter instanceof NullCNFFilter) && !sample);
+			//boolean checkNoResults = (filter != null && !(filter instanceof NullCNFFilter) && !sample);
+			boolean checkNoResults = false;
 			HashSet<HashMap<Filter, Filter>> hshm = null;
 			if (checkNoResults)
 			{
@@ -2552,15 +2554,15 @@ public final class TableScanOperator implements Operator, Serializable
 								while (i < length)
 								{
 									Block block = new Block(in, lastRequested + i + 1);
-									if (hshm != null)
-									{
-										Set<HashSet<HashMap<Filter, Filter>>> filters = noResults.get(block);
-										if (filter != null && filters.contains(hshm))
-										{
-											i++;
-											continue;
-										}
-									}
+									//if (hshm != null)
+									//{
+										//Set<HashSet<HashMap<Filter, Filter>>> filters = noResults.get(block);
+										//if (filter != null && filters.contains(hshm))
+										//{
+										//	i++;
+										//	continue;
+										//}
+									//}
 									toRequest.add(block);
 									i++;
 								}
@@ -2656,17 +2658,17 @@ public final class TableScanOperator implements Operator, Serializable
 							get2--;
 						}
 
-						Block thisBlock = new Block(in, onPage);
-						if (hshm != null)
-						{
-							Set<HashSet<HashMap<Filter, Filter>>> filters = noResults.get(thisBlock);
-							if (filter != null && filters.contains(hshm))
-							{
-								skippedPages.getAndIncrement();
-								onPage++;
-								continue;
-							}
-						}
+						//Block thisBlock = new Block(in, onPage);
+						//if (hshm != null)
+						//{
+						//	Set<HashSet<HashMap<Filter, Filter>>> filters = noResults.get(thisBlock);
+						//	if (filter != null && filters.contains(hshm))
+						//	{
+						//		skippedPages.getAndIncrement();
+						//		onPage++;
+						//		continue;
+						//	}
+						//}
 
 						// tx.read(new Block(in, onPage++), sch);
 						Schema sch = null;
@@ -2901,10 +2903,10 @@ public final class TableScanOperator implements Operator, Serializable
 							}
 						}
 
-						if (checkNoResults && !hadResults)
-						{
-							noResults.multiPut(thisBlock, hshm);
-						}
+						//if (checkNoResults && !hadResults)
+						//{
+						//	noResults.multiPut(thisBlock, hshm);
+						//}
 					}
 
 					BufferManager.unregisterInterest(this);
