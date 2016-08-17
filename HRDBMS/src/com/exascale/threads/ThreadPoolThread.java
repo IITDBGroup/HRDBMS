@@ -2,6 +2,8 @@ package com.exascale.threads;
 
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 
@@ -29,6 +31,23 @@ public abstract class ThreadPoolThread implements Runnable
 		catch (final ExecutionException e)
 		{
 		}
+	}
+	
+	public boolean join(int ms) throws InterruptedException
+	{
+		try
+		{
+			forJoin.get(ms, TimeUnit.MILLISECONDS);
+		}
+		catch (final ExecutionException e)
+		{
+		}
+		catch (TimeoutException e)
+		{
+			return false;
+		}
+		
+		return true;
 	}
 
 	public void kill()

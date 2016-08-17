@@ -635,8 +635,9 @@ public final class Index implements Serializable
 			if (rec.isLeaf())
 			{
 				rec.markTombstone();
-				rec = rec.next(true);
 			}
+			
+			rec = rec.next(true);
 		}
 	}
 

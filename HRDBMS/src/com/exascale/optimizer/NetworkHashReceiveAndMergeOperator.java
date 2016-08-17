@@ -1,6 +1,7 @@
 package com.exascale.optimizer;
 
 import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
@@ -292,7 +293,8 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 						}
 						socks.put(child, sock);
 						final OutputStream out = sock.getOutputStream();
-						outs.put(child, out);
+						BufferedOutputStream out2 = new BufferedOutputStream(out);
+						outs.put(child, out2);
 						final InputStream in = new BufferedInputStream(sock.getInputStream(), 65536);
 						ins.put(child, in);
 
@@ -307,14 +309,14 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 							System.arraycopy(from, 0, data, 8, 4);
 							System.arraycopy(to, 0, data, 12, 4);
 							System.arraycopy(idBytes, 0, data, 16, 4);
-							out.write(data);
-							out.flush();
+							out2.write(data);
+							//out.flush();
 
 							IdentityHashMap<Object, Long> map = new IdentityHashMap<Object, Long>();
-							child.serialize(out, map);
+							child.serialize(out2, map);
 							map.clear();
 							map = null;
-							out.flush();
+							out2.flush();
 						}
 						else
 						{
@@ -327,8 +329,8 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 							System.arraycopy(from, 0, data, 8, 4);
 							System.arraycopy(to, 0, data, 12, 4);
 							System.arraycopy(idBytes, 0, data, 16, 4);
-							out.write(data);
-							out.flush();
+							out2.write(data);
+							out2.flush();
 						}
 					}
 

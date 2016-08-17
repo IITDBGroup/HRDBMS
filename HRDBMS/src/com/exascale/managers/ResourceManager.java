@@ -57,7 +57,7 @@ public final class ResourceManager extends HRDBMSThread
 	private static sun.misc.Unsafe unsafe;
 	private static long offset;
 	public static volatile boolean panic = false;
-	private static IdentityHashMap<Operator, Operator> ops = new IdentityHashMap<Operator, Operator>();
+	private static ConcurrentHashMap<Operator, Operator> ops = new ConcurrentHashMap<Operator, Operator>();
 	private static HashMap<Integer, HashSet<Integer>> links = new HashMap<Integer, HashSet<Integer>>();
 	private static HashMap<Link, AtomicInteger> util = new HashMap<Link, AtomicInteger>();
 	private static HashSet<Integer> goodDistances = new HashSet<Integer>();
@@ -154,6 +154,11 @@ public final class ResourceManager extends HRDBMSThread
 	
 	public static ArrayList<Integer> getAlternateMiddlemen(int source, int target, int primary)
 	{
+		if (primary == target)
+		{
+			return new ArrayList<Integer>();
+		}
+		
 		HashSet<Integer> middlemen = links.get(source);
 		HashSet<Integer> middlemen2 = links.get(target);
 		middlemen.retainAll(middlemen2);
@@ -283,10 +288,7 @@ public final class ResourceManager extends HRDBMSThread
 
 	public static void deregisterOperator(Operator op)
 	{
-		synchronized (ops)
-		{
-			ops.remove(op);
-		}
+		ops.remove(op);
 	}
 
 	public static boolean display(Operator op, int indent)
@@ -379,10 +381,7 @@ public final class ResourceManager extends HRDBMSThread
 
 	public static void registerOperator(Operator op)
 	{
-		synchronized (ops)
-		{
-			ops.put(op, op);
-		}
+		ops.put(op, op);
 	}
 
 	private static void displayQueryProgress()

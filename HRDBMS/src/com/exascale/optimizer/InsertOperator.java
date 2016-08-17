@@ -10,6 +10,7 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -78,8 +79,30 @@ public final class InsertOperator implements Operator, Serializable
 				return true;
 			}
 			
-			delayedRows.get(owner).add(rows.get(0));
+			delayedRows.get(owner).addAll(rows);
 			return false;
+		}
+	}
+	
+	private static boolean registerDelayedCantOwn(InsertOperator caller, String schema, String table, int node, Transaction tx, List<ArrayList<Object>> rows)
+	{
+		synchronized(txDelayedMaps)
+		{
+			String key = schema + "." + table + "~" + node;
+			HashMap<String, InsertOperator> map = txDelayedMaps.get(tx.number());
+			if (map == null)
+			{
+				return false;
+			}
+			
+			InsertOperator owner = map.get(key);
+			if (owner == null)
+			{
+				return false;
+			}
+			
+			delayedRows.get(owner).addAll(rows);
+			return true;
 		}
 	}
 	
@@ -425,13 +448,9 @@ public final class InsertOperator implements Operator, Serializable
 		{
 			flush(indexes, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
 		}
-		else if (ConnectionWorker.isDelayed(tx) && map.totalSize() == 1)
+		else if (ConnectionWorker.isDelayed(tx) && map.totalSize() > 0)
 		{
 			delayedFlush(indexes, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
-		}
-		else if (ConnectionWorker.isDelayed(tx) && map.totalSize() > 1)
-		{
-			flush(indexes, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
 		}
 
 		done = true;
@@ -537,15 +556,43 @@ public final class InsertOperator implements Operator, Serializable
 	{
 		FlushThread thread = null;
 		int node = -1;
-		for (Object o : map.getKeySet())
+		boolean realOwner = false;
+		int realNode = -1;
+		HashSet copy = new HashSet(map.getKeySet());
+		for (Object o : copy)
 		{
 			node = (Integer)o;
 			List<ArrayList<Object>> list = map.get(node);
-			boolean owner = InsertOperator.registerDelayed(this, schema, table, node, tx, list);
-			if (!owner)
+			
+			if (!realOwner)
 			{
-				return;
+				boolean owner = InsertOperator.registerDelayed(this, schema, table, node, tx, list);
+				if (owner)
+				{
+					realOwner = true;
+					realNode = node;
+				}
+				
+				map.multiRemove(o);
 			}
+			else
+			{
+				boolean handled = InsertOperator.registerDelayedCantOwn(this, schema, table, node, tx, list);
+				if (handled)
+				{
+					map.multiRemove(o);
+				}
+			}
+		}
+		
+		if (map.size() > 0)
+		{
+			flush(indexes, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
+		}
+		
+		if (!realOwner)
+		{
+			return;
 		}
 
 		synchronized(this)
@@ -558,8 +605,8 @@ public final class InsertOperator implements Operator, Serializable
 			{}
 		}
 		
-		List<ArrayList<Object>> list = InsertOperator.deregister(this, schema, table, node, tx);
-		thread = new FlushThread(list, indexes, node, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
+		List<ArrayList<Object>> list = InsertOperator.deregister(this, schema, table, realNode, tx);
+		thread = new FlushThread(list, indexes, realNode, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
 		thread.start();
 
 		while (true)

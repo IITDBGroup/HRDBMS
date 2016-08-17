@@ -28,7 +28,7 @@ public class VHJOMultiHashMap<K, V>
 		Vector<V> retval = map.get(key);
 		if (retval == null)
 		{
-			return new ArrayList<V>();
+			return new Vector<V>();
 		}
 		else
 		{
@@ -38,7 +38,8 @@ public class VHJOMultiHashMap<K, V>
 	
 	public void multiRemove(K key)
 	{
-		map.remove(key);
+		Vector<V> removed = map.remove(key);
+		size.addAndGet(removed.size());
 	}
 
 	public void multiPut(K key, V val)

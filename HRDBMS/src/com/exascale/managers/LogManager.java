@@ -393,7 +393,7 @@ public class LogManager extends HRDBMSThread
 				if (ordered.size() == 0)
 				{
 					//Transaction.txListLock.unlock();
-					fc.force(false);
+					//fc.force(false);
 					return;
 				}
 

@@ -558,7 +558,8 @@ public final class RoutingOperator implements Operator
 						}
 						socks.put(child, sock);
 						final OutputStream out = sock.getOutputStream();
-						outsMiddle.put(child, out);
+						BufferedOutputStream out2 = new BufferedOutputStream(out);
+						outsMiddle.put(child, out2);
 						final InputStream in = new BufferedInputStream(sock.getInputStream(), 65536);
 						ins.put(child, in);
 
@@ -573,14 +574,14 @@ public final class RoutingOperator implements Operator
 							System.arraycopy(from, 0, data, 8, 4);
 							System.arraycopy(to, 0, data, 12, 4);
 							System.arraycopy(idBytes, 0, data, 16, 4);
-							out.write(data);
-							out.flush();
+							out2.write(data);
+							//out.flush();
 
 							IdentityHashMap<Object, Long> map = new IdentityHashMap<Object, Long>();
-							child.serialize(out, map);
+							child.serialize(out2, map);
 							map.clear();
 							map = null;
-							out.flush();
+							out2.flush();
 						}
 						else
 						{
@@ -593,8 +594,8 @@ public final class RoutingOperator implements Operator
 							System.arraycopy(from, 0, data, 8, 4);
 							System.arraycopy(to, 0, data, 12, 4);
 							System.arraycopy(idBytes, 0, data, 16, 4);
-							out.write(data);
-							out.flush();
+							out2.write(data);
+							out2.flush();
 						}
 					}
 

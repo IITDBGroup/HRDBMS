@@ -19,6 +19,18 @@ public class InsertTest
 		int startNum = Integer.parseInt(args[2]);
 		long start = System.currentTimeMillis();
 		int batching = Integer.parseInt(args[4]);
+		int deleteBatching = 1;
+		int deletePacing = 1;
+		boolean doDelete = true;
+		try
+		{
+			deleteBatching = Integer.parseInt(args[5]);
+			deletePacing = Integer.parseInt(args[6]);
+		}
+		catch(Exception e)
+		{
+			doDelete = false;
+		}
 
 		Class.forName("com.exascale.client.HRDBMSDriver");
 		conn = DriverManager.getConnection("jdbc:hrdbms://localhost:3232");
@@ -82,21 +94,44 @@ public class InsertTest
 
 		long end2 = System.currentTimeMillis();
 
-		//i = 0;
-		//while (i < count)
-		//{
-		//	stmt.executeUpdate("DELETE FROM JASON.TEST1 WHERE COL1 = " + i);
-		//	i++;
-		//	if (i % 100 == 0)
-		//	{
-		//		System.out.println(i);
-		//	}
 		
-		//	if (i % commitRate == 0)
-		//	{
-		//		conn.commit();
-		//	}
-		//}
+		if (doDelete)
+		{
+			i = 0;
+			while (i < count)
+			{
+				StringBuilder sql = new StringBuilder();
+				sql.append("DELETE FROM JASON.TEST1 WHERE COL1 = " + (i+startNum));
+				i++;
+				int j = 1;
+				while (j < deleteBatching)
+				{
+					if (i % 100 == 0)
+					{
+						System.out.println(i);
+					}
+					
+					sql.append(" OR COL1 = " + (i+startNum));
+					j++;
+					i++;
+				}
+				stmt.executeUpdate(sql.toString());
+				
+				if (i % 100 == 0)
+				{
+					System.out.println(i);
+				}
+				
+				if (i % commitRate == 0)
+				{
+					conn.commit();
+				}
+				else if (i % deletePacing == 0)
+				{
+					((HRDBMSConnection)conn).doPacing();
+				}
+			}
+		}
 
 		stmt.close();
 		conn.close();
