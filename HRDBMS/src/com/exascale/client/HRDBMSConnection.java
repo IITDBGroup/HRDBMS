@@ -922,7 +922,7 @@ public class HRDBMSConnection implements Connection
 		}
 		catch (Exception e)
 		{
-			throw new SQLException("Error sending request to server!", e);
+			throw new SQLException("Error occurred as part of asynchronous transaction. The transacstion needs to be rolled back.", e);
 		}
 	}
 

@@ -272,6 +272,17 @@ public interface SelectListener extends ParseTreeListener {
 	void exitSortKeyCol(@NotNull SelectParser.SortKeyColContext ctx);
 
 	/**
+	 * Enter a parse tree produced by {@link SelectParser#setClause}.
+	 * @param ctx the parse tree
+	 */
+	void enterSetClause(@NotNull SelectParser.SetClauseContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link SelectParser#setClause}.
+	 * @param ctx the parse tree
+	 */
+	void exitSetClause(@NotNull SelectParser.SetClauseContext ctx);
+
+	/**
 	 * Enter a parse tree produced by {@link SelectParser#groupExp}.
 	 * @param ctx the parse tree
 	 */

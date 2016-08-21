@@ -328,6 +328,19 @@ public class SelectBaseListener implements SelectListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
+	@Override public void enterSetClause(@NotNull SelectParser.SetClauseContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitSetClause(@NotNull SelectParser.SetClauseContext ctx) { }
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
 	@Override public void enterGroupExp(@NotNull SelectParser.GroupExpContext ctx) { }
 	/**
 	 * {@inheritDoc}

@@ -2422,7 +2422,16 @@ public final class MetaData implements Serializable
 			if (card == null)
 			{
 				card = PlanCacheManager.getTableCard().setParms(schema, table).execute(tx);
-				getTableCardCache.put(schema + "." + table, card);
+				if (card != -1)
+				{
+					getTableCardCache.put(schema + "." + table, card);
+					return card;
+				}
+				else
+				{
+					getTableCardCache.put(schema + "." + table, 1000000l);
+					return 1000000;
+				}
 			}
 			return card;
 		}
@@ -6659,11 +6668,9 @@ public final class MetaData implements Serializable
 				int updateCount = -1;
 				while (updateCount == -1)
 				{
-					try
-					{
-						PlanCacheManager.getTableCard().setParms(schema, table).execute(tx);
-					}
-					catch (Exception e)
+					long testCard = PlanCacheManager.getTableCard().setParms(schema, table).execute(tx);
+
+					if (testCard == -1)
 					{
 						sql = "INSERT INTO SYS.TABLESTATS VALUES(" + tableID + "," + card + ")";
 						worker = XAManager.executeAuthorizedUpdate(sql, tx);

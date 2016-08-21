@@ -179,6 +179,13 @@ public interface SelectVisitor<T> extends ParseTreeVisitor<T> {
 	T visitSortKeyCol(@NotNull SelectParser.SortKeyColContext ctx);
 
 	/**
+	 * Visit a parse tree produced by {@link SelectParser#setClause}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitSetClause(@NotNull SelectParser.SetClauseContext ctx);
+
+	/**
 	 * Visit a parse tree produced by {@link SelectParser#groupExp}.
 	 * @param ctx the parse tree
 	 * @return the visitor result

@@ -154,9 +154,7 @@ public class SQLParser
 			{
 				throw new ParseException("Catalog updates are not allowed");
 			}
-			Operator op = buildOperatorTreeFromUpdate((Update)stmt);
-			ArrayList<Operator> ops = new ArrayList<Operator>(1);
-			ops.add(op);
+			ArrayList<Operator> ops = buildOperatorTreeFromUpdate((Update)stmt);
 			return ops;
 		}
 
@@ -6712,7 +6710,7 @@ public class SQLParser
 		return null;
 	}
 
-	private Operator buildOperatorTreeFromUpdate(Update update) throws Exception
+	private ArrayList<Operator> buildOperatorTreeFromUpdate(Update update) throws Exception
 	{
 		TableName table = update.getTable();
 		String schema = null;
@@ -6734,107 +6732,230 @@ public class SQLParser
 		}
 
 		TableScanOperator scan = new TableScanOperator(schema, tbl, meta, tx);
-		Operator op = null;
-		if (update.getWhere() != null)
+		
+		if (!update.isMulti())
 		{
-			op = buildOperatorTreeFromWhere(update.getWhere(), scan, null);
-		}
-		else
-		{
-			op = scan;
-		}
-		scan.getRID();
-		Operator op2;
-		if (op != scan)
-		{
-			op2 = scan.firstParent();
-			op2.removeChild(scan);
-			op2.add(scan);
-			while (op2 != op)
+			Operator op = null;
+			if (update.getWhere() != null)
 			{
-				Operator op3 = op2.parent();
-				op3.removeChild(op2);
-				op3.add(op2);
-				op2 = op3;
-			}
-		}
-
-		ArrayList<String> buildList = new ArrayList<String>();
-
-		ArrayList<Expression> exps = null;
-		if (update.getExpression().isList())
-		{
-			exps = update.getExpression().getList();
-		}
-		else
-		{
-			exps = new ArrayList<Expression>();
-			exps.add(update.getExpression());
-		}
-		for (Expression exp : exps)
-		{
-			if (exp.isColumn())
-			{
-				buildList.add(exp.getColumn().getColumn());
-				continue;
-			}
-			OperatorTypeAndName otan = buildOperatorTreeFromExpression(exp, null, null);
-			if (otan.getType() != SQLParser.TYPE_INLINE && otan.getType() != SQLParser.TYPE_DATE)
-			{
-				throw new ParseException("Invalid expression in update statement");
-			}
-
-			if (otan.getType() == SQLParser.TYPE_DATE)
-			{
-				SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-				String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
-				String name = "._E" + suffix++;
-				ExtendObjectOperator operator = new ExtendObjectOperator(DateParser.parse(dateString), name, meta);
-				operator.add(op);
-				op = operator;
-				buildList.add(name);
+				op = buildOperatorTreeFromWhere(update.getWhere(), scan, null);
 			}
 			else
 			{
-				Operator operator = (Operator)otan.getOp();
-				operator.add(op);
-				op = operator;
-				buildList.add(otan.getName());
+				op = scan;
 			}
-		}
+			scan.getRID();
+			Operator op2;
+			if (op != scan)
+			{
+				op2 = scan.firstParent();
+				op2.removeChild(scan);
+				op2.add(scan);
+				while (op2 != op)
+				{
+					Operator op3 = op2.parent();
+					op3.removeChild(op2);
+					op3.add(op2);
+					op2 = op3;
+				}
+			}
 
-		if (!meta.verifyUpdate(schema, tbl, update.getCols(), buildList, op, tx))
+			ArrayList<String> buildList = new ArrayList<String>();
+
+			ArrayList<Expression> exps = null;
+			if (update.getExpression().isList())
+			{
+				exps = update.getExpression().getList();
+			}
+			else
+			{
+				exps = new ArrayList<Expression>();
+				exps.add(update.getExpression());
+			}
+			for (Expression exp : exps)
+			{
+				if (exp.isColumn())
+				{
+					buildList.add(exp.getColumn().getColumn());
+					continue;
+				}
+				OperatorTypeAndName otan = buildOperatorTreeFromExpression(exp, null, null);
+				if (otan.getType() != SQLParser.TYPE_INLINE && otan.getType() != SQLParser.TYPE_DATE)
+				{
+					throw new ParseException("Invalid expression in update statement");
+				}
+
+				if (otan.getType() == SQLParser.TYPE_DATE)
+				{
+					SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+					String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
+					String name = "._E" + suffix++;
+					ExtendObjectOperator operator = new ExtendObjectOperator(DateParser.parse(dateString), name, meta);
+					operator.add(op);
+					op = operator;
+					buildList.add(name);
+				}
+				else
+				{
+					Operator operator = (Operator)otan.getOp();
+					operator.add(op);
+					op = operator;
+					buildList.add(otan.getName());
+				}
+			}
+
+			if (!meta.verifyUpdate(schema, tbl, update.getCols(), buildList, op, tx))
+			{
+				throw new ParseException("The number of columns and/or data types do not match the columns being updated");
+			}
+
+			ArrayList<String> cols = new ArrayList<String>();
+			for (String col : op.getPos2Col().values())
+			{
+				cols.add(col);
+			}
+
+			// cols.add("_RID1");
+			// cols.add("_RID2");
+			// cols.add("_RID3");
+			// cols.add("_RID4");
+
+			ReorderOperator reorder = new ReorderOperator(cols, meta);
+			reorder.add(op);
+			op = reorder;
+			RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
+			retval.add(op);
+			Phase1 p1 = new Phase1(retval, tx);
+			p1.optimize();
+			new Phase2(retval, tx).optimize();
+			new Phase3(retval, tx).optimize();
+			new Phase4(retval, tx).optimize();
+			new Phase5(retval, tx, p1.likelihoodCache).optimize();
+			UpdateOperator uOp = new UpdateOperator(schema, tbl, update.getCols(), buildList, meta);
+			Operator child = retval.children().get(0);
+			retval.removeChild(child);
+			uOp.add(child);
+			ArrayList<Operator> uOps = new ArrayList<Operator>(1);
+			uOps.add(uOp);
+			return uOps;
+		}
+		else
 		{
-			throw new ParseException("The number of columns and/or data types do not match the columns being updated");
+			TableScanOperator master = scan;
+			ArrayList<ArrayList<Column>> cols2 = update.getCols2();
+			ArrayList<Expression> exps2 = update.getExps2();
+			ArrayList<Where> wheres2 = update.getWheres2();
+			int i = 0;
+			ArrayList<Operator> uOps = new ArrayList<Operator>();
+			for (ArrayList<Column> cols : cols2)
+			{
+				scan = master.clone();
+				Operator op = null;
+				if (wheres2.get(i) != null)
+				{
+					op = buildOperatorTreeFromWhere(wheres2.get(i), scan, null);
+				}
+				else
+				{
+					op = scan;
+				}
+				scan.getRID();
+				Operator op2;
+				if (op != scan)
+				{
+					op2 = scan.firstParent();
+					op2.removeChild(scan);
+					op2.add(scan);
+					while (op2 != op)
+					{
+						Operator op3 = op2.parent();
+						op3.removeChild(op2);
+						op3.add(op2);
+						op2 = op3;
+					}
+				}
+
+				ArrayList<String> buildList = new ArrayList<String>();
+
+				ArrayList<Expression> exps = null;
+				if (exps2.get(i).isList())
+				{
+					exps = exps2.get(i).getList();
+				}
+				else
+				{
+					exps = new ArrayList<Expression>();
+					exps.add(exps2.get(i));
+				}
+				for (Expression exp : exps)
+				{
+					if (exp.isColumn())
+					{
+						buildList.add(exp.getColumn().getColumn());
+						continue;
+					}
+					OperatorTypeAndName otan = buildOperatorTreeFromExpression(exp, null, null);
+					if (otan.getType() != SQLParser.TYPE_INLINE && otan.getType() != SQLParser.TYPE_DATE)
+					{
+						throw new ParseException("Invalid expression in update statement");
+					}
+
+					if (otan.getType() == SQLParser.TYPE_DATE)
+					{
+						SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+						String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
+						String name = "._E" + suffix++;
+						ExtendObjectOperator operator = new ExtendObjectOperator(DateParser.parse(dateString), name, meta);
+						operator.add(op);
+						op = operator;
+						buildList.add(name);
+					}
+					else
+					{
+						Operator operator = (Operator)otan.getOp();
+						operator.add(op);
+						op = operator;
+						buildList.add(otan.getName());
+					}
+				}
+
+				if (!meta.verifyUpdate(schema, tbl, cols, buildList, op, tx))
+				{
+					throw new ParseException("The number of columns and/or data types do not match the columns being updated");
+				}
+
+				ArrayList<String> cols3 = new ArrayList<String>();
+				for (String col : op.getPos2Col().values())
+				{
+					cols3.add(col);
+				}
+
+				// cols.add("_RID1");
+				// cols.add("_RID2");
+				// cols.add("_RID3");
+				// cols.add("_RID4");
+
+				ReorderOperator reorder = new ReorderOperator(cols3, meta);
+				reorder.add(op);
+				op = reorder;
+				RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
+				retval.add(op);
+				Phase1 p1 = new Phase1(retval, tx);
+				p1.optimize();
+				new Phase2(retval, tx).optimize();
+				new Phase3(retval, tx).optimize();
+				new Phase4(retval, tx).optimize();
+				new Phase5(retval, tx, p1.likelihoodCache).optimize();
+				UpdateOperator uOp = new UpdateOperator(schema, tbl, cols, buildList, meta);
+				Operator child = retval.children().get(0);
+				retval.removeChild(child);
+				uOp.add(child);
+				uOps.add(uOp);
+				i++;
+			}
+			
+			return uOps;
 		}
-
-		ArrayList<String> cols = new ArrayList<String>();
-		for (String col : op.getPos2Col().values())
-		{
-			cols.add(col);
-		}
-
-		// cols.add("_RID1");
-		// cols.add("_RID2");
-		// cols.add("_RID3");
-		// cols.add("_RID4");
-
-		ReorderOperator reorder = new ReorderOperator(cols, meta);
-		reorder.add(op);
-		op = reorder;
-		RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
-		retval.add(op);
-		Phase1 p1 = new Phase1(retval, tx);
-		p1.optimize();
-		new Phase2(retval, tx).optimize();
-		new Phase3(retval, tx).optimize();
-		new Phase4(retval, tx).optimize();
-		new Phase5(retval, tx, p1.likelihoodCache).optimize();
-		UpdateOperator uOp = new UpdateOperator(schema, tbl, update.getCols(), buildList, meta);
-		Operator child = retval.children().get(0);
-		retval.removeChild(child);
-		uOp.add(child);
-		return uOp;
 	}
 
 	private Operator buildOperatorTreeFromWhere(Where where, Operator op, SubSelect sub) throws Exception
