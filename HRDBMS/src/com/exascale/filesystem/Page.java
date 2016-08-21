@@ -46,8 +46,8 @@ public class Page
 	private volatile long timePinned = -1;
 	private volatile long lsn;
 	private ScalableStampedReentrantRWLock lock;
-	public ArrayList<RID> rowIDsAL;
-	public int[][] offsetArray;
+	public volatile ArrayList<RID> rowIDsAL;
+	public volatile int[][] offsetArray;
 	private volatile boolean readDone = false;
 
 	public Page()

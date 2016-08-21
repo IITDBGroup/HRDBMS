@@ -4,7 +4,8 @@ select : (insert EOF) | (update EOF) | (delete EOF) | (createTable EOF) | (creat
 runstats : 'RUNSTATS' 'ON' tableName ;
 insert : 'INSERT' 'INTO' tableName (('FROM'? fullSelect) | ('VALUES' valuesList (',' valuesList)*)) ;
 valuesList : '(' expression (',' expression)* ')' ;
-update : 'UPDATE' tableName 'SET' (columnName | colList) EQUALS expression whereClause? ;
+update : 'UPDATE' tableName setClause+ ;
+setClause : 'SET' (columnName | colList) EQUALS expression whereClause? ;
 delete : 'DELETE' 'FROM' tableName whereClause? ;
 createTable : 'CREATE' COLUMN? 'TABLE' tableName '(' colDef (',' colDef)* (',' primaryKey)? ')' colOrder? organization? groupExp? nodeExp deviceExp ;
 organization : ORGANIZATION '(' INTEGER (',' INTEGER)* ')' ;

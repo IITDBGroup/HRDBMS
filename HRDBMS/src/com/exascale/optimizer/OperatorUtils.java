@@ -12,6 +12,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
+import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.FastStringTokenizer;
 import com.exascale.misc.MyDate;
 
@@ -1269,6 +1270,7 @@ public class OperatorUtils
 		long id = readLong(in);
 		if (id == -1)
 		{
+			//HRDBMSWorker.logger.debug("OU deserialized null String, String HashMap");
 			return null;
 		}
 

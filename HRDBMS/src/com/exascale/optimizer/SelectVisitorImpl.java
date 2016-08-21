@@ -1054,24 +1054,57 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	public Update visitUpdate(SelectParser.UpdateContext ctx)
 	{
 		TableName table = (TableName)visit(ctx.tableName());
-		ArrayList<Column> cols;
-		if (ctx.colList() == null)
+		
+		if (ctx.setClause().size() == 1)
 		{
-			cols = new ArrayList<Column>(1);
-			cols.add((Column)visit(ctx.columnName()));
-		}
-		else
-		{
-			cols = (ArrayList<Column>)visit(ctx.colList());
-		}
-		Expression exp = (Expression)visit(ctx.expression());
-		Where where = null;
-		if (ctx.whereClause() != null)
-		{
-			where = (Where)visit(ctx.whereClause());
-		}
+			ArrayList<Column> cols;
+			if (ctx.setClause(0).colList() == null)
+			{
+				cols = new ArrayList<Column>(1);
+				cols.add((Column)visit(ctx.setClause(0).columnName()));
+			}
+			else
+			{
+				cols = (ArrayList<Column>)visit(ctx.setClause(0).colList());
+			}
+			Expression exp = (Expression)visit(ctx.setClause(0).expression());
+			Where where = null;
+			if (ctx.setClause(0).whereClause() != null)
+			{
+				where = (Where)visit(ctx.setClause(0).whereClause());
+			}
 
-		return new Update(table, cols, exp, where);
+			return new Update(table, cols, exp, where);
+		}
+		
+		ArrayList<ArrayList<Column>> cols2 = new ArrayList<ArrayList<Column>>();
+		ArrayList<Expression> exps2 = new ArrayList<Expression>();
+		ArrayList<Where> wheres2 = new ArrayList<Where>();
+		for (SelectParser.SetClauseContext ctx2 : ctx.setClause())
+		{
+			ArrayList<Column> cols;
+			if (ctx2.colList() == null)
+			{
+				cols = new ArrayList<Column>(1);
+				cols.add((Column)visit(ctx2.columnName()));
+			}
+			else
+			{
+				cols = (ArrayList<Column>)visit(ctx2.colList());
+			}
+			Expression exp = (Expression)visit(ctx2.expression());
+			Where where = null;
+			if (ctx2.whereClause() != null)
+			{
+				where = (Where)visit(ctx2.whereClause());
+			}
+			
+			cols2.add(cols);
+			exps2.add(exp);
+			wheres2.add(where);
+		}
+		
+		return new Update(table, cols2, exps2, wheres2);
 	}
 
 	@Override

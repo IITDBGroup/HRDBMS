@@ -10,6 +10,7 @@ import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -43,6 +44,7 @@ import com.exascale.tables.Schema.FieldValue;
 import com.exascale.tables.Schema.Row;
 import com.exascale.tables.Schema.RowIterator;
 import com.exascale.tables.Transaction;
+import com.exascale.threads.ConnectionWorker;
 import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.ThreadPoolThread;
 
@@ -58,6 +60,8 @@ public final class TableScanOperator implements Operator, Serializable
 
 	public static MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>> noResults;
 	public static AtomicInteger skippedPages = new AtomicInteger(0);
+	private static Object intraTxLock = new Object();
+	private static HashMap<String, AtomicInteger> sharedDmlTxCounters = new HashMap<String, AtomicInteger>();
 
 	static
 	{
@@ -1376,21 +1380,6 @@ public final class TableScanOperator implements Operator, Serializable
 			// " did need to be started");
 			startDone = true;
 
-			// HRDBMSWorker.logger.debug(TableScanOperator.this + " had " +
-			// children.size() + " children to start");
-			for (final Operator o : children)
-			{
-				try
-				{
-					o.start();
-				}
-				catch (final Exception e)
-				{
-					HRDBMSWorker.logger.error("", e);
-					throw e;
-				}
-			}
-
 			if (devices.size() == 0)
 			{
 				final String in = schema + "." + name + ".tbl";
@@ -2045,7 +2034,18 @@ public final class TableScanOperator implements Operator, Serializable
 										if (j >= 4)
 										{
 
-											row.add(r[rowToIterator.get(j)].getValue());
+											try
+											{
+												row.add(r[rowToIterator.get(j)].getValue());
+											}
+											catch(Exception e)
+											{
+												HRDBMSWorker.logger.debug("Row = " + row);
+												HRDBMSWorker.logger.debug("R = " + Arrays.asList(r));
+												HRDBMSWorker.logger.debug("J = " + j);
+												HRDBMSWorker.logger.debug("RowToIterator = " + rowToIterator);
+												throw e;
+											}
 										}
 										else if (j == 0)
 										{
@@ -2377,7 +2377,7 @@ public final class TableScanOperator implements Operator, Serializable
 
 		public void rowTableRT()
 		{
-			ArrayList<ReaderThread> secondThreads = new ArrayList<ReaderThread>();
+			//ArrayList<ReaderThread> secondThreads = new ArrayList<ReaderThread>();
 			CNFFilter filter = orderedFilters.get(parents.get(0));
 			boolean neededPosNeeded = true;
 			int get = 0;
@@ -2911,13 +2911,13 @@ public final class TableScanOperator implements Operator, Serializable
 
 					BufferManager.unregisterInterest(this);
 
-					if (start == 0 && myMaxBlock != 0)
-					{
-						for (ReaderThread thread : secondThreads)
-						{
-							thread.join();
-						}
-					}
+					//if (start == 0 && myMaxBlock != 0)
+					//{
+					//	for (ReaderThread thread : secondThreads)
+					//	{
+					//		thread.join();
+					//	}
+					//}
 				}
 				else
 				{
@@ -3531,8 +3531,56 @@ public final class TableScanOperator implements Operator, Serializable
 		@Override
 		public void run()
 		{
+			ArrayList<String> dmlTxStrs = new ArrayList<String>();
+			ArrayList<Integer> sorted = new ArrayList(MetaData.getNumDevices());
+			int i = 0;
+			while (i < MetaData.getNumDevices())
+			{
+				sorted.add(i++);
+			}
+			//Collections.sort(sorted);
+			synchronized(intraTxLock)
+			{
+				for (int device : sorted)
+				{
+					String dmlTxStr = Long.toString(tx.number()) + "~" + device + "~" + schema + "." + name;
+					AtomicInteger count = sharedDmlTxCounters.get(dmlTxStr);
+					if (count == null)
+					{
+						count = new AtomicInteger(1);
+						sharedDmlTxCounters.put(dmlTxStr, count);
+						if (ConnectionWorker.dmlTx.putIfAbsent(dmlTxStr, dmlTxStr) != null)
+						{
+							while (ConnectionWorker.dmlTx.putIfAbsent(dmlTxStr, dmlTxStr) != null)
+							{
+								LockSupport.parkNanos(1);
+							}
+						}
+					}
+					else
+					{
+						count.getAndIncrement();
+					}
+				
+					dmlTxStrs.add(dmlTxStr);
+				}
+			}
+			
 			try
 			{
+				for (final Operator o : children)
+				{
+					try
+					{
+						o.start();
+					}
+					catch (final Exception e)
+					{
+						HRDBMSWorker.logger.error("", e);
+						throw e;
+					}
+				}
+				
 				// HRDBMSWorker.logger.debug("Going to start " + ins.size() +
 				// " ReaderThreads for ins for " + TableScanOperator.this);
 				if (scanIndex != null)
@@ -3585,6 +3633,19 @@ public final class TableScanOperator implements Operator, Serializable
 			}
 			catch (final Exception e)
 			{
+				synchronized(intraTxLock)
+				{
+					for (String dmlTxStr : dmlTxStrs)
+					{
+						AtomicInteger count = sharedDmlTxCounters.get(dmlTxStr);
+						int newVal = count.decrementAndGet();
+						if (newVal == 0)
+						{
+							sharedDmlTxCounters.remove(dmlTxStr);
+							ConnectionWorker.dmlTx.remove(dmlTxStr);
+						}
+					}
+				}
 				HRDBMSWorker.logger.error("", e);
 				try
 				{
@@ -3594,6 +3655,20 @@ public final class TableScanOperator implements Operator, Serializable
 				{
 				}
 				return;
+			}
+			
+			synchronized(intraTxLock)
+			{
+				for (String dmlTxStr : dmlTxStrs)
+				{
+					AtomicInteger count = sharedDmlTxCounters.get(dmlTxStr);
+					int newVal = count.decrementAndGet();
+					if (newVal == 0)
+					{
+						sharedDmlTxCounters.remove(dmlTxStr);
+						ConnectionWorker.dmlTx.remove(dmlTxStr);
+					}
+				}
 			}
 		}
 	}

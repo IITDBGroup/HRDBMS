@@ -87,7 +87,7 @@ public final class Index implements Serializable
 	private transient BufferedLinkedBlockingQueue queue;
 	private transient IndexWriterThread iwt;
 	private transient volatile Thread lastThread = null;
-	private long offset = 9;
+	//private long offset = 9;
 	private Transaction tx;
 	private volatile Boolean isUniqueVar = null;
 	public HashMap<Block, Page> myPages = new HashMap<Block, Page>();
@@ -145,7 +145,7 @@ public final class Index implements Serializable
 		value.delayed = OperatorUtils.readBool(in);
 		value.delayedConditions = OperatorUtils.deserializeALF(in, prev);
 		value.renames = OperatorUtils.deserializeStringHM(in, prev);
-		value.offset = OperatorUtils.readLong(in);
+		//value.offset = OperatorUtils.readLong(in);
 		value.tx = new Transaction(OperatorUtils.readLong(in));
 		value.isUniqueVar = OperatorUtils.readBoolClass(in, prev);
 		value.myPages = new HashMap<Block, Page>();
@@ -174,7 +174,7 @@ public final class Index implements Serializable
 		value.delayed = OperatorUtils.readBool(in);
 		value.delayedConditions = OperatorUtils.deserializeALF(in, prev);
 		value.renames = OperatorUtils.deserializeStringHM(in, prev);
-		value.offset = OperatorUtils.readLong(in);
+		//value.offset = OperatorUtils.readLong(in);
 		value.tx = new Transaction(OperatorUtils.readLong(in));
 		value.isUniqueVar = OperatorUtils.readBoolClass(in, prev);
 		value.myPages = new HashMap<Block, Page>();
@@ -320,6 +320,21 @@ public final class Index implements Serializable
 			rec = rec.next(true);
 		}
 
+		HRDBMSWorker.logger.debug("Can't find " + keys + " with RID " + rid);
+		HRDBMSWorker.logger.debug("Started with " + line.getKeys(types) + " with RID " + line.getRid());
+		this.setFirstPosition(true);
+		rec = line;
+		HRDBMSWorker.logger.debug("Retrying starting with " + line.getKeys(types) + " with RID " + line.getRid());
+		while (!rec.isNull())
+		{
+			if (rec.ridsMatch(rid))
+			{
+				rec.markTombstone();
+				return;
+			}
+
+			rec = rec.next(true);
+		}
 		throw new Exception("Unable to locate record for deletion");
 	}
 
@@ -503,6 +518,10 @@ public final class Index implements Serializable
 		{
 			// put to the left of rec
 			IndexRecord left = rec.prev(true);
+			if (left.isNull())
+			{
+				throw new Exception("Null previous record during index insert!");
+			}
 			left.setNext(newRec);
 			rec.setPrev(newRec);
 			newRec.setPrev(left);
@@ -1083,7 +1102,7 @@ public final class Index implements Serializable
 		OperatorUtils.writeBool(delayed, out);
 		OperatorUtils.serializeALF(delayedConditions, out, prev);
 		OperatorUtils.serializeStringHM(renames, out, prev);
-		OperatorUtils.writeLong(offset, out);
+		//OperatorUtils.writeLong(offset, out);
 		OperatorUtils.writeLong(tx.number(), out); // Notice type
 		OperatorUtils.writeBoolClass(isUniqueVar, out, prev);
 		// recreate myPages
@@ -2962,6 +2981,10 @@ public final class Index implements Serializable
 			this.tx = tx;
 			b = p.block();
 			this.p = p;
+			if (p == null)
+			{
+				throw new Exception("NULL page in IndexRecord Constructor");
+			}
 			off = offset;
 
 			byte type = p.get(off + 0);
@@ -3584,7 +3607,7 @@ public final class Index implements Serializable
 			}
 			else
 			{
-				return next();
+				return prev();
 			}
 		}
 

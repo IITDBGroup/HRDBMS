@@ -6121,8 +6121,7 @@ public class PlanCacheManager
 				cmd.add("CLOSE");
 				worker.in.put(cmd);
 				tx.setIsolationLevel(iso);
-
-				throw new Exception("No table statistics");
+				return -1;
 			}
 
 			if (obj instanceof Exception)

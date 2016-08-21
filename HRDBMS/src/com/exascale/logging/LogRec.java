@@ -355,8 +355,7 @@ public class LogRec implements Comparable<LogRec>
 	public void setTimeStamp(long time)
 	{
 		this.timestamp = time;
-		buffer.position(20);
-		buffer.putLong(time);
+		buffer.putLong(20, time);
 	}
 
 	public int size()

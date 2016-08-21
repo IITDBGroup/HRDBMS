@@ -79,6 +79,30 @@ public final class Phase5
 		pruneTree(root, new IdentityHashMap<Operator, Operator>());
 	}
 	
+	public void optimize(boolean indexes) throws Exception
+	{
+		if (indexes)
+		{
+			optimize();
+			return;
+		}
+		
+		setTableTypes(root, new HashSet<Operator>());
+		//addIndexesToTableScans();
+		// addIndexesToJoins();
+		turnOffDistinctUnion(root, false, new HashSet<Operator>());
+		largeGBs(root, new HashSet<Operator>());
+		doMToNForAll(root, new HashSet<Operator>());
+		setCards(root, new HashSet<Operator>());
+		setNumParents(root);
+		// sanityCheck(root, -1);
+		setSpecificCoord(root, new HashSet<Operator>());
+		// Phase1.printTree(root, 0);
+		sortLimit(root, new HashSet<Operator>());
+		//indexOnlyScan(root, new HashSet<Operator>());
+		pruneTree(root, new IdentityHashMap<Operator, Operator>());
+	}
+	
 	private void doMToNForAll(Operator op, HashSet<Operator> visited) throws Exception
 	{
 		if (op instanceof NetworkSendOperator)

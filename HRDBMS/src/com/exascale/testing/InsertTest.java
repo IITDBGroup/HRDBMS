@@ -19,13 +19,25 @@ public class InsertTest
 		int startNum = Integer.parseInt(args[2]);
 		long start = System.currentTimeMillis();
 		int batching = Integer.parseInt(args[4]);
+		int updateBatching = 1;
+		int updatePacing = 1;
+		boolean doUpdate = true;
+		try
+		{
+			updateBatching = Integer.parseInt(args[5]);
+			updatePacing = Integer.parseInt(args[6]);
+		}
+		catch(Exception e)
+		{
+			doUpdate = false;
+		}
 		int deleteBatching = 1;
 		int deletePacing = 1;
 		boolean doDelete = true;
 		try
 		{
-			deleteBatching = Integer.parseInt(args[5]);
-			deletePacing = Integer.parseInt(args[6]);
+			deleteBatching = Integer.parseInt(args[7]);
+			deletePacing = Integer.parseInt(args[8]);
 		}
 		catch(Exception e)
 		{
@@ -76,21 +88,43 @@ public class InsertTest
 
 		long end1 = System.currentTimeMillis();
 
-		//i = 0;
-		//while (i < count)
-		//{
-		//	stmt.executeUpdate("UPDATE JASON.TEST1 SET COL2 = " + random.nextInt() + " WHERE COL1 = " + i);
-		//	i++;
-		//	if (i % 100 == 0)
-		//	{
-		//		System.out.println(i);
-		//	}
-		
-		//	if (i % commitRate == 0)
-		//	{
-		//		conn.commit();
-		//	}
-		//}
+		if (doUpdate)
+		{
+			i = 0;
+			while (i < count)
+			{
+				StringBuilder sql = new StringBuilder();
+				sql.append("UPDATE JASON.TEST1 SET COL2 = " + (((i+startNum)/3) % 5) + " WHERE COL1 = " + (i+startNum));
+				i++;
+				int j = 1;
+				while (j < updateBatching)
+				{
+					if (i % 100 == 0)
+					{
+						System.out.println(i);
+					}
+					
+					sql.append(" SET COL2 = " + (((i+startNum)/3) % 5) + " WHERE COL1 = " + (i+startNum));
+					j++;
+					i++;
+				}
+				stmt.executeUpdate(sql.toString());
+				
+				if (i % 100 == 0)
+				{
+					System.out.println(i);
+				}
+				
+				if (i % commitRate == 0)
+				{
+					conn.commit();
+				}
+				else if (i % updatePacing == 0)
+				{
+					((HRDBMSConnection)conn).doPacing();
+				}
+			}
+		}
 
 		long end2 = System.currentTimeMillis();
 

@@ -637,8 +637,8 @@ public class NetworkReceiveOperator implements Operator, Serializable
 
 				if (overFC == null)
 				{
-					long end = System.currentTimeMillis();
-					HRDBMSWorker.logger.debug("NRO ReadThread for " + sock.getRemoteSocketAddress() + " took " + ((end - start) / 1000) + "s");
+					//long end = System.currentTimeMillis();
+					//HRDBMSWorker.logger.debug("NRO ReadThread for " + sock.getRemoteSocketAddress() + " took " + ((end - start) / 1000) + "s");
 					return;
 				}
 
@@ -844,7 +844,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 				try
 				{
 					outBuffer.put(new DataEndMarker());
-					HRDBMSWorker.logger.debug("Wrote DEM: " + NetworkReceiveOperator.this.toString());
+					//HRDBMSWorker.logger.debug("Wrote DEM: " + NetworkReceiveOperator.this.toString());
 					break;
 				}
 				catch (final Exception e)

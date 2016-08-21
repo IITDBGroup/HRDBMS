@@ -303,18 +303,21 @@ public class Schema
 		}
 
 		int k = 0;
-		while (k < offsetArrayRows)
+		synchronized(offsetArray)
 		{
-			int[] row = offsetArray[k];
-			ByteBuffer temp = ByteBuffer.allocate(row.length * 3);
-			int z = 0;
-			while (z < row.length)
+			while (k < offsetArrayRows)
 			{
-				putMedium(temp, row[z++]);
+				int[] row = offsetArray[k];
+				ByteBuffer temp = ByteBuffer.allocate(row.length * 3);
+				int z = 0;
+				while (z < row.length)
+				{
+					putMedium(temp, row[z++]);
+				}
+				System.arraycopy(temp.array(), 0, after, i, 3 * row.length);
+				i += (3 * row.length);
+				k++;
 			}
-			System.arraycopy(temp.array(), 0, after, i, 3 * row.length);
-			i += (3 * row.length);
-			k++;
 		}
 
 		long lsn = LogManager.getLSN();
@@ -383,10 +386,13 @@ public class Schema
 		}
 
 		i = 0;
-		while (i < colIDListSize)
+		synchronized(offsetArray)
 		{
-			offsetArray[index][i] = -1;
-			i++;
+			while (i < colIDListSize)
+			{
+				offsetArray[index][i] = -1;
+				i++;
+			}
 		}
 
 		LogRec rec = tx.delete(before, after, off, p.block()); // write log rec
@@ -441,7 +447,10 @@ public class Schema
 				i++;
 			}
 
-			offsetArray[index][0] = -1;
+			synchronized(offsetArray)
+			{
+				offsetArray[index][0] = -1;
+			}
 
 			LogRec rec = tx.delete(before, after, off, p.block()); // write log
 																	// rec
@@ -482,7 +491,10 @@ public class Schema
 				i++;
 			}
 
-			offsetArray[index][0] = -1;
+			synchronized(offsetArray)
+			{
+				offsetArray[index][0] = -1;
+			}
 			p.write(off, after, tx.number(), LogManager.getLSN());
 		}
 	}
@@ -522,10 +534,13 @@ public class Schema
 		}
 
 		i = 0;
-		while (i < colIDListSize)
+		synchronized(offsetArray)
 		{
-			offsetArray[index][i] = -1;
-			i++;
+			while (i < colIDListSize)
+			{
+				offsetArray[index][i] = -1;
+				i++;
+			}
 		}
 
 		long lsn = LogManager.getLSN();
@@ -686,7 +701,16 @@ public class Schema
 			cachedLenLen = -1;
 			rowIDToIndex = rowIDToIndexSet.get(colNum);
 			offsetArray = offsetArraySet.get(colNum);
-			int index = rowIDToIndex.get(rid);
+			int index = -1;
+			try
+			{
+				index = rowIDToIndex.get(rid);
+			}
+			catch(Exception e)
+			{
+				HRDBMSWorker.logger.debug("Can't find " + rid + " in " + rowIDToIndex);
+				throw e;
+			}
 			Map<Integer, DataType> colTypesBackup = colTypes;
 			colTypes = new HashMap<Integer, DataType>();
 			colTypes.put(0, colTypesBackup.get(colNum));
@@ -899,10 +923,13 @@ public class Schema
 				cachedLenLen = -1;
 				nextRecNum = 0;
 
-				if (rowIDsAL.size() > 0)
+				synchronized(rowIDsAL)
 				{
-					RID last = rowIDsAL.get(rowIDsAL.size() - 1);
-					nextRecNum = last.getRecNum() + 1;
+					if (rowIDsAL.size() > 0)
+					{
+						RID last = rowIDsAL.get(rowIDsAL.size() - 1);
+						nextRecNum = last.getRecNum() + 1;
+					}
 				}
 
 				rid = new RID(node, dev, p.block().number(), nextRecNum);
@@ -916,10 +943,13 @@ public class Schema
 				cachedLenLen = -1;
 				nextRecNum = 0;
 
-				if (rowIDsAL.size() > 0)
+				synchronized(rowIDsAL)
 				{
-					RID last = rowIDsAL.get(rowIDsAL.size() - 1);
-					nextRecNum = last.getRecNum() + 1;
+					if (rowIDsAL.size() > 0)
+					{
+						RID last = rowIDsAL.get(rowIDsAL.size() - 1);
+						nextRecNum = last.getRecNum() + 1;
+					}
 				}
 
 				rid = new RID(node, dev, p.block().number(), nextRecNum);
@@ -952,7 +982,10 @@ public class Schema
 			// rec = tx.insert(before, after, offArrayOff + 3, p.block());
 			// p.write(offArrayOff + 3, after, tx.number(), rec.lsn());
 			before = new byte[6];
-			off = 4 + (rowIDsAL.size() * 6);
+			synchronized(rowIDsAL)
+			{
+				off = 4 + (rowIDsAL.size() * 6);
+			}
 			p.get(off, before);
 			after = new byte[6];
 			ByteBuffer bb = ByteBuffer.wrap(after);
@@ -988,29 +1021,35 @@ public class Schema
 			p.get(off, before);
 			bb = ByteBuffer.wrap(after);
 			bb.position(0);
-			putMedium(bb, rowIDsAL.size() + 1);
-			rec = tx.insert(before, after, off, p.block());
-			p.write(off, after, tx.number(), rec.lsn());
-			rowIDsAL.add(rid);
-			offsetArrayRows++;
-			rowIDListSize++;
-			offsetArray = offsetArraySet.get(0);
-			if (offsetArray.length == rowIDsAL.size() - 1)
+			synchronized(rowIDsAL)
 			{
-				int[][] newOA = new int[offsetArray.length * 2][1];
-				System.arraycopy(offsetArray, 0, newOA, 0, offsetArray.length);
-				newOA[rowIDsAL.size() - 1][0] = offs.get(0);
-				offsetArray = newOA;
-				p.offsetArray = offsetArray;
-				offsetArraySet.put(0, newOA);
+				putMedium(bb, rowIDsAL.size() + 1);
+				rec = tx.insert(before, after, off, p.block());
+				p.write(off, after, tx.number(), rec.lsn());
+				rowIDsAL.add(rid);
+				offsetArrayRows++;
+				rowIDListSize++;
+				offsetArray = offsetArraySet.get(0);
+				synchronized(offsetArray)
+				{
+					if (offsetArray.length == rowIDsAL.size() - 1)
+					{
+						int[][] newOA = new int[offsetArray.length * 2][1];
+						System.arraycopy(offsetArray, 0, newOA, 0, offsetArray.length);
+						newOA[rowIDsAL.size() - 1][0] = offs.get(0);
+						offsetArray = newOA;
+						p.offsetArray = offsetArray;
+						offsetArraySet.put(0, newOA);
+					}
+					else
+					{
+						offsetArray[rowIDsAL.size() - 1][0] = offs.get(0);
+					}
+				}
+				
+				rowIDToIndex = rowIDToIndexSet.get(0);
+				rowIDToIndex.put(rid, rowIDsAL.size() - 1);
 			}
-			else
-			{
-				offsetArray[rowIDsAL.size() - 1][0] = offs.get(0);
-			}
-
-			rowIDToIndex = rowIDToIndexSet.get(0);
-			rowIDToIndex.put(rid, rowIDsAL.size() - 1);
 
 			int pos = 0;
 			for (FieldValue fv : vals)
@@ -1051,7 +1090,10 @@ public class Schema
 				// rec = tx.insert(before, after, offArrayOff + 3, p.block());
 				// p.write(offArrayOff + 3, after, tx.number(), rec.lsn());
 				before = new byte[6];
-				off = 4 + (rowIDsAL.size() * 6);
+				synchronized(rowIDsAL)
+				{
+					off = 4 + (rowIDsAL.size() * 6);
+				}
 				p.get(off, before);
 				after = new byte[6];
 				bb = ByteBuffer.wrap(after);
@@ -1089,27 +1131,33 @@ public class Schema
 				p.get(off, before);
 				bb = ByteBuffer.wrap(after);
 				bb.position(0);
-				putMedium(bb, rowIDsAL.size() + 1);
-				rec = tx.insert(before, after, off, p.block());
-				p.write(off, after, tx.number(), rec.lsn());
-				rowIDsAL.add(rid);
-				offsetArray = offsetArraySet.get(pos);
-				if (offsetArray.length == rowIDsAL.size() - 1)
+				synchronized(rowIDsAL)
 				{
-					int[][] newOA = new int[offsetArray.length * 2][1];
-					System.arraycopy(offsetArray, 0, newOA, 0, offsetArray.length);
-					newOA[rowIDsAL.size() - 1][0] = offs.get(pos);
-					offsetArray = newOA;
-					p.offsetArray = offsetArray;
-					offsetArraySet.put(pos, newOA);
-				}
-				else
-				{
-					offsetArray[rowIDsAL.size() - 1][0] = offs.get(pos);
-				}
+					putMedium(bb, rowIDsAL.size() + 1);
+					rec = tx.insert(before, after, off, p.block());
+					p.write(off, after, tx.number(), rec.lsn());
+					rowIDsAL.add(rid);
+					offsetArray = offsetArraySet.get(pos);
+					synchronized(offsetArray)
+					{
+						if (offsetArray.length == rowIDsAL.size() - 1)
+						{
+							int[][] newOA = new int[offsetArray.length * 2][1];
+							System.arraycopy(offsetArray, 0, newOA, 0, offsetArray.length);
+							newOA[rowIDsAL.size() - 1][0] = offs.get(pos);
+							offsetArray = newOA;
+							p.offsetArray = offsetArray;
+							offsetArraySet.put(pos, newOA);
+						}
+						else
+						{
+							offsetArray[rowIDsAL.size() - 1][0] = offs.get(pos);
+						}
+					}
 
-				rowIDToIndex = rowIDToIndexSet.get(pos);
-				rowIDToIndex.put(rid, rowIDsAL.size() - 1);
+					rowIDToIndex = rowIDToIndexSet.get(pos);
+					rowIDToIndex.put(rid, rowIDsAL.size() - 1);
+				}
 				pos++;
 			}
 			
@@ -1175,10 +1223,13 @@ public class Schema
 				cachedLenLen = -1;
 				nextRecNum = 0;
 
-				if (rowIDsAL.size() > 0)
+				synchronized(rowIDsAL)
 				{
-					RID last = rowIDsAL.get(rowIDsAL.size() - 1);
-					nextRecNum = last.getRecNum() + 1;
+					if (rowIDsAL.size() > 0)
+					{
+						RID last = rowIDsAL.get(rowIDsAL.size() - 1);
+						nextRecNum = last.getRecNum() + 1;
+					}
 				}
 
 				rid = new RID(node, dev, p.block().number(), nextRecNum);
@@ -1192,10 +1243,13 @@ public class Schema
 				cachedLenLen = -1;
 				nextRecNum = 0;
 
-				if (rowIDsAL.size() > 0)
+				synchronized(rowIDsAL)
 				{
-					RID last = rowIDsAL.get(rowIDsAL.size() - 1);
-					nextRecNum = last.getRecNum() + 1;
+					if (rowIDsAL.size() > 0)
+					{
+						RID last = rowIDsAL.get(rowIDsAL.size() - 1);
+						nextRecNum = last.getRecNum() + 1;
+					}
 				}
 
 				rid = new RID(node, dev, p.block().number(), nextRecNum);
@@ -1226,7 +1280,10 @@ public class Schema
 			// int offArrayOff = 4 + (rowIDsAL.size() * 3);
 			// p.writeShift(offArrayOff, offArrayOff + 3, offArrayLen,
 			// tx.number(), LogManager.getLSN());
-			off = 4 + (rowIDsAL.size() * 6);
+			synchronized(rowIDsAL)
+			{
+				off = 4 + (rowIDsAL.size() * 6);
+			}
 			after = new byte[6];
 			ByteBuffer bb = ByteBuffer.wrap(after);
 			bb.position(0);
@@ -1257,26 +1314,34 @@ public class Schema
 			off = 1;
 			bb = ByteBuffer.wrap(after);
 			bb.position(0);
-			putMedium(bb, rowIDsAL.size() + 1);
-			p.write(off, after, tx.number(), LogManager.getLSN());
-			rowIDsAL.add(rid);
-			offsetArrayRows++;
-			rowIDListSize++;
-			offsetArray = offsetArraySet.get(0);
-			if (offsetArray.length == rowIDsAL.size() - 1)
+			synchronized(rowIDsAL)
 			{
-				int[][] newOA = new int[offsetArray.length * 2][1];
-				System.arraycopy(offsetArray, 0, newOA, 0, offsetArray.length);
-				newOA[rowIDsAL.size() - 1][0] = offs.get(0);
-				offsetArraySet.put(0, newOA);
-			}
-			else
-			{
-				offsetArray[rowIDsAL.size() - 1][0] = offs.get(0);
-			}
+				putMedium(bb, rowIDsAL.size() + 1);
+				p.write(off, after, tx.number(), LogManager.getLSN());
+				rowIDsAL.add(rid);
+				offsetArrayRows++;
+				rowIDListSize++;
+				offsetArray = offsetArraySet.get(0);
+				synchronized(offsetArray)
+				{
+					if (offsetArray.length == rowIDsAL.size() - 1)
+					{
+						int[][] newOA = new int[offsetArray.length * 2][1];
+						System.arraycopy(offsetArray, 0, newOA, 0, offsetArray.length);
+						newOA[rowIDsAL.size() - 1][0] = offs.get(0);
+						offsetArray = newOA;
+						p.offsetArray = offsetArray;
+						offsetArraySet.put(0, newOA);
+					}
+					else
+					{
+						offsetArray[rowIDsAL.size() - 1][0] = offs.get(0);
+					}
+				}
 
-			rowIDToIndex = rowIDToIndexSet.get(0);
-			rowIDToIndex.put(rid, rowIDsAL.size() - 1);
+				rowIDToIndex = rowIDToIndexSet.get(0);
+				rowIDToIndex.put(rid, rowIDsAL.size() - 1);
+			}
 
 			int pos = 0;
 			for (FieldValue fv : vals)
@@ -1315,7 +1380,10 @@ public class Schema
 				// offArrayOff = 4 + (rowIDsAL.size() * 3);
 				// p.writeShift(offArrayOff, offArrayOff + 3, offArrayLen,
 				// tx.number(), LogManager.getLSN());
-				off = 4 + (rowIDsAL.size() * 6);
+				synchronized(rowIDsAL)
+				{
+					off = 4 + (rowIDsAL.size() * 6);
+				}
 				after = new byte[6];
 				bb = ByteBuffer.wrap(after);
 				bb.position(0);
@@ -1346,24 +1414,32 @@ public class Schema
 				off = 1;
 				bb = ByteBuffer.wrap(after);
 				bb.position(0);
-				putMedium(bb, rowIDsAL.size() + 1);
-				p.write(off, after, tx.number(), LogManager.getLSN());
-				rowIDsAL.add(rid);
-				offsetArray = offsetArraySet.get(pos);
-				if (offsetArray.length == rowIDsAL.size() - 1)
+				synchronized(rowIDsAL)
 				{
-					int[][] newOA = new int[offsetArray.length * 2][1];
-					System.arraycopy(offsetArray, 0, newOA, 0, offsetArray.length);
-					newOA[rowIDsAL.size() - 1][0] = offs.get(pos);
-					offsetArraySet.put(pos, newOA);
-				}
-				else
-				{
-					offsetArray[rowIDsAL.size() - 1][0] = offs.get(pos);
-				}
+					putMedium(bb, rowIDsAL.size() + 1);
+					p.write(off, after, tx.number(), LogManager.getLSN());
+					rowIDsAL.add(rid);
+					offsetArray = offsetArraySet.get(pos);
+					synchronized(offsetArray)
+					{
+						if (offsetArray.length == rowIDsAL.size() - 1)
+						{
+							int[][] newOA = new int[offsetArray.length * 2][1];
+							System.arraycopy(offsetArray, 0, newOA, 0, offsetArray.length);
+							newOA[rowIDsAL.size() - 1][0] = offs.get(pos);
+							offsetArray = newOA;
+							p.offsetArray = offsetArray;
+							offsetArraySet.put(pos, newOA);
+						}
+						else
+						{
+							offsetArray[rowIDsAL.size() - 1][0] = offs.get(pos);
+						}
+					}
 
-				rowIDToIndex = rowIDToIndexSet.get(pos);
-				rowIDToIndex.put(rid, rowIDsAL.size() - 1);
+					rowIDToIndex = rowIDToIndexSet.get(pos);
+					rowIDToIndex.put(rid, rowIDsAL.size() - 1);
+				}
 				pos++;
 			}
 
@@ -1427,10 +1503,13 @@ public class Schema
 			}
 
 			i = 0;
-			while (i < rowIDToIndex.size())
+			synchronized(offsetArray)
 			{
-				offsetArray[i][0] = -1;
-				i++;
+				while (i < rowIDToIndex.size())
+				{
+					offsetArray[i][0] = -1;
+					i++;
+				}
 			}
 
 			LogRec rec = tx.delete(before, after, offArrayOff, p.block()); // write
@@ -1462,10 +1541,13 @@ public class Schema
 			}
 
 			i = 0;
-			while (i < rowIDToIndex.size())
+			synchronized(offsetArray)
 			{
-				offsetArray[i][0] = -1;
-				i++;
+				while (i < rowIDToIndex.size())
+				{
+					offsetArray[i][0] = -1;
+					i++;
+				}
 			}
 
 			p.write(offArrayOff, after, tx.number(), LogManager.getLSN());
@@ -1613,14 +1695,17 @@ public class Schema
 				//HRDBMSWorker.logger.debug("RIDs returned by non-iterator read is " + rowIDsAL);
 
 				int i = 0;
-				for (final RID rid : rowIDsAL)
+				synchronized(rowIDsAL)
 				{
-					if (i >= rowIDListSize)
+					for (final RID rid : rowIDsAL)
 					{
-						break;
+						if (i >= rowIDListSize)
+						{
+							break;
+						}
+						rowIDToIndex.put(rid, i);
+						i++;
 					}
-					rowIDToIndex.put(rid, i);
-					i++;
 				}
 				rowIDSet.put(colNum, rowIDsAL);
 				rowIDToIndexSet.put(colNum, rowIDToIndex);
@@ -1825,17 +1910,20 @@ public class Schema
 				offsetArrayRows = rowIDListSize;
 				
 				int row = 0;
-				while (row < rowIDListSize)
+				synchronized(offsetArray)
 				{
-					z = 0;
-					while (z < colIDListSize)
+					while (row < rowIDListSize)
 					{
-						offsetArray[row][z++] = p.getMedium(pos);
-						pos += 3;
-					}
+						z = 0;
+						while (z < colIDListSize)
+						{
+							offsetArray[row][z++] = p.getMedium(pos);
+							pos += 3;
+						}
 					// p.get(pos, offsetArray[row]);
 					// pos += (4 * colIDListSize);
-					row++;
+						row++;
+					}
 				}
 			}
 			else
@@ -2198,35 +2286,41 @@ public class Schema
 			int dataStart = Page.BLOCK_SIZE;
 			rowIDsAL = rowIDSet.get(pos);
 			offsetArray = offsetArraySet.get(pos);
-			int i = rowIDsAL.size() - 1;
-			while (i >= 0)
+			synchronized(rowIDsAL)
 			{
-				int offset = offsetArray[i][0];
-				if (offset == 0 || offset == -1)
+				int i = rowIDsAL.size() - 1;
+				synchronized(offsetArray)
 				{
-					i--;
-					continue;
+					while (i >= 0)
+					{
+						int offset = offsetArray[i][0];
+						if (offset == 0 || offset == -1)
+						{
+							i--;
+							continue;
+						}
+						else
+						{
+							dataStart = offset;
+							break;
+						}
+					}
 				}
-				else
+
+				this.p = pageGroup.get(pos);
+				cachedLenLen = -1;
+				if (vals[pos] instanceof VarcharFV)
 				{
-					dataStart = offset;
-					break;
+					vals[pos] = new CVarcharFV((VarcharFV)vals[pos], this);
 				}
-			}
+				dataStart -= vals[pos].size();
 
-			this.p = pageGroup.get(pos);
-			cachedLenLen = -1;
-			if (vals[pos] instanceof VarcharFV)
-			{
-				vals[pos] = new CVarcharFV((VarcharFV)vals[pos], this);
-			}
-			dataStart -= vals[pos].size();
+				int headEnd = 9 + (rowIDsAL.size() * 6);
 
-			int headEnd = 9 + (rowIDsAL.size() * 6);
-
-			if (headEnd >= dataStart)
-			{
-				return null;
+				if (headEnd >= dataStart)
+				{
+					return null;
+				}
 			}
 
 			retval.add(dataStart);
@@ -2300,57 +2394,63 @@ public class Schema
 		int pos = rowIDListOff + 3;
 		p.rowIDsAL = new ArrayList<RID>(rowIDListSize);
 		rowIDsAL = p.rowIDsAL;
-		int pnum = p.block().number();
-		String pfn = p.block().fileName();
-		Block pblk = p.block();
-		int mColNum = -1;
-		HashMap<Integer, Integer> map = null;
-		if (Transaction.reorder)
+		synchronized(rowIDsAL)
 		{
-			ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = null;
-			synchronized(Transaction.colMaps)
+			int pnum = p.block().number();
+			String pfn = p.block().fileName();
+			Block pblk = p.block();
+			int mColNum = -1;
+			HashMap<Integer, Integer> map = null;
+			if (Transaction.reorder)
 			{
-				colMap = Transaction.colMaps.get(tx);
-				if (colMap == null)
+				ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = null;
+				synchronized(Transaction.colMaps)
 				{
-					colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
-					Transaction.colMaps.put(tx, colMap);
+					colMap = Transaction.colMaps.get(tx);
+					if (colMap == null)
+					{
+						colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
+						Transaction.colMaps.put(tx, colMap);
+					}
+				}
+				map = colMap.get(pfn);
+				if (map == null)
+				{
+					map = tx.getColOrder(pblk);
+					colMap.put(pfn, map);
+				}
+				mColNum = map.get(colNum);
+			}
+		
+			//HRDBMSWorker.logger.debug("pnum = " + pnum + ", colNum = " + colNum + ", mColNum = " + mColNum + ", calculated page = " + (pnum - mColNum) + ", map = " + map);
+		
+			int[] ints = p.getMediums(pos, rowIDListSize << 1);
+
+			synchronized(offsetArray)
+			{
+				while (i < rowIDListSize)
+				{
+					int id = ints[i << 1];
+
+					if (!Transaction.reorder)
+					{
+						rowIDsAL.add(new RID(myNode, myDev, pnum - colNum, id));
+					}
+					else
+					{
+						rowIDsAL.add(new RID(myNode, myDev, pnum - mColNum, id));
+					}
+					// copy.add(rowIDsAL.get(i));
+					//offsetArray[i][0] = p.getMedium(pos + 3);
+					offsetArray[i][0] = ints[(i << 1) + 1];
+					if (offsetArray[i][0] == 0x00ffffff)
+					{
+						offsetArray[i][0] = -1;
+					}
+
+					i++;
 				}
 			}
-			map = colMap.get(pfn);
-			if (map == null)
-			{
-				map = tx.getColOrder(pblk);
-				colMap.put(pfn, map);
-			}
-			mColNum = map.get(colNum);
-		}
-		
-		//HRDBMSWorker.logger.debug("pnum = " + pnum + ", colNum = " + colNum + ", mColNum = " + mColNum + ", calculated page = " + (pnum - mColNum) + ", map = " + map);
-		
-		int[] ints = p.getMediums(pos, rowIDListSize << 1);
-
-		while (i < rowIDListSize)
-		{
-			int id = ints[i << 1];
-
-			if (!Transaction.reorder)
-			{
-				rowIDsAL.add(new RID(myNode, myDev, pnum - colNum, id));
-			}
-			else
-			{
-				rowIDsAL.add(new RID(myNode, myDev, pnum - mColNum, id));
-			}
-			// copy.add(rowIDsAL.get(i));
-			//offsetArray[i][0] = p.getMedium(pos + 3);
-			offsetArray[i][0] = ints[(i << 1) + 1];
-			if (offsetArray[i][0] == 0x00ffffff)
-			{
-				offsetArray[i][0] = -1;
-			}
-
-			i++;
 		}
 
 		rowIDsSet = true;
@@ -2394,27 +2494,30 @@ public class Schema
 		
 		int[] ints = p.getMediums(pos, rowIDListSize << 1);
 
-		while (i < rowIDListSize)
+		synchronized(offsetArray)
 		{
-			int id = ints[i << 1];
+			while (i < rowIDListSize)
+			{
+				int id = ints[i << 1];
 
-			if (!Transaction.reorder)
-			{
-				retval[i] = new RID(myNode, myDev, pnum - colNum, id);
-			}
-			else
-			{
-				retval[i] = new RID(myNode, myDev, pnum - mColNum, id);
-			}
-			// copy.add(rowIDsAL.get(i));
-			offsetArray[i][0] = ints[(i << 1) + 1];
-			if (offsetArray[i][0] == 0x00ffffff)
-			{
-				offsetArray[i][0] = -1;
-			}
+				if (!Transaction.reorder)
+				{
+					retval[i] = new RID(myNode, myDev, pnum - colNum, id);
+				}
+				else
+				{
+					retval[i] = new RID(myNode, myDev, pnum - mColNum, id);
+				}
+				// copy.add(rowIDsAL.get(i));
+				offsetArray[i][0] = ints[(i << 1) + 1];
+				if (offsetArray[i][0] == 0x00ffffff)
+				{
+					offsetArray[i][0] = -1;
+				}
 
-			i++;
-			pos += 6;
+				i++;
+				pos += 6;
+			}
 		}
 
 		rowIDsSet = true;
@@ -2523,20 +2626,23 @@ public class Schema
 		}
 
 		int k = 0;
-		ByteBuffer temp = ByteBuffer.allocate(offsetArray[0].length * 3 * offsetArrayRows);
-		while (k < offsetArrayRows)
+		synchronized(offsetArray)
 		{
-			int[] row = offsetArray[k];
-			int z = 0;
-			while (z < row.length)
+			ByteBuffer temp = ByteBuffer.allocate(offsetArray[0].length * 3 * offsetArrayRows);
+			while (k < offsetArrayRows)
 			{
-				putMedium(temp, row[z++]);
-			}
+				int[] row = offsetArray[k];
+				int z = 0;
+				while (z < row.length)
+				{
+					putMedium(temp, row[z++]);
+				}
 			
-			k++;
-		}
+				k++;
+			}
 		
-		System.arraycopy(temp.array(), 0, after, i, offsetArray[0].length * 3 * offsetArrayRows);
+			System.arraycopy(temp.array(), 0, after, i, offsetArray[0].length * 3 * offsetArrayRows);
+		}
 
 		final InsertLogRec rec = tx.insert(before, after, 1, p.block());
 		p.write(1, after, tx.number(), rec.lsn());
@@ -2561,37 +2667,40 @@ public class Schema
 
 	private void updateOffsets(FieldValue[] vals, int off)
 	{
-		if (rowIDListSize <= offsetArray.length)
+		synchronized(offsetArray)
 		{
-			int j = 0;
-			final int i = offsetArrayRows;
-			for (final FieldValue fv : vals)
+			if (rowIDListSize <= offsetArray.length)
 			{
-				offsetArray[i][j] = off;
-				j++;
-				off += fv.size();
+				int j = 0;
+				final int i = offsetArrayRows;
+				for (final FieldValue fv : vals)
+				{
+					offsetArray[i][j] = off;
+					j++;
+					off += fv.size();
+				}
+
+				offsetArrayRows++;
+				return;
 			}
-
-			offsetArrayRows++;
-			return;
-		}
-		else
-		{
-			final int[][] newOA = new int[offsetArray.length + ROWS_TO_ALLOCATE][colIDs.length];
-			System.arraycopy(offsetArray, 0, newOA, 0, offsetArray.length);
-
-			int j = 0;
-			final int i = offsetArray.length;
-			for (final FieldValue fv : vals)
+			else
 			{
-				newOA[i][j] = off;
-				j++;
-				off += fv.size();
-			}
+				final int[][] newOA = new int[offsetArray.length + ROWS_TO_ALLOCATE][colIDs.length];
+				System.arraycopy(offsetArray, 0, newOA, 0, offsetArray.length);
 
-			offsetArray = newOA;
-			p.offsetArray = newOA;
-			offsetArrayRows++;
+				int j = 0;
+				final int i = offsetArray.length;
+				for (final FieldValue fv : vals)
+				{
+					newOA[i][j] = off;
+					j++;
+					off += fv.size();
+				}
+
+				offsetArray = newOA;
+				p.offsetArray = newOA;
+				offsetArrayRows++;
+			}
 		}
 	}
 
@@ -4290,7 +4399,10 @@ public class Schema
 
 		public FieldValue(int row, int col, Schema s)
 		{
-			off = s.offsetArray[row][col];
+			synchronized(s.offsetArray)
+			{
+				off = s.offsetArray[row][col];
+			}
 			isNull = (off == 0);
 			exists = (off != 0xffffff && off != -1);
 		}
@@ -5051,6 +5163,7 @@ public class Schema
 				{
 					s.offsetArray = new int[s.rowIDListSize][1];
 					s.offsetArrayRows = s.rowIDListSize;
+					s.p.offsetArray = s.offsetArray;
 					int i = 0;
 					RID[] exact = s.setRowIDsCTExact(colNum);
 					for (final RID rid : exact)
@@ -5138,9 +5251,12 @@ public class Schema
 					catch (Exception f)
 					{
 						String string = "Probable error reading column data, offset array is [";
-						for (int[] array : s.offsetArray)
+						synchronized(s.offsetArray)
 						{
-							string += (array[0] + ",");
+							for (int[] array : s.offsetArray)
+							{
+								string += (array[0] + ",");
+							}
 						}
 
 						string += "]";
