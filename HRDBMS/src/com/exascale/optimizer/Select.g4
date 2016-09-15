@@ -1,5 +1,7 @@
 grammar Select;
 
+WILL PROBABLY WANT TO STICK YOUR STUFF IN AS AN ADDITIONAL OPTION FOR PARSING tableName ???
+
 select : (insert EOF) | (update EOF) | (delete EOF) | (createTable EOF) | (createIndex EOF) | (createView EOF) | (dropTable EOF) | (dropIndex EOF) | (dropView EOF) | (load EOF) | (runstats EOF) | ((('WITH' commonTableExpression (',' commonTableExpression)*)? fullSelect) EOF);
 runstats : 'RUNSTATS' 'ON' tableName ;
 insert : 'INSERT' 'INTO' tableName (('FROM'? fullSelect) | ('VALUES' valuesList (',' valuesList)*)) ;
