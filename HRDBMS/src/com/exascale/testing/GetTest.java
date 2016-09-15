@@ -27,7 +27,7 @@ public class GetTest
 			{
 				long start = System.currentTimeMillis();
 				Class.forName("com.exascale.client.HRDBMSDriver");
-				conn = DriverManager.getConnection("jdbc:hrdbms://172.31.20.103:3232");
+				conn = DriverManager.getConnection("jdbc:hrdbms://192.168.56.104:3232");
 				conn.setAutoCommit(false);
 
 				HRDBMSStatement stmt = (HRDBMSStatement)conn.createStatement();

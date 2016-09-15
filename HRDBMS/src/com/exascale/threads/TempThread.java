@@ -23,13 +23,14 @@ public class TempThread extends HRDBMSThread
 			FACTOR = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_concurrent_writers_per_temp_disk"));
 			if (HRDBMSWorker.getHParms().getProperty("use_direct_buffers_for_flush").equals("true"))
 			{
+				int directSize = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("direct_buffer_size"));
 				int total = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("num_direct"));
 				int i = 0;
 				while (i < total)
 				{
 					try
 					{
-						cache.put(ByteBuffer.allocateDirect(8 * 1024 * 1024));
+						cache.put(ByteBuffer.allocateDirect(directSize));
 					}
 					catch (Exception e)
 					{

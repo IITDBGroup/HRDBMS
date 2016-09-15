@@ -200,6 +200,7 @@ public class XAWorker extends HRDBMSThread
 				if (p.getTrees().size() > 1)
 				{
 					ArrayList<SubXAThread> threads = p.executeMultiNoResult();
+					updateCount = p.getUpdateCount();
 					for (SubXAThread thread : threads)
 					{
 						thread.join();
@@ -207,6 +208,8 @@ public class XAWorker extends HRDBMSThread
 						{
 							throw thread.getException();
 						}
+						
+						updateCount += thread.getUpdateCount();
 					}
 				}
 				else

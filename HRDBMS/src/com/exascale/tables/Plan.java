@@ -17,6 +17,7 @@ public class Plan implements Serializable
 	private transient final boolean reserved;
 	private final ArrayList<Operator> trees;
 	private transient final ConcurrentHashMap<Integer, Integer> touchedNodes = new ConcurrentHashMap<Integer, Integer>();
+	private int updateCount2 = 0;
 
 	// private HashMap<Integer, Integer> old2New = null;
 
@@ -39,6 +40,11 @@ public class Plan implements Serializable
 		// }
 		//
 		// old2New = null;
+	}
+	
+	public int getUpdateCount()
+	{
+		return updateCount2;
 	}
 
 	public void addNode(int node)
@@ -159,7 +165,7 @@ public class Plan implements Serializable
 
 		Operator retval = trees.get(size - 1);
 		retval.start();
-		int updateCount = (Integer)retval.next(retval);
+		updateCount2 = (Integer)retval.next(retval);
 		retval.close();
 		return threads;
 	}
@@ -169,6 +175,7 @@ public class Plan implements Serializable
 		private Operator tree;
 		private boolean ok = true;
 		private Exception e;
+		int updateCount = 0;
 		
 		public SubXAThread(Operator tree)
 		{
@@ -180,8 +187,18 @@ public class Plan implements Serializable
 			try
 			{
 				tree.start();
-				while (!(tree.next(tree) instanceof DataEndMarker))
+				while (true)
 				{
+					Object o = tree.next(tree);
+					if (o instanceof DataEndMarker)
+					{
+						break;
+					}
+					
+					if (o instanceof Integer)
+					{
+						updateCount = (Integer)o;
+					}
 				}
 				tree.close();
 			}
@@ -190,6 +207,11 @@ public class Plan implements Serializable
 				ok = false;
 				this.e = e;
 			}
+		}
+		
+		public int getUpdateCount()
+		{
+			return updateCount;
 		}
 		
 		public boolean getOK()

@@ -65,7 +65,10 @@ public class HJOMultiHashMap<K, V>
 	public void multiRemove(K key)
 	{
 		ArrayList<V> removed = map.remove(key);
-		size.addAndGet(removed.size());
+		if (removed != null)
+		{
+			size.addAndGet(-removed.size());
+		}
 	}
 
 	public int size()

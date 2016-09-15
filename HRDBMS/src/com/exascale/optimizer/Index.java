@@ -904,7 +904,7 @@ public final class Index implements Serializable
 		delayed = true;
 	}
 
-	public void scan(CNFFilter filter, boolean sample, int get, int skip, BufferedLinkedBlockingQueue queue, String[] fetchP2C, TreeMap<Integer, String> finalP2C, Transaction tx) throws Exception
+	public void scan(CNFFilter filter, boolean sample, int get, int skip, BufferedLinkedBlockingQueue queue, String[] fetchP2C, TreeMap<Integer, String> finalP2C, Transaction tx, boolean getRID) throws Exception
 	{
 		LockManager.sLock(new Block(fileName, -1), tx.number());
 		// FileManager.getFile(fileName);
@@ -1047,6 +1047,15 @@ public final class Index implements Serializable
 					if (filter.passes(row))
 					{
 						ArrayList<Object> r2 = new ArrayList<Object>();
+						
+						if (getRID)
+						{
+							RID rid = rec.getRid();
+							r2.add(rid.getNode());
+							r2.add(rid.getDevice());
+							r2.add(rid.getBlockNum());
+							r2.add(rid.getRecNum());
+						}
 						for (int pos : keepPos)
 						{
 							r2.add(row.get(pos));
@@ -3619,9 +3628,9 @@ public final class Index implements Serializable
 			bb.putInt(rid.getBlockNum());
 			bb.putInt(rid.getRecNum());
 			byte[] before = new byte[16];
-			p.get(off + 33, before);
-			InsertLogRec rec = tx.insert(before, bb.array(), off + 33, p.block());
-			p.write(off + 33, bb.array(), tx.number(), rec.lsn());
+			p.get(off + 25, before);
+			InsertLogRec rec = tx.insert(before, bb.array(), off + 25, p.block());
+			p.write(off + 25, bb.array(), tx.number(), rec.lsn());
 			// changedBlocks.add(p.block());
 		}
 

@@ -30,6 +30,7 @@ import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.Date;
@@ -63,6 +64,7 @@ import com.exascale.managers.LogManager;
 import com.exascale.managers.ResourceManager;
 import com.exascale.managers.XAManager;
 import com.exascale.misc.BufferedFileChannel;
+import com.exascale.misc.CompressedBitSet;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.FastStringTokenizer;
 import com.exascale.misc.HJOMultiHashMap;
@@ -91,6 +93,7 @@ import com.exascale.optimizer.RootOperator;
 import com.exascale.optimizer.RoutingOperator;
 import com.exascale.optimizer.SortOperator;
 import com.exascale.optimizer.TableScanOperator;
+import com.exascale.optimizer.TableScanOperator.CNFEntry;
 import com.exascale.optimizer.UpdateOperator;
 import com.exascale.tables.DataType;
 import com.exascale.tables.HeaderPage;
@@ -5123,7 +5126,7 @@ public class ConnectionWorker extends HRDBMSThread
 			else
 			{
 				bbSize *= 2;
-				ByteBuffer newBB = ByteBuffer.allocateDirect(bbSize);
+				ByteBuffer newBB = ByteBuffer.allocate(bbSize);
 				bb.limit(bb.position());
 				bb.position(0);
 				newBB.put(bb);
@@ -5149,7 +5152,7 @@ public class ConnectionWorker extends HRDBMSThread
 				{
 					bbSize *= 2;
 				}
-				ByteBuffer newBB = ByteBuffer.allocateDirect(bbSize);
+				ByteBuffer newBB = ByteBuffer.allocate(bbSize);
 				bb.limit(bb.position());
 				bb.position(0);
 				newBB.put(bb);
@@ -7224,6 +7227,7 @@ public class ConnectionWorker extends HRDBMSThread
 		{
 			try
 			{
+				boolean doMM = HRDBMSWorker.getHParms().getProperty("do_min_max").equals("true");
 				//HRDBMSWorker.logger.debug("FlushLoad thread started with type = " + type);
 				MetaData meta = new MetaData();
 				FileChannel fc = loadFCs.remove(meta.getDevicePath(num) + schema + "." + table + ".tmp");
@@ -7375,6 +7379,9 @@ public class ConnectionWorker extends HRDBMSThread
 				}
 				else
 				{
+					int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
+					boolean isV5OrHigher = (pbpeVer >= 5);
+					boolean isV6OrHigher = (pbpeVer >= 6);
 					// col table
 					final Block b = new Block(file, 0);
 					tx.requestPage(b);
@@ -7454,14 +7461,28 @@ public class ConnectionWorker extends HRDBMSThread
 
 					// new ArrayList<RIDAndIndexKeys>();
 					Object o = top.next(top);
+					ArrayList<ArrayList<Object>> pageSet = new ArrayList<ArrayList<Object>>();
 					while (o instanceof ArrayList)
 					{
 						rows++;
 						ArrayList<Object> row = (ArrayList<Object>)o;
 						RID rid = sch.insertRowColTableAppend(aloToFieldValues(row));
 						int newBlock = rid.getBlockNum();
-						if (newBlock != block)
+						if (newBlock == block)
 						{
+							pageSet.add(row);
+						}
+						else
+						{
+							if (doMM)
+							{
+								doMinMax(toRequest, pageSet, pos2Col, isV5OrHigher, isV6OrHigher);
+							}
+							else
+							{
+								pageSet.clear();
+							}
+							pageSet.add(row);
 							block = newBlock;
 
 							if (rows > maxBatch)
@@ -7505,6 +7526,18 @@ public class ConnectionWorker extends HRDBMSThread
 
 						o = top.next(top);
 					}
+					
+					if (pageSet.size() != 0)
+					{
+						if (doMM)
+						{
+							doMinMax(toRequest, pageSet, pos2Col, isV5OrHigher, isV6OrHigher);
+						}
+						else
+						{
+							pageSet.clear();
+						}
+					}
 
 					if (o instanceof Exception)
 					{
@@ -7523,6 +7556,176 @@ public class ConnectionWorker extends HRDBMSThread
 				HRDBMSWorker.logger.debug("", e);
 			}
 		}
+	}
+	
+	private void doMinMax(Block block, ArrayList<ArrayList<Object>> pageSet, TreeMap<Integer, String> pos2Col, boolean isV5OrHigher, boolean isV6OrHigher) 
+	{
+		int cols = pos2Col.size();
+		int rows = pageSet.size();
+		int i = 0;
+		while (i < cols)
+		{
+			ArrayList col = new ArrayList(rows);
+			int j = 0;
+			while (j < rows)
+			{
+				col.add(pageSet.get(j++).get(i));
+			}
+			
+			Collections.sort(col);
+			Object l = col.get(0);
+			Object u = col.get(rows - 1);
+			String colName = pos2Col.get(i);
+			
+			try
+			{
+				Filter lower = null;
+				Filter upper = null;
+				if (l instanceof MyDate)
+				{
+					lower = new Filter(colName, "L", "DATE('" + l.toString() + "')");
+					upper = new Filter(colName, "G", "DATE('" + u.toString() + "')");
+				}
+				else if (l instanceof String)
+				{
+					lower = new Filter(colName, "L", "'" + l + "'");
+					upper = new Filter(colName, "G", "'" + u + "'");
+				}
+				else
+				{
+					lower = new Filter(colName, "L", "" + l);
+					upper = new Filter(colName, "G", "" + u);
+				}
+				
+				HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
+				HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
+				hm.put(lower, lower);
+				hshm.add(hm);
+				if (!isV5OrHigher)
+				{
+					TableScanOperator.noResults.multiPut(block, hshm);
+				}
+				else
+				{
+					BitSet bitSet = null;
+					if (isV6OrHigher)
+					{
+						bitSet = new CompressedBitSet();
+					}
+					else
+					{
+						bitSet = new BitSet();
+					}
+					bitSet.set(block.number());
+					CNFEntry cnfEntry = new CNFEntry(hshm, bitSet);
+					MultiHashMap<Integer, CNFEntry> mhm = TableScanOperator.pbpeCache2.get(block.fileName());
+					if (mhm == null)
+					{
+						mhm = new MultiHashMap<Integer, CNFEntry>();
+						TableScanOperator.pbpeCache2.put(block.fileName(), mhm);
+						mhm = TableScanOperator.pbpeCache2.get(block.fileName());
+					}
+					
+					if (colName.contains("."))
+					{
+						colName = colName.substring(colName.indexOf('.') + 1);
+						//HRDBMSWorker.logger.debug("Truncated column name");
+					}
+					int hash = colName.hashCode();
+					//HRDBMSWorker.logger.debug("While creating min/max hashCode for " + colName + " is " + hash);
+					ConcurrentHashMap<CNFEntry, CNFEntry> map = mhm.getMap(hash);
+					if (map != null)
+					{
+						CNFEntry entry2 = map.get(cnfEntry);
+						if (entry2 != null)
+						{
+							BitSet bs2 = entry2.getBitSet();
+							BitSet bs = cnfEntry.getBitSet();
+							synchronized(bs2)
+							{
+								if (isV6OrHigher)
+								{
+									((CompressedBitSet)bs2).or((CompressedBitSet)bs);
+								}
+								else
+								{
+									bs2.or(bs);
+								}
+							}
+						}
+						else
+						{
+							mhm.multiPut(hash, cnfEntry);
+						}
+					}
+					else
+					{
+						mhm.multiPut(hash, cnfEntry);
+					}
+				}
+				hshm = new HashSet<HashMap<Filter, Filter>>();
+				hm = new HashMap<Filter, Filter>();
+				hm.put(upper, upper);
+				hshm.add(hm);
+				if (!isV5OrHigher)
+				{
+					TableScanOperator.noResults.multiPut(block, hshm);
+				}
+				else
+				{
+					BitSet bitSet = null;
+					if (isV6OrHigher)
+					{
+						bitSet = new CompressedBitSet();
+					}
+					else
+					{
+						bitSet = new BitSet();
+					}
+					bitSet.set(block.number());
+					CNFEntry cnfEntry = new CNFEntry(hshm, bitSet);
+					MultiHashMap<Integer, CNFEntry> mhm = TableScanOperator.pbpeCache2.get(block.fileName());
+					int hash = colName.hashCode();
+					ConcurrentHashMap<CNFEntry, CNFEntry> map = mhm.getMap(hash);
+					if (map != null)
+					{
+						CNFEntry entry2 = map.get(cnfEntry);
+						if (entry2 != null)
+						{
+							BitSet bs2 = entry2.getBitSet();
+							BitSet bs = cnfEntry.getBitSet();
+							synchronized(bs2)
+							{
+								if (isV6OrHigher)
+								{
+									((CompressedBitSet)bs2).or((CompressedBitSet)bs);
+								}
+								else
+								{
+									bs2.or(bs);
+								}
+							}
+						}
+						else
+						{
+							mhm.multiPut(hash, cnfEntry);
+						}
+					}
+					else
+					{
+						mhm.multiPut(hash, cnfEntry);
+					}
+				}
+			}
+			catch(Exception e)
+			{
+				HRDBMSWorker.logger.debug("", e);
+			}
+			
+			i++;
+		}
+		
+		pageSet.clear();
 	}
 
 	private static class Get2Thread extends HRDBMSThread

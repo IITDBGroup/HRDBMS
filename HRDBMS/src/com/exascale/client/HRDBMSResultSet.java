@@ -135,7 +135,7 @@ public class HRDBMSResultSet implements ResultSet
 		try
 		{
 			closed = true;
-			if (conn.autoCommit || conn.txIsReadOnly)
+			if (conn.autoCommit)
 			{
 				conn.commit();
 			}
