@@ -39,7 +39,10 @@ public class VHJOMultiHashMap<K, V>
 	public void multiRemove(K key)
 	{
 		Vector<V> removed = map.remove(key);
-		size.addAndGet(removed.size());
+		if (removed != null)
+		{
+			size.addAndGet(-removed.size());
+		}
 	}
 
 	public void multiPut(K key, V val)

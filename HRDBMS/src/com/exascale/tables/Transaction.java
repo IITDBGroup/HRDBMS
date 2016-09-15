@@ -31,7 +31,7 @@ public class Transaction implements Serializable
 	public static final int ISOLATION_RR = 0, ISOLATION_CS = 1, ISOLATION_UR = 2;
 	private static AtomicLong nextTxNum;
 	public static ConcurrentHashMap<Long, Long> txList = new ConcurrentHashMap<Long, Long>();
-	public static final boolean reorder = HRDBMSWorker.getHParms().getProperty("enable_col_reordering").equals("true");
+	public static final boolean reorder = true;
 
 	static
 	{

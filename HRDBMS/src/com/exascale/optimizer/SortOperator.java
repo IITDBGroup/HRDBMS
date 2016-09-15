@@ -1121,13 +1121,7 @@ public final class SortOperator implements Operator, Serializable
 					externalSort(0);
 					return;
 				}
-
-				if (childCard > ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")) && childCard < ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")) / 2)
-				{
-					mediumSort();
-					return;
-				}
-
+				
 				if (childCard > ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")))
 				{
 					// double percentInMem = (ResourceManager.QUEUE_SIZE *
@@ -1136,6 +1130,12 @@ public final class SortOperator implements Operator, Serializable
 					// percentInMem = percentInMem / 4;
 					double percentInMem = 0;
 					externalSort(percentInMem);
+					return;
+				}
+
+				if (childCard > ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")) / 2)
+				{
+					mediumSort();
 					return;
 				}
 

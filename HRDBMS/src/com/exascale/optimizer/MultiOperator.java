@@ -1881,6 +1881,7 @@ public final class MultiOperator implements Operator, Serializable
 		private Exception e;
 		private final ByteBuffer direct;
 		private boolean force = false;
+		private int directSize = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("direct_buffer_size"));
 
 		public FlushBinThread(ArrayList<ArrayList<Object>> bin, byte[] types, FileChannel fc, ByteBuffer direct)
 		{
@@ -1928,7 +1929,7 @@ public final class MultiOperator implements Operator, Serializable
 				}
 				else
 				{
-					if (direct.position() + data.length <= 8 * 1024 * 1024)
+					if (direct.position() + data.length <= directSize)
 					{
 						try
 						{
@@ -1958,7 +1959,7 @@ public final class MultiOperator implements Operator, Serializable
 							direct.limit(direct.capacity());
 						}
 
-						if (!force && data.length <= 8 * 1024 * 1024)
+						if (!force && data.length <= directSize)
 						{
 							direct.position(0);
 							direct.put(data);

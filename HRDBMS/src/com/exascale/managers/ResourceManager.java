@@ -749,7 +749,7 @@ public final class ResourceManager extends HRDBMSThread
 				// }
 				// last = temp;
 				//
-				HRDBMSWorker.logger.debug(((Runtime.getRuntime().freeMemory()) * 100.0) / (maxMemory * 1.0) + "% free - skipped " + TableScanOperator.skippedPages.get() + " pages");
+				HRDBMSWorker.logger.debug(((Runtime.getRuntime().freeMemory()) * 100.0) / (maxMemory * 1.0) + "% free - skipped " + TableScanOperator.skippedPages.get() + " pages in " + TableScanOperator.pbpeTime + "ms");
 
 				// for (SubBufferManager sbm : BufferManager.managers)
 				// {

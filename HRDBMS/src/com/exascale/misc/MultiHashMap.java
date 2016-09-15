@@ -22,6 +22,11 @@ public class MultiHashMap<K, V> implements Serializable
 		map.clear();
 		size.set(0);
 	}
+	
+	public ConcurrentHashMap<V, V> getMap(K key)
+	{
+		return map.get(key);
+	}
 
 	public Set<V> get(K key)
 	{
@@ -128,5 +133,10 @@ public class MultiHashMap<K, V> implements Serializable
 	public int totalSize()
 	{
 		return size.get();
+	}
+	
+	public String toString()
+	{
+		return map.toString();
 	}
 }

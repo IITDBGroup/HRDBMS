@@ -25,6 +25,8 @@ public class CNFFilter implements Serializable
 {
 	private static sun.misc.Unsafe unsafe;
 	private static final int HASH_THRESHOLD = 10;
+	private static int pbpeVer;
+	private static boolean isV7;
 
 	static
 	{
@@ -38,6 +40,9 @@ public class CNFFilter implements Serializable
 		{
 			unsafe = null;
 		}
+		
+		pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
+		isV7 = (pbpeVer == 7);
 	}
 
 	private ArrayList<ArrayList<Filter>> filters = new ArrayList<ArrayList<Filter>>();
@@ -58,9 +63,28 @@ public class CNFFilter implements Serializable
 	private volatile IdentityHashMap<ArrayList<Filter>, Boolean> hashEligibleCache;
 	private volatile IdentityHashMap<ArrayList<Filter>, Integer> hashColPos;
 	private volatile IdentityHashMap<ArrayList<Filter>, HJOMultiHashMap<Integer, Filter>> hashMapCache;
+	
+	private transient HashSet<Filter> falseForPage;
 
 	public CNFFilter()
 	{
+	}
+	
+	public void reset()
+	{
+		falseForPage = new HashSet<Filter>();
+		for (ArrayList<Filter> filter : filters)
+		{
+			for (Filter f : filter)
+			{
+				falseForPage.add(f);
+			}
+		}
+	}
+	
+	public HashSet<Filter> getFalseResults()
+	{
+		return falseForPage;
 	}
 
 	public CNFFilter(HashSet<HashMap<Filter, Filter>> clause, HashMap<String, Integer> cols2Pos)
@@ -634,16 +658,33 @@ public class CNFFilter implements Serializable
 		int z = 0;
 		final int limit = filters.size();
 		// for (final ArrayList<Filter> filter : filters)
-		while (z < limit)
+		if (isV7 && falseForPage != null)
 		{
-			final ArrayList<Filter> filter = filters.get(z++);
-			if (!passesOredCondition(filter, row))
+			boolean retval = true;
+			while (z < limit)
 			{
-				return false;
+				final ArrayList<Filter> filter = filters.get(z++);
+				if (!passesOredCondition(filter, row))
+				{
+					retval = false;
+				}
 			}
+			
+			return retval;
 		}
+		else
+		{
+			while (z < limit)
+			{
+				final ArrayList<Filter> filter = filters.get(z++);
+				if (!passesOredCondition(filter, row))
+				{
+					return false;
+				}
+			}
 
-		return true;
+			return true;
+		}
 	}
 
 	// @Parallel
@@ -652,6 +693,7 @@ public class CNFFilter implements Serializable
 		int z = 0;
 		final int limit = filters.size();
 		// for (final ArrayList<Filter> filter : filters)
+		
 		while (z < limit)
 		{
 			final ArrayList<Filter> filter = filters.get(z++);
@@ -966,18 +1008,40 @@ public class CNFFilter implements Serializable
 			{
 				if (hashEligible(filter))
 				{
+					if (isV7)
+					{
+						falseForPage.clear();
+					}
 					return passesOredConditionHash(filter, row);
 				}
 			}
 			int z = 0;
 			final int limit = filter.size();
 			// for (final Filter f : filter)
-			while (z < limit)
+			if (isV7 && falseForPage != null)
 			{
-				final Filter f = filter.get(z++);
-				if (f.passes(row, cols2Pos))
+				boolean retval = false;
+				while (z < limit)
 				{
-					return true;
+					final Filter f = filter.get(z++);
+					if (f.passes(row, cols2Pos))
+					{
+						retval = true;
+						falseForPage.remove(f);
+					}
+				}
+				
+				return retval;
+			}
+			else
+			{
+				while (z < limit)
+				{
+					final Filter f = filter.get(z++);
+					if (f.passes(row, cols2Pos))
+					{
+						return true;
+					}
 				}
 			}
 		}

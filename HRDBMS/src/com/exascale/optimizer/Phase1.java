@@ -77,65 +77,143 @@ public final class Phase1
 	{
 		if (op instanceof HashJoinOperator)
 		{
-			return cardHJO(op);
+			long retval = cardHJO(op);
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+			
+			return retval;
 		}
 
 		if (op instanceof IntersectOperator)
 		{
-			return cardSetI(op);
+			long retval = cardSetI(op);
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+			
+			return retval;
 		}
 
 		if (op instanceof MultiOperator)
 		{
-			return cardMO(op);
+			long retval = cardMO(op);
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+			
+			return retval;
 		}
 
 		if (op instanceof NestedLoopJoinOperator)
 		{
-			return cardNL(op);
+			long retval = cardNL(op);
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+			
+			return retval;
 		}
 
 		if (op instanceof NetworkReceiveOperator)
 		{
-			return cardRX(op);
+			long retval = cardRX(op);
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+			
+			return retval;
 		}
 
 		if (op instanceof NetworkHashAndSendOperator)
 		{
-			return card(op.children().get(0)) / ((NetworkHashAndSendOperator)op).parents().size();
+			long retval = card(op.children().get(0)) / ((NetworkHashAndSendOperator)op).parents().size();
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+			
+			return retval;
 		}
 
 		if (op instanceof NetworkSendRROperator)
 		{
-			return card(op.children().get(0)) / ((NetworkSendRROperator)op).parents().size();
+			long retval = card(op.children().get(0)) / ((NetworkSendRROperator)op).parents().size();
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+			
+			return retval;
 		}
 
 		if (op instanceof ProductOperator)
 		{
-			return cardX(op);
+			long retval = cardX(op);
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+			
+			return retval;
 		}
 
 		if (op instanceof SelectOperator)
 		{
-			return (long)(((SelectOperator)op).likelihood(root, tx) * card(op.children().get(0)));
+			long retval = (long)(((SelectOperator)op).likelihood(root, tx) * card(op.children().get(0)));
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+			
+			return retval;
 		}
 
 		if (op instanceof TopOperator)
 		{
-			return cardTop(op);
+			long retval =  cardTop(op);
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+			
+			return retval;
 		}
 
 		if (op instanceof UnionOperator)
 		{
-			return cardUnion(op);
+			long retval = cardUnion(op);
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+			
+			return retval;
 		}
 
 		if (op instanceof TableScanOperator)
 		{
-			return cardTSO(op);
+			long retval = cardTSO(op);
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+			
+			return retval;
 		}
 
-		return card(op.children().get(0));
+		long retval = card(op.children().get(0));
+		if (retval < 1)
+		{
+			retval = 1;
+		}
+		
+		return retval;
 	}
 
 	public void optimize() throws Exception
@@ -167,9 +245,9 @@ public final class Phase1
 		// printTree(root, 0); //DEBUG
 	}
 
-	private double adjust(Operator left, Operator right) throws Exception
+	private double adjust(Operator left, Operator right, double r) throws Exception
 	{
-		double retval = 1.0;
+		double retval = r;
 		if (card(left) < card(right))
 		{
 			Operator op = left;
@@ -190,11 +268,13 @@ public final class Phase1
 				}
 				else if (op instanceof TableScanOperator)
 				{
+					//HRDBMSWorker.logger.debug("Adjust is returning " + retval);
 					return retval;
 				}
 				else
 				{
-					return 1.0;
+					//HRDBMSWorker.logger.debug("Adjust is returning " + r);
+					return r;
 				}
 
 				op = op.children().get(0);
@@ -220,11 +300,13 @@ public final class Phase1
 				}
 				else if (op instanceof TableScanOperator)
 				{
+					//HRDBMSWorker.logger.debug("Adjust is returning " + retval);
 					return retval;
 				}
 				else
 				{
-					return 1.0;
+					//HRDBMSWorker.logger.debug("Adjust is returning " + r);
+					return r;
 				}
 
 				op = op.children().get(0);
@@ -581,6 +663,7 @@ public final class Phase1
 					likelihood = meta.likelihood(new ArrayList<Filter>(select.getFilter()), tx, clone);
 					likelihoodCache.put(select.getFilter(), likelihood);
 				}
+				//HRDBMSWorker.logger.debug("Initial likelihood for " + select + " is " + likelihood);
 				ArrayList<Filter> filters = select.getFilter();
 				Operator left = null;
 				Operator right = null;
@@ -609,7 +692,13 @@ public final class Phase1
 							rights.add(filter.rightColumn());
 						}
 
-						likelihood *= (card(left) * card(right) * adjust(left, right));
+						long cl = card(left);
+						long cr = card(right);
+						//HRDBMSWorker.logger.debug("CL = " + cl + ", CR = " + cr);
+						likelihood *= cl;
+						likelihood *= cr;
+						likelihood = adjust(left, right, likelihood);
+						//HRDBMSWorker.logger.debug("After card/adjust likelihood for " + select + " is " + likelihood);
 						break;
 					}
 				}
@@ -676,6 +765,7 @@ public final class Phase1
 			 */
 
 			selects.remove(minSelect);
+			//HRDBMSWorker.logger.debug("Most promising select is " + minSelect + " with a score of " + minLikelihood);
 			return minSelect;
 		}
 
@@ -699,6 +789,7 @@ public final class Phase1
 							likelihood = meta.likelihood(new ArrayList<Filter>(select.getFilter()), tx, clone);
 							likelihoodCache.put(select.getFilter(), likelihood);
 						}
+						//HRDBMSWorker.logger.debug("Initial likelihood for " + select + " is " + likelihood);
 						left = getSubtreeForCol(filter.leftColumn(), subtrees);
 						right = getSubtreeForCol(filter.rightColumn(), subtrees);
 						SubtreePair pair = new SubtreePair(left, right);
@@ -710,7 +801,13 @@ public final class Phase1
 						{
 							pairs.add(pair);
 						}
-						likelihood *= (card(left) * card(right) * adjust(left, right));
+						long cl = card(left);
+						long cr = card(right);
+						//HRDBMSWorker.logger.debug("CL = " + cl + ", CR = " + cr);
+						likelihood *= cl;
+						likelihood *= cr;
+						likelihood = adjust(left, right, likelihood);
+						//HRDBMSWorker.logger.debug("After card/adjust likelihood for " + select + " is " + likelihood);
 					}
 					else if (current.getCols2Pos().containsKey(filter.rightColumn()))
 					{
@@ -720,6 +817,7 @@ public final class Phase1
 							likelihood = meta.likelihood(new ArrayList<Filter>(select.getFilter()), tx, clone);
 							likelihoodCache.put(select.getFilter(), likelihood);
 						}
+						//HRDBMSWorker.logger.debug("Initial likelihood for " + select + " is " + likelihood);
 						left = getSubtreeForCol(filter.leftColumn(), subtrees);
 						right = getSubtreeForCol(filter.rightColumn(), subtrees);
 						SubtreePair pair = new SubtreePair(left, right);
@@ -731,7 +829,13 @@ public final class Phase1
 						{
 							pairs.add(pair);
 						}
-						likelihood *= (card(left) * card(right) * adjust(left, right));
+						long cl = card(left);
+						long cr = card(right);
+						//HRDBMSWorker.logger.debug("CL = " + cl + ", CR = " + cr);
+						likelihood *= cl;
+						likelihood *= cr;
+						likelihood = adjust(left, right, likelihood);
+						//HRDBMSWorker.logger.debug("After card/adjust likelihood for " + select + " is " + likelihood);
 					}
 
 					break;
@@ -766,6 +870,7 @@ public final class Phase1
 		if (minSelect != null)
 		{
 			// HRDBMSWorker.logger.debug("Chose " + minLikelihood); //DEBUG
+			//HRDBMSWorker.logger.debug("Most promising select is " + minSelect + " with a score of " + minLikelihood);
 			selects.remove(minSelect);
 			return minSelect;
 		}
@@ -779,6 +884,7 @@ public final class Phase1
 				likelihood = meta.likelihood(new ArrayList<Filter>(select.getFilter()), tx, clone);
 				likelihoodCache.put(select.getFilter(), likelihood);
 			}
+			//HRDBMSWorker.logger.debug("Initial likelihood for " + select + " is " + likelihood);
 			ArrayList<Filter> filters = select.getFilter();
 			Operator left = null;
 			Operator right = null;
@@ -806,7 +912,13 @@ public final class Phase1
 						rights.add(filter.rightColumn());
 					}
 
-					likelihood *= (card(left) * card(right) * adjust(left, right));
+					long cl = card(left);
+					long cr = card(right);
+					//HRDBMSWorker.logger.debug("CL = " + cl + ", CR = " + cr);
+					likelihood *= cl;
+					likelihood *= cr;
+					likelihood = adjust(left, right, likelihood);
+					//HRDBMSWorker.logger.debug("After card/adjust likelihood for " + select + " is " + likelihood);
 					break;
 				}
 			}
@@ -870,6 +982,7 @@ public final class Phase1
 		 */
 
 		selects.remove(minSelect);
+		//HRDBMSWorker.logger.debug("Most promising select is " + minSelect + " with a score of " + minLikelihood);
 		return minSelect;
 	}
 

@@ -1480,43 +1480,50 @@ public class XAManager extends HRDBMSThread
 	@Override
 	public void run()
 	{
-		while (!rP1)
+		try
 		{
-			try
-			{
-				Thread.sleep(1000);
-			}
-			catch (Exception e)
-			{
-			}
-		}
-
-		while (in.size() > 0)
-		{
-			while (true)
+			while (!rP1)
 			{
 				try
 				{
-					String cmd = (String)in.take();
-					Long txnum = (Long)in.take();
-					ArrayList<Integer> nodes = (ArrayList<Integer>)in.take();
-					if (cmd.equals("COMMIT"))
-					{
-						XAManager.phase2(txnum, nodes);
-					}
-					else
-					{
-						rollbackP2(txnum, nodes);
-					}
-					break;
+					Thread.sleep(1000);
 				}
-				catch (InterruptedException e)
+				catch (Exception e)
 				{
 				}
 			}
-		}
 
-		rP2 = true;
+			while (in.size() > 0)
+			{
+				while (true)
+				{
+					try
+					{
+						String cmd = (String)in.take();
+						Long txnum = (Long)in.take();
+						ArrayList<Integer> nodes = (ArrayList<Integer>)in.take();
+						if (cmd.equals("COMMIT"))
+						{
+							XAManager.phase2(txnum, nodes);
+						}
+						else
+						{
+							rollbackP2(txnum, nodes);
+						}
+						break;
+					}
+					catch (InterruptedException e)
+					{
+					}
+				}
+			}
+
+			rP2 = true;
+		}
+		catch (Exception e)
+		{
+			HRDBMSWorker.logger.debug("", e);
+		}
 	}
 
 	private static class SendCheckpointThread extends HRDBMSThread

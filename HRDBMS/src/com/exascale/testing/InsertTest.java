@@ -2,7 +2,9 @@ package com.exascale.testing;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Random;
 import java.util.Scanner;
 import com.exascale.client.HRDBMSConnection;
@@ -184,5 +186,47 @@ public class InsertTest
 		long minutes3 = seconds3 / 60;
 		seconds3 -= (minutes3 * 60);
 		System.out.println("Delete test took " + minutes3 + " minutes and " + seconds3 + " seconds.");
+		
+		if (!doUpdate)
+		{
+			ArrayList<Integer> results = new ArrayList<Integer>(count);
+			conn = DriverManager.getConnection("jdbc:hrdbms://localhost:3232");
+			conn.setAutoCommit(false);
+			stmt = conn.createStatement();
+			start = System.currentTimeMillis();
+			i = 0;
+			while (i < count)
+			{
+				StringBuilder sql = new StringBuilder();
+				sql.append("SELECT COL2 FROM JASON.TEST1 WHERE COL1 = " + (i+startNum));
+				
+				ResultSet rs = stmt.executeQuery(sql.toString());
+				while (rs.next())
+				{
+					results.add(rs.getInt(1));
+				}
+				
+				rs.close();
+				i++;
+				
+				if (i % 100 == 0)
+				{
+					System.out.println(i);
+				}
+				
+				if (i % commitRate == 0)
+				{
+					conn.commit();
+				}
+			}
+			
+			stmt.close();
+			conn.close();
+			long end = System.currentTimeMillis();
+			long seconds = (end - start) / 1000;
+			long minutes = seconds / 60;
+			seconds -= (minutes * 60);
+			System.out.println("Select test took " + minutes + " minutes and " + seconds + " seconds.");
+		}
 	}
 }

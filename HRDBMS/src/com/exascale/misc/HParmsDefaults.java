@@ -31,7 +31,7 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("rm_sleep_time_ms", "5000");
 		retval.setProperty("profile", "false");
 		retval.setProperty("detect_thread_deadlocks", "false");
-		retval.setProperty("queue_size", "125000");
+		retval.setProperty("queue_size", "62500");
 		retval.setProperty("cuda_batch_size", "30720");
 		retval.setProperty("gpu_offload", "false");
 		retval.setProperty("temp_directories", "/home/hrdbms/");
@@ -49,7 +49,7 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("hrdbms_user", "hrdbms");
 		retval.setProperty("Xmx_string", "32g");
 		retval.setProperty("number_of_coords", "1");
-		retval.setProperty("max_batch", "1250000");
+		retval.setProperty("max_batch", "625000");
 		retval.setProperty("archive", "false");
 		retval.setProperty("queue_flush_retry_timeout", "1");
 		retval.setProperty("statistics_refresh_target_days", "7");
@@ -58,16 +58,16 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("critical_mem_percent", "15");
 		retval.setProperty("stack_size", "2M");
 		retval.setProperty("jvm_args", "-XX:+UseG1GC -XX:G1HeapRegionSize=32m -XX:+ParallelRefProcEnabled -XX:MaxDirectMemorySize=327772160000 -XX:+AggressiveOpts -XX:CompileThreshold=200 -Xbatch -XX:-TieredCompilation");
-		retval.setProperty("external_factor", "68.0");
-		retval.setProperty("hash_external_factor", "120.0");
+		retval.setProperty("external_factor", "5.0");
+		retval.setProperty("hash_external_factor", "5.0");
 		retval.setProperty("max_queued_load_flush_threads", "5");
-		retval.setProperty("sort_gb_factor", "68.0");
+		retval.setProperty("sort_gb_factor", "5.0");
 		retval.setProperty("java_path", "");
-		retval.setProperty("batches_per_check", "4");
+		retval.setProperty("batches_per_check", "2");
 		retval.setProperty("create_index_batch_size", "1000000");
 		retval.setProperty("max_open_files", "100000");
 		retval.setProperty("enable_cvarchar_compression", "true");
-		retval.setProperty("enable_col_reordering", "true");
+		//retval.setProperty("enable_col_reordering", "true");
 		retval.setProperty("hjo_bucket_size_shift", "0");
 		retval.setProperty("mo_bucket_size_shift", "0");
 		retval.setProperty("max_concurrent_writers_per_temp_disk", "3");
@@ -89,6 +89,9 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("lock_timeout_ms", "60000");
 		retval.setProperty("max_rr", "1200");
 		retval.setProperty("initial_max_hops", "3");
+		retval.setProperty("direct_buffer_size", "8388608");
+		retval.setProperty("pbpe_version", "2");
+		retval.setProperty("do_min_max", "true");
 		HParmsDefaults.retval = retval;
 		return retval;
 	}
