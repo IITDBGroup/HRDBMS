@@ -1,0 +1,72 @@
+<project name="HRDBMS" default="createJar" basedir=".">
+	
+	<property name="projectroot" value="${basedir}" />
+	
+	<!-- DIRECTORIES -->
+	<property name="sourcedir" value="${projectroot}/src" />
+	<property name="binarydir" value="${projectroot}/bin" />
+	<property name="builddir" value="${projectroot}/build" />
+	<property name="librarydir" value="${projectroot}/lib" />
+	
+	<!-- FILES -->
+	<property name="buildjar" value="${builddir}/gprom-jdbc-test.jar" />
+	<property name="packagejar" value="${builddir}/HRDBMS.jar" />
+	<property name="grammarfile" value="${sourcedir}/com/exascale/optimizer/Select.g4" /> 
+	
+	<!-- CLASSPATHS -->
+	<path id="libraries">
+		<fileset dir="${binarydir}">
+			<include name="**/*.class"/>
+		</fileset>
+	</path>
+	
+	<!-- CLEAN -->
+	<target name="clean" depends="">
+		<mkdir dir="${builddir}" />
+		<mkdir dir="${binarydir}" />
+	</target>
+
+	<!-- EXTRACT CLASS FILES FOR DEPENDENCIES -->
+	<target name="unjarDependencies" depends="clean">
+	    <unzip dest="${binarydir}">
+	        <fileset dir="${librarydir}">
+	            <include name="**/*.jar" />
+	        </fileset>    
+	    </unzip>
+	</target>
+	
+	<!-- CREATE PARSER -->
+	<target name="createParser" depends="unjarDependencies">
+		<java classname="org.antlr.v4.Tool" classpathref="libraries">
+			 <arg value="${grammarfile}"/>
+		</java>
+		<!-- TODO -->
+		<!-- <antlr target="${sourcedir}/com/exascale/optimizer/Select.g4" >
+		</antlr> -->
+	</target>
+	
+	<!-- COMPILE SYSTEM -->
+	<target name="compile" depends="unjarDependencies">
+		<depend srcdir="${sourcedir}"
+		        destdir="${binarydir}"
+		        cache="depcache"
+		        closure="yes"/>
+		<javac srcdir="${sourcedir}" destdir="${binarydir}" classpathref="libraries" 
+			debug="on" excludes="**/.svn*">
+			<compilerarg value="-Xlint:unchecked" />
+		</javac>
+	</target>
+
+	
+	<!-- PACKAGE SYSTEM AS JAR -->
+	<target name="createJar" depends="unjarDependencies">
+		<jar destfile="${packagejar}" basedir="${binarydir}">
+			<manifest>
+				<attribute name="Created-By" value="Illinois Institute of Technology, Department for Computer Science" />
+			</manifest>
+		</jar>
+	</target>
+
+	
+	
+</project>
