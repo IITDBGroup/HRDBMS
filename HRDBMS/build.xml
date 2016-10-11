@@ -1,6 +1,14 @@
-<project name="HRDBMS" default="createJar" basedir=".">
-	
+<project name="HRDBMS" default="createJar" basedir="." xmlns:ivy="antlib:org.apache.ivy.ant">
+
+	<!-- ROOTDIR -->
 	<property name="projectroot" value="${basedir}" />
+
+	<!-- TASK DEFS AND IMPORTED LIBRARIES -->
+	<taskdef resource="net/sf/antcontrib/antcontrib.properties">
+		<classpath>
+			<pathelement location="${basedir}/lib/ant-contrib.jar"/>
+		</classpath>
+	</taskdef>
 	
 	<!-- DIRECTORIES -->
 	<property name="sourcedir" value="${projectroot}/src" />
@@ -26,6 +34,11 @@
 		<mkdir dir="${binarydir}" />
 	</target>
 
+	<!-- BUILD -->
+ 	<target name="resolve" description="--> retrieve dependencies with ivy">
+        <ivy:retrieve />
+    </target>
+	
 	<!-- EXTRACT CLASS FILES FOR DEPENDENCIES -->
 	<target name="unjarDependencies" depends="clean">
 	    <unzip dest="${binarydir}">
