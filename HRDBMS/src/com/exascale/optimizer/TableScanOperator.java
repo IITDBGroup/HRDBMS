@@ -8,6 +8,8 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -20,9 +22,11 @@ import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
+import java.util.StringTokenizer;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
@@ -80,7 +84,6 @@ public final class TableScanOperator implements Operator, Serializable
 
 	public static MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>> noResults;
 	public static AtomicInteger skippedPages = new AtomicInteger(0);
-	public static AtomicLong pbpeTime = new AtomicLong(0);
 	private static Object intraTxLock = new Object();
 	private static HashMap<String, AtomicInteger> sharedDmlTxCounters = new HashMap<String, AtomicInteger>();
 	private static Configuration config;
@@ -88,6 +91,13 @@ public final class TableScanOperator implements Operator, Serializable
 	private static ShutdownManager shutdown;
 	public static volatile ConcurrentHashMap<String, MultiHashMap<Integer, CNFEntry>> pbpeCache2;
 	private static ConcurrentLinkedQueue contextQ;
+	public static AtomicLong figureOutProblemsTime = new AtomicLong(0);
+	public static AtomicLong SMTSolveTime = new AtomicLong(0);
+	public static AtomicLong nonSMTSolveTime = new AtomicLong(0);
+	public static AtomicLong pbpeMaintenanceTime = new AtomicLong(0);
+	public static AtomicInteger SMTSolverCalls = new AtomicInteger(0);
+	public static ConcurrentHashMap<String, HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet>> problemCache;
+	public static LinkedBlockingQueue<String> prtq;
 
 	static
 	{
@@ -103,6 +113,10 @@ public final class TableScanOperator implements Operator, Serializable
 			final Field fieldToUpdate = ArrayList.class.getDeclaredField("elementData");
 			// get unsafe offset to this field
 			offset = unsafe.objectFieldOffset(fieldToUpdate);
+			
+			int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
+			boolean isV5OrHigher = (pbpeVer >= 5);
+			boolean isV9 = (pbpeVer == 9);
 
 			File file = new File("pbpe.dat");
 			if (file.exists())
@@ -110,11 +124,11 @@ public final class TableScanOperator implements Operator, Serializable
 				try
 				{
 					ObjectInputStream in = new ObjectInputStream(new FileInputStream("pbpe.dat"));
-					int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
-					boolean isV5OrHigher = (pbpeVer >= 5);
+					
 					if (isV5OrHigher)
 					{
 						pbpeCache2 = (ConcurrentHashMap<String, MultiHashMap<Integer, CNFEntry>>)in.readObject();
+						noResults = new MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>>();
 						contextQ = new ConcurrentLinkedQueue();
 					}
 					else
@@ -135,14 +149,49 @@ public final class TableScanOperator implements Operator, Serializable
 				pbpeCache2 = new ConcurrentHashMap<String, MultiHashMap<Integer, CNFEntry>>();
 				contextQ = new ConcurrentLinkedQueue();
 			}
+			
+			if (isV9)
+			{
+				problemCache = new ConcurrentHashMap<String, HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet>>();
+				for (Map.Entry entry : pbpeCache2.entrySet())
+				{
+					HashSet<CNFEntry> entries = new HashSet<CNFEntry>();
+					MultiHashMap<Integer, CNFEntry> mhm = (MultiHashMap<Integer, CNFEntry>)entry.getValue();
+					Set<Integer> hashCodes = mhm.getKeySet();
+					for (int hash : hashCodes)
+					{
+						entries.addAll(mhm.get(hash));
+					}
+					
+					int length = 1;
+					for (CNFEntry entry2 : entries)
+					{
+						BitSet bs = entry2.getBitSet();
+						synchronized(bs)
+						{
+							int temp = bs.length();
+							if (temp > length)
+							{
+								length = temp;
+							}
+						}
+					}
+					
+					String fn = (String)entry.getKey();
+					HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> problems = buildProblems(entries, 1, length);
+					problemCache.put(fn, problems);
+				}
+				
+				prtq = new LinkedBlockingQueue<String>();
+				new ProblemRebuildThread(prtq).start();
+			}
 
 			new PBPEThread().start();
 			
 			config = Configuration.defaultConfiguration();
 		    logger = SMTLogManager.create(config);
 		    shutdown = ShutdownManager.create();
-		    int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
-			boolean isV5OrHigher = (pbpeVer >= 5);
+
 			if (isV5OrHigher)
 			{
 				int i = 0;
@@ -324,6 +373,126 @@ public final class TableScanOperator implements Operator, Serializable
 	{
 		children.add(op);
 		op.registerParent(this);
+	}
+	
+	private static class ProblemRebuildThread extends HRDBMSThread
+	{
+		private LinkedBlockingQueue<String> q;
+		private HashMap<String, Long> times = new HashMap<String, Long>();
+		
+		public ProblemRebuildThread(LinkedBlockingQueue<String> q)
+		{
+			this.q = q;
+		}
+		
+		public void run()
+		{
+			while (true)
+			{
+				try
+				{
+					String msg = q.take();
+					StringTokenizer tokens = new StringTokenizer(msg, ",", false);
+					String fn = tokens.nextToken();
+					String t = tokens.nextToken();
+					long time = Long.parseLong(t);
+					Long last = times.get(fn);
+					if (last != null && time < last)
+					{
+						continue;
+					}
+					
+					//rebuild data for fragment fn
+					HashSet<CNFEntry> entries = new HashSet<CNFEntry>();
+					time = System.currentTimeMillis();
+					MultiHashMap<Integer, CNFEntry> mhm = pbpeCache2.get(fn);
+					Set<Integer> hashCodes = mhm.getKeySet();
+					for (int hash : hashCodes)
+					{
+						entries.addAll(mhm.get(hash));
+					}
+					
+					int length = 1;
+					for (CNFEntry entry2 : entries)
+					{
+						BitSet bs = entry2.getBitSet();
+						synchronized(bs)
+						{
+							int temp = bs.length();
+							if (temp > length)
+							{
+								length = temp;
+							}
+						}
+					}
+					
+					HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> problems = buildProblems(entries, 1, length);
+					problemCache.put(fn, problems);
+					times.put(fn, time);
+				}
+				catch(InterruptedException e)
+				{
+					continue;
+				}
+			}
+		}
+	}
+	
+	private static HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> buildProblems(HashSet<CNFEntry> entries, int stride, int length)
+	{
+		int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
+		boolean isV6OrHigher = (pbpeVer >= 6);
+		HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> retval = new HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet>();
+		
+		HashMap<HashSet<Integer>, HashSet<HashSet<HashMap<Filter, Filter>>>> tempMap = new HashMap<HashSet<Integer>, HashSet<HashSet<HashMap<Filter, Filter>>>>();
+		int pos = 1;
+		while (pos < length)
+		{
+			HashSet<Integer> key = new HashSet<Integer>();
+			HashSet<HashSet<HashMap<Filter, Filter>>> tempHSHM = new HashSet<HashSet<HashMap<Filter, Filter>>>();
+			int i = 0;
+			for (CNFEntry entry : entries)
+			{
+				BitSet bs = entry.getBitSet();
+				synchronized(bs)
+				{
+					if (bs.get(pos))
+					{
+						key.add(i);
+						tempHSHM.add(entry.getCNF());
+					}
+				}
+				
+				i++;
+			}
+			
+			HashSet<HashSet<HashMap<Filter, Filter>>> hshm = tempMap.get(key);
+			if (hshm == null)
+			{
+				hshm = tempHSHM;
+				tempMap.put(key, hshm);
+			}
+
+			BitSet bs = retval.get(hshm);
+			if (bs == null)
+			{
+				if (isV6OrHigher)
+				{
+					bs = new CompressedBitSet();
+				}
+				else
+				{
+					bs = new BitSet();
+				}
+				
+				retval.put(hshm, bs);
+			}
+			
+			bs.set(pos);
+			pos += stride;
+		}
+		
+		return retval;
 	}
 
 	public void addActiveDeviceForParent(int i, Operator op)
@@ -1686,67 +1855,179 @@ public final class TableScanOperator implements Operator, Serializable
 			this.myMaxBlock = max;
 		}
 		
-		private BitSet computePagesToSkip(HashSet<HashMap<Filter,Filter>> hshm, SolverContext context, String fn, int stride, boolean v8OrHigher)
+		private BitSet computePagesToSkip(HashSet<HashMap<Filter,Filter>> hshm, SolverContext context, String fn, int stride, boolean v8, boolean v9)
 		{
-			HashSet<Integer> hashCodes = getAllHashCodes(hshm);
-			//HRDBMSWorker.logger.debug("Hash codes for " + hshm + " are " + hashCodes);
+			ThreadMXBean tmxb = ManagementFactory.getThreadMXBean();
+			HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> problems = null;
 			HashSet<CNFEntry> entries = new HashSet<CNFEntry>();
-			MultiHashMap<Integer, CNFEntry> mhm = pbpeCache2.get(fn);
-			if (mhm == null)
+			long end1 = 0;
+			long start = tmxb.getCurrentThreadCpuTime();
+			
+			if (!v9)
 			{
-				int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
-				boolean isV6OrHigher = (pbpeVer >= 6);
-				BitSet retval = null;
-				if (isV6OrHigher)
+				HashSet<Integer> hashCodes = getAllHashCodes(hshm);
+				//HRDBMSWorker.logger.debug("Hash codes for " + hshm + " are " + hashCodes);
+				MultiHashMap<Integer, CNFEntry> mhm = pbpeCache2.get(fn);
+				if (mhm == null)
 				{
-					retval = new CompressedBitSet();
+					int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
+					boolean isV6OrHigher = (pbpeVer >= 6);
+					BitSet retval = null;
+					if (isV6OrHigher)
+					{
+						retval = new CompressedBitSet();
+					}
+					else
+					{
+						retval = new BitSet();
+					}
+				
+					return retval;
+				}
+				for (int hash : hashCodes)
+				{
+					entries.addAll(mhm.get(hash));
+				}
+			
+				//HRDBMSWorker.logger.debug("Entries are " + entries);
+				//1 in bit set for a cnf means that cnf is false for that page
+				int length = 1;
+				for (CNFEntry entry : entries)
+				{
+					BitSet bs = entry.getBitSet();
+					synchronized(bs)
+					{
+						int temp = bs.length();
+						if (temp > length)
+						{
+							length = temp;
+						}
+					}
+				}
+			
+				//HRDBMSWorker.logger.debug("BuildProblems length is " + length);
+				
+				problems = buildProblems(entries, stride, length);
+				end1 = tmxb.getCurrentThreadCpuTime();
+				//HRDBMSWorker.logger.debug("Output of buildProblems() is " + problems);
+				
+				if (v8)
+				{
+					int numPageSets = ((length - 2) / stride) + 1;
+					int pSize = problems.size();
+					if (pSize <= 5 || pSize < (numPageSets / 2))
+					{
+						BitSet retval = solveProblems(problems, context, hshm);
+						long end2 = tmxb.getCurrentThreadCpuTime();
+						TableScanOperator.figureOutProblemsTime.getAndAdd(end1 - start);
+						TableScanOperator.SMTSolveTime.getAndAdd(end2 - end1);
+						return retval;
+					}
+					
+					BitSet retval = solveProblemsNonSMT(problems, hshm);
+					long end2 = tmxb.getCurrentThreadCpuTime();
+					TableScanOperator.figureOutProblemsTime.getAndAdd(end1 - start);
+					TableScanOperator.nonSMTSolveTime.getAndAdd(end2 - end1);
+					return retval;
+				}
+			}
+			else
+			{
+				HashSet<Integer> hashCodes = getAllHashCodes(hshm);
+				HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> temp = problemCache.get(fn);
+				if (temp == null)
+				{
+					MultiHashMap<Integer, CNFEntry> mhm = pbpeCache2.get(fn);
+					if (mhm == null)
+					{
+						BitSet retval = new CompressedBitSet();
+						return retval;
+					}
+					
+					for (int hash : hashCodes)
+					{
+						entries.addAll(mhm.get(hash));
+					}
+				
+					//HRDBMSWorker.logger.debug("Entries are " + entries);
+					//1 in bit set for a cnf means that cnf is false for that page
+					int length = 1;
+					for (CNFEntry entry : entries)
+					{
+						BitSet bs = entry.getBitSet();
+						synchronized(bs)
+						{
+							int temp2 = bs.length();
+							if (temp2 > length)
+							{
+								length = temp2;
+							}
+						}
+					}
+				
+					//HRDBMSWorker.logger.debug("BuildProblems length is " + length);
+					
+					problems = buildProblems(entries, stride, length);
 				}
 				else
 				{
-					retval = new BitSet();
-				}
-				
-				return retval;
-			}
-			for (int hash : hashCodes)
-			{
-				entries.addAll(mhm.get(hash));
-			}
-			
-			//HRDBMSWorker.logger.debug("Entries are " + entries);
-			//1 in bit set for a cnf means that cnf is false for that page
-			int length = 1;
-			for (CNFEntry entry : entries)
-			{
-				BitSet bs = entry.getBitSet();
-				synchronized(bs)
-				{
-					int temp = bs.length();
-					if (temp > length)
+					problems = new HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet>();
+					for (Map.Entry entry : temp.entrySet())
 					{
-						length = temp;
+						HashSet<HashSet<HashMap<Filter, Filter>>> set = (HashSet<HashSet<HashMap<Filter, Filter>>>)entry.getKey();
+						set = (HashSet<HashSet<HashMap<Filter, Filter>>>)set.clone();
+						Iterator<HashSet<HashMap<Filter, Filter>>> iter = set.iterator();
+						while (iter.hasNext())
+						{
+							HashSet<HashMap<Filter, Filter>> hshm2 = iter.next();
+							HashSet<Integer> hashCodes2 = getAllHashCodes(hshm2);
+							hashCodes2.retainAll(hashCodes);
+							if (hashCodes2.size() == 0)
+							{
+								iter.remove();
+							}
+						}
+					
+						if (set.size() == 0)
+						{
+							continue;
+						}
+					
+						BitSet bs = problems.get(set);
+						if (bs == null)
+						{
+							problems.put(set, (BitSet)((BitSet)entry.getValue()).clone());
+						}
+						else
+						{
+							BitSet bs2 = (BitSet)entry.getValue();
+							bs.or(bs2);
+						}
+					}
+				
+					if (problems.size() == 0)
+					{
+						end1 = tmxb.getCurrentThreadCpuTime();
+						TableScanOperator.figureOutProblemsTime.getAndAdd(end1 - start);
+						return new CompressedBitSet();
 					}
 				}
+				
+				end1 = tmxb.getCurrentThreadCpuTime();
 			}
 			
-			//HRDBMSWorker.logger.debug("BuildProblems length is " + length);
-			
-			HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> problems = buildProblems(entries, stride, length);
-			//HRDBMSWorker.logger.debug("Output of buildProblems() is " + problems);
-			
-			if (!v8OrHigher)
+			BitSet retval = solveProblems(problems, context, hshm);
+			if (!retval.isEmpty())
 			{
-				return solveProblems(problems, context, hshm);
+				for (CNFEntry entry : entries)
+				{
+					entry.incrementUsage();
+				}
 			}
-			
-			int numPageSets = ((length - 2) / stride) + 1;
-			int pSize = problems.size();
-			if (pSize <= 5 || pSize < (numPageSets / 2))
-			{
-				return solveProblems(problems, context, hshm);
-			}
-			
-			return solveProblemsNonSMT(problems, hshm);
+			long end2 = tmxb.getCurrentThreadCpuTime();
+			TableScanOperator.figureOutProblemsTime.getAndAdd(end1 - start);
+			TableScanOperator.SMTSolveTime.getAndAdd(end2 - end1);
+			return retval;
 		}
 		
 		private BitSet solveProblems(HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> problems, SolverContext context, HashSet<HashMap<Filter, Filter>> hshm)
@@ -1797,63 +2078,6 @@ public final class TableScanOperator implements Operator, Serializable
 			return retval;
 		}
 		
-		private HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> buildProblems(HashSet<CNFEntry> entries, int stride, int length)
-		{
-			int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
-			boolean isV6OrHigher = (pbpeVer >= 6);
-			HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> retval = new HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet>();
-			
-			HashMap<HashSet<Integer>, HashSet<HashSet<HashMap<Filter, Filter>>>> tempMap = new HashMap<HashSet<Integer>, HashSet<HashSet<HashMap<Filter, Filter>>>>();
-			int pos = 1;
-			while (pos < length)
-			{
-				HashSet<Integer> key = new HashSet<Integer>();
-				HashSet<HashSet<HashMap<Filter, Filter>>> tempHSHM = new HashSet<HashSet<HashMap<Filter, Filter>>>();
-				int i = 0;
-				for (CNFEntry entry : entries)
-				{
-					BitSet bs = entry.getBitSet();
-					synchronized(bs)
-					{
-						if (bs.get(pos))
-						{
-							key.add(i);
-							tempHSHM.add(entry.getCNF());
-						}
-					}
-					
-					i++;
-				}
-				
-				HashSet<HashSet<HashMap<Filter, Filter>>> hshm = tempMap.get(key);
-				if (hshm == null)
-				{
-					hshm = tempHSHM;
-					tempMap.put(key, hshm);
-				}
-
-				BitSet bs = retval.get(hshm);
-				if (bs == null)
-				{
-					if (isV6OrHigher)
-					{
-						bs = new CompressedBitSet();
-					}
-					else
-					{
-						bs = new BitSet();
-					}
-					
-					retval.put(hshm, bs);
-				}
-				
-				bs.set(pos);
-				pos += stride;
-			}
-			
-			return retval;
-		}
-		
 		private HashSet<Integer> getAllHashCodes(HashSet<HashMap<Filter, Filter>> hshm)
 		{
 			HashSet<Integer> retval = new HashSet<Integer>();
@@ -1897,33 +2121,14 @@ public final class TableScanOperator implements Operator, Serializable
 			boolean v5OrHigher = (pbpeVer >= 5);
 			boolean v6OrHigher = (pbpeVer >= 6);
 			boolean v7 = (pbpeVer == 7);
-			boolean v8OrHigher = (pbpeVer >= 8);
+			boolean v8 = (pbpeVer == 8);
+			boolean v9 = (pbpeVer == 9);
 			
 			SolverContext context = null;
 			if (v3OrHigher)
 			{
-				if (v8OrHigher)
-				{
-					context = (SolverContext)contextQ.poll();
-					if (context == null)
-					{
-						try
-						{
-							context = SolverContextFactory.createSolverContext(config, logger, shutdown.getNotifier(), Solvers.SMTINTERPOL);
-						}
-						catch(InvalidConfigurationException e)
-						{
-							context = null;
-							HRDBMSWorker.logger.debug("", e);
-							v3OrHigher = false;
-							v5OrHigher = false;
-							v6OrHigher = false;
-							v7 = false;
-							v8OrHigher = false;
-						}
-					}
-				}
-				else
+				context = (SolverContext)contextQ.poll();
+				if (context == null)
 				{
 					try
 					{
@@ -1934,6 +2139,10 @@ public final class TableScanOperator implements Operator, Serializable
 						context = null;
 						HRDBMSWorker.logger.debug("", e);
 						v3OrHigher = false;
+						v5OrHigher = false;
+						v6OrHigher = false;
+						v7 = false;
+						v8 = false;
 					}
 				}
 			}
@@ -2137,10 +2346,8 @@ public final class TableScanOperator implements Operator, Serializable
 					HashMap<Filter, CompressedBitSet> falseFilters = null;
 					if (v5OrHigher && checkNoResults)
 					{
-						long start = System.currentTimeMillis();
-						pagesToSkip = computePagesToSkip(hshm, context, in, layout.size(), v8OrHigher);
-						long end = System.currentTimeMillis();
-						TableScanOperator.pbpeTime.getAndAdd(end-start);
+						pagesToSkip = computePagesToSkip(hshm, context, in, layout.size(), v8, v9);
+						
 						if (v6OrHigher)
 						{
 							newPagesToSkip = new CompressedBitSet();
@@ -2195,17 +2402,22 @@ public final class TableScanOperator implements Operator, Serializable
 										}
 										else if (hshm != null && filter != null)
 										{
+											ThreadMXBean tmxb = ManagementFactory.getThreadMXBean();
+											long start = tmxb.getCurrentThreadCpuTime();
 											Set<HashSet<HashMap<Filter, Filter>>> filters = noResults.get(block);
 											if (filters.size() > 0)
 											{
 												//HRDBMSWorker.logger.debug("Filters is size " + filters.size());
 												try
 												{
-													long start = System.currentTimeMillis();
 													if (isV4)
 													{
 														boolean retval1 = canSatisfySMT(hshm, filters, context);
+														long end1 = tmxb.getCurrentThreadCpuTime();
 														boolean retval2 = canSatisfy(hshm, filters);
+														long end2 = tmxb.getCurrentThreadCpuTime();
+														TableScanOperator.SMTSolveTime.getAndAdd(end1-start);
+														TableScanOperator.nonSMTSolveTime.getAndAdd(end2 - end1);
 														if (retval1 != retval2)
 														{
 															HRDBMSWorker.logger.debug("SMT and non-SMT disagree: " + hshm + ", " + filters + ", " + pbpeDebug1 + ", " + pbpeDebug2);
@@ -2215,30 +2427,41 @@ public final class TableScanOperator implements Operator, Serializable
 														{
 															skipped.add(lastRequested + i + 1);
 															i++;
-															long end = System.currentTimeMillis();
-															TableScanOperator.pbpeTime.getAndAdd(end-start);
 															continue;
 														}
 													}
-													else if (v3OrHigher && !canSatisfySMT(hshm, filters, context))
+													else if (v3OrHigher)
 													{
-														skipped.add(lastRequested + i + 1);
-														i++;
-														long end = System.currentTimeMillis();
-														TableScanOperator.pbpeTime.getAndAdd(end-start);
-														continue;
+														if (!canSatisfySMT(hshm, filters, context))
+														{
+															skipped.add(lastRequested + i + 1);
+															i++;
+															long end1 = tmxb.getCurrentThreadCpuTime();
+															TableScanOperator.SMTSolveTime.getAndAdd(end1-start);
+															continue;
+														}
+														else
+														{
+															long end1 = tmxb.getCurrentThreadCpuTime();
+															TableScanOperator.SMTSolveTime.getAndAdd(end1-start);
+														}
 													}
-													else if (!v3OrHigher && !canSatisfy(hshm, filters))
+													else if (!v3OrHigher)
 													{
-														skipped.add(lastRequested + i + 1);
-														i++;
-														long end = System.currentTimeMillis();
-														TableScanOperator.pbpeTime.getAndAdd(end-start);
-														continue;
+														if (!canSatisfy(hshm, filters))
+														{
+															skipped.add(lastRequested + i + 1);
+															i++;
+															long end1 = tmxb.getCurrentThreadCpuTime();
+															TableScanOperator.nonSMTSolveTime.getAndAdd(end1-start);
+															continue;
+														}
+														else
+														{
+															long end1 = tmxb.getCurrentThreadCpuTime();
+															TableScanOperator.nonSMTSolveTime.getAndAdd(end1-start);
+														}
 													}
-												
-													long end = System.currentTimeMillis();
-													TableScanOperator.pbpeTime.getAndAdd(end-start);
 												}
 												catch(Throwable e)
 												{
@@ -2535,6 +2758,8 @@ public final class TableScanOperator implements Operator, Serializable
 
 						if (checkNoResults && v7)
 						{
+							ThreadMXBean tmxb = ManagementFactory.getThreadMXBean();
+							long start = tmxb.getCurrentThreadCpuTime();
 							HashSet<Filter> falseForPage = filter.getFalseResults();
 							for (Filter f : falseForPage)
 							{
@@ -2550,10 +2775,14 @@ public final class TableScanOperator implements Operator, Serializable
 									bs.set(onPage - layout.size());
 								}
 							}
+							long end = tmxb.getCurrentThreadCpuTime();
+							TableScanOperator.pbpeMaintenanceTime.getAndAdd(end-start);
 						}
 						
 						if (checkNoResults && !hadResults && v2OrHigher)
 						{
+							ThreadMXBean tmxb = ManagementFactory.getThreadMXBean();
+							long start = tmxb.getCurrentThreadCpuTime();
 							if (v5OrHigher)
 							{
 								newPagesToSkip.set(thisBlock.number());
@@ -2562,6 +2791,9 @@ public final class TableScanOperator implements Operator, Serializable
 							{
 								noResults.multiPut(thisBlock, hshm);
 							}
+							
+							long end = tmxb.getCurrentThreadCpuTime();
+							TableScanOperator.pbpeMaintenanceTime.getAndAdd(end-start);
 						}
 					}
 
@@ -2572,6 +2804,8 @@ public final class TableScanOperator implements Operator, Serializable
 					}
 					if (v7 && checkNoResults && falseFilters.size() > 0)
 					{
+						ThreadMXBean tmxb = ManagementFactory.getThreadMXBean();
+						long start = tmxb.getCurrentThreadCpuTime();
 						MultiHashMap<Integer, CNFEntry> mhm = pbpeCache2.get(in);
 						if (mhm == null)
 						{
@@ -2616,9 +2850,14 @@ public final class TableScanOperator implements Operator, Serializable
 								}
 							}
 						}
+						
+						long end = tmxb.getCurrentThreadCpuTime();
+						TableScanOperator.pbpeMaintenanceTime.getAndAdd(end-start);
 					}
 					if (v5OrHigher && newPagesToSkip != null && !newPagesToSkip.isEmpty())
 					{
+						ThreadMXBean tmxb = ManagementFactory.getThreadMXBean();
+						long start = tmxb.getCurrentThreadCpuTime();
 						CNFEntry cnfEntry = new CNFEntry(hshm, newPagesToSkip);
 						MultiHashMap<Integer, CNFEntry> mhm = pbpeCache2.get(in);
 						if (mhm == null)
@@ -2661,6 +2900,24 @@ public final class TableScanOperator implements Operator, Serializable
 								mhm.multiPut(i, cnfEntry);
 							}
 						}
+						
+						if (v9)
+						{
+							String msg = in + "," + System.currentTimeMillis();
+							while (true)
+							{
+								try
+								{
+									TableScanOperator.prtq.put(msg);
+									break;
+								}
+								catch(InterruptedException e)
+								{}
+							}
+						}
+						
+						long end = tmxb.getCurrentThreadCpuTime();
+						TableScanOperator.pbpeMaintenanceTime.getAndAdd(end-start);
 					}
 				}
 				else
@@ -4026,6 +4283,7 @@ public final class TableScanOperator implements Operator, Serializable
 		        	try
 		        	{
 		        		boolean retval = !prover.isUnsat();
+		        		TableScanOperator.SMTSolverCalls.incrementAndGet();
 		        		pbpeDebug1 = "SMT says that " + b +" is " + retval;
 		        		//HRDBMSWorker.logger.debug("Computed return value of " + retval);
 		        		return retval;
@@ -4155,8 +4413,6 @@ public final class TableScanOperator implements Operator, Serializable
 
 			// if we can prove that one of the filters in "ands" cannot be
 			// satisfied, we can return false
-			ArrayList<Filter> notSatisfied = new ArrayList<Filter>();
-			ArrayList<Filter> ranges = new ArrayList<Filter>();
 			for (HashSet<HashMap<Filter, Filter>> hshm2 : filters)
 			{
 				if (hshm2.size() == 1)
@@ -4165,17 +4421,145 @@ public final class TableScanOperator implements Operator, Serializable
 					{
 						if (hm.size() == 1)
 						{
-							for (Filter f : hm.keySet())
+							for (Filter ns : hm.keySet())
 							{
-								if (f.leftIsColumn() && !f.rightIsColumn())
+								if (ns.leftIsColumn() && !ns.rightIsColumn())
 								{
-									notSatisfied.add(f);
+									for (Filter f : ands)
+									{
+										if (f.equals(ns))
+										{
+											//HRDBMSWorker.logger.debug("Skipping page because of exact match of anded predicate");
+											pbpeDebug2 = "Non-SMT says returning false because of exact match of anded predicate";
+											return false;
+										}
+
+										if (ns.leftColumn().equals(f.leftColumn()))
+										{
+											if (ns.op().equals("G"))
+											{
+												Object nsVal = ns.rightLiteral();
+												if (f.op().equals("E") || f.op().equals("G") || f.op().equals("GE"))
+												{
+													Object fVal = f.rightLiteral();
+													if (!nsVal.getClass().equals(fVal.getClass()))
+													{
+														if (nsVal instanceof Long)
+														{
+															nsVal = new Double((Long)nsVal);
+														}
+														else 
+														{
+															fVal = new Double((Long)fVal);
+														}
+													}
+													if (((Comparable)nsVal).compareTo(fVal) < 0)
+													{
+														//HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
+														pbpeDebug2 = "Non-SMT says returning false because of " + ns + ". Search was on " + f;
+														return false;
+													}
+
+												}
+											}
+											else if (ns.op().equals("GE"))
+											{
+												Object nsVal = ns.rightLiteral();
+												if (f.op().equals("E") || f.op().equals("G") || f.op().equals("GE"))
+												{
+													Object fVal = f.rightLiteral();
+													if (!nsVal.getClass().equals(fVal.getClass()))
+													{
+														if (nsVal instanceof Long)
+														{
+															nsVal = new Double((Long)nsVal);
+														}
+														else 
+														{
+															fVal = new Double((Long)fVal);
+														}
+													}
+													if (((Comparable)nsVal).compareTo(fVal) < 1)
+													{
+														//HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
+														pbpeDebug2 = "Non-SMT says returning false because of " + ns + ". Search was on " + f;
+														return false;
+													}
+
+												}
+											}
+											else if (ns.op().equals("L"))
+											{
+												Object nsVal = ns.rightLiteral();
+												if (f.op().equals("E") || f.op().equals("L") || f.op().equals("LE"))
+												{
+													Object fVal = f.rightLiteral();
+													if (!nsVal.getClass().equals(fVal.getClass()))
+													{
+														if (nsVal instanceof Long)
+														{
+															nsVal = new Double((Long)nsVal);
+														}
+														else 
+														{
+															fVal = new Double((Long)fVal);
+														}
+													}
+													if (((Comparable)nsVal).compareTo(fVal) > 0)
+													{
+														//HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
+														pbpeDebug2 = "Non-SMT says returning false because of " + ns + ". Search was on " + f;
+														return false;
+													}
+
+												}
+											}
+											else if (ns.op().equals("LE"))
+											{
+												Object nsVal = ns.rightLiteral();
+												if (f.op().equals("E") || f.op().equals("L") || f.op().equals("LE"))
+												{
+													Object fVal = f.rightLiteral();
+													if (!nsVal.getClass().equals(fVal.getClass()))
+													{
+														if (nsVal instanceof Long)
+														{
+															nsVal = new Double((Long)nsVal);
+														}
+														else 
+														{
+															fVal = new Double((Long)fVal);
+														}
+													}
+													if (((Comparable)nsVal).compareTo(fVal) > -1)
+													{
+														//HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
+														pbpeDebug2 = "Non-SMT says returning false because of " + ns + ". Search was on " + f;
+														return false;
+													}
+
+												}
+											}
+										}
+									}
 								}
 							}
 						}
 					}
 				}
-				else if (hshm2.size() == 2)
+			}
+
+			end = System.currentTimeMillis();
+			if (end - start > MAX_PBPE_TIME)
+			{
+				pbpeDebug2 = "Non-SMT says returning true because out of time";
+				return true;
+			}
+			
+			ArrayList<Filter> ranges = new ArrayList<Filter>();
+			for (HashSet<HashMap<Filter, Filter>> hshm2 : filters)
+			{
+				if (hshm2.size() == 2)
 				{
 					Filter l = null;
 					Filter g = null;
@@ -4213,144 +4597,6 @@ public final class TableScanOperator implements Operator, Serializable
 					{
 						ranges.add(g);
 						ranges.add(l);
-					}
-				}
-			}
-
-			end = System.currentTimeMillis();
-			if (end - start > MAX_PBPE_TIME)
-			{
-				pbpeDebug2 = "Non-SMT says returning true because out of time";
-				return true;
-			}
-
-			if (notSatisfied.size() > 0)
-			{
-				for (Filter ns : notSatisfied)
-				{
-					for (Filter f : ands)
-					{
-						if (f.equals(ns))
-						{
-							//HRDBMSWorker.logger.debug("Skipping page because of exact match of anded predicate");
-							pbpeDebug2 = "Non-SMT says returning false because of exact match of anded predicate";
-							return false;
-						}
-
-						if (ns.leftColumn().equals(f.leftColumn()))
-						{
-							if (ns.op().equals("G"))
-							{
-								Object nsVal = ns.rightLiteral();
-								if (f.op().equals("E") || f.op().equals("G") || f.op().equals("GE"))
-								{
-									Object fVal = f.rightLiteral();
-									if (!nsVal.getClass().equals(fVal.getClass()))
-									{
-										if (nsVal instanceof Long)
-										{
-											nsVal = new Double((Long)nsVal);
-										}
-										else 
-										{
-											fVal = new Double((Long)fVal);
-										}
-									}
-									if (((Comparable)nsVal).compareTo(fVal) < 0)
-									{
-										//HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
-										pbpeDebug2 = "Non-SMT says returning false because of " + ns + ". Search was on " + f;
-										return false;
-									}
-
-								}
-							}
-							else if (ns.op().equals("GE"))
-							{
-								Object nsVal = ns.rightLiteral();
-								if (f.op().equals("E") || f.op().equals("G") || f.op().equals("GE"))
-								{
-									Object fVal = f.rightLiteral();
-									if (!nsVal.getClass().equals(fVal.getClass()))
-									{
-										if (nsVal instanceof Long)
-										{
-											nsVal = new Double((Long)nsVal);
-										}
-										else 
-										{
-											fVal = new Double((Long)fVal);
-										}
-									}
-									if (((Comparable)nsVal).compareTo(fVal) < 1)
-									{
-										//HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
-										pbpeDebug2 = "Non-SMT says returning false because of " + ns + ". Search was on " + f;
-										return false;
-									}
-
-								}
-							}
-							else if (ns.op().equals("L"))
-							{
-								Object nsVal = ns.rightLiteral();
-								if (f.op().equals("E") || f.op().equals("L") || f.op().equals("LE"))
-								{
-									Object fVal = f.rightLiteral();
-									if (!nsVal.getClass().equals(fVal.getClass()))
-									{
-										if (nsVal instanceof Long)
-										{
-											nsVal = new Double((Long)nsVal);
-										}
-										else 
-										{
-											fVal = new Double((Long)fVal);
-										}
-									}
-									if (((Comparable)nsVal).compareTo(fVal) > 0)
-									{
-										//HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
-										pbpeDebug2 = "Non-SMT says returning false because of " + ns + ". Search was on " + f;
-										return false;
-									}
-
-								}
-							}
-							else if (ns.op().equals("LE"))
-							{
-								Object nsVal = ns.rightLiteral();
-								if (f.op().equals("E") || f.op().equals("L") || f.op().equals("LE"))
-								{
-									Object fVal = f.rightLiteral();
-									if (!nsVal.getClass().equals(fVal.getClass()))
-									{
-										if (nsVal instanceof Long)
-										{
-											nsVal = new Double((Long)nsVal);
-										}
-										else 
-										{
-											fVal = new Double((Long)fVal);
-										}
-									}
-									if (((Comparable)nsVal).compareTo(fVal) > -1)
-									{
-										//HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
-										pbpeDebug2 = "Non-SMT says returning false because of " + ns + ". Search was on " + f;
-										return false;
-									}
-
-								}
-							}
-						}
-					}
-
-					end = System.currentTimeMillis();
-					if (end - start > MAX_PBPE_TIME)
-					{
-						pbpeDebug2 = "Non-SMT returning true because out of time";
-						return true;
 					}
 				}
 			}
@@ -4693,6 +4939,7 @@ public final class TableScanOperator implements Operator, Serializable
 	{
 		private HashSet<HashMap<Filter, Filter>> cnf;
 		private BitSet bitSet;
+		private AtomicLong usage = new AtomicLong(0);
 		
 		public CNFEntry(HashSet<HashMap<Filter, Filter>> cnf, BitSet bitSet)
 		{
@@ -4703,6 +4950,16 @@ public final class TableScanOperator implements Operator, Serializable
 		public HashSet<HashMap<Filter, Filter>> getCNF()
 		{
 			return cnf;
+		}
+		
+		public long getUsage()
+		{
+			return usage.get();
+		}
+		
+		public void incrementUsage()
+		{
+			usage.incrementAndGet();
 		}
 		
 		public BitSet getBitSet()

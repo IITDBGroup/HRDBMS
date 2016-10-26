@@ -116,7 +116,7 @@ public final class ResourceManager extends HRDBMSThread
 	public static ArrayList<Integer> getRoute(int from, int to)
 	{
 		Link link = new Link(from, to);
-		ArrayList<Integer> retval = routes.get(link);
+		ArrayList<Integer> retval = (ArrayList<Integer>)routes.get(link).clone();
 		if (retval != null)
 		{
 			return retval;
@@ -159,7 +159,7 @@ public final class ResourceManager extends HRDBMSThread
 			return new ArrayList<Integer>();
 		}
 		
-		HashSet<Integer> middlemen = links.get(source);
+		HashSet<Integer> middlemen = (HashSet<Integer>)links.get(source).clone();
 		HashSet<Integer> middlemen2 = links.get(target);
 		middlemen.retainAll(middlemen2);
 		middlemen.remove(primary);
@@ -603,10 +603,10 @@ public final class ResourceManager extends HRDBMSThread
 				
 				i++;
 				
-				if (i % 100 == 0)
-				{
-					System.out.println(i);
-				}
+				//if (i % 100 == 0)
+				//{
+				//	System.out.println(i);
+				//}
 			}
 		}
 	}
@@ -749,7 +749,7 @@ public final class ResourceManager extends HRDBMSThread
 				// }
 				// last = temp;
 				//
-				HRDBMSWorker.logger.debug(((Runtime.getRuntime().freeMemory()) * 100.0) / (maxMemory * 1.0) + "% free - skipped " + TableScanOperator.skippedPages.get() + " pages in " + TableScanOperator.pbpeTime + "ms");
+				HRDBMSWorker.logger.debug(((Runtime.getRuntime().freeMemory()) * 100.0) / (maxMemory * 1.0) + "% free - skipped " + TableScanOperator.skippedPages.get() + " pages. figureOutProblemsTime = " + TableScanOperator.figureOutProblemsTime + ", SMTSolveTime = " + TableScanOperator.SMTSolveTime + ", nonSMTSolveTime = " + TableScanOperator.nonSMTSolveTime + ", pbpeMaintenanceTime = " + TableScanOperator.pbpeMaintenanceTime + ", SMTSolverCalls = " + TableScanOperator.SMTSolverCalls);
 
 				// for (SubBufferManager sbm : BufferManager.managers)
 				// {

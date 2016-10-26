@@ -3845,27 +3845,29 @@ public class ConnectionWorker extends HRDBMSThread
 		int type;
 		byte[] devBytes = new byte[4];
 		int device;
+		InputStream in2 = null;
 		try
 		{
-			readNonCoord(txBytes);
+			in2 = new BufferedInputStream(sock.getInputStream());
+			readNonCoord(txBytes, in2);
 			txNum = bytesToLong(txBytes);
-			readNonCoord(devBytes);
+			readNonCoord(devBytes, in2);
 			device = bytesToInt(devBytes);
-			readNonCoord(schemaLenBytes);
+			readNonCoord(schemaLenBytes, in2);
 			schemaLength = bytesToInt(schemaLenBytes);
 			schemaData = new byte[schemaLength];
-			readNonCoord(schemaData);
+			readNonCoord(schemaData, in2);
 			schema = new String(schemaData, StandardCharsets.UTF_8);
-			readNonCoord(tableLenBytes);
+			readNonCoord(tableLenBytes, in2);
 			tableLength = bytesToInt(tableLenBytes);
 			tableData = new byte[tableLength];
-			readNonCoord(tableData);
+			readNonCoord(tableData, in2);
 			table = new String(tableData, StandardCharsets.UTF_8);
-			readNonCoord(tableLenBytes);
+			readNonCoord(tableLenBytes, in2);
 			type = bytesToInt(tableLenBytes);
 			// list = readRS();
-			list = readRawRS();
-			ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
+			list = readRawRS(in2);
+			ObjectInputStream objIn = new ObjectInputStream(in2);
 			objIn.readObject();
 			objIn.readObject();
 			objIn.readObject();
@@ -3935,6 +3937,7 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 		try
 		{
+			in2.close();
 			sock.close();
 		}
 		catch (Exception e)
@@ -5103,6 +5106,23 @@ public class ConnectionWorker extends HRDBMSThread
 			}
 		}
 	}
+	
+	private void readNonCoord(byte[] arg, int offset, int length, InputStream in2) throws Exception
+	{
+		int count = 0;
+		while (count < length)
+		{
+			int temp = in2.read(arg, count + offset, length - count);
+			if (temp == -1)
+			{
+				throw new Exception("Hit end of stream when reading from socket");
+			}
+			else
+			{
+				count += temp;
+			}
+		}
+	}
 
 	private ByteBuffer readRawRS() throws Exception
 	{
@@ -5160,6 +5180,75 @@ public class ConnectionWorker extends HRDBMSThread
 				pos = bb.position();
 				// bb.put(data);
 				readNonCoord(bb.array(), pos, size);
+			}
+
+			pos += size;
+			// retval.add((ArrayList<Object>)fromBytes(data));
+			i++;
+		}
+
+		// byte[] retval = new byte[bb.position()];
+		// System.arraycopy(bb.array(), 0, retval, 0, retval.length);
+		bb.limit(pos);
+		return bb;
+	}
+	
+	private ByteBuffer readRawRS(InputStream in2) throws Exception
+	{
+		int bbSize = 16 * 1024 * 1024 - 1;
+		ByteBuffer bb = ByteBuffer.allocate(bbSize);
+		byte[] numBytes = new byte[4];
+		readNonCoord(numBytes, in2);
+		int num = bytesToInt(numBytes);
+		int pos = 0;
+		// ArrayList<ArrayList<Object>> retval = new
+		// ArrayList<ArrayList<Object>>(num);
+		int i = 0;
+		while (i < num)
+		{
+			// readNonCoord(numBytes);
+			if (bb.capacity() - pos >= 4)
+			{
+				// bb.put(numBytes);
+				readNonCoord(bb.array(), pos, 4, in2);
+			}
+			else
+			{
+				bbSize *= 2;
+				ByteBuffer newBB = ByteBuffer.allocate(bbSize);
+				bb.limit(bb.position());
+				bb.position(0);
+				newBB.put(bb);
+				bb = newBB;
+				pos = bb.position();
+				// bb.put(numBytes);
+				readNonCoord(bb.array(), pos, 4, in2);
+			}
+			// int size = bytesToInt(numBytes);
+			int size = bb.getInt(pos);
+			pos += 4;
+			// byte[] data = new byte[size];
+			// readNonCoord(data);
+			if (bb.capacity() - pos >= size)
+			{
+				// bb.put(data);
+				readNonCoord(bb.array(), pos, size, in2);
+			}
+			else
+			{
+				bbSize *= 2;
+				while (bbSize < size)
+				{
+					bbSize *= 2;
+				}
+				ByteBuffer newBB = ByteBuffer.allocate(bbSize);
+				bb.limit(bb.position());
+				bb.position(0);
+				newBB.put(bb);
+				bb = newBB;
+				pos = bb.position();
+				// bb.put(data);
+				readNonCoord(bb.array(), pos, size, in2);
 			}
 
 			pos += size;
@@ -7382,6 +7471,7 @@ public class ConnectionWorker extends HRDBMSThread
 					int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
 					boolean isV5OrHigher = (pbpeVer >= 5);
 					boolean isV6OrHigher = (pbpeVer >= 6);
+					boolean isV9 = (pbpeVer == 9);
 					// col table
 					final Block b = new Block(file, 0);
 					tx.requestPage(b);
@@ -7546,7 +7636,23 @@ public class ConnectionWorker extends HRDBMSThread
 
 					top.close();
 					fc.close();
-					new File(meta.getDevicePath(num) + schema + "." + table + ".tmp").delete();
+					
+					if (isV9)
+					{
+						new File(meta.getDevicePath(num) + schema + "." + table + ".tmp").delete();
+						String msg = file + "," + System.currentTimeMillis();
+					
+						while (true)
+						{
+							try
+							{
+								TableScanOperator.prtq.put(msg);
+								break;
+							}
+							catch(InterruptedException e)
+							{}
+						}
+					}
 				}
 
 			}
