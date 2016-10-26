@@ -90,7 +90,7 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("max_rr", "1200");
 		retval.setProperty("initial_max_hops", "3");
 		retval.setProperty("direct_buffer_size", "8388608");
-		retval.setProperty("pbpe_version", "2");
+		retval.setProperty("pbpe_version", "6");
 		retval.setProperty("do_min_max", "true");
 		HParmsDefaults.retval = retval;
 		return retval;
