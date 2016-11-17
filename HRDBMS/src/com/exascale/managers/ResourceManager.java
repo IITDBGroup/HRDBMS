@@ -92,9 +92,7 @@ public final class ResourceManager extends HRDBMSThread
 		CUDA_SIZE = Integer.parseInt(hparms.getProperty("cuda_batch_size")); // 30720
 		GPU = (hparms.getProperty("gpu_offload")).equals("true");
 		cpus = Runtime.getRuntime().availableProcessors();
-		pool = new ThreadPoolExecutor(0, Integer.MAX_VALUE,
-                60, TimeUnit.SECONDS,
-                new SynchronousQueue<Runnable>());
+		pool = Executors.newCachedThreadPool();
 		maxMemory = Runtime.getRuntime().maxMemory();
 		if (GPU)
 		{

@@ -320,21 +320,21 @@ public final class Index implements Serializable
 			rec = rec.next(true);
 		}
 
-		HRDBMSWorker.logger.debug("Can't find " + keys + " with RID " + rid);
-		HRDBMSWorker.logger.debug("Started with " + line.getKeys(types) + " with RID " + line.getRid());
-		this.setFirstPosition(true);
-		rec = line;
-		HRDBMSWorker.logger.debug("Retrying starting with " + line.getKeys(types) + " with RID " + line.getRid());
-		while (!rec.isNull())
-		{
-			if (rec.ridsMatch(rid))
-			{
-				rec.markTombstone();
-				return;
-			}
-
-			rec = rec.next(true);
-		}
+		//HRDBMSWorker.logger.debug("Can't find " + keys + " with RID " + rid);
+		//HRDBMSWorker.logger.debug("Started with " + line.getKeys(types) + " with RID " + line.getRid());
+		//this.setFirstPosition(true);
+		//rec = line;
+		//HRDBMSWorker.logger.debug("Retrying starting with " + line.getKeys(types) + " with RID " + line.getRid());
+		//while (!rec.isNull())
+		//{
+		//	if (rec.ridsMatch(rid))
+		//	{
+		//		rec.markTombstone();
+		//		return;
+		//	}
+//
+	//		rec = rec.next(true);
+		//}
 		throw new Exception("Unable to locate record for deletion");
 	}
 

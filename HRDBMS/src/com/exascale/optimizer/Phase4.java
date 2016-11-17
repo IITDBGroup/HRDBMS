@@ -1682,7 +1682,7 @@ public final class Phase4
 		final MultiOperator parent = (MultiOperator)receive.parent();
 
 		long pCard = card(parent);
-		if ((!noLargeUpstreamJoins(parent) || upstreamRedistSort(parent) || scoreGBRedist(pCard, receive)) && parent.getKeys().size() > 0)
+		if ((!noLargeUpstreamJoins(parent) || upstreamRedistSort(parent) || card(receive) > MAX_LOCAL_SORT || pCard > (long)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("sort_gb_factor")))) && parent.getKeys().size() > 0)
 		{
 			final ArrayList<String> cols2 = new ArrayList<String>(parent.getKeys());
 			final int starting = getStartingNode(MetaData.numWorkerNodes);

@@ -79,6 +79,7 @@ public final class Phase5
 		pruneTree(root, new IdentityHashMap<Operator, Operator>());
 	}
 	
+	/*
 	public void optimize(boolean indexes) throws Exception
 	{
 		if (indexes)
@@ -102,6 +103,7 @@ public final class Phase5
 		//indexOnlyScan(root, new HashSet<Operator>());
 		pruneTree(root, new IdentityHashMap<Operator, Operator>());
 	}
+	*/
 	
 	private void doMToNForAll(Operator op, HashSet<Operator> visited) throws Exception
 	{

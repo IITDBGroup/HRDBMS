@@ -4,6 +4,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Properties;
@@ -154,6 +155,17 @@ public class CLI
 		{
 			load(cmd);
 		}
+		else if (cmd.equalsIgnoreCase("SET AUTOCOMMIT"))
+		{
+			try
+			{
+				autocommit();
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
+			}
+		}
 		else
 		{
 			update(cmd);
@@ -170,6 +182,11 @@ public class CLI
 		{
 			System.out.println(e.getMessage());
 		}
+	}
+	
+	private static void autocommit() throws SQLException
+	{
+		conn.setAutoCommit(true);
 	}
 
 	private static void select(String cmd)

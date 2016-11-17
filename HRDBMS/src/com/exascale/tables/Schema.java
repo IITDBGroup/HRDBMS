@@ -1862,6 +1862,7 @@ public class Schema
 			catch(NegativeArraySizeException e)
 			{
 				HRDBMSWorker.logger.debug("Page = " + this.p);
+				throw e;
 			}
 
 			// p.get(pos, colIDs);

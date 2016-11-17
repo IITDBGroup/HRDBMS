@@ -127,7 +127,7 @@ public class HRDBMSConnection implements Connection
 	@Override
 	public void commit() throws SQLException
 	{
-		if (closed || autoCommit)
+		if (closed)
 		{
 			throw new SQLException("Invalid call to commit()");
 		}
