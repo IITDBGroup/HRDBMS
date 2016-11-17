@@ -1133,11 +1133,11 @@ public final class SortOperator implements Operator, Serializable
 					return;
 				}
 
-				if (childCard > ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")) / 2)
-				{
-					mediumSort();
-					return;
-				}
+				//if (childCard > ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")) / 2)
+				//{
+				//	mediumSort();
+				//	return;
+				//}
 
 				if (result == null)
 				{

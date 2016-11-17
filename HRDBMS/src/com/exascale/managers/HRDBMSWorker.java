@@ -83,6 +83,23 @@ public class HRDBMSWorker
 	{
 		return threadList;
 	}
+	
+	private static void ensureAllocation()
+	{
+		String string = hparms.getProperty("Xmx_string");
+		string = string.substring(0, string.length() - 1);
+		long gbs = Integer.parseInt(string);
+		long pretty = gbs *9/10;
+		gbs *= (1024l*1024l*1024l*9l);
+		gbs /= 10;
+		gbs /= 8;
+		long gbs2 = (long)Math.sqrt(gbs);
+		//HRDBMSWorker.logger.debug("Square root of " + gbs + " = " + gbs2);
+		int gb = (int)gbs2;
+		HRDBMSWorker.logger.debug("Attempting to allocate 8 x " + gb +" x " + gb);
+		long[][] test = new long[gb][gb];
+		HRDBMSWorker.logger.debug("Allocated " + pretty + "GB");
+	}
 
 	public static void main(String[] args) throws Exception
 	{
@@ -107,6 +124,8 @@ public class HRDBMSWorker
 			logger.error("Could not load HParms", e);
 			System.exit(1);
 		}
+		
+		//ensureAllocation();
 
 		try
 		{

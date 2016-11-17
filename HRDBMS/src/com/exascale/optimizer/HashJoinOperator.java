@@ -1068,26 +1068,6 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 		//HRDBMSWorker.logger.debug("Starting HJO(" + leftChildCard + ", " + rightChildCard + ")");
 		NUM_RT_THREADS = ResourceManager.cpus;
 		NUM_PTHREADS = ResourceManager.cpus;
-		int max = (int)(leftChildCard / 10000 + rightChildCard / 10000);
-		if (max < 0)
-		{
-			max = ResourceManager.cpus;
-		}
-		
-		if (max == 0)
-		{
-			max = 1;
-		}
-		
-		if (NUM_RT_THREADS > max)
-		{
-			NUM_RT_THREADS = max;
-		}
-		
-		if (NUM_PTHREADS > max)
-		{
-			NUM_PTHREADS = max;
-		}
 		
 		readersDone = false;
 		bucketsLock = new ReentrantLock();

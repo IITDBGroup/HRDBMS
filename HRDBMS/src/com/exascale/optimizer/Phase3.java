@@ -664,7 +664,7 @@ public final class Phase3
 			long newCard = card(newOp);
 
 			HRDBMSWorker.logger.debug("Considering l with reduction " + (newCard * 1.0) / (prev * 1.0));
-			if (scoreGBPT(newCard, prev))
+			if (newCard < MAX_GB && (newCard * 1.0) / (prev * 1.0) <= 0.5)
 			{
 				doLeft(mop, hjop, l, r, newOp);
 				HRDBMSWorker.logger.debug("Doing pushdown across the left side");
@@ -685,7 +685,7 @@ public final class Phase3
 			long newCard = card(newOp);
 
 			HRDBMSWorker.logger.debug("Considering r with reduction " + (newCard * 1.0) / (prev * 1.0));
-			if (scoreGBPT(newCard, prev))
+			if (newCard < MAX_GB && (newCard * 1.0) / (prev * 1.0) <= 0.5)
 			{
 				doRight(mop, hjop, l, r, newOp);
 				HRDBMSWorker.logger.debug("Doing pushdown across the right side");

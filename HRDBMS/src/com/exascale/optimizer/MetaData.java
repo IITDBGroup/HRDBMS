@@ -1701,9 +1701,11 @@ public final class MetaData implements Serializable
 		try
 		{
 			Long card = getColCardCache.get(schema + "." + table + "." + col);
+			//HRDBMSWorker.logger.debug("Card cache returned " + card + " for " + schema + "." + table + "." + col);
 			if (card == null)
 			{
 				card = PlanCacheManager.getColCard().setParms(schema, table, col).execute(tx);
+				//HRDBMSWorker.logger.debug("The database says " + card + " for "+ schema + "." + table + "." + col);
 				
 				if (card != -1)
 				{
@@ -1716,6 +1718,10 @@ public final class MetaData implements Serializable
 				}
 				
 				getColCardCache.put(schema + "." + table + "." + col, 1000000l);
+			}
+			else
+			{
+				return card;
 			}
 		}
 		catch (Exception e)
@@ -1981,6 +1987,7 @@ public final class MetaData implements Serializable
 		for (final String col : cols)
 		{
 			card *= this.getCard(schemas.get(i), tables.get(i), col, generated, tx);
+			HRDBMSWorker.logger.debug("After processing " + col + " group card is now " + card);
 			i++;
 		}
 
