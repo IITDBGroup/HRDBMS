@@ -4,7 +4,7 @@ public final class ConstantFilter extends Filter
 {
 	private final double likelihood;
 
-	public ConstantFilter(double likelihood)
+	public ConstantFilter(final double likelihood)
 	{
 		this.likelihood = likelihood;
 	}

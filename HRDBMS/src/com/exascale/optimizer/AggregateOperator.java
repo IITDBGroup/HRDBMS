@@ -39,12 +39,12 @@ public interface AggregateOperator
 			return null;
 		}
 
-		public Object getResult(ArrayList<Object> keys) throws Exception
+		public Object getResult(final ArrayList<Object> keys) throws Exception
 		{
 			return null;
 		}
 
-		public void put(ArrayList<Object> row, ArrayList<Object> groupKeys) throws Exception
+		public void put(final ArrayList<Object> row, final ArrayList<Object> groupKeys) throws Exception
 		{
 		}
 

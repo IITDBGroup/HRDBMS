@@ -98,6 +98,8 @@ public class StartWorkersThread extends HRDBMSThread
 
 				line = in.readLine();
 			}
+
+			in.close();
 			HRDBMSWorker.logger.debug("Start Workers is about to terminate.");
 			HRDBMSWorker.getThreadList().remove(index);
 			HRDBMSWorker.terminateThread(index);

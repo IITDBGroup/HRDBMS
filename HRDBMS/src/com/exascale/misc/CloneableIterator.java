@@ -1,21 +1,23 @@
 package com.exascale.misc;
 
-public interface CloneableIterator<E> extends Cloneable {
+public interface CloneableIterator<E> extends Cloneable
+{
 
-    /**
-     * @return whether there is more
-     */
-    boolean hasNext();
+	/**
+	 * @return a copy
+	 * @throws CloneNotSupportedException
+	 *             this should never happen in practice
+	 */
+	CloneableIterator<E> clone() throws CloneNotSupportedException;
 
-    /**
-     * @return the next element
-     */
-    E next();
+	/**
+	 * @return whether there is more
+	 */
+	boolean hasNext();
 
-    /**
-     * @return a copy
-     * @throws CloneNotSupportedException this should never happen in practice
-     */
-    CloneableIterator<E> clone() throws CloneNotSupportedException;
+	/**
+	 * @return the next element
+	 */
+	E next();
 
 }

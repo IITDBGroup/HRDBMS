@@ -26,7 +26,7 @@ public final class RenameOperator implements Operator, Serializable
 			f.setAccessible(true);
 			unsafe = (sun.misc.Unsafe)f.get(null);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			unsafe = null;
 		}
@@ -46,7 +46,7 @@ public final class RenameOperator implements Operator, Serializable
 	private transient AtomicLong received;
 	private transient volatile boolean demReceived;
 
-	public RenameOperator(ArrayList<String> oldVals, ArrayList<String> newVals, MetaData meta) throws Exception
+	public RenameOperator(final ArrayList<String> oldVals, final ArrayList<String> newVals, final MetaData meta) throws Exception
 	{
 		this.oldVals = oldVals;
 		this.newVals = newVals;
@@ -70,9 +70,9 @@ public final class RenameOperator implements Operator, Serializable
 		received = new AtomicLong(0);
 	}
 
-	public static RenameOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static RenameOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		RenameOperator value = (RenameOperator)unsafe.allocateInstance(RenameOperator.class);
+		final RenameOperator value = (RenameOperator)unsafe.allocateInstance(RenameOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.child = OperatorUtils.deserializeOperator(in, prev);
 		value.parent = OperatorUtils.deserializeOperator(in, prev);
@@ -89,7 +89,7 @@ public final class RenameOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void add(Operator op) throws Exception
+	public void add(final Operator op) throws Exception
 	{
 		if (child == null)
 		{
@@ -163,7 +163,7 @@ public final class RenameOperator implements Operator, Serializable
 			retval.node = node;
 			return retval;
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			return null;
 		}
@@ -251,9 +251,9 @@ public final class RenameOperator implements Operator, Serializable
 	}
 
 	@Override
-	public Object next(Operator op) throws Exception
+	public Object next(final Operator op) throws Exception
 	{
-		Object o = child.next(this);
+		final Object o = child.next(this);
 		if (o instanceof DataEndMarker)
 		{
 			demReceived = true;
@@ -271,7 +271,7 @@ public final class RenameOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void nextAll(Operator op) throws Exception
+	public void nextAll(final Operator op) throws Exception
 	{
 		child.nextAll(op);
 		Object o = next(op);
@@ -300,7 +300,7 @@ public final class RenameOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void registerParent(Operator op) throws Exception
+	public void registerParent(final Operator op) throws Exception
 	{
 		if (parent == null)
 		{
@@ -313,7 +313,7 @@ public final class RenameOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeChild(Operator op)
+	public void removeChild(final Operator op)
 	{
 		if (op == child)
 		{
@@ -323,7 +323,7 @@ public final class RenameOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 		parent = null;
 	}
@@ -334,7 +334,7 @@ public final class RenameOperator implements Operator, Serializable
 		child.reset();
 	}
 
-	public void reverseUpdateReferences(ArrayList<String> references)
+	public void reverseUpdateReferences(final ArrayList<String> references)
 	{
 		for (final Map.Entry entry : old2New.entrySet())
 		{
@@ -347,7 +347,7 @@ public final class RenameOperator implements Operator, Serializable
 		}
 	}
 
-	public SelectOperator reverseUpdateSelectOperator(SelectOperator op)
+	public SelectOperator reverseUpdateSelectOperator(final SelectOperator op)
 	{
 		final SelectOperator retval = op.clone();
 		for (final Filter filter : retval.getFilter())
@@ -385,9 +385,9 @@ public final class RenameOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -408,18 +408,18 @@ public final class RenameOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void setChildPos(int pos)
+	public void setChildPos(final int pos)
 	{
 	}
 
 	@Override
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 		this.node = node;
 	}
 
 	@Override
-	public void setPlan(Plan plan)
+	public void setPlan(final Plan plan)
 	{
 	}
 
@@ -435,7 +435,7 @@ public final class RenameOperator implements Operator, Serializable
 		return "RenameOperator: " + old2New;
 	}
 
-	public void updateReferences(ArrayList<String> references)
+	public void updateReferences(final ArrayList<String> references)
 	{
 		for (final Map.Entry entry : old2New.entrySet())
 		{
@@ -448,7 +448,7 @@ public final class RenameOperator implements Operator, Serializable
 		}
 	}
 
-	public void updateSelectOperator(SelectOperator op)
+	public void updateSelectOperator(final SelectOperator op)
 	{
 		for (final Filter filter : op.getFilter())
 		{

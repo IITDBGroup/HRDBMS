@@ -20,7 +20,7 @@ public final class FastStringTokenizer implements Serializable
 			f.setAccessible(true);
 			unsafe = (sun.misc.Unsafe)f.get(null);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			unsafe = null;
 		}
@@ -33,7 +33,7 @@ public final class FastStringTokenizer implements Serializable
 
 	private int limit;
 
-	public FastStringTokenizer(String string, String delim, boolean bool)
+	public FastStringTokenizer(final String string, final String delim, final boolean bool)
 	{
 		this.delim = delim;
 		this.string = string;
@@ -60,9 +60,9 @@ public final class FastStringTokenizer implements Serializable
 		index = 0;
 	}
 
-	public static FastStringTokenizer deserializeKnown(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static FastStringTokenizer deserializeKnown(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		FastStringTokenizer value = (FastStringTokenizer)unsafe.allocateInstance(FastStringTokenizer.class);
+		final FastStringTokenizer value = (FastStringTokenizer)unsafe.allocateInstance(FastStringTokenizer.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.index = OperatorUtils.readInt(in);
 		value.delim = OperatorUtils.readString(in, prev);
@@ -100,7 +100,7 @@ public final class FastStringTokenizer implements Serializable
 		return temp[index++];
 	}
 
-	public final void reuse(String string, String delim, boolean bool)
+	public final void reuse(final String string, final String delim, final boolean bool)
 	{
 		this.delim = delim;
 		this.string = string;
@@ -131,9 +131,9 @@ public final class FastStringTokenizer implements Serializable
 		index = 0;
 	}
 
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -149,7 +149,7 @@ public final class FastStringTokenizer implements Serializable
 		OperatorUtils.writeInt(limit, out);
 	}
 
-	public void setIndex(int index)
+	public void setIndex(final int index)
 	{
 		this.index = index;
 	}

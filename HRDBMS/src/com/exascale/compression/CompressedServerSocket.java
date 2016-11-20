@@ -14,7 +14,7 @@ public final class CompressedServerSocket extends ServerSocket
 	 *            the port number, or <code>0</code> to use any free port.
 	 * @throws java.io.IOException
 	 */
-	public CompressedServerSocket(int port) throws IOException
+	public CompressedServerSocket(final int port) throws IOException
 	{
 		super(port);
 		// this.setReceiveBufferSize(64 * 1024 * 1024);

@@ -7,7 +7,7 @@ import com.exascale.optimizer.ExtendOperator.ExtendKernel;
 
 public class Rootbeer
 {
-	public void runAll(List<Kernel> jobs) throws Exception
+	public void runAll(final List<Kernel> jobs) throws Exception
 	{
 		// HRDBMSWorker.logger.debug("Rootbeer runAll() called with " +
 		// jobs.size() + " jobs");

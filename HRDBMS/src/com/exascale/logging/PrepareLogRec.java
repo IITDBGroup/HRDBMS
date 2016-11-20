@@ -5,12 +5,12 @@ import java.util.ArrayList;
 
 public class PrepareLogRec extends LogRec
 {
-	public PrepareLogRec(long txnum, ArrayList<Integer> nodes)
+	public PrepareLogRec(final long txnum, final ArrayList<Integer> nodes)
 	{
 		super(LogRec.PREPARE, txnum, ByteBuffer.allocate(((nodes.size() + 1) << 2) + 28));
 		this.buffer().position(28);
 		this.buffer().putInt(nodes.size());
-		for (Integer i : nodes)
+		for (final Integer i : nodes)
 		{
 			this.buffer().putInt(i);
 		}
@@ -20,7 +20,7 @@ public class PrepareLogRec extends LogRec
 	{
 		buffer.position(28);
 		int size = buffer.getInt();
-		ArrayList<Integer> retval = new ArrayList<Integer>(size);
+		final ArrayList<Integer> retval = new ArrayList<Integer>(size);
 		while (size > 0)
 		{
 			retval.add(buffer.getInt());

@@ -11,14 +11,14 @@ public final class AuxPairingHeap<E>
 	private Node minAuxPtr = null;
 	private int size = 0;
 
-	public AuxPairingHeap(Comparator compare)
+	public AuxPairingHeap(final Comparator compare)
 	{
 		this.compare = compare;
 	}
 
 	public E extractMin()
 	{
-		E retval = minPtr.data;
+		final E retval = minPtr.data;
 
 		if (minPtr != node)
 		{
@@ -48,7 +48,7 @@ public final class AuxPairingHeap<E>
 		else
 		{
 			node = mergePairs(node.child);
-			
+
 			if (minAuxPtr == null)
 			{
 				minPtr = node;
@@ -82,9 +82,9 @@ public final class AuxPairingHeap<E>
 		return minPtr.data;
 	}
 
-	public void insert(E val)
+	public void insert(final E val)
 	{
-		Node valNode = new Node(val);
+		final Node valNode = new Node(val);
 		size++;
 
 		if (node == null)
@@ -121,7 +121,7 @@ public final class AuxPairingHeap<E>
 		return size;
 	}
 
-	private Node merge(Node heap1, Node heap2)
+	private Node merge(final Node heap1, final Node heap2)
 	{
 		if (heap2 == null)
 		{
@@ -153,7 +153,7 @@ public final class AuxPairingHeap<E>
 		}
 	}
 
-	private Node mergePairs(Node list)
+	private Node mergePairs(final Node list)
 	{
 		if (list == null)
 		{
@@ -165,8 +165,8 @@ public final class AuxPairingHeap<E>
 			return list;
 		}
 
-		Node right = list.right;
-		Node rightRight = right.right;
+		final Node right = list.right;
+		final Node rightRight = right.right;
 		list.right = null;
 		right.right = null;
 		right.left = null;
@@ -196,7 +196,7 @@ public final class AuxPairingHeap<E>
 
 		while (true)
 		{
-			Node current = list;
+			final Node current = list;
 			Node right = current.right;
 
 			if (right == null && head != null)
@@ -215,7 +215,7 @@ public final class AuxPairingHeap<E>
 				list.left = null;
 			}
 
-			Node newNode = merge(current, right);
+			final Node newNode = merge(current, right);
 			if (list == null)
 			{
 				if (head == null)
@@ -253,7 +253,7 @@ public final class AuxPairingHeap<E>
 		private Node right;
 		private Node left;
 
-		public Node(E data)
+		public Node(final E data)
 		{
 			this.data = data;
 		}

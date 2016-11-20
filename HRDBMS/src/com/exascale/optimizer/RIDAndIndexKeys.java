@@ -21,43 +21,25 @@ public class RIDAndIndexKeys implements Serializable
 			f.setAccessible(true);
 			unsafe = (sun.misc.Unsafe)f.get(null);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			unsafe = null;
 		}
 	}
-	
+
 	private RID rid;
 	private ArrayList<ArrayList<Object>> indexKeys;
 
-	public RIDAndIndexKeys(RID rid, ArrayList<ArrayList<Object>> indexKeys)
+	public RIDAndIndexKeys(final RID rid, final ArrayList<ArrayList<Object>> indexKeys)
 	{
 		this.rid = rid;
 		this.indexKeys = indexKeys;
 	}
-	
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
-	{
-		Long id = prev.get(this);
-		if (id != null)
-		{
-			OperatorUtils.serializeReference(id, out);
-			return;
-		}
 
-		OperatorUtils.writeType(88, out);
-		prev.put(this, OperatorUtils.writeID(out));
-		OperatorUtils.writeInt(rid.getNode(), out);
-		OperatorUtils.writeInt(rid.getDevice(), out);
-		OperatorUtils.writeInt(rid.getBlockNum(), out);
-		OperatorUtils.writeInt(rid.getRecNum(), out);
-		OperatorUtils.serializeALALO(indexKeys, out, prev);
-	}
-	
-	public static RIDAndIndexKeys deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static RIDAndIndexKeys deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		RIDAndIndexKeys value = (RIDAndIndexKeys)unsafe.allocateInstance(RIDAndIndexKeys.class);
-		int type = OperatorUtils.getType(in);
+		final RIDAndIndexKeys value = (RIDAndIndexKeys)unsafe.allocateInstance(RIDAndIndexKeys.class);
+		final int type = OperatorUtils.getType(in);
 		if (type == 0)
 		{
 			return (RIDAndIndexKeys)OperatorUtils.readReference(in, prev);
@@ -69,17 +51,17 @@ public class RIDAndIndexKeys implements Serializable
 		}
 
 		prev.put(OperatorUtils.readLong(in), value);
-		int node = OperatorUtils.readInt(in);
-		int device = OperatorUtils.readInt(in);
-		int page = OperatorUtils.readInt(in);
-		int recNum = OperatorUtils.readInt(in);
+		final int node = OperatorUtils.readInt(in);
+		final int device = OperatorUtils.readInt(in);
+		final int page = OperatorUtils.readInt(in);
+		final int recNum = OperatorUtils.readInt(in);
 		value.rid = new RID(node, device, page, recNum);
 		value.indexKeys = OperatorUtils.deserializeALALO(in, prev);
 		return value;
 	}
 
 	@Override
-	public boolean equals(Object rhs)
+	public boolean equals(final Object rhs)
 	{
 		if (rhs == null)
 		{
@@ -91,7 +73,7 @@ public class RIDAndIndexKeys implements Serializable
 			return false;
 		}
 
-		RIDAndIndexKeys r = (RIDAndIndexKeys)rhs;
+		final RIDAndIndexKeys r = (RIDAndIndexKeys)rhs;
 		return rid.equals(r.rid) && indexKeys.equals(r.indexKeys);
 	}
 
@@ -112,5 +94,23 @@ public class RIDAndIndexKeys implements Serializable
 		hash = hash * 23 + rid.hashCode();
 		hash = hash * 23 + indexKeys.hashCode();
 		return hash;
+	}
+
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		final Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(88, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		OperatorUtils.writeInt(rid.getNode(), out);
+		OperatorUtils.writeInt(rid.getDevice(), out);
+		OperatorUtils.writeInt(rid.getBlockNum(), out);
+		OperatorUtils.writeInt(rid.getRecNum(), out);
+		OperatorUtils.serializeALALO(indexKeys, out, prev);
 	}
 }

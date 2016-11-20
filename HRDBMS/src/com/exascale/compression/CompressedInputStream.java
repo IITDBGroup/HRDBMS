@@ -24,7 +24,7 @@ public final class CompressedInputStream extends FilterInputStream
 	private final LZ4FastDecompressor decompress = factory.fastDecompressor();
 	private final byte[] inBuff;
 
-	public CompressedInputStream(InputStream in)
+	public CompressedInputStream(final InputStream in)
 	{
 		super(in);
 		inBuff = new byte[compress.maxCompressedLength(3 * 128 * 1024)];
@@ -39,13 +39,13 @@ public final class CompressedInputStream extends FilterInputStream
 	@Override
 	public int read() throws IOException
 	{
-		byte[] buff = new byte[1];
+		final byte[] buff = new byte[1];
 		read(buff, 0, 1);
 		return buff[0];
 	}
 
 	@Override
-	public int read(byte[] b, int off, int len) throws IOException
+	public int read(final byte[] b, int off, int len) throws IOException
 	{
 		int read = 0;
 		while (len > 0)
@@ -57,28 +57,28 @@ public final class CompressedInputStream extends FilterInputStream
 				int toRead = 4;
 				while (toRead > 0)
 				{
-					int temp2 = in.read(temp, tempIndex, toRead);
+					final int temp2 = in.read(temp, tempIndex, toRead);
 					toRead -= temp2;
 					tempIndex += temp2;
 				}
 
-				ByteBuffer bb = ByteBuffer.wrap(temp);
-				int remaining = bb.getInt();
+				final ByteBuffer bb = ByteBuffer.wrap(temp);
+				final int remaining = bb.getInt();
 				tempIndex = 0;
 				toRead = 4;
 				while (toRead > 0)
 				{
-					int temp2 = in.read(temp, tempIndex, toRead);
+					final int temp2 = in.read(temp, tempIndex, toRead);
 					toRead -= temp2;
 					tempIndex += temp2;
 				}
 				bb.position(0);
-				int original = bb.getInt();
+				final int original = bb.getInt();
 				tempIndex = 0;
 				toRead = remaining - 4;
 				while (toRead > 0)
 				{
-					int temp2 = in.read(inBuff, tempIndex, toRead);
+					final int temp2 = in.read(inBuff, tempIndex, toRead);
 					toRead -= temp2;
 					tempIndex += temp2;
 				}
@@ -86,7 +86,7 @@ public final class CompressedInputStream extends FilterInputStream
 				limit = original;
 			}
 
-			int available = limit - index;
+			final int available = limit - index;
 			if (available >= len)
 			{
 				System.arraycopy(buff, index, b, off, len);

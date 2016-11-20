@@ -15,7 +15,7 @@ public class NewTablesRunstatsTask extends Task
 {
 	private final ArrayList<String> tables;
 
-	public NewTablesRunstatsTask(ArrayList<String> tables)
+	public NewTablesRunstatsTask(final ArrayList<String> tables)
 	{
 		this.tables = tables;
 	}
@@ -33,29 +33,29 @@ public class NewTablesRunstatsTask extends Task
 		{
 			try
 			{
-				long myStart = System.currentTimeMillis();
-				for (String fail : MaintenanceManager.failed.keySet())
+				final long myStart = System.currentTimeMillis();
+				for (final String fail : MaintenanceManager.failed.keySet())
 				{
 					MaintenanceManager.failed.remove(fail);
 					tables.remove(fail);
 				}
 
-				ArrayList<String> newTables = new ArrayList<String>();
-				HashMap<String, Long> times = new HashMap<String, Long>();
-				long target = Long.parseLong(HRDBMSWorker.getHParms().getProperty("statistics_refresh_target_days")) * 24 * 60 * 60 * 1000;
+				final ArrayList<String> newTables = new ArrayList<String>();
+				final HashMap<String, Long> times = new HashMap<String, Long>();
+				final long target = Long.parseLong(HRDBMSWorker.getHParms().getProperty("statistics_refresh_target_days")) * 24 * 60 * 60 * 1000;
 				String sql = "SELECT SCHEMA, TABNAME, TABLEID FROM SYS.TABLES";
-				int numCoords = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("number_of_coords"));
-				int myNum = MetaData.myCoordNum() * -1 - 2;
-				Connection conn = DriverManager.getConnection("jdbc:hrdbms://localhost:" + HRDBMSWorker.getHParms().getProperty("port_number"));
+				final int numCoords = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("number_of_coords"));
+				final int myNum = MetaData.myCoordNum() * -1 - 2;
+				final Connection conn = DriverManager.getConnection("jdbc:hrdbms://localhost:" + HRDBMSWorker.getHParms().getProperty("port_number"));
 				conn.setAutoCommit(false);
-				Statement stmt = conn.createStatement();
-				ResultSet rs = stmt.executeQuery(sql);
+				final Statement stmt = conn.createStatement();
+				final ResultSet rs = stmt.executeQuery(sql);
 				while (rs.next())
 				{
-					int id = rs.getInt(3);
+					final int id = rs.getInt(3);
 					if (id % numCoords == myNum)
 					{
-						String table = rs.getString(1) + "." + rs.getString(2);
+						final String table = rs.getString(1) + "." + rs.getString(2);
 						if (!tables.contains(table))
 						{
 							tables.add(table);
@@ -67,19 +67,19 @@ public class NewTablesRunstatsTask extends Task
 				rs.close();
 				conn.commit();
 
-				for (String table : newTables)
+				for (final String table : newTables)
 				{
 					try
 					{
 						sql = "RUNSTATS ON " + table;
-						long start = System.currentTimeMillis();
+						final long start = System.currentTimeMillis();
 						stmt.execute(sql);
 						conn.commit();
-						long end = System.currentTimeMillis();
+						final long end = System.currentTimeMillis();
 						times.put(table, new Long(end - start));
 
 					}
-					catch (Exception f)
+					catch (final Exception f)
 					{
 						HRDBMSWorker.logger.warn("Error running RUNSTATS on " + table, f);
 						times.put(table, new Long(0));
@@ -91,24 +91,24 @@ public class NewTablesRunstatsTask extends Task
 				// Initial runstats is done
 				// Figure out how to schedule next round
 				long totalTime = 0;
-				for (Long time : times.values())
+				for (final Long time : times.values())
 				{
 					totalTime += time;
 				}
 
-				long extra = target - totalTime;
-				long breakTime = extra / newTables.size();
+				final long extra = target - totalTime;
+				final long breakTime = extra / newTables.size();
 				long nextTime = System.currentTimeMillis() + breakTime;
-				for (String table : newTables)
+				for (final String table : newTables)
 				{
 					MaintenanceManager.schedule(new RunstatsTask(table), nextTime, times.get(table));
 					nextTime += (times.get(table) + breakTime);
 				}
 
-				long myEnd = System.currentTimeMillis();
+				final long myEnd = System.currentTimeMillis();
 				MaintenanceManager.schedule(NewTablesRunstatsTask.this, -1, myEnd - myStart, myEnd + target);
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.warn("Fatal error running RUNSTATS", e);
 			}

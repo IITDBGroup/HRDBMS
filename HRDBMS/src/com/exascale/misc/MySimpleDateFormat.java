@@ -4,11 +4,11 @@ import java.io.Serializable;
 
 public class MySimpleDateFormat implements Serializable
 {
-	public MySimpleDateFormat(String format)
+	public MySimpleDateFormat(final String format)
 	{
 	}
 
-	public String format(Object date)
+	public String format(final Object date)
 	{
 		final MyDate d = (MyDate)date;
 		return d.format();

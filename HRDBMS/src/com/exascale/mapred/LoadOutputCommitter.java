@@ -9,18 +9,18 @@ public class LoadOutputCommitter extends OutputCommitter
 {
 	private final LoadRecordWriter writer;
 
-	public LoadOutputCommitter(String table, String portString, String hrdbmsHome)
+	public LoadOutputCommitter(final String table, final String portString, final String hrdbmsHome)
 	{
 		writer = LoadRecordWriter.get(table, portString, hrdbmsHome);
 	}
 
 	@Override
-	public void abortTask(TaskAttemptContext arg0) throws IOException
+	public void abortTask(final TaskAttemptContext arg0) throws IOException
 	{
 	}
 
 	@Override
-	public void commitTask(TaskAttemptContext arg0) throws IOException
+	public void commitTask(final TaskAttemptContext arg0) throws IOException
 	{
 		if (writer.rows.size() != 0)
 		{
@@ -40,7 +40,7 @@ public class LoadOutputCommitter extends OutputCommitter
 					}
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -48,18 +48,18 @@ public class LoadOutputCommitter extends OutputCommitter
 	}
 
 	@Override
-	public boolean needsTaskCommit(TaskAttemptContext arg0) throws IOException
+	public boolean needsTaskCommit(final TaskAttemptContext arg0) throws IOException
 	{
 		return true;
 	}
 
 	@Override
-	public void setupJob(JobContext arg0) throws IOException
+	public void setupJob(final JobContext arg0) throws IOException
 	{
 	}
 
 	@Override
-	public void setupTask(TaskAttemptContext arg0) throws IOException
+	public void setupTask(final TaskAttemptContext arg0) throws IOException
 	{
 	}
 }

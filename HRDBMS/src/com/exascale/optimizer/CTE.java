@@ -8,7 +8,7 @@ public class CTE
 	private final ArrayList<Column> cols;
 	private final FullSelect select;
 
-	public CTE(String name, ArrayList<Column> cols, FullSelect select)
+	public CTE(final String name, final ArrayList<Column> cols, final FullSelect select)
 	{
 		this.name = name;
 		this.cols = cols;

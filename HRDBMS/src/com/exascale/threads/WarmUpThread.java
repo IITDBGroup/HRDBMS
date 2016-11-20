@@ -11,7 +11,7 @@ public class WarmUpThread extends HRDBMSThread
 	{
 	}
 
-	public WarmUpThread(boolean stop)
+	public WarmUpThread(final boolean stop)
 	{
 		this.stop = stop;
 	}
@@ -20,8 +20,8 @@ public class WarmUpThread extends HRDBMSThread
 	public void run()
 	{
 		HRDBMSWorker.logger.debug("Warm up thread started");
-		long start = System.currentTimeMillis();
-		BigDecimalReplacement[] ais = new BigDecimalReplacement[100];
+		final long start = System.currentTimeMillis();
+		final BigDecimalReplacement[] ais = new BigDecimalReplacement[100];
 		int i = 0;
 		while (i < 100)
 		{
@@ -35,7 +35,7 @@ public class WarmUpThread extends HRDBMSThread
 			i++;
 			if (i % 100000 == 0)
 			{
-				long end = System.currentTimeMillis();
+				final long end = System.currentTimeMillis();
 				if (end - start >= 90 * 1000)
 				{
 					if (stop)

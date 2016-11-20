@@ -9,7 +9,7 @@ public class HParms extends Properties
 {
 	private static HParms retval = null;
 
-	private HParms(HParmsDefaults defaults)
+	private HParms(final HParmsDefaults defaults)
 	{
 		super(defaults);
 	}
@@ -22,7 +22,7 @@ public class HParms extends Properties
 		}
 
 		final HParmsDefaults defaults = HParmsDefaults.getHParmsDefaults();
-		HParms temp = new HParms(defaults);
+		final HParms temp = new HParms(defaults);
 		temp.load(new BufferedReader(new FileReader("hparms")));
 		retval = temp;
 		return retval;

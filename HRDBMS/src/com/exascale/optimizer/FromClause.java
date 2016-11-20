@@ -6,7 +6,7 @@ public class FromClause
 {
 	private final ArrayList<TableReference> tables;
 
-	public FromClause(ArrayList<TableReference> tables)
+	public FromClause(final ArrayList<TableReference> tables)
 	{
 		this.tables = tables;
 	}
@@ -14,8 +14,8 @@ public class FromClause
 	@Override
 	public FromClause clone()
 	{
-		ArrayList<TableReference> newTables = new ArrayList<TableReference>();
-		for (TableReference t : tables)
+		final ArrayList<TableReference> newTables = new ArrayList<TableReference>();
+		for (final TableReference t : tables)
 		{
 			newTables.add(t.clone());
 		}

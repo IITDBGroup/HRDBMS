@@ -5,12 +5,12 @@ public class TableName
 	private String schema;
 	private final String name;
 
-	public TableName(String name)
+	public TableName(final String name)
 	{
 		this.name = name;
 	}
 
-	public TableName(String schema, String name)
+	public TableName(final String schema, final String name)
 	{
 		this.schema = schema;
 		this.name = name;

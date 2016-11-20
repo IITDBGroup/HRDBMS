@@ -45,7 +45,7 @@ public class FileManager
 		HRDBMSWorker.logger.info("Starting initialization of the File Manager.");
 		setDirs(HRDBMSWorker.getHParms().getProperty("data_directories"));
 
-		ArrayList<OpenThread> threads = new ArrayList<OpenThread>();
+		final ArrayList<OpenThread> threads = new ArrayList<OpenThread>();
 		for (final File dir : dirs)
 		{
 			if (!dir.exists())
@@ -63,20 +63,20 @@ public class FileManager
 				}
 			}
 
-			OpenThread thread = new OpenThread(dir.getAbsolutePath());
+			final OpenThread thread = new OpenThread(dir.getAbsolutePath());
 			thread.start();
 			threads.add(thread);
 		}
 
-		String temps = HRDBMSWorker.getHParms().getProperty("temp_directories");
-		StringTokenizer tokens = new StringTokenizer(temps, ",", false);
+		final String temps = HRDBMSWorker.getHParms().getProperty("temp_directories");
+		final StringTokenizer tokens = new StringTokenizer(temps, ",", false);
 		while (tokens.hasMoreTokens())
 		{
-			String tempDir = tokens.nextToken();
-			File dir = new File(tempDir);
-			for (String file : dir.list())
+			final String tempDir = tokens.nextToken();
+			final File dir = new File(tempDir);
+			for (final String file : dir.list())
 			{
-				File f = new File(dir, file);
+				final File f = new File(dir, file);
 				if (!f.isDirectory())
 				{
 					f.delete();
@@ -84,7 +84,7 @@ public class FileManager
 			}
 		}
 
-		for (OpenThread thread : threads)
+		for (final OpenThread thread : threads)
 		{
 			while (true)
 			{
@@ -93,7 +93,7 @@ public class FileManager
 					thread.join();
 					break;
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 				}
 			}
@@ -102,14 +102,14 @@ public class FileManager
 		HRDBMSWorker.logger.info("File Manager initialization complete.");
 	}
 
-	public static int addNewBlock(String fn, ByteBuffer data, Transaction tx) throws Exception
+	public static int addNewBlock(final String fn, final ByteBuffer data, final Transaction tx) throws Exception
 	{
 		LockManager.xLock(new Block(fn, -1), tx.number());
 		final FileChannel fc = getFile(fn);
 		int retval;
 		retval = numBlocks.get(fn);
-		Block bl = new Block(fn, retval);
-		ExtendLogRec rec = LogManager.extend(tx.number(), bl);
+		final Block bl = new Block(fn, retval);
+		final ExtendLogRec rec = LogManager.extend(tx.number(), bl);
 		LogManager.flush(rec.lsn());
 		data.position(0);
 		fc.write(data, retval * Page.BLOCK_SIZE);
@@ -119,7 +119,7 @@ public class FileManager
 		return retval;
 	}
 
-	public static int addNewBlockNoLog(String fn, ByteBuffer data, Transaction tx) throws Exception
+	public static int addNewBlockNoLog(final String fn, final ByteBuffer data, final Transaction tx) throws Exception
 	{
 		LockManager.xLock(new Block(fn, -1), tx.number());
 		// getFile(fn);
@@ -131,8 +131,8 @@ public class FileManager
 		}
 
 		// write page to bufferpool
-		Block b = new Block(fn, retval);
-		int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % BufferManager.managers.length;
+		final Block b = new Block(fn, retval);
+		final int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % BufferManager.managers.length;
 		BufferManager.managers[hash].pinFromMemory(b, tx.number(), data);
 		numBlocks.put(fn, retval + 1);
 
@@ -155,15 +155,15 @@ public class FileManager
 			// "CatalogCreator.java");
 			// javacOut.close();
 
-			List<String> optionList = new ArrayList<String>();
+			final List<String> optionList = new ArrayList<String>();
 			// set compiler's classpath to be same as the runtime's
 			optionList.addAll(Arrays.asList("-classpath", System.getProperty("java.class.path")));
-			StandardJavaFileManager fileManager = compiler.getStandardFileManager(null, Locale.getDefault(), null);
-			File file1 = new File("CatalogCreator.java");
-			File[] files = new File[] { file1 };
-			Iterable<? extends JavaFileObject> jfos = fileManager.getJavaFileObjectsFromFiles(Arrays.asList(files));
+			final StandardJavaFileManager fileManager = compiler.getStandardFileManager(null, Locale.getDefault(), null);
+			final File file1 = new File("CatalogCreator.java");
+			final File[] files = new File[] { file1 };
+			final Iterable<? extends JavaFileObject> jfos = fileManager.getJavaFileObjectsFromFiles(Arrays.asList(files));
 
-			JavaCompiler.CompilationTask task = compiler.getTask(javacOut, null, null, optionList, null, jfos);
+			final JavaCompiler.CompilationTask task = compiler.getTask(javacOut, null, null, optionList, null, jfos);
 			result = task.call();
 			fileManager.close();
 			javacOut.close();
@@ -184,11 +184,11 @@ public class FileManager
 		try
 		{
 			HRDBMSWorker.logger.debug("About to load CatalogCreator");
-			Class clazz = Class.forName("CatalogCreator");
+			final Class clazz = Class.forName("CatalogCreator");
 			HRDBMSWorker.logger.debug("About to instantiate CatalogCreator");
 			clazz.newInstance();
 			HRDBMSWorker.logger.debug("Done instantiating CatalogCreator");
-			for (FileChannel fc : openFiles.values())
+			for (final FileChannel fc : openFiles.values())
 			{
 				fc.force(false);
 				fc.close();
@@ -197,23 +197,23 @@ public class FileManager
 			openFiles.clear();
 			numBlocks.clear();
 		}
-		catch (Throwable e)
+		catch (final Throwable e)
 		{
 			HRDBMSWorker.logger.error("Error during CatalogCreator execution", e);
 			throw e;
 		}
 	}
 
-	public static EndDelayThread endDelay(String file) throws Exception
+	public static EndDelayThread endDelay(final String file) throws Exception
 	{
-		EndDelayThread thread = new EndDelayThread(file);
+		final EndDelayThread thread = new EndDelayThread(file);
 		thread.start();
 		return thread;
 	}
 
-	public static boolean fileExists(String filename)
+	public static boolean fileExists(final String filename)
 	{
-		File file = new File(filename + ".0");
+		final File file = new File(filename + ".0");
 		return file.exists();
 	}
 
@@ -222,7 +222,7 @@ public class FileManager
 		return dirs;
 	}
 
-	public static FileChannel getFile(String filename) throws Exception
+	public static FileChannel getFile(final String filename) throws Exception
 	{
 		FileChannel fc = openFiles.get(filename);
 
@@ -236,7 +236,7 @@ public class FileManager
 					final File table = new File(filename);
 					final CompressedRandomAccessFile f = new CompressedRandomAccessFile(table, "rw");
 					fc = f.getChannel();
-					long size = fc.size();
+					final long size = fc.size();
 					HRDBMSWorker.logger.debug("Size of " + filename + " is " + size); // DEBUG
 					numBlocks.put(filename, (int)(size / Page.BLOCK_SIZE));
 					openFiles.put(filename, fc);
@@ -247,7 +247,7 @@ public class FileManager
 		return fc;
 	}
 
-	public static synchronized FileChannel getFile(String filename, int suffix) throws Exception
+	public static synchronized FileChannel getFile(final String filename, final int suffix) throws Exception
 	{
 		FileChannel fc = openFiles.get(filename);
 
@@ -270,7 +270,7 @@ public class FileManager
 		return fc;
 	}
 
-	public static ReadThread read(Page p, Block b, ByteBuffer bb) throws Exception
+	public static ReadThread read(final Page p, final Block b, final ByteBuffer bb) throws Exception
 	{
 		// final FileChannel fc = FileManager.getFile(b.fileName());
 		// if (b.number() > numBlocks.get(b.fileName()) + 1)
@@ -278,12 +278,12 @@ public class FileManager
 		// throw new IOException("Trying to read block " + b.number() + " from "
 		// + b.fileName() + " which doesn't exist");
 		// }
-		ReadThread retval = new ReadThread(p, b, bb);
+		final ReadThread retval = new ReadThread(p, b, bb);
 		retval.start();
 		return retval;
 	}
 
-	public static ReadThread read(Page p, Block b, ByteBuffer bb, ArrayList<Integer> cols, int layoutSize) throws Exception
+	public static ReadThread read(final Page p, final Block b, final ByteBuffer bb, final ArrayList<Integer> cols, final int layoutSize) throws Exception
 	{
 		// final FileChannel fc = FileManager.getFile(b.fileName());
 		// if (b.number() > numBlocks.get(b.fileName()) + 1)
@@ -291,12 +291,12 @@ public class FileManager
 		// throw new IOException("Trying to read block " + b.number() + " from "
 		// + b.fileName() + " which doesn't exist");
 		// }
-		ReadThread retval = new ReadThread(p, b, bb, cols, layoutSize);
+		final ReadThread retval = new ReadThread(p, b, bb, cols, layoutSize);
 		retval.start();
 		return retval;
 	}
 
-	public static ReadThread read(Page p, Block b, ByteBuffer bb, ArrayList<Integer> cols, int layoutSize, int rank, int rankSize) throws Exception
+	public static ReadThread read(final Page p, final Block b, final ByteBuffer bb, final ArrayList<Integer> cols, final int layoutSize, final int rank, final int rankSize) throws Exception
 	{
 		// final FileChannel fc = FileManager.getFile(b.fileName());
 		// if (b.number() > numBlocks.get(b.fileName()) + 1)
@@ -304,14 +304,14 @@ public class FileManager
 		// throw new IOException("Trying to read block " + b.number() + " from "
 		// + b.fileName() + " which doesn't exist");
 		// }
-		ReadThread retval = new ReadThread(p, b, bb, cols, layoutSize);
+		final ReadThread retval = new ReadThread(p, b, bb, cols, layoutSize);
 		retval.setRank(rank);
 		retval.setRankSize(rankSize);
 		retval.start();
 		return retval;
 	}
 
-	public static void read(Page p, Block b, ByteBuffer bb, boolean flag) throws Exception
+	public static void read(final Page p, final Block b, final ByteBuffer bb, final boolean flag) throws Exception
 	{
 		// final FileChannel fc = FileManager.getFile(b.fileName());
 		// if (b.number() > numBlocks.get(b.fileName()) + 1)
@@ -322,7 +322,7 @@ public class FileManager
 		new ReadThread(p, b, bb).run();
 	}
 
-	public static ReadThread read(Page p, Block b, ByteBuffer bb, int rank, int rankSize) throws Exception
+	public static ReadThread read(final Page p, final Block b, final ByteBuffer bb, final int rank, final int rankSize) throws Exception
 	{
 		// final FileChannel fc = FileManager.getFile(b.fileName());
 		// if (b.number() > numBlocks.get(b.fileName()) + 1)
@@ -330,28 +330,28 @@ public class FileManager
 		// throw new IOException("Trying to read block " + b.number() + " from "
 		// + b.fileName() + " which doesn't exist");
 		// }
-		ReadThread retval = new ReadThread(p, b, bb);
+		final ReadThread retval = new ReadThread(p, b, bb);
 		retval.setRank(rank);
 		retval.setRankSize(rankSize);
 		retval.start();
 		return retval;
 	}
 
-	public static void read(Page p, Block b, ByteBuffer bb, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos) throws Exception
+	public static void read(final Page p, final Block b, final ByteBuffer bb, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos) throws Exception
 	{
-		ReadThread retval = new ReadThread(p, b, bb, schema, schemaMap, tx, fetchPos);
+		final ReadThread retval = new ReadThread(p, b, bb, schema, schemaMap, tx, fetchPos);
 		retval.start();
 	}
 
-	public static void read(Page p, Block b, ByteBuffer bb, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos, int rank, int rankSize) throws Exception
+	public static void read(final Page p, final Block b, final ByteBuffer bb, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos, final int rank, final int rankSize) throws Exception
 	{
-		ReadThread retval = new ReadThread(p, b, bb, schema, schemaMap, tx, fetchPos);
+		final ReadThread retval = new ReadThread(p, b, bb, schema, schemaMap, tx, fetchPos);
 		retval.setRank(rankSize);
 		retval.setRankSize(rankSize);
 		retval.start();
 	}
 
-	public static ReadThread read(Page p, int num, ArrayList<Integer> indexes, Page[] bp, int rank, int rankSize) throws Exception
+	public static ReadThread read(final Page p, final int num, final ArrayList<Integer> indexes, final Page[] bp, final int rank, final int rankSize) throws Exception
 	{
 		// final FileChannel fc = FileManager.getFile(b.fileName());
 		// if (b.number() > numBlocks.get(b.fileName()) + 1)
@@ -359,12 +359,12 @@ public class FileManager
 		// throw new IOException("Trying to read block " + b.number() + " from "
 		// + b.fileName() + " which doesn't exist");
 		// }
-		ReadThread retval = new ReadThread(p, num, indexes, bp, rank, rankSize);
+		final ReadThread retval = new ReadThread(p, num, indexes, bp, rank, rankSize);
 		retval.start();
 		return retval;
 	}
 
-	public static Read3Thread read3(Page p, Page p2, Page p3, Block b, ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3) throws Exception
+	public static Read3Thread read3(final Page p, final Page p2, final Page p3, final Block b, final ByteBuffer bb, final ByteBuffer bb2, final ByteBuffer bb3) throws Exception
 	{
 		// final FileChannel fc = FileManager.getFile(b.fileName());
 		// if (b.number() > numBlocks.get(b.fileName()) + 1)
@@ -372,12 +372,12 @@ public class FileManager
 		// throw new IOException("Trying to read block " + b.number() + " from "
 		// + b.fileName() + " which doesn't exist");
 		// }
-		Read3Thread retval = new Read3Thread(p, p2, p3, b, bb, bb2, bb3);
+		final Read3Thread retval = new Read3Thread(p, p2, p3, b, bb, bb2, bb3);
 		retval.start();
 		return retval;
 	}
 
-	public static Read3Thread read3(Page p, Page p2, Page p3, Block b, ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3, ArrayList<Integer> cols, int layoutSize) throws Exception
+	public static Read3Thread read3(final Page p, final Page p2, final Page p3, final Block b, final ByteBuffer bb, final ByteBuffer bb2, final ByteBuffer bb3, final ArrayList<Integer> cols, final int layoutSize) throws Exception
 	{
 		// final FileChannel fc = FileManager.getFile(b.fileName());
 		// if (b.number() > numBlocks.get(b.fileName()) + 1)
@@ -385,12 +385,12 @@ public class FileManager
 		// throw new IOException("Trying to read block " + b.number() + " from "
 		// + b.fileName() + " which doesn't exist");
 		// }
-		Read3Thread retval = new Read3Thread(p, p2, p3, b, bb, bb2, bb3, cols, layoutSize);
+		final Read3Thread retval = new Read3Thread(p, p2, p3, b, bb, bb2, bb3, cols, layoutSize);
 		retval.start();
 		return retval;
 	}
 
-	public static Read3Thread read3(Page p, Page p2, Page p3, Block b, ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3, int rank, int rankSize) throws Exception
+	public static Read3Thread read3(final Page p, final Page p2, final Page p3, final Block b, final ByteBuffer bb, final ByteBuffer bb2, final ByteBuffer bb3, final int rank, final int rankSize) throws Exception
 	{
 		// final FileChannel fc = FileManager.getFile(b.fileName());
 		// if (b.number() > numBlocks.get(b.fileName()) + 1)
@@ -398,28 +398,28 @@ public class FileManager
 		// throw new IOException("Trying to read block " + b.number() + " from "
 		// + b.fileName() + " which doesn't exist");
 		// }
-		Read3Thread retval = new Read3Thread(p, p2, p3, b, bb, bb2, bb3);
+		final Read3Thread retval = new Read3Thread(p, p2, p3, b, bb, bb2, bb3);
 		retval.setRank(rank);
 		retval.setRankSize(rankSize);
 		retval.start();
 		return retval;
 	}
 
-	public static void read3(Page p, Page p2, Page p3, Block b, ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3, Schema schema1, Schema schema2, Schema schema3, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos) throws Exception
+	public static void read3(final Page p, final Page p2, final Page p3, final Block b, final ByteBuffer bb, final ByteBuffer bb2, final ByteBuffer bb3, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos) throws Exception
 	{
-		Read3Thread retval = new Read3Thread(p, p2, p3, b, bb, bb2, bb3, schema1, schema2, schema3, schemaMap, tx, fetchPos);
+		final Read3Thread retval = new Read3Thread(p, p2, p3, b, bb, bb2, bb3, schema1, schema2, schema3, schemaMap, tx, fetchPos);
 		retval.start();
 	}
 
-	public static void read3(Page p, Page p2, Page p3, Block b, ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3, Schema schema1, Schema schema2, Schema schema3, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos, int rank, int rankSize) throws Exception
+	public static void read3(final Page p, final Page p2, final Page p3, final Block b, final ByteBuffer bb, final ByteBuffer bb2, final ByteBuffer bb3, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos, final int rank, final int rankSize) throws Exception
 	{
-		Read3Thread retval = new Read3Thread(p, p2, p3, b, bb, bb2, bb3, schema1, schema2, schema3, schemaMap, tx, fetchPos);
+		final Read3Thread retval = new Read3Thread(p, p2, p3, b, bb, bb2, bb3, schema1, schema2, schema3, schemaMap, tx, fetchPos);
 		retval.setRank(rank);
 		retval.setRankSize(rankSize);
 		retval.start();
 	}
 
-	public static ReadThread readSync(Page p, Block b, ByteBuffer bb) throws Exception
+	public static ReadThread readSync(final Page p, final Block b, final ByteBuffer bb) throws Exception
 	{
 		// final FileChannel fc = FileManager.getFile(b.fileName());
 		// if (b.number() > numBlocks.get(b.fileName()) + 1)
@@ -427,25 +427,25 @@ public class FileManager
 		// throw new IOException("Trying to read block " + b.number() + " from "
 		// + b.fileName() + " which doesn't exist");
 		// }
-		ReadThread retval = new ReadThread(p, b, bb);
+		final ReadThread retval = new ReadThread(p, b, bb);
 		retval.run();
 		return retval;
 	}
 
-	public static void readSync(Page p, Block b, ByteBuffer bb, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos) throws Exception
+	public static void readSync(final Page p, final Block b, final ByteBuffer bb, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos) throws Exception
 	{
-		ReadThread retval = new ReadThread(p, b, bb, schema, schemaMap, tx, fetchPos);
+		final ReadThread retval = new ReadThread(p, b, bb, schema, schemaMap, tx, fetchPos);
 		retval.run();
 	}
 
-	public static void redoExtend(Block bl) throws Exception
+	public static void redoExtend(final Block bl) throws Exception
 	{
-		String fn = bl.fileName();
-		int blockNum = bl.number();
+		final String fn = bl.fileName();
+		final int blockNum = bl.number();
 		final FileChannel fc = getFile(fn);
 		synchronized (fc)
 		{
-			int retval = numBlocks.get(bl.fileName()) - 1;
+			final int retval = numBlocks.get(bl.fileName()) - 1;
 			if (retval >= blockNum)
 			{
 				HRDBMSWorker.logger.debug("Went to redo extend of " + bl + " but nothing needed to be done");
@@ -454,7 +454,7 @@ public class FileManager
 			else if (retval == blockNum - 1)
 			{
 				HRDBMSWorker.logger.debug("Needed to redo extend of " + bl);
-				ByteBuffer data = ByteBuffer.allocate(Page.BLOCK_SIZE);
+				final ByteBuffer data = ByteBuffer.allocate(Page.BLOCK_SIZE);
 				int i = 0;
 				data.position(0);
 				while (i < Page.BLOCK_SIZE)
@@ -474,9 +474,9 @@ public class FileManager
 		}
 	}
 
-	public static synchronized void removeFile(String filename) throws Exception
+	public static synchronized void removeFile(final String filename) throws Exception
 	{
-		FileChannel fc = openFiles.get(filename);
+		final FileChannel fc = openFiles.get(filename);
 		if (fc != null)
 		{
 			fc.truncate(0);
@@ -490,7 +490,7 @@ public class FileManager
 	{
 		File sysTables;
 		String fn = HRDBMSWorker.getHParms().getProperty("data_directories");
-		StringTokenizer tokens = new StringTokenizer(fn, ",", false);
+		final StringTokenizer tokens = new StringTokenizer(fn, ",", false);
 		fn = tokens.nextToken();
 
 		if (!fn.endsWith("/"))
@@ -512,14 +512,14 @@ public class FileManager
 		}
 	}
 
-	public static void trim(String fn, int blockNum) throws Exception
+	public static void trim(final String fn, final int blockNum) throws Exception
 	{
 		// HRDBMSWorker.logger.debug("Undoing extend of " + fn + ":" +
 		// blockNum);
 		final FileChannel fc = getFile(fn);
 		synchronized (fc)
 		{
-			int retval = (int)(fc.size() / Page.BLOCK_SIZE) - 1;
+			final int retval = (int)(fc.size() / Page.BLOCK_SIZE) - 1;
 			if (retval > blockNum)
 			{
 				throw new Exception("Can't trim anything but the last block");
@@ -533,7 +533,7 @@ public class FileManager
 		}
 	}
 
-	public static void write(Block b, ByteBuffer bb) throws Exception
+	public static void write(final Block b, final ByteBuffer bb) throws Exception
 	{
 		bb.position(0);
 		final FileChannel fc = getFile(b.fileName());
@@ -541,14 +541,14 @@ public class FileManager
 		// fc.force(false);
 	}
 
-	public static void writeDelayed(Block b, ByteBuffer bb) throws Exception
+	public static void writeDelayed(final Block b, final ByteBuffer bb) throws Exception
 	{
 		bb.position(0);
 		final FileChannel fc = getFile(b.fileName());
 		fc.write(bb, ((long)b.number()) * bb.capacity());
 	}
 
-	private static void setDirs(String list)
+	private static void setDirs(final String list)
 	{
 		StringTokenizer tokens = new StringTokenizer(list, ",", false);
 		int i = 0;
@@ -572,7 +572,7 @@ public class FileManager
 		private final String file;
 		private boolean ok = true;
 
-		public EndDelayThread(String file)
+		public EndDelayThread(final String file)
 		{
 			this.file = file;
 		}
@@ -587,10 +587,10 @@ public class FileManager
 		{
 			try
 			{
-				FileChannel fc = getFile(file);
+				final FileChannel fc = getFile(file);
 				fc.force(false);
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				ok = false;
 			}
@@ -601,7 +601,7 @@ public class FileManager
 	{
 		private String dir;
 
-		public OpenThread(String dir)
+		public OpenThread(final String dir)
 		{
 			if (dir.endsWith("/"))
 			{
@@ -619,25 +619,25 @@ public class FileManager
 			try
 			{
 				final ArrayList<Path> files = new ArrayList<Path>();
-				File path = new File(dir);
-				File[] files2 = path.listFiles();
-				for (File f : files2)
+				final File path = new File(dir);
+				final File[] files2 = path.listFiles();
+				for (final File f : files2)
 				{
-					String name = f.getName();
+					final String name = f.getName();
 					if (name.matches(".*\\..*\\.(tbl|indx)\\..*"))
 					{
 						files.add(f.toPath());
 					}
 				}
 
-				HashSet<String> set = new HashSet<String>();
-				HashMap<String, Integer> tops = new HashMap<String, Integer>();
-				for (Path file2 : files)
+				final HashSet<String> set = new HashSet<String>();
+				final HashMap<String, Integer> tops = new HashMap<String, Integer>();
+				for (final Path file2 : files)
 				{
-					String s = file2.toAbsolutePath().toString().substring(0, file2.toAbsolutePath().toString().lastIndexOf('.'));
-					int suffix = Integer.parseInt(file2.toAbsolutePath().toString().substring(file2.toAbsolutePath().toString().lastIndexOf('.') + 1));
+					final String s = file2.toAbsolutePath().toString().substring(0, file2.toAbsolutePath().toString().lastIndexOf('.'));
+					final int suffix = Integer.parseInt(file2.toAbsolutePath().toString().substring(file2.toAbsolutePath().toString().lastIndexOf('.') + 1));
 					set.add(s);
-					Integer high = tops.get(s);
+					final Integer high = tops.get(s);
 					if (high == null)
 					{
 						tops.put(s, suffix);
@@ -648,20 +648,20 @@ public class FileManager
 					}
 				}
 
-				for (String s : set)
+				for (final String s : set)
 				{
 					HRDBMSWorker.logger.debug("Opening " + s);
 					try
 					{
 						FileManager.getFile(s, tops.get(s));
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.debug("", e);
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
 			}

@@ -7,12 +7,12 @@ public class Column implements Serializable
 	private String table;
 	private String column;
 
-	public Column(String column)
+	public Column(final String column)
 	{
 		this.column = column;
 	}
 
-	public Column(String table, String column)
+	public Column(final String table, final String column)
 	{
 		this.table = table;
 		this.column = column;
@@ -25,14 +25,14 @@ public class Column implements Serializable
 	}
 
 	@Override
-	public boolean equals(Object o)
+	public boolean equals(final Object o)
 	{
 		if (o == null || !(o instanceof Column))
 		{
 			return false;
 		}
 
-		Column rhs = (Column)o;
+		final Column rhs = (Column)o;
 
 		if (table == null)
 		{
@@ -76,12 +76,12 @@ public class Column implements Serializable
 		return hash;
 	}
 
-	public void setColumn(String column)
+	public void setColumn(final String column)
 	{
 		this.column = column;
 	}
 
-	public void setTable(String table)
+	public void setTable(final String table)
 	{
 		this.table = table;
 	}

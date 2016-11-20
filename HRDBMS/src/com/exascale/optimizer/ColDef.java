@@ -9,7 +9,7 @@ public class ColDef implements Serializable
 	private final boolean nullable;
 	private final boolean pk;
 
-	public ColDef(Column col, String type, boolean nullable, boolean pk)
+	public ColDef(final Column col, final String type, final boolean nullable, final boolean pk)
 	{
 		this.col = col;
 		this.type = type;

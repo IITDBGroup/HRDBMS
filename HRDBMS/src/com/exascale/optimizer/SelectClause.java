@@ -8,7 +8,7 @@ public class SelectClause
 	private final boolean selectStar;
 	private final ArrayList<SelectListEntry> selectList;
 
-	public SelectClause(boolean selectAll, boolean selectStar, ArrayList<SelectListEntry> selectList)
+	public SelectClause(final boolean selectAll, final boolean selectStar, final ArrayList<SelectListEntry> selectList)
 	{
 		this.selectAll = selectAll;
 		this.selectStar = selectStar;
@@ -21,7 +21,7 @@ public class SelectClause
 		ArrayList<SelectListEntry> newList = new ArrayList<SelectListEntry>();
 		if (selectList != null)
 		{
-			for (SelectListEntry entry : selectList)
+			for (final SelectListEntry entry : selectList)
 			{
 				newList.add(entry.clone());
 			}

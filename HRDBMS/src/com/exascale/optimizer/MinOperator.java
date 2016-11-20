@@ -22,7 +22,7 @@ public final class MinOperator implements AggregateOperator, Serializable
 			f.setAccessible(true);
 			unsafe = (sun.misc.Unsafe)f.get(null);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			unsafe = null;
 		}
@@ -40,7 +40,7 @@ public final class MinOperator implements AggregateOperator, Serializable
 
 	private long NUM_GROUPS = 16;
 
-	public MinOperator(String input, String output, MetaData meta, boolean isInt)
+	public MinOperator(final String input, final String output, final MetaData meta, final boolean isInt)
 	{
 		this.input = input;
 		this.output = output;
@@ -63,9 +63,9 @@ public final class MinOperator implements AggregateOperator, Serializable
 		}
 	}
 
-	public static MinOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static MinOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		MinOperator value = (MinOperator)unsafe.allocateInstance(MinOperator.class);
+		final MinOperator value = (MinOperator)unsafe.allocateInstance(MinOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.input = OperatorUtils.readString(in, prev);
 		value.output = OperatorUtils.readString(in, prev);
@@ -92,7 +92,7 @@ public final class MinOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public AggregateResultThread getHashThread(HashMap<String, Integer> cols2Pos) throws Exception
+	public AggregateResultThread getHashThread(final HashMap<String, Integer> cols2Pos) throws Exception
 	{
 		return new MinHashThread(cols2Pos);
 	}
@@ -104,7 +104,7 @@ public final class MinOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public AggregateResultThread newProcessingThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos)
+	public AggregateResultThread newProcessingThread(final ArrayList<ArrayList<Object>> rows, final HashMap<String, Integer> cols2Pos)
 	{
 		return new MinThread(rows, cols2Pos);
 	}
@@ -141,9 +141,9 @@ public final class MinOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -163,44 +163,44 @@ public final class MinOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public void setInput(String col)
+	public void setInput(final String col)
 	{
 		input = col;
 	}
 
 	@Override
-	public void setInputColumn(String col)
+	public void setInputColumn(final String col)
 	{
 		input = col;
 	}
 
-	public void setIsChar(boolean isInt)
+	public void setIsChar(final boolean isInt)
 	{
 		this.isChar = isInt;
 	}
 
-	public void setIsDate(boolean isInt)
+	public void setIsDate(final boolean isInt)
 	{
 		this.isDate = isInt;
 	}
 
-	public void setIsFloat(boolean isInt)
+	public void setIsFloat(final boolean isInt)
 	{
 		this.isFloat = isInt;
 	}
 
-	public void setIsInt(boolean isInt)
+	public void setIsInt(final boolean isInt)
 	{
 		this.isInt = isInt;
 	}
 
-	public void setIsLong(boolean isInt)
+	public void setIsLong(final boolean isInt)
 	{
 		this.isLong = isInt;
 	}
 
 	@Override
-	public void setNumGroups(long groups)
+	public void setNumGroups(final long groups)
 	{
 		NUM_GROUPS = groups;
 	}
@@ -213,7 +213,7 @@ public final class MinOperator implements AggregateOperator, Serializable
 		private final HashMap<String, Integer> cols2Pos;
 		private int pos;
 
-		public MinHashThread(HashMap<String, Integer> cols2Pos) throws Exception
+		public MinHashThread(final HashMap<String, Integer> cols2Pos) throws Exception
 		{
 			this.cols2Pos = cols2Pos;
 			try
@@ -235,24 +235,24 @@ public final class MinOperator implements AggregateOperator, Serializable
 		}
 
 		@Override
-		public Object getResult(ArrayList<Object> keys)
+		public Object getResult(final ArrayList<Object> keys)
 		{
 			return mins.get(keys);
 		}
 
 		// @Parallel
 		@Override
-		public final void put(ArrayList<Object> row, ArrayList<Object> group)
+		public final void put(final ArrayList<Object> row, final ArrayList<Object> group)
 		{
 			final Object o = row.get(pos);
-			Comparable val = (Comparable)o;
+			final Comparable val = (Comparable)o;
 
 			synchronized (mins)
 			{
-				Object ad = mins.get(group);
+				final Object ad = mins.get(group);
 				if (ad != null)
 				{
-					Comparable min = (Comparable)ad;
+					final Comparable min = (Comparable)ad;
 					if (val.compareTo(min) < 0)
 					{
 						mins.put(group, val);
@@ -272,7 +272,7 @@ public final class MinOperator implements AggregateOperator, Serializable
 		private final HashMap<String, Integer> cols2Pos;
 		private Comparable min;
 
-		public MinThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos)
+		public MinThread(final ArrayList<ArrayList<Object>> rows, final HashMap<String, Integer> cols2Pos)
 		{
 			this.rows = rows;
 			this.cols2Pos = cols2Pos;

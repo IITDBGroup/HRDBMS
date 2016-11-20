@@ -6,7 +6,7 @@ public class CreateView extends SQLStatement
 	private final FullSelect select;
 	private final String text;
 
-	public CreateView(TableName view, FullSelect select, String text)
+	public CreateView(final TableName view, final FullSelect select, final String text)
 	{
 		this.view = view;
 		this.select = select;

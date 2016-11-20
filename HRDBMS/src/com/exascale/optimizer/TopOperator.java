@@ -25,7 +25,7 @@ public final class TopOperator implements Operator, Serializable
 			f.setAccessible(true);
 			unsafe = (sun.misc.Unsafe)f.get(null);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			unsafe = null;
 		}
@@ -44,16 +44,16 @@ public final class TopOperator implements Operator, Serializable
 	private transient AtomicLong received;
 	private transient volatile boolean demReceived;
 
-	public TopOperator(long numVals, MetaData meta)
+	public TopOperator(final long numVals, final MetaData meta)
 	{
 		this.remaining = new AtomicLong(numVals);
 		this.meta = meta;
 		received = new AtomicLong(0);
 	}
 
-	public static TopOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static TopOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		TopOperator value = (TopOperator)unsafe.allocateInstance(TopOperator.class);
+		final TopOperator value = (TopOperator)unsafe.allocateInstance(TopOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.child = OperatorUtils.deserializeOperator(in, prev);
 		value.parent = OperatorUtils.deserializeOperator(in, prev);
@@ -68,7 +68,7 @@ public final class TopOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void add(Operator op) throws Exception
+	public void add(final Operator op) throws Exception
 	{
 		if (child == null)
 		{
@@ -158,7 +158,7 @@ public final class TopOperator implements Operator, Serializable
 	}
 
 	@Override
-	public Object next(Operator op) throws Exception
+	public Object next(final Operator op) throws Exception
 	{
 		final long num = remaining.getAndDecrement();
 
@@ -201,7 +201,7 @@ public final class TopOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void nextAll(Operator op) throws Exception
+	public void nextAll(final Operator op) throws Exception
 	{
 		child.nextAll(op);
 		Object o = next(op);
@@ -230,7 +230,7 @@ public final class TopOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void registerParent(Operator op) throws Exception
+	public void registerParent(final Operator op) throws Exception
 	{
 		if (parent == null)
 		{
@@ -243,7 +243,7 @@ public final class TopOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeChild(Operator op)
+	public void removeChild(final Operator op)
 	{
 		if (op == child)
 		{
@@ -253,7 +253,7 @@ public final class TopOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 		parent = null;
 	}
@@ -266,9 +266,9 @@ public final class TopOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -287,18 +287,18 @@ public final class TopOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void setChildPos(int pos)
+	public void setChildPos(final int pos)
 	{
 	}
 
 	@Override
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 		this.node = node;
 	}
 
 	@Override
-	public void setPlan(Plan plan)
+	public void setPlan(final Plan plan)
 	{
 	}
 

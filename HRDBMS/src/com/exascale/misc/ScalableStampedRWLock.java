@@ -163,7 +163,7 @@ public class ScalableStampedRWLock implements ReadWriteLock, java.io.Serializabl
 		}
 
 		// Scan the array of Reader states
-		for (AtomicInteger readerState : localReadersStateArray)
+		for (final AtomicInteger readerState : localReadersStateArray)
 		{
 			while (readerState != null && readerState.get() == SRWL_STATE_READING)
 			{
@@ -209,7 +209,7 @@ public class ScalableStampedRWLock implements ReadWriteLock, java.io.Serializabl
 		}
 
 		// Scan the array of Reader states
-		for (AtomicInteger readerState : localReadersStateArray)
+		for (final AtomicInteger readerState : localReadersStateArray)
 		{
 			if (readerState != null && readerState.get() == SRWL_STATE_READING)
 			{
@@ -261,7 +261,7 @@ public class ScalableStampedRWLock implements ReadWriteLock, java.io.Serializabl
 	 *         and {@code false} if the waiting time elapsed before the lock
 	 *         could be acquired.
 	 */
-	public boolean exclusiveTryLockNanos(long nanosTimeout) throws InterruptedException
+	public boolean exclusiveTryLockNanos(final long nanosTimeout) throws InterruptedException
 	{
 		final long lastTime = System.nanoTime();
 		// Try to acquire the stampedLock in write-mode
@@ -283,7 +283,7 @@ public class ScalableStampedRWLock implements ReadWriteLock, java.io.Serializabl
 		}
 
 		// Scan the array of Reader states
-		for (AtomicInteger readerState : localReadersStateArray)
+		for (final AtomicInteger readerState : localReadersStateArray)
 		{
 			while (readerState != null && readerState.get() == SRWL_STATE_READING)
 			{
@@ -440,7 +440,7 @@ public class ScalableStampedRWLock implements ReadWriteLock, java.io.Serializabl
 	 *            the time to wait for the read lock in nanoseconds
 	 * @return {@code true} if the read lock was acquired
 	 */
-	public boolean sharedTryLockNanos(long nanosTimeout)
+	public boolean sharedTryLockNanos(final long nanosTimeout)
 	{
 		final long lastTime = System.nanoTime();
 		ReadersEntry localEntry = entry.get();
@@ -540,7 +540,7 @@ public class ScalableStampedRWLock implements ReadWriteLock, java.io.Serializabl
 	 * @return true if the lock has not been exclusively acquired since issuance
 	 *         of the given stamp; else false
 	 */
-	public boolean validate(long stamp)
+	public boolean validate(final long stamp)
 	{
 		return stampedLock.validate(stamp);
 	}
@@ -577,7 +577,7 @@ public class ScalableStampedRWLock implements ReadWriteLock, java.io.Serializabl
 	 *            The reader's state that we wish to remove from the
 	 *            ConcurrentLinkedQueue
 	 */
-	protected void removeState(AtomicInteger state)
+	protected void removeState(final AtomicInteger state)
 	{
 		readersStateList.remove(state);
 		// Setting the readersStateArrayRef to null will make the Writer
@@ -596,7 +596,7 @@ public class ScalableStampedRWLock implements ReadWriteLock, java.io.Serializabl
 	{
 		final ScalableStampedRWLock rwlock;
 
-		public InnerReadLock(ScalableStampedRWLock rwlock)
+		public InnerReadLock(final ScalableStampedRWLock rwlock)
 		{
 			this.rwlock = rwlock;
 		}
@@ -628,7 +628,7 @@ public class ScalableStampedRWLock implements ReadWriteLock, java.io.Serializabl
 		}
 
 		@Override
-		public boolean tryLock(long timeout, TimeUnit unit) throws InterruptedException
+		public boolean tryLock(final long timeout, final TimeUnit unit) throws InterruptedException
 		{
 			if (Thread.interrupted())
 			{
@@ -651,7 +651,7 @@ public class ScalableStampedRWLock implements ReadWriteLock, java.io.Serializabl
 	{
 		final ScalableStampedRWLock rwlock;
 
-		public InnerWriteLock(ScalableStampedRWLock rwlock)
+		public InnerWriteLock(final ScalableStampedRWLock rwlock)
 		{
 			this.rwlock = rwlock;
 		}
@@ -683,7 +683,7 @@ public class ScalableStampedRWLock implements ReadWriteLock, java.io.Serializabl
 		}
 
 		@Override
-		public boolean tryLock(long timeout, TimeUnit unit) throws InterruptedException
+		public boolean tryLock(final long timeout, final TimeUnit unit) throws InterruptedException
 		{
 			if (Thread.interrupted())
 			{
@@ -708,7 +708,7 @@ public class ScalableStampedRWLock implements ReadWriteLock, java.io.Serializabl
 		public final AtomicInteger state;
 		public boolean isStampLocked = false;
 
-		public ReadersEntry(AtomicInteger state)
+		public ReadersEntry(final AtomicInteger state)
 		{
 			this.state = state;
 		}

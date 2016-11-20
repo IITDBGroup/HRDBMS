@@ -4,7 +4,7 @@ public class DropView extends SQLStatement
 {
 	private final TableName view;
 
-	public DropView(TableName view)
+	public DropView(final TableName view)
 	{
 		this.view = view;
 	}

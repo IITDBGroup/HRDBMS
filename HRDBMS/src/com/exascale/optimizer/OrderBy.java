@@ -6,7 +6,7 @@ public class OrderBy
 {
 	private final ArrayList<SortKey> keys;
 
-	public OrderBy(ArrayList<SortKey> keys)
+	public OrderBy(final ArrayList<SortKey> keys)
 	{
 		this.keys = keys;
 	}
@@ -14,8 +14,8 @@ public class OrderBy
 	@Override
 	public OrderBy clone()
 	{
-		ArrayList<SortKey> newKeys = new ArrayList<SortKey>();
-		for (SortKey key : keys)
+		final ArrayList<SortKey> newKeys = new ArrayList<SortKey>();
+		for (final SortKey key : keys)
 		{
 			newKeys.add(key.clone());
 		}

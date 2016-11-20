@@ -9,7 +9,6 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -40,7 +39,7 @@ public class Huffman
 
 	static
 	{
-		long start = System.currentTimeMillis();
+		final long start = System.currentTimeMillis();
 
 		codeExtended['t']['h'] = 256;
 		codeExtended['T']['H'] = 257;
@@ -1012,14 +1011,14 @@ public class Huffman
 		freq.put(667, 7868); // tION
 
 		buildTree();
-		for (int key : freq.keySet())
+		for (final int key : freq.keySet())
 		{
 			tree = treeParts.get(key);
 		}
 
-		TreeMap<Integer, String> codes = new TreeMap<Integer, String>();
+		final TreeMap<Integer, String> codes = new TreeMap<Integer, String>();
 		traverse(tree, codes, "");
-		for (Entry entry : codes.entrySet())
+		for (final Entry entry : codes.entrySet())
 		{
 			encodeLength[(Integer)entry.getKey()] = ((String)entry.getValue()).length();
 			encode[(Integer)entry.getKey()] = Integer.parseInt((String)entry.getValue(), 2);
@@ -1034,7 +1033,7 @@ public class Huffman
 		{
 			writeDataFile();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			e.printStackTrace();
 		}
@@ -1043,22 +1042,22 @@ public class Huffman
 		{
 			readDataFile();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			e.printStackTrace();
 		}
 
-		long end = System.currentTimeMillis();
+		final long end = System.currentTimeMillis();
 		System.out.println("Init took " + (((end - start) * 1.0) / 1000.0) + "s");
 	}
 
-	public static void main(String[] args)
+	public static void main(final String[] args)
 	{
 
 		try
 		{
-			long start = System.currentTimeMillis();
-			BufferedReader in = new BufferedReader(new FileReader("c:\\bible.txt"));
+			final long start = System.currentTimeMillis();
+			final BufferedReader in = new BufferedReader(new FileReader("c:\\bible.txt"));
 			int u = 0;
 			int c = 0;
 			String line = in.readLine();
@@ -1070,14 +1069,14 @@ public class Huffman
 				{
 					line = line.trim();
 					u += line.length();
-					byte[] bytes = line.getBytes("UTF-8");
-					byte[] compressed = new byte[bytes.length * 3];
-					int clen = compress(bytes, bytes.length, compressed);
+					final byte[] bytes = line.getBytes("UTF-8");
+					final byte[] compressed = new byte[bytes.length * 3];
+					final int clen = compress(bytes, bytes.length, compressed);
 					c += clen;
-					byte[] decompressed = new byte[clen << 1];
-					int dlen = decompress(compressed, clen, decompressed);
-					byte[] target = Arrays.copyOf(decompressed, dlen);
-					String line2 = new String(target, "UTF-8");
+					final byte[] decompressed = new byte[clen << 1];
+					final int dlen = decompress(compressed, clen, decompressed);
+					final byte[] target = Arrays.copyOf(decompressed, dlen);
+					final String line2 = new String(target, "UTF-8");
 					if (!line.equals(line2))
 					{
 						System.out.println("Lines don't match!");
@@ -1089,13 +1088,13 @@ public class Huffman
 				line = in.readLine();
 			}
 
-			long end = System.currentTimeMillis();
+			final long end = System.currentTimeMillis();
 			in.close();
 			System.out.println("Average compression ratio: " + (100.0 - (c * 100.0 / u)) + "%");
 			System.out.println("Test took " + ((end - start) / 1000.0) + "s");
 			System.out.println("Average line was " + (u * 1.0 / lines) + " characters");
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			e.printStackTrace();
 		}
@@ -1107,15 +1106,15 @@ public class Huffman
 		int i = 0;
 		while (i < 16777216)
 		{
-			Code code = new Code();
+			final Code code = new Code();
 			int length = 0;
 			int temp = 0;
-			ArrayList<Byte> bytes = new ArrayList<Byte>();
+			final ArrayList<Byte> bytes = new ArrayList<Byte>();
 			int x = 0x800000;
 			HuffmanNode node = tree;
 			while (x != 0)
 			{
-				int z = i & x;
+				final int z = i & x;
 				if (z == 0)
 				{
 					node = node.left;
@@ -1137,8 +1136,8 @@ public class Huffman
 					}
 					else
 					{
-						byte[] bytes2 = decodeExtended[node.bytecode - 256];
-						for (byte b : bytes2)
+						final byte[] bytes2 = decodeExtended[node.bytecode - 256];
+						for (final byte b : bytes2)
 						{
 							bytes.add(b);
 						}
@@ -1149,9 +1148,9 @@ public class Huffman
 				x = (x >>> 1);
 			}
 
-			byte[] array = new byte[bytes.size()];
+			final byte[] array = new byte[bytes.size()];
 			int j = 0;
-			for (byte b : bytes)
+			for (final byte b : bytes)
 			{
 				array[j++] = b;
 			}
@@ -1168,7 +1167,7 @@ public class Huffman
 		int i = 0;
 		HuffmanNode left = null;
 		HuffmanNode right = null;
-		for (Entry<Integer, Integer> entry : entriesSortedByValues(freq))
+		for (final Entry<Integer, Integer> entry : entriesSortedByValues(freq))
 		{
 			if (i == 0)
 			{
@@ -1182,7 +1181,7 @@ public class Huffman
 			}
 		}
 
-		HuffmanNode parent = new HuffmanNode();
+		final HuffmanNode parent = new HuffmanNode();
 		parent.addLeft(left);
 		parent.addRight(right);
 		freq.remove(left.bytecode);
@@ -1201,7 +1200,7 @@ public class Huffman
 		int i = 0;
 		HuffmanNode left = null;
 		HuffmanNode right = null;
-		for (Entry<Integer, Integer> entry : entriesSortedByValues(freq))
+		for (final Entry<Integer, Integer> entry : entriesSortedByValues(freq))
 		{
 			if (i == 0)
 			{
@@ -1227,7 +1226,7 @@ public class Huffman
 			}
 		}
 
-		HuffmanNode parent = new HuffmanNode();
+		final HuffmanNode parent = new HuffmanNode();
 		parent.addLeft(left);
 		parent.addRight(right);
 		freq.remove(left.bytecode);
@@ -1366,7 +1365,7 @@ public class Huffman
 	 * sortedEntries.addAll(map.entrySet()); return sortedEntries; }
 	 */
 
-	private static int compress(byte[] in, int inLen, byte[] out)
+	private static int compress(final byte[] in, final int inLen, final byte[] out)
 	{
 		int retval = 0;
 		int i = 0;
@@ -1374,7 +1373,7 @@ public class Huffman
 		int value = 0;
 		int remainder = 0;
 		int remLen = 0;
-		ByteBuffer bb = ByteBuffer.wrap(out);
+		final ByteBuffer bb = ByteBuffer.wrap(out);
 		int coded = 0;
 		int length = 0;
 		while (i <= inLen || remLen != 0)
@@ -1391,26 +1390,26 @@ public class Huffman
 				int code = 0;
 				if (i < inLen)
 				{
-					int temp = in[i++] & 0xff;
+					final int temp = in[i++] & 0xff;
 					int temp2 = 0;
 					if (i < inLen)
 					{
 						temp2 = in[i] & 0xff;
-						int temp3 = codeExtended[temp][temp2];
+						final int temp3 = codeExtended[temp][temp2];
 						if (temp3 != 0)
 						{
 							int temp4 = 0;
 							if (i + 1 < inLen)
 							{
 								temp4 = in[i + 1] & 0xff;
-								int temp5 = codeExtended2[temp3 - 256][temp4];
+								final int temp5 = codeExtended2[temp3 - 256][temp4];
 								if (temp5 != 0)
 								{
 									int temp6 = 0;
 									if (i + 2 < inLen)
 									{
 										temp6 = in[i + 2] & 0xff;
-										int temp7 = codeExtended3[temp5 - 256][temp6];
+										final int temp7 = codeExtended3[temp5 - 256][temp6];
 										if (temp7 != 0)
 										{
 											i += 3;
@@ -1510,11 +1509,11 @@ public class Huffman
 		return retval;
 	}
 
-	private static int decompress(byte[] in, int inLen, byte[] out) throws Exception
+	private static int decompress(final byte[] in, final int inLen, final byte[] out) throws Exception
 	{
 		int i = 0;
 		int o = 0;
-		ByteBuffer bb = ByteBuffer.wrap(in);
+		final ByteBuffer bb = ByteBuffer.wrap(in);
 		int remainder = 0;
 		int remLen = 0;
 		Code code = null;
@@ -1596,7 +1595,7 @@ public class Huffman
 			}
 			else
 			{
-				for (byte b : code.bytes)
+				for (final byte b : code.bytes)
 				{
 					if (b == 0)
 					{
@@ -1614,7 +1613,7 @@ public class Huffman
 		}
 	}
 
-	private static Code readCode(ByteBuffer bb, InputStream in) throws Exception
+	private static Code readCode(final ByteBuffer bb, final InputStream in) throws Exception
 	{
 		int size = 0;
 		byte[] bytes = null;
@@ -1670,7 +1669,7 @@ public class Huffman
 			used = bb.get();
 		}
 
-		Code code = new Code();
+		final Code code = new Code();
 		code.bytes = bytes;
 		code.used = used;
 		return code;
@@ -1678,7 +1677,7 @@ public class Huffman
 
 	private static void readDataFile() throws Exception
 	{
-		InputStream in = new FileInputStream("c:\\huffman2.dat");
+		final InputStream in = new FileInputStream("c:\\huffman2.dat");
 		ByteBuffer bb = ByteBuffer.allocate(NUM_SYM * 4);
 		in.read(bb.array());
 		int i = 0;
@@ -1710,7 +1709,7 @@ public class Huffman
 		in.close();
 	}
 
-	private static void traverse(HuffmanNode node, TreeMap<Integer, String> codes, String str)
+	private static void traverse(final HuffmanNode node, final TreeMap<Integer, String> codes, final String str)
 	{
 		if (node.left == null && node.right == null)
 		{
@@ -1730,9 +1729,9 @@ public class Huffman
 		}
 	}
 
-	private static int writeCode(Code code, ByteBuffer bb)
+	private static int writeCode(final Code code, final ByteBuffer bb)
 	{
-		byte size = (byte)code.bytes.length;
+		final byte size = (byte)code.bytes.length;
 		int retval = 0;
 		if (bb.remaining() > 0)
 		{
@@ -1744,7 +1743,7 @@ public class Huffman
 			return -1;
 		}
 
-		for (byte b : code.bytes)
+		for (final byte b : code.bytes)
 		{
 			if (bb.remaining() > 0)
 			{
@@ -1771,7 +1770,7 @@ public class Huffman
 
 	private static void writeDataFile() throws Exception
 	{
-		OutputStream out = new FileOutputStream("c:\\huffman2.dat");
+		final OutputStream out = new FileOutputStream("c:\\huffman2.dat");
 		ByteBuffer bb = ByteBuffer.allocate(NUM_SYM * 4);
 		int i = 0;
 		while (i < NUM_SYM)
@@ -1795,7 +1794,7 @@ public class Huffman
 		int pos = 0;
 		while (i < 16777216)
 		{
-			int len = writeCode(decode3[i], bb);
+			final int len = writeCode(decode3[i], bb);
 			if (len != -1)
 			{
 				pos += len;
@@ -1814,17 +1813,12 @@ public class Huffman
 		out.close();
 	}
 
-	static <K, V extends Comparable<? super V>> SortedSet<Map.Entry<K, V>> entriesSortedByValues(Map<K, V> map)
+	static <K, V extends Comparable<? super V>> SortedSet<Map.Entry<K, V>> entriesSortedByValues(final Map<K, V> map)
 	{
-		SortedSet<Map.Entry<K, V>> sortedEntries = new TreeSet<Map.Entry<K, V>>(new Comparator<Map.Entry<K, V>>() {
-
-			@Override
-			public int compare(Map.Entry<K, V> e1, Map.Entry<K, V> e2)
-			{
-				int res = e1.getValue().compareTo(e2.getValue());
-				return res != 0 ? res : 1;
-				// Special fix to preserve items with equal values
-			}
+		final SortedSet<Map.Entry<K, V>> sortedEntries = new TreeSet<Map.Entry<K, V>>((e1, e2) -> {
+			final int res = e1.getValue().compareTo(e2.getValue());
+			return res != 0 ? res : 1;
+			// Special fix to preserve items with equal values
 		});
 		sortedEntries.addAll(map.entrySet());
 		return sortedEntries;
@@ -1849,19 +1843,19 @@ public class Huffman
 			freq = 0;
 		}
 
-		public HuffmanNode(int bytecode, int freq)
+		public HuffmanNode(final int bytecode, final int freq)
 		{
 			this.bytecode = bytecode;
 			this.freq = freq;
 		}
 
-		public void addLeft(HuffmanNode left)
+		public void addLeft(final HuffmanNode left)
 		{
 			this.left = left;
 			this.freq += left.freq;
 		}
 
-		public void addRight(HuffmanNode right)
+		public void addRight(final HuffmanNode right)
 		{
 			this.right = right;
 			this.freq += right.freq;

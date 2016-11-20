@@ -11,7 +11,7 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 {
 	private final Connection conn;
 
-	public HRDBMSDatabaseMetaData(Connection conn)
+	public HRDBMSDatabaseMetaData(final Connection conn)
 	{
 		this.conn = conn;
 	}
@@ -47,7 +47,7 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public boolean deletesAreDetected(int type) throws SQLException
+	public boolean deletesAreDetected(final int type) throws SQLException
 	{
 		return false;
 	}
@@ -65,14 +65,14 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public ResultSet getAttributes(String catalog, String schemaPattern, String typeNamePattern, String attributeNamePattern) throws SQLException
+	public ResultSet getAttributes(final String catalog, final String schemaPattern, final String typeNamePattern, final String attributeNamePattern) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
 	}
 
 	@Override
-	public ResultSet getBestRowIdentifier(String catalog, String schema, String table, int scope, boolean nullable) throws SQLException
+	public ResultSet getBestRowIdentifier(final String catalog, final String schema, final String table, final int scope, final boolean nullable) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
@@ -105,14 +105,14 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public ResultSet getColumnPrivileges(String catalog, String schema, String table, String columnNamePattern) throws SQLException
+	public ResultSet getColumnPrivileges(final String catalog, final String schema, final String table, final String columnNamePattern) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
 	}
 
 	@Override
-	public ResultSet getColumns(String catalog, String schemaPattern, String tableNamePattern, String columnNamePattern) throws SQLException
+	public ResultSet getColumns(final String catalog, final String schemaPattern, final String tableNamePattern, final String columnNamePattern) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
@@ -125,7 +125,7 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public ResultSet getCrossReference(String parentCatalog, String parentSchema, String parentTable, String foreignCatalog, String foreignSchema, String foreignTable) throws SQLException
+	public ResultSet getCrossReference(final String parentCatalog, final String parentSchema, final String parentTable, final String foreignCatalog, final String foreignSchema, final String foreignTable) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
@@ -186,7 +186,7 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public ResultSet getExportedKeys(String catalog, String schema, String table) throws SQLException
+	public ResultSet getExportedKeys(final String catalog, final String schema, final String table) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
@@ -199,14 +199,14 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public ResultSet getFunctionColumns(String catalog, String schemaPattern, String functionNamePattern, String columnNamePattern) throws SQLException
+	public ResultSet getFunctionColumns(final String catalog, final String schemaPattern, final String functionNamePattern, final String columnNamePattern) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
 	}
 
 	@Override
-	public ResultSet getFunctions(String catalog, String schemaPattern, String functionNamePattern) throws SQLException
+	public ResultSet getFunctions(final String catalog, final String schemaPattern, final String functionNamePattern) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
@@ -219,14 +219,14 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public ResultSet getImportedKeys(String catalog, String schema, String table) throws SQLException
+	public ResultSet getImportedKeys(final String catalog, final String schema, final String table) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
 	}
 
 	@Override
-	public ResultSet getIndexInfo(String catalog, String schema, String table, boolean unique, boolean approximate) throws SQLException
+	public ResultSet getIndexInfo(final String catalog, final String schema, final String table, final boolean unique, final boolean approximate) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
@@ -371,21 +371,21 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public ResultSet getPrimaryKeys(String catalog, String schema, String table) throws SQLException
+	public ResultSet getPrimaryKeys(final String catalog, final String schema, final String table) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
 	}
 
 	@Override
-	public ResultSet getProcedureColumns(String catalog, String schemaPattern, String procedureNamePattern, String columnNamePattern) throws SQLException
+	public ResultSet getProcedureColumns(final String catalog, final String schemaPattern, final String procedureNamePattern, final String columnNamePattern) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
 	}
 
 	@Override
-	public ResultSet getProcedures(String catalog, String schemaPattern, String procedureNamePattern) throws SQLException
+	public ResultSet getProcedures(final String catalog, final String schemaPattern, final String procedureNamePattern) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
@@ -398,7 +398,7 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public ResultSet getPseudoColumns(String catalog, String schemaPattern, String tableNamePattern, String columnNamePattern) throws SQLException
+	public ResultSet getPseudoColumns(final String catalog, final String schemaPattern, final String tableNamePattern, final String columnNamePattern) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
@@ -424,7 +424,7 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public ResultSet getSchemas(String catalog, String schemaPattern) throws SQLException
+	public ResultSet getSchemas(final String catalog, final String schemaPattern) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
@@ -461,14 +461,14 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public ResultSet getSuperTables(String catalog, String schemaPattern, String tableNamePattern) throws SQLException
+	public ResultSet getSuperTables(final String catalog, final String schemaPattern, final String tableNamePattern) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
 	}
 
 	@Override
-	public ResultSet getSuperTypes(String catalog, String schemaPattern, String typeNamePattern) throws SQLException
+	public ResultSet getSuperTypes(final String catalog, final String schemaPattern, final String typeNamePattern) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
@@ -481,14 +481,14 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public ResultSet getTablePrivileges(String catalog, String schemaPattern, String tableNamePattern) throws SQLException
+	public ResultSet getTablePrivileges(final String catalog, final String schemaPattern, final String tableNamePattern) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
 	}
 
 	@Override
-	public ResultSet getTables(String catalog, String schemaPattern, String tableNamePattern, String[] types) throws SQLException
+	public ResultSet getTables(final String catalog, final String schemaPattern, final String tableNamePattern, final String[] types) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
@@ -515,7 +515,7 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public ResultSet getUDTs(String catalog, String schemaPattern, String typeNamePattern, int[] types) throws SQLException
+	public ResultSet getUDTs(final String catalog, final String schemaPattern, final String typeNamePattern, final int[] types) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
@@ -534,14 +534,14 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public ResultSet getVersionColumns(String catalog, String schema, String table) throws SQLException
+	public ResultSet getVersionColumns(final String catalog, final String schema, final String table) throws SQLException
 	{
 		// TODO Auto-generated method stub
 		return null;
 	}
 
 	@Override
-	public boolean insertsAreDetected(int type) throws SQLException
+	public boolean insertsAreDetected(final int type) throws SQLException
 	{
 		return false;
 	}
@@ -559,7 +559,7 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public boolean isWrapperFor(Class<?> iface) throws SQLException
+	public boolean isWrapperFor(final Class<?> iface) throws SQLException
 	{
 		return false;
 	}
@@ -601,37 +601,37 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public boolean othersDeletesAreVisible(int type) throws SQLException
+	public boolean othersDeletesAreVisible(final int type) throws SQLException
 	{
 		return false;
 	}
 
 	@Override
-	public boolean othersInsertsAreVisible(int type) throws SQLException
+	public boolean othersInsertsAreVisible(final int type) throws SQLException
 	{
 		return false;
 	}
 
 	@Override
-	public boolean othersUpdatesAreVisible(int type) throws SQLException
+	public boolean othersUpdatesAreVisible(final int type) throws SQLException
 	{
 		return false;
 	}
 
 	@Override
-	public boolean ownDeletesAreVisible(int type) throws SQLException
+	public boolean ownDeletesAreVisible(final int type) throws SQLException
 	{
 		return true;
 	}
 
 	@Override
-	public boolean ownInsertsAreVisible(int type) throws SQLException
+	public boolean ownInsertsAreVisible(final int type) throws SQLException
 	{
 		return true;
 	}
 
 	@Override
-	public boolean ownUpdatesAreVisible(int type) throws SQLException
+	public boolean ownUpdatesAreVisible(final int type) throws SQLException
 	{
 		return true;
 	}
@@ -751,7 +751,7 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public boolean supportsConvert(int fromType, int toType) throws SQLException
+	public boolean supportsConvert(final int fromType, final int toType) throws SQLException
 	{
 		return false;
 	}
@@ -943,7 +943,7 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public boolean supportsResultSetConcurrency(int type, int concurrency) throws SQLException
+	public boolean supportsResultSetConcurrency(final int type, final int concurrency) throws SQLException
 	{
 		if (type == ResultSet.TYPE_FORWARD_ONLY && concurrency == ResultSet.CONCUR_READ_ONLY)
 		{
@@ -954,7 +954,7 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public boolean supportsResultSetHoldability(int holdability) throws SQLException
+	public boolean supportsResultSetHoldability(final int holdability) throws SQLException
 	{
 		if (holdability == ResultSet.CLOSE_CURSORS_AT_COMMIT)
 		{
@@ -965,7 +965,7 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public boolean supportsResultSetType(int type) throws SQLException
+	public boolean supportsResultSetType(final int type) throws SQLException
 	{
 		if (type == ResultSet.TYPE_FORWARD_ONLY)
 		{
@@ -1066,7 +1066,7 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public boolean supportsTransactionIsolationLevel(int level) throws SQLException
+	public boolean supportsTransactionIsolationLevel(final int level) throws SQLException
 	{
 		return true;
 	}
@@ -1090,13 +1090,13 @@ public class HRDBMSDatabaseMetaData implements DatabaseMetaData
 	}
 
 	@Override
-	public <T> T unwrap(Class<T> iface) throws SQLException
+	public <T> T unwrap(final Class<T> iface) throws SQLException
 	{
 		throw new SQLException("Unwrap() is not supported.");
 	}
 
 	@Override
-	public boolean updatesAreDetected(int type) throws SQLException
+	public boolean updatesAreDetected(final int type) throws SQLException
 	{
 		return false;
 	}

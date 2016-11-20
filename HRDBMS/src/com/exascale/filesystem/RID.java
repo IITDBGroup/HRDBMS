@@ -9,7 +9,7 @@ public class RID implements Serializable, Comparable
 	private int block = -1;
 	private int rec = -1;
 
-	public RID(int node, int dev, int block, int rec)
+	public RID(final int node, final int dev, final int block, final int rec)
 	{
 		this.node = node;
 		this.dev = dev;
@@ -18,14 +18,14 @@ public class RID implements Serializable, Comparable
 	}
 
 	@Override
-	public int compareTo(Object r)
+	public int compareTo(final Object r)
 	{
 		if (!(r instanceof RID))
 		{
 			return -1;
 		}
 
-		RID rhs = (RID)r;
+		final RID rhs = (RID)r;
 		if (node < rhs.node)
 		{
 			return -1;
@@ -65,7 +65,7 @@ public class RID implements Serializable, Comparable
 	}
 
 	@Override
-	public boolean equals(Object obj)
+	public boolean equals(final Object obj)
 	{
 		if (obj == null)
 		{
@@ -112,22 +112,22 @@ public class RID implements Serializable, Comparable
 		return Integer.reverse(node) + Integer.reverse(dev) + Integer.reverse(block) + Integer.reverse(rec);
 	}
 
-	public void setBlock(int block)
+	public void setBlock(final int block)
 	{
 		this.block = block;
 	}
 
-	public void setDevice(int dev)
+	public void setDevice(final int dev)
 	{
 		this.dev = dev;
 	}
 
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 		this.node = node;
 	}
 
-	public void setRecord(int rec)
+	public void setRecord(final int rec)
 	{
 		this.rec = rec;
 	}

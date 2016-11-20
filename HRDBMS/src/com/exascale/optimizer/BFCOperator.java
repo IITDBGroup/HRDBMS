@@ -35,7 +35,7 @@ public class BFCOperator implements Operator
 			// get unsafe offset to this field
 			offset = unsafe.objectFieldOffset(fieldToUpdate);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			unsafe = null;
 		}
@@ -52,21 +52,27 @@ public class BFCOperator implements Operator
 	private final byte[] sizeBuff = new byte[4];
 	private byte[] data = null;
 
-	public BFCOperator(BufferedFileChannel bfc, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Type, MetaData meta)
+	public BFCOperator(final BufferedFileChannel bfc, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Type, final MetaData meta)
 	{
 		this.bfc = bfc;
 		this.pos2Col = pos2Col;
 		this.cols2Type = cols2Type;
 		this.meta = meta;
 		this.cols2Pos = new HashMap<String, Integer>();
-		for (Map.Entry entry : pos2Col.entrySet())
+		for (final Map.Entry entry : pos2Col.entrySet())
 		{
 			cols2Pos.put((String)entry.getValue(), (Integer)entry.getKey());
 		}
 	}
 
+	private static int bytesToInt(final byte[] val)
+	{
+		final int ret = java.nio.ByteBuffer.wrap(val).getInt();
+		return ret;
+	}
+
 	@Override
-	public void add(Operator op) throws Exception
+	public void add(final Operator op) throws Exception
 	{
 		throw new UnsupportedOperationException("A BFCOperator cannot have children");
 	}
@@ -131,7 +137,7 @@ public class BFCOperator implements Operator
 	}
 
 	@Override
-	public Object next(Operator op) throws Exception
+	public Object next(final Operator op) throws Exception
 	{
 		ByteBuffer bb = ByteBuffer.wrap(sizeBuff);
 
@@ -155,7 +161,7 @@ public class BFCOperator implements Operator
 	}
 
 	@Override
-	public void nextAll(Operator op) throws Exception
+	public void nextAll(final Operator op) throws Exception
 	{
 		throw new UnsupportedOperationException("BFCOperator does not support nextAll()");
 	}
@@ -179,18 +185,18 @@ public class BFCOperator implements Operator
 	}
 
 	@Override
-	public void registerParent(Operator op) throws Exception
+	public void registerParent(final Operator op) throws Exception
 	{
 		parent = op;
 	}
 
 	@Override
-	public void removeChild(Operator op)
+	public void removeChild(final Operator op)
 	{
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 		parent = null;
 	}
@@ -201,22 +207,22 @@ public class BFCOperator implements Operator
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 	}
 
 	@Override
-	public void setChildPos(int pos)
+	public void setChildPos(final int pos)
 	{
 	}
 
 	@Override
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 	}
 
 	@Override
-	public void setPlan(Plan p)
+	public void setPlan(final Plan p)
 	{
 	}
 
@@ -225,13 +231,7 @@ public class BFCOperator implements Operator
 	{
 	}
 
-	private int bytesToInt(byte[] val)
-	{
-		final int ret = java.nio.ByteBuffer.wrap(val).getInt();
-		return ret;
-	}
-
-	private Object fromBytes(byte[] val) throws Exception
+	private Object fromBytes(final byte[] val) throws Exception
 	{
 		final ByteBuffer bb = ByteBuffer.wrap(val);
 		final int numFields = bb.getInt();
@@ -301,15 +301,15 @@ public class BFCOperator implements Operator
 				bb.get(temp);
 				try
 				{
-					String value = (String)unsafe.allocateInstance(String.class);
-					int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(temp, 0, length, ca);
+					final String value = (String)unsafe.allocateInstance(String.class);
+					final int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(temp, 0, length, ca);
 					if (clen == ca.length)
 					{
 						unsafe.putObject(value, offset, ca);
 					}
 					else
 					{
-						char[] v = Arrays.copyOf(ca, clen);
+						final char[] v = Arrays.copyOf(ca, clen);
 						unsafe.putObject(value, offset, v);
 					}
 					retval.add(value);

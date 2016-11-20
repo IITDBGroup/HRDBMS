@@ -18,7 +18,7 @@ public class IOThread extends HRDBMSThread
 	private Transaction tx;
 	private ArrayList<Integer> fetchPos;
 
-	public IOThread(Block b, long txnum)
+	public IOThread(final Block b, final long txnum)
 	{
 		this.setWait(false);
 		this.description = ("I/O for " + b);
@@ -27,7 +27,7 @@ public class IOThread extends HRDBMSThread
 		this.txnum = txnum;
 	}
 
-	public IOThread(Block[] bs, long txnum)
+	public IOThread(final Block[] bs, final long txnum)
 	{
 		this.setWait(false);
 		this.description = ("I/O for multiple blocks");
@@ -35,7 +35,7 @@ public class IOThread extends HRDBMSThread
 		this.txnum = txnum;
 	}
 
-	public IOThread(Block[] bs, Transaction tx, Schema[] schemas, int schemaIndex, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos)
+	public IOThread(final Block[] bs, final Transaction tx, final Schema[] schemas, final int schemaIndex, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos)
 	{
 		this.setWait(false);
 		this.description = ("I/O for multiple blocks");
@@ -64,7 +64,7 @@ public class IOThread extends HRDBMSThread
 					{
 						BufferManager.pin(b, tx, schemas[schemaIndex++], schemaMap, fetchPos);
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.debug("", e);
 					}
@@ -76,7 +76,7 @@ public class IOThread extends HRDBMSThread
 			HRDBMSWorker.logger.error("Error occurred in an I/O thread.", e);
 		}
 
-		//this.terminate();
+		// this.terminate();
 		return;
 	}
 }

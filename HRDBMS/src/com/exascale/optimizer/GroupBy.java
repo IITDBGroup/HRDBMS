@@ -6,7 +6,7 @@ public class GroupBy
 {
 	private final ArrayList<Column> cols;
 
-	public GroupBy(ArrayList<Column> cols)
+	public GroupBy(final ArrayList<Column> cols)
 	{
 		this.cols = cols;
 	}
@@ -14,8 +14,8 @@ public class GroupBy
 	@Override
 	public GroupBy clone()
 	{
-		ArrayList<Column> newCols = new ArrayList<Column>();
-		for (Column col : cols)
+		final ArrayList<Column> newCols = new ArrayList<Column>();
+		for (final Column col : cols)
 		{
 			newCols.add(col.clone());
 		}

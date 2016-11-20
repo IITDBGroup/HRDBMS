@@ -6,7 +6,7 @@ public class Predicate
 	private String op;
 	private Expression rhs;
 
-	public Predicate(Expression lhs, String op, Expression rhs)
+	public Predicate(final Expression lhs, final String op, final Expression rhs)
 	{
 		this.lhs = lhs;
 		this.op = op;
@@ -37,14 +37,14 @@ public class Predicate
 	}
 
 	@Override
-	public boolean equals(Object o)
+	public boolean equals(final Object o)
 	{
 		if (!(o instanceof Predicate))
 		{
 			return false;
 		}
 
-		Predicate rhs2 = (Predicate)o;
+		final Predicate rhs2 = (Predicate)o;
 		return lhs.equals(rhs2.lhs) && op.equals(rhs2.op) && rhs.equals(rhs2.rhs);
 	}
 

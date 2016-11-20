@@ -40,7 +40,7 @@ public final class UnionOperator implements Operator, Serializable
 			f.setAccessible(true);
 			unsafe = (sun.misc.Unsafe)f.get(null);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			unsafe = null;
 		}
@@ -71,16 +71,16 @@ public final class UnionOperator implements Operator, Serializable
 	private transient AtomicLong received;
 	private transient volatile boolean demReceived;
 
-	public UnionOperator(boolean distinct, MetaData meta)
+	public UnionOperator(final boolean distinct, final MetaData meta)
 	{
 		this.meta = meta;
 		this.distinct = distinct;
 		received = new AtomicLong(0);
 	}
 
-	public static UnionOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static UnionOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		UnionOperator value = (UnionOperator)unsafe.allocateInstance(UnionOperator.class);
+		final UnionOperator value = (UnionOperator)unsafe.allocateInstance(UnionOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.children = OperatorUtils.deserializeALOp(in, prev);
 		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
@@ -98,7 +98,7 @@ public final class UnionOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void add(Operator op) throws Exception
+	public void add(final Operator op) throws Exception
 	{
 		children.add(op);
 		op.registerParent(this);
@@ -195,7 +195,7 @@ public final class UnionOperator implements Operator, Serializable
 	}
 
 	@Override
-	public Object next(Operator op) throws Exception
+	public Object next(final Operator op) throws Exception
 	{
 		Object o;
 		o = buffer.take();
@@ -223,7 +223,7 @@ public final class UnionOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void nextAll(Operator op) throws Exception
+	public void nextAll(final Operator op) throws Exception
 	{
 		for (final Operator o : children)
 		{
@@ -256,7 +256,7 @@ public final class UnionOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void registerParent(Operator op) throws Exception
+	public void registerParent(final Operator op) throws Exception
 	{
 		if (parent == null)
 		{
@@ -269,14 +269,14 @@ public final class UnionOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeChild(Operator op)
+	public void removeChild(final Operator op)
 	{
 		children.remove(op);
 		op.removeParent(this);
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 		parent = null;
 	}
@@ -309,9 +309,9 @@ public final class UnionOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -333,16 +333,16 @@ public final class UnionOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void setChildPos(int pos)
+	public void setChildPos(final int pos)
 	{
 	}
 
-	public void setDistinct(boolean distinct)
+	public void setDistinct(final boolean distinct)
 	{
 		this.distinct = distinct;
 	}
 
-	public boolean setEstimate(long estimate)
+	public boolean setEstimate(final long estimate)
 	{
 		if (estimateSet)
 		{
@@ -354,13 +354,13 @@ public final class UnionOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 		this.node = node;
 	}
 
 	@Override
-	public void setPlan(Plan plan)
+	public void setPlan(final Plan plan)
 	{
 	}
 
@@ -434,7 +434,7 @@ public final class UnionOperator implements Operator, Serializable
 					{
 						createTempFiles();
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.debug("", e);
 						buffer.put(e);
@@ -512,37 +512,37 @@ public final class UnionOperator implements Operator, Serializable
 
 		private void cleanupExternal()
 		{
-			for (ArrayList<FileChannel> fc : fcs)
+			for (final ArrayList<FileChannel> fc : fcs)
 			{
-				for (FileChannel f : fc)
+				for (final FileChannel f : fc)
 				{
 					try
 					{
 						f.close();
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 					}
 				}
 			}
 
-			for (ArrayList<RandomAccessFile> raf : rafs)
+			for (final ArrayList<RandomAccessFile> raf : rafs)
 			{
-				for (RandomAccessFile r : raf)
+				for (final RandomAccessFile r : raf)
 				{
 					try
 					{
 						r.close();
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 					}
 				}
 			}
 
-			for (ArrayList<String> files : externalFiles)
+			for (final ArrayList<String> files : externalFiles)
 			{
-				for (String fn : files)
+				for (final String fn : files)
 				{
 					new File(fn).delete();
 				}
@@ -557,13 +557,13 @@ public final class UnionOperator implements Operator, Serializable
 			fcs = new ArrayList<ArrayList<FileChannel>>();
 			while (i < numFiles)
 			{
-				ArrayList<String> files = new ArrayList<String>();
-				ArrayList<RandomAccessFile> raf = new ArrayList<RandomAccessFile>();
-				ArrayList<FileChannel> fc = new ArrayList<FileChannel>();
+				final ArrayList<String> files = new ArrayList<String>();
+				final ArrayList<RandomAccessFile> raf = new ArrayList<RandomAccessFile>();
+				final ArrayList<FileChannel> fc = new ArrayList<FileChannel>();
 				int j = 0; // child num
 				while (j < children.size())
 				{
-					String fn = ResourceManager.TEMP_DIRS.get(i % ResourceManager.TEMP_DIRS.size()) + this.hashCode() + "" + System.currentTimeMillis() + ".exths" + i + "." + j;
+					final String fn = ResourceManager.TEMP_DIRS.get(i % ResourceManager.TEMP_DIRS.size()) + this.hashCode() + "" + System.currentTimeMillis() + ".exths" + i + "." + j;
 					files.add(fn);
 					RandomAccessFile r = null;
 					while (true)
@@ -573,14 +573,14 @@ public final class UnionOperator implements Operator, Serializable
 							r = new RandomAccessFile(fn, "rw");
 							break;
 						}
-						catch (FileNotFoundException e)
+						catch (final FileNotFoundException e)
 						{
 							ResourceManager.panic = true;
 							try
 							{
 								Thread.sleep(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("rm_sleep_time_ms")) / 2);
 							}
-							catch (Exception f)
+							catch (final Exception f)
 							{
 							}
 						}
@@ -600,8 +600,8 @@ public final class UnionOperator implements Operator, Serializable
 		private void doExternal()
 		{
 			int i = 0; // fileNum
-			double factor = Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor"));
-			int size = (int)(ResourceManager.QUEUE_SIZE * factor);
+			final double factor = Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor"));
+			final int size = (int)(ResourceManager.QUEUE_SIZE * factor);
 			HashSet<ArrayList<Object>> set = new HashSet<ArrayList<Object>>(size);
 			ReadBackThread thread = new ReadBackThread(i, set);
 			thread.start();
@@ -614,11 +614,11 @@ public final class UnionOperator implements Operator, Serializable
 						thread.join();
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}
-				HashSet<ArrayList<Object>> temp = set;
+				final HashSet<ArrayList<Object>> temp = set;
 				if (i + 1 < numFiles)
 				{
 					set = new HashSet<ArrayList<Object>>(size);
@@ -626,7 +626,7 @@ public final class UnionOperator implements Operator, Serializable
 					thread.start();
 				}
 
-				for (ArrayList<Object> row : temp)
+				for (final ArrayList<Object> row : temp)
 				{
 					buffer.put(row);
 				}
@@ -641,7 +641,7 @@ public final class UnionOperator implements Operator, Serializable
 		private final int fileNum;
 		private final HashSet<ArrayList<Object>> set;
 
-		public ReadBackThread(int fileNum, HashSet<ArrayList<Object>> set)
+		public ReadBackThread(final int fileNum, final HashSet<ArrayList<Object>> set)
 		{
 			this.fileNum = fileNum;
 			this.set = set;
@@ -652,12 +652,12 @@ public final class UnionOperator implements Operator, Serializable
 		{
 			try
 			{
-				ArrayList<FileChannel> fs = fcs.get(fileNum);
-				for (FileChannel f : fs)
+				final ArrayList<FileChannel> fs = fcs.get(fileNum);
+				for (final FileChannel f : fs)
 				{
-					FileChannel fc = new BufferedFileChannel(f, 8 * 1024 * 1024);
+					final FileChannel fc = new BufferedFileChannel(f, 8 * 1024 * 1024);
 					fc.position(0);
-					ByteBuffer bb1 = ByteBuffer.allocate(4);
+					final ByteBuffer bb1 = ByteBuffer.allocate(4);
 					while (true)
 					{
 						bb1.position(0);
@@ -666,22 +666,22 @@ public final class UnionOperator implements Operator, Serializable
 							break;
 						}
 						bb1.position(0);
-						int length = bb1.getInt();
-						ByteBuffer bb = ByteBuffer.allocate(length);
+						final int length = bb1.getInt();
+						final ByteBuffer bb = ByteBuffer.allocate(length);
 						fc.read(bb);
-						ArrayList<Object> row = (ArrayList<Object>)fromBytes(bb.array());
+						final ArrayList<Object> row = (ArrayList<Object>)fromBytes(bb.array());
 						set.add(row);
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 				buffer.put(e);
 			}
 		}
 
-		private final Object fromBytes(byte[] val) throws Exception
+		private final Object fromBytes(final byte[] val) throws Exception
 		{
 			final ByteBuffer bb = ByteBuffer.wrap(val);
 			final int numFields = bb.getInt();
@@ -779,7 +779,7 @@ public final class UnionOperator implements Operator, Serializable
 		private final Operator op;
 		private final int childNum;
 
-		public ReadThread(Operator op, int childNum)
+		public ReadThread(final Operator op, final int childNum)
 		{
 			this.op = op;
 			this.childNum = childNum;
@@ -847,7 +847,7 @@ public final class UnionOperator implements Operator, Serializable
 					{
 						buffer.put(f);
 					}
-					catch (Exception g)
+					catch (final Exception g)
 					{
 					}
 					return;
@@ -857,7 +857,7 @@ public final class UnionOperator implements Operator, Serializable
 			{
 				try
 				{
-					ArrayList<ArrayList<byte[]>> buckets = new ArrayList<ArrayList<byte[]>>();
+					final ArrayList<ArrayList<byte[]>> buckets = new ArrayList<ArrayList<byte[]>>();
 					int i = 0;
 					while (i < numFiles)
 					{
@@ -883,9 +883,9 @@ public final class UnionOperator implements Operator, Serializable
 							return;
 						}
 
-						byte[] data = toBytes(o);
-						int hash = (int)(hash(data) % numFiles);
-						ArrayList<byte[]> bucket = buckets.get(hash);
+						final byte[] data = toBytes(o);
+						final int hash = (int)(hash(data) % numFiles);
+						final ArrayList<byte[]> bucket = buckets.get(hash);
 						bucket.add(data);
 						if (bucket.size() > 8192)
 						{
@@ -905,7 +905,7 @@ public final class UnionOperator implements Operator, Serializable
 
 					flushBuckets(buckets, childNum);
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.debug("", e);
 					buffer.put(e);
@@ -913,29 +913,29 @@ public final class UnionOperator implements Operator, Serializable
 			}
 		}
 
-		private void flushBucket(ArrayList<byte[]> bucket, int fileNum, int childNum) throws Exception
+		private void flushBucket(final ArrayList<byte[]> bucket, final int fileNum, final int childNum) throws Exception
 		{
-			FileChannel fc = fcs.get(fileNum).get(childNum);
-			for (byte[] data : bucket)
+			final FileChannel fc = fcs.get(fileNum).get(childNum);
+			for (final byte[] data : bucket)
 			{
-				ByteBuffer bb = ByteBuffer.wrap(data);
+				final ByteBuffer bb = ByteBuffer.wrap(data);
 				fc.write(bb);
 			}
 
 			bucket.clear();
 		}
 
-		private void flushBuckets(ArrayList<ArrayList<byte[]>> buckets, int childNum) throws Exception
+		private void flushBuckets(final ArrayList<ArrayList<byte[]>> buckets, final int childNum) throws Exception
 		{
 			int i = 0;
-			for (ArrayList<byte[]> bucket : buckets)
+			for (final ArrayList<byte[]> bucket : buckets)
 			{
 				flushBucket(bucket, i, childNum);
 				i++;
 			}
 		}
 
-		private long hash(byte[] key) throws Exception
+		private long hash(final byte[] key) throws Exception
 		{
 			long eHash;
 			if (key == null)
@@ -950,7 +950,7 @@ public final class UnionOperator implements Operator, Serializable
 			return eHash & 0x7FFFFFFFFFFFFFFFL;
 		}
 
-		private final byte[] toBytes(Object v) throws Exception
+		private final byte[] toBytes(final Object v) throws Exception
 		{
 			ArrayList<byte[]> bytes = null;
 			ArrayList<Object> val;
@@ -981,7 +981,7 @@ public final class UnionOperator implements Operator, Serializable
 			// for (final Object o : val)
 			while (z < limit)
 			{
-				Object o = val.get(z++);
+				final Object o = val.get(z++);
 				if (o instanceof Long)
 				{
 					header[i] = (byte)0;
@@ -1005,7 +1005,7 @@ public final class UnionOperator implements Operator, Serializable
 				else if (o instanceof String)
 				{
 					header[i] = (byte)4;
-					byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
+					final byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
 					size += (4 + b.length);
 
 					if (bytes == null)
@@ -1032,7 +1032,7 @@ public final class UnionOperator implements Operator, Serializable
 				{
 					if (((ArrayList)o).size() != 0)
 					{
-						Exception e = new Exception("Non-zero size ArrayList in toBytes()");
+						final Exception e = new Exception("Non-zero size ArrayList in toBytes()");
 						HRDBMSWorker.logger.error("Non-zero size ArrayList in toBytes()", e);
 						throw e;
 					}
@@ -1063,7 +1063,7 @@ public final class UnionOperator implements Operator, Serializable
 			// for (final Object o : val)
 			while (z < limit)
 			{
-				Object o = val.get(z++);
+				final Object o = val.get(z++);
 				if (retval[i] == 0)
 				{
 					retvalBB.putLong((Long)o);
@@ -1082,7 +1082,7 @@ public final class UnionOperator implements Operator, Serializable
 				}
 				else if (retval[i] == 4)
 				{
-					byte[] temp = bytes.get(x);
+					final byte[] temp = bytes.get(x);
 					x++;
 					retvalBB.putInt(temp.length);
 					retvalBB.put(temp);

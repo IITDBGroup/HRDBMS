@@ -24,7 +24,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 			f.setAccessible(true);
 			unsafe = (sun.misc.Unsafe)f.get(null);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			unsafe = null;
 		}
@@ -38,7 +38,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 
 	private long NUM_GROUPS = 16;
 
-	public SumOperator(String input, String output, MetaData meta, boolean isInt)
+	public SumOperator(final String input, final String output, final MetaData meta, final boolean isInt)
 	{
 		this.input = input;
 		this.output = output;
@@ -46,9 +46,9 @@ public final class SumOperator implements AggregateOperator, Serializable
 		this.isInt = isInt;
 	}
 
-	public static SumOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static SumOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		SumOperator value = (SumOperator)unsafe.allocateInstance(SumOperator.class);
+		final SumOperator value = (SumOperator)unsafe.allocateInstance(SumOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.input = OperatorUtils.readString(in, prev);
 		value.output = OperatorUtils.readString(in, prev);
@@ -66,7 +66,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public AggregateResultThread getHashThread(HashMap<String, Integer> cols2Pos) throws Exception
+	public AggregateResultThread getHashThread(final HashMap<String, Integer> cols2Pos) throws Exception
 	{
 		return new SumHashThread(cols2Pos);
 	}
@@ -78,7 +78,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public AggregateResultThread newProcessingThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos)
+	public AggregateResultThread newProcessingThread(final ArrayList<ArrayList<Object>> rows, final HashMap<String, Integer> cols2Pos)
 	{
 		return new SumThread(rows, cols2Pos);
 	}
@@ -103,9 +103,9 @@ public final class SumOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -121,24 +121,24 @@ public final class SumOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public void setInput(String col)
+	public void setInput(final String col)
 	{
 		input = col;
 	}
 
 	@Override
-	public void setInputColumn(String col)
+	public void setInputColumn(final String col)
 	{
 		input = col;
 	}
 
-	public void setIsInt(boolean isInt)
+	public void setIsInt(final boolean isInt)
 	{
 		this.isInt = isInt;
 	}
 
 	@Override
-	public void setNumGroups(long groups)
+	public void setNumGroups(final long groups)
 	{
 		NUM_GROUPS = groups;
 	}
@@ -151,7 +151,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 		private final HashMap<String, Integer> cols2Pos;
 		private int pos;
 
-		public SumHashThread(HashMap<String, Integer> cols2Pos) throws Exception
+		public SumHashThread(final HashMap<String, Integer> cols2Pos) throws Exception
 		{
 			this.cols2Pos = cols2Pos;
 			try
@@ -187,7 +187,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 		}
 
 		@Override
-		public Object getResult(ArrayList<Object> keys) throws Exception
+		public Object getResult(final ArrayList<Object> keys) throws Exception
 		{
 			if (isInt)
 			{
@@ -220,7 +220,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 
 		// @Parallel
 		@Override
-		public final void put(ArrayList<Object> row, ArrayList<Object> group) throws Exception
+		public final void put(final ArrayList<Object> row, final ArrayList<Object> group) throws Exception
 		{
 			if (!isInt)
 			{
@@ -232,9 +232,9 @@ public final class SumOperator implements AggregateOperator, Serializable
 			}
 		}
 
-		private void doublePut(ArrayList<Object> row, ArrayList<Object> group) throws Exception
+		private void doublePut(final ArrayList<Object> row, final ArrayList<Object> group) throws Exception
 		{
-			Object o = row.get(pos);
+			final Object o = row.get(pos);
 			BigDecimalReplacement val;
 			if (o instanceof Integer)
 			{
@@ -262,9 +262,9 @@ public final class SumOperator implements AggregateOperator, Serializable
 			}
 		}
 
-		private void intPut(ArrayList<Object> row, ArrayList<Object> group) throws Exception
+		private void intPut(final ArrayList<Object> row, final ArrayList<Object> group) throws Exception
 		{
-			Object o = row.get(pos);
+			final Object o = row.get(pos);
 			Long val;
 			if (o instanceof Integer)
 			{
@@ -295,7 +295,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 		private BigDecimalReplacement result;
 		private long result2;
 
-		public SumThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos)
+		public SumThread(final ArrayList<ArrayList<Object>> rows, final HashMap<String, Integer> cols2Pos)
 		{
 			this.rows = rows;
 			this.cols2Pos = cols2Pos;
@@ -321,7 +321,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 		public void run()
 		{
 			final int pos = cols2Pos.get(input);
-			
+
 			if (isInt)
 			{
 				result2 = 0;

@@ -1,18 +1,19 @@
 package com.exascale.misc;
 
-public interface IntIterator {
+public interface IntIterator
+{
 
-    /**
-     * Is there more?
-     *
-     * @return true, if there is more, false otherwise
-     */
-    boolean hasNext();
+	/**
+	 * Is there more?
+	 *
+	 * @return true, if there is more, false otherwise
+	 */
+	boolean hasNext();
 
-    /**
-     * Return the next integer
-     *
-     * @return the integer
-     */
-    int next();
+	/**
+	 * Return the next integer
+	 *
+	 * @return the integer
+	 */
+	int next();
 }

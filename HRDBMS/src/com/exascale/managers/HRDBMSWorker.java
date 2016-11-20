@@ -43,7 +43,7 @@ public class HRDBMSWorker
 	public static volatile CheckpointManager checkpoint;
 	private static FileAppender fa;
 
-	public static long addThread(HRDBMSThread thread)
+	public static long addThread(final HRDBMSThread thread)
 	{
 		long retval;
 		retval = THREAD_NUMBER.getAndIncrement();
@@ -83,25 +83,26 @@ public class HRDBMSWorker
 	{
 		return threadList;
 	}
-	
-	private static void ensureAllocation()
-	{
-		String string = hparms.getProperty("Xmx_string");
-		string = string.substring(0, string.length() - 1);
-		long gbs = Integer.parseInt(string);
-		long pretty = gbs *9/10;
-		gbs *= (1024l*1024l*1024l*9l);
-		gbs /= 10;
-		gbs /= 8;
-		long gbs2 = (long)Math.sqrt(gbs);
-		//HRDBMSWorker.logger.debug("Square root of " + gbs + " = " + gbs2);
-		int gb = (int)gbs2;
-		HRDBMSWorker.logger.debug("Attempting to allocate 8 x " + gb +" x " + gb);
-		long[][] test = new long[gb][gb];
-		HRDBMSWorker.logger.debug("Allocated " + pretty + "GB");
-	}
 
-	public static void main(String[] args) throws Exception
+	// private static void ensureAllocation()
+	// {
+	// String string = hparms.getProperty("Xmx_string");
+	// string = string.substring(0, string.length() - 1);
+	// long gbs = Integer.parseInt(string);
+	// long pretty = gbs *9/10;
+	// gbs *= (1024l*1024l*1024l*9l);
+	// gbs /= 10;
+	// gbs /= 8;
+	// long gbs2 = (long)Math.sqrt(gbs);
+	// //HRDBMSWorker.logger.debug("Square root of " + gbs + " = " + gbs2);
+	// int gb = (int)gbs2;
+	// HRDBMSWorker.logger.debug("Attempting to allocate 8 x " + gb +" x " +
+	// gb);
+	// long[][] test = new long[gb][gb];
+	// HRDBMSWorker.logger.debug("Allocated " + pretty + "GB");
+	// }
+
+	public static void main(final String[] args) throws Exception
 	{
 		logger = Logger.getLogger("LOG");
 		BasicConfigurator.configure();
@@ -124,14 +125,14 @@ public class HRDBMSWorker
 			logger.error("Could not load HParms", e);
 			System.exit(1);
 		}
-		
-		//ensureAllocation();
+
+		// ensureAllocation();
 
 		try
 		{
 			new SQLParser();
 		}
-		catch (Throwable e)
+		catch (final Throwable e)
 		{
 			HRDBMSWorker.logger.fatal("Can't load SQLParser class", e);
 			System.exit(1);
@@ -164,10 +165,10 @@ public class HRDBMSWorker
 			start -= 10000;
 		}
 
-		Enumeration props = hparms.propertyNames();
+		final Enumeration props = hparms.propertyNames();
 		while (props.hasMoreElements())
 		{
-			String key = (String)props.nextElement();
+			final String key = (String)props.nextElement();
 			HRDBMSWorker.logger.debug(key + "-> " + hparms.getProperty(key));
 		}
 
@@ -202,7 +203,7 @@ public class HRDBMSWorker
 		hibernate();
 	}
 
-	public static void terminateThread(long index)
+	public static void terminateThread(final long index)
 	{
 		// if anyone is waiting on this thread, wait for Thread.getState() ==
 		// WAITING and notify them
@@ -222,7 +223,7 @@ public class HRDBMSWorker
 		}
 	}
 
-	public static void waitOnThreads(long[] threads, Thread waiter)
+	public static void waitOnThreads(final long[] threads, final Thread waiter)
 	{
 		boolean done = false;
 		while (!done)
@@ -282,7 +283,7 @@ public class HRDBMSWorker
 		}
 	}
 
-	private static void processMessage(String msg)
+	private static void processMessage(final String msg)
 	{
 		if (msg.equals("SHUTDOWN"))
 		{
@@ -305,7 +306,7 @@ public class HRDBMSWorker
 		return new StartWorkersThread();
 	}
 
-	private static void waitListPut(long thread, Thread waiter)
+	private static void waitListPut(final long thread, final Thread waiter)
 	{
 		synchronized (waitList)
 		{

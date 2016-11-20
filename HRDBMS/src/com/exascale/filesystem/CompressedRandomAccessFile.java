@@ -9,7 +9,7 @@ public class CompressedRandomAccessFile
 	private final File file;
 	private int suffix = -1;
 
-	public CompressedRandomAccessFile(File file, String access) throws Exception
+	public CompressedRandomAccessFile(final File file, final String access) throws Exception
 	{
 		if (!access.equals("rw"))
 		{
@@ -19,7 +19,7 @@ public class CompressedRandomAccessFile
 		this.file = file;
 	}
 
-	public CompressedRandomAccessFile(File file, String access, int suffix) throws Exception
+	public CompressedRandomAccessFile(final File file, final String access, final int suffix) throws Exception
 	{
 		if (!access.equals("rw"))
 		{

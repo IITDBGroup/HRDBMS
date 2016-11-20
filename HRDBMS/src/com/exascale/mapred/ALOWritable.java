@@ -48,16 +48,16 @@ public class ALOWritable implements Writable
 	}
 
 	@Override
-	public void readFields(DataInput arg0) throws IOException
+	public void readFields(final DataInput arg0) throws IOException
 	{
 		try
 		{
-			int size = arg0.readInt();
-			byte[] data = new byte[size];
+			final int size = arg0.readInt();
+			final byte[] data = new byte[size];
 			arg0.readFully(data);
 			array = (ArrayList<Object>)fromBytes(data);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			if (e instanceof IOException)
 			{
@@ -70,18 +70,18 @@ public class ALOWritable implements Writable
 		}
 	}
 
-	public void set(ArrayList<Object> array)
+	public void set(final ArrayList<Object> array)
 	{
 		this.array = array;
 	}
 
 	@Override
-	public void write(DataOutput arg0) throws IOException
+	public void write(final DataOutput arg0) throws IOException
 	{
 		arg0.write(toBytes(array));
 	}
 
-	private Object fromBytes(byte[] val) throws Exception
+	private Object fromBytes(final byte[] val) throws Exception
 	{
 		final ByteBuffer bb = ByteBuffer.wrap(val);
 		final int numFields = bb.getInt();
@@ -148,15 +148,15 @@ public class ALOWritable implements Writable
 				final char[] ca = new char[length];
 				bb.get(temp);
 				// final String o = new String(temp, StandardCharsets.UTF_8);
-				String value = (String)unsafe.allocateInstance(String.class);
-				int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(temp, 0, length, ca);
+				final String value = (String)unsafe.allocateInstance(String.class);
+				final int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(temp, 0, length, ca);
 				if (clen == ca.length)
 				{
 					unsafe.putObject(value, offset, ca);
 				}
 				else
 				{
-					char[] v = Arrays.copyOf(ca, clen);
+					final char[] v = Arrays.copyOf(ca, clen);
 					unsafe.putObject(value, offset, v);
 				}
 				retval.add(value);
@@ -172,7 +172,7 @@ public class ALOWritable implements Writable
 		return retval;
 	}
 
-	protected byte[] toBytes(Object v) throws IOException
+	protected byte[] toBytes(final Object v) throws IOException
 	{
 		ArrayList<byte[]> bytes = null;
 		ArrayList<Object> val = null;
@@ -186,19 +186,19 @@ public class ALOWritable implements Writable
 		}
 		else if (v instanceof Exception)
 		{
-			Exception e = (Exception)v;
+			final Exception e = (Exception)v;
 			byte[] data = null;
 			try
 			{
 				data = e.getMessage().getBytes(StandardCharsets.UTF_8);
 			}
-			catch (Exception f)
+			catch (final Exception f)
 			{
 			}
 
-			int dataLen = data.length;
-			int recLen = 9 + dataLen;
-			ByteBuffer bb = ByteBuffer.allocate(recLen + 4);
+			final int dataLen = data.length;
+			final int recLen = 9 + dataLen;
+			final ByteBuffer bb = ByteBuffer.allocate(recLen + 4);
 			bb.position(0);
 			bb.putInt(recLen);
 			bb.putInt(1);
@@ -251,10 +251,10 @@ public class ALOWritable implements Writable
 			{
 				header[i] = (byte)4;
 				// byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
-				byte[] ba = new byte[((String)o).length() << 2];
-				char[] value = (char[])unsafe.getObject(o, offset);
-				int blen = ((sun.nio.cs.ArrayEncoder)ce).encode(value, 0, value.length, ba);
-				byte[] b = Arrays.copyOf(ba, blen);
+				final byte[] ba = new byte[((String)o).length() << 2];
+				final char[] value = (char[])unsafe.getObject(o, offset);
+				final int blen = ((sun.nio.cs.ArrayEncoder)ce).encode(value, 0, value.length, ba);
+				final byte[] b = Arrays.copyOf(ba, blen);
 				size += (4 + b.length);
 				if (bytes == null)
 				{
@@ -304,7 +304,7 @@ public class ALOWritable implements Writable
 			}
 			else if (retval[i] == 4)
 			{
-				byte[] temp = bytes.get(x);
+				final byte[] temp = bytes.get(x);
 				x++;
 				retvalBB.putInt(temp.length);
 				retvalBB.put(temp);

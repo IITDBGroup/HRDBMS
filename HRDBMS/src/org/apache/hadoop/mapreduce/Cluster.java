@@ -70,12 +70,12 @@ public class Cluster
 
 	private Path jobHistoryDir = null;
 
-	public Cluster(Configuration conf) throws IOException
+	public Cluster(final Configuration conf) throws IOException
 	{
 		this(null, conf);
 	}
 
-	public Cluster(InetSocketAddress jobTrackAddr, Configuration conf) throws IOException
+	public Cluster(final InetSocketAddress jobTrackAddr, final Configuration conf) throws IOException
 	{
 		this.conf = conf;
 		this.ugi = UserGroupInformation.getCurrentUser();
@@ -91,7 +91,7 @@ public class Cluster
 	 * @deprecated Use {@link Token#cancel} instead
 	 */
 	@Deprecated
-	public void cancelDelegationToken(Token<DelegationTokenIdentifier> token) throws IOException, InterruptedException
+	public void cancelDelegationToken(final Token<DelegationTokenIdentifier> token) throws IOException, InterruptedException
 	{
 		token.cancel(getConf());
 	}
@@ -161,7 +161,7 @@ public class Cluster
 	 * @return array of JobQueueInfo which are children of queueName
 	 * @throws IOException
 	 */
-	public QueueInfo[] getChildQueues(String queueName) throws IOException, InterruptedException
+	public QueueInfo[] getChildQueues(final String queueName) throws IOException, InterruptedException
 	{
 		return client.getChildQueues(queueName);
 	}
@@ -186,7 +186,7 @@ public class Cluster
 	 * @return the new token
 	 * @throws IOException
 	 */
-	public Token<DelegationTokenIdentifier> getDelegationToken(Text renewer) throws IOException, InterruptedException
+	public Token<DelegationTokenIdentifier> getDelegationToken(final Text renewer) throws IOException, InterruptedException
 	{
 		// client has already set the service
 		return client.getDelegationToken(renewer);
@@ -205,16 +205,12 @@ public class Cluster
 		{
 			try
 			{
-				this.fs = ugi.doAs(new PrivilegedExceptionAction<FileSystem>() {
-					@Override
-					public FileSystem run() throws IOException, InterruptedException
-					{
-						final Path sysDir = new Path(client.getSystemDir());
-						return sysDir.getFileSystem(getConf());
-					}
+				this.fs = ugi.doAs((PrivilegedExceptionAction<FileSystem>)() -> {
+					final Path sysDir = new Path(client.getSystemDir());
+					return sysDir.getFileSystem(getConf());
 				});
 			}
-			catch (InterruptedException e)
+			catch (final InterruptedException e)
 			{
 				throw new RuntimeException(e);
 			}
@@ -230,9 +226,9 @@ public class Cluster
 	 * @throws IOException
 	 * @throws InterruptedException
 	 */
-	public Job getJob(JobID jobId) throws IOException, InterruptedException
+	public Job getJob(final JobID jobId) throws IOException, InterruptedException
 	{
-		JobStatus status = client.getJobStatus(jobId);
+		final JobStatus status = client.getJobStatus(jobId);
 		if (status != null)
 		{
 			JobConf conf;
@@ -240,7 +236,7 @@ public class Cluster
 			{
 				conf = new JobConf(status.getJobFile());
 			}
-			catch (RuntimeException ex)
+			catch (final RuntimeException ex)
 			{
 				// If job file doesn't exist it means we can't find the job
 				if (ex.getCause() instanceof FileNotFoundException)
@@ -268,7 +264,7 @@ public class Cluster
 	 * @throws IOException
 	 * @throws InterruptedException
 	 */
-	public String getJobHistoryUrl(JobID jobId) throws IOException, InterruptedException
+	public String getJobHistoryUrl(final JobID jobId) throws IOException, InterruptedException
 	{
 		if (jobHistoryDir == null)
 		{
@@ -300,7 +296,7 @@ public class Cluster
 	 * @throws IOException
 	 * @throws InterruptedException
 	 */
-	public LogParams getLogParams(JobID jobID, TaskAttemptID taskAttemptID) throws IOException, InterruptedException
+	public LogParams getLogParams(final JobID jobID, final TaskAttemptID taskAttemptID) throws IOException, InterruptedException
 	{
 		return client.getLogFileParams(jobID, taskAttemptID);
 	}
@@ -314,7 +310,7 @@ public class Cluster
 	 * @throws IOException
 	 * @throws InterruptedException
 	 */
-	public QueueInfo getQueue(String name) throws IOException, InterruptedException
+	public QueueInfo getQueue(final String name) throws IOException, InterruptedException
 	{
 		return client.getQueue(name);
 	}
@@ -404,28 +400,28 @@ public class Cluster
 	 * @deprecated Use {@link Token#renew} instead
 	 */
 	@Deprecated
-	public long renewDelegationToken(Token<DelegationTokenIdentifier> token) throws InvalidToken, IOException, InterruptedException
+	public long renewDelegationToken(final Token<DelegationTokenIdentifier> token) throws InvalidToken, IOException, InterruptedException
 	{
 		return token.renew(getConf());
 	}
 
-	private Job[] getJobs(JobStatus[] stats) throws IOException
+	private Job[] getJobs(final JobStatus[] stats) throws IOException
 	{
-		List<Job> jobs = new ArrayList<Job>();
-		for (JobStatus stat : stats)
+		final List<Job> jobs = new ArrayList<Job>();
+		for (final JobStatus stat : stats)
 		{
 			jobs.add(Job.getInstance(this, stat, new JobConf(stat.getJobFile())));
 		}
 		return jobs.toArray(new Job[0]);
 	}
 
-	private void initialize(InetSocketAddress jobTrackAddr, Configuration conf) throws IOException
+	private void initialize(final InetSocketAddress jobTrackAddr, final Configuration conf) throws IOException
 	{
 
 		synchronized (frameworkLoader)
 		{
 			HRDBMSWorker.logger.debug("FrameworkLoader = " + frameworkLoader);
-			for (ClientProtocolProvider provider : frameworkLoader)
+			for (final ClientProtocolProvider provider : frameworkLoader)
 			{
 				HRDBMSWorker.logger.debug("Trying ClientProtocolProvider : " + provider.getClass().getName());
 				ClientProtocol clientProtocol = null;
@@ -452,7 +448,7 @@ public class Cluster
 						HRDBMSWorker.logger.debug("Cannot pick " + provider.getClass().getName() + " as the ClientProtocolProvider - returned null protocol");
 					}
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.debug("Failed to use " + provider.getClass().getName() + " due to error: " + e.getMessage());
 				}

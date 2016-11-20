@@ -17,7 +17,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 
 	static
 	{
-		HParms hparms = HRDBMSWorker.getHParms();
+		final HParms hparms = HRDBMSWorker.getHParms();
 		BLOCK_SIZE = Integer.parseInt(hparms.getProperty("queue_block_size")); // 256
 		RETRY_TIME = Integer.parseInt(hparms.getProperty("queue_flush_retry_timeout"));
 	}
@@ -27,14 +27,14 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 
 	private volatile boolean closed = false;
 
-	public BufferedLinkedBlockingQueue(int cap)
+	public BufferedLinkedBlockingQueue(final int cap)
 	{
 		try
 		{
 			q = free.remove(0);
 			q.clear();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			q = new ArrayBlockingQueue(cap / BLOCK_SIZE);
 		}
@@ -50,7 +50,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 	public synchronized void close()
 	{
 		closed = true;
-		ArrayBlockingQueue temp = q;
+		final ArrayBlockingQueue temp = q;
 		q = null;
 		// /receives.clear();
 		// threadLocal.clear();
@@ -99,7 +99,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 
 			return oa.peek();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			if (closed)
 			{
@@ -110,7 +110,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 		}
 	}
 
-	public void put(Object o)
+	public void put(final Object o)
 	{
 		if (closed)
 		{
@@ -120,7 +120,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 		{
 			if (o == null)
 			{
-				Exception e = new Exception("Null object placed on queue");
+				final Exception e = new Exception("Null object placed on queue");
 				HRDBMSWorker.logger.error("Null object placed on queue", e);
 				return;
 			}
@@ -140,7 +140,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 
 			oa.put(o, threadLocal);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			if (closed)
 			{
@@ -152,7 +152,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 		}
 	}
 
-	public boolean putNow(Object o)
+	public boolean putNow(final Object o)
 	{
 		if (closed)
 		{
@@ -162,7 +162,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 		{
 			if (o == null)
 			{
-				Exception e = new Exception("Null object placed on queue");
+				final Exception e = new Exception("Null object placed on queue");
 				HRDBMSWorker.logger.error("Null object placed on queue", e);
 				return true;
 			}
@@ -182,7 +182,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 
 			return oa.putNow(o, threadLocal);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			if (closed)
 			{
@@ -217,7 +217,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 				}
 			}
 
-			Object retval = oa.take();
+			final Object retval = oa.take();
 			if (retval == null)
 			{
 				throw new Exception("take() is returning a null value");
@@ -225,7 +225,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 
 			return retval;
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			if (closed)
 			{
@@ -246,7 +246,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 			oa = new Object[BLOCK_SIZE];
 		}
 
-		public ArrayAndIndex(Object[] oa)
+		public ArrayAndIndex(final Object[] oa)
 		{
 			this.oa = oa;
 		}
@@ -273,7 +273,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 			}
 		}
 
-		private boolean flushAll(ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal, Object o)
+		private boolean flushAll(final ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal, final Object o)
 		{
 			synchronized (BufferedLinkedBlockingQueue.this)
 			{
@@ -315,7 +315,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 							this.index = 0;
 						}
 
-						Object[] temp = new Object[BLOCK_SIZE];
+						final Object[] temp = new Object[BLOCK_SIZE];
 						temp[0] = o;
 						if (!q.offer(temp))
 						{
@@ -372,7 +372,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 			return oa[index++];
 		}
 
-		private void put(Object o, ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal)
+		private void put(final Object o, final ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal)
 		{
 			if (o instanceof DataEndMarker || o instanceof Exception)
 			{
@@ -390,7 +390,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 					{
 						Thread.sleep(RETRY_TIME);
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 					}
 				}
@@ -411,7 +411,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 					{
 						Thread.sleep(RETRY_TIME);
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 					}
 				}
@@ -431,7 +431,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 		}
 
 		@SuppressWarnings("unchecked")
-		private boolean putNow(Object o, ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal)
+		private boolean putNow(final Object o, final ConcurrentHashMap<Thread, ArrayAndIndex> threadLocal)
 		{
 			if (o instanceof DataEndMarker || o instanceof Exception)
 			{
@@ -449,7 +449,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 					{
 						Thread.sleep(RETRY_TIME);
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 					}
 				}
@@ -470,7 +470,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 					{
 						Thread.sleep(RETRY_TIME);
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 					}
 				}
@@ -521,7 +521,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 		{
 			if (index < BLOCK_SIZE && oa[index] != null)
 			{
-				Object retval = oa[index++];
+				final Object retval = oa[index++];
 				// if (retval == null)
 				// {
 				// throw new Exception("OA.take() returning null value first
@@ -550,7 +550,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 				}
 			}
 
-			Object retval = oa[index++];
+			final Object retval = oa[index++];
 			if (retval == null)
 			{
 				throw new Exception("OA.take() returning null value second path");

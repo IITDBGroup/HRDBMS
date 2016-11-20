@@ -19,19 +19,19 @@ public class BloomFilter
 		}
 	}
 
-	public BloomFilter(boolean flag)
+	public BloomFilter(final boolean flag)
 	{
 		cache = new ConcurrentHashMap<Long, ArrayList<Object>>(4 * 1024 * 1024, 1.0f);
 	}
 
-	public void add(long hash)
+	public void add(final long hash)
 	{
-		long offset = hash & 0x7FFFFFFFl;
-		int bytePos = (int)(offset >> 3);
-		int bitPos = (int)(offset & 0x07);
-		int x = bytePos >>> 23;
-		int y = bytePos & 0x7fffff;
-		byte val = (byte)(1 << bitPos);
+		final long offset = hash & 0x7FFFFFFFl;
+		final int bytePos = (int)(offset >> 3);
+		final int bitPos = (int)(offset & 0x07);
+		final int x = bytePos >>> 23;
+		final int y = bytePos & 0x7fffff;
+		final byte val = (byte)(1 << bitPos);
 		synchronized (bits[x])
 		{
 			bits[x][y] |= val;
@@ -39,22 +39,22 @@ public class BloomFilter
 		return;
 	}
 
-	public void add(long hash, ArrayList<Object> val)
+	public void add(final long hash, final ArrayList<Object> val)
 	{
 		cache.put(hash & 0x3FFFFFl, val);
 	}
 
-	public boolean passes(long hash)
+	public boolean passes(final long hash)
 	{
-		long offset = hash & 0x7FFFFFFFl;
-		int bytePos = (int)(offset >> 3);
-		int bitPos = (int)(offset & 0x07);
+		final long offset = hash & 0x7FFFFFFFl;
+		final int bytePos = (int)(offset >> 3);
+		final int bitPos = (int)(offset & 0x07);
 		return (bits[bytePos >>> 23][bytePos & 0x7fffff] & ((byte)(1 << bitPos))) != 0;
 	}
 
-	public boolean passes(long hash, ArrayList<Object> val)
+	public boolean passes(final long hash, final ArrayList<Object> val)
 	{
-		ArrayList<Object> o = cache.get(hash & 0x3FFFFFl);
+		final ArrayList<Object> o = cache.get(hash & 0x3FFFFFl);
 		return !val.equals(o);
 	}
 }

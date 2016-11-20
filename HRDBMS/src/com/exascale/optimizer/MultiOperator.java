@@ -54,13 +54,13 @@ public final class MultiOperator implements Operator, Serializable
 			HRDBMSWorker.logger.debug("MO SHIFT is " + SHIFT);
 
 			NUM_HGBR_THREADS = ResourceManager.cpus;
-			int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("agg_max_par"));
+			final int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("agg_max_par"));
 			if (NUM_HGBR_THREADS > max)
 			{
 				NUM_HGBR_THREADS = max;
 			}
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			unsafe = null;
 		}
@@ -89,7 +89,7 @@ public final class MultiOperator implements Operator, Serializable
 	private transient volatile boolean demReceived;
 	private long txnum;
 
-	public MultiOperator(ArrayList<AggregateOperator> ops, ArrayList<String> groupCols, MetaData meta, boolean sorted)
+	public MultiOperator(final ArrayList<AggregateOperator> ops, final ArrayList<String> groupCols, final MetaData meta, final boolean sorted)
 	{
 		this.ops = ops;
 		this.groupCols = groupCols;
@@ -98,9 +98,9 @@ public final class MultiOperator implements Operator, Serializable
 		received = new AtomicLong(0);
 	}
 
-	public static MultiOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static MultiOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		MultiOperator value = (MultiOperator)unsafe.allocateInstance(MultiOperator.class);
+		final MultiOperator value = (MultiOperator)unsafe.allocateInstance(MultiOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.child = OperatorUtils.deserializeOperator(in, prev);
 		value.parent = OperatorUtils.deserializeOperator(in, prev);
@@ -122,10 +122,119 @@ public final class MultiOperator implements Operator, Serializable
 		return value;
 	}
 
-	private static int getCInt(ByteBuffer bb)
+	private static ArrayList<FileChannel> createChannels(final ArrayList<RandomAccessFile> files)
 	{
-		int temp = (bb.get() & 0xff);
-		int length = (temp >>> 5);
+		final ArrayList<FileChannel> retval = new ArrayList<FileChannel>(files.size());
+		for (final RandomAccessFile raf : files)
+		{
+			retval.add(raf.getChannel());
+		}
+
+		return retval;
+	}
+
+	private static ArrayList<RandomAccessFile> createFiles(final ArrayList<String> fns) throws Exception
+	{
+		final ArrayList<RandomAccessFile> retval = new ArrayList<RandomAccessFile>(fns.size());
+		for (final String fn : fns)
+		{
+			while (true)
+			{
+				try
+				{
+					final RandomAccessFile raf = new RandomAccessFile(fn, "rw");
+					retval.add(raf);
+					break;
+				}
+				catch (final FileNotFoundException e)
+				{
+					ResourceManager.panic = true;
+					try
+					{
+						Thread.sleep(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("rm_sleep_time_ms")) / 2);
+					}
+					catch (final Exception f)
+					{
+					}
+				}
+			}
+		}
+
+		return retval;
+	}
+
+	private static final Object fromBytes(final byte[] val, final byte[] types) throws Exception
+	{
+		final ByteBuffer bb = ByteBuffer.wrap(val);
+		final int numFields = types.length;
+
+		if (numFields == 0)
+		{
+			return new ArrayList<Object>();
+		}
+
+		final ArrayList<Object> retval = new ArrayList<Object>(numFields);
+		int i = 0;
+		while (i < numFields)
+		{
+			Object o = null;
+			if (types[i] == 0)
+			{
+				// long
+				o = getCLong(bb);
+			}
+			else if (types[i] == 1)
+			{
+				// integer
+				o = getCInt(bb);
+			}
+			else if (types[i] == 2)
+			{
+				// double
+				o = bb.getDouble();
+			}
+			else if (types[i] == 3)
+			{
+				// date
+				o = new MyDate(getMedium(bb));
+			}
+			else if (types[i] == 4)
+			{
+				// string
+				final int length = getCInt(bb);
+
+				byte[] temp = new byte[length];
+				bb.get(temp);
+
+				if (!Schema.CVarcharFV.compress)
+				{
+					o = new String(temp, StandardCharsets.UTF_8);
+				}
+				else
+				{
+					final byte[] out = new byte[temp.length << 1];
+					final int clen = Schema.CVarcharFV.decompress(temp, temp.length, out);
+					temp = new byte[clen];
+					System.arraycopy(out, 0, temp, 0, clen);
+					o = new String(temp, StandardCharsets.UTF_8);
+				}
+			}
+			else
+			{
+				throw new Exception("Unknown type in fromBytes(): " + types[i]);
+			}
+
+			retval.add(o);
+			i++;
+		}
+
+		return retval;
+	}
+
+	private static int getCInt(final ByteBuffer bb)
+	{
+		final int temp = (bb.get() & 0xff);
+		final int length = (temp >>> 5);
 		if (length == 1)
 		{
 			return (temp & 0x1f);
@@ -157,10 +266,10 @@ public final class MultiOperator implements Operator, Serializable
 		}
 	}
 
-	private static long getCLong(ByteBuffer bb)
+	private static long getCLong(final ByteBuffer bb)
 	{
-		int temp = (bb.get() & 0xff);
-		int length = (temp >>> 4);
+		final int temp = (bb.get() & 0xff);
+		final int length = (temp >>> 4);
 		if (length == 1)
 		{
 			return (temp & 0x0f);
@@ -215,14 +324,14 @@ public final class MultiOperator implements Operator, Serializable
 		}
 	}
 
-	private static int getMedium(ByteBuffer bb)
+	private static int getMedium(final ByteBuffer bb)
 	{
 		int retval = ((bb.getShort() & 0xffff) << 8);
 		retval += (bb.get() & 0xff);
 		return retval;
 	}
 
-	private static long hash(Object key) throws Exception
+	private static long hash(final Object key) throws Exception
 	{
 		long eHash;
 		if (key == null)
@@ -233,57 +342,20 @@ public final class MultiOperator implements Operator, Serializable
 		{
 			if (key instanceof ArrayList)
 			{
-				byte[] data = toBytesForHash((ArrayList<Object>)key);
+				final byte[] data = toBytesForHash((ArrayList<Object>)key);
 				eHash = MurmurHash.hash64(data, data.length);
 			}
 			else
 			{
-				byte[] data = key.toString().getBytes(StandardCharsets.UTF_8);
+				final byte[] data = key.toString().getBytes(StandardCharsets.UTF_8);
 				eHash = MurmurHash.hash64(data, data.length);
 			}
 		}
 
 		return eHash;
 	}
-	
-	private static byte[] toBytesForHash(ArrayList<Object> key)
-	{
-		StringBuilder sb = new StringBuilder();
-		for (Object o : key)
-		{
-			if (o instanceof Double)
-			{
-				DecimalFormat df = new DecimalFormat("0", DecimalFormatSymbols.getInstance(Locale.ENGLISH));
-				df.setMaximumFractionDigits(340); //340 = DecimalFormat.DOUBLE_FRACTION_DIGITS
 
-				sb.append(df.format((Double)o));
-				sb.append((char)0);
-			}
-			else if (o instanceof Number)
-			{
-				sb.append(o);
-				sb.append((char)0);
-			}
-			else
-			{
-				sb.append(o.toString());
-				sb.append((char)0);
-			}
-		}
-		
-		final int z = sb.length();
-		byte[] retval = new byte[z];
-		int i = 0;
-		while (i < z)
-		{
-			retval[i] = (byte)sb.charAt(i);
-			i++;
-		}
-		
-		return retval;
-	}
-
-	private static void putCInt(ByteBuffer bb, int val)
+	private static void putCInt(final ByteBuffer bb, int val)
 	{
 		if (val <= 31)
 		{
@@ -317,7 +389,7 @@ public final class MultiOperator implements Operator, Serializable
 		}
 	}
 
-	private static void putCLong(ByteBuffer bb, long val)
+	private static void putCLong(final ByteBuffer bb, long val)
 	{
 		if (val <= 15)
 		{
@@ -378,142 +450,165 @@ public final class MultiOperator implements Operator, Serializable
 		}
 	}
 
-	private static void putMedium(ByteBuffer bb, int val)
+	private static void putMedium(final ByteBuffer bb, final int val)
 	{
 		bb.put((byte)((val & 0xff0000) >> 16));
 		bb.put((byte)((val & 0xff00) >> 8));
 		bb.put((byte)(val & 0xff));
 	}
 
-	private static final byte[] toBytes(Object v) throws Exception
+	private static final byte[] rsToBytes(final ArrayList<ArrayList<Object>> rows, final byte[] types) throws Exception
 	{
-		ArrayList<byte[]> bytes = null;
-		ArrayList<Object> val;
-		if (v instanceof ArrayList)
+		final ByteBuffer[] results = new ByteBuffer[rows.size()];
+		int rIndex = 0;
+		final ArrayList<byte[]> bytes = new ArrayList<byte[]>();
+		final ArrayList<Integer> stringCols = new ArrayList<Integer>(rows.get(0).size());
+		int startSize = 4;
+		int a = 0;
+		for (final byte b : types)
 		{
-			val = (ArrayList<Object>)v;
-		}
-		else
-		{
-			return toBytesDEM();
-		}
-
-		int size = 0;
-		final byte[] header = new byte[val.size()];
-		int i = 0;
-		int z = 0;
-		int limit = val.size();
-		// for (final Object o : val)
-		while (z < limit)
-		{
-			Object o = val.get(z++);
-			if (o instanceof Long)
+			if (b == 4)
 			{
-				header[i] = (byte)0;
-				size += 8;
+				startSize += 4;
+				stringCols.add(a);
 			}
-			else if (o instanceof Integer)
+			else if (b == 1 || b == 3)
 			{
-				header[i] = (byte)1;
-				size += 4;
-			}
-			else if (o instanceof Double)
-			{
-				header[i] = (byte)2;
-				size += 8;
-			}
-			else if (o instanceof MyDate)
-			{
-				header[i] = (byte)3;
-				size += 4;
-			}
-			else if (o instanceof String)
-			{
-				header[i] = (byte)4;
-				byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
-				size += (4 + b.length);
-
-				if (bytes == null)
-				{
-					bytes = new ArrayList<byte[]>();
-					bytes.add(b);
-				}
-				else
-				{
-					bytes.add(b);
-				}
+				startSize += 4;
 			}
 			else
 			{
-				throw new Exception("Unknown type " + o.getClass() + " in toBytes()");
+				startSize += 8;
 			}
 
-			i++;
+			a++;
 		}
 
-		final byte[] retval = new byte[size];
-		// System.out.println("In toBytes(), row has " + val.size() +
-		// " columns, object occupies " + size + " bytes");
-		// System.arraycopy(header, 0, retval, 0, header.length);
-		i = 0;
-		final ByteBuffer retvalBB = ByteBuffer.wrap(retval);
-		// retvalBB.putInt(size - 4);
-		// retvalBB.putInt(val.size());
-		// retvalBB.position(header.length);
-		int x = 0;
-		z = 0;
-		limit = val.size();
-		// for (final Object o : val)
-		while (z < limit)
+		for (final ArrayList<Object> val : rows)
 		{
-			Object o = val.get(z++);
-			if (header[i] == 0)
+			int size = startSize;
+			for (final int y : stringCols)
 			{
-				retvalBB.putLong((Long)o);
-			}
-			else if (header[i] == 1)
-			{
-				retvalBB.putInt((Integer)o);
-			}
-			else if (header[i] == 2)
-			{
-				retvalBB.putDouble((Double)o);
-			}
-			else if (header[i] == 3)
-			{
-				retvalBB.putInt(((MyDate)o).getTime());
-			}
-			else if (header[i] == 4)
-			{
-				byte[] temp = bytes.get(x);
-				x++;
-				retvalBB.putInt(temp.length);
-				retvalBB.put(temp);
+				final Object o = val.get(y);
+				byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
+				if (Schema.CVarcharFV.compress)
+				{
+					final byte[] out = new byte[b.length * 3 + 1];
+					final int clen = Schema.CVarcharFV.compress(b, b.length, out);
+					b = new byte[clen];
+					System.arraycopy(out, 0, b, 0, clen);
+				}
+				size += b.length;
+				bytes.add(b);
 			}
 
-			i++;
+			final byte[] retval = new byte[size];
+			final ByteBuffer retvalBB = ByteBuffer.wrap(retval);
+			// retvalBB.putInt(size - 4);
+			int x = 0;
+			int i = 0;
+			for (final Object o : val)
+			{
+				if (types[i] == 0)
+				{
+					// retvalBB.putLong((Long)o);
+					putCLong(retvalBB, (Long)o);
+				}
+				else if (types[i] == 1)
+				{
+					// retvalBB.putInt((Integer)o);
+					putCInt(retvalBB, (Integer)o);
+				}
+				else if (types[i] == 2)
+				{
+					retvalBB.putDouble((Double)o);
+				}
+				else if (types[i] == 3)
+				{
+					final int value = ((MyDate)o).getTime();
+					// retvalBB.putInt(value);
+					putMedium(retvalBB, value);
+				}
+				else if (types[i] == 4)
+				{
+					final byte[] temp = bytes.get(x++);
+					// retvalBB.putInt(temp.length);
+					putCInt(retvalBB, temp.length);
+					retvalBB.put(temp);
+				}
+				else
+				{
+					throw new Exception("Unknown type: " + types[i]);
+				}
+
+				i++;
+			}
+
+			results[rIndex++] = retvalBB;
+			bytes.clear();
+		}
+
+		int count = 0;
+		for (final ByteBuffer bb : results)
+		{
+			count += (bb.position() + 4);
+		}
+		final byte[] retval = new byte[count];
+		final ByteBuffer retvalBB = ByteBuffer.wrap(retval);
+		int retvalPos = 0;
+		for (final ByteBuffer bb : results)
+		{
+			final byte[] ba = bb.array();
+			retvalBB.position(retvalPos);
+			retvalBB.putInt(bb.position());
+			retvalPos += 4;
+			System.arraycopy(ba, 0, retval, retvalPos, bb.position());
+			retvalPos += bb.position();
 		}
 
 		return retval;
 	}
 
-	private static byte[] toBytesDEM()
+	private static byte[] toBytesForHash(final ArrayList<Object> key)
 	{
-		final byte[] retval = new byte[9];
-		retval[0] = 0;
-		retval[1] = 0;
-		retval[2] = 0;
-		retval[3] = 5;
-		retval[4] = 0;
-		retval[5] = 0;
-		retval[6] = 0;
-		retval[7] = 1;
-		retval[8] = 5;
+		final StringBuilder sb = new StringBuilder();
+		for (final Object o : key)
+		{
+			if (o instanceof Double)
+			{
+				final DecimalFormat df = new DecimalFormat("0", DecimalFormatSymbols.getInstance(Locale.ENGLISH));
+				df.setMaximumFractionDigits(340); // 340 =
+													// DecimalFormat.DOUBLE_FRACTION_DIGITS
+
+				sb.append(df.format(o));
+				sb.append((char)0);
+			}
+			else if (o instanceof Number)
+			{
+				sb.append(o);
+				sb.append((char)0);
+			}
+			else
+			{
+				sb.append(o.toString());
+				sb.append((char)0);
+			}
+		}
+
+		final int z = sb.length();
+		final byte[] retval = new byte[z];
+		int i = 0;
+		while (i < z)
+		{
+			retval[i] = (byte)sb.charAt(i);
+			i++;
+		}
+
 		return retval;
 	}
 
 	@Override
-	public void add(Operator op) throws Exception
+	public void add(final Operator op) throws Exception
 	{
 		if (child == null)
 		{
@@ -530,7 +625,7 @@ public final class MultiOperator implements Operator, Serializable
 					pos2Col = new TreeMap<Integer, String>();
 
 					int i = 0;
-					ArrayList<String> newGroupCols = new ArrayList<String>();
+					final ArrayList<String> newGroupCols = new ArrayList<String>();
 					for (final String groupCol : groupCols)
 					{
 						if (!groupCol.startsWith("."))
@@ -543,9 +638,9 @@ public final class MultiOperator implements Operator, Serializable
 						else
 						{
 							int matches = 0;
-							for (String col : tempCols2Types.keySet())
+							for (final String col : tempCols2Types.keySet())
 							{
-								String col2 = col.substring(col.indexOf('.'));
+								final String col2 = col.substring(col.indexOf('.'));
 								if (col2.equals(groupCol))
 								{
 									cols2Types.put(col, tempCols2Types.get(col));
@@ -574,7 +669,7 @@ public final class MultiOperator implements Operator, Serializable
 						i++;
 					}
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.debug("", e);
 					throw e;
@@ -587,7 +682,7 @@ public final class MultiOperator implements Operator, Serializable
 		}
 	}
 
-	public void addCount(String outCol)
+	public void addCount(final String outCol)
 	{
 		ops.add(new CountOperator(outCol, meta));
 	}
@@ -783,7 +878,7 @@ public final class MultiOperator implements Operator, Serializable
 		{
 			if (op instanceof CountOperator)
 			{
-				String col = ((CountOperator)op).getRealInputColumn();
+				final String col = ((CountOperator)op).getRealInputColumn();
 				if (col != null)
 				{
 					retval.add(col);
@@ -807,7 +902,7 @@ public final class MultiOperator implements Operator, Serializable
 			retval.add(op.getInputColumn());
 		}
 
-		for (String col : groupCols)
+		for (final String col : groupCols)
 		{
 			if (!retval.contains(col))
 			{
@@ -837,7 +932,7 @@ public final class MultiOperator implements Operator, Serializable
 	}
 
 	@Override
-	public Object next(Operator op) throws Exception
+	public Object next(final Operator op) throws Exception
 	{
 		Object o;
 		o = readBuffer.take();
@@ -865,7 +960,7 @@ public final class MultiOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void nextAll(Operator op) throws Exception
+	public void nextAll(final Operator op) throws Exception
 	{
 		child.nextAll(op);
 		Object o = next(op);
@@ -894,7 +989,7 @@ public final class MultiOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void registerParent(Operator op) throws Exception
+	public void registerParent(final Operator op) throws Exception
 	{
 		if (parent == null)
 		{
@@ -907,7 +1002,7 @@ public final class MultiOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeChild(Operator op)
+	public void removeChild(final Operator op)
 	{
 		if (op == child)
 		{
@@ -917,12 +1012,12 @@ public final class MultiOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 		parent = null;
 	}
 
-	public void replaceAvgWithSumAndCount(HashMap<String, ArrayList<String>> old2New)
+	public void replaceAvgWithSumAndCount(final HashMap<String, ArrayList<String>> old2New)
 	{
 		for (final AggregateOperator op : (ArrayList<AggregateOperator>)ops.clone())
 		{
@@ -974,9 +1069,9 @@ public final class MultiOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -1003,7 +1098,7 @@ public final class MultiOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void setChildPos(int pos)
+	public void setChildPos(final int pos)
 	{
 	}
 
@@ -1013,12 +1108,12 @@ public final class MultiOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 		this.node = node;
 	}
 
-	public boolean setNumGroupsAndChildCard(long groups, long childCard)
+	public boolean setNumGroupsAndChildCard(final long groups, final long childCard)
 	{
 		if (cardSet)
 		{
@@ -1041,7 +1136,7 @@ public final class MultiOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void setPlan(Plan plan)
+	public void setPlan(final Plan plan)
 	{
 	}
 
@@ -1050,7 +1145,7 @@ public final class MultiOperator implements Operator, Serializable
 		sorted = true;
 	}
 
-	public void setTXNum(long txnum)
+	public void setTXNum(final long txnum)
 	{
 		this.txnum = txnum;
 	}
@@ -1080,7 +1175,7 @@ public final class MultiOperator implements Operator, Serializable
 			// Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor"))
 			// / childCard;
 			// percentInMem = percentInMem / 8;
-			double percentInMem = 0;
+			final double percentInMem = 0;
 			new ExternalThread(percentInMem).start();
 		}
 	}
@@ -1100,7 +1195,7 @@ public final class MultiOperator implements Operator, Serializable
 		return retval;
 	}
 
-	public void updateInputColumns(ArrayList<String> outputs, ArrayList<String> inputs)
+	public void updateInputColumns(final ArrayList<String> outputs, final ArrayList<String> inputs)
 	{
 		for (final AggregateOperator op : ops)
 		{
@@ -1109,54 +1204,13 @@ public final class MultiOperator implements Operator, Serializable
 		}
 	}
 
-	private ArrayList<FileChannel> createChannels(ArrayList<RandomAccessFile> files)
+	private ArrayList<String> createFNs(final int num, final int extra)
 	{
-		ArrayList<FileChannel> retval = new ArrayList<FileChannel>(files.size());
-		for (RandomAccessFile raf : files)
-		{
-			retval.add(raf.getChannel());
-		}
-
-		return retval;
-	}
-
-	private ArrayList<RandomAccessFile> createFiles(ArrayList<String> fns) throws Exception
-	{
-		ArrayList<RandomAccessFile> retval = new ArrayList<RandomAccessFile>(fns.size());
-		for (String fn : fns)
-		{
-			while (true)
-			{
-				try
-				{
-					RandomAccessFile raf = new RandomAccessFile(fn, "rw");
-					retval.add(raf);
-					break;
-				}
-				catch (FileNotFoundException e)
-				{
-					ResourceManager.panic = true;
-					try
-					{
-						Thread.sleep(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("rm_sleep_time_ms")) / 2);
-					}
-					catch (Exception f)
-					{
-					}
-				}
-			}
-		}
-
-		return retval;
-	}
-
-	private ArrayList<String> createFNs(int num, int extra)
-	{
-		ArrayList<String> retval = new ArrayList<String>(num);
+		final ArrayList<String> retval = new ArrayList<String>(num);
 		int i = 0;
 		while (i < num)
 		{
-			String fn = ResourceManager.TEMP_DIRS.get(i % ResourceManager.TEMP_DIRS.size()) + this.hashCode() + "" + System.currentTimeMillis() + i + "_" + extra + ".exthash";
+			final String fn = ResourceManager.TEMP_DIRS.get(i % ResourceManager.TEMP_DIRS.size()) + this.hashCode() + "" + System.currentTimeMillis() + i + "_" + extra + ".exthash";
 			retval.add(fn);
 			i++;
 		}
@@ -1164,7 +1218,7 @@ public final class MultiOperator implements Operator, Serializable
 		return retval;
 	}
 
-	private void external(double percentInMem)
+	private void external(final double percentInMem)
 	{
 		try
 		{
@@ -1177,12 +1231,12 @@ public final class MultiOperator implements Operator, Serializable
 				numBins = 2;
 			}
 
-			int inMemBins = (int)(numBins * percentInMem);
-			byte[] types1 = new byte[child.getPos2Col().size()];
+			final int inMemBins = (int)(numBins * percentInMem);
+			final byte[] types1 = new byte[child.getPos2Col().size()];
 			int j = 0;
-			for (String col : child.getPos2Col().values())
+			for (final String col : child.getPos2Col().values())
 			{
-				String type = child.getCols2Types().get(col);
+				final String type = child.getCols2Types().get(col);
 				if (type.equals("INT"))
 				{
 					types1[j] = (byte)1;
@@ -1213,11 +1267,11 @@ public final class MultiOperator implements Operator, Serializable
 			}
 
 			externalFiles = new ArrayList<String>(numBins);
-			ArrayList<String> fns1 = createFNs(numBins, 0);
+			final ArrayList<String> fns1 = createFNs(numBins, 0);
 			externalFiles.addAll(fns1);
-			ArrayList<RandomAccessFile> files1 = createFiles(fns1);
-			ArrayList<FileChannel> channels1 = createChannels(files1);
-			LeftThread thread1 = new LeftThread(files1, channels1, numBins, types1, inMemBins);
+			final ArrayList<RandomAccessFile> files1 = createFiles(fns1);
+			final ArrayList<FileChannel> channels1 = createChannels(files1);
+			final LeftThread thread1 = new LeftThread(files1, channels1, numBins, types1, inMemBins);
 			thread1.start();
 
 			while (true)
@@ -1227,7 +1281,7 @@ public final class MultiOperator implements Operator, Serializable
 					thread1.join();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -1238,7 +1292,8 @@ public final class MultiOperator implements Operator, Serializable
 			}
 
 			ArrayList<ArrayList<ArrayList<Object>>> lbins = thread1.getBins();
-			ArrayList<ExternalProcessThread> epThreads = new ArrayList<ExternalProcessThread>();
+			thread1.directs = null;
+			final ArrayList<ExternalProcessThread> epThreads = new ArrayList<ExternalProcessThread>();
 			int z = 0;
 			final int limit = lbins.size();
 			int maxPar = Runtime.getRuntime().availableProcessors();
@@ -1253,7 +1308,7 @@ public final class MultiOperator implements Operator, Serializable
 
 			while (z < limit)
 			{
-				ArrayList<ArrayList<Object>> data = lbins.get(z++);
+				final ArrayList<ArrayList<Object>> data = lbins.get(z++);
 				if (numPar1 == -1)
 				{
 					numPar1 = data.size() / 250000;
@@ -1271,13 +1326,13 @@ public final class MultiOperator implements Operator, Serializable
 
 				numPar2 = maxPar / numPar1;
 
-				ExternalProcessThread thread = new ExternalProcessThread(data, numPar1);
-				//int pri = Thread.MAX_PRIORITY - epThreads.size();
-				//if (pri < Thread.NORM_PRIORITY)
-				//{
-				//	pri = Thread.NORM_PRIORITY;
-				//}
-				//thread.setPriority(pri);
+				final ExternalProcessThread thread = new ExternalProcessThread(data, numPar1);
+				// int pri = Thread.MAX_PRIORITY - epThreads.size();
+				// if (pri < Thread.NORM_PRIORITY)
+				// {
+				// pri = Thread.NORM_PRIORITY;
+				// }
+				// thread.setPriority(pri);
 				thread.start();
 				epThreads.add(thread);
 
@@ -1304,19 +1359,20 @@ public final class MultiOperator implements Operator, Serializable
 			}
 
 			lbins = null;
+			thread1.bins = null;
 			int i = inMemBins;
-			ArrayList<ReadDataThread> leftThreads = new ArrayList<ReadDataThread>();
+			final ArrayList<ReadDataThread> leftThreads = new ArrayList<ReadDataThread>();
 			numPar1 = -1;
 
 			while (i < numBins)
 			{
-				ReadDataThread thread4 = new ReadDataThread(channels1.get(i), types1);
-				//int pri = Thread.MAX_PRIORITY - leftThreads.size();
-				//if (pri < Thread.NORM_PRIORITY)
-				//{
-				//	pri = Thread.NORM_PRIORITY;
-				//}
-				//thread4.setPriority(pri);
+				final ReadDataThread thread4 = new ReadDataThread(channels1.get(i), types1);
+				// int pri = Thread.MAX_PRIORITY - leftThreads.size();
+				// if (pri < Thread.NORM_PRIORITY)
+				// {
+				// pri = Thread.NORM_PRIORITY;
+				// }
+				// thread4.setPriority(pri);
 				thread4.start();
 				leftThreads.add(thread4);
 				i++;
@@ -1325,6 +1381,10 @@ public final class MultiOperator implements Operator, Serializable
 				{
 					thread4.join();
 					numPar1 = thread4.getNumPar();
+					if (numPar1 > maxPar)
+					{
+						numPar1 = maxPar;
+					}
 				}
 
 				if (leftThreads.size() >= numPar1)
@@ -1349,240 +1409,60 @@ public final class MultiOperator implements Operator, Serializable
 				}
 			}
 
-			for (ExternalProcessThread ept : epThreads)
+			for (final ExternalProcessThread ept : epThreads)
 			{
 				ept.join();
 			}
 
-			for (ReadDataThread thread : leftThreads)
+			for (final ReadDataThread thread : leftThreads)
 			{
 				thread.join();
 			}
 
 			readBuffer.put(new DataEndMarker());
 
-			for (FileChannel fc : channels1)
+			for (final FileChannel fc : channels1)
 			{
 				try
 				{
 					fc.close();
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 				}
 			}
 
-			for (RandomAccessFile raf : files1)
+			for (final RandomAccessFile raf : files1)
 			{
 				try
 				{
 					raf.close();
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 				}
 			}
 
-			for (String fn : externalFiles)
+			for (final String fn : externalFiles)
 			{
 				try
 				{
 					new File(fn).delete();
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 				}
 			}
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			readBuffer.put(e);
 		}
 	}
 
-	private final Object fromBytes(byte[] val, byte[] types) throws Exception
-	{
-		final ByteBuffer bb = ByteBuffer.wrap(val);
-		final int numFields = types.length;
-
-		if (numFields == 0)
-		{
-			return new ArrayList<Object>();
-		}
-
-		final ArrayList<Object> retval = new ArrayList<Object>(numFields);
-		int i = 0;
-		while (i < numFields)
-		{
-			Object o = null;
-			if (types[i] == 0)
-			{
-				// long
-				o = getCLong(bb);
-			}
-			else if (types[i] == 1)
-			{
-				// integer
-				o = getCInt(bb);
-			}
-			else if (types[i] == 2)
-			{
-				// double
-				o = bb.getDouble();
-			}
-			else if (types[i] == 3)
-			{
-				// date
-				o = new MyDate(getMedium(bb));
-			}
-			else if (types[i] == 4)
-			{
-				// string
-				int length = getCInt(bb);
-
-				byte[] temp = new byte[length];
-				bb.get(temp);
-
-				if (!Schema.CVarcharFV.compress)
-				{
-					o = new String(temp, StandardCharsets.UTF_8);
-				}
-				else
-				{
-					byte[] out = new byte[temp.length << 1];
-					int clen = Schema.CVarcharFV.decompress(temp, temp.length, out);
-					temp = new byte[clen];
-					System.arraycopy(out, 0, temp, 0, clen);
-					o = new String(temp, StandardCharsets.UTF_8);
-				}
-			}
-			else
-			{
-				throw new Exception("Unknown type in fromBytes(): " + types[i]);
-			}
-
-			retval.add(o);
-			i++;
-		}
-
-		return retval;
-	}
-
 	private void init()
 	{
 		new InitThread().start();
-	}
-
-	private final byte[] rsToBytes(ArrayList<ArrayList<Object>> rows, final byte[] types) throws Exception
-	{
-		final ByteBuffer[] results = new ByteBuffer[rows.size()];
-		int rIndex = 0;
-		ArrayList<byte[]> bytes = new ArrayList<byte[]>();
-		final ArrayList<Integer> stringCols = new ArrayList<Integer>(rows.get(0).size());
-		int startSize = 4;
-		int a = 0;
-		for (byte b : types)
-		{
-			if (b == 4)
-			{
-				startSize += 4;
-				stringCols.add(a);
-			}
-			else if (b == 1 || b == 3)
-			{
-				startSize += 4;
-			}
-			else
-			{
-				startSize += 8;
-			}
-
-			a++;
-		}
-
-		for (ArrayList<Object> val : rows)
-		{
-			int size = startSize;
-			for (int y : stringCols)
-			{
-				Object o = val.get(y);
-				byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
-				if (Schema.CVarcharFV.compress)
-				{
-					byte[] out = new byte[b.length * 3 + 1];
-					int clen = Schema.CVarcharFV.compress(b, b.length, out);
-					b = new byte[clen];
-					System.arraycopy(out, 0, b, 0, clen);
-				}
-				size += b.length;
-				bytes.add(b);
-			}
-
-			final byte[] retval = new byte[size];
-			final ByteBuffer retvalBB = ByteBuffer.wrap(retval);
-			// retvalBB.putInt(size - 4);
-			int x = 0;
-			int i = 0;
-			for (final Object o : val)
-			{
-				if (types[i] == 0)
-				{
-					// retvalBB.putLong((Long)o);
-					putCLong(retvalBB, (Long)o);
-				}
-				else if (types[i] == 1)
-				{
-					// retvalBB.putInt((Integer)o);
-					putCInt(retvalBB, (Integer)o);
-				}
-				else if (types[i] == 2)
-				{
-					retvalBB.putDouble((Double)o);
-				}
-				else if (types[i] == 3)
-				{
-					int value = ((MyDate)o).getTime();
-					// retvalBB.putInt(value);
-					putMedium(retvalBB, value);
-				}
-				else if (types[i] == 4)
-				{
-					byte[] temp = bytes.get(x++);
-					// retvalBB.putInt(temp.length);
-					putCInt(retvalBB, temp.length);
-					retvalBB.put(temp);
-				}
-				else
-				{
-					throw new Exception("Unknown type: " + types[i]);
-				}
-
-				i++;
-			}
-
-			results[rIndex++] = retvalBB;
-			bytes.clear();
-		}
-
-		int count = 0;
-		for (ByteBuffer bb : results)
-		{
-			count += (bb.position() + 4);
-		}
-		final byte[] retval = new byte[count];
-		ByteBuffer retvalBB = ByteBuffer.wrap(retval);
-		int retvalPos = 0;
-		for (ByteBuffer bb : results)
-		{
-			byte[] ba = bb.array();
-			retvalBB.position(retvalPos);
-			retvalBB.putInt(bb.position());
-			retvalPos += 4;
-			System.arraycopy(ba, 0, retval, retvalPos, bb.position());
-			retvalPos += bb.position();
-		}
-
-		return retval;
 	}
 
 	public final class AggregateThread
@@ -1596,7 +1476,7 @@ public final class MultiOperator implements Operator, Serializable
 			end = true;
 		}
 
-		public AggregateThread(Object[] groupKeys, ArrayList<AggregateOperator> ops, ArrayList<ArrayList<Object>> rows)
+		public AggregateThread(final Object[] groupKeys, final ArrayList<AggregateOperator> ops, final ArrayList<ArrayList<Object>> rows)
 		{
 			for (final Object o : groupKeys)
 			{
@@ -1658,9 +1538,9 @@ public final class MultiOperator implements Operator, Serializable
 	{
 		private ArrayList<ArrayList<Object>> rows;
 		private final int par;
-		private int pri = -1;
+		// private int pri = -1;
 
-		public ExternalProcessThread(ArrayList<ArrayList<Object>> rows, int par)
+		public ExternalProcessThread(final ArrayList<ArrayList<Object>> rows, final int par)
 		{
 			this.rows = rows;
 			this.par = par;
@@ -1669,28 +1549,29 @@ public final class MultiOperator implements Operator, Serializable
 		@Override
 		public void run()
 		{
-			//if (pri != -1)
-			//{
-			//	Thread.currentThread().setPriority(pri);
-			//}
+			// if (pri != -1)
+			// {
+			// Thread.currentThread().setPriority(pri);
+			// }
 			try
 			{
 				if (par == 1)
 				{
 					process(rows, 0, rows.size());
+					rows = null;
 					return;
 				}
 
 				int i = 0;
 				int pos = 0;
-				int size = rows.size();
+				final int size = rows.size();
 				int per = size / par;
 				if (per == 0 && size != 0)
 				{
 					per = 1;
 				}
 
-				ArrayList<EPT2Thread> threads = new ArrayList<EPT2Thread>(par);
+				final ArrayList<EPT2Thread> threads = new ArrayList<EPT2Thread>(par);
 				while (i < par)
 				{
 					int end = pos + per;
@@ -1704,7 +1585,7 @@ public final class MultiOperator implements Operator, Serializable
 						end = size;
 					}
 
-					EPT2Thread thread = new EPT2Thread(rows, pos, end);
+					final EPT2Thread thread = new EPT2Thread(rows, pos, end);
 					thread.start();
 					threads.add(thread);
 					pos = end;
@@ -1717,26 +1598,28 @@ public final class MultiOperator implements Operator, Serializable
 					i++;
 				}
 
-				for (EPT2Thread thread : threads)
+				for (final EPT2Thread thread : threads)
 				{
 					thread.join();
 				}
+				
+				rows = null;
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				readBuffer.put(e);
 			}
 		}
 
-		public void setPriority(int pri)
-		{
-			this.pri = pri;
-		}
+		// public void setPriority(int pri)
+		// {
+		// this.pri = pri;
+		// }
 
-		private void process(ArrayList<ArrayList<Object>> probe, int start, int end) throws Exception
+		private void process(final ArrayList<ArrayList<Object>> probe, final int start, final int end) throws Exception
 		{
-			HashSet<ArrayList<Object>> groups = new HashSet<ArrayList<Object>>();
-			AggregateResultThread[] threads = new AggregateResultThread[ops.size()];
+			final HashSet<ArrayList<Object>> groups = new HashSet<ArrayList<Object>>();
+			final AggregateResultThread[] threads = new AggregateResultThread[ops.size()];
 			ArrayList<Integer> groupPos = null;
 			groupPos = new ArrayList<Integer>(groupCols.size());
 			for (final String groupCol : groupCols)
@@ -1757,7 +1640,7 @@ public final class MultiOperator implements Operator, Serializable
 				final int limit = probe.size();
 				while (z < limit)
 				{
-					ArrayList<Object> o = probe.get(z++);
+					final ArrayList<Object> o = probe.get(z++);
 					final ArrayList<Object> row = o;
 					final ArrayList<Object> groupKeys = new ArrayList<Object>();
 
@@ -1768,7 +1651,7 @@ public final class MultiOperator implements Operator, Serializable
 							groupKeys.add(row.get(pos));
 						}
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.debug("Trying to group on " + groupCols);
 						HRDBMSWorker.logger.debug("Child.getCols2Pos() = " + child.getCols2Pos());
@@ -1816,7 +1699,7 @@ public final class MultiOperator implements Operator, Serializable
 				{
 					readBuffer.put(e);
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 				}
 				return;
@@ -1829,7 +1712,7 @@ public final class MultiOperator implements Operator, Serializable
 			private final int start;
 			private final int end;
 
-			public EPT2Thread(ArrayList<ArrayList<Object>> probe, int start, int end)
+			public EPT2Thread(final ArrayList<ArrayList<Object>> probe, final int start, final int end)
 			{
 				this.probe = probe;
 				this.start = start;
@@ -1843,7 +1726,7 @@ public final class MultiOperator implements Operator, Serializable
 				{
 					process(probe, start, end);
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					readBuffer.put(e);
 				}
@@ -1860,7 +1743,7 @@ public final class MultiOperator implements Operator, Serializable
 			percentInMem = 0;
 		}
 
-		public ExternalThread(double percentInMem)
+		public ExternalThread(final double percentInMem)
 		{
 			this.percentInMem = percentInMem;
 		}
@@ -1881,9 +1764,9 @@ public final class MultiOperator implements Operator, Serializable
 		private Exception e;
 		private final ByteBuffer direct;
 		private boolean force = false;
-		private int directSize = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("direct_buffer_size"));
+		private final int directSize = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("direct_buffer_size"));
 
-		public FlushBinThread(ArrayList<ArrayList<Object>> bin, byte[] types, FileChannel fc, ByteBuffer direct)
+		public FlushBinThread(final ArrayList<ArrayList<Object>> bin, final byte[] types, final FileChannel fc, final ByteBuffer direct)
 		{
 			this.types = types;
 			this.bin = bin;
@@ -1891,7 +1774,7 @@ public final class MultiOperator implements Operator, Serializable
 			this.direct = direct;
 		}
 
-		public FlushBinThread(ArrayList<ArrayList<Object>> bin, byte[] types, FileChannel fc, ByteBuffer direct, boolean force)
+		public FlushBinThread(final ArrayList<ArrayList<Object>> bin, final byte[] types, final FileChannel fc, final ByteBuffer direct, final boolean force)
 		{
 			this.types = types;
 			this.bin = bin;
@@ -1916,7 +1799,7 @@ public final class MultiOperator implements Operator, Serializable
 			// Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
 			try
 			{
-				byte[] data = rsToBytes(bin, types);
+				final byte[] data = rsToBytes(bin, types);
 				// HRDBMSWorker.logger.debug("HJO bin flush size = " +
 				// (data.length * 1.0 / 1048576) + "MB");
 				bin = null;
@@ -1924,7 +1807,7 @@ public final class MultiOperator implements Operator, Serializable
 				if (direct == null)
 				{
 					// fc.position(fc.size());
-					ByteBuffer bb = ByteBuffer.wrap(data);
+					final ByteBuffer bb = ByteBuffer.wrap(data);
 					fc.write(bb);
 				}
 				else
@@ -1935,7 +1818,7 @@ public final class MultiOperator implements Operator, Serializable
 						{
 							direct.put(data);
 						}
-						catch (Exception e)
+						catch (final Exception e)
 						{
 							HRDBMSWorker.logger.debug("", e);
 							HRDBMSWorker.logger.debug("Capacity: " + direct.capacity() + " Limit: " + direct.limit() + " Position: " + direct.position() + " Write size: " + data.length);
@@ -1966,13 +1849,13 @@ public final class MultiOperator implements Operator, Serializable
 						}
 						else
 						{
-							ByteBuffer bb = ByteBuffer.wrap(data);
+							final ByteBuffer bb = ByteBuffer.wrap(data);
 							fc.write(bb);
 						}
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 				ok = false;
@@ -2053,7 +1936,7 @@ public final class MultiOperator implements Operator, Serializable
 				{
 					readBuffer.put(e);
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 				}
 				return;
@@ -2067,7 +1950,7 @@ public final class MultiOperator implements Operator, Serializable
 			@Override
 			public void run()
 			{
-				double tF = NUM_GROUPS * 1.0 / childCard;
+				final double tF = NUM_GROUPS * 1.0 / childCard;
 				try
 				{
 					Object o = child.next(MultiOperator.this);
@@ -2100,7 +1983,7 @@ public final class MultiOperator implements Operator, Serializable
 								groupKeys.add(row.get(pos));
 							}
 						}
-						catch (Exception e)
+						catch (final Exception e)
 						{
 							HRDBMSWorker.logger.debug("Trying to group on " + groupCols);
 							HRDBMSWorker.logger.debug("Child.getCols2Pos() = " + child.getCols2Pos());
@@ -2113,7 +1996,7 @@ public final class MultiOperator implements Operator, Serializable
 						}
 						else
 						{
-							ArrayList<Object> obj = groups.get(groupKeys);
+							final ArrayList<Object> obj = groups.get(groupKeys);
 							if (obj == null)
 							{
 								groups.putIfAbsent(groupKeys, groupKeys);
@@ -2144,7 +2027,7 @@ public final class MultiOperator implements Operator, Serializable
 					{
 						readBuffer.put(e);
 					}
-					catch (Exception f)
+					catch (final Exception f)
 					{
 					}
 					return;
@@ -2165,8 +2048,8 @@ public final class MultiOperator implements Operator, Serializable
 				ArrayList<ArrayList<Object>> rows = null;
 				boolean newGroup = false;
 
-				ArrayList<Integer> indxs = new ArrayList<Integer>(groupCols.size());
-				for (String groupCol : groupCols)
+				final ArrayList<Integer> indxs = new ArrayList<Integer>(groupCols.size());
+				for (final String groupCol : groupCols)
 				{
 					indxs.add(child.getCols2Pos().get(groupCol));
 				}
@@ -2231,7 +2114,7 @@ public final class MultiOperator implements Operator, Serializable
 					}
 				}
 
-				AggregateThread aggThread = new AggregateThread(groupKeys, ops, rows);
+				final AggregateThread aggThread = new AggregateThread(groupKeys, ops, rows);
 				aggThread.start();
 				readBuffer.put(aggThread.getResult());
 				readBuffer.put(new DataEndMarker());
@@ -2243,7 +2126,7 @@ public final class MultiOperator implements Operator, Serializable
 				{
 					readBuffer.put(e);
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 				}
 				return;
@@ -2263,7 +2146,7 @@ public final class MultiOperator implements Operator, Serializable
 		private ScalableStampedReentrantRWLock rwLock;
 		private ArrayList<ByteBuffer> directs;
 
-		public LeftThread(ArrayList<RandomAccessFile> files, ArrayList<FileChannel> channels, int numBins, byte[] types, int inMemBins)
+		public LeftThread(final ArrayList<RandomAccessFile> files, final ArrayList<FileChannel> channels, final int numBins, final byte[] types, final int inMemBins)
 		{
 			this.channels = channels;
 			this.numBins = numBins;
@@ -2292,8 +2175,8 @@ public final class MultiOperator implements Operator, Serializable
 			rwLock = new ScalableStampedReentrantRWLock();
 			bins = new ArrayList<ArrayList<ArrayList<Object>>>();
 			directs = new ArrayList<ByteBuffer>();
-			ConcurrentHashMap<Integer, FlushBinThread> threads = new ConcurrentHashMap<Integer, FlushBinThread>();
-			int size = (int)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")) / (numBins >> SHIFT));
+			final ConcurrentHashMap<Integer, FlushBinThread> threads = new ConcurrentHashMap<Integer, FlushBinThread>();
+			final int size = (int)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")) / (numBins >> SHIFT));
 			int i = 0;
 			while (i < numBins)
 			{
@@ -2312,11 +2195,11 @@ public final class MultiOperator implements Operator, Serializable
 				}
 			}
 
-			ArrayList<SubLeftThread> slThreads = new ArrayList<SubLeftThread>();
+			final ArrayList<SubLeftThread> slThreads = new ArrayList<SubLeftThread>();
 			i = 0;
 			while (i < 1)
 			{
-				SubLeftThread t = new SubLeftThread(this, threads, size);
+				final SubLeftThread t = new SubLeftThread(this, threads, size);
 				t.start();
 				slThreads.add(t);
 				i++;
@@ -2335,9 +2218,9 @@ public final class MultiOperator implements Operator, Serializable
 					received.getAndIncrement();
 				}
 
-				int[] poses = new int[groupCols.size()];
+				final int[] poses = new int[groupCols.size()];
 				i = 0;
-				for (String col : groupCols)
+				for (final String col : groupCols)
 				{
 					poses[i] = childCols2Pos.get(col);
 					i++;
@@ -2347,14 +2230,14 @@ public final class MultiOperator implements Operator, Serializable
 				{
 					i = 0;
 					key.clear();
-					for (int pos : poses)
+					for (final int pos : poses)
 					{
 						try
 						{
 							key.add(((ArrayList<Object>)o).get(pos));
 							i++;
 						}
-						catch (Exception e)
+						catch (final Exception e)
 						{
 							HRDBMSWorker.logger.debug("Failed to find a column in " + childCols2Pos);
 							throw e;
@@ -2362,7 +2245,7 @@ public final class MultiOperator implements Operator, Serializable
 					}
 
 					final long hash = 0x7FFFFFFFFFFFFFFFL & hash(key);
-					int x = (int)(hash % numBins);
+					final int x = (int)(hash % numBins);
 					rwLock.readLock().lock();
 					ArrayList<ArrayList<Object>> bin = bins.get(x);
 					synchronized (bin)
@@ -2378,7 +2261,7 @@ public final class MultiOperator implements Operator, Serializable
 						bin = bins.get(x);
 						if (bin.size() >= size)
 						{
-							FlushBinThread thread = new FlushBinThread(bin, types, channels.get(x), directs.get(x));
+							final FlushBinThread thread = new FlushBinThread(bin, types, channels.get(x), directs.get(x));
 							if (threads.putIfAbsent(x, thread) != null)
 							{
 								threads.get(x).join();
@@ -2408,7 +2291,7 @@ public final class MultiOperator implements Operator, Serializable
 					}
 				}
 
-				for (SubLeftThread t : slThreads)
+				for (final SubLeftThread t : slThreads)
 				{
 					t.join();
 					if (!t.getOK())
@@ -2418,11 +2301,11 @@ public final class MultiOperator implements Operator, Serializable
 				}
 
 				i = 0;
-				for (ArrayList<ArrayList<Object>> bin : bins)
+				for (final ArrayList<ArrayList<Object>> bin : bins)
 				{
 					if (i >= inMemBins && bin.size() > 0)
 					{
-						FlushBinThread thread = new FlushBinThread(bin, types, channels.get(i), directs.get(i), true);
+						final FlushBinThread thread = new FlushBinThread(bin, types, channels.get(i), directs.get(i), true);
 						if (threads.putIfAbsent(i, thread) != null)
 						{
 							threads.get(i).join();
@@ -2439,7 +2322,7 @@ public final class MultiOperator implements Operator, Serializable
 					i++;
 				}
 
-				for (FlushBinThread thread : threads.values())
+				for (final FlushBinThread thread : threads.values())
 				{
 					thread.join();
 					if (!thread.getOK())
@@ -2452,7 +2335,7 @@ public final class MultiOperator implements Operator, Serializable
 				i = 0;
 				while (i < numBins)
 				{
-					ByteBuffer bb = directs.get(i);
+					final ByteBuffer bb = directs.get(i);
 					if (bb != null)
 					{
 						TempThread.freeDirect(bb);
@@ -2481,9 +2364,9 @@ public final class MultiOperator implements Operator, Serializable
 		private final FileChannel fc;
 		private final byte[] types;
 		private int num = 0;
-		private int pri = -1;
+		// private int pri = -1;
 
-		public ReadDataThread(FileChannel fc, byte[] types) throws Exception
+		public ReadDataThread(final FileChannel fc, final byte[] types) throws Exception
 		{
 			this.fc = new BufferedFileChannel(fc, 8 * 1024 * 1024);
 			this.types = types;
@@ -2492,7 +2375,7 @@ public final class MultiOperator implements Operator, Serializable
 		public int getNumPar()
 		{
 			int internal = num / 250000;
-			int maxPar = Runtime.getRuntime().availableProcessors();
+			final int maxPar = Runtime.getRuntime().availableProcessors();
 			if (internal == 0)
 			{
 				internal = 1;
@@ -2509,15 +2392,15 @@ public final class MultiOperator implements Operator, Serializable
 		@Override
 		public void run()
 		{
-			//if (pri != -1)
-			//{
-			//	Thread.currentThread().setPriority(pri);
-			//}
+			// if (pri != -1)
+			// {
+			// Thread.currentThread().setPriority(pri);
+			// }
 			try
 			{
-				ConcurrentHashMap<ArrayList<Object>, Integer> groups = new ConcurrentHashMap<ArrayList<Object>, Integer>();
-				AggregateResultThread[] threads = new AggregateResultThread[ops.size()];
-				ArrayList<Integer> groupPos = new ArrayList<Integer>(groupCols.size());
+				final ConcurrentHashMap<ArrayList<Object>, Integer> groups = new ConcurrentHashMap<ArrayList<Object>, Integer>();
+				final AggregateResultThread[] threads = new AggregateResultThread[ops.size()];
+				final ArrayList<Integer> groupPos = new ArrayList<Integer>(groupCols.size());
 				for (final String groupCol : groupCols)
 				{
 					groupPos.add(child.getCols2Pos().get(groupCol));
@@ -2531,8 +2414,8 @@ public final class MultiOperator implements Operator, Serializable
 				}
 
 				fc.position(0);
-				ConcurrentHashMap<byte[], Integer> bas = new ConcurrentHashMap<byte[], Integer>();
-				ByteBuffer bb1 = ByteBuffer.allocate(4);
+				final ConcurrentHashMap<byte[], Integer> bas = new ConcurrentHashMap<byte[], Integer>();
+				final ByteBuffer bb1 = ByteBuffer.allocate(4);
 				while (true)
 				{
 					bb1.position(0);
@@ -2541,9 +2424,9 @@ public final class MultiOperator implements Operator, Serializable
 						break;
 					}
 					bb1.position(0);
-					int length = bb1.getInt();
+					final int length = bb1.getInt();
 					num++;
-					ByteBuffer bb = ByteBuffer.allocate(length);
+					final ByteBuffer bb = ByteBuffer.allocate(length);
 					fc.read(bb);
 					bas.put(bb.array(), Integer.valueOf(1));
 				}
@@ -2576,21 +2459,21 @@ public final class MultiOperator implements Operator, Serializable
 				// thread.close();
 				// }
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 			}
 		}
 
-		public void setPriority(int pri)
-		{
-			this.pri = pri;
-		}
+		// public void setPriority(int pri)
+		// {
+		// this.pri = pri;
+		// }
 
-		private void process(byte[] k, ConcurrentHashMap<ArrayList<Object>, Integer> groups, ArrayList<Integer> groupPos, AggregateResultThread[] threads)
+		private void process(final byte[] k, final ConcurrentHashMap<ArrayList<Object>, Integer> groups, final ArrayList<Integer> groupPos, final AggregateResultThread[] threads)
 		{
 			try
 			{
-				ArrayList<Object> row = (ArrayList<Object>)fromBytes(k, types);
+				final ArrayList<Object> row = (ArrayList<Object>)fromBytes(k, types);
 				final ArrayList<Object> groupKeys = new ArrayList<Object>();
 
 				try
@@ -2600,7 +2483,7 @@ public final class MultiOperator implements Operator, Serializable
 						groupKeys.add(row.get(pos));
 					}
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.debug("Trying to group on " + groupCols);
 					HRDBMSWorker.logger.debug("Child.getCols2Pos() = " + child.getCols2Pos());
@@ -2615,7 +2498,7 @@ public final class MultiOperator implements Operator, Serializable
 					thread.put(row, groupKeys);
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				throw new RuntimeException(e);
 			}
@@ -2630,7 +2513,7 @@ public final class MultiOperator implements Operator, Serializable
 		private boolean ok = true;
 		private Exception e;
 
-		public SubLeftThread(LeftThread leftThread, ConcurrentHashMap<Integer, FlushBinThread> threads, int size)
+		public SubLeftThread(final LeftThread leftThread, final ConcurrentHashMap<Integer, FlushBinThread> threads, final int size)
 		{
 			this.leftThread = leftThread;
 			this.threads = threads;
@@ -2663,9 +2546,9 @@ public final class MultiOperator implements Operator, Serializable
 					received.getAndIncrement();
 				}
 
-				int[] poses = new int[groupCols.size()];
+				final int[] poses = new int[groupCols.size()];
 				int i = 0;
-				for (String col : groupCols)
+				for (final String col : groupCols)
 				{
 					poses[i] = childCols2Pos.get(col);
 					i++;
@@ -2675,14 +2558,14 @@ public final class MultiOperator implements Operator, Serializable
 				{
 					i = 0;
 					key.clear();
-					for (int pos : poses)
+					for (final int pos : poses)
 					{
 						try
 						{
 							key.add(((ArrayList<Object>)o).get(pos));
 							i++;
 						}
-						catch (Exception e)
+						catch (final Exception e)
 						{
 							HRDBMSWorker.logger.debug("Failed to find a column in " + childCols2Pos);
 							throw e;
@@ -2690,7 +2573,7 @@ public final class MultiOperator implements Operator, Serializable
 					}
 
 					final long hash = 0x7FFFFFFFFFFFFFFFL & hash(key);
-					int x = (int)(hash % leftThread.numBins);
+					final int x = (int)(hash % leftThread.numBins);
 					leftThread.rwLock.readLock().lock();
 					ArrayList<ArrayList<Object>> bin = leftThread.bins.get(x);
 					synchronized (bin)
@@ -2706,7 +2589,7 @@ public final class MultiOperator implements Operator, Serializable
 						bin = leftThread.bins.get(x);
 						if (bin.size() >= size)
 						{
-							FlushBinThread thread = new FlushBinThread(bin, leftThread.types, leftThread.channels.get(x), leftThread.directs.get(x));
+							final FlushBinThread thread = new FlushBinThread(bin, leftThread.types, leftThread.channels.get(x), leftThread.directs.get(x));
 							if (threads.putIfAbsent(x, thread) != null)
 							{
 								threads.get(x).join();
@@ -2736,7 +2619,7 @@ public final class MultiOperator implements Operator, Serializable
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				ok = false;
 				this.e = e;

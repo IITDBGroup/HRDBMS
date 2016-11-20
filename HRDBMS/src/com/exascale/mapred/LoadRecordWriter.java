@@ -23,18 +23,16 @@ public class LoadRecordWriter extends RecordWriter
 	public HashMap<Integer, ArrayList<ArrayList<Object>>> rows = new HashMap<Integer, ArrayList<ArrayList<Object>>>();
 	public HashMap<Integer, ArrayList<ArrayList<Object>>> processing;
 	private final String portString;
-	private final String hrdbmsHome;
 	public LoadThread thread = null;
 	private int size = 0;
 
-	public LoadRecordWriter(String table, String portString, String hrdbmsHome)
+	public LoadRecordWriter(final String table, final String portString, final String hrdbmsHome)
 	{
 		this.table = table;
 		this.portString = portString;
-		this.hrdbmsHome = hrdbmsHome;
 	}
 
-	public static LoadRecordWriter get(String table, String portString, String hrdbmsHome)
+	public static LoadRecordWriter get(final String table, final String portString, final String hrdbmsHome)
 	{
 		synchronized (writers)
 		{
@@ -49,17 +47,17 @@ public class LoadRecordWriter extends RecordWriter
 		}
 	}
 
-	private static void getConfirmation(Socket sock) throws Exception
+	private static void getConfirmation(final Socket sock) throws Exception
 	{
-		InputStream in = sock.getInputStream();
-		byte[] inMsg = new byte[2];
+		final InputStream in = sock.getInputStream();
+		final byte[] inMsg = new byte[2];
 
 		int count = 0;
 		while (count < 2)
 		{
 			try
 			{
-				int temp = in.read(inMsg, count, 2 - count);
+				final int temp = in.read(inMsg, count, 2 - count);
 				if (temp == -1)
 				{
 					in.close();
@@ -77,7 +75,7 @@ public class LoadRecordWriter extends RecordWriter
 			}
 		}
 
-		String inStr = new String(inMsg, StandardCharsets.UTF_8);
+		final String inStr = new String(inMsg, StandardCharsets.UTF_8);
 		if (!inStr.equals("OK"))
 		{
 			in.close();
@@ -88,12 +86,12 @@ public class LoadRecordWriter extends RecordWriter
 		{
 			in.close();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 		}
 	}
 
-	private static byte[] intToBytes(int val)
+	private static byte[] intToBytes(final int val)
 	{
 		final byte[] buff = new byte[4];
 		buff[0] = (byte)(val >> 24);
@@ -103,12 +101,12 @@ public class LoadRecordWriter extends RecordWriter
 		return buff;
 	}
 
-	private static final byte[] rsToBytes(ArrayList<ArrayList<Object>> rows) throws Exception
+	private static final byte[] rsToBytes(final ArrayList<ArrayList<Object>> rows) throws Exception
 	{
 		final ByteBuffer[] results = new ByteBuffer[rows.size()];
 		int rIndex = 0;
 		final ArrayList<byte[]> bytes = new ArrayList<byte[]>();
-		for (ArrayList<Object> val : rows)
+		for (final ArrayList<Object> val : rows)
 		{
 			bytes.clear();
 			int size = val.size() + 8;
@@ -139,7 +137,7 @@ public class LoadRecordWriter extends RecordWriter
 				else if (o instanceof String)
 				{
 					header[i] = (byte)4;
-					byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
+					final byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
 					size += (4 + b.length);
 					bytes.add(b);
 				}
@@ -157,7 +155,7 @@ public class LoadRecordWriter extends RecordWriter
 				{
 					if (((ArrayList)o).size() != 0)
 					{
-						Exception e = new Exception("Non-zero size ArrayList in toBytes()");
+						final Exception e = new Exception("Non-zero size ArrayList in toBytes()");
 						throw e;
 					}
 					header[i] = (byte)8;
@@ -200,7 +198,7 @@ public class LoadRecordWriter extends RecordWriter
 				}
 				else if (retval[i] == 4)
 				{
-					byte[] temp = bytes.get(x);
+					final byte[] temp = bytes.get(x);
 					x++;
 					retvalBB.putInt(temp.length);
 					retvalBB.put(temp);
@@ -229,13 +227,13 @@ public class LoadRecordWriter extends RecordWriter
 			count += bb.capacity();
 		}
 		final byte[] retval = new byte[count + 4];
-		ByteBuffer temp = ByteBuffer.allocate(4);
+		final ByteBuffer temp = ByteBuffer.allocate(4);
 		temp.asIntBuffer().put(results.length);
 		System.arraycopy(temp.array(), 0, retval, 0, 4);
 		int retvalPos = 4;
 		for (final ByteBuffer bb : results)
 		{
-			byte[] ba = bb.array();
+			final byte[] ba = bb.array();
 			System.arraycopy(ba, 0, retval, retvalPos, ba.length);
 			retvalPos += ba.length;
 		}
@@ -244,7 +242,7 @@ public class LoadRecordWriter extends RecordWriter
 	}
 
 	@Override
-	public synchronized void close(TaskAttemptContext arg0) throws IOException, InterruptedException
+	public synchronized void close(final TaskAttemptContext arg0) throws IOException, InterruptedException
 	{
 		if (rows.size() > 0)
 		{
@@ -260,12 +258,13 @@ public class LoadRecordWriter extends RecordWriter
 		size = 0;
 		try
 		{
-			hostname = new MetaData(hrdbmsHome).getHostNameForNode(lastNode);
+			// new MetaData(hrdbmsHome);
+			hostname = MetaData.getHostNameForNode(lastNode);
 			// LoadReducer.out.println("Node# " + lastNode + " is resolving to "
 			// + hostname);
 			// LoadReducer.out.flush();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			throw new IOException(e.getMessage());
 		}
@@ -279,7 +278,7 @@ public class LoadRecordWriter extends RecordWriter
 					thread.join();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -296,11 +295,11 @@ public class LoadRecordWriter extends RecordWriter
 	}
 
 	@Override
-	public synchronized void write(Object arg0, Object arg1) throws IOException, InterruptedException
+	public synchronized void write(final Object arg0, final Object arg1) throws IOException, InterruptedException
 	{
-		MyLongWritable key = (MyLongWritable)arg0;
-		int node = (int)(key.get() >> 32);
-		int device = (int)(key.get() & 0x00000000FFFFFFFF);
+		final MyLongWritable key = (MyLongWritable)arg0;
+		final int node = (int)(key.get() >> 32);
+		final int device = (int)(key.get() & 0x00000000FFFFFFFF);
 		if (node != lastNode)
 		{
 			if (lastNode == -1)
@@ -313,7 +312,7 @@ public class LoadRecordWriter extends RecordWriter
 				lastNode = node;
 			}
 		}
-		ALOWritable alo = (ALOWritable)arg1;
+		final ALOWritable alo = (ALOWritable)arg1;
 		ArrayList<ArrayList<Object>> devRows = rows.get(device);
 		if (devRows == null)
 		{
@@ -341,7 +340,7 @@ public class LoadRecordWriter extends RecordWriter
 		private final ArrayList<ArrayList<Object>> rows;
 		private final int device;
 
-		public ConfirmationThread(String hostname, String portString, String table, int device, ArrayList<ArrayList<Object>> rows)
+		public ConfirmationThread(final String hostname, final String portString, final String table, final int device, final ArrayList<ArrayList<Object>> rows)
 		{
 			this.hostname = hostname;
 			this.portString = portString;
@@ -362,12 +361,12 @@ public class LoadRecordWriter extends RecordWriter
 			{
 				// Socket sock = new Socket(hostname,
 				// Integer.parseInt(portString));
-				Socket sock = new Socket();
+				final Socket sock = new Socket();
 				sock.setReceiveBufferSize(4194304);
 				sock.setSendBufferSize(4194304);
 				sock.connect(new InetSocketAddress(hostname, Integer.parseInt(portString)));
-				OutputStream out = sock.getOutputStream();
-				byte[] outMsg = "HADOOPLD        ".getBytes(StandardCharsets.UTF_8);
+				final OutputStream out = sock.getOutputStream();
+				final byte[] outMsg = "HADOOPLD        ".getBytes(StandardCharsets.UTF_8);
 				outMsg[8] = 0;
 				outMsg[9] = 0;
 				outMsg[10] = 0;
@@ -377,10 +376,10 @@ public class LoadRecordWriter extends RecordWriter
 				outMsg[14] = 0;
 				outMsg[15] = 0;
 				out.write(outMsg);
-				byte[] dev = intToBytes(device);
+				final byte[] dev = intToBytes(device);
 				out.write(dev);
-				byte[] data = table.getBytes(StandardCharsets.UTF_8);
-				byte[] length = intToBytes(data.length);
+				final byte[] data = table.getBytes(StandardCharsets.UTF_8);
+				final byte[] length = intToBytes(data.length);
 				out.write(length);
 				out.write(data);
 				out.write(rsToBytes(rows));
@@ -390,7 +389,7 @@ public class LoadRecordWriter extends RecordWriter
 				out.close();
 				sock.close();
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				ok = false;
 			}
@@ -405,7 +404,7 @@ public class LoadRecordWriter extends RecordWriter
 		private final String table;
 		private final HashMap<Integer, ArrayList<ArrayList<Object>>> rows;
 
-		public LoadThread(String hostname, String portString, String table, HashMap<Integer, ArrayList<ArrayList<Object>>> rows)
+		public LoadThread(final String hostname, final String portString, final String table, final HashMap<Integer, ArrayList<ArrayList<Object>>> rows)
 		{
 			this.hostname = hostname;
 			this.portString = portString;
@@ -421,15 +420,15 @@ public class LoadRecordWriter extends RecordWriter
 		@Override
 		public void run()
 		{
-			ArrayList<ConfirmationThread> threads = new ArrayList<ConfirmationThread>();
-			for (Map.Entry entry : rows.entrySet())
+			final ArrayList<ConfirmationThread> threads = new ArrayList<ConfirmationThread>();
+			for (final Map.Entry entry : rows.entrySet())
 			{
-				ConfirmationThread thread = new ConfirmationThread(hostname, portString, table, (Integer)entry.getKey(), (ArrayList<ArrayList<Object>>)entry.getValue());
+				final ConfirmationThread thread = new ConfirmationThread(hostname, portString, table, (Integer)entry.getKey(), (ArrayList<ArrayList<Object>>)entry.getValue());
 				thread.start();
 				threads.add(thread);
 			}
 
-			for (ConfirmationThread thread : threads)
+			for (final ConfirmationThread thread : threads)
 			{
 				while (true)
 				{
@@ -438,7 +437,7 @@ public class LoadRecordWriter extends RecordWriter
 						thread.join();
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}

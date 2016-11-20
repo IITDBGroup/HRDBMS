@@ -33,7 +33,6 @@ import java.util.concurrent.locks.LockSupport;
 import org.sosy_lab.common.ShutdownManager;
 import org.sosy_lab.common.configuration.Configuration;
 import org.sosy_lab.common.configuration.InvalidConfigurationException;
-import org.sosy_lab.common.log.BasicLogManager;
 import org.sosy_lab.common.log.LogManager;
 import org.sosy_lab.java_smt.SolverContextFactory;
 import org.sosy_lab.java_smt.SolverContextFactory.Solvers;
@@ -103,7 +102,7 @@ public final class TableScanOperator implements Operator, Serializable
 	{
 		try
 		{
-			HParms hparms = HRDBMSWorker.getHParms();
+			final HParms hparms = HRDBMSWorker.getHParms();
 			PREFETCH_REQUEST_SIZE_STATIC = Integer.parseInt(hparms.getProperty("prefetch_request_size")); // 80
 			PAGES_IN_ADVANCE_STATIC = Integer.parseInt(hparms.getProperty("pages_in_advance")); // 40
 			MAX_PBPE_TIME = Integer.parseInt(hparms.getProperty("max_pbpe_time"));
@@ -113,23 +112,22 @@ public final class TableScanOperator implements Operator, Serializable
 			final Field fieldToUpdate = ArrayList.class.getDeclaredField("elementData");
 			// get unsafe offset to this field
 			offset = unsafe.objectFieldOffset(fieldToUpdate);
-			
-			int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
-			boolean isV5OrHigher = (pbpeVer >= 5);
-			boolean isV9 = (pbpeVer == 9);
 
-			File file = new File("pbpe.dat");
+			final int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
+			final boolean isV5OrHigher = (pbpeVer >= 5);
+			final boolean isV9 = (pbpeVer == 9);
+
+			final File file = new File("pbpe.dat");
 			if (file.exists())
 			{
 				try
 				{
-					ObjectInputStream in = new ObjectInputStream(new FileInputStream("pbpe.dat"));
-					
+					final ObjectInputStream in = new ObjectInputStream(new FileInputStream("pbpe.dat"));
+
 					if (isV5OrHigher)
 					{
 						pbpeCache2 = (ConcurrentHashMap<String, MultiHashMap<Integer, CNFEntry>>)in.readObject();
 						noResults = new MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>>();
-						contextQ = new ConcurrentLinkedQueue();
 					}
 					else
 					{
@@ -137,7 +135,7 @@ public final class TableScanOperator implements Operator, Serializable
 					}
 					in.close();
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					noResults = new MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>>();
 					pbpeCache2 = new ConcurrentHashMap<String, MultiHashMap<Integer, CNFEntry>>();
@@ -147,63 +145,63 @@ public final class TableScanOperator implements Operator, Serializable
 			{
 				noResults = new MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>>();
 				pbpeCache2 = new ConcurrentHashMap<String, MultiHashMap<Integer, CNFEntry>>();
-				contextQ = new ConcurrentLinkedQueue();
 			}
-			
+
 			if (isV9)
 			{
 				problemCache = new ConcurrentHashMap<String, HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet>>();
-				for (Map.Entry entry : pbpeCache2.entrySet())
+				for (final Map.Entry entry : pbpeCache2.entrySet())
 				{
-					HashSet<CNFEntry> entries = new HashSet<CNFEntry>();
-					MultiHashMap<Integer, CNFEntry> mhm = (MultiHashMap<Integer, CNFEntry>)entry.getValue();
-					Set<Integer> hashCodes = mhm.getKeySet();
-					for (int hash : hashCodes)
+					final HashSet<CNFEntry> entries = new HashSet<CNFEntry>();
+					final MultiHashMap<Integer, CNFEntry> mhm = (MultiHashMap<Integer, CNFEntry>)entry.getValue();
+					final Set<Integer> hashCodes = mhm.getKeySet();
+					for (final int hash : hashCodes)
 					{
 						entries.addAll(mhm.get(hash));
 					}
-					
+
 					int length = 1;
-					for (CNFEntry entry2 : entries)
+					for (final CNFEntry entry2 : entries)
 					{
-						BitSet bs = entry2.getBitSet();
-						synchronized(bs)
+						final BitSet bs = entry2.getBitSet();
+						synchronized (bs)
 						{
-							int temp = bs.length();
+							final int temp = bs.length();
 							if (temp > length)
 							{
 								length = temp;
 							}
 						}
 					}
-					
-					String fn = (String)entry.getKey();
-					HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> problems = buildProblems(entries, 1, length);
+
+					final String fn = (String)entry.getKey();
+					final HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> problems = buildProblems(entries, 1, length);
 					problemCache.put(fn, problems);
 				}
-				
+
 				prtq = new LinkedBlockingQueue<String>();
 				new ProblemRebuildThread(prtq).start();
 			}
 
 			new PBPEThread().start();
-			
-			config = Configuration.defaultConfiguration();
-		    logger = SMTLogManager.create(config);
-		    shutdown = ShutdownManager.create();
 
+			config = Configuration.defaultConfiguration();
+			logger = SMTLogManager.create(config);
+			shutdown = ShutdownManager.create();
+
+			contextQ = new ConcurrentLinkedQueue();
 			if (isV5OrHigher)
 			{
 				int i = 0;
 				while (i < MetaData.getNumDevices())
 				{
-					SolverContext context = SolverContextFactory.createSolverContext(config, logger, shutdown.getNotifier(), Solvers.SMTINTERPOL);
+					final SolverContext context = SolverContextFactory.createSolverContext(config, logger, shutdown.getNotifier(), Solvers.SMTINTERPOL);
 					contextQ.add(context);
 					i++;
 				}
 			}
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 		}
@@ -261,7 +259,7 @@ public final class TableScanOperator implements Operator, Serializable
 	private int tType = 0;
 	private volatile transient HashSet<Integer> referencesHash = null;
 
-	public TableScanOperator(String schema, String name, MetaData meta, HashMap<String, Integer> cols2Pos, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, TreeMap<Integer, String> tablePos2Col, HashMap<String, String> tableCols2Types, HashMap<String, Integer> tableCols2Pos) throws Exception
+	public TableScanOperator(final String schema, final String name, final MetaData meta, final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> tablePos2Col, final HashMap<String, String> tableCols2Types, final HashMap<String, Integer> tableCols2Pos) throws Exception
 	{
 		this.meta = meta;
 		this.name = name;
@@ -275,13 +273,13 @@ public final class TableScanOperator implements Operator, Serializable
 		received = new AtomicLong(0);
 	}
 
-	public TableScanOperator(String schema, String name, MetaData meta, Transaction tx) throws Exception
+	public TableScanOperator(final String schema, final String name, final MetaData meta, final Transaction tx) throws Exception
 	{
 		this.meta = meta;
 		this.name = name;
 		this.schema = schema;
-		cols2Types = meta.getCols2TypesForTable(schema, name, tx);
-		cols2Pos = meta.getCols2PosForTable(schema, name, tx);
+		cols2Types = MetaData.getCols2TypesForTable(schema, name, tx);
+		cols2Pos = MetaData.getCols2PosForTable(schema, name, tx);
 		pos2Col = MetaData.cols2PosFlip(cols2Pos);
 		tableCols2Types = (HashMap<String, String>)cols2Types.clone();
 		tablePos2Col = (TreeMap<Integer, String>)pos2Col.clone();
@@ -298,13 +296,13 @@ public final class TableScanOperator implements Operator, Serializable
 	// MetaData.getNumDevices()) / 15;
 	// }
 
-	public TableScanOperator(String schema, String name, MetaData meta, Transaction tx, boolean releaseLocks) throws Exception
+	public TableScanOperator(final String schema, final String name, final MetaData meta, final Transaction tx, final boolean releaseLocks) throws Exception
 	{
 		this.meta = meta;
 		this.name = name;
 		this.schema = schema;
-		cols2Types = meta.getCols2TypesForTable(schema, name, tx);
-		cols2Pos = meta.getCols2PosForTable(schema, name, tx);
+		cols2Types = MetaData.getCols2TypesForTable(schema, name, tx);
+		cols2Pos = MetaData.getCols2PosForTable(schema, name, tx);
 		pos2Col = MetaData.cols2PosFlip(cols2Pos);
 		tableCols2Types = (HashMap<String, String>)cols2Types.clone();
 		tablePos2Col = (TreeMap<Integer, String>)pos2Col.clone();
@@ -313,12 +311,12 @@ public final class TableScanOperator implements Operator, Serializable
 		received = new AtomicLong(0);
 	}
 
-	public TableScanOperator(String schema, String name, MetaData meta, Transaction tx, boolean releaseLocks, HashMap<String, Integer> cols2Pos, TreeMap<Integer, String> pos2Col) throws Exception
+	public TableScanOperator(final String schema, final String name, final MetaData meta, final Transaction tx, final boolean releaseLocks, final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Col) throws Exception
 	{
 		this.meta = meta;
 		this.name = name;
 		this.schema = schema;
-		cols2Types = meta.getCols2TypesForTable(schema, name, tx);
+		cols2Types = MetaData.getCols2TypesForTable(schema, name, tx);
 		this.cols2Pos = cols2Pos;
 		this.pos2Col = pos2Col;
 		tableCols2Types = (HashMap<String, String>)cols2Types.clone();
@@ -328,9 +326,9 @@ public final class TableScanOperator implements Operator, Serializable
 		received = new AtomicLong(0);
 	}
 
-	public static TableScanOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static TableScanOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		TableScanOperator value = (TableScanOperator)unsafe.allocateInstance(TableScanOperator.class);
+		final TableScanOperator value = (TableScanOperator)unsafe.allocateInstance(TableScanOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
 		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
@@ -368,93 +366,23 @@ public final class TableScanOperator implements Operator, Serializable
 		return value;
 	}
 
-	@Override
-	public void add(Operator op) throws Exception
+	private static HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> buildProblems(final HashSet<CNFEntry> entries, final int stride, final int length)
 	{
-		children.add(op);
-		op.registerParent(this);
-	}
-	
-	private static class ProblemRebuildThread extends HRDBMSThread
-	{
-		private LinkedBlockingQueue<String> q;
-		private HashMap<String, Long> times = new HashMap<String, Long>();
-		
-		public ProblemRebuildThread(LinkedBlockingQueue<String> q)
-		{
-			this.q = q;
-		}
-		
-		public void run()
-		{
-			while (true)
-			{
-				try
-				{
-					String msg = q.take();
-					StringTokenizer tokens = new StringTokenizer(msg, ",", false);
-					String fn = tokens.nextToken();
-					String t = tokens.nextToken();
-					long time = Long.parseLong(t);
-					Long last = times.get(fn);
-					if (last != null && time < last)
-					{
-						continue;
-					}
-					
-					//rebuild data for fragment fn
-					HashSet<CNFEntry> entries = new HashSet<CNFEntry>();
-					time = System.currentTimeMillis();
-					MultiHashMap<Integer, CNFEntry> mhm = pbpeCache2.get(fn);
-					Set<Integer> hashCodes = mhm.getKeySet();
-					for (int hash : hashCodes)
-					{
-						entries.addAll(mhm.get(hash));
-					}
-					
-					int length = 1;
-					for (CNFEntry entry2 : entries)
-					{
-						BitSet bs = entry2.getBitSet();
-						synchronized(bs)
-						{
-							int temp = bs.length();
-							if (temp > length)
-							{
-								length = temp;
-							}
-						}
-					}
-					
-					HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> problems = buildProblems(entries, 1, length);
-					problemCache.put(fn, problems);
-					times.put(fn, time);
-				}
-				catch(InterruptedException e)
-				{
-					continue;
-				}
-			}
-		}
-	}
-	
-	private static HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> buildProblems(HashSet<CNFEntry> entries, int stride, int length)
-	{
-		int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
-		boolean isV6OrHigher = (pbpeVer >= 6);
-		HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> retval = new HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet>();
-		
-		HashMap<HashSet<Integer>, HashSet<HashSet<HashMap<Filter, Filter>>>> tempMap = new HashMap<HashSet<Integer>, HashSet<HashSet<HashMap<Filter, Filter>>>>();
+		final int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
+		final boolean isV6OrHigher = (pbpeVer >= 6);
+		final HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> retval = new HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet>();
+
+		final HashMap<HashSet<Integer>, HashSet<HashSet<HashMap<Filter, Filter>>>> tempMap = new HashMap<HashSet<Integer>, HashSet<HashSet<HashMap<Filter, Filter>>>>();
 		int pos = 1;
 		while (pos < length)
 		{
-			HashSet<Integer> key = new HashSet<Integer>();
-			HashSet<HashSet<HashMap<Filter, Filter>>> tempHSHM = new HashSet<HashSet<HashMap<Filter, Filter>>>();
+			final HashSet<Integer> key = new HashSet<Integer>();
+			final HashSet<HashSet<HashMap<Filter, Filter>>> tempHSHM = new HashSet<HashSet<HashMap<Filter, Filter>>>();
 			int i = 0;
-			for (CNFEntry entry : entries)
+			for (final CNFEntry entry : entries)
 			{
-				BitSet bs = entry.getBitSet();
-				synchronized(bs)
+				final BitSet bs = entry.getBitSet();
+				synchronized (bs)
 				{
 					if (bs.get(pos))
 					{
@@ -462,10 +390,10 @@ public final class TableScanOperator implements Operator, Serializable
 						tempHSHM.add(entry.getCNF());
 					}
 				}
-				
+
 				i++;
 			}
-			
+
 			HashSet<HashSet<HashMap<Filter, Filter>>> hshm = tempMap.get(key);
 			if (hshm == null)
 			{
@@ -484,18 +412,136 @@ public final class TableScanOperator implements Operator, Serializable
 				{
 					bs = new BitSet();
 				}
-				
+
 				retval.put(hshm, bs);
 			}
-			
+
 			bs.set(pos);
 			pos += stride;
 		}
-		
+
 		return retval;
 	}
 
-	public void addActiveDeviceForParent(int i, Operator op)
+	private static boolean canAnythingInRangeSatisfyFilters(final ArrayList<Filter> filters, Object lowLE, Object highLE) throws Exception
+	{
+		if (lowLE == null)
+		{
+			if (highLE instanceof Double)
+			{
+				lowLE = Double.MIN_VALUE;
+			}
+			else if (highLE instanceof Long)
+			{
+				lowLE = Long.MIN_VALUE;
+			}
+			else if (highLE instanceof Integer)
+			{
+				lowLE = Integer.MIN_VALUE;
+			}
+			else if (highLE instanceof MyDate)
+			{
+				lowLE = new MyDate(Integer.MIN_VALUE);
+			}
+			else if (highLE instanceof String)
+			{
+				lowLE = "";
+			}
+		}
+
+		if (highLE == null)
+		{
+			if (lowLE instanceof Double)
+			{
+				highLE = Double.MAX_VALUE;
+			}
+			else if (lowLE instanceof Long)
+			{
+				highLE = Long.MAX_VALUE;
+			}
+			else if (lowLE instanceof Integer)
+			{
+				highLE = Integer.MAX_VALUE;
+			}
+			else if (lowLE instanceof MyDate)
+			{
+				highLE = new MyDate(Integer.MAX_VALUE);
+			}
+			else if (lowLE instanceof String)
+			{
+				highLE = "\uFFFF";
+			}
+		}
+
+		for (final Filter filter : filters)
+		{
+			if (filter.op().equals("E"))
+			{
+				Object literal = null;
+				if (filter.leftIsColumn())
+				{
+					literal = filter.rightLiteral();
+				}
+				else
+				{
+					literal = filter.leftLiteral();
+				}
+
+				if (((Comparable)lowLE).compareTo(literal) < 1 && ((Comparable)highLE).compareTo(literal) > -1)
+				{
+					continue;
+				}
+				else
+				{
+					return false;
+				}
+			}
+
+			final HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
+			String col = null;
+			if (filter.leftIsColumn())
+			{
+				col = filter.leftColumn();
+			}
+			else
+			{
+				col = filter.rightColumn();
+			}
+			cols2Pos.put(col, 0);
+			final ArrayList<Object> row1 = new ArrayList<Object>(1);
+			row1.add(lowLE);
+			final ArrayList<Object> row2 = new ArrayList<Object>(1);
+			row2.add(highLE);
+
+			try
+			{
+				if (filter.passes(row1, cols2Pos) || filter.passes(row2, cols2Pos))
+				{
+					continue;
+				}
+				else
+				{
+					return false;
+				}
+			}
+			catch (final Exception e)
+			{
+				HRDBMSWorker.logger.error("", e);
+				throw e;
+			}
+		}
+
+		return true;
+	}
+
+	@Override
+	public void add(final Operator op) throws Exception
+	{
+		children.add(op);
+		op.registerParent(this);
+	}
+
+	public void addActiveDeviceForParent(final int i, final Operator op)
 	{
 		ArrayList<Integer> list = activeDevices.get(op);
 
@@ -510,12 +556,12 @@ public final class TableScanOperator implements Operator, Serializable
 		list.add(i);
 	}
 
-	public void addActiveDevices(ArrayList<Integer> devs)
+	public void addActiveDevices(final ArrayList<Integer> devs)
 	{
 		devices.addAll(devs);
 	}
 
-	public void addActiveDevicesForParent(ArrayList<Integer> is, Operator op)
+	public void addActiveDevicesForParent(final ArrayList<Integer> is, final Operator op)
 	{
 		final ArrayList<Integer> list = activeDevices.get(op);
 
@@ -528,7 +574,7 @@ public final class TableScanOperator implements Operator, Serializable
 		list.addAll(is);
 	}
 
-	public void addActiveNodeForParent(int i, Operator op)
+	public void addActiveNodeForParent(final int i, final Operator op)
 	{
 		ArrayList<Integer> list = activeNodes.get(op);
 
@@ -543,7 +589,7 @@ public final class TableScanOperator implements Operator, Serializable
 		list.add(i);
 	}
 
-	public void addFilter(ArrayList<Filter> filters, Operator op, Operator opParent, Transaction tx) throws Exception
+	public void addFilter(final ArrayList<Filter> filters, final Operator op, final Operator opParent, final Transaction tx) throws Exception
 	{
 		opParents.put(opParent, op);
 
@@ -707,7 +753,7 @@ public final class TableScanOperator implements Operator, Serializable
 
 		if (readBuffers != null)
 		{
-			for (BufferedLinkedBlockingQueue readBuffer : readBuffers.values())
+			for (final BufferedLinkedBlockingQueue readBuffer : readBuffers.values())
 			{
 				readBuffer.close();
 			}
@@ -751,7 +797,7 @@ public final class TableScanOperator implements Operator, Serializable
 	}
 
 	@Override
-	public boolean equals(Object rhs)
+	public boolean equals(final Object rhs)
 	{
 		if (rhs == null || (!(rhs instanceof TableScanOperator)))
 		{
@@ -800,7 +846,7 @@ public final class TableScanOperator implements Operator, Serializable
 		return 0;
 	}
 
-	public CNFFilter getCNFForParent(Operator op)
+	public CNFFilter getCNFForParent(final Operator op)
 	{
 		return orderedFilters.get(op);
 	}
@@ -827,7 +873,7 @@ public final class TableScanOperator implements Operator, Serializable
 		return devices;
 	}
 
-	public ArrayList<Integer> getDeviceList(Operator op)
+	public ArrayList<Integer> getDeviceList(final Operator op)
 	{
 		return activeDevices.get(op);
 	}
@@ -842,7 +888,7 @@ public final class TableScanOperator implements Operator, Serializable
 		return partMeta.getDeviceRanges();
 	}
 
-	public ArrayList<Integer> getDevicesMatchingRangeFilters(ArrayList<Filter> rangeFilters) throws Exception
+	public ArrayList<Integer> getDevicesMatchingRangeFilters(final ArrayList<Filter> rangeFilters) throws Exception
 	{
 		final ArrayList<Integer> retval = new ArrayList<Integer>();
 		ArrayList<Integer> deviceList = null;
@@ -941,7 +987,7 @@ public final class TableScanOperator implements Operator, Serializable
 		return partMeta.getNodeGroupRanges();
 	}
 
-	public ArrayList<Integer> getNodeGroupsMatchingRangeFilters(ArrayList<Filter> rangeFilters) throws Exception
+	public ArrayList<Integer> getNodeGroupsMatchingRangeFilters(final ArrayList<Filter> rangeFilters) throws Exception
 	{
 		final ArrayList<Integer> retval = new ArrayList<Integer>();
 		final ArrayList<Integer> nodeGroupList = partMeta.nodeGroupSet();
@@ -977,7 +1023,7 @@ public final class TableScanOperator implements Operator, Serializable
 		return partMeta.nodeSet();
 	}
 
-	public ArrayList<Integer> getNodeList(Operator op)
+	public ArrayList<Integer> getNodeList(final Operator op)
 	{
 		return activeNodes.get(op);
 	}
@@ -992,7 +1038,7 @@ public final class TableScanOperator implements Operator, Serializable
 		return partMeta.getNodeRanges();
 	}
 
-	public ArrayList<Integer> getNodesMatchingRangeFilters(ArrayList<Filter> rangeFilters) throws Exception
+	public ArrayList<Integer> getNodesMatchingRangeFilters(final ArrayList<Filter> rangeFilters) throws Exception
 	{
 		final ArrayList<Integer> retval = new ArrayList<Integer>();
 		ArrayList<Integer> nodeList = null;
@@ -1084,8 +1130,8 @@ public final class TableScanOperator implements Operator, Serializable
 		cols2Types.put("_RID3", "INT");
 		cols2Types.put("_RID4", "INT");
 
-		HashMap<String, Integer> newCols2Pos = new HashMap<String, Integer>();
-		TreeMap<Integer, String> newPos2Col = new TreeMap<Integer, String>();
+		final HashMap<String, Integer> newCols2Pos = new HashMap<String, Integer>();
+		final TreeMap<Integer, String> newPos2Col = new TreeMap<Integer, String>();
 		newCols2Pos.put("_RID1", 0);
 		newCols2Pos.put("_RID2", 1);
 		newCols2Pos.put("_RID3", 2);
@@ -1094,7 +1140,7 @@ public final class TableScanOperator implements Operator, Serializable
 		newPos2Col.put(1, "_RID2");
 		newPos2Col.put(2, "_RID3");
 		newPos2Col.put(3, "_RID4");
-		for (Map.Entry entry : cols2Pos.entrySet())
+		for (final Map.Entry entry : cols2Pos.entrySet())
 		{
 			newCols2Pos.put((String)entry.getKey(), (Integer)entry.getValue() + 4);
 			newPos2Col.put((Integer)entry.getValue() + 4, (String)entry.getKey());
@@ -1175,7 +1221,7 @@ public final class TableScanOperator implements Operator, Serializable
 	}
 
 	@Override
-	public Object next(Operator op) throws Exception
+	public Object next(final Operator op) throws Exception
 	{
 		if (!optimize)
 		{
@@ -1240,7 +1286,7 @@ public final class TableScanOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void nextAll(Operator op)
+	public void nextAll(final Operator op)
 	{
 		forceDone = true;
 	}
@@ -1286,7 +1332,7 @@ public final class TableScanOperator implements Operator, Serializable
 	{
 		if (parents.size() == 0)
 		{
-			ArrayList<Operator> retval = new ArrayList<Operator>();
+			final ArrayList<Operator> retval = new ArrayList<Operator>();
 			{
 				retval.add(null);
 			}
@@ -1314,7 +1360,7 @@ public final class TableScanOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void registerParent(Operator op)
+	public void registerParent(final Operator op)
 	{
 		parents.add(op);
 		if (opParents.containsKey(op))
@@ -1325,14 +1371,14 @@ public final class TableScanOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeChild(Operator op)
+	public void removeChild(final Operator op)
 	{
 		children.remove(op);
 		op.removeParent(this);
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 		parents.remove(op);
 	}
@@ -1374,9 +1420,9 @@ public final class TableScanOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -1418,13 +1464,13 @@ public final class TableScanOperator implements Operator, Serializable
 		OperatorUtils.writeInt(tType, out);
 	}
 
-	public void setAlias(String alias)
+	public void setAlias(final String alias)
 	{
 		this.alias = alias;
-		TreeMap<Integer, String> newPos2Col = new TreeMap<Integer, String>();
-		HashMap<String, Integer> newCols2Pos = new HashMap<String, Integer>();
-		HashMap<String, String> newCols2Types = new HashMap<String, String>();
-		for (Map.Entry entry : pos2Col.entrySet())
+		final TreeMap<Integer, String> newPos2Col = new TreeMap<Integer, String>();
+		final HashMap<String, Integer> newCols2Pos = new HashMap<String, Integer>();
+		final HashMap<String, String> newCols2Types = new HashMap<String, String>();
+		for (final Map.Entry entry : pos2Col.entrySet())
 		{
 			String val = (String)entry.getValue();
 			val = val.substring(val.indexOf('.') + 1);
@@ -1432,7 +1478,7 @@ public final class TableScanOperator implements Operator, Serializable
 			newCols2Pos.put(alias + "." + val, (Integer)entry.getKey());
 		}
 
-		for (Map.Entry entry : cols2Types.entrySet())
+		for (final Map.Entry entry : cols2Types.entrySet())
 		{
 			String val = (String)entry.getKey();
 			val = val.substring(val.indexOf('.') + 1);
@@ -1444,17 +1490,17 @@ public final class TableScanOperator implements Operator, Serializable
 		cols2Types = newCols2Types;
 	}
 
-	public void setChildForDevice(int device, Operator child)
+	public void setChildForDevice(final int device, final Operator child)
 	{
 		device2Child.put(device, child);
 	}
 
 	@Override
-	public void setChildPos(int pos)
+	public void setChildPos(final int pos)
 	{
 	}
 
-	public void setCNFForParent(Operator op, CNFFilter filter)
+	public void setCNFForParent(final Operator op, final CNFFilter filter)
 	{
 		orderedFilters.put(op, filter);
 		if (op instanceof NetworkHashAndSendOperator || op instanceof NetworkSendMultipleOperator || op instanceof NetworkSendRROperator)
@@ -1469,13 +1515,13 @@ public final class TableScanOperator implements Operator, Serializable
 		indexOnly = true;
 	}
 
-	public void setIndexScan(Index scanIndex)
+	public void setIndexScan(final Index scanIndex)
 	{
 		this.scanIndex = scanIndex;
 		scanIndex.setTransaction(new Transaction(0));
 	}
 
-	public void setMetaData(Transaction t) throws Exception
+	public void setMetaData(final Transaction t) throws Exception
 	{
 		set = true;
 		partMeta = meta.getPartMeta(schema, name, t);
@@ -1485,7 +1531,7 @@ public final class TableScanOperator implements Operator, Serializable
 	{
 		if (getRID)
 		{
-			ArrayList<String> newNeeded = new ArrayList<String>(needed.size());
+			final ArrayList<String> newNeeded = new ArrayList<String>(needed.size());
 			needed.remove(0);
 			needed.remove(0);
 			needed.remove(0);
@@ -1556,7 +1602,7 @@ public final class TableScanOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 		this.node = node;
 	}
@@ -1567,22 +1613,22 @@ public final class TableScanOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void setPlan(Plan plan)
+	public void setPlan(final Plan plan)
 	{
 	}
 
-	public void setSample(long sPer)
+	public void setSample(final long sPer)
 	{
 		sample = true;
 		this.sPer = sPer;
 	}
 
-	public void setTransaction(Transaction tx)
+	public void setTransaction(final Transaction tx)
 	{
 		this.tx = tx;
 	}
 
-	public void setType(int type)
+	public void setType(final int type)
 	{
 		tType = type;
 	}
@@ -1619,12 +1665,12 @@ public final class TableScanOperator implements Operator, Serializable
 				{
 					if (children.size() == 0)
 					{
-						final String in = meta.getDevicePath(device) + schema + "." + name + ".tbl";
+						final String in = MetaData.getDevicePath(device) + schema + "." + name + ".tbl";
 						ins.add(in);
 					}
 					else
 					{
-						final String in = meta.getDevicePath(device) + schema + "." + name + ".tbl";
+						final String in = MetaData.getDevicePath(device) + schema + "." + name + ".tbl";
 						randomIns.add(in);
 						ins2Device.put(in, device);
 					}
@@ -1689,129 +1735,18 @@ public final class TableScanOperator implements Operator, Serializable
 		return retval;
 	}
 
-	private boolean canAnythingInRangeSatisfyFilters(ArrayList<Filter> filters, Object lowLE, Object highLE) throws Exception
-	{
-		if (lowLE == null)
-		{
-			if (highLE instanceof Double)
-			{
-				lowLE = Double.MIN_VALUE;
-			}
-			else if (highLE instanceof Long)
-			{
-				lowLE = Long.MIN_VALUE;
-			}
-			else if (highLE instanceof Integer)
-			{
-				lowLE = Integer.MIN_VALUE;
-			}
-			else if (highLE instanceof MyDate)
-			{
-				lowLE = new MyDate(Integer.MIN_VALUE);
-			}
-			else if (highLE instanceof String)
-			{
-				lowLE = "";
-			}
-		}
-
-		if (highLE == null)
-		{
-			if (lowLE instanceof Double)
-			{
-				highLE = Double.MAX_VALUE;
-			}
-			else if (lowLE instanceof Long)
-			{
-				highLE = Long.MAX_VALUE;
-			}
-			else if (lowLE instanceof Integer)
-			{
-				highLE = Integer.MAX_VALUE;
-			}
-			else if (lowLE instanceof MyDate)
-			{
-				highLE = new MyDate(Integer.MAX_VALUE);
-			}
-			else if (lowLE instanceof String)
-			{
-				highLE = "\uFFFF";
-			}
-		}
-
-		for (final Filter filter : filters)
-		{
-			if (filter.op().equals("E"))
-			{
-				Object literal = null;
-				if (filter.leftIsColumn())
-				{
-					literal = filter.rightLiteral();
-				}
-				else
-				{
-					literal = filter.leftLiteral();
-				}
-
-				if (((Comparable)lowLE).compareTo(literal) < 1 && ((Comparable)highLE).compareTo(literal) > -1)
-				{
-					continue;
-				}
-				else
-				{
-					return false;
-				}
-			}
-
-			final HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
-			String col = null;
-			if (filter.leftIsColumn())
-			{
-				col = filter.leftColumn();
-			}
-			else
-			{
-				col = filter.rightColumn();
-			}
-			cols2Pos.put(col, 0);
-			final ArrayList<Object> row1 = new ArrayList<Object>(1);
-			row1.add(lowLE);
-			final ArrayList<Object> row2 = new ArrayList<Object>(1);
-			row2.add(highLE);
-
-			try
-			{
-				if (filter.passes(row1, cols2Pos) || filter.passes(row2, cols2Pos))
-				{
-					continue;
-				}
-				else
-				{
-					return false;
-				}
-			}
-			catch (final Exception e)
-			{
-				HRDBMSWorker.logger.error("", e);
-				throw e;
-			}
-		}
-
-		return true;
-	}
-
 	private void init()
 	{
 		final InitThread t = new InitThread();
 		t.start();
 	}
 
-	private boolean needThisColForFilter(String col, CNFFilter filter)
+	private boolean needThisColForFilter(final String col, final CNFFilter filter)
 	{
 		if (referencesHash == null)
 		{
-			HashSet<Integer> temp = new HashSet<Integer>();
-			for (String s : filter.getReferencesHash())
+			final HashSet<Integer> temp = new HashSet<Integer>();
+			for (final String s : filter.getReferencesHash())
 			{
 				temp.add(s.hashCode());
 			}
@@ -1820,6 +1755,58 @@ public final class TableScanOperator implements Operator, Serializable
 		}
 
 		return referencesHash.contains(col.hashCode());
+	}
+
+	public static class CNFEntry implements Serializable
+	{
+		private final HashSet<HashMap<Filter, Filter>> cnf;
+		private final BitSet bitSet;
+		private final AtomicLong usage = new AtomicLong(0);
+
+		public CNFEntry(final HashSet<HashMap<Filter, Filter>> cnf, final BitSet bitSet)
+		{
+			this.cnf = cnf;
+			this.bitSet = bitSet;
+		}
+
+		@Override
+		public boolean equals(final Object r)
+		{
+			final CNFEntry rhs = (CNFEntry)r;
+			return cnf.equals(rhs.cnf);
+		}
+
+		public BitSet getBitSet()
+		{
+			return bitSet;
+		}
+
+		public HashSet<HashMap<Filter, Filter>> getCNF()
+		{
+			return cnf;
+		}
+
+		public long getUsage()
+		{
+			return usage.get();
+		}
+
+		@Override
+		public int hashCode()
+		{
+			return cnf.hashCode();
+		}
+
+		public void incrementUsage()
+		{
+			usage.incrementAndGet();
+		}
+
+		@Override
+		public String toString()
+		{
+			return cnf.toString() + " : " + bitSet.toString();
+		}
 	}
 
 	public final class ReaderThread extends ThreadPoolThread
@@ -1832,298 +1819,41 @@ public final class TableScanOperator implements Operator, Serializable
 		private String pbpeDebug1;
 		private String pbpeDebug2;
 
-		public ReaderThread(String in)
+		public ReaderThread(final String in)
 		{
 			this.in = in;
 		}
 
-		public ReaderThread(String in2, boolean marker)
+		public ReaderThread(final String in2, final boolean marker)
 		{
 			this.in2 = in2;
 		}
 
-		public ReaderThread(String in, Index scan)
+		public ReaderThread(final String in, final Index scan)
 		{
 			this.in = in;
 			this.scan = scan;
 		}
 
-		public ReaderThread(String in, int start, int max)
+		public ReaderThread(final String in, final int start, final int max)
 		{
 			this.in = in;
 			this.start = start;
 			this.myMaxBlock = max;
 		}
-		
-		private BitSet computePagesToSkip(HashSet<HashMap<Filter,Filter>> hshm, SolverContext context, String fn, int stride, boolean v8, boolean v9)
-		{
-			ThreadMXBean tmxb = ManagementFactory.getThreadMXBean();
-			HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> problems = null;
-			HashSet<CNFEntry> entries = new HashSet<CNFEntry>();
-			long end1 = 0;
-			long start = tmxb.getCurrentThreadCpuTime();
-			
-			if (!v9)
-			{
-				HashSet<Integer> hashCodes = getAllHashCodes(hshm);
-				//HRDBMSWorker.logger.debug("Hash codes for " + hshm + " are " + hashCodes);
-				MultiHashMap<Integer, CNFEntry> mhm = pbpeCache2.get(fn);
-				if (mhm == null)
-				{
-					int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
-					boolean isV6OrHigher = (pbpeVer >= 6);
-					BitSet retval = null;
-					if (isV6OrHigher)
-					{
-						retval = new CompressedBitSet();
-					}
-					else
-					{
-						retval = new BitSet();
-					}
-				
-					return retval;
-				}
-				for (int hash : hashCodes)
-				{
-					entries.addAll(mhm.get(hash));
-				}
-			
-				//HRDBMSWorker.logger.debug("Entries are " + entries);
-				//1 in bit set for a cnf means that cnf is false for that page
-				int length = 1;
-				for (CNFEntry entry : entries)
-				{
-					BitSet bs = entry.getBitSet();
-					synchronized(bs)
-					{
-						int temp = bs.length();
-						if (temp > length)
-						{
-							length = temp;
-						}
-					}
-				}
-			
-				//HRDBMSWorker.logger.debug("BuildProblems length is " + length);
-				
-				problems = buildProblems(entries, stride, length);
-				end1 = tmxb.getCurrentThreadCpuTime();
-				//HRDBMSWorker.logger.debug("Output of buildProblems() is " + problems);
-				
-				if (v8)
-				{
-					int numPageSets = ((length - 2) / stride) + 1;
-					int pSize = problems.size();
-					if (pSize <= 5 || pSize < (numPageSets / 2))
-					{
-						BitSet retval = solveProblems(problems, context, hshm);
-						long end2 = tmxb.getCurrentThreadCpuTime();
-						TableScanOperator.figureOutProblemsTime.getAndAdd(end1 - start);
-						TableScanOperator.SMTSolveTime.getAndAdd(end2 - end1);
-						return retval;
-					}
-					
-					BitSet retval = solveProblemsNonSMT(problems, hshm);
-					long end2 = tmxb.getCurrentThreadCpuTime();
-					TableScanOperator.figureOutProblemsTime.getAndAdd(end1 - start);
-					TableScanOperator.nonSMTSolveTime.getAndAdd(end2 - end1);
-					return retval;
-				}
-			}
-			else
-			{
-				HashSet<Integer> hashCodes = getAllHashCodes(hshm);
-				HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> temp = problemCache.get(fn);
-				if (temp == null)
-				{
-					MultiHashMap<Integer, CNFEntry> mhm = pbpeCache2.get(fn);
-					if (mhm == null)
-					{
-						BitSet retval = new CompressedBitSet();
-						return retval;
-					}
-					
-					for (int hash : hashCodes)
-					{
-						entries.addAll(mhm.get(hash));
-					}
-				
-					//HRDBMSWorker.logger.debug("Entries are " + entries);
-					//1 in bit set for a cnf means that cnf is false for that page
-					int length = 1;
-					for (CNFEntry entry : entries)
-					{
-						BitSet bs = entry.getBitSet();
-						synchronized(bs)
-						{
-							int temp2 = bs.length();
-							if (temp2 > length)
-							{
-								length = temp2;
-							}
-						}
-					}
-				
-					//HRDBMSWorker.logger.debug("BuildProblems length is " + length);
-					
-					problems = buildProblems(entries, stride, length);
-				}
-				else
-				{
-					problems = new HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet>();
-					for (Map.Entry entry : temp.entrySet())
-					{
-						HashSet<HashSet<HashMap<Filter, Filter>>> set = (HashSet<HashSet<HashMap<Filter, Filter>>>)entry.getKey();
-						set = (HashSet<HashSet<HashMap<Filter, Filter>>>)set.clone();
-						Iterator<HashSet<HashMap<Filter, Filter>>> iter = set.iterator();
-						while (iter.hasNext())
-						{
-							HashSet<HashMap<Filter, Filter>> hshm2 = iter.next();
-							HashSet<Integer> hashCodes2 = getAllHashCodes(hshm2);
-							hashCodes2.retainAll(hashCodes);
-							if (hashCodes2.size() == 0)
-							{
-								iter.remove();
-							}
-						}
-					
-						if (set.size() == 0)
-						{
-							continue;
-						}
-					
-						BitSet bs = problems.get(set);
-						if (bs == null)
-						{
-							problems.put(set, (BitSet)((BitSet)entry.getValue()).clone());
-						}
-						else
-						{
-							BitSet bs2 = (BitSet)entry.getValue();
-							bs.or(bs2);
-						}
-					}
-				
-					if (problems.size() == 0)
-					{
-						end1 = tmxb.getCurrentThreadCpuTime();
-						TableScanOperator.figureOutProblemsTime.getAndAdd(end1 - start);
-						return new CompressedBitSet();
-					}
-				}
-				
-				end1 = tmxb.getCurrentThreadCpuTime();
-			}
-			
-			BitSet retval = solveProblems(problems, context, hshm);
-			if (!retval.isEmpty())
-			{
-				for (CNFEntry entry : entries)
-				{
-					entry.incrementUsage();
-				}
-			}
-			long end2 = tmxb.getCurrentThreadCpuTime();
-			TableScanOperator.figureOutProblemsTime.getAndAdd(end1 - start);
-			TableScanOperator.SMTSolveTime.getAndAdd(end2 - end1);
-			return retval;
-		}
-		
-		private BitSet solveProblems(HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> problems, SolverContext context, HashSet<HashMap<Filter, Filter>> hshm)
-		{
-			int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
-			boolean isV6OrHigher = (pbpeVer >= 6);
-			BitSet retval = null;
-			if (isV6OrHigher)
-			{
-				retval = new CompressedBitSet();
-			}
-			else
-			{
-				retval = new BitSet();
-			}
-			for (Map.Entry entry : problems.entrySet())
-			{
-				HashSet<HashSet<HashMap<Filter, Filter>>> hshshm = (HashSet<HashSet<HashMap<Filter, Filter>>>)entry.getKey();
-				if (!canSatisfySMT(hshm, hshshm, context))
-				{
-					if (isV6OrHigher)
-					{
-						((CompressedBitSet)retval).or((CompressedBitSet)entry.getValue());
-					}
-					else
-					{
-						retval.or((BitSet)entry.getValue());
-					}
-				}
-			}
-			
-			return retval;
-		}
-		
-		private BitSet solveProblemsNonSMT(HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> problems, HashSet<HashMap<Filter, Filter>> hshm)
-		{
-			BitSet retval = new CompressedBitSet();
-			
-			for (Map.Entry entry : problems.entrySet())
-			{
-				HashSet<HashSet<HashMap<Filter, Filter>>> hshshm = (HashSet<HashSet<HashMap<Filter, Filter>>>)entry.getKey();
-				if (!canSatisfy(hshm, hshshm))
-				{
-					((CompressedBitSet)retval).or((CompressedBitSet)entry.getValue());
-				}
-			}
-			
-			return retval;
-		}
-		
-		private HashSet<Integer> getAllHashCodes(HashSet<HashMap<Filter, Filter>> hshm)
-		{
-			HashSet<Integer> retval = new HashSet<Integer>();
-			for (HashMap<Filter, Filter> hm : hshm)
-			{
-				for (Filter f : hm.keySet())
-				{
-					if (f.leftIsColumn())
-					{
-						String col = f.leftColumn();
-						if (col.contains("."))
-						{
-							col = col.substring(col.indexOf('.') + 1);
-						}
-						
-						retval.add(col.hashCode());
-					}
-					
-					if (f.rightIsColumn())
-					{
-						String col = f.rightColumn();
-						if (col.contains("."))
-						{
-							col = col.substring(col.indexOf('.') + 1);
-						}
-						
-						retval.add(col.hashCode());
-					}
-				}
-			}
-			
-			return retval;
-		}
 
 		public void colTableRT()
 		{
-			int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
-			boolean v2OrHigher = (pbpeVer >= 2);
+			final int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
+			final boolean v2OrHigher = (pbpeVer >= 2);
 			boolean v3OrHigher = (pbpeVer >= 3);
-			boolean isV4 = (pbpeVer == 4);
+			final boolean isV4 = (pbpeVer == 4);
 			boolean v5OrHigher = (pbpeVer >= 5);
 			boolean v6OrHigher = (pbpeVer >= 6);
 			boolean v7 = (pbpeVer == 7);
 			boolean v8 = (pbpeVer == 8);
-			boolean v9 = (pbpeVer == 9);
-			
+			final boolean v9 = (pbpeVer == 9);
+
 			SolverContext context = null;
 			if (v3OrHigher)
 			{
@@ -2134,9 +1864,9 @@ public final class TableScanOperator implements Operator, Serializable
 					{
 						context = SolverContextFactory.createSolverContext(config, logger, shutdown.getNotifier(), Solvers.SMTINTERPOL);
 					}
-					catch(InvalidConfigurationException e)
+					catch (final InvalidConfigurationException e)
 					{
-						context = null;
+						// context = null;
 						HRDBMSWorker.logger.debug("", e);
 						v3OrHigher = false;
 						v5OrHigher = false;
@@ -2154,7 +1884,7 @@ public final class TableScanOperator implements Operator, Serializable
 					HRDBMSWorker.logger.debug("Col table internal error: order of RID cols is wrong");
 				}
 			}
-			new ArrayList<ReaderThread>();
+			// new ArrayList<ReaderThread>();
 			CNFFilter filter = orderedFilters.get(parents.get(0));
 			if (filter != null && !(filter instanceof NullCNFFilter))
 			{
@@ -2184,19 +1914,19 @@ public final class TableScanOperator implements Operator, Serializable
 			{
 				try
 				{
-					Index index = new Index(in, scan.getKeys(), scan.getTypes(), scan.getOrders());
+					final Index index = new Index(in, scan.getKeys(), scan.getTypes(), scan.getOrders());
 					index.open();
 					index.scan(filter, sample, get, skip, readBuffer, midPos2Col, pos2Col, tx, getRID);
 					return;
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
 					try
 					{
 						readBuffer.put(e);
 					}
-					catch (Exception f)
+					catch (final Exception f)
 					{
 					}
 					return;
@@ -2209,7 +1939,7 @@ public final class TableScanOperator implements Operator, Serializable
 				{
 					int i = 0;
 					neededPosNeeded = false;
-					for (int pos : neededPos)
+					for (final int pos : neededPos)
 					{
 						if (pos != i)
 						{
@@ -2222,14 +1952,14 @@ public final class TableScanOperator implements Operator, Serializable
 				}
 			}
 
-			ArrayList<String> types = new ArrayList<String>(midPos2Col.length);
+			final ArrayList<String> types = new ArrayList<String>(midPos2Col.length);
 			for (final String entry : midPos2Col)
 			{
 				types.add(midCols2Types.get(entry));
 			}
 
-			ArrayList<Integer> cols = new ArrayList<Integer>(fetchPos.size());
-			HashMap<Integer, Integer> rowToIterator = new HashMap<Integer, Integer>();
+			final ArrayList<Integer> cols = new ArrayList<Integer>(fetchPos.size());
+			final HashMap<Integer, Integer> rowToIterator = new HashMap<Integer, Integer>();
 
 			if (!getRID)
 			{
@@ -2241,9 +1971,9 @@ public final class TableScanOperator implements Operator, Serializable
 
 				Collections.sort(cols);
 				int pos = 0;
-				for (int col : cols)
+				for (final int col : cols)
 				{
-					int index = fetchPos.indexOf(col);
+					final int index = fetchPos.indexOf(col);
 					rowToIterator.put(index, pos);
 					pos++;
 				}
@@ -2253,7 +1983,7 @@ public final class TableScanOperator implements Operator, Serializable
 				int w = 0;
 				while (w < fetchPos.size())
 				{
-					int col = fetchPos.get(w++);
+					final int col = fetchPos.get(w++);
 					if (col >= 4)
 					{
 						cols.add(col - 4);
@@ -2262,14 +1992,15 @@ public final class TableScanOperator implements Operator, Serializable
 
 				Collections.sort(cols);
 				int pos = 0;
-				for (int col : cols)
+				for (final int col : cols)
 				{
-					int index = fetchPos.indexOf(col + 4);
+					final int index = fetchPos.indexOf(col + 4);
 					rowToIterator.put(index, pos);
 					pos++;
 				}
-				
-				//HRDBMSWorker.logger.debug("COLS is " + cols + ", fetchPos is " + fetchPos);
+
+				// HRDBMSWorker.logger.debug("COLS is " + cols + ", fetchPos is
+				// " + fetchPos);
 			}
 
 			try
@@ -2289,10 +2020,10 @@ public final class TableScanOperator implements Operator, Serializable
 						throw new Exception("Unable to open file " + in);
 					}
 
-					HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
-					for (Map.Entry entry : tablePos2Col.entrySet())
+					final HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+					for (final Map.Entry entry : tablePos2Col.entrySet())
 					{
-						String type = tableCols2Types.get(entry.getValue());
+						final String type = tableCols2Types.get(entry.getValue());
 						DataType value = null;
 						if (type.equals("INT"))
 						{
@@ -2318,7 +2049,7 @@ public final class TableScanOperator implements Operator, Serializable
 						layout.put((Integer)entry.getKey(), value);
 					}
 
-					Schema sch = new Schema(layout);
+					final Schema sch = new Schema(layout);
 
 					int onPage = 1;
 					BufferManager.registerInterest(this, in, onPage, numBlocks - 1);
@@ -2336,18 +2067,18 @@ public final class TableScanOperator implements Operator, Serializable
 					{
 						PREFETCH_REQUEST_SIZE = layout.size() * 2;
 					}
-					int MAX_PAGES_IN_ADVANCE = PREFETCH_REQUEST_SIZE * 2;
+					final int MAX_PAGES_IN_ADVANCE = PREFETCH_REQUEST_SIZE * 2;
 
 					RequestPagesThread raThread = null;
-					ArrayList<Integer> skipped = new ArrayList<Integer>();
-					
+					final ArrayList<Integer> skipped = new ArrayList<Integer>();
+
 					BitSet pagesToSkip = null;
 					BitSet newPagesToSkip = null;
 					HashMap<Filter, CompressedBitSet> falseFilters = null;
 					if (v5OrHigher && checkNoResults)
 					{
 						pagesToSkip = computePagesToSkip(hshm, context, in, layout.size(), v8, v9);
-						
+
 						if (v6OrHigher)
 						{
 							newPagesToSkip = new CompressedBitSet();
@@ -2356,7 +2087,7 @@ public final class TableScanOperator implements Operator, Serializable
 						{
 							newPagesToSkip = new BitSet();
 						}
-						
+
 						if (v7)
 						{
 							falseFilters = new HashMap<Filter, CompressedBitSet>();
@@ -2380,14 +2111,14 @@ public final class TableScanOperator implements Operator, Serializable
 								// PREFETCH_REQUEST_SIZE < numBlocks ?
 								// PREFETCH_REQUEST_SIZE : numBlocks -
 								// lastRequested - 1];
-								ArrayList<Block> toRequest = new ArrayList<Block>();
+								final ArrayList<Block> toRequest = new ArrayList<Block>();
 								int i = 0;
 								final int length = lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1;
 								while (i < length)
 								{
 									if ((lastRequested + i + 1) % layout.size() == 1)
 									{
-										Block block = new Block(in, lastRequested + i + 1);
+										final Block block = new Block(in, lastRequested + i + 1);
 										if (v5OrHigher)
 										{
 											if (pagesToSkip != null)
@@ -2402,27 +2133,28 @@ public final class TableScanOperator implements Operator, Serializable
 										}
 										else if (hshm != null && filter != null)
 										{
-											ThreadMXBean tmxb = ManagementFactory.getThreadMXBean();
-											long start = tmxb.getCurrentThreadCpuTime();
-											Set<HashSet<HashMap<Filter, Filter>>> filters = noResults.get(block);
+											final ThreadMXBean tmxb = ManagementFactory.getThreadMXBean();
+											final long start = tmxb.getCurrentThreadCpuTime();
+											final Set<HashSet<HashMap<Filter, Filter>>> filters = noResults.get(block);
 											if (filters.size() > 0)
 											{
-												//HRDBMSWorker.logger.debug("Filters is size " + filters.size());
+												// HRDBMSWorker.logger.debug("Filters
+												// is size " + filters.size());
 												try
 												{
 													if (isV4)
 													{
-														boolean retval1 = canSatisfySMT(hshm, filters, context);
-														long end1 = tmxb.getCurrentThreadCpuTime();
-														boolean retval2 = canSatisfy(hshm, filters);
-														long end2 = tmxb.getCurrentThreadCpuTime();
-														TableScanOperator.SMTSolveTime.getAndAdd(end1-start);
+														final boolean retval1 = canSatisfySMT(hshm, filters, context);
+														final long end1 = tmxb.getCurrentThreadCpuTime();
+														final boolean retval2 = canSatisfy(hshm, filters);
+														final long end2 = tmxb.getCurrentThreadCpuTime();
+														TableScanOperator.SMTSolveTime.getAndAdd(end1 - start);
 														TableScanOperator.nonSMTSolveTime.getAndAdd(end2 - end1);
 														if (retval1 != retval2)
 														{
 															HRDBMSWorker.logger.debug("SMT and non-SMT disagree: " + hshm + ", " + filters + ", " + pbpeDebug1 + ", " + pbpeDebug2);
 														}
-														
+
 														if (!retval1)
 														{
 															skipped.add(lastRequested + i + 1);
@@ -2436,14 +2168,14 @@ public final class TableScanOperator implements Operator, Serializable
 														{
 															skipped.add(lastRequested + i + 1);
 															i++;
-															long end1 = tmxb.getCurrentThreadCpuTime();
-															TableScanOperator.SMTSolveTime.getAndAdd(end1-start);
+															final long end1 = tmxb.getCurrentThreadCpuTime();
+															TableScanOperator.SMTSolveTime.getAndAdd(end1 - start);
 															continue;
 														}
 														else
 														{
-															long end1 = tmxb.getCurrentThreadCpuTime();
-															TableScanOperator.SMTSolveTime.getAndAdd(end1-start);
+															final long end1 = tmxb.getCurrentThreadCpuTime();
+															TableScanOperator.SMTSolveTime.getAndAdd(end1 - start);
 														}
 													}
 													else if (!v3OrHigher)
@@ -2452,18 +2184,18 @@ public final class TableScanOperator implements Operator, Serializable
 														{
 															skipped.add(lastRequested + i + 1);
 															i++;
-															long end1 = tmxb.getCurrentThreadCpuTime();
-															TableScanOperator.nonSMTSolveTime.getAndAdd(end1-start);
+															final long end1 = tmxb.getCurrentThreadCpuTime();
+															TableScanOperator.nonSMTSolveTime.getAndAdd(end1 - start);
 															continue;
 														}
 														else
 														{
-															long end1 = tmxb.getCurrentThreadCpuTime();
-															TableScanOperator.nonSMTSolveTime.getAndAdd(end1-start);
+															final long end1 = tmxb.getCurrentThreadCpuTime();
+															TableScanOperator.nonSMTSolveTime.getAndAdd(end1 - start);
 														}
 													}
 												}
-												catch(Throwable e)
+												catch (final Throwable e)
 												{
 													HRDBMSWorker.logger.debug("", e);
 												}
@@ -2478,7 +2210,7 @@ public final class TableScanOperator implements Operator, Serializable
 
 								if (toRequest.size() > 0)
 								{
-									Block[] toRequest2 = toRequest.toArray(new Block[toRequest.size()]);
+									final Block[] toRequest2 = toRequest.toArray(new Block[toRequest.size()]);
 									raThread = tx.requestPages(toRequest2, cols, layout.size());
 								}
 
@@ -2486,9 +2218,9 @@ public final class TableScanOperator implements Operator, Serializable
 							}
 							else
 							{
-								ArrayList<Block> toRequest = new ArrayList<Block>();
+								final ArrayList<Block> toRequest = new ArrayList<Block>();
 								int i = 0;
-								int length = lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1;
+								final int length = lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1;
 								while (i < length)
 								{
 									if ((lastRequested + i + 1) % layout.size() == 1)
@@ -2520,14 +2252,14 @@ public final class TableScanOperator implements Operator, Serializable
 
 								if (toRequest.size() > 0)
 								{
-									Block[] toRequest2 = new Block[toRequest.size()];
+									final Block[] toRequest2 = new Block[toRequest.size()];
 									int j = 0;
 									int z = 0;
 									final int limit = toRequest.size();
 									// for (Block b : toRequest)
 									while (z < limit)
 									{
-										Block b = toRequest.get(z++);
+										final Block b = toRequest.get(z++);
 										toRequest2[j] = b;
 										j++;
 									}
@@ -2555,7 +2287,7 @@ public final class TableScanOperator implements Operator, Serializable
 							get2--;
 						}
 
-						Block thisBlock = new Block(in, onPage);
+						final Block thisBlock = new Block(in, onPage);
 						if (hshm != null)
 						{
 							// Set<HashSet<HashMap<Filter, Filter>>> filters =
@@ -2592,14 +2324,14 @@ public final class TableScanOperator implements Operator, Serializable
 						{
 							filter.reset();
 						}
-						outer: while (rit.hasNext())
+						while (rit.hasNext())
 						{
-							Object o = rit.next();
+							final Object o = rit.next();
 							FieldValue[] r = null;
 							RID rid = null;
 							if (getRID)
 							{
-								Map.Entry entry = (Map.Entry)o;
+								final Map.Entry entry = (Map.Entry)o;
 								rid = (RID)entry.getKey();
 								r = (FieldValue[])entry.getValue();
 							}
@@ -2614,7 +2346,7 @@ public final class TableScanOperator implements Operator, Serializable
 							{
 								size = fetchPos.size();
 							}
-							catch (Exception e)
+							catch (final Exception e)
 							{
 								if (forceDone)
 								{
@@ -2640,7 +2372,7 @@ public final class TableScanOperator implements Operator, Serializable
 										{
 											row.add(r[rowToIterator.get(j)].getValue());
 										}
-										catch (NullPointerException e)
+										catch (final NullPointerException e)
 										{
 											HRDBMSWorker.logger.debug("Row is " + r);
 											throw e;
@@ -2655,7 +2387,7 @@ public final class TableScanOperator implements Operator, Serializable
 											{
 												row.add(r[rowToIterator.get(j)].getValue());
 											}
-											catch(Exception e)
+											catch (final Exception e)
 											{
 												HRDBMSWorker.logger.debug("Row = " + row);
 												HRDBMSWorker.logger.debug("R = " + Arrays.asList(r));
@@ -2758,10 +2490,10 @@ public final class TableScanOperator implements Operator, Serializable
 
 						if (checkNoResults && v7)
 						{
-							ThreadMXBean tmxb = ManagementFactory.getThreadMXBean();
-							long start = tmxb.getCurrentThreadCpuTime();
-							HashSet<Filter> falseForPage = filter.getFalseResults();
-							for (Filter f : falseForPage)
+							final ThreadMXBean tmxb = ManagementFactory.getThreadMXBean();
+							final long start = tmxb.getCurrentThreadCpuTime();
+							final HashSet<Filter> falseForPage = filter.getFalseResults();
+							for (final Filter f : falseForPage)
 							{
 								CompressedBitSet bs = falseFilters.get(f);
 								if (bs == null)
@@ -2775,14 +2507,14 @@ public final class TableScanOperator implements Operator, Serializable
 									bs.set(onPage - layout.size());
 								}
 							}
-							long end = tmxb.getCurrentThreadCpuTime();
-							TableScanOperator.pbpeMaintenanceTime.getAndAdd(end-start);
+							final long end = tmxb.getCurrentThreadCpuTime();
+							TableScanOperator.pbpeMaintenanceTime.getAndAdd(end - start);
 						}
-						
+
 						if (checkNoResults && !hadResults && v2OrHigher)
 						{
-							ThreadMXBean tmxb = ManagementFactory.getThreadMXBean();
-							long start = tmxb.getCurrentThreadCpuTime();
+							final ThreadMXBean tmxb = ManagementFactory.getThreadMXBean();
+							final long start = tmxb.getCurrentThreadCpuTime();
 							if (v5OrHigher)
 							{
 								newPagesToSkip.set(thisBlock.number());
@@ -2791,9 +2523,9 @@ public final class TableScanOperator implements Operator, Serializable
 							{
 								noResults.multiPut(thisBlock, hshm);
 							}
-							
-							long end = tmxb.getCurrentThreadCpuTime();
-							TableScanOperator.pbpeMaintenanceTime.getAndAdd(end-start);
+
+							final long end = tmxb.getCurrentThreadCpuTime();
+							TableScanOperator.pbpeMaintenanceTime.getAndAdd(end - start);
 						}
 					}
 
@@ -2804,8 +2536,8 @@ public final class TableScanOperator implements Operator, Serializable
 					}
 					if (v7 && checkNoResults && falseFilters.size() > 0)
 					{
-						ThreadMXBean tmxb = ManagementFactory.getThreadMXBean();
-						long start = tmxb.getCurrentThreadCpuTime();
+						final ThreadMXBean tmxb = ManagementFactory.getThreadMXBean();
+						final long start = tmxb.getCurrentThreadCpuTime();
 						MultiHashMap<Integer, CNFEntry> mhm = pbpeCache2.get(in);
 						if (mhm == null)
 						{
@@ -2813,28 +2545,28 @@ public final class TableScanOperator implements Operator, Serializable
 							pbpeCache2.put(in, mhm);
 							mhm = pbpeCache2.get(in);
 						}
-						
-						for (Map.Entry entry : falseFilters.entrySet())
+
+						for (final Map.Entry entry : falseFilters.entrySet())
 						{
-							Filter f = (Filter)entry.getKey();
-							CompressedBitSet bs = (CompressedBitSet)entry.getValue();
-							HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
+							final Filter f = (Filter)entry.getKey();
+							final CompressedBitSet bs = (CompressedBitSet)entry.getValue();
+							final HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
 							hm.put(f, f);
-							HashSet<HashMap<Filter, Filter>> hshm2 = new HashSet<HashMap<Filter, Filter>>();
+							final HashSet<HashMap<Filter, Filter>> hshm2 = new HashSet<HashMap<Filter, Filter>>();
 							hshm2.add(hm);
-							CNFEntry cnfEntry = new CNFEntry(hshm2, bs);
-							HashSet<Integer> hashCodes = getAllHashCodes(hshm2);
-							for (int i : hashCodes)
+							final CNFEntry cnfEntry = new CNFEntry(hshm2, bs);
+							final HashSet<Integer> hashCodes = getAllHashCodes(hshm2);
+							for (final int i : hashCodes)
 							{
-								ConcurrentHashMap<CNFEntry, CNFEntry> map = mhm.getMap(i);
+								final ConcurrentHashMap<CNFEntry, CNFEntry> map = mhm.getMap(i);
 								if (map != null)
 								{
-									CNFEntry entry2 = map.get(cnfEntry);
+									final CNFEntry entry2 = map.get(cnfEntry);
 									if (entry2 != null)
 									{
-										BitSet bs2 = entry2.getBitSet();
-										BitSet bs3 = cnfEntry.getBitSet();
-										synchronized(bs2)
+										final BitSet bs2 = entry2.getBitSet();
+										final BitSet bs3 = cnfEntry.getBitSet();
+										synchronized (bs2)
 										{
 											((CompressedBitSet)bs2).or((CompressedBitSet)bs3);
 										}
@@ -2850,15 +2582,15 @@ public final class TableScanOperator implements Operator, Serializable
 								}
 							}
 						}
-						
-						long end = tmxb.getCurrentThreadCpuTime();
-						TableScanOperator.pbpeMaintenanceTime.getAndAdd(end-start);
+
+						final long end = tmxb.getCurrentThreadCpuTime();
+						TableScanOperator.pbpeMaintenanceTime.getAndAdd(end - start);
 					}
 					if (v5OrHigher && newPagesToSkip != null && !newPagesToSkip.isEmpty())
 					{
-						ThreadMXBean tmxb = ManagementFactory.getThreadMXBean();
-						long start = tmxb.getCurrentThreadCpuTime();
-						CNFEntry cnfEntry = new CNFEntry(hshm, newPagesToSkip);
+						final ThreadMXBean tmxb = ManagementFactory.getThreadMXBean();
+						final long start = tmxb.getCurrentThreadCpuTime();
+						final CNFEntry cnfEntry = new CNFEntry(hshm, newPagesToSkip);
 						MultiHashMap<Integer, CNFEntry> mhm = pbpeCache2.get(in);
 						if (mhm == null)
 						{
@@ -2866,19 +2598,19 @@ public final class TableScanOperator implements Operator, Serializable
 							pbpeCache2.put(in, mhm);
 							mhm = pbpeCache2.get(in);
 						}
-						
-						HashSet<Integer> hashCodes = getAllHashCodes(hshm);
-						for (int i : hashCodes)
+
+						final HashSet<Integer> hashCodes = getAllHashCodes(hshm);
+						for (final int i : hashCodes)
 						{
-							ConcurrentHashMap<CNFEntry, CNFEntry> map = mhm.getMap(i);
+							final ConcurrentHashMap<CNFEntry, CNFEntry> map = mhm.getMap(i);
 							if (map != null)
 							{
-								CNFEntry entry2 = map.get(cnfEntry);
+								final CNFEntry entry2 = map.get(cnfEntry);
 								if (entry2 != null)
 								{
-									BitSet bs2 = entry2.getBitSet();
-									BitSet bs = cnfEntry.getBitSet();
-									synchronized(bs2)
+									final BitSet bs2 = entry2.getBitSet();
+									final BitSet bs = cnfEntry.getBitSet();
+									synchronized (bs2)
 									{
 										if (v6OrHigher)
 										{
@@ -2900,10 +2632,10 @@ public final class TableScanOperator implements Operator, Serializable
 								mhm.multiPut(i, cnfEntry);
 							}
 						}
-						
+
 						if (v9)
 						{
-							String msg = in + "," + System.currentTimeMillis();
+							final String msg = in + "," + System.currentTimeMillis();
 							while (true)
 							{
 								try
@@ -2911,13 +2643,14 @@ public final class TableScanOperator implements Operator, Serializable
 									TableScanOperator.prtq.put(msg);
 									break;
 								}
-								catch(InterruptedException e)
-								{}
+								catch (final InterruptedException e)
+								{
+								}
 							}
 						}
-						
-						long end = tmxb.getCurrentThreadCpuTime();
-						TableScanOperator.pbpeMaintenanceTime.getAndAdd(end-start);
+
+						final long end = tmxb.getCurrentThreadCpuTime();
+						TableScanOperator.pbpeMaintenanceTime.getAndAdd(end - start);
 					}
 				}
 				else
@@ -2938,12 +2671,12 @@ public final class TableScanOperator implements Operator, Serializable
 						return;
 					}
 					// @?Parallel
-					int device = ins2Device.get(in2);
-					int currentPage = -1;
-					HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
-					for (Map.Entry entry : tablePos2Col.entrySet())
+					final int device = ins2Device.get(in2);
+					final int currentPage = -1;
+					final HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+					for (final Map.Entry entry : tablePos2Col.entrySet())
 					{
-						String type = tableCols2Types.get(entry.getValue());
+						final String type = tableCols2Types.get(entry.getValue());
 						DataType value = null;
 						if (type.equals("INT"))
 						{
@@ -2969,20 +2702,22 @@ public final class TableScanOperator implements Operator, Serializable
 						layout.put((Integer)entry.getKey(), value);
 					}
 
-					Schema sch = new Schema(layout);
+					final Schema sch = new Schema(layout);
 					// long count = 0;
 					ArrayList<Object> row = new ArrayList<Object>(fetchPos.size());
 					while (!(o instanceof DataEndMarker))
 					{
 						if (!indexOnly)
 						{
-							long partialRid = (Long)(((ArrayList<Object>)o).get(0));
-							int blockNum = (int)(partialRid >> 32);
-							int recNum = (int)(partialRid & 0xFFFFFFFF);
-							//HRDBMSWorker.logger.debug("Col table index fetch for block " + blockNum + " and record " + recNum + " with cols = " + cols);
+							final long partialRid = (Long)(((ArrayList<Object>)o).get(0));
+							final int blockNum = (int)(partialRid >> 32);
+							final int recNum = (int)(partialRid & 0xFFFFFFFF);
+							// HRDBMSWorker.logger.debug("Col table index fetch
+							// for block " + blockNum + " and record " + recNum
+							// + " with cols = " + cols);
 							if (blockNum != currentPage)
 							{
-								Block b = new Block(in2, blockNum);
+								final Block b = new Block(in2, blockNum);
 								tx.requestPage(b, cols);
 								tx.read(b, sch, cols, false);
 							}
@@ -3029,15 +2764,17 @@ public final class TableScanOperator implements Operator, Serializable
 									}
 									j++;
 								}
-								catch (Exception e)
+								catch (final Exception e)
 								{
 									HRDBMSWorker.logger.debug("", e);
 									throw e;
 								}
 							}
-							
-							//HRDBMSWorker.logger.debug("Row returned by index fetch is " + row);
-							//HRDBMSWorker.logger.debug("Pos2Col is " + TableScanOperator.this.getPos2Col());
+
+							// HRDBMSWorker.logger.debug("Row returned by index
+							// fetch is " + row);
+							// HRDBMSWorker.logger.debug("Pos2Col is " +
+							// TableScanOperator.this.getPos2Col());
 
 							if (!optimize)
 							{
@@ -3141,7 +2878,7 @@ public final class TableScanOperator implements Operator, Serializable
 				{
 					readBuffer.put(e);
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 				}
 				return;
@@ -3150,12 +2887,14 @@ public final class TableScanOperator implements Operator, Serializable
 
 		public void rowTableRT()
 		{
-			//ArrayList<ReaderThread> secondThreads = new ArrayList<ReaderThread>();
+			// ArrayList<ReaderThread> secondThreads = new
+			// ArrayList<ReaderThread>();
 			CNFFilter filter = orderedFilters.get(parents.get(0));
 			boolean neededPosNeeded = true;
 			int get = 0;
 			int skip = 0;
-			//boolean checkNoResults = (filter != null && !(filter instanceof NullCNFFilter) && !sample);
+			// boolean checkNoResults = (filter != null && !(filter instanceof
+			// NullCNFFilter) && !sample);
 			boolean checkNoResults = false;
 			HashSet<HashMap<Filter, Filter>> hshm = null;
 			if (checkNoResults)
@@ -3177,19 +2916,19 @@ public final class TableScanOperator implements Operator, Serializable
 			{
 				try
 				{
-					Index index = new Index(in, scan.getKeys(), scan.getTypes(), scan.getOrders());
+					final Index index = new Index(in, scan.getKeys(), scan.getTypes(), scan.getOrders());
 					index.open();
 					index.scan(filter, sample, get, skip, readBuffer, midPos2Col, pos2Col, tx, getRID);
 					return;
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.error("", e);
 					try
 					{
 						readBuffer.put(e);
 					}
-					catch (Exception f)
+					catch (final Exception f)
 					{
 					}
 					return;
@@ -3202,7 +2941,7 @@ public final class TableScanOperator implements Operator, Serializable
 				{
 					int i = 0;
 					neededPosNeeded = false;
-					for (int pos : neededPos)
+					for (final int pos : neededPos)
 					{
 						if (pos != i)
 						{
@@ -3214,7 +2953,7 @@ public final class TableScanOperator implements Operator, Serializable
 					}
 				}
 			}
-			ArrayList<String> types = new ArrayList<String>(midPos2Col.length);
+			final ArrayList<String> types = new ArrayList<String>(midPos2Col.length);
 			for (final String entry : midPos2Col)
 			{
 				types.add(midCols2Types.get(entry));
@@ -3249,10 +2988,10 @@ public final class TableScanOperator implements Operator, Serializable
 						// in);
 						throw new Exception("Unable to open file " + in);
 					}
-					HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
-					for (Map.Entry entry : tablePos2Col.entrySet())
+					final HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+					for (final Map.Entry entry : tablePos2Col.entrySet())
 					{
-						String type = tableCols2Types.get(entry.getValue());
+						final String type = tableCols2Types.get(entry.getValue());
 						DataType value = null;
 						if (type.equals("INT"))
 						{
@@ -3280,7 +3019,7 @@ public final class TableScanOperator implements Operator, Serializable
 
 					PREFETCH_REQUEST_SIZE = PREFETCH_REQUEST_SIZE_STATIC;
 					PAGES_IN_ADVANCE = PAGES_IN_ADVANCE_STATIC;
-					Schema[] schemas = new Schema[PREFETCH_REQUEST_SIZE * 4];
+					final Schema[] schemas = new Schema[PREFETCH_REQUEST_SIZE * 4];
 					int g = 0;
 					while (g < schemas.length)
 					{
@@ -3321,26 +3060,28 @@ public final class TableScanOperator implements Operator, Serializable
 								// PREFETCH_REQUEST_SIZE < numBlocks ?
 								// PREFETCH_REQUEST_SIZE : numBlocks -
 								// lastRequested - 1];
-								ArrayList<Block> toRequest = new ArrayList<Block>();
+								final ArrayList<Block> toRequest = new ArrayList<Block>();
 								int i = 0;
 								final int length = lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1;
 								while (i < length)
 								{
-									Block block = new Block(in, lastRequested + i + 1);
-									//if (hshm != null)
-									//{
-										//Set<HashSet<HashMap<Filter, Filter>>> filters = noResults.get(block);
-										//if (filter != null && filters.contains(hshm))
-										//{
-										//	i++;
-										//	continue;
-										//}
-									//}
+									final Block block = new Block(in, lastRequested + i + 1);
+									// if (hshm != null)
+									// {
+									// Set<HashSet<HashMap<Filter, Filter>>>
+									// filters = noResults.get(block);
+									// if (filter != null &&
+									// filters.contains(hshm))
+									// {
+									// i++;
+									// continue;
+									// }
+									// }
 									toRequest.add(block);
 									i++;
 								}
 
-								Block[] toRequest2 = new Block[toRequest.size()];
+								final Block[] toRequest2 = new Block[toRequest.size()];
 								i = 0;
 								while (i < toRequest2.length)
 								{
@@ -3361,9 +3102,9 @@ public final class TableScanOperator implements Operator, Serializable
 							}
 							else
 							{
-								ArrayList<Block> toRequest = new ArrayList<Block>();
+								final ArrayList<Block> toRequest = new ArrayList<Block>();
 								int i = 0;
-								int length = lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1;
+								final int length = lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1;
 								while (i < length)
 								{
 									if (skip3 == 0)
@@ -3388,14 +3129,14 @@ public final class TableScanOperator implements Operator, Serializable
 
 								if (toRequest.size() > 0)
 								{
-									Block[] toRequest2 = new Block[toRequest.size()];
+									final Block[] toRequest2 = new Block[toRequest.size()];
 									int j = 0;
 									int z = 0;
 									final int limit = toRequest.size();
 									// for (Block b : toRequest)
 									while (z < limit)
 									{
-										Block b = toRequest.get(z++);
+										final Block b = toRequest.get(z++);
 										toRequest2[j] = b;
 										j++;
 									}
@@ -3431,17 +3172,18 @@ public final class TableScanOperator implements Operator, Serializable
 							get2--;
 						}
 
-						//Block thisBlock = new Block(in, onPage);
-						//if (hshm != null)
-						//{
-						//	Set<HashSet<HashMap<Filter, Filter>>> filters = noResults.get(thisBlock);
-						//	if (filter != null && filters.contains(hshm))
-						//	{
-						//		skippedPages.getAndIncrement();
-						//		onPage++;
-						//		continue;
-						//	}
-						//}
+						// Block thisBlock = new Block(in, onPage);
+						// if (hshm != null)
+						// {
+						// Set<HashSet<HashMap<Filter, Filter>>> filters =
+						// noResults.get(thisBlock);
+						// if (filter != null && filters.contains(hshm))
+						// {
+						// skippedPages.getAndIncrement();
+						// onPage++;
+						// continue;
+						// }
+						// }
 
 						// tx.read(new Block(in, onPage++), sch);
 						Schema sch = null;
@@ -3470,10 +3212,9 @@ public final class TableScanOperator implements Operator, Serializable
 							rit = sch.rowIterator(false);
 						}
 
-						boolean hadResults = false;
 						outer: while (rit.hasNext())
 						{
-							Row r = rit.next();
+							final Row r = rit.next();
 							RID rid = null;
 							if (getRID)
 							{
@@ -3493,7 +3234,7 @@ public final class TableScanOperator implements Operator, Serializable
 									}
 									else
 									{
-										FieldValue fv = r.getCol(fetchPos.get(j));
+										final FieldValue fv = r.getCol(fetchPos.get(j));
 										if (!checked)
 										{
 											if (!fv.exists())
@@ -3508,11 +3249,11 @@ public final class TableScanOperator implements Operator, Serializable
 								}
 								else
 								{
-									int colNum = fetchPos.get(j);
+									final int colNum = fetchPos.get(j);
 									if (colNum >= 4)
 									{
 
-										FieldValue fv = r.getCol(colNum - 4);
+										final FieldValue fv = r.getCol(colNum - 4);
 										if (!checked)
 										{
 											if (!fv.exists())
@@ -3584,7 +3325,6 @@ public final class TableScanOperator implements Operator, Serializable
 								{
 									if (filter.passes(row))
 									{
-										hadResults = true;
 										if (!getRID)
 										{
 											int i = 0;
@@ -3593,18 +3333,18 @@ public final class TableScanOperator implements Operator, Serializable
 											// for (Object o : row)
 											while (z < limit)
 											{
-												Object o = row.get(z++);
+												final Object o = row.get(z++);
 												if (o == null)
 												{
-													int temp = fetchPos.get(i);
-													FieldValue fv = r.getCol(temp);
+													final int temp = fetchPos.get(i);
+													final FieldValue fv = r.getCol(temp);
 													if (!fv.exists())
 													{
 														continue outer;
 													}
 													// row.set(i,
 													// fv.getValue());
-													Object[] array = (Object[])unsafe.getObject(row, offset);
+													final Object[] array = (Object[])unsafe.getObject(row, offset);
 													array[i] = fv.getValue();
 												}
 
@@ -3653,7 +3393,6 @@ public final class TableScanOperator implements Operator, Serializable
 								}
 								else
 								{
-									hadResults = true;
 									// final ArrayList<Object> newRow = new
 									// ArrayList<Object>(neededPos.size());
 									// for (final int pos : neededPos)
@@ -3676,21 +3415,21 @@ public final class TableScanOperator implements Operator, Serializable
 							}
 						}
 
-						//if (checkNoResults && !hadResults)
-						//{
-						//	noResults.multiPut(thisBlock, hshm);
-						//}
+						// if (checkNoResults && !hadResults)
+						// {
+						// noResults.multiPut(thisBlock, hshm);
+						// }
 					}
 
 					BufferManager.unregisterInterest(this);
 
-					//if (start == 0 && myMaxBlock != 0)
-					//{
-					//	for (ReaderThread thread : secondThreads)
-					//	{
-					//		thread.join();
-					//	}
-					//}
+					// if (start == 0 && myMaxBlock != 0)
+					// {
+					// for (ReaderThread thread : secondThreads)
+					// {
+					// thread.join();
+					// }
+					// }
 				}
 				else
 				{
@@ -3710,12 +3449,12 @@ public final class TableScanOperator implements Operator, Serializable
 						return;
 					}
 					// @?Parallel
-					int device = ins2Device.get(in2);
-					int currentPage = -1;
-					HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
-					for (Map.Entry entry : tablePos2Col.entrySet())
+					final int device = ins2Device.get(in2);
+					final int currentPage = -1;
+					final HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+					for (final Map.Entry entry : tablePos2Col.entrySet())
 					{
-						String type = tableCols2Types.get(entry.getValue());
+						final String type = tableCols2Types.get(entry.getValue());
 						DataType value = null;
 						if (type.equals("INT"))
 						{
@@ -3741,19 +3480,19 @@ public final class TableScanOperator implements Operator, Serializable
 						layout.put((Integer)entry.getKey(), value);
 					}
 
-					Schema sch = new Schema(layout);
+					final Schema sch = new Schema(layout);
 					// long count = 0;
 					ArrayList<Object> row = new ArrayList<Object>(fetchPos.size());
 					while (!(o instanceof DataEndMarker))
 					{
 						if (!indexOnly)
 						{
-							long partialRid = (Long)(((ArrayList<Object>)o).get(0));
-							int blockNum = (int)(partialRid >> 32);
-							int recNum = (int)(partialRid & 0xFFFFFFFF);
+							final long partialRid = (Long)(((ArrayList<Object>)o).get(0));
+							final int blockNum = (int)(partialRid >> 32);
+							final int recNum = (int)(partialRid & 0xFFFFFFFF);
 							if (blockNum != currentPage)
 							{
-								Block b = new Block(in2, blockNum);
+								final Block b = new Block(in2, blockNum);
 								tx.requestPage(b);
 								tx.read(b, sch);
 								// count++;
@@ -3786,16 +3525,16 @@ public final class TableScanOperator implements Operator, Serializable
 										}
 										else
 										{
-											FieldValue fv = r.getCol(fetchPos.get(j));
+											final FieldValue fv = r.getCol(fetchPos.get(j));
 											row.add(fv.getValue());
 										}
 									}
 									else
 									{
-										int colNum = fetchPos.get(j);
+										final int colNum = fetchPos.get(j);
 										if (colNum >= 4)
 										{
-											FieldValue fv = r.getCol(colNum - 4);
+											final FieldValue fv = r.getCol(colNum - 4);
 											row.add(fv.getValue());
 										}
 										else if (colNum == 0)
@@ -3817,7 +3556,7 @@ public final class TableScanOperator implements Operator, Serializable
 									}
 									j++;
 								}
-								catch (Exception e)
+								catch (final Exception e)
 								{
 									HRDBMSWorker.logger.debug("", e);
 									throw e;
@@ -3872,13 +3611,13 @@ public final class TableScanOperator implements Operator, Serializable
 											// for (Object o2 : row)
 											while (z < limit)
 											{
-												Object o2 = row.get(z++);
+												final Object o2 = row.get(z++);
 												if (o2 == null)
 												{
-													FieldValue fv = r.getCol(fetchPos.get(i));
+													final FieldValue fv = r.getCol(fetchPos.get(i));
 													// row.set(i,
 													// fv.getValue());
-													Object[] array = (Object[])unsafe.getObject(row, offset);
+													final Object[] array = (Object[])unsafe.getObject(row, offset);
 													array[i] = fv.getValue();
 												}
 
@@ -3985,7 +3724,7 @@ public final class TableScanOperator implements Operator, Serializable
 				{
 					readBuffer.put(e);
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 				}
 				return;
@@ -4008,387 +3747,31 @@ public final class TableScanOperator implements Operator, Serializable
 					colTableRT();
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 			}
 
 			tsoCount.decrementAndGet();
 		}
-		
-		private boolean containsStringMatching(HashSet<HashMap<Filter, Filter>> hshm)
-		{
-			for (HashMap<Filter, Filter> hm : hshm)
-			{
-				for (Filter f : hm.keySet())
-				{
-					if (f.op().equals("LI") || f.op().equals("NL"))
-					{
-						return true;
-					}
-				}
-			}
-			
-			return false;
-		}
-		
-		private BooleanFormula convertHSHMToBF(HashSet<HashMap<Filter, Filter>> hshm, BooleanFormulaManager bmgr, RationalFormulaManager rmgr, HashMap<String, RationalFormula> vars)
-		{
-			ArrayList<BooleanFormula> clauses = new ArrayList<BooleanFormula>();
-			for (HashMap<Filter, Filter> hm : hshm)
-			{
-				BooleanFormula b = convertHMToBF(hm, bmgr, rmgr, vars);
-				if (b != null)
-				{
-					clauses.add(b);
-				}
-			}
-			
-			if (clauses.size() == 0)
-			{
-				return null;
-			}
-			
-			BooleanFormula b = clauses.get(0);
-			int i = 1;
-			while (i < clauses.size())
-			{
-				b = bmgr.and(b, clauses.get(i++));
-			}
-			
-			return b;
-		}
-		
-		private BooleanFormula convertHMToBF(HashMap<Filter, Filter> hm, BooleanFormulaManager bmgr, RationalFormulaManager rmgr, HashMap<String, RationalFormula> vars)
-		{
-			ArrayList<BooleanFormula> clauses = new ArrayList<BooleanFormula>();
-			for (Filter f : hm.keySet())
-			{
-				if (f.op().equals("LI") || f.op().equals("NL"))
-				{
-					continue;
-				}
-				
-				clauses.add(convertFToBF(f, bmgr, rmgr, vars));
-			}
-			
-			if (clauses.size() == 0)
-			{
-				return null;
-			}
-			
-			BooleanFormula b = clauses.get(0);
-			int i = 1;
-			while (i < clauses.size())
-			{
-				b = bmgr.or(b, clauses.get(i++));
-			}
-			
-			return b;
-		}
-		
-		private BooleanFormula convertFToBF(Filter f, BooleanFormulaManager bmgr, RationalFormulaManager rmgr, HashMap<String, RationalFormula> vars)
-		{
-			RationalFormula r = null;
-			RationalFormula r2 = null;
-			if (f.leftIsColumn())
-			{
-				String col = f.leftColumn();
-				if (col.contains("."))
-				{
-					col = col.substring(col.indexOf('.') + 1);
-				}
-				
-				r = vars.get(col);
-				if (r == null)
-				{
-					r = rmgr.makeVariable(col);
-					vars.put(col, r);
-				}
-			}
-			else
-			{
-				Object o = f.leftLiteral();
-				if (o instanceof Double)
-				{
-					r = rmgr.makeNumber((Double)o);
-				}
-				else if (o instanceof Long)
-				{
-					r = rmgr.makeNumber((Long)o);
-				}
-				else if (o instanceof MyDate)
-				{
-					r = rmgr.makeNumber(((MyDate)o).getTime());
-				}
-				else
-				{
-					r = rmgr.makeNumber(stringToNumber((String)o));
-				}
-			}
-			
-			if (f.rightIsColumn())
-			{
-				String col = f.rightColumn();
-				if (col.contains("."))
-				{
-					col = col.substring(col.indexOf('.') + 1);
-				}
-				
-				r2 = vars.get(col);
-				if (r2 == null)
-				{
-					r2 = rmgr.makeVariable(col);
-					vars.put(col, r2);
-				}
-			}
-			else
-			{
-				Object o = f.rightLiteral();
-				if (o instanceof Double)
-				{
-					r2 = rmgr.makeNumber((Double)o);
-				}
-				else if (o instanceof Long)
-				{
-					r2 = rmgr.makeNumber((Long)o);
-				}
-				else if (o instanceof MyDate)
-				{
-					r2 = rmgr.makeNumber(((MyDate)o).getTime());
-				}
-				else
-				{
-					r2 = rmgr.makeNumber(stringToNumber((String)o));
-				}
-			}
-			
-			String op = f.op();
-			if (op.equals("E"))
-			{
-				return rmgr.equal(r, r2);
-			}
-			else if (op.equals("NE"))
-			{
-				return bmgr.not(rmgr.equal(r, r2));
-			}
-			else if (op.equals("G"))
-			{
-				return rmgr.greaterThan(r, r2);
-			}
-			else if (op.equals("GE"))
-			{
-				return rmgr.greaterOrEquals(r, r2);
-			}
-			else if (op.equals("L"))
-			{
-				return rmgr.lessThan(r, r2);
-			}
-			else
-			{
-				return rmgr.lessOrEquals(r, r2);
-			}
-		}
-		
-		private BigDecimal stringToNumber(String str)
-		{
-			StringBuilder s = new StringBuilder();
-			s.append("0.");
-			int i = 0;
-			while (i < str.length())
-			{
-				char c = str.charAt(i);
-				int j = c;
-				s.append(String.format("%05d", j));
-				i++;
-			}
-			
-			if (s.length() == 2)
-			{
-				s.append("0");
-			}
-			
-			return new BigDecimal(s.toString());
-		}
-		
-		private boolean canSatisfySMT(HashSet<HashMap<Filter, Filter>> hshm, Set<HashSet<HashMap<Filter, Filter>>> filters, SolverContext context)
-		{	
-			if (filters.contains(hshm))
-			{
-				//HRDBMSWorker.logger.debug("Exact match");
-				//HRDBMSWorker.logger.debug("Skipping page because of exact match");
-				pbpeDebug1 = "SMT has an exact match";
-				return false;
-			}
-			//else
-			//{
-			//	HRDBMSWorker.logger.debug("No exact match");
-			//}
-			
-			if (containsStringMatching(hshm))
-			{
-				//HRDBMSWorker.logger.debug("Contains string matching");
-				pbpeDebug1 = "SMT says no exact match and contains string matching";
-				return true;
-			}
-			//else
-			//{
-			//	HRDBMSWorker.logger.debug("Does not contain string matching");
-			//}
-			
-			long start = System.currentTimeMillis();
-			FormulaManager fmgr = context.getFormulaManager();
-		    BooleanFormulaManager bmgr = fmgr.getBooleanFormulaManager();
-		    RationalFormulaManager rmgr = fmgr.getRationalFormulaManager();
-		    HashMap<String, RationalFormula> vars = new HashMap<String, RationalFormula>();
-		    HashSet<String> neededCols = getNeededCols(hshm);
-		    
-		    ArrayList<BooleanFormula> clauses = new ArrayList<BooleanFormula>();
-		    for (HashSet<HashMap<Filter, Filter>> hshm2 : filters)
-		    {
-		    	if (containsNeededCol(hshm2, neededCols))
-		    	{
-		    		BooleanFormula b = convertHSHMToBF(hshm2, bmgr, rmgr, vars);
-		    		if (b != null)
-		    		{
-		    			clauses.add(bmgr.not(b));
-		    		}
-		    	}
-		    }
-		    
-		    clauses.add(convertHSHMToBF(hshm, bmgr, rmgr, vars));
-		    BooleanFormula b = clauses.get(0);
-		    int i = 1;
-		    while (i < clauses.size())
-		    {
-		    	b = bmgr.and(b, clauses.get(i++));
-		    }
-		    
-		    //HRDBMSWorker.logger.debug("Formula is " + b);
-		    try (ProverEnvironment prover = context.newProverEnvironment()) 
-		    {
-		    	try
-		    	{
-		    		prover.addConstraint(b);
-		    	}
-		    	catch(NullPointerException e)
-		    	{
-		    		HRDBMSWorker.logger.debug("Caught NullPointerException, b is " + b);
-		    		HRDBMSWorker.logger.debug("Converting HSHM results in " + convertHSHMToBF(hshm, bmgr, rmgr, vars));
-		    		HRDBMSWorker.logger.debug("Does HSHM contain string matching: " + containsStringMatching(hshm));
-		    		HRDBMSWorker.logger.debug("HSHM is " + hshm);
-		    	}
-		        while (true)
-		        {
-		        	try
-		        	{
-		        		boolean retval = !prover.isUnsat();
-		        		TableScanOperator.SMTSolverCalls.incrementAndGet();
-		        		pbpeDebug1 = "SMT says that " + b +" is " + retval;
-		        		//HRDBMSWorker.logger.debug("Computed return value of " + retval);
-		        		return retval;
-		        	}
-		        	catch(InterruptedException e)
-		        	{}
-		        	catch(SolverException e)
-		        	{
-		        		HRDBMSWorker.logger.debug("", e);
-		        		pbpeDebug1 = "SMT says exception during solve";
-		        		return true;
-		        	}
-		        }
-		    }
-		}
-		
-		private boolean containsNeededCol(HashSet<HashMap<Filter, Filter>> hshm, HashSet<String> needed)
-		{
-			for (HashMap<Filter, Filter> hm : hshm)
-			{
-				for (Filter f : hm.keySet())
-				{
-					if (f.leftIsColumn())
-					{
-						String col = f.leftColumn();
-						if (col.contains("."))
-						{
-							col = col.substring(col.indexOf('.') + 1);
-						}
-						
-						if (needed.contains(col))
-						{
-							return true;
-						}
-					}
-					
-					if (f.rightIsColumn())
-					{
-						String col = f.rightColumn();
-						if (col.contains("."))
-						{
-							col = col.substring(col.indexOf('.') + 1);
-						}
-						
-						if (needed.contains(col))
-						{
-							return true;
-						}
-					}
-				}
-			}
-			
-			return false;
-		}
-		
-		private HashSet<String> getNeededCols(HashSet<HashMap<Filter, Filter>> hshm)
-		{
-			HashSet<String> retval = new HashSet<String>();
-			for (HashMap<Filter, Filter> hm : hshm)
-			{
-				for (Filter f : hm.keySet())
-				{
-					if (f.leftIsColumn())
-					{
-						String col = f.leftColumn();
-						if (col.contains("."))
-						{
-							col = col.substring(col.indexOf('.') + 1);
-						}
-						
-						retval.add(col);
-					}
-					
-					if (f.rightIsColumn())
-					{
-						String col = f.rightColumn();
-						if (col.contains("."))
-						{
-							col = col.substring(col.indexOf('.') + 1);
-						}
-						
-						retval.add(col);
-					}
-				}
-			}
-			
-			return retval;
-		}
 
-		private boolean canSatisfy(HashSet<HashMap<Filter, Filter>> hshm, Set<HashSet<HashMap<Filter, Filter>>> filters)
+		private boolean canSatisfy(final HashSet<HashMap<Filter, Filter>> hshm, final Set<HashSet<HashMap<Filter, Filter>>> filters)
 		{
 			if (filters.contains(hshm))
 			{
-				//HRDBMSWorker.logger.debug("Skipping page because of exact match");
+				// HRDBMSWorker.logger.debug("Skipping page because of exact
+				// match");
 				pbpeDebug2 = "Non-SMT says exact match";
 				return false;
 			}
 
-			long start = System.currentTimeMillis();
-			ArrayList<Filter> ands = new ArrayList<Filter>();
-			for (HashMap<Filter, Filter> hm : hshm)
+			final long start = System.currentTimeMillis();
+			final ArrayList<Filter> ands = new ArrayList<Filter>();
+			for (final HashMap<Filter, Filter> hm : hshm)
 			{
 				if (hm.size() == 1)
 				{
-					for (Filter f : hm.keySet())
+					for (final Filter f : hm.keySet())
 					{
 						if (f.leftIsColumn() && !f.rightIsColumn() && (f.op().equals("E") || f.op().equals("G") || f.op().equals("L") || f.op().equals("GE") || f.op().equals("LE")))
 						{
@@ -4413,23 +3796,25 @@ public final class TableScanOperator implements Operator, Serializable
 
 			// if we can prove that one of the filters in "ands" cannot be
 			// satisfied, we can return false
-			for (HashSet<HashMap<Filter, Filter>> hshm2 : filters)
+			for (final HashSet<HashMap<Filter, Filter>> hshm2 : filters)
 			{
 				if (hshm2.size() == 1)
 				{
-					for (HashMap<Filter, Filter> hm : hshm2)
+					for (final HashMap<Filter, Filter> hm : hshm2)
 					{
 						if (hm.size() == 1)
 						{
-							for (Filter ns : hm.keySet())
+							for (final Filter ns : hm.keySet())
 							{
 								if (ns.leftIsColumn() && !ns.rightIsColumn())
 								{
-									for (Filter f : ands)
+									for (final Filter f : ands)
 									{
 										if (f.equals(ns))
 										{
-											//HRDBMSWorker.logger.debug("Skipping page because of exact match of anded predicate");
+											// HRDBMSWorker.logger.debug("Skipping
+											// page because of exact match of
+											// anded predicate");
 											pbpeDebug2 = "Non-SMT says returning false because of exact match of anded predicate";
 											return false;
 										}
@@ -4448,14 +3833,17 @@ public final class TableScanOperator implements Operator, Serializable
 														{
 															nsVal = new Double((Long)nsVal);
 														}
-														else 
+														else
 														{
 															fVal = new Double((Long)fVal);
 														}
 													}
 													if (((Comparable)nsVal).compareTo(fVal) < 0)
 													{
-														//HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
+														// HRDBMSWorker.logger.debug("Skipping
+														// page because of " +
+														// ns + ". Search was on
+														// " + f);
 														pbpeDebug2 = "Non-SMT says returning false because of " + ns + ". Search was on " + f;
 														return false;
 													}
@@ -4474,14 +3862,17 @@ public final class TableScanOperator implements Operator, Serializable
 														{
 															nsVal = new Double((Long)nsVal);
 														}
-														else 
+														else
 														{
 															fVal = new Double((Long)fVal);
 														}
 													}
 													if (((Comparable)nsVal).compareTo(fVal) < 1)
 													{
-														//HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
+														// HRDBMSWorker.logger.debug("Skipping
+														// page because of " +
+														// ns + ". Search was on
+														// " + f);
 														pbpeDebug2 = "Non-SMT says returning false because of " + ns + ". Search was on " + f;
 														return false;
 													}
@@ -4500,14 +3891,17 @@ public final class TableScanOperator implements Operator, Serializable
 														{
 															nsVal = new Double((Long)nsVal);
 														}
-														else 
+														else
 														{
 															fVal = new Double((Long)fVal);
 														}
 													}
 													if (((Comparable)nsVal).compareTo(fVal) > 0)
 													{
-														//HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
+														// HRDBMSWorker.logger.debug("Skipping
+														// page because of " +
+														// ns + ". Search was on
+														// " + f);
 														pbpeDebug2 = "Non-SMT says returning false because of " + ns + ". Search was on " + f;
 														return false;
 													}
@@ -4526,14 +3920,17 @@ public final class TableScanOperator implements Operator, Serializable
 														{
 															nsVal = new Double((Long)nsVal);
 														}
-														else 
+														else
 														{
 															fVal = new Double((Long)fVal);
 														}
 													}
 													if (((Comparable)nsVal).compareTo(fVal) > -1)
 													{
-														//HRDBMSWorker.logger.debug("Skipping page because of " + ns + ". Search was on " + f);
+														// HRDBMSWorker.logger.debug("Skipping
+														// page because of " +
+														// ns + ". Search was on
+														// " + f);
 														pbpeDebug2 = "Non-SMT says returning false because of " + ns + ". Search was on " + f;
 														return false;
 													}
@@ -4555,20 +3952,20 @@ public final class TableScanOperator implements Operator, Serializable
 				pbpeDebug2 = "Non-SMT says returning true because out of time";
 				return true;
 			}
-			
-			ArrayList<Filter> ranges = new ArrayList<Filter>();
-			for (HashSet<HashMap<Filter, Filter>> hshm2 : filters)
+
+			final ArrayList<Filter> ranges = new ArrayList<Filter>();
+			for (final HashSet<HashMap<Filter, Filter>> hshm2 : filters)
 			{
 				if (hshm2.size() == 2)
 				{
 					Filter l = null;
 					Filter g = null;
 					String col = null;
-					for (HashMap<Filter, Filter> hm : hshm2)
+					for (final HashMap<Filter, Filter> hm : hshm2)
 					{
 						if (hm.size() == 1)
 						{
-							for (Filter f : hm.keySet())
+							for (final Filter f : hm.keySet())
 							{
 								if (f.leftIsColumn() && !f.rightIsColumn())
 								{
@@ -4601,16 +3998,14 @@ public final class TableScanOperator implements Operator, Serializable
 				}
 			}
 
-			boolean foundL = false;
-			boolean foundG = false;
 			int gIndex = -1;
 			String col = null;
 			if (ranges.size() > 0)
 			{
 				int index = 0;
-				for (Filter ns : ranges)
+				for (final Filter ns : ranges)
 				{
-					for (Filter f : ands)
+					for (final Filter f : ands)
 					{
 						if (ns.leftColumn().equals(f.leftColumn()))
 						{
@@ -4626,16 +4021,16 @@ public final class TableScanOperator implements Operator, Serializable
 										{
 											nsVal = new Double((Long)nsVal);
 										}
-										else 
+										else
 										{
 											fVal = new Double((Long)fVal);
 										}
 									}
 									if (((Comparable)nsVal).compareTo(fVal) < 0)
 									{
-										foundG = true;
 										gIndex = index;
-										//HRDBMSWorker.logger.debug("Found G = " + ns);
+										// HRDBMSWorker.logger.debug("Found G =
+										// " + ns);
 										pbpeDebug2 = "Non-SMT says returning false because G = " + ns;
 										col = f.leftColumn();
 									}
@@ -4654,16 +4049,16 @@ public final class TableScanOperator implements Operator, Serializable
 										{
 											nsVal = new Double((Long)nsVal);
 										}
-										else 
+										else
 										{
 											fVal = new Double((Long)fVal);
 										}
 									}
 									if (((Comparable)nsVal).compareTo(fVal) < 1)
 									{
-										foundG = true;
 										gIndex = index;
-										//HRDBMSWorker.logger.debug("Found G = " + ns);
+										// HRDBMSWorker.logger.debug("Found G =
+										// " + ns);
 										pbpeDebug2 = "Non-SMT says returning false because G = " + ns;
 										col = f.leftColumn();
 									}
@@ -4682,16 +4077,17 @@ public final class TableScanOperator implements Operator, Serializable
 										{
 											nsVal = new Double((Long)nsVal);
 										}
-										else 
+										else
 										{
 											fVal = new Double((Long)fVal);
 										}
 									}
 									if (((Comparable)nsVal).compareTo(fVal) > 0)
 									{
-										if (index == gIndex+1 && f.leftColumn().equals(col))
+										if (index == gIndex + 1 && f.leftColumn().equals(col))
 										{
-											//HRDBMSWorker.logger.debug("Found L = " + ns);
+											// HRDBMSWorker.logger.debug("Found
+											// L = " + ns);
 											pbpeDebug2 += (" and L = " + ns);
 											return false;
 										}
@@ -4711,16 +4107,17 @@ public final class TableScanOperator implements Operator, Serializable
 										{
 											nsVal = new Double((Long)nsVal);
 										}
-										else 
+										else
 										{
 											fVal = new Double((Long)fVal);
 										}
 									}
 									if (((Comparable)nsVal).compareTo(fVal) > -1)
 									{
-										if (index == gIndex+1 && f.leftColumn().equals(col))
+										if (index == gIndex + 1 && f.leftColumn().equals(col))
 										{
-											//HRDBMSWorker.logger.debug("Found L = " + ns);
+											// HRDBMSWorker.logger.debug("Found
+											// L = " + ns);
 											pbpeDebug2 += (" and L = " + ns);
 											return false;
 										}
@@ -4744,6 +4141,628 @@ public final class TableScanOperator implements Operator, Serializable
 			pbpeDebug2 = "Non-SMT says true because all methods failed";
 			return true;
 		}
+
+		private boolean canSatisfySMT(final HashSet<HashMap<Filter, Filter>> hshm, final Set<HashSet<HashMap<Filter, Filter>>> filters, final SolverContext context)
+		{
+			if (filters.contains(hshm))
+			{
+				// HRDBMSWorker.logger.debug("Exact match");
+				// HRDBMSWorker.logger.debug("Skipping page because of exact
+				// match");
+				pbpeDebug1 = "SMT has an exact match";
+				return false;
+			}
+			// else
+			// {
+			// HRDBMSWorker.logger.debug("No exact match");
+			// }
+
+			if (containsStringMatching(hshm))
+			{
+				// HRDBMSWorker.logger.debug("Contains string matching");
+				pbpeDebug1 = "SMT says no exact match and contains string matching";
+				return true;
+			}
+			// else
+			// {
+			// HRDBMSWorker.logger.debug("Does not contain string matching");
+			// }
+
+			// long start = System.currentTimeMillis();
+			final FormulaManager fmgr = context.getFormulaManager();
+			final BooleanFormulaManager bmgr = fmgr.getBooleanFormulaManager();
+			final RationalFormulaManager rmgr = fmgr.getRationalFormulaManager();
+			final HashMap<String, RationalFormula> vars = new HashMap<String, RationalFormula>();
+			final HashSet<String> neededCols = getNeededCols(hshm);
+
+			final ArrayList<BooleanFormula> clauses = new ArrayList<BooleanFormula>();
+			for (final HashSet<HashMap<Filter, Filter>> hshm2 : filters)
+			{
+				if (containsNeededCol(hshm2, neededCols))
+				{
+					final BooleanFormula b = convertHSHMToBF(hshm2, bmgr, rmgr, vars);
+					if (b != null)
+					{
+						clauses.add(bmgr.not(b));
+					}
+				}
+			}
+
+			clauses.add(convertHSHMToBF(hshm, bmgr, rmgr, vars));
+			BooleanFormula b = clauses.get(0);
+			int i = 1;
+			while (i < clauses.size())
+			{
+				b = bmgr.and(b, clauses.get(i++));
+			}
+
+			// HRDBMSWorker.logger.debug("Formula is " + b);
+			try (ProverEnvironment prover = context.newProverEnvironment())
+			{
+				try
+				{
+					prover.addConstraint(b);
+				}
+				catch (final NullPointerException e)
+				{
+					HRDBMSWorker.logger.debug("Caught NullPointerException, b is " + b);
+					HRDBMSWorker.logger.debug("Converting HSHM results in " + convertHSHMToBF(hshm, bmgr, rmgr, vars));
+					HRDBMSWorker.logger.debug("Does HSHM contain string matching: " + containsStringMatching(hshm));
+					HRDBMSWorker.logger.debug("HSHM is " + hshm);
+				}
+				while (true)
+				{
+					try
+					{
+						final boolean retval = !prover.isUnsat();
+						TableScanOperator.SMTSolverCalls.incrementAndGet();
+						pbpeDebug1 = "SMT says that " + b + " is " + retval;
+						// HRDBMSWorker.logger.debug("Computed return value of "
+						// + retval);
+						return retval;
+					}
+					catch (final InterruptedException e)
+					{
+					}
+					catch (final SolverException e)
+					{
+						HRDBMSWorker.logger.debug("", e);
+						pbpeDebug1 = "SMT says exception during solve";
+						return true;
+					}
+				}
+			}
+		}
+
+		private BitSet computePagesToSkip(final HashSet<HashMap<Filter, Filter>> hshm, final SolverContext context, final String fn, final int stride, final boolean v8, final boolean v9)
+		{
+			final ThreadMXBean tmxb = ManagementFactory.getThreadMXBean();
+			HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> problems = null;
+			final HashSet<CNFEntry> entries = new HashSet<CNFEntry>();
+			long end1 = 0;
+			final long start = tmxb.getCurrentThreadCpuTime();
+
+			if (!v9)
+			{
+				final HashSet<Integer> hashCodes = getAllHashCodes(hshm);
+				// HRDBMSWorker.logger.debug("Hash codes for " + hshm + " are "
+				// + hashCodes);
+				final MultiHashMap<Integer, CNFEntry> mhm = pbpeCache2.get(fn);
+				if (mhm == null)
+				{
+					final int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
+					final boolean isV6OrHigher = (pbpeVer >= 6);
+					BitSet retval = null;
+					if (isV6OrHigher)
+					{
+						retval = new CompressedBitSet();
+					}
+					else
+					{
+						retval = new BitSet();
+					}
+
+					return retval;
+				}
+				for (final int hash : hashCodes)
+				{
+					entries.addAll(mhm.get(hash));
+				}
+
+				// HRDBMSWorker.logger.debug("Entries are " + entries);
+				// 1 in bit set for a cnf means that cnf is false for that page
+				int length = 1;
+				for (final CNFEntry entry : entries)
+				{
+					final BitSet bs = entry.getBitSet();
+					synchronized (bs)
+					{
+						final int temp = bs.length();
+						if (temp > length)
+						{
+							length = temp;
+						}
+					}
+				}
+
+				// HRDBMSWorker.logger.debug("BuildProblems length is " +
+				// length);
+
+				problems = buildProblems(entries, stride, length);
+				end1 = tmxb.getCurrentThreadCpuTime();
+				// HRDBMSWorker.logger.debug("Output of buildProblems() is " +
+				// problems);
+
+				if (v8)
+				{
+					final int numPageSets = ((length - 2) / stride) + 1;
+					final int pSize = problems.size();
+					if (pSize <= 5 || pSize < (numPageSets / 2))
+					{
+						final BitSet retval = solveProblems(problems, context, hshm);
+						final long end2 = tmxb.getCurrentThreadCpuTime();
+						TableScanOperator.figureOutProblemsTime.getAndAdd(end1 - start);
+						TableScanOperator.SMTSolveTime.getAndAdd(end2 - end1);
+						return retval;
+					}
+
+					final BitSet retval = solveProblemsNonSMT(problems, hshm);
+					final long end2 = tmxb.getCurrentThreadCpuTime();
+					TableScanOperator.figureOutProblemsTime.getAndAdd(end1 - start);
+					TableScanOperator.nonSMTSolveTime.getAndAdd(end2 - end1);
+					return retval;
+				}
+			}
+			else
+			{
+				final HashSet<Integer> hashCodes = getAllHashCodes(hshm);
+				final HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> temp = problemCache.get(fn);
+				if (temp == null)
+				{
+					final MultiHashMap<Integer, CNFEntry> mhm = pbpeCache2.get(fn);
+					if (mhm == null)
+					{
+						final BitSet retval = new CompressedBitSet();
+						return retval;
+					}
+
+					for (final int hash : hashCodes)
+					{
+						entries.addAll(mhm.get(hash));
+					}
+
+					// HRDBMSWorker.logger.debug("Entries are " + entries);
+					// 1 in bit set for a cnf means that cnf is false for that
+					// page
+					int length = 1;
+					for (final CNFEntry entry : entries)
+					{
+						final BitSet bs = entry.getBitSet();
+						synchronized (bs)
+						{
+							final int temp2 = bs.length();
+							if (temp2 > length)
+							{
+								length = temp2;
+							}
+						}
+					}
+
+					// HRDBMSWorker.logger.debug("BuildProblems length is " +
+					// length);
+
+					problems = buildProblems(entries, stride, length);
+				}
+				else
+				{
+					problems = new HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet>();
+					for (final Map.Entry entry : temp.entrySet())
+					{
+						HashSet<HashSet<HashMap<Filter, Filter>>> set = (HashSet<HashSet<HashMap<Filter, Filter>>>)entry.getKey();
+						set = (HashSet<HashSet<HashMap<Filter, Filter>>>)set.clone();
+						final Iterator<HashSet<HashMap<Filter, Filter>>> iter = set.iterator();
+						while (iter.hasNext())
+						{
+							final HashSet<HashMap<Filter, Filter>> hshm2 = iter.next();
+							final HashSet<Integer> hashCodes2 = getAllHashCodes(hshm2);
+							hashCodes2.retainAll(hashCodes);
+							if (hashCodes2.size() == 0)
+							{
+								iter.remove();
+							}
+						}
+
+						if (set.size() == 0)
+						{
+							continue;
+						}
+
+						final BitSet bs = problems.get(set);
+						if (bs == null)
+						{
+							problems.put(set, (BitSet)((BitSet)entry.getValue()).clone());
+						}
+						else
+						{
+							final BitSet bs2 = (BitSet)entry.getValue();
+							bs.or(bs2);
+						}
+					}
+
+					if (problems.size() == 0)
+					{
+						end1 = tmxb.getCurrentThreadCpuTime();
+						TableScanOperator.figureOutProblemsTime.getAndAdd(end1 - start);
+						return new CompressedBitSet();
+					}
+				}
+
+				end1 = tmxb.getCurrentThreadCpuTime();
+			}
+
+			final BitSet retval = solveProblems(problems, context, hshm);
+			if (!retval.isEmpty())
+			{
+				for (final CNFEntry entry : entries)
+				{
+					entry.incrementUsage();
+				}
+			}
+			final long end2 = tmxb.getCurrentThreadCpuTime();
+			TableScanOperator.figureOutProblemsTime.getAndAdd(end1 - start);
+			TableScanOperator.SMTSolveTime.getAndAdd(end2 - end1);
+			return retval;
+		}
+
+		private boolean containsNeededCol(final HashSet<HashMap<Filter, Filter>> hshm, final HashSet<String> needed)
+		{
+			for (final HashMap<Filter, Filter> hm : hshm)
+			{
+				for (final Filter f : hm.keySet())
+				{
+					if (f.leftIsColumn())
+					{
+						String col = f.leftColumn();
+						if (col.contains("."))
+						{
+							col = col.substring(col.indexOf('.') + 1);
+						}
+
+						if (needed.contains(col))
+						{
+							return true;
+						}
+					}
+
+					if (f.rightIsColumn())
+					{
+						String col = f.rightColumn();
+						if (col.contains("."))
+						{
+							col = col.substring(col.indexOf('.') + 1);
+						}
+
+						if (needed.contains(col))
+						{
+							return true;
+						}
+					}
+				}
+			}
+
+			return false;
+		}
+
+		private boolean containsStringMatching(final HashSet<HashMap<Filter, Filter>> hshm)
+		{
+			for (final HashMap<Filter, Filter> hm : hshm)
+			{
+				for (final Filter f : hm.keySet())
+				{
+					if (f.op().equals("LI") || f.op().equals("NL"))
+					{
+						return true;
+					}
+				}
+			}
+
+			return false;
+		}
+
+		private BooleanFormula convertFToBF(final Filter f, final BooleanFormulaManager bmgr, final RationalFormulaManager rmgr, final HashMap<String, RationalFormula> vars)
+		{
+			RationalFormula r = null;
+			RationalFormula r2 = null;
+			if (f.leftIsColumn())
+			{
+				String col = f.leftColumn();
+				if (col.contains("."))
+				{
+					col = col.substring(col.indexOf('.') + 1);
+				}
+
+				r = vars.get(col);
+				if (r == null)
+				{
+					r = rmgr.makeVariable(col);
+					vars.put(col, r);
+				}
+			}
+			else
+			{
+				final Object o = f.leftLiteral();
+				if (o instanceof Double)
+				{
+					r = rmgr.makeNumber((Double)o);
+				}
+				else if (o instanceof Long)
+				{
+					r = rmgr.makeNumber((Long)o);
+				}
+				else if (o instanceof MyDate)
+				{
+					r = rmgr.makeNumber(((MyDate)o).getTime());
+				}
+				else
+				{
+					r = rmgr.makeNumber(stringToNumber((String)o));
+				}
+			}
+
+			if (f.rightIsColumn())
+			{
+				String col = f.rightColumn();
+				if (col.contains("."))
+				{
+					col = col.substring(col.indexOf('.') + 1);
+				}
+
+				r2 = vars.get(col);
+				if (r2 == null)
+				{
+					r2 = rmgr.makeVariable(col);
+					vars.put(col, r2);
+				}
+			}
+			else
+			{
+				final Object o = f.rightLiteral();
+				if (o instanceof Double)
+				{
+					r2 = rmgr.makeNumber((Double)o);
+				}
+				else if (o instanceof Long)
+				{
+					r2 = rmgr.makeNumber((Long)o);
+				}
+				else if (o instanceof MyDate)
+				{
+					r2 = rmgr.makeNumber(((MyDate)o).getTime());
+				}
+				else
+				{
+					r2 = rmgr.makeNumber(stringToNumber((String)o));
+				}
+			}
+
+			final String op = f.op();
+			if (op.equals("E"))
+			{
+				return rmgr.equal(r, r2);
+			}
+			else if (op.equals("NE"))
+			{
+				return bmgr.not(rmgr.equal(r, r2));
+			}
+			else if (op.equals("G"))
+			{
+				return rmgr.greaterThan(r, r2);
+			}
+			else if (op.equals("GE"))
+			{
+				return rmgr.greaterOrEquals(r, r2);
+			}
+			else if (op.equals("L"))
+			{
+				return rmgr.lessThan(r, r2);
+			}
+			else
+			{
+				return rmgr.lessOrEquals(r, r2);
+			}
+		}
+
+		private BooleanFormula convertHMToBF(final HashMap<Filter, Filter> hm, final BooleanFormulaManager bmgr, final RationalFormulaManager rmgr, final HashMap<String, RationalFormula> vars)
+		{
+			final ArrayList<BooleanFormula> clauses = new ArrayList<BooleanFormula>();
+			for (final Filter f : hm.keySet())
+			{
+				if (f.op().equals("LI") || f.op().equals("NL"))
+				{
+					continue;
+				}
+
+				clauses.add(convertFToBF(f, bmgr, rmgr, vars));
+			}
+
+			if (clauses.size() == 0)
+			{
+				return null;
+			}
+
+			BooleanFormula b = clauses.get(0);
+			int i = 1;
+			while (i < clauses.size())
+			{
+				b = bmgr.or(b, clauses.get(i++));
+			}
+
+			return b;
+		}
+
+		private BooleanFormula convertHSHMToBF(final HashSet<HashMap<Filter, Filter>> hshm, final BooleanFormulaManager bmgr, final RationalFormulaManager rmgr, final HashMap<String, RationalFormula> vars)
+		{
+			final ArrayList<BooleanFormula> clauses = new ArrayList<BooleanFormula>();
+			for (final HashMap<Filter, Filter> hm : hshm)
+			{
+				final BooleanFormula b = convertHMToBF(hm, bmgr, rmgr, vars);
+				if (b != null)
+				{
+					clauses.add(b);
+				}
+			}
+
+			if (clauses.size() == 0)
+			{
+				return null;
+			}
+
+			BooleanFormula b = clauses.get(0);
+			int i = 1;
+			while (i < clauses.size())
+			{
+				b = bmgr.and(b, clauses.get(i++));
+			}
+
+			return b;
+		}
+
+		private HashSet<Integer> getAllHashCodes(final HashSet<HashMap<Filter, Filter>> hshm)
+		{
+			final HashSet<Integer> retval = new HashSet<Integer>();
+			for (final HashMap<Filter, Filter> hm : hshm)
+			{
+				for (final Filter f : hm.keySet())
+				{
+					if (f.leftIsColumn())
+					{
+						String col = f.leftColumn();
+						if (col.contains("."))
+						{
+							col = col.substring(col.indexOf('.') + 1);
+						}
+
+						retval.add(col.hashCode());
+					}
+
+					if (f.rightIsColumn())
+					{
+						String col = f.rightColumn();
+						if (col.contains("."))
+						{
+							col = col.substring(col.indexOf('.') + 1);
+						}
+
+						retval.add(col.hashCode());
+					}
+				}
+			}
+
+			return retval;
+		}
+
+		private HashSet<String> getNeededCols(final HashSet<HashMap<Filter, Filter>> hshm)
+		{
+			final HashSet<String> retval = new HashSet<String>();
+			for (final HashMap<Filter, Filter> hm : hshm)
+			{
+				for (final Filter f : hm.keySet())
+				{
+					if (f.leftIsColumn())
+					{
+						String col = f.leftColumn();
+						if (col.contains("."))
+						{
+							col = col.substring(col.indexOf('.') + 1);
+						}
+
+						retval.add(col);
+					}
+
+					if (f.rightIsColumn())
+					{
+						String col = f.rightColumn();
+						if (col.contains("."))
+						{
+							col = col.substring(col.indexOf('.') + 1);
+						}
+
+						retval.add(col);
+					}
+				}
+			}
+
+			return retval;
+		}
+
+		private BitSet solveProblems(final HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> problems, final SolverContext context, final HashSet<HashMap<Filter, Filter>> hshm)
+		{
+			final int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
+			final boolean isV6OrHigher = (pbpeVer >= 6);
+			BitSet retval = null;
+			if (isV6OrHigher)
+			{
+				retval = new CompressedBitSet();
+			}
+			else
+			{
+				retval = new BitSet();
+			}
+			for (final Map.Entry entry : problems.entrySet())
+			{
+				final HashSet<HashSet<HashMap<Filter, Filter>>> hshshm = (HashSet<HashSet<HashMap<Filter, Filter>>>)entry.getKey();
+				if (!canSatisfySMT(hshm, hshshm, context))
+				{
+					if (isV6OrHigher)
+					{
+						((CompressedBitSet)retval).or((CompressedBitSet)entry.getValue());
+					}
+					else
+					{
+						retval.or((BitSet)entry.getValue());
+					}
+				}
+			}
+
+			return retval;
+		}
+
+		private BitSet solveProblemsNonSMT(final HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> problems, final HashSet<HashMap<Filter, Filter>> hshm)
+		{
+			final BitSet retval = new CompressedBitSet();
+
+			for (final Map.Entry entry : problems.entrySet())
+			{
+				final HashSet<HashSet<HashMap<Filter, Filter>>> hshshm = (HashSet<HashSet<HashMap<Filter, Filter>>>)entry.getKey();
+				if (!canSatisfy(hshm, hshshm))
+				{
+					((CompressedBitSet)retval).or((CompressedBitSet)entry.getValue());
+				}
+			}
+
+			return retval;
+		}
+
+		private BigDecimal stringToNumber(final String str)
+		{
+			final StringBuilder s = new StringBuilder();
+			s.append("0.");
+			int i = 0;
+			while (i < str.length())
+			{
+				final char c = str.charAt(i);
+				final int j = c;
+				s.append(String.format("%05d", j));
+				i++;
+			}
+
+			if (s.length() == 2)
+			{
+				s.append("0");
+			}
+
+			return new BigDecimal(s.toString());
+		}
 	}
 
 	private final class InitThread extends ThreadPoolThread
@@ -4753,19 +4772,19 @@ public final class TableScanOperator implements Operator, Serializable
 		@Override
 		public void run()
 		{
-			ArrayList<String> dmlTxStrs = new ArrayList<String>();
-			ArrayList<Integer> sorted = new ArrayList(MetaData.getNumDevices());
+			final ArrayList<String> dmlTxStrs = new ArrayList<String>();
+			final ArrayList<Integer> sorted = new ArrayList(MetaData.getNumDevices());
 			int i = 0;
 			while (i < MetaData.getNumDevices())
 			{
 				sorted.add(i++);
 			}
-			//Collections.sort(sorted);
-			synchronized(intraTxLock)
+			// Collections.sort(sorted);
+			synchronized (intraTxLock)
 			{
-				for (int device : sorted)
+				for (final int device : sorted)
 				{
-					String dmlTxStr = Long.toString(tx.number()) + "~" + device + "~" + schema + "." + name;
+					final String dmlTxStr = Long.toString(tx.number()) + "~" + device + "~" + schema + "." + name;
 					AtomicInteger count = sharedDmlTxCounters.get(dmlTxStr);
 					if (count == null)
 					{
@@ -4783,11 +4802,11 @@ public final class TableScanOperator implements Operator, Serializable
 					{
 						count.getAndIncrement();
 					}
-				
+
 					dmlTxStrs.add(dmlTxStr);
 				}
 			}
-			
+
 			try
 			{
 				for (final Operator o : children)
@@ -4802,16 +4821,16 @@ public final class TableScanOperator implements Operator, Serializable
 						throw e;
 					}
 				}
-				
+
 				// HRDBMSWorker.logger.debug("Going to start " + ins.size() +
 				// " ReaderThreads for ins for " + TableScanOperator.this);
 				if (scanIndex != null)
 				{
-					String fn = scanIndex.getFileName();
+					final String fn = scanIndex.getFileName();
 					for (final int device : devices)
 					{
-						final String in = meta.getDevicePath(device) + fn;
-						ReaderThread read = new ReaderThread(in, scanIndex);
+						final String in = MetaData.getDevicePath(device) + fn;
+						final ReaderThread read = new ReaderThread(in, scanIndex);
 						read.start();
 						reads.add(read);
 					}
@@ -4855,12 +4874,12 @@ public final class TableScanOperator implements Operator, Serializable
 			}
 			catch (final Exception e)
 			{
-				synchronized(intraTxLock)
+				synchronized (intraTxLock)
 				{
-					for (String dmlTxStr : dmlTxStrs)
+					for (final String dmlTxStr : dmlTxStrs)
 					{
-						AtomicInteger count = sharedDmlTxCounters.get(dmlTxStr);
-						int newVal = count.decrementAndGet();
+						final AtomicInteger count = sharedDmlTxCounters.get(dmlTxStr);
+						final int newVal = count.decrementAndGet();
 						if (newVal == 0)
 						{
 							sharedDmlTxCounters.remove(dmlTxStr);
@@ -4873,18 +4892,18 @@ public final class TableScanOperator implements Operator, Serializable
 				{
 					readBuffer.put(e);
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 				}
 				return;
 			}
-			
-			synchronized(intraTxLock)
+
+			synchronized (intraTxLock)
 			{
-				for (String dmlTxStr : dmlTxStrs)
+				for (final String dmlTxStr : dmlTxStrs)
 				{
-					AtomicInteger count = sharedDmlTxCounters.get(dmlTxStr);
-					int newVal = count.decrementAndGet();
+					final AtomicInteger count = sharedDmlTxCounters.get(dmlTxStr);
+					final int newVal = count.decrementAndGet();
 					if (newVal == 0)
 					{
 						sharedDmlTxCounters.remove(dmlTxStr);
@@ -4900,22 +4919,22 @@ public final class TableScanOperator implements Operator, Serializable
 		@Override
 		public void run()
 		{
-			int sleep = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_externalize_interval_s")) * 1000;
-			int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
-			boolean isV5OrHigher = (pbpeVer >= 5);
+			final int sleep = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_externalize_interval_s")) * 1000;
+			final int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
+			final boolean isV5OrHigher = (pbpeVer >= 5);
 			while (true)
 			{
 				try
 				{
 					Thread.sleep(sleep);
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 
 				try
 				{
-					ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream("pbpe.dat.new", false));
+					final ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream("pbpe.dat.new", false));
 					if (isV5OrHigher)
 					{
 						out.writeObject(pbpeCache2);
@@ -4927,60 +4946,75 @@ public final class TableScanOperator implements Operator, Serializable
 					out.close();
 					new File("pbpe.dat.new").renameTo(new File("pbpe.dat"));
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.warn("", e);
 				}
 			}
 		}
 	}
-	
-	public static class CNFEntry implements Serializable
+
+	private static class ProblemRebuildThread extends HRDBMSThread
 	{
-		private HashSet<HashMap<Filter, Filter>> cnf;
-		private BitSet bitSet;
-		private AtomicLong usage = new AtomicLong(0);
-		
-		public CNFEntry(HashSet<HashMap<Filter, Filter>> cnf, BitSet bitSet)
+		private final LinkedBlockingQueue<String> q;
+		private final HashMap<String, Long> times = new HashMap<String, Long>();
+
+		public ProblemRebuildThread(final LinkedBlockingQueue<String> q)
 		{
-			this.cnf = cnf;
-			this.bitSet = bitSet;
+			this.q = q;
 		}
-		
-		public HashSet<HashMap<Filter, Filter>> getCNF()
+
+		@Override
+		public void run()
 		{
-			return cnf;
-		}
-		
-		public long getUsage()
-		{
-			return usage.get();
-		}
-		
-		public void incrementUsage()
-		{
-			usage.incrementAndGet();
-		}
-		
-		public BitSet getBitSet()
-		{
-			return bitSet;
-		}
-		
-		public int hashCode()
-		{
-			return cnf.hashCode();
-		}
-		
-		public boolean equals(Object r)
-		{
-			CNFEntry rhs = (CNFEntry)r;
-			return cnf.equals(rhs.cnf);
-		}
-		
-		public String toString()
-		{
-			return cnf.toString() + " : " + bitSet.toString();
+			while (true)
+			{
+				try
+				{
+					final String msg = q.take();
+					final StringTokenizer tokens = new StringTokenizer(msg, ",", false);
+					final String fn = tokens.nextToken();
+					final String t = tokens.nextToken();
+					long time = Long.parseLong(t);
+					final Long last = times.get(fn);
+					if (last != null && time < last)
+					{
+						continue;
+					}
+
+					// rebuild data for fragment fn
+					final HashSet<CNFEntry> entries = new HashSet<CNFEntry>();
+					time = System.currentTimeMillis();
+					final MultiHashMap<Integer, CNFEntry> mhm = pbpeCache2.get(fn);
+					final Set<Integer> hashCodes = mhm.getKeySet();
+					for (final int hash : hashCodes)
+					{
+						entries.addAll(mhm.get(hash));
+					}
+
+					int length = 1;
+					for (final CNFEntry entry2 : entries)
+					{
+						final BitSet bs = entry2.getBitSet();
+						synchronized (bs)
+						{
+							final int temp = bs.length();
+							if (temp > length)
+							{
+								length = temp;
+							}
+						}
+					}
+
+					final HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> problems = buildProblems(entries, 1, length);
+					problemCache.put(fn, problems);
+					times.put(fn, time);
+				}
+				catch (final InterruptedException e)
+				{
+					continue;
+				}
+			}
 		}
 	}
 }

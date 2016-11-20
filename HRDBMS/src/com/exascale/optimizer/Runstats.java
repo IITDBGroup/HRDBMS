@@ -4,7 +4,7 @@ public class Runstats extends SQLStatement
 {
 	private final TableName table;
 
-	public Runstats(TableName table)
+	public Runstats(final TableName table)
 	{
 		this.table = table;
 	}

@@ -1322,23 +1322,23 @@ public class ReverseConcurrentHashMap
 		try
 		{
 			U = getUnsafe();
-			Class<?> k = ReverseConcurrentHashMap.class;
+			final Class<?> k = ReverseConcurrentHashMap.class;
 			SIZECTL = U.objectFieldOffset(k.getDeclaredField("sizeCtl"));
 			TRANSFERINDEX = U.objectFieldOffset(k.getDeclaredField("transferIndex"));
 			BASECOUNT = U.objectFieldOffset(k.getDeclaredField("baseCount"));
 			CELLSBUSY = U.objectFieldOffset(k.getDeclaredField("cellsBusy"));
-			Class<?> ck = CounterCell.class;
+			final Class<?> ck = CounterCell.class;
 			CELLVALUE = U.objectFieldOffset(ck.getDeclaredField("value"));
-			Class<?> ak = Node[].class;
+			final Class<?> ak = Node[].class;
 			ABASE = U.arrayBaseOffset(ak);
-			int scale = U.arrayIndexScale(ak);
+			final int scale = U.arrayIndexScale(ak);
 			if ((scale & (scale - 1)) != 0)
 			{
 				throw new Error("data type scale not a power of two");
 			}
 			ASHIFT = 31 - Integer.numberOfLeadingZeros(scale);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			throw new Error(e);
 		}
@@ -1411,13 +1411,13 @@ public class ReverseConcurrentHashMap
 	 * @throws IllegalArgumentException
 	 *             if the initial capacity of elements is negative
 	 */
-	public ReverseConcurrentHashMap(int initialCapacity)
+	public ReverseConcurrentHashMap(final int initialCapacity)
 	{
 		if (initialCapacity < 0)
 		{
 			throw new IllegalArgumentException();
 		}
-		int cap = ((initialCapacity >= (MAXIMUM_CAPACITY >>> 1)) ? MAXIMUM_CAPACITY : tableSizeFor(initialCapacity + (initialCapacity >>> 1) + 1));
+		final int cap = ((initialCapacity >= (MAXIMUM_CAPACITY >>> 1)) ? MAXIMUM_CAPACITY : tableSizeFor(initialCapacity + (initialCapacity >>> 1) + 1));
 		this.sizeCtl = cap;
 	}
 
@@ -1449,7 +1449,7 @@ public class ReverseConcurrentHashMap
 	 *
 	 * @since 1.6
 	 */
-	public ReverseConcurrentHashMap(int initialCapacity, float loadFactor)
+	public ReverseConcurrentHashMap(final int initialCapacity, final float loadFactor)
 	{
 		this(initialCapacity, loadFactor, 1);
 	}
@@ -1476,7 +1476,7 @@ public class ReverseConcurrentHashMap
 	 *             if the initial capacity is negative or the load factor or
 	 *             concurrencyLevel are nonpositive
 	 */
-	public ReverseConcurrentHashMap(int initialCapacity, float loadFactor, int concurrencyLevel)
+	public ReverseConcurrentHashMap(int initialCapacity, final float loadFactor, final int concurrencyLevel)
 	{
 		if (!(loadFactor > 0.0f) || initialCapacity < 0 || concurrencyLevel <= 0)
 		{
@@ -1486,8 +1486,8 @@ public class ReverseConcurrentHashMap
 		{
 			initialCapacity = concurrencyLevel; // as estimated threads
 		}
-		long size = (long)(1.0 + initialCapacity / loadFactor);
-		int cap = (size >= MAXIMUM_CAPACITY) ? MAXIMUM_CAPACITY : tableSizeFor((int)size);
+		final long size = (long)(1.0 + initialCapacity / loadFactor);
+		final int cap = (size >= MAXIMUM_CAPACITY) ? MAXIMUM_CAPACITY : tableSizeFor((int)size);
 		this.sizeCtl = cap;
 	}
 
@@ -1509,7 +1509,7 @@ public class ReverseConcurrentHashMap
 	 * Returns a power of two table size for the given desired capacity. See
 	 * Hackers Delight, sec 3.2
 	 */
-	private static final int tableSizeFor(int c)
+	private static final int tableSizeFor(final int c)
 	{
 		int n = c - 1;
 		n |= n >>> 1;
@@ -1520,7 +1520,7 @@ public class ReverseConcurrentHashMap
 		return (n < 0) ? 1 : (n >= MAXIMUM_CAPACITY) ? MAXIMUM_CAPACITY : n + 1;
 	}
 
-	static final boolean casTabAt(Node[] tab, int i, Node c, Node v)
+	static final boolean casTabAt(final Node[] tab, final int i, final Node c, final Node v)
 	{
 		return U.compareAndSwapObject(tab, ((long)i << ASHIFT) + ABASE, c, v);
 	}
@@ -1529,7 +1529,7 @@ public class ReverseConcurrentHashMap
 	 * Returns x's Class if it is of the form "class C implements Comparable
 	 * <C>", else null.
 	 */
-	static Class<?> comparableClassFor(Object x)
+	static Class<?> comparableClassFor(final Object x)
 	{
 		if (x instanceof Comparable)
 		{
@@ -1543,7 +1543,7 @@ public class ReverseConcurrentHashMap
 			}
 			if ((ts = c.getGenericInterfaces()) != null)
 			{
-				for (Type element : ts)
+				for (final Type element : ts)
 				{
 					if (((t = element) instanceof ParameterizedType) && ((p = (ParameterizedType)t).getRawType() == Comparable.class) && (as = p.getActualTypeArguments()) != null && as.length == 1 && as[0] == c)
 					{
@@ -1561,7 +1561,7 @@ public class ReverseConcurrentHashMap
 	 */
 	@SuppressWarnings({ "rawtypes", "unchecked" })
 	// for cast to Comparable
-	static int compareComparables(Class<?> kc, Object k, Object x)
+	static int compareComparables(final Class<?> kc, final Object k, final Object x)
 	{
 		return (x == null || x.getClass() != kc ? 0 : ((Comparable)k).compareTo(x));
 	}
@@ -1570,7 +1570,7 @@ public class ReverseConcurrentHashMap
 	 * Returns the stamp bits for resizing a table of size n. Must be negative
 	 * when shifted left by RESIZE_STAMP_SHIFT.
 	 */
-	static final int resizeStamp(int n)
+	static final int resizeStamp(final int n)
 	{
 		return Integer.numberOfLeadingZeros(n) | (1 << (RESIZE_STAMP_BITS - 1));
 	}
@@ -1589,7 +1589,7 @@ public class ReverseConcurrentHashMap
 	 * m.entrySet()) putVal(e.getKey(), e.getValue(), false); }
 	 */
 
-	static final void setTabAt(Node[] tab, int i, Node v)
+	static final void setTabAt(final Node[] tab, final int i, final Node v)
 	{
 		U.putObjectVolatile(tab, ((long)i << ASHIFT) + ABASE, v);
 	}
@@ -1608,13 +1608,13 @@ public class ReverseConcurrentHashMap
 	 * incorporate impact of the highest bits that would otherwise never be used
 	 * in index calculations because of table bounds.
 	 */
-	static final int spread(int h)
+	static final int spread(final int h)
 	{
 		return (h ^ (h >>> 16)) & HASH_BITS;
 	}
 
 	@SuppressWarnings("unchecked")
-	static final Node tabAt(Node[] tab, int i)
+	static final Node tabAt(final Node[] tab, final int i)
 	{
 		return (Node)U.getObjectVolatile(tab, ((long)i << ASHIFT) + ABASE);
 	}
@@ -1622,12 +1622,12 @@ public class ReverseConcurrentHashMap
 	/**
 	 * Returns a list on non-TreeNodes replacing those in given list.
 	 */
-	static Node untreeify(Node b)
+	static Node untreeify(final Node b)
 	{
 		Node hd = null, tl = null;
 		for (Node q = b; q != null; q = q.next)
 		{
-			Node p = new Node(q.hash, q.key, q.val, null);
+			final Node p = new Node(q.hash, q.key, q.val, null);
 			if (tl == null)
 			{
 				hd = p;
@@ -1654,7 +1654,7 @@ public class ReverseConcurrentHashMap
 		while (tab != null && i < tab.length)
 		{
 			int fh;
-			Node f = tabAt(tab, i);
+			final Node f = tabAt(tab, i);
 			if (f == null)
 			{
 				++i;
@@ -1707,7 +1707,7 @@ public class ReverseConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified value is null
 	 */
-	public boolean contains(long value)
+	public boolean contains(final long value)
 	{
 		return containsValue(value);
 	}
@@ -1723,7 +1723,7 @@ public class ReverseConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key is null
 	 */
-	public boolean containsKey(ArrayList<Object> key)
+	public boolean containsKey(final ArrayList<Object> key)
 	{
 		return get(key) != -1;
 	}
@@ -1740,7 +1740,7 @@ public class ReverseConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified value is null
 	 */
-	public boolean containsValue(long value)
+	public boolean containsValue(final long value)
 	{
 		if (value == -1)
 		{
@@ -1749,7 +1749,7 @@ public class ReverseConcurrentHashMap
 		Node[] t;
 		if ((t = table) != null)
 		{
-			Traverser it = new Traverser(t, t.length, 0, t.length);
+			final Traverser it = new Traverser(t, t.length, 0, t.length);
 			for (Node p; (p = it.advance()) != null;)
 			{
 				if ((p.val) == value)
@@ -1804,7 +1804,7 @@ public class ReverseConcurrentHashMap
 	 * @return {@code true} if the specified object is equal to this map
 	 */
 	@Override
-	public boolean equals(Object o)
+	public boolean equals(final Object o)
 	{
 		if (o != this)
 		{
@@ -1812,23 +1812,23 @@ public class ReverseConcurrentHashMap
 			{
 				return false;
 			}
-			ReverseConcurrentHashMap m = (ReverseConcurrentHashMap)o;
+			final ReverseConcurrentHashMap m = (ReverseConcurrentHashMap)o;
 			Node[] t;
-			int f = (t = table) == null ? 0 : t.length;
-			Traverser it = new Traverser(t, f, 0, f);
+			final int f = (t = table) == null ? 0 : t.length;
+			final Traverser it = new Traverser(t, f, 0, f);
 			for (Node p; (p = it.advance()) != null;)
 			{
-				long val = p.val;
-				long v = m.get(p.key);
+				final long val = p.val;
+				final long v = m.get(p.key);
 				if (v == -1 || (v != val))
 				{
 					return false;
 				}
 			}
-			EntryIterator iter = m.entrySet().iterator();
+			final EntryIterator iter = m.entrySet().iterator();
 			while (iter.hasNext())
 			{
-				MapEntry e = iter.next();
+				final MapEntry e = iter.next();
 				ArrayList<Object> mk;
 				long mv, v;
 				if ((mk = e.getKey()) == null || (mv = e.getValue()) == -1 || (v = get(mk)) == -1 || (mv != v))
@@ -1853,7 +1853,7 @@ public class ReverseConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key is null
 	 */
-	public long get(ArrayList<Object> key)
+	public long get(final ArrayList<Object> key)
 	{
 		// try
 		// {
@@ -1861,7 +1861,7 @@ public class ReverseConcurrentHashMap
 		Node e, p;
 		int n, eh;
 		ArrayList<Object> ek;
-		int h = spread(key.hashCode());
+		final int h = spread(key.hashCode());
 		if ((tab = table) != null && (n = tab.length) > 0 && (e = tabAt(tab, (n - 1) & h)) != null)
 		{
 			if ((eh = e.hash) == h)
@@ -1957,7 +1957,7 @@ public class ReverseConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key is null
 	 */
-	public long getOrDefault(ArrayList<Object> key, long defaultValue)
+	public long getOrDefault(final ArrayList<Object> key, final long defaultValue)
 	{
 		long v;
 		return (v = get(key)) == -1 ? defaultValue : v;
@@ -1977,7 +1977,7 @@ public class ReverseConcurrentHashMap
 		Node[] t;
 		if ((t = table) != null)
 		{
-			Traverser it = new Traverser(t, t.length, 0, t.length);
+			final Traverser it = new Traverser(t, t.length, 0, t.length);
 			for (Node p; (p = it.advance()) != null;)
 			{
 				h += (p.key.hashCode() ^ ((int)(p.val ^ (p.val >>> 32))));
@@ -2034,7 +2034,7 @@ public class ReverseConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the mappedValue is null
 	 */
-	public KeySetView keySet(long mappedValue)
+	public KeySetView keySet(final long mappedValue)
 	{
 		if (mappedValue == -1)
 		{
@@ -2268,7 +2268,7 @@ public class ReverseConcurrentHashMap
 	 */
 	public long mappingCount()
 	{
-		long n = sumCount();
+		final long n = sumCount();
 		return (n < 0L) ? 0L : n; // ignore transient negative values
 	}
 
@@ -2313,7 +2313,7 @@ public class ReverseConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key or value is null
 	 */
-	public long put(ArrayList<Object> key, long value)
+	public long put(final ArrayList<Object> key, final long value)
 	{
 		// try
 		// {
@@ -2369,7 +2369,7 @@ public class ReverseConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key or value is null
 	 */
-	public long putIfAbsent(ArrayList<Object> key, long value)
+	public long putIfAbsent(final ArrayList<Object> key, final long value)
 	{
 		// try
 		// {
@@ -2395,7 +2395,7 @@ public class ReverseConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key is null
 	 */
-	public long remove(ArrayList<Object> key)
+	public long remove(final ArrayList<Object> key)
 	{
 		// try
 		// {
@@ -2414,7 +2414,7 @@ public class ReverseConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key is null
 	 */
-	public boolean remove(ArrayList<Object> key, long value)
+	public boolean remove(final ArrayList<Object> key, final long value)
 	{
 		if (key == null)
 		{
@@ -2433,7 +2433,7 @@ public class ReverseConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key or value is null
 	 */
-	public long replace(ArrayList<Object> key, long value)
+	public long replace(final ArrayList<Object> key, final long value)
 	{
 		// try
 		// {
@@ -2456,7 +2456,7 @@ public class ReverseConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if any of the arguments are null
 	 */
-	public boolean replace(ArrayList<Object> key, long oldValue, long newValue)
+	public boolean replace(final ArrayList<Object> key, final long oldValue, final long newValue)
 	{
 		if (key == null || oldValue == -1 || newValue == -1)
 		{
@@ -2472,7 +2472,7 @@ public class ReverseConcurrentHashMap
 	{
 		// try
 		// {
-		long n = sumCount();
+		final long n = sumCount();
 		return ((n < 0L) ? 0 : (n > Integer.MAX_VALUE) ? Integer.MAX_VALUE : (int)n);
 		// }
 		// catch(Throwable e)
@@ -2496,17 +2496,17 @@ public class ReverseConcurrentHashMap
 	public String toString()
 	{
 		Node[] t;
-		int f = (t = table) == null ? 0 : t.length;
-		Traverser it = new Traverser(t, f, 0, f);
-		StringBuilder sb = new StringBuilder();
+		final int f = (t = table) == null ? 0 : t.length;
+		final Traverser it = new Traverser(t, f, 0, f);
+		final StringBuilder sb = new StringBuilder();
 		sb.append('{');
 		Node p;
 		if ((p = it.advance()) != null)
 		{
 			for (;;)
 			{
-				ArrayList<Object> k = p.key;
-				long v = p.val;
+				final ArrayList<Object> k = p.key;
+				final long v = p.val;
 				sb.append(k);
 				sb.append('=');
 				sb.append(v);
@@ -2564,7 +2564,7 @@ public class ReverseConcurrentHashMap
 	 * @param check
 	 *            if <0, don't check resize, if <= 1 only check if uncontended
 	 */
-	private final void addCount(long x, int check)
+	private final void addCount(final long x, final int check)
 	{
 		CounterCell[] as;
 		long b, s;
@@ -2591,7 +2591,7 @@ public class ReverseConcurrentHashMap
 			int n, sc;
 			while (s >= (sc = sizeCtl) && (tab = table) != null && (n = tab.length) < MAXIMUM_CAPACITY)
 			{
-				int rs = resizeStamp(n);
+				final int rs = resizeStamp(n);
 				if (sc < 0)
 				{
 					if ((sc >>> RESIZE_STAMP_SHIFT) != rs || sc == rs + 1 || sc == rs + MAX_RESIZERS || (nt = nextTable) == null || transferIndex <= 0)
@@ -2615,7 +2615,7 @@ public class ReverseConcurrentHashMap
 	/* ---------------- Counter support -------------- */
 
 	// See LongAdder version for explanation
-	private final void fullAddCount(long x, boolean wasUncontended)
+	private final void fullAddCount(final long x, boolean wasUncontended)
 	{
 		int h;
 		if ((h = MyThreadLocalRandom.getProbe()) == 0)
@@ -2637,7 +2637,8 @@ public class ReverseConcurrentHashMap
 				{
 					if (cellsBusy == 0)
 					{ // Try to attach new Cell
-						CounterCell r = new CounterCell(x); // Optimistic create
+						final CounterCell r = new CounterCell(x); // Optimistic
+																	// create
 						if (cellsBusy == 0 && U.compareAndSwapInt(this, CELLSBUSY, 0, 1))
 						{
 							boolean created = false;
@@ -2686,7 +2687,7 @@ public class ReverseConcurrentHashMap
 					{
 						if (counterCells == as)
 						{// Expand table unless stale
-							CounterCell[] rs = new CounterCell[n << 1];
+							final CounterCell[] rs = new CounterCell[n << 1];
 							for (int i = 0; i < n; ++i)
 							{
 								rs[i] = as[i];
@@ -2710,7 +2711,7 @@ public class ReverseConcurrentHashMap
 				{ // Initialize table
 					if (counterCells == as)
 					{
-						CounterCell[] rs = new CounterCell[2];
+						final CounterCell[] rs = new CounterCell[2];
 						rs[h & 1] = new CounterCell(x);
 						counterCells = rs;
 						init = true;
@@ -2751,9 +2752,9 @@ public class ReverseConcurrentHashMap
 				{
 					if ((tab = table) == null || tab.length == 0)
 					{
-						int n = (sc > 0) ? sc : DEFAULT_CAPACITY;
+						final int n = (sc > 0) ? sc : DEFAULT_CAPACITY;
 						@SuppressWarnings("unchecked")
-						Node[] nt = new Node[n];
+						final Node[] nt = new Node[n];
 						table = tab = nt;
 						sc = n - (n >>> 2);
 					}
@@ -2772,9 +2773,10 @@ public class ReverseConcurrentHashMap
 	 * Moves and/or copies the nodes in each bin to new table. See above for
 	 * explanation.
 	 */
-	private final void transfer(Node[] tab, Node[] nextTab)
+	private final void transfer(final Node[] tab, Node[] nextTab)
 	{
-		int n = tab.length, stride;
+		final int n = tab.length;
+		int stride;
 		if ((stride = (NCPU > 1) ? (n >>> 3) / NCPU : n) < MIN_TRANSFER_STRIDE)
 		{
 			stride = MIN_TRANSFER_STRIDE; // subdivide range
@@ -2784,10 +2786,10 @@ public class ReverseConcurrentHashMap
 			try
 			{
 				@SuppressWarnings("unchecked")
-				Node[] nt = new Node[n << 1];
+				final Node[] nt = new Node[n << 1];
 				nextTab = nt;
 			}
-			catch (Throwable ex)
+			catch (final Throwable ex)
 			{ // try to cope with OOME
 				sizeCtl = Integer.MAX_VALUE;
 				return;
@@ -2795,8 +2797,8 @@ public class ReverseConcurrentHashMap
 			nextTable = nextTab;
 			transferIndex = n;
 		}
-		int nextn = nextTab.length;
-		ForwardingNode fwd = new ForwardingNode(nextTab);
+		final int nextn = nextTab.length;
+		final ForwardingNode fwd = new ForwardingNode(nextTab);
 		boolean advance = true;
 		boolean finishing = false; // to ensure sweep before committing nextTab
 		for (int i = 0, bound = 0;;)
@@ -2863,7 +2865,7 @@ public class ReverseConcurrentHashMap
 							Node lastRun = f;
 							for (Node p = f.next; p != null; p = p.next)
 							{
-								int b = p.hash & n;
+								final int b = p.hash & n;
 								if (b != runBit)
 								{
 									runBit = b;
@@ -2882,9 +2884,9 @@ public class ReverseConcurrentHashMap
 							}
 							for (Node p = f; p != lastRun; p = p.next)
 							{
-								int ph = p.hash;
-								ArrayList<Object> pk = p.key;
-								long pv = p.val;
+								final int ph = p.hash;
+								final ArrayList<Object> pk = p.key;
+								final long pv = p.val;
 								if ((ph & n) == 0)
 								{
 									ln = new Node(ph, pk, pv, ln);
@@ -2901,14 +2903,14 @@ public class ReverseConcurrentHashMap
 						}
 						else if (f instanceof TreeBin)
 						{
-							TreeBin t = (TreeBin)f;
+							final TreeBin t = (TreeBin)f;
 							TreeNode lo = null, loTail = null;
 							TreeNode hi = null, hiTail = null;
 							int lc = 0, hc = 0;
 							for (Node e = t.first; e != null; e = e.next)
 							{
-								int h = e.hash;
-								TreeNode p = new TreeNode(h, e.key, e.val, null, null);
+								final int h = e.hash;
+								final TreeNode p = new TreeNode(h, e.key, e.val, null, null);
 								if ((h & n) == 0)
 								{
 									if ((p.prev = loTail) == null)
@@ -2955,7 +2957,7 @@ public class ReverseConcurrentHashMap
 	 * Replaces all linked nodes in bin at given index unless table is too
 	 * small, in which case resizes instead.
 	 */
-	private final void treeifyBin(Node[] tab, int index)
+	private final void treeifyBin(final Node[] tab, final int index)
 	{
 		Node b;
 		int n;
@@ -2974,7 +2976,7 @@ public class ReverseConcurrentHashMap
 						TreeNode hd = null, tl = null;
 						for (Node e = b; e != null; e = e.next)
 						{
-							TreeNode p = new TreeNode(e.hash, e.key, e.val, null, null);
+							final TreeNode p = new TreeNode(e.hash, e.key, e.val, null, null);
 							if ((p.prev = tl) == null)
 							{
 								hd = p;
@@ -2998,13 +3000,13 @@ public class ReverseConcurrentHashMap
 	 * @param size
 	 *            number of elements (doesn't need to be perfectly accurate)
 	 */
-	private final void tryPresize(int size)
+	private final void tryPresize(final int size)
 	{
-		int c = (size >= (MAXIMUM_CAPACITY >>> 1)) ? MAXIMUM_CAPACITY : tableSizeFor(size + (size >>> 1) + 1);
+		final int c = (size >= (MAXIMUM_CAPACITY >>> 1)) ? MAXIMUM_CAPACITY : tableSizeFor(size + (size >>> 1) + 1);
 		int sc;
 		while ((sc = sizeCtl) >= 0)
 		{
-			Node[] tab = table;
+			final Node[] tab = table;
 			int n;
 			if (tab == null || (n = tab.length) == 0)
 			{
@@ -3016,7 +3018,7 @@ public class ReverseConcurrentHashMap
 						if (table == tab)
 						{
 							@SuppressWarnings("unchecked")
-							Node[] nt = new Node[n];
+							final Node[] nt = new Node[n];
 							table = nt;
 							sc = n - (n >>> 2);
 						}
@@ -3033,7 +3035,7 @@ public class ReverseConcurrentHashMap
 			}
 			else if (tab == table)
 			{
-				int rs = resizeStamp(n);
+				final int rs = resizeStamp(n);
 				if (sc < 0)
 				{
 					Node[] nt;
@@ -3068,7 +3070,7 @@ public class ReverseConcurrentHashMap
 	 *             mapping, followed by a null pair. The key-value mappings are
 	 *             emitted in no particular order.
 	 */
-	private void writeObject(java.io.ObjectOutputStream s) throws java.io.IOException
+	private void writeObject(final java.io.ObjectOutputStream s) throws java.io.IOException
 	{
 		// For serialization compatibility
 		// Emulate segment calculation from previous version of this class
@@ -3079,8 +3081,8 @@ public class ReverseConcurrentHashMap
 			++sshift;
 			ssize <<= 1;
 		}
-		int segmentShift = 32 - sshift;
-		int segmentMask = ssize - 1;
+		final int segmentShift = 32 - sshift;
+		final int segmentMask = ssize - 1;
 		@SuppressWarnings("unchecked")
 		Segment[] segments = new Segment[DEFAULT_CONCURRENCY_LEVEL];
 		for (int i = 0; i < segments.length; ++i)
@@ -3095,7 +3097,7 @@ public class ReverseConcurrentHashMap
 		Node[] t;
 		if ((t = table) != null)
 		{
-			Traverser it = new Traverser(t, t.length, 0, t.length);
+			final Traverser it = new Traverser(t, t.length, 0, t.length);
 			for (Node p; (p = it.advance()) != null;)
 			{
 				s.writeObject(p.key);
@@ -3116,14 +3118,15 @@ public class ReverseConcurrentHashMap
 	 * more convenient to use as a guide to splitting than is the depth, since
 	 * it is used while dividing by two anyway.
 	 */
-	final int batchFor(long b)
+	final int batchFor(final long b)
 	{
 		long n;
 		if (b == Long.MAX_VALUE || (n = sumCount()) <= 1L || n < b)
 		{
 			return 0;
 		}
-		int sp = ForkJoinPool.getCommonPoolParallelism() << 2; // slack of 4
+		final int sp = ForkJoinPool.getCommonPoolParallelism() << 2; // slack of
+																		// 4
 		return (b <= 0L || (n /= b) >= sp) ? sp : (int)n;
 	}
 
@@ -3132,13 +3135,13 @@ public class ReverseConcurrentHashMap
 	/**
 	 * Helps transfer if a resize is in progress.
 	 */
-	final Node[] helpTransfer(Node[] tab, Node f)
+	final Node[] helpTransfer(final Node[] tab, final Node f)
 	{
 		Node[] nextTab;
 		int sc;
 		if (tab != null && (f instanceof ForwardingNode) && (nextTab = ((ForwardingNode)f).nextTable) != null)
 		{
-			int rs = resizeStamp(tab.length);
+			final int rs = resizeStamp(tab.length);
 			while (nextTab == nextTable && table == tab && (sc = sizeCtl) < 0)
 			{
 				if ((sc >>> RESIZE_STAMP_SHIFT) != rs || sc == rs + 1 || sc == rs + MAX_RESIZERS || transferIndex <= 0)
@@ -3157,13 +3160,13 @@ public class ReverseConcurrentHashMap
 	}
 
 	/** Implementation for put and putIfAbsent */
-	final long putVal(ArrayList<Object> key, long value, boolean onlyIfAbsent)
+	final long putVal(final ArrayList<Object> key, final long value, final boolean onlyIfAbsent)
 	{
 		if (key == null || value == -1)
 		{
 			throw new NullPointerException();
 		}
-		int hash = spread(key.hashCode());
+		final int hash = spread(key.hashCode());
 		int binCount = 0;
 		for (Node[] tab = table;;)
 		{
@@ -3206,7 +3209,7 @@ public class ReverseConcurrentHashMap
 									}
 									break;
 								}
-								Node pred = e;
+								final Node pred = e;
 								if ((e = e.next) == null)
 								{
 									pred.next = new Node(hash, key, value, null);
@@ -3252,9 +3255,9 @@ public class ReverseConcurrentHashMap
 	 * value with v, conditional upon match of cv if non-null. If resulting
 	 * value is null, delete.
 	 */
-	final long replaceNode(ArrayList<Object> key, long value, long cv)
+	final long replaceNode(final ArrayList<Object> key, final long value, final long cv)
 	{
-		int hash = spread(key.hashCode());
+		final int hash = spread(key.hashCode());
 		for (Node[] tab = table;;)
 		{
 			Node f;
@@ -3283,7 +3286,7 @@ public class ReverseConcurrentHashMap
 								ArrayList<Object> ek;
 								if (e.hash == hash && ((ek = e.key) == key || (ek != null && key.equals(ek))))
 								{
-									long ev = e.val;
+									final long ev = e.val;
 									if (cv == -1 || cv == ev)
 									{
 										oldVal = ev;
@@ -3312,11 +3315,11 @@ public class ReverseConcurrentHashMap
 						else if (f instanceof TreeBin)
 						{
 							validated = true;
-							TreeBin t = (TreeBin)f;
+							final TreeBin t = (TreeBin)f;
 							TreeNode r, p;
 							if ((r = t.root) != null && (p = r.findTreeNode(hash, key, null)) != null)
 							{
-								long pv = p.val;
+								final long pv = p.val;
 								if (cv == -1 || cv == pv)
 								{
 									oldVal = pv;
@@ -3352,12 +3355,12 @@ public class ReverseConcurrentHashMap
 
 	final long sumCount()
 	{
-		CounterCell[] as = counterCells;
+		final CounterCell[] as = counterCells;
 		CounterCell a;
 		long sum = baseCount;
 		if (as != null)
 		{
-			for (CounterCell element : as)
+			for (final CounterCell element : as)
 			{
 				if ((a = element) != null)
 				{
@@ -3370,7 +3373,7 @@ public class ReverseConcurrentHashMap
 
 	static public final class EntryIterator extends BaseIterator
 	{
-		EntryIterator(Node[] tab, int index, int size, int limit, ReverseConcurrentHashMap map)
+		EntryIterator(final Node[] tab, final int index, final int size, final int limit, final ReverseConcurrentHashMap map)
 		{
 			super(tab, index, size, limit, map);
 		}
@@ -3384,8 +3387,8 @@ public class ReverseConcurrentHashMap
 			{
 				throw new NoSuchElementException();
 			}
-			ArrayList<Object> k = p.key;
-			long v = p.val;
+			final ArrayList<Object> k = p.key;
+			final long v = p.val;
 			lastReturned = p;
 			advance();
 			return new MapEntry(k, v, map);
@@ -3404,12 +3407,12 @@ public class ReverseConcurrentHashMap
 	 */
 	static public final class EntrySetView extends CollectionView
 	{
-		EntrySetView(ReverseConcurrentHashMap map)
+		EntrySetView(final ReverseConcurrentHashMap map)
 		{
 			super(map);
 		}
 
-		public boolean contains(Object o)
+		public boolean contains(final Object o)
 		{
 			ArrayList<Object> k;
 			long v, r;
@@ -3424,7 +3427,7 @@ public class ReverseConcurrentHashMap
 			Node[] t;
 			if ((t = map.table) != null)
 			{
-				Traverser it = new Traverser(t, t.length, 0, t.length);
+				final Traverser it = new Traverser(t, t.length, 0, t.length);
 				for (Node p; (p = it.advance()) != null;)
 				{
 					h += p.hashCode();
@@ -3440,9 +3443,9 @@ public class ReverseConcurrentHashMap
 		{
 			// try
 			// {
-			ReverseConcurrentHashMap m = map;
+			final ReverseConcurrentHashMap m = map;
 			Node[] t;
-			int f = (t = m.table) == null ? 0 : t.length;
+			final int f = (t = m.table) == null ? 0 : t.length;
 			return new EntryIterator(t, f, 0, f, m);
 			// }
 			// catch(Throwable e)
@@ -3461,7 +3464,7 @@ public class ReverseConcurrentHashMap
 		 * added; }
 		 */
 
-		public boolean remove(Object o)
+		public boolean remove(final Object o)
 		{
 			ArrayList<Object> k;
 			long v;
@@ -3490,7 +3493,7 @@ public class ReverseConcurrentHashMap
 
 	static public final class KeyIterator extends BaseIterator
 	{
-		KeyIterator(Node[] tab, int index, int size, int limit, ReverseConcurrentHashMap map)
+		KeyIterator(final Node[] tab, final int index, final int size, final int limit, final ReverseConcurrentHashMap map)
 		{
 			super(tab, index, size, limit, map);
 		}
@@ -3502,7 +3505,7 @@ public class ReverseConcurrentHashMap
 			{
 				throw new NoSuchElementException();
 			}
-			ArrayList<Object> k = p.key;
+			final ArrayList<Object> k = p.key;
 			lastReturned = p;
 			advance();
 			return k;
@@ -3608,7 +3611,7 @@ public class ReverseConcurrentHashMap
 	{
 		private final long value;
 
-		KeySetView(ReverseConcurrentHashMap map, long value)
+		KeySetView(final ReverseConcurrentHashMap map, final long value)
 		{ // non-public
 			super(map);
 			this.value = value;
@@ -3626,7 +3629,7 @@ public class ReverseConcurrentHashMap
 		 * @throws UnsupportedOperationException
 		 *             if no default mapped value for additions was provided
 		 */
-		public boolean add(ArrayList<Object> e)
+		public boolean add(final ArrayList<Object> e)
 		{
 			long v;
 			if ((v = value) == -1)
@@ -3642,7 +3645,7 @@ public class ReverseConcurrentHashMap
 		 * @throws NullPointerException
 		 *             if the specified key is null
 		 */
-		public boolean contains(ArrayList<Object> o)
+		public boolean contains(final ArrayList<Object> o)
 		{
 			return map.containsKey(o);
 		}
@@ -3665,8 +3668,8 @@ public class ReverseConcurrentHashMap
 		public KeyIterator iterator()
 		{
 			Node[] t;
-			ReverseConcurrentHashMap m = map;
-			int f = (t = m.table) == null ? 0 : t.length;
+			final ReverseConcurrentHashMap m = map;
+			final int f = (t = m.table) == null ? 0 : t.length;
 			return new KeyIterator(t, f, 0, f, m);
 		}
 
@@ -3681,7 +3684,7 @@ public class ReverseConcurrentHashMap
 		 * @throws NullPointerException
 		 *             if the specified key is null
 		 */
-		public boolean remove(ArrayList<Object> o)
+		public boolean remove(final ArrayList<Object> o)
 		{
 			return map.remove(o) != -1;
 		}
@@ -4483,7 +4486,7 @@ public class ReverseConcurrentHashMap
 		long val; // non-null
 		final ReverseConcurrentHashMap map;
 
-		MapEntry(ArrayList<Object> key, long val, ReverseConcurrentHashMap map)
+		MapEntry(final ArrayList<Object> key, final long val, final ReverseConcurrentHashMap map)
 		{
 			this.key = key;
 			this.val = val;
@@ -4491,7 +4494,7 @@ public class ReverseConcurrentHashMap
 		}
 
 		@Override
-		public boolean equals(Object o)
+		public boolean equals(final Object o)
 		{
 			ArrayList<Object> k;
 			long v;
@@ -4535,13 +4538,13 @@ public class ReverseConcurrentHashMap
 		 * which case the put will re-establish). We do not and cannot guarantee
 		 * more.
 		 */
-		public long setValue(long value)
+		public long setValue(final long value)
 		{
 			if (value == -1)
 			{
 				throw new NullPointerException();
 			}
-			long v = val;
+			final long v = val;
 			val = value;
 			map.put(key, value);
 			return v;
@@ -4556,7 +4559,7 @@ public class ReverseConcurrentHashMap
 
 	static public final class ValueIterator extends BaseIterator
 	{
-		ValueIterator(Node[] tab, int index, int size, int limit, ReverseConcurrentHashMap map)
+		ValueIterator(final Node[] tab, final int index, final int size, final int limit, final ReverseConcurrentHashMap map)
 		{
 			super(tab, index, size, limit, map);
 		}
@@ -4570,7 +4573,7 @@ public class ReverseConcurrentHashMap
 			{
 				throw new NoSuchElementException();
 			}
-			long v = p.val;
+			final long v = p.val;
 			lastReturned = p;
 			advance();
 			return v;
@@ -4595,12 +4598,12 @@ public class ReverseConcurrentHashMap
 	 */
 	static public final class ValuesView extends CollectionView
 	{
-		ValuesView(ReverseConcurrentHashMap map)
+		ValuesView(final ReverseConcurrentHashMap map)
 		{
 			super(map);
 		}
 
-		public final boolean add(long e)
+		public final boolean add(final long e)
 		{
 			throw new UnsupportedOperationException();
 		}
@@ -4617,7 +4620,7 @@ public class ReverseConcurrentHashMap
 		 * }
 		 */
 
-		public final boolean contains(long o)
+		public final boolean contains(final long o)
 		{
 			return map.containsValue(o);
 		}
@@ -4626,9 +4629,9 @@ public class ReverseConcurrentHashMap
 		{
 			// try
 			// {
-			ReverseConcurrentHashMap m = map;
+			final ReverseConcurrentHashMap m = map;
 			Node[] t;
-			int f = (t = m.table) == null ? 0 : t.length;
+			final int f = (t = m.table) == null ? 0 : t.length;
 			return new ValueIterator(t, f, 0, f, m);
 			// }
 			// catch(Throwable e)
@@ -4662,7 +4665,7 @@ public class ReverseConcurrentHashMap
 		final ReverseConcurrentHashMap map;
 		Node lastReturned;
 
-		BaseIterator(Node[] tab, int size, int index, int limit, ReverseConcurrentHashMap map)
+		BaseIterator(final Node[] tab, final int size, final int index, final int limit, final ReverseConcurrentHashMap map)
 		{
 			super(tab, size, index, limit);
 			this.map = map;
@@ -4700,7 +4703,7 @@ public class ReverseConcurrentHashMap
 	{
 		final ReverseConcurrentHashMap map;
 
-		CollectionView(ReverseConcurrentHashMap map)
+		CollectionView(final ReverseConcurrentHashMap map)
 		{
 			this.map = map;
 		}
@@ -4807,7 +4810,7 @@ public class ReverseConcurrentHashMap
 	{
 		volatile long value;
 
-		CounterCell(long x)
+		CounterCell(final long x)
 		{
 			value = x;
 		}
@@ -4819,14 +4822,14 @@ public class ReverseConcurrentHashMap
 	{
 		final Node[] nextTable;
 
-		ForwardingNode(Node[] tab)
+		ForwardingNode(final Node[] tab)
 		{
 			super(MOVED, null, -1, null);
 			this.nextTable = tab;
 		}
 
 		@Override
-		Node find(int h, ArrayList<Object> k)
+		Node find(final int h, final ArrayList<Object> k)
 		{
 			// loop to avoid arbitrarily deep recursion on forwarding nodes
 			outer: for (Node[] tab = nextTable;;)
@@ -4878,7 +4881,7 @@ public class ReverseConcurrentHashMap
 		volatile long val;
 		volatile Node next;
 
-		Node(int hash, ArrayList<Object> key, long val, Node next)
+		Node(final int hash, final ArrayList<Object> key, final long val, final Node next)
 		{
 			this.hash = hash;
 			this.key = key;
@@ -4887,7 +4890,7 @@ public class ReverseConcurrentHashMap
 		}
 
 		@Override
-		public final boolean equals(Object o)
+		public final boolean equals(final Object o)
 		{
 			ArrayList<Object> k;
 			long v;
@@ -4923,7 +4926,7 @@ public class ReverseConcurrentHashMap
 			return key.hashCode() ^ ((int)(val ^ (val >>> 32)));
 		}
 
-		public final long setValue(long value)
+		public final long setValue(final long value)
 		{
 			throw new UnsupportedOperationException();
 		}
@@ -4937,7 +4940,7 @@ public class ReverseConcurrentHashMap
 		/**
 		 * Virtualized support for map.get(); overridden in subclasses.
 		 */
-		Node find(int h, ArrayList<Object> k)
+		Node find(final int h, final ArrayList<Object> k)
 		{
 			Node e = this;
 			if (k != null)
@@ -4964,7 +4967,7 @@ public class ReverseConcurrentHashMap
 			super(RESERVED, null, -1, null);
 		}
 
-		Node find(int h, Object k)
+		Node find(final int h, final Object k)
 		{
 			return null;
 		}
@@ -4977,7 +4980,7 @@ public class ReverseConcurrentHashMap
 	{
 		final float loadFactor;
 
-		Segment(float lf)
+		Segment(final float lf)
 		{
 			this.loadFactor = lf;
 		}
@@ -5022,7 +5025,7 @@ public class ReverseConcurrentHashMap
 		int baseLimit; // index bound for initial table
 		final int baseSize; // initial table size
 
-		Traverser(Node[] tab, int size, int index, int limit)
+		Traverser(final Node[] tab, final int size, final int index, final int limit)
 		{
 			this.tab = tab;
 			this.baseSize = size;
@@ -5034,7 +5037,7 @@ public class ReverseConcurrentHashMap
 		/**
 		 * Saves traversal state upon encountering a forwarding node.
 		 */
-		private void pushState(Node[] t, int i, int n)
+		private void pushState(final Node[] t, final int i, final int n)
 		{
 			TableStack s = spare; // reuse if possible
 			if (s != null)
@@ -5068,7 +5071,7 @@ public class ReverseConcurrentHashMap
 				index = s.index;
 				tab = s.tab;
 				s.tab = null;
-				TableStack next = s.next;
+				final TableStack next = s.next;
 				s.next = spare; // save for reuse
 				stack = next;
 				spare = s;
@@ -5152,10 +5155,10 @@ public class ReverseConcurrentHashMap
 			try
 			{
 				U = getUnsafe();
-				Class<?> k = TreeBin.class;
+				final Class<?> k = TreeBin.class;
 				LOCKSTATE = U.objectFieldOffset(k.getDeclaredField("lockState"));
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				throw new Error(e);
 			}
@@ -5171,7 +5174,7 @@ public class ReverseConcurrentHashMap
 		/**
 		 * Creates bin with initial set of nodes headed by b.
 		 */
-		TreeBin(TreeNode b)
+		TreeBin(final TreeNode b)
 		{
 			super(TREEBIN, null, -1, null);
 			this.first = b;
@@ -5188,13 +5191,13 @@ public class ReverseConcurrentHashMap
 				}
 				else
 				{
-					ArrayList<Object> k = x.key;
-					int h = x.hash;
+					final ArrayList<Object> k = x.key;
+					final int h = x.hash;
 					Class<?> kc = null;
 					for (TreeNode p = r;;)
 					{
 						int dir, ph;
-						ArrayList<Object> pk = p.key;
+						final ArrayList<Object> pk = p.key;
 						if ((ph = p.hash) > h)
 						{
 							dir = -1;
@@ -5207,7 +5210,7 @@ public class ReverseConcurrentHashMap
 						{
 							dir = tieBreakOrder(k, pk);
 						}
-						TreeNode xp = p;
+						final TreeNode xp = p;
 						if ((p = (dir <= 0) ? p.left : p.right) == null)
 						{
 							x.parent = xp;
@@ -5262,7 +5265,8 @@ public class ReverseConcurrentHashMap
 					}
 					else
 					{
-						TreeNode sl = xpr.left, sr = xpr.right;
+						final TreeNode sl = xpr.left;
+						TreeNode sr = xpr.right;
 						if ((sr == null || !sr.red) && (sl == null || !sl.red))
 						{
 							xpr.red = true;
@@ -5312,7 +5316,8 @@ public class ReverseConcurrentHashMap
 					}
 					else
 					{
-						TreeNode sl = xpl.left, sr = xpl.right;
+						TreeNode sl = xpl.left;
+						final TreeNode sr = xpl.right;
 						if ((sl == null || !sl.red) && (sr == null || !sr.red))
 						{
 							xpl.red = true;
@@ -5424,9 +5429,9 @@ public class ReverseConcurrentHashMap
 		/**
 		 * Recursive invariant check
 		 */
-		static boolean checkInvariants(TreeNode t)
+		static boolean checkInvariants(final TreeNode t)
 		{
-			TreeNode tp = t.parent, tl = t.left, tr = t.right, tb = t.prev, tn = (TreeNode)t.next;
+			final TreeNode tp = t.parent, tl = t.left, tr = t.right, tb = t.prev, tn = (TreeNode)t.next;
 			if (tb != null && tb.next != t)
 			{
 				return false;
@@ -5462,7 +5467,7 @@ public class ReverseConcurrentHashMap
 			return true;
 		}
 
-		static TreeNode rotateLeft(TreeNode root, TreeNode p)
+		static TreeNode rotateLeft(TreeNode root, final TreeNode p)
 		{
 			TreeNode r, pp, rl;
 			if (p != null && (r = p.right) != null)
@@ -5492,7 +5497,7 @@ public class ReverseConcurrentHashMap
 		/* ------------------------------------------------------------ */
 		// Red-black tree methods, all adapted from CLR
 
-		static TreeNode rotateRight(TreeNode root, TreeNode p)
+		static TreeNode rotateRight(TreeNode root, final TreeNode p)
 		{
 			TreeNode l, pp, lr;
 			if (p != null && (l = p.left) != null)
@@ -5525,7 +5530,7 @@ public class ReverseConcurrentHashMap
 		 * insertion rule to maintain equivalence across rebalancings.
 		 * Tie-breaking further than necessary simplifies testing a bit.
 		 */
-		static int tieBreakOrder(Object a, Object b)
+		static int tieBreakOrder(final Object a, final Object b)
 		{
 			int d;
 			if (a == null || b == null || (d = a.getClass().getName().compareTo(b.getClass().getName())) == 0)
@@ -5594,7 +5599,7 @@ public class ReverseConcurrentHashMap
 		 * available.
 		 */
 		@Override
-		final Node find(int h, ArrayList<Object> k)
+		final Node find(final int h, final ArrayList<Object> k)
 		{
 			if (k != null)
 			{
@@ -5636,7 +5641,7 @@ public class ReverseConcurrentHashMap
 		 *
 		 * @return null if added
 		 */
-		final TreeNode putTreeVal(int h, ArrayList<Object> k, long v)
+		final TreeNode putTreeVal(final int h, final ArrayList<Object> k, final long v)
 		{
 			Class<?> kc = null;
 			boolean searched = false;
@@ -5675,10 +5680,11 @@ public class ReverseConcurrentHashMap
 					dir = tieBreakOrder(k, pk);
 				}
 
-				TreeNode xp = p;
+				final TreeNode xp = p;
 				if ((p = (dir <= 0) ? p.left : p.right) == null)
 				{
-					TreeNode x, f = first;
+					TreeNode x;
+					final TreeNode f = first;
 					first = x = new TreeNode(h, k, v, f, xp);
 					if (f != null)
 					{
@@ -5724,10 +5730,10 @@ public class ReverseConcurrentHashMap
 		 *
 		 * @return true if now too small, so should be untreeified
 		 */
-		final boolean removeTreeNode(TreeNode p)
+		final boolean removeTreeNode(final TreeNode p)
 		{
-			TreeNode next = (TreeNode)p.next;
-			TreeNode pred = p.prev; // unlink traversal pointers
+			final TreeNode next = (TreeNode)p.next;
+			final TreeNode pred = p.prev; // unlink traversal pointers
 			TreeNode r, rl;
 			if (pred == null)
 			{
@@ -5755,8 +5761,8 @@ public class ReverseConcurrentHashMap
 			try
 			{
 				TreeNode replacement;
-				TreeNode pl = p.left;
-				TreeNode pr = p.right;
+				final TreeNode pl = p.left;
+				final TreeNode pr = p.right;
 				if (pl != null && pr != null)
 				{
 					TreeNode s = pr, sl;
@@ -5764,11 +5770,11 @@ public class ReverseConcurrentHashMap
 					{
 						s = sl;
 					}
-					boolean c = s.red;
+					final boolean c = s.red;
 					s.red = p.red;
 					p.red = c; // swap colors
-					TreeNode sr = s.right;
-					TreeNode pp = p.parent;
+					final TreeNode sr = s.right;
+					final TreeNode pp = p.parent;
 					if (s == pr)
 					{ // p was s's direct parent
 						p.parent = s;
@@ -5776,7 +5782,7 @@ public class ReverseConcurrentHashMap
 					}
 					else
 					{
-						TreeNode sp = s.parent;
+						final TreeNode sp = s.parent;
 						if ((p.parent = sp) != null)
 						{
 							if (s == sp.left)
@@ -5837,7 +5843,7 @@ public class ReverseConcurrentHashMap
 				}
 				if (replacement != p)
 				{
-					TreeNode pp = replacement.parent = p.parent;
+					final TreeNode pp = replacement.parent = p.parent;
 					if (pp == null)
 					{
 						r = replacement;
@@ -5892,14 +5898,14 @@ public class ReverseConcurrentHashMap
 		TreeNode prev; // needed to unlink next upon deletion
 		boolean red;
 
-		TreeNode(int hash, ArrayList<Object> key, long val, Node next, TreeNode parent)
+		TreeNode(final int hash, final ArrayList<Object> key, final long val, final Node next, final TreeNode parent)
 		{
 			super(hash, key, val, next);
 			this.parent = parent;
 		}
 
 		@Override
-		Node find(int h, ArrayList<Object> k)
+		Node find(final int h, final ArrayList<Object> k)
 		{
 			return findTreeNode(h, k, null);
 		}
@@ -5908,7 +5914,7 @@ public class ReverseConcurrentHashMap
 		 * Returns the TreeNode (or null if not found) for the given key
 		 * starting at given root.
 		 */
-		final TreeNode findTreeNode(int h, ArrayList<Object> k, Class<?> kc)
+		final TreeNode findTreeNode(final int h, final ArrayList<Object> k, Class<?> kc)
 		{
 			if (k != null)
 			{
@@ -5918,7 +5924,7 @@ public class ReverseConcurrentHashMap
 					int ph, dir;
 					ArrayList<Object> pk;
 					TreeNode q;
-					TreeNode pl = p.left, pr = p.right;
+					final TreeNode pl = p.left, pr = p.right;
 					if ((ph = p.hash) > h)
 					{
 						p = pl;

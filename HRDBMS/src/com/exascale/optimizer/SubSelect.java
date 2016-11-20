@@ -10,7 +10,7 @@ public class SubSelect
 	private final OrderBy orderBy;
 	private final FetchFirst fetchFirst;
 
-	public SubSelect(SelectClause select, FromClause from, Where where, GroupBy groupBy, Having having, OrderBy orderBy, FetchFirst fetchFirst)
+	public SubSelect(final SelectClause select, final FromClause from, final Where where, final GroupBy groupBy, final Having having, final OrderBy orderBy, final FetchFirst fetchFirst)
 	{
 		this.select = select;
 		this.from = from;
@@ -104,12 +104,12 @@ public class SubSelect
 		return where;
 	}
 
-	public void setGroupBy(GroupBy groupBy)
+	public void setGroupBy(final GroupBy groupBy)
 	{
 		this.groupBy = groupBy;
 	}
 
-	public void setWhere(Where where)
+	public void setWhere(final Where where)
 	{
 		this.where = where;
 	}
