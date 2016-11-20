@@ -22,15 +22,10 @@ public class MultiHashMap<K, V> implements Serializable
 		map.clear();
 		size.set(0);
 	}
-	
-	public ConcurrentHashMap<V, V> getMap(K key)
-	{
-		return map.get(key);
-	}
 
-	public Set<V> get(K key)
+	public Set<V> get(final K key)
 	{
-		ConcurrentHashMap<V, V> retval = map.get(key);
+		final ConcurrentHashMap<V, V> retval = map.get(key);
 		if (retval == null)
 		{
 			return new HashSet<V>();
@@ -46,7 +41,12 @@ public class MultiHashMap<K, V> implements Serializable
 		return map.keySet();
 	}
 
-	public boolean multiContains(K key, V val)
+	public ConcurrentHashMap<V, V> getMap(final K key)
+	{
+		return map.get(key);
+	}
+
+	public boolean multiContains(final K key, final V val)
 	{
 		final ConcurrentHashMap<V, V> vector = map.get(key);
 
@@ -63,7 +63,7 @@ public class MultiHashMap<K, V> implements Serializable
 		return false;
 	}
 
-	public synchronized void multiPut(K key, V val)
+	public synchronized void multiPut(final K key, final V val)
 	{
 		if (map.containsKey(key))
 		{
@@ -80,13 +80,13 @@ public class MultiHashMap<K, V> implements Serializable
 		size.getAndIncrement();
 	}
 
-	public synchronized V multiRemove(K key)
+	public synchronized V multiRemove(final K key)
 	{
 		V retval = null;
 		if (map.containsKey(key))
 		{
 			final ConcurrentHashMap<V, V> vector = map.get(key);
-			for (V k : vector.keySet())
+			for (final V k : vector.keySet())
 			{
 				retval = k;
 				vector.remove(k);
@@ -104,7 +104,7 @@ public class MultiHashMap<K, V> implements Serializable
 		return retval;
 	}
 
-	public synchronized void multiRemove(K key, V val)
+	public synchronized void multiRemove(final K key, final V val)
 	{
 		if (map.containsKey(key))
 		{
@@ -120,7 +120,7 @@ public class MultiHashMap<K, V> implements Serializable
 		}
 	}
 
-	public void remove(K key)
+	public void remove(final K key)
 	{
 		map.remove(key);
 	}
@@ -130,13 +130,14 @@ public class MultiHashMap<K, V> implements Serializable
 		return map.size();
 	}
 
-	public int totalSize()
-	{
-		return size.get();
-	}
-	
+	@Override
 	public String toString()
 	{
 		return map.toString();
+	}
+
+	public int totalSize()
+	{
+		return size.get();
 	}
 }

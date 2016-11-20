@@ -7,18 +7,18 @@ import net.jpountz.lz4.LZ4FastDecompressor;
 
 public class BWTTest
 {
-	public static void main(String[] args)
+	public static void main(final String[] args)
 	{
-		ByteBuffer data = ByteBuffer.allocate(128 * 3 * 1024);
+		final ByteBuffer data = ByteBuffer.allocate(128 * 3 * 1024);
 		int i = 0;
 		while (i < 128 * 3 * 256)
 		{
 			data.putInt(i++);
 		}
 
-		LZ4Factory factory = LZ4Factory.nativeInstance();
-		LZ4Compressor fast = factory.fastCompressor();
-		LZ4Compressor hc = factory.highCompressor();
+		final LZ4Factory factory = LZ4Factory.nativeInstance();
+		final LZ4Compressor fast = factory.fastCompressor();
+		final LZ4Compressor hc = factory.highCompressor();
 		long start = System.currentTimeMillis();
 		byte[] outData = fast.compress(data.array());
 		long end = System.currentTimeMillis();
@@ -51,8 +51,8 @@ public class BWTTest
 		outData = hc.compress(data.array());
 		end = System.currentTimeMillis();
 		System.out.println("Took " + (end - start) + "ms with LZ4-HC and achieved ratio of " + (128.0 * 3 * 1024 / outData.length));
-		byte[] temp = new byte[128 * 3 * 1024];
-		BWT bwt = new BWT(0);
+		final byte[] temp = new byte[128 * 3 * 1024];
+		final BWT bwt = new BWT(0);
 		start = System.currentTimeMillis();
 		bwt.forward(new IndexedByteArray(data.array(), 0), new IndexedByteArray(temp, 0));
 		outData = fast.compress(temp);
@@ -94,7 +94,7 @@ public class BWTTest
 		end = System.currentTimeMillis();
 		System.out.println("Took " + (end - start) + "ms with LZ4-HC-BWT and achieved ratio of " + (128.0 * 3 * 1024 / outData.length));
 		outData = fast.compress(data.array());
-		LZ4FastDecompressor decomp = factory.fastDecompressor();
+		final LZ4FastDecompressor decomp = factory.fastDecompressor();
 		start = System.currentTimeMillis();
 		outData = decomp.decompress(outData, 128 * 3 * 1024);
 		end = System.currentTimeMillis();

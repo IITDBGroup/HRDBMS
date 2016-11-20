@@ -1,56 +1,62 @@
 package com.exascale.misc;
 
-public interface IteratingRLW {
-    /**
-     * @return whether there is more
-     */
-    boolean next();
+public interface IteratingRLW
+{
+	/**
+	 * @return a copy of the iterator
+	 * @throws CloneNotSupportedException
+	 *             this should not be thrown in theory
+	 */
+	IteratingRLW clone() throws CloneNotSupportedException;
 
-    /**
-     * @param index where the literal word is
-     * @return the literal word at the given index.
-     */
-    long getLiteralWordAt(int index);
+	/**
+	 * @param x
+	 *            the number of words to discard
+	 */
+	void discardFirstWords(long x);
 
-    /**
-     * @return the number of literal (non-fill) words
-     */
-    int getNumberOfLiteralWords();
+	/**
+	 * Discard x literal words (assumes that there is no running word)
+	 * 
+	 * @param x
+	 *            the number of words to discard
+	 */
+	void discardLiteralWords(long x);
 
-    /**
-     * @return the bit used for the fill bits
-     */
-    boolean getRunningBit();
+	/**
+	 * Discard all running words
+	 */
+	void discardRunningWords();
 
-    /**
-     * @return sum of getRunningLength() and getNumberOfLiteralWords()
-     */
-    long size();
+	/**
+	 * @param index
+	 *            where the literal word is
+	 * @return the literal word at the given index.
+	 */
+	long getLiteralWordAt(int index);
 
-    /**
-     * @return length of the run of fill words
-     */
-    long getRunningLength();
+	/**
+	 * @return the number of literal (non-fill) words
+	 */
+	int getNumberOfLiteralWords();
 
-    /**
-     * @param x the number of words to discard
-     */
-    void discardFirstWords(long x);
+	/**
+	 * @return the bit used for the fill bits
+	 */
+	boolean getRunningBit();
 
-    /**
-     * Discard all running words
-     */
-    void discardRunningWords();
+	/**
+	 * @return length of the run of fill words
+	 */
+	long getRunningLength();
 
-    /**
-     * Discard x literal words (assumes that there is no running word)
-     * @param x the number of words to discard
-     */
-    void discardLiteralWords(long x);
+	/**
+	 * @return whether there is more
+	 */
+	boolean next();
 
-    /**
-     * @return a copy of the iterator
-     * @throws CloneNotSupportedException this should not be thrown in theory
-     */
-    IteratingRLW clone() throws CloneNotSupportedException;
+	/**
+	 * @return sum of getRunningLength() and getNumberOfLiteralWords()
+	 */
+	long size();
 }

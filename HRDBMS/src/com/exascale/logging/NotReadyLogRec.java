@@ -4,7 +4,7 @@ import java.nio.ByteBuffer;
 
 public class NotReadyLogRec extends LogRec
 {
-	public NotReadyLogRec(long txnum)
+	public NotReadyLogRec(final long txnum)
 	{
 		super(LogRec.NOTREADY, txnum, ByteBuffer.allocate(28));
 	}

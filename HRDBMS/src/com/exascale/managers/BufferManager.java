@@ -30,7 +30,7 @@ public class BufferManager extends HRDBMSThread
 		mLength = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("num_sbms"));
 	}
 
-	public BufferManager(boolean log)
+	public BufferManager(final boolean log)
 	{
 		managers = new SubBufferManager[mLength];
 		int i = 0;
@@ -41,9 +41,9 @@ public class BufferManager extends HRDBMSThread
 		}
 	}
 
-	public static void flushAll(FileChannel fc) throws Exception
+	public static void flushAll(final FileChannel fc) throws Exception
 	{
-		ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
+		final ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
 		int i = 0;
 		while (i < mLength)
 		{
@@ -51,14 +51,14 @@ public class BufferManager extends HRDBMSThread
 			i += 32;
 		}
 
-		for (FlushThread thread : threads)
+		for (final FlushThread thread : threads)
 		{
 			thread.start();
 		}
 
 		Exception e = null;
-		HashSet<String> toForce = new HashSet<String>();
-		for (FlushThread thread : threads)
+		final HashSet<String> toForce = new HashSet<String>();
+		for (final FlushThread thread : threads)
 		{
 			thread.join();
 			if (thread.getException() != null)
@@ -69,14 +69,14 @@ public class BufferManager extends HRDBMSThread
 			toForce.addAll(thread.getToForce());
 		}
 
-		ArrayList<EndDelayThread> threads2 = new ArrayList<EndDelayThread>();
-		for (String file : toForce)
+		final ArrayList<EndDelayThread> threads2 = new ArrayList<EndDelayThread>();
+		for (final String file : toForce)
 		{
 			threads2.add(FileManager.endDelay(file));
 		}
 
 		boolean allOK = true;
-		for (EndDelayThread thread : threads2)
+		for (final EndDelayThread thread : threads2)
 		{
 			thread.join();
 			if (!thread.getOK())
@@ -96,43 +96,43 @@ public class BufferManager extends HRDBMSThread
 		}
 	}
 
-	public static Page getPage(Block b, long txnum)
+	public static Page getPage(final Block b, final long txnum)
 	{
-		int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
+		final int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
 		return managers[hash].getPage(b, txnum);
 	}
 
-	public static void invalidateFile(String fn) throws Exception
+	public static void invalidateFile(final String fn) throws Exception
 	{
-		for (SubBufferManager manager : managers)
+		for (final SubBufferManager manager : managers)
 		{
 			manager.invalidateFile(fn);
 		}
 	}
 
-	public static boolean isInterest(Block b)
+	public static boolean isInterest(final Block b)
 	{
 		if (b == null)
 		{
 			return false;
 		}
 
-		String fn = b.fileName();
-		int num = b.number();
-		List<Range> ranges = fileRanges.get(fn);
+		final String fn = b.fileName();
+		final int num = b.number();
+		final List<Range> ranges = fileRanges.get(fn);
 		int z = 0;
 		final int limit = ranges.size();
 		while (z < limit)
 		{
 			try
 			{
-				Range range = ranges.get(z++);
+				final Range range = ranges.get(z++);
 				if (range != null && num >= range.low && num <= range.high)
 				{
 					return true;
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 			}
 		}
@@ -140,161 +140,161 @@ public class BufferManager extends HRDBMSThread
 		return false;
 	}
 
-	public static ReadThread pin(Block b, long txnum) throws Exception
+	public static ReadThread pin(final Block b, final long txnum) throws Exception
 	{
-		int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
+		final int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
 		return managers[hash].pin(b, txnum);
 	}
 
-	public static ReadThread pin(Block b, long txnum, ArrayList<Integer> cols, int layoutSize) throws Exception
+	public static ReadThread pin(final Block b, final long txnum, final ArrayList<Integer> cols, final int layoutSize) throws Exception
 	{
-		int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
+		final int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
 		return managers[hash].pin(b, txnum, cols, layoutSize);
 	}
 
-	public static ReadThread pin(Block b, long txnum, ArrayList<Integer> cols, int layoutSize, int rank, int rankSize) throws Exception
+	public static ReadThread pin(final Block b, final long txnum, final ArrayList<Integer> cols, final int layoutSize, final int rank, final int rankSize) throws Exception
 	{
-		int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
+		final int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
 		return managers[hash].pin(b, txnum, cols, layoutSize, rank, rankSize);
 	}
 
-	public static ReadThread pin(Block b, long txnum, int rank, int rankSize) throws Exception
+	public static ReadThread pin(final Block b, final long txnum, final int rank, final int rankSize) throws Exception
 	{
-		int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
+		final int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
 		return managers[hash].pin(b, txnum, rank, rankSize);
 	}
 
-	public static void pin(Block b, Transaction tx, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos) throws Exception
+	public static void pin(final Block b, final Transaction tx, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos) throws Exception
 	{
-		int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
+		final int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
 		managers[hash].pin(b, tx, schema, schemaMap, fetchPos);
 	}
 
-	public static void pin(Block b, Transaction tx, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos, int rank, int rankSize) throws Exception
+	public static void pin(final Block b, final Transaction tx, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos, final int rank, final int rankSize) throws Exception
 	{
-		int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
+		final int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
 		managers[hash].pin(b, tx, schema, schemaMap, fetchPos, rank, rankSize);
 	}
 
-	public static Read3Thread pin3(Block b, long txnum) throws Exception
+	public static Read3Thread pin3(final Block b, final long txnum) throws Exception
 	{
-		int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
+		final int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
 		return managers[hash].pin3(b, txnum);
 	}
 
-	public static Read3Thread pin3(Block b, long txnum, ArrayList<Integer> cols, int layoutSize) throws Exception
+	public static Read3Thread pin3(final Block b, final long txnum, final ArrayList<Integer> cols, final int layoutSize) throws Exception
 	{
-		int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
+		final int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
 		return managers[hash].pin3(b, txnum, cols, layoutSize);
 	}
 
-	public static Read3Thread pin3(Block b, long txnum, int rank, int rankSize) throws Exception
+	public static Read3Thread pin3(final Block b, final long txnum, final int rank, final int rankSize) throws Exception
 	{
-		int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
+		final int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
 		return managers[hash].pin3(b, txnum, rank, rankSize);
 	}
 
-	public static void pin3(Block b, Transaction tx, Schema schema1, Schema schema2, Schema schema3, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos) throws Exception
+	public static void pin3(final Block b, final Transaction tx, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos) throws Exception
 	{
-		int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
+		final int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
 		managers[hash].pin3(b, tx, schema1, schema2, schema3, schemaMap, fetchPos);
 	}
 
-	public static void pin3(Block b, Transaction tx, Schema schema1, Schema schema2, Schema schema3, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos, int rank, int rankSize) throws Exception
+	public static void pin3(final Block b, final Transaction tx, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos, final int rank, final int rankSize) throws Exception
 	{
-		int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
+		final int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
 		managers[hash].pin3(b, tx, schema1, schema2, schema3, schemaMap, fetchPos, rank, rankSize);
 	}
 
-	public static ReadThread pinConsecutive(Block b, long txnum, int num, ArrayList<Integer> cols, int layoutSize, int rank, int rankSize) throws Exception
+	public static ReadThread pinConsecutive(final Block b, final long txnum, final int num, final ArrayList<Integer> cols, final int layoutSize, final int rank, final int rankSize) throws Exception
 	{
-		int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
+		final int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
 		return managers[hash].requestConsecutivePages(b, txnum, num, rank, rankSize);
 	}
 
-	public static void pinSync(Block b, long txnum) throws Exception
+	public static void pinSync(final Block b, final long txnum) throws Exception
 	{
-		int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
+		final int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
 		managers[hash].pinSync(b, txnum);
 	}
 
-	public static void pinSync(Block b, Transaction tx, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos) throws Exception
+	public static void pinSync(final Block b, final Transaction tx, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos) throws Exception
 	{
-		int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
+		final int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
 		managers[hash].pinSync(b, tx, schema, schemaMap, fetchPos);
 	}
 
-	public static void registerInterest(TableScanOperator.ReaderThread op, String fn, int low, int high)
+	public static void registerInterest(final TableScanOperator.ReaderThread op, final String fn, final int low, final int high)
 	{
-		Range range = new Range(low, high);
+		final Range range = new Range(low, high);
 		threadRanges.put(op, range);
 		fileRanges.multiPut(fn, range);
 		threadFiles.put(op, fn);
 	}
 
-	public static void request3Pages(Block[] reqBlocks, long txnum) throws Exception
+	public static void request3Pages(final Block[] reqBlocks, final long txnum) throws Exception
 	{
 		new Request3PagesThread(reqBlocks, txnum).start();
 	}
 
-	public static void request3Pages(Block[] reqBlocks, Transaction tx, Schema[] schemas, int schemaIndex, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos) throws Exception
+	public static void request3Pages(final Block[] reqBlocks, final Transaction tx, final Schema[] schemas, final int schemaIndex, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos) throws Exception
 	{
 		new Request3PagesThread2(reqBlocks, tx, schemas, schemaIndex, schemaMap, fetchPos).start();
 	}
 
-	public static void requestConsecutivePages(Block b, long txnum, int num)
+	public static void requestConsecutivePages(final Block b, final long txnum, final int num)
 	{
 		try
 		{
-			int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
+			final int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
 			managers[hash].requestConsecutivePages(b, txnum, num, 1, 1);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.warn("Error fetching pages", e);
 		}
 	}
 
-	public static RequestPagesThread requestConsecutivePages(Block firstBlock, long txnum, int num, ArrayList<Integer> cols, int layoutSize, int rank) throws Exception
+	public static RequestPagesThread requestConsecutivePages(final Block firstBlock, final long txnum, final int num, final ArrayList<Integer> cols, final int layoutSize, final int rank) throws Exception
 	{
-		RequestPagesThread retval = new RequestPagesThread(firstBlock, txnum, num, cols, layoutSize, rank);
+		final RequestPagesThread retval = new RequestPagesThread(firstBlock, txnum, num, cols, layoutSize, rank);
 		retval.start();
 		return retval;
 	}
 
-	public static void requestPage(Block b, long txnum)
+	public static void requestPage(final Block b, final long txnum)
 	{
 		try
 		{
-			int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
+			final int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
 			managers[hash].requestPage(b, txnum);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.warn("Error fetching pages", e);
 		}
 	}
 
-	public static RequestPagesThread requestPages(Block[] reqBlocks, long txnum) throws Exception
+	public static RequestPagesThread requestPages(final Block[] reqBlocks, final long txnum) throws Exception
 	{
-		RequestPagesThread retval = new RequestPagesThread(reqBlocks, txnum);
+		final RequestPagesThread retval = new RequestPagesThread(reqBlocks, txnum);
 		retval.start();
 		return retval;
 	}
 
-	public static RequestPagesThread requestPages(Block[] reqBlocks, long txnum, ArrayList<Integer> cols, int layoutSize) throws Exception
+	public static RequestPagesThread requestPages(final Block[] reqBlocks, final long txnum, final ArrayList<Integer> cols, final int layoutSize) throws Exception
 	{
-		RequestPagesThread retval = new RequestPagesThread(reqBlocks, txnum, cols, layoutSize);
+		final RequestPagesThread retval = new RequestPagesThread(reqBlocks, txnum, cols, layoutSize);
 		retval.start();
 		return retval;
 	}
 
-	public static void requestPages(Block[] reqBlocks, Transaction tx, Schema[] schemas, int schemaIndex, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos) throws Exception
+	public static void requestPages(final Block[] reqBlocks, final Transaction tx, final Schema[] schemas, final int schemaIndex, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos) throws Exception
 	{
 		new RequestPagesThread2(reqBlocks, tx, schemas, schemaIndex, schemaMap, fetchPos).start();
 	}
 
-	public static void requestPagesSync(Block[] reqBlocks, long txnum) throws Exception
+	public static void requestPagesSync(final Block[] reqBlocks, final long txnum) throws Exception
 	{
 		try
 		{
@@ -303,22 +303,22 @@ public class BufferManager extends HRDBMSThread
 				BufferManager.pin(b, txnum);
 			}
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 		}
 	}
 
-	public static void throwAwayPage(String fn, int blockNum) throws Exception
+	public static void throwAwayPage(final String fn, final int blockNum) throws Exception
 	{
-		Block b = new Block(fn, blockNum);
-		int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
+		final Block b = new Block(fn, blockNum);
+		final int hash = (b.fileName().hashCode() & 0x7FFFFFFF) % mLength;
 		managers[hash].throwAwayPage(b);
 	}
 
-	public static void unpin(Page p, long txnum)
+	public static void unpin(final Page p, final long txnum)
 	{
-		int hash = (p.block().fileName().hashCode() & 0x7FFFFFFF) % mLength;
+		final int hash = (p.block().fileName().hashCode() & 0x7FFFFFFF) % mLength;
 		managers[hash].unpin(p, txnum);
 	}
 
@@ -332,7 +332,7 @@ public class BufferManager extends HRDBMSThread
 		}
 	}
 
-	public static void unpinAll(long txnum)
+	public static void unpinAll(final long txnum)
 	{
 		int i = 0;
 		while (i < mLength)
@@ -342,7 +342,7 @@ public class BufferManager extends HRDBMSThread
 		}
 	}
 
-	public static void unpinAllExcept(long txnum, String iFn, Block inUse)
+	public static void unpinAllExcept(final long txnum, final String iFn, final Block inUse)
 	{
 		int i = 0;
 		while (i < mLength)
@@ -352,7 +352,7 @@ public class BufferManager extends HRDBMSThread
 		}
 	}
 
-	public static void unpinAllLessThan(long txnum, int lt, String tFn)
+	public static void unpinAllLessThan(final long txnum, final int lt, final String tFn)
 	{
 		int i = 0;
 		while (i < mLength)
@@ -362,7 +362,7 @@ public class BufferManager extends HRDBMSThread
 		}
 	}
 
-	public static void unpinAllLessThan(long txnum, int lt, String tFn, boolean flag)
+	public static void unpinAllLessThan(final long txnum, final int lt, final String tFn, final boolean flag)
 	{
 		int i = 0;
 		while (i < mLength)
@@ -372,7 +372,7 @@ public class BufferManager extends HRDBMSThread
 		}
 	}
 
-	public static void unpinMyDevice(long txnum, String prefix)
+	public static void unpinMyDevice(final long txnum, final String prefix)
 	{
 		int i = 0;
 		while (i < mLength)
@@ -382,22 +382,22 @@ public class BufferManager extends HRDBMSThread
 		}
 	}
 
-	public static void unregisterInterest(TableScanOperator.ReaderThread op)
+	public static void unregisterInterest(final TableScanOperator.ReaderThread op)
 	{
-		Range range = threadRanges.remove(op);
-		String fn = threadFiles.remove(op);
-		List<Range> ranges = fileRanges.get(fn);
+		final Range range = threadRanges.remove(op);
+		final String fn = threadFiles.remove(op);
+		final List<Range> ranges = fileRanges.get(fn);
 		ranges.remove(range);
 	}
 
-	public static void updateProgress(TableScanOperator.ReaderThread op, int low)
+	public static void updateProgress(final TableScanOperator.ReaderThread op, final int low)
 	{
 		threadRanges.get(op).low = low;
 	}
 
-	public static void write(Page p, int off, byte[] data)
+	public static void write(final Page p, final int off, final byte[] data)
 	{
-		int hash = (p.block().fileName().hashCode() & 0x7FFFFFFF) % mLength;
+		final int hash = (p.block().fileName().hashCode() & 0x7FFFFFFF) % mLength;
 		managers[hash].write(p, off, data);
 	}
 
@@ -413,7 +413,7 @@ public class BufferManager extends HRDBMSThread
 		private Exception e = null;
 		private HashSet<String> toForce = new HashSet<String>();
 
-		public FlushThread(int i, FileChannel fc)
+		public FlushThread(final int i, final FileChannel fc)
 		{
 			this.i = i;
 			this.fc = fc;
@@ -443,7 +443,7 @@ public class BufferManager extends HRDBMSThread
 					j++;
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				this.e = e;
 			}
@@ -455,16 +455,16 @@ public class BufferManager extends HRDBMSThread
 		public volatile int low;
 		public final int high;
 
-		public Range(int low, int high)
+		public Range(final int low, final int high)
 		{
 			this.low = low;
 			this.high = high;
 		}
 
 		@Override
-		public boolean equals(Object r)
+		public boolean equals(final Object r)
 		{
-			Range rhs = (Range)r;
+			final Range rhs = (Range)r;
 			return low == rhs.low && high == rhs.high;
 		}
 
@@ -489,12 +489,12 @@ public class BufferManager extends HRDBMSThread
 		private int inRank = -1;
 		private ArrayList<RequestPagesThread> threads;
 
-		public RequestPagesThread(ArrayList<RequestPagesThread> threads)
+		public RequestPagesThread(final ArrayList<RequestPagesThread> threads)
 		{
 			this.threads = threads;
 		}
 
-		public RequestPagesThread(Block firstBlock, long txnum, int num, ArrayList<Integer> cols, int layoutSize, int inRank)
+		public RequestPagesThread(final Block firstBlock, final long txnum, final int num, final ArrayList<Integer> cols, final int layoutSize, final int inRank)
 		{
 			this.txnum = txnum;
 			this.cols = cols;
@@ -504,13 +504,13 @@ public class BufferManager extends HRDBMSThread
 			this.inRank = inRank;
 		}
 
-		public RequestPagesThread(Block[] reqBlocks, long txnum)
+		public RequestPagesThread(final Block[] reqBlocks, final long txnum)
 		{
 			this.reqBlocks = reqBlocks;
 			this.txnum = txnum;
 		}
 
-		public RequestPagesThread(Block[] reqBlocks, long txnum, ArrayList<Integer> cols, int layoutSize)
+		public RequestPagesThread(final Block[] reqBlocks, final long txnum, final ArrayList<Integer> cols, final int layoutSize)
 		{
 			this.reqBlocks = reqBlocks;
 			this.txnum = txnum;
@@ -525,7 +525,7 @@ public class BufferManager extends HRDBMSThread
 			{
 				if (threads != null)
 				{
-					for (RequestPagesThread thread : threads)
+					for (final RequestPagesThread thread : threads)
 					{
 						if (thread != null)
 						{
@@ -540,7 +540,7 @@ public class BufferManager extends HRDBMSThread
 				{
 					try
 					{
-						int rankSize = reqBlocks.length;
+						final int rankSize = reqBlocks.length;
 						int rank = 1;
 						for (final Block b : reqBlocks)
 						{
@@ -550,7 +550,7 @@ public class BufferManager extends HRDBMSThread
 
 						return;
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.debug("", e);
 					}
@@ -568,19 +568,19 @@ public class BufferManager extends HRDBMSThread
 						rankSize = inRank + 1;
 					}
 
-					ReadThread thread = BufferManager.pinConsecutive(firstBlock, txnum, num, cols, layoutSize, inRank + 1, rankSize);
+					final ReadThread thread = BufferManager.pinConsecutive(firstBlock, txnum, num, cols, layoutSize, inRank + 1, rankSize);
 					thread.join();
 					return;
 				}
 
-				ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
-				int rankSize = reqBlocks.length;
+				final ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
+				final int rankSize = reqBlocks.length;
 				try
 				{
 					int rank = 1;
 					for (final Block b : reqBlocks)
 					{
-						ReadThread thread = BufferManager.pin(b, txnum, cols, layoutSize, rank, rankSize);
+						final ReadThread thread = BufferManager.pin(b, txnum, cols, layoutSize, rank, rankSize);
 
 						if (thread != null)
 						{
@@ -590,14 +590,14 @@ public class BufferManager extends HRDBMSThread
 						rank++;
 					}
 
-					for (ReadThread thread : threads)
+					for (final ReadThread thread : threads)
 					{
 						thread.join();
 					}
 
 					return;
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.debug("", e);
 				}
@@ -698,7 +698,7 @@ public class BufferManager extends HRDBMSThread
 				 * (Block bl : notNeeded) { tx.unpin(tx.getPage(bl)); } }
 				 */
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 			}
@@ -710,7 +710,7 @@ public class BufferManager extends HRDBMSThread
 		private final Block[] reqBlocks;
 		private final long txnum;
 
-		public Request3PagesThread(Block[] reqBlocks, long txnum)
+		public Request3PagesThread(final Block[] reqBlocks, final long txnum)
 		{
 			this.reqBlocks = reqBlocks;
 			this.txnum = txnum;
@@ -723,7 +723,7 @@ public class BufferManager extends HRDBMSThread
 			{
 				// HRDBMSWorker.logger.debug("Short BM request pages thread
 				// starting");
-				int rankSize = reqBlocks.length;
+				final int rankSize = reqBlocks.length;
 				int rank = 1;
 				for (final Block b : reqBlocks)
 				{
@@ -733,7 +733,7 @@ public class BufferManager extends HRDBMSThread
 				// HRDBMSWorker.logger.debug("Short BM request pages thread
 				// ending");
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 			}
@@ -749,7 +749,7 @@ public class BufferManager extends HRDBMSThread
 		private final ConcurrentHashMap<Integer, Schema> schemaMap;
 		private final ArrayList<Integer> fetchPos;
 
-		public Request3PagesThread2(Block[] reqBlocks, Transaction tx, Schema[] schemas, int schemaIndex, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos)
+		public Request3PagesThread2(final Block[] reqBlocks, final Transaction tx, final Schema[] schemas, final int schemaIndex, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos)
 		{
 			this.reqBlocks = reqBlocks;
 			this.tx = tx;
@@ -766,7 +766,7 @@ public class BufferManager extends HRDBMSThread
 			{
 				// HRDBMSWorker.logger.debug("Long BM request pages thread
 				// starting");
-				int rankSize = reqBlocks.length;
+				final int rankSize = reqBlocks.length;
 				int rank = 1;
 				for (final Block b : reqBlocks)
 				{
@@ -777,7 +777,7 @@ public class BufferManager extends HRDBMSThread
 				// HRDBMSWorker.logger.debug("Long BM request pages thread
 				// ending");
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 			}
@@ -793,7 +793,7 @@ public class BufferManager extends HRDBMSThread
 		private final ConcurrentHashMap<Integer, Schema> schemaMap;
 		private final ArrayList<Integer> fetchPos;
 
-		public RequestPagesThread2(Block[] reqBlocks, Transaction tx, Schema[] schemas, int schemaIndex, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos)
+		public RequestPagesThread2(final Block[] reqBlocks, final Transaction tx, final Schema[] schemas, final int schemaIndex, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos)
 		{
 			this.reqBlocks = reqBlocks;
 			this.tx = tx;
@@ -808,7 +808,7 @@ public class BufferManager extends HRDBMSThread
 		{
 			try
 			{
-				int rankSize = reqBlocks.length;
+				final int rankSize = reqBlocks.length;
 				int rank = 1;
 				for (final Block b : reqBlocks)
 				{
@@ -816,7 +816,7 @@ public class BufferManager extends HRDBMSThread
 					rank++;
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 			}

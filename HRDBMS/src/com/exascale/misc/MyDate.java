@@ -6,18 +6,18 @@ public class MyDate implements Comparable, Serializable
 {
 	private final int time;
 
-	public MyDate(int time)
+	public MyDate(final int time)
 	{
 		this.time = time;
 	}
 
-	public MyDate(int year, int month, int day)
+	public MyDate(final int year, final int month, final int day)
 	{
 		this.time = day + (month << 5) + (year << 9);
 	}
 
 	@Override
-	public int compareTo(Object r)
+	public int compareTo(final Object r)
 	{
 		final MyDate rhs = (MyDate)r;
 		if (time == rhs.time)
@@ -35,7 +35,7 @@ public class MyDate implements Comparable, Serializable
 	}
 
 	@Override
-	public boolean equals(Object r)
+	public boolean equals(final Object r)
 	{
 		if (r == null || !(r instanceof MyDate))
 		{
@@ -47,9 +47,9 @@ public class MyDate implements Comparable, Serializable
 
 	public String format()
 	{
-		int year = (time >> 9);
-		int day = (time & 0x000000000000001F);
-		int month = ((time & 0x00000000000001E0) >> 5);
+		final int year = (time >> 9);
+		final int day = (time & 0x000000000000001F);
+		final int month = ((time & 0x00000000000001E0) >> 5);
 		final StringBuilder b = new StringBuilder(10);
 		b.append(year);
 		b.append("-");

@@ -10,7 +10,7 @@ public class HeaderPage
 	private int node = -1;
 	private final Page p;
 
-	public HeaderPage(Page p, int type)
+	public HeaderPage(final Page p, final int type)
 	{
 		this.p = p;
 		if (p.block().number() == 0)
@@ -22,16 +22,16 @@ public class HeaderPage
 
 	public ArrayList<Integer> getClustering()
 	{
-		int pageSize = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("page_size"));
+		final int pageSize = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("page_size"));
 		if (pageSize < 252 * 1024)
 		{
 			return new ArrayList<Integer>();
 		}
 
 		int pos = 131072;
-		int size = p.getInt(pos);
+		final int size = p.getInt(pos);
 		pos += 4;
-		ArrayList<Integer> retval = new ArrayList<Integer>(size);
+		final ArrayList<Integer> retval = new ArrayList<Integer>(size);
 		int i = 0;
 		while (i < size)
 		{
@@ -46,9 +46,9 @@ public class HeaderPage
 	public ArrayList<Integer> getColOrder()
 	{
 		int pos = 26220;
-		int size = p.getInt(pos);
+		final int size = p.getInt(pos);
 		pos += 4;
-		ArrayList<Integer> retval = new ArrayList<Integer>(size);
+		final ArrayList<Integer> retval = new ArrayList<Integer>(size);
 		int i = 0;
 		while (i < size)
 		{
@@ -65,9 +65,9 @@ public class HeaderPage
 		return device;
 	}
 
-	public ArrayList<Byte> getHeaderBytes(int size)
+	public ArrayList<Byte> getHeaderBytes(final int size)
 	{
-		ArrayList<Byte> retval = new ArrayList<Byte>(size);
+		final ArrayList<Byte> retval = new ArrayList<Byte>(size);
 		int pos = 8;
 		int i = 0;
 		while (i < size)

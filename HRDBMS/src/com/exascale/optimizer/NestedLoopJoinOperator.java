@@ -26,7 +26,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			f.setAccessible(true);
 			unsafe = (sun.misc.Unsafe)f.get(null);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			unsafe = null;
 		}
@@ -51,26 +51,26 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	private long leftChildCard = 16;
 	private long txnum;
 
-	public NestedLoopJoinOperator(ArrayList<Filter> filters, MetaData meta)
+	public NestedLoopJoinOperator(final ArrayList<Filter> filters, final MetaData meta)
 	{
 		this.meta = meta;
 		this.addFilter(filters);
 	}
 
-	public NestedLoopJoinOperator(JoinOperator op)
+	public NestedLoopJoinOperator(final JoinOperator op)
 	{
 		this.meta = op.getMeta();
 		this.f = op.getHSHMFilter();
 	}
 
-	private NestedLoopJoinOperator(MetaData meta)
+	private NestedLoopJoinOperator(final MetaData meta)
 	{
 		this.meta = meta;
 	}
 
-	public static NestedLoopJoinOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static NestedLoopJoinOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		NestedLoopJoinOperator value = (NestedLoopJoinOperator)unsafe.allocateInstance(NestedLoopJoinOperator.class);
+		final NestedLoopJoinOperator value = (NestedLoopJoinOperator)unsafe.allocateInstance(NestedLoopJoinOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.children = OperatorUtils.deserializeALOp(in, prev);
 		value.parent = OperatorUtils.deserializeOperator(in, prev);
@@ -93,7 +93,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	}
 
 	@Override
-	public void add(Operator op) throws Exception
+	public void add(final Operator op) throws Exception
 	{
 		if (children.size() < 2)
 		{
@@ -130,7 +130,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		}
 	}
 
-	public void addFilter(ArrayList<Filter> filters)
+	public void addFilter(final ArrayList<Filter> filters)
 	{
 		if (f == null)
 		{
@@ -156,13 +156,13 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	}
 
 	@Override
-	public void addJoinCondition(ArrayList<Filter> filters)
+	public void addJoinCondition(final ArrayList<Filter> filters)
 	{
 		addFilter(filters);
 	}
 
 	@Override
-	public void addJoinCondition(String left, String right)
+	public void addJoinCondition(final String left, final String right)
 	{
 		throw new UnsupportedOperationException("NestedLoopJoinOperator does not support addJoinCondition(String, String)");
 	}
@@ -242,7 +242,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	}
 
 	@Override
-	public ArrayList<String> getJoinForChild(Operator op)
+	public ArrayList<String> getJoinForChild(final Operator op)
 	{
 		Filter x = null;
 		for (final HashMap<Filter, Filter> filters : f)
@@ -327,13 +327,13 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	}
 
 	@Override
-	public Object next(Operator op) throws Exception
+	public Object next(final Operator op) throws Exception
 	{
 		return dynamicOp.next(this);
 	}
 
 	@Override
-	public void nextAll(Operator op) throws Exception
+	public void nextAll(final Operator op) throws Exception
 	{
 		dynamicOp.nextAll(this);
 		Object o = next(op);
@@ -362,7 +362,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	}
 
 	@Override
-	public void registerParent(Operator op) throws Exception
+	public void registerParent(final Operator op) throws Exception
 	{
 		if (parent == null)
 		{
@@ -375,7 +375,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	}
 
 	@Override
-	public void removeChild(Operator op)
+	public void removeChild(final Operator op)
 	{
 		childPos = children.indexOf(op);
 		children.remove(op);
@@ -383,7 +383,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 		parent = null;
 	}
@@ -396,9 +396,9 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -427,29 +427,29 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	}
 
 	@Override
-	public void setChildPos(int pos)
+	public void setChildPos(final int pos)
 	{
 		childPos = pos;
 	}
 
-	public void setDynamicIndex(ArrayList<Index> indexes)
+	public void setDynamicIndex(final ArrayList<Index> indexes)
 	{
 		indexAccess = true;
 		this.dynamicIndexes = indexes;
 	}
 
 	@Override
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 		this.node = node;
 	}
 
 	@Override
-	public void setPlan(Plan plan)
+	public void setPlan(final Plan plan)
 	{
 	}
 
-	public boolean setRightChildCard(long card, long card2)
+	public boolean setRightChildCard(final long card, final long card2)
 	{
 		if (cardSet)
 		{
@@ -462,7 +462,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		return true;
 	}
 
-	public void setTXNum(long txnum)
+	public void setTXNum(final long txnum)
 	{
 		this.txnum = txnum;
 	}
@@ -579,15 +579,15 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	@Override
 	public void start() throws Exception
 	{
-		boolean usesHash = usesHash();
-		boolean usesSort = usesSort();
+		final boolean usesHash = usesHash();
+		final boolean usesSort = usesSort();
 
 		if (!usesHash && !usesSort)
 		{
 			dynamicOp = new ProductOperator(meta);
 			((ProductOperator)dynamicOp).setTXNum(txnum);
-			Operator left = children.get(0);
-			Operator right = children.get(1);
+			final Operator left = children.get(0);
+			final Operator right = children.get(1);
 			removeChild(left);
 			removeChild(right);
 			if (left instanceof TableScanOperator)
@@ -615,8 +615,8 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		}
 		else if (usesHash)
 		{
-			ArrayList<String> lefts = this.getJoinForChild(children.get(0));
-			ArrayList<String> rights = this.getJoinForChild(children.get(1));
+			final ArrayList<String> lefts = this.getJoinForChild(children.get(0));
+			final ArrayList<String> rights = this.getJoinForChild(children.get(1));
 			dynamicOp = new HashJoinOperator(lefts.get(0), rights.get(0), meta);
 			((HashJoinOperator)dynamicOp).setTXNum(txnum);
 			if (lefts.size() > 1)
@@ -628,8 +628,8 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 					i++;
 				}
 			}
-			Operator left = children.get(0);
-			Operator right = children.get(1);
+			final Operator left = children.get(0);
+			final Operator right = children.get(1);
 			removeChild(left);
 			removeChild(right);
 			if (left instanceof TableScanOperator)
@@ -660,8 +660,8 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		{
 			dynamicOp = new ProductOperator(meta);
 			((ProductOperator)dynamicOp).setTXNum(txnum);
-			Operator left = children.get(0);
-			Operator right = children.get(1);
+			final Operator left = children.get(0);
+			final Operator right = children.get(1);
 			removeChild(left);
 			removeChild(right);
 			if (left instanceof TableScanOperator)

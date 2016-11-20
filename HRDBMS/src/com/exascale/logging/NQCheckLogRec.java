@@ -7,7 +7,7 @@ public class NQCheckLogRec extends LogRec
 {
 	private final HashSet<Long> txs;
 
-	public NQCheckLogRec(HashSet<Long> txs)
+	public NQCheckLogRec(final HashSet<Long> txs)
 	{
 		super(LogRec.NQCHECK, -1, ByteBuffer.allocate(32 + 8 * txs.size()));
 		this.txs = txs;

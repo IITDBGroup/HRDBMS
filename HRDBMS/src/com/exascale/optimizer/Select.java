@@ -7,7 +7,7 @@ public class Select extends SQLStatement
 	private final ArrayList<CTE> ctes;
 	private final FullSelect select;
 
-	public Select(ArrayList<CTE> ctes, FullSelect select)
+	public Select(final ArrayList<CTE> ctes, final FullSelect select)
 	{
 		this.ctes = ctes;
 		this.select = select;

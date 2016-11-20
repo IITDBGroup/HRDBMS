@@ -26,19 +26,19 @@ public class HRDBMSPreparedStatement extends HRDBMSStatement implements Prepared
 {
 	private final String sql;
 
-	public HRDBMSPreparedStatement(HRDBMSConnection conn, String sql)
+	public HRDBMSPreparedStatement(final HRDBMSConnection conn, final String sql)
 	{
 		super(conn);
 		this.sql = sql;
 	}
 
-	public HRDBMSPreparedStatement(HRDBMSConnection conn, String sql, int arg1, int arg2) throws SQLFeatureNotSupportedException
+	public HRDBMSPreparedStatement(final HRDBMSConnection conn, final String sql, final int arg1, final int arg2) throws SQLFeatureNotSupportedException
 	{
 		super(conn, arg1, arg2);
 		this.sql = sql;
 	}
 
-	public HRDBMSPreparedStatement(HRDBMSConnection conn, String sql, int arg1, int arg2, int arg3) throws SQLFeatureNotSupportedException
+	public HRDBMSPreparedStatement(final HRDBMSConnection conn, final String sql, final int arg1, final int arg2, final int arg3) throws SQLFeatureNotSupportedException
 	{
 		super(conn, arg1, arg2, arg3);
 		this.sql = sql;
@@ -92,31 +92,31 @@ public class HRDBMSPreparedStatement extends HRDBMSStatement implements Prepared
 	}
 
 	@Override
-	public void setArray(int parameterIndex, Array x) throws SQLException
+	public void setArray(final int parameterIndex, final Array x) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setAsciiStream(int parameterIndex, InputStream x) throws SQLException
+	public void setAsciiStream(final int parameterIndex, final InputStream x) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setAsciiStream(int parameterIndex, InputStream x, int length) throws SQLException
+	public void setAsciiStream(final int parameterIndex, final InputStream x, final int length) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setAsciiStream(int parameterIndex, InputStream x, long length) throws SQLException
+	public void setAsciiStream(final int parameterIndex, final InputStream x, final long length) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setBigDecimal(int parameterIndex, BigDecimal x) throws SQLException
+	public void setBigDecimal(final int parameterIndex, final BigDecimal x) throws SQLException
 	{
 		if (closed)
 		{
@@ -132,97 +132,97 @@ public class HRDBMSPreparedStatement extends HRDBMSStatement implements Prepared
 	}
 
 	@Override
-	public void setBinaryStream(int parameterIndex, InputStream x) throws SQLException
+	public void setBinaryStream(final int parameterIndex, final InputStream x) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setBinaryStream(int parameterIndex, InputStream x, int length) throws SQLException
+	public void setBinaryStream(final int parameterIndex, final InputStream x, final int length) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setBinaryStream(int parameterIndex, InputStream x, long length) throws SQLException
+	public void setBinaryStream(final int parameterIndex, final InputStream x, final long length) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setBlob(int parameterIndex, Blob x) throws SQLException
+	public void setBlob(final int parameterIndex, final Blob x) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setBlob(int parameterIndex, InputStream inputStream) throws SQLException
+	public void setBlob(final int parameterIndex, final InputStream inputStream) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setBlob(int parameterIndex, InputStream inputStream, long length) throws SQLException
+	public void setBlob(final int parameterIndex, final InputStream inputStream, final long length) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setBoolean(int parameterIndex, boolean x) throws SQLException
+	public void setBoolean(final int parameterIndex, final boolean x) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setByte(int parameterIndex, byte x) throws SQLException
+	public void setByte(final int parameterIndex, final byte x) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setBytes(int parameterIndex, byte[] x) throws SQLException
+	public void setBytes(final int parameterIndex, final byte[] x) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setCharacterStream(int parameterIndex, Reader reader) throws SQLException
+	public void setCharacterStream(final int parameterIndex, final Reader reader) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setCharacterStream(int parameterIndex, Reader reader, int length) throws SQLException
+	public void setCharacterStream(final int parameterIndex, final Reader reader, final int length) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setCharacterStream(int parameterIndex, Reader reader, long length) throws SQLException
+	public void setCharacterStream(final int parameterIndex, final Reader reader, final long length) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setClob(int parameterIndex, Clob x) throws SQLException
+	public void setClob(final int parameterIndex, final Clob x) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setClob(int parameterIndex, Reader reader) throws SQLException
+	public void setClob(final int parameterIndex, final Reader reader) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setClob(int parameterIndex, Reader reader, long length) throws SQLException
+	public void setClob(final int parameterIndex, final Reader reader, final long length) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setDate(int parameterIndex, Date x) throws SQLException
+	public void setDate(final int parameterIndex, final Date x) throws SQLException
 	{
 		if (closed)
 		{
@@ -238,13 +238,13 @@ public class HRDBMSPreparedStatement extends HRDBMSStatement implements Prepared
 	}
 
 	@Override
-	public void setDate(int parameterIndex, Date x, Calendar cal) throws SQLException
+	public void setDate(final int parameterIndex, final Date x, final Calendar cal) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setDouble(int parameterIndex, double x) throws SQLException
+	public void setDouble(final int parameterIndex, final double x) throws SQLException
 	{
 		if (closed)
 		{
@@ -260,7 +260,7 @@ public class HRDBMSPreparedStatement extends HRDBMSStatement implements Prepared
 	}
 
 	@Override
-	public void setFloat(int parameterIndex, float x) throws SQLException
+	public void setFloat(final int parameterIndex, final float x) throws SQLException
 	{
 		if (closed)
 		{
@@ -276,7 +276,7 @@ public class HRDBMSPreparedStatement extends HRDBMSStatement implements Prepared
 	}
 
 	@Override
-	public void setInt(int parameterIndex, int x) throws SQLException
+	public void setInt(final int parameterIndex, final int x) throws SQLException
 	{
 		if (closed)
 		{
@@ -292,7 +292,7 @@ public class HRDBMSPreparedStatement extends HRDBMSStatement implements Prepared
 	}
 
 	@Override
-	public void setLong(int parameterIndex, long x) throws SQLException
+	public void setLong(final int parameterIndex, final long x) throws SQLException
 	{
 		if (closed)
 		{
@@ -308,43 +308,43 @@ public class HRDBMSPreparedStatement extends HRDBMSStatement implements Prepared
 	}
 
 	@Override
-	public void setNCharacterStream(int parameterIndex, Reader value) throws SQLException
+	public void setNCharacterStream(final int parameterIndex, final Reader value) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setNCharacterStream(int parameterIndex, Reader value, long length) throws SQLException
+	public void setNCharacterStream(final int parameterIndex, final Reader value, final long length) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setNClob(int parameterIndex, NClob value) throws SQLException
+	public void setNClob(final int parameterIndex, final NClob value) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setNClob(int parameterIndex, Reader reader) throws SQLException
+	public void setNClob(final int parameterIndex, final Reader reader) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setNClob(int parameterIndex, Reader reader, long length) throws SQLException
+	public void setNClob(final int parameterIndex, final Reader reader, final long length) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setNString(int parameterIndex, String value) throws SQLException
+	public void setNString(final int parameterIndex, final String value) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setNull(int parameterIndex, int sqlType) throws SQLException
+	public void setNull(final int parameterIndex, final int sqlType) throws SQLException
 	{
 		if (closed)
 		{
@@ -360,13 +360,13 @@ public class HRDBMSPreparedStatement extends HRDBMSStatement implements Prepared
 	}
 
 	@Override
-	public void setNull(int parameterIndex, int sqlType, String typeName) throws SQLException
+	public void setNull(final int parameterIndex, final int sqlType, final String typeName) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setObject(int parameterIndex, Object x) throws SQLException
+	public void setObject(final int parameterIndex, final Object x) throws SQLException
 	{
 		if (closed)
 		{
@@ -382,31 +382,31 @@ public class HRDBMSPreparedStatement extends HRDBMSStatement implements Prepared
 	}
 
 	@Override
-	public void setObject(int parameterIndex, Object x, int targetSqlType) throws SQLException
+	public void setObject(final int parameterIndex, final Object x, final int targetSqlType) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setObject(int parameterIndex, Object x, int targetSqlType, int scaleOrLength) throws SQLException
+	public void setObject(final int parameterIndex, final Object x, final int targetSqlType, final int scaleOrLength) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setRef(int parameterIndex, Ref x) throws SQLException
+	public void setRef(final int parameterIndex, final Ref x) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setRowId(int parameterIndex, RowId x) throws SQLException
+	public void setRowId(final int parameterIndex, final RowId x) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setShort(int parameterIndex, short x) throws SQLException
+	public void setShort(final int parameterIndex, final short x) throws SQLException
 	{
 		if (closed)
 		{
@@ -422,13 +422,13 @@ public class HRDBMSPreparedStatement extends HRDBMSStatement implements Prepared
 	}
 
 	@Override
-	public void setSQLXML(int parameterIndex, SQLXML xmlObject) throws SQLException
+	public void setSQLXML(final int parameterIndex, final SQLXML xmlObject) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setString(int parameterIndex, String x) throws SQLException
+	public void setString(final int parameterIndex, final String x) throws SQLException
 	{
 		if (closed)
 		{
@@ -444,37 +444,37 @@ public class HRDBMSPreparedStatement extends HRDBMSStatement implements Prepared
 	}
 
 	@Override
-	public void setTime(int parameterIndex, Time x) throws SQLException
+	public void setTime(final int parameterIndex, final Time x) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setTime(int parameterIndex, Time x, Calendar cal) throws SQLException
+	public void setTime(final int parameterIndex, final Time x, final Calendar cal) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setTimestamp(int parameterIndex, Timestamp x) throws SQLException
+	public void setTimestamp(final int parameterIndex, final Timestamp x) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setTimestamp(int parameterIndex, Timestamp x, Calendar cal) throws SQLException
+	public void setTimestamp(final int parameterIndex, final Timestamp x, final Calendar cal) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setUnicodeStream(int parameterIndex, InputStream x, int length) throws SQLException
+	public void setUnicodeStream(final int parameterIndex, final InputStream x, final int length) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public void setURL(int parameterIndex, URL x) throws SQLException
+	public void setURL(final int parameterIndex, final URL x) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}

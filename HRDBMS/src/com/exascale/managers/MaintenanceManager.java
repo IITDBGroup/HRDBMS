@@ -18,7 +18,7 @@ public class MaintenanceManager extends HRDBMSThread
 	public static ConcurrentHashMap<String, String> failed = new ConcurrentHashMap<String, String>(16, 0.75f, 6 * ResourceManager.cpus);
 	public static ConcurrentHashMap<String, String> reorgFailed = new ConcurrentHashMap<String, String>(16, 0.75f, 6 * ResourceManager.cpus);
 	private transient static long busyTill = -1;
-	private final MetaData meta = new MetaData();
+	// private final MetaData meta = new MetaData();
 
 	public MaintenanceManager() throws Exception
 	{
@@ -26,13 +26,13 @@ public class MaintenanceManager extends HRDBMSThread
 		{
 			Class.forName("com.exascale.client.HRDBMSDriver");
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.error("Unable to load HRDBMS driver!");
 			System.exit(1);
 		}
 
-		long now = System.currentTimeMillis();
+		final long now = System.currentTimeMillis();
 		schedule(new InitRunstatsTask(), now + 24 * 60 * 60 * 1000);
 		schedule(new InitReorgTask(), now + 24 * 60 * 60 * 1000);
 
@@ -42,14 +42,14 @@ public class MaintenanceManager extends HRDBMSThread
 		}
 	}
 
-	public static synchronized void schedule(Task task, long executionTime)
+	public static synchronized void schedule(final Task task, final long executionTime)
 	{
 		task.setExecuteTime(executionTime);
 		task.setEstimatedTime(0);
 		tasks.add(task);
 	}
 
-	public static void schedule(Task task, long executionTime, long estimatedRunTime)
+	public static void schedule(final Task task, final long executionTime, final long estimatedRunTime)
 	{
 		schedule(task, -1, estimatedRunTime, executionTime + estimatedRunTime);
 		// task.setExecuteTime(executionTime);
@@ -57,20 +57,20 @@ public class MaintenanceManager extends HRDBMSThread
 		// tasks.add(task);
 	}
 
-	public static synchronized void schedule(Task task, long executionTime, long estimatedRunTime, long targetCompletionTime)
+	public static synchronized void schedule(final Task task, final long executionTime, final long estimatedRunTime, final long targetCompletionTime)
 	{
 		task.setEstimatedTime(estimatedRunTime);
 		// figure out how to schedule it
 		// find a free spot
 		// compress things to make a free spot
 		// next depth
-		ArrayList<ArrayList<Task>> depths = buildDepths();
+		final ArrayList<ArrayList<Task>> depths = buildDepths();
 		long time = -1;
 		int i = 0;
 		final int size = depths.size();
 		while (i < size)
 		{
-			Free free = largeCloseFree(targetCompletionTime - estimatedRunTime, targetCompletionTime, depths.get(i));
+			final Free free = largeCloseFree(targetCompletionTime - estimatedRunTime, targetCompletionTime, depths.get(i));
 			if (free != null)
 			{
 				time = free.center(estimatedRunTime);
@@ -79,7 +79,7 @@ public class MaintenanceManager extends HRDBMSThread
 				return;
 			}
 
-			long total = totalPriorFree(depths.get(i), targetCompletionTime);
+			final long total = totalPriorFree(depths.get(i), targetCompletionTime);
 			if (total >= estimatedRunTime)
 			{
 				makeSpace(depths.get(i), targetCompletionTime - estimatedRunTime, targetCompletionTime);
@@ -100,14 +100,14 @@ public class MaintenanceManager extends HRDBMSThread
 
 	private static ArrayList<ArrayList<Task>> buildDepths()
 	{
-		ArrayList<ArrayList<Task>> retval = new ArrayList<ArrayList<Task>>();
+		final ArrayList<ArrayList<Task>> retval = new ArrayList<ArrayList<Task>>();
 		ArrayList<Task> level = new ArrayList<Task>();
 		ArrayList<Task> queued = new ArrayList<Task>();
 		ArrayList<Task> list = new ArrayList<Task>(tasks);
 		while (true)
 		{
 			Collections.sort(list, new ScheduleComparator());
-			for (Task task : list)
+			for (final Task task : list)
 			{
 				if (level.size() == 0)
 				{
@@ -115,7 +115,7 @@ public class MaintenanceManager extends HRDBMSThread
 				}
 				else
 				{
-					Task prev = level.get(level.size() - 1);
+					final Task prev = level.get(level.size() - 1);
 					if (task.executeTime() >= (prev.executeTime() + prev.getEstimate()))
 					{
 						level.add(task);
@@ -141,7 +141,7 @@ public class MaintenanceManager extends HRDBMSThread
 		}
 	}
 
-	private static Free largeCloseFree(long startRequest, long endRequest, ArrayList<Task> layer)
+	private static Free largeCloseFree(final long startRequest, final long endRequest, final ArrayList<Task> layer)
 	{
 		// start is inside a task or outside
 		int i = 0;
@@ -158,9 +158,9 @@ public class MaintenanceManager extends HRDBMSThread
 				{
 					while (i > 0)
 					{
-						Task prev = layer.get(i - 1);
-						long end = task.executeTime();
-						long start = prev.executeTime() + prev.getEstimate();
+						final Task prev = layer.get(i - 1);
+						final long end = task.executeTime();
+						final long start = prev.executeTime() + prev.getEstimate();
 						if ((end - start) >= (endRequest - startRequest))
 						{
 							return new Free(start, end);
@@ -178,8 +178,8 @@ public class MaintenanceManager extends HRDBMSThread
 				// start is not in a task
 				if (i == 0)
 				{
-					long end = Math.min(endRequest, task.executeTime());
-					long start = end - (endRequest - startRequest);
+					final long end = Math.min(endRequest, task.executeTime());
+					final long start = end - (endRequest - startRequest);
 
 					if ((busyTill == -1 || start >= busyTill) && start >= System.currentTimeMillis())
 					{
@@ -227,10 +227,10 @@ public class MaintenanceManager extends HRDBMSThread
 		return new Free(startRequest, endRequest);
 	}
 
-	private static void makeSpace(ArrayList<Task> layer, long start, long end)
+	private static void makeSpace(final ArrayList<Task> layer, final long start, final long end)
 	{
 		int i = 0;
-		for (Task task : layer)
+		for (final Task task : layer)
 		{
 			if (task.executeTime() >= end)
 			{
@@ -239,13 +239,13 @@ public class MaintenanceManager extends HRDBMSThread
 		}
 
 		i--;
-		int last = i;
+		final int last = i;
 		while (i >= 0)
 		{
 			Task task = layer.get(i);
 			if (i != 0)
 			{
-				Task prev = layer.get(i - 1);
+				final Task prev = layer.get(i - 1);
 				task.setExecuteTime(prev.executeTime() + prev.getEstimate());
 			}
 			else
@@ -257,7 +257,7 @@ public class MaintenanceManager extends HRDBMSThread
 			while (j <= last)
 			{
 				task = layer.get(j);
-				Task prev = layer.get(j - 1);
+				final Task prev = layer.get(j - 1);
 				task.setExecuteTime(prev.executeTime() + prev.getEstimate());
 				j++;
 			}
@@ -271,19 +271,19 @@ public class MaintenanceManager extends HRDBMSThread
 			}
 		}
 
-		for (Task task : layer)
+		for (final Task task : layer)
 		{
 			tasks.remove(task);
 			tasks.add(task);
 		}
 	}
 
-	private static long totalPriorFree(ArrayList<Task> layer, long endTime)
+	private static long totalPriorFree(final ArrayList<Task> layer, final long endTime)
 	{
 		int i = 0;
 		long retval = 0;
 		Task prev = null;
-		for (Task task : layer)
+		for (final Task task : layer)
 		{
 			if (i == 0)
 			{
@@ -321,8 +321,8 @@ public class MaintenanceManager extends HRDBMSThread
 
 		if (i == layer.size())
 		{
-			Task last = layer.get(i - 1);
-			long remaining = endTime - (last.executeTime() + last.getEstimate());
+			final Task last = layer.get(i - 1);
+			final long remaining = endTime - (last.executeTime() + last.getEstimate());
 			if (remaining > 0)
 			{
 				retval += remaining;
@@ -362,7 +362,7 @@ public class MaintenanceManager extends HRDBMSThread
 				synchronized (MaintenanceManager.class)
 				{
 					tasks.remove(task);
-					long newBusy = System.currentTimeMillis() + task.getEstimate();
+					final long newBusy = System.currentTimeMillis() + task.getEstimate();
 					if (newBusy > busyTill)
 					{
 						busyTill = newBusy;
@@ -371,7 +371,7 @@ public class MaintenanceManager extends HRDBMSThread
 					task.run();
 				}
 			}
-			catch (InterruptedException e)
+			catch (final InterruptedException e)
 			{
 			}
 		}
@@ -382,15 +382,15 @@ public class MaintenanceManager extends HRDBMSThread
 		private final long start;
 		private final long end;
 
-		public Free(long start, long end)
+		public Free(final long start, final long end)
 		{
 			this.start = start;
 			this.end = end;
 		}
 
-		public long center(long estimate)
+		public long center(final long estimate)
 		{
-			long free = end - start - estimate;
+			final long free = end - start - estimate;
 			return start + (free >> 1);
 		}
 	}
@@ -398,10 +398,10 @@ public class MaintenanceManager extends HRDBMSThread
 	private static class ScheduleComparator implements Comparator<Task>
 	{
 		@Override
-		public int compare(Task lhs, Task rhs)
+		public int compare(final Task lhs, final Task rhs)
 		{
-			long lhsEnd = lhs.executeTime() + lhs.getEstimate();
-			long rhsEnd = rhs.executeTime() + rhs.getEstimate();
+			final long lhsEnd = lhs.executeTime() + lhs.getEstimate();
+			final long rhsEnd = rhs.executeTime() + rhs.getEstimate();
 
 			if (lhsEnd < rhsEnd)
 			{

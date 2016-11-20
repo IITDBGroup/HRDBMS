@@ -2,7 +2,7 @@ package com.exascale.misc;
 
 public final class DateParser
 {
-	public static final MyDate parse(String s)
+	public static final MyDate parse(final String s)
 	{
 		final String year = s.substring(0, 4);
 		final String month = s.substring(5, 7);

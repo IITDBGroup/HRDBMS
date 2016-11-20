@@ -1,6 +1,5 @@
 package com.exascale.misc;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
@@ -23,9 +22,9 @@ public class VHJOMultiHashMap<K, V>
 		size.set(0);
 	}
 
-	public List<V> get(K key)
+	public List<V> get(final K key)
 	{
-		Vector<V> retval = map.get(key);
+		final Vector<V> retval = map.get(key);
 		if (retval == null)
 		{
 			return new Vector<V>();
@@ -35,17 +34,8 @@ public class VHJOMultiHashMap<K, V>
 			return retval;
 		}
 	}
-	
-	public void multiRemove(K key)
-	{
-		Vector<V> removed = map.remove(key);
-		if (removed != null)
-		{
-			size.addAndGet(-removed.size());
-		}
-	}
 
-	public void multiPut(K key, V val)
+	public void multiPut(final K key, final V val)
 	{
 		if (map.containsKey(key))
 		{
@@ -64,6 +54,15 @@ public class VHJOMultiHashMap<K, V>
 		}
 
 		size.getAndIncrement();
+	}
+
+	public void multiRemove(final K key)
+	{
+		final Vector<V> removed = map.remove(key);
+		if (removed != null)
+		{
+			size.addAndGet(-removed.size());
+		}
 	}
 
 	public int size()

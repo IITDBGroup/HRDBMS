@@ -40,7 +40,7 @@ public class DeleteLogRec extends LogRec
 
 	private final CharsetEncoder ce = cs.newEncoder();
 
-	public DeleteLogRec(long txnum, Block b, int off, byte[] before, byte[] after) throws Exception
+	public DeleteLogRec(final long txnum, final Block b, final int off, final byte[] before, final byte[] after) throws Exception
 	{
 		super(LogRec.DELETE, txnum, ByteBuffer.allocate(32 + b.toString().getBytes(StandardCharsets.UTF_8).length + 8 + 2 * before.length));
 
@@ -57,11 +57,11 @@ public class DeleteLogRec extends LogRec
 		final ByteBuffer buff = this.buffer();
 		buff.position(28);
 		// byte[] bbytes = b.toString().getBytes("UTF-8");
-		String string = b.toString();
-		byte[] ba = new byte[string.length() << 2];
-		char[] value = (char[])unsafe.getObject(string, offset);
-		int blen = ((sun.nio.cs.ArrayEncoder)ce).encode(value, 0, value.length, ba);
-		byte[] bbytes = Arrays.copyOf(ba, blen);
+		final String string = b.toString();
+		final byte[] ba = new byte[string.length() << 2];
+		final char[] value = (char[])unsafe.getObject(string, offset);
+		final int blen = ((sun.nio.cs.ArrayEncoder)ce).encode(value, 0, value.length, ba);
+		final byte[] bbytes = Arrays.copyOf(ba, blen);
 		buff.putInt(blen);
 		try
 		{
@@ -113,7 +113,7 @@ public class DeleteLogRec extends LogRec
 		// " for a length of " + before.length);
 		if (b.number() < 0)
 		{
-			Exception e = new Exception("Negative block number requested: " + b.number());
+			final Exception e = new Exception("Negative block number requested: " + b.number());
 			HRDBMSWorker.logger.debug("", e);
 		}
 
@@ -136,7 +136,7 @@ public class DeleteLogRec extends LogRec
 		// " for a length of " + before.length);
 		if (b.number() < 0)
 		{
-			Exception e = new Exception("Negative block number requested: " + b.number());
+			final Exception e = new Exception("Negative block number requested: " + b.number());
 			HRDBMSWorker.logger.debug("", e);
 		}
 

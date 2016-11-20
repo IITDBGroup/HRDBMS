@@ -17,7 +17,7 @@ public class StartCoordsThread extends HRDBMSThread
 		this.description = "Start Coordinators";
 	}
 
-	public static boolean isThisMyIpAddress(InetAddress addr)
+	public static boolean isThisMyIpAddress(final InetAddress addr)
 	{
 		// Check if the address is a valid special local or loop back
 		if (addr.isAnyLocalAddress() || addr.isLoopbackAddress())
@@ -128,6 +128,8 @@ public class StartCoordsThread extends HRDBMSThread
 
 				line = in.readLine();
 			}
+
+			in.close();
 			HRDBMSWorker.logger.debug("Start Coordinator is about to terminate.");
 			HRDBMSWorker.getThreadList().remove(index);
 			HRDBMSWorker.terminateThread(index);

@@ -32,7 +32,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 	static
 	{
 		factory = LZ4Factory.nativeInstance();
-		LZ4Compressor comp = factory.fastCompressor();
+		final LZ4Compressor comp = factory.fastCompressor();
 		int slot = comp.maxCompressedLength(Page.BLOCK_SIZE);
 		if (slot % 4096 != 0)
 		{
@@ -50,7 +50,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 				cache.put(ByteBuffer.allocate((int)SLOT_SIZE));
 				cache2.put(ByteBuffer.allocate((int)SLOT_SIZE * 3));
 			}
-			catch (InterruptedException e)
+			catch (final InterruptedException e)
 			{
 			}
 			i++;
@@ -64,18 +64,18 @@ public class SparseCompressedFileChannel2 extends FileChannel
 	private final ScalableStampedReentrantRWLock lock = new ScalableStampedReentrantRWLock();
 	private final ConcurrentHashMap<Integer, Integer> writeLocks = new ConcurrentHashMap<Integer, Integer>();
 
-	public SparseCompressedFileChannel2(File file) throws IOException
+	public SparseCompressedFileChannel2(final File file) throws IOException
 	{
 		this.fn = file.getAbsolutePath();
 		int high = -1;
-		int split = this.fn.lastIndexOf('/');
-		String dir = this.fn.substring(0, split);
-		String relative = this.fn.substring(split + 1);
+		final int split = this.fn.lastIndexOf('/');
+		final String dir = this.fn.substring(0, split);
+		final String relative = this.fn.substring(split + 1);
 
 		final ArrayList<Path> files = new ArrayList<Path>();
-		File dirFile = new File(dir);
-		File[] files3 = dirFile.listFiles();
-		for (File f : files3)
+		final File dirFile = new File(dir);
+		final File[] files3 = dirFile.listFiles();
+		for (final File f : files3)
 		{
 			if (f.getName().startsWith(relative + "."))
 			{
@@ -83,23 +83,23 @@ public class SparseCompressedFileChannel2 extends FileChannel
 			}
 		}
 
-		for (Path file2 : files)
+		for (final Path file2 : files)
 		{
-			String s = file2.toString().substring(file2.toString().lastIndexOf('.') + 1);
-			int suffix = Integer.parseInt(s);
+			final String s = file2.toString().substring(file2.toString().lastIndexOf('.') + 1);
+			final int suffix = Integer.parseInt(s);
 			if (suffix > high)
 			{
 				high = suffix;
 			}
 		}
 
-		File theFile = new File(this.fn + ".0");
+		final File theFile = new File(this.fn + ".0");
 
 		if (high == -1)
 		{
 			length = 0;
 			// HRDBMSWorker.logger.debug("Opened " + fn + " with length = 0");
-			RandomAccessFile raf = new RandomAccessFile(this.fn + ".0", "rw");
+			final RandomAccessFile raf = new RandomAccessFile(this.fn + ".0", "rw");
 			theFC = raf.getChannel();
 			// theFC = FileChannel.open(theFile.toPath(),
 			// StandardOpenOption.SPARSE, StandardOpenOption.CREATE,
@@ -115,16 +115,16 @@ public class SparseCompressedFileChannel2 extends FileChannel
 		// theFC = FileChannel.open(theFile.toPath(), StandardOpenOption.SPARSE,
 		// StandardOpenOption.CREATE, StandardOpenOption.READ,
 		// StandardOpenOption.WRITE);
-		RandomAccessFile raf = new RandomAccessFile(this.fn + ".0", "rw");
+		final RandomAccessFile raf = new RandomAccessFile(this.fn + ".0", "rw");
 		theFC = raf.getChannel();
 	}
 
-	public SparseCompressedFileChannel2(File file, int suffix) throws IOException
+	public SparseCompressedFileChannel2(final File file, final int suffix) throws IOException
 	{
 		this(file);
 	}
 
-	private static ByteBuffer allocateByteBuffer(int size)
+	private static ByteBuffer allocateByteBuffer(final int size)
 	{
 		if (size == SLOT_SIZE)
 		{
@@ -147,7 +147,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 		}
 		else
 		{
-			ByteBuffer retval = cache2.poll();
+			final ByteBuffer retval = cache2.poll();
 			if (retval != null)
 			{
 				if (retval.capacity() >= size)
@@ -162,7 +162,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 		}
 	}
 
-	private static void deallocateByteBuffer(ByteBuffer bb)
+	private static void deallocateByteBuffer(final ByteBuffer bb)
 	{
 		if (bb.capacity() == SLOT_SIZE)
 		{
@@ -175,16 +175,16 @@ public class SparseCompressedFileChannel2 extends FileChannel
 		}
 	}
 
-	public void copyFromFC(SparseCompressedFileChannel2 source) throws Exception
+	public void copyFromFC(final SparseCompressedFileChannel2 source) throws Exception
 	{
 		lock.writeLock().lock();
 		try
 		{
 			truncate(0);
 			BufferManager.invalidateFile(fn);
-			long size = source.size();
+			final long size = source.size();
 			long offset = 0;
-			ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
+			final ByteBuffer bb = ByteBuffer.allocate(Page.BLOCK_SIZE);
 			while (offset < size)
 			{
 				bb.position(0);
@@ -199,7 +199,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 			FileManager.removeFile(source.fn);
 			BufferManager.invalidateFile(source.fn);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			lock.writeLock().unlock();
 			HRDBMSWorker.logger.debug("", e);
@@ -209,19 +209,19 @@ public class SparseCompressedFileChannel2 extends FileChannel
 	}
 
 	@Override
-	public void force(boolean arg0) throws IOException
+	public void force(final boolean arg0) throws IOException
 	{
 		theFC.force(false);
 	}
 
 	@Override
-	public FileLock lock(long arg0, long arg1, boolean arg2) throws IOException
+	public FileLock lock(final long arg0, final long arg1, final boolean arg2) throws IOException
 	{
 		throw new IOException("Unsupported operation");
 	}
 
 	@Override
-	public MappedByteBuffer map(MapMode arg0, long arg1, long arg2) throws IOException
+	public MappedByteBuffer map(final MapMode arg0, final long arg1, final long arg2) throws IOException
 	{
 		throw new IOException("Unsupported operation");
 	}
@@ -233,24 +233,24 @@ public class SparseCompressedFileChannel2 extends FileChannel
 	}
 
 	@Override
-	public FileChannel position(long arg0) throws IOException
+	public FileChannel position(final long arg0) throws IOException
 	{
 		throw new IOException("Unsupported operation");
 	}
 
 	@Override
-	public int read(ByteBuffer arg0) throws IOException
+	public int read(final ByteBuffer arg0) throws IOException
 	{
 		throw new IOException("Unsupported operation");
 	}
 
 	@Override
-	public int read(ByteBuffer arg0, long arg1) throws IOException
+	public int read(final ByteBuffer arg0, final long arg1) throws IOException
 	{
 		try
 		{
 			boolean closed = false;
-			int page = (int)(arg1 / Page.BLOCK_SIZE);
+			final int page = (int)(arg1 / Page.BLOCK_SIZE);
 			lock.readLock().lock();
 			try
 			{
@@ -264,11 +264,11 @@ public class SparseCompressedFileChannel2 extends FileChannel
 				{
 					// full block
 					// LZ4SafeDecompressor decomp = factory.safeDecompressor();
-					LZ4FastDecompressor decomp = factory.fastDecompressor();
+					final LZ4FastDecompressor decomp = factory.fastDecompressor();
 					// int mod = block & 31;
-					FileChannel fc = theFC;
+					final FileChannel fc = theFC;
 
-					ByteBuffer bb = allocateByteBuffer((int)SLOT_SIZE);
+					final ByteBuffer bb = allocateByteBuffer((int)SLOT_SIZE);
 					fc.read(bb, page * SLOT_SIZE);
 					// bb.position(bb.array().length - (int)SLOT_SIZE);
 					// int size = bb.getInt();
@@ -279,7 +279,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 						decomp.decompress(bb.array(), 0, arg0.array(), 0, Page.BLOCK_SIZE);
 						deallocateByteBuffer(bb);
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						// HRDBMSWorker.logger.debug("Block = " + block);
 						HRDBMSWorker.logger.debug("FC = " + fc);
@@ -293,7 +293,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				if (!closed)
 				{
@@ -309,19 +309,19 @@ public class SparseCompressedFileChannel2 extends FileChannel
 			lock.readLock().unlock();
 			return arg0.capacity();
 		}
-		catch (Throwable e)
+		catch (final Throwable e)
 		{
 			HRDBMSWorker.logger.error("", e);
 			throw new IOException(e);
 		}
 	}
 
-	public int read(ByteBuffer arg0, long arg1, ArrayList<Integer> cols, int layoutSize) throws IOException
+	public int read(final ByteBuffer arg0, final long arg1, final ArrayList<Integer> cols, final int layoutSize) throws IOException
 	{
 		try
 		{
 			boolean closed = false;
-			int page = (int)(arg1 / Page.BLOCK_SIZE);
+			final int page = (int)(arg1 / Page.BLOCK_SIZE);
 
 			lock.readLock().lock();
 			try
@@ -336,11 +336,11 @@ public class SparseCompressedFileChannel2 extends FileChannel
 				{
 					// full block
 					// LZ4SafeDecompressor decomp = factory.safeDecompressor();
-					LZ4FastDecompressor decomp = factory.fastDecompressor();
+					final LZ4FastDecompressor decomp = factory.fastDecompressor();
 					// int mod = block & 31;
-					FileChannel fc = theFC;
+					final FileChannel fc = theFC;
 
-					ByteBuffer bb = allocateByteBuffer((int)SLOT_SIZE);
+					final ByteBuffer bb = allocateByteBuffer((int)SLOT_SIZE);
 					fc.read(bb, page * SLOT_SIZE);
 					// bb.position(bb.array().length - (int)SLOT_SIZE);
 					// int size = bb.getInt();
@@ -351,7 +351,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 						decomp.decompress(bb.array(), 0, arg0.array(), 0, Page.BLOCK_SIZE);
 						deallocateByteBuffer(bb);
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						// HRDBMSWorker.logger.debug("Block = " + block);
 						HRDBMSWorker.logger.debug("FC = " + fc);
@@ -365,7 +365,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				if (!closed)
 				{
@@ -381,7 +381,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 			lock.readLock().unlock();
 			return arg0.capacity();
 		}
-		catch (Throwable e)
+		catch (final Throwable e)
 		{
 			HRDBMSWorker.logger.error("", e);
 			throw new IOException(e);
@@ -389,20 +389,20 @@ public class SparseCompressedFileChannel2 extends FileChannel
 	}
 
 	@Override
-	public long read(ByteBuffer[] arg0, int arg1, int arg2) throws IOException
+	public long read(final ByteBuffer[] arg0, final int arg1, final int arg2) throws IOException
 	{
 		throw new IOException("Unsupported operation");
 	}
 
-	public int read(ByteBuffer[] bbs, long arg1) throws IOException
+	public int read(final ByteBuffer[] bbs, final long arg1) throws IOException
 	{
 		Exception ex = null;
-		int page = (int)(arg1 / Page.BLOCK_SIZE);
+		final int page = (int)(arg1 / Page.BLOCK_SIZE);
 		try
 		{
 			lock.readLock().lock();
 			int i = 0;
-			int num = bbs.length;
+			final int num = bbs.length;
 			while (i < num)
 			{
 				while (writeLocks.putIfAbsent(page + i, page + i) != null)
@@ -413,10 +413,10 @@ public class SparseCompressedFileChannel2 extends FileChannel
 				i++;
 			}
 
-			LZ4FastDecompressor decomp = factory.fastDecompressor();
-			FileChannel fc = theFC;
+			final LZ4FastDecompressor decomp = factory.fastDecompressor();
+			final FileChannel fc = theFC;
 
-			ByteBuffer bb = allocateByteBuffer((int)SLOT_SIZE * num);
+			final ByteBuffer bb = allocateByteBuffer((int)SLOT_SIZE * num);
 			fc.read(bb, page * SLOT_SIZE);
 
 			i = 0;
@@ -427,7 +427,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 			}
 			deallocateByteBuffer(bb);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			ex = e;
 		}
@@ -448,7 +448,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 		return bbs[0].capacity();
 	}
 
-	public int read3(ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3, long arg1) throws IOException
+	public int read3(final ByteBuffer bb, final ByteBuffer bb2, final ByteBuffer bb3, final long arg1) throws IOException
 	{
 		read(bb, arg1);
 		read(bb2, arg1 + Page.BLOCK_SIZE);
@@ -456,7 +456,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 		return bb.capacity();
 	}
 
-	public int read3(ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3, long arg1, ArrayList<Integer> cols, int layoutSize) throws IOException
+	public int read3(final ByteBuffer bb, final ByteBuffer bb2, final ByteBuffer bb3, final long arg1, final ArrayList<Integer> cols, final int layoutSize) throws IOException
 	{
 		read(bb, arg1, cols, layoutSize);
 		read(bb2, arg1 + Page.BLOCK_SIZE, cols, layoutSize);
@@ -468,35 +468,35 @@ public class SparseCompressedFileChannel2 extends FileChannel
 	public long size() throws IOException
 	{
 		lock.readLock().lock();
-		long retval = length * 1L * Page.BLOCK_SIZE;
+		final long retval = length * 1L * Page.BLOCK_SIZE;
 		lock.readLock().unlock();
 		return retval;
 	}
 
 	@Override
-	public long transferFrom(ReadableByteChannel arg0, long arg1, long arg2) throws IOException
+	public long transferFrom(final ReadableByteChannel arg0, final long arg1, final long arg2) throws IOException
 	{
 		throw new IOException("Unsupported operation");
 	}
 
 	@Override
-	public long transferTo(long arg0, long arg1, WritableByteChannel arg2) throws IOException
+	public long transferTo(final long arg0, final long arg1, final WritableByteChannel arg2) throws IOException
 	{
 		throw new IOException("Unsupported operation");
 	}
 
 	@Override
-	public FileChannel truncate(long arg0) throws IOException
+	public FileChannel truncate(final long arg0) throws IOException
 	{
 		lock.writeLock().lock();
 		try
 		{
 			pos = arg0;
-			int desiredPages = (int)(arg0 / Page.BLOCK_SIZE);
+			final int desiredPages = (int)(arg0 / Page.BLOCK_SIZE);
 			theFC.truncate(desiredPages * SLOT_SIZE);
 			length = desiredPages;
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			lock.writeLock().unlock();
 			HRDBMSWorker.logger.debug("", e);
@@ -507,13 +507,13 @@ public class SparseCompressedFileChannel2 extends FileChannel
 	}
 
 	@Override
-	public FileLock tryLock(long arg0, long arg1, boolean arg2) throws IOException
+	public FileLock tryLock(final long arg0, final long arg1, final boolean arg2) throws IOException
 	{
 		throw new IOException("Unsupported operation");
 	}
 
 	@Override
-	public int write(ByteBuffer arg0) throws IOException
+	public int write(final ByteBuffer arg0) throws IOException
 	{
 		// lock.writeLock().lock();
 		try
@@ -521,7 +521,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 			write(arg0, pos);
 			pos += arg0.capacity();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			// lock.writeLock().unlock();
 			HRDBMSWorker.logger.debug("", e);
@@ -532,7 +532,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 	}
 
 	@Override
-	public int write(ByteBuffer arg0, long arg1) throws IOException
+	public int write(final ByteBuffer arg0, final long arg1) throws IOException
 	{
 		// multi-page write
 		if (arg0.capacity() > Page.BLOCK_SIZE)
@@ -540,8 +540,8 @@ public class SparseCompressedFileChannel2 extends FileChannel
 			return multiPageWrite(arg0, arg1);
 		}
 
-		boolean closed = false;
-		int page = (int)(arg1 / Page.BLOCK_SIZE);
+		final boolean closed = false;
+		final int page = (int)(arg1 / Page.BLOCK_SIZE);
 
 		lock.readLock().lock();
 
@@ -563,14 +563,14 @@ public class SparseCompressedFileChannel2 extends FileChannel
 			{
 				// compress it
 				// LZ4Compressor comp = factory.highCompressor();
-				LZ4Compressor comp = factory.fastCompressor();
+				final LZ4Compressor comp = factory.fastCompressor();
 				// write it
 				// fc.truncate(0);
 				// int oldSize = (int)fc.size();
-				byte[] data = comp.compress(arg0.array());
+				final byte[] data = comp.compress(arg0.array());
 
-				ByteBuffer bb = ByteBuffer.wrap(data);
-				FileChannel fc = theFC;
+				final ByteBuffer bb = ByteBuffer.wrap(data);
+				final FileChannel fc = theFC;
 				fc.write(bb, page * SLOT_SIZE);
 
 				writeLocks.remove(page);
@@ -587,11 +587,11 @@ public class SparseCompressedFileChannel2 extends FileChannel
 			{
 				// need to write to new block
 				{
-					LZ4Compressor comp = factory.fastCompressor();
-					byte[] data = comp.compress(arg0.array());
+					final LZ4Compressor comp = factory.fastCompressor();
+					final byte[] data = comp.compress(arg0.array());
 
-					ByteBuffer bb = ByteBuffer.wrap(data);
-					FileChannel fc = theFC;
+					final ByteBuffer bb = ByteBuffer.wrap(data);
+					final FileChannel fc = theFC;
 					// Process p = Runtime.getRuntime().exec("dd if=/dev/zero
 					// of=" + this.fn + ".0 bs=" + SLOT_SIZE + " count=0 seek="
 					// + (page+1));
@@ -614,7 +614,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 				return arg0.capacity();
 			}
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			if (!closed)
@@ -627,18 +627,18 @@ public class SparseCompressedFileChannel2 extends FileChannel
 	}
 
 	@Override
-	public long write(ByteBuffer[] arg0, int arg1, int arg2) throws IOException
+	public long write(final ByteBuffer[] arg0, final int arg1, final int arg2) throws IOException
 	{
 		throw new IOException("Unsupported operation");
 	}
 
-	private int multiPageWrite(ByteBuffer input, long offset) throws IOException
+	private int multiPageWrite(final ByteBuffer input, final long offset) throws IOException
 	{
 		try
 		{
-			int pages = input.capacity() / Page.BLOCK_SIZE;
+			final int pages = input.capacity() / Page.BLOCK_SIZE;
 			int i = 0;
-			byte[] data = new byte[Page.BLOCK_SIZE];
+			final byte[] data = new byte[Page.BLOCK_SIZE];
 			ByteBuffer bb;
 			while (i < pages)
 			{
@@ -648,7 +648,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 				i++;
 			}
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			throw e;

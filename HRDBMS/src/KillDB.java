@@ -6,7 +6,7 @@ import java.util.StringTokenizer;
 
 public class KillDB
 {
-	public static void main(String[] args)
+	public static void main(final String[] args)
 	{
 		try
 		{
@@ -28,7 +28,7 @@ public class KillDB
 					System.exit(1);
 				}
 
-				String cmd = "pkill -9 java";
+				final String cmd = "pkill -9 java";
 
 				// if (type.equals("C"))
 				{
@@ -89,6 +89,8 @@ public class KillDB
 
 				line = in.readLine();
 			}
+
+			in.close();
 		}
 		catch (final Exception e)
 		{

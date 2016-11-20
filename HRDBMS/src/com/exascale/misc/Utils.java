@@ -2,7 +2,7 @@ package com.exascale.misc;
 
 public final class Utils
 {
-	public static final double parseDouble(String s)
+	public static final double parseDouble(final String s)
 	{
 		final int p = s.indexOf('.');
 		if (p < 0)
@@ -43,7 +43,7 @@ public final class Utils
 		return retval;
 	}
 
-	public static final int parseInt(String s)
+	public static final int parseInt(final String s)
 	{
 		boolean negative = false;
 		int offset = 0;
@@ -73,7 +73,7 @@ public final class Utils
 		return result;
 	}
 
-	public static final long parseLong(String s)
+	public static final long parseLong(final String s)
 	{
 		boolean negative = false;
 		int offset = 0;

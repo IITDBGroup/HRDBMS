@@ -4,7 +4,7 @@ public class FetchFirst
 {
 	private final long num;
 
-	public FetchFirst(long num)
+	public FetchFirst(final long num)
 	{
 		this.num = num;
 	}

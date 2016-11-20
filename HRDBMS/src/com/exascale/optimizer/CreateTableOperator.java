@@ -31,7 +31,7 @@ public final class CreateTableOperator implements Operator, Serializable
 	private ArrayList<Integer> colOrder;
 	private ArrayList<Integer> organization;
 
-	public CreateTableOperator(String schema, String table, ArrayList<ColDef> defs, ArrayList<String> pks, String nodeGroupExp, String nodeExp, String deviceExp, MetaData meta)
+	public CreateTableOperator(final String schema, final String table, final ArrayList<ColDef> defs, final ArrayList<String> pks, final String nodeGroupExp, final String nodeExp, final String deviceExp, final MetaData meta)
 	{
 		this.meta = meta;
 		this.schema = schema;
@@ -44,7 +44,7 @@ public final class CreateTableOperator implements Operator, Serializable
 		type = 0;
 	}
 
-	public CreateTableOperator(String schema, String table, ArrayList<ColDef> defs, ArrayList<String> pks, String nodeGroupExp, String nodeExp, String deviceExp, MetaData meta, int type)
+	public CreateTableOperator(final String schema, final String table, final ArrayList<ColDef> defs, final ArrayList<String> pks, final String nodeGroupExp, final String nodeExp, final String deviceExp, final MetaData meta, final int type)
 	{
 		this.meta = meta;
 		this.schema = schema;
@@ -57,7 +57,7 @@ public final class CreateTableOperator implements Operator, Serializable
 		this.type = type;
 	}
 
-	public CreateTableOperator(String schema, String table, ArrayList<ColDef> defs, ArrayList<String> pks, String nodeGroupExp, String nodeExp, String deviceExp, MetaData meta, int type, ArrayList<Integer> colOrder)
+	public CreateTableOperator(final String schema, final String table, final ArrayList<ColDef> defs, final ArrayList<String> pks, final String nodeGroupExp, final String nodeExp, final String deviceExp, final MetaData meta, final int type, final ArrayList<Integer> colOrder)
 	{
 		this.meta = meta;
 		this.schema = schema;
@@ -72,7 +72,7 @@ public final class CreateTableOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void add(Operator op) throws Exception
+	public void add(final Operator op) throws Exception
 	{
 		throw new Exception("CreateTableOperator does not support children");
 	}
@@ -147,13 +147,13 @@ public final class CreateTableOperator implements Operator, Serializable
 
 	@Override
 	// @?Parallel
-	public Object next(Operator op) throws Exception
+	public Object next(final Operator op) throws Exception
 	{
 		if (!done)
 		{
 			done = true;
 			MetaData.tableMetaLock.lock();
-			meta.createTable(schema, table, defs, pks, tx, nodeGroupExp, nodeExp, deviceExp, type, colOrder, organization);
+			MetaData.createTable(schema, table, defs, pks, tx, nodeGroupExp, nodeExp, deviceExp, type, colOrder, organization);
 			MetaData.tableTypeCache.remove(schema + "." + table);
 			MetaData.tableExistenceCache.remove(schema + "." + table);
 			MetaData.tableMetaLock.unlock();
@@ -166,7 +166,7 @@ public final class CreateTableOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void nextAll(Operator op) throws Exception
+	public void nextAll(final Operator op) throws Exception
 	{
 	}
 
@@ -189,18 +189,18 @@ public final class CreateTableOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void registerParent(Operator op) throws Exception
+	public void registerParent(final Operator op) throws Exception
 	{
 		throw new Exception("CreateTableOperator does not support parents.");
 	}
 
 	@Override
-	public void removeChild(Operator op)
+	public void removeChild(final Operator op)
 	{
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 	}
 
@@ -211,33 +211,33 @@ public final class CreateTableOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		throw new Exception("Trying to serialize a create table operator");
 	}
 
 	@Override
-	public void setChildPos(int pos)
+	public void setChildPos(final int pos)
 	{
 	}
 
 	@Override
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 		this.node = node;
 	}
 
-	public void setOrganization(ArrayList<Integer> organization)
+	public void setOrganization(final ArrayList<Integer> organization)
 	{
 		this.organization = organization;
 	}
 
 	@Override
-	public void setPlan(Plan plan)
+	public void setPlan(final Plan plan)
 	{
 	}
 
-	public void setTransaction(Transaction tx)
+	public void setTransaction(final Transaction tx)
 	{
 		this.tx = tx;
 	}

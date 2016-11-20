@@ -1,6 +1,5 @@
 package com.exascale.misc;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.Vector;
@@ -24,9 +23,9 @@ public class LOMultiHashMap<K, V>
 		size.set(0);
 	}
 
-	public List<V> get(K key)
+	public List<V> get(final K key)
 	{
-		Vector<V> retval = map.get(key);
+		final Vector<V> retval = map.get(key);
 		if (retval == null)
 		{
 			return new Vector<V>();
@@ -42,7 +41,7 @@ public class LOMultiHashMap<K, V>
 		return map.keySet();
 	}
 
-	public void multiPut(K key, V val)
+	public void multiPut(final K key, final V val)
 	{
 		Vector<V> vector = map.get(key);
 		if (vector != null)

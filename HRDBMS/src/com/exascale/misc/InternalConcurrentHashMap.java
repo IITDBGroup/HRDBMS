@@ -1,6 +1,5 @@
 package com.exascale.misc;
 
-import java.io.ObjectStreamField;
 import java.lang.reflect.Field;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
@@ -503,7 +502,10 @@ public class InternalConcurrentHashMap
 	static final int NCPU = Runtime.getRuntime().availableProcessors();
 
 	/** For serialization compatibility. */
-	private static final ObjectStreamField[] serialPersistentFields = { new ObjectStreamField("segments", Segment[].class), new ObjectStreamField("segmentMask", Integer.TYPE), new ObjectStreamField("segmentShift", Integer.TYPE) };
+	// private static final ObjectStreamField[] serialPersistentFields = { new
+	// ObjectStreamField("segments", Segment[].class), new
+	// ObjectStreamField("segmentMask", Integer.TYPE), new
+	// ObjectStreamField("segmentShift", Integer.TYPE) };
 
 	/* ---------------- Nodes -------------- */
 
@@ -1319,23 +1321,23 @@ public class InternalConcurrentHashMap
 		try
 		{
 			U = getUnsafe();
-			Class<?> k = InternalConcurrentHashMap.class;
+			final Class<?> k = InternalConcurrentHashMap.class;
 			SIZECTL = U.objectFieldOffset(k.getDeclaredField("sizeCtl"));
 			TRANSFERINDEX = U.objectFieldOffset(k.getDeclaredField("transferIndex"));
 			BASECOUNT = U.objectFieldOffset(k.getDeclaredField("baseCount"));
 			CELLSBUSY = U.objectFieldOffset(k.getDeclaredField("cellsBusy"));
-			Class<?> ck = CounterCell.class;
+			final Class<?> ck = CounterCell.class;
 			CELLVALUE = U.objectFieldOffset(ck.getDeclaredField("value"));
-			Class<?> ak = Node[].class;
+			final Class<?> ak = Node[].class;
 			ABASE = U.arrayBaseOffset(ak);
-			int scale = U.arrayIndexScale(ak);
+			final int scale = U.arrayIndexScale(ak);
 			if ((scale & (scale - 1)) != 0)
 			{
 				throw new Error("data type scale not a power of two");
 			}
 			ASHIFT = 31 - Integer.numberOfLeadingZeros(scale);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			throw new Error(e);
 		}
@@ -1408,13 +1410,13 @@ public class InternalConcurrentHashMap
 	 * @throws IllegalArgumentException
 	 *             if the initial capacity of elements is negative
 	 */
-	public InternalConcurrentHashMap(int initialCapacity)
+	public InternalConcurrentHashMap(final int initialCapacity)
 	{
 		if (initialCapacity < 0)
 		{
 			throw new IllegalArgumentException();
 		}
-		int cap = ((initialCapacity >= (MAXIMUM_CAPACITY >>> 1)) ? MAXIMUM_CAPACITY : tableSizeFor(initialCapacity + (initialCapacity >>> 1) + 1));
+		final int cap = ((initialCapacity >= (MAXIMUM_CAPACITY >>> 1)) ? MAXIMUM_CAPACITY : tableSizeFor(initialCapacity + (initialCapacity >>> 1) + 1));
 		this.sizeCtl = cap;
 	}
 
@@ -1446,7 +1448,7 @@ public class InternalConcurrentHashMap
 	 *
 	 * @since 1.6
 	 */
-	public InternalConcurrentHashMap(int initialCapacity, float loadFactor)
+	public InternalConcurrentHashMap(final int initialCapacity, final float loadFactor)
 	{
 		this(initialCapacity, loadFactor, 1);
 	}
@@ -1473,7 +1475,7 @@ public class InternalConcurrentHashMap
 	 *             if the initial capacity is negative or the load factor or
 	 *             concurrencyLevel are nonpositive
 	 */
-	public InternalConcurrentHashMap(int initialCapacity, float loadFactor, int concurrencyLevel)
+	public InternalConcurrentHashMap(int initialCapacity, final float loadFactor, final int concurrencyLevel)
 	{
 		if (!(loadFactor > 0.0f) || initialCapacity < 0 || concurrencyLevel <= 0)
 		{
@@ -1483,8 +1485,8 @@ public class InternalConcurrentHashMap
 		{
 			initialCapacity = concurrencyLevel; // as estimated threads
 		}
-		long size = (long)(1.0 + initialCapacity / loadFactor);
-		int cap = (size >= MAXIMUM_CAPACITY) ? MAXIMUM_CAPACITY : tableSizeFor((int)size);
+		final long size = (long)(1.0 + initialCapacity / loadFactor);
+		final int cap = (size >= MAXIMUM_CAPACITY) ? MAXIMUM_CAPACITY : tableSizeFor((int)size);
 		this.sizeCtl = cap;
 	}
 
@@ -1506,7 +1508,7 @@ public class InternalConcurrentHashMap
 	 * Returns a power of two table size for the given desired capacity. See
 	 * Hackers Delight, sec 3.2
 	 */
-	private static final int tableSizeFor(int c)
+	private static final int tableSizeFor(final int c)
 	{
 		int n = c - 1;
 		n |= n >>> 1;
@@ -1517,7 +1519,7 @@ public class InternalConcurrentHashMap
 		return (n < 0) ? 1 : (n >= MAXIMUM_CAPACITY) ? MAXIMUM_CAPACITY : n + 1;
 	}
 
-	static final boolean casTabAt(Node[] tab, int i, Node c, Node v)
+	static final boolean casTabAt(final Node[] tab, final int i, final Node c, final Node v)
 	{
 		return U.compareAndSwapObject(tab, ((long)i << ASHIFT) + ABASE, c, v);
 	}
@@ -1526,7 +1528,7 @@ public class InternalConcurrentHashMap
 	 * Returns x's Class if it is of the form "class C implements Comparable
 	 * <C>", else null.
 	 */
-	static Class<?> comparableClassFor(Object x)
+	static Class<?> comparableClassFor(final Object x)
 	{
 		if (x instanceof Comparable)
 		{
@@ -1540,7 +1542,7 @@ public class InternalConcurrentHashMap
 			}
 			if ((ts = c.getGenericInterfaces()) != null)
 			{
-				for (Type element : ts)
+				for (final Type element : ts)
 				{
 					if (((t = element) instanceof ParameterizedType) && ((p = (ParameterizedType)t).getRawType() == Comparable.class) && (as = p.getActualTypeArguments()) != null && as.length == 1 && as[0] == c)
 					{
@@ -1558,7 +1560,7 @@ public class InternalConcurrentHashMap
 	 */
 	@SuppressWarnings({ "rawtypes", "unchecked" })
 	// for cast to Comparable
-	static int compareComparables(Class<?> kc, Object k, Object x)
+	static int compareComparables(final Class<?> kc, final Object k, final Object x)
 	{
 		return (x == null || x.getClass() != kc ? 0 : ((Comparable)k).compareTo(x));
 	}
@@ -1567,7 +1569,7 @@ public class InternalConcurrentHashMap
 	 * Returns the stamp bits for resizing a table of size n. Must be negative
 	 * when shifted left by RESIZE_STAMP_SHIFT.
 	 */
-	static final int resizeStamp(int n)
+	static final int resizeStamp(final int n)
 	{
 		return Integer.numberOfLeadingZeros(n) | (1 << (RESIZE_STAMP_BITS - 1));
 	}
@@ -1586,7 +1588,7 @@ public class InternalConcurrentHashMap
 	 * m.entrySet()) putVal(e.getKey(), e.getValue(), false); }
 	 */
 
-	static final void setTabAt(Node[] tab, int i, Node v)
+	static final void setTabAt(final Node[] tab, final int i, final Node v)
 	{
 		U.putObjectVolatile(tab, ((long)i << ASHIFT) + ABASE, v);
 	}
@@ -1605,13 +1607,13 @@ public class InternalConcurrentHashMap
 	 * incorporate impact of the highest bits that would otherwise never be used
 	 * in index calculations because of table bounds.
 	 */
-	static final int spread(int h)
+	static final int spread(final int h)
 	{
 		return (h ^ (h >>> 16)) & HASH_BITS;
 	}
 
 	@SuppressWarnings("unchecked")
-	static final Node tabAt(Node[] tab, int i)
+	static final Node tabAt(final Node[] tab, final int i)
 	{
 		return (Node)U.getObjectVolatile(tab, ((long)i << ASHIFT) + ABASE);
 	}
@@ -1619,12 +1621,12 @@ public class InternalConcurrentHashMap
 	/**
 	 * Returns a list on non-TreeNodes replacing those in given list.
 	 */
-	static Node untreeify(Node b)
+	static Node untreeify(final Node b)
 	{
 		Node hd = null, tl = null;
 		for (Node q = b; q != null; q = q.next)
 		{
-			Node p = new Node(q.hash, q.key, q.val, null);
+			final Node p = new Node(q.hash, q.key, q.val, null);
 			if (tl == null)
 			{
 				hd = p;
@@ -1651,7 +1653,7 @@ public class InternalConcurrentHashMap
 		while (tab != null && i < tab.length)
 		{
 			int fh;
-			Node f = tabAt(tab, i);
+			final Node f = tabAt(tab, i);
 			if (f == null)
 			{
 				++i;
@@ -1704,7 +1706,7 @@ public class InternalConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified value is null
 	 */
-	public boolean contains(Object value)
+	public boolean contains(final Object value)
 	{
 		return containsValue(value);
 	}
@@ -1720,7 +1722,7 @@ public class InternalConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key is null
 	 */
-	public boolean containsKey(long key)
+	public boolean containsKey(final long key)
 	{
 		return get(key) != null;
 	}
@@ -1737,7 +1739,7 @@ public class InternalConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified value is null
 	 */
-	public boolean containsValue(Object value)
+	public boolean containsValue(final Object value)
 	{
 		if (value == null)
 		{
@@ -1746,7 +1748,7 @@ public class InternalConcurrentHashMap
 		Node[] t;
 		if ((t = table) != null)
 		{
-			Traverser it = new Traverser(t, t.length, 0, t.length);
+			final Traverser it = new Traverser(t, t.length, 0, t.length);
 			for (Node p; (p = it.advance()) != null;)
 			{
 				ArrayList<Object> v;
@@ -1768,7 +1770,7 @@ public class InternalConcurrentHashMap
 	public Enumeration<ArrayList<Object>> elements()
 	{
 		Node[] t;
-		int f = (t = table) == null ? 0 : t.length;
+		final int f = (t = table) == null ? 0 : t.length;
 		return new ValueIterator(t, f, 0, f, this);
 	}
 
@@ -1815,7 +1817,7 @@ public class InternalConcurrentHashMap
 	 * @return {@code true} if the specified object is equal to this map
 	 */
 	@Override
-	public boolean equals(Object o)
+	public boolean equals(final Object o)
 	{
 		if (o != this)
 		{
@@ -1823,23 +1825,23 @@ public class InternalConcurrentHashMap
 			{
 				return false;
 			}
-			InternalConcurrentHashMap m = (InternalConcurrentHashMap)o;
+			final InternalConcurrentHashMap m = (InternalConcurrentHashMap)o;
 			Node[] t;
-			int f = (t = table) == null ? 0 : t.length;
-			Traverser it = new Traverser(t, f, 0, f);
+			final int f = (t = table) == null ? 0 : t.length;
+			final Traverser it = new Traverser(t, f, 0, f);
 			for (Node p; (p = it.advance()) != null;)
 			{
-				ArrayList<Object> val = p.val;
-				Object v = m.get(p.key);
+				final ArrayList<Object> val = p.val;
+				final Object v = m.get(p.key);
 				if (v == null || (v != val && !v.equals(val)))
 				{
 					return false;
 				}
 			}
-			EntryIterator iter = m.entrySet().iterator();
+			final EntryIterator iter = m.entrySet().iterator();
 			while (iter.hasNext())
 			{
-				MapEntry e = iter.next();
+				final MapEntry e = iter.next();
 				long mk;
 				ArrayList<Object> mv, v;
 				if ((mk = e.getKey()) == -1 || (mv = e.getValue()) == null || (v = get(mk)) == null || (mv != v && !mv.equals(v)))
@@ -1915,14 +1917,14 @@ public class InternalConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key is null
 	 */
-	public ArrayList<Object> get(long key)
+	public ArrayList<Object> get(final long key)
 	{
 		// try
 		// {
 		Node[] tab;
 		Node e, p;
 		int n, eh;
-		int h = spread((int)(key ^ (key >>> 32)));
+		final int h = spread((int)(key ^ (key >>> 32)));
 		if ((tab = table) != null && (n = tab.length) > 0 && (e = tabAt(tab, (n - 1) & h)) != null)
 		{
 			if ((eh = e.hash) == h)
@@ -1966,7 +1968,7 @@ public class InternalConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key is null
 	 */
-	public ArrayList<Object> getOrDefault(long key, ArrayList<Object> defaultValue)
+	public ArrayList<Object> getOrDefault(final long key, final ArrayList<Object> defaultValue)
 	{
 		ArrayList<Object> v;
 		return (v = get(key)) == null ? defaultValue : v;
@@ -1986,7 +1988,7 @@ public class InternalConcurrentHashMap
 		Node[] t;
 		if ((t = table) != null)
 		{
-			Traverser it = new Traverser(t, t.length, 0, t.length);
+			final Traverser it = new Traverser(t, t.length, 0, t.length);
 			for (Node p; (p = it.advance()) != null;)
 			{
 				h += ((int)(p.key ^ (p.key >>> 32))) ^ p.val.hashCode();
@@ -2257,7 +2259,7 @@ public class InternalConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the mappedValue is null
 	 */
-	public KeySetView keySet(ArrayList<Object> mappedValue)
+	public KeySetView keySet(final ArrayList<Object> mappedValue)
 	{
 		if (mappedValue == null)
 		{
@@ -2288,7 +2290,7 @@ public class InternalConcurrentHashMap
 	 */
 	public long mappingCount()
 	{
-		long n = sumCount();
+		final long n = sumCount();
 		return (n < 0L) ? 0L : n; // ignore transient negative values
 	}
 
@@ -2311,7 +2313,7 @@ public class InternalConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key or value is null
 	 */
-	public ArrayList<Object> put(long key, ArrayList<Object> value)
+	public ArrayList<Object> put(final long key, final ArrayList<Object> value)
 	{
 		// try
 		// {
@@ -2367,7 +2369,7 @@ public class InternalConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key or value is null
 	 */
-	public ArrayList<Object> putIfAbsent(long key, ArrayList<Object> value)
+	public ArrayList<Object> putIfAbsent(final long key, final ArrayList<Object> value)
 	{
 		// try
 		// {
@@ -2393,7 +2395,7 @@ public class InternalConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key is null
 	 */
-	public ArrayList<Object> remove(long key)
+	public ArrayList<Object> remove(final long key)
 	{
 		// try
 		// {
@@ -2412,7 +2414,7 @@ public class InternalConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key is null
 	 */
-	public boolean remove(long key, ArrayList<Object> value)
+	public boolean remove(final long key, final ArrayList<Object> value)
 	{
 		if (key == -1)
 		{
@@ -2431,7 +2433,7 @@ public class InternalConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key or value is null
 	 */
-	public ArrayList<Object> replace(long key, ArrayList<Object> value)
+	public ArrayList<Object> replace(final long key, final ArrayList<Object> value)
 	{
 		// try
 		// {
@@ -2454,7 +2456,7 @@ public class InternalConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if any of the arguments are null
 	 */
-	public boolean replace(long key, ArrayList<Object> oldValue, ArrayList<Object> newValue)
+	public boolean replace(final long key, final ArrayList<Object> oldValue, final ArrayList<Object> newValue)
 	{
 		if (key == -1 || oldValue == null || newValue == null)
 		{
@@ -2470,7 +2472,7 @@ public class InternalConcurrentHashMap
 	{
 		// try
 		// {
-		long n = sumCount();
+		final long n = sumCount();
 		return ((n < 0L) ? 0 : (n > Integer.MAX_VALUE) ? Integer.MAX_VALUE : (int)n);
 		// }
 		// catch(Throwable e)
@@ -2494,17 +2496,17 @@ public class InternalConcurrentHashMap
 	public String toString()
 	{
 		Node[] t;
-		int f = (t = table) == null ? 0 : t.length;
-		Traverser it = new Traverser(t, f, 0, f);
-		StringBuilder sb = new StringBuilder();
+		final int f = (t = table) == null ? 0 : t.length;
+		final Traverser it = new Traverser(t, f, 0, f);
+		final StringBuilder sb = new StringBuilder();
 		sb.append('{');
 		Node p;
 		if ((p = it.advance()) != null)
 		{
 			for (;;)
 			{
-				long k = p.key;
-				ArrayList<Object> v = p.val;
+				final long k = p.key;
+				final ArrayList<Object> v = p.val;
 				sb.append(k);
 				sb.append('=');
 				sb.append(v);
@@ -2562,7 +2564,7 @@ public class InternalConcurrentHashMap
 	 * @param check
 	 *            if <0, don't check resize, if <= 1 only check if uncontended
 	 */
-	private final void addCount(long x, int check)
+	private final void addCount(final long x, final int check)
 	{
 		CounterCell[] as;
 		long b, s;
@@ -2589,7 +2591,7 @@ public class InternalConcurrentHashMap
 			int n, sc;
 			while (s >= (sc = sizeCtl) && (tab = table) != null && (n = tab.length) < MAXIMUM_CAPACITY)
 			{
-				int rs = resizeStamp(n);
+				final int rs = resizeStamp(n);
 				if (sc < 0)
 				{
 					if ((sc >>> RESIZE_STAMP_SHIFT) != rs || sc == rs + 1 || sc == rs + MAX_RESIZERS || (nt = nextTable) == null || transferIndex <= 0)
@@ -2613,7 +2615,7 @@ public class InternalConcurrentHashMap
 	/* ---------------- Counter support -------------- */
 
 	// See LongAdder version for explanation
-	private final void fullAddCount(long x, boolean wasUncontended)
+	private final void fullAddCount(final long x, boolean wasUncontended)
 	{
 		int h;
 		if ((h = MyThreadLocalRandom.getProbe()) == 0)
@@ -2635,7 +2637,8 @@ public class InternalConcurrentHashMap
 				{
 					if (cellsBusy == 0)
 					{ // Try to attach new Cell
-						CounterCell r = new CounterCell(x); // Optimistic create
+						final CounterCell r = new CounterCell(x); // Optimistic
+																	// create
 						if (cellsBusy == 0 && U.compareAndSwapInt(this, CELLSBUSY, 0, 1))
 						{
 							boolean created = false;
@@ -2684,7 +2687,7 @@ public class InternalConcurrentHashMap
 					{
 						if (counterCells == as)
 						{// Expand table unless stale
-							CounterCell[] rs = new CounterCell[n << 1];
+							final CounterCell[] rs = new CounterCell[n << 1];
 							for (int i = 0; i < n; ++i)
 							{
 								rs[i] = as[i];
@@ -2708,7 +2711,7 @@ public class InternalConcurrentHashMap
 				{ // Initialize table
 					if (counterCells == as)
 					{
-						CounterCell[] rs = new CounterCell[2];
+						final CounterCell[] rs = new CounterCell[2];
 						rs[h & 1] = new CounterCell(x);
 						counterCells = rs;
 						init = true;
@@ -2749,9 +2752,9 @@ public class InternalConcurrentHashMap
 				{
 					if ((tab = table) == null || tab.length == 0)
 					{
-						int n = (sc > 0) ? sc : DEFAULT_CAPACITY;
+						final int n = (sc > 0) ? sc : DEFAULT_CAPACITY;
 						@SuppressWarnings("unchecked")
-						Node[] nt = new Node[n];
+						final Node[] nt = new Node[n];
 						table = tab = nt;
 						sc = n - (n >>> 2);
 					}
@@ -2770,9 +2773,10 @@ public class InternalConcurrentHashMap
 	 * Moves and/or copies the nodes in each bin to new table. See above for
 	 * explanation.
 	 */
-	private final void transfer(Node[] tab, Node[] nextTab)
+	private final void transfer(final Node[] tab, Node[] nextTab)
 	{
-		int n = tab.length, stride;
+		final int n = tab.length;
+		int stride;
 		if ((stride = (NCPU > 1) ? (n >>> 3) / NCPU : n) < MIN_TRANSFER_STRIDE)
 		{
 			stride = MIN_TRANSFER_STRIDE; // subdivide range
@@ -2782,10 +2786,10 @@ public class InternalConcurrentHashMap
 			try
 			{
 				@SuppressWarnings("unchecked")
-				Node[] nt = new Node[n << 1];
+				final Node[] nt = new Node[n << 1];
 				nextTab = nt;
 			}
-			catch (Throwable ex)
+			catch (final Throwable ex)
 			{ // try to cope with OOME
 				sizeCtl = Integer.MAX_VALUE;
 				return;
@@ -2793,8 +2797,8 @@ public class InternalConcurrentHashMap
 			nextTable = nextTab;
 			transferIndex = n;
 		}
-		int nextn = nextTab.length;
-		ForwardingNode fwd = new ForwardingNode(nextTab);
+		final int nextn = nextTab.length;
+		final ForwardingNode fwd = new ForwardingNode(nextTab);
 		boolean advance = true;
 		boolean finishing = false; // to ensure sweep before committing nextTab
 		for (int i = 0, bound = 0;;)
@@ -2861,7 +2865,7 @@ public class InternalConcurrentHashMap
 							Node lastRun = f;
 							for (Node p = f.next; p != null; p = p.next)
 							{
-								int b = p.hash & n;
+								final int b = p.hash & n;
 								if (b != runBit)
 								{
 									runBit = b;
@@ -2880,9 +2884,9 @@ public class InternalConcurrentHashMap
 							}
 							for (Node p = f; p != lastRun; p = p.next)
 							{
-								int ph = p.hash;
-								long pk = p.key;
-								ArrayList<Object> pv = p.val;
+								final int ph = p.hash;
+								final long pk = p.key;
+								final ArrayList<Object> pv = p.val;
 								if ((ph & n) == 0)
 								{
 									ln = new Node(ph, pk, pv, ln);
@@ -2899,14 +2903,14 @@ public class InternalConcurrentHashMap
 						}
 						else if (f instanceof TreeBin)
 						{
-							TreeBin t = (TreeBin)f;
+							final TreeBin t = (TreeBin)f;
 							TreeNode lo = null, loTail = null;
 							TreeNode hi = null, hiTail = null;
 							int lc = 0, hc = 0;
 							for (Node e = t.first; e != null; e = e.next)
 							{
-								int h = e.hash;
-								TreeNode p = new TreeNode(h, e.key, e.val, null, null);
+								final int h = e.hash;
+								final TreeNode p = new TreeNode(h, e.key, e.val, null, null);
 								if ((h & n) == 0)
 								{
 									if ((p.prev = loTail) == null)
@@ -2953,7 +2957,7 @@ public class InternalConcurrentHashMap
 	 * Replaces all linked nodes in bin at given index unless table is too
 	 * small, in which case resizes instead.
 	 */
-	private final void treeifyBin(Node[] tab, int index)
+	private final void treeifyBin(final Node[] tab, final int index)
 	{
 		Node b;
 		int n;
@@ -2972,7 +2976,7 @@ public class InternalConcurrentHashMap
 						TreeNode hd = null, tl = null;
 						for (Node e = b; e != null; e = e.next)
 						{
-							TreeNode p = new TreeNode(e.hash, e.key, e.val, null, null);
+							final TreeNode p = new TreeNode(e.hash, e.key, e.val, null, null);
 							if ((p.prev = tl) == null)
 							{
 								hd = p;
@@ -2996,13 +3000,13 @@ public class InternalConcurrentHashMap
 	 * @param size
 	 *            number of elements (doesn't need to be perfectly accurate)
 	 */
-	private final void tryPresize(int size)
+	private final void tryPresize(final int size)
 	{
-		int c = (size >= (MAXIMUM_CAPACITY >>> 1)) ? MAXIMUM_CAPACITY : tableSizeFor(size + (size >>> 1) + 1);
+		final int c = (size >= (MAXIMUM_CAPACITY >>> 1)) ? MAXIMUM_CAPACITY : tableSizeFor(size + (size >>> 1) + 1);
 		int sc;
 		while ((sc = sizeCtl) >= 0)
 		{
-			Node[] tab = table;
+			final Node[] tab = table;
 			int n;
 			if (tab == null || (n = tab.length) == 0)
 			{
@@ -3014,7 +3018,7 @@ public class InternalConcurrentHashMap
 						if (table == tab)
 						{
 							@SuppressWarnings("unchecked")
-							Node[] nt = new Node[n];
+							final Node[] nt = new Node[n];
 							table = nt;
 							sc = n - (n >>> 2);
 						}
@@ -3031,7 +3035,7 @@ public class InternalConcurrentHashMap
 			}
 			else if (tab == table)
 			{
-				int rs = resizeStamp(n);
+				final int rs = resizeStamp(n);
 				if (sc < 0)
 				{
 					Node[] nt;
@@ -3066,7 +3070,7 @@ public class InternalConcurrentHashMap
 	 *             mapping, followed by a null pair. The key-value mappings are
 	 *             emitted in no particular order.
 	 */
-	private void writeObject(java.io.ObjectOutputStream s) throws java.io.IOException
+	private void writeObject(final java.io.ObjectOutputStream s) throws java.io.IOException
 	{
 		// For serialization compatibility
 		// Emulate segment calculation from previous version of this class
@@ -3077,8 +3081,8 @@ public class InternalConcurrentHashMap
 			++sshift;
 			ssize <<= 1;
 		}
-		int segmentShift = 32 - sshift;
-		int segmentMask = ssize - 1;
+		final int segmentShift = 32 - sshift;
+		final int segmentMask = ssize - 1;
 		@SuppressWarnings("unchecked")
 		Segment[] segments = new Segment[DEFAULT_CONCURRENCY_LEVEL];
 		for (int i = 0; i < segments.length; ++i)
@@ -3093,7 +3097,7 @@ public class InternalConcurrentHashMap
 		Node[] t;
 		if ((t = table) != null)
 		{
-			Traverser it = new Traverser(t, t.length, 0, t.length);
+			final Traverser it = new Traverser(t, t.length, 0, t.length);
 			for (Node p; (p = it.advance()) != null;)
 			{
 				s.writeObject(p.key);
@@ -3114,14 +3118,15 @@ public class InternalConcurrentHashMap
 	 * more convenient to use as a guide to splitting than is the depth, since
 	 * it is used while dividing by two anyway.
 	 */
-	final int batchFor(long b)
+	final int batchFor(final long b)
 	{
 		long n;
 		if (b == Long.MAX_VALUE || (n = sumCount()) <= 1L || n < b)
 		{
 			return 0;
 		}
-		int sp = ForkJoinPool.getCommonPoolParallelism() << 2; // slack of 4
+		final int sp = ForkJoinPool.getCommonPoolParallelism() << 2; // slack of
+																		// 4
 		return (b <= 0L || (n /= b) >= sp) ? sp : (int)n;
 	}
 
@@ -3130,13 +3135,13 @@ public class InternalConcurrentHashMap
 	/**
 	 * Helps transfer if a resize is in progress.
 	 */
-	final Node[] helpTransfer(Node[] tab, Node f)
+	final Node[] helpTransfer(final Node[] tab, final Node f)
 	{
 		Node[] nextTab;
 		int sc;
 		if (tab != null && (f instanceof ForwardingNode) && (nextTab = ((ForwardingNode)f).nextTable) != null)
 		{
-			int rs = resizeStamp(tab.length);
+			final int rs = resizeStamp(tab.length);
 			while (nextTab == nextTable && table == tab && (sc = sizeCtl) < 0)
 			{
 				if ((sc >>> RESIZE_STAMP_SHIFT) != rs || sc == rs + 1 || sc == rs + MAX_RESIZERS || transferIndex <= 0)
@@ -3155,13 +3160,13 @@ public class InternalConcurrentHashMap
 	}
 
 	/** Implementation for put and putIfAbsent */
-	final ArrayList<Object> putVal(long key, ArrayList<Object> value, boolean onlyIfAbsent)
+	final ArrayList<Object> putVal(final long key, final ArrayList<Object> value, final boolean onlyIfAbsent)
 	{
 		if (key == -1 || value == null)
 		{
 			throw new NullPointerException();
 		}
-		int hash = spread((int)(key ^ (key >>> 32)));
+		final int hash = spread((int)(key ^ (key >>> 32)));
 		int binCount = 0;
 		for (Node[] tab = table;;)
 		{
@@ -3203,7 +3208,7 @@ public class InternalConcurrentHashMap
 									}
 									break;
 								}
-								Node pred = e;
+								final Node pred = e;
 								if ((e = e.next) == null)
 								{
 									pred.next = new Node(hash, key, value, null);
@@ -3249,9 +3254,9 @@ public class InternalConcurrentHashMap
 	 * value with v, conditional upon match of cv if non-null. If resulting
 	 * value is null, delete.
 	 */
-	final ArrayList<Object> replaceNode(long key, ArrayList<Object> value, Object cv)
+	final ArrayList<Object> replaceNode(final long key, final ArrayList<Object> value, final Object cv)
 	{
-		int hash = spread((int)(key ^ (key >>> 32)));
+		final int hash = spread((int)(key ^ (key >>> 32)));
 		for (Node[] tab = table;;)
 		{
 			Node f;
@@ -3279,7 +3284,7 @@ public class InternalConcurrentHashMap
 							{
 								if (e.hash == hash && ((e.key) == key))
 								{
-									ArrayList<Object> ev = e.val;
+									final ArrayList<Object> ev = e.val;
 									if (cv == null || cv == ev || (ev != null && cv.equals(ev)))
 									{
 										oldVal = ev;
@@ -3308,11 +3313,11 @@ public class InternalConcurrentHashMap
 						else if (f instanceof TreeBin)
 						{
 							validated = true;
-							TreeBin t = (TreeBin)f;
+							final TreeBin t = (TreeBin)f;
 							TreeNode r, p;
 							if ((r = t.root) != null && (p = r.findTreeNode(hash, key, null)) != null)
 							{
-								ArrayList<Object> pv = p.val;
+								final ArrayList<Object> pv = p.val;
 								if (cv == null || cv == pv || (pv != null && cv.equals(pv)))
 								{
 									oldVal = pv;
@@ -3348,12 +3353,12 @@ public class InternalConcurrentHashMap
 
 	final long sumCount()
 	{
-		CounterCell[] as = counterCells;
+		final CounterCell[] as = counterCells;
 		CounterCell a;
 		long sum = baseCount;
 		if (as != null)
 		{
-			for (CounterCell element : as)
+			for (final CounterCell element : as)
 			{
 				if ((a = element) != null)
 				{
@@ -3366,7 +3371,7 @@ public class InternalConcurrentHashMap
 
 	static public final class EntryIterator extends BaseIterator
 	{
-		EntryIterator(Node[] tab, int index, int size, int limit, InternalConcurrentHashMap map)
+		EntryIterator(final Node[] tab, final int index, final int size, final int limit, final InternalConcurrentHashMap map)
 		{
 			super(tab, index, size, limit, map);
 		}
@@ -3380,8 +3385,8 @@ public class InternalConcurrentHashMap
 			{
 				throw new NoSuchElementException();
 			}
-			long k = p.key;
-			ArrayList<Object> v = p.val;
+			final long k = p.key;
+			final ArrayList<Object> v = p.val;
 			lastReturned = p;
 			advance();
 			return new MapEntry(k, v, map);
@@ -3400,12 +3405,12 @@ public class InternalConcurrentHashMap
 	 */
 	static public final class EntrySetView extends CollectionView
 	{
-		EntrySetView(InternalConcurrentHashMap map)
+		EntrySetView(final InternalConcurrentHashMap map)
 		{
 			super(map);
 		}
 
-		public boolean contains(Object o)
+		public boolean contains(final Object o)
 		{
 			long k;
 			ArrayList<Object> v, r;
@@ -3420,7 +3425,7 @@ public class InternalConcurrentHashMap
 			Node[] t;
 			if ((t = map.table) != null)
 			{
-				Traverser it = new Traverser(t, t.length, 0, t.length);
+				final Traverser it = new Traverser(t, t.length, 0, t.length);
 				for (Node p; (p = it.advance()) != null;)
 				{
 					h += p.hashCode();
@@ -3436,9 +3441,9 @@ public class InternalConcurrentHashMap
 		{
 			// try
 			// {
-			InternalConcurrentHashMap m = map;
+			final InternalConcurrentHashMap m = map;
 			Node[] t;
-			int f = (t = m.table) == null ? 0 : t.length;
+			final int f = (t = m.table) == null ? 0 : t.length;
 			return new EntryIterator(t, f, 0, f, m);
 			// }
 			// catch(Throwable e)
@@ -3457,7 +3462,7 @@ public class InternalConcurrentHashMap
 		 * added; }
 		 */
 
-		public boolean remove(Object o)
+		public boolean remove(final Object o)
 		{
 			long k;
 			ArrayList<Object> v;
@@ -3486,7 +3491,7 @@ public class InternalConcurrentHashMap
 
 	static public final class KeyIterator extends BaseIterator
 	{
-		KeyIterator(Node[] tab, int index, int size, int limit, InternalConcurrentHashMap map)
+		KeyIterator(final Node[] tab, final int index, final int size, final int limit, final InternalConcurrentHashMap map)
 		{
 			super(tab, index, size, limit, map);
 		}
@@ -3498,7 +3503,7 @@ public class InternalConcurrentHashMap
 			{
 				throw new NoSuchElementException();
 			}
-			long k = p.key;
+			final long k = p.key;
 			lastReturned = p;
 			advance();
 			return k;
@@ -3601,7 +3606,7 @@ public class InternalConcurrentHashMap
 	{
 		private final ArrayList<Object> value;
 
-		KeySetView(InternalConcurrentHashMap map, ArrayList<Object> value)
+		KeySetView(final InternalConcurrentHashMap map, final ArrayList<Object> value)
 		{ // non-public
 			super(map);
 			this.value = value;
@@ -3619,7 +3624,7 @@ public class InternalConcurrentHashMap
 		 * @throws UnsupportedOperationException
 		 *             if no default mapped value for additions was provided
 		 */
-		public boolean add(long e)
+		public boolean add(final long e)
 		{
 			ArrayList<Object> v;
 			if ((v = value) == null)
@@ -3635,7 +3640,7 @@ public class InternalConcurrentHashMap
 		 * @throws NullPointerException
 		 *             if the specified key is null
 		 */
-		public boolean contains(long o)
+		public boolean contains(final long o)
 		{
 			return map.containsKey(o);
 		}
@@ -3658,8 +3663,8 @@ public class InternalConcurrentHashMap
 		public KeyIterator iterator()
 		{
 			Node[] t;
-			InternalConcurrentHashMap m = map;
-			int f = (t = m.table) == null ? 0 : t.length;
+			final InternalConcurrentHashMap m = map;
+			final int f = (t = m.table) == null ? 0 : t.length;
 			return new KeyIterator(t, f, 0, f, m);
 		}
 
@@ -3674,7 +3679,7 @@ public class InternalConcurrentHashMap
 		 * @throws NullPointerException
 		 *             if the specified key is null
 		 */
-		public boolean remove(long o)
+		public boolean remove(final long o)
 		{
 			return map.remove(o) != null;
 		}
@@ -4474,7 +4479,7 @@ public class InternalConcurrentHashMap
 		ArrayList<Object> val; // non-null
 		final InternalConcurrentHashMap map;
 
-		MapEntry(long key, ArrayList<Object> val, InternalConcurrentHashMap map)
+		MapEntry(final long key, final ArrayList<Object> val, final InternalConcurrentHashMap map)
 		{
 			this.key = key;
 			this.val = val;
@@ -4482,7 +4487,7 @@ public class InternalConcurrentHashMap
 		}
 
 		@Override
-		public boolean equals(Object o)
+		public boolean equals(final Object o)
 		{
 			long k;
 			ArrayList<Object> v;
@@ -4526,13 +4531,13 @@ public class InternalConcurrentHashMap
 		 * which case the put will re-establish). We do not and cannot guarantee
 		 * more.
 		 */
-		public ArrayList<Object> setValue(ArrayList<Object> value)
+		public ArrayList<Object> setValue(final ArrayList<Object> value)
 		{
 			if (value == null)
 			{
 				throw new NullPointerException();
 			}
-			ArrayList<Object> v = val;
+			final ArrayList<Object> v = val;
 			val = value;
 			map.put(key, value);
 			return v;
@@ -4547,7 +4552,7 @@ public class InternalConcurrentHashMap
 
 	static public final class ValueIterator extends BaseIterator implements Iterator, Enumeration
 	{
-		ValueIterator(Node[] tab, int index, int size, int limit, InternalConcurrentHashMap map)
+		ValueIterator(final Node[] tab, final int index, final int size, final int limit, final InternalConcurrentHashMap map)
 		{
 			super(tab, index, size, limit, map);
 		}
@@ -4562,7 +4567,7 @@ public class InternalConcurrentHashMap
 			{
 				throw new NoSuchElementException();
 			}
-			ArrayList<Object> v = p.val;
+			final ArrayList<Object> v = p.val;
 			lastReturned = p;
 			advance();
 			return v;
@@ -4588,12 +4593,12 @@ public class InternalConcurrentHashMap
 	 */
 	static public final class ValuesView extends CollectionView
 	{
-		ValuesView(InternalConcurrentHashMap map)
+		ValuesView(final InternalConcurrentHashMap map)
 		{
 			super(map);
 		}
 
-		public final boolean add(ArrayList<Object> e)
+		public final boolean add(final ArrayList<Object> e)
 		{
 			throw new UnsupportedOperationException();
 		}
@@ -4603,7 +4608,7 @@ public class InternalConcurrentHashMap
 		 * UnsupportedOperationException(); }
 		 */
 
-		public final boolean contains(Object o)
+		public final boolean contains(final Object o)
 		{
 			return map.containsValue(o);
 		}
@@ -4612,9 +4617,9 @@ public class InternalConcurrentHashMap
 		{
 			// try
 			// {
-			InternalConcurrentHashMap m = map;
+			final InternalConcurrentHashMap m = map;
 			Node[] t;
-			int f = (t = m.table) == null ? 0 : t.length;
+			final int f = (t = m.table) == null ? 0 : t.length;
 			return new ValueIterator(t, f, 0, f, m);
 			// }
 			// catch(Throwable e)
@@ -4624,11 +4629,11 @@ public class InternalConcurrentHashMap
 			// }
 		}
 
-		public final boolean remove(Object o)
+		public final boolean remove(final Object o)
 		{
 			if (o != null)
 			{
-				for (Iterator<ArrayList<Object>> it = iterator(); it.hasNext();)
+				for (final Iterator<ArrayList<Object>> it = iterator(); it.hasNext();)
 				{
 					if (o.equals(it.next()))
 					{
@@ -4664,7 +4669,7 @@ public class InternalConcurrentHashMap
 		final InternalConcurrentHashMap map;
 		Node lastReturned;
 
-		BaseIterator(Node[] tab, int size, int index, int limit, InternalConcurrentHashMap map)
+		BaseIterator(final Node[] tab, final int size, final int index, final int limit, final InternalConcurrentHashMap map)
 		{
 			super(tab, size, index, limit);
 			this.map = map;
@@ -4702,7 +4707,7 @@ public class InternalConcurrentHashMap
 	{
 		final InternalConcurrentHashMap map;
 
-		CollectionView(InternalConcurrentHashMap map)
+		CollectionView(final InternalConcurrentHashMap map)
 		{
 			this.map = map;
 		}
@@ -4809,7 +4814,7 @@ public class InternalConcurrentHashMap
 	{
 		volatile long value;
 
-		CounterCell(long x)
+		CounterCell(final long x)
 		{
 			value = x;
 		}
@@ -4821,14 +4826,14 @@ public class InternalConcurrentHashMap
 	{
 		final Node[] nextTable;
 
-		ForwardingNode(Node[] tab)
+		ForwardingNode(final Node[] tab)
 		{
 			super(MOVED, -1, null, null);
 			this.nextTable = tab;
 		}
 
 		@Override
-		Node find(int h, long k)
+		Node find(final int h, final long k)
 		{
 			// loop to avoid arbitrarily deep recursion on forwarding nodes
 			outer: for (Node[] tab = nextTable;;)
@@ -4880,7 +4885,7 @@ public class InternalConcurrentHashMap
 		volatile ArrayList<Object> val;
 		volatile Node next;
 
-		Node(int hash, long key, ArrayList<Object> val, Node next)
+		Node(final int hash, final long key, final ArrayList<Object> val, final Node next)
 		{
 			this.hash = hash;
 			this.key = key;
@@ -4889,7 +4894,7 @@ public class InternalConcurrentHashMap
 		}
 
 		@Override
-		public final boolean equals(Object o)
+		public final boolean equals(final Object o)
 		{
 			long k;
 			ArrayList<Object> v, u;
@@ -4925,7 +4930,7 @@ public class InternalConcurrentHashMap
 			return ((int)(key ^ (key >>> 32))) ^ val.hashCode();
 		}
 
-		public final ArrayList<Object> setValue(ArrayList<Object> value)
+		public final ArrayList<Object> setValue(final ArrayList<Object> value)
 		{
 			throw new UnsupportedOperationException();
 		}
@@ -4939,7 +4944,7 @@ public class InternalConcurrentHashMap
 		/**
 		 * Virtualized support for map.get(); overridden in subclasses.
 		 */
-		Node find(int h, long k)
+		Node find(final int h, final long k)
 		{
 			Node e = this;
 			if (k != -1)
@@ -4966,7 +4971,7 @@ public class InternalConcurrentHashMap
 			super(RESERVED, -1, null, null);
 		}
 
-		Node find(int h, Object k)
+		Node find(final int h, final Object k)
 		{
 			return null;
 		}
@@ -4979,7 +4984,7 @@ public class InternalConcurrentHashMap
 	{
 		final float loadFactor;
 
-		Segment(float lf)
+		Segment(final float lf)
 		{
 			this.loadFactor = lf;
 		}
@@ -5024,7 +5029,7 @@ public class InternalConcurrentHashMap
 		int baseLimit; // index bound for initial table
 		final int baseSize; // initial table size
 
-		Traverser(Node[] tab, int size, int index, int limit)
+		Traverser(final Node[] tab, final int size, final int index, final int limit)
 		{
 			this.tab = tab;
 			this.baseSize = size;
@@ -5036,7 +5041,7 @@ public class InternalConcurrentHashMap
 		/**
 		 * Saves traversal state upon encountering a forwarding node.
 		 */
-		private void pushState(Node[] t, int i, int n)
+		private void pushState(final Node[] t, final int i, final int n)
 		{
 			TableStack s = spare; // reuse if possible
 			if (s != null)
@@ -5070,7 +5075,7 @@ public class InternalConcurrentHashMap
 				index = s.index;
 				tab = s.tab;
 				s.tab = null;
-				TableStack next = s.next;
+				final TableStack next = s.next;
 				s.next = spare; // save for reuse
 				stack = next;
 				spare = s;
@@ -5154,10 +5159,10 @@ public class InternalConcurrentHashMap
 			try
 			{
 				U = getUnsafe();
-				Class<?> k = TreeBin.class;
+				final Class<?> k = TreeBin.class;
 				LOCKSTATE = U.objectFieldOffset(k.getDeclaredField("lockState"));
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				throw new Error(e);
 			}
@@ -5173,7 +5178,7 @@ public class InternalConcurrentHashMap
 		/**
 		 * Creates bin with initial set of nodes headed by b.
 		 */
-		TreeBin(TreeNode b)
+		TreeBin(final TreeNode b)
 		{
 			super(TREEBIN, -1, null, null);
 			this.first = b;
@@ -5190,13 +5195,13 @@ public class InternalConcurrentHashMap
 				}
 				else
 				{
-					long k = x.key;
-					int h = x.hash;
+					final long k = x.key;
+					final int h = x.hash;
 					Class<?> kc = null;
 					for (TreeNode p = r;;)
 					{
 						int dir, ph;
-						long pk = p.key;
+						final long pk = p.key;
 						if ((ph = p.hash) > h)
 						{
 							dir = -1;
@@ -5209,7 +5214,7 @@ public class InternalConcurrentHashMap
 						{
 							dir = tieBreakOrder(k, pk);
 						}
-						TreeNode xp = p;
+						final TreeNode xp = p;
 						if ((p = (dir <= 0) ? p.left : p.right) == null)
 						{
 							x.parent = xp;
@@ -5264,7 +5269,8 @@ public class InternalConcurrentHashMap
 					}
 					else
 					{
-						TreeNode sl = xpr.left, sr = xpr.right;
+						final TreeNode sl = xpr.left;
+						TreeNode sr = xpr.right;
 						if ((sr == null || !sr.red) && (sl == null || !sl.red))
 						{
 							xpr.red = true;
@@ -5314,7 +5320,8 @@ public class InternalConcurrentHashMap
 					}
 					else
 					{
-						TreeNode sl = xpl.left, sr = xpl.right;
+						TreeNode sl = xpl.left;
+						final TreeNode sr = xpl.right;
 						if ((sl == null || !sl.red) && (sr == null || !sr.red))
 						{
 							xpl.red = true;
@@ -5426,9 +5433,9 @@ public class InternalConcurrentHashMap
 		/**
 		 * Recursive invariant check
 		 */
-		static boolean checkInvariants(TreeNode t)
+		static boolean checkInvariants(final TreeNode t)
 		{
-			TreeNode tp = t.parent, tl = t.left, tr = t.right, tb = t.prev, tn = (TreeNode)t.next;
+			final TreeNode tp = t.parent, tl = t.left, tr = t.right, tb = t.prev, tn = (TreeNode)t.next;
 			if (tb != null && tb.next != t)
 			{
 				return false;
@@ -5464,7 +5471,7 @@ public class InternalConcurrentHashMap
 			return true;
 		}
 
-		static TreeNode rotateLeft(TreeNode root, TreeNode p)
+		static TreeNode rotateLeft(TreeNode root, final TreeNode p)
 		{
 			TreeNode r, pp, rl;
 			if (p != null && (r = p.right) != null)
@@ -5494,7 +5501,7 @@ public class InternalConcurrentHashMap
 		/* ------------------------------------------------------------ */
 		// Red-black tree methods, all adapted from CLR
 
-		static TreeNode rotateRight(TreeNode root, TreeNode p)
+		static TreeNode rotateRight(TreeNode root, final TreeNode p)
 		{
 			TreeNode l, pp, lr;
 			if (p != null && (l = p.left) != null)
@@ -5527,7 +5534,7 @@ public class InternalConcurrentHashMap
 		 * insertion rule to maintain equivalence across rebalancings.
 		 * Tie-breaking further than necessary simplifies testing a bit.
 		 */
-		static int tieBreakOrder(Object a, Object b)
+		static int tieBreakOrder(final Object a, final Object b)
 		{
 			int d;
 			if (a == null || b == null || (d = a.getClass().getName().compareTo(b.getClass().getName())) == 0)
@@ -5596,7 +5603,7 @@ public class InternalConcurrentHashMap
 		 * available.
 		 */
 		@Override
-		final Node find(int h, long k)
+		final Node find(final int h, final long k)
 		{
 			if (k != -1)
 			{
@@ -5638,7 +5645,7 @@ public class InternalConcurrentHashMap
 		 *
 		 * @return null if added
 		 */
-		final TreeNode putTreeVal(int h, long k, ArrayList<Object> v)
+		final TreeNode putTreeVal(final int h, final long k, final ArrayList<Object> v)
 		{
 			Class<?> kc = null;
 			boolean searched = false;
@@ -5677,10 +5684,11 @@ public class InternalConcurrentHashMap
 					dir = tieBreakOrder(k, pk);
 				}
 
-				TreeNode xp = p;
+				final TreeNode xp = p;
 				if ((p = (dir <= 0) ? p.left : p.right) == null)
 				{
-					TreeNode x, f = first;
+					TreeNode x;
+					final TreeNode f = first;
 					first = x = new TreeNode(h, k, v, f, xp);
 					if (f != null)
 					{
@@ -5726,10 +5734,10 @@ public class InternalConcurrentHashMap
 		 *
 		 * @return true if now too small, so should be untreeified
 		 */
-		final boolean removeTreeNode(TreeNode p)
+		final boolean removeTreeNode(final TreeNode p)
 		{
-			TreeNode next = (TreeNode)p.next;
-			TreeNode pred = p.prev; // unlink traversal pointers
+			final TreeNode next = (TreeNode)p.next;
+			final TreeNode pred = p.prev; // unlink traversal pointers
 			TreeNode r, rl;
 			if (pred == null)
 			{
@@ -5757,8 +5765,8 @@ public class InternalConcurrentHashMap
 			try
 			{
 				TreeNode replacement;
-				TreeNode pl = p.left;
-				TreeNode pr = p.right;
+				final TreeNode pl = p.left;
+				final TreeNode pr = p.right;
 				if (pl != null && pr != null)
 				{
 					TreeNode s = pr, sl;
@@ -5766,11 +5774,11 @@ public class InternalConcurrentHashMap
 					{
 						s = sl;
 					}
-					boolean c = s.red;
+					final boolean c = s.red;
 					s.red = p.red;
 					p.red = c; // swap colors
-					TreeNode sr = s.right;
-					TreeNode pp = p.parent;
+					final TreeNode sr = s.right;
+					final TreeNode pp = p.parent;
 					if (s == pr)
 					{ // p was s's direct parent
 						p.parent = s;
@@ -5778,7 +5786,7 @@ public class InternalConcurrentHashMap
 					}
 					else
 					{
-						TreeNode sp = s.parent;
+						final TreeNode sp = s.parent;
 						if ((p.parent = sp) != null)
 						{
 							if (s == sp.left)
@@ -5839,7 +5847,7 @@ public class InternalConcurrentHashMap
 				}
 				if (replacement != p)
 				{
-					TreeNode pp = replacement.parent = p.parent;
+					final TreeNode pp = replacement.parent = p.parent;
 					if (pp == null)
 					{
 						r = replacement;
@@ -5894,14 +5902,14 @@ public class InternalConcurrentHashMap
 		TreeNode prev; // needed to unlink next upon deletion
 		boolean red;
 
-		TreeNode(int hash, long key, ArrayList<Object> val, Node next, TreeNode parent)
+		TreeNode(final int hash, final long key, final ArrayList<Object> val, final Node next, final TreeNode parent)
 		{
 			super(hash, key, val, next);
 			this.parent = parent;
 		}
 
 		@Override
-		Node find(int h, long k)
+		Node find(final int h, final long k)
 		{
 			return findTreeNode(h, k, null);
 		}
@@ -5910,7 +5918,7 @@ public class InternalConcurrentHashMap
 		 * Returns the TreeNode (or null if not found) for the given key
 		 * starting at given root.
 		 */
-		final TreeNode findTreeNode(int h, long k, Class<?> kc)
+		final TreeNode findTreeNode(final int h, final long k, Class<?> kc)
 		{
 			if (k != -1)
 			{
@@ -5920,7 +5928,7 @@ public class InternalConcurrentHashMap
 					int ph, dir;
 					long pk;
 					TreeNode q;
-					TreeNode pl = p.left, pr = p.right;
+					final TreeNode pl = p.left, pr = p.right;
 					if ((ph = p.hash) > h)
 					{
 						p = pl;

@@ -5,12 +5,12 @@ public class SingleTable
 	private final TableName table;
 	private String alias;
 
-	public SingleTable(TableName table)
+	public SingleTable(final TableName table)
 	{
 		this.table = table;
 	}
 
-	public SingleTable(TableName table, String alias)
+	public SingleTable(final TableName table, final String alias)
 	{
 		this.table = table;
 		this.alias = alias;

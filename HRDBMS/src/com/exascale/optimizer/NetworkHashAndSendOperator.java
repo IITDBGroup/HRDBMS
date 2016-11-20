@@ -32,7 +32,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 			f.setAccessible(true);
 			unsafe = (sun.misc.Unsafe)f.get(null);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			unsafe = null;
 		}
@@ -50,7 +50,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 
 	private int connCount = 0;
 
-	public NetworkHashAndSendOperator(ArrayList<String> hashCols, long numNodes, int id, int starting, MetaData meta) throws Exception
+	public NetworkHashAndSendOperator(final ArrayList<String> hashCols, final long numNodes, final int id, final int starting, final MetaData meta) throws Exception
 	{
 		this.hashCols = hashCols;
 		if (numNodes > MetaData.numWorkerNodes)
@@ -66,15 +66,10 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		this.meta = meta;
 		received = new AtomicLong(0);
 	}
-	
-	public int getNumNodes()
-	{
-		return numNodes;
-	}
 
-	public static NetworkHashAndSendOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static NetworkHashAndSendOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		NetworkHashAndSendOperator value = (NetworkHashAndSendOperator)unsafe.allocateInstance(NetworkHashAndSendOperator.class);
+		final NetworkHashAndSendOperator value = (NetworkHashAndSendOperator)unsafe.allocateInstance(NetworkHashAndSendOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.meta = new MetaData();
 		value.child = OperatorUtils.deserializeOperator(in, prev);
@@ -101,8 +96,70 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		return value;
 	}
 
+	private static long hash(final Object key) throws Exception
+	{
+		long eHash;
+		if (key == null)
+		{
+			eHash = 0;
+		}
+		else
+		{
+			if (key instanceof ArrayList)
+			{
+				final byte[] data = toBytesForHash((ArrayList<Object>)key);
+				eHash = MurmurHash.hash64(data, data.length);
+			}
+			else
+			{
+				final byte[] data = key.toString().getBytes(StandardCharsets.UTF_8);
+				eHash = MurmurHash.hash64(data, data.length);
+			}
+		}
+
+		return eHash;
+	}
+
+	private static byte[] toBytesForHash(final ArrayList<Object> key)
+	{
+		final StringBuilder sb = new StringBuilder();
+		for (final Object o : key)
+		{
+			if (o instanceof Double)
+			{
+				final DecimalFormat df = new DecimalFormat("0", DecimalFormatSymbols.getInstance(Locale.ENGLISH));
+				df.setMaximumFractionDigits(340); // 340 =
+													// DecimalFormat.DOUBLE_FRACTION_DIGITS
+
+				sb.append(df.format(o));
+				sb.append((char)0);
+			}
+			else if (o instanceof Number)
+			{
+				sb.append(o);
+				sb.append((char)0);
+			}
+			else
+			{
+				sb.append(o.toString());
+				sb.append((char)0);
+			}
+		}
+
+		final int z = sb.length();
+		final byte[] retval = new byte[z];
+		int i = 0;
+		while (i < z)
+		{
+			retval[i] = (byte)sb.charAt(i);
+			i++;
+		}
+
+		return retval;
+	}
+
 	@Override
-	public synchronized void addConnection(int fromNode, Socket sock)
+	public synchronized void addConnection(final int fromNode, final Socket sock)
 	{
 		connections.put(fromNode, sock);
 		connCount++;
@@ -141,7 +198,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 			retval.numpSet = numpSet;
 			return retval;
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			return null;
 		}
@@ -189,6 +246,11 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		return id;
 	}
 
+	public int getNumNodes()
+	{
+		return numNodes;
+	}
+
 	public int getStarting()
 	{
 		return starting;
@@ -211,7 +273,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 	@Override
 	public Operator parent()
 	{
-		Exception e = new Exception();
+		final Exception e = new Exception();
 		HRDBMSWorker.logger.error("NetworkHashAndSendOperator does not support parent()", e);
 		return null;
 	}
@@ -228,21 +290,21 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 	}
 
 	@Override
-	public void registerParent(Operator op)
+	public void registerParent(final Operator op)
 	{
 		parents.add(op);
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 		parents.remove(op);
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -273,9 +335,9 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev, boolean flag) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev, final boolean flag) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -306,12 +368,12 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		OperatorUtils.writeInt(connCount, out);
 	}
 
-	public void setID(int id)
+	public void setID(final int id)
 	{
 		this.id = id;
 	}
 
-	public void setNumNodes(int numNodes)
+	public void setNumNodes(final int numNodes)
 	{
 		this.numNodes = numNodes;
 	}
@@ -329,7 +391,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		return true;
 	}
 
-	public void setStarting(int starting)
+	public void setStarting(final int starting)
 	{
 		this.starting = starting;
 	}
@@ -345,9 +407,9 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 			throw new Exception("NetworkHashAndSendOperator does not have the correct number of parents");
 		}
 
-		OutputStream[] outs2 = new OutputStream[outs.length];
+		final OutputStream[] outs2 = new OutputStream[outs.length];
 		int i = 0;
-		for (OutputStream out : outs)
+		for (final OutputStream out : outs)
 		{
 			outs2[i++] = new CompressedOutputStream(out);
 		}
@@ -417,7 +479,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				for (final OutputStream out : outs2)
 				{
@@ -441,12 +503,12 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 			{
 				child.close();
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 			}
 			// Thread.sleep(60 * 1000);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			byte[] obj = null;
@@ -454,7 +516,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 			{
 				obj = toBytes(e);
 			}
-			catch (Exception f)
+			catch (final Exception f)
 			{
 				for (final OutputStream out : outs2)
 				{
@@ -462,7 +524,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 					{
 						out.close();
 					}
-					catch (Exception g)
+					catch (final Exception g)
 					{
 					}
 				}
@@ -476,7 +538,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 					child.nextAll(this);
 					child.close();
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 					try
 					{
@@ -484,7 +546,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 						child.nextAll(this);
 						child.close();
 					}
-					catch (Exception g)
+					catch (final Exception g)
 					{
 					}
 				}
@@ -496,66 +558,5 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 	public String toString()
 	{
 		return "NetworkHashAndSendOperator(" + node + ") " + hashCols + " ID = " + id;
-	}
-
-	private static long hash(Object key) throws Exception
-	{
-		long eHash;
-		if (key == null)
-		{
-			eHash = 0;
-		}
-		else
-		{
-			if (key instanceof ArrayList)
-			{
-				byte[] data = toBytesForHash((ArrayList<Object>)key);
-				eHash = MurmurHash.hash64(data, data.length);
-			}
-			else
-			{
-				byte[] data = key.toString().getBytes(StandardCharsets.UTF_8);
-				eHash = MurmurHash.hash64(data, data.length);
-			}
-		}
-
-		return eHash;
-	}
-	
-	private static byte[] toBytesForHash(ArrayList<Object> key)
-	{
-		StringBuilder sb = new StringBuilder();
-		for (Object o : key)
-		{
-			if (o instanceof Double)
-			{
-				DecimalFormat df = new DecimalFormat("0", DecimalFormatSymbols.getInstance(Locale.ENGLISH));
-				df.setMaximumFractionDigits(340); //340 = DecimalFormat.DOUBLE_FRACTION_DIGITS
-
-				sb.append(df.format((Double)o));
-				sb.append((char)0);
-			}
-			else if (o instanceof Number)
-			{
-				sb.append(o);
-				sb.append((char)0);
-			}
-			else
-			{
-				sb.append(o.toString());
-				sb.append((char)0);
-			}
-		}
-		
-		final int z = sb.length();
-		byte[] retval = new byte[z];
-		int i = 0;
-		while (i < z)
-		{
-			retval[i] = (byte)sb.charAt(i);
-			i++;
-		}
-		
-		return retval;
 	}
 }

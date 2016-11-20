@@ -24,7 +24,7 @@ public final class DummyOperator implements Operator, Serializable
 			f.setAccessible(true);
 			unsafe = (sun.misc.Unsafe)f.get(null);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			unsafe = null;
 		}
@@ -39,7 +39,7 @@ public final class DummyOperator implements Operator, Serializable
 
 	private transient AtomicInteger nextCalled;
 
-	public DummyOperator(MetaData meta)
+	public DummyOperator(final MetaData meta)
 	{
 		this.meta = meta;
 		cols2Types = new HashMap<String, String>();
@@ -47,9 +47,9 @@ public final class DummyOperator implements Operator, Serializable
 		pos2Col = new TreeMap<Integer, String>();
 	}
 
-	public static DummyOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static DummyOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		DummyOperator value = (DummyOperator)unsafe.allocateInstance(DummyOperator.class);
+		final DummyOperator value = (DummyOperator)unsafe.allocateInstance(DummyOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
 		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
@@ -60,7 +60,7 @@ public final class DummyOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void add(Operator op) throws Exception
+	public void add(final Operator op) throws Exception
 	{
 		throw new Exception("DummyOperator does not support children");
 	}
@@ -133,7 +133,7 @@ public final class DummyOperator implements Operator, Serializable
 
 	@Override
 	// @?Parallel
-	public Object next(Operator op) throws Exception
+	public Object next(final Operator op) throws Exception
 	{
 		if (nextCalled.getAndIncrement() == 0)
 		{
@@ -144,7 +144,7 @@ public final class DummyOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void nextAll(Operator op) throws Exception
+	public void nextAll(final Operator op) throws Exception
 	{
 		nextCalled.set(1);
 	}
@@ -168,7 +168,7 @@ public final class DummyOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void registerParent(Operator op) throws Exception
+	public void registerParent(final Operator op) throws Exception
 	{
 		if (parent == null)
 		{
@@ -181,12 +181,12 @@ public final class DummyOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeChild(Operator op)
+	public void removeChild(final Operator op)
 	{
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 		parent = null;
 	}
@@ -205,9 +205,9 @@ public final class DummyOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -224,32 +224,32 @@ public final class DummyOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void setChildPos(int pos)
+	public void setChildPos(final int pos)
 	{
 	}
 
-	public void setCols2Pos(HashMap<String, Integer> cols2Pos)
+	public void setCols2Pos(final HashMap<String, Integer> cols2Pos)
 	{
 		this.cols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
 	}
 
-	public void setCols2Types(HashMap<String, String> cols2Types)
+	public void setCols2Types(final HashMap<String, String> cols2Types)
 	{
 		this.cols2Types = (HashMap<String, String>)cols2Types.clone();
 	}
 
 	@Override
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 		this.node = node;
 	}
 
 	@Override
-	public void setPlan(Plan plan)
+	public void setPlan(final Plan plan)
 	{
 	}
 
-	public void setPos2Col(TreeMap<Integer, String> pos2Col)
+	public void setPos2Col(final TreeMap<Integer, String> pos2Col)
 	{
 		this.pos2Col = (TreeMap<Integer, String>)pos2Col.clone();
 	}

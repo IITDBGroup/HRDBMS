@@ -26,7 +26,7 @@ public class HRDBMSDriver implements Driver
 	}
 
 	@Override
-	public boolean acceptsURL(String arg0) throws SQLException
+	public boolean acceptsURL(final String arg0) throws SQLException
 	{
 		final String protocol = arg0.substring(0, 14);
 		if (!protocol.equals("jdbc:hrdbms://"))
@@ -38,7 +38,7 @@ public class HRDBMSDriver implements Driver
 	}
 
 	@Override
-	public Connection connect(String arg0, Properties arg1) throws SQLException
+	public Connection connect(final String arg0, final Properties arg1) throws SQLException
 	{
 		try
 		{
@@ -56,7 +56,7 @@ public class HRDBMSDriver implements Driver
 			{
 				portNum = Integer.parseInt(port);
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				throw new SQLException("Invalid port number!");
 			}
@@ -69,8 +69,9 @@ public class HRDBMSDriver implements Driver
 				sock.setSendBufferSize(4194304);
 				sock.connect(new InetSocketAddress(hostname, portNum));
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
+				sock.close();
 				throw new SQLException(e.getMessage());
 			}
 			return new HRDBMSConnection(sock, arg1.getProperty("user"), arg1.getProperty("password"), portNum, arg1.getProperty("FORCE", "FALSE"));
@@ -100,7 +101,7 @@ public class HRDBMSDriver implements Driver
 	}
 
 	@Override
-	public DriverPropertyInfo[] getPropertyInfo(String arg0, Properties arg1) throws SQLException
+	public DriverPropertyInfo[] getPropertyInfo(final String arg0, final Properties arg1) throws SQLException
 	{
 		return new DriverPropertyInfo[0];
 	}

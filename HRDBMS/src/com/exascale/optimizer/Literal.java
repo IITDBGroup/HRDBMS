@@ -10,7 +10,7 @@ public class Literal
 		isNull = true;
 	}
 
-	public Literal(Object value)
+	public Literal(final Object value)
 	{
 		this.value = value;
 		if (value == null)
@@ -31,14 +31,14 @@ public class Literal
 	}
 
 	@Override
-	public boolean equals(Object o)
+	public boolean equals(final Object o)
 	{
 		if (o == null || !(o instanceof Literal))
 		{
 			return false;
 		}
 
-		Literal rhs = (Literal)o;
+		final Literal rhs = (Literal)o;
 		if (value == null && rhs.value == null && isNull == rhs.isNull)
 		{
 			return true;

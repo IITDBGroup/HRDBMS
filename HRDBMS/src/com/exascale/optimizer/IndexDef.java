@@ -7,7 +7,7 @@ public class IndexDef implements Serializable
 	private final Column col;
 	private final boolean dir;
 
-	public IndexDef(Column col, boolean dir)
+	public IndexDef(final Column col, final boolean dir)
 	{
 		this.col = col;
 		this.dir = dir;

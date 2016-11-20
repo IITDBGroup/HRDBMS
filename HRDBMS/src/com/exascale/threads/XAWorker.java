@@ -48,7 +48,7 @@ public class XAWorker extends HRDBMSThread
 	private Exception ex;
 	private boolean runInline = false;
 
-	public XAWorker(Plan p, Transaction tx, boolean result)
+	public XAWorker(final Plan p, final Transaction tx, final boolean result)
 	{
 		this.description = "XA Worker";
 		this.setWait(false);
@@ -59,7 +59,7 @@ public class XAWorker extends HRDBMSThread
 		{
 			in = free.remove(0);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			in = new ArrayBlockingQueue<Object>(ResourceManager.QUEUE_SIZE);
 		}
@@ -68,20 +68,10 @@ public class XAWorker extends HRDBMSThread
 		{
 			out = free2.remove(0);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			out = new SPSCQueue(ResourceManager.QUEUE_SIZE);
 		}
-	}
-	
-	public void setRunInline()
-	{
-		runInline = true;
-	}
-	
-	public boolean shouldRunInline()
-	{
-		return runInline;
 	}
 
 	public Exception getException()
@@ -97,13 +87,13 @@ public class XAWorker extends HRDBMSThread
 	@Override
 	public void run()
 	{
-		for (Operator tree : p.getTrees())
+		for (final Operator tree : p.getTrees())
 		{
 			try
 			{
 				setPlanAndTransaction(tree, new HashSet<Operator>());
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 			}
@@ -113,26 +103,26 @@ public class XAWorker extends HRDBMSThread
 		{
 			try
 			{
-				Operator op = p.execute();
-				//ResourceManager.registerOperator(op);
+				final Operator op = p.execute();
+				// ResourceManager.registerOperator(op);
 				while (true)
 				{
 					try
 					{
-						ArrayList<Object> command = (ArrayList<Object>)in.take();
-						String text = (String)command.get(0);
+						final ArrayList<Object> command = (ArrayList<Object>)in.take();
+						final String text = (String)command.get(0);
 						if (text.equals("CLOSE"))
 						{
 							op.nextAll(op);
 							op.close();
-							//ResourceManager.deregisterOperator(op);
+							// ResourceManager.deregisterOperator(op);
 							in.clear();
 							out.clear();
 							free.add(in);
 							free2.add(out);
 							in = null;
 							out = null;
-							//this.terminate();
+							// this.terminate();
 							return;
 						}
 						else if (text.equals("META"))
@@ -148,7 +138,7 @@ public class XAWorker extends HRDBMSThread
 							{
 								try
 								{
-									Object obj = op.next(op);
+									final Object obj = op.next(op);
 									out.put(obj);
 									if (obj instanceof DataEndMarker)
 									{
@@ -156,14 +146,14 @@ public class XAWorker extends HRDBMSThread
 									}
 									howMany--;
 								}
-								catch (Exception e)
+								catch (final Exception e)
 								{
 									HRDBMSWorker.logger.debug("", e);
 									out.put(e);
 									op.nextAll(op);
 									op.close();
-									//ResourceManager.deregisterOperator(op);
-									//this.terminate();
+									// ResourceManager.deregisterOperator(op);
+									// this.terminate();
 									return;
 								}
 							}
@@ -172,23 +162,23 @@ public class XAWorker extends HRDBMSThread
 						{
 							HRDBMSWorker.logger.debug("Unknown command received by XAWorker: " + text);
 							op.close();
-							//ResourceManager.deregisterOperator(op);
-							//this.terminate();
+							// ResourceManager.deregisterOperator(op);
+							// this.terminate();
 						}
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				try
 				{
 					HRDBMSWorker.logger.debug("", e);
 					out.put(e);
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 				}
 			}
@@ -199,16 +189,16 @@ public class XAWorker extends HRDBMSThread
 			{
 				if (p.getTrees().size() > 1)
 				{
-					ArrayList<SubXAThread> threads = p.executeMultiNoResult();
+					final ArrayList<SubXAThread> threads = p.executeMultiNoResult();
 					updateCount = p.getUpdateCount();
-					for (SubXAThread thread : threads)
+					for (final SubXAThread thread : threads)
 					{
 						thread.join();
 						if (!thread.getOK())
 						{
 							throw thread.getException();
 						}
-						
+
 						updateCount += thread.getUpdateCount();
 					}
 				}
@@ -222,10 +212,10 @@ public class XAWorker extends HRDBMSThread
 				free2.add(out);
 				in = null;
 				out = null;
-				//this.terminate();
+				// this.terminate();
 				return;
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 				updateCount = -1;
@@ -233,23 +223,23 @@ public class XAWorker extends HRDBMSThread
 			}
 		}
 
-		//this.terminate();
+		// this.terminate();
 	}
-	
+
 	public void runInline() throws Exception
 	{
-		for (Operator tree : p.getTrees())
+		for (final Operator tree : p.getTrees())
 		{
 			try
 			{
 				setPlanAndTransaction(tree, new HashSet<Operator>());
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 			}
 		}
-		
+
 		try
 		{
 			updateCount = p.executeNoResult();
@@ -259,10 +249,10 @@ public class XAWorker extends HRDBMSThread
 			free2.add(out);
 			in = null;
 			out = null;
-			//this.terminate();
+			// this.terminate();
 			return;
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			updateCount = -1;
@@ -271,7 +261,17 @@ public class XAWorker extends HRDBMSThread
 		}
 	}
 
-	private void setPlanAndTransaction(Operator op, HashSet<Operator> visited) throws Exception
+	public void setRunInline()
+	{
+		runInline = true;
+	}
+
+	public boolean shouldRunInline()
+	{
+		return runInline;
+	}
+
+	private void setPlanAndTransaction(final Operator op, final HashSet<Operator> visited) throws Exception
 	{
 		if ((!(op instanceof TableScanOperator)) && visited.contains(op))
 		{
@@ -379,7 +379,7 @@ public class XAWorker extends HRDBMSThread
 
 		op.setPlan(p);
 
-		for (Operator o : op.children())
+		for (final Operator o : op.children())
 		{
 			setPlanAndTransaction(o, visited);
 		}

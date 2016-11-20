@@ -147,7 +147,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	 * @throws IllegalArgumentException
 	 *             if the specified initial capacity is negative
 	 */
-	public ArrayListLong(int initialCapacity)
+	public ArrayListLong(final int initialCapacity)
 	{
 		super();
 		if (initialCapacity < 0)
@@ -166,13 +166,13 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	 * @throws NullPointerException
 	 *             if the specified collection is null
 	 */
-	public ArrayListLong(long[] c)
+	public ArrayListLong(final long[] c)
 	{
 		elementData = c;
 		size = elementData.length;
 	}
 
-	private static int hugeCapacity(int minCapacity)
+	private static int hugeCapacity(final int minCapacity)
 	{
 		if (minCapacity < 0)
 		{
@@ -193,7 +193,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	 * @throws IndexOutOfBoundsException
 	 *             {@inheritDoc}
 	 */
-	public void add(int index, long element)
+	public void add(final int index, final long element)
 	{
 		rangeCheckForAdd(index);
 
@@ -210,7 +210,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	 *            element to be appended to this list
 	 * @return <tt>true</tt> (as specified by {@link Collection#add})
 	 */
-	public boolean add(long e)
+	public boolean add(final long e)
 	{
 		ensureCapacityInternal(size + 1); // Increments modCount!!
 		elementData[size++] = e;
@@ -231,7 +231,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	 * @throws NullPointerException
 	 *             if the specified collection is null
 	 */
-	public boolean addAll(ArrayListLong c)
+	public boolean addAll(final ArrayListLong c)
 	{
 		final long[] a = c.elementData;
 		final int numNew = c.size;
@@ -285,7 +285,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	 *            element whose presence in this list is to be tested
 	 * @return <tt>true</tt> if this list contains the specified element
 	 */
-	public boolean contains(long o)
+	public boolean contains(final long o)
 	{
 		return indexOf(o) >= 0;
 	}
@@ -298,7 +298,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	 * @param minCapacity
 	 *            the desired minimum capacity
 	 */
-	public void ensureCapacity(int minCapacity)
+	public void ensureCapacity(final int minCapacity)
 	{
 		final int minExpand = (elementData != EMPTY_ELEMENTDATA)
 		// any size if real element table
@@ -322,7 +322,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	 * @throws IndexOutOfBoundsException
 	 *             {@inheritDoc}
 	 */
-	public long get(int index)
+	public long get(final int index)
 	{
 		rangeCheck(index);
 
@@ -336,7 +336,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	 * <tt>(o==null&nbsp;?&nbsp;get(i)==null&nbsp;:&nbsp;o.equals(get(i)))</tt>,
 	 * or -1 if there is no such index.
 	 */
-	public int indexOf(long o)
+	public int indexOf(final long o)
 	{
 		for (int i = 0; i < size; i++)
 		{
@@ -379,7 +379,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	 * <tt>(o==null&nbsp;?&nbsp;get(i)==null&nbsp;:&nbsp;o.equals(get(i)))</tt>,
 	 * or -1 if there is no such index.
 	 */
-	public int lastIndexOf(long o)
+	public int lastIndexOf(final long o)
 	{
 		for (int i = size - 1; i >= 0; i--)
 		{
@@ -403,7 +403,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	 * @throws IndexOutOfBoundsException
 	 *             {@inheritDoc}
 	 */
-	public long remove(int index)
+	public long remove(final int index)
 	{
 		rangeCheck(index);
 
@@ -434,7 +434,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	 *            element to be removed from this list, if present
 	 * @return <tt>true</tt> if this list contained the specified element
 	 */
-	public boolean remove(long o)
+	public boolean remove(final long o)
 	{
 		for (int index = 0; index < size; index++)
 		{
@@ -459,7 +459,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	 * @throws IndexOutOfBoundsException
 	 *             {@inheritDoc}
 	 */
-	public long set(int index, long element)
+	public long set(final int index, final long element)
 	{
 		rangeCheck(index);
 
@@ -522,7 +522,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 		ensureExplicitCapacity(minCapacity);
 	}
 
-	private void ensureExplicitCapacity(int minCapacity)
+	private void ensureExplicitCapacity(final int minCapacity)
 	{
 		modCount++;
 
@@ -537,7 +537,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	 * Private remove method that skips bounds checking and does not return the
 	 * value removed.
 	 */
-	private void fastRemove(int index)
+	private void fastRemove(final int index)
 	{
 		modCount++;
 		final int numMoved = size - index - 1;
@@ -555,7 +555,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	 * @param minCapacity
 	 *            the desired minimum capacity
 	 */
-	private void grow(int minCapacity)
+	private void grow(final int minCapacity)
 	{
 		// overflow-conscious code
 		final int oldCapacity = elementData.length;
@@ -577,7 +577,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	 * possible refactorings of the error handling code, this "outlining"
 	 * performs best with both server and client VMs.
 	 */
-	private String outOfBoundsMsg(int index)
+	private String outOfBoundsMsg(final int index)
 	{
 		return "Index: " + index + ", Size: " + size;
 	}
@@ -588,7 +588,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	 * It is always used immediately prior to an array access, which throws an
 	 * ArrayIndexOutOfBoundsException if index is negative.
 	 */
-	private void rangeCheck(int index)
+	private void rangeCheck(final int index)
 	{
 		if (index >= size)
 		{
@@ -599,7 +599,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	/**
 	 * A version of rangeCheck used by add and addAll.
 	 */
-	private void rangeCheckForAdd(int index)
+	private void rangeCheckForAdd(final int index)
 	{
 		if (index > size || index < 0)
 		{
@@ -608,7 +608,7 @@ public final class ArrayListLong implements RandomAccess, Cloneable, java.io.Ser
 	}
 
 	@SuppressWarnings("unchecked")
-	long elementData(int index)
+	long elementData(final int index)
 	{
 		return elementData[index];
 	}

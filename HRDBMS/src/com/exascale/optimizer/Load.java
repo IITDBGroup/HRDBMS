@@ -7,7 +7,7 @@ public class Load extends SQLStatement
 	private final String delimiter;
 	private final String glob;
 
-	public Load(TableName table, boolean replace, String delimiter, String glob)
+	public Load(final TableName table, final boolean replace, final String delimiter, final String glob)
 	{
 		this.table = table;
 		this.replace = replace;

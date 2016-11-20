@@ -11,27 +11,27 @@ public class LoadOutputFormat extends OutputFormat
 {
 
 	@Override
-	public void checkOutputSpecs(JobContext arg0) throws IOException, InterruptedException
+	public void checkOutputSpecs(final JobContext arg0) throws IOException, InterruptedException
 	{
 	}
 
 	@Override
-	public OutputCommitter getOutputCommitter(TaskAttemptContext arg0) throws IOException, InterruptedException
+	public OutputCommitter getOutputCommitter(final TaskAttemptContext arg0) throws IOException, InterruptedException
 	{
-		String jobName = arg0.getJobName();
-		String tableName = jobName.substring(5);
-		String portString = arg0.getConfiguration().get("hrdbms.port");
-		String hrdbmsHome = arg0.getConfiguration().get("hrdbms.home");
+		final String jobName = arg0.getJobName();
+		final String tableName = jobName.substring(5);
+		final String portString = arg0.getConfiguration().get("hrdbms.port");
+		final String hrdbmsHome = arg0.getConfiguration().get("hrdbms.home");
 		return new LoadOutputCommitter(tableName, portString, hrdbmsHome);
 	}
 
 	@Override
-	public RecordWriter getRecordWriter(TaskAttemptContext arg0) throws IOException, InterruptedException
+	public RecordWriter getRecordWriter(final TaskAttemptContext arg0) throws IOException, InterruptedException
 	{
-		String jobName = arg0.getJobName();
-		String tableName = jobName.substring(5);
-		String portString = arg0.getConfiguration().get("hrdbms.port");
-		String hrdbmsHome = arg0.getConfiguration().get("hrdbms.home");
+		final String jobName = arg0.getJobName();
+		final String tableName = jobName.substring(5);
+		final String portString = arg0.getConfiguration().get("hrdbms.port");
+		final String hrdbmsHome = arg0.getConfiguration().get("hrdbms.home");
 		return LoadRecordWriter.get(tableName, portString, hrdbmsHome);
 	}
 }
