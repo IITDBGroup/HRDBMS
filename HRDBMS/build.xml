@@ -75,14 +75,14 @@
 	</target>
 
 	
-	<!-- EXTRACT CLASS FILES FOR DEPENDENCIES -->
+	<!-- EXTRACT CLASS FILES FOR DEPENDENCIES
 	<target name="unjarDependencies" depends="clean">
 	    <unzip dest="${binarydir}">
 	        <fileset dir="${librarydir}">
 	            <include name="**/*.jar" />
 	        </fileset>    
 	    </unzip>
-	</target>
+	</target>  -->
 	
 	<!-- CREATE PARSER -->
 	<target name="createParser" depends="clean">
@@ -95,7 +95,7 @@
 	</target>
 	
 	<!-- COMPILE SYSTEM -->
-	<target name="compile" depends="unjarDependencies">
+	<target name="compile" depends="clean">
 		<depend srcdir="${sourcedir}"
 		        destdir="${binarydir}"
 		        cache="depcache"
@@ -108,7 +108,7 @@
 
 	
 	<!-- PACKAGE SYSTEM AS JAR -->
-	<target name="createJar" depends="unjarDependencies">
+	<target name="createJar" depends="compile">
 		<jar destfile="${packagejar}" basedir="${binarydir}">
 			<manifest>
 				<attribute name="Created-By" value="Illinois Institute of Technology, Department for Computer Science" />
