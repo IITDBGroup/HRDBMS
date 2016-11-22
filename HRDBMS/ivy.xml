@@ -116,13 +116,18 @@
       </dependency>
       <dependency org="de.ruedigermoeller" name="fst" rev="2.22"/>
       <dependency org="net.jpountz.lz4" name="lz4" rev="1.3.0"/>
-      <dependency org="com.google.errorprone" name="error_prone_annotations" rev="2.0.11"/> 
-      <dependency org="org.sosy-lab" name="smtinterpol" rev="2.1-255-gcdd5908"/> 
+      <dependency org="com.google.errorprone" name="error_prone_annotations" rev="2.0.11"/>
+      <dependency org="org.sosy-lab" name="java-smt" rev="1.0.1"/> 
       <dependency org="com.google.guava" name="guava" rev="19.0" />
+      
+      
      <!--
-	
-      <dependency org="" name="" rev=""/> 
-      <dependency org="" name="" rev=""/> 
+	<dependency org="com.github.sevntu.checkstyle" name="dsm-maven-plugin" rev="1.17.0"/>
+      <dependency org="org.sosy-lab" name="common" rev="0.2"/>         
+      <dependency org="com.google.googlejavaformat" name="google-java-format" rev="	0.1-alpha"/> 
+      <dependency org="" name="" rev=""/>
+      <dependency org="" name="" rev=""/>
+      
       -->
 
       
