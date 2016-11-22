@@ -14,10 +14,10 @@ package com.exascale.optimizer;
  *
  * COPYRIGHT:
  *
- * This software module was originally developed by Raphaël Grosbois and
+ * This software module was originally developed by Raphael Grosbois and
  * Diego Santa Cruz (Swiss Federal Institute of Technology-EPFL); Joel
- * Askelöf (Ericsson Radio Systems AB); and Bertrand Berthelot, David
- * Bouchard, Félix Henry, Gerard Mozelle and Patrice Onno (Canon Research
+ * Askelef (Ericsson Radio Systems AB); and Bertrand Berthelot, David
+ * Bouchard, Felix Henry, Gerard Mozelle and Patrice Onno (Canon Research
  * Centre France S.A) in the course of development of the JPEG2000
  * standard as specified by ISO/IEC 15444 (JPEG 2000 Standard). This
  * software module is an implementation of a part of the JPEG 2000

@@ -26,12 +26,12 @@
 		
 	
 	<!-- CLASSPATHS -->
-	<path id="libraries">
+<!--	<path id="libraries">
 		<fileset dir="${binarydir}">
 			<include name="**/*.class"/>
 		</fileset>
 	</path>
-	
+	-->
 	<!-- **************************************** TASKS **************************************** -->                                         
 	<!-- Ivy -->
     <target name="download-ivy" unless="offline">
@@ -57,6 +57,10 @@
 	<target name="download-dependencies" depends="init-ivy">
 		 <ivy:resolve />
 		 <ivy:retrieve sync="false" type="jar" pattern="${librarydir}/[artifact].[ext]" />
+		<!-- classpath -->
+		<path id="classpath">
+			<fileset dir="${librarydir}"/>
+		</path>
 	</target>
 	
 	<!-- TASK DEFS AND IMPORTED LIBRARIES -->
@@ -86,7 +90,7 @@
 	
 	<!-- CREATE PARSER -->
 	<target name="createParser" depends="clean">
-		<java classname="org.antlr.v4.Tool" classpathref="libraries">
+		<java classname="org.antlr.v4.Tool" classpathref="classpath">
 			 <arg value="${grammarfile}"/>
 		</java>
 		<!-- TODO -->
@@ -100,16 +104,47 @@
 		        destdir="${binarydir}"
 		        cache="depcache"
 		        closure="yes"/>
-		<javac srcdir="${sourcedir}" destdir="${binarydir}" classpathref="libraries" 
-			debug="on" excludes="**/.svn*">
+		<javac 
+			srcdir="${sourcedir}" 
+			destdir="${binarydir}" 
+			classpathref="classpath" 
+			debug="on" 
+			excludes="**/.svn*" 
+			source="1.8"
+			includeantruntime="false">
 			<compilerarg value="-Xlint:unchecked" />
 		</javac>
 	</target>
 
+	<target name="compileStandalone">
+		<depend srcdir="${sourcedir}"
+		        destdir="${binarydir}"
+		        cache="depcache"
+		        closure="yes"/>
+		<javac 
+			srcdir="${sourcedir}" 
+			destdir="${binarydir}" 
+			classpathref="classpath" 
+			debug="on" 
+			excludes="**/.svn*" 
+			source="1.8"
+			includeantruntime="false">
+			<compilerarg value="-Xlint:unchecked" />
+		</javac>
+	</target>
 	
 	<!-- PACKAGE SYSTEM AS JAR -->
 	<target name="createJar" depends="compile">
 		<jar destfile="${packagejar}" basedir="${binarydir}">
+			<manifest>
+				<attribute name="Created-By" value="Illinois Institute of Technology, Department for Computer Science" />
+			</manifest>
+			<zipgroupfileset dir="${librarydir}" includes="*.jar" excludes="ant*.jar ivy.jar"/>
+		</jar>
+	</target>
+
+	<target name="createJarStandalone">
+		<jar destfile="${packagejar}" basedir="${binarydir}" zip64Mode="as-needed">
 			<manifest>
 				<attribute name="Created-By" value="Illinois Institute of Technology, Department for Computer Science" />
 			</manifest>
