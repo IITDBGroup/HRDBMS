@@ -1,10 +1,10 @@
-# OVERVIEW
+# Overview
 HRDBMS is a relational database for analytics/complex queries that is designed to handle large amounts of data and run across large clusters.
 The nodes in an HRDBMS cluster are divided into 2 types: coordinators nodes and workers nodes.  The majority of the cluster will be made of worker nodes.  These are the nodes that will actually store table data and do the majority of query processing.  The remaining nodes are coordinator nodes.  The coordinator nodes are responsible for accepting incoming requests from JDBC clients (no ODBC supported as of yet) and doing query planning and optimization.  Your cluster must have at least 1 coordinator and 3 workers.  You can have multiple coordinators if you choose.  The main advantage of this is to be able to handle more clients, and (in the future) to provide HA for coordinators.
 
 This document will cover how to build, install, configure, and start HRDBMS.  It will then discuss SQL syntax and how to use the JDBC driver and CLI interface.
 
-# BUILDING HRDBMS
+# Building HRDBMS
 
 Download the source code as well as the 2 dependency jar files.  When you build your project, you need to create a single output jar file called HRDBMS.jar that includes all of the stuff from the 2 dependency jar files within it.
 
@@ -16,23 +16,39 @@ ant createJar
 
 which generates a `HRDBMS.jar` in the `build` folder.
 
-# INSTALLING HRDBMS
+# Installing HRDBMS
 
-1)	Create a file called nodes.cfg that has this format.
+## nodes.cfg
 
+Create a file called `nodes.cfg` that has this format.
+
+~~~
 cc082.cooley, C, rack1, /home/hrdbms
 cc123.cooley, W, rack1, /home/hrdbms
 cc077.cooley, W, rack1, /home/hrdbms
 ...
+~~~
 
 The first field is the hostname or ip of the node.  The second field is C or W for whether the node is a coordinator or a worker.  The third field is the name of the rack that the node is on.  The fourth field is the "install directory" for HRDBMS on that node.  This is the directory where the HRDBMS.jar file exists on that node.  Distribute this nodes.cfg file to all nodes.  It needs to exist in the install directory on each node and it needs to be identical on all nodes.
 
-2)	Distribute the HRDBMS.jar file and the huffman.dat file to all nodes.  Make sure to put it in whatever the install directory is for each node.
-3)	Set up passwordless ssh for the userid that you will run HRDBMS under between each coordinator node and each worker node.
-4)	Make sure each node supports a hard limit in ulimit for the HRDBMS userid for max processes of 100000.  We will never get anywhere near that, but I just picked a really high number.
-5)	On each node you also need to have a file called hparms in the install directory.  This file specifies the value for system parameters that you wish to override from the defaults.  There are a few that you will definitely need to override.  In a simple installation, you can get by with having this file be identical on all nodes.  In more complex installations, that might not work.  The format for the file is keyword=value, with one keyword per line and no space between the keyword, the equals sign, and the value.
+## Distribute files
 
-All currently valid parameters are explained here.
+Distribute the `HRDBMS.jar` file and the `huffman.dat` file to all nodes.  Make sure to put it in whatever the install directory is for each node.
+
+## Set up passwordless ssh
+
+Set up passwordless ssh for the userid that you will run HRDBMS under between each coordinator node and each worker node.
+
+## Change hard limits with ulimit
+
+Make sure each node supports a hard limit in ulimit for the HRDBMS userid for max processes of 100000.  We will never get anywhere near that, but I just picked a really high number.
+
+## hparms
+
+On each node you also need to have a file called `hparms` in the install directory.  This file specifies the value for system parameters that you wish to override from the defaults.  There are a few that you will definitely need to override.  In a simple installation, you can get by with having this file be identical on all nodes.  In more complex installations, that might not work.  The format for the file is keyword=value, with one keyword per line and no space between the keyword, the equals sign, and the value.
+
+All currently valid parameters are explained below:
+
 * `deadlock_check_secs` - check for lock deadlocks every this many seconds.  The default is 60.
 
 * `slock_block_sleep_ms` - when we are unable to get a share lock, we retry every this many milliseconds.  The default is 1000.
@@ -112,7 +128,7 @@ It's probably fine for most purposes, unless you have a really, really big machi
 * `hjo_bin_size` - the number of rows per bin when HRDBMS does an external hash join. The default value is 100000.
 * `mo_bin_size` - the number of rows per bins when HRDBMS does an external aggregation. The default value is 3000000.
 
-# STARTING HRDBMS
+# Starting HRDBMS
 Log on to any of the coordinator nodes as the HRDBMS user.  Go to the install directory for that node.  Issue the following commands...
 
 ~~~
@@ -123,12 +139,14 @@ nohup java -XX:+UseG1GC -XX:G1HeapRegionSize=32m -XX:+ParallelRefProcEnabled -XX
 
 Each node will write a debug log in its install directory called hrdbms.log.
 
-# SQL SYNTAX
+# SQL Syntax
 For starters you probably want to create some tables.
 
+~~~
 CREATE [COLUMN] TABLE schema.table(col def, col def, ..., [PRIMARY KEY(col, col,...)]) [COLORDER(int, int, ...)] [ORGANIZATION(int, int, ...)] groupExp nodeExp devExp
+~~~
 
-Syntax in []s is optional.  Column definitions are pretty much standard as with any database.  Primary keys can be defined as part of a column definition or as a separate PRIMARY KEY clause.  If you use the COLORDER clause, it takes a list of integers, 1 through the number of columns in the tables.  The list specifies the orders in which to physically stored the columns, and it only makes sense for a column table.  For example COLORDER(2,3,1) says store the second column first, followed by the third column, and then the first column.
+Syntax in `[]` is optional.  Column definitions are pretty much standard as with any database.  Primary keys can be defined as part of a column definition or as a separate PRIMARY KEY clause.  If you use the COLORDER clause, it takes a list of integers, 1 through the number of columns in the tables.  The list specifies the orders in which to physically stored the columns, and it only makes sense for a column table.  For example COLORDER(2,3,1) says store the second column first, followed by the third column, and then the first column.
 
 If you use the ORGANIZATION cluase, it takes a list of integers as well. Again the integers are representing columns from the column definition list.  The first column has a value of 1.  The ORGANIZATION clause specifies a sort order for how data should be loaded into the table.  For example ORGANIZATION(3,2) says that when loading data, sort it first by column 3 and then by column 2 and load it in that order.  
 
@@ -147,7 +165,7 @@ For devExp, use.
 all,hash{col|col|...}
 This hash determines which device on the node the row is placed on.  Never use the same set of columns for this expression that you used for nodeExp.  It is OK however, if nodeExp is a subset of devExp or vice versa.
 
-# INDEXES
+## Indexes
 HRDBMS automatically builds indexes for you to support primary key constraints.  While it is true, that indexes can help (and help a good deal) for certain queries, it is not that common of a situation for complex queries.  So rather than creating what indexes you think make sense, let HRDBMS tell you!
 
 Start with no indexes other than for the primary keys and run your SQL statements.  Check the debug log (hrdbms.log) in the install directory on the coordinators, to find the coordinator that actually did the optimization for the queries.  If the optimizer wanted to use an index but one did not exist, it will tell you in the debug log!  It will tell you what columns in wanted an index on.  Very cool.
@@ -190,10 +208,10 @@ INSERT, UPDATE, DELETE, and DROP are all straightforward.  Except that are known
 
 CREATE VIEW is straightforward except for that right now, it doesn't let you give column names in the view definition.  The column names are whatever is in the SELECT clause in the defining SELECT statement.
 
-# SELECT STATEMENTS
+## Select Statements
 All the basic SELECT functionality is there, except outer joins.  Outer joins are not yet supported because HRDBMS does not yet support nulls.  For now you need to use an invalid data value just like you would in a file.  Currently null support is a medium priority for me.  Only the most basic scalar functions are there.  It's simple to add more, but rather than sitting down and adding 100, I've been adding them as needed.  I can't say it's SQL-92 compliant or anything like that, but it does most of what I see people do in the real world.  If you need something it doesn't do, let me know.  Contact info at the bottom.
 
-# USING THE CLI
+# Using The CLI
 To start the CLI, run...
 
 ~~~
@@ -216,9 +234,9 @@ timing on
 
 You will then get timing information back for all your queries.  Type quit to exit the CLI.
 
-# USING THE JDBC DRIVER
+# Using The JDBC Driver
 Using the JDBC driver is pretty standard.  You have to use the HRDBMS.jar file and the JDBC driver is packaged up in the same jar file that the server is in.  In fact the CLI is a JDBC application.  So, if you need more help just look at the source code for CLI.java in the com.exascale.CLI package.
 
-# CONTACT INFO
+# Contact Info
 If we start to get more users, I'll start to prioritize things based on what the users need with the understanding that my research needs have to come first.  Please use the issues feature on github to submit bug reports and feature requests.  I'll respond to this much better than things getting lost in email.  But if you need to go over something with me that requires some discussion, you can reach me at jasonar81@gmail.com.  Just put HRDBMS in the subject line.  Thanks!
 
