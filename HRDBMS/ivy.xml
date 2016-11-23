@@ -37,6 +37,7 @@
 	<dependency org="org.apache.hadoop" name="hadoop-archives" rev="2.5.1"/>
 	<dependency org="org.apache.hadoop" name="hadoop-auth" rev="2.5.1"/>
 	<dependency org="org.apache.hadoop" name="hadoop-common" rev="2.5.1"/>
+	<dependency org="org.apache.hadoop" name="hadoop-core" rev="1.2.1"/>
 	<dependency org="org.apache.hadoop" name="hadoop-datajoin" rev="2.5.1"/>
 	<dependency org="org.apache.hadoop" name="hadoop-distcp" rev="2.5.1"/>
 	<dependency org="org.apache.hadoop" name="hadoop-extras" rev="2.5.1"/>

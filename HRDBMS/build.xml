@@ -10,6 +10,8 @@
 	<property name="builddir" value="${projectroot}/build" />
 	<property name="librarydir" value="${projectroot}/lib" />
 	<property name="buildlibrarydir" value="${projectroot}/buildlib" />
+	<property name="tmpjardir" value="${projectroot}/tmpjardir" />
+	<property name="parseroutdir" value="${sourcedir}/com/exascale/optimizer/" />
 	
 	<!-- FILES -->
 	<property name="buildjar" value="${builddir}/gprom-jdbc-test.jar" />
@@ -76,6 +78,7 @@
 	<target name="clean" depends="setup-additional-anttasks">
 		<mkdir dir="${builddir}" />
 		<mkdir dir="${binarydir}" />
+		<mkdir dir="${tmpjardir}" />
 	</target>
 
 	
@@ -89,13 +92,19 @@
 	</target>  -->
 	
 	<!-- CREATE PARSER -->
-	<target name="createParser" depends="clean">
+	<target name="createParser">
+		<path id="classpath">
+			<fileset dir="${librarydir}" includes="antlr4.jar" />
+		</path>
 		<java classname="org.antlr.v4.Tool" classpathref="classpath">
-			 <arg value="${grammarfile}"/>
-		</java>
-		<!-- TODO -->
-		<!-- <antlr target="${sourcedir}/com/exascale/optimizer/Select.g4" >
-		</antlr> -->
+			<arg value="-visitor"/>
+			<arg value="-no-listener"/>
+			<arg value="-package"/>
+			<arg value="com.exascale.optimizer" />
+			<arg value="-o"/>
+			<arg value="${projectroot}" />
+			<arg value="${grammarfile}"/>
+		</java> 
 	</target>
 	
 	<!-- COMPILE SYSTEM -->
@@ -117,6 +126,9 @@
 	</target>
 
 	<target name="compileStandalone">
+		<path id="classpath">
+			<fileset dir="${librarydir}"/>
+		</path>
 		<depend srcdir="${sourcedir}"
 		        destdir="${binarydir}"
 		        cache="depcache"
@@ -135,21 +147,47 @@
 	
 	<!-- PACKAGE SYSTEM AS JAR -->
 	<target name="createJar" depends="compile">
-		<jar destfile="${packagejar}" basedir="${binarydir}">
-			<manifest>
-				<attribute name="Created-By" value="Illinois Institute of Technology, Department for Computer Science" />
-			</manifest>
-			<zipgroupfileset dir="${librarydir}" includes="*.jar" excludes="ant*.jar ivy.jar"/>
-		</jar>
-	</target>
-
-	<target name="createJarStandalone">
+		<path id="jarclasspath">
+			<fileset dir="${librarydir}" excludes="ant*.jar ivy.jar" />
+		</path>
+		<delete dir="${tmpjardir}"/> 
+		<unjar dest="${tmpjardir}">
+			<patternset>
+				<exclude name="**/*.RSA"/>
+				<exclude name="**/*.SF"/>
+				<exclude name="**/*.DSA"/>
+			</patternset>
+			<path refid="jarclasspath" />
+		</unjar>
 		<jar destfile="${packagejar}" basedir="${binarydir}" zip64Mode="as-needed">
 			<manifest>
 				<attribute name="Created-By" value="Illinois Institute of Technology, Department for Computer Science" />
 			</manifest>
-			<zipgroupfileset dir="${librarydir}" includes="*.jar" excludes="ant*.jar ivy.jar"/>
+			<zipfileset dir="${tmpjardir}" includes="**/*" /> 
 		</jar>
+		<delete dir="${tmpjardir}"/>
+	</target>
+
+	<target name="createJarStandalone">
+		<path id="jarclasspath">
+			<fileset dir="${librarydir}" excludes="ant*.jar ivy.jar" />
+		</path>
+		<delete dir="${tmpjardir}"/> 
+		<unjar dest="${tmpjardir}">
+			<patternset>
+				<exclude name="**/*.RSA"/>
+				<exclude name="**/*.SF"/>
+				<exclude name="**/*.DSA"/>
+			</patternset>
+			<path refid="jarclasspath" />
+		</unjar>
+		<jar destfile="${packagejar}" basedir="${binarydir}" zip64Mode="as-needed">
+			<manifest>
+				<attribute name="Created-By" value="Illinois Institute of Technology, Department for Computer Science" />
+			</manifest>
+			<zipfileset dir="${tmpjardir}" includes="**/*" /> 
+		</jar>
+		<delete dir="${tmpjardir}"/>
 	</target>
 
 	
