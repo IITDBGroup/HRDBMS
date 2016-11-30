@@ -15,6 +15,8 @@
 	<property name="binarydir" value="${projectroot}/bin" />
 	<property name="builddir" value="${projectroot}/build" />
 	<property name="librarydir" value="${projectroot}/lib" />
+	<property name="packagedir" value="${sourcedir}/com/exascale/optimizer" />
+	<property name="package" value="com/exascale/optimizer" />
 	
 	<!-- FILES -->
 	<property name="buildjar" value="${builddir}/gprom-jdbc-test.jar" />
@@ -56,6 +58,19 @@
 		<!-- TODO -->
 		<!-- <antlr target="${sourcedir}/com/exascale/optimizer/Select.g4" >
 		</antlr> -->
+	</target>
+	
+	<target name="antlr4-install">
+				    <mkdir dir="${antlr4.dir}" />
+				    <get src="http://www.antlr.org/download/antlr-4.4-complete.jar" dest="${antlr4.dir}" skipexisting="true"/>
+	</target>
+	<target name="antlr4-gensrc" depends="antlr4-install" >
+	    
+	    <java jar="${antlr4.dir}/antlr-4.4-complete.jar" fork="true">
+	    <arg line="-package ${package} ${grammarfile} -o ${packagedir}"/>
+	    <arg line="-listener -visitor -encoding UTF-8"/>
+	    <arg line="-package ${package}"/>
+	    </java>
 	</target>
 	
 	<!-- COMPILE SYSTEM -->
