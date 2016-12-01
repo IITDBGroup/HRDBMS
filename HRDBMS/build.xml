@@ -16,7 +16,7 @@
 	<property name="builddir" value="${projectroot}/build" />
 	<property name="librarydir" value="${projectroot}/lib" />
 	<property name="packagedir" value="${sourcedir}/com/exascale/optimizer" />
-	<property name="package" value="com/exascale/optimizer" />
+	<property name="package" value="com.exascale.optimizer" />
 	
 	<!-- FILES -->
 	<property name="buildjar" value="${builddir}/gprom-jdbc-test.jar" />
