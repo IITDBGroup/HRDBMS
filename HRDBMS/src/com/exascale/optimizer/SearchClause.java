@@ -17,6 +17,26 @@ public class SearchClause
 		this.condition = condition;
 		this.negated = negated;
 	}
+	
+	public String toString()
+	{
+		String retval = " ";
+		if (negated)
+		{
+			retval += "NOT ";
+		}
+		
+		if (predicate != null)
+		{
+			retval += predicate.toString();
+		}
+		else
+		{
+			retval += condition.toString();
+		}
+		
+		return retval;
+	}
 
 	@Override
 	public SearchClause clone()

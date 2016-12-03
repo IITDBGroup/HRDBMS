@@ -15,7 +15,7 @@ public final class CompressedOutputStream extends FilterOutputStream
 	{
 		factory = LZ4Factory.nativeInstance();
 	}
-	private final byte[] buff = new byte[3 * 128 * 1024];
+	private final byte[] buff = new byte[128 * 1024];
 	private int index = 0;
 	private final LZ4Compressor compress = factory.fastCompressor();
 	// private LZ4Compressor compress = factory.highCompressor();
@@ -24,7 +24,7 @@ public final class CompressedOutputStream extends FilterOutputStream
 	public CompressedOutputStream(final OutputStream out)
 	{
 		super(out);
-		outBuff = new byte[compress.maxCompressedLength(3 * 128 * 1024) + 8];
+		outBuff = new byte[compress.maxCompressedLength(128 * 1024) + 8];
 	}
 
 	@Override
@@ -44,7 +44,7 @@ public final class CompressedOutputStream extends FilterOutputStream
 	public void write(final byte[] b) throws IOException
 	{
 		int toWrite = b.length;
-		int ableToWrite = 3 * 128 * 1024 - index;
+		int ableToWrite = 128 * 1024 - index;
 		int bIndex = 0;
 
 		while (true)
@@ -67,7 +67,7 @@ public final class CompressedOutputStream extends FilterOutputStream
 				flushFull();
 				toWrite -= ableToWrite;
 				bIndex += ableToWrite;
-				ableToWrite = 3 * 128 * 1024;
+				ableToWrite = 128 * 1024;
 			}
 		}
 	}
@@ -82,11 +82,11 @@ public final class CompressedOutputStream extends FilterOutputStream
 
 	private void flushFull() throws IOException
 	{
-		final int compLen = compress.compress(buff, 0, 3 * 128 * 1024, outBuff, 8);
+		final int compLen = compress.compress(buff, 0, 128 * 1024, outBuff, 8);
 		final ByteBuffer bb = ByteBuffer.wrap(outBuff);
 		bb.position(0);
 		bb.putInt(compLen + 4);
-		bb.putInt(3 * 128 * 1024);
+		bb.putInt(128 * 1024);
 		out.write(outBuff, 0, compLen + 8);
 		index = 0;
 	}

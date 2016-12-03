@@ -17,6 +17,7 @@ import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.HJOMultiHashMap;
 import com.exascale.misc.MurmurHash;
+import com.exascale.misc.MyDate;
 
 public class CNFFilter implements Serializable
 {
@@ -32,14 +33,13 @@ public class CNFFilter implements Serializable
 			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
 			f.setAccessible(true);
 			unsafe = (sun.misc.Unsafe)f.get(null);
+			pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
+			isV7 = (pbpeVer == 7);
 		}
 		catch (final Exception e)
 		{
 			unsafe = null;
 		}
-
-		pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
-		isV7 = (pbpeVer == 7);
 	}
 
 	private ArrayList<ArrayList<Filter>> filters = new ArrayList<ArrayList<Filter>>();
@@ -1083,5 +1083,161 @@ public class CNFFilter implements Serializable
 		}
 
 		return false;
+	}
+	
+	public static String isTrue(HashSet<HashMap<Filter, Filter>> hshm)
+	{
+		if (hshm.isEmpty())
+		{
+			return null;
+		}
+		
+		StringBuilder sb = new StringBuilder();
+		boolean outerFirst = true;
+		for (HashMap<Filter, Filter> hm : hshm)
+		{
+			if (outerFirst)
+			{
+				outerFirst = false;
+			}
+			else
+			{
+				sb.append(" AND ");
+			}
+			
+			sb.append("(");
+			boolean first = true;
+			for (Filter f : hm.keySet())
+			{
+				if (first)
+				{
+					first = false;
+				}
+				else
+				{
+					sb.append(" OR ");
+				}
+				
+				if (f.leftIsColumn())
+				{
+					String col = f.leftColumn();
+					if (col.contains("."))
+					{
+						col = col.substring(col.indexOf('.') + 1);
+					}
+					
+					sb.append(col);
+				}
+				else
+				{
+					if (f.leftIsDate())
+					{
+						MyDate o = f.getLeftDate();
+						sb.append("DATE('" + o + "')");
+					}
+					else if (f.leftIsNumber())
+					{
+						sb.append(f.getLeftNumber());
+					}
+					else
+					{
+						sb.append("'" + f.getLeftString() + "'");
+					}
+				}
+				
+				String op = f.op();
+				if (op.equals("E"))
+				{
+					sb.append(" = ");
+				}
+				else if (op.equals("NE"))
+				{
+					sb.append(" <> ");
+				}
+				else if (op.equals("G"))
+				{
+					sb.append(" > ");
+				}
+				else if (op.equals("GE"))
+				{
+					sb.append(" >= ");
+				}
+				else if (op.equals("L"))
+				{
+					sb.append(" < ");
+				}
+				else if (op.equals("LE"))
+				{
+					sb.append(" <= ");
+				}
+				else if (op.equals("LI"))
+				{
+					sb.append(" LIKE ");
+				}
+				else
+				{
+					sb.append(" NOT LIKE ");
+				}
+				
+				if (f.rightIsColumn())
+				{
+					String col = f.rightColumn();
+					if (col.contains("."))
+					{
+						col = col.substring(col.indexOf('.') + 1);
+					}
+					
+					sb.append(col);
+				}
+				else
+				{
+					if (f.rightIsDate())
+					{
+						MyDate o = f.getRightDate();
+						sb.append("DATE('" + o + "')");
+					}
+					else if (f.rightIsNumber())
+					{
+						sb.append(f.getRightNumber());
+					}
+					else
+					{
+						sb.append("'" + f.getRightString() + "'");
+					}
+				}
+			}
+			
+			sb.append(")");
+		}
+		
+		return sb.toString();
+	}
+	
+	public static String notTrue(ArrayList<HashSet<HashMap<Filter, Filter>>> hshms)
+	{
+		if (hshms.isEmpty())
+		{
+			return null;
+		}
+		
+		StringBuilder sb = new StringBuilder();
+		boolean first = true;
+		for (HashSet<HashMap<Filter, Filter>> hshm : hshms)
+		{
+			if (first)
+			{
+				first = false;
+			}
+			else
+			{
+				sb.append(" AND ");
+			}
+			
+			sb.append(" NOT (");
+			sb.append(isTrue(hshm));
+			sb.append(")");
+		}
+		
+		return sb.toString();
 	}
 }

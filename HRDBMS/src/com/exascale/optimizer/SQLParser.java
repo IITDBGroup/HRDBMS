@@ -409,7 +409,7 @@ public class SQLParser
 			for (final ConnectedSearchClause clause : s.getConnected())
 			{
 				clause.setAnd(!clause.isAnd());
-				clause.getSearch().setNegated(clause.getSearch().getNegated());
+				clause.getSearch().setNegated(!clause.getSearch().getNegated());
 			}
 
 			return;
@@ -9581,135 +9581,125 @@ public class SQLParser
 		}
 	}
 
-	private void convertToCNF(final SearchCondition s)
+	private void convertToCNF(SearchCondition s)
 	{
-		final SearchClause sc = s.getClause();
-		if (sc.getPredicate() == null)
+		tail: while (true)
 		{
-			pushInwardAnyNegation(sc);
-		}
-
-		if (s.getConnected() != null && s.getConnected().size() > 0)
-		{
-			for (final ConnectedSearchClause csc : s.getConnected())
-			{
-				if (csc.getSearch().getPredicate() == null)
-				{
-					pushInwardAnyNegation(csc.getSearch());
-				}
-			}
-		}
-
-		if (isCNF(s))
-		{
-			return;
-		}
-
-		if ((s.getConnected() == null || s.getConnected().size() == 0) && sc.getPredicate() == null)
-		{
-			final SearchCondition s2 = sc.getSearch();
-			s.setClause(s2.getClause());
-			s.setConnected(s2.getConnected());
-			convertToCNF(s);
-			return;
-		}
-
-		if (allPredicates(s))
-		{
-			// we must have mixed ands and ors
-			final ArrayList<SearchClause> preds = new ArrayList<SearchClause>();
-			SearchClause next = null;
-			final ArrayList<ConnectedSearchClause> remainder = new ArrayList<ConnectedSearchClause>();
-			preds.add(sc);
-			boolean found = false;
-
-			for (final ConnectedSearchClause csc : s.getConnected())
-			{
-				if (found)
-				{
-					remainder.add(csc);
-					continue;
-				}
-
-				if (csc.isAnd())
-				{
-					preds.add(csc.getSearch());
-				}
-				else
-				{
-					found = true;
-					next = csc.getSearch();
-				}
-			}
-
-			final ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
-			for (final SearchClause a : preds)
-			{
-				final ArrayList<ConnectedSearchClause> b = new ArrayList<ConnectedSearchClause>(1);
-				final ConnectedSearchClause b1 = new ConnectedSearchClause(next, false);
-				b.add(b1);
-				final SearchCondition search = new SearchCondition(a, b);
-				searches.add(search);
-			}
-
-			final SearchCondition first = searches.remove(0);
-			final ArrayList<ConnectedSearchClause> b = new ArrayList<ConnectedSearchClause>();
-			for (final SearchCondition s2 : searches)
-			{
-				final SearchClause sc2 = new SearchClause(s2, false);
-				b.add(new ConnectedSearchClause(sc2, true));
-			}
-
-			final SearchCondition s3 = new SearchCondition(new SearchClause(first, false), b);
-			s.setClause(new SearchClause(s3, false));
-			s.setConnected(remainder);
-			convertToCNF(s);
-			return;
-		}
-
-		if (s.getConnected().get(0).isAnd())
-		{
-			// starts with and
+			//HRDBMSWorker.logger.debug("Entering convertToCNF search condition = " + s);
+			SearchClause sc = s.getClause();
 			if (sc.getPredicate() == null)
 			{
-				convertToCNF(sc.getSearch());
+				pushInwardAnyNegation(sc);
+				//HRDBMSWorker.logger.debug("After negating first search clause, search condition = " + s);
 			}
 
-			if (s.getConnected().get(0).getSearch().getPredicate() == null)
+			if (s.getConnected() != null && s.getConnected().size() > 0)
 			{
-				convertToCNF(s.getConnected().get(0).getSearch().getSearch());
-			}
-
-			if (sc.getPredicate() != null || (allPredicates(sc.getSearch()) && allAnd(sc.getSearch())))
-			{
-				// A is all anded predicates
-				final ArrayList<SearchClause> A = new ArrayList<SearchClause>();
-				if (sc.getPredicate() != null)
+				for (final ConnectedSearchClause csc : s.getConnected())
 				{
-					A.add(sc);
-				}
-				else
-				{
-					final SearchCondition s2 = sc.getSearch();
-					A.add(s2.getClause());
-					for (final ConnectedSearchClause csc : s2.getConnected())
+					if (csc.getSearch().getPredicate() == null)
 					{
-						A.add(csc.getSearch());
+						pushInwardAnyNegation(csc.getSearch());
 					}
 				}
+			}
+			
+			//HRDBMSWorker.logger.debug("After negating the rest, search condition = " + s);
 
-				// figure out what B is
-				final SearchClause sc2 = s.getConnected().get(0).getSearch();
-				if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
+			if (isCNF(s))
+			{
+				return;
+			}
+
+			if ((s.getConnected() == null || s.getConnected().size() == 0) && sc.getPredicate() == null)
+			{
+				final SearchCondition s2 = sc.getSearch();
+				s.setClause(s2.getClause());
+				s.setConnected(s2.getConnected());
+				continue tail;
+			}
+
+			if (allPredicates(s))
+			{
+				// we must have mixed ands and ors
+				ArrayList<SearchClause> preds = new ArrayList<SearchClause>();
+				SearchClause next = null;
+				ArrayList<ConnectedSearchClause> remainder = new ArrayList<ConnectedSearchClause>();
+				preds.add(sc);
+				boolean found = false;
+
+				for (final ConnectedSearchClause csc : s.getConnected())
 				{
-					// B is all anded predicates
-					if (sc2.getPredicate() != null)
+					if (found)
 					{
-						A.add(sc2);
+						remainder.add(csc);
+						continue;
+					}
+
+					if (csc.isAnd())
+					{
+						preds.add(csc.getSearch());
 					}
 					else
 					{
-						final SearchCondition s2 = sc2.getSearch();
+						found = true;
+						next = csc.getSearch();
+					}
+				}
+
+				ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
+				for (final SearchClause a : preds)
+				{
+					final ArrayList<ConnectedSearchClause> b = new ArrayList<ConnectedSearchClause>(1);
+					final ConnectedSearchClause b1 = new ConnectedSearchClause(next, false);
+					b.add(b1);
+					final SearchCondition search = new SearchCondition(a, b);
+					searches.add(search);
+				}
+
+				final SearchCondition first = searches.remove(0);
+				ArrayList<ConnectedSearchClause> b = new ArrayList<ConnectedSearchClause>();
+				for (final SearchCondition s2 : searches)
+				{
+					final SearchClause sc2 = new SearchClause(s2, false);
+					b.add(new ConnectedSearchClause(sc2, true));
+				}
+
+				SearchCondition s3 = new SearchCondition(new SearchClause(first, false), b);
+				s.setClause(new SearchClause(s3, false));
+				s.setConnected(remainder);
+				preds = null;
+				remainder = null;
+				searches = null;
+				b = null;
+				s3 = null;
+				continue tail;
+			}
+
+			if (s.getConnected().get(0).isAnd())
+			{
+				// starts with and
+				if (sc.getPredicate() == null)
+				{
+					convertToCNF(sc.getSearch());
+				}
+
+				if (s.getConnected().get(0).getSearch().getPredicate() == null)
+				{
+					convertToCNF(s.getConnected().get(0).getSearch().getSearch());
+				}
+
+				if (sc.getPredicate() != null || (allPredicates(sc.getSearch()) && allAnd(sc.getSearch())))
+				{
+					// A is all anded predicates
+					ArrayList<SearchClause> A = new ArrayList<SearchClause>();
+					if (sc.getPredicate() != null)
+					{
+						A.add(sc);
+					}
+					else
+					{
+						final SearchCondition s2 = sc.getSearch();
 						A.add(s2.getClause());
 						for (final ConnectedSearchClause csc : s2.getConnected())
 						{
@@ -9717,627 +9707,675 @@ public class SQLParser
 						}
 					}
 
-					s.getConnected().remove(0);
-					final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					final SearchClause first = A.remove(0);
-					for (final SearchClause search : A)
+					// figure out what B is
+					final SearchClause sc2 = s.getConnected().get(0).getSearch();
+					if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
 					{
-						cscs.add(new ConnectedSearchClause(search, true));
-					}
+						// B is all anded predicates
+						if (sc2.getPredicate() != null)
+						{
+							A.add(sc2);
+						}
+						else
+						{
+							final SearchCondition s2 = sc2.getSearch();
+							A.add(s2.getClause());
+							for (final ConnectedSearchClause csc : s2.getConnected())
+							{
+								A.add(csc.getSearch());
+							}
+						}
 
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
-				}
-				else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
-				{
-					// B all ors
-					s.getConnected().remove(0);
-					final SearchClause first = A.remove(0);
-					final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					for (final SearchClause search : A)
-					{
-						cscs.add(new ConnectedSearchClause(search, true));
-					}
-
-					cscs.add(new ConnectedSearchClause(sc2, true));
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
-				}
-				else
-				{
-					// A AND B CNF
-					s.getConnected().remove(0);
-					ArrayList<ConnectedSearchClause> cscs = sc2.getSearch().getConnected();
-					if (cscs == null)
-					{
-						cscs = new ArrayList<ConnectedSearchClause>();
-					}
-					for (final SearchClause search : A)
-					{
-						cscs.add(new ConnectedSearchClause(search, true));
-					}
-					sc2.getSearch().setConnected(cscs);
-					s.setClause(sc2);
-					convertToCNF(s);
-					return;
-				}
-			}
-			else if (allPredicates(sc.getSearch()) && allOrs(sc.getSearch()))
-			{
-				// A all ored preds
-				// figure out what B is
-				final SearchClause sc2 = s.getConnected().get(0).getSearch();
-				if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
-				{
-					// B is all anded predicates
-					final SearchClause first = sc;
-					final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					if (sc2.getPredicate() != null)
-					{
 						s.getConnected().remove(0);
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						final SearchClause first = A.remove(0);
+						for (final SearchClause search : A)
+						{
+							cscs.add(new ConnectedSearchClause(search, true));
+						}
+
+						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+						A = null;
+						cscs = null;
+						continue tail;
+					}
+					else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
+					{
+						// B all ors
+						s.getConnected().remove(0);
+						final SearchClause first = A.remove(0);
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						for (final SearchClause search : A)
+						{
+							cscs.add(new ConnectedSearchClause(search, true));
+						}
+
 						cscs.add(new ConnectedSearchClause(sc2, true));
 						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-						convertToCNF(s);
-						return;
+						A = null;
+						cscs = null;
+						continue tail;
 					}
+					else
+					{
+						// A AND B CNF
+						s.getConnected().remove(0);
+						ArrayList<ConnectedSearchClause> cscs = sc2.getSearch().getConnected();
+						if (cscs == null)
+						{
+							cscs = new ArrayList<ConnectedSearchClause>();
+						}
+						for (final SearchClause search : A)
+						{
+							cscs.add(new ConnectedSearchClause(search, true));
+						}
+						sc2.getSearch().setConnected(cscs);
+						s.setClause(sc2);
+						A = null;
+						continue tail;
+					}
+				}
+				else if (allPredicates(sc.getSearch()) && allOrs(sc.getSearch()))
+				{
+					// A all ored preds
+					// figure out what B is
+					final SearchClause sc2 = s.getConnected().get(0).getSearch();
+					if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
+					{
+						// B is all anded predicates
+						final SearchClause first = sc;
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						if (sc2.getPredicate() != null)
+						{
+							s.getConnected().remove(0);
+							cscs.add(new ConnectedSearchClause(sc2, true));
+							s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+							cscs = null;
+							continue tail;
+						}
 
-					cscs.add(new ConnectedSearchClause(sc2.getSearch().getClause(), true));
-					if (sc2.getSearch().getConnected() != null)
-					{
-						cscs.addAll(sc2.getSearch().getConnected());
+						cscs.add(new ConnectedSearchClause(sc2.getSearch().getClause(), true));
+						if (sc2.getSearch().getConnected() != null)
+						{
+							cscs.addAll(sc2.getSearch().getConnected());
+						}
+						s.getConnected().remove(0);
+						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+						cscs = null;
+						continue tail;
 					}
-					s.getConnected().remove(0);
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
-				}
-				else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
-				{
-					// B all ors
-					final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					final SearchClause first = sc;
-					cscs.add(new ConnectedSearchClause(sc2, true));
-					s.getConnected().remove(0);
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
-				}
-				else
-				{
-					// A ors B CNF
-					s.getConnected().remove(0);
-					ArrayList<ConnectedSearchClause> cscs = sc2.getSearch().getConnected();
-					if (cscs == null)
+					else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
 					{
-						cscs = new ArrayList<ConnectedSearchClause>();
-					}
-					cscs.add(new ConnectedSearchClause(sc, true));
-					sc2.getSearch().setConnected(cscs);
-					s.setClause(sc2);
-					convertToCNF(s);
-					return;
-				}
-			}
-			else
-			{
-				// A is CNF
-				// figure out what B is
-				final SearchClause sc2 = s.getConnected().get(0).getSearch();
-				if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
-				{
-					// A CNF B AND
-					s.getConnected().remove(0);
-					ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
-					if (cscs == null)
-					{
-						cscs = new ArrayList<ConnectedSearchClause>();
-					}
-
-					if (sc2.getPredicate() != null)
-					{
+						// B all ors
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						final SearchClause first = sc;
 						cscs.add(new ConnectedSearchClause(sc2, true));
+						s.getConnected().remove(0);
+						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+						cscs = null;
+						continue tail;
+					}
+					else
+					{
+						// A ors B CNF
+						s.getConnected().remove(0);
+						ArrayList<ConnectedSearchClause> cscs = sc2.getSearch().getConnected();
+						if (cscs == null)
+						{
+							cscs = new ArrayList<ConnectedSearchClause>();
+						}
+						cscs.add(new ConnectedSearchClause(sc, true));
+						sc2.getSearch().setConnected(cscs);
+						s.setClause(sc2);
+						cscs = null;
+						continue tail;
+					}
+				}
+				else
+				{
+					// A is CNF
+					// figure out what B is
+					final SearchClause sc2 = s.getConnected().get(0).getSearch();
+					if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
+					{
+						// A CNF B AND
+						s.getConnected().remove(0);
+						ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
+						if (cscs == null)
+						{
+							cscs = new ArrayList<ConnectedSearchClause>();
+						}
+
+						if (sc2.getPredicate() != null)
+						{
+							cscs.add(new ConnectedSearchClause(sc2, true));
+							sc.getSearch().setConnected(cscs);
+							cscs = null;
+							continue tail;
+						}
+
+						cscs.add(new ConnectedSearchClause(sc2.getSearch().getClause(), true));
+						if (sc2.getSearch().getConnected() != null)
+						{
+							cscs.addAll(sc2.getSearch().getConnected());
+						}
+
 						sc.getSearch().setConnected(cscs);
-						convertToCNF(s);
-						return;
+						cscs = null;
+						continue tail;
 					}
-
-					cscs.add(new ConnectedSearchClause(sc2.getSearch().getClause(), true));
-					if (sc2.getSearch().getConnected() != null)
+					else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
 					{
-						cscs.addAll(sc2.getSearch().getConnected());
-					}
+						// A CNF B OR
+						s.getConnected().remove(0);
+						ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
+						if (cscs == null)
+						{
+							cscs = new ArrayList<ConnectedSearchClause>();
+						}
 
-					sc.getSearch().setConnected(cscs);
-					convertToCNF(s);
-					return;
-				}
-				else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
-				{
-					// A CNF B OR
-					s.getConnected().remove(0);
-					ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
-					if (cscs == null)
-					{
-						cscs = new ArrayList<ConnectedSearchClause>();
-					}
-
-					sc.getSearch().setConnected(cscs);
-					cscs.add(new ConnectedSearchClause(sc2, true));
-					convertToCNF(s);
-					return;
-				}
-				else
-				{
-					// A CNF B CNF
-					s.getConnected().remove(0);
-					ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
-					if (cscs == null)
-					{
-						cscs = new ArrayList<ConnectedSearchClause>();
 						sc.getSearch().setConnected(cscs);
-					}
-
-					cscs.add(new ConnectedSearchClause(sc2.getSearch().getClause(), true));
-					if (sc2.getSearch().getConnected() != null)
-					{
-						cscs.addAll(sc2.getSearch().getConnected());
-					}
-
-					convertToCNF(s);
-					return;
-				}
-			}
-		}
-		else
-		{
-			// starts with or
-			if (sc.getPredicate() == null)
-			{
-				convertToCNF(sc.getSearch());
-			}
-
-			if (s.getConnected().get(0).getSearch().getPredicate() == null)
-			{
-				convertToCNF(s.getConnected().get(0).getSearch().getSearch());
-			}
-
-			if (sc.getPredicate() != null || (allPredicates(sc.getSearch()) && allAnd(sc.getSearch())))
-			{
-				// A is all anded predicates
-				final ArrayList<SearchClause> A = new ArrayList<SearchClause>();
-				if (sc.getPredicate() != null)
-				{
-					A.add(sc);
-				}
-				else
-				{
-					final SearchCondition s2 = sc.getSearch();
-					A.add(s2.getClause());
-					for (final ConnectedSearchClause csc : s2.getConnected())
-					{
-						A.add(csc.getSearch());
-					}
-				}
-
-				// figure out what B is
-				final SearchClause sc2 = s.getConnected().get(0).getSearch();
-				if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
-				{
-					// B is all anded predicates
-					final ArrayList<SearchClause> B = new ArrayList<SearchClause>();
-					if (sc2.getPredicate() != null)
-					{
-						B.add(sc2);
+						cscs.add(new ConnectedSearchClause(sc2, true));
+						cscs = null;
+						continue tail;
 					}
 					else
 					{
-						final SearchCondition s2 = sc2.getSearch();
-						B.add(s2.getClause());
-						for (final ConnectedSearchClause csc : s2.getConnected())
+						// A CNF B CNF
+						s.getConnected().remove(0);
+						ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
+						if (cscs == null)
 						{
-							B.add(csc.getSearch());
+							cscs = new ArrayList<ConnectedSearchClause>();
+							sc.getSearch().setConnected(cscs);
 						}
-					}
 
-					final ArrayList<SearchClause> searches = new ArrayList<SearchClause>();
-					for (final SearchClause p1 : A)
-					{
-						for (final SearchClause p2 : B)
+						cscs.add(new ConnectedSearchClause(sc2.getSearch().getClause(), true));
+						if (sc2.getSearch().getConnected() != null)
 						{
-							final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-							cscs.add(new ConnectedSearchClause(p2, false));
-							searches.add(new SearchClause(new SearchCondition(p1, cscs), false));
+							cscs.addAll(sc2.getSearch().getConnected());
 						}
-					}
 
-					final SearchClause first = searches.remove(0);
-					final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					for (final SearchClause search : searches)
-					{
-						cscs.add(new ConnectedSearchClause(search, true));
+						cscs = null;
+						continue tail;
 					}
-					s.getConnected().remove(0);
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
-				}
-				else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
-				{
-					// B all ors
-					final ArrayList<SearchClause> searches = new ArrayList<SearchClause>();
-					for (final SearchClause a : A)
-					{
-						final SearchClause search = sc2.clone();
-						search.getSearch().getConnected().add(new ConnectedSearchClause(a, false));
-						searches.add(search);
-					}
-
-					final SearchClause first = searches.remove(0);
-					final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					for (final SearchClause search : searches)
-					{
-						cscs.add(new ConnectedSearchClause(search, true));
-					}
-					s.getConnected().remove(0);
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
-				}
-				else
-				{
-					// A AND B CNF
-					s.getConnected().remove(0);
-					// build list of ored clauses in B
-					final SearchCondition scond = sc2.getSearch();
-					final ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
-					if (scond.getClause().getPredicate() != null)
-					{
-						final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-						searches.add(new SearchCondition(scond.getClause(), cscs));
-					}
-					else
-					{
-						searches.add(scond.getClause().getSearch());
-					}
-
-					for (final ConnectedSearchClause csc : scond.getConnected())
-					{
-						if (csc.getSearch().getPredicate() != null)
-						{
-							final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-							searches.add(new SearchCondition(csc.getSearch(), cscs));
-						}
-						else
-						{
-							searches.add(csc.getSearch().getSearch());
-						}
-					}
-
-					final ArrayList<SearchCondition> AB = new ArrayList<SearchCondition>();
-					for (final SearchClause a : A)
-					{
-						for (final SearchCondition b : searches)
-						{
-							final SearchCondition ab = b.clone();
-							ab.getConnected().add(new ConnectedSearchClause(a, false));
-							AB.add(ab);
-						}
-					}
-
-					final SearchClause first = new SearchClause(AB.remove(0), false);
-					final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					for (final SearchCondition ab : AB)
-					{
-						cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
-					}
-
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
-				}
-			}
-			else if (allPredicates(sc.getSearch()) && allOrs(sc.getSearch()))
-			{
-				// A all ored preds
-				// figure out what B is
-				final SearchClause sc2 = s.getConnected().get(0).getSearch();
-				if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
-				{
-					// B is all anded predicates
-					final ArrayList<SearchClause> B = new ArrayList<SearchClause>();
-					if (sc2.getPredicate() != null)
-					{
-						B.add(sc2);
-					}
-					else
-					{
-						final SearchCondition s2 = sc2.getSearch();
-						B.add(s2.getClause());
-						for (final ConnectedSearchClause csc : s2.getConnected())
-						{
-							B.add(csc.getSearch());
-						}
-					}
-
-					final ArrayList<SearchClause> searches = new ArrayList<SearchClause>();
-					for (final SearchClause b : B)
-					{
-						final SearchClause search = sc.clone();
-						search.getSearch().getConnected().add(new ConnectedSearchClause(b, false));
-						searches.add(search);
-					}
-
-					final SearchClause first = searches.remove(0);
-					final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					for (final SearchClause search : searches)
-					{
-						cscs.add(new ConnectedSearchClause(search, true));
-					}
-					s.getConnected().remove(0);
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
-				}
-				else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
-				{
-					// B all ors
-					s.getConnected().remove(0);
-					final ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
-					cscs.add(new ConnectedSearchClause(sc2.getSearch().getClause(), false));
-					cscs.addAll(sc2.getSearch().getConnected());
-					convertToCNF(s);
-					return;
-				}
-				else
-				{
-					// A ors B CNF
-					s.getConnected().remove(0);
-					// build list of ored clauses in B
-					final SearchCondition scond = sc2.getSearch();
-					final ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
-					if (scond.getClause().getPredicate() != null)
-					{
-						final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-						searches.add(new SearchCondition(scond.getClause(), cscs));
-					}
-					else
-					{
-						searches.add(scond.getClause().getSearch());
-					}
-
-					for (final ConnectedSearchClause csc : scond.getConnected())
-					{
-						if (csc.getSearch().getPredicate() != null)
-						{
-							final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-							searches.add(new SearchCondition(csc.getSearch(), cscs));
-						}
-						else
-						{
-							searches.add(csc.getSearch().getSearch());
-						}
-					}
-
-					for (final SearchCondition search : searches)
-					{
-						search.getConnected().add(new ConnectedSearchClause(sc.getSearch().getClause(), false));
-						for (final ConnectedSearchClause csc : sc.getSearch().getConnected())
-						{
-							search.getConnected().add(csc);
-						}
-					}
-
-					final SearchClause first = new SearchClause(searches.remove(0), false);
-					final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					for (final SearchCondition ab : searches)
-					{
-						cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
-					}
-
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
 				}
 			}
 			else
 			{
-				// A is CNF
-				// figure out what B is
-				final SearchClause sc2 = s.getConnected().get(0).getSearch();
-				if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
+				// starts with or
+				if (sc.getPredicate() == null)
 				{
-					// A CNF B AND
-					final ArrayList<SearchClause> B = new ArrayList<SearchClause>();
-					if (sc2.getPredicate() != null)
+					convertToCNF(sc.getSearch());
+				}
+
+				if (s.getConnected().get(0).getSearch().getPredicate() == null)
+				{
+					convertToCNF(s.getConnected().get(0).getSearch().getSearch());
+				}
+
+				if (sc.getPredicate() != null || (allPredicates(sc.getSearch()) && allAnd(sc.getSearch())))
+				{
+					// A is all anded predicates
+					ArrayList<SearchClause> A = new ArrayList<SearchClause>();
+					if (sc.getPredicate() != null)
 					{
-						B.add(sc2);
+						A.add(sc);
 					}
 					else
 					{
-						final SearchCondition s2 = sc2.getSearch();
-						B.add(s2.getClause());
+						final SearchCondition s2 = sc.getSearch();
+						A.add(s2.getClause());
 						for (final ConnectedSearchClause csc : s2.getConnected())
 						{
-							B.add(csc.getSearch());
+							A.add(csc.getSearch());
 						}
 					}
 
-					s.getConnected().remove(0);
-					// build list of ored clauses in A
-					final SearchCondition scond = sc.getSearch();
-					final ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
-					if (scond.getClause().getPredicate() != null)
+					// figure out what B is
+					final SearchClause sc2 = s.getConnected().get(0).getSearch();
+					if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
 					{
-						final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-						searches.add(new SearchCondition(scond.getClause(), cscs));
-					}
-					else
-					{
-						searches.add(scond.getClause().getSearch());
-					}
-
-					for (final ConnectedSearchClause csc : scond.getConnected())
-					{
-						if (csc.getSearch().getPredicate() != null)
+						// B is all anded predicates
+						ArrayList<SearchClause> B = new ArrayList<SearchClause>();
+						if (sc2.getPredicate() != null)
 						{
-							final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-							searches.add(new SearchCondition(csc.getSearch(), cscs));
+							B.add(sc2);
 						}
 						else
 						{
-							searches.add(csc.getSearch().getSearch());
+							final SearchCondition s2 = sc2.getSearch();
+							B.add(s2.getClause());
+							for (final ConnectedSearchClause csc : s2.getConnected())
+							{
+								B.add(csc.getSearch());
+							}
 						}
-					}
 
-					final ArrayList<SearchCondition> AB = new ArrayList<SearchCondition>();
-					for (final SearchClause b : B)
-					{
-						for (final SearchCondition a : searches)
+						ArrayList<SearchClause> searches = new ArrayList<SearchClause>();
+						for (final SearchClause p1 : A)
 						{
-							final SearchCondition ab = a.clone();
-							ab.getConnected().add(new ConnectedSearchClause(b, false));
-							AB.add(ab);
+							for (final SearchClause p2 : B)
+							{
+								final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+								cscs.add(new ConnectedSearchClause(p2, false));
+								searches.add(new SearchClause(new SearchCondition(p1, cscs), false));
+							}
 						}
-					}
 
-					final SearchClause first = new SearchClause(AB.remove(0), false);
-					final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					for (final SearchCondition ab : AB)
+						final SearchClause first = searches.remove(0);
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						for (final SearchClause search : searches)
+						{
+							cscs.add(new ConnectedSearchClause(search, true));
+						}
+						s.getConnected().remove(0);
+						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+						A = null;
+						B = null;
+						searches = null;
+						cscs = null;
+						continue tail;
+					}
+					else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
 					{
-						cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
-					}
+						// B all ors
+						ArrayList<SearchClause> searches = new ArrayList<SearchClause>();
+						for (final SearchClause a : A)
+						{
+							final SearchClause search = sc2.clone();
+							search.getSearch().getConnected().add(new ConnectedSearchClause(a, false));
+							searches.add(search);
+						}
 
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
+						final SearchClause first = searches.remove(0);
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						for (final SearchClause search : searches)
+						{
+							cscs.add(new ConnectedSearchClause(search, true));
+						}
+						s.getConnected().remove(0);
+						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+						A = null;
+						searches = null;
+						cscs = null;
+						continue tail;
+					}
+					else
+					{
+						// A AND B CNF
+						s.getConnected().remove(0);
+						// build list of ored clauses in B
+						final SearchCondition scond = sc2.getSearch();
+						ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
+						if (scond.getClause().getPredicate() != null)
+						{
+							final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+							searches.add(new SearchCondition(scond.getClause(), cscs));
+						}
+						else
+						{
+							searches.add(scond.getClause().getSearch());
+						}
+
+						for (final ConnectedSearchClause csc : scond.getConnected())
+						{
+							if (csc.getSearch().getPredicate() != null)
+							{
+								final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+								searches.add(new SearchCondition(csc.getSearch(), cscs));
+							}
+							else
+							{
+								searches.add(csc.getSearch().getSearch());
+							}
+						}
+
+						ArrayList<SearchCondition> AB = new ArrayList<SearchCondition>();
+						for (final SearchClause a : A)
+						{
+							for (final SearchCondition b : searches)
+							{
+								final SearchCondition ab = b.clone();
+								ab.getConnected().add(new ConnectedSearchClause(a, false));
+								AB.add(ab);
+							}
+						}
+
+						SearchClause first = new SearchClause(AB.remove(0), false);
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						for (final SearchCondition ab : AB)
+						{
+							cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
+						}
+
+						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+						A = null;
+						searches = null;
+						AB = null;
+						first = null;
+						cscs = null;
+						continue tail;
+					}
 				}
-				else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
+				else if (allPredicates(sc.getSearch()) && allOrs(sc.getSearch()))
 				{
-					// A CNF B OR
-					s.getConnected().remove(0);
-					// build list of ored clauses in A
-					final SearchCondition scond = sc.getSearch();
-					final ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
-					if (scond.getClause().getPredicate() != null)
+					// A all ored preds
+					// figure out what B is
+					final SearchClause sc2 = s.getConnected().get(0).getSearch();
+					if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
 					{
-						final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-						searches.add(new SearchCondition(scond.getClause(), cscs));
-					}
-					else
-					{
-						searches.add(scond.getClause().getSearch());
-					}
-
-					for (final ConnectedSearchClause csc : scond.getConnected())
-					{
-						if (csc.getSearch().getPredicate() != null)
+						// B is all anded predicates
+						ArrayList<SearchClause> B = new ArrayList<SearchClause>();
+						if (sc2.getPredicate() != null)
 						{
-							final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-							searches.add(new SearchCondition(csc.getSearch(), cscs));
+							B.add(sc2);
 						}
 						else
 						{
-							searches.add(csc.getSearch().getSearch());
+							final SearchCondition s2 = sc2.getSearch();
+							B.add(s2.getClause());
+							for (final ConnectedSearchClause csc : s2.getConnected())
+							{
+								B.add(csc.getSearch());
+							}
 						}
-					}
 
-					for (final SearchCondition search : searches)
-					{
-						search.getConnected().add(new ConnectedSearchClause(sc2.getSearch().getClause(), false));
-						for (final ConnectedSearchClause csc : sc2.getSearch().getConnected())
+						ArrayList<SearchClause> searches = new ArrayList<SearchClause>();
+						for (final SearchClause b : B)
 						{
-							search.getConnected().add(csc);
+							final SearchClause search = sc.clone();
+							search.getSearch().getConnected().add(new ConnectedSearchClause(b, false));
+							searches.add(search);
 						}
-					}
 
-					final SearchClause first = new SearchClause(searches.remove(0), false);
-					final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					for (final SearchCondition ab : searches)
+						final SearchClause first = searches.remove(0);
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						for (final SearchClause search : searches)
+						{
+							cscs.add(new ConnectedSearchClause(search, true));
+						}
+						s.getConnected().remove(0);
+						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+						B = null;
+						searches = null;
+						cscs = null;
+						continue tail;
+					}
+					else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
 					{
-						cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
+						// B all ors
+						s.getConnected().remove(0);
+						final ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
+						cscs.add(new ConnectedSearchClause(sc2.getSearch().getClause(), false));
+						cscs.addAll(sc2.getSearch().getConnected());
+						continue tail;
 					}
+					else
+					{
+						// A ors B CNF
+						s.getConnected().remove(0);
+						// build list of ored clauses in B
+						final SearchCondition scond = sc2.getSearch();
+						ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
+						if (scond.getClause().getPredicate() != null)
+						{
+							final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+							searches.add(new SearchCondition(scond.getClause(), cscs));
+						}
+						else
+						{
+							searches.add(scond.getClause().getSearch());
+						}
 
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
+						for (final ConnectedSearchClause csc : scond.getConnected())
+						{
+							if (csc.getSearch().getPredicate() != null)
+							{
+								final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+								searches.add(new SearchCondition(csc.getSearch(), cscs));
+							}
+							else
+							{
+								searches.add(csc.getSearch().getSearch());
+							}
+						}
+
+						for (final SearchCondition search : searches)
+						{
+							search.getConnected().add(new ConnectedSearchClause(sc.getSearch().getClause(), false));
+							for (final ConnectedSearchClause csc : sc.getSearch().getConnected())
+							{
+								search.getConnected().add(csc);
+							}
+						}
+
+						final SearchClause first = new SearchClause(searches.remove(0), false);
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						for (final SearchCondition ab : searches)
+						{
+							cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
+						}
+
+						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+						searches = null;
+						cscs = null;
+						continue tail;
+					}
 				}
 				else
 				{
-					// A CNF B CNF
-					SearchCondition scond = sc.getSearch();
-					final ArrayList<SearchCondition> A = new ArrayList<SearchCondition>();
-					if (scond.getClause().getPredicate() != null)
+					// A is CNF
+					// figure out what B is
+					SearchClause sc2 = s.getConnected().get(0).getSearch();
+					if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
 					{
-						final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-						A.add(new SearchCondition(scond.getClause(), cscs));
-					}
-					else
-					{
-						A.add(scond.getClause().getSearch());
-					}
-
-					for (final ConnectedSearchClause csc : scond.getConnected())
-					{
-						if (csc.getSearch().getPredicate() != null)
+						// A CNF B AND
+						ArrayList<SearchClause> B = new ArrayList<SearchClause>();
+						if (sc2.getPredicate() != null)
 						{
-							final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-							A.add(new SearchCondition(csc.getSearch(), cscs));
+							B.add(sc2);
 						}
 						else
 						{
-							A.add(csc.getSearch().getSearch());
+							final SearchCondition s2 = sc2.getSearch();
+							B.add(s2.getClause());
+							for (final ConnectedSearchClause csc : s2.getConnected())
+							{
+								B.add(csc.getSearch());
+							}
 						}
-					}
 
-					scond = sc2.getSearch();
-					final ArrayList<SearchCondition> B = new ArrayList<SearchCondition>();
-					if (scond.getClause().getPredicate() != null)
-					{
-						final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-						B.add(new SearchCondition(scond.getClause(), cscs));
-					}
-					else
-					{
-						B.add(scond.getClause().getSearch());
-					}
-
-					for (final ConnectedSearchClause csc : scond.getConnected())
-					{
-						if (csc.getSearch().getPredicate() != null)
+						sc2 = null;
+						s.getConnected().remove(0);
+						s.setClause(null);
+						// build list of ored clauses in A
+						SearchCondition scond = sc.getSearch();
+						sc = null;
+						ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
+						if (scond.getClause().getPredicate() != null)
 						{
 							final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-							B.add(new SearchCondition(csc.getSearch(), cscs));
+							searches.add(new SearchCondition(scond.getClause(), cscs));
 						}
 						else
 						{
-							B.add(csc.getSearch().getSearch());
+							searches.add(scond.getClause().getSearch());
 						}
-					}
-
-					final ArrayList<SearchCondition> AB = new ArrayList<SearchCondition>();
-					for (final SearchCondition a : A)
-					{
-						for (final SearchCondition b : B)
+						
+						for (final ConnectedSearchClause csc : scond.getConnected())
 						{
-							final SearchCondition ab = a.clone();
-							ab.getConnected().add(new ConnectedSearchClause(b.getClause(), false));
-							ab.getConnected().addAll(b.getConnected());
-							AB.add(ab);
+							if (csc.getSearch().getPredicate() != null)
+							{
+								final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+								searches.add(new SearchCondition(csc.getSearch(), cscs));
+							}
+							else
+							{
+								searches.add(csc.getSearch().getSearch());
+							}
 						}
-					}
 
-					final SearchClause first = new SearchClause(AB.remove(0), false);
-					final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					for (final SearchCondition ab : AB)
+						scond = null;
+						ArrayList<SearchCondition> AB = new ArrayList<SearchCondition>();
+						HRDBMSWorker.logger.debug("Attempting to create " + (B.size() * 1l * searches.size()) + " new search conditions");
+						for (final SearchClause b : B)
+						{
+							for (final SearchCondition a : searches)
+							{
+								final SearchCondition ab = a.clone();
+								ab.getConnected().add(new ConnectedSearchClause(b, false));
+								AB.add(ab);
+							}
+						}
+
+						searches = null;
+						B = null;
+						SearchClause first = new SearchClause(AB.remove(0), false);
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						for (final SearchCondition ab : AB)
+						{
+							cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
+						}
+
+						AB = null;
+						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+						cscs = null;
+						first = null;
+						continue tail;
+					}
+					else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
 					{
-						cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
-					}
+						// A CNF B OR
+						s.getConnected().remove(0);
+						// build list of ored clauses in A
+						final SearchCondition scond = sc.getSearch();
+						ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
+						if (scond.getClause().getPredicate() != null)
+						{
+							final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+							searches.add(new SearchCondition(scond.getClause(), cscs));
+						}
+						else
+						{
+							searches.add(scond.getClause().getSearch());
+						}
 
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
+						for (final ConnectedSearchClause csc : scond.getConnected())
+						{
+							if (csc.getSearch().getPredicate() != null)
+							{
+								final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+								searches.add(new SearchCondition(csc.getSearch(), cscs));
+							}
+							else
+							{
+								searches.add(csc.getSearch().getSearch());
+							}
+						}
+
+						for (final SearchCondition search : searches)
+						{
+							search.getConnected().add(new ConnectedSearchClause(sc2.getSearch().getClause(), false));
+							for (final ConnectedSearchClause csc : sc2.getSearch().getConnected())
+							{
+								search.getConnected().add(csc);
+							}
+						}
+
+						SearchClause first = new SearchClause(searches.remove(0), false);
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						for (final SearchCondition ab : searches)
+						{
+							cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
+						}
+
+						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+						searches = null;
+						first = null;
+						cscs = null;
+						continue tail;
+					}
+					else
+					{
+						// A CNF B CNF
+						SearchCondition scond = sc.getSearch();
+						ArrayList<SearchCondition> A = new ArrayList<SearchCondition>();
+						if (scond.getClause().getPredicate() != null)
+						{
+							final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+							A.add(new SearchCondition(scond.getClause(), cscs));
+						}
+						else
+						{
+							A.add(scond.getClause().getSearch());
+						}
+
+						for (final ConnectedSearchClause csc : scond.getConnected())
+						{
+							if (csc.getSearch().getPredicate() != null)
+							{
+								final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+								A.add(new SearchCondition(csc.getSearch(), cscs));
+							}
+							else
+							{
+								A.add(csc.getSearch().getSearch());
+							}
+						}
+
+						scond = sc2.getSearch();
+						ArrayList<SearchCondition> B = new ArrayList<SearchCondition>();
+						if (scond.getClause().getPredicate() != null)
+						{
+							final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+							B.add(new SearchCondition(scond.getClause(), cscs));
+						}
+						else
+						{
+							B.add(scond.getClause().getSearch());
+						}
+
+						for (final ConnectedSearchClause csc : scond.getConnected())
+						{
+							if (csc.getSearch().getPredicate() != null)
+							{
+								final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+								B.add(new SearchCondition(csc.getSearch(), cscs));
+							}
+							else
+							{
+								B.add(csc.getSearch().getSearch());
+							}
+						}
+
+						ArrayList<SearchCondition> AB = new ArrayList<SearchCondition>();
+						for (final SearchCondition a : A)
+						{
+							for (final SearchCondition b : B)
+							{
+								final SearchCondition ab = a.clone();
+								ab.getConnected().add(new ConnectedSearchClause(b.getClause(), false));
+								ab.getConnected().addAll(b.getConnected());
+								AB.add(ab);
+							}
+						}
+
+						SearchClause first = new SearchClause(AB.remove(0), false);
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						for (final SearchCondition ab : AB)
+						{
+							cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
+						}
+
+						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+						A = null;
+						B = null;
+						AB = null;
+						first = null;
+						cscs = null;
+						continue tail;
+					}
 				}
 			}
 		}
@@ -10972,17 +11010,21 @@ public class SQLParser
 
 	private void pushInwardAnyNegation(SearchClause sc)
 	{
+		//HRDBMSWorker.logger.debug("Upon entering pushInwardAnyNegation(), sc = " + sc);
 		if (sc.getNegated())
 		{
 			negateSearchCondition(sc.getSearch());
 			sc.setNegated(false);
 		}
+		
+		//HRDBMSWorker.logger.debug("After negating search condition, sc = " + sc);
 
 		final SearchCondition s = sc.getSearch();
 		sc = s.getClause();
 		if (sc.getPredicate() == null)
 		{
 			pushInwardAnyNegation(sc);
+			//HRDBMSWorker.logger.debug("After calling pushInwardAnyNegation on first clause, sc = " + sc);
 		}
 
 		if (s.getConnected() != null && s.getConnected().size() > 0)
@@ -10992,6 +11034,7 @@ public class SQLParser
 				if (csc.getSearch().getPredicate() == null)
 				{
 					pushInwardAnyNegation(csc.getSearch());
+					//HRDBMSWorker.logger.debug("After calling pushInwardAnyNegation on subsequent clause, sc = " + sc);
 				}
 			}
 		}

@@ -7,9 +7,11 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -324,6 +326,10 @@ public class LogManager extends HRDBMSThread
 			{
 				masterLSN = lsn;
 			}
+			else
+			{
+				return;
+			}
 		}
 		final LinkedBlockingDeque<LogRec> list = logs.get(fn);
 		// synchronized (noArchiveLock)
@@ -333,7 +339,7 @@ public class LogManager extends HRDBMSThread
 			try
 			{
 				final HashMap<BlockAndTransaction, ArrayList<LogRec>> toWrite = new HashMap<BlockAndTransaction, ArrayList<LogRec>>();
-				final TreeMap<LogRec, LogRec> ordered = new TreeMap<LogRec, LogRec>();
+				final HashSet<LogRec> ordered = new HashSet<LogRec>();
 				final FileChannel fc = getFile(fn);
 				// synchronized (Transaction.txList)
 				{
@@ -342,7 +348,7 @@ public class LogManager extends HRDBMSThread
 						final LogRec rec = list.getFirst();
 						if (rec.lsn() <= masterLSN)
 						{
-							ordered.put(rec, rec);
+							ordered.add(rec);
 							if (rec.type() == LogRec.INSERT)
 							{
 								final InsertLogRec ins = (InsertLogRec)rec;
@@ -420,7 +426,7 @@ public class LogManager extends HRDBMSThread
 						for (final LogRec rec : recs)
 						{
 							ordered.remove(rec);
-							ordered.put(rec, rec);
+							ordered.add(rec);
 						}
 
 						recs = regions.generateRemovals();
@@ -434,14 +440,16 @@ public class LogManager extends HRDBMSThread
 					{
 						fc.position(fc.size());
 						int total = 0;
-						for (final LogRec rec : ordered.keySet())
+						List<LogRec> sortedList = new ArrayList<LogRec>(ordered);
+						Collections.sort(sortedList);
+						for (final LogRec rec : sortedList)
 						{
 							total += (8 + rec.buffer().limit());
 						}
 
 						final ByteBuffer size = ByteBuffer.allocate(total);
 						size.position(0);
-						for (final LogRec rec : ordered.keySet())
+						for (final LogRec rec : sortedList)
 						{
 							if (rec.size() < 28)
 							{
@@ -483,6 +491,10 @@ public class LogManager extends HRDBMSThread
 			{
 				masterLSN = lsn;
 			}
+			else
+			{
+				return;
+			}
 		}
 		// synchronized (noArchiveLock)
 		// Transaction.txListLock.lock();
@@ -491,7 +503,7 @@ public class LogManager extends HRDBMSThread
 			try
 			{
 				final HashMap<BlockAndTransaction, ArrayList<LogRec>> toWrite = new HashMap<BlockAndTransaction, ArrayList<LogRec>>();
-				final TreeMap<LogRec, LogRec> ordered = new TreeMap<LogRec, LogRec>();
+				final HashSet<LogRec> ordered = new HashSet<LogRec>();
 				final FileChannel fc = getFile(fn);
 				// synchronized (Transaction.txList)
 				{
@@ -500,7 +512,7 @@ public class LogManager extends HRDBMSThread
 						final LogRec rec = list.getFirst();
 						if (rec.lsn() <= masterLSN)
 						{
-							ordered.put(rec, rec);
+							ordered.add(rec);
 							if (rec.type() == LogRec.INSERT)
 							{
 								final InsertLogRec ins = (InsertLogRec)rec;
@@ -577,7 +589,7 @@ public class LogManager extends HRDBMSThread
 						for (final LogRec rec : recs)
 						{
 							ordered.remove(rec);
-							ordered.put(rec, rec);
+							ordered.add(rec);
 						}
 
 						recs = regions.generateRemovals();
@@ -591,14 +603,16 @@ public class LogManager extends HRDBMSThread
 					{
 						fc.position(fc.size());
 						int total = 0;
-						for (final LogRec rec : ordered.keySet())
+						List<LogRec> sortedList = new ArrayList<LogRec>(ordered);
+						Collections.sort(sortedList);
+						for (final LogRec rec : ordered)
 						{
 							total += (8 + rec.buffer().limit());
 						}
 
 						final ByteBuffer size = ByteBuffer.allocate(total);
 						size.position(0);
-						for (final LogRec rec : ordered.keySet())
+						for (final LogRec rec : ordered)
 						{
 							if (rec.size() < 28)
 							{

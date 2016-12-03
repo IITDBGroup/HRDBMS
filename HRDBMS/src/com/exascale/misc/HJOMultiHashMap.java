@@ -23,7 +23,7 @@ public class HJOMultiHashMap<K, V>
 		size.set(0);
 	}
 
-	public List<V> get(final K key)
+	public ArrayList<V> get(final K key)
 	{
 		final ArrayList<V> retval = map.get(key);
 		if (retval == null)

@@ -12,6 +12,21 @@ public class SearchCondition
 		this.search = search;
 		this.connected = connected;
 	}
+	
+	public String toString()
+	{
+		String retval = "(" + search.toString();
+		if (connected != null)
+		{
+			for (ConnectedSearchClause csc : connected)
+			{
+				retval += csc.toString();
+			}
+		}
+		
+		retval += ")";
+		return retval;
+	}
 
 	@Override
 	public SearchCondition clone()

@@ -44,6 +44,8 @@ public class InsertTest
 		{
 			doDelete = false;
 		}
+		
+		String name = args[args.length - 1];
 
 		Class.forName("com.exascale.client.HRDBMSDriver");
 		conn = DriverManager.getConnection("jdbc:hrdbms://localhost:3232");
@@ -56,7 +58,7 @@ public class InsertTest
 		while (i < count)
 		{
 			final StringBuilder sql = new StringBuilder();
-			sql.append("INSERT INTO JASON.TEST1 VALUES(" + (i + startNum) + ", " + random.nextInt() + ")");
+			sql.append("INSERT INTO JASON." + name + " VALUES(" + (i + startNum) + ", " + random.nextInt() + ")");
 			i++;
 			int j = 1;
 			while (j < batching)
@@ -95,7 +97,7 @@ public class InsertTest
 			while (i < count)
 			{
 				final StringBuilder sql = new StringBuilder();
-				sql.append("UPDATE JASON.TEST1 SET COL2 = " + (((i + startNum) / 3) % 5) + " WHERE COL1 = " + (i + startNum));
+				sql.append("UPDATE JASON." + name + " SET COL2 = " + (((i + startNum) / 3) % 5) + " WHERE COL1 = " + (i + startNum));
 				i++;
 				int j = 1;
 				while (j < updateBatching)
@@ -135,7 +137,7 @@ public class InsertTest
 			while (i < count)
 			{
 				final StringBuilder sql = new StringBuilder();
-				sql.append("DELETE FROM JASON.TEST1 WHERE COL1 = " + (i + startNum));
+				sql.append("DELETE FROM JASON." + name + " WHERE COL1 = " + (i + startNum));
 				i++;
 				int j = 1;
 				while (j < deleteBatching)
@@ -196,7 +198,7 @@ public class InsertTest
 			while (i < count)
 			{
 				final StringBuilder sql = new StringBuilder();
-				sql.append("SELECT COL2 FROM JASON.TEST1 WHERE COL1 = " + (i + startNum));
+				sql.append("SELECT COL2 FROM JASON." + name + " WHERE COL1 = " + (i + startNum));
 
 				final ResultSet rs = stmt.executeQuery(sql.toString());
 				while (rs.next())

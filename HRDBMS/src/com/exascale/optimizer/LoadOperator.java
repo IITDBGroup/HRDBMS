@@ -1704,23 +1704,52 @@ public final class LoadOperator implements Operator, Serializable
 
 				if (type.equals("CHAR"))
 				{
+					//TPC-DS nulls are an empty string
 					row.add(token);
 				}
 				else if (type.equals("INT"))
 				{
-					row.add(Integer.parseInt(token));
+					if (token.equals(""))
+					{
+						row.add(-1); //NULL hack
+					}
+					else
+					{
+						row.add(Integer.parseInt(token));
+					}
 				}
 				else if (type.equals("LONG"))
 				{
-					row.add(Long.parseLong(token));
+					if (token.equals(""))
+					{
+						row.add(-1l); //NULL hack
+					}
+					else
+					{
+						row.add(Long.parseLong(token));
+					}
 				}
 				else if (type.equals("FLOAT"))
 				{
-					row.add(Utils.parseDouble(token));
+					if (token.equals(""))
+					{
+						row.add(0.0); //NULL hack
+					}
+					else
+					{
+						row.add(Utils.parseDouble(token));
+					}
 				}
 				else if (type.equals("DATE"))
 				{
-					row.add(new MyDate(Integer.parseInt(token.substring(0, 4)), Integer.parseInt(token.substring(5, 7)), Integer.parseInt(token.substring(8, 10))));
+					if (token.equals(""))
+					{
+						row.add(new MyDate(0)); //NULL hack
+					}
+					else
+					{
+						row.add(new MyDate(Integer.parseInt(token.substring(0, 4)), Integer.parseInt(token.substring(5, 7)), Integer.parseInt(token.substring(8, 10))));
+					}
 				}
 			}
 

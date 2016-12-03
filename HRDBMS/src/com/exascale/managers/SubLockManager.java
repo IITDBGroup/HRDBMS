@@ -271,19 +271,21 @@ public class SubLockManager
 
 		while (true)
 		{
-			final long end = System.currentTimeMillis();
-			if (end - start > TIMEOUT)
-			{
-				lock.unlock();
-				throw new LockAbortException();
-			}
-
 			final Long tx = xBlocksToTXs.get(b);
 			if (tx != null)
 			{
 				if (tx.longValue() != txnum)
 				{
+					final long end = System.currentTimeMillis();
+					if (end - start > TIMEOUT)
+					{
+						lock.unlock();
+						throw new LockAbortException();
+					}
+					
 					HRDBMSWorker.logger.debug("Can't get xLock on " + b + " for transaction " + txnum + " because " + tx + " has an xLock");
+					HRDBMSWorker.logger.debug("xBlocksToTXs = " + xBlocksToTXs);
+					HRDBMSWorker.logger.debug("xTXsToBlocks = " + xTXsToBlocks);
 
 					// long current = System.currentTimeMillis();
 					// if (current - start >= TIMEOUT)
@@ -357,6 +359,13 @@ public class SubLockManager
 					}
 					else
 					{
+						final long end = System.currentTimeMillis();
+						if (end - start > TIMEOUT)
+						{
+							lock.unlock();
+							throw new LockAbortException();
+						}
+						
 						HRDBMSWorker.logger.debug("Can't get xLock on " + b + " for transaction " + txnum + " because " + txs + " have sLocks");
 
 						// long current = System.currentTimeMillis();
@@ -422,10 +431,10 @@ public class SubLockManager
 		}
 		else
 		{
-			if (!array.contains(b))
-			{
+			//if (!array.contains(b))
+			//{
 				array.add(b);
-			}
+			//}
 		}
 
 		lock.unlock();

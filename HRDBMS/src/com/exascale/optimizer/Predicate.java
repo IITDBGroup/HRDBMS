@@ -16,6 +16,11 @@ public class Predicate
 	protected Predicate()
 	{
 	}
+	
+	public String toString()
+	{
+		return "lhs " + op + " rhs";
+	}
 
 	@Override
 	public Predicate clone()
@@ -71,5 +76,49 @@ public class Predicate
 		hash = hash * 31 + op.hashCode();
 		hash = hash * 31 + rhs.hashCode();
 		return hash;
+	}
+	
+	public void negate()
+	{
+		if (op.equals("E"))
+		{
+			op = "NE";
+		}
+		else if (op.equals("NE"))
+		{
+			op = "E";
+		}
+		else if (op.equals("G"))
+		{
+			op = "LE";
+		}
+		else if (op.equals("GE"))
+		{
+			op = "L";
+		}
+		else if (op.equals("L"))
+		{
+			op = "GE";
+		}
+		else if (op.equals("LE"))
+		{
+			op = "G";
+		}
+		else if (op.equals("LI"))
+		{
+			op = "NL";
+		}
+		else if (op.equals("NL"))
+		{
+			op = "LI";
+		}
+		else if (op.equals("IN"))
+		{
+			op = "NI";
+		}
+		else if (op.equals("NI"))
+		{
+			op = "IN";
+		}
 	}
 }

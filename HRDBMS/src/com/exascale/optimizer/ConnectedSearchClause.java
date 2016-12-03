@@ -10,6 +10,16 @@ public class ConnectedSearchClause
 		this.search = search;
 		this.and = and;
 	}
+	
+	public String toString()
+	{
+		if (and)
+		{
+			return " AND " + search;
+		}
+		
+		return " OR " + search;
+	}
 
 	@Override
 	public ConnectedSearchClause clone()

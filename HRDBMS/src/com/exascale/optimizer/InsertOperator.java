@@ -30,7 +30,7 @@ public final class InsertOperator implements Operator, Serializable
 {
 	private static ConcurrentHashMap<String, InetSocketAddress> addrCache = new ConcurrentHashMap<String, InetSocketAddress>();
 	private static HashMap<Long, HashMap<String, InsertOperator>> txDelayedMaps = new HashMap<Long, HashMap<String, InsertOperator>>();
-	private static IdentityHashMap<InsertOperator, List<ArrayList<Object>>> delayedRows = new IdentityHashMap<InsertOperator, List<ArrayList<Object>>>();
+	private static IdentityHashMap<InsertOperator, ArrayList<ArrayList<Object>>> delayedRows = new IdentityHashMap<InsertOperator, ArrayList<ArrayList<Object>>>();
 	private Operator child;
 	private final MetaData meta;
 	private HashMap<String, String> cols2Types;
@@ -45,6 +45,7 @@ public final class InsertOperator implements Operator, Serializable
 	private boolean done = false;
 	private HJOMultiHashMap map = new HJOMultiHashMap<Integer, ArrayList<Object>>();
 	private Transaction tx;
+	private transient String[] colTypes;
 
 	public InsertOperator(final String schema, final String table, final MetaData meta)
 	{
@@ -74,13 +75,13 @@ public final class InsertOperator implements Operator, Serializable
 		}
 	}
 
-	private static void cast(final ArrayList<Object> row, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types)
+	private void cast(final ArrayList<Object> row, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types)
 	{
 		int i = 0;
 		final int size = pos2Col.size();
 		while (i < size)
 		{
-			final String type = cols2Types.get(pos2Col.get(i));
+			final String type = colTypes[i];
 			final Object o = row.get(i);
 			if (type.equals("INT"))
 			{
@@ -126,11 +127,11 @@ public final class InsertOperator implements Operator, Serializable
 		}
 	}
 
-	private static List<ArrayList<Object>> deregister(final InsertOperator owner, final String schema, final String table, final int node, final Transaction tx)
+	private static ArrayList<ArrayList<Object>> deregister(final InsertOperator owner, final String schema, final String table, final int node, final Transaction tx)
 	{
 		synchronized (txDelayedMaps)
 		{
-			final List<ArrayList<Object>> retval = delayedRows.remove(owner);
+			final ArrayList<ArrayList<Object>> retval = delayedRows.remove(owner);
 			final HashMap<String, InsertOperator> map = txDelayedMaps.get(tx.number());
 			final String key = schema + "." + table + "~" + node;
 			map.remove(key);
@@ -167,7 +168,7 @@ public final class InsertOperator implements Operator, Serializable
 		return buff;
 	}
 
-	private static boolean registerDelayed(final InsertOperator caller, final String schema, final String table, final int node, final Transaction tx, final List<ArrayList<Object>> rows)
+	private static boolean registerDelayed(final InsertOperator caller, final String schema, final String table, final int node, final Transaction tx, final ArrayList<ArrayList<Object>> rows)
 	{
 		synchronized (txDelayedMaps)
 		{
@@ -445,7 +446,7 @@ public final class InsertOperator implements Operator, Serializable
 
 	@Override
 	public void start() throws Exception
-	{
+	{	
 		child.start();
 		final ArrayList<String> indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
 		final HashMap<Integer, Integer> pos2Length = new HashMap<Integer, Integer>();
@@ -453,6 +454,14 @@ public final class InsertOperator implements Operator, Serializable
 		final TreeMap<Integer, String> pos2Col = MetaData.cols2PosFlip(cols2Pos);
 		// new MetaData();
 		final HashMap<String, String> cols2Types = MetaData.getCols2TypesForTable(schema, table, tx);
+		final int size = pos2Col.size();
+		colTypes = new String[size];
+		int i = 0;
+		while (i < size)
+		{
+			colTypes[i] = cols2Types.get(pos2Col.get(i));
+			i++;
+		}
 		final PartitionMetaData spmd = new MetaData().getPartMeta(schema, table, tx);
 		final ArrayList<ArrayList<String>> keys = MetaData.getKeys(indexes, tx);
 		final ArrayList<ArrayList<String>> types = MetaData.getTypes(indexes, tx);
@@ -470,6 +479,8 @@ public final class InsertOperator implements Operator, Serializable
 		Object o = child.next(this);
 		final PartitionMetaData pmeta = new MetaData().new PartitionMetaData(schema, table, tx);
 		final int numNodes = MetaData.numWorkerNodes;
+		MasterFlushThread mft = null;
+		
 		while (!(o instanceof DataEndMarker))
 		{
 			final ArrayList<Object> row = (ArrayList<Object>)o;
@@ -479,6 +490,7 @@ public final class InsertOperator implements Operator, Serializable
 				if (((String)row.get((Integer)entry.getKey())).length() > (Integer)entry.getValue())
 				{
 					num.set(Integer.MIN_VALUE);
+					done = true;
 					return;
 				}
 			}
@@ -491,21 +503,33 @@ public final class InsertOperator implements Operator, Serializable
 			}
 			if (map.size() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes")))
 			{
-				flush(indexes, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
-				if (num.get() == Integer.MIN_VALUE)
+				if (mft != null)
 				{
-					done = true;
-					return;
+					mft.join();
+					if (num.get() == Integer.MIN_VALUE)
+					{
+						done = true;
+						return;
+					}
 				}
+				
+				mft = flush(indexes, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
+				map = new HJOMultiHashMap<Integer, ArrayList<Object>>();
 			}
 			else if (map.totalSize() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_batch")))
 			{
-				flush(indexes, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
-				if (num.get() == Integer.MIN_VALUE)
+				if (mft != null)
 				{
-					done = true;
-					return;
+					mft.join();
+					if (num.get() == Integer.MIN_VALUE)
+					{
+						done = true;
+						return;
+					}
 				}
+				
+				mft = flush(indexes, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
+				map = new HJOMultiHashMap<Integer, ArrayList<Object>>();
 			}
 
 			o = child.next(this);
@@ -513,10 +537,31 @@ public final class InsertOperator implements Operator, Serializable
 
 		if (!ConnectionWorker.isDelayed(tx) && map.totalSize() > 0)
 		{
-			flush(indexes, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
+			if (mft != null)
+			{
+				mft.join();
+				if (num.get() == Integer.MIN_VALUE)
+				{
+					done = true;
+					return;
+				}
+			}
+			
+			mft = flush(indexes, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
+			mft.join();
 		}
 		else if (ConnectionWorker.isDelayed(tx) && map.totalSize() > 0)
 		{
+			if (mft != null)
+			{
+				mft.join();
+				if (num.get() == Integer.MIN_VALUE)
+				{
+					done = true;
+					return;
+				}
+			}
+			
 			delayedFlush(indexes, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
 		}
 
@@ -539,7 +584,7 @@ public final class InsertOperator implements Operator, Serializable
 		for (final Object o : copy)
 		{
 			node = (Integer)o;
-			final List<ArrayList<Object>> list = map.get(node);
+			final ArrayList<ArrayList<Object>> list = map.get(node);
 
 			if (!realOwner)
 			{
@@ -564,7 +609,21 @@ public final class InsertOperator implements Operator, Serializable
 
 		if (map.size() > 0)
 		{
-			flush(indexes, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
+			while (true)
+			{
+				try
+				{
+					flush(indexes, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type).join();
+					if (num.get() == Integer.MIN_VALUE)
+					{
+						done = true;
+						return;
+					}
+					break;
+				}
+				catch(InterruptedException e)
+				{}
+			}
 		}
 
 		if (!realOwner)
@@ -583,7 +642,7 @@ public final class InsertOperator implements Operator, Serializable
 			}
 		}
 
-		final List<ArrayList<Object>> list = InsertOperator.deregister(this, schema, table, realNode, tx);
+		final ArrayList<ArrayList<Object>> list = InsertOperator.deregister(this, schema, table, realNode, tx);
 		thread = new FlushThread(list, indexes, realNode, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
 		thread.start();
 
@@ -606,47 +665,84 @@ public final class InsertOperator implements Operator, Serializable
 		}
 	}
 
-	private void flush(final ArrayList<String> indexes, final HashMap<String, Integer> cols2Pos, final PartitionMetaData spmd, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type)
+	private MasterFlushThread flush(final ArrayList<String> indexes, final HashMap<String, Integer> cols2Pos, final PartitionMetaData spmd, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type)
 	{
-		final ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
-		for (final Object o : map.getKeySet())
+		MasterFlushThread mft = new MasterFlushThread(indexes, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type, map);
+		mft.start();
+		return mft;
+	}
+	
+	private class MasterFlushThread extends HRDBMSThread
+	{
+		private ArrayList<String> indexes;
+		private HashMap<String, Integer> cols2Pos;
+		private PartitionMetaData spmd;
+		private ArrayList<ArrayList<String>> keys;
+		private ArrayList<ArrayList<String>> types;
+		private ArrayList<ArrayList<Boolean>> orders;
+		private TreeMap<Integer, String> pos2Col;
+		private HashMap<String, String> cols2Types;
+		private int type;
+		private HJOMultiHashMap localMap;
+		
+		public MasterFlushThread(final ArrayList<String> indexes, final HashMap<String, Integer> cols2Pos, final PartitionMetaData spmd, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type, HJOMultiHashMap localMap)
 		{
-			final int node = (Integer)o;
-			final List<ArrayList<Object>> list = map.get(node);
-			threads.add(new FlushThread(list, indexes, node, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type));
+			this.indexes = indexes;
+			this.cols2Pos = cols2Pos;
+			this.spmd = spmd;
+			this.keys = keys;
+			this.types = types;
+			this.orders = orders;
+			this.pos2Col = pos2Col;
+			this.cols2Types = cols2Types;
+			this.type = type;
+			this.localMap = localMap;
 		}
-
-		for (final FlushThread thread : threads)
+		
+		public void run()
 		{
-			thread.start();
-		}
-
-		for (final FlushThread thread : threads)
-		{
-			while (true)
+			final ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
+			for (final Object o : localMap.getKeySet())
 			{
-				try
+				final int node = (Integer)o;
+				final ArrayList<ArrayList<Object>> list = localMap.get(node);
+				FlushThread thread = new FlushThread(list, indexes, node, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
+				threads.add(thread);
+				thread.start();
+			}
+
+			//for (final FlushThread thread : threads)
+			//{
+			//	thread.start();
+			//}
+
+			for (final FlushThread thread : threads)
+			{
+				while (true)
 				{
-					thread.join();
-					break;
+					try
+					{
+						thread.join();
+						break;
+					}
+					catch (final InterruptedException e)
+					{
+					}
 				}
-				catch (final InterruptedException e)
+
+				if (!thread.getOK())
 				{
+					num.set(Integer.MIN_VALUE);
 				}
 			}
 
-			if (!thread.getOK())
-			{
-				num.set(Integer.MIN_VALUE);
-			}
+			localMap.clear();
 		}
-
-		map.clear();
 	}
 
 	private class FlushThread extends HRDBMSThread
 	{
-		private final List<ArrayList<Object>> list;
+		private final ArrayList<ArrayList<Object>> list;
 		private final ArrayList<String> indexes;
 		private boolean ok = true;
 		private final int node;
@@ -659,7 +755,7 @@ public final class InsertOperator implements Operator, Serializable
 		private final HashMap<String, String> cols2Types;
 		private final int type;
 
-		public FlushThread(final List<ArrayList<Object>> list, final ArrayList<String> indexes, final int node, final HashMap<String, Integer> cols2Pos, final PartitionMetaData spmd, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type)
+		public FlushThread(final ArrayList<ArrayList<Object>> list, final ArrayList<String> indexes, final int node, final HashMap<String, Integer> cols2Pos, final PartitionMetaData spmd, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type)
 		{
 			this.list = list;
 			this.indexes = indexes;
@@ -720,7 +816,7 @@ public final class InsertOperator implements Operator, Serializable
 				out.write(stringToBytes(spmd.getDExp()));
 				final IdentityHashMap<Object, Long> prev = new IdentityHashMap<Object, Long>();
 				OperatorUtils.serializeALS(indexes, out, prev);
-				OperatorUtils.serializeALALO(new ArrayList(list), out, prev);
+				OperatorUtils.serializeALALO(list, out, prev);
 				OperatorUtils.serializeALALS(keys, out, prev);
 				OperatorUtils.serializeALALS(types, out, prev);
 				OperatorUtils.serializeALALB(orders, out, prev);
