@@ -571,7 +571,17 @@ public class SparseCompressedFileChannel2 extends FileChannel
 
 				final ByteBuffer bb = ByteBuffer.wrap(data);
 				final FileChannel fc = theFC;
-				fc.write(bb, page * SLOT_SIZE);
+				try
+				{
+					fc.write(bb, page * SLOT_SIZE);
+				}
+				catch(IllegalArgumentException ex)
+				{
+					HRDBMSWorker.logger.debug("Page = " + page);
+					HRDBMSWorker.logger.debug("Arg1 = " + arg1);
+					HRDBMSWorker.logger.debug("SLOT_SIZE = " + SLOT_SIZE);
+					throw ex;
+				}
 
 				writeLocks.remove(page);
 				lock.readLock().unlock();

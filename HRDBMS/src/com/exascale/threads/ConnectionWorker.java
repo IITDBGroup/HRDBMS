@@ -7851,10 +7851,10 @@ public class ConnectionWorker extends HRDBMSThread
 
 					top.close();
 					fc.close();
+					new File(MetaData.getDevicePath(num) + schema + "." + table + ".tmp").delete();
 
 					if (isV9)
 					{
-						new File(MetaData.getDevicePath(num) + schema + "." + table + ".tmp").delete();
 						final String msg = file + "," + System.currentTimeMillis();
 
 						while (true)

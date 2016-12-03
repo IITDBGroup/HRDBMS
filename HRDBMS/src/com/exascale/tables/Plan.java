@@ -160,7 +160,13 @@ public class Plan implements Serializable
 
 		final Operator retval = trees.get(size - 1);
 		retval.start();
-		final int updateCount = (Integer)retval.next(retval);
+		Object o = retval.next(retval);
+		int updateCount = 0;
+		if (o instanceof Integer)
+		{
+			updateCount = (Integer)o;
+		}
+
 		retval.close();
 		return updateCount;
 	}

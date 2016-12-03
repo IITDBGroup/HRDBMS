@@ -16,7 +16,7 @@ public final class CompressedInputStream extends FilterInputStream
 	{
 		factory = LZ4Factory.nativeInstance();
 	}
-	private final byte[] buff = new byte[3 * 128 * 1024];
+	private final byte[] buff = new byte[128 * 1024];
 	private int index = 0;
 	private int limit = 0;
 	private final byte[] temp = new byte[4];
@@ -27,7 +27,7 @@ public final class CompressedInputStream extends FilterInputStream
 	public CompressedInputStream(final InputStream in)
 	{
 		super(in);
-		inBuff = new byte[compress.maxCompressedLength(3 * 128 * 1024)];
+		inBuff = new byte[compress.maxCompressedLength(128 * 1024)];
 	}
 
 	@Override

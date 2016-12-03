@@ -484,6 +484,11 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 						oa[index++] = o;
 						return true;
 					}
+					
+					if (q.remainingCapacity() == 0)
+					{
+						return false;
+					}
 
 					synchronized (q)
 					{

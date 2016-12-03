@@ -112,7 +112,7 @@ public class FileManager
 		final ExtendLogRec rec = LogManager.extend(tx.number(), bl);
 		LogManager.flush(rec.lsn());
 		data.position(0);
-		fc.write(data, retval * Page.BLOCK_SIZE);
+		fc.write(data, (retval * 1L) * Page.BLOCK_SIZE);
 		// fc.force(false);
 		numBlocks.put(fn, retval + 1);
 
@@ -463,7 +463,7 @@ public class FileManager
 					i += 8;
 				}
 				data.position(0);
-				fc.write(data, blockNum * Page.BLOCK_SIZE);
+				fc.write(data, (blockNum * 1L) * Page.BLOCK_SIZE);
 				// fc.force(false);
 				numBlocks.put(bl.fileName(), blockNum + 1);
 			}

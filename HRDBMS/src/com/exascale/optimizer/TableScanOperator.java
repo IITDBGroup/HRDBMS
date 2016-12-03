@@ -82,6 +82,7 @@ public final class TableScanOperator implements Operator, Serializable
 	private static long offset;
 
 	public static MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>> noResults;
+	public static ConcurrentHashMap<HashSet<HashMap<Filter, Filter>>, AtomicLong> noResultCounts;
 	public static AtomicInteger skippedPages = new AtomicInteger(0);
 	private static Object intraTxLock = new Object();
 	private static HashMap<String, AtomicInteger> sharedDmlTxCounters = new HashMap<String, AtomicInteger>();
@@ -145,6 +146,24 @@ public final class TableScanOperator implements Operator, Serializable
 			{
 				noResults = new MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>>();
 				pbpeCache2 = new ConcurrentHashMap<String, MultiHashMap<Integer, CNFEntry>>();
+			}
+			
+			final File file2 = new File("pbpe.stats");
+			if (file2.exists())
+			{
+				try
+				{
+					ObjectInputStream in2 = new ObjectInputStream(new FileInputStream("pbpe.stats"));
+					noResultCounts = (ConcurrentHashMap<HashSet<HashMap<Filter, Filter>>, AtomicLong>)in2.readObject();
+				}
+				catch(Exception e)
+				{
+					noResultCounts = new ConcurrentHashMap<HashSet<HashMap<Filter, Filter>>, AtomicLong>();
+				}
+			}
+			else
+			{
+				noResultCounts = new ConcurrentHashMap<HashSet<HashMap<Filter, Filter>>, AtomicLong>();
 			}
 
 			if (isV9)
@@ -1901,6 +1920,18 @@ public final class TableScanOperator implements Operator, Serializable
 				if (hshm == null)
 				{
 					checkNoResults = false;
+				}
+				else
+				{
+					AtomicLong al = noResultCounts.get(hshm);
+					if (al == null)
+					{
+						noResultCounts.put(hshm, new AtomicLong(1));
+					}
+					else
+					{
+						al.incrementAndGet();
+					}
 				}
 			}
 
@@ -3931,6 +3962,7 @@ public final class TableScanOperator implements Operator, Serializable
 														// page because of " +
 														// ns + ". Search was on
 														// " + f);
+														
 														pbpeDebug2 = "Non-SMT says returning false because of " + ns + ". Search was on " + f;
 														return false;
 													}
@@ -4935,6 +4967,7 @@ public final class TableScanOperator implements Operator, Serializable
 				try
 				{
 					final ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream("pbpe.dat.new", false));
+					final ObjectOutputStream out2 = new ObjectOutputStream(new FileOutputStream("pbpe.stats.new", false));
 					if (isV5OrHigher)
 					{
 						out.writeObject(pbpeCache2);
@@ -4942,9 +4975,15 @@ public final class TableScanOperator implements Operator, Serializable
 					else
 					{
 						out.writeObject(noResults);
+						out2.writeObject(noResultCounts);
 					}
 					out.close();
+					out2.close();
 					new File("pbpe.dat.new").renameTo(new File("pbpe.dat"));
+					if (!isV5OrHigher)
+					{
+						new File("pbpe.stats.new").renameTo(new File("pbpe.stats"));
+					}
 				}
 				catch (final Exception e)
 				{
