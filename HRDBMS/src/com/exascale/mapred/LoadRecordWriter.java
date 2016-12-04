@@ -14,6 +14,8 @@ import org.apache.hadoop.mapreduce.RecordWriter;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import com.exascale.misc.MyDate;
 import com.exascale.optimizer.MetaData;
+import com.exascale.mapred.MyLongWritable;
+
 
 public class LoadRecordWriter extends RecordWriter
 {

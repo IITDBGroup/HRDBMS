@@ -1,0 +1,242 @@
+# Overview
+HRDBMS is a relational database for analytics/complex queries that is designed to handle large amounts of data and run across large clusters.
+The nodes in an HRDBMS cluster are divided into 2 types: coordinators nodes and workers nodes.  The majority of the cluster will be made of worker nodes.  These are the nodes that will actually store table data and do the majority of query processing.  The remaining nodes are coordinator nodes.  The coordinator nodes are responsible for accepting incoming requests from JDBC clients (no ODBC supported as of yet) and doing query planning and optimization.  Your cluster must have at least 1 coordinator and 3 workers.  You can have multiple coordinators if you choose.  The main advantage of this is to be able to handle more clients, and (in the future) to provide HA for coordinators.
+
+This document will cover how to build, install, configure, and start HRDBMS.  It will then discuss SQL syntax and how to use the JDBC driver and CLI interface.
+
+# Building HRDBMS
+
+Download the source code as well as the 2 dependency jar files.  When you build your project, you need to create a single output jar file called HRDBMS.jar that includes all of the stuff from the 2 dependency jar files within it.
+
+Now we also support building with ant:
+
+~~~
+ant createJar
+~~~
+
+which generates a `HRDBMS.jar` in the `build` folder.
+
+# Installing HRDBMS
+
+## nodes.cfg
+
+Create a file called `nodes.cfg` that has this format.
+
+~~~
+cc082.cooley, C, rack1, /home/hrdbms
+cc123.cooley, W, rack1, /home/hrdbms
+cc077.cooley, W, rack1, /home/hrdbms
+...
+~~~
+
+The first field is the hostname or ip of the node.  The second field is C or W for whether the node is a coordinator or a worker.  The third field is the name of the rack that the node is on.  The fourth field is the "install directory" for HRDBMS on that node.  This is the directory where the HRDBMS.jar file exists on that node.  Distribute this nodes.cfg file to all nodes.  It needs to exist in the install directory on each node and it needs to be identical on all nodes.
+
+## Distribute files
+
+Distribute the `HRDBMS.jar` file and the `huffman.dat` file to all nodes.  Make sure to put it in whatever the install directory is for each node.
+
+## Set up passwordless ssh
+
+Set up passwordless ssh for the userid that you will run HRDBMS under between each coordinator node and each worker node.
+
+## Change hard limits with ulimit
+
+Make sure each node supports a hard limit in ulimit for the HRDBMS userid for max processes of 100000.  We will never get anywhere near that, but I just picked a really high number.
+
+## hparms
+
+On each node you also need to have a file called `hparms` in the install directory.  This file specifies the value for system parameters that you wish to override from the defaults.  There are a few that you will definitely need to override.  In a simple installation, you can get by with having this file be identical on all nodes.  In more complex installations, that might not work.  The format for the file is keyword=value, with one keyword per line and no space between the keyword, the equals sign, and the value.
+
+All currently valid parameters are explained below:
+
+* `deadlock_check_secs` - check for lock deadlocks every this many seconds.  The default is 60.
+
+* `slock_block_sleep_ms` - when we are unable to get a share lock, we retry every this many milliseconds.  The default is 1000.
+
+* `bp_pages` - the minimum number of bufferpool pages that are required to be kept around.  HRDBMS has a very dynamic bufferpool.  It grows and shrinks as needed.  This is the minimum size that it is allowed to be.  The recommendation is that this value is set the same as the num_sbms parameter, implying that each SBM is allowed to shrink down to 1 page.  Both this and the `num_sbms` parameter default to 256.
+
+* `checkpoint_freq_sec` - how often HRDBMS should checkpoint in seconds.  Checkpointing to frequently leads to excess overhead and log archiving.  Checkpointing to infrequently could lead to long recovery times after a database crash.  The default is 1800 seconds.
+
+* `port_number` - this is the port number that HRDBMS listens on.  For coordinator nodes this is the port number that is used for incoming JDBC connections.  For worker nodes, this is the port that is used for node to node communications.  The default is 3232.
+
+* `data_directories` - this is a comma separated list of directories where table data is stored.  All nodes must have the same number of entries in this list.  Ideally, each node has local drives which are dedicated for table data storage and this is just a list of those mount points.  Performance testing shows that the best results are achieved when the size of this list is equal to the number of cores on the server.  The default value is /home/hrdbms.
+
+* `log_dir` - this is the directory where the active log exists.  Ideally this should be on yet another disk that is separate from the disks for the table data and separate from the disks for the OS.  The default value is /home/hrdbms.
+* `catalog_sync_port`` - this port is only used during the catalog creation process for a newly created HRDBMS system.  It is used for synchronization purposes.  The default value is 3233.
+* `rm_sleep_time_ms` - the Resource Manager sleep time in milliseconds.  The Resource Manager wakes up every this often and checks on resource usage.  The default value is 5000.
+* `profile` - this defaults to the value false.  If you set it to true, you will get a file called java.hprof.txt (which interestingly enough does not at all match the format of a hprof profiler file) in the install directory on each node with profiling information.
+* `detect_thread_deadlocks` - defaults to false.  For debugging only.
+* `queue_size` - HRDBMS internally uses a bunch of custom multi-producer/multi-consumer blocking queues.  This is the max size of each of these queues.  This value can have a big impact on performance.  The default is 125000 and seems to give good performance results, but more testing could definitely be done in this space, especially seeing how the optimal queue size changes with different heap sizes. You may want to consider using a larger queue size on your coordinator nodes. My testing has shown good results with using a size of 500000 on the coordinator nodes.
+* `cuda_batch_size` - how many rows we batch up before we send a job off to the GPU for parallel processing.  The only part of HRDBMS that can currently run on a GPU is arithmetic expression processing.  The default value is 30720.  It's been so long since I turned on the CUDA feature (it's off by default) that I don't remember how or why this value was chosen.  Testers welcome!
+* `gpu_offload` - whether or not to enable the GPU offload mentioned above.  The default value is false.  Setting this to true original gave about a 10% improvement for queries with a lot of math.  Since then, there have been improvements in the CPU version of that code, and I don't know where it stands now.
+* `temp_directories` - much like data_directories, this is a comma separated list of directories to use for temporary data.  The same rules apply.  Ideally these are mount point of local disks that are specifically for the purposes of temporary data.  Again, benchmarking results show that we can take advantage of as many of these as you have cores on your servers.  Every node must have the same number of entries in the list for this parameter.
+* `queue_block_size` - to increase throughput, the internal queues that HRDBMS uses are kind of like buffered queues.  Each thread has a local buffer that it writes to, and only when the buffer reaches a certain size, does it actual get flushed and written.  What happens at that point is that all of the individual messages get wrapped up into 1 big message and placed on the queue.  That one big message will get picked up by 1 of the consumers.  That 1 consumer will be the one to process all of the individual messages in that 1 big message.  This parameter sets the number of little messages per big message.  It has a very big impact on performance.  The default value is 256 and gives good results in my testing, but feel free to play around with it.
+* `catalog_creation_tcp_wait_ms` - when initializing a brand new HRDBMS system we have to create the catalog on all of the coordinator nodes.  Sometimes some of the coordinator nodes are up but not all of them, so sometimes connections fail to some of the coordinator nodes.  This parameter specifies how long we wait in milliseconds before retrying a connection to a coordinator.  The default is 5000.
+* `max_neighbor_nodes` - HRDBMS uses a hierarchical communications model when a node has too many neighbor nodes that it has to communicate with.  This parameter is the maximum number of other nodes that a single node is allowed to communicate with.  The default value is 100, which testing has shown is reasonable if not slightly low.
+* `max_local_no_hash_product` - the HRDBMS optimizer decides to not go full blown and start using the whole cluster if it thinks that operations are small (and all subsequent operations are also small).  This parameter controls what is considered small for any kind of join or Cartesian product that is not using hashing.  The default is 10000000.  That is that if the expected output cardinality is less than 10 million, it's considered small.
+* `max_local_sort` - this is the same sort of parameter for sorts.  The default is 2500000.
+* `parallel_sort_min_rows` - this is the minimum number of rows we have to have before a parallel sort will be invoked.  Otherwise a single threaded sort will be used.  The default value is 2500 * number of cores ^ (2/3).
+* `prefetch_request_size` - this is the number of pages that will be prefetched at a time per disk per table.  The default is currently 24, but it has gone through many changes and more testing/tuning is needed here.  This can have a big effect on performance.
+* `pages_in_advance` - this option is only taken into account for row-oriented tables.  It specifies how many pages in advance should prefetch be kicked off.  The default is currently 12.  Testing seems to show that setting it to half of prefetch_request_size gives good results, but more work is needed.  Of course, the performance of column-oriented tables is greatly improved now, so I don't know how important this is any more.
+* `getpage_attempts` - this is how many times HRDBMS will attempt to retrieve a page before giving up and failing.  The default is 30000.
+* `getpage_fail_sleep_time_ms` - this is how long to wait between successive attempts to get a page in milliseconds.  The default is 1.
+* `archive_dir` - this is the directory where archive logs are written.  In an ideal world, this would be yet another disk that is separate from the OS disks, the disk for the active log, and the disks for the table data and temp data, but it is probably acceptable if this is on the same disk as the active log data as long as it is in a separate directory.
+* `hrdbms_user` - this is the userid that HRDBMS will run under.  This needs to be the same userid on all nodes.  You need to be logged in as this user when you start HRDBMS.  The default value is hrdbms.
+* `Xmx_string` - this is the size of the Java heap.  The default value is 32g.  It is highly recommended that you do not use a value smaller than 24g.  You should also not use a value higher than 75% of your total system memory.
+* `number_of_coords` - this is the number of coordinator nodes that you have.  I know I could change my code so that it just counts the number of C entries in the nodes.cfg file but I haven't done that yet, so you have to deal with it for now.  The default value is 1.
+* `max_batch` - when loading data from a file on a coordinator node, batches are created on the coordinator node and then distributed to workers.  This is the size of that batch.  Larger batches tend to be better, but it has a big impact on memory usage on both the coordinator and on the workers.  The default value is 1250000.
+* `archive` - whether or not you actually want to write archive logs.  You can't turn off archiving off the XA logs, but you can turn off archiving of the WAL if you want. The default value is false, meaning don't archive the write ahead log.  That means that after a checkpoint, any data from the write ahead log that is no longer needed is completely deleted.
+* `queue_flush_retry_timeout` - there are events that occur where we need all producers to flush their local buffers for writing to the multi-producer/multi-consumer queues.  This requires a lot of locking and synchronization.  We have to use try-lock semantics to avoid deadlocks, so this is how often to retry the lock in milliseconds.  The default value is 1.
+* `statistics_refresh_target_days` - there's some pretty cool (in concept) code in HRDBMS that attempts to figure out all of the maintenance tasks that are needed and tries to build a schedule that attempts to meet your targets/SLAs while still spreading the work so there is as little work running at any given time (leaving as much of the system available to running queries.  It is designed to learn from how long tasks took to run in the past and update its schedule accordingly.  It also updates its schedule dynamically as new tasks are needed based on new tables being added etc...  Of course none of this has been tested yet, and the few times that I left my system up more than a day I saw lots of errors come out from this part of the code.  But anyway, its listed here so the documentation is complete.  This parameter is supposed to specify the most out of date that you are willing to tolerate your statistics being.  The idea is that the scheduler will then do its best to come up with a plan to make sure that it keeps statistics more current than this value then on all of your tables without you needing to many issue commands to update statistics.  The default value is 7.
+* `old_file_cleanup_target_days` - Same sort of thing here.  Old files is referring to the fact that if you drop a table, it just drops the metadata from the catalog.  This scheduled tasks are supposed to actually drop files from the worker nodes when there is no corresponding catalog entries present anymore.  The default value is 7.
+* `reorg_refresh_target_days` - Likewise for reorgs.  The default value is 7.
+* `critical_mem_percent` - if available memory in the heap falls below this percent, operations that would normally run in memory can be forced to run externally.  Additionally, if available memory falls below this value parallelism of operations is reduced. The default value is 15.
+* `stack_size` - the stack size for Java threads.  HRDBMS has some very recursive stuff in its optimizer, so we use a default value of 2M.  It's recommended that you leave this at the default value.
+* `jvm_args` - this is a place to pass arguments to the JVM besides stack and heap size parameters.  If you override, this keep in mind that you probably want to put back all the stuff from the default and then add whatever you were trying to add.  Most of the stuff in the default is very important!  The default value is...
+
+~~~~
+-XX:+UseG1GC -XX:G1HeapRegionSize=32m -XX:+ParallelRefProcEnabled -XX:MaxDirectMemorySize=327772160000 -XX:+AggressiveOpts
+~~~~
+
+It's probably fine for most purposes, unless you have a really, really big machine and want to make use of a whole ton of the direct buffer feature (discussed soon).
+
+* `external_factor` - this is where things get fun.  This is used to decide whether aggregation operations are done in memory or not.  The logic is that you take the value of queue_size and you multiply it by `external_factor`.  If the estimated output cardinality of the aggregation operation is less than this number, it will be done in memory.  If it is bigger than this number, it will be done externally.  The default value is 68.0 (it's a floating point value), and was tuned using the default queue_size and default heap size.
+* `hash_external_factor` - this is a similar number for hash joins.  Again take queue_size and multiply it by hash_external_factor.  If the estimated cardinality of the right hand size input to the hash join is smaller than this number, the hash join will be done in memory.  If it is larger than this number, the hash join will be done externally.  The default value is 140.0.  This parameter actually affects a few other things in the optimizer as well, but this is the biggest one.
+* `max_queued_load_flush_threads` - as mentioned previously, the coordinator builds batches when doing loads and then ships them off to the workers.  While the workers are processing the batch, the coordinator is already busy building the next one.  Sometimes, the workers are faster than the coordinator with a batch and sometimes they are slower.  So, sometimes the coordinator can get several batches queued up that are ready to go.  We have to limit to the number of batches that the coordinator can have queued up and ready to go before it just needs to go to sleep and wait a little while (otherwise it could run itself out of memory).  The default value is 5.  Higher numbers are good.  But it has a big impact on memory usage.  Obviously the batch size comes into play here as well.
+* `sort_gb_factor` - has complicated effects on the optimizer.  Just set this the same as external_factor and be done with it.  I need to merge the two parameters.  The default is 68.0.
+* `java_path` - this needs to be set to the full path name of the bin directory that contains your java executable.  There is no default.
+* `batches_per_check` - during a load, this is the number of batches to process before asking the Buffer Manager to unpin the pages that we have used so far.  The default value is 4.  The unpinning process adds overhead, so we don't want to do it too often.  But, if we don't do it often enough, it drives up memory usage.
+* `create_index_batch_size` - during a load or index creation, this is the number of rows to insert into the index before asking the Buffer Manager to unpin the pages that we have used so far.  There is also a separate index cache which caches parsed index records that we have read.  That gets cleared as well.  The default value is 1000000.  It's the clearing of the index cache that has the biggest performance impact here since the higher level index records are accessed so frequently.  It's just that even increasing this number by relatively small amounts can drive up memory usage by big amounts (but it can also have cause a big performance gain).
+* `max_open_files` - the maximum number of open files that HRDBMS is allowed to have.  Make sure the hard limits in ulimit for the HRDBMS user on all your nodes will allow this value.  The default value is 100000.
+* `enable_cvarchar_compression` - when using column-oriented tables, there was a performance problem related to larger character fields, so I introduced Huffman compression to help alleviate that problem.  It worked great.  It based on character frequency (including common 2-4 character patterns) in English.  It needs to be extended to other languages.  So, your mileage may vary if your data is not English, although it seems to even work reasonable well on random garbage data.  The bottom line is that it should work reasonably well as long as your data is ASCII data.  If your data truly uses unicode characters outside of ASCII, you need to turn this off until we get a model built for your language(s). The default value is true.
+* `enable_col_reordering` - the idea here is that we can get better performance if a single prefetch thread can fetch multiple pages, but it can only do that if they are consecutive pages.  If there are groups of columns that are commonly accessed together we want them stored next to each other.  So, this is really only meaningful for column oriented tables.  One option is to put the columns in that order in the table definition, but you may not want to do that for some reason.  So, column reordering allows you to define the columns in a certain order in the table definition but then specify a different order for how you want them physically stored.  The default value is true.  It is a known bug that setting this to false is broken right now, as in your query will probably never return.
+* `hjo_bucket_size_shift` - when doing an external hash join, we fill up in memory buckets that get periodically flushed to disk.  The size of those in memory buckets is controlled by the external_factor parameter (confusingly not by the hash_external_factor parameter).  If this parameter is set to 0, that's the size of the bucket that is used.  If this parameter is set to 1, that bucket size is doubled.  If it's set to 2, that bucket size is multiplied by 4, etc...  On some filesystems, larger writes to disk perform much better.  However, larger buckets does mean more memory usage.  Furthermore, if you use the direct buffers feature, you can leave this set to 0.  The direct buffers feature does also require more memory too though.  The default value is 0.
+* `mo_bucket_size_shift` - the same parameter but for aggregation operations.  The default value is 0.
+* `max_concurrent_writers_per_temp_disk` - exactly what it sounds like.  When someone needs to write to a temp disk, it creates a temp thread and registers it with the temp thread manager.  They get scheduled across the various temp disks as there are availabilities.  The temp thread manager makes sure there are never more that this many concurrent writers on any given temp disk.  Depending on your hardware it may be a good idea to keep this low, or you may be able to crank it up very high.  Cranking it up to higher values will increase memory usage as well though.  The default value is 3.
+* `mo_max_par` - the default value is 1. Leave this set to 1. It is deprecated and will be removed.
+* `hjo_max_par` - the max number of parallel threads that can be used to process external hash joins.  This same limit gets applied to both the threads that read in both the data for the left side of the join and the threads that read in data for the right side of the join and build the in-memory hash table.  So you could actually have 2x this number of concurrent threads running.  The default value is the number of cores that the server has divided by two.  You can set this as high as the number of cores that the server has, and you might can slightly better performance if you have plenty of memory to work with.  But, if your memory is constrained, the additional memory usage will cause degraded performance.
+* `use_direct_buffers_for_flush` - if you set this parameter to true, it changes the algorithm for flushing the buckets for external hash joins and aggregations.  When a buckets fills up, instead of flushing directly to disk.  It is flushed to a buffer that is outside of the java heap.  Only when that buffer fills up, is it flushed to disk.  The direct buffers are intended to be much larger, are reused over the lifetime of the HRDBMS system, and are not subject the Java garbage collection.  The default value is false. If you turn on this feature, it is recommended that the size of your Java heap plus the size of you direct buffers does not exceed 75% of your system memory.  This can provide a major performance improvement, but its only intended for systems with a very large amount of memory.
+* `num_direct` - if you set use_direct_buffers_for_flush to true, this parameter control how many direct buffers to allocate.  Each direct buffer is 8MB in size.  The default is 20000.
+* `num_sbms` - this is the number of Sub-Buffer Managers.  The bufferpool is actually striped across a number of sub-bufferpools.  Since almost all bufferpool operations are synchronized, we only want to synchronize on a portion of the bufferpool.  A good guess would be the number of tables you have times the number of data directories per node. The default value is 256.
+* `extend_max_par` - the max number of parallel threads to use for performing arithmetic computations.  The default value is the number of cores on the server.  This setting provides significantly better performance than any other setting with 1 user.  It may be a different situation with many concurrent users, thus a tunable parameter.
+* `agg_max_par` - the max number of parallel threads that can be used to perform in-memory aggregations.  The default is currently the number of cores on the server.  Testing shows that again this is a good setting, at least for 1 concurrent user.
+* `page_size` - the page size to use.  All bufferpool pages will be this size.  All table and index pages will be this size.  The size is specified in bytes.  The default value is 2093056 (2044kb).  Values larger than 64MB can cause integer overflow errors in certain rare though possible situations. Larger pages do use more memory.
+* `nram_spsc_queue_size` - when a coordinator node does a merge sort of all the sorted results from each worker node, it usually can't do the sort as fast as the data is coming in.  To help, it spills incoming rows into some very fast single producer/single consumer queues.  There is one for each worker node participating in the sort.  This parameter sets the maximum number of rows that each queue can hold before we take a break from receiving more data.  Making these queues bigger significantly improves coordinator merge sort performance, but obviously uses much more memory.  The default value is 125000.
+* `max_pbpe_time` - the maximum amount of time in milliseconds that HRDBMS will spend trying to do predicate based page elimination for a page set. This parameter only comes into play for column tables. If you use larger page sizes, it's safer to make this parameter larger.  The default is 5ms.
+* `pbpe_externalize_interval_s` - the pbpe cache is hardened to disk every this many seconds. The default value is 60.
+* `sort_bucket_size` - the number of rows that get sorted individually before being passed into the mergesort when HRDBMS has to do an external sort. The default value is 300000.
+* `hjo_bin_size` - the number of rows per bin when HRDBMS does an external hash join. The default value is 100000.
+* `mo_bin_size` - the number of rows per bins when HRDBMS does an external aggregation. The default value is 3000000.
+
+# Starting HRDBMS
+Log on to any of the coordinator nodes as the HRDBMS user.  Go to the install directory for that node.  Issue the following commands...
+
+~~~
+ulimit -n <your max_open_files value>
+ulimit -u 100000
+nohup java -XX:+UseG1GC -XX:G1HeapRegionSize=32m -XX:+ParallelRefProcEnabled -XX:MaxDirectMemorySize=327772160000 -XX:+AggressiveOpts -Xmx<your heap size> -Xms<your heap size> -Xss<your stack size> -cp HRDBMS.jar:. com.exascale.managers.HRDBMSWorker 0 &
+~~~
+
+Each node will write a debug log in its install directory called hrdbms.log.
+
+# SQL Syntax
+For starters you probably want to create some tables.
+
+~~~
+CREATE [COLUMN] TABLE schema.table(col def, col def, ..., [PRIMARY KEY(col, col,...)]) [COLORDER(int, int, ...)] [ORGANIZATION(int, int, ...)] groupExp nodeExp devExp
+~~~
+
+Syntax in `[]` is optional.  Column definitions are pretty much standard as with any database.  Primary keys can be defined as part of a column definition or as a separate PRIMARY KEY clause.  If you use the COLORDER clause, it takes a list of integers, 1 through the number of columns in the tables.  The list specifies the orders in which to physically stored the columns, and it only makes sense for a column table.  For example COLORDER(2,3,1) says store the second column first, followed by the third column, and then the first column.
+
+If you use the ORGANIZATION cluase, it takes a list of integers as well. Again the integers are representing columns from the column definition list.  The first column has a value of 1.  The ORGANIZATION clause specifies a sort order for how data should be loaded into the table.  For example ORGANIZATION(3,2) says that when loading data, sort it first by column 3 and then by column 2 and load it in that order.  
+
+The groupExp, nodeExp, and devExp clauses are explained next are used to tell HRDBMS how to distribute the data across the cluster.  They use a rather expressive language that can actually result in quite a number of possibilities.  I really need to write a separate document explaining this language.  For now, I will just explain how to do the most basic distribution.
+
+For groupExp, just use the value NONE.
+
+For nodeExp, use.
+all,hash,{col|col|...}
+
+You can use 1 or more columns (all though one column is usually best if you can find 1 column that will work.  The column or columns you choose will be hashed to determine what node each row will be placed on.  Multiple columns are separate with a pipe symbol, |.
+
+Alternatively, for small tables, you can have them distributed in full to all nodes by using ANY for the nodeExp.
+
+For devExp, use.
+all,hash{col|col|...}
+This hash determines which device on the node the row is placed on.  Never use the same set of columns for this expression that you used for nodeExp.  It is OK however, if nodeExp is a subset of devExp or vice versa.
+
+## Indexes
+HRDBMS automatically builds indexes for you to support primary key constraints.  While it is true, that indexes can help (and help a good deal) for certain queries, it is not that common of a situation for complex queries.  So rather than creating what indexes you think make sense, let HRDBMS tell you!
+
+Start with no indexes other than for the primary keys and run your SQL statements.  Check the debug log (hrdbms.log) in the install directory on the coordinators, to find the coordinator that actually did the optimization for the queries.  If the optimizer wanted to use an index but one did not exist, it will tell you in the debug log!  It will tell you what columns in wanted an index on.  Very cool.
+
+If you need to create an index, the syntax is.
+
+~~~
+CREATE [UNIQUE] INDEX name on schema.table(col ASC|DESC, col ASC|DESC, ...)
+~~~
+
+Note that the index name does not have a schema portion.  The schema of the index is always the schema of the table.  Personally, I wouldn't bother with unique indexes except for the primary key indexes that HRDBMS creates for you.  There is a restriction today that they are only unique within a node anyway.  They are not globally unique.  There is a design in place to have them be globally unique, but it has not been implemented yet.
+
+Now you probably want to load data.  Note that there is no difference in performance between creating indexes before you load data or after you load data.  Internally, it's the same code that's going to run.
+
+~~~
+LOAD REPLACE|RESUME INTO schema.table DELIMITER char FROM path
+~~~
+
+`REPLACE` will truncate the table before loading.  RESUME will append to the table.  The data to load needs to exist in files on the coordinator where the LOAD runs.  Since coordinators can load balance, you need to make sure you are running on a specific coordinator.  The way to do this is addressed below when I talk about using the CLI. 
+
+The file needs to be a delimited file, but the delimiter can be any single character.  For example if my delimiter was the pipe symbol, I would say.
+
+~~~
+DELIMITER | FROM ...
+~~~
+
+The path clause tells HRDBMS what files contain the data to load.  This can be a single file or a wildcard pattern.  If it is multiple files, they will be processes in parallel.  I typically break my input data up into as many files as I have cores so I take advantage of parallelism. The path must be surrounded by single quotes.  For example,
+
+~~~
+FROM '/projects/SC14SCC/data/tpch*/dbgen/lineitem.tbl*'
+~~~
+
+After you load data, make sure to collect statistics with...
+
+~~~
+RUNSTATS on schema.table
+~~~
+
+INSERT, UPDATE, DELETE, and DROP are all straightforward.  Except that are known issues with update and delete right now.  It's been a low priority for me as all my benchmarks for my research papers are just doing loads and then a bunch of queries.
+
+CREATE VIEW is straightforward except for that right now, it doesn't let you give column names in the view definition.  The column names are whatever is in the SELECT clause in the defining SELECT statement.
+
+## Select Statements
+All the basic SELECT functionality is there, except outer joins.  Outer joins are not yet supported because HRDBMS does not yet support nulls.  For now you need to use an invalid data value just like you would in a file.  Currently null support is a medium priority for me.  Only the most basic scalar functions are there.  It's simple to add more, but rather than sitting down and adding 100, I've been adding them as needed.  I can't say it's SQL-92 compliant or anything like that, but it does most of what I see people do in the real world.  If you need something it doesn't do, let me know.  Contact info at the bottom.
+
+# Using The CLI
+To start the CLI, run...
+
+~~~
+java -Xmx1G -Xms1G -cp HRDBMS.jar:. com.exascale.cli.CLI
+~~~
+
+This will get you an `HRDBMS>` prompt.
+
+The first thing you need to do is connect to HRDBMS.  You can do this by...
+
+~~~
+connect to jdbc:hrdbms://hostname:port [force]
+~~~
+
+Port should be the value of your port_number parameter.  Hostname should be the hostname or ip of any coordinator.  If you specify force, it says you need to be connected to that specific coordinator and load balancing is not allowed to reroute you to a different coordinator.
+
+After that you can issue any SQL commands.  Do not end the commands with a semi-colon.  Hitting enter ends the command.  For commands that span multiple lines, just keep typing.  If you enter the command...
+
+timing on
+
+You will then get timing information back for all your queries.  Type quit to exit the CLI.
+
+# Using The JDBC Driver
+Using the JDBC driver is pretty standard.  You have to use the HRDBMS.jar file and the JDBC driver is packaged up in the same jar file that the server is in.  In fact the CLI is a JDBC application.  So, if you need more help just look at the source code for CLI.java in the com.exascale.CLI package.
+
+# Contact Info
+If we start to get more users, I'll start to prioritize things based on what the users need with the understanding that my research needs have to come first.  Please use the issues feature on github to submit bug reports and feature requests.  I'll respond to this much better than things getting lost in email.  But if you need to go over something with me that requires some discussion, you can reach me at jasonar81@gmail.com.  Just put HRDBMS in the subject line.  Thanks!
+

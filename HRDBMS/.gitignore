@@ -1,1 +1,5 @@
 /bin
+buildlib
+depcache
+build
+lib
