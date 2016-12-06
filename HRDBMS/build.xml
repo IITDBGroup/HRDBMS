@@ -149,6 +149,7 @@
 	<target name="createJar" depends="compile">
 		<path id="jarclasspath">
 			<fileset dir="${librarydir}" excludes="ant*.jar ivy.jar" />
+			<fileset dir="${librarydir}" includes="antlr*.jar" />
 		</path>
 		<delete dir="${tmpjardir}"/> 
 		<unjar dest="${tmpjardir}">
