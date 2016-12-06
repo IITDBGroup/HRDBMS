@@ -1,98 +1,193 @@
 <project name="HRDBMS" default="createJar" basedir="." xmlns:ivy="antlib:org.apache.ivy.ant">
 
-	<!-- ROOTDIR -->
+	<!-- PROPERTIES -->
 	<property name="projectroot" value="${basedir}" />
 
-	<!-- TASK DEFS AND IMPORTED LIBRARIES -->
-	<taskdef resource="net/sf/antcontrib/antcontrib.properties">
-		<classpath>
-			<pathelement location="${basedir}/lib/ant-contrib.jar"/>
-		</classpath>
-	</taskdef>
 	
 	<!-- DIRECTORIES -->
 	<property name="sourcedir" value="${projectroot}/src" />
 	<property name="binarydir" value="${projectroot}/bin" />
 	<property name="builddir" value="${projectroot}/build" />
 	<property name="librarydir" value="${projectroot}/lib" />
-	<property name="packagedir" value="${sourcedir}/com/exascale/optimizer" />
-	<property name="package" value="com.exascale.optimizer" />
+	<property name="buildlibrarydir" value="${projectroot}/buildlib" />
+	<property name="tmpjardir" value="${projectroot}/tmpjardir" />
+	<property name="parseroutdir" value="${sourcedir}/com/exascale/optimizer/" />
 	
 	<!-- FILES -->
 	<property name="buildjar" value="${builddir}/gprom-jdbc-test.jar" />
 	<property name="packagejar" value="${builddir}/HRDBMS.jar" />
 	<property name="grammarfile" value="${sourcedir}/com/exascale/optimizer/Select.g4" /> 
+
+	<!-- Ivy -->
+    <property name="ivy.install.version" value="2.1.0" />
+    <condition property="ivy.home" value="${env.IVY_HOME}">
+      <isset property="env.IVY_HOME" />
+    </condition>
+    <property name="ivy.jar.dir" value="${librarydir}" />
+    <property name="ivy.jar.file" value="${ivy.jar.dir}/ivy.jar" />
+		
 	
 	<!-- CLASSPATHS -->
-	<path id="libraries">
+<!--	<path id="libraries">
 		<fileset dir="${binarydir}">
 			<include name="**/*.class"/>
 		</fileset>
 	</path>
-	
-	<!-- CLEAN -->
-	<target name="clean" depends="">
-		<mkdir dir="${builddir}" />
-		<mkdir dir="${binarydir}" />
-	</target>
+	-->
+	<!-- **************************************** TASKS **************************************** -->                                         
+	<!-- Ivy -->
+    <target name="download-ivy" unless="offline">
 
-	<!-- BUILD -->
- 	<target name="resolve" description="--> retrieve dependencies with ivy">
-        <ivy:retrieve />
+        <mkdir dir="${ivy.jar.dir}"/>
+        <!-- download Ivy from web site so that it can be used even without any special installation -->
+        <get src="http://repo2.maven.org/maven2/org/apache/ivy/ivy/${ivy.install.version}/ivy-${ivy.install.version}.jar" 
+             dest="${ivy.jar.file}" usetimestamp="true"/>
+    </target>
+
+    <target name="init-ivy" depends="download-ivy">
+      <!-- try to load ivy here from ivy home, in case the user has not already dropped
+              it into ant's lib dir (note that the latter copy will always take precedence).
+              We will not fail as long as local lib dir exists (it may be empty) and
+              ivy is in at least one of ant's lib dir or the local lib dir. -->
+        <path id="ivy.lib.path">
+            <fileset dir="${ivy.jar.dir}" includes="*.jar"/>
+        </path>
+        <taskdef resource="org/apache/ivy/ant/antlib.xml"
+                 uri="antlib:org.apache.ivy.ant" classpathref="ivy.lib.path"/>
     </target>
 	
-	<!-- EXTRACT CLASS FILES FOR DEPENDENCIES -->
+	<target name="download-dependencies" depends="init-ivy">
+		 <ivy:resolve />
+		 <ivy:retrieve sync="false" type="jar" pattern="${librarydir}/[artifact].[ext]" />
+		<!-- classpath -->
+		<path id="classpath">
+			<fileset dir="${librarydir}"/>
+		</path>
+	</target>
+	
+	<!-- TASK DEFS AND IMPORTED LIBRARIES -->
+	<target name="setup-additional-anttasks" depends="download-dependencies">
+		<taskdef resource="net/sf/antcontrib/antcontrib.properties">
+			<classpath>
+				<pathelement location="${basedir}/lib/ant-contrib.jar"/>
+			</classpath>
+		</taskdef>
+	</target>
+	
+	<!-- CLEAN -->
+	<target name="clean" depends="setup-additional-anttasks">
+		<mkdir dir="${builddir}" />
+		<mkdir dir="${binarydir}" />
+		<mkdir dir="${tmpjardir}" />
+	</target>
+
+	
+	<!-- EXTRACT CLASS FILES FOR DEPENDENCIES
 	<target name="unjarDependencies" depends="clean">
 	    <unzip dest="${binarydir}">
 	        <fileset dir="${librarydir}">
 	            <include name="**/*.jar" />
 	        </fileset>    
 	    </unzip>
-	</target>
+	</target>  -->
 	
 	<!-- CREATE PARSER -->
-	<target name="createParser" depends="unjarDependencies">
-		<java classname="org.antlr.v4.Tool" classpathref="libraries">
-			 <arg value="${grammarfile}"/>
-		</java>
-		<!-- TODO -->
-		<!-- <antlr target="${sourcedir}/com/exascale/optimizer/Select.g4" >
-		</antlr> -->
-	</target>
-	
-	<target name="antlr4-install">
-				    <mkdir dir="${antlr4.dir}" />
-				    <get src="http://www.antlr.org/download/antlr-4.4-complete.jar" dest="${antlr4.dir}" skipexisting="true"/>
-	</target>
-	<target name="antlr4-gensrc" depends="antlr4-install" >
-	    
-	    <java jar="${antlr4.dir}/antlr-4.4-complete.jar" fork="true">
-	    <arg line="-package ${package} ${grammarfile} -o ${packagedir}"/>
-	    <arg line="-listener -visitor -encoding UTF-8"/>
-	    <arg line="-package ${package}"/>
-	    </java>
+	<target name="createParser">
+		<path id="classpath">
+			<fileset dir="${librarydir}" includes="antlr4.jar" />
+		</path>
+		<java classname="org.antlr.v4.Tool" classpathref="classpath">
+			<arg value="-visitor"/>
+			<arg value="-no-listener"/>
+			<arg value="-package"/>
+			<arg value="com.exascale.optimizer" />
+			<arg value="-o"/>
+			<arg value="${projectroot}" />
+			<arg value="${grammarfile}"/>
+		</java> 
 	</target>
 	
 	<!-- COMPILE SYSTEM -->
-	<target name="compile" depends="unjarDependencies">
+	<target name="compile" depends="clean">
 		<depend srcdir="${sourcedir}"
 		        destdir="${binarydir}"
 		        cache="depcache"
 		        closure="yes"/>
-		<javac srcdir="${sourcedir}" destdir="${binarydir}" classpathref="libraries" 
-			debug="on" excludes="**/.svn*">
+		<javac 
+			srcdir="${sourcedir}" 
+			destdir="${binarydir}" 
+			classpathref="classpath" 
+			debug="on" 
+			excludes="**/.svn*" 
+			source="1.8"
+			includeantruntime="false">
 			<compilerarg value="-Xlint:unchecked" />
 		</javac>
 	</target>
 
+	<target name="compileStandalone">
+		<path id="classpath">
+			<fileset dir="${librarydir}"/>
+		</path>
+		<depend srcdir="${sourcedir}"
+		        destdir="${binarydir}"
+		        cache="depcache"
+		        closure="yes"/>
+		<javac 
+			srcdir="${sourcedir}" 
+			destdir="${binarydir}" 
+			classpathref="classpath" 
+			debug="on" 
+			excludes="**/.svn*" 
+			source="1.8"
+			includeantruntime="false">
+			<compilerarg value="-Xlint:unchecked" />
+		</javac>
+	</target>
 	
 	<!-- PACKAGE SYSTEM AS JAR -->
-	<target name="createJar" depends="unjarDependencies">
-		<jar destfile="${packagejar}" basedir="${binarydir}">
+	<target name="createJar" depends="compile">
+		<path id="jarclasspath">
+			<fileset dir="${librarydir}" excludes="ant*.jar ivy.jar" />
+		</path>
+		<delete dir="${tmpjardir}"/> 
+		<unjar dest="${tmpjardir}">
+			<patternset>
+				<exclude name="**/*.RSA"/>
+				<exclude name="**/*.SF"/>
+				<exclude name="**/*.DSA"/>
+			</patternset>
+			<path refid="jarclasspath" />
+		</unjar>
+		<jar destfile="${packagejar}" basedir="${binarydir}" zip64Mode="as-needed">
 			<manifest>
 				<attribute name="Created-By" value="Illinois Institute of Technology, Department for Computer Science" />
 			</manifest>
+			<zipfileset dir="${tmpjardir}" includes="**/*" /> 
 		</jar>
+		<delete dir="${tmpjardir}"/>
+	</target>
+
+	<target name="createJarStandalone">
+		<path id="jarclasspath">
+			<fileset dir="${librarydir}" excludes="ant*.jar ivy.jar" />
+		</path>
+		<delete dir="${tmpjardir}"/> 
+		<unjar dest="${tmpjardir}">
+			<patternset>
+				<exclude name="**/*.RSA"/>
+				<exclude name="**/*.SF"/>
+				<exclude name="**/*.DSA"/>
+			</patternset>
+			<path refid="jarclasspath" />
+		</unjar>
+		<jar destfile="${packagejar}" basedir="${binarydir}" zip64Mode="as-needed">
+			<manifest>
+				<attribute name="Created-By" value="Illinois Institute of Technology, Department for Computer Science" />
+			</manifest>
+			<zipfileset dir="${tmpjardir}" includes="**/*" /> 
+		</jar>
+		<delete dir="${tmpjardir}"/>
 	</target>
 
 	
