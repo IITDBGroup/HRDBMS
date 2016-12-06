@@ -3097,7 +3097,7 @@ public final class Phase3
 					}
 					assignNodes(root, -1);
 					final Operator op = receive.parent();
-					if (op instanceof SelectOperator || op instanceof YearOperator || op instanceof SubstringOperator || op instanceof ProjectOperator || op instanceof ExtendOperator || op instanceof RenameOperator || op instanceof ReorderOperator || op instanceof CaseOperator || op instanceof ExtendObjectOperator || op instanceof DateMathOperator || op instanceof ConcatOperator)
+					if (op instanceof SelectOperator || op instanceof YearOperator || op instanceof SubstringOperator || op instanceof Json_valueOperator || op instanceof Json_queryOperator || op instanceof ProjectOperator || op instanceof ExtendOperator || op instanceof RenameOperator || op instanceof ReorderOperator || op instanceof CaseOperator || op instanceof ExtendObjectOperator || op instanceof DateMathOperator || op instanceof ConcatOperator)
 					{
 						if (op instanceof SelectOperator)
 						{

@@ -4234,6 +4234,46 @@ public final class MetaData implements Serializable
 				// System.out.println("Operator is SubstringOperator");
 				// System.out.println("Generated is " + r);
 			}
+			else if (op instanceof Json_valueOperator)
+			{
+				double card = 1;
+				for (final String table : t)
+				{
+					final FastStringTokenizer tokens = new FastStringTokenizer(table, ".", false);
+					final String schema = tokens.nextToken();
+					final String table2 = tokens.nextToken();
+					card *= this.getTableCard(schema, table2, tx);
+				}
+
+				for (final ArrayList<Filter> filter : f)
+				{
+					card *= this.likelihood(filter, r, tx, tree);
+				}
+
+				r.put(((Json_valueOperator)op).getOutputCol(), card);
+				// System.out.println("Operator is Json_valueOperator");
+				// System.out.println("Generated is " + r);
+			}
+			else if (op instanceof Json_queryOperator)
+			{
+				double card = 1;
+				for (final String table : t)
+				{
+					final FastStringTokenizer tokens = new FastStringTokenizer(table, ".", false);
+					final String schema = tokens.nextToken();
+					final String table2 = tokens.nextToken();
+					card *= this.getTableCard(schema, table2, tx);
+				}
+
+				for (final ArrayList<Filter> filter : f)
+				{
+					card *= this.likelihood(filter, r, tx, tree);
+				}
+
+				r.put(((Json_queryOperator)op).getOutputCol(), card);
+				// System.out.println("Operator is Json_valueOperator");
+				// System.out.println("Generated is " + r);
+			}
 			else if (op instanceof RenameOperator)
 			{
 				for (final Map.Entry entry : ((RenameOperator)op).getRenameMap().entrySet())

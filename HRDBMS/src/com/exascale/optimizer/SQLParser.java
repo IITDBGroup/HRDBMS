@@ -437,6 +437,36 @@ public class SQLParser
 					throw new ParseException("The SUBSTRING() function cannot be used on a non-character data");
 				}
 			}
+			else if (o instanceof Json_valueOperator)
+			{
+				String name = o.getReferences().get(0);
+				String type = op.getCols2Types().get(name);
+
+				if (type == null)
+				{
+					throw new ParseException("A reference to column " + name + " was unable to be resolved.");
+				}
+
+				if (!type.equals("CHAR"))
+				{
+					throw new ParseException("The JSON_VALUE() function cannot be used on a non-character data");
+				}
+			}
+			else if (o instanceof Json_queryOperator)
+			{
+				String name = o.getReferences().get(0);
+				String type = op.getCols2Types().get(name);
+
+				if (type == null)
+				{
+					throw new ParseException("A reference to column " + name + " was unable to be resolved.");
+				}
+
+				if (!type.equals("CHAR"))
+				{
+					throw new ParseException("The JSON_QUERY() function cannot be used on a non-character data");
+				}
+			}
 			else if (o instanceof DateMathOperator)
 			{
 				String name = o.getReferences().get(0);
@@ -973,6 +1003,36 @@ public class SQLParser
 				if (!type.equals("CHAR"))
 				{
 					throw new ParseException("The SUBSTRING() function cannot be used on a non-character data");
+				}
+			}
+			else if (o instanceof Json_valueOperator)
+			{
+				String name = o.getReferences().get(0);
+				String type = op.getCols2Types().get(name);
+
+				if (type == null)
+				{
+					throw new ParseException("A reference to column " + name + " was unable to be resolved.");
+				}
+
+				if (!type.equals("CHAR"))
+				{
+					throw new ParseException("The JSON_VALUE() function cannot be used on a non-character data");
+				}
+			}
+			else if (o instanceof Json_queryOperator)
+			{
+				String name = o.getReferences().get(0);
+				String type = op.getCols2Types().get(name);
+
+				if (type == null)
+				{
+					throw new ParseException("A reference to column " + name + " was unable to be resolved.");
+				}
+
+				if (!type.equals("CHAR"))
+				{
+					throw new ParseException("The JSON_QUERY() function cannot be used on a non-character data");
 				}
 			}
 			else if (o instanceof DateMathOperator)
@@ -2601,6 +2661,171 @@ public class SQLParser
 				else
 				{
 					throw new ParseException("The first argument to SUBSTRING() must be a literal, a column, a function, or an expression");
+				}
+			}
+			
+			else if (method.equals("JSON_VALUE"))
+			{
+				ArrayList<Expression> args = f.getArgs();
+				if (args.size() != 2)
+				{
+					throw new ParseException("JSON_VALUE() requires 2 arguments");
+				}
+				Expression arg = args.get(1);
+				Object arg1 = arg.getLiteral().getValue();
+				String jpath;
+				String jdoc = "";
+				if(arg1 instanceof String){
+					jpath = arg1.toString(); 
+				}else{
+					throw new ParseException("Argument 1 to JSON_VALUE must be a string");
+				}
+				arg = args.get(0);
+				if (arg.isLiteral() || arg.isFunction() || arg.isExpression() || arg.isCase())
+				{
+					OperatorTypeAndName retval = buildOperatorTreeFromExpression(arg, null, sub);
+					if (retval.getType() == TYPE_DATE || retval.getType() == TYPE_DAYS || retval.getType() == TYPE_MONTHS || retval.getType() == TYPE_YEARS || retval.getType() == TYPE_GROUPBY)
+					{
+						throw new ParseException("Argument 1 to JSON_VALUE must be a string");
+					}
+
+					ArrayList<Object> row = new ArrayList<Object>();
+					row.add(retval.getName());
+					row.add(retval.getOp());
+					row.add(retval.getType());
+					row.add(complexID++);
+					row.add(arg);
+					row.add(retval.getPrereq());
+					row.add(sub);
+					row.add(false);
+					complex.add(row);
+					jdoc = arg.getLiteral().getValue().toString();
+					if (name != null)
+					{
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new Json_valueOperator(retval.getName(), jdoc, jpath, sgetName, meta), TYPE_INLINE, sgetName, (Integer)row.get(3));
+					}
+					else
+					{
+						name = "._E" + suffix++;
+						return new OperatorTypeAndName(new Json_valueOperator(retval.getName(), jdoc, jpath, name, meta), TYPE_INLINE, name, (Integer)row.get(3));
+					}
+				}
+				else if (arg.isColumn())
+				{
+					String colName = "";
+					Column col = arg.getColumn();
+					if (col.getTable() != null)
+					{
+						colName += col.getTable();
+					}
+
+					colName += ("." + col.getColumn());
+
+					if (name != null)
+					{
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new Json_valueOperator(colName, jdoc, jpath, sgetName, meta), TYPE_INLINE, sgetName, -1);
+					}
+					else
+					{
+						name = "._E" + suffix++;
+						return new OperatorTypeAndName(new Json_valueOperator(colName, jdoc, jpath, name, meta), TYPE_INLINE, name, -1);
+					}
+				}
+				else
+				{
+					throw new ParseException("The first argument to JSON_VALUE() must be a literal, a column, a function, or an expression");
+				}
+			}
+			else if (method.equals("JSON_QUERY"))
+			{
+				ArrayList<Expression> args = f.getArgs();
+				if (args.size() != 2)
+				{
+					throw new ParseException("JSON_QUERY() requires 2 arguments");
+				}
+				Expression arg = args.get(1);
+				Object arg1 = arg.getLiteral().getValue();
+				String jpath;
+				String jdoc = "";
+				if(arg1 instanceof String){
+					jpath = arg1.toString(); 
+				}else{
+					throw new ParseException("Argument 1 to JSON_QUERY must be a string");
+				}
+				arg = args.get(0);
+				if (arg.isLiteral() || arg.isFunction() || arg.isExpression() || arg.isCase())
+				{
+					OperatorTypeAndName retval = buildOperatorTreeFromExpression(arg, null, sub);
+					if (retval.getType() == TYPE_DATE || retval.getType() == TYPE_DAYS || retval.getType() == TYPE_MONTHS || retval.getType() == TYPE_YEARS || retval.getType() == TYPE_GROUPBY)
+					{
+						throw new ParseException("Argument 1 to JSON_QUERY must be a string");
+					}
+
+					ArrayList<Object> row = new ArrayList<Object>();
+					row.add(retval.getName());
+					row.add(retval.getOp());
+					row.add(retval.getType());
+					row.add(complexID++);
+					row.add(arg);
+					row.add(retval.getPrereq());
+					row.add(sub);
+					row.add(false);
+					complex.add(row);
+					jdoc = arg.getLiteral().getValue().toString();
+					if (name != null)
+					{
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new Json_queryOperator(retval.getName(), jdoc, jpath, sgetName, meta), TYPE_INLINE, sgetName, (Integer)row.get(3));
+					}
+					else
+					{
+						name = "._E" + suffix++;
+						return new OperatorTypeAndName(new Json_queryOperator(retval.getName(), jdoc, jpath, name, meta), TYPE_INLINE, name, (Integer)row.get(3));
+					}
+				}
+				else if (arg.isColumn())
+				{
+					String colName = "";
+					Column col = arg.getColumn();
+					if (col.getTable() != null)
+					{
+						colName += col.getTable();
+					}
+
+					colName += ("." + col.getColumn());
+
+					if (name != null)
+					{
+						String sgetName = name;
+						if (!sgetName.contains("."))
+						{
+							sgetName = "." + sgetName;
+						}
+						return new OperatorTypeAndName(new Json_queryOperator(colName, jdoc, jpath, sgetName, meta), TYPE_INLINE, sgetName, -1);
+					}
+					else
+					{
+						name = "._E" + suffix++;
+						return new OperatorTypeAndName(new Json_queryOperator(colName, jdoc, jpath, name, meta), TYPE_INLINE, name, -1);
+					}
+				}
+				else
+				{
+					throw new ParseException("The first argument to JSON_QUERY() must be a literal, a column, a function, or an expression");
 				}
 			}
 		}
