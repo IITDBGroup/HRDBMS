@@ -467,7 +467,15 @@ public final class ResourceManager extends HRDBMSThread
 		{
 			new ProfileThread().start();
 		}
-		new MonitorThread().start();
+		
+		try
+		{
+			new MonitorThread().start();
+		}
+		catch(Throwable e)
+		{
+			HRDBMSWorker.logger.debug("", e);
+		}
 		// new GCThread().start();
 		if (DEADLOCK_DETECT)
 		{
@@ -710,6 +718,7 @@ public final class ResourceManager extends HRDBMSThread
 		@Override
 		public void run()
 		{
+			HRDBMSWorker.logger.debug("Starting monitor thread.");
 			// long last = System.currentTimeMillis();
 			// HashMap<GarbageCollectorMXBean, Long> map = new
 			// HashMap<GarbageCollectorMXBean, Long>();
@@ -753,23 +762,30 @@ public final class ResourceManager extends HRDBMSThread
 				// }
 				// last = temp;
 				//
-				HRDBMSWorker.logger.debug(((Runtime.getRuntime().freeMemory()) * 100.0) / (maxMemory * 1.0) + "% free - skipped " + TableScanOperator.skippedPages.get() + " pages. figureOutProblemsTime = " + TableScanOperator.figureOutProblemsTime + ", SMTSolveTime = " + TableScanOperator.SMTSolveTime + ", nonSMTSolveTime = " + TableScanOperator.nonSMTSolveTime + ", pbpeMaintenanceTime = " + TableScanOperator.pbpeMaintenanceTime + ", SMTSolverCalls = " + TableScanOperator.SMTSolverCalls);
-
-				// for (SubBufferManager sbm : BufferManager.managers)
-				// {
-				// HRDBMSWorker.logger.debug("Owner is " +
-				// sbm.lock.whoIsOwner());
-				// HRDBMSWorker.logger.debug("Owners is " +
-				// sbm.lock.getOwners());
-				// }
-				// HRDBMSWorker.logger.debug("GC time was " + (pct * 100.0) +
-				// "%");
-				if (i % 12 == 0)
+				try
 				{
-					displayQueryProgress();
-				}
+					HRDBMSWorker.logger.debug(((Runtime.getRuntime().freeMemory()) * 100.0) / (maxMemory * 1.0) + "% free - skipped " + TableScanOperator.skippedPages.get() + " pages. figureOutProblemsTime = " + TableScanOperator.figureOutProblemsTime + ", SMTSolveTime = " + TableScanOperator.SMTSolveTime + ", nonSMTSolveTime = " + TableScanOperator.nonSMTSolveTime + ", pbpeMaintenanceTime = " + TableScanOperator.pbpeMaintenanceTime + ", SMTSolverCalls = " + TableScanOperator.SMTSolverCalls);
 
-				i++;
+					// for (SubBufferManager sbm : BufferManager.managers)
+					// {
+					// HRDBMSWorker.logger.debug("Owner is " +
+					// sbm.lock.whoIsOwner());
+					// HRDBMSWorker.logger.debug("Owners is " +
+					// sbm.lock.getOwners());
+					// }
+					// HRDBMSWorker.logger.debug("GC time was " + (pct * 100.0) +
+					// "%");
+					if (i % 12 == 0)
+					{
+						displayQueryProgress();
+					}
+
+					i++;
+				}
+				catch(Throwable e)
+				{
+					HRDBMSWorker.logger.debug("", e);
+				}
 				try
 				{
 					Thread.sleep(SLEEP_TIME);

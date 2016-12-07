@@ -118,6 +118,23 @@ public class FileManager
 
 		return retval;
 	}
+	
+	public static int addNewBlockNoFlush(final String fn, final ByteBuffer data, final Transaction tx) throws Exception
+	{
+		LockManager.xLock(new Block(fn, -1), tx.number());
+		final FileChannel fc = getFile(fn);
+		int retval;
+		retval = numBlocks.get(fn);
+		final Block bl = new Block(fn, retval);
+		final ExtendLogRec rec = LogManager.extend(tx.number(), bl);
+		//LogManager.flush(rec.lsn());
+		data.position(0);
+		fc.write(data, (retval * 1L) * Page.BLOCK_SIZE);
+		// fc.force(false);
+		numBlocks.put(fn, retval + 1);
+
+		return retval;
+	}
 
 	public static int addNewBlockNoLog(final String fn, final ByteBuffer data, final Transaction tx) throws Exception
 	{

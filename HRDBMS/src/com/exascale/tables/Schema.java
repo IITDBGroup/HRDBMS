@@ -2037,14 +2037,31 @@ public class Schema
 		buff.put((byte)1);
 		putMedium(buff, 0); // RID list length
 
-		int newBlockNum = FileManager.addNewBlock(fn, oldBuff, tx);
+		int newBlockNum = 0;
+		if (pageGroup.size() == 1)
+		{
+			newBlockNum = FileManager.addNewBlock(fn, oldBuff, tx);
+		}
+		else
+		{
+			newBlockNum = FileManager.addNewBlockNoFlush(fn, oldBuff, tx);
+		}
+		
 		final Block bl = new Block(fn, newBlockNum);
 		LockManager.xLock(bl, tx.number());
 
 		int pos = 1;
 		while (pos < pageGroup.size())
 		{
-			newBlockNum = FileManager.addNewBlock(fn, oldBuff, tx);
+			if (pos + 1 == pageGroup.size())
+			{
+				newBlockNum = FileManager.addNewBlock(fn, oldBuff, tx);
+			}
+			else
+			{
+				newBlockNum = FileManager.addNewBlockNoFlush(fn, oldBuff, tx);
+			}
+			
 			final Block bl2 = new Block(fn, newBlockNum);
 			LockManager.xLock(bl2, tx.number());
 			pos++;
