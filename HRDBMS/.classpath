@@ -195,5 +195,6 @@
 	<classpathentry kind="lib" path="lib/javasmt-solver-z3.jar"/>
 	<classpathentry kind="lib" path="lib/smtinterpol.jar"/>
 	<classpathentry kind="lib" path="lib/hadoop-core.jar"/>
+	<classpathentry kind="var" path="JAVA_HOME"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
