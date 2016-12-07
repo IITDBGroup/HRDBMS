@@ -58,7 +58,7 @@
 	
 	<target name="download-dependencies" depends="init-ivy">
 		 <ivy:resolve />
-		 <ivy:retrieve sync="false" type="jar" pattern="${librarydir}/[artifact].[ext]" />
+		 <ivy:retrieve sync="false" type="jar,bundle" pattern="${librarydir}/[organisation]-[originalname].[ext]" />
 		<!-- classpath -->
 		<path id="classpath">
 			<fileset dir="${librarydir}"/>
@@ -148,7 +148,10 @@
 	<!-- PACKAGE SYSTEM AS JAR -->
 	<target name="createJar" depends="compile">
 		<path id="jarclasspath">
-			<fileset dir="${librarydir}" excludes="ant*.jar ivy.jar" />
+			<fileset dir="${librarydir}">
+				<exclude name="ant*.jar" />
+				<exclude name="ivy.jar" />
+			</fileset>
 			<fileset dir="${librarydir}" includes="antlr*.jar" />
 		</path>
 		<delete dir="${tmpjardir}"/> 
