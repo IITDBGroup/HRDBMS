@@ -69,7 +69,7 @@
 	<target name="setup-additional-anttasks" depends="download-dependencies">
 		<taskdef resource="net/sf/antcontrib/antcontrib.properties">
 			<classpath>
-				<pathelement location="${basedir}/lib/ant-contrib.jar"/>
+				<pathelement location="${basedir}/lib/ant-contrib-ant-contrib-1.0b3.jar"/>
 			</classpath>
 		</taskdef>
 	</target>
@@ -121,7 +121,9 @@
 			excludes="**/.svn*" 
 			source="1.8"
 			includeantruntime="false">
-			<compilerarg value="-Xlint:unchecked -Xmaxwarns" />
+			<compilerarg value="-Xlint:unchecked"/>
+			<compilerarg value="-Xmaxwarns"/>
+			<compilerarg value="0"/>
 		</javac>
 	</target>
 

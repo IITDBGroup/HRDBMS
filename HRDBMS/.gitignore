@@ -3,3 +3,7 @@ buildlib
 depcache
 build
 lib
+# Ignore IvyIDEA user-specific files
+*.iml
+# Ignore IDEA user workspace settings
+workspace.xml
