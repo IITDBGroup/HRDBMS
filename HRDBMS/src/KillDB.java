@@ -79,7 +79,7 @@ public class KillDB
 						// session.disconnect();
 						// HRDBMSWorker.logger.info("Command: " + "ssh -n -f " +
 						// host + " \"sh -c '" + command1 + "'\"");
-						Runtime.getRuntime().exec(new String[] { "bash", "-c", "ssh -n -f " + host + "  \"sh -c '" + cmd + "'\"" });
+						Runtime.getRuntime().exec(new String[] { "bash", "-c", "ssh -o StrictHostKeyChecking=no -n -f " + host + "  \"sh -c '" + cmd + "'\"" });
 					}
 					catch (final Exception e)
 					{

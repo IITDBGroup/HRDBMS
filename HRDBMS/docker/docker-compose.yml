@@ -1,0 +1,15 @@
+services:
+  coordinator:
+     image: mykh74/hrdbms:v1
+     ports:
+        - "5010:5010"
+     volumes:
+        - ./:/home/hrdbms/app
+     depends_on:
+        - worker
+  worker:
+     image: mykh74/hrdbms:v1
+     ports:
+        - "5015:5015"
+     volumes:
+        - ./:/home/hrdbms/app
