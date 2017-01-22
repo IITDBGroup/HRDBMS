@@ -49,14 +49,14 @@ public class StartWorkersThread extends HRDBMSThread
 						cmd += "/";
 					}
 
-					cmd += "java";
+					cmd += "java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5015";
 				}
 
 				if (type.equals("W"))
 				{
 					HRDBMSWorker.getHParms().getProperty("hrdbms_user");
 					HRDBMSWorker.logger.info("Starting worker " + host);
-					final String command1 = "cd " + wd + "; ulimit -n " + HRDBMSWorker.getHParms().getProperty("max_open_files") + "; ulimit -u 100000; nohup " + cmd + " -Xmx" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xms" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xss" + HRDBMSWorker.getHParms().getProperty("stack_size") + " " + HRDBMSWorker.getHParms().getProperty("jvm_args") + " -cp HRDBMS.jar:. com.exascale.managers.HRDBMSWorker " + HRDBMSWorker.TYPE_WORKER + " &";
+					final String command1 = "cd " + wd + "; ulimit -n " + HRDBMSWorker.getHParms().getProperty("max_open_files") + "; nohup " + cmd + " -Xmx" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xms" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xss" + HRDBMSWorker.getHParms().getProperty("stack_size") + " " + HRDBMSWorker.getHParms().getProperty("jvm_args") + " -classpath /home/hrdbms/app/bin: com.exascale.managers.HRDBMSWorker " + HRDBMSWorker.TYPE_WORKER + " &";
 					try
 					{
 
@@ -87,8 +87,8 @@ public class StartWorkersThread extends HRDBMSThread
 						// }
 						// channel.disconnect();
 						// session.disconnect();
-						HRDBMSWorker.logger.info("Command: " + "ssh -n -f " + host + "  \"sh -c '" + command1 + "'\"");
-						Runtime.getRuntime().exec(new String[] { "bash", "-c", "ssh -n -f " + host + "  \"bash -c '" + command1 + "'\"" });
+						HRDBMSWorker.logger.info("Command: " + "ssh -o StrictHostKeyChecking=no -n -f " + host + "  \"sh -c '" + command1 + "'\"");
+						Runtime.getRuntime().exec(new String[] { "bash", "-c", "ssh -o StrictHostKeyChecking=no -n -f " + host + "  \"bash -c '" + command1 + "'\"" });
 					}
 					catch (final Exception e)
 					{

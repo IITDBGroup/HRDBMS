@@ -1,7 +1,7 @@
 <project name="HRDBMS" default="createJar" basedir=".">
 	
 	<property name="projectroot" value="${basedir}" />
-	
+
 	<!-- DIRECTORIES -->
 	<property name="sourcedir" value="${projectroot}/src" />
 	<property name="binarydir" value="${projectroot}/bin" />
