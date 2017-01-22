@@ -58,7 +58,7 @@
 	
 	<target name="download-dependencies" depends="init-ivy">
 		 <ivy:resolve />
-		 <ivy:retrieve sync="false" type="jar,bundle" pattern="${librarydir}/[organisation]-[originalname].[ext]" />
+		 <ivy:retrieve sync="false" type="jar,bundle" pattern="${librarydir}/[artifact].[ext]" />
 		<!-- classpath -->
 		<path id="classpath">
 			<fileset dir="${librarydir}"/>
@@ -69,7 +69,7 @@
 	<target name="setup-additional-anttasks" depends="download-dependencies">
 		<taskdef resource="net/sf/antcontrib/antcontrib.properties">
 			<classpath>
-				<pathelement location="${basedir}/lib/ant-contrib-ant-contrib-1.0b3.jar"/>
+				<pathelement location="${basedir}/lib/ant-contrib.jar"/>
 			</classpath>
 		</taskdef>
 	</target>
@@ -94,7 +94,10 @@
 	<!-- CREATE PARSER -->
 	<target name="createParser">
 		<path id="classpath">
-			<fileset dir="${librarydir}" includes="antlr4.jar" />
+			<fileset dir="${librarydir}">
+					<include name="antlr*.jar"/>
+				<include name="ST4.jar"/>
+					</fileset>
 		</path>
 		<java classname="org.antlr.v4.Tool" classpathref="classpath">
 			<arg value="-visitor"/>
