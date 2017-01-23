@@ -1,0 +1,9 @@
+connect to jdbc:hrdbms://17.17.0.2:3232
+create table region(r_regionkey integer not null primary key, r_name char(25), r_comment char(152)) none any all,hash,{r_regionkey}
+commit
+load resume into region delimiter | from '/home/hrdbms/region.tbl'
+commit
+runstats on region
+commit
+select * from region
+quit

@@ -1,0 +1,5 @@
+root ALL=(ALL) NOPASSWD: ALL
+hrdbms ALL=(ALL) NOPASSWD: ALL
+Defaults    env_reset
+Defaults    secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+

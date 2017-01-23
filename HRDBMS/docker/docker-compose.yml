@@ -1,0 +1,29 @@
+version: "2.0"
+services:
+  coordinator:
+     image: mykh74/hrdbms:v1
+     ports:
+        - "5010:5010"
+     volumes:
+        - ../:/home/hrdbms/app
+     depends_on:
+        - worker
+     networks:
+        app_net:
+          ipv4_address: 17.17.0.2
+  worker:
+     image: mykh74/hrdbms:v1
+     ports:
+        - "5015:5015"
+     volumes:
+        - ../:/home/hrdbms/app
+     networks:
+        app_net:
+          ipv4_address: 17.17.0.3
+networks:
+  app_net:
+      driver: bridge
+      ipam:
+          config:
+              - subnet: 17.17.0.0/8
+                gateway: 17.17.0.1
