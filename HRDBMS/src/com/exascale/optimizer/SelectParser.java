@@ -324,11 +324,11 @@ public class SelectParser extends Parser {
 				break;
 			}
 		}
-//		catch (RecognitionException re) {
-//			_localctx.exception = re;
-//			_errHandler.reportError(this, re);
-//			_errHandler.recover(this, re);
-//		}
+		catch (RecognitionException re) {
+			_localctx.exception = re;
+			_errHandler.reportError(this, re);
+			_errHandler.recover(this, re);
+		}
 		finally {
 			exitRule();
 		}
