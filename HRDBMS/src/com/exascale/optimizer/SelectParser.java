@@ -118,7 +118,10 @@ public class SelectParser extends Parser {
 		public CreateTableContext createTable() {
 			return getRuleContext(CreateTableContext.class,0);
 		}
-		public CommonTableExpressionContext commonTableExpression(int i) {
+        public CreateExternalTableContext createExternalTable() {
+            return getRuleContext(CreateExternalTableContext.class,0);
+        }
+        public CommonTableExpressionContext commonTableExpression(int i) {
 			return getRuleContext(CommonTableExpressionContext.class,i);
 		}
 		public DeleteContext delete() {
@@ -321,11 +324,11 @@ public class SelectParser extends Parser {
 				break;
 			}
 		}
-		catch (RecognitionException re) {
-			_localctx.exception = re;
-			_errHandler.reportError(this, re);
-			_errHandler.recover(this, re);
-		}
+//		catch (RecognitionException re) {
+//			_localctx.exception = re;
+//			_errHandler.reportError(this, re);
+//			_errHandler.recover(this, re);
+//		}
 		finally {
 			exitRule();
 		}

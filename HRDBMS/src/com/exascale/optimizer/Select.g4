@@ -1,6 +1,6 @@
 grammar Select;
 
-select : (insert EOF) | (update EOF) | (delete EOF) | (createTable EOF) | (createIndex EOF) | (createView EOF) | (dropTable EOF) | (dropIndex EOF) | (dropView EOF) | (load EOF) | (runstats EOF) | ((('WITH' commonTableExpression (',' commonTableExpression)*)? fullSelect) EOF);
+select : (insert EOF) | (update EOF) | (delete EOF) | (createExternalTable EOF) | (createTable EOF) | (createIndex EOF) | (createView EOF) | (dropTable EOF) | (dropIndex EOF) | (dropView EOF) | (load EOF) | (runstats EOF) | ((('WITH' commonTableExpression (',' commonTableExpression)*)? fullSelect) EOF);
 runstats : 'RUNSTATS' 'ON' tableName ;
 insert : 'INSERT' 'INTO' tableName (('FROM'? fullSelect) | ('VALUES' '(' expression (',' expression)* ')')) ;
 update : 'UPDATE' tableName 'SET' (columnName | colList) EQUALS expression whereClause? ;
