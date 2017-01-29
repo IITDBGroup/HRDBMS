@@ -860,7 +860,11 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 		{
 			return (CreateIndex)visit(ctx.createIndex());
 		}
-		else if (ctx.createTable() != null)
+        else if (ctx.createExternalTable() != null)
+        {
+            return (CreateExternalTable)visit(ctx.createExternalTable());
+        }
+        else if (ctx.createTable() != null)
 		{
 			return (CreateTable)visit(ctx.createTable());
 		}

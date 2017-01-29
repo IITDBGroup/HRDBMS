@@ -13,7 +13,7 @@ javaClassExtTableSpec: 'USING' javaClassName 'WITH' 'PARAMETERS' '(' keyValueLis
 javaClassName: JAVACLASSNAMEIDENTIFIER ('.' JAVACLASSNAMEIDENTIFIER)* '.java' ;
 keyValueList: anything ':' anything (',' anything ':' anything)*;
 anything : . ;
-sourceList : 'local' | 'hdfs' | 's3' ;
+sourceList : 'LOCAL' | 'HDFS' | 'S3' ;
 colOrder : COLORDER '(' INTEGER (',' INTEGER)* ')' ;
 groupExp : NONE | realGroupExp ;
 realGroupExp :  '{' groupDef ('|' groupDef)* '}' (',' (hashExp | rangeType))? ;

@@ -36,8 +36,13 @@
 	</target>
 	
 	<!-- CREATE PARSER -->
-	<target name="createParser" depends="unjarDependencies">
-		<java classname="org.antlr.v4.Tool" classpathref="libraries">
+	<target name="createParser">
+		<path id="classpath">
+			<fileset dir="${librarydir}">
+				<include name="antlr-4.6-complete.jar"/>
+			</fileset>
+		</path>
+		<java classname="org.antlr.v4.Tool" classpathref="classpath">
 			 <arg value="${grammarfile}"/>
 		</java>
 		<!-- TODO -->

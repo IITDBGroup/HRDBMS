@@ -17,9 +17,12 @@ import com.exascale.exceptions.ParseException;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DateParser;
 import com.exascale.optimizer.externalTable.CreateExternalTable;
+import com.exascale.optimizer.CreateExternalTableOperator;
 import com.exascale.tables.SQL;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.ConnectionWorker;
+import java.util.Properties;
+import java.lang.String;
 
 public class SQLParser
 {
@@ -1266,8 +1269,12 @@ public class SQLParser
 		{
 			return new CreateExternalTableOperator(meta, schema, tbl, colDefs, createExternalTable.getGeneralExtTableSpec().getSourceList() , createExternalTable.getGeneralExtTableSpec().getAnyString(), createExternalTable.getGeneralExtTableSpec().getFilePathIdentifier());
 		}
-		
-		return new CreateExternalTableOperator(meta, schema, tbl, colDefs, createExternalTable.getJavaClassExtTableSpec().getJavaClassName() , createExternalTable.getJavaClassExtTableSpec().getKeyValueList());
+		// @todo we need to pass correct parameters in CreateExternalTableOperator
+		String javaclass = new String("Undefined");
+		Properties tableproperties = new Properties();
+		CreateExternalTableOperator op = new CreateExternalTableOperator(meta, schema, tbl, colDefs, javaclass, tableproperties);
+		op.setTransaction(tx);
+		return op;
 	}
 
 	private Operator buildOperatorTreeFromCreateView(CreateView createView) throws Exception

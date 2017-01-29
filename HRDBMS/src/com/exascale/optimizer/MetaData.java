@@ -1377,7 +1377,7 @@ public final class MetaData implements Serializable
 
 			cols2Types.put(name, type);
 		}
-		new MetaData().new PartitionMetaData(schema, table, "none", "any", "ALL,HASH,{col}", tx, cols2Types);
+		new MetaData().new PartitionMetaData(schema, table, "NONE", "ANY", "ALL,HASH,{COL}", tx, cols2Types);
 		// tables
 		// cols
 		// indexes
@@ -1387,6 +1387,8 @@ public final class MetaData implements Serializable
 		String typeFlag = "E";
 
 		PlanCacheManager.getInsertTable().setParms(tableID, schema, table, typeFlag).execute(tx);
+        // @todo FIX PARAMETERS SET UP FOR EXTERNAL TABLE
+		PlanCacheManager.getInsertExternalTable().setParms(tableID, javaClassName, "Undefined Parameters").execute(tx);
 		int colID = 0;
 		for (ColDef def : defs)
 		{

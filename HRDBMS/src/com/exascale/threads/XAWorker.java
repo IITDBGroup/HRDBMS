@@ -11,6 +11,7 @@ import com.exascale.misc.SPSCQueue;
 import com.exascale.optimizer.AntiJoinOperator;
 import com.exascale.optimizer.CreateIndexOperator;
 import com.exascale.optimizer.CreateTableOperator;
+import com.exascale.optimizer.CreateExternalTableOperator;
 import com.exascale.optimizer.CreateViewOperator;
 import com.exascale.optimizer.DeleteOperator;
 import com.exascale.optimizer.DropIndexOperator;
@@ -290,6 +291,10 @@ public class XAWorker extends HRDBMSThread
 		else if (op instanceof CreateTableOperator)
 		{
 			((CreateTableOperator)op).setTransaction(tx);
+		}
+		else if (op instanceof CreateExternalTableOperator)
+		{
+			((CreateExternalTableOperator)op).setTransaction(tx);
 		}
 		else if (op instanceof DropTableOperator)
 		{

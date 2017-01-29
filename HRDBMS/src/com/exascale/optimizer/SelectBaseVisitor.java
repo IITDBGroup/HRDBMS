@@ -1,5 +1,5 @@
+// Generated from /home/michael/ms-project/Bitbucket/hrdbms/HRDBMS/src/com/exascale/optimizer/Select.g4 by ANTLR 4.6
 package com.exascale.optimizer;
-import org.antlr.v4.runtime.misc.NotNull;
 import org.antlr.v4.runtime.tree.AbstractParseTreeVisitor;
 
 /**
@@ -17,789 +17,691 @@ public class SelectBaseVisitor<T> extends AbstractParseTreeVisitor<T> implements
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitJoinP(@NotNull SelectParser.JoinPContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitSelect(SelectParser.SelectContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitSelect(@NotNull SelectParser.SelectContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitRunstats(SelectParser.RunstatsContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitIsSingleTable(@NotNull SelectParser.IsSingleTableContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitInsert(SelectParser.InsertContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitNullExp(@NotNull SelectParser.NullExpContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitUpdate(SelectParser.UpdateContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitDropView(@NotNull SelectParser.DropViewContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitDelete(SelectParser.DeleteContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitDropIndex(@NotNull SelectParser.DropIndexContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitCreateTable(SelectParser.CreateTableContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitLong2(@NotNull SelectParser.Long2Context ctx) { return visitChildren(ctx); }
-
+	@Override public T visitOrganization(SelectParser.OrganizationContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitCol2Part(@NotNull SelectParser.Col2PartContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitCreateExternalTable(SelectParser.CreateExternalTableContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitInt2(@NotNull SelectParser.Int2Context ctx) { return visitChildren(ctx); }
-
+	@Override public T visitGeneralExtTableSpec(SelectParser.GeneralExtTableSpecContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitConnectedSearchClause(@NotNull SelectParser.ConnectedSearchClauseContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitJavaClassExtTableSpec(SelectParser.JavaClassExtTableSpecContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitConnectedSelect(@NotNull SelectParser.ConnectedSelectContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitJavaClassName(SelectParser.JavaClassNameContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitIdentifier(@NotNull SelectParser.IdentifierContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitKeyValueList(SelectParser.KeyValueListContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitRangeType(@NotNull SelectParser.RangeTypeContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitAnything(SelectParser.AnythingContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitNotNull(@NotNull SelectParser.NotNullContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitSourceList(SelectParser.SourceListContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitGroupDef(@NotNull SelectParser.GroupDefContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitColOrder(SelectParser.ColOrderContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitSortKeyCol(@NotNull SelectParser.SortKeyColContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitGroupExp(SelectParser.GroupExpContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitGroupExp(@NotNull SelectParser.GroupExpContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitRealGroupExp(SelectParser.RealGroupExpContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitStringLiteral(@NotNull SelectParser.StringLiteralContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitGroupDef(SelectParser.GroupDefContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitColumnSet(@NotNull SelectParser.ColumnSetContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitRangeExp(SelectParser.RangeExpContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitPrimary(@NotNull SelectParser.PrimaryContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitNodeExp(SelectParser.NodeExpContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitChar2(@NotNull SelectParser.Char2Context ctx) { return visitChildren(ctx); }
-
+	@Override public T visitRealNodeExp(SelectParser.RealNodeExpContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitJavaClassExtTableSpec(@NotNull SelectParser.JavaClassExtTableSpecContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitIntegerSet(SelectParser.IntegerSetContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitNestedTable(@NotNull SelectParser.NestedTableContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitHashExp(SelectParser.HashExpContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitSingleTable(@NotNull SelectParser.SingleTableContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitColumnSet(SelectParser.ColumnSetContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitExpSelect(@NotNull SelectParser.ExpSelectContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitRangeType(SelectParser.RangeTypeContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitNumericLiteral(@NotNull SelectParser.NumericLiteralContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitRangeSet(SelectParser.RangeSetContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitMulDiv(@NotNull SelectParser.MulDivContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitDeviceExp(SelectParser.DeviceExpContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitOrderBy(@NotNull SelectParser.OrderByContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitDropTable(SelectParser.DropTableContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitRunstats(@NotNull SelectParser.RunstatsContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitCreateView(SelectParser.CreateViewContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitSelectColumn(@NotNull SelectParser.SelectColumnContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitDropView(SelectParser.DropViewContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitGroupBy(@NotNull SelectParser.GroupByContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitCreateIndex(SelectParser.CreateIndexContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitPExpression(@NotNull SelectParser.PExpressionContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitDropIndex(SelectParser.DropIndexContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitSearchClause(@NotNull SelectParser.SearchClauseContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitLoad(SelectParser.LoadContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitSelectClause(@NotNull SelectParser.SelectClauseContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitAny(SelectParser.AnyContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitColDef(@NotNull SelectParser.ColDefContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitRemainder(SelectParser.RemainderContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitTable1Part(@NotNull SelectParser.Table1PartContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitIndexDef(SelectParser.IndexDefContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitCreateView(@NotNull SelectParser.CreateViewContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitColDef(SelectParser.ColDefContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitGeneralExtTableSpec(@NotNull SelectParser.GeneralExtTableSpecContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitPrimaryKey(SelectParser.PrimaryKeyContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitFloat2(@NotNull SelectParser.Float2Context ctx) { return visitChildren(ctx); }
-
+	@Override public T visitNotNull(SelectParser.NotNullContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitHavingClause(@NotNull SelectParser.HavingClauseContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitPrimary(SelectParser.PrimaryContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitFromClause(@NotNull SelectParser.FromClauseContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitDataType(SelectParser.DataTypeContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitCrossJoinP(@NotNull SelectParser.CrossJoinPContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitChar2(SelectParser.Char2Context ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitAddSub(@NotNull SelectParser.AddSubContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitInt2(SelectParser.Int2Context ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitFullSelect(@NotNull SelectParser.FullSelectContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitLong2(SelectParser.Long2Context ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitSearchCondition(@NotNull SelectParser.SearchConditionContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitDate2(SelectParser.Date2Context ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitDeviceExp(@NotNull SelectParser.DeviceExpContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitFloat2(SelectParser.Float2Context ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitIndexDef(@NotNull SelectParser.IndexDefContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitColList(SelectParser.ColListContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitJoin(@NotNull SelectParser.JoinContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitCommonTableExpression(SelectParser.CommonTableExpressionContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitColOrder(@NotNull SelectParser.ColOrderContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitFullSelect(SelectParser.FullSelectContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitSelecthow(@NotNull SelectParser.SelecthowContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitConnectedSelect(SelectParser.ConnectedSelectContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitCreateIndex(@NotNull SelectParser.CreateIndexContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitSubSelect(SelectParser.SubSelectContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitSubSelect(@NotNull SelectParser.SubSelectContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitSelectClause(SelectParser.SelectClauseContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitOrganization(@NotNull SelectParser.OrganizationContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitSelecthow(SelectParser.SelecthowContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitNullPredicate(@NotNull SelectParser.NullPredicateContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitSelectColumn(SelectParser.SelectColumnContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitCountDistinct(@NotNull SelectParser.CountDistinctContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitSelectExpression(SelectParser.SelectExpressionContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitCorrelationClause(@NotNull SelectParser.CorrelationClauseContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitFromClause(SelectParser.FromClauseContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitWhereClause(@NotNull SelectParser.WhereClauseContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitJoinP(SelectParser.JoinPContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitCol1Part(@NotNull SelectParser.Col1PartContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitNestedTable(SelectParser.NestedTableContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitJavaClassName(@NotNull SelectParser.JavaClassNameContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitCrossJoinP(SelectParser.CrossJoinPContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitOperator(@NotNull SelectParser.OperatorContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitIsSingleTable(SelectParser.IsSingleTableContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitConcat(@NotNull SelectParser.ConcatContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitJoin(SelectParser.JoinContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitList(@NotNull SelectParser.ListContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitCrossJoin(SelectParser.CrossJoinContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitDataType(@NotNull SelectParser.DataTypeContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitSingleTable(SelectParser.SingleTableContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitIntegerSet(@NotNull SelectParser.IntegerSetContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitWhereClause(SelectParser.WhereClauseContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitRangeExp(@NotNull SelectParser.RangeExpContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitGroupBy(SelectParser.GroupByContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitColList(@NotNull SelectParser.ColListContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitHavingClause(SelectParser.HavingClauseContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitSortKeyInt(@NotNull SelectParser.SortKeyIntContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitOrderBy(SelectParser.OrderByContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitNodeExp(@NotNull SelectParser.NodeExpContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitSortKeyInt(SelectParser.SortKeyIntContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitHashExp(@NotNull SelectParser.HashExpContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitSortKeyCol(SelectParser.SortKeyColContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitCaseCase(@NotNull SelectParser.CaseCaseContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitCorrelationClause(SelectParser.CorrelationClauseContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitCreateTable(@NotNull SelectParser.CreateTableContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitFetchFirst(SelectParser.FetchFirstContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitRealNodeExp(@NotNull SelectParser.RealNodeExpContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitTable1Part(SelectParser.Table1PartContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitIsLiteral(@NotNull SelectParser.IsLiteralContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitTable2Part(SelectParser.Table2PartContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitExistsPredicate(@NotNull SelectParser.ExistsPredicateContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitCol1Part(SelectParser.Col1PartContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitInsert(@NotNull SelectParser.InsertContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitCol2Part(SelectParser.Col2PartContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitUpdate(@NotNull SelectParser.UpdateContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitSearchCondition(SelectParser.SearchConditionContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitTable2Part(@NotNull SelectParser.Table2PartContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitConnectedSearchClause(SelectParser.ConnectedSearchClauseContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitDelete(@NotNull SelectParser.DeleteContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitSearchClause(SelectParser.SearchClauseContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitRealGroupExp(@NotNull SelectParser.RealGroupExpContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitNormalPredicate(SelectParser.NormalPredicateContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitNormalPredicate(@NotNull SelectParser.NormalPredicateContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitNullPredicate(SelectParser.NullPredicateContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitFetchFirst(@NotNull SelectParser.FetchFirstContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitExistsPredicate(SelectParser.ExistsPredicateContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitAnything(@NotNull SelectParser.AnythingContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitOperator(SelectParser.OperatorContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitFunction(@NotNull SelectParser.FunctionContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitCountStar(SelectParser.CountStarContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitColLiteral(@NotNull SelectParser.ColLiteralContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitExpSelect(SelectParser.ExpSelectContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitLoad(@NotNull SelectParser.LoadContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitMulDiv(SelectParser.MulDivContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitCrossJoin(@NotNull SelectParser.CrossJoinContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitAddSub(SelectParser.AddSubContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitDropTable(@NotNull SelectParser.DropTableContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitIsLiteral(SelectParser.IsLiteralContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitCommonTableExpression(@NotNull SelectParser.CommonTableExpressionContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitCaseExp(SelectParser.CaseExpContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitCountStar(@NotNull SelectParser.CountStarContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitNullExp(SelectParser.NullExpContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitSourceList(@NotNull SelectParser.SourceListContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitPExpression(SelectParser.PExpressionContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitCaseExp(@NotNull SelectParser.CaseExpContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitConcat(SelectParser.ConcatContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitKeyValueList(@NotNull SelectParser.KeyValueListContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitFunction(SelectParser.FunctionContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitDate2(@NotNull SelectParser.Date2Context ctx) { return visitChildren(ctx); }
-
+	@Override public T visitColLiteral(SelectParser.ColLiteralContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitSelectExpression(@NotNull SelectParser.SelectExpressionContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitList(SelectParser.ListContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitAny(@NotNull SelectParser.AnyContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitCountDistinct(SelectParser.CountDistinctContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitCreateExternalTable(@NotNull SelectParser.CreateExternalTableContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitCaseCase(SelectParser.CaseCaseContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitRangeSet(@NotNull SelectParser.RangeSetContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitIdentifier(SelectParser.IdentifierContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitRemainder(@NotNull SelectParser.RemainderContext ctx) { return visitChildren(ctx); }
-
+	@Override public T visitNumericLiteral(SelectParser.NumericLiteralContext ctx) { return visitChildren(ctx); }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation returns the result of calling
 	 * {@link #visitChildren} on {@code ctx}.</p>
 	 */
-	@Override public T visitPrimaryKey(@NotNull SelectParser.PrimaryKeyContext ctx) { return visitChildren(ctx); }
+	@Override public T visitStringLiteral(SelectParser.StringLiteralContext ctx) { return visitChildren(ctx); }
 }
