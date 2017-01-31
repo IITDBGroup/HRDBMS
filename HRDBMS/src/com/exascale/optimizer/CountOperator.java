@@ -23,7 +23,7 @@ public final class CountOperator implements AggregateOperator, Serializable
 			f.setAccessible(true);
 			unsafe = (sun.misc.Unsafe)f.get(null);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			unsafe = null;
 		}
@@ -36,22 +36,22 @@ public final class CountOperator implements AggregateOperator, Serializable
 
 	private long NUM_GROUPS = 16;
 
-	public CountOperator(String output, MetaData meta)
+	public CountOperator(final String output, final MetaData meta)
 	{
 		this.output = output;
 		this.meta = meta;
 	}
 
-	public CountOperator(String input, String output, MetaData meta)
+	public CountOperator(final String input, final String output, final MetaData meta)
 	{
 		this.input = input;
 		this.output = output;
 		this.meta = meta;
 	}
 
-	public static CountOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static CountOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		CountOperator value = (CountOperator)unsafe.allocateInstance(CountOperator.class);
+		final CountOperator value = (CountOperator)unsafe.allocateInstance(CountOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.input = OperatorUtils.readString(in, prev);
 		value.output = OperatorUtils.readString(in, prev);
@@ -66,7 +66,7 @@ public final class CountOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public AggregateResultThread getHashThread(HashMap<String, Integer> cols2Pos)
+	public AggregateResultThread getHashThread(final HashMap<String, Integer> cols2Pos)
 	{
 		return new CountHashThread(cols2Pos);
 	}
@@ -88,7 +88,7 @@ public final class CountOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public AggregateResultThread newProcessingThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos)
+	public AggregateResultThread newProcessingThread(final ArrayList<ArrayList<Object>> rows, final HashMap<String, Integer> cols2Pos)
 	{
 		return new CountThread(rows, cols2Pos);
 	}
@@ -106,9 +106,9 @@ public final class CountOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -123,19 +123,19 @@ public final class CountOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public void setInput(String col)
+	public void setInput(final String col)
 	{
 		input = col;
 	}
 
 	@Override
-	public void setInputColumn(String col)
+	public void setInputColumn(final String col)
 	{
 		input = col;
 	}
 
 	@Override
-	public void setNumGroups(long groups)
+	public void setNumGroups(final long groups)
 	{
 		NUM_GROUPS = groups;
 	}
@@ -147,7 +147,7 @@ public final class CountOperator implements AggregateOperator, Serializable
 		private ConcurrentHashMap<ArrayList<Object>, AtomicLong> results = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS <= Integer.MAX_VALUE ? (int)NUM_GROUPS : Integer.MAX_VALUE, 0.75f, 6 * ResourceManager.cpus);
 		private int pos;
 
-		public CountHashThread(HashMap<String, Integer> cols2Pos)
+		public CountHashThread(final HashMap<String, Integer> cols2Pos)
 		{
 			if (input != null)
 			{
@@ -163,14 +163,14 @@ public final class CountOperator implements AggregateOperator, Serializable
 		}
 
 		@Override
-		public Object getResult(ArrayList<Object> keys)
+		public Object getResult(final ArrayList<Object> keys)
 		{
 			return results.get(keys).longValue();
 		}
 
 		// @Parallel
 		@Override
-		public final void put(ArrayList<Object> row, ArrayList<Object> group)
+		public final void put(final ArrayList<Object> row, final ArrayList<Object> group)
 		{
 			row.get(pos);
 			// TODO only do following if val not null
@@ -194,7 +194,7 @@ public final class CountOperator implements AggregateOperator, Serializable
 		private long result;
 		private int pos;
 
-		public CountThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos)
+		public CountThread(final ArrayList<ArrayList<Object>> rows, final HashMap<String, Integer> cols2Pos)
 		{
 			this.rows = rows;
 			if (input != null)

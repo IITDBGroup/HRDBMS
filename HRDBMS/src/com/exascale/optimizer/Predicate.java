@@ -6,7 +6,7 @@ public class Predicate
 	private String op;
 	private Expression rhs;
 
-	public Predicate(Expression lhs, String op, Expression rhs)
+	public Predicate(final Expression lhs, final String op, final Expression rhs)
 	{
 		this.lhs = lhs;
 		this.op = op;
@@ -15,6 +15,11 @@ public class Predicate
 
 	protected Predicate()
 	{
+	}
+	
+	public String toString()
+	{
+		return "lhs " + op + " rhs";
 	}
 
 	@Override
@@ -37,14 +42,14 @@ public class Predicate
 	}
 
 	@Override
-	public boolean equals(Object o)
+	public boolean equals(final Object o)
 	{
 		if (!(o instanceof Predicate))
 		{
 			return false;
 		}
 
-		Predicate rhs2 = (Predicate)o;
+		final Predicate rhs2 = (Predicate)o;
 		return lhs.equals(rhs2.lhs) && op.equals(rhs2.op) && rhs.equals(rhs2.rhs);
 	}
 
@@ -71,5 +76,49 @@ public class Predicate
 		hash = hash * 31 + op.hashCode();
 		hash = hash * 31 + rhs.hashCode();
 		return hash;
+	}
+	
+	public void negate()
+	{
+		if (op.equals("E"))
+		{
+			op = "NE";
+		}
+		else if (op.equals("NE"))
+		{
+			op = "E";
+		}
+		else if (op.equals("G"))
+		{
+			op = "LE";
+		}
+		else if (op.equals("GE"))
+		{
+			op = "L";
+		}
+		else if (op.equals("L"))
+		{
+			op = "GE";
+		}
+		else if (op.equals("LE"))
+		{
+			op = "G";
+		}
+		else if (op.equals("LI"))
+		{
+			op = "NL";
+		}
+		else if (op.equals("NL"))
+		{
+			op = "LI";
+		}
+		else if (op.equals("IN"))
+		{
+			op = "NI";
+		}
+		else if (op.equals("NI"))
+		{
+			op = "IN";
+		}
 	}
 }

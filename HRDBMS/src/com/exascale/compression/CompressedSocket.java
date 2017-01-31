@@ -62,7 +62,7 @@ public final class CompressedSocket extends Socket
 	 *                if an I/O error occurs when creating the socket.
 	 * @see Socket#Socket(java.lang.String, int)
 	 */
-	public CompressedSocket(String host, int port) throws IOException
+	public CompressedSocket(final String host, final int port) throws IOException
 	{
 		super(host, port);
 	}
@@ -72,7 +72,7 @@ public final class CompressedSocket extends Socket
 		return new CompressedSocket();
 	}
 
-	public static CompressedSocket newCompressedSocket(String host, int port) throws IOException
+	public static CompressedSocket newCompressedSocket(final String host, final int port) throws IOException
 	{
 		return new CompressedSocket(host, port);
 	}

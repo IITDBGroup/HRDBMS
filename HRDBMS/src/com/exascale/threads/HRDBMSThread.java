@@ -18,12 +18,12 @@ public abstract class HRDBMSThread extends ThreadPoolThread
 		return wait;
 	}
 
-	public void setIndex(long index)
+	public void setIndex(final long index)
 	{
 		this.index = index;
 	}
 
-	public void setWait(boolean wait)
+	public void setWait(final boolean wait)
 	{
 		this.wait = wait;
 	}

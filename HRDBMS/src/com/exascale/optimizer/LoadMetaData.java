@@ -29,7 +29,7 @@ public class LoadMetaData implements Serializable
 	public ArrayList<String> indexes;
 	public int type;
 
-	public LoadMetaData(int numNodes, String delimiter, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, HashMap<Integer, Integer> pos2Length, PartitionMetaData pmd, ArrayList<Integer> workerNodes, ArrayList<Integer> coordNodes, long txNum, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes, int type)
+	public LoadMetaData(final int numNodes, final String delimiter, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final HashMap<Integer, Integer> pos2Length, final PartitionMetaData pmd, final ArrayList<Integer> workerNodes, final ArrayList<Integer> coordNodes, final long txNum, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final ArrayList<String> indexes, final int type)
 	{
 		this.numNodes = numNodes;
 		this.delimiter = delimiter;

@@ -72,7 +72,7 @@ public class HRDBMSResultSet implements ResultSet
 
 	private final CharsetDecoder cd = cs.newDecoder();
 
-	public HRDBMSResultSet(HRDBMSConnection conn, int fetchSize, HRDBMSStatement stmt) throws Exception
+	public HRDBMSResultSet(final HRDBMSConnection conn, final int fetchSize, final HRDBMSStatement stmt) throws Exception
 	{
 		this.conn = conn;
 		this.fetchSize = fetchSize;
@@ -80,7 +80,13 @@ public class HRDBMSResultSet implements ResultSet
 		requestMetaData();
 	}
 
-	private static byte[] intToBytes(int val)
+	private static int bytesToInt(final byte[] val)
+	{
+		final int ret = java.nio.ByteBuffer.wrap(val).getInt();
+		return ret;
+	}
+
+	private static byte[] intToBytes(final int val)
 	{
 		final byte[] buff = new byte[4];
 		buff[0] = (byte)(val >> 24);
@@ -91,7 +97,7 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public boolean absolute(int row) throws SQLException
+	public boolean absolute(final int row) throws SQLException
 	{
 		throw new SQLException("Result set is TYPE_FORWARD_ONLY");
 	}
@@ -135,13 +141,13 @@ public class HRDBMSResultSet implements ResultSet
 		try
 		{
 			closed = true;
-			if (conn.autoCommit || conn.txIsReadOnly)
+			if (conn.autoCommit)
 			{
 				conn.commit();
 			}
 			sendCloseRS();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			throw new SQLException(e.getMessage());
 		}
@@ -154,14 +160,14 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public int findColumn(String columnLabel) throws SQLException
+	public int findColumn(final String columnLabel) throws SQLException
 	{
 		if (closed)
 		{
 			throw new SQLException("findColumn() called on a closed result set");
 		}
 
-		Integer pos = cols2Pos.get(columnLabel.toUpperCase());
+		final Integer pos = cols2Pos.get(columnLabel.toUpperCase());
 		if (pos == null)
 		{
 			throw new SQLException("The column does not exist in the result set");
@@ -177,31 +183,31 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public Array getArray(int columnIndex) throws SQLException
+	public Array getArray(final int columnIndex) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public Array getArray(String columnLabel) throws SQLException
+	public Array getArray(final String columnLabel) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public InputStream getAsciiStream(int columnIndex) throws SQLException
+	public InputStream getAsciiStream(final int columnIndex) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public InputStream getAsciiStream(String columnLabel) throws SQLException
+	public InputStream getAsciiStream(final String columnLabel) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public BigDecimal getBigDecimal(int columnIndex) throws SQLException
+	public BigDecimal getBigDecimal(final int columnIndex) throws SQLException
 	{
 		wasNull = false;
 
@@ -210,20 +216,20 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Cannot fetch a value from a closed result set");
 		}
 
-		Object row = rs.get(position - firstRowIs);
+		final Object row = rs.get(position - firstRowIs);
 		if (row instanceof DataEndMarker)
 		{
 			throw new SQLException("Past end of result set");
 		}
 
-		ArrayList<Object> alo = (ArrayList<Object>)row;
+		final ArrayList<Object> alo = (ArrayList<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
 			throw new SQLException("Column index is out of bounds");
 		}
 
-		Object col = alo.get(columnIndex - 1);
+		final Object col = alo.get(columnIndex - 1);
 
 		if (col == null)
 		{
@@ -236,18 +242,18 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("The column is not numeric");
 		}
 
-		Number num = (Number)col;
+		final Number num = (Number)col;
 		return new BigDecimal(num.doubleValue());
 	}
 
 	@Override
-	public BigDecimal getBigDecimal(int columnIndex, int scale) throws SQLException
+	public BigDecimal getBigDecimal(final int columnIndex, final int scale) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public BigDecimal getBigDecimal(String columnLabel) throws SQLException
+	public BigDecimal getBigDecimal(final String columnLabel) throws SQLException
 	{
 		wasNull = false;
 
@@ -256,26 +262,26 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Cannot fetch a value from a closed result set");
 		}
 
-		Integer columnIndex = cols2Pos.get(columnLabel.toUpperCase());
+		final Integer columnIndex = cols2Pos.get(columnLabel.toUpperCase());
 		if (columnIndex == null)
 		{
 			throw new SQLException("The column requested does not exist in the result set");
 		}
 
-		Object row = rs.get(position - firstRowIs);
+		final Object row = rs.get(position - firstRowIs);
 		if (row instanceof DataEndMarker)
 		{
 			throw new SQLException("Past end of result set");
 		}
 
-		ArrayList<Object> alo = (ArrayList<Object>)row;
+		final ArrayList<Object> alo = (ArrayList<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
 			throw new SQLException("Column index is out of bounds");
 		}
 
-		Object col = alo.get(columnIndex - 1);
+		final Object col = alo.get(columnIndex - 1);
 
 		if (col == null)
 		{
@@ -288,96 +294,96 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("The column is not numeric");
 		}
 
-		Number num = (Number)col;
+		final Number num = (Number)col;
 		return new BigDecimal(num.doubleValue());
 	}
 
 	@Override
-	public BigDecimal getBigDecimal(String columnLabel, int scale) throws SQLException
+	public BigDecimal getBigDecimal(final String columnLabel, final int scale) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public InputStream getBinaryStream(int columnIndex) throws SQLException
+	public InputStream getBinaryStream(final int columnIndex) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public InputStream getBinaryStream(String columnLabel) throws SQLException
+	public InputStream getBinaryStream(final String columnLabel) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public Blob getBlob(int columnIndex) throws SQLException
+	public Blob getBlob(final int columnIndex) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public Blob getBlob(String columnLabel) throws SQLException
+	public Blob getBlob(final String columnLabel) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public boolean getBoolean(int columnIndex) throws SQLException
+	public boolean getBoolean(final int columnIndex) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public boolean getBoolean(String columnLabel) throws SQLException
+	public boolean getBoolean(final String columnLabel) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public byte getByte(int columnIndex) throws SQLException
+	public byte getByte(final int columnIndex) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public byte getByte(String columnLabel) throws SQLException
+	public byte getByte(final String columnLabel) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public byte[] getBytes(int columnIndex) throws SQLException
+	public byte[] getBytes(final int columnIndex) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public byte[] getBytes(String columnLabel) throws SQLException
+	public byte[] getBytes(final String columnLabel) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public Reader getCharacterStream(int columnIndex) throws SQLException
+	public Reader getCharacterStream(final int columnIndex) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public Reader getCharacterStream(String columnLabel) throws SQLException
+	public Reader getCharacterStream(final String columnLabel) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public Clob getClob(int columnIndex) throws SQLException
+	public Clob getClob(final int columnIndex) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public Clob getClob(String columnLabel) throws SQLException
+	public Clob getClob(final String columnLabel) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
@@ -400,7 +406,7 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public Date getDate(int columnIndex) throws SQLException
+	public Date getDate(final int columnIndex) throws SQLException
 	{
 		wasNull = false;
 
@@ -409,20 +415,20 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Cannot fetch a value from a closed result set");
 		}
 
-		Object row = rs.get(position - firstRowIs);
+		final Object row = rs.get(position - firstRowIs);
 		if (row instanceof DataEndMarker)
 		{
 			throw new SQLException("Past end of result set");
 		}
 
-		ArrayList<Object> alo = (ArrayList<Object>)row;
+		final ArrayList<Object> alo = (ArrayList<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
 			throw new SQLException("Column index is out of bounds");
 		}
 
-		Object col = alo.get(columnIndex - 1);
+		final Object col = alo.get(columnIndex - 1);
 
 		if (col == null)
 		{
@@ -439,13 +445,13 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public Date getDate(int columnIndex, Calendar cal) throws SQLException
+	public Date getDate(final int columnIndex, final Calendar cal) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public Date getDate(String columnLabel) throws SQLException
+	public Date getDate(final String columnLabel) throws SQLException
 	{
 		wasNull = false;
 
@@ -454,26 +460,26 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Cannot fetch a value from a closed result set");
 		}
 
-		Integer columnIndex = cols2Pos.get(columnLabel.toUpperCase());
+		final Integer columnIndex = cols2Pos.get(columnLabel.toUpperCase());
 		if (columnIndex == null)
 		{
 			throw new SQLException("The column requested does not exist in the result set");
 		}
 
-		Object row = rs.get(position - firstRowIs);
+		final Object row = rs.get(position - firstRowIs);
 		if (row instanceof DataEndMarker)
 		{
 			throw new SQLException("Past end of result set");
 		}
 
-		ArrayList<Object> alo = (ArrayList<Object>)row;
+		final ArrayList<Object> alo = (ArrayList<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
 			throw new SQLException("Column index is out of bounds");
 		}
 
-		Object col = alo.get(columnIndex - 1);
+		final Object col = alo.get(columnIndex - 1);
 
 		if (col == null)
 		{
@@ -490,13 +496,13 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public Date getDate(String columnLabel, Calendar cal) throws SQLException
+	public Date getDate(final String columnLabel, final Calendar cal) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public double getDouble(int columnIndex) throws SQLException
+	public double getDouble(final int columnIndex) throws SQLException
 	{
 		wasNull = false;
 
@@ -505,20 +511,20 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Cannot fetch a value from a closed result set");
 		}
 
-		Object row = rs.get(position - firstRowIs);
+		final Object row = rs.get(position - firstRowIs);
 		if (row instanceof DataEndMarker)
 		{
 			throw new SQLException("Past end of result set");
 		}
 
-		ArrayList<Object> alo = (ArrayList<Object>)row;
+		final ArrayList<Object> alo = (ArrayList<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
 			throw new SQLException("Column index is out of bounds");
 		}
 
-		Object col = alo.get(columnIndex - 1);
+		final Object col = alo.get(columnIndex - 1);
 
 		if (col == null)
 		{
@@ -530,12 +536,12 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("The column is not numeric");
 		}
 
-		Number num = (Number)col;
+		final Number num = (Number)col;
 		return num.doubleValue();
 	}
 
 	@Override
-	public double getDouble(String columnLabel) throws SQLException
+	public double getDouble(final String columnLabel) throws SQLException
 	{
 		wasNull = false;
 
@@ -544,26 +550,26 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Cannot fetch a value from a closed result set");
 		}
 
-		Integer columnIndex = cols2Pos.get(columnLabel.toUpperCase());
+		final Integer columnIndex = cols2Pos.get(columnLabel.toUpperCase());
 		if (columnIndex == null)
 		{
 			throw new SQLException("The column requested does not exist in the result set");
 		}
 
-		Object row = rs.get(position - firstRowIs);
+		final Object row = rs.get(position - firstRowIs);
 		if (row instanceof DataEndMarker)
 		{
 			throw new SQLException("Past end of result set");
 		}
 
-		ArrayList<Object> alo = (ArrayList<Object>)row;
+		final ArrayList<Object> alo = (ArrayList<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
 			throw new SQLException("Column index is out of bounds");
 		}
 
-		Object col = alo.get(columnIndex - 1);
+		final Object col = alo.get(columnIndex - 1);
 
 		if (col == null)
 		{
@@ -576,7 +582,7 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("The column is not numeric");
 		}
 
-		Number num = (Number)col;
+		final Number num = (Number)col;
 		return num.doubleValue();
 	}
 
@@ -603,7 +609,7 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public float getFloat(int columnIndex) throws SQLException
+	public float getFloat(final int columnIndex) throws SQLException
 	{
 		wasNull = false;
 
@@ -612,20 +618,20 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Cannot fetch a value from a closed result set");
 		}
 
-		Object row = rs.get(position - firstRowIs);
+		final Object row = rs.get(position - firstRowIs);
 		if (row instanceof DataEndMarker)
 		{
 			throw new SQLException("Past end of result set");
 		}
 
-		ArrayList<Object> alo = (ArrayList<Object>)row;
+		final ArrayList<Object> alo = (ArrayList<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
 			throw new SQLException("Column index is out of bounds");
 		}
 
-		Object col = alo.get(columnIndex - 1);
+		final Object col = alo.get(columnIndex - 1);
 
 		if (col == null)
 		{
@@ -638,12 +644,12 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("The column is not numeric");
 		}
 
-		Number num = (Number)col;
+		final Number num = (Number)col;
 		return num.floatValue();
 	}
 
 	@Override
-	public float getFloat(String columnLabel) throws SQLException
+	public float getFloat(final String columnLabel) throws SQLException
 	{
 		wasNull = false;
 
@@ -652,26 +658,26 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Cannot fetch a value from a closed result set");
 		}
 
-		Integer columnIndex = cols2Pos.get(columnLabel.toUpperCase());
+		final Integer columnIndex = cols2Pos.get(columnLabel.toUpperCase());
 		if (columnIndex == null)
 		{
 			throw new SQLException("The column requested does not exist in the result set");
 		}
 
-		Object row = rs.get(position - firstRowIs);
+		final Object row = rs.get(position - firstRowIs);
 		if (row instanceof DataEndMarker)
 		{
 			throw new SQLException("Past end of result set");
 		}
 
-		ArrayList<Object> alo = (ArrayList<Object>)row;
+		final ArrayList<Object> alo = (ArrayList<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
 			throw new SQLException("Column index is out of bounds");
 		}
 
-		Object col = alo.get(columnIndex - 1);
+		final Object col = alo.get(columnIndex - 1);
 
 		if (col == null)
 		{
@@ -684,7 +690,7 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("The column is not numeric");
 		}
 
-		Number num = (Number)col;
+		final Number num = (Number)col;
 		return num.floatValue();
 	}
 
@@ -700,7 +706,7 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public int getInt(int columnIndex) throws SQLException
+	public int getInt(final int columnIndex) throws SQLException
 	{
 		wasNull = false;
 
@@ -709,20 +715,20 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Cannot fetch a value from a closed result set");
 		}
 
-		Object row = rs.get(position - firstRowIs);
+		final Object row = rs.get(position - firstRowIs);
 		if (row instanceof DataEndMarker)
 		{
 			throw new SQLException("Past end of result set");
 		}
 
-		ArrayList<Object> alo = (ArrayList<Object>)row;
+		final ArrayList<Object> alo = (ArrayList<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
 			throw new SQLException("Column index is out of bounds");
 		}
 
-		Object col = alo.get(columnIndex - 1);
+		final Object col = alo.get(columnIndex - 1);
 
 		if (col == null)
 		{
@@ -741,12 +747,12 @@ public class HRDBMSResultSet implements ResultSet
 				throw new SQLException("The column cannot be converted to an integer");
 			}
 		}
-		Number num = (Number)col;
+		final Number num = (Number)col;
 		return num.intValue();
 	}
 
 	@Override
-	public int getInt(String columnLabel) throws SQLException
+	public int getInt(final String columnLabel) throws SQLException
 	{
 		wasNull = false;
 
@@ -755,26 +761,26 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Cannot fetch a value from a closed result set");
 		}
 
-		Integer columnIndex = cols2Pos.get(columnLabel.toUpperCase());
+		final Integer columnIndex = cols2Pos.get(columnLabel.toUpperCase());
 		if (columnIndex == null)
 		{
 			throw new SQLException("The column requested does not exist in the result set");
 		}
 
-		Object row = rs.get(position - firstRowIs);
+		final Object row = rs.get(position - firstRowIs);
 		if (row instanceof DataEndMarker)
 		{
 			throw new SQLException("Past end of result set");
 		}
 
-		ArrayList<Object> alo = (ArrayList<Object>)row;
+		final ArrayList<Object> alo = (ArrayList<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
 			throw new SQLException("Column index is out of bounds");
 		}
 
-		Object col = alo.get(columnIndex - 1);
+		final Object col = alo.get(columnIndex - 1);
 
 		if (col == null)
 		{
@@ -795,12 +801,12 @@ public class HRDBMSResultSet implements ResultSet
 			}
 		}
 
-		Number num = (Number)col;
+		final Number num = (Number)col;
 		return num.intValue();
 	}
 
 	@Override
-	public long getLong(int columnIndex) throws SQLException
+	public long getLong(final int columnIndex) throws SQLException
 	{
 		wasNull = false;
 
@@ -809,20 +815,20 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Cannot fetch a value from a closed result set");
 		}
 
-		Object row = rs.get(position - firstRowIs);
+		final Object row = rs.get(position - firstRowIs);
 		if (row instanceof DataEndMarker)
 		{
 			throw new SQLException("Past end of result set");
 		}
 
-		ArrayList<Object> alo = (ArrayList<Object>)row;
+		final ArrayList<Object> alo = (ArrayList<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
 			throw new SQLException("Column index is out of bounds");
 		}
 
-		Object col = alo.get(columnIndex - 1);
+		final Object col = alo.get(columnIndex - 1);
 
 		if (col == null)
 		{
@@ -835,12 +841,12 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("The column cannot be converted to a long");
 		}
 
-		Number num = (Number)col;
+		final Number num = (Number)col;
 		return num.longValue();
 	}
 
 	@Override
-	public long getLong(String columnLabel) throws SQLException
+	public long getLong(final String columnLabel) throws SQLException
 	{
 		wasNull = false;
 
@@ -849,26 +855,26 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Cannot fetch a value from a closed result set");
 		}
 
-		Integer columnIndex = cols2Pos.get(columnLabel.toUpperCase());
+		final Integer columnIndex = cols2Pos.get(columnLabel.toUpperCase());
 		if (columnIndex == null)
 		{
 			throw new SQLException("The column requested does not exist in the result set");
 		}
 
-		Object row = rs.get(position - firstRowIs);
+		final Object row = rs.get(position - firstRowIs);
 		if (row instanceof DataEndMarker)
 		{
 			throw new SQLException("Past end of result set");
 		}
 
-		ArrayList<Object> alo = (ArrayList<Object>)row;
+		final ArrayList<Object> alo = (ArrayList<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
 			throw new SQLException("Column index is out of bounds");
 		}
 
-		Object col = alo.get(columnIndex - 1);
+		final Object col = alo.get(columnIndex - 1);
 
 		if (col == null)
 		{
@@ -881,7 +887,7 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("The column cannot be converted to a long");
 		}
 
-		Number num = (Number)col;
+		final Number num = (Number)col;
 		return num.longValue();
 	}
 
@@ -897,43 +903,43 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public Reader getNCharacterStream(int columnIndex) throws SQLException
+	public Reader getNCharacterStream(final int columnIndex) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public Reader getNCharacterStream(String columnLabel) throws SQLException
+	public Reader getNCharacterStream(final String columnLabel) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public NClob getNClob(int columnIndex) throws SQLException
+	public NClob getNClob(final int columnIndex) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public NClob getNClob(String columnLabel) throws SQLException
+	public NClob getNClob(final String columnLabel) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public String getNString(int columnIndex) throws SQLException
+	public String getNString(final int columnIndex) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public String getNString(String columnLabel) throws SQLException
+	public String getNString(final String columnLabel) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public Object getObject(int columnIndex) throws SQLException
+	public Object getObject(final int columnIndex) throws SQLException
 	{
 		wasNull = false;
 
@@ -942,20 +948,20 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Cannot fetch a value from a closed result set");
 		}
 
-		Object row = rs.get(position - firstRowIs);
+		final Object row = rs.get(position - firstRowIs);
 		if (row instanceof DataEndMarker)
 		{
 			throw new SQLException("Past end of result set");
 		}
 
-		ArrayList<Object> alo = (ArrayList<Object>)row;
+		final ArrayList<Object> alo = (ArrayList<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
 			throw new SQLException("Column index is out of bounds");
 		}
 
-		Object col = alo.get(columnIndex - 1);
+		final Object col = alo.get(columnIndex - 1);
 		if (col == null)
 		{
 			wasNull = true;
@@ -965,19 +971,19 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public <T> T getObject(int columnIndex, Class<T> type) throws SQLException
+	public <T> T getObject(final int columnIndex, final Class<T> type) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public Object getObject(int columnIndex, Map<String, Class<?>> map) throws SQLException
+	public Object getObject(final int columnIndex, final Map<String, Class<?>> map) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public Object getObject(String columnLabel) throws SQLException
+	public Object getObject(final String columnLabel) throws SQLException
 	{
 		wasNull = false;
 
@@ -986,26 +992,26 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Cannot fetch a value from a closed result set");
 		}
 
-		Integer columnIndex = cols2Pos.get(columnLabel.toUpperCase());
+		final Integer columnIndex = cols2Pos.get(columnLabel.toUpperCase());
 		if (columnIndex == null)
 		{
 			throw new SQLException("The column requested does not exist in the result set");
 		}
 
-		Object row = rs.get(position - firstRowIs);
+		final Object row = rs.get(position - firstRowIs);
 		if (row instanceof DataEndMarker)
 		{
 			throw new SQLException("Past end of result set");
 		}
 
-		ArrayList<Object> alo = (ArrayList<Object>)row;
+		final ArrayList<Object> alo = (ArrayList<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
 			throw new SQLException("Column index is out of bounds");
 		}
 
-		Object col = alo.get(columnIndex - 1);
+		final Object col = alo.get(columnIndex - 1);
 		if (col == null)
 		{
 			wasNull = true;
@@ -1015,25 +1021,25 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public <T> T getObject(String columnLabel, Class<T> type) throws SQLException
+	public <T> T getObject(final String columnLabel, final Class<T> type) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public Object getObject(String columnLabel, Map<String, Class<?>> map) throws SQLException
+	public Object getObject(final String columnLabel, final Map<String, Class<?>> map) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public Ref getRef(int columnIndex) throws SQLException
+	public Ref getRef(final int columnIndex) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public Ref getRef(String columnLabel) throws SQLException
+	public Ref getRef(final String columnLabel) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
@@ -1051,31 +1057,29 @@ public class HRDBMSResultSet implements ResultSet
 			return 0;
 		}
 
-		Object row = rs.get(position - firstRowIs);
+		final Object row = rs.get(position - firstRowIs);
 		if (row instanceof DataEndMarker)
 		{
 			return 0;
 		}
-		else
-		{
-			return position + 1;
-		}
+
+		return position + 1;
 	}
 
 	@Override
-	public RowId getRowId(int columnIndex) throws SQLException
+	public RowId getRowId(final int columnIndex) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public RowId getRowId(String columnLabel) throws SQLException
+	public RowId getRowId(final String columnLabel) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public short getShort(int columnIndex) throws SQLException
+	public short getShort(final int columnIndex) throws SQLException
 	{
 		wasNull = false;
 
@@ -1084,20 +1088,20 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Cannot fetch a value from a closed result set");
 		}
 
-		Object row = rs.get(position - firstRowIs);
+		final Object row = rs.get(position - firstRowIs);
 		if (row instanceof DataEndMarker)
 		{
 			throw new SQLException("Past end of result set");
 		}
 
-		ArrayList<Object> alo = (ArrayList<Object>)row;
+		final ArrayList<Object> alo = (ArrayList<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
 			throw new SQLException("Column index is out of bounds");
 		}
 
-		Object col = alo.get(columnIndex - 1);
+		final Object col = alo.get(columnIndex - 1);
 
 		if (col == null)
 		{
@@ -1134,7 +1138,7 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public short getShort(String columnLabel) throws SQLException
+	public short getShort(final String columnLabel) throws SQLException
 	{
 		wasNull = false;
 
@@ -1143,26 +1147,26 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Cannot fetch a value from a closed result set");
 		}
 
-		Integer columnIndex = cols2Pos.get(columnLabel.toUpperCase());
+		final Integer columnIndex = cols2Pos.get(columnLabel.toUpperCase());
 		if (columnIndex == null)
 		{
 			throw new SQLException("The column requested does not exist in the result set");
 		}
 
-		Object row = rs.get(position - firstRowIs);
+		final Object row = rs.get(position - firstRowIs);
 		if (row instanceof DataEndMarker)
 		{
 			throw new SQLException("Past end of result set");
 		}
 
-		ArrayList<Object> alo = (ArrayList<Object>)row;
+		final ArrayList<Object> alo = (ArrayList<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
 			throw new SQLException("Column index is out of bounds");
 		}
 
-		Object col = alo.get(columnIndex - 1);
+		final Object col = alo.get(columnIndex - 1);
 
 		if (col == null)
 		{
@@ -1199,13 +1203,13 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public SQLXML getSQLXML(int columnIndex) throws SQLException
+	public SQLXML getSQLXML(final int columnIndex) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public SQLXML getSQLXML(String columnLabel) throws SQLException
+	public SQLXML getSQLXML(final String columnLabel) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
@@ -1222,7 +1226,7 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public String getString(int columnIndex) throws SQLException
+	public String getString(final int columnIndex) throws SQLException
 	{
 		wasNull = false;
 
@@ -1231,20 +1235,20 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Cannot fetch a value from a closed result set");
 		}
 
-		Object row = rs.get(position - firstRowIs);
+		final Object row = rs.get(position - firstRowIs);
 		if (row instanceof DataEndMarker)
 		{
 			throw new SQLException("Past end of result set");
 		}
 
-		ArrayList<Object> alo = (ArrayList<Object>)row;
+		final ArrayList<Object> alo = (ArrayList<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
 			throw new SQLException("Column index is out of bounds");
 		}
 
-		Object col = alo.get(columnIndex - 1);
+		final Object col = alo.get(columnIndex - 1);
 
 		if (col == null)
 		{
@@ -1261,7 +1265,7 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public String getString(String columnLabel) throws SQLException
+	public String getString(final String columnLabel) throws SQLException
 	{
 		wasNull = false;
 
@@ -1270,26 +1274,26 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Cannot fetch a value from a closed result set");
 		}
 
-		Integer columnIndex = cols2Pos.get(columnLabel.toUpperCase());
+		final Integer columnIndex = cols2Pos.get(columnLabel.toUpperCase());
 		if (columnIndex == null)
 		{
 			throw new SQLException("The column requested does not exist in the result set");
 		}
 
-		Object row = rs.get(position - firstRowIs);
+		final Object row = rs.get(position - firstRowIs);
 		if (row instanceof DataEndMarker)
 		{
 			throw new SQLException("Past end of result set");
 		}
 
-		ArrayList<Object> alo = (ArrayList<Object>)row;
+		final ArrayList<Object> alo = (ArrayList<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
 			throw new SQLException("Column index is out of bounds");
 		}
 
-		Object col = alo.get(columnIndex - 1);
+		final Object col = alo.get(columnIndex - 1);
 
 		if (col == null)
 		{
@@ -1306,49 +1310,49 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public Time getTime(int columnIndex) throws SQLException
+	public Time getTime(final int columnIndex) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public Time getTime(int columnIndex, Calendar cal) throws SQLException
+	public Time getTime(final int columnIndex, final Calendar cal) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public Time getTime(String columnLabel) throws SQLException
+	public Time getTime(final String columnLabel) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public Time getTime(String columnLabel, Calendar cal) throws SQLException
+	public Time getTime(final String columnLabel, final Calendar cal) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public Timestamp getTimestamp(int columnIndex) throws SQLException
+	public Timestamp getTimestamp(final int columnIndex) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public Timestamp getTimestamp(int columnIndex, Calendar cal) throws SQLException
+	public Timestamp getTimestamp(final int columnIndex, final Calendar cal) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public Timestamp getTimestamp(String columnLabel) throws SQLException
+	public Timestamp getTimestamp(final String columnLabel) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public Timestamp getTimestamp(String columnLabel, Calendar cal) throws SQLException
+	public Timestamp getTimestamp(final String columnLabel, final Calendar cal) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
@@ -1365,25 +1369,25 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public InputStream getUnicodeStream(int columnIndex) throws SQLException
+	public InputStream getUnicodeStream(final int columnIndex) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public InputStream getUnicodeStream(String columnLabel) throws SQLException
+	public InputStream getUnicodeStream(final String columnLabel) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public URL getURL(int columnIndex) throws SQLException
+	public URL getURL(final int columnIndex) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
-	public URL getURL(String columnLabel) throws SQLException
+	public URL getURL(final String columnLabel) throws SQLException
 	{
 		throw new SQLFeatureNotSupportedException();
 	}
@@ -1418,7 +1422,7 @@ public class HRDBMSResultSet implements ResultSet
 			getMoreData();
 		}
 
-		Object row = rs.get(rs.size() - 1);
+		final Object row = rs.get(rs.size() - 1);
 		if (!(row instanceof DataEndMarker))
 		{
 			return false;
@@ -1433,10 +1437,8 @@ public class HRDBMSResultSet implements ResultSet
 		{
 			return true;
 		}
-		else
-		{
-			return false;
-		}
+
+		return false;
 	}
 
 	@Override
@@ -1457,15 +1459,13 @@ public class HRDBMSResultSet implements ResultSet
 			getMoreData();
 		}
 
-		Object row = rs.get(0);
+		final Object row = rs.get(0);
 		if (row instanceof DataEndMarker)
 		{
 			return false;
 		}
-		else
-		{
-			return true;
-		}
+
+		return true;
 	}
 
 	@Override
@@ -1487,7 +1487,7 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public boolean isWrapperFor(Class<?> iface) throws SQLException
+	public boolean isWrapperFor(final Class<?> iface) throws SQLException
 	{
 		return false;
 	}
@@ -1524,7 +1524,7 @@ public class HRDBMSResultSet implements ResultSet
 		{
 			if (rs.size() > 0)
 			{
-				Object row = rs.get(rs.size() - 1);
+				final Object row = rs.get(rs.size() - 1);
 				if (row instanceof DataEndMarker)
 				{
 					return false;
@@ -1536,7 +1536,7 @@ public class HRDBMSResultSet implements ResultSet
 			firstRowIs = position;
 		}
 
-		Object row = rs.get(position - firstRowIs);
+		final Object row = rs.get(position - firstRowIs);
 		if (row instanceof DataEndMarker)
 		{
 			return false;
@@ -1560,7 +1560,7 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public boolean relative(int rows) throws SQLException
+	public boolean relative(final int rows) throws SQLException
 	{
 		throw new SQLException("Result set is TYPE_FORWARD_ONLY");
 	}
@@ -1599,7 +1599,7 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public void setFetchDirection(int direction) throws SQLException
+	public void setFetchDirection(final int direction) throws SQLException
 	{
 		if (closed)
 		{
@@ -1613,7 +1613,7 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public void setFetchSize(int rows) throws SQLException
+	public void setFetchSize(final int rows) throws SQLException
 	{
 		if (closed)
 		{
@@ -1629,428 +1629,428 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public <T> T unwrap(Class<T> iface) throws SQLException
+	public <T> T unwrap(final Class<T> iface) throws SQLException
 	{
 		throw new SQLException("Unwrap() is not supported.");
 	}
 
 	@Override
-	public void updateArray(int columnIndex, Array x) throws SQLException
+	public void updateArray(final int columnIndex, final Array x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateArray(String columnLabel, Array x) throws SQLException
+	public void updateArray(final String columnLabel, final Array x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateAsciiStream(int columnIndex, InputStream x) throws SQLException
+	public void updateAsciiStream(final int columnIndex, final InputStream x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateAsciiStream(int columnIndex, InputStream x, int length) throws SQLException
+	public void updateAsciiStream(final int columnIndex, final InputStream x, final int length) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateAsciiStream(int columnIndex, InputStream x, long length) throws SQLException
+	public void updateAsciiStream(final int columnIndex, final InputStream x, final long length) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateAsciiStream(String columnLabel, InputStream x) throws SQLException
+	public void updateAsciiStream(final String columnLabel, final InputStream x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateAsciiStream(String columnLabel, InputStream x, int length) throws SQLException
+	public void updateAsciiStream(final String columnLabel, final InputStream x, final int length) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateAsciiStream(String columnLabel, InputStream x, long length) throws SQLException
+	public void updateAsciiStream(final String columnLabel, final InputStream x, final long length) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateBigDecimal(int columnIndex, BigDecimal x) throws SQLException
+	public void updateBigDecimal(final int columnIndex, final BigDecimal x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateBigDecimal(String columnLabel, BigDecimal x) throws SQLException
+	public void updateBigDecimal(final String columnLabel, final BigDecimal x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateBinaryStream(int columnIndex, InputStream x) throws SQLException
+	public void updateBinaryStream(final int columnIndex, final InputStream x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateBinaryStream(int columnIndex, InputStream x, int length) throws SQLException
+	public void updateBinaryStream(final int columnIndex, final InputStream x, final int length) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateBinaryStream(int columnIndex, InputStream x, long length) throws SQLException
+	public void updateBinaryStream(final int columnIndex, final InputStream x, final long length) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateBinaryStream(String columnLabel, InputStream x) throws SQLException
+	public void updateBinaryStream(final String columnLabel, final InputStream x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateBinaryStream(String columnLabel, InputStream x, int length) throws SQLException
+	public void updateBinaryStream(final String columnLabel, final InputStream x, final int length) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateBinaryStream(String columnLabel, InputStream x, long length) throws SQLException
+	public void updateBinaryStream(final String columnLabel, final InputStream x, final long length) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateBlob(int columnIndex, Blob x) throws SQLException
+	public void updateBlob(final int columnIndex, final Blob x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateBlob(int columnIndex, InputStream inputStream) throws SQLException
+	public void updateBlob(final int columnIndex, final InputStream inputStream) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateBlob(int columnIndex, InputStream inputStream, long length) throws SQLException
+	public void updateBlob(final int columnIndex, final InputStream inputStream, final long length) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateBlob(String columnLabel, Blob x) throws SQLException
+	public void updateBlob(final String columnLabel, final Blob x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateBlob(String columnLabel, InputStream inputStream) throws SQLException
+	public void updateBlob(final String columnLabel, final InputStream inputStream) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateBlob(String columnLabel, InputStream inputStream, long length) throws SQLException
+	public void updateBlob(final String columnLabel, final InputStream inputStream, final long length) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateBoolean(int columnIndex, boolean x) throws SQLException
+	public void updateBoolean(final int columnIndex, final boolean x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateBoolean(String columnLabel, boolean x) throws SQLException
+	public void updateBoolean(final String columnLabel, final boolean x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateByte(int columnIndex, byte x) throws SQLException
+	public void updateByte(final int columnIndex, final byte x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateByte(String columnLabel, byte x) throws SQLException
+	public void updateByte(final String columnLabel, final byte x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateBytes(int columnIndex, byte[] x) throws SQLException
+	public void updateBytes(final int columnIndex, final byte[] x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateBytes(String columnLabel, byte[] x) throws SQLException
+	public void updateBytes(final String columnLabel, final byte[] x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateCharacterStream(int columnIndex, Reader x) throws SQLException
+	public void updateCharacterStream(final int columnIndex, final Reader x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateCharacterStream(int columnIndex, Reader x, int length) throws SQLException
+	public void updateCharacterStream(final int columnIndex, final Reader x, final int length) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateCharacterStream(int columnIndex, Reader x, long length) throws SQLException
+	public void updateCharacterStream(final int columnIndex, final Reader x, final long length) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateCharacterStream(String columnLabel, Reader reader) throws SQLException
+	public void updateCharacterStream(final String columnLabel, final Reader reader) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateCharacterStream(String columnLabel, Reader reader, int length) throws SQLException
+	public void updateCharacterStream(final String columnLabel, final Reader reader, final int length) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateCharacterStream(String columnLabel, Reader reader, long length) throws SQLException
+	public void updateCharacterStream(final String columnLabel, final Reader reader, final long length) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateClob(int columnIndex, Clob x) throws SQLException
+	public void updateClob(final int columnIndex, final Clob x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateClob(int columnIndex, Reader reader) throws SQLException
+	public void updateClob(final int columnIndex, final Reader reader) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateClob(int columnIndex, Reader reader, long length) throws SQLException
+	public void updateClob(final int columnIndex, final Reader reader, final long length) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateClob(String columnLabel, Clob x) throws SQLException
+	public void updateClob(final String columnLabel, final Clob x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateClob(String columnLabel, Reader reader) throws SQLException
+	public void updateClob(final String columnLabel, final Reader reader) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateClob(String columnLabel, Reader reader, long length) throws SQLException
+	public void updateClob(final String columnLabel, final Reader reader, final long length) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateDate(int columnIndex, Date x) throws SQLException
+	public void updateDate(final int columnIndex, final Date x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateDate(String columnLabel, Date x) throws SQLException
+	public void updateDate(final String columnLabel, final Date x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateDouble(int columnIndex, double x) throws SQLException
+	public void updateDouble(final int columnIndex, final double x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateDouble(String columnLabel, double x) throws SQLException
+	public void updateDouble(final String columnLabel, final double x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateFloat(int columnIndex, float x) throws SQLException
+	public void updateFloat(final int columnIndex, final float x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateFloat(String columnLabel, float x) throws SQLException
+	public void updateFloat(final String columnLabel, final float x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateInt(int columnIndex, int x) throws SQLException
+	public void updateInt(final int columnIndex, final int x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateInt(String columnLabel, int x) throws SQLException
+	public void updateInt(final String columnLabel, final int x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateLong(int columnIndex, long x) throws SQLException
+	public void updateLong(final int columnIndex, final long x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateLong(String columnLabel, long x) throws SQLException
+	public void updateLong(final String columnLabel, final long x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateNCharacterStream(int columnIndex, Reader x) throws SQLException
+	public void updateNCharacterStream(final int columnIndex, final Reader x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateNCharacterStream(int columnIndex, Reader x, long length) throws SQLException
+	public void updateNCharacterStream(final int columnIndex, final Reader x, final long length) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateNCharacterStream(String columnLabel, Reader reader) throws SQLException
+	public void updateNCharacterStream(final String columnLabel, final Reader reader) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateNCharacterStream(String columnLabel, Reader reader, long length) throws SQLException
+	public void updateNCharacterStream(final String columnLabel, final Reader reader, final long length) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateNClob(int columnIndex, NClob nClob) throws SQLException
+	public void updateNClob(final int columnIndex, final NClob nClob) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateNClob(int columnIndex, Reader reader) throws SQLException
+	public void updateNClob(final int columnIndex, final Reader reader) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateNClob(int columnIndex, Reader reader, long length) throws SQLException
+	public void updateNClob(final int columnIndex, final Reader reader, final long length) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateNClob(String columnLabel, NClob nClob) throws SQLException
+	public void updateNClob(final String columnLabel, final NClob nClob) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateNClob(String columnLabel, Reader reader) throws SQLException
+	public void updateNClob(final String columnLabel, final Reader reader) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateNClob(String columnLabel, Reader reader, long length) throws SQLException
+	public void updateNClob(final String columnLabel, final Reader reader, final long length) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateNString(int columnIndex, String nString) throws SQLException
+	public void updateNString(final int columnIndex, final String nString) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateNString(String columnLabel, String nString) throws SQLException
+	public void updateNString(final String columnLabel, final String nString) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateNull(int columnIndex) throws SQLException
+	public void updateNull(final int columnIndex) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateNull(String columnLabel) throws SQLException
+	public void updateNull(final String columnLabel) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateObject(int columnIndex, Object x) throws SQLException
+	public void updateObject(final int columnIndex, final Object x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateObject(int columnIndex, Object x, int scaleOrLength) throws SQLException
+	public void updateObject(final int columnIndex, final Object x, final int scaleOrLength) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateObject(String columnLabel, Object x) throws SQLException
+	public void updateObject(final String columnLabel, final Object x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateObject(String columnLabel, Object x, int scaleOrLength) throws SQLException
+	public void updateObject(final String columnLabel, final Object x, final int scaleOrLength) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateRef(int columnIndex, Ref x) throws SQLException
+	public void updateRef(final int columnIndex, final Ref x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 
 	}
 
 	@Override
-	public void updateRef(String columnLabel, Ref x) throws SQLException
+	public void updateRef(final String columnLabel, final Ref x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
@@ -2062,73 +2062,73 @@ public class HRDBMSResultSet implements ResultSet
 	}
 
 	@Override
-	public void updateRowId(int columnIndex, RowId x) throws SQLException
+	public void updateRowId(final int columnIndex, final RowId x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateRowId(String columnLabel, RowId x) throws SQLException
+	public void updateRowId(final String columnLabel, final RowId x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateShort(int columnIndex, short x) throws SQLException
+	public void updateShort(final int columnIndex, final short x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateShort(String columnLabel, short x) throws SQLException
+	public void updateShort(final String columnLabel, final short x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateSQLXML(int columnIndex, SQLXML xmlObject) throws SQLException
+	public void updateSQLXML(final int columnIndex, final SQLXML xmlObject) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateSQLXML(String columnLabel, SQLXML xmlObject) throws SQLException
+	public void updateSQLXML(final String columnLabel, final SQLXML xmlObject) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateString(int columnIndex, String x) throws SQLException
+	public void updateString(final int columnIndex, final String x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateString(String columnLabel, String x) throws SQLException
+	public void updateString(final String columnLabel, final String x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateTime(int columnIndex, Time x) throws SQLException
+	public void updateTime(final int columnIndex, final Time x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateTime(String columnLabel, Time x) throws SQLException
+	public void updateTime(final String columnLabel, final Time x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateTimestamp(int columnIndex, Timestamp x) throws SQLException
+	public void updateTimestamp(final int columnIndex, final Timestamp x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
 
 	@Override
-	public void updateTimestamp(String columnLabel, Timestamp x) throws SQLException
+	public void updateTimestamp(final String columnLabel, final Timestamp x) throws SQLException
 	{
 		throw new SQLException("Result set is CONCUR_READ_ONLY");
 	}
@@ -2144,13 +2144,7 @@ public class HRDBMSResultSet implements ResultSet
 		return wasNull;
 	}
 
-	private int bytesToInt(byte[] val)
-	{
-		final int ret = java.nio.ByteBuffer.wrap(val).getInt();
-		return ret;
-	}
-
-	private final Object fromBytes(byte[] val) throws Exception
+	private final Object fromBytes(final byte[] val) throws Exception
 	{
 		final ByteBuffer bb = ByteBuffer.wrap(val);
 		final int numFields = bb.getInt();
@@ -2205,15 +2199,15 @@ public class HRDBMSResultSet implements ResultSet
 				{
 					// final String o = new String(temp,
 					// StandardCharsets.UTF_8);
-					String value = (String)unsafe.allocateInstance(String.class);
-					int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(temp, 0, length, ca);
+					final String value = (String)unsafe.allocateInstance(String.class);
+					final int clen = ((sun.nio.cs.ArrayDecoder)cd).decode(temp, 0, length, ca);
 					if (clen == ca.length)
 					{
 						unsafe.putObject(value, offset, ca);
 					}
 					else
 					{
-						char[] v = Arrays.copyOf(ca, clen);
+						final char[] v = Arrays.copyOf(ca, clen);
 						unsafe.putObject(value, offset, v);
 					}
 					retval.add(value);
@@ -2259,14 +2253,14 @@ public class HRDBMSResultSet implements ResultSet
 
 	private void getConfirmation() throws Exception
 	{
-		byte[] inMsg = new byte[2];
+		final byte[] inMsg = new byte[2];
 
 		int count = 0;
 		while (count < 2)
 		{
 			try
 			{
-				int temp = conn.in.read(inMsg, count, 2 - count);
+				final int temp = conn.in.read(inMsg, count, 2 - count);
 				if (temp == -1)
 				{
 					throw new Exception();
@@ -2282,7 +2276,7 @@ public class HRDBMSResultSet implements ResultSet
 			}
 		}
 
-		String inStr = new String(inMsg, StandardCharsets.UTF_8);
+		final String inStr = new String(inMsg, StandardCharsets.UTF_8);
 		if (!inStr.equals("OK"))
 		{
 			throw new Exception();
@@ -2293,7 +2287,7 @@ public class HRDBMSResultSet implements ResultSet
 	{
 		try
 		{
-			byte[] outMsg = "NEXT            ".getBytes(StandardCharsets.UTF_8);
+			final byte[] outMsg = "NEXT            ".getBytes(StandardCharsets.UTF_8);
 			outMsg[8] = 0;
 			outMsg[9] = 0;
 			outMsg[10] = 0;
@@ -2322,10 +2316,10 @@ public class HRDBMSResultSet implements ResultSet
 			{
 				num = new byte[4];
 				read(num);
-				int size = bytesToInt(num);
-				byte[] data = new byte[size];
+				final int size = bytesToInt(num);
+				final byte[] data = new byte[size];
 				read(data);
-				Object obj = fromBytes(data);
+				final Object obj = fromBytes(data);
 				rs.add(obj);
 				i--;
 
@@ -2335,7 +2329,7 @@ public class HRDBMSResultSet implements ResultSet
 				}
 			}
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			if (e instanceof SQLException)
 			{
@@ -2346,13 +2340,13 @@ public class HRDBMSResultSet implements ResultSet
 		}
 	}
 
-	private void read(byte[] bytes) throws Exception
+	private void read(final byte[] bytes) throws Exception
 	{
 		int count = 0;
 		final int size = bytes.length;
 		while (count < size)
 		{
-			int temp = conn.in.read(bytes, count, bytes.length - count);
+			final int temp = conn.in.read(bytes, count, bytes.length - count);
 			if (temp == -1)
 			{
 				throw new Exception();
@@ -2370,15 +2364,15 @@ public class HRDBMSResultSet implements ResultSet
 	{
 		try
 		{
-			byte[] length = new byte[4];
+			final byte[] length = new byte[4];
 			read(length);
-			int len = bytesToInt(length);
-			byte[] text = new byte[len];
+			final int len = bytesToInt(length);
+			final byte[] text = new byte[len];
 			read(text);
-			String txt = new String(text, StandardCharsets.UTF_8);
+			final String txt = new String(text, StandardCharsets.UTF_8);
 			return new Exception(txt);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			throw new Exception("An error occurred on the server, but an exception occurred while trying to retrieve the error message.  A rollback has been performed.");
 		}
@@ -2386,7 +2380,7 @@ public class HRDBMSResultSet implements ResultSet
 
 	private void requestMetaData() throws Exception
 	{
-		byte[] outMsg = "RSMETA          ".getBytes(StandardCharsets.UTF_8);
+		final byte[] outMsg = "RSMETA          ".getBytes(StandardCharsets.UTF_8);
 		outMsg[8] = 0;
 		outMsg[9] = 0;
 		outMsg[10] = 0;
@@ -2398,7 +2392,7 @@ public class HRDBMSResultSet implements ResultSet
 		conn.out.write(outMsg);
 		conn.out.flush();
 
-		ObjectInputStream in = new ObjectInputStream(conn.in);
+		final ObjectInputStream in = new ObjectInputStream(conn.in);
 		cols2Pos = (HashMap<String, Integer>)in.readObject();
 		pos2Cols = (TreeMap<Integer, String>)in.readObject();
 		cols2Types = (HashMap<String, String>)in.readObject();
@@ -2406,7 +2400,7 @@ public class HRDBMSResultSet implements ResultSet
 
 	private void sendCloseRS() throws Exception
 	{
-		byte[] outMsg = "CLOSERS         ".getBytes(StandardCharsets.UTF_8);
+		final byte[] outMsg = "CLOSERS         ".getBytes(StandardCharsets.UTF_8);
 		outMsg[8] = 0;
 		outMsg[9] = 0;
 		outMsg[10] = 0;

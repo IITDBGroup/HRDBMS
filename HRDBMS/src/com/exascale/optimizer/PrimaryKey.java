@@ -6,7 +6,7 @@ public class PrimaryKey
 {
 	private final ArrayList<Column> cols;
 
-	public PrimaryKey(ArrayList<Column> cols)
+	public PrimaryKey(final ArrayList<Column> cols)
 	{
 		this.cols = cols;
 	}

@@ -12,14 +12,14 @@ public class TableReference
 	private FullSelect select;
 	private String alias;
 
-	public TableReference(FullSelect select)
+	public TableReference(final FullSelect select)
 	{
 		this.select = select;
 		isSingleTable = false;
 		isSelect = true;
 	}
 
-	public TableReference(FullSelect select, String alias)
+	public TableReference(final FullSelect select, final String alias)
 	{
 		this.select = select;
 		isSingleTable = false;
@@ -27,7 +27,7 @@ public class TableReference
 		this.alias = alias;
 	}
 
-	public TableReference(SingleTable table)
+	public TableReference(final SingleTable table)
 	{
 		this.table = table;
 		isSingleTable = true;
@@ -35,7 +35,7 @@ public class TableReference
 		alias = table.getAlias();
 	}
 
-	public TableReference(TableReference lhs, String op, TableReference rhs, SearchCondition search, String alias)
+	public TableReference(final TableReference lhs, final String op, final TableReference rhs, final SearchCondition search, final String alias)
 	{
 		this.lhs = lhs;
 		this.op = op;
@@ -46,7 +46,7 @@ public class TableReference
 		this.alias = alias;
 	}
 
-	public void addSelect(FullSelect select)
+	public void addSelect(final FullSelect select)
 	{
 		isSelect = true;
 		this.select = select;
@@ -119,7 +119,7 @@ public class TableReference
 		table = null;
 	}
 
-	public void setAlias(String alias)
+	public void setAlias(final String alias)
 	{
 		this.alias = alias;
 	}

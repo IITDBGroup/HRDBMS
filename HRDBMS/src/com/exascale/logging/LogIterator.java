@@ -3,8 +3,8 @@ package com.exascale.logging;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.util.ArrayDeque;
 import java.util.Iterator;
+import java.util.concurrent.LinkedBlockingDeque;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LogManager;
 import com.exascale.tables.Transaction;
@@ -16,19 +16,20 @@ public class LogIterator implements Iterator<LogRec>
 	private final FileChannel fc;
 	private int size;
 
-	public LogIterator(String filename) throws IOException
+	public LogIterator(final String filename) throws IOException
 	{
 		// synchronized (LogManager.noArchiveLock) // disable archiving while we
 		// have
 		// an iterator open
-		Transaction.txListLock.writeLock().lock();
+		synchronized (Transaction.txListLock)
 		{
+			// Transaction.txListLock.lock();
 			LogManager.openIters++;
 			LogManager.noArchive = true;
 		}
-		Transaction.txListLock.writeLock().unlock();
+		// Transaction.txListLock.unlock();
 
-		final ArrayDeque<LogRec> log = LogManager.logs.get(filename);
+		final LinkedBlockingDeque<LogRec> log = LogManager.logs.get(filename);
 		synchronized (log)
 		{
 			if (log.size() > 0)
@@ -56,17 +57,17 @@ public class LogIterator implements Iterator<LogRec>
 		}
 	}
 
-	public LogIterator(String filename, boolean flush) throws IOException
+	public LogIterator(final String filename, final boolean flush) throws IOException
 	{
 		// synchronized (LogManager.noArchiveLock) // disable archiving while we
 		// have
 		// an iterator open
-		Transaction.txListLock.writeLock().lock();
+		synchronized (Transaction.txListLock)
 		{
 			LogManager.openIters++;
 			LogManager.noArchive = true;
 		}
-		Transaction.txListLock.writeLock().unlock();
+		// Transaction.txListLock.unlock();
 
 		fc = LogManager.getFile(filename);
 		synchronized (fc)
@@ -87,7 +88,7 @@ public class LogIterator implements Iterator<LogRec>
 		}
 	}
 
-	public LogIterator(String filename, boolean flush, FileChannel fc) throws IOException
+	public LogIterator(final String filename, final boolean flush, final FileChannel fc) throws IOException
 	{
 		// synchronized (LogManager.noArchiveLock) // disable archiving while we
 		// have
@@ -120,7 +121,8 @@ public class LogIterator implements Iterator<LogRec>
 	public void close()
 	{
 		// synchronized (LogManager.noArchiveLock)
-		Transaction.txListLock.writeLock().lock();
+		// Transaction.txListLock.lock();
+		synchronized (Transaction.txListLock)
 		{
 			LogManager.openIters--;
 
@@ -129,7 +131,7 @@ public class LogIterator implements Iterator<LogRec>
 				LogManager.noArchive = false;
 			}
 		}
-		Transaction.txListLock.writeLock().unlock();
+		// Transaction.txListLock.unlock();
 	}
 
 	@Override

@@ -4,7 +4,7 @@ public class DropTable extends SQLStatement
 {
 	private final TableName table;
 
-	public DropTable(TableName table)
+	public DropTable(final TableName table)
 	{
 		this.table = table;
 	}

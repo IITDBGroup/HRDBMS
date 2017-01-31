@@ -103,28 +103,33 @@ public class OperatorUtils
 	// 81 - Operator null
 	// 82 - Index null;
 	// 83 - BoolArray
+	// 84 - ALALO
+	// 85 - Routing
+	// 86 - Null String
+	// 87 - ALRAIK
+	// 88 - RAIK
 
-	public static int bytesToInt(byte[] val)
+	public static int bytesToInt(final byte[] val)
 	{
 		final int ret = java.nio.ByteBuffer.wrap(val).getInt();
 		return ret;
 	}
 
-	public static long bytesToLong(byte[] val)
+	public static long bytesToLong(final byte[] val)
 	{
 		final long ret = java.nio.ByteBuffer.wrap(val).getLong();
 		return ret;
 	}
 
-	public static short bytesToShort(byte[] val)
+	public static short bytesToShort(final byte[] val)
 	{
 		final short ret = java.nio.ByteBuffer.wrap(val).getShort();
 		return ret;
 	}
 
-	public static ArrayDeque<String> deserializeADS(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static ArrayDeque<String> deserializeADS(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (ArrayDeque<String>)readReference(in, prev);
@@ -135,14 +140,14 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 29 but received " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		ArrayDeque<String> retval = new ArrayDeque<String>(size);
+		final int size = readShort(in);
+		final ArrayDeque<String> retval = new ArrayDeque<String>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -154,9 +159,9 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static AggregateOperator deserializeAgOp(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static AggregateOperator deserializeAgOp(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (AggregateOperator)readReference(in, prev);
@@ -195,9 +200,9 @@ public class OperatorUtils
 		throw new Exception("Unknown type in deserializeAgOp(): " + type);
 	}
 
-	public static ArrayList<AggregateOperator> deserializeALAgOp(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static ArrayList<AggregateOperator> deserializeALAgOp(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (ArrayList<AggregateOperator>)readReference(in, prev);
@@ -208,14 +213,14 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 34 but received " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		ArrayList<AggregateOperator> retval = new ArrayList<AggregateOperator>(size);
+		final int size = readShort(in);
+		final ArrayList<AggregateOperator> retval = new ArrayList<AggregateOperator>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -227,9 +232,41 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static ArrayList<ArrayList<Filter>> deserializeALALF(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static ArrayList<ArrayList<Boolean>> deserializeALALB(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
+		if (type == 0)
+		{
+			return (ArrayList<ArrayList<Boolean>>)readReference(in, prev);
+		}
+
+		if (type != 86)
+		{
+			throw new Exception("Corrupted stream. Expected type 86 but received " + type);
+		}
+
+		final long id = readLong(in);
+		if (id == -1)
+		{
+			return null;
+		}
+
+		final int size = readShort(in);
+		final ArrayList<ArrayList<Boolean>> retval = new ArrayList<ArrayList<Boolean>>(size);
+		prev.put(id, retval);
+		int i = 0;
+		while (i < size)
+		{
+			retval.add(deserializeALB(in, prev));
+			i++;
+		}
+
+		return retval;
+	}
+
+	public static ArrayList<ArrayList<Filter>> deserializeALALF(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	{
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (ArrayList<ArrayList<Filter>>)readReference(in, prev);
@@ -240,14 +277,14 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 67 but received " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		ArrayList<ArrayList<Filter>> retval = new ArrayList<ArrayList<Filter>>(size);
+		final int size = readShort(in);
+		final ArrayList<ArrayList<Filter>> retval = new ArrayList<ArrayList<Filter>>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -259,9 +296,73 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static ArrayList<Boolean> deserializeALB(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static ArrayList<ArrayList<Object>> deserializeALALO(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
+		if (type == 0)
+		{
+			return (ArrayList<ArrayList<Object>>)readReference(in, prev);
+		}
+
+		if (type != 84)
+		{
+			throw new Exception("Corrupted stream. Expected type 84 but received " + type);
+		}
+
+		final long id = readLong(in);
+		if (id == -1)
+		{
+			return null;
+		}
+
+		final int size = readShort(in);
+		final ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>(size);
+		prev.put(id, retval);
+		int i = 0;
+		while (i < size)
+		{
+			retval.add(deserializeALO(in, prev));
+			i++;
+		}
+
+		return retval;
+	}
+
+	public static ArrayList<ArrayList<String>> deserializeALALS(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	{
+		final int type = getType(in);
+		if (type == 0)
+		{
+			return (ArrayList<ArrayList<String>>)readReference(in, prev);
+		}
+
+		if (type != 85)
+		{
+			throw new Exception("Corrupted stream. Expected type 85 but received " + type);
+		}
+
+		final long id = readLong(in);
+		if (id == -1)
+		{
+			return null;
+		}
+
+		final int size = readShort(in);
+		final ArrayList<ArrayList<String>> retval = new ArrayList<ArrayList<String>>(size);
+		prev.put(id, retval);
+		int i = 0;
+		while (i < size)
+		{
+			retval.add(deserializeALS(in, prev));
+			i++;
+		}
+
+		return retval;
+	}
+
+	public static ArrayList<Boolean> deserializeALB(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	{
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (ArrayList<Boolean>)readReference(in, prev);
@@ -272,14 +373,14 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 45 but received " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		ArrayList<Boolean> retval = new ArrayList<Boolean>(size);
+		final int size = readShort(in);
+		final ArrayList<Boolean> retval = new ArrayList<Boolean>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -291,9 +392,9 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static ArrayList<Filter> deserializeALF(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static ArrayList<Filter> deserializeALF(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (ArrayList<Filter>)readReference(in, prev);
@@ -304,14 +405,14 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 42 but received " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		ArrayList<Filter> retval = new ArrayList<Filter>(size);
+		final int size = readShort(in);
+		final ArrayList<Filter> retval = new ArrayList<Filter>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -323,9 +424,9 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static ArrayList<HashSet<HashMap<Filter, Filter>>> deserializeALHSHM(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static ArrayList<HashSet<HashMap<Filter, Filter>>> deserializeALHSHM(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (ArrayList<HashSet<HashMap<Filter, Filter>>>)readReference(in, prev);
@@ -336,14 +437,14 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 11 but received " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		ArrayList<HashSet<HashMap<Filter, Filter>>> retval = new ArrayList<HashSet<HashMap<Filter, Filter>>>(size);
+		final int size = readShort(in);
+		final ArrayList<HashSet<HashMap<Filter, Filter>>> retval = new ArrayList<HashSet<HashMap<Filter, Filter>>>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -355,9 +456,9 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static ArrayList<Integer> deserializeALI(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static ArrayList<Integer> deserializeALI(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (ArrayList<Integer>)readReference(in, prev);
@@ -368,14 +469,14 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 7 but received " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		ArrayList<Integer> retval = new ArrayList<Integer>(size);
+		final int size = readShort(in);
+		final ArrayList<Integer> retval = new ArrayList<Integer>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -387,9 +488,9 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static ArrayList<Index> deserializeALIndx(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static ArrayList<Index> deserializeALIndx(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (ArrayList<Index>)readReference(in, prev);
@@ -400,14 +501,14 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 10 but received " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		ArrayList<Index> retval = new ArrayList<Index>(size);
+		final int size = readShort(in);
+		final ArrayList<Index> retval = new ArrayList<Index>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -419,7 +520,7 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static ArrayList<Object> deserializeALO(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static ArrayList<Object> deserializeALO(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
 		int type = getType(in);
 		if (type == 0)
@@ -432,14 +533,14 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 12 but received " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		ArrayList<Object> retval = new ArrayList<Object>(size);
+		final int size = readShort(in);
+		final ArrayList<Object> retval = new ArrayList<Object>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -481,9 +582,9 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static ArrayList<Operator> deserializeALOp(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static ArrayList<Operator> deserializeALOp(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (ArrayList<Operator>)readReference(in, prev);
@@ -494,14 +595,14 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 32 but received " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		ArrayList<Operator> retval = new ArrayList<Operator>(size);
+		final int size = readShort(in);
+		final ArrayList<Operator> retval = new ArrayList<Operator>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -513,9 +614,42 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static ArrayList<String> deserializeALS(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static ArrayList<RIDAndIndexKeys> deserializeALRAIK(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
+		if (type == 0)
+		{
+			return (ArrayList<RIDAndIndexKeys>)readReference(in, prev);
+		}
+
+		if (type != 87)
+		{
+			throw new Exception("Corrupted stream. Expected type 87 but received " + type);
+		}
+
+		final long id = readLong(in);
+		if (id == -1)
+		{
+			return null;
+		}
+
+		final int size = readShort(in);
+		final ArrayList<RIDAndIndexKeys> retval = new ArrayList<RIDAndIndexKeys>(size);
+		prev.put(id, retval);
+		int i = 0;
+		while (i < size)
+		{
+			retval.add(RIDAndIndexKeys.deserialize(in, prev)); // have not read
+																// type
+			i++;
+		}
+
+		return retval;
+	}
+
+	public static ArrayList<String> deserializeALS(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	{
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (ArrayList<String>)readReference(in, prev);
@@ -526,14 +660,14 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 6 but received " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		ArrayList<String> retval = new ArrayList<String>(size);
+		final int size = readShort(in);
+		final ArrayList<String> retval = new ArrayList<String>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -545,9 +679,9 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static boolean[] deserializeBoolArray(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static boolean[] deserializeBoolArray(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (boolean[])readReference(in, prev);
@@ -558,14 +692,14 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 83 but received " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		boolean[] retval = new boolean[size];
+		final int size = readShort(in);
+		final boolean[] retval = new boolean[size];
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -577,9 +711,9 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static CNFFilter deserializeCNF(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static CNFFilter deserializeCNF(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (CNFFilter)readReference(in, prev);
@@ -598,9 +732,9 @@ public class OperatorUtils
 		return CNFFilter.deserializeKnown(in, prev); // already read type
 	}
 
-	public static Filter deserializeFilter(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static Filter deserializeFilter(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (Filter)readReference(in, prev);
@@ -619,9 +753,9 @@ public class OperatorUtils
 		return Filter.deserializeKnown(in, prev); // type already read
 	}
 
-	public static FastStringTokenizer deserializeFST(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static FastStringTokenizer deserializeFST(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (FastStringTokenizer)readReference(in, prev);
@@ -641,9 +775,9 @@ public class OperatorUtils
 		// type
 	}
 
-	public static HashMap<Filter, Filter> deserializeHMF(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static HashMap<Filter, Filter> deserializeHMF(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (HashMap<Filter, Filter>)readReference(in, prev);
@@ -654,19 +788,20 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 9 but received " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		HashMap<Filter, Filter> retval = new HashMap<Filter, Filter>(4 * size / 3 + 1);
+		final int size = readShort(in);
+		final HashMap<Filter, Filter> retval = new HashMap<Filter, Filter>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
 		{
-			Filter f = Filter.deserialize(in, prev); // has not read type yet
+			final Filter f = Filter.deserialize(in, prev); // has not read type
+															// yet
 			retval.put(f, f);
 			i++;
 		}
@@ -674,9 +809,9 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static HashMap<Integer, Operator> deserializeHMIntOp(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static HashMap<Integer, Operator> deserializeHMIntOp(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (HashMap<Integer, Operator>)readReference(in, prev);
@@ -687,20 +822,20 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 80 but received " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		HashMap<Integer, Operator> retval = new HashMap<Integer, Operator>(4 * size / 3 + 1);
+		final int size = readShort(in);
+		final HashMap<Integer, Operator> retval = new HashMap<Integer, Operator>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
 		{
-			Integer key = readInt(in);
-			Operator value = deserializeOperator(in, prev);
+			final Integer key = readInt(in);
+			final Operator value = deserializeOperator(in, prev);
 			retval.put(key, value);
 			i++;
 		}
@@ -708,9 +843,9 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static HashMap<Operator, CNFFilter> deserializeHMOpCNF(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static HashMap<Operator, CNFFilter> deserializeHMOpCNF(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (HashMap<Operator, CNFFilter>)readReference(in, prev);
@@ -721,20 +856,20 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 79 but received " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		HashMap<Operator, CNFFilter> retval = new HashMap<Operator, CNFFilter>(4 * size / 3 + 1);
+		final int size = readShort(in);
+		final HashMap<Operator, CNFFilter> retval = new HashMap<Operator, CNFFilter>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
 		{
-			Operator key = deserializeOperator(in, prev);
-			CNFFilter value = deserializeCNF(in, prev);
+			final Operator key = deserializeOperator(in, prev);
+			final CNFFilter value = deserializeCNF(in, prev);
 			retval.put(key, value);
 			i++;
 		}
@@ -742,9 +877,9 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static HashSet<HashMap<Filter, Filter>> deserializeHSHM(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static HashSet<HashMap<Filter, Filter>> deserializeHSHM(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (HashSet<HashMap<Filter, Filter>>)readReference(in, prev);
@@ -755,14 +890,14 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 8 but received " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		HashSet<HashMap<Filter, Filter>> retval = new HashSet<HashMap<Filter, Filter>>(4 * size / 3 + 1);
+		final int size = readShort(in);
+		final HashSet<HashMap<Filter, Filter>> retval = new HashSet<HashMap<Filter, Filter>>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -774,7 +909,7 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static HashSet<Object> deserializeHSO(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static HashSet<Object> deserializeHSO(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
 		int type = getType(in);
 		if (type == 0)
@@ -787,14 +922,14 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 43 but received " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		HashSet<Object> retval = new HashSet<Object>(4 * size / 3 + 1);
+		final int size = readShort(in);
+		final HashSet<Object> retval = new HashSet<Object>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -836,9 +971,9 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static HashSet<String> deserializeHSS(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static HashSet<String> deserializeHSS(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (HashSet<String>)readReference(in, prev);
@@ -849,14 +984,14 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 68 but received " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		HashSet<String> retval = new HashSet<String>(4 * size / 3 + 1);
+		final int size = readShort(in);
+		final HashSet<String> retval = new HashSet<String>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -868,9 +1003,9 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static Index deserializeIndex(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static Index deserializeIndex(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (Index)readReference(in, prev);
@@ -889,9 +1024,9 @@ public class OperatorUtils
 		return Index.deserializeKnown(in, prev);
 	}
 
-	public static int[] deserializeIntArray(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static int[] deserializeIntArray(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (int[])readReference(in, prev);
@@ -902,14 +1037,14 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 46 but received " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		int[] retval = new int[size];
+		final int size = readShort(in);
+		final int[] retval = new int[size];
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -921,9 +1056,9 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static Operator deserializeOperator(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static Operator deserializeOperator(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		switch (type)
 		{
 			// 0 - reference
@@ -1081,14 +1216,16 @@ public class OperatorUtils
 			// 80 - HMIntOp
 			case 81:
 				return null;
+			case 85:
+				return RoutingOperator.deserialize(in, prev);
 			default:
 				throw new Exception("Unknown type in deserialize operator: " + type);
 		}
 	}
 
-	public static String[] deserializeStringArray(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static String[] deserializeStringArray(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (String[])readReference(in, prev);
@@ -1099,14 +1236,14 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 66 but received " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		String[] retval = new String[size];
+		final int size = readShort(in);
+		final String[] retval = new String[size];
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -1118,9 +1255,9 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static HashMap<String, String> deserializeStringHM(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static HashMap<String, String> deserializeStringHM(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (HashMap<String, String>)readReference(in, prev);
@@ -1131,20 +1268,22 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 2, found type " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
+			// HRDBMSWorker.logger.debug("OU deserialized null String, String
+			// HashMap");
 			return null;
 		}
 
-		int size = readShort(in);
-		HashMap<String, String> retval = new HashMap<String, String>(4 * size / 3 + 1);
+		final int size = readShort(in);
+		final HashMap<String, String> retval = new HashMap<String, String>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
 		{
-			String key = readString(in, prev);
-			String value = readString(in, prev);
+			final String key = readString(in, prev);
+			final String value = readString(in, prev);
 			retval.put(key, value);
 			i++;
 		}
@@ -1152,9 +1291,9 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static HashMap<String, Integer> deserializeStringIntHM(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static HashMap<String, Integer> deserializeStringIntHM(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (HashMap<String, Integer>)readReference(in, prev);
@@ -1165,20 +1304,20 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream.  Expected type 4 but received " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		HashMap<String, Integer> retval = new HashMap<String, Integer>(4 * size / 3 + 1);
+		final int size = readShort(in);
+		final HashMap<String, Integer> retval = new HashMap<String, Integer>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
 		{
-			String key = readString(in, prev);
-			int value = readInt(in);
+			final String key = readString(in, prev);
+			final int value = readInt(in);
 			retval.put(key, value);
 			i++;
 		}
@@ -1186,9 +1325,9 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static TreeMap<Integer, String> deserializeTM(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static TreeMap<Integer, String> deserializeTM(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (TreeMap<Integer, String>)readReference(in, prev);
@@ -1199,20 +1338,20 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 5 but received " + type);
 		}
 
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		TreeMap<Integer, String> retval = new TreeMap<Integer, String>();
+		final int size = readShort(in);
+		final TreeMap<Integer, String> retval = new TreeMap<Integer, String>();
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
 		{
-			int key = readInt(in);
-			String value = readString(in, prev);
+			final int key = readInt(in);
+			final String value = readString(in, prev);
 			retval.put(key, value);
 			i++;
 		}
@@ -1220,17 +1359,17 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static int getType(InputStream in) throws Exception
+	public static int getType(final InputStream in) throws Exception
 	{
 		return in.read();
 	}
 
-	public static void read(byte[] data, InputStream in) throws Exception
+	public static void read(final byte[] data, final InputStream in) throws Exception
 	{
 		int count = 0;
 		while (count < data.length)
 		{
-			int temp = in.read(data, count, data.length - count);
+			final int temp = in.read(data, count, data.length - count);
 			if (temp == -1)
 			{
 				throw new Exception("Early EOF");
@@ -1240,15 +1379,15 @@ public class OperatorUtils
 		}
 	}
 
-	public static boolean readBool(InputStream in) throws Exception
+	public static boolean readBool(final InputStream in) throws Exception
 	{
-		int val = in.read();
+		final int val = in.read();
 		return (val != 0);
 	}
 
-	public static Boolean readBoolClass(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static Boolean readBoolClass(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 70)
 		{
 			return null;
@@ -1262,9 +1401,9 @@ public class OperatorUtils
 		return readBool(in);
 	}
 
-	public static MyDate readDate(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static MyDate readDate(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 18)
 		{
 			return null;
@@ -1275,23 +1414,23 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 19 but received " + type);
 		}
 
-		byte[] data = new byte[4];
+		final byte[] data = new byte[4];
 		read(data, in);
-		int l = bytesToInt(data);
+		final int l = bytesToInt(data);
 		return new MyDate(l);
 	}
 
-	public static MyDate readDateKnown(InputStream in) throws Exception
+	public static MyDate readDateKnown(final InputStream in) throws Exception
 	{
-		byte[] data = new byte[4];
+		final byte[] data = new byte[4];
 		read(data, in);
-		int l = bytesToInt(data);
+		final int l = bytesToInt(data);
 		return new MyDate(l);
 	}
 
-	public static Double readDoubleClass(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static Double readDoubleClass(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 12)
 		{
 			return null;
@@ -1302,30 +1441,30 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 13 but received " + type);
 		}
 
-		byte[] data = new byte[8];
+		final byte[] data = new byte[8];
 		read(data, in);
-		long l = bytesToLong(data);
+		final long l = bytesToLong(data);
 		return Double.longBitsToDouble(l);
 	}
 
-	public static Double readDoubleClassKnown(InputStream in) throws Exception
+	public static Double readDoubleClassKnown(final InputStream in) throws Exception
 	{
-		byte[] data = new byte[8];
+		final byte[] data = new byte[8];
 		read(data, in);
-		long l = bytesToLong(data);
+		final long l = bytesToLong(data);
 		return Double.longBitsToDouble(l);
 	}
 
-	public static int readInt(InputStream in) throws Exception
+	public static int readInt(final InputStream in) throws Exception
 	{
-		byte[] data = new byte[4];
+		final byte[] data = new byte[4];
 		read(data, in);
 		return bytesToInt(data);
 	}
 
-	public static Integer readIntClass(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static Integer readIntClass(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 16)
 		{
 			return null;
@@ -1336,28 +1475,28 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 17 but received " + type);
 		}
 
-		byte[] data = new byte[4];
+		final byte[] data = new byte[4];
 		read(data, in);
 		return bytesToInt(data);
 	}
 
-	public static Integer readIntClassKnown(InputStream in) throws Exception
+	public static Integer readIntClassKnown(final InputStream in) throws Exception
 	{
-		byte[] data = new byte[4];
+		final byte[] data = new byte[4];
 		read(data, in);
 		return bytesToInt(data);
 	}
 
-	public static long readLong(InputStream in) throws Exception
+	public static long readLong(final InputStream in) throws Exception
 	{
-		byte[] data = new byte[8];
+		final byte[] data = new byte[8];
 		read(data, in);
 		return bytesToLong(data);
 	}
 
-	public static Long readLongClass(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static Long readLongClass(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 14)
 		{
 			return null;
@@ -1368,21 +1507,21 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 15 but received " + type);
 		}
 
-		byte[] data = new byte[8];
+		final byte[] data = new byte[8];
 		read(data, in);
 		return bytesToLong(data);
 	}
 
-	public static Long readLongClassKnown(InputStream in) throws Exception
+	public static Long readLongClassKnown(final InputStream in) throws Exception
 	{
-		byte[] data = new byte[8];
+		final byte[] data = new byte[8];
 		read(data, in);
 		return bytesToLong(data);
 	}
 
-	public static Object readObject(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static Object readObject(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		switch (type)
 		{
 			case 0:
@@ -1407,10 +1546,10 @@ public class OperatorUtils
 		}
 	}
 
-	public static Object readReference(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static Object readReference(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		long id = readLong(in);
-		Object obj = prev.get(id);
+		final long id = readLong(in);
+		final Object obj = prev.get(id);
 		if (obj == null)
 		{
 			throw new Exception("During deserialization we had an unresolved reference to ID = " + id);
@@ -1419,19 +1558,24 @@ public class OperatorUtils
 		return obj;
 	}
 
-	public static short readShort(InputStream in) throws Exception
+	public static int readShort(final InputStream in) throws Exception
 	{
-		byte[] data = new byte[2];
+		final byte[] data = new byte[4];
 		read(data, in);
-		return bytesToShort(data);
+		return bytesToInt(data);
 	}
 
-	public static String readString(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static String readString(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
+		final int type = getType(in);
 		if (type == 0)
 		{
 			return (String)readReference(in, prev);
+		}
+
+		if (type == 86)
+		{
+			return null;
 		}
 
 		if (type != 3)
@@ -1439,37 +1583,32 @@ public class OperatorUtils
 			throw new Exception("Corrupted stream. Expected type 3 but received " + type);
 		}
 
-		long id = readLong(in);
-		if (id == -1)
-		{
-			return null;
-		}
-
-		int size = readShort(in);
-		byte[] data = new byte[size];
+		final long id = readLong(in);
+		final int size = readShort(in);
+		final byte[] data = new byte[size];
 		read(data, in);
-		String retval = new String(data, StandardCharsets.UTF_8);
+		final String retval = new String(data, StandardCharsets.UTF_8);
 		prev.put(id, retval);
 		return retval;
 	}
 
-	public static String readStringKnown(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static String readStringKnown(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		long id = readLong(in);
+		final long id = readLong(in);
 		if (id == -1)
 		{
 			return null;
 		}
 
-		int size = readShort(in);
-		byte[] data = new byte[size];
+		final int size = readShort(in);
+		final byte[] data = new byte[size];
 		read(data, in);
-		String retval = new String(data, StandardCharsets.UTF_8);
+		final String retval = new String(data, StandardCharsets.UTF_8);
 		prev.put(id, retval);
 		return retval;
 	}
 
-	public static void serializeADS(ArrayDeque<String> als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeADS(final ArrayDeque<String> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1478,7 +1617,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(als);
+		final Long id = prev.get(als);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -1488,7 +1627,7 @@ public class OperatorUtils
 		writeType(29, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
-		Iterator<String> iter = als.descendingIterator();
+		final Iterator<String> iter = als.descendingIterator();
 		while (iter.hasNext())
 		{
 			writeString(iter.next(), out, prev);
@@ -1497,7 +1636,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALAgOp(ArrayList<AggregateOperator> als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALAgOp(final ArrayList<AggregateOperator> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1506,7 +1645,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(als);
+		final Long id = prev.get(als);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -1516,7 +1655,7 @@ public class OperatorUtils
 		writeType(34, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
-		for (AggregateOperator entry : als)
+		for (final AggregateOperator entry : als)
 		{
 			entry.serialize(out, prev);
 		}
@@ -1524,16 +1663,43 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALALF(ArrayList<ArrayList<Filter>> als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALALB(final ArrayList<ArrayList<Boolean>> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
-			writeType(7, out);
+			writeType(86, out);
 			writeLong(-1, out);
 			return;
 		}
 
-		Long id = prev.get(als);
+		final Long id = prev.get(als);
+		if (id != null)
+		{
+			serializeReference(id, out);
+			return;
+		}
+
+		writeType(86, out);
+		prev.put(als, writeID(out));
+		writeShort(als.size(), out);
+		for (final ArrayList<Boolean> entry : als)
+		{
+			serializeALB(entry, out, prev);
+		}
+
+		return;
+	}
+
+	public static void serializeALALF(final ArrayList<ArrayList<Filter>> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		if (als == null)
+		{
+			writeType(67, out);
+			writeLong(-1, out);
+			return;
+		}
+
+		final Long id = prev.get(als);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -1543,7 +1709,7 @@ public class OperatorUtils
 		writeType(67, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
-		for (ArrayList<Filter> entry : als)
+		for (final ArrayList<Filter> entry : als)
 		{
 			serializeALF(entry, out, prev);
 		}
@@ -1551,7 +1717,61 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALB(ArrayList<Boolean> als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALALO(final ArrayList<ArrayList<Object>> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		if (als == null)
+		{
+			writeType(84, out);
+			writeLong(-1, out);
+			return;
+		}
+
+		final Long id = prev.get(als);
+		if (id != null)
+		{
+			serializeReference(id, out);
+			return;
+		}
+
+		writeType(84, out);
+		prev.put(als, writeID(out));
+		writeShort(als.size(), out);
+		for (final ArrayList<Object> entry : als)
+		{
+			serializeALO(entry, out, prev);
+		}
+
+		return;
+	}
+
+	public static void serializeALALS(final ArrayList<ArrayList<String>> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		if (als == null)
+		{
+			writeType(85, out);
+			writeLong(-1, out);
+			return;
+		}
+
+		final Long id = prev.get(als);
+		if (id != null)
+		{
+			serializeReference(id, out);
+			return;
+		}
+
+		writeType(85, out);
+		prev.put(als, writeID(out));
+		writeShort(als.size(), out);
+		for (final ArrayList<String> entry : als)
+		{
+			serializeALS(entry, out, prev);
+		}
+
+		return;
+	}
+
+	public static void serializeALB(final ArrayList<Boolean> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1560,7 +1780,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(als);
+		final Long id = prev.get(als);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -1570,7 +1790,7 @@ public class OperatorUtils
 		writeType(45, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
-		for (Boolean entry : als)
+		for (final Boolean entry : als)
 		{
 			writeBool(entry, out);
 		}
@@ -1578,7 +1798,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALF(ArrayList<Filter> als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALF(final ArrayList<Filter> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1587,7 +1807,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(als);
+		final Long id = prev.get(als);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -1597,7 +1817,7 @@ public class OperatorUtils
 		writeType(42, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
-		for (Filter entry : als)
+		for (final Filter entry : als)
 		{
 			entry.serialize(out, prev);
 		}
@@ -1605,7 +1825,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALHSHM(ArrayList<HashSet<HashMap<Filter, Filter>>> als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALHSHM(final ArrayList<HashSet<HashMap<Filter, Filter>>> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1614,7 +1834,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(als);
+		final Long id = prev.get(als);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -1624,7 +1844,7 @@ public class OperatorUtils
 		writeType(11, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
-		for (HashSet<HashMap<Filter, Filter>> entry : als)
+		for (final HashSet<HashMap<Filter, Filter>> entry : als)
 		{
 			serializeHSHM(entry, out, prev);
 		}
@@ -1632,7 +1852,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALI(ArrayList<Integer> als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALI(final ArrayList<Integer> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1641,7 +1861,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(als);
+		final Long id = prev.get(als);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -1651,7 +1871,7 @@ public class OperatorUtils
 		writeType(7, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
-		for (Integer entry : als)
+		for (final Integer entry : als)
 		{
 			writeInt(entry, out);
 		}
@@ -1659,7 +1879,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALIndx(ArrayList<Index> als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALIndx(final ArrayList<Index> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1668,7 +1888,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(als);
+		final Long id = prev.get(als);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -1678,7 +1898,7 @@ public class OperatorUtils
 		writeType(10, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
-		for (Index entry : als)
+		for (final Index entry : als)
 		{
 			entry.serialize(out, prev);
 		}
@@ -1686,7 +1906,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALO(ArrayList<Object> als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALO(final ArrayList<Object> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1695,7 +1915,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(als);
+		final Long id = prev.get(als);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -1705,7 +1925,7 @@ public class OperatorUtils
 		writeType(12, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
-		for (Object entry : als)
+		for (final Object entry : als)
 		{
 			if (entry instanceof String)
 			{
@@ -1736,7 +1956,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALOp(ArrayList<Operator> als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALOp(final ArrayList<Operator> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1745,7 +1965,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(als);
+		final Long id = prev.get(als);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -1755,7 +1975,7 @@ public class OperatorUtils
 		writeType(32, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
-		for (Operator entry : als)
+		for (final Operator entry : als)
 		{
 			entry.serialize(out, prev);
 		}
@@ -1763,7 +1983,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALOp(ArrayList<Operator> als, OutputStream out, IdentityHashMap<Object, Long> prev, boolean flag) throws Exception
+	public static void serializeALOp(final ArrayList<Operator> als, final OutputStream out, final IdentityHashMap<Object, Long> prev, final boolean flag) throws Exception
 	{
 		if (als == null)
 		{
@@ -1772,7 +1992,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(als);
+		final Long id = prev.get(als);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -1782,7 +2002,7 @@ public class OperatorUtils
 		writeType(32, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
-		for (Operator entry : als)
+		for (final Operator entry : als)
 		{
 			((NetworkSendOperator)entry).serialize(out, prev, false);
 		}
@@ -1790,7 +2010,34 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALS(ArrayList<String> als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALRAIK(final ArrayList<RIDAndIndexKeys> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		if (als == null)
+		{
+			writeType(87, out);
+			writeLong(-1, out);
+			return;
+		}
+
+		final Long id = prev.get(als);
+		if (id != null)
+		{
+			serializeReference(id, out);
+			return;
+		}
+
+		writeType(87, out);
+		prev.put(als, writeID(out));
+		writeShort(als.size(), out);
+		for (final RIDAndIndexKeys entry : als)
+		{
+			entry.serialize(out, prev);
+		}
+
+		return;
+	}
+
+	public static void serializeALS(final ArrayList<String> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1799,7 +2046,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(als);
+		final Long id = prev.get(als);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -1809,7 +2056,7 @@ public class OperatorUtils
 		writeType(6, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
-		for (String entry : als)
+		for (final String entry : als)
 		{
 			writeString(entry, out, prev);
 		}
@@ -1817,7 +2064,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeBoolArray(boolean[] als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeBoolArray(final boolean[] als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1826,7 +2073,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(als);
+		final Long id = prev.get(als);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -1836,7 +2083,7 @@ public class OperatorUtils
 		writeType(83, out);
 		prev.put(als, writeID(out));
 		writeShort(als.length, out);
-		for (boolean entry : als)
+		for (final boolean entry : als)
 		{
 			writeBool(entry, out);
 		}
@@ -1844,7 +2091,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeCNF(CNFFilter d, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeCNF(final CNFFilter d, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (d == null)
 		{
@@ -1855,7 +2102,7 @@ public class OperatorUtils
 		d.serialize(out, prev);
 	}
 
-	public static void serializeFilter(Filter als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeFilter(final Filter als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1866,7 +2113,7 @@ public class OperatorUtils
 		als.serialize(out, prev);
 	}
 
-	public static void serializeFST(FastStringTokenizer d, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeFST(final FastStringTokenizer d, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (d == null)
 		{
@@ -1877,7 +2124,7 @@ public class OperatorUtils
 		d.serialize(out, prev);
 	}
 
-	public static void serializeHMF(HashMap<Filter, Filter> hmf, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeHMF(final HashMap<Filter, Filter> hmf, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (hmf == null)
 		{
@@ -1886,7 +2133,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(hmf);
+		final Long id = prev.get(hmf);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -1896,7 +2143,7 @@ public class OperatorUtils
 		writeType(9, out);
 		prev.put(hmf, writeID(out));
 		writeShort(hmf.size(), out);
-		for (Filter entry : hmf.keySet())
+		for (final Filter entry : hmf.keySet())
 		{
 			entry.serialize(out, prev);
 		}
@@ -1904,7 +2151,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeHMIntOp(HashMap<Integer, Operator> hm, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeHMIntOp(final HashMap<Integer, Operator> hm, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (hm == null)
 		{
@@ -1913,7 +2160,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(hm);
+		final Long id = prev.get(hm);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -1923,10 +2170,10 @@ public class OperatorUtils
 		writeType(80, out);
 		prev.put(hm, writeID(out));
 		writeShort(hm.size(), out);
-		for (Map.Entry<Integer, Operator> entry : hm.entrySet())
+		for (final Map.Entry<Integer, Operator> entry : hm.entrySet())
 		{
-			Integer key = entry.getKey();
-			Operator value = entry.getValue();
+			final Integer key = entry.getKey();
+			final Operator value = entry.getValue();
 
 			writeInt(key, out);
 			value.serialize(out, prev);
@@ -1935,7 +2182,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeHMOpCNF(HashMap<Operator, CNFFilter> hm, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeHMOpCNF(final HashMap<Operator, CNFFilter> hm, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (hm == null)
 		{
@@ -1944,7 +2191,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(hm);
+		final Long id = prev.get(hm);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -1954,10 +2201,10 @@ public class OperatorUtils
 		writeType(79, out);
 		prev.put(hm, writeID(out));
 		writeShort(hm.size(), out);
-		for (Map.Entry<Operator, CNFFilter> entry : hm.entrySet())
+		for (final Map.Entry<Operator, CNFFilter> entry : hm.entrySet())
 		{
-			Operator key = entry.getKey();
-			CNFFilter value = entry.getValue();
+			final Operator key = entry.getKey();
+			final CNFFilter value = entry.getValue();
 
 			key.serialize(out, prev);
 			value.serialize(out, prev);
@@ -1966,7 +2213,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeHSHM(HashSet<HashMap<Filter, Filter>> hshm, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeHSHM(final HashSet<HashMap<Filter, Filter>> hshm, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (hshm == null)
 		{
@@ -1975,7 +2222,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(hshm);
+		final Long id = prev.get(hshm);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -1985,7 +2232,7 @@ public class OperatorUtils
 		writeType(8, out);
 		prev.put(hshm, writeID(out));
 		writeShort(hshm.size(), out);
-		for (HashMap<Filter, Filter> entry : hshm)
+		for (final HashMap<Filter, Filter> entry : hshm)
 		{
 			serializeHMF(entry, out, prev);
 		}
@@ -1993,7 +2240,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeHSO(HashSet<Object> als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeHSO(final HashSet<Object> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -2002,7 +2249,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(als);
+		final Long id = prev.get(als);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -2012,7 +2259,7 @@ public class OperatorUtils
 		writeType(43, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
-		for (Object entry : als)
+		for (final Object entry : als)
 		{
 			if (entry instanceof String)
 			{
@@ -2043,7 +2290,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeHSS(HashSet<String> als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeHSS(final HashSet<String> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -2052,7 +2299,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(als);
+		final Long id = prev.get(als);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -2062,7 +2309,7 @@ public class OperatorUtils
 		writeType(68, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
-		for (String entry : als)
+		for (final String entry : als)
 		{
 			writeString(entry, out, prev);
 		}
@@ -2070,7 +2317,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeIndex(Index i, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeIndex(final Index i, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (i == null)
 		{
@@ -2083,7 +2330,7 @@ public class OperatorUtils
 		}
 	}
 
-	public static void serializeIntArray(int[] als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeIntArray(final int[] als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -2092,7 +2339,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(als);
+		final Long id = prev.get(als);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -2102,7 +2349,7 @@ public class OperatorUtils
 		writeType(46, out);
 		prev.put(als, writeID(out));
 		writeShort(als.length, out);
-		for (int entry : als)
+		for (final int entry : als)
 		{
 			writeInt(entry, out);
 		}
@@ -2110,7 +2357,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeOperator(Operator op, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeOperator(final Operator op, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (op == null)
 		{
@@ -2123,13 +2370,13 @@ public class OperatorUtils
 		}
 	}
 
-	public static void serializeReference(long id, OutputStream out) throws Exception
+	public static void serializeReference(final long id, final OutputStream out) throws Exception
 	{
 		writeType(0, out);
 		writeLong(id, out);
 	}
 
-	public static void serializeStringArray(String[] als, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeStringArray(final String[] als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -2138,7 +2385,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(als);
+		final Long id = prev.get(als);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -2148,7 +2395,7 @@ public class OperatorUtils
 		writeType(66, out);
 		prev.put(als, writeID(out));
 		writeShort(als.length, out);
-		for (String entry : als)
+		for (final String entry : als)
 		{
 			writeString(entry, out, prev);
 		}
@@ -2156,7 +2403,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeStringHM(HashMap<String, String> hm, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeStringHM(final HashMap<String, String> hm, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (hm == null)
 		{
@@ -2165,7 +2412,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(hm);
+		final Long id = prev.get(hm);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -2176,10 +2423,10 @@ public class OperatorUtils
 		prev.put(hm, writeID(out));
 
 		writeShort(hm.size(), out);
-		for (Map.Entry<String, String> entry : hm.entrySet())
+		for (final Map.Entry<String, String> entry : hm.entrySet())
 		{
-			String key = entry.getKey();
-			String value = entry.getValue();
+			final String key = entry.getKey();
+			final String value = entry.getValue();
 
 			writeString(key, out, prev);
 			writeString(value, out, prev);
@@ -2188,7 +2435,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeStringIntHM(HashMap<String, Integer> hm, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeStringIntHM(final HashMap<String, Integer> hm, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (hm == null)
 		{
@@ -2197,7 +2444,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(hm);
+		final Long id = prev.get(hm);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -2207,10 +2454,10 @@ public class OperatorUtils
 		writeType(4, out);
 		prev.put(hm, writeID(out));
 		writeShort(hm.size(), out);
-		for (Map.Entry<String, Integer> entry : hm.entrySet())
+		for (final Map.Entry<String, Integer> entry : hm.entrySet())
 		{
-			String key = entry.getKey();
-			int value = entry.getValue();
+			final String key = entry.getKey();
+			final int value = entry.getValue();
 
 			writeString(key, out, prev);
 			writeInt(value, out);
@@ -2219,7 +2466,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeTM(TreeMap<Integer, String> hm, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeTM(final TreeMap<Integer, String> hm, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (hm == null)
 		{
@@ -2228,7 +2475,7 @@ public class OperatorUtils
 			return;
 		}
 
-		Long id = prev.get(hm);
+		final Long id = prev.get(hm);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -2238,10 +2485,10 @@ public class OperatorUtils
 		writeType(5, out);
 		prev.put(hm, writeID(out));
 		writeShort(hm.size(), out);
-		for (Map.Entry<Integer, String> entry : hm.entrySet())
+		for (final Map.Entry<Integer, String> entry : hm.entrySet())
 		{
-			String value = entry.getValue();
-			int key = entry.getKey();
+			final String value = entry.getValue();
+			final int key = entry.getKey();
 
 			writeInt(key, out);
 			writeString(value, out, prev);
@@ -2250,7 +2497,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void writeBool(boolean b, OutputStream out) throws Exception
+	public static void writeBool(final boolean b, final OutputStream out) throws Exception
 	{
 		if (b)
 		{
@@ -2262,7 +2509,7 @@ public class OperatorUtils
 		}
 	}
 
-	public static void writeBoolClass(Boolean d, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void writeBoolClass(final Boolean d, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (d == null)
 		{
@@ -2275,7 +2522,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void writeDate(MyDate d, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void writeDate(final MyDate d, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (d == null)
 		{
@@ -2288,7 +2535,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void writeDoubleClass(Double d, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void writeDoubleClass(final Double d, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (d == null)
 		{
@@ -2301,19 +2548,19 @@ public class OperatorUtils
 		return;
 	}
 
-	public static long writeID(OutputStream out) throws Exception
+	public static long writeID(final OutputStream out) throws Exception
 	{
-		long retval = id.incrementAndGet();
+		final long retval = id.incrementAndGet();
 		writeLong(retval, out);
 		return retval;
 	}
 
-	public static void writeInt(int i, OutputStream out) throws Exception
+	public static void writeInt(final int i, final OutputStream out) throws Exception
 	{
 		out.write(intToBytes(i));
 	}
 
-	public static void writeIntClass(Integer d, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void writeIntClass(final Integer d, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (d == null)
 		{
@@ -2326,12 +2573,12 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void writeLong(long l, OutputStream out) throws Exception
+	public static void writeLong(final long l, final OutputStream out) throws Exception
 	{
 		out.write(longToBytes(l));
 	}
 
-	public static void writeLongClass(Long d, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void writeLongClass(final Long d, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (d == null)
 		{
@@ -2344,7 +2591,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void writeObject(Object d, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void writeObject(final Object d, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (d instanceof String)
 		{
@@ -2374,21 +2621,22 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void writeShort(int i, OutputStream out) throws Exception
+	public static void writeShort(final int i, final OutputStream out) throws Exception // now
+																						// writes
+																						// int
 	{
-		out.write(shortToBytes((short)i));
+		out.write(intToBytes(i));
 	}
 
-	public static void writeString(String s, OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public static void writeString(final String s, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (s == null)
 		{
-			writeType(3, out);
-			writeLong(-1, out);
+			writeType(86, out);
 			return;
 		}
 
-		Long id = prev.get(s);
+		final Long id = prev.get(s);
 		if (id != null)
 		{
 			serializeReference(id, out);
@@ -2397,18 +2645,18 @@ public class OperatorUtils
 
 		writeType(3, out);
 		prev.put(s, writeID(out));
-		byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
+		final byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
 		writeShort(bytes.length, out);
 		out.write(bytes);
 		return;
 	}
 
-	public static void writeType(int type, OutputStream out) throws Exception
+	public static void writeType(final int type, final OutputStream out) throws Exception
 	{
 		out.write(type);
 	}
 
-	private static byte[] intToBytes(int val)
+	private static byte[] intToBytes(final int val)
 	{
 		final byte[] buff = new byte[4];
 		buff[0] = (byte)(val >> 24);
@@ -2418,7 +2666,7 @@ public class OperatorUtils
 		return buff;
 	}
 
-	private static byte[] longToBytes(long val)
+	private static byte[] longToBytes(final long val)
 	{
 		final byte[] buff = new byte[8];
 		buff[0] = (byte)(val >> 56);
@@ -2432,11 +2680,11 @@ public class OperatorUtils
 		return buff;
 	}
 
-	private static byte[] shortToBytes(int val)
-	{
-		final byte[] buff = new byte[2];
-		buff[0] = (byte)((val & 0x0000FF00) >> 8);
-		buff[1] = (byte)((val & 0x000000FF));
-		return buff;
-	}
+	// private static byte[] shortToBytes(int val)
+	// {
+	// final byte[] buff = new byte[2];
+	// buff[0] = (byte)((val & 0x0000FF00) >> 8);
+	// buff[1] = (byte)((val & 0x000000FF));
+	// return buff;
+	// }
 }

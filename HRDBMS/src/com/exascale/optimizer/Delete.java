@@ -5,7 +5,7 @@ public class Delete extends SQLStatement
 	private final TableName table;
 	private final Where where;
 
-	public Delete(TableName table, Where where)
+	public Delete(final TableName table, final Where where)
 	{
 		this.table = table;
 		this.where = where;

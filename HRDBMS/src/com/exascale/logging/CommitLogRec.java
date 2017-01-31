@@ -4,7 +4,7 @@ import java.nio.ByteBuffer;
 
 public class CommitLogRec extends LogRec
 {
-	public CommitLogRec(long txnum)
+	public CommitLogRec(final long txnum)
 	{
 		super(LogRec.COMMIT, txnum, ByteBuffer.allocate(28));
 	}

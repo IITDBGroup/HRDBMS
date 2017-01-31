@@ -23,15 +23,16 @@ public class TempThread extends HRDBMSThread
 			FACTOR = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_concurrent_writers_per_temp_disk"));
 			if (HRDBMSWorker.getHParms().getProperty("use_direct_buffers_for_flush").equals("true"))
 			{
-				int total = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("num_direct"));
+				final int directSize = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("direct_buffer_size"));
+				final int total = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("num_direct"));
 				int i = 0;
 				while (i < total)
 				{
 					try
 					{
-						cache.put(ByteBuffer.allocateDirect(8 * 1024 * 1024));
+						cache.put(ByteBuffer.allocateDirect(directSize));
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						throw e;
 					}
@@ -44,7 +45,7 @@ public class TempThread extends HRDBMSThread
 				}
 			}
 		}
-		catch (Throwable f)
+		catch (final Throwable f)
 		{
 			HRDBMSWorker.logger.debug("", f);
 			System.exit(1);
@@ -55,24 +56,24 @@ public class TempThread extends HRDBMSThread
 
 	private final long txnum;
 
-	public TempThread(HRDBMSThread thread, long txnum)
+	public TempThread(final HRDBMSThread thread, final long txnum)
 	{
 		this.thread = thread;
 		this.txnum = txnum;
 	}
 
-	public static void freeDirect(ByteBuffer bb)
+	public static void freeDirect(final ByteBuffer bb)
 	{
 		if (!cache.offer(bb))
 		{
 			try
 			{
-				Field cleanerField = bb.getClass().getDeclaredField("cleaner");
+				final Field cleanerField = bb.getClass().getDeclaredField("cleaner");
 				cleanerField.setAccessible(true);
-				sun.misc.Cleaner cleaner = (sun.misc.Cleaner)cleanerField.get(bb);
+				final sun.misc.Cleaner cleaner = (sun.misc.Cleaner)cleanerField.get(bb);
 				cleaner.clean();
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 			}
 		}
@@ -80,7 +81,7 @@ public class TempThread extends HRDBMSThread
 
 	public static ByteBuffer getDirect()
 	{
-		ByteBuffer retval = cache.poll();
+		final ByteBuffer retval = cache.poll();
 		if (retval == null)
 		{
 			return retval;
@@ -97,7 +98,7 @@ public class TempThread extends HRDBMSThread
 		HRDBMSWorker.logger.debug("TempThread initialize");
 	}
 
-	public static void start(HRDBMSThread thread, long txnum)
+	public static void start(final HRDBMSThread thread, final long txnum)
 	{
 		new TempThread(thread, txnum).run();
 	}
@@ -124,23 +125,23 @@ public class TempThread extends HRDBMSThread
 					return;
 				}
 
-				for (Entry entry : threads.entrySet())
+				for (final Entry entry : threads.entrySet())
 				{
-					ArrayList<HRDBMSThread> al2 = (ArrayList<HRDBMSThread>)entry.getValue();
+					final ArrayList<HRDBMSThread> al2 = (ArrayList<HRDBMSThread>)entry.getValue();
 
 					if (al2 != al)
 					{
 						int i = al2.size() - 1;
 						while (i >= 0)
 						{
-							HRDBMSThread t = al2.get(i);
+							final HRDBMSThread t = al2.get(i);
 							if (t.isDone())
 							{
 								try
 								{
 									t.join();
 								}
-								catch (Exception e)
+								catch (final Exception e)
 								{
 								}
 
@@ -162,7 +163,7 @@ public class TempThread extends HRDBMSThread
 		}
 	}
 
-	private boolean tryHandleNow(ArrayList<HRDBMSThread> al)
+	private boolean tryHandleNow(final ArrayList<HRDBMSThread> al)
 	{
 		if (al.size() < (ResourceManager.TEMP_DIRS.size() * FACTOR))
 		{
@@ -175,14 +176,14 @@ public class TempThread extends HRDBMSThread
 			int i = al.size() - 1;
 			while (i >= 0)
 			{
-				HRDBMSThread t = al.get(i);
+				final HRDBMSThread t = al.get(i);
 				if (t.isDone())
 				{
 					try
 					{
 						t.join();
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 					}
 

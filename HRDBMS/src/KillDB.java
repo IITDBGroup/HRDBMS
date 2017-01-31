@@ -6,7 +6,7 @@ import java.util.StringTokenizer;
 
 public class KillDB
 {
-	public static void main(String[] args)
+	public static void main(final String[] args)
 	{
 		try
 		{
@@ -28,7 +28,7 @@ public class KillDB
 					System.exit(1);
 				}
 
-				String cmd = "pkill java";
+				final String cmd = "pkill -9 java";
 
 				// if (type.equals("C"))
 				{
@@ -79,6 +79,7 @@ public class KillDB
 						// session.disconnect();
 						// HRDBMSWorker.logger.info("Command: " + "ssh -n -f " +
 						// host + " \"sh -c '" + command1 + "'\"");
+						// TODO set no host key check for easy docker deployment... make optional?
 						Runtime.getRuntime().exec(new String[] { "bash", "-c", "ssh -o StrictHostKeyChecking=no -n -f " + host + "  \"sh -c '" + cmd + "'\"" });
 					}
 					catch (final Exception e)
@@ -89,6 +90,7 @@ public class KillDB
 
 				line = in.readLine();
 			}
+			in.close();
 		}
 		catch (final Exception e)
 		{

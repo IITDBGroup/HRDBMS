@@ -32,7 +32,7 @@ public final class DateMathOperator implements Operator, Serializable
 			f.setAccessible(true);
 			unsafe = (sun.misc.Unsafe)f.get(null);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			unsafe = null;
 		}
@@ -56,7 +56,7 @@ public final class DateMathOperator implements Operator, Serializable
 	private transient AtomicLong received;
 	private transient volatile boolean demReceived;
 
-	public DateMathOperator(String col, int type, int offset, String name, MetaData meta)
+	public DateMathOperator(final String col, final int type, final int offset, final String name, final MetaData meta)
 	{
 		this.col = col;
 		this.type = type;
@@ -66,9 +66,9 @@ public final class DateMathOperator implements Operator, Serializable
 		received = new AtomicLong(0);
 	}
 
-	public static DateMathOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static DateMathOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		DateMathOperator value = (DateMathOperator)unsafe.allocateInstance(DateMathOperator.class);
+		final DateMathOperator value = (DateMathOperator)unsafe.allocateInstance(DateMathOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.child = OperatorUtils.deserializeOperator(in, prev);
 		value.parent = OperatorUtils.deserializeOperator(in, prev);
@@ -87,7 +87,7 @@ public final class DateMathOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void add(Operator op) throws Exception
+	public void add(final Operator op) throws Exception
 	{
 		if (child == null)
 		{
@@ -111,7 +111,7 @@ public final class DateMathOperator implements Operator, Serializable
 						col = col.substring(1);
 						for (String col3 : cols2Pos.keySet())
 						{
-							String orig = col3;
+							final String orig = col3;
 							if (col3.contains("."))
 							{
 								col3 = col3.substring(col3.indexOf('.') + 1);
@@ -156,7 +156,7 @@ public final class DateMathOperator implements Operator, Serializable
 			retval.node = node;
 			return retval;
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			return null;
 		}
@@ -221,7 +221,7 @@ public final class DateMathOperator implements Operator, Serializable
 	}
 
 	@Override
-	public Object next(Operator op) throws Exception
+	public Object next(final Operator op) throws Exception
 	{
 		final Object o = child.next(this);
 		if (o instanceof DataEndMarker)
@@ -240,18 +240,18 @@ public final class DateMathOperator implements Operator, Serializable
 		}
 
 		final ArrayList<Object> row = (ArrayList<Object>)o;
-		MyDate mDate = (MyDate)row.get(colPos);
+		final MyDate mDate = (MyDate)row.get(colPos);
 		if (type == SQLParser.TYPE_DAYS)
 		{
-			Date date = sdf.parse(msdf.format(mDate));
-			GregorianCalendar cal = new GregorianCalendar();
+			final Date date = sdf.parse(msdf.format(mDate));
+			final GregorianCalendar cal = new GregorianCalendar();
 			cal.setTime(date);
 			cal.add(Calendar.DATE, offset);
 			row.add(DateParser.parse(sdf.format(cal.getTime())));
 		}
 		else
 		{
-			Exception e = new Exception("DateMathOperator doesn't support anything other than TYPE_DAYS");
+			final Exception e = new Exception("DateMathOperator doesn't support anything other than TYPE_DAYS");
 			HRDBMSWorker.logger.error("DateMathOperator doesn't support anything other than TYPE_DAYS", e);
 			throw e;
 		}
@@ -259,7 +259,7 @@ public final class DateMathOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void nextAll(Operator op) throws Exception
+	public void nextAll(final Operator op) throws Exception
 	{
 		child.nextAll(op);
 		Object o = next(op);
@@ -288,7 +288,7 @@ public final class DateMathOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void registerParent(Operator op) throws Exception
+	public void registerParent(final Operator op) throws Exception
 	{
 		if (parent == null)
 		{
@@ -301,7 +301,7 @@ public final class DateMathOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeChild(Operator op)
+	public void removeChild(final Operator op)
 	{
 		if (op == child)
 		{
@@ -311,7 +311,7 @@ public final class DateMathOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 		parent = null;
 	}
@@ -328,9 +328,9 @@ public final class DateMathOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -353,18 +353,18 @@ public final class DateMathOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void setChildPos(int pos)
+	public void setChildPos(final int pos)
 	{
 	}
 
 	@Override
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 		this.node = node;
 	}
 
 	@Override
-	public void setPlan(Plan plan)
+	public void setPlan(final Plan plan)
 	{
 	}
 

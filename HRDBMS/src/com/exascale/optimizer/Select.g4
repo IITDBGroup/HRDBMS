@@ -1,12 +1,21 @@
 grammar Select;
 
+// Note that the select rule is a bit of a misnomer. In addition to select queries, it defines all other valid statements.
 select : (insert EOF) | (update EOF) | (delete EOF) | (createExternalTable EOF) | (createTable EOF) | (createIndex EOF) | (createView EOF) | (dropTable EOF) | (dropIndex EOF) | (dropView EOF) | (load EOF) | (runstats EOF) | ((('WITH' commonTableExpression (',' commonTableExpression)*)? fullSelect) EOF);
+
 runstats : 'RUNSTATS' 'ON' tableName ;
-insert : 'INSERT' 'INTO' tableName (('FROM'? fullSelect) | ('VALUES' '(' expression (',' expression)* ')')) ;
-update : 'UPDATE' tableName 'SET' (columnName | colList) EQUALS expression whereClause? ;
+
+insert : 'INSERT' 'INTO' tableName (('FROM'? fullSelect) | ('VALUES' valuesList (',' valuesList)*)) ;
+valuesList : '(' expression (',' expression)* ')' ;
+
+update : 'UPDATE' tableName setClause+ ;
+setClause : 'SET' (columnName | colList) EQUALS expression whereClause? ;
+
 delete : 'DELETE' 'FROM' tableName whereClause? ;
+
 createTable : 'CREATE' COLUMN? 'TABLE' tableName '(' colDef (',' colDef)* (',' primaryKey)? ')' colOrder? organization? groupExp? nodeExp deviceExp ;
 organization : ORGANIZATION '(' INTEGER (',' INTEGER)* ')' ;
+
 createExternalTable : 'CREATE' 'EXTERNAL' 'TABLE' tableName '(' colDef (',' colDef)* ')' (generalExtTableSpec | javaClassExtTableSpec) ;
 generalExtTableSpec: 'IMPORT' 'FROM' sourceList 'FIELDS' 'DELIMITED' 'BY' anything 'ROWS' 'DELIMITED' 'BY' anything 'FILE' 'PATH' FILEPATHIDENTIFIER ;
 javaClassExtTableSpec: 'USING' javaClassName 'WITH' 'PARAMETERS' '(' keyValueList ')' ;
@@ -14,6 +23,7 @@ javaClassName: JAVACLASSNAMEIDENTIFIER ('.' JAVACLASSNAMEIDENTIFIER)* '.java' ;
 keyValueList: anything ':' anything (',' anything ':' anything)*;
 anything : . ;
 sourceList : 'LOCAL' | 'HDFS' | 'S3' ;
+
 colOrder : COLORDER '(' INTEGER (',' INTEGER)* ')' ;
 groupExp : NONE | realGroupExp ;
 realGroupExp :  '{' groupDef ('|' groupDef)* '}' (',' (hashExp | rangeType))? ;
@@ -27,11 +37,13 @@ columnSet : '{' columnName ('|' columnName)* '}' ;
 rangeType : RANGE ',' columnName ',' rangeSet ;
 rangeSet : '{' rangeExp ('|' rangeExp)* '}' ;
 deviceExp : (ALL | integerSet) (',' (hashExp | rangeExp))? ; 
+
 dropTable : 'DROP' 'TABLE' tableName ;
 createView : 'CREATE' 'VIEW' tableName 'AS' fullSelect ;
 dropView : 'DROP' 'VIEW' tableName ;
 createIndex : 'CREATE' UNIQUE? 'INDEX' tableName 'ON' tableName '(' indexDef (',' indexDef)* ')' ;
 dropIndex : 'DROP' 'INDEX' tableName ;
+
 load : 'LOAD' (REPLACE | RESUME) 'INTO' tableName ('DELIMITER' any)? 'FROM' remainder ;
 any : . ;
 remainder : .* EOF ;
@@ -47,6 +59,8 @@ long2 : 'BIGINT' ;
 date2 : DATE ;
 float2 : 'FLOAT' | 'DOUBLE' ;
 colList : '(' columnName (',' columnName)* ')' ;
+
+// Define the query language
 commonTableExpression : IDENTIFIER ('(' columnName (',' columnName)* ')')? 'AS' '(' fullSelect ')' ;
 fullSelect : (subSelect	| '(' fullSelect ')') (connectedSelect)* (orderBy)? (fetchFirst)? ;
 connectedSelect : TABLECOMBINATION (subSelect | '(' fullSelect ')') ;

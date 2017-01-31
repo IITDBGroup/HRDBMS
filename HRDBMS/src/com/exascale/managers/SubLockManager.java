@@ -9,6 +9,7 @@ import com.exascale.filesystem.Block;
 
 public class SubLockManager
 {
+	private static long TIMEOUT = Long.parseLong(HRDBMSWorker.getHParms().getProperty("lock_timeout_ms"));
 	public HashMap<Block, HashSet<Long>> sBlocksToTXs = new HashMap<Block, HashSet<Long>>();
 	private final HashMap<Long, HashSet<Block>> sTXsToBlocks = new HashMap<Long, HashSet<Block>>();
 	public HashMap<Block, Long> xBlocksToTXs = new HashMap<Block, Long>();
@@ -23,7 +24,7 @@ public class SubLockManager
 	// Long.parseLong(HRDBMSWorker.getHParms().getProperty("deadlock_timeout_secs"))
 	// * 1000;
 
-	public void release(long txnum)
+	public void release(final long txnum)
 	{
 		lock.lock();
 		try
@@ -32,15 +33,15 @@ public class SubLockManager
 
 			if (array != null)
 			{
-				for (Block b : array)
+				for (final Block b : array)
 				{
 					xBlocksToTXs.remove(b);
-					ArrayList<Thread> threads = waitList.get(b);
+					final ArrayList<Thread> threads = waitList.get(b);
 					if (threads != null)
 					{
-						Thread thread = threads.remove(0);
+						final Thread thread = threads.remove(0);
 						inverseWaitList.remove(thread);
-						Long tx = threads2Txs.remove(thread);
+						final Long tx = threads2Txs.remove(thread);
 						txs2Threads.remove(tx);
 						if (threads.size() == 0)
 						{
@@ -58,19 +59,19 @@ public class SubLockManager
 
 			if (array != null)
 			{
-				for (Block b : array)
+				for (final Block b : array)
 				{
-					HashSet<Long> array2 = sBlocksToTXs.get(b);
+					final HashSet<Long> array2 = sBlocksToTXs.get(b);
 					array2.remove(txnum);
 					if (array2.size() == 0)
 					{
 						sBlocksToTXs.remove(b);
-						ArrayList<Thread> threads = waitList.get(b);
+						final ArrayList<Thread> threads = waitList.get(b);
 						if (threads != null)
 						{
-							Thread thread = threads.remove(0);
+							final Thread thread = threads.remove(0);
 							inverseWaitList.remove(thread);
-							Long tx = threads2Txs.remove(thread);
+							final Long tx = threads2Txs.remove(thread);
 							txs2Threads.remove(tx);
 							if (threads.size() == 0)
 							{
@@ -85,7 +86,7 @@ public class SubLockManager
 				}
 			}
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			lock.unlock();
 			return;
@@ -94,11 +95,11 @@ public class SubLockManager
 		lock.unlock();
 	}
 
-	public void sLock(Block b, long txnum) throws LockAbortException
+	public void sLock(final Block b, final long txnum) throws LockAbortException
 	{
-		// long start = System.currentTimeMillis();
+		final long start = System.currentTimeMillis();
 		lock.lock();
-		HashSet<Long> set = sBlocksToTXs.get(b);
+		final HashSet<Long> set = sBlocksToTXs.get(b);
 		if (set != null && set.contains(txnum))
 		{
 			lock.unlock();
@@ -107,7 +108,14 @@ public class SubLockManager
 
 		while (true)
 		{
-			Long xTx = xBlocksToTXs.get(b); // does someone have an xLock?
+			final long end = System.currentTimeMillis();
+			if (end - start > TIMEOUT)
+			{
+				lock.unlock();
+				throw new LockAbortException();
+			}
+
+			final Long xTx = xBlocksToTXs.get(b); // does someone have an xLock?
 			if (xTx != null)
 			{
 				if (waitOnXLock(b, txnum, xTx))
@@ -156,10 +164,10 @@ public class SubLockManager
 		lock.unlock();
 	}
 
-	public void unlockSLock(Block b, long txnum)
+	public void unlockSLock(final Block b, final long txnum)
 	{
 		lock.lock();
-		HashSet<Block> array = sTXsToBlocks.get(txnum);
+		final HashSet<Block> array = sTXsToBlocks.get(txnum);
 
 		if (array == null)
 		{
@@ -175,7 +183,7 @@ public class SubLockManager
 			}
 		}
 
-		HashSet<Long> array2 = sBlocksToTXs.get(b);
+		final HashSet<Long> array2 = sBlocksToTXs.get(b);
 		if (array2 != null)
 		{
 			array2.remove(txnum);
@@ -185,12 +193,12 @@ public class SubLockManager
 			}
 		}
 
-		ArrayList<Thread> threads = waitList.get(b);
+		final ArrayList<Thread> threads = waitList.get(b);
 		if (threads != null)
 		{
-			Thread thread = threads.remove(0);
+			final Thread thread = threads.remove(0);
 			inverseWaitList.remove(thread);
-			Long tx = threads2Txs.remove(thread);
+			final Long tx = threads2Txs.remove(thread);
 			txs2Threads.remove(tx);
 			if (threads.size() == 0)
 			{
@@ -215,7 +223,7 @@ public class SubLockManager
 			xBlocksToTXs.clear();
 			xTXsToBlocks.clear();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			lock.unlock();
 			return;
@@ -250,11 +258,11 @@ public class SubLockManager
 	 * lock.unlock(); }
 	 */
 
-	public void xLock(Block b, long txnum) throws LockAbortException
+	public void xLock(final Block b, final long txnum) throws LockAbortException
 	{
-		// long start = System.currentTimeMillis();
+		final long start = System.currentTimeMillis();
 		lock.lock();
-		Long set = xBlocksToTXs.get(b);
+		final Long set = xBlocksToTXs.get(b);
 		if (set != null && set.longValue() == txnum)
 		{
 			lock.unlock();
@@ -263,12 +271,21 @@ public class SubLockManager
 
 		while (true)
 		{
-			Long tx = xBlocksToTXs.get(b);
+			final Long tx = xBlocksToTXs.get(b);
 			if (tx != null)
 			{
 				if (tx.longValue() != txnum)
 				{
+					final long end = System.currentTimeMillis();
+					if (end - start > TIMEOUT)
+					{
+						lock.unlock();
+						throw new LockAbortException();
+					}
+					
 					HRDBMSWorker.logger.debug("Can't get xLock on " + b + " for transaction " + txnum + " because " + tx + " has an xLock");
+					HRDBMSWorker.logger.debug("xBlocksToTXs = " + xBlocksToTXs);
+					HRDBMSWorker.logger.debug("xTXsToBlocks = " + xTXsToBlocks);
 
 					// long current = System.currentTimeMillis();
 					// if (current - start >= TIMEOUT)
@@ -304,9 +321,9 @@ public class SubLockManager
 
 						try
 						{
-							Thread.currentThread().wait();
+							Thread.currentThread().wait(TIMEOUT);
 						}
-						catch (Exception e)
+						catch (final Exception e)
 						{
 						}
 					}
@@ -329,7 +346,7 @@ public class SubLockManager
 			{
 				// also check that there are no sLocks, except for possibly
 				// myself
-				HashSet<Long> txs = sBlocksToTXs.get(b);
+				final HashSet<Long> txs = sBlocksToTXs.get(b);
 				if (txs == null)
 				{
 					break;
@@ -342,6 +359,13 @@ public class SubLockManager
 					}
 					else
 					{
+						final long end = System.currentTimeMillis();
+						if (end - start > TIMEOUT)
+						{
+							lock.unlock();
+							throw new LockAbortException();
+						}
+						
 						HRDBMSWorker.logger.debug("Can't get xLock on " + b + " for transaction " + txnum + " because " + txs + " have sLocks");
 
 						// long current = System.currentTimeMillis();
@@ -378,9 +402,9 @@ public class SubLockManager
 
 							try
 							{
-								Thread.currentThread().wait();
+								Thread.currentThread().wait(TIMEOUT);
 							}
-							catch (Exception e)
+							catch (final Exception e)
 							{
 							}
 						}
@@ -407,16 +431,16 @@ public class SubLockManager
 		}
 		else
 		{
-			if (!array.contains(b))
-			{
+			//if (!array.contains(b))
+			//{
 				array.add(b);
-			}
+			//}
 		}
 
 		lock.unlock();
 	}
 
-	private boolean waitOnXLock(Block b, long txnum, Long xTx) throws LockAbortException
+	private boolean waitOnXLock(final Block b, final long txnum, final Long xTx) throws LockAbortException
 	{
 		if (xTx.longValue() != txnum)
 		{
@@ -444,9 +468,9 @@ public class SubLockManager
 
 				try
 				{
-					Thread.currentThread().wait();
+					Thread.currentThread().wait(TIMEOUT);
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 				}
 			}

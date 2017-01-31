@@ -28,7 +28,7 @@ public class LockManager extends HRDBMSThread
 		}
 	}
 
-	public static void release(long txnum)
+	public static void release(final long txnum)
 	{
 		int i = 0;
 		while (i < mLength)
@@ -38,15 +38,15 @@ public class LockManager extends HRDBMSThread
 		}
 	}
 
-	public static void sLock(Block b, long txnum) throws LockAbortException
+	public static void sLock(final Block b, final long txnum) throws LockAbortException
 	{
-		int hash = (b.hashCode2() & 0x7FFFFFFF) % mLength;
+		final int hash = (b.hashCode2() & 0x7FFFFFFF) % mLength;
 		managers[hash].sLock(b, txnum);
 	}
 
-	public static void unlockSLock(Block b, long txnum)
+	public static void unlockSLock(final Block b, final long txnum)
 	{
-		int hash = (b.hashCode2() & 0x7FFFFFFF) % mLength;
+		final int hash = (b.hashCode2() & 0x7FFFFFFF) % mLength;
 		managers[hash].unlockSLock(b, txnum);
 	}
 
@@ -60,9 +60,9 @@ public class LockManager extends HRDBMSThread
 		}
 	}
 
-	public static void xLock(Block b, long txnum) throws LockAbortException
+	public static void xLock(final Block b, final long txnum) throws LockAbortException
 	{
-		int hash = (b.hashCode2() & 0x7FFFFFFF) % mLength;
+		final int hash = (b.hashCode2() & 0x7FFFFFFF) % mLength;
 		managers[hash].xLock(b, txnum);
 	}
 
@@ -75,26 +75,26 @@ public class LockManager extends HRDBMSThread
 			{
 				Thread.sleep(TIMEOUT);
 			}
-			catch (InterruptedException e)
+			catch (final InterruptedException e)
 			{
 			}
 
 			try
 			{
-				ArrayList<Vertice> starting = new ArrayList<Vertice>();
-				HashMap<Vertice, Vertice> vertices = new HashMap<Vertice, Vertice>();
-				HashMap<Thread, SubLockManager> threads2SLMs = new HashMap<Thread, SubLockManager>();
+				final ArrayList<Vertice> starting = new ArrayList<Vertice>();
+				final HashMap<Vertice, Vertice> vertices = new HashMap<Vertice, Vertice>();
+				final HashMap<Thread, SubLockManager> threads2SLMs = new HashMap<Thread, SubLockManager>();
 
 				while (true)
 				{
-					for (SubLockManager manager : managers)
+					for (final SubLockManager manager : managers)
 					{
 						manager.lock.lock();
 						// for all the threads that are waiting to lock blocks
-						for (Map.Entry entry : manager.waitList.entrySet())
+						for (final Map.Entry entry : manager.waitList.entrySet())
 						{
 							// for each thread
-							for (Thread thread : (ArrayList<Thread>)entry.getValue())
+							for (final Thread thread : (ArrayList<Thread>)entry.getValue())
 							{
 								Vertice vertice = new Vertice(manager.threads2Txs.get(thread), thread);
 								threads2SLMs.put(thread, manager);
@@ -111,7 +111,7 @@ public class LockManager extends HRDBMSThread
 
 								// if there is an xLock on that block, we know
 								// what transaction we are waiting on
-								Long targetTX = manager.xBlocksToTXs.get(entry.getKey());
+								final Long targetTX = manager.xBlocksToTXs.get(entry.getKey());
 								if (targetTX != null)
 								{
 									// this xLock is what I am waiting on
@@ -134,8 +134,8 @@ public class LockManager extends HRDBMSThread
 									// xLock
 									// get the list of all TXs that have sLocks
 									// on this block
-									HashSet<Long> targetTXs = manager.sBlocksToTXs.get(entry.getKey());
-									for (Long txnum : targetTXs)
+									final HashSet<Long> targetTXs = manager.sBlocksToTXs.get(entry.getKey());
+									for (final Long txnum : targetTXs)
 									{
 										Vertice vertice2 = new Vertice(txnum);
 										if (!vertices.containsKey(vertice2))
@@ -156,22 +156,22 @@ public class LockManager extends HRDBMSThread
 					}
 
 					boolean doBreak = true;
-					for (Vertice vertice : starting)
+					for (final Vertice vertice : starting)
 					{
-						boolean cycle = checkForCycles(vertice);
+						final boolean cycle = checkForCycles(vertice);
 
 						if (cycle)
 						{
 							vertice.removeAllEdges();
-							ArrayList<Thread> threads = vertice.getThreads();
-							for (Thread thread : threads)
+							final ArrayList<Thread> threads = vertice.getThreads();
+							for (final Thread thread : threads)
 							{
 								killed.put(thread, thread);
-								SubLockManager manager = threads2SLMs.get(thread);
-								Long tx = manager.threads2Txs.remove(thread);
+								final SubLockManager manager = threads2SLMs.get(thread);
+								final Long tx = manager.threads2Txs.remove(thread);
 								manager.txs2Threads.remove(tx);
-								Block b = manager.inverseWaitList.remove(thread);
-								ArrayList<Thread> threads2 = manager.waitList.get(b);
+								final Block b = manager.inverseWaitList.remove(thread);
+								final ArrayList<Thread> threads2 = manager.waitList.get(b);
 								threads2.remove(thread);
 								if (threads2.size() == 0)
 								{
@@ -187,7 +187,7 @@ public class LockManager extends HRDBMSThread
 						}
 					}
 
-					for (SubLockManager manager : managers)
+					for (final SubLockManager manager : managers)
 					{
 						manager.lock.unlock();
 					}
@@ -198,16 +198,16 @@ public class LockManager extends HRDBMSThread
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.fatal("Deadlock detection thread exception", e);
-				for (SubLockManager manager : managers)
+				for (final SubLockManager manager : managers)
 				{
 					try
 					{
 						manager.lock.unlock();
 					}
-					catch (Exception f)
+					catch (final Exception f)
 					{
 						HRDBMSWorker.logger.debug("", f);
 					}
@@ -216,12 +216,12 @@ public class LockManager extends HRDBMSThread
 		}
 	}
 
-	private boolean checkForCycles(Vertice vertice)
+	private boolean checkForCycles(final Vertice vertice)
 	{
-		HashSet<Edge> edges = new HashSet<Edge>();
-		for (Vertice dest : vertice.edges)
+		final HashSet<Edge> edges = new HashSet<Edge>();
+		for (final Vertice dest : vertice.edges)
 		{
-			Edge edge = new Edge(vertice, dest);
+			final Edge edge = new Edge(vertice, dest);
 			edges.add(edge);
 			if (checkForCycles(dest, vertice, edges))
 			{
@@ -242,16 +242,16 @@ public class LockManager extends HRDBMSThread
 	// }
 	// }
 
-	private boolean checkForCycles(Vertice start, Vertice orig, HashSet<Edge> edges)
+	private boolean checkForCycles(final Vertice start, final Vertice orig, final HashSet<Edge> edges)
 	{
-		for (Vertice dest : start.edges)
+		for (final Vertice dest : start.edges)
 		{
 			if (dest.equals(orig))
 			{
 				return true;
 			}
 
-			Edge edge = new Edge(start, dest);
+			final Edge edge = new Edge(start, dest);
 			if (edges.contains(edge))
 			{
 				return false; // someone has a cycle, but its not my problem
@@ -275,20 +275,20 @@ public class LockManager extends HRDBMSThread
 		private final Vertice source;
 		private final Vertice dest;
 
-		public Edge(Vertice source, Vertice dest)
+		public Edge(final Vertice source, final Vertice dest)
 		{
 			this.source = source;
 			this.dest = dest;
 		}
 
 		@Override
-		public boolean equals(Object r)
+		public boolean equals(final Object r)
 		{
 			if (r == null)
 			{
 				return false;
 			}
-			Edge rhs = (Edge)r;
+			final Edge rhs = (Edge)r;
 			return source.equals(rhs.source) && dest.equals(rhs.dest);
 		}
 
@@ -308,35 +308,35 @@ public class LockManager extends HRDBMSThread
 		private final HashSet<Thread> threads = new HashSet<Thread>();
 		private final HashSet<Vertice> edges = new HashSet<Vertice>();
 
-		public Vertice(Long txnum)
+		public Vertice(final Long txnum)
 		{
 			this.txnum = txnum;
 		}
 
-		public Vertice(Long txnum, Thread thread)
+		public Vertice(final Long txnum, final Thread thread)
 		{
 			this.txnum = txnum;
 			threads.add(thread);
 		}
 
-		public void addEdge(Vertice vertice)
+		public void addEdge(final Vertice vertice)
 		{
 			edges.add(vertice);
 		}
 
-		public void addThread(Thread thread)
+		public void addThread(final Thread thread)
 		{
 			threads.add(thread);
 		}
 
 		@Override
-		public boolean equals(Object r)
+		public boolean equals(final Object r)
 		{
 			if (r == null)
 			{
 				return false;
 			}
-			Vertice rhs = (Vertice)r;
+			final Vertice rhs = (Vertice)r;
 			return txnum == rhs.txnum;
 		}
 

@@ -6,13 +6,13 @@ public class ConnectedSelect
 	private SubSelect sub;
 	private FullSelect full;
 
-	public ConnectedSelect(FullSelect full, String combo)
+	public ConnectedSelect(final FullSelect full, final String combo)
 	{
 		this.combo = combo;
 		this.full = full;
 	}
 
-	public ConnectedSelect(SubSelect sub, String combo)
+	public ConnectedSelect(final SubSelect sub, final String combo)
 	{
 		this.combo = combo;
 		this.sub = sub;

@@ -32,17 +32,17 @@ public final class DivSufSort
 		this.mergeStack = new Stack(SS_SMERGE_STACKSIZE);
 	}
 
-	private static int getIndex(int a)
+	private static int getIndex(final int a)
 	{
 		return (a >= 0) ? a : ~a;
 	}
 
-	private static int ssIlg(int n)
+	private static int ssIlg(final int n)
 	{
 		return ((n & 0xFF00) != 0) ? 8 + LOG_TABLE[(n >> 8) & 0xFF] : LOG_TABLE[n & 0xFF];
 	}
 
-	private static int ssIsqrt(int x)
+	private static int ssIsqrt(final int x)
 	{
 		if (x >= (SS_BLOCKSIZE * SS_BLOCKSIZE))
 		{
@@ -77,12 +77,12 @@ public final class DivSufSort
 		return (x < y * y) ? y - 1 : y;
 	}
 
-	private static int trIlg(int n)
+	private static int trIlg(final int n)
 	{
 		return ((n & 0xFFFF0000) != 0) ? (((n & 0xFF000000) != 0) ? 24 + LOG_TABLE[(n >> 24) & 0xFF] : 16 + LOG_TABLE[(n >> 16) & 0xFF]) : (((n & 0x0000FF00) != 0) ? 8 + LOG_TABLE[(n >> 8) & 0xFF] : LOG_TABLE[n & 0xFF]);
 	}
 
-	private static int trMedian3(int[] arr, int isad, int v1, int v2, int v3)
+	private static int trMedian3(final int[] arr, final int isad, int v1, int v2, final int v3)
 	{
 		if (arr[isad + arr[v1]] > arr[isad + arr[v2]])
 		{
@@ -104,11 +104,11 @@ public final class DivSufSort
 		return v2;
 	}
 
-	private static int trMedian5(int[] arr, int isad, int v1, int v2, int v3, int v4, int v5)
+	private static int trMedian5(final int[] arr, final int isad, int v1, int v2, int v3, int v4, int v5)
 	{
 		if (arr[isad + arr[v2]] > arr[isad + arr[v3]])
 		{
-			int t = v2;
+			final int t = v2;
 			v2 = v3;
 			v3 = t;
 		}
@@ -155,7 +155,7 @@ public final class DivSufSort
 		return v3;
 	}
 
-	private static int trPivot(int[] arr, int isad, int first, int last)
+	private static int trPivot(final int[] arr, final int isad, int first, int last)
 	{
 		int t = last - first;
 		int middle = first + (t >> 1);
@@ -179,7 +179,7 @@ public final class DivSufSort
 	}
 
 	// Not thread safe
-	public int[] computeSuffixArray(byte[] input, int start, int length)
+	public int[] computeSuffixArray(final byte[] input, final int start, final int length)
 	{
 		// Lazy dynamic memory allocation
 		if (this.sa.length < length)
@@ -198,7 +198,7 @@ public final class DivSufSort
 		}
 
 		this.buffer[length] = input[start];
-		int m = this.sortTypeBstar(this.bucketA, this.bucketB, length);
+		final int m = this.sortTypeBstar(this.bucketA, this.bucketB, length);
 		this.constructSuffixArray(this.bucketA, this.bucketB, length, m);
 		return this.sa;
 	}
@@ -220,7 +220,7 @@ public final class DivSufSort
 		}
 	}
 
-	private void constructSuffixArray(int[] bucket_A, int[] bucket_B, int n, int m)
+	private void constructSuffixArray(final int[] bucket_A, final int[] bucket_B, final int n, final int m)
 	{
 		if (m > 0)
 		{
@@ -299,7 +299,7 @@ public final class DivSufSort
 		}
 	}
 
-	private int sortTypeBstar(int[] bucket_A, int[] bucket_B, int n)
+	private int sortTypeBstar(final int[] bucket_A, final int[] bucket_B, final int n)
 	{
 		int c1 = 0;
 		int m = n;
@@ -477,7 +477,7 @@ public final class DivSufSort
 					// Move all type B* suffixes to the correct position.
 					// Typically very small number of copies, no need for
 					// arraycopy
-					for (int j = bucket_B[idx + c1]; j <= k; i--, k--)
+					for (final int j = bucket_B[idx + c1]; j <= k; i--, k--)
 					{
 						arr[i] = arr[k];
 					}
@@ -504,7 +504,7 @@ public final class DivSufSort
 		}
 	}
 
-	private int ssCompare(int p1, int p2, int depth)
+	private int ssCompare(final int p1, final int p2, final int depth)
 	{
 		int u1 = depth + this.sa[p1];
 		int u2 = depth + this.sa[p2];
@@ -531,7 +531,7 @@ public final class DivSufSort
 		return (u1 < u1n) ? ((u2 < u2n) ? this.buffer[u1] - this.buffer[u2] : 1) : ((u2 < u2n) ? -1 : 0);
 	}
 
-	private int ssCompare(int pa, int pb, int p2, int depth)
+	private int ssCompare(final int pa, final int pb, final int p2, final int depth)
 	{
 		int u1 = depth + pa;
 		int u2 = depth + this.sa[p2];
@@ -558,7 +558,7 @@ public final class DivSufSort
 		return (u1 < u1n) ? ((u2 < u2n) ? this.buffer[u1] - this.buffer[u2] : 1) : ((u2 < u2n) ? -1 : 0);
 	}
 
-	private void ssFixDown(int idx, int pa, int saIdx, int i, int size)
+	private void ssFixDown(final int idx, final int pa, final int saIdx, int i, final int size)
 	{
 		final int[] arr = this.sa;
 		final int v = arr[saIdx + i];
@@ -591,7 +591,7 @@ public final class DivSufSort
 		arr[i + saIdx] = v;
 	}
 
-	private void ssHeapSort(int idx, int pa, int saIdx, int size)
+	private void ssHeapSort(final int idx, final int pa, final int saIdx, final int size)
 	{
 		int m = size;
 
@@ -618,14 +618,14 @@ public final class DivSufSort
 
 		for (int i = m - 1; i > 0; i--)
 		{
-			int t = this.sa[saIdx];
+			final int t = this.sa[saIdx];
 			this.sa[saIdx] = this.sa[saIdx + i];
 			this.ssFixDown(idx, pa, saIdx, 0, i);
 			this.sa[saIdx + i] = t;
 		}
 	}
 
-	private void ssInplaceMerge(int pa, int first, int middle, int last, int depth)
+	private void ssInplaceMerge(final int pa, final int first, int middle, int last, final int depth)
 	{
 		final int[] arr = this.sa;
 
@@ -699,7 +699,7 @@ public final class DivSufSort
 		}
 	}
 
-	private void ssInsertionSort(int pa, int first, int last, int depth)
+	private void ssInsertionSort(final int pa, final int first, final int last, final int depth)
 	{
 		final int[] arr = this.sa;
 
@@ -732,7 +732,7 @@ public final class DivSufSort
 		}
 	}
 
-	private int ssMedian3(int Td, int pa, int v1, int v2, int v3)
+	private int ssMedian3(final int Td, final int pa, int v1, int v2, final int v3)
 	{
 		final int idx = Td;
 
@@ -756,7 +756,7 @@ public final class DivSufSort
 		return v2;
 	}
 
-	private int ssMedian5(final int idx, int pa, int v1, int v2, int v3, int v4, int v5)
+	private int ssMedian5(final int idx, final int pa, int v1, int v2, int v3, int v4, int v5)
 	{
 		if (this.buffer[idx + this.sa[pa + this.sa[v2]]] > this.buffer[idx + this.sa[pa + this.sa[v3]]])
 		{
@@ -807,7 +807,7 @@ public final class DivSufSort
 		return v3;
 	}
 
-	private void ssMergeBackward(int pa, int first, int middle, int last, int buf, int depth)
+	private void ssMergeBackward(final int pa, final int first, final int middle, final int last, final int buf, final int depth)
 	{
 		final int[] arr = this.sa;
 		final int bufEnd = buf + last - middle - 1;
@@ -990,7 +990,7 @@ public final class DivSufSort
 		}
 	}
 
-	private void ssMergeForward(int pa, int first, int middle, int last, int buf, int depth)
+	private void ssMergeForward(final int pa, final int first, final int middle, final int last, final int buf, final int depth)
 	{
 		final int[] arr = this.sa;
 		final int bufEnd = buf + middle - first - 1;
@@ -1093,7 +1093,7 @@ public final class DivSufSort
 					this.ssInsertionSort(pa, first, last, depth);
 				}
 
-				StackElement se = this.ssStack.pop();
+				final StackElement se = this.ssStack.pop();
 
 				if (se == null)
 				{
@@ -1357,7 +1357,7 @@ public final class DivSufSort
 		}
 	}
 
-	private int ssPartition(int pa, int first, int last, int depth)
+	private int ssPartition(final int pa, final int first, final int last, final int depth)
 	{
 		final int[] arr = this.sa;
 		int a = first - 1;
@@ -1392,7 +1392,7 @@ public final class DivSufSort
 		return a;
 	}
 
-	private int ssPivot(int td, int pa, int first, int last)
+	private int ssPivot(final int td, final int pa, int first, int last)
 	{
 		int t = last - first;
 		int middle = first + (t >> 1);
@@ -1409,7 +1409,7 @@ public final class DivSufSort
 		return this.ssMedian3(td, pa, first, middle, last);
 	}
 
-	private void ssRotate(int first, int middle, int last)
+	private void ssRotate(int first, final int middle, int last)
 	{
 		int l = middle - first;
 		int r = last - middle;
@@ -1482,7 +1482,7 @@ public final class DivSufSort
 		}
 	}
 
-	private void ssSort(final int pa, int first, int last, int buf, int bufSize, int depth, int n, boolean lastSuffix)
+	private void ssSort(final int pa, int first, final int last, int buf, int bufSize, final int depth, final int n, final boolean lastSuffix)
 	{
 		if (lastSuffix == true)
 		{
@@ -1572,7 +1572,7 @@ public final class DivSufSort
 		}
 	}
 
-	private void ssSwapMerge(int pa, int first, int middle, int last, int buf, int bufSize, int depth)
+	private void ssSwapMerge(final int pa, int first, int middle, int last, final int buf, final int bufSize, final int depth)
 	{
 		final int[] arr = this.sa;
 		int check = 0;
@@ -1596,7 +1596,7 @@ public final class DivSufSort
 					arr[last] = ~arr[last];
 				}
 
-				StackElement se = this.mergeStack.pop();
+				final StackElement se = this.mergeStack.pop();
 
 				if (se == null)
 				{
@@ -1627,7 +1627,7 @@ public final class DivSufSort
 					arr[last] = ~arr[last];
 				}
 
-				StackElement se = this.mergeStack.pop();
+				final StackElement se = this.mergeStack.pop();
 
 				if (se == null)
 				{
@@ -1655,8 +1655,8 @@ public final class DivSufSort
 
 			if (m > 0)
 			{
-				int lm = middle - m;
-				int rm = middle + m;
+				final int lm = middle - m;
+				final int rm = middle + m;
 				this.ssBlockSwap(lm, middle, m);
 				int l = middle;
 				int r = l;
@@ -1730,7 +1730,7 @@ public final class DivSufSort
 					arr[last] = ~arr[last];
 				}
 
-				StackElement se = this.mergeStack.pop();
+				final StackElement se = this.mergeStack.pop();
 
 				if (se == null)
 				{
@@ -1745,22 +1745,22 @@ public final class DivSufSort
 		}
 	}
 
-	private void swapInSA(int a, int b)
+	private void swapInSA(final int a, final int b)
 	{
 		final int tmp = this.sa[a];
 		this.sa[a] = this.sa[b];
 		this.sa[b] = tmp;
 	}
 
-	private void trCopy(int isa, int first, int a, int b, int last, int depth)
+	private void trCopy(final int isa, final int first, final int a, final int b, final int last, final int depth)
 	{
 		final int[] arr = this.sa;
-		int v = b - 1;
+		final int v = b - 1;
 		int d = a - 1;
 
 		for (int c = first; c <= d; c++)
 		{
-			int s = arr[c] - depth;
+			final int s = arr[c] - depth;
 
 			if ((s >= 0) && (arr[isa + s] == v))
 			{
@@ -1786,7 +1786,7 @@ public final class DivSufSort
 		}
 	}
 
-	private void trFixDown(int isad, int saIdx, int i, int size)
+	private void trFixDown(final int isad, final int saIdx, int i, final int size)
 	{
 		final int[] arr = this.sa;
 		final int v = arr[saIdx + i];
@@ -1819,7 +1819,7 @@ public final class DivSufSort
 		arr[saIdx + i] = v;
 	}
 
-	private void trHeapSort(int isad, int saIdx, int size)
+	private void trHeapSort(final int isad, final int saIdx, final int size)
 	{
 		final int[] arr = this.sa;
 		int m = size;
@@ -1854,7 +1854,7 @@ public final class DivSufSort
 		}
 	}
 
-	private void trInsertionSort(int isad, int first, int last)
+	private void trInsertionSort(final int isad, final int first, final int last)
 	{
 		final int[] arr = this.sa;
 
@@ -1889,7 +1889,7 @@ public final class DivSufSort
 		}
 	}
 
-	private void trIntroSort(int isa, int isad, int first, int last, TRBudget budget)
+	private void trIntroSort(final int isa, int isad, int first, int last, final TRBudget budget)
 	{
 		final int incr = isad - isa;
 		final int[] arr = this.sa;
@@ -1903,7 +1903,7 @@ public final class DivSufSort
 				if (limit == -1)
 				{
 					// tandem repeat partition
-					long res = this.trPartition(isad - incr, first, first, last, last - 1);
+					final long res = this.trPartition(isad - incr, first, first, last, last - 1);
 					final int a = (int)(res >> 32);
 					final int b = (int)(res & 0xFFFFFFFFL);
 
@@ -1947,7 +1947,7 @@ public final class DivSufSort
 						}
 						else
 						{
-							StackElement se = this.trStack.pop();
+							final StackElement se = this.trStack.pop();
 
 							if (se == null)
 							{
@@ -1976,7 +1976,7 @@ public final class DivSufSort
 						}
 						else
 						{
-							StackElement se = this.trStack.pop();
+							final StackElement se = this.trStack.pop();
 
 							if (se == null)
 							{
@@ -2049,7 +2049,7 @@ public final class DivSufSort
 							a++;
 						} while (arr[a] < 0);
 
-						int next = (arr[isa + arr[a]] != arr[isad + arr[a]]) ? trIlg(a - first + 1) : -1;
+						final int next = (arr[isa + arr[a]] != arr[isad + arr[a]]) ? trIlg(a - first + 1) : -1;
 						a++;
 
 						if (a < last)
@@ -2102,7 +2102,7 @@ public final class DivSufSort
 							}
 							else
 							{
-								StackElement se = this.trStack.pop();
+								final StackElement se = this.trStack.pop();
 
 								if (se == null)
 								{
@@ -2119,7 +2119,7 @@ public final class DivSufSort
 					}
 					else
 					{
-						StackElement se = this.trStack.pop();
+						final StackElement se = this.trStack.pop();
 
 						if (se == null)
 						{
@@ -2153,7 +2153,7 @@ public final class DivSufSort
 				{
 					int b = a - 1;
 
-					for (int x = arr[isad + arr[a]]; (first <= b) && (arr[isad + arr[b]] == x); b--)
+					for (final int x = arr[isad + arr[a]]; (first <= b) && (arr[isad + arr[b]] == x); b--)
 					{
 						arr[b] = ~arr[b];
 					}
@@ -2172,7 +2172,7 @@ public final class DivSufSort
 			int v = arr[isad + arr[first]];
 
 			// partition
-			long res = this.trPartition(isad, first, first + 1, last, v);
+			final long res = this.trPartition(isad, first, first + 1, last, v);
 			final int a = (int)(res >> 32);
 			final int b = (int)(res & 0xFFFFFFFFL);
 
@@ -2321,7 +2321,7 @@ public final class DivSufSort
 						}
 						else
 						{
-							StackElement se = this.trStack.pop();
+							final StackElement se = this.trStack.pop();
 
 							if (se == null)
 							{
@@ -2348,7 +2348,7 @@ public final class DivSufSort
 						}
 						else
 						{
-							StackElement se = this.trStack.pop();
+							final StackElement se = this.trStack.pop();
 
 							if (se == null)
 							{
@@ -2378,7 +2378,7 @@ public final class DivSufSort
 						this.trStack.get(trlink).d = -1;
 					}
 
-					StackElement se = this.trStack.pop();
+					final StackElement se = this.trStack.pop();
 
 					if (se == null)
 					{
@@ -2395,10 +2395,10 @@ public final class DivSufSort
 		}
 	}
 
-	private void trPartialCopy(int isa, int first, int a, int b, int last, int depth)
+	private void trPartialCopy(final int isa, final int first, final int a, final int b, final int last, final int depth)
 	{
 		final int[] arr = this.sa;
-		int v = b - 1;
+		final int v = b - 1;
 		int lastRank = -1;
 		int newRank = -1;
 		int d = a - 1;
@@ -2465,7 +2465,7 @@ public final class DivSufSort
 		}
 	}
 
-	private long trPartition(int isad, int first, int middle, int last, int v)
+	private long trPartition(final int isad, int first, final int middle, int last, final int v)
 	{
 		int x = 0;
 		int b = middle;
@@ -2581,10 +2581,10 @@ public final class DivSufSort
 		return (((long)first) << 32) | ((last) & 0xFFFFFFFFL);
 	}
 
-	private void trSort(int isa, int n, int depth)
+	private void trSort(final int isa, final int n, final int depth)
 	{
 		final int[] arr = this.sa;
-		TRBudget budget = new TRBudget(trIlg(n) * 2 / 3, n);
+		final TRBudget budget = new TRBudget(trIlg(n) * 2 / 3, n);
 
 		for (int isad = isa + depth; arr[0] > -n; isad += (isad - isa))
 		{
@@ -2652,7 +2652,7 @@ public final class DivSufSort
 		private final StackElement[] array;
 		private int index;
 
-		Stack(int size)
+		Stack(final int size)
 		{
 			this.array = new StackElement[size];
 
@@ -2662,7 +2662,7 @@ public final class DivSufSort
 			}
 		}
 
-		StackElement get(int idx)
+		StackElement get(final int idx)
 		{
 			return this.array[idx];
 		}
@@ -2672,9 +2672,9 @@ public final class DivSufSort
 			return (this.index == 0) ? null : this.array[--this.index];
 		}
 
-		void push(int a, int b, int c, int d, int e)
+		void push(final int a, final int b, final int c, final int d, final int e)
 		{
-			StackElement elt = this.array[this.index];
+			final StackElement elt = this.array[this.index];
 			elt.a = a;
 			elt.b = b;
 			elt.c = c;
@@ -2701,14 +2701,14 @@ public final class DivSufSort
 		int incVal;
 		int count;
 
-		private TRBudget(int chance, int incval)
+		private TRBudget(final int chance, final int incval)
 		{
 			this.chance = chance;
 			this.remain = incval;
 			this.incVal = incval;
 		}
 
-		private boolean check(int size)
+		private boolean check(final int size)
 		{
 			if (size <= this.remain)
 			{

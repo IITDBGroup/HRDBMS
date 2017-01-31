@@ -46,7 +46,8 @@ public class Page
 	private volatile long timePinned = -1;
 	private volatile long lsn;
 	private ScalableStampedReentrantRWLock lock;
-
+	public volatile ArrayList<RID> rowIDsAL;
+	public volatile int[][] offsetArray;
 	private volatile boolean readDone = false;
 
 	public Page()
@@ -67,9 +68,11 @@ public class Page
 		readDone = false;
 	}
 
-	public ReadThread assignToBlock(Block b, boolean log) throws Exception
+	public ReadThread assignToBlock(final Block b, final boolean log) throws Exception
 	{
 		lock.writeLock().lock();
+		rowIDsAL = null;
+		offsetArray = null;
 		if (modifiedBy >= 0)
 		{
 			if (b != null)
@@ -94,9 +97,11 @@ public class Page
 		return retval;
 	}
 
-	public ReadThread assignToBlock(Block b, boolean log, ArrayList<Integer> cols, int layoutSize) throws Exception
+	public ReadThread assignToBlock(final Block b, final boolean log, final ArrayList<Integer> cols, final int layoutSize) throws Exception
 	{
 		lock.writeLock().lock();
+		rowIDsAL = null;
+		offsetArray = null;
 		if (modifiedBy >= 0)
 		{
 			if (b != null)
@@ -121,9 +126,11 @@ public class Page
 		return retval;
 	}
 
-	public ReadThread assignToBlock(Block b, boolean log, ArrayList<Integer> cols, int layoutSize, int rank, int rankSize) throws Exception
+	public ReadThread assignToBlock(final Block b, final boolean log, final ArrayList<Integer> cols, final int layoutSize, final int rank, final int rankSize) throws Exception
 	{
 		lock.writeLock().lock();
+		rowIDsAL = null;
+		offsetArray = null;
 		if (modifiedBy >= 0)
 		{
 			if (b != null)
@@ -148,9 +155,11 @@ public class Page
 		return retval;
 	}
 
-	public void assignToBlock(Block b, boolean log, boolean flag) throws Exception
+	public void assignToBlock(final Block b, final boolean log, final boolean flag) throws Exception
 	{
 		lock.writeLock().lock();
+		rowIDsAL = null;
+		offsetArray = null;
 		if (modifiedBy >= 0)
 		{
 			if (b != null)
@@ -173,9 +182,11 @@ public class Page
 		lock.writeLock().unlock();
 	}
 
-	public ReadThread assignToBlock(Block b, boolean log, int rank, int rankSize) throws Exception
+	public ReadThread assignToBlock(final Block b, final boolean log, final int rank, final int rankSize) throws Exception
 	{
 		lock.writeLock().lock();
+		rowIDsAL = null;
+		offsetArray = null;
 		if (modifiedBy >= 0)
 		{
 			if (b != null)
@@ -200,10 +211,12 @@ public class Page
 		return retval;
 	}
 
-	public void assignToBlock(Block b, boolean log, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos) throws Exception
+	public void assignToBlock(final Block b, final boolean log, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos) throws Exception
 	{
 		lock.writeLock().lock();
 		{
+			rowIDsAL = null;
+			offsetArray = null;
 			if (modifiedBy >= 0)
 			{
 				if (b != null)
@@ -228,10 +241,12 @@ public class Page
 		lock.writeLock().unlock();
 	}
 
-	public void assignToBlock(Block b, boolean log, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos, int rank, int rankSize) throws Exception
+	public void assignToBlock(final Block b, final boolean log, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos, final int rank, final int rankSize) throws Exception
 	{
 		lock.writeLock().lock();
 		{
+			rowIDsAL = null;
+			offsetArray = null;
 			if (modifiedBy >= 0)
 			{
 				if (b != null)
@@ -256,7 +271,7 @@ public class Page
 		lock.writeLock().unlock();
 	}
 
-	public Read3Thread assignToBlock3(Block b, Block b2, Block b3, boolean log, Page p2, Page p3) throws Exception
+	public Read3Thread assignToBlock3(final Block b, final Block b2, final Block b3, final boolean log, final Page p2, final Page p3) throws Exception
 	{
 		// HRDBMSWorker.logger.debug("Short Page pin3 starting");
 		lock.writeLock().lock();
@@ -267,6 +282,12 @@ public class Page
 			{
 				p3.lock.writeLock().lock();
 				{
+					rowIDsAL = null;
+					offsetArray = null;
+					p2.rowIDsAL = null;
+					p2.offsetArray = null;
+					p3.rowIDsAL = null;
+					p3.offsetArray = null;
 					if (modifiedBy >= 0)
 					{
 						if (log)
@@ -309,7 +330,7 @@ public class Page
 			}
 			p2.lock.writeLock().unlock();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			throw e;
@@ -320,7 +341,7 @@ public class Page
 		// HRDBMSWorker.logger.debug("Short Page pin3 ending");
 	}
 
-	public Read3Thread assignToBlock3(Block b, Block b2, Block b3, boolean log, Page p2, Page p3, ArrayList<Integer> cols, int layoutSize) throws Exception
+	public Read3Thread assignToBlock3(final Block b, final Block b2, final Block b3, final boolean log, final Page p2, final Page p3, final ArrayList<Integer> cols, final int layoutSize) throws Exception
 	{
 		// HRDBMSWorker.logger.debug("Short Page pin3 starting");
 		lock.writeLock().lock();
@@ -331,6 +352,12 @@ public class Page
 			{
 				p3.lock.writeLock().lock();
 				{
+					rowIDsAL = null;
+					offsetArray = null;
+					p2.rowIDsAL = null;
+					p2.offsetArray = null;
+					p3.rowIDsAL = null;
+					p3.offsetArray = null;
 					if (modifiedBy >= 0)
 					{
 						if (log)
@@ -373,7 +400,7 @@ public class Page
 			}
 			p2.lock.writeLock().unlock();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			throw e;
@@ -384,7 +411,7 @@ public class Page
 		// HRDBMSWorker.logger.debug("Short Page pin3 ending");
 	}
 
-	public Read3Thread assignToBlock3(Block b, Block b2, Block b3, boolean log, Page p2, Page p3, int rank, int rankSize) throws Exception
+	public Read3Thread assignToBlock3(final Block b, final Block b2, final Block b3, final boolean log, final Page p2, final Page p3, final int rank, final int rankSize) throws Exception
 	{
 		// HRDBMSWorker.logger.debug("Short Page pin3 starting");
 		lock.writeLock().lock();
@@ -395,6 +422,12 @@ public class Page
 			{
 				p3.lock.writeLock().lock();
 				{
+					rowIDsAL = null;
+					offsetArray = null;
+					p2.rowIDsAL = null;
+					p2.offsetArray = null;
+					p3.rowIDsAL = null;
+					p3.offsetArray = null;
 					if (modifiedBy >= 0)
 					{
 						if (log)
@@ -437,7 +470,7 @@ public class Page
 			}
 			p2.lock.writeLock().unlock();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			throw e;
@@ -448,7 +481,7 @@ public class Page
 		// HRDBMSWorker.logger.debug("Short Page pin3 ending");
 	}
 
-	public void assignToBlock3(Block b, Block b2, Block b3, boolean log, Schema schema1, Schema schema2, Schema schema3, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos, Page p2, Page p3) throws Exception
+	public void assignToBlock3(final Block b, final Block b2, final Block b3, final boolean log, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos, final Page p2, final Page p3) throws Exception
 	{
 		// HRDBMSWorker.logger.debug("Long Page pin3 starting");
 		try
@@ -459,6 +492,12 @@ public class Page
 				{
 					p3.lock.writeLock().lock();
 					{
+						rowIDsAL = null;
+						offsetArray = null;
+						p2.rowIDsAL = null;
+						p2.offsetArray = null;
+						p3.rowIDsAL = null;
+						p3.offsetArray = null;
 						if (modifiedBy >= 0)
 						{
 							if (log)
@@ -504,7 +543,7 @@ public class Page
 				p2.lock.writeLock().unlock();
 			}
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			throw e;
@@ -513,7 +552,7 @@ public class Page
 		lock.writeLock().unlock();
 	}
 
-	public void assignToBlock3(Block b, Block b2, Block b3, boolean log, Schema schema1, Schema schema2, Schema schema3, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos, Page p2, Page p3, int rank, int rankSize) throws Exception
+	public void assignToBlock3(final Block b, final Block b2, final Block b3, final boolean log, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos, final Page p2, final Page p3, final int rank, final int rankSize) throws Exception
 	{
 		// HRDBMSWorker.logger.debug("Long Page pin3 starting");
 		try
@@ -524,6 +563,12 @@ public class Page
 				{
 					p3.lock.writeLock().lock();
 					{
+						rowIDsAL = null;
+						offsetArray = null;
+						p2.rowIDsAL = null;
+						p2.offsetArray = null;
+						p3.rowIDsAL = null;
+						p3.offsetArray = null;
 						if (modifiedBy >= 0)
 						{
 							if (log)
@@ -569,7 +614,7 @@ public class Page
 				p2.lock.writeLock().unlock();
 			}
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			throw e;
@@ -578,11 +623,13 @@ public class Page
 		lock.writeLock().unlock();
 	}
 
-	public void assignToBlockFromMemory(Block b, boolean log, ByteBuffer data) throws Exception
+	public void assignToBlockFromMemory(final Block b, final boolean log, final ByteBuffer data) throws Exception
 	{
 		// FileManager.getFile(b.fileName());
 
 		lock.writeLock().lock();
+		rowIDsAL = null;
+		offsetArray = null;
 		if (modifiedBy >= 0)
 		{
 			if (log)
@@ -602,17 +649,21 @@ public class Page
 		lock.writeLock().unlock();
 	}
 
-	public ReadThread assignToBlocks(Block b, int num, boolean log, ArrayList<Integer> indexes, Page[] bp, int rank, int rankSize) throws Exception
+	public ReadThread assignToBlocks(final Block b, final int num, final boolean log, final ArrayList<Integer> indexes, final Page[] bp, final int rank, final int rankSize) throws Exception
 	{
 		// HRDBMSWorker.logger.debug("Short Page pin3 starting");
 		ReadThread retval = null;
 		try
 		{
 			this.lock.writeLock().lock();
+			rowIDsAL = null;
+			offsetArray = null;
 			int i = 1;
 			while (i < num)
 			{
 				bp[indexes.get(i)].lock.writeLock().lock();
+				bp[indexes.get(i)].rowIDsAL = null;
+				bp[indexes.get(i)].offsetArray = null;
 				i++;
 			}
 
@@ -625,7 +676,7 @@ public class Page
 			int page = b.number() + 1;
 			while (i < num)
 			{
-				Page p2 = bp[indexes.get(i)];
+				final Page p2 = bp[indexes.get(i)];
 				if (p2.modifiedBy >= 0)
 				{
 					p2.flush();
@@ -644,12 +695,12 @@ public class Page
 			i = 1;
 			while (i < num)
 			{
-				Page p2 = bp[indexes.get(i)];
+				final Page p2 = bp[indexes.get(i)];
 				p2.pins.clear();
 				i++;
 			}
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			throw e;
@@ -667,9 +718,11 @@ public class Page
 		// HRDBMSWorker.logger.debug("Short Page pin3 ending");
 	}
 
-	public void assignToBlockSync(Block b, boolean log) throws Exception
+	public void assignToBlockSync(final Block b, final boolean log) throws Exception
 	{
 		lock.writeLock().lock();
+		rowIDsAL = null;
+		offsetArray = null;
 		if (b != null)
 		{
 			FileManager.readSync(this, b, contents);
@@ -677,10 +730,12 @@ public class Page
 		lock.writeLock().unlock();
 	}
 
-	public void assignToBlockSync(Block b, boolean log, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos) throws Exception
+	public void assignToBlockSync(final Block b, final boolean log, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos) throws Exception
 	{
 		lock.writeLock().lock();
 		{
+			rowIDsAL = null;
+			offsetArray = null;
 			if (b != null)
 			{
 				FileManager.readSync(this, b, contents, schema, schemaMap, tx, fetchPos);
@@ -700,7 +755,7 @@ public class Page
 	}
 
 	@Override
-	public boolean equals(Object rhs)
+	public boolean equals(final Object rhs)
 	{
 		if (rhs == null)
 		{
@@ -712,11 +767,11 @@ public class Page
 			return false;
 		}
 
-		Page r = (Page)rhs;
+		final Page r = (Page)rhs;
 		return blk.equals(r.blk);
 	}
 
-	public byte get(int pos)
+	public byte get(final int pos)
 	{
 		lock.readLock().lock();
 		while (!readDone)
@@ -725,12 +780,12 @@ public class Page
 
 		try
 		{
-			byte[] hb = (byte[])unsafe.getObject(contents, offset);
+			final byte[] hb = (byte[])unsafe.getObject(contents, offset);
 			lock.readLock().unlock();
 			return hb[pos];
 			// return contents.get(pos);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("Error reading from page " + blk + " trying to read 1 byte at offset " + pos);
 			lock.readLock().unlock();
@@ -738,7 +793,7 @@ public class Page
 		}
 	}
 
-	public void get(int off, byte[] buff) throws Exception
+	public void get(final int off, final byte[] buff) throws Exception
 	{
 		lock.readLock().lock();
 		while (!readDone)
@@ -748,11 +803,11 @@ public class Page
 		{
 			// contents.position(off);
 			// contents.get(buff);
-			byte[] hb = (byte[])unsafe.getObject(contents, offset);
+			final byte[] hb = (byte[])unsafe.getObject(contents, offset);
 			System.arraycopy(hb, off, buff, 0, buff.length);
 			lock.readLock().unlock();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("Error reading from page " + blk + " trying to read " + buff.length + " bytes at offset " + off);
 			lock.readLock().unlock();
@@ -760,7 +815,7 @@ public class Page
 		}
 	}
 
-	public void get(int off, int[] buff) throws Exception
+	public void get(int off, final int[] buff) throws Exception
 	{
 		lock.readLock().lock();
 		while (!readDone)
@@ -769,7 +824,7 @@ public class Page
 
 		// contents.position(off);
 		// contents.asIntBuffer().get(buff);
-		byte[] hb = (byte[])unsafe.getObject(contents, offset);
+		final byte[] hb = (byte[])unsafe.getObject(contents, offset);
 		int i = 0;
 		while (i < buff.length)
 		{
@@ -780,14 +835,14 @@ public class Page
 		lock.readLock().unlock();
 	}
 
-	public double getDouble(int pos)
+	public double getDouble(final int pos)
 	{
 		lock.readLock().lock();
 		while (!readDone)
 		{
 		}
 
-		double retval = contents.getDouble(pos);
+		final double retval = contents.getDouble(pos);
 		lock.readLock().unlock();
 		return retval;
 		// byte[] hb = (byte[])unsafe.getObject(contents, offset);
@@ -798,14 +853,14 @@ public class Page
 		// return Double.longBitsToDouble(retval);
 	}
 
-	public float getFloat(int pos)
+	public float getFloat(final int pos)
 	{
 		lock.readLock().lock();
 		while (!readDone)
 		{
 		}
 
-		float retval = contents.getFloat(pos);
+		final float retval = contents.getFloat(pos);
 		lock.readLock().unlock();
 		return retval;
 		// byte[] hb = (byte[])unsafe.getObject(contents, offset);
@@ -814,7 +869,7 @@ public class Page
 		// return Float.intBitsToFloat(retval);
 	}
 
-	public int getInt(int pos)
+	public int getInt(final int pos)
 	{
 		lock.readLock().lock();
 		while (!readDone)
@@ -822,13 +877,13 @@ public class Page
 		}
 
 		// return contents.getInt(pos);
-		byte[] hb = (byte[])unsafe.getObject(contents, offset);
-		int retval = (hb[pos] << 24) | ((hb[pos + 1] & 0xff) << 16) | ((hb[pos + 2] & 0xff) << 8) | (hb[pos + 3] & 0xff);
+		final byte[] hb = (byte[])unsafe.getObject(contents, offset);
+		final int retval = (hb[pos] << 24) | ((hb[pos + 1] & 0xff) << 16) | ((hb[pos + 2] & 0xff) << 8) | (hb[pos + 3] & 0xff);
 		lock.readLock().unlock();
 		return retval;
 	}
 
-	public long getLong(int pos)
+	public long getLong(final int pos)
 	{
 		lock.readLock().lock();
 		while (!readDone)
@@ -836,13 +891,13 @@ public class Page
 		}
 
 		// return contents.getLong(pos);
-		byte[] hb = (byte[])unsafe.getObject(contents, offset);
-		long retval = (((long)hb[pos]) << 56) | ((((long)hb[pos + 1]) & 0xff) << 48) | ((((long)hb[pos + 2]) & 0xff) << 40) | ((((long)hb[pos + 3]) & 0xff) << 32) | ((((long)hb[pos + 4]) & 0xff) << 24) | ((((long)hb[pos + 5]) & 0xff) << 16) | ((((long)hb[pos + 6]) & 0xff) << 8) | (((long)hb[pos + 7]) & 0xff);
+		final byte[] hb = (byte[])unsafe.getObject(contents, offset);
+		final long retval = (((long)hb[pos]) << 56) | ((((long)hb[pos + 1]) & 0xff) << 48) | ((((long)hb[pos + 2]) & 0xff) << 40) | ((((long)hb[pos + 3]) & 0xff) << 32) | ((((long)hb[pos + 4]) & 0xff) << 24) | ((((long)hb[pos + 5]) & 0xff) << 16) | ((((long)hb[pos + 6]) & 0xff) << 8) | (((long)hb[pos + 7]) & 0xff);
 		lock.readLock().unlock();
 		return retval;
 	}
 
-	public int getMedium(int pos)
+	public int getMedium(final int pos)
 	{
 		lock.readLock().lock();
 		while (!readDone)
@@ -850,13 +905,33 @@ public class Page
 		}
 
 		// return contents.getInt(pos);
-		byte[] hb = (byte[])unsafe.getObject(contents, offset);
-		int retval = (hb[pos] << 16) | ((hb[pos + 1] & 0xff) << 8) | ((hb[pos + 2] & 0xff));
+		final byte[] hb = (byte[])unsafe.getObject(contents, offset);
+		final int retval = (hb[pos] << 16) | ((hb[pos + 1] & 0xff) << 8) | ((hb[pos + 2] & 0xff));
 		lock.readLock().unlock();
 		return retval;
 	}
 
-	public short getShort(int pos)
+	public int[] getMediums(int pos, final int num)
+	{
+		lock.readLock().lock();
+		while (!readDone)
+		{
+		}
+
+		final byte[] hb = (byte[])unsafe.getObject(contents, offset);
+		final int[] retval = new int[num];
+		int i = 0;
+		while (i < num)
+		{
+			retval[i] = (hb[pos] << 16) | ((hb[pos + 1] & 0xff) << 8) | ((hb[pos + 2] & 0xff));
+			pos += 3;
+			i++;
+		}
+		lock.readLock().unlock();
+		return retval;
+	}
+
+	public short getShort(final int pos)
 	{
 		lock.readLock().lock();
 		while (!readDone)
@@ -864,8 +939,8 @@ public class Page
 		}
 
 		// return contents.getShort(off);
-		byte[] hb = (byte[])unsafe.getObject(contents, offset);
-		short retval = (short)((hb[pos] << 8) | (hb[pos + 1] & 0xff));
+		final byte[] hb = (byte[])unsafe.getObject(contents, offset);
+		final short retval = (short)((hb[pos] << 8) | (hb[pos + 1] & 0xff));
 		lock.readLock().unlock();
 		return retval;
 	}
@@ -886,7 +961,7 @@ public class Page
 		return pins.size() > 0;
 	}
 
-	public boolean isPinnedBy(long txnum)
+	public boolean isPinnedBy(final long txnum)
 	{
 		return pins.containsKey(txnum);
 	}
@@ -896,7 +971,7 @@ public class Page
 		return readDone;
 	}
 
-	public void pin(long lsn, long txnum)
+	public void pin(final long lsn, final long txnum)
 	{
 		lock.writeLock().lock();
 		final AtomicInteger numPins = pins.get(txnum);
@@ -921,9 +996,11 @@ public class Page
 		return timePinned;
 	}
 
-	public void preAssignToBlock(Block b, boolean log) throws Exception
+	public void preAssignToBlock(final Block b, final boolean log) throws Exception
 	{
 		lock.writeLock().lock();
+		rowIDsAL = null;
+		offsetArray = null;
 		if (modifiedBy >= 0)
 		{
 			if (b != null)
@@ -941,14 +1018,14 @@ public class Page
 		lock.writeLock().unlock();
 	}
 
-	public byte[] read(int off, int length)
+	public byte[] read(final int off, final int length)
 	{
 		lock.readLock().lock();
 		while (!readDone)
 		{
 		}
 		final byte[] retval = new byte[length];
-		byte[] hb = (byte[])unsafe.getObject(contents, offset);
+		final byte[] hb = (byte[])unsafe.getObject(contents, offset);
 		System.arraycopy(hb, off, retval, 0, length);
 		// contents.position(off);
 		// contents.get(retval);
@@ -963,7 +1040,7 @@ public class Page
 		lock.writeLock().unlock();
 	}
 
-	public void setPinTime(long time)
+	public void setPinTime(final long time)
 	{
 		timePinned = time;
 	}
@@ -973,20 +1050,26 @@ public class Page
 		readDone = true;
 	}
 
-	public void unpin(long txnum)
+	@Override
+	public String toString()
+	{
+		return blk.toString();
+	}
+
+	public void unpin(final long txnum)
 	{
 		lock.writeLock().lock();
 		pins.remove(txnum);
 		lock.writeLock().unlock();
 	}
 
-	public boolean unpin1(long txnum)
+	public boolean unpin1(final long txnum)
 	{
 		lock.writeLock().lock();
-		AtomicInteger ai = pins.get(txnum);
+		final AtomicInteger ai = pins.get(txnum);
 		if (ai != null)
 		{
-			int newVal = ai.decrementAndGet();
+			final int newVal = ai.decrementAndGet();
 			if (newVal == 0)
 			{
 				pins.remove(txnum);
@@ -1002,7 +1085,7 @@ public class Page
 		return true;
 	}
 
-	public void write(int off, byte[] data, long txnum, long lsn) throws Exception
+	public void write(final int off, final byte[] data, final long txnum, final long lsn) throws Exception
 	{
 		lock.writeLock().lock();
 		while (!readDone)
@@ -1024,22 +1107,22 @@ public class Page
 		// }
 		// LockManager.lock.unlock();
 		// BufferManager.write(this, off, data);
-		byte[] hb = (byte[])unsafe.getObject(contents, offset);
+		final byte[] hb = (byte[])unsafe.getObject(contents, offset);
 		System.arraycopy(data, 0, hb, off, data.length);
 		lock.writeLock().unlock();
 	}
 
-	public void writeDirect(int off, byte[] data)
+	public void writeDirect(final int off, final byte[] data)
 	{
 		// contents.position(off);
 		// contents.put(data);
 		lock.writeLock().lock();
-		byte[] hb = (byte[])unsafe.getObject(contents, offset);
+		final byte[] hb = (byte[])unsafe.getObject(contents, offset);
 		System.arraycopy(data, 0, hb, off, data.length);
 		lock.writeLock().unlock();
 	}
 
-	public void writeShift(int srcOff, int destOff, int len, long txnum, long lsn) throws Exception
+	public void writeShift(final int srcOff, final int destOff, final int len, final long txnum, final long lsn) throws Exception
 	{
 		lock.writeLock().lock();
 		while (!readDone)
@@ -1052,7 +1135,7 @@ public class Page
 
 		this.modifiedBy = txnum;
 
-		byte[] hb = (byte[])unsafe.getObject(contents, offset);
+		final byte[] hb = (byte[])unsafe.getObject(contents, offset);
 		System.arraycopy(hb, srcOff, hb, destOff, len);
 		lock.writeLock().unlock();
 	}

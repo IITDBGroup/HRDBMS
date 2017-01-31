@@ -52,13 +52,13 @@ public final class SocketImplWrapper extends SocketImpl
 	 * @param socket
 	 *            the socket to wrap
 	 */
-	public SocketImplWrapper(Socket socket)
+	public SocketImplWrapper(final Socket socket)
 	{
 		this.socket = socket;
 	}
 
 	@Override
-	public Object getOption(int optID) throws SocketException
+	public Object getOption(final int optID) throws SocketException
 	{
 		switch (optID)
 		{
@@ -95,7 +95,7 @@ public final class SocketImplWrapper extends SocketImpl
 	// ------------------- overrides SocketImpl ------------------------------
 
 	@Override
-	public void setOption(int optID, Object value) throws SocketException
+	public void setOption(final int optID, final Object value) throws SocketException
 	{
 
 		Boolean bval = null;
@@ -164,7 +164,7 @@ public final class SocketImplWrapper extends SocketImpl
 	}
 
 	@Override
-	protected void accept(SocketImpl s) throws IOException
+	protected void accept(final SocketImpl s) throws IOException
 	{
 		throw new WrappedException();
 	}
@@ -176,7 +176,7 @@ public final class SocketImplWrapper extends SocketImpl
 	}
 
 	@Override
-	protected void bind(InetAddress host, int port) throws IOException
+	protected void bind(final InetAddress host, final int port) throws IOException
 	{
 		throw new WrappedException();
 	}
@@ -188,7 +188,7 @@ public final class SocketImplWrapper extends SocketImpl
 	}
 
 	@Override
-	protected void connect(InetAddress address, int port) throws IOException
+	protected void connect(final InetAddress address, final int port) throws IOException
 	{
 		throw new WrappedException();
 	}
@@ -196,19 +196,19 @@ public final class SocketImplWrapper extends SocketImpl
 	// --------------------- implements SocketImpl -----------------------------
 
 	@Override
-	protected void connect(SocketAddress address, int timeout) throws IOException
+	protected void connect(final SocketAddress address, final int timeout) throws IOException
 	{
 		throw new WrappedException();
 	}
 
 	@Override
-	protected void connect(String host, int port) throws IOException
+	protected void connect(final String host, final int port) throws IOException
 	{
 		throw new WrappedException();
 	}
 
 	@Override
-	protected void create(boolean stream) throws IOException
+	protected void create(final boolean stream) throws IOException
 	{
 		throw new WrappedException();
 	}
@@ -250,13 +250,13 @@ public final class SocketImplWrapper extends SocketImpl
 	}
 
 	@Override
-	protected void listen(int backlog) throws IOException
+	protected void listen(final int backlog) throws IOException
 	{
 		throw new WrappedException();
 	}
 
 	@Override
-	protected void sendUrgentData(int data) throws IOException
+	protected void sendUrgentData(final int data) throws IOException
 	{
 		throw new WrappedException();
 	}

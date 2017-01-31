@@ -9,7 +9,7 @@ public class BuildDecode
 	private static int[][] codeExtended = new int[256][256];
 	private static int[][] codeExtended2 = new int[NUM_SYM - 256][256];
 
-	public static void main(String[] args)
+	public static void main(final String[] args)
 	{
 		try
 		{
@@ -411,25 +411,27 @@ public class BuildDecode
 			codeExtended2[7]['R'] = 650;
 			codeExtended2[6]['R'] = 651;
 
-			BufferedReader in = new BufferedReader(new FileReader("c:\\extended.txt"));
+			final BufferedReader in = new BufferedReader(new FileReader("c:\\extended.txt"));
 			String line = in.readLine();
 			while (line != null)
 			{
 				int index = line.indexOf("freq.put(");
-				int index2 = line.indexOf(",", index);
-				int value = Integer.parseInt(line.substring(index + 9, index2).trim());
+				final int index2 = line.indexOf(",", index);
+				final int value = Integer.parseInt(line.substring(index + 9, index2).trim());
 				index = line.indexOf("//");
 				line = line.substring(index + 2).trim();
 				if (line.length() == 4)
 				{
-					int code1 = codeExtended[line.charAt(0)][line.charAt(1)] - 256;
-					int code2 = codeExtended2[code1][line.charAt(2)] - 256;
-					String out = "codeExtended3[" + code2 + "]['" + line.charAt(3) + "'] = " + value + ";";
+					final int code1 = codeExtended[line.charAt(0)][line.charAt(1)] - 256;
+					final int code2 = codeExtended2[code1][line.charAt(2)] - 256;
+					final String out = "codeExtended3[" + code2 + "]['" + line.charAt(3) + "'] = " + value + ";";
 					System.out.println(out);
 				}
 
 				line = in.readLine();
 			}
+
+			in.close();
 
 			/*
 			 * BufferedReader in = new BufferedReader(new
@@ -447,7 +449,7 @@ public class BuildDecode
 			 * System.out.println(out);
 			 */
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			e.printStackTrace();
 		}

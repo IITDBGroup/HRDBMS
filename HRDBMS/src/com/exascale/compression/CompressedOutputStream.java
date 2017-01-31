@@ -15,23 +15,23 @@ public final class CompressedOutputStream extends FilterOutputStream
 	{
 		factory = LZ4Factory.nativeInstance();
 	}
-	private final byte[] buff = new byte[3 * 128 * 1024];
+	private final byte[] buff = new byte[128 * 1024];
 	private int index = 0;
 	private final LZ4Compressor compress = factory.fastCompressor();
 	// private LZ4Compressor compress = factory.highCompressor();
 	private final byte[] outBuff;
 
-	public CompressedOutputStream(OutputStream out)
+	public CompressedOutputStream(final OutputStream out)
 	{
 		super(out);
-		outBuff = new byte[compress.maxCompressedLength(3 * 128 * 1024) + 8];
+		outBuff = new byte[compress.maxCompressedLength(128 * 1024) + 8];
 	}
 
 	@Override
 	public void flush() throws IOException
 	{
-		int compLen = compress.compress(buff, 0, index, outBuff, 8);
-		ByteBuffer bb = ByteBuffer.wrap(outBuff);
+		final int compLen = compress.compress(buff, 0, index, outBuff, 8);
+		final ByteBuffer bb = ByteBuffer.wrap(outBuff);
 		bb.position(0);
 		bb.putInt(compLen + 4);
 		bb.putInt(index);
@@ -41,10 +41,10 @@ public final class CompressedOutputStream extends FilterOutputStream
 	}
 
 	@Override
-	public void write(byte[] b) throws IOException
+	public void write(final byte[] b) throws IOException
 	{
 		int toWrite = b.length;
-		int ableToWrite = 3 * 128 * 1024 - index;
+		int ableToWrite = 128 * 1024 - index;
 		int bIndex = 0;
 
 		while (true)
@@ -67,26 +67,26 @@ public final class CompressedOutputStream extends FilterOutputStream
 				flushFull();
 				toWrite -= ableToWrite;
 				bIndex += ableToWrite;
-				ableToWrite = 3 * 128 * 1024;
+				ableToWrite = 128 * 1024;
 			}
 		}
 	}
 
 	@Override
-	public void write(int b) throws IOException
+	public void write(final int b) throws IOException
 	{
-		byte[] buff = new byte[1];
+		final byte[] buff = new byte[1];
 		buff[0] = (byte)b;
 		write(buff);
 	}
 
 	private void flushFull() throws IOException
 	{
-		int compLen = compress.compress(buff, 0, 3 * 128 * 1024, outBuff, 8);
-		ByteBuffer bb = ByteBuffer.wrap(outBuff);
+		final int compLen = compress.compress(buff, 0, 128 * 1024, outBuff, 8);
+		final ByteBuffer bb = ByteBuffer.wrap(outBuff);
 		bb.position(0);
 		bb.putInt(compLen + 4);
-		bb.putInt(3 * 128 * 1024);
+		bb.putInt(128 * 1024);
 		out.write(outBuff, 0, compLen + 8);
 		index = 0;
 	}

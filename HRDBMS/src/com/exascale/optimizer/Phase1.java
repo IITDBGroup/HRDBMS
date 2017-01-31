@@ -22,14 +22,14 @@ public final class Phase1
 	private final HashMap<String, String> ftLookup = new HashMap<String, String>();
 	public HashMap<ArrayList<Filter>, Double> likelihoodCache = new HashMap<ArrayList<Filter>, Double>();
 
-	public Phase1(RootOperator root, Transaction tx) throws Exception
+	public Phase1(final RootOperator root, final Transaction tx) throws Exception
 	{
 		this.root = root;
 		this.tx = tx;
 		this.clone = cloneTree(root);
 	}
 
-	public static void printTree(Operator op, int indent)
+	public static void printTree(final Operator op, final int indent)
 	{
 		String line = "";
 		int i = 0;
@@ -55,7 +55,7 @@ public final class Phase1
 			line += "(";
 			HRDBMSWorker.logger.debug(line);
 
-			for (Operator child : op.children())
+			for (final Operator child : op.children())
 			{
 				printTree(child, indent + 3);
 			}
@@ -73,69 +73,180 @@ public final class Phase1
 		}
 	}
 
-	public long card(Operator op) throws Exception
+	private static boolean anyHope(Operator op)
 	{
-		if (op instanceof HashJoinOperator)
+		while (op instanceof SelectOperator)
 		{
-			return cardHJO(op);
-		}
-
-		if (op instanceof IntersectOperator)
-		{
-			return cardSetI(op);
-		}
-
-		if (op instanceof MultiOperator)
-		{
-			return cardMO(op);
-		}
-
-		if (op instanceof NestedLoopJoinOperator)
-		{
-			return cardNL(op);
-		}
-
-		if (op instanceof NetworkReceiveOperator)
-		{
-			return cardRX(op);
-		}
-
-		if (op instanceof NetworkHashAndSendOperator)
-		{
-			return card(op.children().get(0)) / ((NetworkHashAndSendOperator)op).parents().size();
-		}
-
-		if (op instanceof NetworkSendRROperator)
-		{
-			return card(op.children().get(0)) / ((NetworkSendRROperator)op).parents().size();
-		}
-
-		if (op instanceof ProductOperator)
-		{
-			return cardX(op);
-		}
-
-		if (op instanceof SelectOperator)
-		{
-			return (long)(((SelectOperator)op).likelihood(root, tx) * card(op.children().get(0)));
-		}
-
-		if (op instanceof TopOperator)
-		{
-			return cardTop(op);
-		}
-
-		if (op instanceof UnionOperator)
-		{
-			return cardUnion(op);
+			op = op.children().get(0);
 		}
 
 		if (op instanceof TableScanOperator)
 		{
-			return cardTSO(op);
+			return false;
 		}
 
-		return card(op.children().get(0));
+		return true;
+	}
+
+	private static Operator getSubtreeForCol(final String col, final ArrayList<Operator> subtrees)
+	{
+		for (final Operator op : subtrees)
+		{
+			if (op.getCols2Pos().containsKey(col))
+			{
+				return op;
+			}
+		}
+
+		HRDBMSWorker.logger.debug("Can't find subtree for column " + col + " in...");
+		for (final Operator op : subtrees)
+		{
+			HRDBMSWorker.logger.debug(op.getCols2Pos().keySet());
+		}
+		return null;
+	}
+
+	public long card(final Operator op) throws Exception
+	{
+		if (op instanceof HashJoinOperator)
+		{
+			long retval = cardHJO(op);
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+
+			return retval;
+		}
+
+		if (op instanceof IntersectOperator)
+		{
+			long retval = cardSetI(op);
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+
+			return retval;
+		}
+
+		if (op instanceof MultiOperator)
+		{
+			long retval = cardMO(op);
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+
+			return retval;
+		}
+
+		if (op instanceof NestedLoopJoinOperator)
+		{
+			long retval = cardNL(op);
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+
+			return retval;
+		}
+
+		if (op instanceof NetworkReceiveOperator)
+		{
+			long retval = cardRX(op);
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+
+			return retval;
+		}
+
+		if (op instanceof NetworkHashAndSendOperator)
+		{
+			long retval = card(op.children().get(0)) / ((NetworkHashAndSendOperator)op).parents().size();
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+
+			return retval;
+		}
+
+		if (op instanceof NetworkSendRROperator)
+		{
+			long retval = card(op.children().get(0)) / ((NetworkSendRROperator)op).parents().size();
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+
+			return retval;
+		}
+
+		if (op instanceof ProductOperator)
+		{
+			long retval = cardX(op);
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+
+			return retval;
+		}
+
+		if (op instanceof SelectOperator)
+		{
+			long retval = (long)(((SelectOperator)op).likelihood(root, tx) * card(op.children().get(0)));
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+
+			return retval;
+		}
+
+		if (op instanceof TopOperator)
+		{
+			long retval = cardTop(op);
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+
+			return retval;
+		}
+
+		if (op instanceof UnionOperator)
+		{
+			long retval = cardUnion(op);
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+
+			return retval;
+		}
+
+		if (op instanceof TableScanOperator)
+		{
+			long retval = cardTSO(op);
+			if (retval < 1)
+			{
+				retval = 1;
+			}
+
+			return retval;
+		}
+
+		long retval = card(op.children().get(0));
+		if (retval < 1)
+		{
+			retval = 1;
+		}
+
+		return retval;
 	}
 
 	public void optimize() throws Exception
@@ -167,9 +278,9 @@ public final class Phase1
 		// printTree(root, 0); //DEBUG
 	}
 
-	private double adjust(Operator left, Operator right) throws Exception
+	private double adjust(final Operator left, final Operator right, final double r) throws Exception
 	{
-		double retval = 1.0;
+		double retval = r;
 		if (card(left) < card(right))
 		{
 			Operator op = left;
@@ -190,11 +301,14 @@ public final class Phase1
 				}
 				else if (op instanceof TableScanOperator)
 				{
+					// HRDBMSWorker.logger.debug("Adjust is returning " +
+					// retval);
 					return retval;
 				}
 				else
 				{
-					return 1.0;
+					// HRDBMSWorker.logger.debug("Adjust is returning " + r);
+					return r;
 				}
 
 				op = op.children().get(0);
@@ -220,11 +334,14 @@ public final class Phase1
 				}
 				else if (op instanceof TableScanOperator)
 				{
+					// HRDBMSWorker.logger.debug("Adjust is returning " +
+					// retval);
 					return retval;
 				}
 				else
 				{
-					return 1.0;
+					// HRDBMSWorker.logger.debug("Adjust is returning " + r);
+					return r;
 				}
 
 				op = op.children().get(0);
@@ -232,28 +349,13 @@ public final class Phase1
 		}
 	}
 
-	private boolean anyHope(Operator op)
+	private long cardHJO(final Operator op) throws Exception
 	{
-		while (op instanceof SelectOperator)
-		{
-			op = op.children().get(0);
-		}
-
-		if (op instanceof TableScanOperator)
-		{
-			return false;
-		}
-
-		return true;
-	}
-
-	private long cardHJO(Operator op) throws Exception
-	{
-		HashSet<HashMap<Filter, Filter>> hshm = ((HashJoinOperator)op).getHSHM();
+		final HashSet<HashMap<Filter, Filter>> hshm = ((HashJoinOperator)op).getHSHM();
 		double max = -1;
-		for (HashMap<Filter, Filter> hm : hshm)
+		for (final HashMap<Filter, Filter> hm : hshm)
 		{
-			double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
+			final double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
 			if (temp > max)
 			{
 				max = temp;
@@ -276,7 +378,7 @@ public final class Phase1
 		return retval;
 	}
 
-	private long cardMO(Operator op) throws Exception
+	private long cardMO(final Operator op) throws Exception
 	{
 		final long groupCard = meta.getColgroupCard(((MultiOperator)op).getKeys(), root, tx, op);
 		if (groupCard > card(op.children().get(0)))
@@ -287,13 +389,13 @@ public final class Phase1
 		return groupCard;
 	}
 
-	private long cardNL(Operator op) throws Exception
+	private long cardNL(final Operator op) throws Exception
 	{
-		HashSet<HashMap<Filter, Filter>> hshm = ((NestedLoopJoinOperator)op).getHSHM();
+		final HashSet<HashMap<Filter, Filter>> hshm = ((NestedLoopJoinOperator)op).getHSHM();
 		double max = -1;
-		for (HashMap<Filter, Filter> hm : hshm)
+		for (final HashMap<Filter, Filter> hm : hshm)
 		{
-			double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
+			final double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
 			if (temp > max)
 			{
 				max = temp;
@@ -316,7 +418,7 @@ public final class Phase1
 		return retval;
 	}
 
-	private long cardRX(Operator op) throws Exception
+	private long cardRX(final Operator op) throws Exception
 	{
 		long retval = 0;
 		for (final Operator o : op.children())
@@ -331,7 +433,7 @@ public final class Phase1
 		return retval;
 	}
 
-	private long cardSetI(Operator op) throws Exception
+	private long cardSetI(final Operator op) throws Exception
 	{
 		long lCard = card(op.children().get(0));
 		long rCard = card(op.children().get(1));
@@ -354,7 +456,7 @@ public final class Phase1
 		}
 	}
 
-	private long cardTop(Operator op) throws Exception
+	private long cardTop(final Operator op) throws Exception
 	{
 		long retval = ((TopOperator)op).getRemaining();
 		long retval2 = card(op.children().get(0));
@@ -377,14 +479,14 @@ public final class Phase1
 		}
 	}
 
-	private long cardTSO(Operator op) throws Exception
+	private long cardTSO(final Operator op) throws Exception
 	{
-		PartitionMetaData pmd = meta.getPartMeta(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx);
-		int numNodes = pmd.getNumNodes();
-		return (long)((1.0 / numNodes) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx));
+		final PartitionMetaData pmd = meta.getPartMeta(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx);
+		final int numNodes = pmd.getNumNodes();
+		return (long)((1.0 / numNodes) * MetaData.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx));
 	}
 
-	private long cardUnion(Operator op) throws Exception
+	private long cardUnion(final Operator op) throws Exception
 	{
 		long retval = 0;
 		for (final Operator o : op.children())
@@ -399,9 +501,9 @@ public final class Phase1
 		return retval;
 	}
 
-	private long cardX(Operator op) throws Exception
+	private long cardX(final Operator op) throws Exception
 	{
-		long temp = card(op.children().get(0)) * card(op.children().get(1));
+		final long temp = card(op.children().get(0)) * card(op.children().get(1));
 		if (temp < 0)
 		{
 			return Long.MAX_VALUE;
@@ -412,7 +514,7 @@ public final class Phase1
 		}
 	}
 
-	private Operator cloneTree(Operator op) throws Exception
+	private Operator cloneTree(final Operator op) throws Exception
 	{
 		final Operator clone = op.clone();
 		for (final Operator o : op.children())
@@ -441,7 +543,7 @@ public final class Phase1
 		return clone;
 	}
 
-	private void combineProductsAndSelects(Operator op) throws Exception
+	private void combineProductsAndSelects(final Operator op) throws Exception
 	{
 		if (op instanceof SelectOperator)
 		{
@@ -547,7 +649,7 @@ public final class Phase1
 		}
 	}
 
-	private ArrayList<Operator> getLeaves(Operator op)
+	private ArrayList<Operator> getLeaves(final Operator op)
 	{
 		if (op.children().size() == 0)
 		{
@@ -565,14 +667,14 @@ public final class Phase1
 		return retval;
 	}
 
-	private SelectOperator getMostPromisingSelect(ArrayList<SelectOperator> selects, ArrayList<Operator> subtrees, Operator current) throws Exception
+	private SelectOperator getMostPromisingSelect(final ArrayList<SelectOperator> selects, final ArrayList<Operator> subtrees, final Operator current) throws Exception
 	{
 		double minLikelihood = Double.MAX_VALUE;
 		SelectOperator minSelect = null;
 		if (current == null)
 		{
 			// HRDBMSWorker.logger.debug("Current is null");
-			HashSet<SubtreePair> pairs = new HashSet<SubtreePair>();
+			final HashSet<SubtreePair> pairs = new HashSet<SubtreePair>();
 			outer: for (final SelectOperator select : selects)
 			{
 				Double likelihood = likelihoodCache.get(select.getFilter());
@@ -581,19 +683,21 @@ public final class Phase1
 					likelihood = meta.likelihood(new ArrayList<Filter>(select.getFilter()), tx, clone);
 					likelihoodCache.put(select.getFilter(), likelihood);
 				}
-				ArrayList<Filter> filters = select.getFilter();
+				// HRDBMSWorker.logger.debug("Initial likelihood for " + select
+				// + " is " + likelihood);
+				final ArrayList<Filter> filters = select.getFilter();
 				Operator left = null;
 				Operator right = null;
-				ArrayList<String> lefts = new ArrayList<String>();
-				ArrayList<String> rights = new ArrayList<String>();
-				for (Filter filter : filters)
+				final ArrayList<String> lefts = new ArrayList<String>();
+				final ArrayList<String> rights = new ArrayList<String>();
+				for (final Filter filter : filters)
 				{
 					if (filter.leftIsColumn() && filter.rightIsColumn())
 					{
 						left = getSubtreeForCol(filter.leftColumn(), subtrees);
 						right = getSubtreeForCol(filter.rightColumn(), subtrees);
 
-						SubtreePair pair = new SubtreePair(left, right);
+						final SubtreePair pair = new SubtreePair(left, right);
 						if (pairs.contains(pair))
 						{
 							continue outer;
@@ -609,7 +713,15 @@ public final class Phase1
 							rights.add(filter.rightColumn());
 						}
 
-						likelihood *= (card(left) * card(right) * adjust(left, right));
+						final long cl = card(left);
+						final long cr = card(right);
+						// HRDBMSWorker.logger.debug("CL = " + cl + ", CR = " +
+						// cr);
+						likelihood *= cl;
+						likelihood *= cr;
+						likelihood = adjust(left, right, likelihood);
+						// HRDBMSWorker.logger.debug("After card/adjust
+						// likelihood for " + select + " is " + likelihood);
 						break;
 					}
 				}
@@ -676,11 +788,13 @@ public final class Phase1
 			 */
 
 			selects.remove(minSelect);
+			// HRDBMSWorker.logger.debug("Most promising select is " + minSelect
+			// + " with a score of " + minLikelihood);
 			return minSelect;
 		}
 
 		// HRDBMSWorker.logger.debug("Current is not null");
-		HashSet<SubtreePair> pairs = new HashSet<SubtreePair>();
+		final HashSet<SubtreePair> pairs = new HashSet<SubtreePair>();
 		outer2: for (final SelectOperator select : selects)
 		{
 			Double likelihood = Double.MAX_VALUE;
@@ -699,9 +813,11 @@ public final class Phase1
 							likelihood = meta.likelihood(new ArrayList<Filter>(select.getFilter()), tx, clone);
 							likelihoodCache.put(select.getFilter(), likelihood);
 						}
+						// HRDBMSWorker.logger.debug("Initial likelihood for " +
+						// select + " is " + likelihood);
 						left = getSubtreeForCol(filter.leftColumn(), subtrees);
 						right = getSubtreeForCol(filter.rightColumn(), subtrees);
-						SubtreePair pair = new SubtreePair(left, right);
+						final SubtreePair pair = new SubtreePair(left, right);
 						if (pairs.contains(pair))
 						{
 							continue outer2;
@@ -710,7 +826,15 @@ public final class Phase1
 						{
 							pairs.add(pair);
 						}
-						likelihood *= (card(left) * card(right) * adjust(left, right));
+						final long cl = card(left);
+						final long cr = card(right);
+						// HRDBMSWorker.logger.debug("CL = " + cl + ", CR = " +
+						// cr);
+						likelihood *= cl;
+						likelihood *= cr;
+						likelihood = adjust(left, right, likelihood);
+						// HRDBMSWorker.logger.debug("After card/adjust
+						// likelihood for " + select + " is " + likelihood);
 					}
 					else if (current.getCols2Pos().containsKey(filter.rightColumn()))
 					{
@@ -720,9 +844,11 @@ public final class Phase1
 							likelihood = meta.likelihood(new ArrayList<Filter>(select.getFilter()), tx, clone);
 							likelihoodCache.put(select.getFilter(), likelihood);
 						}
+						// HRDBMSWorker.logger.debug("Initial likelihood for " +
+						// select + " is " + likelihood);
 						left = getSubtreeForCol(filter.leftColumn(), subtrees);
 						right = getSubtreeForCol(filter.rightColumn(), subtrees);
-						SubtreePair pair = new SubtreePair(left, right);
+						final SubtreePair pair = new SubtreePair(left, right);
 						if (pairs.contains(pair))
 						{
 							continue outer2;
@@ -731,7 +857,15 @@ public final class Phase1
 						{
 							pairs.add(pair);
 						}
-						likelihood *= (card(left) * card(right) * adjust(left, right));
+						final long cl = card(left);
+						final long cr = card(right);
+						// HRDBMSWorker.logger.debug("CL = " + cl + ", CR = " +
+						// cr);
+						likelihood *= cl;
+						likelihood *= cr;
+						likelihood = adjust(left, right, likelihood);
+						// HRDBMSWorker.logger.debug("After card/adjust
+						// likelihood for " + select + " is " + likelihood);
 					}
 
 					break;
@@ -766,6 +900,8 @@ public final class Phase1
 		if (minSelect != null)
 		{
 			// HRDBMSWorker.logger.debug("Chose " + minLikelihood); //DEBUG
+			// HRDBMSWorker.logger.debug("Most promising select is " + minSelect
+			// + " with a score of " + minLikelihood);
 			selects.remove(minSelect);
 			return minSelect;
 		}
@@ -779,18 +915,20 @@ public final class Phase1
 				likelihood = meta.likelihood(new ArrayList<Filter>(select.getFilter()), tx, clone);
 				likelihoodCache.put(select.getFilter(), likelihood);
 			}
-			ArrayList<Filter> filters = select.getFilter();
+			// HRDBMSWorker.logger.debug("Initial likelihood for " + select + "
+			// is " + likelihood);
+			final ArrayList<Filter> filters = select.getFilter();
 			Operator left = null;
 			Operator right = null;
-			ArrayList<String> lefts = new ArrayList<String>();
-			ArrayList<String> rights = new ArrayList<String>();
-			for (Filter filter : filters)
+			final ArrayList<String> lefts = new ArrayList<String>();
+			final ArrayList<String> rights = new ArrayList<String>();
+			for (final Filter filter : filters)
 			{
 				if (filter.leftIsColumn() && filter.rightIsColumn())
 				{
 					left = getSubtreeForCol(filter.leftColumn(), subtrees);
 					right = getSubtreeForCol(filter.rightColumn(), subtrees);
-					SubtreePair pair = new SubtreePair(left, right);
+					final SubtreePair pair = new SubtreePair(left, right);
 					if (pairs.contains(pair))
 					{
 						continue outer3;
@@ -806,7 +944,14 @@ public final class Phase1
 						rights.add(filter.rightColumn());
 					}
 
-					likelihood *= (card(left) * card(right) * adjust(left, right));
+					final long cl = card(left);
+					final long cr = card(right);
+					// HRDBMSWorker.logger.debug("CL = " + cl + ", CR = " + cr);
+					likelihood *= cl;
+					likelihood *= cr;
+					likelihood = adjust(left, right, likelihood);
+					// HRDBMSWorker.logger.debug("After card/adjust likelihood
+					// for " + select + " is " + likelihood);
 					break;
 				}
 			}
@@ -870,34 +1015,18 @@ public final class Phase1
 		 */
 
 		selects.remove(minSelect);
+		// HRDBMSWorker.logger.debug("Most promising select is " + minSelect + "
+		// with a score of " + minLikelihood);
 		return minSelect;
 	}
 
-	private void getReferences(Operator o, HashSet<String> references)
+	private void getReferences(final Operator o, final HashSet<String> references)
 	{
 		references.addAll(o.getReferences());
 		for (final Operator op : o.children())
 		{
 			getReferences(op, references);
 		}
-	}
-
-	private Operator getSubtreeForCol(String col, ArrayList<Operator> subtrees)
-	{
-		for (final Operator op : subtrees)
-		{
-			if (op.getCols2Pos().containsKey(col))
-			{
-				return op;
-			}
-		}
-
-		HRDBMSWorker.logger.debug("Can't find subtree for column " + col + " in...");
-		for (Operator op : subtrees)
-		{
-			HRDBMSWorker.logger.debug(op.getCols2Pos().keySet());
-		}
-		return null;
 	}
 
 	private void mergeSelectsAndTableScans(Operator op) throws Exception
@@ -948,32 +1077,32 @@ public final class Phase1
 		}
 	}
 
-	private void projectForSemiAnti(Operator op) throws Exception
+	private void projectForSemiAnti(final Operator op) throws Exception
 	{
 		if (op instanceof SemiJoinOperator)
 		{
-			HashSet<HashMap<Filter, Filter>> hshm = ((SemiJoinOperator)op).getHSHM();
-			HashSet<String> cols = new HashSet<String>();
-			for (HashMap<Filter, Filter> hm : hshm)
+			final HashSet<HashMap<Filter, Filter>> hshm = ((SemiJoinOperator)op).getHSHM();
+			final HashSet<String> cols = new HashSet<String>();
+			for (final HashMap<Filter, Filter> hm : hshm)
 			{
-				for (Filter f : hm.keySet())
+				for (final Filter f : hm.keySet())
 				{
 					if (f.leftIsColumn())
 					{
-						String l = f.leftColumn();
+						final String l = f.leftColumn();
 						cols.add(l);
 					}
 
 					if (f.rightIsColumn())
 					{
-						String r = f.rightColumn();
+						final String r = f.rightColumn();
 						cols.add(r);
 					}
 				}
 			}
 
-			ArrayList<String> toProject = new ArrayList<String>();
-			for (String col : cols)
+			final ArrayList<String> toProject = new ArrayList<String>();
+			for (final String col : cols)
 			{
 				if (op.children().get(1).getCols2Pos().keySet().contains(col))
 				{
@@ -983,8 +1112,8 @@ public final class Phase1
 
 			if (toProject.size() < op.children().get(1).getCols2Pos().size())
 			{
-				ProjectOperator project = new ProjectOperator(toProject, meta);
-				Operator right = op.children().get(1);
+				final ProjectOperator project = new ProjectOperator(toProject, meta);
+				final Operator right = op.children().get(1);
 				op.removeChild(right);
 				project.add(right);
 				op.add(project);
@@ -992,28 +1121,28 @@ public final class Phase1
 		}
 		else if (op instanceof AntiJoinOperator)
 		{
-			HashSet<HashMap<Filter, Filter>> hshm = ((AntiJoinOperator)op).getHSHM();
-			HashSet<String> cols = new HashSet<String>();
-			for (HashMap<Filter, Filter> hm : hshm)
+			final HashSet<HashMap<Filter, Filter>> hshm = ((AntiJoinOperator)op).getHSHM();
+			final HashSet<String> cols = new HashSet<String>();
+			for (final HashMap<Filter, Filter> hm : hshm)
 			{
-				for (Filter f : hm.keySet())
+				for (final Filter f : hm.keySet())
 				{
 					if (f.leftIsColumn())
 					{
-						String l = f.leftColumn();
+						final String l = f.leftColumn();
 						cols.add(l);
 					}
 
 					if (f.rightIsColumn())
 					{
-						String r = f.rightColumn();
+						final String r = f.rightColumn();
 						cols.add(r);
 					}
 				}
 			}
 
-			ArrayList<String> toProject = new ArrayList<String>();
-			for (String col : cols)
+			final ArrayList<String> toProject = new ArrayList<String>();
+			for (final String col : cols)
 			{
 				if (op.children().get(1).getCols2Pos().keySet().contains(col))
 				{
@@ -1023,8 +1152,8 @@ public final class Phase1
 
 			if (toProject.size() < op.children().get(1).getCols2Pos().size())
 			{
-				ProjectOperator project = new ProjectOperator(toProject, meta);
-				Operator right = op.children().get(1);
+				final ProjectOperator project = new ProjectOperator(toProject, meta);
+				final Operator right = op.children().get(1);
 				op.removeChild(right);
 				project.add(right);
 				op.add(project);
@@ -1036,7 +1165,7 @@ public final class Phase1
 		}
 		else
 		{
-			for (Operator o : op.children())
+			for (final Operator o : op.children())
 			{
 				projectForSemiAnti(o);
 			}
@@ -1061,7 +1190,7 @@ public final class Phase1
 				{
 					final TableScanOperator table = (TableScanOperator)op;
 					final HashMap<String, Integer> cols2Pos = table.getCols2Pos();
-					TreeMap<Integer, String> pos2Col = table.getPos2Col();
+					final TreeMap<Integer, String> pos2Col = table.getPos2Col();
 					final ArrayList<String> needed = new ArrayList<String>(references.size());
 					for (final String col : references)
 					{
@@ -1086,7 +1215,7 @@ public final class Phase1
 						}
 						else
 						{
-							String col = pos2Col.get(0);
+							final String col = pos2Col.get(0);
 							needed.add(table.getAlias() + "." + col.substring(col.indexOf('.') + 1));
 						}
 					}
@@ -1160,7 +1289,7 @@ public final class Phase1
 		}
 	}
 
-	private void pushDownSelects(Operator op, long time) throws Exception
+	private void pushDownSelects(final Operator op, final long time) throws Exception
 	{
 		if (System.currentTimeMillis() - time > 2000)
 		{
@@ -1180,7 +1309,7 @@ public final class Phase1
 			}
 
 			final ArrayList<Operator> children = op.children();
-			Operator child = children.get(0);
+			final Operator child = children.get(0);
 
 			// look at opportunity to push down across child
 			if (child instanceof TableScanOperator)
@@ -1291,7 +1420,7 @@ public final class Phase1
 		}
 	}
 
-	private void pushDownSelects2(Operator op, long time) throws Exception
+	private void pushDownSelects2(final Operator op, final long time) throws Exception
 	{
 		if (System.currentTimeMillis() - time > 2000)
 		{
@@ -1310,10 +1439,10 @@ public final class Phase1
 				return;
 			}
 
-			SelectOperator sop = (SelectOperator)op;
-			ArrayList<Filter> filters = sop.getFilter();
+			final SelectOperator sop = (SelectOperator)op;
+			final ArrayList<Filter> filters = sop.getFilter();
 
-			for (Filter filter : filters)
+			for (final Filter filter : filters)
 			{
 				if (filter.leftIsColumn() && filter.rightIsColumn())
 				{
@@ -1335,7 +1464,7 @@ public final class Phase1
 					}
 					else
 					{
-						Operator child = op.children().get(0);
+						final Operator child = op.children().get(0);
 						if (child instanceof ProductOperator)
 						{
 							done2.add(op);
@@ -1347,7 +1476,7 @@ public final class Phase1
 			}
 
 			final ArrayList<Operator> children = op.children();
-			Operator child = children.get(0);
+			final Operator child = children.get(0);
 
 			// look at opportunity to push down across child
 			if (child instanceof TableScanOperator)
@@ -1457,11 +1586,11 @@ public final class Phase1
 		}
 	}
 
-	private void removeUnneededOps(Operator op) throws Exception
+	private void removeUnneededOps(final Operator op) throws Exception
 	{
 		if (!(op instanceof MultiOperator))
 		{
-			for (Operator o : op.children())
+			for (final Operator o : op.children())
 			{
 				removeUnneededOps(o);
 			}
@@ -1469,26 +1598,26 @@ public final class Phase1
 			return;
 		}
 
-		MultiOperator mop = (MultiOperator)op;
-		Operator child = mop.children().get(0);
+		final MultiOperator mop = (MultiOperator)op;
+		final Operator child = mop.children().get(0);
 		if (child instanceof ReorderOperator || child instanceof ProjectOperator || child instanceof SortOperator)
 		{
 			mop.removeChild(child);
-			Operator grandChild = child.children().get(0);
+			final Operator grandChild = child.children().get(0);
 			child.removeChild(grandChild);
 			mop.add(grandChild);
 			removeUnneededOps(mop);
 		}
 		else
 		{
-			for (Operator o : mop.children())
+			for (final Operator o : mop.children())
 			{
 				removeUnneededOps(o);
 			}
 		}
 	}
 
-	private void reorderProducts(Operator op) throws Exception
+	private void reorderProducts(final Operator op) throws Exception
 	{
 		try
 		{
@@ -1515,7 +1644,7 @@ public final class Phase1
 		}
 	}
 
-	private void reorderProducts(Operator op, ArrayList<SelectOperator> selects, Operator top) throws Exception
+	private void reorderProducts(Operator op, final ArrayList<SelectOperator> selects, final Operator top) throws Exception
 	{
 		while (op instanceof SelectOperator)
 		{
@@ -1593,7 +1722,7 @@ public final class Phase1
 		transitive(selectsCopy);
 
 		Operator newProd = null;
-		ArrayList<SelectOperator> delay = new ArrayList<SelectOperator>();
+		final ArrayList<SelectOperator> delay = new ArrayList<SelectOperator>();
 		while (selectsCopy.size() > 0)
 		{
 			final SelectOperator select = getMostPromisingSelect(selectsCopy, subtrees, newProd);
@@ -1614,7 +1743,7 @@ public final class Phase1
 						right = getSubtreeForCol(filter.rightColumn(), subtrees);
 						if (filter.op().equals("E") && card(left) < card(right))
 						{
-							Operator temp = left;
+							final Operator temp = left;
 							left = right;
 							right = temp;
 						}
@@ -1676,13 +1805,13 @@ public final class Phase1
 				temp.add(newProd);
 				newProd = temp;
 
-				for (SelectOperator s2 : (ArrayList<SelectOperator>)selectsCopy.clone())
+				for (final SelectOperator s2 : (ArrayList<SelectOperator>)selectsCopy.clone())
 				{
 					if (s2 != select)
 					{
-						ArrayList<Filter> f2s = s2.getFilter();
+						final ArrayList<Filter> f2s = s2.getFilter();
 						boolean ok = true;
-						for (Filter f2 : f2s)
+						for (final Filter f2 : f2s)
 						{
 							if (f2.leftIsColumn())
 							{
@@ -1737,7 +1866,7 @@ public final class Phase1
 		// everything needs to be removed and readded for all the operators in
 		// the rest of the top
 		Operator next = subtrees.get(0);
-		for (SelectOperator sop : delay)
+		for (final SelectOperator sop : delay)
 		{
 			sop.add(next);
 			next = sop;
@@ -1777,15 +1906,15 @@ public final class Phase1
 		}
 	}
 
-	private void transitive(ArrayList<SelectOperator> list) throws Exception
+	private void transitive(final ArrayList<SelectOperator> list) throws Exception
 	{
-		ConcurrentHashMap<Filter, Filter> set = new ConcurrentHashMap<Filter, Filter>();
-		for (SelectOperator op : list)
+		final ConcurrentHashMap<Filter, Filter> set = new ConcurrentHashMap<Filter, Filter>();
+		for (final SelectOperator op : list)
 		{
-			ArrayList<Filter> ors = op.getFilter();
+			final ArrayList<Filter> ors = op.getFilter();
 			if (ors.size() == 1)
 			{
-				Filter f = ors.get(0);
+				final Filter f = ors.get(0);
 				if (f.op().equals("E") && f.leftIsColumn() && f.rightIsColumn())
 				{
 					set.put(f, f);
@@ -1797,15 +1926,15 @@ public final class Phase1
 		while (didWork)
 		{
 			didWork = false;
-			for (Filter f1 : set.keySet())
+			for (final Filter f1 : set.keySet())
 			{
-				for (Filter f2 : set.keySet())
+				for (final Filter f2 : set.keySet())
 				{
 					if (f1.leftColumn().equals(f2.leftColumn()))
 					{
 						if (!f1.rightColumn().equals(f2.rightColumn()))
 						{
-							Filter f3 = new Filter(f1.getRightString(), "E", f2.getRightString());
+							final Filter f3 = new Filter(f1.getRightString(), "E", f2.getRightString());
 							if (!set.contains(f3) && !set.contains(new Filter(f2.getRightString(), "E", f1.getRightString())))
 							{
 								set.put(f3, f3);
@@ -1819,7 +1948,7 @@ public final class Phase1
 					{
 						if (!f1.rightColumn().equals(f2.leftColumn()))
 						{
-							Filter f3 = new Filter(f1.getRightString(), "E", f2.getLeftString());
+							final Filter f3 = new Filter(f1.getRightString(), "E", f2.getLeftString());
 							if (!set.contains(f3) && !set.contains(new Filter(f2.getLeftString(), "E", f1.getRightString())))
 							{
 								set.put(f3, f3);
@@ -1833,7 +1962,7 @@ public final class Phase1
 					{
 						if (!f1.leftColumn().equals(f2.leftColumn()))
 						{
-							Filter f3 = new Filter(f1.getLeftString(), "E", f2.getLeftString());
+							final Filter f3 = new Filter(f1.getLeftString(), "E", f2.getLeftString());
 							if (!set.contains(f3) && !set.contains(new Filter(f2.getLeftString(), "E", f1.getLeftString())))
 							{
 								set.put(f3, f3);
@@ -1847,7 +1976,7 @@ public final class Phase1
 					{
 						if (!f1.leftColumn().equals(f2.rightColumn()))
 						{
-							Filter f3 = new Filter(f1.getLeftString(), "E", f2.getRightString());
+							final Filter f3 = new Filter(f1.getLeftString(), "E", f2.getRightString());
 							if (!set.contains(f3) && !set.contains(new Filter(f2.getRightString(), "E", f1.getLeftString())))
 							{
 								set.put(f3, f3);
@@ -1867,20 +1996,20 @@ public final class Phase1
 		private final Operator left;
 		private final Operator right;
 
-		public SubtreePair(Operator left, Operator right)
+		public SubtreePair(final Operator left, final Operator right)
 		{
 			this.left = left;
 			this.right = right;
 		}
 
 		@Override
-		public boolean equals(Object o)
+		public boolean equals(final Object o)
 		{
 			if (o == null)
 			{
 				return false;
 			}
-			SubtreePair rhs = (SubtreePair)o;
+			final SubtreePair rhs = (SubtreePair)o;
 
 			return (this.left == rhs.left && this.right == rhs.right) || (this.left == rhs.right && this.right == rhs.left);
 		}

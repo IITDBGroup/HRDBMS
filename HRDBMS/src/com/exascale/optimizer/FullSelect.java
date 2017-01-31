@@ -11,7 +11,7 @@ public class FullSelect
 	private final FetchFirst fetchFirst;
 	private ArrayList<Column> cols;
 
-	public FullSelect(SubSelect sub, FullSelect full, ArrayList<ConnectedSelect> connected, OrderBy orderBy, FetchFirst fetchFirst)
+	public FullSelect(final SubSelect sub, final FullSelect full, final ArrayList<ConnectedSelect> connected, final OrderBy orderBy, final FetchFirst fetchFirst)
 	{
 		this.sub = sub;
 		this.full = full;
@@ -20,7 +20,7 @@ public class FullSelect
 		this.fetchFirst = fetchFirst;
 	}
 
-	public void addCols(ArrayList<Column> cols)
+	public void addCols(final ArrayList<Column> cols)
 	{
 		this.cols = cols;
 	}
@@ -47,7 +47,7 @@ public class FullSelect
 		if (connected != null)
 		{
 			connectedClone = new ArrayList<ConnectedSelect>();
-			for (ConnectedSelect c : connected)
+			for (final ConnectedSelect c : connected)
 			{
 				connectedClone.add(c.clone());
 			}
@@ -63,12 +63,12 @@ public class FullSelect
 			fetchFirstClone = fetchFirst.clone();
 		}
 
-		FullSelect retval = new FullSelect(subClone, fullClone, connectedClone, orderByClone, fetchFirstClone);
+		final FullSelect retval = new FullSelect(subClone, fullClone, connectedClone, orderByClone, fetchFirstClone);
 
 		if (cols != null)
 		{
 			retval.cols = new ArrayList<Column>();
-			for (Column c : cols)
+			for (final Column c : cols)
 			{
 				retval.cols.add(c.clone());
 			}

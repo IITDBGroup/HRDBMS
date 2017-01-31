@@ -14,10 +14,10 @@ package com.exascale.optimizer;
  *
  * COPYRIGHT:
  *
- * This software module was originally developed by Raphaël Grosbois and
+ * This software module was originally developed by Raphael Grosbois and
  * Diego Santa Cruz (Swiss Federal Institute of Technology-EPFL); Joel
- * Askelöf (Ericsson Radio Systems AB); and Bertrand Berthelot, David
- * Bouchard, Félix Henry, Gerard Mozelle and Patrice Onno (Canon Research
+ * Askelef (Ericsson Radio Systems AB); and Bertrand Berthelot, David
+ * Bouchard, Felix Henry, Gerard Mozelle and Patrice Onno (Canon Research
  * Centre France S.A) in the course of development of the JPEG2000
  * standard as specified by ISO/IEC 15444 (JPEG 2000 Standard). This
  * software module is an implementation of a part of the JPEG 2000
@@ -61,7 +61,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public final class BufferedRandomAccessFile
 {
-	private final String fileName;
+	// private final String fileName;
 	private boolean isReadOnly = true;
 	protected RandomAccessFile theFile;
 	private volatile byte[] byteBuffer;
@@ -87,7 +87,7 @@ public final class BufferedRandomAccessFile
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 */
-	public BufferedRandomAccessFile(File file, String mode) throws IOException
+	public BufferedRandomAccessFile(final File file, final String mode) throws IOException
 	{
 		this(file, mode, 512);
 	}
@@ -109,9 +109,9 @@ public final class BufferedRandomAccessFile
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 */
-	public BufferedRandomAccessFile(File file, String mode, int bufferSize) throws IOException
+	public BufferedRandomAccessFile(final File file, String mode, final int bufferSize) throws IOException
 	{
-		fileName = file.getName();
+		// fileName = file.getName();
 		if (mode.equals("rw") || mode.equals("rw+"))
 		{ // mode read / write
 			isReadOnly = false;
@@ -144,7 +144,7 @@ public final class BufferedRandomAccessFile
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 */
-	public BufferedRandomAccessFile(String name, String mode) throws IOException
+	public BufferedRandomAccessFile(final String name, final String mode) throws IOException
 	{
 		this(name, mode, 512);
 	}
@@ -166,7 +166,7 @@ public final class BufferedRandomAccessFile
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 */
-	public BufferedRandomAccessFile(String name, String mode, int bufferSize) throws IOException
+	public BufferedRandomAccessFile(final String name, final String mode, final int bufferSize) throws IOException
 	{
 		this(new File(name), mode, bufferSize);
 	}
@@ -415,7 +415,7 @@ public final class BufferedRandomAccessFile
 		return ((read() << 8) | read());
 	}
 
-	public void seek(long off) throws IOException
+	public void seek(final long off) throws IOException
 	{
 		/*
 		 * If the new offset is within the buffer, only the pos value needs to
@@ -490,7 +490,7 @@ public final class BufferedRandomAccessFile
 		return super.toString() + "\nBig-Endian ordering";
 	}
 
-	public final void write(byte b) throws IOException
+	public final void write(final byte b) throws IOException
 	{
 		// As long as pos is less than the length of the buffer we can write
 		// to the buffer. If the position is after the buffer a new buffer is
@@ -516,7 +516,7 @@ public final class BufferedRandomAccessFile
 		}
 	}
 
-	public void write(byte[] bs) throws IOException
+	public void write(final byte[] bs) throws IOException
 	{
 		for (final byte b : bs)
 		{
@@ -524,7 +524,7 @@ public final class BufferedRandomAccessFile
 		}
 	}
 
-	public final void write(int b) throws IOException
+	public final void write(final int b) throws IOException
 	{
 		// As long as pos is less than the length of the buffer we can write
 		// to the buffer. If the position is after the buffer a new buffer is
@@ -561,7 +561,7 @@ public final class BufferedRandomAccessFile
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 */
-	public final void writeDouble(double v) throws IOException
+	public final void writeDouble(final double v) throws IOException
 	{
 		final long longV = Double.doubleToLongBits(v);
 
@@ -585,7 +585,7 @@ public final class BufferedRandomAccessFile
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 */
-	public final void writeFloat(float v) throws IOException
+	public final void writeFloat(final float v) throws IOException
 	{
 		final int intV = Float.floatToIntBits(v);
 
@@ -605,7 +605,7 @@ public final class BufferedRandomAccessFile
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 */
-	public final void writeInt(int v) throws IOException
+	public final void writeInt(final int v) throws IOException
 	{
 		write(v >>> 24);
 		write(v >>> 16);
@@ -623,7 +623,7 @@ public final class BufferedRandomAccessFile
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 */
-	public final void writeLong(long v) throws IOException
+	public final void writeLong(final long v) throws IOException
 	{
 		write((int)(v >>> 56));
 		write((int)(v >>> 48));
@@ -652,13 +652,13 @@ public final class BufferedRandomAccessFile
 	 * @exception java.io.IOException
 	 *                If an I/O error ocurred.
 	 */
-	public final void writeShort(int v) throws IOException
+	public final void writeShort(final int v) throws IOException
 	{
 		write(v >>> 8);
 		write(v);
 	}
 
-	private final void readNewBuffer(long off) throws IOException
+	private final void readNewBuffer(final long off) throws IOException
 	{
 		/*
 		 * If the buffer have changed. We need to write it to the file before

@@ -4,7 +4,7 @@ import java.nio.ByteBuffer;
 
 public class StartLogRec extends LogRec
 {
-	public StartLogRec(long txnum)
+	public StartLogRec(final long txnum)
 	{
 		super(LogRec.START, txnum, ByteBuffer.allocate(28));
 	}

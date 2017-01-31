@@ -35,7 +35,7 @@ public class TruncateLogRec extends LogRec
 
 	private final CharsetEncoder ce = cs.newEncoder();
 
-	public TruncateLogRec(long txnum, Block b) throws Exception
+	public TruncateLogRec(final long txnum, final Block b) throws Exception
 	{
 		super(LogRec.TRUNCATE, txnum, ByteBuffer.allocate(32 + b.toString().getBytes(StandardCharsets.UTF_8).length));
 		this.b = b;
@@ -44,11 +44,11 @@ public class TruncateLogRec extends LogRec
 		buff.position(28);
 		// byte[] bbytes = b.toString().getBytes("UTF-8");
 		// final int blen = bbytes.length;
-		String string = b.toString();
-		byte[] ba = new byte[string.length() << 2];
-		char[] value = (char[])unsafe.getObject(string, offset);
-		int blen = ((sun.nio.cs.ArrayEncoder)ce).encode(value, 0, value.length, ba);
-		byte[] bbytes = Arrays.copyOf(ba, blen);
+		final String string = b.toString();
+		final byte[] ba = new byte[string.length() << 2];
+		final char[] value = (char[])unsafe.getObject(string, offset);
+		final int blen = ((sun.nio.cs.ArrayEncoder)ce).encode(value, 0, value.length, ba);
+		final byte[] bbytes = Arrays.copyOf(ba, blen);
 		buff.putInt(blen);
 		try
 		{

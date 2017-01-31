@@ -6,15 +6,17 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
@@ -42,13 +44,15 @@ public class LogManager extends HRDBMSThread
 	private static AtomicLong last_lsn;
 	public static Map<String, FileChannel> openFiles = new HashMap<String, FileChannel>();
 	public static String filename;
-	public static ConcurrentHashMap<String, ArrayDeque<LogRec>> logs = new ConcurrentHashMap<String, ArrayDeque<LogRec>>();
+	public static ConcurrentHashMap<String, LinkedBlockingDeque<LogRec>> logs = new ConcurrentHashMap<String, LinkedBlockingDeque<LogRec>>();
 	// private static BlockingQueue<String> in = new
 	// LinkedBlockingQueue<String>();
 	public static Boolean noArchive = false;
 	// public static Object noArchiveLock = new Object();
 	public static int openIters = 0;
 	public static volatile boolean recoverDone = false;
+	private static volatile long masterLSN = 0;
+	private static Object masterLSNLock = new Object();
 
 	static
 	{
@@ -62,12 +66,12 @@ public class LogManager extends HRDBMSThread
 		this.description = "Log Manager";
 	}
 
-	public static RandomAccessFile archive(Set<Long> txList) throws Exception
+	public static RandomAccessFile archive(final Set<Long> txList) throws Exception
 	{
 		return archive(txList, filename, false);
 	}
 
-	public static RandomAccessFile archive(Set<Long> txList, String fn, boolean force) throws Exception
+	public static RandomAccessFile archive(final Set<Long> txList, final String fn, final boolean force) throws Exception
 	{
 		// go through log and archive anything that is not part of an open
 		// transaction
@@ -75,7 +79,8 @@ public class LogManager extends HRDBMSThread
 		while (true)
 		{
 			// synchronized(noArchiveLock)
-			Transaction.txListLock.writeLock().lock();
+			// Transaction.txListLock.lock();
+			synchronized (Transaction.txListLock)
 			{
 				try
 				{
@@ -84,7 +89,7 @@ public class LogManager extends HRDBMSThread
 						continue;
 					}
 
-					final ArrayDeque<LogRec> list = logs.get(fn);
+					final LinkedBlockingDeque<LogRec> list = logs.get(fn);
 
 					if (list != null)
 					{
@@ -109,27 +114,27 @@ public class LogManager extends HRDBMSThread
 							f = new RandomAccessFile(table, "rwd");
 							break;
 						}
-						catch (FileNotFoundException e)
+						catch (final FileNotFoundException e)
 						{
 							ResourceManager.panic = true;
 							try
 							{
 								Thread.sleep(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("rm_sleep_time_ms")) / 2);
 							}
-							catch (Exception g)
+							catch (final Exception g)
 							{
 							}
 						}
 					}
-					FileChannel fc2 = f.getChannel();
+					final FileChannel fc2 = f.getChannel();
 					fc2.truncate(0);
-					Iterator<LogRec> iter = new ForwardLogIterator(fn);
-					ArrayList<LogRec> toArchive = new ArrayList<LogRec>();
-					ArrayList<LogRec> toKeep = new ArrayList<LogRec>();
+					final Iterator<LogRec> iter = new ForwardLogIterator(fn);
+					final ArrayList<LogRec> toArchive = new ArrayList<LogRec>();
+					final ArrayList<LogRec> toKeep = new ArrayList<LogRec>();
 					while (iter.hasNext())
 					{
-						LogRec rec = iter.next();
-						long txnum = rec.txnum();
+						final LogRec rec = iter.next();
+						final long txnum = rec.txnum();
 						if (txList.contains(txnum))
 						{
 							toKeep.add(rec);
@@ -158,30 +163,30 @@ public class LogManager extends HRDBMSThread
 								f1 = new RandomAccessFile(t, "rwd");
 								break;
 							}
-							catch (FileNotFoundException e)
+							catch (final FileNotFoundException e)
 							{
 								ResourceManager.panic = true;
 								try
 								{
 									Thread.sleep(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("rm_sleep_time_ms")) / 2);
 								}
-								catch (Exception g)
+								catch (final Exception g)
 								{
 								}
 							}
 						}
-						FileChannel fc1 = f1.getChannel();
+						final FileChannel fc1 = f1.getChannel();
 
 						fc1.position(0);
 						int total = 0;
-						for (LogRec rec : toArchive)
+						for (final LogRec rec : toArchive)
 						{
 							total += (8 + rec.buffer().limit());
 						}
 
 						final ByteBuffer size = ByteBuffer.allocate(total);
 						size.position(0);
-						for (LogRec rec : toArchive)
+						for (final LogRec rec : toArchive)
 						{
 							size.putInt(rec.size());
 							rec.buffer().position(0);
@@ -197,7 +202,7 @@ public class LogManager extends HRDBMSThread
 
 					fc2.position(0);
 					long tot = 0;
-					for (LogRec rec : toKeep)
+					for (final LogRec rec : toKeep)
 					{
 						tot += (8 + rec.buffer().limit());
 					}
@@ -205,9 +210,9 @@ public class LogManager extends HRDBMSThread
 					int total = 0;
 					if (tot > Integer.MAX_VALUE)
 					{
-						for (LogRec rec : toKeep)
+						for (final LogRec rec : toKeep)
 						{
-							ByteBuffer bb = ByteBuffer.allocate(8 + rec.buffer().limit());
+							final ByteBuffer bb = ByteBuffer.allocate(8 + rec.buffer().limit());
 							bb.putInt(rec.size());
 							rec.buffer().position(0);
 							bb.put(rec.buffer());
@@ -216,7 +221,7 @@ public class LogManager extends HRDBMSThread
 							fc2.write(bb);
 						}
 
-						Transaction.txListLock.writeLock().unlock();
+						// Transaction.txListLock.unlock();
 						return f;
 					}
 					else
@@ -225,7 +230,7 @@ public class LogManager extends HRDBMSThread
 					}
 					final ByteBuffer size = ByteBuffer.allocate(total);
 					size.position(0);
-					for (LogRec rec : toKeep)
+					for (final LogRec rec : toKeep)
 					{
 						size.putInt(rec.size());
 						rec.buffer().position(0);
@@ -236,108 +241,120 @@ public class LogManager extends HRDBMSThread
 					size.position(0);
 					fc2.write(size);
 
-					Transaction.txListLock.writeLock().unlock();
+					// Transaction.txListLock.unlock();
 					return f;
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
-					Transaction.txListLock.writeLock().unlock();
+					// Transaction.txListLock.unlock();
 					throw e;
 				}
 			}
 		}
 	}
 
-	public static Iterator<LogRec> archiveIterator(String fn, boolean flush)
+	public static Iterator<LogRec> archiveIterator(final String fn, final boolean flush)
 	{
 		try
 		{
 			return new ArchiveIterator(fn);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			return null;
 		}
 	}
 
-	public static void commit(long txnum) throws Exception
+	public static void commit(final long txnum) throws Exception
 	{
 		commit(txnum, filename);
 	}
 
-	public static void commit(long txnum, String fn) throws Exception
+	public static void commit(final long txnum, final String fn) throws Exception
 	{
 		final LogRec rec = new CommitLogRec(txnum);
 		write(rec, fn);
 		flush(rec.lsn(), fn);
 	}
 
-	public static void commitNoFlush(long txnum) throws Exception
+	public static void commitNoFlush(final long txnum) throws Exception
 	{
 		commitNoFlush(txnum, filename);
 	}
 
-	public static void commitNoFlush(long txnum, String fn) throws Exception
+	public static void commitNoFlush(final long txnum, final String fn) throws Exception
 	{
 		final LogRec rec = new CommitLogRec(txnum);
 		write(rec, fn);
 		flushNoForce(rec.lsn(), fn);
 	}
 
-	public static DeleteLogRec delete(long txnum, Block b, int off, byte[] before, byte[] after) throws Exception
+	public static DeleteLogRec delete(final long txnum, final Block b, final int off, final byte[] before, final byte[] after) throws Exception
 	{
 		return delete(txnum, b, off, before, after, filename);
 	}
 
-	public static DeleteLogRec delete(long txnum, Block b, int off, byte[] before, byte[] after, String fn) throws Exception
+	public static DeleteLogRec delete(final long txnum, final Block b, final int off, final byte[] before, final byte[] after, final String fn) throws Exception
 	{
 		final DeleteLogRec rec = new DeleteLogRec(txnum, b, off, before.clone(), after.clone());
 		write(rec, fn);
 		return rec;
 	}
 
-	public static ExtendLogRec extend(long txnum, Block b) throws Exception
+	public static ExtendLogRec extend(final long txnum, final Block b) throws Exception
 	{
 		return extend(txnum, b, filename);
 	}
 
-	public static ExtendLogRec extend(long txnum, Block b, String fn) throws Exception
+	public static ExtendLogRec extend(final long txnum, final Block b, final String fn) throws Exception
 	{
 		final ExtendLogRec rec = new ExtendLogRec(txnum, b);
 		write(rec, fn);
 		return rec;
 	}
 
-	public static void flush(long lsn) throws IOException
+	public static void flush(final long lsn) throws IOException
 	{
 		flush(lsn, filename);
 	}
 
-	public static void flush(long lsn, String fn) throws IOException
+	public static void flush(final long lsn, final String fn) throws IOException
 	{
-		final ArrayDeque<LogRec> list = logs.get(fn);
+		synchronized (masterLSNLock)
+		{
+			if (lsn > masterLSN)
+			{
+				masterLSN = lsn;
+			}
+			else
+			{
+				return;
+			}
+		}
+		final LinkedBlockingDeque<LogRec> list = logs.get(fn);
 		// synchronized (noArchiveLock)
-		Transaction.txListLock.writeLock().lock();
+		// Transaction.txListLock.lock();
+		synchronized (Transaction.txListLock)
 		{
 			try
 			{
-				HashMap<BlockAndTransaction, ArrayList<LogRec>> toWrite = new HashMap<BlockAndTransaction, ArrayList<LogRec>>();
-				TreeMap<LogRec, LogRec> ordered = new TreeMap<LogRec, LogRec>();
+				final HashMap<BlockAndTransaction, ArrayList<LogRec>> toWrite = new HashMap<BlockAndTransaction, ArrayList<LogRec>>();
+				final HashSet<LogRec> ordered = new HashSet<LogRec>();
 				final FileChannel fc = getFile(fn);
 				// synchronized (Transaction.txList)
 				{
-					while (list.size() > 0)
+					while (!list.isEmpty())
 					{
-						LogRec rec = list.getFirst();
-						if (rec.lsn() <= lsn)
+						final LogRec rec = list.getFirst();
+						if (rec.lsn() <= masterLSN)
 						{
-							ordered.put(rec, rec);
+							ordered.add(rec);
 							if (rec.type() == LogRec.INSERT)
 							{
-								InsertLogRec ins = (InsertLogRec)rec;
-								Block block = ins.getBlock();
-								long t = ins.txnum();
-								BlockAndTransaction key = new BlockAndTransaction(block, t);
+								final InsertLogRec ins = (InsertLogRec)rec;
+								final Block block = ins.getBlock();
+								final long t = ins.txnum();
+								final BlockAndTransaction key = new BlockAndTransaction(block, t);
 								ArrayList<LogRec> myToWrite = toWrite.get(key);
 								if (myToWrite == null)
 								{
@@ -352,10 +369,10 @@ public class LogManager extends HRDBMSThread
 							}
 							else if (rec.type() == LogRec.DELETE)
 							{
-								DeleteLogRec ins = (DeleteLogRec)rec;
-								Block block = ins.getBlock();
-								long t = ins.txnum();
-								BlockAndTransaction key = new BlockAndTransaction(block, t);
+								final DeleteLogRec ins = (DeleteLogRec)rec;
+								final Block block = ins.getBlock();
+								final long t = ins.txnum();
+								final BlockAndTransaction key = new BlockAndTransaction(block, t);
 								ArrayList<LogRec> myToWrite = toWrite.get(key);
 								if (myToWrite == null)
 								{
@@ -380,23 +397,24 @@ public class LogManager extends HRDBMSThread
 
 				if (ordered.size() == 0)
 				{
-					Transaction.txListLock.writeLock().unlock();
+					// Transaction.txListLock.unlock();
+					// fc.force(false);
 					return;
 				}
 
 				try
 				{
 					// consolidate stuff in toWrite
-					for (Map.Entry<BlockAndTransaction, ArrayList<LogRec>> entry : toWrite.entrySet())
+					for (final Map.Entry<BlockAndTransaction, ArrayList<LogRec>> entry : toWrite.entrySet())
 					{
-						ArrayList<LogRec> value = entry.getValue();
-						int size = value.size();
+						final ArrayList<LogRec> value = entry.getValue();
+						final int size = value.size();
 						if (size == 1)
 						{
 							continue;
 						}
 
-						PageRegions regions = new PageRegions(value.get(0));
+						final PageRegions regions = new PageRegions(value.get(0));
 						int i = 1;
 						while (i < size)
 						{
@@ -405,14 +423,14 @@ public class LogManager extends HRDBMSThread
 
 						ArrayList<LogRec> recs = regions.generateLogRecs();
 
-						for (LogRec rec : recs)
+						for (final LogRec rec : recs)
 						{
 							ordered.remove(rec);
-							ordered.put(rec, rec);
+							ordered.add(rec);
 						}
 
 						recs = regions.generateRemovals();
-						for (LogRec rec : recs)
+						for (final LogRec rec : recs)
 						{
 							ordered.remove(rec);
 						}
@@ -422,14 +440,16 @@ public class LogManager extends HRDBMSThread
 					{
 						fc.position(fc.size());
 						int total = 0;
-						for (LogRec rec : ordered.keySet())
+						List<LogRec> sortedList = new ArrayList<LogRec>(ordered);
+						Collections.sort(sortedList);
+						for (final LogRec rec : sortedList)
 						{
 							total += (8 + rec.buffer().limit());
 						}
 
 						final ByteBuffer size = ByteBuffer.allocate(total);
 						size.position(0);
-						for (LogRec rec : ordered.keySet())
+						for (final LogRec rec : sortedList)
 						{
 							if (rec.size() < 28)
 							{
@@ -452,40 +472,53 @@ public class LogManager extends HRDBMSThread
 					System.exit(1);
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
-				Transaction.txListLock.writeLock().unlock();
+				// Transaction.txListLock.unlock();
 				throw e;
 			}
 		}
-		Transaction.txListLock.writeLock().unlock();
+		// Transaction.txListLock.unlock();
 	}
 
-	public static void flushNoForce(long lsn, String fn) throws IOException
+	public static void flushNoForce(final long lsn, final String fn) throws IOException
 	{
-		final ArrayDeque<LogRec> list = logs.get(fn);
+		final LinkedBlockingDeque<LogRec> list = logs.get(fn);
+
+		synchronized (masterLSNLock)
+		{
+			if (lsn > masterLSN)
+			{
+				masterLSN = lsn;
+			}
+			else
+			{
+				return;
+			}
+		}
 		// synchronized (noArchiveLock)
-		Transaction.txListLock.writeLock().lock();
+		// Transaction.txListLock.lock();
+		synchronized (Transaction.txListLock)
 		{
 			try
 			{
-				HashMap<BlockAndTransaction, ArrayList<LogRec>> toWrite = new HashMap<BlockAndTransaction, ArrayList<LogRec>>();
-				TreeMap<LogRec, LogRec> ordered = new TreeMap<LogRec, LogRec>();
+				final HashMap<BlockAndTransaction, ArrayList<LogRec>> toWrite = new HashMap<BlockAndTransaction, ArrayList<LogRec>>();
+				final HashSet<LogRec> ordered = new HashSet<LogRec>();
 				final FileChannel fc = getFile(fn);
 				// synchronized (Transaction.txList)
 				{
-					while (list.size() > 0)
+					while (!list.isEmpty())
 					{
-						LogRec rec = list.getFirst();
-						if (rec.lsn() <= lsn)
+						final LogRec rec = list.getFirst();
+						if (rec.lsn() <= masterLSN)
 						{
-							ordered.put(rec, rec);
+							ordered.add(rec);
 							if (rec.type() == LogRec.INSERT)
 							{
-								InsertLogRec ins = (InsertLogRec)rec;
-								Block block = ins.getBlock();
-								long t = ins.txnum();
-								BlockAndTransaction key = new BlockAndTransaction(block, t);
+								final InsertLogRec ins = (InsertLogRec)rec;
+								final Block block = ins.getBlock();
+								final long t = ins.txnum();
+								final BlockAndTransaction key = new BlockAndTransaction(block, t);
 								ArrayList<LogRec> myToWrite = toWrite.get(key);
 								if (myToWrite == null)
 								{
@@ -500,10 +533,10 @@ public class LogManager extends HRDBMSThread
 							}
 							else if (rec.type() == LogRec.DELETE)
 							{
-								DeleteLogRec ins = (DeleteLogRec)rec;
-								Block block = ins.getBlock();
-								long t = ins.txnum();
-								BlockAndTransaction key = new BlockAndTransaction(block, t);
+								final DeleteLogRec ins = (DeleteLogRec)rec;
+								final Block block = ins.getBlock();
+								final long t = ins.txnum();
+								final BlockAndTransaction key = new BlockAndTransaction(block, t);
 								ArrayList<LogRec> myToWrite = toWrite.get(key);
 								if (myToWrite == null)
 								{
@@ -528,23 +561,23 @@ public class LogManager extends HRDBMSThread
 
 				if (ordered.size() == 0)
 				{
-					Transaction.txListLock.writeLock().unlock();
+					// Transaction.txListLock.unlock();
 					return;
 				}
 
 				try
 				{
 					// consolidate stuff in toWrite
-					for (Map.Entry<BlockAndTransaction, ArrayList<LogRec>> entry : toWrite.entrySet())
+					for (final Map.Entry<BlockAndTransaction, ArrayList<LogRec>> entry : toWrite.entrySet())
 					{
-						ArrayList<LogRec> value = entry.getValue();
-						int size = value.size();
+						final ArrayList<LogRec> value = entry.getValue();
+						final int size = value.size();
 						if (size == 1)
 						{
 							continue;
 						}
 
-						PageRegions regions = new PageRegions(value.get(0));
+						final PageRegions regions = new PageRegions(value.get(0));
 						int i = 1;
 						while (i < size)
 						{
@@ -553,14 +586,14 @@ public class LogManager extends HRDBMSThread
 
 						ArrayList<LogRec> recs = regions.generateLogRecs();
 
-						for (LogRec rec : recs)
+						for (final LogRec rec : recs)
 						{
 							ordered.remove(rec);
-							ordered.put(rec, rec);
+							ordered.add(rec);
 						}
 
 						recs = regions.generateRemovals();
-						for (LogRec rec : recs)
+						for (final LogRec rec : recs)
 						{
 							ordered.remove(rec);
 						}
@@ -570,14 +603,16 @@ public class LogManager extends HRDBMSThread
 					{
 						fc.position(fc.size());
 						int total = 0;
-						for (LogRec rec : ordered.keySet())
+						List<LogRec> sortedList = new ArrayList<LogRec>(ordered);
+						Collections.sort(sortedList);
+						for (final LogRec rec : ordered)
 						{
 							total += (8 + rec.buffer().limit());
 						}
 
 						final ByteBuffer size = ByteBuffer.allocate(total);
 						size.position(0);
-						for (LogRec rec : ordered.keySet())
+						for (final LogRec rec : ordered)
 						{
 							if (rec.size() < 28)
 							{
@@ -600,13 +635,13 @@ public class LogManager extends HRDBMSThread
 					System.exit(1);
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
-				Transaction.txListLock.writeLock().unlock();
+				// Transaction.txListLock.unlock();
 				throw e;
 			}
 		}
-		Transaction.txListLock.writeLock().unlock();
+		// Transaction.txListLock.unlock();
 	}
 
 	public static Iterator<LogRec> forwardIterator()
@@ -614,7 +649,7 @@ public class LogManager extends HRDBMSThread
 		return forwardIterator(filename);
 	}
 
-	public static Iterator<LogRec> forwardIterator(String fn)
+	public static Iterator<LogRec> forwardIterator(final String fn)
 	{
 		try
 		{
@@ -647,7 +682,7 @@ public class LogManager extends HRDBMSThread
 	// }
 	// }
 
-	public static synchronized FileChannel getFile(String filename) throws IOException
+	public static synchronized FileChannel getFile(final String filename) throws IOException
 	{
 		FileChannel fc = openFiles.get(filename);
 
@@ -662,21 +697,21 @@ public class LogManager extends HRDBMSThread
 					f = new RandomAccessFile(table, "rw");
 					break;
 				}
-				catch (FileNotFoundException e)
+				catch (final FileNotFoundException e)
 				{
 					ResourceManager.panic = true;
 					try
 					{
 						Thread.sleep(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("rm_sleep_time_ms")) / 2);
 					}
-					catch (Exception g)
+					catch (final Exception g)
 					{
 					}
 				}
 			}
 			fc = f.getChannel();
 			openFiles.put(filename, fc);
-			logs.put(filename, new ArrayDeque<LogRec>());
+			logs.put(filename, new LinkedBlockingDeque<LogRec>());
 		}
 
 		return fc;
@@ -687,12 +722,12 @@ public class LogManager extends HRDBMSThread
 		return last_lsn.incrementAndGet();
 	}
 
-	public static InsertLogRec insert(long txnum, Block b, int off, byte[] before, byte[] after) throws Exception
+	public static InsertLogRec insert(final long txnum, final Block b, final int off, final byte[] before, final byte[] after) throws Exception
 	{
 		return insert(txnum, b, off, before, after, filename);
 	}
 
-	public static InsertLogRec insert(long txnum, Block b, int off, byte[] before, byte[] after, String fn) throws Exception
+	public static InsertLogRec insert(final long txnum, final Block b, final int off, final byte[] before, final byte[] after, final String fn) throws Exception
 	{
 		final InsertLogRec rec = new InsertLogRec(txnum, b, off, before.clone(), after.clone());
 		write(rec, fn);
@@ -704,7 +739,7 @@ public class LogManager extends HRDBMSThread
 		return iterator(filename);
 	}
 
-	public static Iterator<LogRec> iterator(String fn)
+	public static Iterator<LogRec> iterator(final String fn)
 	{
 		try
 		{
@@ -717,7 +752,7 @@ public class LogManager extends HRDBMSThread
 		}
 	}
 
-	public static Iterator<LogRec> iterator(String fn, boolean flush)
+	public static Iterator<LogRec> iterator(final String fn, final boolean flush)
 	{
 		if (flush)
 		{
@@ -735,12 +770,12 @@ public class LogManager extends HRDBMSThread
 		}
 	}
 
-	public static void notReady(long txnum) throws IOException
+	public static void notReady(final long txnum) throws IOException
 	{
 		notReady(txnum, filename);
 	}
 
-	public static void notReady(long txnum, String fn) throws IOException
+	public static void notReady(final long txnum, final String fn) throws IOException
 	{
 		final LogRec rec = new NotReadyLogRec(txnum);
 		write(rec, fn);
@@ -752,7 +787,7 @@ public class LogManager extends HRDBMSThread
 		return partialIterator(filename);
 	}
 
-	public static Iterator<LogRec> partialIterator(String fn)
+	public static Iterator<LogRec> partialIterator(final String fn)
 	{
 		try
 		{
@@ -765,7 +800,7 @@ public class LogManager extends HRDBMSThread
 		}
 	}
 
-	public static Iterator<LogRec> partialIterator(String fn, boolean flush)
+	public static Iterator<LogRec> partialIterator(final String fn, final boolean flush)
 	{
 		if (flush)
 		{
@@ -783,24 +818,24 @@ public class LogManager extends HRDBMSThread
 		}
 	}
 
-	public static void ready(long txnum, String host) throws IOException
+	public static void ready(final long txnum, final String host) throws IOException
 	{
 		ready(txnum, host, filename);
 	}
 
-	public static void ready(long txnum, String host, String fn) throws IOException
+	public static void ready(final long txnum, final String host, final String fn) throws IOException
 	{
 		final LogRec rec = new ReadyLogRec(txnum, host);
 		write(rec, fn);
 		flush(rec.lsn(), fn);
 	}
 
-	public static void rollback(long txnum) throws Exception
+	public static void rollback(final long txnum) throws Exception
 	{
 		rollback(txnum, filename);
 	}
 
-	public static void rollback(long txnum, String fn) throws Exception
+	public static void rollback(final long txnum, final String fn) throws Exception
 	{
 		LogRec rec = new RollbackLogRec(txnum);
 		write(rec, fn);
@@ -824,35 +859,36 @@ public class LogManager extends HRDBMSThread
 		((LogIterator)iter).close();
 	}
 
-	public static TruncateLogRec truncate(long txnum, Block b) throws Exception
+	public static TruncateLogRec truncate(final long txnum, final Block b) throws Exception
 	{
 		return truncate(txnum, b, filename);
 	}
 
-	public static TruncateLogRec truncate(long txnum, Block b, String fn) throws Exception
+	public static TruncateLogRec truncate(final long txnum, final Block b, final String fn) throws Exception
 	{
 		final TruncateLogRec rec = new TruncateLogRec(txnum, b);
 		write(rec, fn);
 		return rec;
 	}
 
-	public static long write(LogRec rec)
+	public static long write(final LogRec rec)
 	{
 		return write(rec, filename);
 	}
 
-	public static long write(LogRec rec, String fn)
+	public static long write(final LogRec rec, final String fn)
 	{
-		final ArrayDeque<LogRec> list = logs.get(fn);
+		final LinkedBlockingDeque<LogRec> list = logs.get(fn);
 		rec.setTimeStamp(System.currentTimeMillis());
 		long retval;
 		retval = getLSN();
 		rec.setLSN(retval);
-		Transaction.txListLock.writeLock().lock();
-		{
-			list.add(rec);
-		}
-		Transaction.txListLock.writeLock().unlock();
+		// Transaction.txListLock.lock();
+		// synchronized(Transaction.txListLock)
+		// {
+		list.add(rec);
+		// }
+		// Transaction.txListLock.unlock();
 
 		return retval;
 	}
@@ -874,205 +910,211 @@ public class LogManager extends HRDBMSThread
 		final HashSet<Long> commitList = new HashSet<Long>();
 		final HashSet<Long> rollbackList = new HashSet<Long>();
 		final HashSet<Long> needsCommit = new HashSet<Long>();
-		HashSet<String> truncated = new HashSet<String>();
-		HashMap<String, Long> trunc2LSN = new HashMap<String, Long>();
-		Transaction.txListLock.writeLock().lock();
-		while (fn != null)
+		final HashSet<String> truncated = new HashSet<String>();
+		final HashMap<String, Long> trunc2LSN = new HashMap<String, Long>();
+		// Transaction.txListLock.lock();
+		synchronized (Transaction.txListLock)
 		{
-			logs.get(fn);
+			while (fn != null)
 			{
-				try
+				logs.get(fn);
 				{
-					final Iterator<LogRec> iter = iterator(fn, false);
-					while (iter.hasNext())
+					try
 					{
-						final LogRec rec = iter.next();
-						if (rec.type() == LogRec.COMMIT)
+						final Iterator<LogRec> iter = iterator(fn, false);
+						while (iter.hasNext())
 						{
-							if (rollbackList.contains(rec.txnum()))
+							final LogRec rec = iter.next();
+							if (rec.type() == LogRec.COMMIT)
 							{
-								HRDBMSWorker.logger.debug("Found a COMMIT record for " + rec.txnum() + ", but we already processed an abort");
-							}
-							else
-							{
-								commitList.add(rec.txnum());
-								HRDBMSWorker.logger.debug("Saw COMMIT for " + rec.txnum());
-							}
-						}
-						else if (rec.type() == LogRec.ROLLB || rec.type() == LogRec.NOTREADY)
-						{
-							if (commitList.contains(rec.txnum()))
-							{
-								HRDBMSWorker.logger.debug("Found an abort record for " + rec.txnum() + " but we already processed a COMMIT");
-							}
-							else
-							{
-								rollbackList.add(rec.txnum());
-								HRDBMSWorker.logger.debug("Saw ROLLB/NOTREADY for " + rec.txnum());
-							}
-						}
-						else if (rec.type() == LogRec.TRUNCATE)
-						{
-							if (commitList.contains(rec.txnum()))
-							{
-								TruncateLogRec trunc = (TruncateLogRec)rec.rebuild();
-								truncated.add(trunc.getBlock().fileName());
-								trunc2LSN.put(trunc.getBlock().fileName(), trunc.lsn());
-							}
-						}
-						else if (rec.type() == LogRec.READY)
-						{
-							if (rollbackList.contains(rec.txnum()) || commitList.contains(rec.txnum()))
-							{
-							}
-							else
-							{
-								ReadyLogRec xa = (ReadyLogRec)rec.rebuild();
-								if (XAManager.askXAManager(xa))
+								if (rollbackList.contains(rec.txnum()))
+								{
+									HRDBMSWorker.logger.debug("Found a COMMIT record for " + rec.txnum() + ", but we already processed an abort");
+								}
+								else
 								{
 									commitList.add(rec.txnum());
-									needsCommit.add(rec.txnum());
-									HRDBMSWorker.logger.debug("Saw READY for " + rec.txnum() + " decided it was a COMMIT");
+									// HRDBMSWorker.logger.debug("Saw COMMIT for
+									// " + rec.txnum());
+								}
+							}
+							else if (rec.type() == LogRec.ROLLB || rec.type() == LogRec.NOTREADY)
+							{
+								if (commitList.contains(rec.txnum()))
+								{
+									HRDBMSWorker.logger.debug("Found an abort record for " + rec.txnum() + " but we already processed a COMMIT");
 								}
 								else
 								{
 									rollbackList.add(rec.txnum());
-									HRDBMSWorker.logger.debug("Saw READY for " + rec.txnum() + " decided it was a ROLLB");
+									HRDBMSWorker.logger.debug("Saw ROLLB/NOTREADY for " + rec.txnum());
 								}
 							}
-						}
-						else if (rec.type() == LogRec.XACOMMIT)
-						{
-							if (rollbackList.contains(rec.txnum()))
+							else if (rec.type() == LogRec.TRUNCATE)
 							{
-								HRDBMSWorker.logger.debug("Found an XACOMMIT record for " + rec.txnum() + " but we already processed an abort");
-							}
-							else
-							{
-								if (!commitList.contains(rec.txnum()))
+								if (commitList.contains(rec.txnum()))
 								{
-									HRDBMSWorker.logger.debug("Saw XACOMMIT for " + rec.txnum());
-									XACommitLogRec xa = (XACommitLogRec)rec.rebuild();
-									// XAManager.phase2(xa.txnum(),
-									// xa.getNodes());
-									XAManager.in.put("COMMIT");
-									XAManager.in.put(xa.txnum());
-									XAManager.in.put(xa.getNodes());
-									commitList.add(rec.txnum());
+									final TruncateLogRec trunc = (TruncateLogRec)rec.rebuild();
+									truncated.add(trunc.getBlock().fileName());
+									trunc2LSN.put(trunc.getBlock().fileName(), trunc.lsn());
 								}
 							}
-						}
-						else if (rec.type() == LogRec.XAABORT)
-						{
-							if (commitList.contains(rec.txnum()))
+							else if (rec.type() == LogRec.READY)
 							{
-								HRDBMSWorker.logger.debug("Found an XAABORT record for " + rec.txnum() + " but we already processed a COMMIT");
-							}
-							else
-							{
-								if (!rollbackList.contains(rec.txnum()))
+								if (rollbackList.contains(rec.txnum()) || commitList.contains(rec.txnum()))
 								{
-									HRDBMSWorker.logger.debug("Saw XAABORT for " + rec.txnum());
-									XAAbortLogRec xa = (XAAbortLogRec)rec.rebuild();
-									// XAManager.rollbackP2(xa.txnum(),
-									// xa.getNodes());
-									XAManager.in.put("ROLLBACK");
-									XAManager.in.put(xa.txnum());
-									XAManager.in.put(xa.getNodes());
+								}
+								else
+								{
+									final ReadyLogRec xa = (ReadyLogRec)rec.rebuild();
+									if (XAManager.askXAManager(xa))
+									{
+										commitList.add(rec.txnum());
+										needsCommit.add(rec.txnum());
+										HRDBMSWorker.logger.debug("Saw READY for " + rec.txnum() + " decided it was a COMMIT");
+									}
+									else
+									{
+										rollbackList.add(rec.txnum());
+										HRDBMSWorker.logger.debug("Saw READY for " + rec.txnum() + " decided it was a ROLLB");
+									}
+								}
+							}
+							else if (rec.type() == LogRec.XACOMMIT)
+							{
+								if (rollbackList.contains(rec.txnum()))
+								{
+									HRDBMSWorker.logger.debug("Found an XACOMMIT record for " + rec.txnum() + " but we already processed an abort");
+								}
+								else
+								{
+									if (!commitList.contains(rec.txnum()))
+									{
+										HRDBMSWorker.logger.debug("Saw XACOMMIT for " + rec.txnum());
+										final XACommitLogRec xa = (XACommitLogRec)rec.rebuild();
+										// XAManager.phase2(xa.txnum(),
+										// xa.getNodes());
+										XAManager.in.put("COMMIT");
+										XAManager.in.put(xa.txnum());
+										XAManager.in.put(xa.getNodes());
+										commitList.add(rec.txnum());
+									}
+								}
+							}
+							else if (rec.type() == LogRec.XAABORT)
+							{
+								if (commitList.contains(rec.txnum()))
+								{
+									HRDBMSWorker.logger.debug("Found an XAABORT record for " + rec.txnum() + " but we already processed a COMMIT");
+								}
+								else
+								{
+									if (!rollbackList.contains(rec.txnum()))
+									{
+										HRDBMSWorker.logger.debug("Saw XAABORT for " + rec.txnum());
+										final XAAbortLogRec xa = (XAAbortLogRec)rec.rebuild();
+										// XAManager.rollbackP2(xa.txnum(),
+										// xa.getNodes());
+										XAManager.in.put("ROLLBACK");
+										XAManager.in.put(xa.txnum());
+										XAManager.in.put(xa.getNodes());
+										rollbackList.add(rec.txnum());
+									}
+								}
+							}
+							else if (rec.type() == LogRec.PREPARE)
+							{
+								if (rollbackList.contains(rec.txnum()) || commitList.contains(rec.txnum()))
+								{
+								}
+								else
+								{
+									HRDBMSWorker.logger.debug("Saw PREPARE for " + rec.txnum());
+									final PrepareLogRec xa = (PrepareLogRec)rec.rebuild();
+									XAManager.rollback(xa.txnum(), xa.getNodes());
 									rollbackList.add(rec.txnum());
 								}
 							}
+							// else if (rec.type() == LogRec.INSERT ||
+							// rec.type() ==
+							// LogRec.DELETE || rec.type() == LogRec.EXTEND)
+							// {
+							// if ((!commitList.contains(rec.txnum())) &&
+							// (!rollbackList.contains(rec.txnum())))
+							// {
+							// HRDBMSWorker.logger.debug("Saw stranded changes
+							// for "
+							// +
+							// rec.txnum());
+							// rec.rebuild().undo();
+							// }
+							// }
 						}
-						else if (rec.type() == LogRec.PREPARE)
+
+						final Iterator<LogRec> iter2 = forwardIterator(fn);
+						((LogIterator)iter).close();
+
+						while (iter2.hasNext())
 						{
-							if (rollbackList.contains(rec.txnum()) || commitList.contains(rec.txnum()))
+							final LogRec rec = iter2.next();
+							if (rec.type() == LogRec.INSERT)
 							{
+								if (commitList.contains(rec.txnum()))
+								{
+									final InsertLogRec i = (InsertLogRec)rec.rebuild();
+									if (!truncated.contains(i.getBlock().fileName()) || i.lsn() > trunc2LSN.get(i.getBlock().fileName()))
+									{
+										i.redo();
+									}
+								}
 							}
-							else
+							else if (rec.type() == LogRec.DELETE)
 							{
-								HRDBMSWorker.logger.debug("Saw PREPARE for " + rec.txnum());
-								PrepareLogRec xa = (PrepareLogRec)rec.rebuild();
-								XAManager.rollback(xa.txnum(), xa.getNodes());
-								rollbackList.add(rec.txnum());
+								if (commitList.contains(rec.txnum()))
+								{
+									final DeleteLogRec i = (DeleteLogRec)rec.rebuild();
+									if (!truncated.contains(i.getBlock().fileName()) || i.lsn() > trunc2LSN.get(i.getBlock().fileName()))
+									{
+										i.redo();
+									}
+								}
+							}
+							else if (rec.type() == LogRec.EXTEND)
+							{
+								if (commitList.contains(rec.txnum()))
+								{
+									final ExtendLogRec i = (ExtendLogRec)rec.rebuild();
+									if (!truncated.contains(i.getBlock().fileName()) || i.lsn() > trunc2LSN.get(i.getBlock().fileName()))
+									{
+										i.redo();
+									}
+								}
 							}
 						}
-						// else if (rec.type() == LogRec.INSERT || rec.type() ==
-						// LogRec.DELETE || rec.type() == LogRec.EXTEND)
-						// {
-						// if ((!commitList.contains(rec.txnum())) &&
-						// (!rollbackList.contains(rec.txnum())))
-						// {
-						// HRDBMSWorker.logger.debug("Saw stranded changes for "
-						// +
-						// rec.txnum());
-						// rec.rebuild().undo();
-						// }
-						// }
+
+						((ForwardLogIterator)iter2).close();
+						for (final long txnum : needsCommit)
+						{
+							LogManager.commit(txnum);
+						}
+
+						needsCommit.clear();
+						// final LogRec rec = new NQCheckLogRec(new
+						// HashSet<Long>());
+						// write(rec, fn);
+						// flush(rec.lsn(), fn);
+						fn = oldFN;
+						oldFN = null;
 					}
-
-					final Iterator<LogRec> iter2 = forwardIterator(fn);
-					((LogIterator)iter).close();
-
-					while (iter2.hasNext())
+					catch (final Exception e)
 					{
-						final LogRec rec = iter2.next();
-						if (rec.type() == LogRec.INSERT)
-						{
-							if (commitList.contains(rec.txnum()))
-							{
-								InsertLogRec i = (InsertLogRec)rec.rebuild();
-								if (!truncated.contains(i.getBlock().fileName()) || i.lsn() > trunc2LSN.get(i.getBlock().fileName()))
-								{
-									i.redo();
-								}
-							}
-						}
-						else if (rec.type() == LogRec.DELETE)
-						{
-							if (commitList.contains(rec.txnum()))
-							{
-								DeleteLogRec i = (DeleteLogRec)rec.rebuild();
-								if (!truncated.contains(i.getBlock().fileName()) || i.lsn() > trunc2LSN.get(i.getBlock().fileName()))
-								{
-									i.redo();
-								}
-							}
-						}
-						else if (rec.type() == LogRec.EXTEND)
-						{
-							if (commitList.contains(rec.txnum()))
-							{
-								ExtendLogRec i = (ExtendLogRec)rec.rebuild();
-								if (!truncated.contains(i.getBlock().fileName()) || i.lsn() > trunc2LSN.get(i.getBlock().fileName()))
-								{
-									i.redo();
-								}
-							}
-						}
+						// Transaction.txListLock.unlock();
+						throw e;
 					}
-
-					((ForwardLogIterator)iter2).close();
-					for (long txnum : needsCommit)
-					{
-						LogManager.commit(txnum);
-					}
-
-					needsCommit.clear();
-					// final LogRec rec = new NQCheckLogRec(new
-					// HashSet<Long>());
-					// write(rec, fn);
-					// flush(rec.lsn(), fn);
-					fn = oldFN;
-					oldFN = null;
-				}
-				catch (Exception e)
-				{
-					Transaction.txListLock.writeLock().unlock();
-					throw e;
 				}
 			}
 		}
-		Transaction.txListLock.writeLock().unlock();
+		// Transaction.txListLock.unlock();
 	}
 
 	// public static void writeStartRecIfNeeded(long txnum)
@@ -1252,14 +1294,14 @@ public class LogManager extends HRDBMSThread
 		private final Block b;
 		private final long t;
 
-		public BlockAndTransaction(Block b, long t)
+		public BlockAndTransaction(final Block b, final long t)
 		{
 			this.b = b;
 			this.t = t;
 		}
 
 		@Override
-		public boolean equals(Object rhs)
+		public boolean equals(final Object rhs)
 		{
 			if (rhs == null)
 			{
@@ -1271,7 +1313,7 @@ public class LogManager extends HRDBMSThread
 				return false;
 			}
 
-			BlockAndTransaction r = (BlockAndTransaction)rhs;
+			final BlockAndTransaction r = (BlockAndTransaction)rhs;
 			return b.equals(r.b) && t == r.t;
 		}
 
@@ -1292,29 +1334,29 @@ public class LogManager extends HRDBMSThread
 		private final SparseByteArray before = new SparseByteArray();
 		private final SparseByteArray after = new SparseByteArray();
 
-		public PageRegions(LogRec rec)
+		public PageRegions(final LogRec rec)
 		{
 			if (rec.type() == LogRec.INSERT)
 			{
-				InsertLogRec ins = (InsertLogRec)rec;
+				final InsertLogRec ins = (InsertLogRec)rec;
 				starts.put(ins.getOffset(), ins);
 				before.putBefore(ins.getOffset(), ins.getBefore());
 				after.put(ins.getOffset(), ins.getAfter());
 				return;
 			}
 
-			DeleteLogRec ins = (DeleteLogRec)rec;
+			final DeleteLogRec ins = (DeleteLogRec)rec;
 			starts.put(ins.getOffset(), ins);
 			before.putBefore(ins.getOffset(), ins.getBefore());
 			after.put(ins.getOffset(), ins.getAfter());
 			return;
 		}
 
-		public void add(LogRec rec)
+		public void add(final LogRec rec)
 		{
 			if (rec.type() == LogRec.INSERT)
 			{
-				InsertLogRec ins = (InsertLogRec)rec;
+				final InsertLogRec ins = (InsertLogRec)rec;
 				if (!starts.containsKey(ins.getOffset()))
 				{
 					starts.put(ins.getOffset(), ins);
@@ -1329,7 +1371,7 @@ public class LogManager extends HRDBMSThread
 				return;
 			}
 
-			DeleteLogRec ins = (DeleteLogRec)rec;
+			final DeleteLogRec ins = (DeleteLogRec)rec;
 			if (!starts.containsKey(ins.getOffset()))
 			{
 				starts.put(ins.getOffset(), ins);
@@ -1346,21 +1388,21 @@ public class LogManager extends HRDBMSThread
 
 		public ArrayList<LogRec> generateLogRecs() throws Exception
 		{
-			ArrayList<LogRec> retval = new ArrayList<LogRec>();
-			ArrayList<Integer> offs = before.getOffsets();
-			for (int off : offs)
+			final ArrayList<LogRec> retval = new ArrayList<LogRec>();
+			final ArrayList<Integer> offs = before.getOffsets();
+			for (final int off : offs)
 			{
-				LogRec rec = starts.remove(off);
+				final LogRec rec = starts.remove(off);
 				if (rec.type() == LogRec.INSERT)
 				{
-					InsertLogRec newRec = new InsertLogRec(rec.txnum(), ((InsertLogRec)rec).getBlock(), ((InsertLogRec)rec).getOffset(), before.getArray(off), after.getArray(off));
+					final InsertLogRec newRec = new InsertLogRec(rec.txnum(), ((InsertLogRec)rec).getBlock(), ((InsertLogRec)rec).getOffset(), before.getArray(off), after.getArray(off));
 					newRec.setLSN(rec.lsn());
 					newRec.setTimeStamp(rec.getTimeStamp());
 					retval.add(newRec);
 				}
 				else
 				{
-					DeleteLogRec newRec = new DeleteLogRec(rec.txnum(), ((DeleteLogRec)rec).getBlock(), ((DeleteLogRec)rec).getOffset(), before.getArray(off), after.getArray(off));
+					final DeleteLogRec newRec = new DeleteLogRec(rec.txnum(), ((DeleteLogRec)rec).getBlock(), ((DeleteLogRec)rec).getOffset(), before.getArray(off), after.getArray(off));
 					newRec.setLSN(rec.lsn());
 					newRec.setTimeStamp(rec.getTimeStamp());
 					retval.add(newRec);
@@ -1372,13 +1414,13 @@ public class LogManager extends HRDBMSThread
 
 		public ArrayList<LogRec> generateRemovals()
 		{
-			ArrayList<LogRec> retval = new ArrayList<LogRec>();
-			for (LogRec rec : starts.values())
+			final ArrayList<LogRec> retval = new ArrayList<LogRec>();
+			for (final LogRec rec : starts.values())
 			{
 				retval.add(rec);
 			}
 
-			for (LogRec rec : remove)
+			for (final LogRec rec : remove)
 			{
 				retval.add(rec);
 			}
@@ -1402,7 +1444,7 @@ public class LogManager extends HRDBMSThread
 			}
 		}
 
-		public byte[] getArray(int off)
+		public byte[] getArray(final int off)
 		{
 			int i = off;
 			while (i < Page.BLOCK_SIZE && bytes[i] != null)
@@ -1410,8 +1452,8 @@ public class LogManager extends HRDBMSThread
 				i++;
 			}
 
-			int length = i - off;
-			byte[] retval = new byte[length];
+			final int length = i - off;
+			final byte[] retval = new byte[length];
 			i = off;
 			int j = 0;
 			while (j < length)
@@ -1426,7 +1468,7 @@ public class LogManager extends HRDBMSThread
 
 		public ArrayList<Integer> getOffsets()
 		{
-			ArrayList<Integer> retval = new ArrayList<Integer>();
+			final ArrayList<Integer> retval = new ArrayList<Integer>();
 			int offset = -1;
 			int i = 0;
 			while (i < Page.BLOCK_SIZE)
@@ -1447,7 +1489,7 @@ public class LogManager extends HRDBMSThread
 			return retval;
 		}
 
-		public void put(int off, byte[] array)
+		public void put(final int off, final byte[] array)
 		{
 			int i = off;
 			int j = 0;
@@ -1460,7 +1502,7 @@ public class LogManager extends HRDBMSThread
 			}
 		}
 
-		public void putBefore(int off, byte[] array)
+		public void putBefore(final int off, final byte[] array)
 		{
 			int i = off;
 			int j = 0;

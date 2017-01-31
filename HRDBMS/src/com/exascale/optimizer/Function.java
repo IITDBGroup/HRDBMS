@@ -8,13 +8,13 @@ public class Function
 	private final ArrayList<Expression> args;
 	boolean distinct = false;
 
-	public Function(String name, ArrayList<Expression> args)
+	public Function(final String name, final ArrayList<Expression> args)
 	{
 		this.name = name;
 		this.args = args;
 	}
 
-	public Function(String name, ArrayList<Expression> args, boolean distinct)
+	public Function(final String name, final ArrayList<Expression> args, final boolean distinct)
 	{
 		this.name = name;
 		this.args = args;
@@ -29,8 +29,8 @@ public class Function
 			return new Function(name, args, distinct);
 		}
 
-		ArrayList<Expression> newArgs = new ArrayList<Expression>();
-		for (Expression e : args)
+		final ArrayList<Expression> newArgs = new ArrayList<Expression>();
+		for (final Expression e : args)
 		{
 			newArgs.add(e.clone());
 		}
@@ -39,14 +39,14 @@ public class Function
 	}
 
 	@Override
-	public boolean equals(Object rhs)
+	public boolean equals(final Object rhs)
 	{
 		if (!(rhs instanceof Function))
 		{
 			return false;
 		}
 
-		Function r = (Function)rhs;
+		final Function r = (Function)rhs;
 		return name.equals(r.name) && args.equals(r.args) && distinct == r.distinct;
 	}
 

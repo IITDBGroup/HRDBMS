@@ -25,7 +25,7 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 			f.setAccessible(true);
 			unsafe = (sun.misc.Unsafe)f.get(null);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			unsafe = null;
 		}
@@ -35,16 +35,16 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 
 	private int ID;
 
-	public NetworkHashReceiveOperator(int ID, MetaData meta)
+	public NetworkHashReceiveOperator(final int ID, final MetaData meta)
 	{
 		this.ID = ID;
 		this.meta = meta;
 		received = new AtomicLong(0);
 	}
 
-	public static NetworkHashReceiveOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static NetworkHashReceiveOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		NetworkHashReceiveOperator value = (NetworkHashReceiveOperator)unsafe.allocateInstance(NetworkHashReceiveOperator.class);
+		final NetworkHashReceiveOperator value = (NetworkHashReceiveOperator)unsafe.allocateInstance(NetworkHashReceiveOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.meta = new MetaData();
 		value.children = OperatorUtils.deserializeALOp(in, prev);
@@ -80,7 +80,7 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 	}
 
 	@Override
-	public Object next(Operator op2) throws Exception
+	public Object next(final Operator op2) throws Exception
 	{
 		Object o;
 		o = outBuffer.take();
@@ -125,9 +125,9 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -157,7 +157,7 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 		OperatorUtils.writeLong(txnum, out);
 	}
 
-	public void setID(int ID)
+	public void setID(final int ID)
 	{
 		this.ID = ID;
 	}
@@ -192,11 +192,11 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 							sock = new Socket();
 							sock.setReceiveBufferSize(4194304);
 							sock.setSendBufferSize(4194304);
-							sock.connect(new InetSocketAddress(meta.getHostNameForNode(child.getNode()), WORKER_PORT));
+							sock.connect(new InetSocketAddress(MetaData.getHostNameForNode(child.getNode()), WORKER_PORT));
 						}
 						catch (final java.net.ConnectException e)
 						{
-							HRDBMSWorker.logger.error("Connection failed to " + meta.getHostNameForNode(child.getNode()), e);
+							HRDBMSWorker.logger.error("Connection failed to " + MetaData.getHostNameForNode(child.getNode()), e);
 							throw e;
 						}
 						socks.put(child, sock);

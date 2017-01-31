@@ -2,6 +2,7 @@ package com.exascale.misc;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import com.exascale.managers.ResourceManager;
@@ -22,9 +23,9 @@ public class HJOMultiHashMap<K, V>
 		size.set(0);
 	}
 
-	public List<V> get(K key)
+	public ArrayList<V> get(final K key)
 	{
-		ArrayList<V> retval = map.get(key);
+		final ArrayList<V> retval = map.get(key);
 		if (retval == null)
 		{
 			return new ArrayList<V>();
@@ -35,7 +36,12 @@ public class HJOMultiHashMap<K, V>
 		}
 	}
 
-	public void multiPut(K key, V val)
+	public Set<K> getKeySet()
+	{
+		return map.keySet();
+	}
+
+	public void multiPut(final K key, final V val)
 	{
 		if (map.containsKey(key))
 		{
@@ -56,9 +62,13 @@ public class HJOMultiHashMap<K, V>
 		size.getAndIncrement();
 	}
 
-	public void multiRemove(K key)
+	public void multiRemove(final K key)
 	{
-		map.remove(key);
+		final ArrayList<V> removed = map.remove(key);
+		if (removed != null)
+		{
+			size.addAndGet(-removed.size());
+		}
 	}
 
 	public int size()

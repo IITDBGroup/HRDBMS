@@ -23,7 +23,7 @@ public final class DropIndexOperator implements Operator, Serializable
 	private boolean done = false;
 	private Transaction tx;
 
-	public DropIndexOperator(String schema, String table, MetaData meta)
+	public DropIndexOperator(final String schema, final String table, final MetaData meta)
 	{
 		this.meta = meta;
 		this.schema = schema;
@@ -31,7 +31,7 @@ public final class DropIndexOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void add(Operator op) throws Exception
+	public void add(final Operator op) throws Exception
 	{
 		throw new Exception("DropIndexOperator does not support children");
 	}
@@ -104,7 +104,7 @@ public final class DropIndexOperator implements Operator, Serializable
 
 	@Override
 	// @?Parallel
-	public Object next(Operator op) throws Exception
+	public Object next(final Operator op) throws Exception
 	{
 		if (!done)
 		{
@@ -119,7 +119,7 @@ public final class DropIndexOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void nextAll(Operator op) throws Exception
+	public void nextAll(final Operator op) throws Exception
 	{
 	}
 
@@ -142,18 +142,18 @@ public final class DropIndexOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void registerParent(Operator op) throws Exception
+	public void registerParent(final Operator op) throws Exception
 	{
 		throw new Exception("DropIndexOperator does not support parents.");
 	}
 
 	@Override
-	public void removeChild(Operator op)
+	public void removeChild(final Operator op)
 	{
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 	}
 
@@ -164,28 +164,28 @@ public final class DropIndexOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		throw new Exception("Trying to call serialize on drop index operator");
 	}
 
 	@Override
-	public void setChildPos(int pos)
+	public void setChildPos(final int pos)
 	{
 	}
 
 	@Override
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 		this.node = node;
 	}
 
 	@Override
-	public void setPlan(Plan plan)
+	public void setPlan(final Plan plan)
 	{
 	}
 
-	public void setTransaction(Transaction tx)
+	public void setTransaction(final Transaction tx)
 	{
 		this.tx = tx;
 	}

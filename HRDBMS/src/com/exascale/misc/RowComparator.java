@@ -12,7 +12,7 @@ public final class RowComparator implements Comparator
 
 	// private MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
 
-	public RowComparator(ArrayList<Boolean> orders, ArrayList<String> types)
+	public RowComparator(final ArrayList<Boolean> orders, final ArrayList<String> types)
 	{
 		this.orders = new boolean[orders.size()];
 		this.types = new String[types.size()];
@@ -26,7 +26,7 @@ public final class RowComparator implements Comparator
 	}
 
 	@Override
-	public int compare(Object arg0, Object arg1)
+	public int compare(final Object arg0, final Object arg1)
 	{
 		int result;
 
@@ -184,7 +184,7 @@ public final class RowComparator implements Comparator
 		return 0;
 	}
 
-	public int compare(Object arg0, Object arg1, boolean debug)
+	public int compare(final Object arg0, final Object arg1, final boolean debug)
 	{
 		int result;
 

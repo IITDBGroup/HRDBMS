@@ -6,16 +6,36 @@ public class SearchClause
 	private Predicate predicate;
 	private SearchCondition condition;
 
-	public SearchClause(Predicate predicate, boolean negated)
+	public SearchClause(final Predicate predicate, final boolean negated)
 	{
 		this.predicate = predicate;
 		this.negated = negated;
 	}
 
-	public SearchClause(SearchCondition condition, boolean negated)
+	public SearchClause(final SearchCondition condition, final boolean negated)
 	{
 		this.condition = condition;
 		this.negated = negated;
+	}
+	
+	public String toString()
+	{
+		String retval = " ";
+		if (negated)
+		{
+			retval += "NOT ";
+		}
+		
+		if (predicate != null)
+		{
+			retval += predicate.toString();
+		}
+		else
+		{
+			retval += condition.toString();
+		}
+		
+		return retval;
 	}
 
 	@Override
@@ -32,14 +52,14 @@ public class SearchClause
 	}
 
 	@Override
-	public boolean equals(Object o)
+	public boolean equals(final Object o)
 	{
 		if (!(o instanceof SearchClause))
 		{
 			return false;
 		}
 
-		SearchClause rhs = (SearchClause)o;
+		final SearchClause rhs = (SearchClause)o;
 		if (negated != rhs.negated)
 		{
 			return false;
@@ -103,7 +123,7 @@ public class SearchClause
 		return hash;
 	}
 
-	public void setNegated(boolean negated)
+	public void setNegated(final boolean negated)
 	{
 		this.negated = negated;
 	}

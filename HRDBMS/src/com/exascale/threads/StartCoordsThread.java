@@ -17,7 +17,7 @@ public class StartCoordsThread extends HRDBMSThread
 		this.description = "Start Coordinators";
 	}
 
-	public static boolean isThisMyIpAddress(InetAddress addr)
+	public static boolean isThisMyIpAddress(final InetAddress addr)
 	{
 		// Check if the address is a valid special local or loop back
 		if (addr.isAnyLocalAddress() || addr.isLoopbackAddress())
@@ -71,6 +71,7 @@ public class StartCoordsThread extends HRDBMSThread
 						cmd += "/";
 					}
 
+					// TODO added options for docker/debugger... make optional?
 					cmd += "java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5010 ";
 				}
 
@@ -86,10 +87,10 @@ public class StartCoordsThread extends HRDBMSThread
 					// final String user =
 					// HRDBMSWorker.getHParms().getProperty("hrdbms_user");
 					HRDBMSWorker.logger.info("Starting coordinator " + host);
-					final String command1 = "cd " + wd + "; ulimit -n " + HRDBMSWorker.getHParms().getProperty("max_open_files") + "; nohup " + cmd + " -Xmx" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xms" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xss" + HRDBMSWorker.getHParms().getProperty("stack_size") + " " + HRDBMSWorker.getHParms().getProperty("jvm_args") + " -classpath /home/hrdbms/app/bin: com.exascale.managers.HRDBMSWorker " + HRDBMSWorker.TYPE_COORD + " > /dev/null 2>&1 &";
+					// TODO use  -cp HRDBMS.jar:. ... is it compatible with debugger?
+					final String command1 = "cd " + wd + "; ulimit -n " + HRDBMSWorker.getHParms().getProperty("max_open_files") + "; ulimit -u 100000; nohup " + cmd + " -Xmx" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xms" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xss" + HRDBMSWorker.getHParms().getProperty("stack_size") + " " + HRDBMSWorker.getHParms().getProperty("jvm_args") + " -classpath /home/hrdbms/app/bin: com.exascale.managers.HRDBMSWorker " + HRDBMSWorker.TYPE_COORD + " > /dev/null 2>&1 &";
 					try
 					{
-
 						// final java.util.Properties config = new
 						// java.util.Properties();
 						// config.put("StrictHostKeyChecking", "no");
@@ -117,8 +118,9 @@ public class StartCoordsThread extends HRDBMSThread
 						// }
 						// channel.disconnect();
 						// session.disconnect();
-						HRDBMSWorker.logger.info("Command: " + "ssh -o StrictHostKeyChecking=no -n -f " + host + "  \"sh -c '" + command1 + "'\"");
-						Runtime.getRuntime().exec(new String[] { "bash", "-c", "ssh -o StrictHostKeyChecking=no-n -f " + host + "  \"bash -c '" + command1 + "'\"" });
+						// TODO used no host key checking for easy docker deployment... make optional?
+						HRDBMSWorker.logger.info("Command: " + "ssh -o StrictHostKeyChecking=no -n -f " + host + "  \"bash -c '" + command1 + "'\"");
+						Runtime.getRuntime().exec(new String[] { "bash", "-c", "ssh -o StrictHostKeyChecking=no -n -f " + host + "  \"bash -c '" + command1 + "'\"" });
 					}
 					catch (final Exception e)
 					{
@@ -128,6 +130,7 @@ public class StartCoordsThread extends HRDBMSThread
 
 				line = in.readLine();
 			}
+			in.close();
 			HRDBMSWorker.logger.debug("Start Coordinator is about to terminate.");
 			HRDBMSWorker.getThreadList().remove(index);
 			HRDBMSWorker.terminateThread(index);

@@ -4,7 +4,7 @@ public class ExistsPredicate extends Predicate
 {
 	private final SubSelect select;
 
-	public ExistsPredicate(SubSelect select)
+	public ExistsPredicate(final SubSelect select)
 	{
 		this.select = select;
 	}
@@ -16,7 +16,7 @@ public class ExistsPredicate extends Predicate
 	}
 
 	@Override
-	public boolean equals(Object o)
+	public boolean equals(final Object o)
 	{
 		return false;
 	}

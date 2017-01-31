@@ -5,7 +5,7 @@ public final class IndexedByteArray
 	public byte[] array;
 	public int index;
 
-	public IndexedByteArray(byte[] array, int idx)
+	public IndexedByteArray(final byte[] array, final int idx)
 	{
 		if (array == null)
 		{
@@ -17,7 +17,7 @@ public final class IndexedByteArray
 	}
 
 	@Override
-	public boolean equals(Object o)
+	public boolean equals(final Object o)
 	{
 		try
 		{
@@ -31,10 +31,10 @@ public final class IndexedByteArray
 				return true;
 			}
 
-			IndexedByteArray iba = (IndexedByteArray)o;
+			final IndexedByteArray iba = (IndexedByteArray)o;
 			return ((this.array == iba.array) && (this.index == iba.index));
 		}
-		catch (ClassCastException e)
+		catch (final ClassCastException e)
 		{
 			return false;
 		}
@@ -50,7 +50,7 @@ public final class IndexedByteArray
 	@Override
 	public String toString()
 	{
-		StringBuilder builder = new StringBuilder(100);
+		final StringBuilder builder = new StringBuilder(100);
 		builder.append("[");
 		builder.append(String.valueOf(this.array));
 		builder.append(",");

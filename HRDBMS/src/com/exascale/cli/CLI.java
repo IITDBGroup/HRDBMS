@@ -4,6 +4,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Properties;
@@ -15,14 +16,14 @@ public class CLI
 	private static Connection conn;
 	private static boolean timing = false;
 
-	public static void main(String[] args)
+	public static void main(final String[] args)
 	{
-		Scanner in = new Scanner(System.in);
+		final Scanner in = new Scanner(System.in);
 		try
 		{
 			Class.forName("com.exascale.client.HRDBMSDriver");
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			System.out.println("Unable to load HRDBMS driver!");
 			System.exit(1);
@@ -31,7 +32,7 @@ public class CLI
 		while (true)
 		{
 			System.out.print("HRDBMS> ");
-			String cmd = in.nextLine();
+			final String cmd = in.nextLine();
 			if (cmd.equalsIgnoreCase("QUIT"))
 			{
 				in.close();
@@ -42,13 +43,18 @@ public class CLI
 		}
 	}
 
+	private static void autocommit() throws SQLException
+	{
+		conn.setAutoCommit(true);
+	}
+
 	private static void commit()
 	{
 		try
 		{
 			conn.commit();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			System.out.println(e.getMessage());
 		}
@@ -63,7 +69,7 @@ public class CLI
 				conn.close();
 				connected = false;
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				System.out.println(e.getMessage());
 				return;
@@ -72,7 +78,7 @@ public class CLI
 
 		try
 		{
-			Properties prop = new Properties();
+			final Properties prop = new Properties();
 			if (endWithIgnoreCase(cmd, "FORCE"))
 			{
 				prop.setProperty("FORCE", "TRUE");
@@ -82,25 +88,23 @@ public class CLI
 			conn.setAutoCommit(false);
 			connected = true;
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			System.out.println(e.getMessage());
 		}
 	}
 
-	private static boolean endWithIgnoreCase(String in, String cmp)
+	private static boolean endWithIgnoreCase(final String in, final String cmp)
 	{
 		if (in.toUpperCase().endsWith(cmp.toUpperCase()))
 		{
 			return true;
 		}
-		else
-		{
-			return false;
-		}
+
+		return false;
 	}
 
-	private static void load(String cmd)
+	private static void load(final String cmd)
 	{
 		if (!connected)
 		{
@@ -110,17 +114,18 @@ public class CLI
 
 		try
 		{
-			Statement stmt = conn.createStatement();
-			int num = stmt.executeUpdate(cmd);
+			final Statement stmt = conn.createStatement();
+			final int num = stmt.executeUpdate(cmd);
 			System.out.println(num + " rows were loaded");
+			stmt.close();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			System.out.println(e.getMessage());
 		}
 	}
 
-	private static void processCommand(String cmd)
+	private static void processCommand(final String cmd)
 	{
 		if (cmd.trim().equals(""))
 		{
@@ -154,6 +159,17 @@ public class CLI
 		{
 			load(cmd);
 		}
+		else if (cmd.equalsIgnoreCase("SET AUTOCOMMIT"))
+		{
+			try
+			{
+				autocommit();
+			}
+			catch (final Exception e)
+			{
+				e.printStackTrace();
+			}
+		}
 		else
 		{
 			update(cmd);
@@ -166,13 +182,13 @@ public class CLI
 		{
 			conn.rollback();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			System.out.println(e.getMessage());
 		}
 	}
 
-	private static void select(String cmd)
+	private static void select(final String cmd)
 	{
 		long start = 0;
 		long end = 0;
@@ -184,14 +200,14 @@ public class CLI
 
 		try
 		{
-			Statement stmt = conn.createStatement();
+			final Statement stmt = conn.createStatement();
 			start = System.currentTimeMillis();
-			ResultSet rs = stmt.executeQuery(cmd);
-			ResultSetMetaData meta = rs.getMetaData();
-			ArrayList<Integer> offsets = new ArrayList<Integer>();
+			final ResultSet rs = stmt.executeQuery(cmd);
+			final ResultSetMetaData meta = rs.getMetaData();
+			final ArrayList<Integer> offsets = new ArrayList<Integer>();
 			int i = 1;
-			StringBuilder line = new StringBuilder(64 * 1024);
-			int colCount = meta.getColumnCount();
+			final StringBuilder line = new StringBuilder(64 * 1024);
+			final int colCount = meta.getColumnCount();
 			while (i <= colCount)
 			{
 				offsets.add(line.length());
@@ -200,7 +216,7 @@ public class CLI
 			}
 
 			System.out.println(line);
-			int len = line.length();
+			final int len = line.length();
 			line.setLength(0);
 			i = 0;
 			while (i < len - 4)
@@ -213,12 +229,12 @@ public class CLI
 			while (rs.next())
 			{
 				i = 1;
-				int s = line.length();
+				final int s = line.length();
 				while (i <= colCount)
 				{
 					line.append(" ");
-					int target = s + offsets.get(i - 1);
-					int x = target - line.length();
+					final int target = s + offsets.get(i - 1);
+					final int x = target - line.length();
 					int y = 0;
 					while (y < x)
 					{
@@ -247,6 +263,7 @@ public class CLI
 
 			end = System.currentTimeMillis();
 			rs.close();
+			stmt.close();
 
 			if (timing)
 			{
@@ -254,25 +271,23 @@ public class CLI
 				System.out.println("Query took " + (end - start) / 1000.0 + " seconds");
 			}
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			System.out.println(e.getMessage());
 		}
 	}
 
-	private static boolean startsWithIgnoreCase(String in, String cmp)
+	private static boolean startsWithIgnoreCase(final String in, final String cmp)
 	{
 		if (in.toUpperCase().startsWith(cmp.toUpperCase()))
 		{
 			return true;
 		}
-		else
-		{
-			return false;
-		}
+
+		return false;
 	}
 
-	private static void update(String cmd)
+	private static void update(final String cmd)
 	{
 		if (!connected)
 		{
@@ -282,11 +297,12 @@ public class CLI
 
 		try
 		{
-			Statement stmt = conn.createStatement();
-			int num = stmt.executeUpdate(cmd);
+			final Statement stmt = conn.createStatement();
+			final int num = stmt.executeUpdate(cmd);
 			System.out.println(num + " rows were modified");
+			stmt.close();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			System.out.println(e.getMessage());
 		}

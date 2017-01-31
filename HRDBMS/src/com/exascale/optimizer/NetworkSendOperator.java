@@ -66,7 +66,7 @@ public class NetworkSendOperator implements Operator, Serializable
 	protected transient AtomicLong received;
 	protected transient volatile boolean demReceived;
 
-	public NetworkSendOperator(int node, MetaData meta)
+	public NetworkSendOperator(final int node, final MetaData meta)
 	{
 		this.meta = meta;
 		this.node = node;
@@ -78,9 +78,9 @@ public class NetworkSendOperator implements Operator, Serializable
 		received = new AtomicLong(0);
 	}
 
-	public static NetworkSendOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static NetworkSendOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		NetworkSendOperator value = (NetworkSendOperator)unsafe.allocateInstance(NetworkSendOperator.class);
+		final NetworkSendOperator value = (NetworkSendOperator)unsafe.allocateInstance(NetworkSendOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.meta = new MetaData();
 		value.child = OperatorUtils.deserializeOperator(in, prev);
@@ -99,8 +99,58 @@ public class NetworkSendOperator implements Operator, Serializable
 		return value;
 	}
 
+	private static byte[] toBytesDEM()
+	{
+		final byte[] retval = new byte[9];
+		retval[0] = 0;
+		retval[1] = 0;
+		retval[2] = 0;
+		retval[3] = 5;
+		retval[4] = 0;
+		retval[5] = 0;
+		retval[6] = 0;
+		retval[7] = 1;
+		retval[8] = 5;
+		return retval;
+	}
+
+	private static byte[] toBytesException(final Object v)
+	{
+		final Exception e = (Exception)v;
+		byte[] data = null;
+		try
+		{
+			HRDBMSWorker.logger.debug("", (Exception)v);
+			if (e.getMessage() == null)
+			{
+				final StringWriter sw = new StringWriter();
+				final PrintWriter pw = new PrintWriter(sw);
+				e.printStackTrace(pw);
+				data = sw.toString().getBytes(StandardCharsets.UTF_8);
+			}
+			else
+			{
+				data = e.getMessage().getBytes(StandardCharsets.UTF_8);
+			}
+		}
+		catch (final Exception f)
+		{
+		}
+
+		final int dataLen = data.length;
+		final int recLen = 9 + dataLen;
+		final ByteBuffer bb = ByteBuffer.allocate(recLen + 4);
+		bb.position(0);
+		bb.putInt(recLen);
+		bb.putInt(1);
+		bb.put((byte)10);
+		bb.putInt(dataLen);
+		bb.put(data);
+		return bb.array();
+	}
+
 	@Override
-	public void add(Operator op) throws Exception
+	public void add(final Operator op) throws Exception
 	{
 		if (child == null)
 		{
@@ -116,7 +166,7 @@ public class NetworkSendOperator implements Operator, Serializable
 		}
 	}
 
-	public void addConnection(int fromNode, Socket sock)
+	public void addConnection(final int fromNode, final Socket sock)
 	{
 	}
 
@@ -209,13 +259,13 @@ public class NetworkSendOperator implements Operator, Serializable
 	}
 
 	@Override
-	public Object next(Operator op) throws Exception
+	public Object next(final Operator op) throws Exception
 	{
 		throw new Exception("Unsupported operation");
 	}
 
 	@Override
-	public void nextAll(Operator op)
+	public void nextAll(final Operator op)
 	{
 	}
 
@@ -243,7 +293,7 @@ public class NetworkSendOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void registerParent(Operator op) throws Exception
+	public void registerParent(final Operator op) throws Exception
 	{
 		if (parent == null)
 		{
@@ -256,14 +306,14 @@ public class NetworkSendOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeChild(Operator op)
+	public void removeChild(final Operator op)
 	{
 		child = null;
 		op.removeParent(this);
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 		parent = null;
 	}
@@ -276,9 +326,9 @@ public class NetworkSendOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -301,7 +351,7 @@ public class NetworkSendOperator implements Operator, Serializable
 		OperatorUtils.writeBool(cardSet, out);
 	}
 
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev, boolean flag) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev, final boolean flag) throws Exception
 	{
 	}
 
@@ -317,12 +367,12 @@ public class NetworkSendOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void setChildPos(int pos)
+	public void setChildPos(final int pos)
 	{
 	}
 
 	@Override
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 		this.node = node;
 	}
@@ -339,11 +389,11 @@ public class NetworkSendOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void setPlan(Plan plan)
+	public void setPlan(final Plan plan)
 	{
 	}
 
-	public void setSocket(Socket sock) throws Exception
+	public void setSocket(final Socket sock) throws Exception
 	{
 		try
 		{
@@ -360,7 +410,7 @@ public class NetworkSendOperator implements Operator, Serializable
 	@Override
 	public synchronized void start() throws Exception
 	{
-		CompressedOutputStream compOut = new CompressedOutputStream(out);
+		final CompressedOutputStream compOut = new CompressedOutputStream(out);
 		try
 		{
 			started = true;
@@ -381,7 +431,7 @@ public class NetworkSendOperator implements Operator, Serializable
 				{
 					compOut.write(obj);
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.debug("Error writing to " + sock.getRemoteSocketAddress());
 					throw e;
@@ -409,19 +459,19 @@ public class NetworkSendOperator implements Operator, Serializable
 			child.close();
 			// Thread.sleep(60 * 1000); WHY was this here?
 		}
-		catch (Throwable e)
+		catch (final Throwable e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			try
 			{
-				byte[] obj = toBytes(e);
+				final byte[] obj = toBytes(e);
 				compOut.write(obj);
 				compOut.flush();
 				compOut.close();
 				child.nextAll(this);
 				child.close();
 			}
-			catch (Throwable f)
+			catch (final Throwable f)
 			{
 				HRDBMSWorker.logger.debug("", f);
 				try
@@ -430,7 +480,7 @@ public class NetworkSendOperator implements Operator, Serializable
 					child.nextAll(this);
 					child.close();
 				}
-				catch (Throwable g)
+				catch (final Throwable g)
 				{
 					HRDBMSWorker.logger.debug("", g);
 					try
@@ -438,7 +488,7 @@ public class NetworkSendOperator implements Operator, Serializable
 						child.nextAll(this);
 						child.close();
 					}
-					catch (Throwable h)
+					catch (final Throwable h)
 					{
 						HRDBMSWorker.logger.debug("", h);
 					}
@@ -458,57 +508,7 @@ public class NetworkSendOperator implements Operator, Serializable
 		return "NetworkSendOperator(" + node + ")";
 	}
 
-	private byte[] toBytesDEM()
-	{
-		final byte[] retval = new byte[9];
-		retval[0] = 0;
-		retval[1] = 0;
-		retval[2] = 0;
-		retval[3] = 5;
-		retval[4] = 0;
-		retval[5] = 0;
-		retval[6] = 0;
-		retval[7] = 1;
-		retval[8] = 5;
-		return retval;
-	}
-
-	private byte[] toBytesException(Object v)
-	{
-		Exception e = (Exception)v;
-		byte[] data = null;
-		try
-		{
-			HRDBMSWorker.logger.debug("", (Exception)v);
-			if (e.getMessage() == null)
-			{
-				StringWriter sw = new StringWriter();
-				PrintWriter pw = new PrintWriter(sw);
-				e.printStackTrace(pw);
-				data = sw.toString().getBytes(StandardCharsets.UTF_8);
-			}
-			else
-			{
-				data = e.getMessage().getBytes(StandardCharsets.UTF_8);
-			}
-		}
-		catch (Exception f)
-		{
-		}
-
-		int dataLen = data.length;
-		int recLen = 9 + dataLen;
-		ByteBuffer bb = ByteBuffer.allocate(recLen + 4);
-		bb.position(0);
-		bb.putInt(recLen);
-		bb.putInt(1);
-		bb.put((byte)10);
-		bb.putInt(dataLen);
-		bb.put(data);
-		return bb.array();
-	}
-
-	protected byte[] toBytes(Object v) throws Exception
+	protected byte[] toBytes(final Object v) throws Exception
 	{
 		ArrayList<byte[]> bytes = null;
 		ArrayList<Object> val = null;
@@ -537,7 +537,7 @@ public class NetworkSendOperator implements Operator, Serializable
 		// for (final Object o : val)
 		while (z < limit)
 		{
-			Object o = val.get(z++);
+			final Object o = val.get(z++);
 			if (o instanceof Long)
 			{
 				header[i] = (byte)0;
@@ -562,10 +562,10 @@ public class NetworkSendOperator implements Operator, Serializable
 			{
 				header[i] = (byte)4;
 				// byte[] b = ((String)o).getBytes("UTF-8");
-				byte[] ba = new byte[((String)o).length() << 2];
-				char[] value = (char[])unsafe.getObject(o, offset);
-				int blen = ((sun.nio.cs.ArrayEncoder)ce).encode(value, 0, value.length, ba);
-				byte[] b = Arrays.copyOf(ba, blen);
+				final byte[] ba = new byte[((String)o).length() << 2];
+				final char[] value = (char[])unsafe.getObject(o, offset);
+				final int blen = ((sun.nio.cs.ArrayEncoder)ce).encode(value, 0, value.length, ba);
+				final byte[] b = Arrays.copyOf(ba, blen);
 				size += (4 + b.length);
 				if (bytes == null)
 				{
@@ -600,7 +600,7 @@ public class NetworkSendOperator implements Operator, Serializable
 		// for (final Object o : val)
 		while (z < limit)
 		{
-			Object o = val.get(z++);
+			final Object o = val.get(z++);
 			if (retval[i] == 0)
 			{
 				retvalBB.putLong((Long)o);
@@ -619,7 +619,7 @@ public class NetworkSendOperator implements Operator, Serializable
 			}
 			else if (retval[i] == 4)
 			{
-				byte[] temp = bytes.get(x);
+				final byte[] temp = bytes.get(x);
 				x++;
 				retvalBB.putInt(temp.length);
 				retvalBB.put(temp);

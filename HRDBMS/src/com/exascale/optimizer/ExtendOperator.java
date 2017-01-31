@@ -34,7 +34,7 @@ public final class ExtendOperator implements Operator, Serializable
 			f.setAccessible(true);
 			unsafe = (sun.misc.Unsafe)f.get(null);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			unsafe = null;
 		}
@@ -59,8 +59,9 @@ public final class ExtendOperator implements Operator, Serializable
 	private transient volatile ArrayList<Double> literals;
 	private transient AtomicLong received;
 	private transient volatile boolean demReceived;
+	private boolean singleThreaded = false;
 
-	public ExtendOperator(String prefix, String name, MetaData meta)
+	public ExtendOperator(final String prefix, final String name, final MetaData meta)
 	{
 		this.prefix = prefix;
 		this.meta = meta;
@@ -74,9 +75,9 @@ public final class ExtendOperator implements Operator, Serializable
 		received = new AtomicLong(0);
 	}
 
-	public static ExtendOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static ExtendOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		ExtendOperator value = (ExtendOperator)unsafe.allocateInstance(ExtendOperator.class);
+		final ExtendOperator value = (ExtendOperator)unsafe.allocateInstance(ExtendOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.child = OperatorUtils.deserializeOperator(in, prev);
 		value.parent = OperatorUtils.deserializeOperator(in, prev);
@@ -89,13 +90,14 @@ public final class ExtendOperator implements Operator, Serializable
 		value.tokens = OperatorUtils.deserializeFST(in, prev);
 		value.master = OperatorUtils.deserializeADS(in, prev);
 		value.startDone = OperatorUtils.readBool(in);
+		value.singleThreaded = OperatorUtils.readBool(in);
 		value.received = new AtomicLong(0);
 		value.demReceived = false;
 		return value;
 	}
 
 	@Override
-	public void add(Operator op) throws Exception
+	public void add(final Operator op) throws Exception
 	{
 		if (child == null)
 		{
@@ -131,6 +133,7 @@ public final class ExtendOperator implements Operator, Serializable
 		final ExtendOperator retval = new ExtendOperator(prefix, name, meta);
 		retval.node = node;
 		retval.tokens = tokens.clone();
+		retval.singleThreaded = singleThreaded;
 		return retval;
 	}
 
@@ -214,7 +217,7 @@ public final class ExtendOperator implements Operator, Serializable
 					continue;
 				}
 
-				Integer x = cols2Pos.get(temp);
+				final Integer x = cols2Pos.get(temp);
 				if (x == null)
 				{
 					int count = 0;
@@ -224,7 +227,7 @@ public final class ExtendOperator implements Operator, Serializable
 					}
 					for (String col : cols2Pos.keySet())
 					{
-						String origCol = col;
+						final String origCol = col;
 						if (col.contains("."))
 						{
 							col = col.substring(col.indexOf('.') + 1);
@@ -251,9 +254,14 @@ public final class ExtendOperator implements Operator, Serializable
 		return retval;
 	}
 
+	public boolean isSingleThreaded()
+	{
+		return singleThreaded;
+	}
+
 	// @?Parallel
 	@Override
-	public Object next(Operator op) throws Exception
+	public Object next(final Operator op) throws Exception
 	{
 		Object o;
 		o = queue.take();
@@ -281,7 +289,7 @@ public final class ExtendOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void nextAll(Operator op) throws Exception
+	public void nextAll(final Operator op) throws Exception
 	{
 		child.nextAll(op);
 		Object o = next(op);
@@ -310,7 +318,7 @@ public final class ExtendOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void registerParent(Operator op) throws Exception
+	public void registerParent(final Operator op) throws Exception
 	{
 		if (parent == null)
 		{
@@ -323,7 +331,7 @@ public final class ExtendOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeChild(Operator op)
+	public void removeChild(final Operator op)
 	{
 		if (op == child)
 		{
@@ -333,7 +341,7 @@ public final class ExtendOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 		parent = null;
 	}
@@ -345,9 +353,9 @@ public final class ExtendOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -367,22 +375,28 @@ public final class ExtendOperator implements Operator, Serializable
 		OperatorUtils.serializeFST(tokens, out, prev);
 		OperatorUtils.serializeADS(master, out, prev);
 		OperatorUtils.writeBool(startDone, out);
+		OperatorUtils.writeBool(singleThreaded, out);
 	}
 
 	@Override
-	public void setChildPos(int pos)
+	public void setChildPos(final int pos)
 	{
 	}
 
 	@Override
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 		this.node = node;
 	}
 
 	@Override
-	public void setPlan(Plan plan)
+	public void setPlan(final Plan plan)
 	{
+	}
+
+	public void setSingleThreaded()
+	{
+		singleThreaded = true;
 	}
 
 	@Override
@@ -391,13 +405,20 @@ public final class ExtendOperator implements Operator, Serializable
 		startDone = true;
 		child.start();
 		queue = new BufferedLinkedBlockingQueue(ResourceManager.QUEUE_SIZE);
-		if (ResourceManager.GPU)
+		if (!singleThreaded && ResourceManager.GPU)
 		{
 			new GPUThread(true).start();
 		}
 		else
 		{
-			new NonGPUThread().start();
+			if (singleThreaded)
+			{
+				new NonGPUThread().run();
+			}
+			else
+			{
+				new NonGPUThread().start();
+			}
 		}
 	}
 
@@ -407,7 +428,7 @@ public final class ExtendOperator implements Operator, Serializable
 		return "ExtendOperator: " + name + "=" + prefix;
 	}
 
-	private Object notCached(String temp, ArrayList<Object> row, ArrayList<Integer> p)
+	private Object notCached(String temp, final ArrayList<Object> row, final ArrayList<Integer> p)
 	{
 		Integer x = cols2Pos.get(temp);
 		if (x == null)
@@ -419,7 +440,7 @@ public final class ExtendOperator implements Operator, Serializable
 			}
 			for (String col : cols2Pos.keySet())
 			{
-				String origCol = col;
+				final String origCol = col;
 				if (col.contains("."))
 				{
 					col = col.substring(col.indexOf('.') + 1);
@@ -442,12 +463,11 @@ public final class ExtendOperator implements Operator, Serializable
 		return row.get(x);
 	}
 
-	private final Double parsePrefixDouble(ArrayList<Object> row)
+	private final Double parsePrefixDouble(final ArrayList<Object> row, final ArrayDeque<Object> execStack)
 	{
 		ArrayList<Integer> p = null;
 		ArrayList<Double> ds = null;
 		final ArrayDeque<String> parseStack = master.clone();
-		final ArrayDeque<Object> execStack = new ArrayDeque<Object>();
 		int i = 0;
 		int j = 0;
 		// System.out.println("Starting parse stack = " + parseStack);
@@ -457,7 +477,7 @@ public final class ExtendOperator implements Operator, Serializable
 		{
 			y--;
 			// System.out.println("Exec stack = " + execStack);
-			String temp = parseStack.pop();
+			final String temp = parseStack.pop();
 			// System.out.println("We popped " + temp);
 			if (temp.equals("*"))
 			{
@@ -527,6 +547,7 @@ public final class ExtendOperator implements Operator, Serializable
 						else
 						{
 							queue.put(new Exception("Unknown type in ExtendOperator: " + field.getClass()));
+							execStack.clear();
 							return 0D;
 						}
 					}
@@ -558,9 +579,10 @@ public final class ExtendOperator implements Operator, Serializable
 					{
 						queue.put(e);
 					}
-					catch (Exception f)
+					catch (final Exception f)
 					{
 					}
+					execStack.clear();
 					return 0D;
 				}
 			}
@@ -588,7 +610,7 @@ public final class ExtendOperator implements Operator, Serializable
 		public ArrayList<Integer> poses;
 		public ArrayList<Double> calced;
 
-		public ExtendKernel(ArrayList<Object> row, ArrayDeque master, ArrayList<Integer> poses, ArrayList<Double> calced)
+		public ExtendKernel(final ArrayList<Object> row, final ArrayDeque master, final ArrayList<Integer> poses, final ArrayList<Double> calced)
 		{
 			this.row = row;
 			this.master = master;
@@ -606,7 +628,7 @@ public final class ExtendOperator implements Operator, Serializable
 	{
 		private final boolean sendDEM;
 
-		public GPUThread(boolean sendDEM)
+		public GPUThread(final boolean sendDEM)
 		{
 			this.sendDEM = sendDEM;
 		}
@@ -614,8 +636,13 @@ public final class ExtendOperator implements Operator, Serializable
 		@Override
 		public void run()
 		{
-			final List<Kernel> jobs = new ArrayList<Kernel>(ResourceManager.CUDA_SIZE);
+			List<Kernel> jobs = null;
+			if (ResourceManager.GPU)
+			{
+				jobs = new ArrayList<Kernel>(ResourceManager.CUDA_SIZE);
+			}
 			final ArrayList<Double> calced = new ArrayList<Double>();
+			final ArrayDeque<Object> execStack = new ArrayDeque<Object>();
 			int i = 0;
 			while (true)
 			{
@@ -639,7 +666,7 @@ public final class ExtendOperator implements Operator, Serializable
 					{
 						queue.put(e);
 					}
-					catch (Exception f)
+					catch (final Exception f)
 					{
 					}
 					return;
@@ -662,13 +689,13 @@ public final class ExtendOperator implements Operator, Serializable
 								i++;
 							}
 						}
-						catch (Exception e)
+						catch (final Exception e)
 						{
 							try
 							{
 								queue.put(e);
 							}
-							catch (Exception f)
+							catch (final Exception f)
 							{
 							}
 							return;
@@ -682,13 +709,13 @@ public final class ExtendOperator implements Operator, Serializable
 							queue.put(o);
 							return;
 						}
-						catch (Exception e)
+						catch (final Exception e)
 						{
 							try
 							{
 								queue.put(e);
 							}
-							catch (Exception f)
+							catch (final Exception f)
 							{
 							}
 							return;
@@ -703,19 +730,19 @@ public final class ExtendOperator implements Operator, Serializable
 				final ArrayList<Object> row = (ArrayList<Object>)o;
 				if (poses == null || !ResourceManager.GPU)
 				{
-					final Double ppd = parsePrefixDouble(row);
+					final Double ppd = parsePrefixDouble(row, execStack);
 					row.add(ppd);
 					try
 					{
 						queue.put(row);
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						try
 						{
 							queue.put(e);
 						}
-						catch (Exception f)
+						catch (final Exception f)
 						{
 						}
 						return;
@@ -742,13 +769,13 @@ public final class ExtendOperator implements Operator, Serializable
 								i++;
 							}
 						}
-						catch (Exception e)
+						catch (final Exception e)
 						{
 							try
 							{
 								queue.put(e);
 							}
-							catch (Exception f)
+							catch (final Exception f)
 							{
 							}
 							return;
@@ -768,10 +795,17 @@ public final class ExtendOperator implements Operator, Serializable
 		@Override
 		public void run()
 		{
-			ArrayList<GPUThread> threads = new ArrayList<GPUThread>();
+			if (singleThreaded)
+			{
+				new GPUThread(false).run();
+				queue.put(new DataEndMarker());
+				return;
+			}
+
+			final ArrayList<GPUThread> threads = new ArrayList<GPUThread>();
 			int z = 0;
 			int limit = Runtime.getRuntime().availableProcessors();
-			int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("extend_max_par"));
+			final int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("extend_max_par"));
 			if (limit > max)
 			{
 				limit = max;
@@ -779,7 +813,7 @@ public final class ExtendOperator implements Operator, Serializable
 
 			while (z < limit)
 			{
-				GPUThread thread = new GPUThread(false);
+				final GPUThread thread = new GPUThread(false);
 				thread.start();
 				threads.add(thread);
 				z++;
@@ -792,7 +826,7 @@ public final class ExtendOperator implements Operator, Serializable
 				{
 					threads.get(z++).join();
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 				}
 			}

@@ -20,22 +20,22 @@ public class ReorgTask extends Task
 {
 	private final String table;
 
-	public ReorgTask(String table)
+	public ReorgTask(final String table)
 	{
 		this.table = table;
 	}
 
-	private static void getConfirmation(Socket sock) throws Exception
+	private static void getConfirmation(final Socket sock) throws Exception
 	{
-		InputStream in = sock.getInputStream();
-		byte[] inMsg = new byte[2];
+		final InputStream in = sock.getInputStream();
+		final byte[] inMsg = new byte[2];
 
 		int count = 0;
 		while (count < 2)
 		{
 			try
 			{
-				int temp = in.read(inMsg, count, 2 - count);
+				final int temp = in.read(inMsg, count, 2 - count);
 				if (temp == -1)
 				{
 					in.close();
@@ -53,7 +53,7 @@ public class ReorgTask extends Task
 			}
 		}
 
-		String inStr = new String(inMsg, StandardCharsets.UTF_8);
+		final String inStr = new String(inMsg, StandardCharsets.UTF_8);
 		if (!inStr.equals("OK"))
 		{
 			in.close();
@@ -64,12 +64,12 @@ public class ReorgTask extends Task
 		{
 			in.close();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 		}
 	}
 
-	private static byte[] intToBytes(int val)
+	private static byte[] intToBytes(final int val)
 	{
 		final byte[] buff = new byte[4];
 		buff[0] = (byte)(val >> 24);
@@ -79,7 +79,7 @@ public class ReorgTask extends Task
 		return buff;
 	}
 
-	private static byte[] longToBytes(long val)
+	private static byte[] longToBytes(final long val)
 	{
 		final byte[] buff = new byte[8];
 		buff[0] = (byte)(val >> 56);
@@ -93,16 +93,16 @@ public class ReorgTask extends Task
 		return buff;
 	}
 
-	private static ArrayList<Object> makeTree(ArrayList<Integer> nodes)
+	private static ArrayList<Object> makeTree(final ArrayList<Integer> nodes)
 	{
-		int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
+		final int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 		if (nodes.size() <= max)
 		{
-			ArrayList<Object> retval = new ArrayList<Object>(nodes);
+			final ArrayList<Object> retval = new ArrayList<Object>(nodes);
 			return retval;
 		}
 
-		ArrayList<Object> retval = new ArrayList<Object>();
+		final ArrayList<Object> retval = new ArrayList<Object>();
 		int i = 0;
 		while (i < max)
 		{
@@ -110,16 +110,16 @@ public class ReorgTask extends Task
 			i++;
 		}
 
-		int remaining = nodes.size() - i;
-		int perNode = remaining / max + 1;
+		final int remaining = nodes.size() - i;
+		final int perNode = remaining / max + 1;
 
 		int j = 0;
 		final int size = nodes.size();
 		while (i < size)
 		{
-			int first = (Integer)retval.get(j);
+			final int first = (Integer)retval.get(j);
 			retval.remove(j);
-			ArrayList<Integer> list = new ArrayList<Integer>(perNode + 1);
+			final ArrayList<Integer> list = new ArrayList<Integer>(perNode + 1);
 			list.add(first);
 			int k = 0;
 			while (k < perNode && i < size)
@@ -142,7 +142,7 @@ public class ReorgTask extends Task
 		i = 0;
 		while (i < retval.size())
 		{
-			ArrayList<Integer> list = (ArrayList<Integer>)retval.remove(i);
+			final ArrayList<Integer> list = (ArrayList<Integer>)retval.remove(i);
 			retval.add(i, makeTree(list));
 			i++;
 		}
@@ -150,18 +150,18 @@ public class ReorgTask extends Task
 		return retval;
 	}
 
-	private static byte[] stringToBytes(String string)
+	private static byte[] stringToBytes(final String string)
 	{
 		byte[] data = null;
 		try
 		{
 			data = string.getBytes(StandardCharsets.UTF_8);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 		}
-		byte[] len = intToBytes(data.length);
-		byte[] retval = new byte[data.length + len.length];
+		final byte[] len = intToBytes(data.length);
+		final byte[] retval = new byte[data.length + len.length];
 		System.arraycopy(len, 0, retval, 0, len.length);
 		System.arraycopy(data, 0, retval, len.length, data.length);
 		return retval;
@@ -180,60 +180,60 @@ public class ReorgTask extends Task
 		{
 			try
 			{
-				long start = System.currentTimeMillis();
-				MetaData meta = new MetaData();
+				final long start = System.currentTimeMillis();
+				// MetaData meta = new MetaData();
 				Transaction tx = new Transaction(Transaction.ISOLATION_CS);
-				ArrayList<Index> indexes = meta.getIndexesForTable(table.substring(0, table.indexOf('.')), table.substring(table.indexOf('.') + 1), tx);
-				ArrayList<Integer> nodes = meta.getNodesForTable(table.substring(0, table.indexOf('.')), table.substring(table.indexOf('.') + 1), tx);
-				HashMap<String, String> cols2Types = meta.getCols2TypesForTable(table.substring(0, table.indexOf('.')), table.substring(table.indexOf('.') + 1), tx);
-				TreeMap<Integer, String> pos2Col = meta.getPos2ColForTable(table.substring(0, table.indexOf('.')), table.substring(table.indexOf('.') + 1), tx);
+				final ArrayList<Index> indexes = MetaData.getIndexesForTable(table.substring(0, table.indexOf('.')), table.substring(table.indexOf('.') + 1), tx);
+				final ArrayList<Integer> nodes = MetaData.getNodesForTable(table.substring(0, table.indexOf('.')), table.substring(table.indexOf('.') + 1), tx);
+				final HashMap<String, String> cols2Types = MetaData.getCols2TypesForTable(table.substring(0, table.indexOf('.')), table.substring(table.indexOf('.') + 1), tx);
+				final TreeMap<Integer, String> pos2Col = MetaData.getPos2ColForTable(table.substring(0, table.indexOf('.')), table.substring(table.indexOf('.') + 1), tx);
 
-				ArrayList<Object> tree = makeTree(nodes);
-				ArrayList<Boolean> uniques = meta.getUnique(table.substring(0, table.indexOf('.')), table.substring(table.indexOf('.') + 1), tx);
+				final ArrayList<Object> tree = makeTree(nodes);
+				final ArrayList<Boolean> uniques = MetaData.getUnique(table.substring(0, table.indexOf('.')), table.substring(table.indexOf('.') + 1), tx);
 
 				tx.commit();
 				tx = new Transaction(Transaction.ISOLATION_CS);
 				sendReorgs(tree, table.substring(0, table.indexOf('.')), table.substring(table.indexOf('.') + 1), indexes, tx, cols2Types, pos2Col, uniques);
 				tx.commit();
 
-				long end = System.currentTimeMillis();
+				final long end = System.currentTimeMillis();
 
 				// reschedule myself
 				MaintenanceManager.schedule(ReorgTask.this, -1, end - start, end + Long.parseLong(HRDBMSWorker.getHParms().getProperty("reorg_refresh_target_days")) * 24 * 60 * 60 * 1000);
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.warn("Error running REORG on " + table, e);
 				MaintenanceManager.reorgFailed.put(table, table);
 			}
 		}
 
-		private void sendReorgs(ArrayList<Object> tree, String schema, String table, ArrayList<Index> indexes, Transaction tx, HashMap<String, String> cols2Types, TreeMap<Integer, String> pos2Col, ArrayList<Boolean> uniques) throws Exception
+		private void sendReorgs(final ArrayList<Object> tree, final String schema, final String table, final ArrayList<Index> indexes, final Transaction tx, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> pos2Col, final ArrayList<Boolean> uniques) throws Exception
 		{
 			boolean allOK = true;
-			ArrayList<SendReorgThread> threads = new ArrayList<SendReorgThread>();
-			for (Object o : tree)
+			final ArrayList<SendReorgThread> threads = new ArrayList<SendReorgThread>();
+			for (final Object o : tree)
 			{
 				if (o instanceof Integer)
 				{
-					ArrayList<Object> list = new ArrayList<Object>(1);
+					final ArrayList<Object> list = new ArrayList<Object>(1);
 					list.add(o);
-					SendReorgThread thread = new SendReorgThread(list, schema, table, indexes, tx, cols2Types, pos2Col, uniques);
+					final SendReorgThread thread = new SendReorgThread(list, schema, table, indexes, tx, cols2Types, pos2Col, uniques);
 					threads.add(thread);
 				}
 				else
 				{
-					SendReorgThread thread = new SendReorgThread((ArrayList<Object>)o, schema, table, indexes, tx, cols2Types, pos2Col, uniques);
+					final SendReorgThread thread = new SendReorgThread((ArrayList<Object>)o, schema, table, indexes, tx, cols2Types, pos2Col, uniques);
 					threads.add(thread);
 				}
 			}
 
-			for (SendReorgThread thread : threads)
+			for (final SendReorgThread thread : threads)
 			{
 				thread.start();
 			}
 
-			for (SendReorgThread thread : threads)
+			for (final SendReorgThread thread : threads)
 			{
 				while (true)
 				{
@@ -242,11 +242,11 @@ public class ReorgTask extends Task
 						thread.join();
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}
-				boolean ok = thread.getOK();
+				final boolean ok = thread.getOK();
 				if (!ok)
 				{
 					allOK = false;
@@ -272,7 +272,7 @@ public class ReorgTask extends Task
 		private final TreeMap<Integer, String> pos2Col;
 		private final ArrayList<Boolean> uniques;
 
-		public SendReorgThread(ArrayList<Object> tree, String schema, String table, ArrayList<Index> indexes, Transaction tx, HashMap<String, String> cols2Types, TreeMap<Integer, String> pos2Col, ArrayList<Boolean> uniques)
+		public SendReorgThread(final ArrayList<Object> tree, final String schema, final String table, final ArrayList<Index> indexes, final Transaction tx, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> pos2Col, final ArrayList<Boolean> uniques)
 		{
 			this.tree = tree;
 			this.schema = schema;
@@ -284,17 +284,18 @@ public class ReorgTask extends Task
 			this.uniques = uniques;
 		}
 
-		private static ArrayList<Object> convertToHosts(ArrayList<Object> tree, Transaction tx) throws Exception
+		private static ArrayList<Object> convertToHosts(final ArrayList<Object> tree, final Transaction tx) throws Exception
 		{
-			ArrayList<Object> retval = new ArrayList<Object>();
+			final ArrayList<Object> retval = new ArrayList<Object>();
 			int i = 0;
 			final int size = tree.size();
 			while (i < size)
 			{
-				Object obj = tree.get(i);
+				final Object obj = tree.get(i);
 				if (obj instanceof Integer)
 				{
-					retval.add(new MetaData().getHostNameForNode((Integer)obj, tx));
+					// new MetaData();
+					retval.add(MetaData.getHostNameForNode((Integer)obj, tx));
 				}
 				else
 				{
@@ -307,7 +308,7 @@ public class ReorgTask extends Task
 			return retval;
 		}
 
-		private static boolean sendReorg(ArrayList<Object> tree, String schema, String table, ArrayList<Index> indexes, Transaction tx, HashMap<String, String> cols2Types, TreeMap<Integer, String> pos2Col, ArrayList<Boolean> uniques)
+		private static boolean sendReorg(final ArrayList<Object> tree, final String schema, final String table, final ArrayList<Index> indexes, final Transaction tx, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> pos2Col, final ArrayList<Boolean> uniques)
 		{
 			Object obj = tree.get(0);
 			while (obj instanceof ArrayList)
@@ -318,15 +319,16 @@ public class ReorgTask extends Task
 			Socket sock = null;
 			try
 			{
-				String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
+				// new MetaData();
+				final String hostname = MetaData.getHostNameForNode((Integer)obj, tx);
 				// sock = new Socket(hostname,
 				// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				sock = new Socket();
 				sock.setReceiveBufferSize(4194304);
 				sock.setSendBufferSize(4194304);
 				sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
-				OutputStream out = sock.getOutputStream();
-				byte[] outMsg = "REORG           ".getBytes(StandardCharsets.UTF_8);
+				final OutputStream out = sock.getOutputStream();
+				final byte[] outMsg = "REORG           ".getBytes(StandardCharsets.UTF_8);
 				outMsg[8] = 0;
 				outMsg[9] = 0;
 				outMsg[10] = 0;
@@ -338,9 +340,9 @@ public class ReorgTask extends Task
 				out.write(outMsg);
 				out.write(stringToBytes(schema));
 				out.write(stringToBytes(table));
-				byte[] txBytes = longToBytes(tx.number());
+				final byte[] txBytes = longToBytes(tx.number());
 				out.write(txBytes);
-				ObjectOutputStream objOut = new ObjectOutputStream(out);
+				final ObjectOutputStream objOut = new ObjectOutputStream(out);
 				objOut.writeObject(convertToHosts(tree, tx));
 				objOut.writeObject(indexes);
 				objOut.writeObject(cols2Types);
@@ -353,7 +355,7 @@ public class ReorgTask extends Task
 				sock.close();
 				return true;
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				try
 				{
@@ -362,7 +364,7 @@ public class ReorgTask extends Task
 						sock.close();
 					}
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 				}
 				return false;

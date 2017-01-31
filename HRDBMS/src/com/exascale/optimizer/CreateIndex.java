@@ -9,7 +9,7 @@ public class CreateIndex extends SQLStatement
 	private final ArrayList<IndexDef> cols;
 	private final boolean unique;
 
-	public CreateIndex(TableName index, TableName table, ArrayList<IndexDef> cols, boolean unique)
+	public CreateIndex(final TableName index, final TableName table, final ArrayList<IndexDef> cols, final boolean unique)
 	{
 		this.index = index;
 		this.table = table;

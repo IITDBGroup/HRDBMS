@@ -12,7 +12,7 @@ public class ForwardLogIterator implements Iterator<LogRec>
 	private final FileChannel fc;
 	long fcSize;
 
-	public ForwardLogIterator(String filename) throws IOException
+	public ForwardLogIterator(final String filename) throws IOException
 	{
 		nextpos = 4;
 		fc = LogManager.getFile(filename);

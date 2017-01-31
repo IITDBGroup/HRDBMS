@@ -11,12 +11,12 @@ public class MyLongWritable extends LongWritable
 		super();
 	}
 
-	public MyLongWritable(long key2)
+	public MyLongWritable(final long key2)
 	{
 		super(key2);
 	}
 
-	public static void setup(int numWorkers, int numDevices)
+	public static void setup(final int numWorkers, final int numDevices)
 	{
 		MyLongWritable.numDevices = numDevices;
 	}
@@ -24,7 +24,7 @@ public class MyLongWritable extends LongWritable
 	@Override
 	public int hashCode()
 	{
-		int retval = (int)(super.get() >> 32) * numDevices + (int)(super.get() & 0x00000000FFFFFFFF);
+		final int retval = (int)(super.get() >> 32) * numDevices + (int)(super.get() & 0x00000000FFFFFFFF);
 		return retval;
 	}
 }

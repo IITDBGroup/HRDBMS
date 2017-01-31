@@ -76,9 +76,7 @@ public class CatalogCode
 		final String in =
 		// SYS.TABLES(ID, SCHEMA, NAME, TYPE)
 		"SYS.TABLES(INT, VARCHAR, VARCHAR, VARCHAR)\n" + "14\n" + "(0, SYS, TABLES, R)\n" + "(1, SYS, COLUMNS, R)\n" + "(2, SYS, INDEXES, R)\n" + "(3, SYS, INDEXCOLS, R)\n" + "(4, SYS, VIEWS, R)\n" + "(5, SYS, TABLESTATS, R)\n" + "(6, SYS, NODES, R)\n" + "(7, SYS, COLSTATS, R)\n" + "(8, SYS, COLDIST, R)\n" + "(9, SYS, BACKUPS, R)\n" + "(10, SYS, NODESTATE, R)\n" + "(11, SYS, PARTITIONING, R)\n" + "(12, SYS, INDEXSTATS, R)\n" + "(13, SYS, EXTERNALTABLES, R)\n"
-
 		+ "SYS.BACKUPS(INT, INT, INT)\n" + "0\n"
-
 		+ "SYS.NODESTATE(INT, VARCHAR)\n" + "0\n"
 
 		// SYS.COLUMNS(COLID, TABLEID, NAME, TYPE, LENGTH, SCALE, PKPOS, NULL)
@@ -107,7 +105,7 @@ public class CatalogCode
 		+ "(0, 11, TABLEID, INT, 4, 0, 0, N)\n" + "(1, 11, GROUPEXP, VARCHAR, 8192, 0, -1, N)\n" + "(2, 11, NODEEXP, VARCHAR, 8192, 0, -1, N)\n" + "(3, 11, DEVICEEXP, VARCHAR, 8192, 0, -1, N)\n"
 
 		+ "(0, 12, TABLEID, INT, 4, 0, 0, N)\n" + "(1, 12, INDEXID, INT, 4, 0, 1, N)\n" + "(2, 12, NUMDISTINCT, BIGINT, 8, 0, -1, N)\n"
-		
+
 		+ "(0, 13, TABLEID, INT, 4, 0, 0, N)\n" + "(1, 13, JAVACLASSNAME, VARCHAR, 4096, 0, -1, N)\n" + "(2, 13, PARAMETERS, VARCHAR, 65536, 0, -1, N)\n"
 
 		+ "SYS.VIEWS(INT, VARCHAR, VARCHAR, VARCHAR)\n" + "0\n"
@@ -308,7 +306,7 @@ public class CatalogCode
 		HRDBMSWorker.logger.debug("buildCode() is returning!");
 	}
 
-	public static boolean isThisMyIpAddress(InetAddress addr)
+	public static boolean isThisMyIpAddress(final InetAddress addr)
 	{
 		// Check if the address is a valid special local or loop back
 		if (addr.isAnyLocalAddress() || addr.isLoopbackAddress())
@@ -327,12 +325,12 @@ public class CatalogCode
 		}
 	}
 
-	private static void buildIndexData(PrintWriter out, TreeMap<TextRowSorter, RID> keys2RID, int numKeys, String name, boolean unique) throws Exception
+	private static void buildIndexData(final PrintWriter out, final TreeMap<TextRowSorter, RID> keys2RID, final int numKeys, final String name, final boolean unique) throws Exception
 	{
 		final ByteBuffer data = ByteBuffer.allocate(Page.BLOCK_SIZE);
 		buildIndexDataBuffer(keys2RID, numKeys, data, unique);
 		String fn = HRDBMSWorker.getHParms().getProperty("data_directories");
-		StringTokenizer tokens = new StringTokenizer(fn, ",", false);
+		final StringTokenizer tokens = new StringTokenizer(fn, ",", false);
 		fn = tokens.nextToken();
 		if (!fn.endsWith("/"))
 		{
@@ -354,7 +352,7 @@ public class CatalogCode
 		}
 	}
 
-	private static void buildIndexDataBuffer(TreeMap<TextRowSorter, RID> keys2RID, int numKeys, ByteBuffer data, boolean unique) throws UnsupportedEncodingException
+	private static void buildIndexDataBuffer(final TreeMap<TextRowSorter, RID> keys2RID, final int numKeys, final ByteBuffer data, final boolean unique) throws UnsupportedEncodingException
 	{
 		data.position(0);
 		data.putInt(numKeys); // num key cols
@@ -398,7 +396,7 @@ public class CatalogCode
 		}
 	}
 
-	private static int calcDataSize(Vector<String> table, Vector<String> types)
+	private static int calcDataSize(final Vector<String> table, final Vector<String> types)
 	{
 		HRDBMSWorker.logger.debug("In calcDataSize().  Table has " + table.size() + " rows");
 		int total = 0;
@@ -470,7 +468,7 @@ public class CatalogCode
 		return total;
 	}
 
-	private static void calculateVariables(Vector<Vector<String>> data, Vector<String> tableLines)
+	private static void calculateVariables(final Vector<Vector<String>> data, final Vector<String> tableLines)
 	{
 		HRDBMSWorker.logger.debug("In calculateVariables() with " + vars.keySet().size() + " variables to process.");
 		for (final String var : vars.keySet())
@@ -902,7 +900,7 @@ public class CatalogCode
 		}
 	}
 
-	private static void createColStats(Vector<String> tableLines, Vector<Vector<String>> data)
+	private static void createColStats(final Vector<String> tableLines, final Vector<Vector<String>> data)
 	{
 		final Vector<String> tTable = getTable("SYS.TABLES", tableLines, data);
 
@@ -958,7 +956,7 @@ public class CatalogCode
 		}
 	}
 
-	private static void createIndexes(PrintWriter out) throws Exception
+	private static void createIndexes(final PrintWriter out) throws Exception
 	{
 		HRDBMSWorker.logger.debug("Entered createIndexes()");
 		final Vector<String> iTable = getTable("SYS.INDEXES", tableLines, data);
@@ -973,7 +971,7 @@ public class CatalogCode
 			final int indexID = Integer.parseInt(iRowST.nextToken().substring(1).trim());
 			final String iName = iRowST.nextToken().trim();
 			final int tableID = Integer.parseInt(iRowST.nextToken().trim());
-			boolean unique = iRowST.nextToken().trim().substring(0, 1).equals("Y");
+			final boolean unique = iRowST.nextToken().trim().substring(0, 1).equals("Y");
 			final int numKeys = numKeys(tableID, indexID);
 			String tName = null;
 
@@ -1089,7 +1087,7 @@ public class CatalogCode
 			{
 				buildIndexData(out, keys2RIDs, numKeys, "SYS." + iName, unique);
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 				throw e;
@@ -1097,7 +1095,7 @@ public class CatalogCode
 		}
 	}
 
-	private static void createIndexStats(Vector<String> tableLines, Vector<Vector<String>> data)
+	private static void createIndexStats(final Vector<String> tableLines, final Vector<Vector<String>> data)
 	{
 		Vector<String> isTable = null;
 		Vector<String> iTable = null;
@@ -1282,7 +1280,7 @@ public class CatalogCode
 		}
 	}
 
-	private static void createOutputHeader(PrintWriter out)
+	private static void createOutputHeader(final PrintWriter out)
 	{
 		out.println("import java.io.File;");
 		out.println("import java.nio.ByteBuffer;");
@@ -1326,7 +1324,7 @@ public class CatalogCode
 		out.println("\t}");
 	}
 
-	private static void createOutputTrailer(PrintWriter out, Vector<Vector<String>> data, Vector<String> tableLines)
+	private static void createOutputTrailer(final PrintWriter out, final Vector<Vector<String>> data, final Vector<String> tableLines)
 	{
 		out.println("");
 		out.println("\tprivate static void putMedium(ByteBuffer bb, int val)");
@@ -1356,7 +1354,7 @@ public class CatalogCode
 		out.println("}");
 	}
 
-	private static void createTableHeader(PrintWriter out, String name, int rows, int cols, int dataSize)
+	private static void createTableHeader(final PrintWriter out, final String name, final int rows, final int cols, final int dataSize)
 	{
 		out.println("\tpublic void createTable" + methodNum + "() throws Exception, UnsupportedEncodingException");
 		out.println("\t{");
@@ -1449,7 +1447,7 @@ public class CatalogCode
 		out.println("");
 	}
 
-	private static void createTableStats(Vector<String> tableLines, Vector<Vector<String>> data)
+	private static void createTableStats(final Vector<String> tableLines, final Vector<Vector<String>> data)
 	{
 		Vector<String> tsTable = null;
 		Vector<String> tTable = null;
@@ -1544,7 +1542,7 @@ public class CatalogCode
 		}
 	}
 
-	private static int getCompositeColCard(String table, int[] colIndexes, int depth)
+	private static int getCompositeColCard(final String table, final int[] colIndexes, final int depth)
 	{
 		HRDBMSWorker.logger.debug("Entering getCompositeColCard().");
 		int i = 0;
@@ -1622,7 +1620,7 @@ public class CatalogCode
 		return unique.size();
 	}
 
-	private static int getFullKeyCard(String table)
+	private static int getFullKeyCard(final String table)
 	{
 		final Vector<String> t = getTable("SYS.TABLES", tableLines, data);
 		final Vector<String> actual = getTable(table, tableLines, data);
@@ -1705,7 +1703,7 @@ public class CatalogCode
 	 * return -1; }
 	 */
 
-	private static int getNodePreferLocal(int primary, String priRack, HashMap<Integer, String> nodes2Rack, HashMap<Integer, Integer> nodes2NumTables)
+	private static int getNodePreferLocal(final int primary, final String priRack, final HashMap<Integer, String> nodes2Rack, final HashMap<Integer, Integer> nodes2NumTables)
 	{
 		final HashMap<Integer, Integer> candidates = new HashMap<Integer, Integer>();
 		for (final Map.Entry<Integer, String> entry : nodes2Rack.entrySet())
@@ -1762,7 +1760,7 @@ public class CatalogCode
 		return lowKey;
 	}
 
-	private static int getNodePreferNonLocal(int primary, int secondary, String priRack, HashMap<Integer, String> nodes2Rack, HashMap<Integer, Integer> nodes2NumTables)
+	private static int getNodePreferNonLocal(final int primary, final int secondary, final String priRack, final HashMap<Integer, String> nodes2Rack, final HashMap<Integer, Integer> nodes2NumTables)
 	{
 		final HashMap<Integer, Integer> candidates = new HashMap<Integer, Integer>();
 		for (final Map.Entry<Integer, String> entry : nodes2Rack.entrySet())
@@ -1819,7 +1817,7 @@ public class CatalogCode
 		return lowKey;
 	}
 
-	private static int getNulls(String table, int colIndex)
+	private static int getNulls(final String table, final int colIndex)
 	{
 		final Vector<String> t = getTable(table, tableLines, data);
 
@@ -1855,7 +1853,7 @@ public class CatalogCode
 		return total;
 	}
 
-	private static Vector<String> getTable(String table, Vector<String> tableLines, Vector<Vector<String>> data)
+	private static Vector<String> getTable(final String table, final Vector<String> tableLines, final Vector<Vector<String>> data)
 	{
 		int i = 0;
 		for (final String header : tableLines)
@@ -1871,7 +1869,7 @@ public class CatalogCode
 		return null;
 	}
 
-	private static void indexPut(ByteBuffer data, ByteBuffer keyBytes, RID rid)
+	private static void indexPut(final ByteBuffer data, final ByteBuffer keyBytes, final RID rid)
 	{
 		data.position(5); // offset of first slot
 		final int freeOff = data.getInt();
@@ -1879,7 +1877,7 @@ public class CatalogCode
 		int headOff = data.getInt();
 		while (true)
 		{
-			int temp = data.getInt(headOff + 13); // get right offset
+			final int temp = data.getInt(headOff + 13); // get right offset
 			if (temp == 0)
 			{
 				break;
@@ -1904,14 +1902,14 @@ public class CatalogCode
 		data.putInt(rid.getRecNum());
 		keyBytes.position(0);
 		data.put(keyBytes);
-		int newFreeOff = data.position();
+		final int newFreeOff = data.position();
 		data.position(headOff + 13);
 		data.putInt(freeOff);
 		data.position(5);
 		data.putInt(newFreeOff);
 	}
 
-	private static int numCols(int tableId)
+	private static int numCols(final int tableId)
 	{
 		final Vector<String> cTable = getTable("SYS.COLUMNS", tableLines, data);
 
@@ -1930,7 +1928,7 @@ public class CatalogCode
 		return num;
 	}
 
-	private static int numKeys(int tableId, int indexId)
+	private static int numKeys(final int tableId, final int indexId)
 	{
 		final Vector<String> cTable = getTable("SYS.INDEXCOLS", tableLines, data);
 
@@ -2088,7 +2086,7 @@ public class CatalogCode
 		}
 	}
 
-	private static void writeData(PrintWriter out, Vector<String> table, int dataSize, Vector<String> types)
+	private static void writeData(final PrintWriter out, final Vector<String> table, final int dataSize, final Vector<String> types)
 	{
 		out.println("HRDBMSWorker.logger.debug(\"Writing table data.\");");
 		out.println("");
@@ -2180,7 +2178,7 @@ public class CatalogCode
 		out.println("");
 	}
 
-	private static void writeOffsetArray(PrintWriter out, Vector<String> table, int dataSize, Vector<String> types)
+	private static void writeOffsetArray(final PrintWriter out, final Vector<String> table, final int dataSize, final Vector<String> types)
 	{
 		out.println("");
 		out.println("HRDBMSWorker.logger.debug(\"Writing offset array\");");
@@ -2243,7 +2241,7 @@ public class CatalogCode
 		}
 	}
 
-	private static void writeVariables(PrintWriter out)
+	private static void writeVariables(final PrintWriter out)
 	{
 		for (final Entry<String, Long> entry : vars.entrySet())
 		{
@@ -2255,18 +2253,18 @@ public class CatalogCode
 	{
 		private final Vector<Comparable> cols = new Vector<Comparable>();
 
-		public void add(Integer col)
+		public void add(final Integer col)
 		{
 			cols.add(col);
 		}
 
-		public void add(String col)
+		public void add(final String col)
 		{
 			cols.add(col);
 		}
 
 		@Override
-		public int compareTo(Object r) throws IllegalArgumentException
+		public int compareTo(final Object r) throws IllegalArgumentException
 		{
 			if (!(r instanceof TextRowSorter))
 			{
@@ -2296,7 +2294,7 @@ public class CatalogCode
 		}
 
 		@Override
-		public boolean equals(Object rhs)
+		public boolean equals(final Object rhs)
 		{
 
 			if (rhs == null)

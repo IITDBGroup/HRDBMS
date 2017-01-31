@@ -12,17 +12,21 @@ import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 import java.net.Socket;
 import java.net.SocketException;
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Properties;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import com.exascale.exceptions.ParseException;
 import com.exascale.filesystem.Block;
 import com.exascale.managers.BufferManager;
@@ -48,31 +52,34 @@ public final class MetaData implements Serializable
 	public static int numWorkerNodes = 0;
 	private static ArrayList<Integer> coords = new ArrayList<Integer>();
 	private static ArrayList<Integer> workers = new ArrayList<Integer>();
-	private static HashMap<String, ArrayList<Object>> getPartitioningCache = new HashMap<String, ArrayList<Object>>();
-	private static HashMap<String, ArrayList<Object>> getIndexesCache = new HashMap<String, ArrayList<Object>>();
-	private static HashMap<String, ArrayList<Object>> getUniqueIndexesCache = new HashMap<String, ArrayList<Object>>();
-	private static HashMap<String, ArrayList<Object>> getKeysCache = new HashMap<String, ArrayList<Object>>();
-	private static HashMap<String, ArrayList<Object>> getTypesCache = new HashMap<String, ArrayList<Object>>();
-	private static HashMap<String, ArrayList<Object>> getOrdersCache = new HashMap<String, ArrayList<Object>>();
-	private static HashMap<String, ArrayList<Object>> getIndexColsForTableCache = new HashMap<String, ArrayList<Object>>();
-	private static HashMap<String, Integer> getLengthCache = new HashMap<String, Integer>();
-	private static HashMap<String, Integer> getTableIDCache = new HashMap<String, Integer>();
-	private static HashMap<String, Long> getColCardCache = new HashMap<String, Long>();
-	private static HashMap<String, ArrayList<Object>> getIndexIDsForTableCache = new HashMap<String, ArrayList<Object>>();
-	private static HashMap<String, ArrayList<Object>> getCols2PosForTableCache = new HashMap<String, ArrayList<Object>>();
-	private static HashMap<String, ArrayList<Object>> getCols2TypesCache = new HashMap<String, ArrayList<Object>>();
-	private static HashMap<String, ArrayList<Object>> getUniqueCache = new HashMap<String, ArrayList<Object>>();
-	private static HashMap<String, Long> getTableCardCache = new HashMap<String, Long>();
-	private static HashMap<String, String> getColTypeCache = new HashMap<String, String>();
-	private static HashMap<String, Object> getDistCache = new HashMap<String, Object>();
+	private static ConcurrentHashMap<String, ArrayList<Object>> getPartitioningCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, ArrayList<Object>> getIndexesCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, ArrayList<Object>> getUniqueIndexesCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, ArrayList<Object>> getKeysCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, ArrayList<Object>> getTypesCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, ArrayList<Object>> getOrdersCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, ArrayList<Object>> getIndexColsForTableCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, Integer> getLengthCache = new ConcurrentHashMap<String, Integer>();
+	private static ConcurrentHashMap<String, Integer> getTableIDCache = new ConcurrentHashMap<String, Integer>();
+	private static ConcurrentHashMap<String, Long> getColCardCache = new ConcurrentHashMap<String, Long>();
+	private static ConcurrentHashMap<String, ArrayList<Object>> getIndexIDsForTableCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, ArrayList<Object>> getCols2PosForTableCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, ArrayList<Object>> getCols2TypesCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, ArrayList<Object>> getUniqueCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, Long> getTableCardCache = new ConcurrentHashMap<String, Long>();
+	private static ConcurrentHashMap<String, String> getColTypeCache = new ConcurrentHashMap<String, String>();
+	private static ConcurrentHashMap<String, Object> getDistCache = new ConcurrentHashMap<String, Object>();
 	private static int numDevices;
+	static ReentrantLock tableMetaLock = new ReentrantLock();
+	static ConcurrentHashMap<String, Boolean> tableExistenceCache = new ConcurrentHashMap<String, Boolean>();
+	static ConcurrentHashMap<String, Integer> tableTypeCache = new ConcurrentHashMap<String, Integer>();
 
 	static
 	{
 		try
 		{
-			String dirList = HRDBMSWorker.getHParms().getProperty("data_directories");
-			FastStringTokenizer tokens2 = new FastStringTokenizer(dirList, ",", false);
+			final String dirList = HRDBMSWorker.getHParms().getProperty("data_directories");
+			final FastStringTokenizer tokens2 = new FastStringTokenizer(dirList, ",", false);
 			numDevices = tokens2.allTokens().length;
 			final BufferedReader nodes = new BufferedReader(new FileReader(new File("nodes.cfg")));
 			String line = nodes.readLine();
@@ -82,7 +89,7 @@ public final class MetaData implements Serializable
 			{
 				final StringTokenizer tokens = new StringTokenizer(line, ",", false);
 				final String host = tokens.nextToken().trim();
-				String type = tokens.nextToken().trim().toUpperCase();
+				final String type = tokens.nextToken().trim().toUpperCase();
 				if (isMyIP(host))
 				{
 					if (HRDBMSWorker.type == HRDBMSWorker.TYPE_WORKER)
@@ -123,7 +130,7 @@ public final class MetaData implements Serializable
 
 			nodes.close();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			// HRDBMSWorker.logger.fatal("Error during static metadata
 			// initialization",
@@ -140,12 +147,12 @@ public final class MetaData implements Serializable
 
 	}
 
-	public MetaData(ConnectionWorker connection)
+	public MetaData(final ConnectionWorker connection)
 	{
 		this.connection = connection;
 	}
 
-	public MetaData(String x) throws Exception
+	public MetaData(final String x) throws Exception
 	{
 		try
 		{
@@ -162,7 +169,7 @@ public final class MetaData implements Serializable
 						{
 							final StringTokenizer tokens = new StringTokenizer(line, ",", false);
 							final String host = tokens.nextToken().trim();
-							String type = tokens.nextToken().trim().toUpperCase();
+							final String type = tokens.nextToken().trim().toUpperCase();
 							if (isMyIP(host))
 							{
 								myNode = workerID;
@@ -186,1082 +193,21 @@ public final class MetaData implements Serializable
 				}
 			}
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			throw e;
 		}
 	}
 
-	public static TreeMap<Integer, String> cols2PosFlip(HashMap<String, Integer> cols2Pos)
+	public static void cluster(final String schema, final String table, final Transaction tx, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type) throws Exception
 	{
-		final TreeMap<Integer, String> retval = new TreeMap<Integer, String>();
+		final ArrayList<Integer> nodes = getWorkerNodes();
+		final ArrayList<Object> tree = makeTree(nodes);
+		final ArrayList<Socket> sockets = new ArrayList<Socket>();
 
-		for (Map.Entry entry : cols2Pos.entrySet())
-		{
-			retval.put((Integer)entry.getValue(), (String)entry.getKey());
-		}
+		final int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 
-		return retval;
-	}
-
-	public static void createView(String schema, String table, String text, Transaction tx) throws Exception
-	{
-		int id = PlanCacheManager.getNextViewID().setParms().execute(tx);
-		PlanCacheManager.getInsertView().setParms(id, schema, table, text).execute(tx);
-	}
-
-	public static int determineDevice(ArrayList<Object> row, PartitionMetaData pmeta, HashMap<String, Integer> cols2Pos) throws Exception
-	{
-		pmeta.getTable();
-		String table = pmeta.getTable();
-		if (pmeta.isSingleDeviceSet())
-		{
-			return pmeta.getSingleDevice();
-		}
-		else if (pmeta.deviceIsHash())
-		{
-			ArrayList<String> devHash = pmeta.getDeviceHash();
-			ArrayList<Object> partial = new ArrayList<Object>();
-			final int z = devHash.size();
-			int i = 0;
-			while (i < z)
-			{
-				String col = devHash.get(i++);
-				try
-				{
-					partial.add(row.get(cols2Pos.get(table + "." + col)));
-				}
-				catch (Exception e)
-				{
-					HRDBMSWorker.logger.debug("Looking for " + table + "." + col);
-					HRDBMSWorker.logger.debug("Cols2Pos is " + cols2Pos);
-					HRDBMSWorker.logger.debug("Row is " + row);
-				}
-			}
-
-			long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
-			if (pmeta.allDevices())
-			{
-				return (int)(hash % getNumDevices());
-			}
-			else
-			{
-				return pmeta.deviceSet().get((int)(hash % pmeta.deviceSet().size()));
-			}
-		}
-		else
-		{
-			String col = table + "." + pmeta.getDeviceRangeCol();
-			Object obj = row.get(cols2Pos.get(col));
-			ArrayList<Object> ranges = pmeta.getDeviceRanges();
-			int i = 0;
-			final int size = ranges.size();
-			while (i < size)
-			{
-				if (((Comparable)obj).compareTo(ranges.get(i)) <= 0)
-				{
-					if (pmeta.allDevices())
-					{
-						return i;
-					}
-					else
-					{
-						return pmeta.deviceSet().get(i);
-					}
-				}
-
-				i++;
-			}
-
-			if (pmeta.allNodes())
-			{
-				return i;
-			}
-			else
-			{
-				return pmeta.deviceSet().get(i);
-			}
-		}
-	}
-
-	public static ArrayList<Integer> determineNode(String schema, String table, ArrayList<Object> row, Transaction tx, PartitionMetaData pmeta, HashMap<String, Integer> cols2Pos, int numNodes) throws Exception
-	{
-		if (pmeta.noNodeGroupSet())
-		{
-			if (pmeta.anyNode())
-			{
-				ArrayList<Integer> retval = getWorkerNodes();
-				return retval;
-			}
-			else if (pmeta.isSingleNodeSet())
-			{
-				if (pmeta.getSingleNode() == -1)
-				{
-					ArrayList<Integer> retval = getCoordNodes();
-					return retval;
-				}
-				else
-				{
-					ArrayList<Integer> retval = new ArrayList<Integer>();
-					retval.add(pmeta.getSingleNode());
-					return retval;
-				}
-			}
-			else if (pmeta.nodeIsHash())
-			{
-				ArrayList<String> nodeHash = pmeta.getNodeHash();
-				ArrayList<Object> partial = new ArrayList<Object>();
-				final int z = nodeHash.size();
-				int i = 0;
-				while (i < z)
-				{
-					String col = nodeHash.get(i++);
-					partial.add(row.get(cols2Pos.get(table + "." + col)));
-				}
-
-				long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
-				if (pmeta.allNodes())
-				{
-					ArrayList<Integer> retval = new ArrayList<Integer>();
-					retval.add((int)(hash % numNodes)); // LOOKOUT if we ever do
-					// dynamic # nodes
-					return retval;
-				}
-				else
-				{
-					ArrayList<Integer> retval = new ArrayList<Integer>();
-					retval.add(pmeta.nodeSet().get((int)(hash % pmeta.nodeSet().size())));
-					return retval;
-				}
-			}
-			else
-			{
-				// range
-				String col = table + "." + pmeta.getNodeRangeCol();
-				Object obj = row.get(cols2Pos.get(col));
-				ArrayList<Object> ranges = pmeta.getNodeRanges();
-				int i = 0;
-				final int size = ranges.size();
-				while (i < size)
-				{
-					if (((Comparable)obj).compareTo(ranges.get(i)) <= 0)
-					{
-						if (pmeta.allNodes())
-						{
-							ArrayList<Integer> retval = new ArrayList<Integer>();
-							retval.add(i);
-							return retval;
-						}
-						else
-						{
-							ArrayList<Integer> retval = new ArrayList<Integer>();
-							retval.add(pmeta.nodeSet().get(i));
-							return retval;
-						}
-					}
-
-					i++;
-				}
-
-				if (pmeta.allNodes())
-				{
-					ArrayList<Integer> retval = new ArrayList<Integer>();
-					retval.add(i);
-					return retval;
-				}
-				else
-				{
-					ArrayList<Integer> retval = new ArrayList<Integer>();
-					retval.add(pmeta.nodeSet().get(i));
-					return retval;
-				}
-			}
-		}
-		else
-		{
-			ArrayList<Integer> ngSet = null;
-			if (pmeta.isSingleNodeGroupSet())
-			{
-				ngSet = pmeta.getNodeGroupHashMap().get(pmeta.getSingleNodeGroup());
-			}
-			else if (pmeta.nodeGroupIsHash())
-			{
-				ArrayList<String> nodeGroupHash = pmeta.getNodeGroupHash();
-				ArrayList<Object> partial = new ArrayList<Object>();
-				final int z = nodeGroupHash.size();
-				int i = 0;
-				while (i < z)
-				{
-					String col = nodeGroupHash.get(i++);
-					partial.add(row.get(cols2Pos.get(table + "." + col)));
-				}
-
-				long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
-				ngSet = pmeta.getNodeGroupHashMap().get((int)(hash % pmeta.getNodeGroupHashMap().size()));
-			}
-			else
-			{
-				String col = table + "." + pmeta.getNodeGroupRangeCol();
-				Object obj = row.get(cols2Pos.get(col));
-				ArrayList<Object> ranges = pmeta.getNodeGroupRanges();
-				int i = 0;
-				final int size = ranges.size();
-				while (i < size)
-				{
-					if (((Comparable)obj).compareTo(ranges.get(i)) <= 0)
-					{
-						ngSet = pmeta.getNodeGroupHashMap().get(i);
-						break;
-					}
-
-					i++;
-				}
-
-				if (ngSet == null)
-				{
-					ngSet = pmeta.getNodeGroupHashMap().get(i);
-				}
-			}
-
-			if (pmeta.anyNode())
-			{
-				return ngSet;
-			}
-			else if (pmeta.isSingleNodeSet())
-			{
-				ArrayList<Integer> retval = new ArrayList<Integer>();
-				retval.add(ngSet.get(pmeta.getSingleNode()));
-				return retval;
-			}
-			else if (pmeta.nodeIsHash())
-			{
-				ArrayList<String> nodeHash = pmeta.getNodeHash();
-				ArrayList<Object> partial = new ArrayList<Object>();
-				final int z = nodeHash.size();
-				int i = 0;
-				while (i < z)
-				{
-					String col = nodeHash.get(i++);
-					partial.add(row.get(cols2Pos.get(table + "." + col)));
-				}
-
-				long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
-				if (pmeta.allNodes())
-				{
-					ArrayList<Integer> retval = new ArrayList<Integer>();
-					retval.add(ngSet.get((int)(hash % ngSet.size())));
-					return retval;
-				}
-				else
-				{
-					ArrayList<Integer> retval = new ArrayList<Integer>();
-					retval.add(ngSet.get(pmeta.nodeSet().get((int)(hash % pmeta.nodeSet().size()))));
-					return retval;
-				}
-			}
-			else
-			{
-				// range
-				String col = table + "." + pmeta.getNodeRangeCol();
-				Object obj = row.get(cols2Pos.get(col));
-				ArrayList<Object> ranges = pmeta.getNodeRanges();
-				int i = 0;
-				final int size = ranges.size();
-				while (i < size)
-				{
-					if (((Comparable)obj).compareTo(ranges.get(i)) <= 0)
-					{
-						if (pmeta.allNodes())
-						{
-							ArrayList<Integer> retval = new ArrayList<Integer>();
-							retval.add(ngSet.get(i));
-							return retval;
-						}
-						else
-						{
-							ArrayList<Integer> retval = new ArrayList<Integer>();
-							retval.add(ngSet.get(pmeta.nodeSet().get(i)));
-							return retval;
-						}
-					}
-
-					i++;
-				}
-
-				if (pmeta.allNodes())
-				{
-					ArrayList<Integer> retval = new ArrayList<Integer>();
-					retval.add(ngSet.get(i));
-					return retval;
-				}
-				else
-				{
-					ArrayList<Integer> retval = new ArrayList<Integer>();
-					retval.add(ngSet.get(pmeta.nodeSet().get(i)));
-					return retval;
-				}
-			}
-		}
-	}
-
-	public static ArrayList<Integer> determineNodeNoLookups(String schema, String table, ArrayList<Object> row, PartitionMetaData pmeta, HashMap<String, Integer> cols2Pos, int numNodes, ArrayList<Integer> workerNodes, ArrayList<Integer> coordNodes) throws Exception
-	{
-		if (pmeta.noNodeGroupSet())
-		{
-			if (pmeta.anyNode())
-			{
-				return workerNodes;
-			}
-			else if (pmeta.isSingleNodeSet())
-			{
-				if (pmeta.getSingleNode() == -1)
-				{
-					return coordNodes;
-				}
-				else
-				{
-					ArrayList<Integer> retval = new ArrayList<Integer>();
-					retval.add(pmeta.getSingleNode());
-					return retval;
-				}
-			}
-			else if (pmeta.nodeIsHash())
-			{
-				ArrayList<String> nodeHash = pmeta.getNodeHash();
-				ArrayList<Object> partial = new ArrayList<Object>();
-				for (String col : nodeHash)
-				{
-					partial.add(row.get(cols2Pos.get(table + "." + col)));
-				}
-
-				long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
-				if (pmeta.allNodes())
-				{
-					ArrayList<Integer> retval = new ArrayList<Integer>();
-					retval.add((int)(hash % numNodes)); // LOOKOUT if we ever do
-					// dynamic # nodes
-					return retval;
-				}
-				else
-				{
-					ArrayList<Integer> retval = new ArrayList<Integer>();
-					retval.add(pmeta.nodeSet().get((int)(hash % pmeta.nodeSet().size())));
-					return retval;
-				}
-			}
-			else
-			{
-				// range
-				String col = table + "." + pmeta.getNodeRangeCol();
-				Object obj = row.get(cols2Pos.get(col));
-				ArrayList<Object> ranges = pmeta.getNodeRanges();
-				int i = 0;
-				final int size = ranges.size();
-				while (i < size)
-				{
-					if (((Comparable)obj).compareTo(ranges.get(i)) <= 0)
-					{
-						if (pmeta.allNodes())
-						{
-							ArrayList<Integer> retval = new ArrayList<Integer>();
-							retval.add(i);
-							return retval;
-						}
-						else
-						{
-							ArrayList<Integer> retval = new ArrayList<Integer>();
-							retval.add(pmeta.nodeSet().get(i));
-							return retval;
-						}
-					}
-
-					i++;
-				}
-
-				if (pmeta.allNodes())
-				{
-					ArrayList<Integer> retval = new ArrayList<Integer>();
-					retval.add(i);
-					return retval;
-				}
-				else
-				{
-					ArrayList<Integer> retval = new ArrayList<Integer>();
-					retval.add(pmeta.nodeSet().get(i));
-					return retval;
-				}
-			}
-		}
-		else
-		{
-			ArrayList<Integer> ngSet = null;
-			if (pmeta.isSingleNodeGroupSet())
-			{
-				ngSet = pmeta.getNodeGroupHashMap().get(pmeta.getSingleNodeGroup());
-			}
-			else if (pmeta.nodeGroupIsHash())
-			{
-				ArrayList<String> nodeGroupHash = pmeta.getNodeGroupHash();
-				ArrayList<Object> partial = new ArrayList<Object>();
-				for (String col : nodeGroupHash)
-				{
-					partial.add(row.get(cols2Pos.get(table + "." + col)));
-				}
-
-				long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
-				ngSet = pmeta.getNodeGroupHashMap().get((int)(hash % pmeta.getNodeGroupHashMap().size()));
-			}
-			else
-			{
-				String col = table + "." + pmeta.getNodeGroupRangeCol();
-				Object obj = row.get(cols2Pos.get(col));
-				ArrayList<Object> ranges = pmeta.getNodeGroupRanges();
-				int i = 0;
-				final int size = ranges.size();
-				while (i < size)
-				{
-					if (((Comparable)obj).compareTo(ranges.get(i)) <= 0)
-					{
-						ngSet = pmeta.getNodeGroupHashMap().get(i);
-						break;
-					}
-
-					i++;
-				}
-
-				if (ngSet == null)
-				{
-					ngSet = pmeta.getNodeGroupHashMap().get(i);
-				}
-			}
-
-			if (pmeta.anyNode())
-			{
-				return ngSet;
-			}
-			else if (pmeta.isSingleNodeSet())
-			{
-				ArrayList<Integer> retval = new ArrayList<Integer>();
-				retval.add(ngSet.get(pmeta.getSingleNode()));
-				return retval;
-			}
-			else if (pmeta.nodeIsHash())
-			{
-				ArrayList<String> nodeHash = pmeta.getNodeHash();
-				ArrayList<Object> partial = new ArrayList<Object>();
-				for (String col : nodeHash)
-				{
-					partial.add(row.get(cols2Pos.get(table + "." + col)));
-				}
-
-				long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
-				if (pmeta.allNodes())
-				{
-					ArrayList<Integer> retval = new ArrayList<Integer>();
-					retval.add(ngSet.get((int)(hash % ngSet.size())));
-					return retval;
-				}
-				else
-				{
-					ArrayList<Integer> retval = new ArrayList<Integer>();
-					retval.add(ngSet.get(pmeta.nodeSet().get((int)(hash % pmeta.nodeSet().size()))));
-					return retval;
-				}
-			}
-			else
-			{
-				// range
-				String col = table + "." + pmeta.getNodeRangeCol();
-				Object obj = row.get(cols2Pos.get(col));
-				ArrayList<Object> ranges = pmeta.getNodeRanges();
-				int i = 0;
-				final int size = ranges.size();
-				while (i < size)
-				{
-					if (((Comparable)obj).compareTo(ranges.get(i)) <= 0)
-					{
-						if (pmeta.allNodes())
-						{
-							ArrayList<Integer> retval = new ArrayList<Integer>();
-							retval.add(ngSet.get(i));
-							return retval;
-						}
-						else
-						{
-							ArrayList<Integer> retval = new ArrayList<Integer>();
-							retval.add(ngSet.get(pmeta.nodeSet().get(i)));
-							return retval;
-						}
-					}
-
-					i++;
-				}
-
-				if (pmeta.allNodes())
-				{
-					ArrayList<Integer> retval = new ArrayList<Integer>();
-					retval.add(ngSet.get(i));
-					return retval;
-				}
-				else
-				{
-					ArrayList<Integer> retval = new ArrayList<Integer>();
-					retval.add(ngSet.get(pmeta.nodeSet().get(i)));
-					return retval;
-				}
-			}
-		}
-	}
-
-	public static void dropIndex(String schema, String index, Transaction tx) throws Exception
-	{
-		PlanCacheManager.invalidate();
-		ArrayList<Object> row = PlanCacheManager.getTableAndIndexID().setParms(schema, index).execute(tx);
-		int tableID = (Integer)row.get(0);
-		int indexID = (Integer)row.get(1);
-		PlanCacheManager.getDeleteIndex().setParms(tableID, indexID).execute(tx);
-		PlanCacheManager.getDeleteIndexCol().setParms(tableID, indexID).execute(tx);
-		PlanCacheManager.getDeleteIndexStats().setParms(tableID, indexID).execute(tx);
-		BufferManager.invalidateFile(schema + "." + index + ".indx");
-		PlanCacheManager.invalidate();
-		getPartitioningCache.clear();
-		getIndexesCache.clear();
-		getKeysCache.clear();
-		getTypesCache.clear();
-		getOrdersCache.clear();
-		getIndexColsForTableCache.clear();
-		getLengthCache.clear();
-		getTableIDCache.clear();
-		getColCardCache.clear();
-		getIndexIDsForTableCache.clear();
-		getCols2PosForTableCache.clear();
-		getCols2TypesCache.clear();
-		getUniqueCache.clear();
-		getTableCardCache.clear();
-		getColTypeCache.clear();
-		getDistCache.clear();
-	}
-
-	public static void dropTable(String schema, String table, Transaction tx) throws Exception
-	{
-		PlanCacheManager.invalidate();
-		int id = PlanCacheManager.getTableID().setParms(schema, table).execute(tx);
-		PlanCacheManager.getDeleteTable().setParms(schema, table).execute(tx);
-		PlanCacheManager.getDeleteCols().setParms(id).execute(tx);
-		PlanCacheManager.getMultiDeleteIndexes().setParms(id).execute(tx);
-		PlanCacheManager.getMultiDeleteIndexCols().setParms(id).execute(tx);
-		PlanCacheManager.getDeleteTableStats().setParms(id).execute(tx);
-		PlanCacheManager.getDeleteColStats().setParms(id).execute(tx);
-		PlanCacheManager.getDeleteColDist().setParms(id).execute(tx);
-		PlanCacheManager.getDeletePartitioning().setParms(id).execute(tx);
-		PlanCacheManager.getMultiDeleteIndexStats().setParms(id).execute(tx);
-		BufferManager.invalidateFile(schema + "." + table + ".tbl");
-		PlanCacheManager.invalidate();
-		getPartitioningCache.clear();
-		getIndexesCache.clear();
-		getKeysCache.clear();
-		getTypesCache.clear();
-		getOrdersCache.clear();
-		getIndexColsForTableCache.clear();
-		getLengthCache.clear();
-		getTableIDCache.clear();
-		getColCardCache.clear();
-		getIndexIDsForTableCache.clear();
-		getCols2PosForTableCache.clear();
-		getCols2TypesCache.clear();
-		getUniqueCache.clear();
-		getTableCardCache.clear();
-		getColTypeCache.clear();
-		getDistCache.clear();
-	}
-
-	public static void dropView(String schema, String table, Transaction tx) throws Exception
-	{
-		PlanCacheManager.getDeleteView().setParms(schema, table).execute(tx);
-	}
-
-	public static ArrayList<String> getColsFromIndexFileName(String index, Transaction tx, ArrayList<ArrayList<String>> keys, ArrayList<String> indexes) throws Exception
-	{
-		int i = 0;
-		for (String indx : indexes)
-		{
-			if (indx.equals(index))
-			{
-				return keys.get(i);
-			}
-
-			i++;
-		}
-
-		return null;
-	}
-
-	public static HashMap<Integer, String> getCoordMap()
-	{
-		HashMap<Integer, String> retval = new HashMap<Integer, String>();
-		for (Map.Entry entry : nodeTable.entrySet())
-		{
-			int node = (Integer)entry.getKey();
-			String host = (String)entry.getValue();
-			if (node < 0)
-			{
-				retval.put(node, host);
-			}
-		}
-
-		return retval;
-	}
-
-	public static ArrayList<Integer> getCoordNodes()
-	{
-		return (ArrayList<Integer>)coords.clone();
-	}
-
-	public static ArrayList<Integer> getDevicesForTable(String schema, String table, Transaction tx) throws Exception
-	{
-		PartitionMetaData pmeta = new MetaData().new PartitionMetaData(schema, table, tx);
-		if (pmeta.allDevices())
-		{
-			ArrayList<Integer> retval = new ArrayList<Integer>();
-			int i = 0;
-			final int num = getNumDevices();
-			while (i < num)
-			{
-				retval.add(i);
-				i++;
-			}
-
-			return retval;
-		}
-		else
-		{
-			return pmeta.deviceSet();
-		}
-	}
-
-	public static int getNumDevices()
-	{
-		return numDevices;
-	}
-
-	public static ArrayList<Integer> getWorkerNodes()
-	{
-		return (ArrayList<Integer>)workers.clone();
-	}
-
-	public static boolean isMyIP(String host) throws Exception
-	{
-		return isThisMyIpAddress(InetAddress.getByName(host));
-	}
-
-	public static boolean isThisMyIpAddress(InetAddress addr)
-	{
-		// Check if the address is a valid special local or loop back
-		if (addr.isAnyLocalAddress() || addr.isLoopbackAddress())
-		{
-			return true;
-		}
-
-		// Check if the address is defined on any interface
-		try
-		{
-			return NetworkInterface.getByInetAddress(addr) != null;
-		}
-		catch (SocketException e)
-		{
-			return false;
-		}
-	}
-
-	public static int myCoordNum() throws Exception
-	{
-		if (HRDBMSWorker.type == HRDBMSWorker.TYPE_WORKER)
-		{
-			throw new Exception("Not a coordinator");
-		}
-
-		return myNode;
-	}
-
-	public static int myNodeNum()
-	{
-		return myNode;
-	}
-
-	public static void removeDefaultSchema(ConnectionWorker conn)
-	{
-		defaultSchemas.remove(conn);
-	}
-
-	public static void setDefaultSchema(ConnectionWorker conn, String schema)
-	{
-		defaultSchemas.put(conn, schema);
-	}
-
-	public static boolean verifyIndexExistence(String schema, String index, Transaction tx) throws Exception
-	{
-		Object o = PlanCacheManager.getVerifyIndexExist().setParms(schema, index).execute(tx);
-		if (o instanceof DataEndMarker)
-		{
-			return false;
-		}
-
-		return true;
-	}
-
-	private static ArrayList<Object> convertToHosts(ArrayList<Object> tree, Transaction tx) throws Exception
-	{
-		ArrayList<Object> retval = new ArrayList<Object>();
-		int i = 0;
-		final int size = tree.size();
-		while (i < size)
-		{
-			Object obj = tree.get(i);
-			if (obj instanceof Integer)
-			{
-				retval.add(new MetaData().getHostNameForNode((Integer)obj, tx));
-			}
-			else
-			{
-				retval.add(convertToHosts((ArrayList<Object>)obj, tx));
-			}
-
-			i++;
-		}
-
-		return retval;
-	}
-
-	private static void getConfirmation(Socket sock) throws Exception
-	{
-		InputStream in = sock.getInputStream();
-		byte[] inMsg = new byte[2];
-
-		int count = 0;
-		while (count < 2)
-		{
-			try
-			{
-				int temp = in.read(inMsg, count, 2 - count);
-				if (temp == -1)
-				{
-					in.close();
-					throw new Exception();
-				}
-				else
-				{
-					count += temp;
-				}
-			}
-			catch (final Exception e)
-			{
-				in.close();
-				throw new Exception();
-			}
-		}
-
-		String inStr = new String(inMsg, StandardCharsets.UTF_8);
-		if (!inStr.equals("OK"))
-		{
-			in.close();
-			throw new Exception();
-		}
-
-		try
-		{
-			in.close();
-		}
-		catch (Exception e)
-		{
-		}
-	}
-
-	private static long hash(Object key) throws Exception
-	{
-		long eHash;
-		if (key == null)
-		{
-			eHash = 0;
-		}
-		else
-		{
-			if (key instanceof ArrayList)
-			{
-				byte[] data = toBytes(key);
-				eHash = MurmurHash.hash64(data, data.length);
-			}
-			else
-			{
-				byte[] data = key.toString().getBytes(StandardCharsets.UTF_8);
-				eHash = MurmurHash.hash64(data, data.length);
-			}
-		}
-
-		return eHash;
-	}
-
-	private static byte[] intToBytes(int val)
-	{
-		final byte[] buff = new byte[4];
-		buff[0] = (byte)(val >> 24);
-		buff[1] = (byte)((val & 0x00FF0000) >> 16);
-		buff[2] = (byte)((val & 0x0000FF00) >> 8);
-		buff[3] = (byte)((val & 0x000000FF));
-		return buff;
-	}
-
-	private static byte[] longToBytes(long val)
-	{
-		final byte[] buff = new byte[8];
-		buff[0] = (byte)(val >> 56);
-		buff[1] = (byte)((val & 0x00FF000000000000L) >> 48);
-		buff[2] = (byte)((val & 0x0000FF0000000000L) >> 40);
-		buff[3] = (byte)((val & 0x000000FF00000000L) >> 32);
-		buff[4] = (byte)((val & 0x00000000FF000000L) >> 24);
-		buff[5] = (byte)((val & 0x0000000000FF0000L) >> 16);
-		buff[6] = (byte)((val & 0x000000000000FF00L) >> 8);
-		buff[7] = (byte)((val & 0x00000000000000FFL));
-		return buff;
-	}
-
-	private static ArrayList<Object> makeTree(ArrayList<Integer> nodes)
-	{
-		int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
-		if (nodes.size() <= max)
-		{
-			ArrayList<Object> retval = new ArrayList<Object>(nodes);
-			return retval;
-		}
-
-		ArrayList<Object> retval = new ArrayList<Object>();
-		int i = 0;
-		while (i < max)
-		{
-			retval.add(nodes.get(i));
-			i++;
-		}
-
-		int remaining = nodes.size() - i;
-		int perNode = remaining / max + 1;
-
-		int j = 0;
-		final int size = nodes.size();
-		while (i < size)
-		{
-			int first = (Integer)retval.get(j);
-			retval.remove(j);
-			ArrayList<Integer> list = new ArrayList<Integer>(perNode + 1);
-			list.add(first);
-			int k = 0;
-			while (k < perNode && i < size)
-			{
-				list.add(nodes.get(i));
-				i++;
-				k++;
-			}
-
-			retval.add(j, list);
-			j++;
-		}
-
-		if (((ArrayList<Integer>)retval.get(0)).size() <= max)
-		{
-			return retval;
-		}
-
-		// more than 2 tier
-		i = 0;
-		while (i < retval.size())
-		{
-			ArrayList<Integer> list = (ArrayList<Integer>)retval.remove(i);
-			retval.add(i, makeTree(list));
-			i++;
-		}
-
-		return retval;
-	}
-
-	private static byte[] stringToBytes(String string)
-	{
-		byte[] data = null;
-		try
-		{
-			data = string.getBytes(StandardCharsets.UTF_8);
-		}
-		catch (Exception e)
-		{
-		}
-		byte[] len = intToBytes(data.length);
-		byte[] retval = new byte[data.length + len.length];
-		System.arraycopy(len, 0, retval, 0, len.length);
-		System.arraycopy(data, 0, retval, len.length, data.length);
-		return retval;
-	}
-
-	private static final byte[] toBytes(Object v) throws Exception
-	{
-		ArrayList<byte[]> bytes = null;
-		ArrayList<Object> val;
-		if (v instanceof ArrayList)
-		{
-			val = (ArrayList<Object>)v;
-		}
-		else
-		{
-			final byte[] retval = new byte[9];
-			retval[0] = 0;
-			retval[1] = 0;
-			retval[2] = 0;
-			retval[3] = 5;
-			retval[4] = 0;
-			retval[5] = 0;
-			retval[6] = 0;
-			retval[7] = 1;
-			retval[8] = 5;
-			return retval;
-		}
-
-		int size = val.size() + 8;
-		final byte[] header = new byte[size];
-		int i = 8;
-		int z = 0;
-		int limit = val.size();
-		// for (final Object o : val)
-		while (z < limit)
-		{
-			Object o = val.get(z++);
-			if (o instanceof Long)
-			{
-				header[i] = (byte)0;
-				size += 8;
-			}
-			else if (o instanceof Integer)
-			{
-				header[i] = (byte)1;
-				size += 4;
-			}
-			else if (o instanceof Double)
-			{
-				header[i] = (byte)2;
-				size += 8;
-			}
-			else if (o instanceof MyDate)
-			{
-				header[i] = (byte)3;
-				size += 4;
-			}
-			else if (o instanceof String)
-			{
-				header[i] = (byte)4;
-				byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
-				size += (4 + b.length);
-
-				if (bytes == null)
-				{
-					bytes = new ArrayList<byte[]>();
-					bytes.add(b);
-				}
-				else
-				{
-					bytes.add(b);
-				}
-			}
-			// else if (o instanceof AtomicLong)
-			// {
-			// header[i] = (byte)6;
-			// size += 8;
-			// }
-			// else if (o instanceof AtomicBigDecimal)
-			// {
-			// header[i] = (byte)7;
-			// size += 8;
-			// }
-			else if (o instanceof ArrayList)
-			{
-				if (((ArrayList)o).size() != 0)
-				{
-					Exception e = new Exception("Non-zero size ArrayList in toBytes()");
-					HRDBMSWorker.logger.error("Non-zero size ArrayList in toBytes()", e);
-					throw e;
-				}
-				header[i] = (byte)8;
-			}
-			else
-			{
-				HRDBMSWorker.logger.error("Unknown type " + o.getClass() + " in toBytes()");
-				HRDBMSWorker.logger.error(o);
-				throw new Exception("Unknown type " + o.getClass() + " in toBytes()");
-			}
-
-			i++;
-		}
-
-		final byte[] retval = new byte[size];
-		// System.out.println("In toBytes(), row has " + val.size() +
-		// " columns, object occupies " + size + " bytes");
-		System.arraycopy(header, 0, retval, 0, header.length);
-		i = 8;
-		final ByteBuffer retvalBB = ByteBuffer.wrap(retval);
-		retvalBB.putInt(size - 4);
-		retvalBB.putInt(val.size());
-		retvalBB.position(header.length);
-		int x = 0;
-		z = 0;
-		limit = val.size();
-		// for (final Object o : val)
-		while (z < limit)
-		{
-			Object o = val.get(z++);
-			if (retval[i] == 0)
-			{
-				retvalBB.putLong((Long)o);
-			}
-			else if (retval[i] == 1)
-			{
-				retvalBB.putInt((Integer)o);
-			}
-			else if (retval[i] == 2)
-			{
-				retvalBB.putDouble((Double)o);
-			}
-			else if (retval[i] == 3)
-			{
-				retvalBB.putInt(((MyDate)o).getTime());
-			}
-			else if (retval[i] == 4)
-			{
-				byte[] temp = bytes.get(x);
-				x++;
-				retvalBB.putInt(temp.length);
-				retvalBB.put(temp);
-			}
-			// else if (retval[i] == 6)
-			// {
-			// retvalBB.putLong(((AtomicLong)o).get());
-			// }
-			// else if (retval[i] == 7)
-			// {
-			// retvalBB.putDouble(((AtomicBigDecimal)o).get().doubleValue());
-			// }
-			else if (retval[i] == 8)
-			{
-			}
-
-			i++;
-		}
-
-		return retval;
-	}
-
-	public void cluster(String schema, String table, Transaction tx, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type) throws Exception
-	{
-		ArrayList<Integer> nodes = getWorkerNodes();
-		ArrayList<Object> tree = makeTree(nodes);
-		ArrayList<Socket> sockets = new ArrayList<Socket>();
-
-		int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
-
-		for (Object o : tree)
+		for (final Object o : tree)
 		{
 			ArrayList<Object> list;
 			if (o instanceof Integer)
@@ -1281,7 +227,7 @@ public final class MetaData implements Serializable
 			}
 
 			Socket sock;
-			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
+			final String hostname = getHostNameForNode((Integer)obj, tx);
 			// sock = new Socket(hostname,
 			// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			sock = new Socket();
@@ -1289,7 +235,7 @@ public final class MetaData implements Serializable
 			sock.setSendBufferSize(4194304);
 			sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 			OutputStream out = sock.getOutputStream();
-			byte[] outMsg = "CLUSTER         ".getBytes(StandardCharsets.UTF_8);
+			final byte[] outMsg = "CLUSTER         ".getBytes(StandardCharsets.UTF_8);
 			outMsg[8] = 0;
 			outMsg[9] = 0;
 			outMsg[10] = 0;
@@ -1303,7 +249,7 @@ public final class MetaData implements Serializable
 			out.write(stringToBytes(schema));
 			out.write(stringToBytes(table));
 			out.write(intToBytes(type));
-			ObjectOutputStream objOut = new ObjectOutputStream(out);
+			final ObjectOutputStream objOut = new ObjectOutputStream(out);
 			objOut.writeObject(convertToHosts(list, tx));
 			objOut.writeObject(pos2Col);
 			objOut.writeObject(cols2Types);
@@ -1322,16 +268,28 @@ public final class MetaData implements Serializable
 			}
 		}
 
-		for (Socket sock : sockets)
+		for (final Socket sock : sockets)
 		{
-			OutputStream out = sock.getOutputStream();
+			final OutputStream out = sock.getOutputStream();
 			getConfirmation(sock);
 			out.close();
 			sock.close();
 		}
 	}
 
-	public void createIndex(String schema, String table, String index, ArrayList<IndexDef> defs, boolean unique, Transaction tx) throws Exception
+	public static TreeMap<Integer, String> cols2PosFlip(final HashMap<String, Integer> cols2Pos)
+	{
+		final TreeMap<Integer, String> retval = new TreeMap<Integer, String>();
+
+		for (final Map.Entry entry : cols2Pos.entrySet())
+		{
+			retval.put((Integer)entry.getValue(), (String)entry.getKey());
+		}
+
+		return retval;
+	}
+
+	public static void createIndex(final String schema, final String table, final String index, final ArrayList<IndexDef> defs, final boolean unique, final Transaction tx) throws Exception
 	{
 		Integer tableID = getTableIDCache.get(schema + "." + table);
 		if (tableID == null)
@@ -1339,14 +297,14 @@ public final class MetaData implements Serializable
 			tableID = PlanCacheManager.getTableID().setParms(schema, table).execute(tx);
 			getTableIDCache.put(schema + "." + table, tableID);
 		}
-		int id = PlanCacheManager.getNextIndexID().setParms(tableID).execute(tx);
+		final int id = PlanCacheManager.getNextIndexID().setParms(tableID).execute(tx);
 		PlanCacheManager.getInsertIndex().setParms(id, index, tableID, unique).execute(tx);
-		HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
+		final HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
 		int pos = 0;
-		for (IndexDef def : defs)
+		for (final IndexDef def : defs)
 		{
-			String col = def.getCol().getColumn();
-			int colID = cols2Pos.get(table + "." + col);
+			final String col = def.getCol().getColumn();
+			final int colID = cols2Pos.get(table + "." + col);
 			PlanCacheManager.getInsertIndexCol().setParms(id, tableID, colID, pos, def.isAsc()).execute(tx);
 			pos++;
 		}
@@ -1354,8 +312,8 @@ public final class MetaData implements Serializable
 		buildIndex(schema, index, table, defs.size(), unique, tx);
 		populateIndex(schema, index, table, tx, cols2Pos);
 	}
-	
-	public void createExternalTable(String schema, String table, ArrayList<ColDef> defs,Transaction tx, String sourceList, String anyString, String filePathIdentifier, String javaClassName, Properties keyValueList) throws Exception
+
+	public static void createExternalTable(String schema, String table, ArrayList<ColDef> defs,Transaction tx, String sourceList, String anyString, String filePathIdentifier, String javaClassName, Properties keyValueList) throws Exception
 	{
 		HashMap<String, String> cols2Types = new HashMap<String, String>();
 		for (ColDef def : defs)
@@ -1377,7 +335,7 @@ public final class MetaData implements Serializable
 
 			cols2Types.put(name, type);
 		}
-		new MetaData().new PartitionMetaData(schema, table, "NONE", "ANY", "ALL,HASH,{COL}", tx, cols2Types);
+		new MetaData().new PartitionMetaData(schema, table, "none", "any", "ALL,HASH,{col}", tx, cols2Types);
 		// tables
 		// cols
 		// indexes
@@ -1387,8 +345,6 @@ public final class MetaData implements Serializable
 		String typeFlag = "E";
 
 		PlanCacheManager.getInsertTable().setParms(tableID, schema, table, typeFlag).execute(tx);
-        // @todo FIX PARAMETERS SET UP FOR EXTERNAL TABLE
-		PlanCacheManager.getInsertExternalTable().setParms(tableID, javaClassName, "Undefined Parameters").execute(tx);
 		int colID = 0;
 		for (ColDef def : defs)
 		{
@@ -1423,17 +379,17 @@ public final class MetaData implements Serializable
 			}
 
 			int pkpos = -1;
-			/*if (pks.contains(name))
-			{
-				pkpos = pks.indexOf(name);
-			}*/
+ 			/*if (pks.contains(name))
+ 			{
+ 				pkpos = pks.indexOf(name);
+ 			}*/
 
 			PlanCacheManager.getInsertCol().setParms(colID, tableID, name, type, length, scale, pkpos, def.isNullable()).execute(tx);
 			colID++;
 		}
 
 		String partColName = defs.get(0).getCol().getColumn();
-		
+
 		PlanCacheManager.getInsertPartition().setParms(tableID, "NONE", "ANY", "ALL,HASH,{"+ partColName +"}").execute(tx);
 		// int indexID = -1;
 		// if (pks != null && pks.size() != 0)
@@ -1457,17 +413,15 @@ public final class MetaData implements Serializable
 		// {
 		// 	buildIndex(schema, "PK" + table, table, pks.size(), true, tx);
 		// }
-		
 	}
 
-
-	public void createTable(String schema, String table, ArrayList<ColDef> defs, ArrayList<String> pks, Transaction tx, String nodeGroupExp, String nodeExp, String deviceExp, int tType, ArrayList<Integer> colOrder, ArrayList<Integer> organization) throws Exception
+	public static void createTable(final String schema, final String table, final ArrayList<ColDef> defs, final ArrayList<String> pks, final Transaction tx, final String nodeGroupExp, final String nodeExp, final String deviceExp, final int tType, final ArrayList<Integer> colOrder, final ArrayList<Integer> organization) throws Exception
 	{
 		// validate expressions
-		HashMap<String, String> cols2Types = new HashMap<String, String>();
-		for (ColDef def : defs)
+		final HashMap<String, String> cols2Types = new HashMap<String, String>();
+		for (final ColDef def : defs)
 		{
-			String name = def.getCol().getColumn();
+			final String name = def.getCol().getColumn();
 			String type = def.getType();
 			if (type.equals("LONG"))
 			{
@@ -1484,13 +438,14 @@ public final class MetaData implements Serializable
 
 			cols2Types.put(name, type);
 		}
+
 		new MetaData().new PartitionMetaData(schema, table, nodeGroupExp, nodeExp, deviceExp, tx, cols2Types);
 		// tables
 		// cols
 		// indexes
 		// indexcols
 		// partitioning
-		int tableID = PlanCacheManager.getNextTableID().setParms().execute(tx);
+		final int tableID = PlanCacheManager.getNextTableID().setParms().execute(tx);
 		String typeFlag = "R";
 		if (tType == 1)
 		{
@@ -1499,14 +454,14 @@ public final class MetaData implements Serializable
 
 		PlanCacheManager.getInsertTable().setParms(tableID, schema, table, typeFlag).execute(tx);
 		int colID = 0;
-		for (ColDef def : defs)
+		for (final ColDef def : defs)
 		{
 			// INT, LONG, FLOAT, DATE, CHAR(x)
 			// COLID, TABLEID, NAME, TYPE, LENGTH, SCALE, PKPOS, NULLABLE
-			String name = def.getCol().getColumn();
+			final String name = def.getCol().getColumn();
 			String type = def.getType();
 			int length = 0;
-			int scale = 0;
+			final int scale = 0;
 			if (type.equals("LONG"))
 			{
 				type = "BIGINT";
@@ -1548,9 +503,9 @@ public final class MetaData implements Serializable
 			indexID = PlanCacheManager.getNextIndexID().setParms(tableID).execute(tx);
 			PlanCacheManager.getInsertIndex().setParms(indexID, "PK" + table, tableID, true).execute(tx);
 
-			HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
+			final HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
 			int pos = 0;
-			for (String col : pks)
+			for (final String col : pks)
 			{
 				colID = cols2Pos.get(table + "." + col);
 				PlanCacheManager.getInsertIndexCol().setParms(indexID, tableID, colID, pos, true).execute(tx);
@@ -1566,19 +521,42 @@ public final class MetaData implements Serializable
 		}
 	}
 
-	public int determineDevice(String schema, String table, ArrayList<Object> row, PartitionMetaData pmeta, Transaction tx) throws Exception
+	public static void createView(final String schema, final String table, final String text, final Transaction tx) throws Exception
 	{
-		HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
-		if (pmeta.deviceIsHash())
+		final int id = PlanCacheManager.getNextViewID().setParms().execute(tx);
+		PlanCacheManager.getInsertView().setParms(id, schema, table, text).execute(tx);
+	}
+
+	public static int determineDevice(final ArrayList<Object> row, final PartitionMetaData pmeta, final HashMap<String, Integer> cols2Pos) throws Exception
+	{
+		pmeta.getTable();
+		final String table = pmeta.getTable();
+		if (pmeta.isSingleDeviceSet())
 		{
-			ArrayList<String> devHash = pmeta.getDeviceHash();
-			ArrayList<Object> partial = new ArrayList<Object>();
-			for (String col : devHash)
+			return pmeta.getSingleDevice();
+		}
+		else if (pmeta.deviceIsHash())
+		{
+			final ArrayList<String> devHash = pmeta.getDeviceHash();
+			final ArrayList<Object> partial = new ArrayList<Object>();
+			final int z = devHash.size();
+			int i = 0;
+			while (i < z)
 			{
-				partial.add(row.get(cols2Pos.get(table + "." + col)));
+				final String col = devHash.get(i++);
+				try
+				{
+					partial.add(row.get(cols2Pos.get(table + "." + col)));
+				}
+				catch (final Exception e)
+				{
+					HRDBMSWorker.logger.debug("Looking for " + table + "." + col);
+					HRDBMSWorker.logger.debug("Cols2Pos is " + cols2Pos);
+					HRDBMSWorker.logger.debug("Row is " + row);
+				}
 			}
 
-			long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
+			final long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
 			if (pmeta.allDevices())
 			{
 				return (int)(hash % getNumDevices());
@@ -1590,9 +568,9 @@ public final class MetaData implements Serializable
 		}
 		else
 		{
-			String col = table + "." + pmeta.getDeviceRangeCol();
-			Object obj = row.get(cols2Pos.get(col));
-			ArrayList<Object> ranges = pmeta.getDeviceRanges();
+			final String col = table + "." + pmeta.getDeviceRangeCol();
+			final Object obj = row.get(cols2Pos.get(col));
+			final ArrayList<Object> ranges = pmeta.getDeviceRanges();
 			int i = 0;
 			final int size = ranges.size();
 			while (i < size)
@@ -1623,50 +601,567 @@ public final class MetaData implements Serializable
 		}
 	}
 
-	public HashMap<String, Double> generateCard(Operator op, Transaction tx, Operator tree) throws Exception
+	public static int determineDevice(final String schema, final String table, final ArrayList<Object> row, final PartitionMetaData pmeta, final Transaction tx) throws Exception
 	{
-		final HashMap<Operator, ArrayList<String>> tables = new HashMap<Operator, ArrayList<String>>();
-		final HashMap<Operator, ArrayList<ArrayList<Filter>>> filters = new HashMap<Operator, ArrayList<ArrayList<Filter>>>();
-		final HashMap<Operator, HashMap<String, Double>> retval = new HashMap<Operator, HashMap<String, Double>>();
-		final ArrayList<Operator> leaves = getLeaves(op);
-		final ArrayList<Operator> queued = new ArrayList<Operator>(leaves.size());
-		for (final Operator leaf : leaves)
+		final HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
+		if (pmeta.deviceIsHash())
 		{
-			final Operator o = doWork(leaf, tables, filters, retval, tx, tree);
-			if (o != null)
+			final ArrayList<String> devHash = pmeta.getDeviceHash();
+			final ArrayList<Object> partial = new ArrayList<Object>();
+			for (final String col : devHash)
 			{
-				queued.add(o);
+				partial.add(row.get(cols2Pos.get(table + "." + col)));
 			}
-		}
 
-		while (queued.size() > 1)
-		{
-			final Operator o = queued.get(0);
-			if (queued.indexOf(o) != queued.lastIndexOf(o))
+			final long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
+			if (pmeta.allDevices())
 			{
-				queued.remove(queued.lastIndexOf(o));
-				final Operator o2 = doWork(o, tables, filters, retval, tx, tree);
-				queued.add(o2);
-				queued.remove(0);
+				return (int)(hash % getNumDevices());
 			}
 			else
 			{
-				queued.add(o);
-				queued.remove(0);
+				return pmeta.deviceSet().get((int)(hash % pmeta.deviceSet().size()));
 			}
 		}
+		else
+		{
+			final String col = table + "." + pmeta.getDeviceRangeCol();
+			final Object obj = row.get(cols2Pos.get(col));
+			final ArrayList<Object> ranges = pmeta.getDeviceRanges();
+			int i = 0;
+			final int size = ranges.size();
+			while (i < size)
+			{
+				if (((Comparable)obj).compareTo(ranges.get(i)) <= 0)
+				{
+					if (pmeta.allDevices())
+					{
+						return i;
+					}
+					else
+					{
+						return pmeta.deviceSet().get(i);
+					}
+				}
 
-		return retval.get(queued.get(0));
+				i++;
+			}
+
+			if (pmeta.allNodes())
+			{
+				return i;
+			}
+			else
+			{
+				return pmeta.deviceSet().get(i);
+			}
+		}
 	}
 
-	public Index getBestCompoundIndex(HashSet<String> cols, String schema, String table, Transaction tx) throws Exception
+	public static ArrayList<Integer> determineNode(final String schema, final String table, final ArrayList<Object> row, final Transaction tx, final PartitionMetaData pmeta, final HashMap<String, Integer> cols2Pos, final int numNodes) throws Exception
+	{
+		if (pmeta.noNodeGroupSet())
+		{
+			if (pmeta.anyNode())
+			{
+				final ArrayList<Integer> retval = getWorkerNodes();
+				return retval;
+			}
+			else if (pmeta.isSingleNodeSet())
+			{
+				if (pmeta.getSingleNode() == -1)
+				{
+					final ArrayList<Integer> retval = getCoordNodes();
+					return retval;
+				}
+				else
+				{
+					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(pmeta.getSingleNode());
+					return retval;
+				}
+			}
+			else if (pmeta.nodeIsHash())
+			{
+				final ArrayList<String> nodeHash = pmeta.getNodeHash();
+				final ArrayList<Object> partial = new ArrayList<Object>();
+				final int z = nodeHash.size();
+				int i = 0;
+				while (i < z)
+				{
+					final String col = nodeHash.get(i++);
+					partial.add(row.get(cols2Pos.get(table + "." + col)));
+				}
+
+				final long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
+				if (pmeta.allNodes())
+				{
+					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add((int)(hash % numNodes)); // LOOKOUT if we ever do
+					// dynamic # nodes
+					return retval;
+				}
+				else
+				{
+					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(pmeta.nodeSet().get((int)(hash % pmeta.nodeSet().size())));
+					return retval;
+				}
+			}
+			else
+			{
+				// range
+				final String col = table + "." + pmeta.getNodeRangeCol();
+				final Object obj = row.get(cols2Pos.get(col));
+				final ArrayList<Object> ranges = pmeta.getNodeRanges();
+				int i = 0;
+				final int size = ranges.size();
+				while (i < size)
+				{
+					if (((Comparable)obj).compareTo(ranges.get(i)) <= 0)
+					{
+						if (pmeta.allNodes())
+						{
+							final ArrayList<Integer> retval = new ArrayList<Integer>();
+							retval.add(i);
+							return retval;
+						}
+						else
+						{
+							final ArrayList<Integer> retval = new ArrayList<Integer>();
+							retval.add(pmeta.nodeSet().get(i));
+							return retval;
+						}
+					}
+
+					i++;
+				}
+
+				if (pmeta.allNodes())
+				{
+					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(i);
+					return retval;
+				}
+				else
+				{
+					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(pmeta.nodeSet().get(i));
+					return retval;
+				}
+			}
+		}
+		else
+		{
+			ArrayList<Integer> ngSet = null;
+			if (pmeta.isSingleNodeGroupSet())
+			{
+				ngSet = pmeta.getNodeGroupHashMap().get(pmeta.getSingleNodeGroup());
+			}
+			else if (pmeta.nodeGroupIsHash())
+			{
+				final ArrayList<String> nodeGroupHash = pmeta.getNodeGroupHash();
+				final ArrayList<Object> partial = new ArrayList<Object>();
+				final int z = nodeGroupHash.size();
+				int i = 0;
+				while (i < z)
+				{
+					final String col = nodeGroupHash.get(i++);
+					partial.add(row.get(cols2Pos.get(table + "." + col)));
+				}
+
+				final long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
+				ngSet = pmeta.getNodeGroupHashMap().get((int)(hash % pmeta.getNodeGroupHashMap().size()));
+			}
+			else
+			{
+				final String col = table + "." + pmeta.getNodeGroupRangeCol();
+				final Object obj = row.get(cols2Pos.get(col));
+				final ArrayList<Object> ranges = pmeta.getNodeGroupRanges();
+				int i = 0;
+				final int size = ranges.size();
+				while (i < size)
+				{
+					if (((Comparable)obj).compareTo(ranges.get(i)) <= 0)
+					{
+						ngSet = pmeta.getNodeGroupHashMap().get(i);
+						break;
+					}
+
+					i++;
+				}
+
+				if (ngSet == null)
+				{
+					ngSet = pmeta.getNodeGroupHashMap().get(i);
+				}
+			}
+
+			if (pmeta.anyNode())
+			{
+				return ngSet;
+			}
+			else if (pmeta.isSingleNodeSet())
+			{
+				final ArrayList<Integer> retval = new ArrayList<Integer>();
+				retval.add(ngSet.get(pmeta.getSingleNode()));
+				return retval;
+			}
+			else if (pmeta.nodeIsHash())
+			{
+				final ArrayList<String> nodeHash = pmeta.getNodeHash();
+				final ArrayList<Object> partial = new ArrayList<Object>();
+				final int z = nodeHash.size();
+				int i = 0;
+				while (i < z)
+				{
+					final String col = nodeHash.get(i++);
+					partial.add(row.get(cols2Pos.get(table + "." + col)));
+				}
+
+				final long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
+				if (pmeta.allNodes())
+				{
+					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(ngSet.get((int)(hash % ngSet.size())));
+					return retval;
+				}
+				else
+				{
+					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(ngSet.get(pmeta.nodeSet().get((int)(hash % pmeta.nodeSet().size()))));
+					return retval;
+				}
+			}
+			else
+			{
+				// range
+				final String col = table + "." + pmeta.getNodeRangeCol();
+				final Object obj = row.get(cols2Pos.get(col));
+				final ArrayList<Object> ranges = pmeta.getNodeRanges();
+				int i = 0;
+				final int size = ranges.size();
+				while (i < size)
+				{
+					if (((Comparable)obj).compareTo(ranges.get(i)) <= 0)
+					{
+						if (pmeta.allNodes())
+						{
+							final ArrayList<Integer> retval = new ArrayList<Integer>();
+							retval.add(ngSet.get(i));
+							return retval;
+						}
+						else
+						{
+							final ArrayList<Integer> retval = new ArrayList<Integer>();
+							retval.add(ngSet.get(pmeta.nodeSet().get(i)));
+							return retval;
+						}
+					}
+
+					i++;
+				}
+
+				if (pmeta.allNodes())
+				{
+					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(ngSet.get(i));
+					return retval;
+				}
+				else
+				{
+					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(ngSet.get(pmeta.nodeSet().get(i)));
+					return retval;
+				}
+			}
+		}
+	}
+
+	public static ArrayList<Integer> determineNodeNoLookups(final String schema, final String table, final ArrayList<Object> row, final PartitionMetaData pmeta, final HashMap<String, Integer> cols2Pos, final int numNodes, final ArrayList<Integer> workerNodes, final ArrayList<Integer> coordNodes) throws Exception
+	{
+		if (pmeta.noNodeGroupSet())
+		{
+			if (pmeta.anyNode())
+			{
+				return workerNodes;
+			}
+			else if (pmeta.isSingleNodeSet())
+			{
+				if (pmeta.getSingleNode() == -1)
+				{
+					return coordNodes;
+				}
+				else
+				{
+					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(pmeta.getSingleNode());
+					return retval;
+				}
+			}
+			else if (pmeta.nodeIsHash())
+			{
+				final ArrayList<String> nodeHash = pmeta.getNodeHash();
+				final ArrayList<Object> partial = new ArrayList<Object>();
+				for (final String col : nodeHash)
+				{
+					partial.add(row.get(cols2Pos.get(table + "." + col)));
+				}
+
+				final long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
+				if (pmeta.allNodes())
+				{
+					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add((int)(hash % numNodes)); // LOOKOUT if we ever do
+					// dynamic # nodes
+					return retval;
+				}
+				else
+				{
+					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(pmeta.nodeSet().get((int)(hash % pmeta.nodeSet().size())));
+					return retval;
+				}
+			}
+			else
+			{
+				// range
+				final String col = table + "." + pmeta.getNodeRangeCol();
+				final Object obj = row.get(cols2Pos.get(col));
+				final ArrayList<Object> ranges = pmeta.getNodeRanges();
+				int i = 0;
+				final int size = ranges.size();
+				while (i < size)
+				{
+					if (((Comparable)obj).compareTo(ranges.get(i)) <= 0)
+					{
+						if (pmeta.allNodes())
+						{
+							final ArrayList<Integer> retval = new ArrayList<Integer>();
+							retval.add(i);
+							return retval;
+						}
+						else
+						{
+							final ArrayList<Integer> retval = new ArrayList<Integer>();
+							retval.add(pmeta.nodeSet().get(i));
+							return retval;
+						}
+					}
+
+					i++;
+				}
+
+				if (pmeta.allNodes())
+				{
+					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(i);
+					return retval;
+				}
+				else
+				{
+					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(pmeta.nodeSet().get(i));
+					return retval;
+				}
+			}
+		}
+		else
+		{
+			ArrayList<Integer> ngSet = null;
+			if (pmeta.isSingleNodeGroupSet())
+			{
+				ngSet = pmeta.getNodeGroupHashMap().get(pmeta.getSingleNodeGroup());
+			}
+			else if (pmeta.nodeGroupIsHash())
+			{
+				final ArrayList<String> nodeGroupHash = pmeta.getNodeGroupHash();
+				final ArrayList<Object> partial = new ArrayList<Object>();
+				for (final String col : nodeGroupHash)
+				{
+					partial.add(row.get(cols2Pos.get(table + "." + col)));
+				}
+
+				final long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
+				ngSet = pmeta.getNodeGroupHashMap().get((int)(hash % pmeta.getNodeGroupHashMap().size()));
+			}
+			else
+			{
+				final String col = table + "." + pmeta.getNodeGroupRangeCol();
+				final Object obj = row.get(cols2Pos.get(col));
+				final ArrayList<Object> ranges = pmeta.getNodeGroupRanges();
+				int i = 0;
+				final int size = ranges.size();
+				while (i < size)
+				{
+					if (((Comparable)obj).compareTo(ranges.get(i)) <= 0)
+					{
+						ngSet = pmeta.getNodeGroupHashMap().get(i);
+						break;
+					}
+
+					i++;
+				}
+
+				if (ngSet == null)
+				{
+					ngSet = pmeta.getNodeGroupHashMap().get(i);
+				}
+			}
+
+			if (pmeta.anyNode())
+			{
+				return ngSet;
+			}
+			else if (pmeta.isSingleNodeSet())
+			{
+				final ArrayList<Integer> retval = new ArrayList<Integer>();
+				retval.add(ngSet.get(pmeta.getSingleNode()));
+				return retval;
+			}
+			else if (pmeta.nodeIsHash())
+			{
+				final ArrayList<String> nodeHash = pmeta.getNodeHash();
+				final ArrayList<Object> partial = new ArrayList<Object>();
+				for (final String col : nodeHash)
+				{
+					partial.add(row.get(cols2Pos.get(table + "." + col)));
+				}
+
+				final long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
+				if (pmeta.allNodes())
+				{
+					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(ngSet.get((int)(hash % ngSet.size())));
+					return retval;
+				}
+				else
+				{
+					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(ngSet.get(pmeta.nodeSet().get((int)(hash % pmeta.nodeSet().size()))));
+					return retval;
+				}
+			}
+			else
+			{
+				// range
+				final String col = table + "." + pmeta.getNodeRangeCol();
+				final Object obj = row.get(cols2Pos.get(col));
+				final ArrayList<Object> ranges = pmeta.getNodeRanges();
+				int i = 0;
+				final int size = ranges.size();
+				while (i < size)
+				{
+					if (((Comparable)obj).compareTo(ranges.get(i)) <= 0)
+					{
+						if (pmeta.allNodes())
+						{
+							final ArrayList<Integer> retval = new ArrayList<Integer>();
+							retval.add(ngSet.get(i));
+							return retval;
+						}
+						else
+						{
+							final ArrayList<Integer> retval = new ArrayList<Integer>();
+							retval.add(ngSet.get(pmeta.nodeSet().get(i)));
+							return retval;
+						}
+					}
+
+					i++;
+				}
+
+				if (pmeta.allNodes())
+				{
+					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(ngSet.get(i));
+					return retval;
+				}
+				else
+				{
+					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					retval.add(ngSet.get(pmeta.nodeSet().get(i)));
+					return retval;
+				}
+			}
+		}
+	}
+
+	public static void dropIndex(final String schema, final String index, final Transaction tx) throws Exception
+	{
+		PlanCacheManager.invalidate();
+		final ArrayList<Object> row = PlanCacheManager.getTableAndIndexID().setParms(schema, index).execute(tx);
+		final int tableID = (Integer)row.get(0);
+		final int indexID = (Integer)row.get(1);
+		PlanCacheManager.getDeleteIndex().setParms(tableID, indexID).execute(tx);
+		PlanCacheManager.getDeleteIndexCol().setParms(tableID, indexID).execute(tx);
+		PlanCacheManager.getDeleteIndexStats().setParms(tableID, indexID).execute(tx);
+		BufferManager.invalidateFile(schema + "." + index + ".indx");
+		PlanCacheManager.invalidate();
+		getPartitioningCache.clear();
+		getIndexesCache.clear();
+		getKeysCache.clear();
+		getTypesCache.clear();
+		getOrdersCache.clear();
+		getIndexColsForTableCache.clear();
+		getLengthCache.clear();
+		getTableIDCache.clear();
+		getColCardCache.clear();
+		getIndexIDsForTableCache.clear();
+		getCols2PosForTableCache.clear();
+		getCols2TypesCache.clear();
+		getUniqueCache.clear();
+		getTableCardCache.clear();
+		getColTypeCache.clear();
+		getDistCache.clear();
+	}
+
+	public static void dropTable(final String schema, final String table, final Transaction tx) throws Exception
+	{
+		PlanCacheManager.invalidate();
+		final int id = PlanCacheManager.getTableID().setParms(schema, table).execute(tx);
+		PlanCacheManager.getDeleteTable().setParms(schema, table).execute(tx);
+		PlanCacheManager.getDeleteCols().setParms(id).execute(tx);
+		PlanCacheManager.getMultiDeleteIndexes().setParms(id).execute(tx);
+		PlanCacheManager.getMultiDeleteIndexCols().setParms(id).execute(tx);
+		PlanCacheManager.getDeleteTableStats().setParms(id).execute(tx);
+		PlanCacheManager.getDeleteColStats().setParms(id).execute(tx);
+		PlanCacheManager.getDeleteColDist().setParms(id).execute(tx);
+		PlanCacheManager.getDeletePartitioning().setParms(id).execute(tx);
+		PlanCacheManager.getMultiDeleteIndexStats().setParms(id).execute(tx);
+		BufferManager.invalidateFile(schema + "." + table + ".tbl");
+		PlanCacheManager.invalidate();
+		getPartitioningCache.clear();
+		getIndexesCache.clear();
+		getKeysCache.clear();
+		getTypesCache.clear();
+		getOrdersCache.clear();
+		getIndexColsForTableCache.clear();
+		getLengthCache.clear();
+		getTableIDCache.clear();
+		getColCardCache.clear();
+		getIndexIDsForTableCache.clear();
+		getCols2PosForTableCache.clear();
+		getCols2TypesCache.clear();
+		getUniqueCache.clear();
+		getTableCardCache.clear();
+		getColTypeCache.clear();
+		getDistCache.clear();
+	}
+
+	public static void dropView(final String schema, final String table, final Transaction tx) throws Exception
+	{
+		PlanCacheManager.getDeleteView().setParms(schema, table).execute(tx);
+	}
+
+	public static Index getBestCompoundIndex(final HashSet<String> cols, final String schema, final String table, final Transaction tx) throws Exception
 	{
 		if (cols.size() <= 1)
 		{
 			return null;
 		}
 
-		final ArrayList<Index> indexes = this.getIndexesForTable(schema, table, tx);
+		final ArrayList<Index> indexes = getIndexesForTable(schema, table, tx);
 		int maxCount = 1;
 		Index maxIndex = null;
 		for (final Index index : indexes)
@@ -1693,10 +1188,10 @@ public final class MetaData implements Serializable
 
 		if (maxCount == cols.size())
 		{
-			for (Index index : indexes)
+			for (final Index index : indexes)
 			{
 				int count = 0;
-				for (String col : index.getKeys())
+				for (final String col : index.getKeys())
 				{
 					if (cols.contains(col))
 					{
@@ -1718,62 +1213,39 @@ public final class MetaData implements Serializable
 		return maxIndex;
 	}
 
-	public long getCard(String col, HashMap<String, Double> generated, Transaction tx, Operator tree) throws Exception
-	{
-		String c = col.substring(col.indexOf('.') + 1);
-		String ST = getTableForCol(col, tree);
-
-		try
-		{
-			String schema = ST.substring(0, ST.indexOf('.'));
-			String table = ST.substring(ST.indexOf('.') + 1);
-			Long card = getColCardCache.get(schema + "." + table + "." + c);
-			if (card == null)
-			{
-				card = PlanCacheManager.getColCard().setParms(schema, table, c).execute(tx);
-				getColCardCache.put(schema + "." + table + "." + c, card);
-			}
-			return card;
-		}
-		catch (Exception e)
-		{
-		}
-
-		if (generated.containsKey(col))
-		{
-			return (generated.get(col).longValue());
-		}
-
-		// HRDBMSWorker.logger.warn("Can't find cardinality for " + schema + "."
-		// + table + "." + col);
-		return 1000000;
-	}
-
-	public long getCard(String col, RootOperator op, Transaction tx, Operator tree) throws Exception
-	{
-		return getCard(col, op.getGenerated(), tx, tree);
-	}
-
-	public long getCard(String schema, String table, String col, HashMap<String, Double> generated, Transaction tx)
+	public static long getCard(final String schema, final String table, final String col, final HashMap<String, Double> generated, final Transaction tx)
 	{
 		try
 		{
 			Long card = getColCardCache.get(schema + "." + table + "." + col);
+			// HRDBMSWorker.logger.debug("Card cache returned " + card + " for "
+			// + schema + "." + table + "." + col);
 			if (card == null)
 			{
 				card = PlanCacheManager.getColCard().setParms(schema, table, col).execute(tx);
-				getColCardCache.put(schema + "." + table + "." + col, card);
+				// HRDBMSWorker.logger.debug("The database says " + card + " for
+				// "+ schema + "." + table + "." + col);
+
+				if (card != -1)
+				{
+					getColCardCache.put(schema + "." + table + "." + col, card);
+					return card;
+				}
+				else if (generated.containsKey(col))
+				{
+					return (generated.get(col).longValue());
+				}
+
+				getColCardCache.put(schema + "." + table + "." + col, 1000000l);
 			}
-			return card;
+			else
+			{
+				return card;
+			}
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			// HRDBMSWorker.logger.debug("", e);
-		}
-
-		if (generated.containsKey(col))
-		{
-			return (generated.get(col).longValue());
 		}
 
 		// HRDBMSWorker.logger.warn("Can't find cardinality for " + schema + "."
@@ -1781,12 +1253,12 @@ public final class MetaData implements Serializable
 		return 1000000;
 	}
 
-	public long getCard(String schema, String table, String col, RootOperator op, Transaction tx)
+	public static long getCard(final String schema, final String table, final String col, final RootOperator op, final Transaction tx)
 	{
 		return getCard(schema, table, col, op.getGenerated(), tx);
 	}
 
-	public long getColgroupCard(ArrayList<String> schemas, ArrayList<String> tables, ArrayList<String> cols, HashMap<String, Double> generated, Transaction tx) throws Exception
+	public static long getColgroupCard(final ArrayList<String> schemas, final ArrayList<String> tables, final ArrayList<String> cols, final HashMap<String, Double> generated, final Transaction tx) throws Exception
 	{
 		boolean oneSchema = true;
 		boolean oneTable = true;
@@ -1794,7 +1266,7 @@ public final class MetaData implements Serializable
 		String theTable = null;
 
 		int i = 0;
-		for (String schema : schemas)
+		for (final String schema : schemas)
 		{
 			if (theSchema == null)
 			{
@@ -1809,7 +1281,7 @@ public final class MetaData implements Serializable
 				}
 			}
 
-			String table = tables.get(i);
+			final String table = tables.get(i);
 			if (theTable == null)
 			{
 				theTable = table;
@@ -1838,20 +1310,20 @@ public final class MetaData implements Serializable
 				rs = PlanCacheManager.getIndexIDsForTable().setParms(theSchema, theTable).execute(tx);
 				getIndexIDsForTableCache.put(theSchema + "." + theTable, rs);
 			}
-			for (Object r : rs)
+			for (final Object r : rs)
 			{
 				if (!(r instanceof DataEndMarker))
 				{
-					ArrayList<Object> row = (ArrayList<Object>)r;
-					int count = PlanCacheManager.getIndexColCount().setParms(tableID, (Integer)row.get(0)).execute(tx);
+					final ArrayList<Object> row = (ArrayList<Object>)r;
+					final int count = PlanCacheManager.getIndexColCount().setParms(tableID, (Integer)row.get(0)).execute(tx);
 					if (count == schemas.size())
 					{
 						boolean hasAllCols = true;
-						HashMap<String, Integer> cols2Pos = getCols2PosForTable(theSchema, theTable, tx);
-						for (String col : cols)
+						final HashMap<String, Integer> cols2Pos = getCols2PosForTable(theSchema, theTable, tx);
+						for (final String col : cols)
 						{
-							int colID = cols2Pos.get(theTable + "." + col);
-							Object o = PlanCacheManager.getCheckIndexForCol().setParms(tableID, (Integer)row.get(0), colID).execute(tx);
+							final int colID = cols2Pos.get(theTable + "." + col);
+							final Object o = PlanCacheManager.getCheckIndexForCol().setParms(tableID, (Integer)row.get(0), colID).execute(tx);
 							if (o instanceof DataEndMarker)
 							{
 								hasAllCols = false;
@@ -1861,14 +1333,14 @@ public final class MetaData implements Serializable
 
 						if (hasAllCols)
 						{
-							Object o = PlanCacheManager.getIndexCard().setParms(tableID, (Integer)row.get(0)).execute(tx);
+							final Object o = PlanCacheManager.getIndexCard().setParms(tableID, (Integer)row.get(0)).execute(tx);
 							if (o instanceof DataEndMarker)
 							{
 								continue;
 							}
 							else
 							{
-								ArrayList<Object> cardRow = (ArrayList<Object>)o;
+								final ArrayList<Object> cardRow = (ArrayList<Object>)o;
 								return (Long)cardRow.get(0);
 							}
 						}
@@ -1881,171 +1353,19 @@ public final class MetaData implements Serializable
 		i = 0;
 		for (final String col : cols)
 		{
-			card *= this.getCard(schemas.get(i), tables.get(i), col, generated, tx);
+			card *= getCard(schemas.get(i), tables.get(i), col, generated, tx);
 			i++;
 		}
 
 		return (long)card;
 	}
 
-	public long getColgroupCard(ArrayList<String> schemas, ArrayList<String> tables, ArrayList<String> cols, RootOperator op, Transaction tx) throws Exception
+	public static long getColgroupCard(final ArrayList<String> schemas, final ArrayList<String> tables, final ArrayList<String> cols, final RootOperator op, final Transaction tx) throws Exception
 	{
 		return getColgroupCard(schemas, tables, cols, op.getGenerated(), tx);
 	}
 
-	public long getColgroupCard(ArrayList<String> cs, HashMap<String, Double> generated, Transaction tx, Operator tree) throws Exception
-	{
-		if (cs.size() == 0)
-		{
-			return 1;
-		}
-
-		ArrayList<String> schemas = new ArrayList<String>();
-		ArrayList<String> tables = new ArrayList<String>();
-		ArrayList<String> cols = new ArrayList<String>();
-		for (String c : cs)
-		{
-			cols.add(c.substring(c.indexOf('.') + 1));
-			String ST = getTableForCol(c, tree);
-			if (ST == null)
-			{
-				int i = 0;
-				long card = 1;
-				final int size = cs.size();
-				while (i < size)
-				{
-					long old = card;
-					card *= 1000000;
-					if (card < 0)
-					{
-						return old;
-					}
-					i++;
-				}
-
-				return card;
-			}
-			schemas.add(ST.substring(0, ST.indexOf('.')));
-			tables.add(ST.substring(ST.indexOf('.') + 1));
-		}
-		boolean oneSchema = true;
-		boolean oneTable = true;
-		String theSchema = null;
-		String theTable = null;
-
-		int i = 0;
-		for (String schema : schemas)
-		{
-			if (theSchema == null)
-			{
-				theSchema = schema;
-			}
-			else
-			{
-				if (!schema.equals(theSchema))
-				{
-					oneSchema = false;
-					break;
-				}
-			}
-
-			String table = tables.get(i);
-			if (theTable == null)
-			{
-				theTable = table;
-			}
-			else
-			{
-				if (!table.equals(theTable))
-				{
-					oneTable = false;
-					break;
-				}
-			}
-		}
-
-		Integer tableID = -1;
-		if (oneSchema && oneTable && theSchema != null && theTable != null)
-		{
-			try
-			{
-				tableID = getTableIDCache.get(theSchema + "." + theTable);
-				if (tableID == null)
-				{
-					tableID = PlanCacheManager.getTableID().setParms(theSchema, theTable).execute(tx);
-					getTableIDCache.put(theSchema + "." + theTable, tableID);
-				}
-			}
-			catch (Exception e)
-			{
-				oneSchema = false;
-			}
-		}
-
-		if (oneSchema && oneTable && theSchema != null && theTable != null)
-		{
-			ArrayList<Object> rs = getIndexIDsForTableCache.get(theSchema + "." + theTable);
-			if (rs == null)
-			{
-				rs = PlanCacheManager.getIndexIDsForTable().setParms(theSchema, theTable).execute(tx);
-				getIndexIDsForTableCache.put(theSchema + "." + theTable, rs);
-			}
-			for (Object r : rs)
-			{
-				if (!(r instanceof DataEndMarker))
-				{
-					ArrayList<Object> row = (ArrayList<Object>)r;
-					int count = PlanCacheManager.getIndexColCount().setParms(tableID, (Integer)row.get(0)).execute(tx);
-					if (count == schemas.size())
-					{
-						boolean hasAllCols = true;
-						HashMap<String, Integer> cols2Pos = getCols2PosForTable(theSchema, theTable, tx);
-						for (String col : cols)
-						{
-							int colID = cols2Pos.get(theTable + "." + col);
-							Object o = PlanCacheManager.getCheckIndexForCol().setParms(tableID, (Integer)row.get(0), colID).execute(tx);
-							if (o instanceof DataEndMarker)
-							{
-								hasAllCols = false;
-								break;
-							}
-						}
-
-						if (hasAllCols)
-						{
-							Object o = PlanCacheManager.getIndexCard().setParms(tableID, (Integer)row.get(0)).execute(tx);
-							if (o instanceof DataEndMarker)
-							{
-								continue;
-							}
-							else
-							{
-								ArrayList<Object> cardRow = (ArrayList<Object>)o;
-								return (Long)cardRow.get(0);
-							}
-						}
-					}
-				}
-			}
-		}
-
-		double card = 1;
-		i = 0;
-		for (final String col : cols)
-		{
-			card *= this.getCard(schemas.get(i), tables.get(i), col, generated, tx);
-			i++;
-		}
-
-		return (long)card;
-	}
-
-	public long getColgroupCard(ArrayList<String> cols, RootOperator op, Transaction tx, Operator tree) throws Exception
-	{
-		return getColgroupCard(cols, op.getGenerated(), tx, tree);
-	}
-
-	public HashMap<String, Integer> getCols2PosForTable(String schema, String name, Transaction tx) throws Exception
+	public static HashMap<String, Integer> getCols2PosForTable(final String schema, final String name, final Transaction tx) throws Exception
 	{
 		final HashMap<String, Integer> retval = new HashMap<String, Integer>();
 		ArrayList<Object> rs = getCols2PosForTableCache.get(schema + "." + name);
@@ -2073,14 +1393,14 @@ public final class MetaData implements Serializable
 		// }
 		// DEBUG
 
-		for (Object r : rs)
+		for (final Object r : rs)
 		{
 			if (r instanceof DataEndMarker)
 			{
 			}
 			else
 			{
-				ArrayList<Object> row = (ArrayList<Object>)r;
+				final ArrayList<Object> row = (ArrayList<Object>)r;
 				retval.put(name + "." + (String)row.get(0), (Integer)row.get(1));
 			}
 		}
@@ -2088,7 +1408,7 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	public HashMap<String, String> getCols2TypesForTable(String schema, String name, Transaction tx) throws Exception
+	public static HashMap<String, String> getCols2TypesForTable(final String schema, final String name, final Transaction tx) throws Exception
 	{
 		final HashMap<String, String> retval = new HashMap<String, String>();
 		ArrayList<Object> rs = getCols2TypesCache.get(schema + "." + name);
@@ -2097,12 +1417,12 @@ public final class MetaData implements Serializable
 			rs = PlanCacheManager.getCols2Types().setParms(schema, name).execute(tx);
 			getCols2TypesCache.put(schema + "." + name, rs);
 		}
-		for (Object r : rs)
+		for (final Object r : rs)
 		{
 			if (!(r instanceof DataEndMarker))
 			{
-				ArrayList<Object> row = (ArrayList<Object>)r;
-				String col = name + "." + (String)row.get(0);
+				final ArrayList<Object> row = (ArrayList<Object>)r;
+				final String col = name + "." + (String)row.get(0);
 				String type = (String)row.get(1);
 				if (type.equals("BIGINT"))
 				{
@@ -2124,27 +1444,47 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	public String getCurrentSchema()
+	public static ArrayList<String> getColsFromIndexFileName(final String index, final Transaction tx, final ArrayList<ArrayList<String>> keys, final ArrayList<String> indexes) throws Exception
 	{
-		if (connection == null)
+		int i = 0;
+		for (final String indx : indexes)
 		{
-			return null;
+			if (indx.equals(index))
+			{
+				return keys.get(i);
+			}
+
+			i++;
 		}
 
-		String retval = defaultSchemas.get(connection);
-		if (retval == null)
+		return null;
+	}
+
+	public static HashMap<Integer, String> getCoordMap()
+	{
+		final HashMap<Integer, String> retval = new HashMap<Integer, String>();
+		for (final Map.Entry entry : nodeTable.entrySet())
 		{
-			// TODO return userid
-			return "HRDBMS";
+			final int node = (Integer)entry.getKey();
+			final String host = (String)entry.getValue();
+			if (node < 0)
+			{
+				retval.put(node, host);
+			}
 		}
 
 		return retval;
 	}
 
-	public String getDevicePath(int num)
+	public static ArrayList<Integer> getCoordNodes()
 	{
-		String deviceList = HRDBMSWorker.getHParms().getProperty("data_directories");
-		FastStringTokenizer tokens = new FastStringTokenizer(deviceList, ",", false);
+		return (ArrayList<Integer>)coords.clone();
+	}
+
+	public static String getDevicePath(final int num)
+	{
+		final String deviceList = HRDBMSWorker.getHParms().getProperty("data_directories");
+		final FastStringTokenizer tokens = new FastStringTokenizer(deviceList, ",", false);
 		tokens.setIndex(num);
 		String path = tokens.nextToken();
 		if (!path.endsWith("/"))
@@ -2155,12 +1495,34 @@ public final class MetaData implements Serializable
 		return path;
 	}
 
-	public String getHostNameForNode(int node)
+	public static ArrayList<Integer> getDevicesForTable(final String schema, final String table, final Transaction tx) throws Exception
+	{
+		final PartitionMetaData pmeta = new MetaData().new PartitionMetaData(schema, table, tx);
+		if (pmeta.allDevices())
+		{
+			final ArrayList<Integer> retval = new ArrayList<Integer>();
+			int i = 0;
+			final int num = getNumDevices();
+			while (i < num)
+			{
+				retval.add(i);
+				i++;
+			}
+
+			return retval;
+		}
+		else
+		{
+			return pmeta.deviceSet();
+		}
+	}
+
+	public static String getHostNameForNode(final int node)
 	{
 		return nodeTable.get(node);
 	}
 
-	public String getHostNameForNode(int node, Transaction tx) throws Exception
+	public static String getHostNameForNode(final int node, final Transaction tx) throws Exception
 	{
 		if (node == -1)
 		{
@@ -2172,7 +1534,7 @@ public final class MetaData implements Serializable
 		}
 	}
 
-	public ArrayList<String> getIndexColsForTable(String schema, String table, Transaction tx) throws Exception
+	public static ArrayList<String> getIndexColsForTable(final String schema, final String table, final Transaction tx) throws Exception
 	{
 		ArrayList<Object> rs = getIndexColsForTableCache.get(schema + "." + table);
 		if (rs == null)
@@ -2180,12 +1542,12 @@ public final class MetaData implements Serializable
 			rs = PlanCacheManager.getIndexColsForTable().setParms(schema, table).execute(tx);
 			getIndexColsForTableCache.put(schema + "." + table, rs);
 		}
-		ArrayList<String> retRow = new ArrayList<String>();
-		for (Object o : rs)
+		final ArrayList<String> retRow = new ArrayList<String>();
+		for (final Object o : rs)
 		{
 			if (!(o instanceof DataEndMarker))
 			{
-				ArrayList<Object> row = (ArrayList<Object>)o;
+				final ArrayList<Object> row = (ArrayList<Object>)o;
 				retRow.add(table + "." + row.get(0));
 			}
 		}
@@ -2193,7 +1555,7 @@ public final class MetaData implements Serializable
 		return retRow;
 	}
 
-	public ArrayList<Index> getIndexesForTable(String schema, String table, Transaction tx) throws Exception
+	public static ArrayList<Index> getIndexesForTable(final String schema, final String table, final Transaction tx) throws Exception
 	{
 		final ArrayList<Index> retval = new ArrayList<Index>();
 		ArrayList<Object> rs = getIndexesCache.get(schema + "." + table);
@@ -2202,11 +1564,11 @@ public final class MetaData implements Serializable
 			rs = PlanCacheManager.getIndexes().setParms(schema, table).execute(tx);
 			getIndexesCache.put(schema + "." + table, rs);
 		}
-		for (Object o : rs)
+		for (final Object o : rs)
 		{
 			if (!(o instanceof DataEndMarker))
 			{
-				ArrayList<Object> row = (ArrayList<Object>)o;
+				final ArrayList<Object> row = (ArrayList<Object>)o;
 				ArrayList<Object> rs2 = getKeysCache.get(schema + "." + row.get(0));
 				if (rs2 == null)
 				{
@@ -2214,10 +1576,10 @@ public final class MetaData implements Serializable
 					getKeysCache.put(schema + "." + row.get(0), rs2);
 				}
 				// tabname, colname
-				ArrayList<String> keys = new ArrayList<String>();
-				for (Object o2 : rs2)
+				final ArrayList<String> keys = new ArrayList<String>();
+				for (final Object o2 : rs2)
 				{
-					ArrayList<Object> row2 = (ArrayList<Object>)o2;
+					final ArrayList<Object> row2 = (ArrayList<Object>)o2;
 					keys.add(row2.get(0) + "." + row2.get(1));
 				}
 
@@ -2227,10 +1589,10 @@ public final class MetaData implements Serializable
 					rs2 = PlanCacheManager.getTypes().setParms(schema, (String)row.get(0)).execute(tx);
 					getTypesCache.put(schema + "." + row.get(0), rs2);
 				}
-				ArrayList<String> types = new ArrayList<String>();
-				for (Object o2 : rs2)
+				final ArrayList<String> types = new ArrayList<String>();
+				for (final Object o2 : rs2)
 				{
-					ArrayList<Object> row2 = (ArrayList<Object>)o2;
+					final ArrayList<Object> row2 = (ArrayList<Object>)o2;
 					String type = (String)row2.get(0);
 					if (type.equals("BIGINT"))
 					{
@@ -2253,13 +1615,13 @@ public final class MetaData implements Serializable
 					rs2 = PlanCacheManager.getOrders().setParms(schema, (String)row.get(0)).execute(tx);
 					getOrdersCache.put(schema + "." + row.get(0), rs2);
 				}
-				ArrayList<Boolean> orders = new ArrayList<Boolean>();
-				for (Object o2 : rs2)
+				final ArrayList<Boolean> orders = new ArrayList<Boolean>();
+				for (final Object o2 : rs2)
 				{
 					if (!(o2 instanceof DataEndMarker))
 					{
-						ArrayList<Object> row2 = (ArrayList<Object>)o2;
-						String ord = (String)row2.get(0);
+						final ArrayList<Object> row2 = (ArrayList<Object>)o2;
+						final String ord = (String)row2.get(0);
 						boolean order = true;
 						if (!ord.equals("A"))
 						{
@@ -2276,7 +1638,7 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	public ArrayList<String> getIndexFileNamesForTable(String schema, String table, Transaction tx) throws Exception
+	public static ArrayList<String> getIndexFileNamesForTable(final String schema, final String table, final Transaction tx) throws Exception
 	{
 		ArrayList<Object> rs = getIndexesCache.get(schema + "." + table);
 		if (rs == null)
@@ -2285,13 +1647,13 @@ public final class MetaData implements Serializable
 			getIndexesCache.put(schema + "." + table, rs);
 		}
 
-		ArrayList<String> retval = new ArrayList<String>();
+		final ArrayList<String> retval = new ArrayList<String>();
 
-		for (Object o : rs)
+		for (final Object o : rs)
 		{
 			if (!(o instanceof DataEndMarker))
 			{
-				ArrayList<Object> row = (ArrayList<Object>)o;
+				final ArrayList<Object> row = (ArrayList<Object>)o;
 				retval.add(schema + "." + row.get(0) + ".indx");
 			}
 		}
@@ -2299,13 +1661,13 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	public ArrayList<ArrayList<String>> getKeys(ArrayList<String> indexes, Transaction tx) throws Exception
+	public static ArrayList<ArrayList<String>> getKeys(final ArrayList<String> indexes, final Transaction tx) throws Exception
 	{
-		ArrayList<ArrayList<String>> retval = new ArrayList<ArrayList<String>>();
-		for (String index : indexes)
+		final ArrayList<ArrayList<String>> retval = new ArrayList<ArrayList<String>>();
+		for (final String index : indexes)
 		{
-			String schema = index.substring(0, index.indexOf('.'));
-			String name = index.substring(schema.length() + 1, index.indexOf('.', schema.length() + 1));
+			final String schema = index.substring(0, index.indexOf('.'));
+			final String name = index.substring(schema.length() + 1, index.indexOf('.', schema.length() + 1));
 			ArrayList<Object> rs = getKeysCache.get(schema + "." + name);
 			if (rs == null)
 			{
@@ -2313,12 +1675,12 @@ public final class MetaData implements Serializable
 				getKeysCache.put(schema + "." + name, rs);
 			}
 			// tabname, colname
-			ArrayList<String> retRow = new ArrayList<String>();
-			for (Object o : rs)
+			final ArrayList<String> retRow = new ArrayList<String>();
+			for (final Object o : rs)
 			{
 				if (!(o instanceof DataEndMarker))
 				{
-					ArrayList<Object> row = (ArrayList<Object>)o;
+					final ArrayList<Object> row = (ArrayList<Object>)o;
 					retRow.add(row.get(0) + "." + row.get(1));
 				}
 			}
@@ -2328,7 +1690,7 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	public int getLengthForCharCol(String schema, String table, String col, Transaction tx) throws Exception
+	public static int getLengthForCharCol(final String schema, final String table, String col, final Transaction tx) throws Exception
 	{
 		if (col.contains("."))
 		{
@@ -2344,12 +1706,12 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	public String getMyHostName(Transaction tx) throws Exception
+	public static String getMyHostName(final Transaction tx) throws Exception
 	{
 		return nodeTable.get(myNode);
 	}
 
-	public ArrayList<Integer> getNodesForTable(String schema, String table, Transaction tx) throws Exception
+	public static ArrayList<Integer> getNodesForTable(final String schema, final String table, final Transaction tx) throws Exception
 	{
 		ArrayList<Object> r = getPartitioningCache.get(schema + "." + table);
 		if (r == null)
@@ -2358,28 +1720,28 @@ public final class MetaData implements Serializable
 			getPartitioningCache.put(schema + "." + table, r);
 		}
 
-		ArrayList<Object> row = r;
-		String nodeGroupExp = (String)row.get(0);
-		String nodeExp = (String)row.get(1);
+		final ArrayList<Object> row = r;
+		final String nodeGroupExp = (String)row.get(0);
+		final String nodeExp = (String)row.get(1);
 
 		if (nodeGroupExp.equals("NONE"))
 		{
 			if (nodeExp.startsWith("ALL") || nodeExp.startsWith("ANY"))
 			{
-				ArrayList<Integer> retval = getWorkerNodes();
+				final ArrayList<Integer> retval = getWorkerNodes();
 				return retval;
 			}
 
-			StringTokenizer tokens1 = new StringTokenizer(nodeExp, ",", false);
-			String nodeSet = tokens1.nextToken();
-			StringTokenizer tokens2 = new StringTokenizer(nodeSet, "|{}", false);
-			HashSet<Integer> retval = new HashSet<Integer>();
+			final StringTokenizer tokens1 = new StringTokenizer(nodeExp, ",", false);
+			final String nodeSet = tokens1.nextToken();
+			final StringTokenizer tokens2 = new StringTokenizer(nodeSet, "|{}", false);
+			final HashSet<Integer> retval = new HashSet<Integer>();
 			while (tokens2.hasMoreTokens())
 			{
-				int node = Integer.parseInt(tokens2.nextToken());
+				final int node = Integer.parseInt(tokens2.nextToken());
 				if (node == -1)
 				{
-					ArrayList<Integer> coords = getCoordNodes();
+					final ArrayList<Integer> coords = getCoordNodes();
 					retval.addAll(coords);
 				}
 				else
@@ -2391,39 +1753,44 @@ public final class MetaData implements Serializable
 			return new ArrayList<Integer>(retval);
 		}
 
-		StringTokenizer tokens1 = new StringTokenizer(nodeGroupExp, ",", false);
-		String nodeGroupSet = tokens1.nextToken();
-		StringTokenizer tokens2 = new StringTokenizer(nodeGroupSet, "|{}", false);
-		HashSet<Integer> retval = new HashSet<Integer>();
+		final StringTokenizer tokens1 = new StringTokenizer(nodeGroupExp, ",", false);
+		final String nodeGroupSet = tokens1.nextToken();
+		final StringTokenizer tokens2 = new StringTokenizer(nodeGroupSet, "|{}", false);
+		final HashSet<Integer> retval = new HashSet<Integer>();
 		while (tokens2.hasMoreTokens())
 		{
-			int node = Integer.parseInt(tokens2.nextToken());
+			final int node = Integer.parseInt(tokens2.nextToken());
 			retval.add(node);
 		}
 
 		return new ArrayList<Integer>(retval);
 	}
 
-	public ArrayList<ArrayList<Boolean>> getOrders(ArrayList<String> indexes, Transaction tx) throws Exception
+	public static int getNumDevices()
 	{
-		ArrayList<ArrayList<Boolean>> retval = new ArrayList<ArrayList<Boolean>>();
-		for (String index : indexes)
+		return numDevices;
+	}
+
+	public static ArrayList<ArrayList<Boolean>> getOrders(final ArrayList<String> indexes, final Transaction tx) throws Exception
+	{
+		final ArrayList<ArrayList<Boolean>> retval = new ArrayList<ArrayList<Boolean>>();
+		for (final String index : indexes)
 		{
-			String schema = index.substring(0, index.indexOf('.'));
-			String name = index.substring(schema.length() + 1, index.indexOf('.', schema.length() + 1));
+			final String schema = index.substring(0, index.indexOf('.'));
+			final String name = index.substring(schema.length() + 1, index.indexOf('.', schema.length() + 1));
 			ArrayList<Object> rs = getOrdersCache.get(schema + "." + name);
 			if (rs == null)
 			{
 				rs = PlanCacheManager.getOrders().setParms(schema, name).execute(tx);
 				getOrdersCache.put(schema + "." + name, rs);
 			}
-			ArrayList<Boolean> retRow = new ArrayList<Boolean>();
-			for (Object o : rs)
+			final ArrayList<Boolean> retRow = new ArrayList<Boolean>();
+			for (final Object o : rs)
 			{
 				if (!(o instanceof DataEndMarker))
 				{
-					ArrayList<Object> row = (ArrayList<Object>)o;
-					String ord = (String)row.get(0);
+					final ArrayList<Object> row = (ArrayList<Object>)o;
+					final String ord = (String)row.get(0);
 					boolean order = true;
 					if (!ord.equals("A"))
 					{
@@ -2438,12 +1805,7 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	public PartitionMetaData getPartMeta(String schema, String table, Transaction tx) throws Exception
-	{
-		return new PartitionMetaData(schema, table, tx);
-	}
-
-	public TreeMap<Integer, String> getPos2ColForTable(String schema, String name, Transaction tx) throws Exception
+	public static TreeMap<Integer, String> getPos2ColForTable(final String schema, final String name, final Transaction tx) throws Exception
 	{
 		final TreeMap<Integer, String> retval = new TreeMap<Integer, String>();
 		ArrayList<Object> rs = getCols2PosForTableCache.get(schema + "." + name);
@@ -2452,14 +1814,14 @@ public final class MetaData implements Serializable
 			rs = PlanCacheManager.getCols2PosForTable().setParms(schema, name).execute(tx);
 			getCols2PosForTableCache.put(schema + "." + name, rs);
 		}
-		for (Object r : rs)
+		for (final Object r : rs)
 		{
 			if (r instanceof DataEndMarker)
 			{
 			}
 			else
 			{
-				ArrayList<Object> row = (ArrayList<Object>)r;
+				final ArrayList<Object> row = (ArrayList<Object>)r;
 				retval.put((Integer)row.get(1), name + "." + (String)row.get(0));
 			}
 		}
@@ -2467,7 +1829,7 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	public long getTableCard(String schema, String table, Transaction tx)
+	public static long getTableCard(final String schema, final String table, final Transaction tx)
 	{
 		try
 		{
@@ -2475,11 +1837,20 @@ public final class MetaData implements Serializable
 			if (card == null)
 			{
 				card = PlanCacheManager.getTableCard().setParms(schema, table).execute(tx);
-				getTableCardCache.put(schema + "." + table, card);
+				if (card != -1)
+				{
+					getTableCardCache.put(schema + "." + table, card);
+					return card;
+				}
+				else
+				{
+					getTableCardCache.put(schema + "." + table, 1000000l);
+					return 1000000;
+				}
 			}
 			return card;
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			// HRDBMSWorker.logger.warn("No table card found for table " +
 			// schema + "." + table);
@@ -2487,126 +1858,47 @@ public final class MetaData implements Serializable
 		}
 	}
 
-	public String getTableForCol(String col, Operator tree) throws Exception// must
-	// return
-	// schema.table
-	// -
-	// must
-	// accept
-	// qualified
-	// or
-	// unqualified
-	// col
+	public static int getTypeForTable(final String schema, final String table, final Transaction tx) throws Exception
 	{
-		ColAndTree cat = new ColAndTree(col, tree);
-		String s = gtfcCache.get(cat);
-		if (s != null)
+		final boolean haveLock = tableMetaLock.tryLock();
+		if (haveLock)
 		{
-			return s;
+			final Integer result = tableTypeCache.get(schema + "." + table);
+			if (result != null)
+			{
+				tableMetaLock.unlock();
+				return result;
+			}
 		}
 
-		ArrayList<TableScanOperator> tables = new ArrayList<TableScanOperator>();
-		getTables(tree, new HashSet<Operator>(), tables);
-		if (isQualified(col))
+		final int result = PlanCacheManager.getTableType().setParms(schema, table).execute(tx);
+		if (haveLock)
 		{
-			String qual = getQual(col);
-			String c = getCol(col);
-			String retSchema = null;
-			String retTable = null;
-			for (TableScanOperator t : tables)
-			{
-				if (containsCol(t, c))
-				{
-					if (tableIs(t, qual) || aliasIs(t, qual))
-					{
-						if (retSchema == null)
-						{
-							retSchema = t.getSchema();
-							retTable = t.getTable();
-						}
-						else
-						{
-							if (!retSchema.equals(t.getSchema()) || !retTable.equals(t.getTable()))
-							{
-								throw new Exception("Ambiguous column " + col);
-							}
-						}
-					}
-				}
-			}
-
-			if (retSchema != null)
-			{
-				String retval = retSchema + "." + retTable;
-				gtfcCache.put(cat, retval);
-				return retval;
-			}
-			else
-			{
-				return null;
-			}
+			tableTypeCache.put(schema + "." + table, result);
+			tableMetaLock.unlock();
 		}
-		else
-		{
-			String c = getCol(col);
-			String retSchema = null;
-			String retTable = null;
-			for (TableScanOperator t : tables)
-			{
-				if (containsCol(t, c))
-				{
-					if (retSchema == null)
-					{
-						retSchema = t.getSchema();
-						retTable = t.getTable();
-					}
-					else
-					{
-						if (!retSchema.equals(t.getSchema()) || !retTable.equals(t.getTable()))
-						{
-							throw new Exception("Ambiguous column " + col);
-						}
-					}
-				}
-			}
-
-			if (retSchema != null)
-			{
-				String retval = retSchema + "." + retTable;
-				gtfcCache.put(cat, retval);
-				return retval;
-			}
-			else
-			{
-				return null;
-			}
-		}
+		return result;
 	}
 
-	public int getTypeForTable(String schema, String table, Transaction tx) throws Exception
+	public static ArrayList<ArrayList<String>> getTypes(final ArrayList<String> indexes, final Transaction tx) throws Exception
 	{
-		return PlanCacheManager.getTableType().setParms(schema, table).execute(tx);
-	}
-
-	public ArrayList<ArrayList<String>> getTypes(ArrayList<String> indexes, Transaction tx) throws Exception
-	{
-		ArrayList<ArrayList<String>> retval = new ArrayList<ArrayList<String>>();
-		for (String index : indexes)
+		final ArrayList<ArrayList<String>> retval = new ArrayList<ArrayList<String>>();
+		for (final String index : indexes)
 		{
-			String schema = index.substring(0, index.indexOf('.'));
-			String name = index.substring(schema.length() + 1, index.indexOf('.', schema.length() + 1));
+			final String schema = index.substring(0, index.indexOf('.'));
+			final String name = index.substring(schema.length() + 1, index.indexOf('.', schema.length() + 1));
 			ArrayList<Object> rs = getTypesCache.get(schema + "." + name);
 			if (rs == null)
 			{
 				rs = PlanCacheManager.getTypes().setParms(schema, name).execute(tx);
 				getTypesCache.put(schema + "." + name, rs);
 			}
-			ArrayList<String> retRow = new ArrayList<String>();
-			for (Object o : rs)
+			final ArrayList<String> retRow = new ArrayList<String>();
+			for (final Object o : rs)
 			{
 				if (!(o instanceof DataEndMarker))
 				{
-					ArrayList<Object> row = (ArrayList<Object>)o;
+					final ArrayList<Object> row = (ArrayList<Object>)o;
 					String type = (String)row.get(0);
 					if (type.equals("BIGINT"))
 					{
@@ -2629,21 +1921,21 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	public ArrayList<Boolean> getUnique(String schema, String table, Transaction tx) throws Exception
+	public static ArrayList<Boolean> getUnique(final String schema, final String table, final Transaction tx) throws Exception
 	{
-		ArrayList<Boolean> retval = new ArrayList<Boolean>();
+		final ArrayList<Boolean> retval = new ArrayList<Boolean>();
 		ArrayList<Object> rs = getUniqueCache.get(schema + "." + table);
 		if (rs == null)
 		{
 			rs = PlanCacheManager.getUnique().setParms(schema, table).execute(tx);
 			getUniqueCache.put(schema + "." + table, rs);
 		}
-		for (Object o : rs)
+		for (final Object o : rs)
 		{
 			if (!(o instanceof DataEndMarker))
 			{
-				ArrayList<Object> row = (ArrayList<Object>)o;
-				boolean unique = (((String)row.get(1)).equals("Y"));
+				final ArrayList<Object> row = (ArrayList<Object>)o;
+				final boolean unique = (((String)row.get(1)).equals("Y"));
 				retval.add(unique);
 			}
 		}
@@ -2651,7 +1943,7 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	public ArrayList<Index> getUniqueIndexesForTable(String schema, String table, Transaction tx) throws Exception
+	public static ArrayList<Index> getUniqueIndexesForTable(final String schema, final String table, final Transaction tx) throws Exception
 	{
 		final ArrayList<Index> retval = new ArrayList<Index>();
 		ArrayList<Object> rs = getUniqueIndexesCache.get(schema + "." + table);
@@ -2660,11 +1952,11 @@ public final class MetaData implements Serializable
 			rs = PlanCacheManager.getUniqueIndexes().setParms(schema, table).execute(tx);
 			getUniqueIndexesCache.put(schema + "." + table, rs);
 		}
-		for (Object o : rs)
+		for (final Object o : rs)
 		{
 			if (!(o instanceof DataEndMarker))
 			{
-				ArrayList<Object> row = (ArrayList<Object>)o;
+				final ArrayList<Object> row = (ArrayList<Object>)o;
 				ArrayList<Object> rs2 = getKeysCache.get(schema + "." + row.get(0));
 				if (rs2 == null)
 				{
@@ -2672,10 +1964,10 @@ public final class MetaData implements Serializable
 					getKeysCache.put(schema + "." + row.get(0), rs2);
 				}
 				// tabname, colname
-				ArrayList<String> keys = new ArrayList<String>();
-				for (Object o2 : rs2)
+				final ArrayList<String> keys = new ArrayList<String>();
+				for (final Object o2 : rs2)
 				{
-					ArrayList<Object> row2 = (ArrayList<Object>)o2;
+					final ArrayList<Object> row2 = (ArrayList<Object>)o2;
 					keys.add(row2.get(0) + "." + row2.get(1));
 				}
 
@@ -2685,10 +1977,10 @@ public final class MetaData implements Serializable
 					rs2 = PlanCacheManager.getTypes().setParms(schema, (String)row.get(0)).execute(tx);
 					getTypesCache.put(schema + "." + row.get(0), rs2);
 				}
-				ArrayList<String> types = new ArrayList<String>();
-				for (Object o2 : rs2)
+				final ArrayList<String> types = new ArrayList<String>();
+				for (final Object o2 : rs2)
 				{
-					ArrayList<Object> row2 = (ArrayList<Object>)o2;
+					final ArrayList<Object> row2 = (ArrayList<Object>)o2;
 					String type = (String)row2.get(0);
 					if (type.equals("BIGINT"))
 					{
@@ -2711,13 +2003,13 @@ public final class MetaData implements Serializable
 					rs2 = PlanCacheManager.getOrders().setParms(schema, (String)row.get(0)).execute(tx);
 					getOrdersCache.put(schema + "." + row.get(0), rs2);
 				}
-				ArrayList<Boolean> orders = new ArrayList<Boolean>();
-				for (Object o2 : rs2)
+				final ArrayList<Boolean> orders = new ArrayList<Boolean>();
+				for (final Object o2 : rs2)
 				{
 					if (!(o2 instanceof DataEndMarker))
 					{
-						ArrayList<Object> row2 = (ArrayList<Object>)o2;
-						String ord = (String)row2.get(0);
+						final ArrayList<Object> row2 = (ArrayList<Object>)o2;
+						final String ord = (String)row2.get(0);
 						boolean order = true;
 						if (!ord.equals("A"))
 						{
@@ -2734,527 +2026,61 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	public String getViewSQL(String schema, String name, Transaction tx) throws Exception
+	public static String getViewSQL(final String schema, final String name, final Transaction tx) throws Exception
 	{
 		return PlanCacheManager.getViewSQL().setParms(schema, name).execute(tx);
 	}
 
-	public double likelihood(ArrayList<Filter> filters, HashMap<String, Double> generated, Transaction tx, Operator tree) throws Exception
+	public static ArrayList<Integer> getWorkerNodes()
 	{
-		double sum = 0;
-
-		for (final Filter filter : filters)
-		{
-			sum += likelihood(filter, generated, tx, tree);
-		}
-
-		if (sum > 1)
-		{
-			sum = 1;
-		}
-
-		return sum;
+		return (ArrayList<Integer>)workers.clone();
 	}
 
-	public double likelihood(ArrayList<Filter> filters, RootOperator op, Transaction tx, Operator tree) throws Exception
+	public static boolean isMyIP(final String host) throws Exception
 	{
-		return likelihood(filters, op.getGenerated(), tx, tree);
+		return isThisMyIpAddress(InetAddress.getByName(host));
 	}
 
-	// public static int getNumNodes(Transaction tx) throws Exception
-	// {
-	// return PlanCacheManager.getCountWorkerNodes().setParms().execute(tx);
-	// }
-
-	public double likelihood(ArrayList<Filter> filters, Transaction tx, Operator tree) throws Exception
+	public static boolean isThisMyIpAddress(final InetAddress addr)
 	{
-		double sum = 0;
-
-		for (final Filter filter : filters)
+		// Check if the address is a valid special local or loop back
+		if (addr.isAnyLocalAddress() || addr.isLoopbackAddress())
 		{
-			sum += likelihood(filter, tx, tree);
+			return true;
 		}
 
-		if (sum > 1)
+		// Check if the address is defined on any interface
+		try
 		{
-			sum = 1;
+			return NetworkInterface.getByInetAddress(addr) != null;
 		}
-
-		return sum;
+		catch (final SocketException e)
+		{
+			return false;
+		}
 	}
 
-	// likelihood of a row directly out of the table passing this test
-	public double likelihood(Filter filter, HashMap<String, Double> generated, Transaction tx, Operator tree) throws Exception
+	public static int myCoordNum() throws Exception
 	{
-		long leftCard = 1;
-		long rightCard = 1;
-
-		if (filter instanceof ConstantFilter)
+		if (HRDBMSWorker.type == HRDBMSWorker.TYPE_WORKER)
 		{
-			final double retval = ((ConstantFilter)filter).getLikelihood();
-			return retval;
+			throw new Exception("Not a coordinator");
 		}
 
-		if (filter.alwaysTrue())
-		{
-			return 1;
-		}
-
-		if (filter.alwaysFalse())
-		{
-			return 0;
-		}
-
-		if (filter.leftIsColumn())
-		{
-			String left = filter.leftColumn();
-			String leftST = getTableForCol(left, tree);
-			if (leftST == null)
-			{
-				leftCard = 1000000;
-			}
-			else
-			{
-				String leftSchema = leftST.substring(0, leftST.indexOf('.'));
-				String leftTable = leftST.substring(leftST.indexOf('.') + 1);
-				String leftCol = left.substring(left.indexOf('.') + 1);
-				leftCard = getCard(leftSchema, leftTable, leftCol, generated, tx);
-			}
-		}
-
-		if (filter.rightIsColumn())
-		{
-			// figure out number of possible values for right side
-			String right = filter.rightColumn();
-			String rightST = getTableForCol(right, tree);
-			if (rightST == null)
-			{
-				rightCard = 1000000;
-			}
-			else
-			{
-				String rightSchema = rightST.substring(0, rightST.indexOf('.'));
-				String rightTable = rightST.substring(rightST.indexOf('.') + 1);
-				String rightCol = right.substring(right.indexOf('.') + 1);
-				rightCard = getCard(rightSchema, rightTable, rightCol, generated, tx);
-			}
-		}
-
-		final String op = filter.op();
-
-		if (op.equals("E"))
-		{
-			if (filter.leftIsColumn() && filter.rightIsColumn())
-			{
-				final double retval = 1.0 / smaller(leftCard, rightCard);
-				return retval;
-			}
-
-			final double retval = 1.0 / bigger(leftCard, rightCard);
-			return retval;
-		}
-
-		if (op.equals("NE"))
-		{
-			if (filter.leftIsColumn() && filter.rightIsColumn())
-			{
-				final double retval = 1.0 - (1.0 / smaller(leftCard, rightCard));
-				return retval;
-			}
-
-			final double retval = 1.0 - 1.0 / bigger(leftCard, rightCard);
-			return retval;
-		}
-
-		if (op.equals("L") || op.equals("LE"))
-		{
-			if (filter.leftIsColumn() && filter.rightIsColumn())
-			{
-				return 0.5;
-			}
-
-			if (filter.leftIsColumn())
-			{
-				if (filter.rightIsNumber())
-				{
-					final double right = filter.getRightNumber();
-					final String left = filter.leftColumn();
-					final double retval = percentBelow(left, right, tx, tree);
-					return retval;
-				}
-				else if (filter.rightIsDate())
-				{
-					final MyDate right = filter.getRightDate();
-					final String left = filter.leftColumn();
-					final double retval = percentBelow(left, right, tx, tree);
-					return retval;
-				}
-				else
-				{
-					// string
-					final String right = filter.getRightString();
-					final String left = filter.leftColumn();
-					final double retval = percentBelow(left, right, tx, tree);
-					return retval;
-				}
-			}
-			else
-			{
-				if (filter.leftIsNumber())
-				{
-					final double left = filter.getLeftNumber();
-					final String right = filter.rightColumn();
-					final double retval = percentAbove(right, left, tx, tree);
-					return retval;
-				}
-				else if (filter.leftIsDate())
-				{
-					final MyDate left = filter.getLeftDate();
-					final String right = filter.rightColumn();
-					final double retval = percentAbove(right, left, tx, tree);
-					return retval;
-				}
-				else
-				{
-					// string
-					final String left = filter.getLeftString();
-					final String right = filter.rightColumn();
-					final double retval = percentAbove(right, left, tx, tree);
-					return retval;
-				}
-			}
-		}
-
-		if (op.equals("G") || op.equals("GE"))
-		{
-			if (filter.leftIsColumn() && filter.rightIsColumn())
-			{
-				return 0.5;
-			}
-
-			if (filter.leftIsColumn())
-			{
-				if (filter.rightIsNumber())
-				{
-					final double right = filter.getRightNumber();
-					final String left = filter.leftColumn();
-					final double retval = percentAbove(left, right, tx, tree);
-					return retval;
-				}
-				else if (filter.rightIsDate())
-				{
-					final MyDate right = filter.getRightDate();
-					final String left = filter.leftColumn();
-					final double retval = percentAbove(left, right, tx, tree);
-					return retval;
-				}
-				else
-				{
-					// string
-					final String right = filter.getRightString();
-					final String left = filter.leftColumn();
-					final double retval = percentAbove(left, right, tx, tree);
-					return retval;
-				}
-			}
-			else
-			{
-				if (filter.leftIsNumber())
-				{
-					final double left = filter.getLeftNumber();
-					final String right = filter.rightColumn();
-					final double retval = percentBelow(right, left, tx, tree);
-					return retval;
-				}
-				else if (filter.leftIsDate())
-				{
-					final MyDate left = filter.getLeftDate();
-					final String right = filter.rightColumn();
-					final double retval = percentBelow(right, left, tx, tree);
-					return retval;
-				}
-				else
-				{
-					// string
-					final String left = filter.getLeftString();
-					final String right = filter.rightColumn();
-					final double retval = percentBelow(right, left, tx, tree);
-					return retval;
-				}
-			}
-		}
-
-		if (op.equals("LI"))
-		{
-			return 0.05;
-		}
-
-		if (op.equals("NL"))
-		{
-			return 0.95;
-		}
-
-		throw new Exception("Unknown operator in likelihood()");
+		return myNode;
 	}
 
-	public double likelihood(Filter filter, RootOperator op, Transaction tx, Operator tree) throws Exception
+	public static int myNodeNum()
 	{
-		return likelihood(filter, op.getGenerated(), tx, tree);
+		return myNode;
 	}
 
-	public double likelihood(Filter filter, Transaction tx, Operator tree) throws Exception
+	public static void populateIndex(final String schema, final String index, final String table, final Transaction tx, final HashMap<String, Integer> cols2Pos) throws Exception
 	{
-		long leftCard = 1;
-		long rightCard = 1;
-		final HashMap<String, Double> generated = new HashMap<String, Double>();
-
-		if (filter instanceof ConstantFilter)
-		{
-			((ConstantFilter)filter).getLikelihood();
-		}
-
-		if (filter.alwaysTrue())
-		{
-			return 1;
-		}
-
-		if (filter.alwaysFalse())
-		{
-			return 0;
-		}
-
-		if (filter.leftIsColumn())
-		{
-			String left = filter.leftColumn();
-			String leftST = getTableForCol(left, tree);
-			if (leftST == null)
-			{
-				leftCard = 1000000;
-			}
-			else
-			{
-				String leftSchema = leftST.substring(0, leftST.indexOf('.'));
-				String leftTable = leftST.substring(leftST.indexOf('.') + 1);
-				String leftCol = left.substring(left.indexOf('.') + 1);
-				leftCard = getCard(leftSchema, leftTable, leftCol, generated, tx);
-			}
-		}
-
-		if (filter.rightIsColumn())
-		{
-			// figure out number of possible values for right side
-			String right = filter.rightColumn();
-			String rightST = getTableForCol(right, tree);
-			if (rightST == null)
-			{
-				rightCard = 1000000;
-			}
-			else
-			{
-				String rightSchema = rightST.substring(0, rightST.indexOf('.'));
-				String rightTable = rightST.substring(rightST.indexOf('.') + 1);
-				String rightCol = right.substring(right.indexOf('.') + 1);
-				rightCard = getCard(rightSchema, rightTable, rightCol, generated, tx);
-			}
-		}
-
-		final String op = filter.op();
-
-		if (op.equals("E"))
-		{
-			if (filter.leftIsColumn() && filter.rightIsColumn())
-			{
-				final double retval = 1.0 / smaller(leftCard, rightCard);
-				return retval;
-			}
-
-			final double retval = 1.0 / bigger(leftCard, rightCard);
-			return retval;
-		}
-
-		if (op.equals("NE"))
-		{
-			if (filter.leftIsColumn() && filter.rightIsColumn())
-			{
-				final double retval = 1.0 - (1.0 / smaller(leftCard, rightCard));
-				return retval;
-			}
-
-			final double retval = 1.0 - 1.0 / bigger(leftCard, rightCard);
-			return retval;
-		}
-
-		if (op.equals("L") || op.equals("LE"))
-		{
-			if (filter.leftIsColumn() && filter.rightIsColumn())
-			{
-				return 0.5;
-			}
-
-			if (filter.leftIsColumn())
-			{
-				if (filter.rightIsNumber())
-				{
-					final double right = filter.getRightNumber();
-					final String left = filter.leftColumn();
-					final double retval = percentBelow(left, right, tx, tree);
-					return retval;
-				}
-				else if (filter.rightIsDate())
-				{
-					final MyDate right = filter.getRightDate();
-					final String left = filter.leftColumn();
-					final double retval = percentBelow(left, right, tx, tree);
-					return retval;
-				}
-				else
-				{
-					// string
-					final String right = filter.getRightString();
-					final String left = filter.leftColumn();
-					final double retval = percentBelow(left, right, tx, tree);
-					return retval;
-				}
-			}
-			else
-			{
-				if (filter.leftIsNumber())
-				{
-					final double left = filter.getLeftNumber();
-					final String right = filter.rightColumn();
-					final double retval = percentAbove(right, left, tx, tree);
-					return retval;
-				}
-				else if (filter.leftIsDate())
-				{
-					final MyDate left = filter.getLeftDate();
-					final String right = filter.rightColumn();
-					final double retval = percentAbove(right, left, tx, tree);
-					return retval;
-				}
-				else
-				{
-					// string
-					final String left = filter.getLeftString();
-					final String right = filter.rightColumn();
-					final double retval = percentAbove(right, left, tx, tree);
-					return retval;
-				}
-			}
-		}
-
-		if (op.equals("G") || op.equals("GE"))
-		{
-			if (filter.leftIsColumn() && filter.rightIsColumn())
-			{
-				return 0.5;
-			}
-
-			if (filter.leftIsColumn())
-			{
-				if (filter.rightIsNumber())
-				{
-					final double right = filter.getRightNumber();
-					final String left = filter.leftColumn();
-					final double retval = percentAbove(left, right, tx, tree);
-					return retval;
-				}
-				else if (filter.rightIsDate())
-				{
-					final MyDate right = filter.getRightDate();
-					final String left = filter.leftColumn();
-					final double retval = percentAbove(left, right, tx, tree);
-					return retval;
-				}
-				else
-				{
-					// string
-					final String right = filter.getRightString();
-					final String left = filter.leftColumn();
-					final double retval = percentAbove(left, right, tx, tree);
-					return retval;
-				}
-			}
-			else
-			{
-				if (filter.leftIsNumber())
-				{
-					final double left = filter.getLeftNumber();
-					final String right = filter.rightColumn();
-					final double retval = percentBelow(right, left, tx, tree);
-					return retval;
-				}
-				else if (filter.leftIsDate())
-				{
-					final MyDate left = filter.getLeftDate();
-					final String right = filter.rightColumn();
-					final double retval = percentBelow(right, left, tx, tree);
-					return retval;
-				}
-				else
-				{
-					// string
-					final String left = filter.getLeftString();
-					final String right = filter.rightColumn();
-					final double retval = percentBelow(right, left, tx, tree);
-					return retval;
-				}
-			}
-		}
-
-		if (op.equals("LI"))
-		{
-			return 0.05;
-		}
-
-		if (op.equals("NL"))
-		{
-			return 0.95;
-		}
-
-		throw new Exception("Unknown operator in likelihood()");
-	}
-
-	public double likelihood(HashSet<HashMap<Filter, Filter>> hshm, HashMap<String, Double> generated, Transaction tx, Operator tree) throws Exception
-	{
-		final ArrayList<Double> ands = new ArrayList<Double>(hshm.size());
-		for (final HashMap<Filter, Filter> ored : hshm)
-		{
-			double sum = 0;
-
-			for (final Filter filter : ored.keySet())
-			{
-				sum += likelihood(filter, generated, tx, tree);
-			}
-
-			if (sum > 1)
-			{
-				sum = 1;
-			}
-
-			ands.add(sum);
-		}
-
-		double retval = 1;
-		for (final double x : ands)
-		{
-			retval *= x;
-		}
-
-		return retval;
-	}
-
-	public double likelihood(HashSet<HashMap<Filter, Filter>> hshm, RootOperator op, Transaction tx, Operator tree) throws Exception
-	{
-		return likelihood(hshm, op.getGenerated(), tx, tree);
-	}
-
-	public void populateIndex(String schema, String index, String table, Transaction tx, HashMap<String, Integer> cols2Pos) throws Exception
-	{
-		String iFn = schema + "." + index + ".indx";
-		String tFn = schema + "." + table + ".tbl";
-		ArrayList<Integer> nodes = getNodesForTable(schema, table, tx);
-		ArrayList<Integer> devices = MetaData.getDevicesForTable(schema, table, tx);
+		final String iFn = schema + "." + index + ".indx";
+		final String tFn = schema + "." + table + ".tbl";
+		final ArrayList<Integer> nodes = getNodesForTable(schema, table, tx);
+		final ArrayList<Integer> devices = MetaData.getDevicesForTable(schema, table, tx);
 		ArrayList<Object> rs = getKeysCache.get(schema + "." + index);
 		if (rs == null)
 		{
@@ -3262,12 +2088,12 @@ public final class MetaData implements Serializable
 			getKeysCache.put(schema + "." + index, rs);
 		}
 		// tabname, colname
-		ArrayList<String> keys = new ArrayList<String>();
-		for (Object o : rs)
+		final ArrayList<String> keys = new ArrayList<String>();
+		for (final Object o : rs)
 		{
 			if (!(o instanceof DataEndMarker))
 			{
-				ArrayList<Object> row = (ArrayList<Object>)o;
+				final ArrayList<Object> row = (ArrayList<Object>)o;
 				keys.add(row.get(0) + "." + row.get(1));
 			}
 		}
@@ -3278,12 +2104,12 @@ public final class MetaData implements Serializable
 			rs = PlanCacheManager.getTypes().setParms(schema, index).execute(tx);
 			getTypesCache.put(schema + "." + index, rs);
 		}
-		ArrayList<String> types = new ArrayList<String>();
-		for (Object o : rs)
+		final ArrayList<String> types = new ArrayList<String>();
+		for (final Object o : rs)
 		{
 			if (!(o instanceof DataEndMarker))
 			{
-				ArrayList<Object> row = (ArrayList<Object>)o;
+				final ArrayList<Object> row = (ArrayList<Object>)o;
 				String type = (String)row.get(0);
 				if (type.equals("BIGINT"))
 				{
@@ -3307,13 +2133,13 @@ public final class MetaData implements Serializable
 			rs = PlanCacheManager.getOrders().setParms(schema, index).execute(tx);
 			getOrdersCache.put(schema + "." + index, rs);
 		}
-		ArrayList<Boolean> orders = new ArrayList<Boolean>();
-		for (Object o : rs)
+		final ArrayList<Boolean> orders = new ArrayList<Boolean>();
+		for (final Object o : rs)
 		{
 			if (!(o instanceof DataEndMarker))
 			{
-				ArrayList<Object> row = (ArrayList<Object>)o;
-				String ord = (String)row.get(0);
+				final ArrayList<Object> row = (ArrayList<Object>)o;
+				final String ord = (String)row.get(0);
 				boolean order = true;
 				if (!ord.equals("A"))
 				{
@@ -3323,21 +2149,21 @@ public final class MetaData implements Serializable
 			}
 		}
 
-		ArrayList<Integer> poses = new ArrayList<Integer>();
-		for (String col : keys)
+		final ArrayList<Integer> poses = new ArrayList<Integer>();
+		for (final String col : keys)
 		{
 			poses.add(cols2Pos.get(col));
 		}
 
-		ArrayList<Object> tree = makeTree(nodes);
-		ArrayList<Socket> sockets = new ArrayList<Socket>();
-		int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
+		final ArrayList<Object> tree = makeTree(nodes);
+		final ArrayList<Socket> sockets = new ArrayList<Socket>();
+		final int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 
-		TreeMap<Integer, String> pos2Col = cols2PosFlip(cols2Pos);
-		HashMap<String, String> cols2Types = getCols2TypesForTable(schema, table, tx);
-		int type = getTypeForTable(schema, table, tx);
+		final TreeMap<Integer, String> pos2Col = cols2PosFlip(cols2Pos);
+		final HashMap<String, String> cols2Types = getCols2TypesForTable(schema, table, tx);
+		final int type = getTypeForTable(schema, table, tx);
 
-		for (Object o : tree)
+		for (final Object o : tree)
 		{
 			ArrayList<Object> list;
 			if (o instanceof Integer)
@@ -3357,7 +2183,7 @@ public final class MetaData implements Serializable
 			}
 
 			Socket sock;
-			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
+			final String hostname = getHostNameForNode((Integer)obj, tx);
 			// sock = new Socket(hostname,
 			// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			sock = new Socket();
@@ -3365,7 +2191,7 @@ public final class MetaData implements Serializable
 			sock.setSendBufferSize(4194304);
 			sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 			OutputStream out = sock.getOutputStream();
-			byte[] outMsg = "POPINDEX        ".getBytes(StandardCharsets.UTF_8);
+			final byte[] outMsg = "POPINDEX        ".getBytes(StandardCharsets.UTF_8);
 			outMsg[8] = 0;
 			outMsg[9] = 0;
 			outMsg[10] = 0;
@@ -3379,7 +2205,7 @@ public final class MetaData implements Serializable
 			out.write(stringToBytes(iFn));
 			out.write(stringToBytes(tFn));
 			out.write(intToBytes(type));
-			ObjectOutputStream objOut = new ObjectOutputStream(out);
+			final ObjectOutputStream objOut = new ObjectOutputStream(out);
 			objOut.writeObject(devices);
 			objOut.writeObject(keys);
 			objOut.writeObject(types);
@@ -3403,23 +2229,28 @@ public final class MetaData implements Serializable
 			}
 		}
 
-		for (Socket sock : sockets)
+		for (final Socket sock : sockets)
 		{
-			OutputStream out = sock.getOutputStream();
+			final OutputStream out = sock.getOutputStream();
 			getConfirmation(sock);
 			out.close();
 			sock.close();
 		}
 	}
 
-	public void runstats(String schema, String table, Transaction tx) throws Exception
+	public static void removeDefaultSchema(final ConnectionWorker conn)
 	{
-		Transaction tTx = new Transaction(Transaction.ISOLATION_UR);
-		int tableID = PlanCacheManager.getTableID().setParms(schema, table).execute(tTx);
-		TableStatsThread tThread = new TableStatsThread(schema, table, tableID, tTx);
-		TreeMap<Integer, String> pos2Col = getPos2ColForTable(schema, table, tTx);
-		ArrayList<RunstatsThread> threads = new ArrayList<RunstatsThread>();
-		ArrayList<Transaction> cTxs = new ArrayList<Transaction>();
+		defaultSchemas.remove(conn);
+	}
+
+	public static void runstats(final String schema, final String table, final Transaction tx) throws Exception
+	{
+		final Transaction tTx = new Transaction(Transaction.ISOLATION_UR);
+		final int tableID = PlanCacheManager.getTableID().setParms(schema, table).execute(tTx);
+		final TableStatsThread tThread = new TableStatsThread(schema, table, tableID, tTx);
+		final TreeMap<Integer, String> pos2Col = getPos2ColForTable(schema, table, tTx);
+		final ArrayList<RunstatsThread> threads = new ArrayList<RunstatsThread>();
+		final ArrayList<Transaction> cTxs = new ArrayList<Transaction>();
 
 		tThread.start();
 		tThread.join();
@@ -3429,36 +2260,36 @@ public final class MetaData implements Serializable
 			allOK = false;
 		}
 
-		ArrayList<Transaction> cdTxs = new ArrayList<Transaction>();
+		final ArrayList<Transaction> cdTxs = new ArrayList<Transaction>();
 		// if (allOK)
 		// {
 		int i = 0;
 		final int size = pos2Col.size();
 		while (i < size)
 		{
-			Transaction ctx = new Transaction(Transaction.ISOLATION_UR);
+			final Transaction ctx = new Transaction(Transaction.ISOLATION_UR);
 			cTxs.add(ctx);
 			i++;
 		}
 
-		long card = PlanCacheManager.getTableCard().setParms(schema, table).execute(cTxs.get(0));
+		final long card = PlanCacheManager.getTableCard().setParms(schema, table).execute(cTxs.get(0));
 
 		// indexes
-		ArrayList<Transaction> iTxs = new ArrayList<Transaction>();
-		ArrayList<Object> rs = PlanCacheManager.getIndexIDsForTable().setParms(schema, table).execute(tTx);
-		HashMap<String, Integer> colToIndex = new HashMap<String, Integer>();
+		final ArrayList<Transaction> iTxs = new ArrayList<Transaction>();
+		final ArrayList<Object> rs = PlanCacheManager.getIndexIDsForTable().setParms(schema, table).execute(tTx);
+		final HashMap<String, Integer> colToIndex = new HashMap<String, Integer>();
 		int iThreads = 0;
-		for (Object o : rs)
+		for (final Object o : rs)
 		{
 			if (o instanceof DataEndMarker)
 			{
 				continue;
 			}
-			ArrayList<Object> row = (ArrayList<Object>)o;
-			int indexID = (Integer)row.get(0);
-			ArrayList<Object> rs2 = PlanCacheManager.getKeysByID().setParms(tableID, indexID).execute(tTx);
-			ArrayList<String> keys = new ArrayList<String>();
-			for (Object o2 : rs2)
+			final ArrayList<Object> row = (ArrayList<Object>)o;
+			final int indexID = (Integer)row.get(0);
+			final ArrayList<Object> rs2 = PlanCacheManager.getKeysByID().setParms(tableID, indexID).execute(tTx);
+			final ArrayList<String> keys = new ArrayList<String>();
+			for (final Object o2 : rs2)
 			{
 				if (o2 instanceof DataEndMarker)
 				{
@@ -3467,7 +2298,7 @@ public final class MetaData implements Serializable
 				keys.add((String)((ArrayList<Object>)o2).get(0));
 			}
 
-			Transaction itx = new Transaction(Transaction.ISOLATION_UR);
+			final Transaction itx = new Transaction(Transaction.ISOLATION_UR);
 			threads.add(new IndexStatsThread(schema, table, keys, tableID, indexID, itx, card));
 			if (keys.size() == 0)
 			{
@@ -3480,7 +2311,7 @@ public final class MetaData implements Serializable
 		i = 0;
 		while (i < size)
 		{
-			Integer indexID = colToIndex.get(pos2Col.get(i));
+			final Integer indexID = colToIndex.get(pos2Col.get(i));
 			if (indexID != null)
 			{
 				threads.add(new ColStatsThread(schema, table, pos2Col.get(i), tableID, i, cTxs.get(i), card, indexID));
@@ -3496,7 +2327,7 @@ public final class MetaData implements Serializable
 		int j = iThreads;
 		while (i < size)
 		{
-			Transaction ctx = new Transaction(Transaction.ISOLATION_UR);
+			final Transaction ctx = new Transaction(Transaction.ISOLATION_UR);
 			cdTxs.add(ctx);
 			String col = pos2Col.get(i);
 			if (col.contains("."))
@@ -3508,9 +2339,9 @@ public final class MetaData implements Serializable
 			j += 2;
 		}
 
-		ArrayList<RunstatsThread> submitted = new ArrayList<RunstatsThread>();
+		final ArrayList<RunstatsThread> submitted = new ArrayList<RunstatsThread>();
 		HRDBMSWorker.logger.debug("THREADS:" + threads);
-		for (RunstatsThread thread : threads)
+		for (final RunstatsThread thread : threads)
 		{
 			thread.start();
 			submitted.add(thread);
@@ -3520,7 +2351,7 @@ public final class MetaData implements Serializable
 				{
 					RunstatsThread thread2 = null;
 					int x = 0;
-					for (RunstatsThread thread3 : submitted)
+					for (final RunstatsThread thread3 : submitted)
 					{
 						if (thread3.isDone())
 						{
@@ -3550,7 +2381,7 @@ public final class MetaData implements Serializable
 			}
 		}
 
-		for (RunstatsThread thread : submitted)
+		for (final RunstatsThread thread : submitted)
 		{
 			thread.join();
 			if (!thread.getOK())
@@ -3588,17 +2419,33 @@ public final class MetaData implements Serializable
 		}
 	}
 
-	public boolean verifyColExistence(String schema, String table, String col, Transaction tx) throws Exception
+	public static void setDefaultSchema(final ConnectionWorker conn, final String schema)
 	{
-		HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
+		defaultSchemas.put(conn, schema);
+	}
+
+	public static boolean verifyColExistence(final String schema, final String table, final String col, final Transaction tx) throws Exception
+	{
+		final HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
 		return cols2Pos.containsKey(table + "." + col);
 	}
 
-	public boolean verifyInsert(String schema, String table, Operator op, Transaction tx) throws Exception
+	public static boolean verifyIndexExistence(final String schema, final String index, final Transaction tx) throws Exception
 	{
-		TreeMap<Integer, String> catalogPos2Col = getPos2ColForTable(schema, table, tx);
-		HashMap<String, String> catalogCols2Types = new MetaData().getCols2TypesForTable(schema, table, tx);
-		HashMap<Integer, String> catalogPos2Types = new HashMap<Integer, String>();
+		final Object o = PlanCacheManager.getVerifyIndexExist().setParms(schema, index).execute(tx);
+		if (o instanceof DataEndMarker)
+		{
+			return false;
+		}
+
+		return true;
+	}
+
+	public static boolean verifyInsert(final String schema, final String table, final Operator op, final Transaction tx) throws Exception
+	{
+		final TreeMap<Integer, String> catalogPos2Col = getPos2ColForTable(schema, table, tx);
+		final HashMap<String, String> catalogCols2Types = getCols2TypesForTable(schema, table, tx);
+		final HashMap<Integer, String> catalogPos2Types = new HashMap<Integer, String>();
 		int i = 0;
 		final int s1 = catalogPos2Col.size();
 		while (i < s1)
@@ -3607,7 +2454,7 @@ public final class MetaData implements Serializable
 			i++;
 		}
 
-		HashMap<Integer, String> opPos2Types = new HashMap<Integer, String>();
+		final HashMap<Integer, String> opPos2Types = new HashMap<Integer, String>();
 		i = 0;
 		final int s2 = op.getPos2Col().size();
 		while (i < s2)
@@ -3625,8 +2472,8 @@ public final class MetaData implements Serializable
 		final int s3 = opPos2Types.size();
 		while (i < s3)
 		{
-			String opType = opPos2Types.get(i);
-			String catalogType = catalogPos2Types.get(i);
+			final String opType = opPos2Types.get(i);
+			final String catalogType = catalogPos2Types.get(i);
 
 			if (opType.equals("CHAR") && !opType.equals(catalogType))
 			{
@@ -3649,21 +2496,42 @@ public final class MetaData implements Serializable
 		return true;
 	}
 
-	public boolean verifyTableExistence(String schema, String name, Transaction tx) throws Exception
+	public static boolean verifyTableExistence(final String schema, final String name, final Transaction tx) throws Exception
 	{
-		Object o = PlanCacheManager.getVerifyTableExist().setParms(schema, name).execute(tx);
+		final boolean haveLock = tableMetaLock.tryLock();
+		if (haveLock)
+		{
+			final Boolean result = tableExistenceCache.get(schema + "." + name);
+			if (result != null)
+			{
+				tableMetaLock.unlock();
+				return result;
+			}
+		}
+
+		final Object o = PlanCacheManager.getVerifyTableExist().setParms(schema, name).execute(tx);
 		if (o instanceof DataEndMarker)
 		{
+			if (haveLock)
+			{
+				tableExistenceCache.put(schema + "." + name, false);
+				tableMetaLock.unlock();
+			}
 			return false;
 		}
 
+		if (haveLock)
+		{
+			tableExistenceCache.put(schema + "." + name, true);
+			tableMetaLock.unlock();
+		}
 		return true;
 	}
 
-	public boolean verifyUpdate(String schema, String tbl, ArrayList<Column> cols, ArrayList<String> buildList, Operator op, Transaction tx) throws Exception
+	public static boolean verifyUpdate(final String schema, final String tbl, final ArrayList<Column> cols, final ArrayList<String> buildList, final Operator op, final Transaction tx) throws Exception
 	{
 		// verify that all columns are 1 part - parseException
-		for (Column col : cols)
+		for (final Column col : cols)
 		{
 			if (col.getTable() != null)
 			{
@@ -3673,9 +2541,9 @@ public final class MetaData implements Serializable
 		// get data types for cols on this table
 		// make sure that selecting the buildList cols from op in that order
 		// satisfies updates for cols on this table
-		TreeMap<Integer, String> catalogPos2Col = getPos2ColForTable(schema, tbl, tx);
-		HashMap<String, String> catalogCols2Types = new MetaData().getCols2TypesForTable(schema, tbl, tx);
-		HashMap<Integer, String> catalogPos2Types = new HashMap<Integer, String>();
+		final TreeMap<Integer, String> catalogPos2Col = getPos2ColForTable(schema, tbl, tx);
+		final HashMap<String, String> catalogCols2Types = getCols2TypesForTable(schema, tbl, tx);
+		final HashMap<Integer, String> catalogPos2Types = new HashMap<Integer, String>();
 		int i = 0;
 		final int s1 = catalogPos2Col.size();
 		while (i < s1)
@@ -3684,17 +2552,17 @@ public final class MetaData implements Serializable
 			i++;
 		}
 
-		HashMap<Integer, String> opPos2Types = new HashMap<Integer, String>();
+		final HashMap<Integer, String> opPos2Types = new HashMap<Integer, String>();
 		i = 0;
 		final int s2 = catalogPos2Col.size();
 		while (i < s2)
 		{
-			String col = catalogPos2Col.get(i);
+			final String col = catalogPos2Col.get(i);
 			boolean contains = false;
 			int index = -1;
-			String col1 = col.substring(col.indexOf('.') + 1);
+			final String col1 = col.substring(col.indexOf('.') + 1);
 			int j = 0;
-			for (Column col2 : cols)
+			for (final Column col2 : cols)
 			{
 				if (col2.getColumn().equals(col1))
 				{
@@ -3712,7 +2580,7 @@ public final class MetaData implements Serializable
 			else
 			{
 				String toGet = buildList.get(index);
-				String type = op.getCols2Types().get(toGet);
+				final String type = op.getCols2Types().get(toGet);
 				if (type != null)
 				{
 					opPos2Types.put(i, type);
@@ -3724,7 +2592,7 @@ public final class MetaData implements Serializable
 						toGet = toGet.substring(toGet.indexOf('.') + 1);
 					}
 
-					for (Map.Entry entry : op.getCols2Types().entrySet())
+					for (final Map.Entry entry : op.getCols2Types().entrySet())
 					{
 						String temp = (String)entry.getKey();
 						if (temp.contains("."))
@@ -3753,8 +2621,8 @@ public final class MetaData implements Serializable
 		final int s3 = opPos2Types.size();
 		while (i < s3)
 		{
-			String opType = opPos2Types.get(i);
-			String catalogType = catalogPos2Types.get(i);
+			final String opType = opPos2Types.get(i);
+			final String catalogType = catalogPos2Types.get(i);
 
 			if (opType.equals("CHAR") && !opType.equals(catalogType))
 			{
@@ -3777,9 +2645,9 @@ public final class MetaData implements Serializable
 		return true;
 	}
 
-	public boolean verifyViewExistence(String schema, String name, Transaction tx) throws Exception
+	public static boolean verifyViewExistence(final String schema, final String name, final Transaction tx) throws Exception
 	{
-		Object o = PlanCacheManager.getVerifyViewExist().setParms(schema, name).execute(tx);
+		final Object o = PlanCacheManager.getVerifyViewExist().setParms(schema, name).execute(tx);
 		if (o instanceof DataEndMarker)
 		{
 			return false;
@@ -3788,12 +2656,12 @@ public final class MetaData implements Serializable
 		return true;
 	}
 
-	private boolean aliasIs(TableScanOperator t, String q)
+	private static boolean aliasIs(final TableScanOperator t, final String q)
 	{
 		return t.getAlias().equals(q);
 	}
 
-	private long bigger(long x, long y)
+	private static long bigger(final long x, final long y)
 	{
 		if (x >= y)
 		{
@@ -3815,16 +2683,16 @@ public final class MetaData implements Serializable
 		return y;
 	}
 
-	private void buildIndex(String schema, String index, String table, int numCols, boolean unique, Transaction tx) throws Exception
+	private static void buildIndex(final String schema, final String index, final String table, final int numCols, final boolean unique, final Transaction tx) throws Exception
 	{
-		String fn = schema + "." + index + ".indx";
-		ArrayList<Integer> nodes = getNodesForTable(schema, table, tx);
-		ArrayList<Integer> devices = MetaData.getDevicesForTable(schema, table, tx);
-		ArrayList<Object> tree = makeTree(nodes);
-		ArrayList<Socket> sockets = new ArrayList<Socket>();
-		int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
+		final String fn = schema + "." + index + ".indx";
+		final ArrayList<Integer> nodes = getNodesForTable(schema, table, tx);
+		final ArrayList<Integer> devices = MetaData.getDevicesForTable(schema, table, tx);
+		final ArrayList<Object> tree = makeTree(nodes);
+		final ArrayList<Socket> sockets = new ArrayList<Socket>();
+		final int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 
-		for (Object o : tree)
+		for (final Object o : tree)
 		{
 			ArrayList<Object> list;
 			if (o instanceof Integer)
@@ -3844,7 +2712,7 @@ public final class MetaData implements Serializable
 			}
 
 			Socket sock;
-			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
+			final String hostname = getHostNameForNode((Integer)obj, tx);
 			// sock = new Socket(hostname,
 			// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			sock = new Socket();
@@ -3852,7 +2720,7 @@ public final class MetaData implements Serializable
 			sock.setSendBufferSize(4194304);
 			sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 			OutputStream out = sock.getOutputStream();
-			byte[] outMsg = "NEWINDEX        ".getBytes(StandardCharsets.UTF_8);
+			final byte[] outMsg = "NEWINDEX        ".getBytes(StandardCharsets.UTF_8);
 			outMsg[8] = 0;
 			outMsg[9] = 0;
 			outMsg[10] = 0;
@@ -3873,7 +2741,7 @@ public final class MetaData implements Serializable
 				out.write(intToBytes(0));
 			}
 			out.write(stringToBytes(fn));
-			ObjectOutputStream objOut = new ObjectOutputStream(out);
+			final ObjectOutputStream objOut = new ObjectOutputStream(out);
 			objOut.writeObject(devices);
 			objOut.writeObject(convertToHosts(list, tx));
 			objOut.flush();
@@ -3891,16 +2759,16 @@ public final class MetaData implements Serializable
 			}
 		}
 
-		for (Socket sock : sockets)
+		for (final Socket sock : sockets)
 		{
-			OutputStream out = sock.getOutputStream();
+			final OutputStream out = sock.getOutputStream();
 			getConfirmation(sock);
 			out.close();
 			sock.close();
 		}
 	}
 
-	private void buildTable(String schema, String table, int numCols, Transaction tx, int tType, ArrayList<ColDef> defs, ArrayList<Integer> colOrder, ArrayList<Integer> organization) throws Exception
+	private static void buildTable(final String schema, final String table, final int numCols, final Transaction tx, final int tType, final ArrayList<ColDef> defs, ArrayList<Integer> colOrder, ArrayList<Integer> organization) throws Exception
 	{
 		if (tType != 0 && colOrder == null)
 		{
@@ -3917,14 +2785,14 @@ public final class MetaData implements Serializable
 			organization = new ArrayList<Integer>();
 		}
 
-		String fn = schema + "." + table + ".tbl";
-		ArrayList<Integer> nodes = getNodesForTable(schema, table, tx);
-		ArrayList<Integer> devices = MetaData.getDevicesForTable(schema, table, tx);
-		ArrayList<Object> tree = makeTree(nodes);
-		ArrayList<Socket> sockets = new ArrayList<Socket>();
-		int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
+		final String fn = schema + "." + table + ".tbl";
+		final ArrayList<Integer> nodes = getNodesForTable(schema, table, tx);
+		final ArrayList<Integer> devices = MetaData.getDevicesForTable(schema, table, tx);
+		final ArrayList<Object> tree = makeTree(nodes);
+		final ArrayList<Socket> sockets = new ArrayList<Socket>();
+		final int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 
-		for (Object o : tree)
+		for (final Object o : tree)
 		{
 			ArrayList<Object> list;
 			if (o instanceof Integer)
@@ -3944,7 +2812,7 @@ public final class MetaData implements Serializable
 			}
 
 			Socket sock;
-			String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
+			final String hostname = getHostNameForNode((Integer)obj, tx);
 			// sock = new Socket(hostname,
 			// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 			sock = new Socket();
@@ -3952,7 +2820,7 @@ public final class MetaData implements Serializable
 			sock.setSendBufferSize(4194304);
 			sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 			OutputStream out = sock.getOutputStream();
-			byte[] outMsg = "NEWTABLE        ".getBytes(StandardCharsets.UTF_8);
+			final byte[] outMsg = "NEWTABLE        ".getBytes(StandardCharsets.UTF_8);
 			outMsg[8] = 0;
 			outMsg[9] = 0;
 			outMsg[10] = 0;
@@ -3966,7 +2834,7 @@ public final class MetaData implements Serializable
 			out.write(intToBytes(numCols));
 			out.write(stringToBytes(fn));
 			out.write(intToBytes(tType));
-			ObjectOutputStream objOut = new ObjectOutputStream(out);
+			final ObjectOutputStream objOut = new ObjectOutputStream(out);
 			objOut.writeObject(devices);
 			objOut.writeObject(convertToHosts(list, tx));
 			objOut.writeObject(defs);
@@ -3991,18 +2859,18 @@ public final class MetaData implements Serializable
 			}
 		}
 
-		for (Socket sock : sockets)
+		for (final Socket sock : sockets)
 		{
-			OutputStream out = sock.getOutputStream();
+			final OutputStream out = sock.getOutputStream();
 			getConfirmation(sock);
 			out.close();
 			sock.close();
 		}
 	}
 
-	private boolean containsCol(TableScanOperator op, String c)
+	private static boolean containsCol(final TableScanOperator op, final String c)
 	{
-		Set<String> set = op.getTableCols2Pos().keySet();
+		final Set<String> set = op.getTableCols2Pos().keySet();
 		for (String s : set)
 		{
 			if (s.contains("."))
@@ -4018,7 +2886,7 @@ public final class MetaData implements Serializable
 		return false;
 	}
 
-	private ArrayList<Object> convertRangeStringToObject(String set, String schema, String table, String rangeCol, Transaction tx) throws Exception
+	private static ArrayList<Object> convertRangeStringToObject(final String set, final String schema, final String table, final String rangeCol, final Transaction tx) throws Exception
 	{
 		String type = getColTypeCache.get(schema + "." + table + "." + rangeCol);
 		if (type == null)
@@ -4026,11 +2894,11 @@ public final class MetaData implements Serializable
 			type = PlanCacheManager.getColType().setParms(schema, table, rangeCol).execute(tx);
 			getColTypeCache.put(schema + "." + table + "." + rangeCol, type);
 		}
-		ArrayList<Object> retval = new ArrayList<Object>();
-		StringTokenizer tokens = new StringTokenizer(set, "{}|");
+		final ArrayList<Object> retval = new ArrayList<Object>();
+		final StringTokenizer tokens = new StringTokenizer(set, "{}|");
 		while (tokens.hasMoreTokens())
 		{
-			String token = tokens.nextToken();
+			final String token = tokens.nextToken();
 			if (type.equals("INT"))
 			{
 				retval.add(Integer.parseInt(token));
@@ -4049,9 +2917,9 @@ public final class MetaData implements Serializable
 			}
 			else if (type.equals("DATE"))
 			{
-				int year = Integer.parseInt(token.substring(0, 4));
-				int month = Integer.parseInt(token.substring(5, 7));
-				int day = Integer.parseInt(token.substring(8, 10));
+				final int year = Integer.parseInt(token.substring(0, 4));
+				final int month = Integer.parseInt(token.substring(5, 7));
+				final int day = Integer.parseInt(token.substring(8, 10));
 				retval.add(new MyDate(year, month, day));
 			}
 		}
@@ -4059,13 +2927,13 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	private ArrayList<Object> convertRangeStringToObject(String set, String schema, String table, String rangeCol, Transaction tx, String type) throws Exception
+	private static ArrayList<Object> convertRangeStringToObject(final String set, final String schema, final String table, final String rangeCol, final Transaction tx, final String type) throws Exception
 	{
-		ArrayList<Object> retval = new ArrayList<Object>();
-		StringTokenizer tokens = new StringTokenizer(set, "{}|");
+		final ArrayList<Object> retval = new ArrayList<Object>();
+		final StringTokenizer tokens = new StringTokenizer(set, "{}|");
 		while (tokens.hasMoreTokens())
 		{
-			String token = tokens.nextToken();
+			final String token = tokens.nextToken();
 			if (type.equals("INT"))
 			{
 				retval.add(Integer.parseInt(token));
@@ -4084,9 +2952,9 @@ public final class MetaData implements Serializable
 			}
 			else if (type.equals("DATE"))
 			{
-				int year = Integer.parseInt(token.substring(0, 4));
-				int month = Integer.parseInt(token.substring(5, 7));
-				int day = Integer.parseInt(token.substring(8, 10));
+				final int year = Integer.parseInt(token.substring(0, 4));
+				final int month = Integer.parseInt(token.substring(5, 7));
+				final int day = Integer.parseInt(token.substring(8, 10));
 				retval.add(new MyDate(year, month, day));
 			}
 		}
@@ -4094,7 +2962,30 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	private void defaultDate(ArrayList<MyDate> retval)
+	private static ArrayList<Object> convertToHosts(final ArrayList<Object> tree, final Transaction tx) throws Exception
+	{
+		final ArrayList<Object> retval = new ArrayList<Object>();
+		int i = 0;
+		final int size = tree.size();
+		while (i < size)
+		{
+			final Object obj = tree.get(i);
+			if (obj instanceof Integer)
+			{
+				retval.add(getHostNameForNode((Integer)obj, tx));
+			}
+			else
+			{
+				retval.add(convertToHosts((ArrayList<Object>)obj, tx));
+			}
+
+			i++;
+		}
+
+		return retval;
+	}
+
+	private static void defaultDate(final ArrayList<MyDate> retval)
 	{
 		retval.add(new MyDate(1960, 1, 1));
 		retval.add(new MyDate(2000, 1, 1));
@@ -4103,7 +2994,7 @@ public final class MetaData implements Serializable
 		retval.add(new MyDate(2060, 1, 1));
 	}
 
-	private void defaultDouble(ArrayList<Double> retval)
+	private static void defaultDouble(final ArrayList<Double> retval)
 	{
 		retval.add(Double.MIN_VALUE);
 		retval.add(Double.MIN_VALUE / 2);
@@ -4112,7 +3003,1160 @@ public final class MetaData implements Serializable
 		retval.add(Double.MAX_VALUE);
 	}
 
-	private Operator doWork(Operator op, HashMap<Operator, ArrayList<String>> tables, HashMap<Operator, ArrayList<ArrayList<Filter>>> filters, HashMap<Operator, HashMap<String, Double>> retvals, Transaction tx, Operator tree) throws Exception
+	private static String getCol(final String col)
+	{
+		if (!col.contains("."))
+		{
+			return col;
+		}
+		else
+		{
+			return col.substring(col.indexOf('.') + 1);
+		}
+	}
+
+	// public static int getNumNodes(Transaction tx) throws Exception
+	// {
+	// return PlanCacheManager.getCountWorkerNodes().setParms().execute(tx);
+	// }
+
+	private static void getConfirmation(final Socket sock) throws Exception
+	{
+		final InputStream in = sock.getInputStream();
+		final byte[] inMsg = new byte[2];
+
+		int count = 0;
+		while (count < 2)
+		{
+			try
+			{
+				final int temp = in.read(inMsg, count, 2 - count);
+				if (temp == -1)
+				{
+					in.close();
+					throw new Exception();
+				}
+				else
+				{
+					count += temp;
+				}
+			}
+			catch (final Exception e)
+			{
+				in.close();
+				throw new Exception();
+			}
+		}
+
+		final String inStr = new String(inMsg, StandardCharsets.UTF_8);
+		if (!inStr.equals("OK"))
+		{
+			in.close();
+			throw new Exception();
+		}
+
+		try
+		{
+			in.close();
+		}
+		catch (final Exception e)
+		{
+		}
+	}
+
+	private static String getQual(final String col)
+	{
+		return col.substring(0, col.indexOf('.'));
+	}
+
+	private static long hash(final Object key) throws Exception
+	{
+		long eHash;
+		if (key == null)
+		{
+			eHash = 0;
+		}
+		else
+		{
+			if (key instanceof ArrayList)
+			{
+				final byte[] data = toBytesForHash((ArrayList<Object>)key);
+				eHash = MurmurHash.hash64(data, data.length);
+			}
+			else
+			{
+				final byte[] data = key.toString().getBytes(StandardCharsets.UTF_8);
+				eHash = MurmurHash.hash64(data, data.length);
+			}
+		}
+
+		return eHash;
+	}
+
+	private static byte[] intToBytes(final int val)
+	{
+		final byte[] buff = new byte[4];
+		buff[0] = (byte)(val >> 24);
+		buff[1] = (byte)((val & 0x00FF0000) >> 16);
+		buff[2] = (byte)((val & 0x0000FF00) >> 8);
+		buff[3] = (byte)((val & 0x000000FF));
+		return buff;
+	}
+
+	private static boolean isQualified(final String col)
+	{
+		if (col.contains(".") && !col.startsWith("."))
+		{
+			return true;
+		}
+
+		return false;
+	}
+
+	private static byte[] longToBytes(final long val)
+	{
+		final byte[] buff = new byte[8];
+		buff[0] = (byte)(val >> 56);
+		buff[1] = (byte)((val & 0x00FF000000000000L) >> 48);
+		buff[2] = (byte)((val & 0x0000FF0000000000L) >> 40);
+		buff[3] = (byte)((val & 0x000000FF00000000L) >> 32);
+		buff[4] = (byte)((val & 0x00000000FF000000L) >> 24);
+		buff[5] = (byte)((val & 0x0000000000FF0000L) >> 16);
+		buff[6] = (byte)((val & 0x000000000000FF00L) >> 8);
+		buff[7] = (byte)((val & 0x00000000000000FFL));
+		return buff;
+	}
+
+	private static ArrayList<Object> makeTree(final ArrayList<Integer> nodes)
+	{
+		final int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
+		if (nodes.size() <= max)
+		{
+			final ArrayList<Object> retval = new ArrayList<Object>(nodes);
+			return retval;
+		}
+
+		final ArrayList<Object> retval = new ArrayList<Object>();
+		int i = 0;
+		while (i < max)
+		{
+			retval.add(nodes.get(i));
+			i++;
+		}
+
+		final int remaining = nodes.size() - i;
+		final int perNode = remaining / max + 1;
+
+		int j = 0;
+		final int size = nodes.size();
+		while (i < size)
+		{
+			final int first = (Integer)retval.get(j);
+			retval.remove(j);
+			final ArrayList<Integer> list = new ArrayList<Integer>(perNode + 1);
+			list.add(first);
+			int k = 0;
+			while (k < perNode && i < size)
+			{
+				list.add(nodes.get(i));
+				i++;
+				k++;
+			}
+
+			retval.add(j, list);
+			j++;
+		}
+
+		if (((ArrayList<Integer>)retval.get(0)).size() <= max)
+		{
+			return retval;
+		}
+
+		// more than 2 tier
+		i = 0;
+		while (i < retval.size())
+		{
+			final ArrayList<Integer> list = (ArrayList<Integer>)retval.remove(i);
+			retval.add(i, makeTree(list));
+			i++;
+		}
+
+		return retval;
+	}
+
+	private static boolean references(final ArrayList<Filter> filters, final ArrayList<String> cols)
+	{
+		for (final Filter filter : filters)
+		{
+			if (filter.leftIsColumn())
+			{
+				if (cols.contains(filter.leftColumn()))
+				{
+					return true;
+				}
+			}
+
+			if (filter.rightIsColumn())
+			{
+				if (cols.contains(filter.rightColumn()))
+				{
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	private static long smaller(final long x, final long y)
+	{
+		if (x <= y)
+		{
+			if (x <= 0)
+			{
+				return 1;
+			}
+			else
+			{
+				return x;
+			}
+		}
+
+		if (y <= 0)
+		{
+			return 1;
+		}
+
+		return y;
+	}
+
+	private static byte[] stringToBytes(final String string)
+	{
+		byte[] data = null;
+		try
+		{
+			data = string.getBytes(StandardCharsets.UTF_8);
+		}
+		catch (final Exception e)
+		{
+		}
+		final byte[] len = intToBytes(data.length);
+		final byte[] retval = new byte[data.length + len.length];
+		System.arraycopy(len, 0, retval, 0, len.length);
+		System.arraycopy(data, 0, retval, len.length, data.length);
+		return retval;
+	}
+
+	private static double stringToDouble(final String val)
+	{
+		int i = 0;
+		double retval = 0;
+		while (i < 16 && i < val.length())
+		{
+			final int point = val.charAt(i);
+			retval += (point * Math.pow(2.0, 240 - (i << 4)));
+			i++;
+		}
+
+		return retval;
+	}
+
+	private static boolean tableIs(final TableScanOperator t, final String q)
+	{
+		return t.getTable().equals(q);
+	}
+
+	private static byte[] toBytesForHash(final ArrayList<Object> key)
+	{
+		final StringBuilder sb = new StringBuilder();
+		for (final Object o : key)
+		{
+			if (o instanceof Double)
+			{
+				final DecimalFormat df = new DecimalFormat("0", DecimalFormatSymbols.getInstance(Locale.ENGLISH));
+				df.setMaximumFractionDigits(340); // 340 =
+													// DecimalFormat.DOUBLE_FRACTION_DIGITS
+
+				sb.append(df.format(o));
+				sb.append((char)0);
+			}
+			else if (o instanceof Number)
+			{
+				sb.append(o);
+				sb.append((char)0);
+			}
+			else
+			{
+				sb.append(o.toString());
+				sb.append((char)0);
+			}
+		}
+
+		final int z = sb.length();
+		final byte[] retval = new byte[z];
+		int i = 0;
+		while (i < z)
+		{
+			retval[i] = (byte)sb.charAt(i);
+			i++;
+		}
+
+		return retval;
+	}
+
+	public HashMap<String, Double> generateCard(final Operator op, final Transaction tx, final Operator tree) throws Exception
+	{
+		final HashMap<Operator, ArrayList<String>> tables = new HashMap<Operator, ArrayList<String>>();
+		final HashMap<Operator, ArrayList<ArrayList<Filter>>> filters = new HashMap<Operator, ArrayList<ArrayList<Filter>>>();
+		final HashMap<Operator, HashMap<String, Double>> retval = new HashMap<Operator, HashMap<String, Double>>();
+		final ArrayList<Operator> leaves = getLeaves(op);
+		final ArrayList<Operator> queued = new ArrayList<Operator>(leaves.size());
+		for (final Operator leaf : leaves)
+		{
+			final Operator o = doWork(leaf, tables, filters, retval, tx, tree);
+			if (o != null)
+			{
+				queued.add(o);
+			}
+		}
+
+		while (queued.size() > 1)
+		{
+			final Operator o = queued.get(0);
+			if (queued.indexOf(o) != queued.lastIndexOf(o))
+			{
+				queued.remove(queued.lastIndexOf(o));
+				final Operator o2 = doWork(o, tables, filters, retval, tx, tree);
+				queued.add(o2);
+				queued.remove(0);
+			}
+			else
+			{
+				queued.add(o);
+				queued.remove(0);
+			}
+		}
+
+		return retval.get(queued.get(0));
+	}
+
+	public long getCard(final String col, final HashMap<String, Double> generated, final Transaction tx, final Operator tree) throws Exception
+	{
+		final String c = col.substring(col.indexOf('.') + 1);
+		final String ST = getTableForCol(col, tree);
+
+		try
+		{
+			final String schema = ST.substring(0, ST.indexOf('.'));
+			final String table = ST.substring(ST.indexOf('.') + 1);
+			Long card = getColCardCache.get(schema + "." + table + "." + c);
+			if (card == null)
+			{
+				card = PlanCacheManager.getColCard().setParms(schema, table, c).execute(tx);
+				if (card != -1)
+				{
+					getColCardCache.put(schema + "." + table + "." + c, card);
+					return card;
+				}
+				else if (generated.containsKey(col))
+				{
+					return (generated.get(col).longValue());
+				}
+
+				getColCardCache.put(schema + "." + table + "." + c, 1000000l);
+			}
+		}
+		catch (final Exception e)
+		{
+		}
+
+		// HRDBMSWorker.logger.warn("Can't find cardinality for " + schema + "."
+		// + table + "." + col);
+		return 1000000;
+	}
+
+	public long getCard(final String col, final RootOperator op, final Transaction tx, final Operator tree) throws Exception
+	{
+		return getCard(col, op.getGenerated(), tx, tree);
+	}
+
+	public long getColgroupCard(final ArrayList<String> cs, final HashMap<String, Double> generated, final Transaction tx, final Operator tree) throws Exception
+	{
+		if (cs.size() == 0)
+		{
+			return 1;
+		}
+
+		final ArrayList<String> schemas = new ArrayList<String>();
+		final ArrayList<String> tables = new ArrayList<String>();
+		final ArrayList<String> cols = new ArrayList<String>();
+		for (final String c : cs)
+		{
+			cols.add(c.substring(c.indexOf('.') + 1));
+			final String ST = getTableForCol(c, tree);
+			if (ST == null)
+			{
+				int i = 0;
+				long card = 1;
+				final int size = cs.size();
+				while (i < size)
+				{
+					final long old = card;
+					card *= 1000000;
+					if (card < 0)
+					{
+						return old;
+					}
+					i++;
+				}
+
+				return card;
+			}
+			schemas.add(ST.substring(0, ST.indexOf('.')));
+			tables.add(ST.substring(ST.indexOf('.') + 1));
+		}
+		boolean oneSchema = true;
+		boolean oneTable = true;
+		String theSchema = null;
+		String theTable = null;
+
+		int i = 0;
+		for (final String schema : schemas)
+		{
+			if (theSchema == null)
+			{
+				theSchema = schema;
+			}
+			else
+			{
+				if (!schema.equals(theSchema))
+				{
+					oneSchema = false;
+					break;
+				}
+			}
+
+			final String table = tables.get(i);
+			if (theTable == null)
+			{
+				theTable = table;
+			}
+			else
+			{
+				if (!table.equals(theTable))
+				{
+					oneTable = false;
+					break;
+				}
+			}
+		}
+
+		Integer tableID = -1;
+		if (oneSchema && oneTable && theSchema != null && theTable != null)
+		{
+			try
+			{
+				tableID = getTableIDCache.get(theSchema + "." + theTable);
+				if (tableID == null)
+				{
+					tableID = PlanCacheManager.getTableID().setParms(theSchema, theTable).execute(tx);
+					getTableIDCache.put(theSchema + "." + theTable, tableID);
+				}
+			}
+			catch (final Exception e)
+			{
+				oneSchema = false;
+			}
+		}
+
+		if (oneSchema && oneTable && theSchema != null && theTable != null)
+		{
+			ArrayList<Object> rs = getIndexIDsForTableCache.get(theSchema + "." + theTable);
+			if (rs == null)
+			{
+				rs = PlanCacheManager.getIndexIDsForTable().setParms(theSchema, theTable).execute(tx);
+				getIndexIDsForTableCache.put(theSchema + "." + theTable, rs);
+			}
+			for (final Object r : rs)
+			{
+				if (!(r instanceof DataEndMarker))
+				{
+					final ArrayList<Object> row = (ArrayList<Object>)r;
+					final int count = PlanCacheManager.getIndexColCount().setParms(tableID, (Integer)row.get(0)).execute(tx);
+					if (count == schemas.size())
+					{
+						boolean hasAllCols = true;
+						final HashMap<String, Integer> cols2Pos = getCols2PosForTable(theSchema, theTable, tx);
+						for (final String col : cols)
+						{
+							final int colID = cols2Pos.get(theTable + "." + col);
+							final Object o = PlanCacheManager.getCheckIndexForCol().setParms(tableID, (Integer)row.get(0), colID).execute(tx);
+							if (o instanceof DataEndMarker)
+							{
+								hasAllCols = false;
+								break;
+							}
+						}
+
+						if (hasAllCols)
+						{
+							final Object o = PlanCacheManager.getIndexCard().setParms(tableID, (Integer)row.get(0)).execute(tx);
+							if (o instanceof DataEndMarker)
+							{
+								continue;
+							}
+							else
+							{
+								final ArrayList<Object> cardRow = (ArrayList<Object>)o;
+								return (Long)cardRow.get(0);
+							}
+						}
+					}
+				}
+			}
+		}
+
+		double card = 1;
+		i = 0;
+		for (final String col : cols)
+		{
+			card *= getCard(schemas.get(i), tables.get(i), col, generated, tx);
+			HRDBMSWorker.logger.debug("After processing " + col + " group card is now " + card);
+			i++;
+		}
+
+		return (long)card;
+	}
+
+	public long getColgroupCard(final ArrayList<String> cols, final RootOperator op, final Transaction tx, final Operator tree) throws Exception
+	{
+		return getColgroupCard(cols, op.getGenerated(), tx, tree);
+	}
+
+	public String getCurrentSchema()
+	{
+		if (connection == null)
+		{
+			return null;
+		}
+
+		final String retval = defaultSchemas.get(connection);
+		if (retval == null)
+		{
+			// TODO return userid
+			return "HRDBMS";
+		}
+
+		return retval;
+	}
+
+	public PartitionMetaData getPartMeta(final String schema, final String table, final Transaction tx) throws Exception
+	{
+		return new PartitionMetaData(schema, table, tx);
+	}
+
+	public String getTableForCol(final String col, final Operator tree) throws Exception// must
+	// return
+	// schema.table
+	// -
+	// must
+	// accept
+	// qualified
+	// or
+	// unqualified
+	// col
+	{
+		final ColAndTree cat = new ColAndTree(col, tree);
+		final String s = gtfcCache.get(cat);
+		if (s != null)
+		{
+			return s;
+		}
+
+		final ArrayList<TableScanOperator> tables = new ArrayList<TableScanOperator>();
+		getTables(tree, new HashSet<Operator>(), tables);
+		if (isQualified(col))
+		{
+			final String qual = getQual(col);
+			final String c = getCol(col);
+			String retSchema = null;
+			String retTable = null;
+			for (final TableScanOperator t : tables)
+			{
+				if (containsCol(t, c))
+				{
+					if (tableIs(t, qual) || aliasIs(t, qual))
+					{
+						if (retSchema == null)
+						{
+							retSchema = t.getSchema();
+							retTable = t.getTable();
+						}
+						else
+						{
+							if (!retSchema.equals(t.getSchema()) || !retTable.equals(t.getTable()))
+							{
+								throw new Exception("Ambiguous column " + col);
+							}
+						}
+					}
+				}
+			}
+
+			if (retSchema != null)
+			{
+				final String retval = retSchema + "." + retTable;
+				gtfcCache.put(cat, retval);
+				return retval;
+			}
+			else
+			{
+				return null;
+			}
+		}
+		else
+		{
+			final String c = getCol(col);
+			String retSchema = null;
+			String retTable = null;
+			for (final TableScanOperator t : tables)
+			{
+				if (containsCol(t, c))
+				{
+					if (retSchema == null)
+					{
+						retSchema = t.getSchema();
+						retTable = t.getTable();
+					}
+					else
+					{
+						if (!retSchema.equals(t.getSchema()) || !retTable.equals(t.getTable()))
+						{
+							throw new Exception("Ambiguous column " + col);
+						}
+					}
+				}
+			}
+
+			if (retSchema != null)
+			{
+				final String retval = retSchema + "." + retTable;
+				gtfcCache.put(cat, retval);
+				return retval;
+			}
+			else
+			{
+				return null;
+			}
+		}
+	}
+
+	public double likelihood(final ArrayList<Filter> filters, final HashMap<String, Double> generated, final Transaction tx, final Operator tree) throws Exception
+	{
+		double sum = 0;
+
+		for (final Filter filter : filters)
+		{
+			sum += likelihood(filter, generated, tx, tree);
+		}
+
+		if (sum > 1)
+		{
+			sum = 1;
+		}
+
+		return sum;
+	}
+
+	public double likelihood(final ArrayList<Filter> filters, final RootOperator op, final Transaction tx, final Operator tree) throws Exception
+	{
+		return likelihood(filters, op.getGenerated(), tx, tree);
+	}
+
+	public double likelihood(final ArrayList<Filter> filters, final Transaction tx, final Operator tree) throws Exception
+	{
+		double sum = 0;
+
+		for (final Filter filter : filters)
+		{
+			sum += likelihood(filter, tx, tree);
+		}
+
+		if (sum > 1)
+		{
+			sum = 1;
+		}
+
+		return sum;
+	}
+
+	// likelihood of a row directly out of the table passing this test
+	public double likelihood(final Filter filter, final HashMap<String, Double> generated, final Transaction tx, final Operator tree) throws Exception
+	{
+		long leftCard = 1;
+		long rightCard = 1;
+
+		if (filter instanceof ConstantFilter)
+		{
+			final double retval = ((ConstantFilter)filter).getLikelihood();
+			return retval;
+		}
+
+		if (filter.alwaysTrue())
+		{
+			return 1;
+		}
+
+		if (filter.alwaysFalse())
+		{
+			return 0;
+		}
+
+		if (filter.leftIsColumn())
+		{
+			final String left = filter.leftColumn();
+			final String leftST = getTableForCol(left, tree);
+			if (leftST == null)
+			{
+				leftCard = 1000000;
+			}
+			else
+			{
+				final String leftSchema = leftST.substring(0, leftST.indexOf('.'));
+				final String leftTable = leftST.substring(leftST.indexOf('.') + 1);
+				final String leftCol = left.substring(left.indexOf('.') + 1);
+				leftCard = getCard(leftSchema, leftTable, leftCol, generated, tx);
+			}
+		}
+
+		if (filter.rightIsColumn())
+		{
+			// figure out number of possible values for right side
+			final String right = filter.rightColumn();
+			final String rightST = getTableForCol(right, tree);
+			if (rightST == null)
+			{
+				rightCard = 1000000;
+			}
+			else
+			{
+				final String rightSchema = rightST.substring(0, rightST.indexOf('.'));
+				final String rightTable = rightST.substring(rightST.indexOf('.') + 1);
+				final String rightCol = right.substring(right.indexOf('.') + 1);
+				rightCard = getCard(rightSchema, rightTable, rightCol, generated, tx);
+			}
+		}
+
+		final String op = filter.op();
+
+		if (op.equals("E"))
+		{
+			if (filter.leftIsColumn() && filter.rightIsColumn())
+			{
+				final double retval = 1.0 / smaller(leftCard, rightCard);
+				return retval;
+			}
+
+			final double retval = 1.0 / bigger(leftCard, rightCard);
+			return retval;
+		}
+
+		if (op.equals("NE"))
+		{
+			if (filter.leftIsColumn() && filter.rightIsColumn())
+			{
+				final double retval = 1.0 - (1.0 / smaller(leftCard, rightCard));
+				return retval;
+			}
+
+			final double retval = 1.0 - 1.0 / bigger(leftCard, rightCard);
+			return retval;
+		}
+
+		if (op.equals("L") || op.equals("LE"))
+		{
+			if (filter.leftIsColumn() && filter.rightIsColumn())
+			{
+				return 0.5;
+			}
+
+			if (filter.leftIsColumn())
+			{
+				if (filter.rightIsNumber())
+				{
+					final double right = filter.getRightNumber();
+					final String left = filter.leftColumn();
+					final double retval = percentBelow(left, right, tx, tree);
+					return retval;
+				}
+				else if (filter.rightIsDate())
+				{
+					final MyDate right = filter.getRightDate();
+					final String left = filter.leftColumn();
+					final double retval = percentBelow(left, right, tx, tree);
+					return retval;
+				}
+				else
+				{
+					// string
+					final String right = filter.getRightString();
+					final String left = filter.leftColumn();
+					final double retval = percentBelow(left, right, tx, tree);
+					return retval;
+				}
+			}
+			else
+			{
+				if (filter.leftIsNumber())
+				{
+					final double left = filter.getLeftNumber();
+					final String right = filter.rightColumn();
+					final double retval = percentAbove(right, left, tx, tree);
+					return retval;
+				}
+				else if (filter.leftIsDate())
+				{
+					final MyDate left = filter.getLeftDate();
+					final String right = filter.rightColumn();
+					final double retval = percentAbove(right, left, tx, tree);
+					return retval;
+				}
+				else
+				{
+					// string
+					final String left = filter.getLeftString();
+					final String right = filter.rightColumn();
+					final double retval = percentAbove(right, left, tx, tree);
+					return retval;
+				}
+			}
+		}
+
+		if (op.equals("G") || op.equals("GE"))
+		{
+			if (filter.leftIsColumn() && filter.rightIsColumn())
+			{
+				return 0.5;
+			}
+
+			if (filter.leftIsColumn())
+			{
+				if (filter.rightIsNumber())
+				{
+					final double right = filter.getRightNumber();
+					final String left = filter.leftColumn();
+					final double retval = percentAbove(left, right, tx, tree);
+					return retval;
+				}
+				else if (filter.rightIsDate())
+				{
+					final MyDate right = filter.getRightDate();
+					final String left = filter.leftColumn();
+					final double retval = percentAbove(left, right, tx, tree);
+					return retval;
+				}
+				else
+				{
+					// string
+					final String right = filter.getRightString();
+					final String left = filter.leftColumn();
+					final double retval = percentAbove(left, right, tx, tree);
+					return retval;
+				}
+			}
+			else
+			{
+				if (filter.leftIsNumber())
+				{
+					final double left = filter.getLeftNumber();
+					final String right = filter.rightColumn();
+					final double retval = percentBelow(right, left, tx, tree);
+					return retval;
+				}
+				else if (filter.leftIsDate())
+				{
+					final MyDate left = filter.getLeftDate();
+					final String right = filter.rightColumn();
+					final double retval = percentBelow(right, left, tx, tree);
+					return retval;
+				}
+				else
+				{
+					// string
+					final String left = filter.getLeftString();
+					final String right = filter.rightColumn();
+					final double retval = percentBelow(right, left, tx, tree);
+					return retval;
+				}
+			}
+		}
+
+		if (op.equals("LI"))
+		{
+			return 0.05;
+		}
+
+		if (op.equals("NL"))
+		{
+			return 0.95;
+		}
+
+		throw new Exception("Unknown operator in likelihood()");
+	}
+
+	public double likelihood(final Filter filter, final RootOperator op, final Transaction tx, final Operator tree) throws Exception
+	{
+		return likelihood(filter, op.getGenerated(), tx, tree);
+	}
+
+	public double likelihood(final Filter filter, final Transaction tx, final Operator tree) throws Exception
+	{
+		long leftCard = 1;
+		long rightCard = 1;
+		final HashMap<String, Double> generated = new HashMap<String, Double>();
+
+		if (filter instanceof ConstantFilter)
+		{
+			((ConstantFilter)filter).getLikelihood();
+		}
+
+		if (filter.alwaysTrue())
+		{
+			return 1;
+		}
+
+		if (filter.alwaysFalse())
+		{
+			return 0;
+		}
+
+		if (filter.leftIsColumn())
+		{
+			final String left = filter.leftColumn();
+			final String leftST = getTableForCol(left, tree);
+			if (leftST == null)
+			{
+				leftCard = 1000000;
+			}
+			else
+			{
+				final String leftSchema = leftST.substring(0, leftST.indexOf('.'));
+				final String leftTable = leftST.substring(leftST.indexOf('.') + 1);
+				final String leftCol = left.substring(left.indexOf('.') + 1);
+				leftCard = getCard(leftSchema, leftTable, leftCol, generated, tx);
+			}
+		}
+
+		if (filter.rightIsColumn())
+		{
+			// figure out number of possible values for right side
+			final String right = filter.rightColumn();
+			final String rightST = getTableForCol(right, tree);
+			if (rightST == null)
+			{
+				rightCard = 1000000;
+			}
+			else
+			{
+				final String rightSchema = rightST.substring(0, rightST.indexOf('.'));
+				final String rightTable = rightST.substring(rightST.indexOf('.') + 1);
+				final String rightCol = right.substring(right.indexOf('.') + 1);
+				rightCard = getCard(rightSchema, rightTable, rightCol, generated, tx);
+			}
+		}
+
+		final String op = filter.op();
+
+		if (op.equals("E"))
+		{
+			if (filter.leftIsColumn() && filter.rightIsColumn())
+			{
+				final double retval = 1.0 / smaller(leftCard, rightCard);
+				return retval;
+			}
+
+			final double retval = 1.0 / bigger(leftCard, rightCard);
+			return retval;
+		}
+
+		if (op.equals("NE"))
+		{
+			if (filter.leftIsColumn() && filter.rightIsColumn())
+			{
+				final double retval = 1.0 - (1.0 / smaller(leftCard, rightCard));
+				return retval;
+			}
+
+			final double retval = 1.0 - 1.0 / bigger(leftCard, rightCard);
+			return retval;
+		}
+
+		if (op.equals("L") || op.equals("LE"))
+		{
+			if (filter.leftIsColumn() && filter.rightIsColumn())
+			{
+				return 0.5;
+			}
+
+			if (filter.leftIsColumn())
+			{
+				if (filter.rightIsNumber())
+				{
+					final double right = filter.getRightNumber();
+					final String left = filter.leftColumn();
+					final double retval = percentBelow(left, right, tx, tree);
+					return retval;
+				}
+				else if (filter.rightIsDate())
+				{
+					final MyDate right = filter.getRightDate();
+					final String left = filter.leftColumn();
+					final double retval = percentBelow(left, right, tx, tree);
+					return retval;
+				}
+				else
+				{
+					// string
+					final String right = filter.getRightString();
+					final String left = filter.leftColumn();
+					final double retval = percentBelow(left, right, tx, tree);
+					return retval;
+				}
+			}
+			else
+			{
+				if (filter.leftIsNumber())
+				{
+					final double left = filter.getLeftNumber();
+					final String right = filter.rightColumn();
+					final double retval = percentAbove(right, left, tx, tree);
+					return retval;
+				}
+				else if (filter.leftIsDate())
+				{
+					final MyDate left = filter.getLeftDate();
+					final String right = filter.rightColumn();
+					final double retval = percentAbove(right, left, tx, tree);
+					return retval;
+				}
+				else
+				{
+					// string
+					final String left = filter.getLeftString();
+					final String right = filter.rightColumn();
+					final double retval = percentAbove(right, left, tx, tree);
+					return retval;
+				}
+			}
+		}
+
+		if (op.equals("G") || op.equals("GE"))
+		{
+			if (filter.leftIsColumn() && filter.rightIsColumn())
+			{
+				return 0.5;
+			}
+
+			if (filter.leftIsColumn())
+			{
+				if (filter.rightIsNumber())
+				{
+					final double right = filter.getRightNumber();
+					final String left = filter.leftColumn();
+					final double retval = percentAbove(left, right, tx, tree);
+					return retval;
+				}
+				else if (filter.rightIsDate())
+				{
+					final MyDate right = filter.getRightDate();
+					final String left = filter.leftColumn();
+					final double retval = percentAbove(left, right, tx, tree);
+					return retval;
+				}
+				else
+				{
+					// string
+					final String right = filter.getRightString();
+					final String left = filter.leftColumn();
+					final double retval = percentAbove(left, right, tx, tree);
+					return retval;
+				}
+			}
+			else
+			{
+				if (filter.leftIsNumber())
+				{
+					final double left = filter.getLeftNumber();
+					final String right = filter.rightColumn();
+					final double retval = percentBelow(right, left, tx, tree);
+					return retval;
+				}
+				else if (filter.leftIsDate())
+				{
+					final MyDate left = filter.getLeftDate();
+					final String right = filter.rightColumn();
+					final double retval = percentBelow(right, left, tx, tree);
+					return retval;
+				}
+				else
+				{
+					// string
+					final String left = filter.getLeftString();
+					final String right = filter.rightColumn();
+					final double retval = percentBelow(right, left, tx, tree);
+					return retval;
+				}
+			}
+		}
+
+		if (op.equals("LI"))
+		{
+			return 0.05;
+		}
+
+		if (op.equals("NL"))
+		{
+			return 0.95;
+		}
+
+		throw new Exception("Unknown operator in likelihood()");
+	}
+
+	public double likelihood(final HashSet<HashMap<Filter, Filter>> hshm, final HashMap<String, Double> generated, final Transaction tx, final Operator tree) throws Exception
+	{
+		final ArrayList<Double> ands = new ArrayList<Double>(hshm.size());
+		for (final HashMap<Filter, Filter> ored : hshm)
+		{
+			double sum = 0;
+
+			for (final Filter filter : ored.keySet())
+			{
+				sum += likelihood(filter, generated, tx, tree);
+			}
+
+			if (sum > 1)
+			{
+				sum = 1;
+			}
+
+			ands.add(sum);
+		}
+
+		double retval = 1;
+		for (final double x : ands)
+		{
+			retval *= x;
+		}
+
+		return retval;
+	}
+
+	public double likelihood(final HashSet<HashMap<Filter, Filter>> hshm, final RootOperator op, final Transaction tx, final Operator tree) throws Exception
+	{
+		return likelihood(hshm, op.getGenerated(), tx, tree);
+	}
+
+	private Operator doWork(Operator op, final HashMap<Operator, ArrayList<String>> tables, final HashMap<Operator, ArrayList<ArrayList<Filter>>> filters, final HashMap<Operator, HashMap<String, Double>> retvals, final Transaction tx, final Operator tree) throws Exception
 	{
 		ArrayList<String> t;
 		ArrayList<ArrayList<Filter>> f;
@@ -4208,7 +4252,7 @@ public final class MetaData implements Serializable
 					final FastStringTokenizer tokens = new FastStringTokenizer(table, ".", false);
 					final String schema = tokens.nextToken();
 					final String table2 = tokens.nextToken();
-					card *= this.getTableCard(schema, table2, tx);
+					card *= getTableCard(schema, table2, tx);
 				}
 
 				for (final ArrayList<Filter> filter : f)
@@ -4228,7 +4272,7 @@ public final class MetaData implements Serializable
 					final FastStringTokenizer tokens = new FastStringTokenizer(table, ".", false);
 					final String schema = tokens.nextToken();
 					final String table2 = tokens.nextToken();
-					card *= this.getTableCard(schema, table2, tx);
+					card *= getTableCard(schema, table2, tx);
 				}
 
 				for (final ArrayList<Filter> filter : f)
@@ -4269,7 +4313,7 @@ public final class MetaData implements Serializable
 					final FastStringTokenizer tokens = new FastStringTokenizer(table, ".", false);
 					final String schema = tokens.nextToken();
 					final String table2 = tokens.nextToken();
-					card *= this.getTableCard(schema, table2, tx);
+					card *= getTableCard(schema, table2, tx);
 				}
 
 				for (final ArrayList<Filter> filter : f)
@@ -4289,7 +4333,7 @@ public final class MetaData implements Serializable
 					final FastStringTokenizer tokens = new FastStringTokenizer(table, ".", false);
 					final String schema = tokens.nextToken();
 					final String table2 = tokens.nextToken();
-					card *= this.getTableCard(schema, table2, tx);
+					card *= getTableCard(schema, table2, tx);
 				}
 
 				for (final ArrayList<Filter> filter : f)
@@ -4374,31 +4418,19 @@ public final class MetaData implements Serializable
 		}
 	}
 
-	private String getCol(String col)
-	{
-		if (!col.contains("."))
-		{
-			return col;
-		}
-		else
-		{
-			return col.substring(col.indexOf('.') + 1);
-		}
-	}
-
-	private ArrayList<MyDate> getDateQuartiles(String col, Transaction tx, Operator tree) throws Exception
+	private ArrayList<MyDate> getDateQuartiles(final String col, final Transaction tx, final Operator tree) throws Exception
 	{
 		// SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-		ArrayList<MyDate> retval = new ArrayList<MyDate>(5);
-		String c = col.substring(col.indexOf('.') + 1);
-		String ST = getTableForCol(col, tree);
+		final ArrayList<MyDate> retval = new ArrayList<MyDate>(5);
+		final String c = col.substring(col.indexOf('.') + 1);
+		final String ST = getTableForCol(col, tree);
 		if (ST == null)
 		{
 			defaultDate(retval);
 			return retval;
 		}
-		String schema = ST.substring(0, ST.indexOf('.'));
-		String table = ST.substring(ST.indexOf('.') + 1);
+		final String schema = ST.substring(0, ST.indexOf('.'));
+		final String table = ST.substring(ST.indexOf('.') + 1);
 		Object o = getDistCache.get(schema + "." + table + "." + c);
 		if (o == null)
 		{
@@ -4411,12 +4443,12 @@ public final class MetaData implements Serializable
 		}
 		else
 		{
-			for (Object obj : (ArrayList<Object>)o)
+			for (final Object obj : (ArrayList<Object>)o)
 			{
-				String val = (String)obj;
-				int year = Integer.parseInt(val.substring(0, 4));
-				int month = Integer.parseInt(val.substring(5, 7));
-				int day = Integer.parseInt(val.substring(8, 10));
+				final String val = (String)obj;
+				final int year = Integer.parseInt(val.substring(0, 4));
+				final int month = Integer.parseInt(val.substring(5, 7));
+				final int day = Integer.parseInt(val.substring(8, 10));
 				retval.add(new MyDate(year, month, day));
 			}
 		}
@@ -4424,18 +4456,18 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	private ArrayList<Double> getDoubleQuartiles(String col, Transaction tx, Operator tree) throws Exception
+	private ArrayList<Double> getDoubleQuartiles(final String col, final Transaction tx, final Operator tree) throws Exception
 	{
-		ArrayList<Double> retval = new ArrayList<Double>(5);
-		String c = col.substring(col.indexOf('.') + 1);
-		String ST = getTableForCol(col, tree);
+		final ArrayList<Double> retval = new ArrayList<Double>(5);
+		final String c = col.substring(col.indexOf('.') + 1);
+		final String ST = getTableForCol(col, tree);
 		if (ST == null)
 		{
 			defaultDouble(retval);
 			return retval;
 		}
-		String schema = ST.substring(0, ST.indexOf('.'));
-		String table = ST.substring(ST.indexOf('.') + 1);
+		final String schema = ST.substring(0, ST.indexOf('.'));
+		final String table = ST.substring(ST.indexOf('.') + 1);
 		Object o = getDistCache.get(schema + "." + table + "." + c);
 		if (o == null)
 		{
@@ -4448,9 +4480,9 @@ public final class MetaData implements Serializable
 		}
 		else
 		{
-			for (Object obj : (ArrayList<Object>)o)
+			for (final Object obj : (ArrayList<Object>)o)
 			{
-				String val = (String)obj;
+				final String val = (String)obj;
 				retval.add(Double.parseDouble(val));
 			}
 		}
@@ -4458,7 +4490,7 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	private ArrayList<Operator> getLeaves(Operator op)
+	private ArrayList<Operator> getLeaves(final Operator op)
 	{
 		if (op.children().size() == 0)
 		{
@@ -4476,16 +4508,11 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	private String getQual(String col)
+	private ArrayList<String> getStringQuartiles(final String col, final Transaction tx, final Operator tree) throws Exception
 	{
-		return col.substring(0, col.indexOf('.'));
-	}
-
-	private ArrayList<String> getStringQuartiles(String col, Transaction tx, Operator tree) throws Exception
-	{
-		ArrayList<String> retval = new ArrayList<String>(5);
-		String c = col.substring(col.indexOf('.') + 1);
-		String ST = getTableForCol(col, tree);
+		final ArrayList<String> retval = new ArrayList<String>(5);
+		final String c = col.substring(col.indexOf('.') + 1);
+		final String ST = getTableForCol(col, tree);
 		if (ST == null)
 		{
 			retval.add("A");
@@ -4495,8 +4522,8 @@ public final class MetaData implements Serializable
 			retval.add("z");
 			return retval;
 		}
-		String schema = ST.substring(0, ST.indexOf('.'));
-		String table = ST.substring(ST.indexOf('.') + 1);
+		final String schema = ST.substring(0, ST.indexOf('.'));
+		final String table = ST.substring(ST.indexOf('.') + 1);
 		Object o = getDistCache.get(schema + "." + table + "." + c);
 		if (o == null)
 		{
@@ -4513,9 +4540,9 @@ public final class MetaData implements Serializable
 		}
 		else
 		{
-			for (Object obj : (ArrayList<Object>)o)
+			for (final Object obj : (ArrayList<Object>)o)
 			{
-				String val = (String)obj;
+				final String val = (String)obj;
 				retval.add(val);
 			}
 		}
@@ -4523,7 +4550,7 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	private void getTables(Operator op, HashSet<Operator> touched, ArrayList<TableScanOperator> tables)
+	private void getTables(final Operator op, final HashSet<Operator> touched, final ArrayList<TableScanOperator> tables)
 	{
 		if (touched.contains(op))
 		{
@@ -4538,7 +4565,7 @@ public final class MetaData implements Serializable
 		}
 		else
 		{
-			for (Operator o : op.children())
+			for (final Operator o : op.children())
 			{
 				getTables(o, touched, tables);
 			}
@@ -4547,17 +4574,7 @@ public final class MetaData implements Serializable
 		}
 	}
 
-	private boolean isQualified(String col)
-	{
-		if (col.contains(".") && !col.startsWith("."))
-		{
-			return true;
-		}
-
-		return false;
-	}
-
-	private double percentAbove(String col, double val, Transaction tx, Operator tree) throws Exception
+	private double percentAbove(final String col, final double val, final Transaction tx, final Operator tree) throws Exception
 	{
 		final ArrayList<Double> quartiles = getDoubleQuartiles(col, tx, tree);
 		// System.out.println("In percentAbove with col = " + col +
@@ -4596,7 +4613,7 @@ public final class MetaData implements Serializable
 		return 0;
 	}
 
-	private double percentAbove(String col, MyDate val, Transaction tx, Operator tree) throws Exception
+	private double percentAbove(final String col, final MyDate val, final Transaction tx, final Operator tree) throws Exception
 	{
 		final ArrayList<MyDate> quartiles = getDateQuartiles(col, tx, tree);
 		if (quartiles == null)
@@ -4632,7 +4649,7 @@ public final class MetaData implements Serializable
 		return 0;
 	}
 
-	private double percentAbove(String col, String val, Transaction tx, Operator tree) throws Exception
+	private double percentAbove(final String col, final String val, final Transaction tx, final Operator tree) throws Exception
 	{
 		final ArrayList<String> quartiles = getStringQuartiles(col, tx, tree);
 		if (quartiles == null)
@@ -4668,7 +4685,7 @@ public final class MetaData implements Serializable
 		return 0;
 	}
 
-	private double percentBelow(String col, double val, Transaction tx, Operator tree) throws Exception
+	private double percentBelow(final String col, final double val, final Transaction tx, final Operator tree) throws Exception
 	{
 		final ArrayList<Double> quartiles = getDoubleQuartiles(col, tx, tree);
 		if (quartiles == null)
@@ -4704,7 +4721,7 @@ public final class MetaData implements Serializable
 		return 0;
 	}
 
-	private double percentBelow(String col, MyDate val, Transaction tx, Operator tree) throws Exception
+	private double percentBelow(final String col, final MyDate val, final Transaction tx, final Operator tree) throws Exception
 	{
 		final ArrayList<MyDate> quartiles = getDateQuartiles(col, tx, tree);
 		if (quartiles == null)
@@ -4740,7 +4757,7 @@ public final class MetaData implements Serializable
 		return 0;
 	}
 
-	private double percentBelow(String col, String val, Transaction tx, Operator tree) throws Exception
+	private double percentBelow(final String col, final String val, final Transaction tx, final Operator tree) throws Exception
 	{
 		final ArrayList<String> quartiles = getStringQuartiles(col, tx, tree);
 		if (quartiles == null)
@@ -4776,71 +4793,6 @@ public final class MetaData implements Serializable
 		return 0;
 	}
 
-	private boolean references(ArrayList<Filter> filters, ArrayList<String> cols)
-	{
-		for (final Filter filter : filters)
-		{
-			if (filter.leftIsColumn())
-			{
-				if (cols.contains(filter.leftColumn()))
-				{
-					return true;
-				}
-			}
-
-			if (filter.rightIsColumn())
-			{
-				if (cols.contains(filter.rightColumn()))
-				{
-					return true;
-				}
-			}
-		}
-
-		return false;
-	}
-
-	private long smaller(long x, long y)
-	{
-		if (x <= y)
-		{
-			if (x <= 0)
-			{
-				return 1;
-			}
-			else
-			{
-				return x;
-			}
-		}
-
-		if (y <= 0)
-		{
-			return 1;
-		}
-
-		return y;
-	}
-
-	private double stringToDouble(String val)
-	{
-		int i = 0;
-		double retval = 0;
-		while (i < 16 && i < val.length())
-		{
-			final int point = val.charAt(i);
-			retval += (point * Math.pow(2.0, 240 - (i << 4)));
-			i++;
-		}
-
-		return retval;
-	}
-
-	private boolean tableIs(TableScanOperator t, String q)
-	{
-		return t.getTable().equals(q);
-	}
-
 	public final class PartitionMetaData implements Serializable
 	{
 		private static final int NODEGROUP_NONE = -3;
@@ -4868,7 +4820,7 @@ public final class MetaData implements Serializable
 		private final Transaction tx;
 		private final String ngExp, nExp, dExp;
 
-		public PartitionMetaData(String schema, String table, String ngExp, String nExp, String dExp, Transaction tx, HashMap<String, String> cols2Types) throws Exception
+		public PartitionMetaData(final String schema, final String table, final String ngExp, final String nExp, final String dExp, final Transaction tx, final HashMap<String, String> cols2Types) throws Exception
 		{
 			this.schema = schema;
 			this.table = table;
@@ -4881,7 +4833,7 @@ public final class MetaData implements Serializable
 			setDData2(dExp, cols2Types);
 		}
 
-		public PartitionMetaData(String schema, String table, Transaction tx) throws Exception
+		public PartitionMetaData(final String schema, final String table, final Transaction tx) throws Exception
 		{
 			this.schema = schema;
 			this.table = table;
@@ -4938,6 +4890,21 @@ public final class MetaData implements Serializable
 		public ArrayList<Object> getDeviceRanges()
 		{
 			return deviceRange;
+		}
+
+		public String getDExp()
+		{
+			return dExp;
+		}
+
+		public String getNExp()
+		{
+			return nExp;
+		}
+
+		public String getNGExp()
+		{
+			return ngExp;
 		}
 
 		public ArrayList<String> getNodeGroupHash()
@@ -5060,7 +5027,7 @@ public final class MetaData implements Serializable
 			return nodeGroupSet.get(0) == NODEGROUP_NONE;
 		}
 
-		private void otherNG(String exp) throws Exception
+		private void otherNG(final String exp) throws Exception
 		{
 			final FastStringTokenizer tokens = new FastStringTokenizer(exp, ",", false);
 			String set = tokens.nextToken().substring(1);
@@ -5072,15 +5039,15 @@ public final class MetaData implements Serializable
 			nodeGroupHashMap = new HashMap<Integer, ArrayList<Integer>>();
 			while (tokens2.hasMoreTokens())
 			{
-				String nodesInGroup = tokens2.nextToken();
+				final String nodesInGroup = tokens2.nextToken();
 				nodeGroupSet.add(setNum);
 				numNodeGroups++;
 
-				ArrayList<Integer> nodeListForGroup = new ArrayList<Integer>();
-				FastStringTokenizer tokens3 = new FastStringTokenizer(nodesInGroup, "|", false);
+				final ArrayList<Integer> nodeListForGroup = new ArrayList<Integer>();
+				final FastStringTokenizer tokens3 = new FastStringTokenizer(nodesInGroup, "|", false);
 				while (tokens3.hasMoreTokens())
 				{
-					String token = tokens3.nextToken();
+					final String token = tokens3.nextToken();
 					nodeListForGroup.add(Integer.parseInt(token));
 				}
 				nodeGroupHashMap.put(setNum, nodeListForGroup);
@@ -5117,7 +5084,7 @@ public final class MetaData implements Serializable
 			}
 		}
 
-		private void setDData(String exp) throws Exception
+		private void setDData(final String exp) throws Exception
 		{
 			final FastStringTokenizer tokens = new FastStringTokenizer(exp, ",", false);
 			final String first = tokens.nextToken();
@@ -5156,7 +5123,7 @@ public final class MetaData implements Serializable
 			}
 		}
 
-		private void setDData2(String exp, HashMap<String, String> cols2Types) throws Exception
+		private void setDData2(final String exp, final HashMap<String, String> cols2Types) throws Exception
 		{
 			final FastStringTokenizer tokens = new FastStringTokenizer(exp, ",", false);
 			final String first = tokens.nextToken();
@@ -5176,7 +5143,7 @@ public final class MetaData implements Serializable
 				numDevices = 0;
 				while (tokens2.hasMoreTokens())
 				{
-					int device = Integer.parseInt(tokens2.nextToken());
+					final int device = Integer.parseInt(tokens2.nextToken());
 					if (device >= MetaData.getNumDevices())
 					{
 						throw new Exception("Invalid device number: " + device);
@@ -5208,7 +5175,7 @@ public final class MetaData implements Serializable
 				deviceRangeCol = tokens.nextToken();
 				String set = tokens.nextToken().substring(1);
 				set = set.substring(0, set.length() - 1);
-				String type2 = cols2Types.get(deviceRangeCol);
+				final String type2 = cols2Types.get(deviceRangeCol);
 				if (type2 == null)
 				{
 					throw new Exception("Device range column does not exist");
@@ -5225,7 +5192,7 @@ public final class MetaData implements Serializable
 			}
 		}
 
-		private void setDNotAll(String first)
+		private void setDNotAll(final String first)
 		{
 			String set = first.substring(1);
 			set = set.substring(0, set.length() - 1);
@@ -5239,7 +5206,7 @@ public final class MetaData implements Serializable
 			}
 		}
 
-		private void setDNotHash(FastStringTokenizer tokens) throws Exception
+		private void setDNotHash(final FastStringTokenizer tokens) throws Exception
 		{
 			deviceRangeCol = tokens.nextToken();
 			String set = tokens.nextToken().substring(1);
@@ -5247,7 +5214,7 @@ public final class MetaData implements Serializable
 			deviceRange = convertRangeStringToObject(set, schema, table, deviceRangeCol, tx);
 		}
 
-		private void setNData(String exp) throws Exception
+		private void setNData(final String exp) throws Exception
 		{
 			final FastStringTokenizer tokens = new FastStringTokenizer(exp, ",", false);
 			final String first = tokens.nextToken();
@@ -5294,7 +5261,7 @@ public final class MetaData implements Serializable
 			}
 		}
 
-		private void setNData2(String exp, HashMap<String, String> cols2Types) throws Exception
+		private void setNData2(final String exp, final HashMap<String, String> cols2Types) throws Exception
 		{
 			final FastStringTokenizer tokens = new FastStringTokenizer(exp, ",", false);
 			final String first = tokens.nextToken();
@@ -5326,7 +5293,7 @@ public final class MetaData implements Serializable
 				numNodes = 0;
 				while (tokens2.hasMoreTokens())
 				{
-					int node = Integer.parseInt(tokens2.nextToken());
+					final int node = Integer.parseInt(tokens2.nextToken());
 					if (node >= MetaData.numWorkerNodes)
 					{
 						throw new Exception("Invalid node number: " + node);
@@ -5350,10 +5317,10 @@ public final class MetaData implements Serializable
 				nodeHash = new ArrayList<String>(tokens2.allTokens().length);
 				while (tokens2.hasMoreTokens())
 				{
-					String col = tokens2.nextToken();
+					final String col = tokens2.nextToken();
 					if (!cols2Types.containsKey(col))
 					{
-						throw new Exception("Hash column " + col + " does not exist!");
+						throw new Exception("Hash column " + col + " does not exist in " + cols2Types);
 					}
 					nodeHash.add(col);
 				}
@@ -5361,7 +5328,7 @@ public final class MetaData implements Serializable
 			else if (type.equals("RANGE"))
 			{
 				nodeRangeCol = tokens.nextToken();
-				String type2 = cols2Types.get(nodeRangeCol);
+				final String type2 = cols2Types.get(nodeRangeCol);
 				if (type2 == null)
 				{
 					throw new Exception("Node range column does not exist");
@@ -5380,7 +5347,7 @@ public final class MetaData implements Serializable
 			}
 		}
 
-		private void setNGData(String exp) throws Exception
+		private void setNGData(final String exp) throws Exception
 		{
 			if (exp.equals("NONE"))
 			{
@@ -5392,7 +5359,7 @@ public final class MetaData implements Serializable
 			otherNG(exp);
 		}
 
-		private void setNGData2(String exp, HashMap<String, String> cols2Types) throws Exception
+		private void setNGData2(final String exp, final HashMap<String, String> cols2Types) throws Exception
 		{
 			if (exp.equals("NONE"))
 			{
@@ -5412,17 +5379,17 @@ public final class MetaData implements Serializable
 			int expectedNumNodesInGroup = -1;
 			while (tokens2.hasMoreTokens())
 			{
-				String nodesInGroup = tokens2.nextToken();
+				final String nodesInGroup = tokens2.nextToken();
 				int nodeCount = 0;
 				nodeGroupSet.add(setNum);
 				numNodeGroups++;
 
-				ArrayList<Integer> nodeListForGroup = new ArrayList<Integer>();
-				FastStringTokenizer tokens3 = new FastStringTokenizer(nodesInGroup, "|", false);
+				final ArrayList<Integer> nodeListForGroup = new ArrayList<Integer>();
+				final FastStringTokenizer tokens3 = new FastStringTokenizer(nodesInGroup, "|", false);
 				while (tokens3.hasMoreTokens())
 				{
-					String token = tokens3.nextToken();
-					int node = Integer.parseInt(token);
+					final String token = tokens3.nextToken();
+					final int node = Integer.parseInt(token);
 					if (node >= MetaData.numWorkerNodes)
 					{
 						throw new Exception("Invalid node number: " + node);
@@ -5456,7 +5423,7 @@ public final class MetaData implements Serializable
 				nodeGroupHash = new ArrayList<String>();
 				while (tokens2.hasMoreTokens())
 				{
-					String col = tokens2.nextToken();
+					final String col = tokens2.nextToken();
 					if (!cols2Types.containsKey(col))
 					{
 						throw new Exception("Hash column " + col + " does not exist");
@@ -5467,7 +5434,7 @@ public final class MetaData implements Serializable
 			else if (type.equals("RANGE"))
 			{
 				nodeGroupRangeCol = tokens.nextToken();
-				String type2 = cols2Types.get(nodeGroupRangeCol);
+				final String type2 = cols2Types.get(nodeGroupRangeCol);
 				if (type2 == null)
 				{
 					throw new Exception("Node group range column does not exist");
@@ -5486,7 +5453,7 @@ public final class MetaData implements Serializable
 			}
 		}
 
-		private void setNNotAA(String exp, String first)
+		private void setNNotAA(final String exp, final String first)
 		{
 			String set = first.substring(1);
 			set = set.substring(0, set.length() - 1);
@@ -5500,7 +5467,7 @@ public final class MetaData implements Serializable
 			}
 		}
 
-		private void setNNotHash(FastStringTokenizer tokens) throws Exception
+		private void setNNotHash(final FastStringTokenizer tokens) throws Exception
 		{
 			nodeRangeCol = tokens.nextToken();
 			String set = tokens.nextToken().substring(1);
@@ -5514,16 +5481,16 @@ public final class MetaData implements Serializable
 		private final String col;
 		private final Operator tree;
 
-		public ColAndTree(String col, Operator tree)
+		public ColAndTree(final String col, final Operator tree)
 		{
 			this.col = col;
 			this.tree = tree;
 		}
 
 		@Override
-		public boolean equals(Object r)
+		public boolean equals(final Object r)
 		{
-			ColAndTree rhs = (ColAndTree)r;
+			final ColAndTree rhs = (ColAndTree)r;
 			return col.equals(rhs.col) && tree == rhs.tree;
 		}
 
@@ -5550,7 +5517,7 @@ public final class MetaData implements Serializable
 		private long p;
 		private final long totalCard;
 
-		public ColDistThread(String schema, String table, String col, int tableID, int colID, long card, Transaction tx)
+		public ColDistThread(final String schema, final String table, final String col, final int tableID, final int colID, final long card, final Transaction tx)
 		{
 			this.schema = schema;
 			this.table = table;
@@ -5580,7 +5547,7 @@ public final class MetaData implements Serializable
 				}
 
 				tx.setIsolationLevel(Transaction.ISOLATION_UR);
-				String type = PlanCacheManager.getColType().setParms(schema, table, col).execute(tx);
+				final String type = PlanCacheManager.getColType().setParms(schema, table, col).execute(tx);
 				String sql = "SELECT " + col + " FROM " + schema + "." + table + " ORDER BY " + col + " ASC";
 				XAWorker worker = null;
 				if (totalCard > 1000000)
@@ -5676,10 +5643,10 @@ public final class MetaData implements Serializable
 					cmd.add("CLOSE");
 					worker.in.put(cmd);
 					int updateCount = -1;
-					Random random = new Random();
+					final Random random = new Random();
 					while (updateCount == -1)
 					{
-						Object obj = PlanCacheManager.getDist().setParms(schema, table, col).execute(tx);
+						final Object obj = PlanCacheManager.getDist().setParms(schema, table, col).execute(tx);
 						if (obj instanceof DataEndMarker)
 						{
 							sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
@@ -5800,10 +5767,10 @@ public final class MetaData implements Serializable
 					cmd.add("CLOSE");
 					worker.in.put(cmd);
 					int updateCount = -1;
-					Random random = new Random();
+					final Random random = new Random();
 					while (updateCount == -1)
 					{
-						Object obj = PlanCacheManager.getDist().setParms(schema, table, col).execute(tx);
+						final Object obj = PlanCacheManager.getDist().setParms(schema, table, col).execute(tx);
 						if (obj instanceof DataEndMarker)
 						{
 							sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
@@ -5924,10 +5891,10 @@ public final class MetaData implements Serializable
 					cmd.add("CLOSE");
 					worker.in.put(cmd);
 					int updateCount = -1;
-					Random random = new Random();
+					final Random random = new Random();
 					while (updateCount == -1)
 					{
-						Object obj = PlanCacheManager.getDist().setParms(schema, table, col).execute(tx);
+						final Object obj = PlanCacheManager.getDist().setParms(schema, table, col).execute(tx);
 						if (obj instanceof DataEndMarker)
 						{
 							sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
@@ -6046,10 +6013,10 @@ public final class MetaData implements Serializable
 				cmd.add("CLOSE");
 				worker.in.put(cmd);
 				int updateCount = -1;
-				Random random = new Random();
+				final Random random = new Random();
 				while (updateCount == -1)
 				{
-					Object obj = PlanCacheManager.getDist().setParms(schema, table, col).execute(tx);
+					final Object obj = PlanCacheManager.getDist().setParms(schema, table, col).execute(tx);
 					if (obj instanceof DataEndMarker)
 					{
 						sql = "INSERT INTO SYS.COLDIST VALUES(" + tableID + ", " + colID + ", '" + low + "', '" + q1 + "', '" + q2 + "', '" + q3 + "', '" + high + "')";
@@ -6100,7 +6067,7 @@ public final class MetaData implements Serializable
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				ok = false;
 				HRDBMSWorker.logger.debug("", e);
@@ -6108,7 +6075,7 @@ public final class MetaData implements Serializable
 				{
 					XAManager.rollback(tx);
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 					// BLACKLIST?
 					HRDBMSWorker.logger.debug("", f);
@@ -6130,7 +6097,7 @@ public final class MetaData implements Serializable
 		private long p;
 		private final int indexID;
 
-		public ColStatsThread(String schema, String table, String col, int tableID, int colID, Transaction tx, long totalCard, int indexID)
+		public ColStatsThread(final String schema, final String table, final String col, final int tableID, final int colID, final Transaction tx, final long totalCard, final int indexID)
 		{
 			this.schema = schema;
 			this.table = table;
@@ -6175,7 +6142,7 @@ public final class MetaData implements Serializable
 							obj2 = worker.out.take();
 							break;
 						}
-						catch (InterruptedException e)
+						catch (final InterruptedException e)
 						{
 						}
 					}
@@ -6240,7 +6207,7 @@ public final class MetaData implements Serializable
 							obj = worker.out.take();
 							break;
 						}
-						catch (InterruptedException e)
+						catch (final InterruptedException e)
 						{
 						}
 					}
@@ -6275,17 +6242,14 @@ public final class MetaData implements Serializable
 					}
 				}
 				int updateCount = -1;
-				Random random = new Random();
+				final Random random = new Random();
 				while (updateCount == -1)
 				{
-					try
-					{
-						PlanCacheManager.getColCard().setParms(schema, table, col).execute(tx);
-					}
-					catch (Exception e)
+					final long cardTest = PlanCacheManager.getColCard().setParms(schema, table, col).execute(tx);
+					if (cardTest == -1)
 					{
 						sql = "INSERT INTO SYS.COLSTATS VALUES(" + tableID + "," + colID + "," + card + ")";
-						XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+						final XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 						worker.start();
 						worker.join();
 						updateCount = worker.getUpdateCount();
@@ -6305,7 +6269,7 @@ public final class MetaData implements Serializable
 					}
 
 					sql = "UPDATE SYS.COLSTATS SET CARD = " + card + " WHERE TABLEID = " + tableID + " AND COLID = " + colID;
-					XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+					final XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 					worker.start();
 					worker.join();
 					updateCount = worker.getUpdateCount();
@@ -6331,7 +6295,7 @@ public final class MetaData implements Serializable
 
 				Thread.sleep(random.nextInt(60000));
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				ok = false;
 				HRDBMSWorker.logger.debug("", e);
@@ -6339,7 +6303,7 @@ public final class MetaData implements Serializable
 				{
 					XAManager.rollback(tx);
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 					// BLACKLIST?
 					HRDBMSWorker.logger.debug("", f);
@@ -6360,7 +6324,7 @@ public final class MetaData implements Serializable
 		private final long totalCard;
 		private long p;
 
-		public IndexStatsThread(String schema, String table, ArrayList<String> keys, int tableID, int indexID, Transaction tx, long totalCard)
+		public IndexStatsThread(final String schema, final String table, final ArrayList<String> keys, final int tableID, final int indexID, final Transaction tx, final long totalCard)
 		{
 			this.schema = schema;
 			this.table = table;
@@ -6399,7 +6363,7 @@ public final class MetaData implements Serializable
 						obj2 = worker.out.take();
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}
@@ -6423,7 +6387,7 @@ public final class MetaData implements Serializable
 					return;
 				}
 
-				String unique = (String)((ArrayList<Object>)obj2).get(3);
+				final String unique = (String)((ArrayList<Object>)obj2).get(3);
 				long card = -1;
 				if (unique.equals("Y"))
 				{
@@ -6477,7 +6441,7 @@ public final class MetaData implements Serializable
 							obj2 = worker.out.take();
 							break;
 						}
-						catch (InterruptedException e)
+						catch (final InterruptedException e)
 						{
 						}
 					}
@@ -6512,12 +6476,12 @@ public final class MetaData implements Serializable
 					}
 				}
 				int updateCount = -1;
-				Random random = new Random();
+				final Random random = new Random();
 				while (updateCount == -1)
 				{
 					LockManager.xLock(new Block("/data1/SYS.INDEXSTATS.tbl", 4097), tx.number());
 					LockManager.xLock(new Block("/data1/SYS.PKINDEXSTATS.indx", 0), tx.number());
-					Object obj = PlanCacheManager.getIndexCard().setParms(tableID, indexID).execute(tx);
+					final Object obj = PlanCacheManager.getIndexCard().setParms(tableID, indexID).execute(tx);
 					if (obj instanceof DataEndMarker)
 					{
 						sql = "INSERT INTO SYS.INDEXSTATS VALUES(" + tableID + "," + indexID + "," + card + ")";
@@ -6568,7 +6532,7 @@ public final class MetaData implements Serializable
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				ok = false;
 				HRDBMSWorker.logger.debug("", e);
@@ -6576,7 +6540,7 @@ public final class MetaData implements Serializable
 				{
 					XAManager.rollback(tx);
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 					// BLACKLIST?
 					HRDBMSWorker.logger.debug("", f);
@@ -6598,7 +6562,7 @@ public final class MetaData implements Serializable
 		private Transaction tx;
 		private boolean ok = true;
 
-		public TableStatsThread(String schema, String table, int tableID, Transaction tx)
+		public TableStatsThread(final String schema, final String table, final int tableID, final Transaction tx)
 		{
 			this.schema = schema;
 			this.table = table;
@@ -6633,7 +6597,7 @@ public final class MetaData implements Serializable
 						obj = worker.out.take();
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}
@@ -6657,16 +6621,14 @@ public final class MetaData implements Serializable
 					return;
 				}
 
-				long card = (Long)((ArrayList<Object>)obj).get(0);
-				Random random = new Random();
+				final long card = (Long)((ArrayList<Object>)obj).get(0);
+				final Random random = new Random();
 				int updateCount = -1;
 				while (updateCount == -1)
 				{
-					try
-					{
-						PlanCacheManager.getTableCard().setParms(schema, table).execute(tx);
-					}
-					catch (Exception e)
+					final long testCard = PlanCacheManager.getTableCard().setParms(schema, table).execute(tx);
+
+					if (testCard == -1)
 					{
 						sql = "INSERT INTO SYS.TABLESTATS VALUES(" + tableID + "," + card + ")";
 						worker = XAManager.executeAuthorizedUpdate(sql, tx);
@@ -6715,7 +6677,7 @@ public final class MetaData implements Serializable
 					// Thread.sleep(random.nextInt(60000));
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				ok = false;
 				HRDBMSWorker.logger.debug("", e);
@@ -6723,7 +6685,7 @@ public final class MetaData implements Serializable
 				{
 					XAManager.rollback(tx);
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 					// BLACKLIST?
 					HRDBMSWorker.logger.debug("", f);

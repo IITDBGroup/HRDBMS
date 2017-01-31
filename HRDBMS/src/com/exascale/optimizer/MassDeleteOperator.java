@@ -35,14 +35,14 @@ public final class MassDeleteOperator implements Operator, Serializable
 	private Transaction tx;
 	private boolean logged = true;
 
-	public MassDeleteOperator(String schema, String table, MetaData meta)
+	public MassDeleteOperator(final String schema, final String table, final MetaData meta)
 	{
 		this.meta = meta;
 		this.schema = schema;
 		this.table = table;
 	}
 
-	public MassDeleteOperator(String schema, String table, MetaData meta, boolean logged)
+	public MassDeleteOperator(final String schema, final String table, final MetaData meta, final boolean logged)
 	{
 		this.meta = meta;
 		this.schema = schema;
@@ -50,17 +50,24 @@ public final class MassDeleteOperator implements Operator, Serializable
 		this.logged = logged;
 	}
 
-	private static ArrayList<Object> convertToHosts(ArrayList<Object> tree, Transaction tx) throws Exception
+	private static int bytesToInt(final byte[] val)
 	{
-		ArrayList<Object> retval = new ArrayList<Object>();
+		final int ret = java.nio.ByteBuffer.wrap(val).getInt();
+		return ret;
+	}
+
+	private static ArrayList<Object> convertToHosts(final ArrayList<Object> tree, final Transaction tx) throws Exception
+	{
+		final ArrayList<Object> retval = new ArrayList<Object>();
 		int i = 0;
 		final int size = tree.size();
 		while (i < size)
 		{
-			Object obj = tree.get(i);
+			final Object obj = tree.get(i);
 			if (obj instanceof Integer)
 			{
-				retval.add(new MetaData().getHostNameForNode((Integer)obj, tx));
+				// new MetaData();
+				retval.add(MetaData.getHostNameForNode((Integer)obj, tx));
 			}
 			else
 			{
@@ -73,17 +80,17 @@ public final class MassDeleteOperator implements Operator, Serializable
 		return retval;
 	}
 
-	private static void getConfirmation(Socket sock) throws Exception
+	private static void getConfirmation(final Socket sock) throws Exception
 	{
-		InputStream in = sock.getInputStream();
-		byte[] inMsg = new byte[2];
+		final InputStream in = sock.getInputStream();
+		final byte[] inMsg = new byte[2];
 
 		int count = 0;
 		while (count < 2)
 		{
 			try
 			{
-				int temp = in.read(inMsg, count, 2 - count);
+				final int temp = in.read(inMsg, count, 2 - count);
 				if (temp == -1)
 				{
 					in.close();
@@ -101,7 +108,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 			}
 		}
 
-		String inStr = new String(inMsg, StandardCharsets.UTF_8);
+		final String inStr = new String(inMsg, StandardCharsets.UTF_8);
 		if (!inStr.equals("OK"))
 		{
 			in.close();
@@ -109,7 +116,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 		}
 	}
 
-	private static byte[] intToBytes(int val)
+	private static byte[] intToBytes(final int val)
 	{
 		final byte[] buff = new byte[4];
 		buff[0] = (byte)(val >> 24);
@@ -119,7 +126,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 		return buff;
 	}
 
-	private static byte[] longToBytes(long val)
+	private static byte[] longToBytes(final long val)
 	{
 		final byte[] buff = new byte[8];
 		buff[0] = (byte)(val >> 56);
@@ -133,16 +140,16 @@ public final class MassDeleteOperator implements Operator, Serializable
 		return buff;
 	}
 
-	private static ArrayList<Object> makeTree(ArrayList<Integer> nodes)
+	private static ArrayList<Object> makeTree(final ArrayList<Integer> nodes)
 	{
-		int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
+		final int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 		if (nodes.size() <= max)
 		{
-			ArrayList<Object> retval = new ArrayList<Object>(nodes);
+			final ArrayList<Object> retval = new ArrayList<Object>(nodes);
 			return retval;
 		}
 
-		ArrayList<Object> retval = new ArrayList<Object>();
+		final ArrayList<Object> retval = new ArrayList<Object>();
 		int i = 0;
 		while (i < max)
 		{
@@ -150,16 +157,16 @@ public final class MassDeleteOperator implements Operator, Serializable
 			i++;
 		}
 
-		int remaining = nodes.size() - i;
-		int perNode = remaining / max + 1;
+		final int remaining = nodes.size() - i;
+		final int perNode = remaining / max + 1;
 
 		int j = 0;
 		final int size = nodes.size();
 		while (i < size)
 		{
-			int first = (Integer)retval.get(j);
+			final int first = (Integer)retval.get(j);
 			retval.remove(j);
-			ArrayList<Integer> list = new ArrayList<Integer>(perNode + 1);
+			final ArrayList<Integer> list = new ArrayList<Integer>(perNode + 1);
 			list.add(first);
 			int k = 0;
 			while (k < perNode && i < size)
@@ -182,7 +189,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 		i = 0;
 		while (i < retval.size())
 		{
-			ArrayList<Integer> list = (ArrayList<Integer>)retval.remove(i);
+			final ArrayList<Integer> list = (ArrayList<Integer>)retval.remove(i);
 			retval.add(i, makeTree(list));
 			i++;
 		}
@@ -190,8 +197,25 @@ public final class MassDeleteOperator implements Operator, Serializable
 		return retval;
 	}
 
+	private static byte[] stringToBytes(final String string)
+	{
+		byte[] data = null;
+		try
+		{
+			data = string.getBytes(StandardCharsets.UTF_8);
+		}
+		catch (final Exception e)
+		{
+		}
+		final byte[] len = intToBytes(data.length);
+		final byte[] retval = new byte[data.length + len.length];
+		System.arraycopy(len, 0, retval, 0, len.length);
+		System.arraycopy(data, 0, retval, len.length, data.length);
+		return retval;
+	}
+
 	@Override
-	public void add(Operator op) throws Exception
+	public void add(final Operator op) throws Exception
 	{
 		throw new Exception("MassDeleteOperator does not support children");
 	}
@@ -274,7 +298,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 
 	@Override
 	// @?Parallel
-	public Object next(Operator op) throws Exception
+	public Object next(final Operator op) throws Exception
 	{
 		while (!done)
 		{
@@ -283,7 +307,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 
 		if (num.get() >= 0)
 		{
-			int retval = num.get();
+			final int retval = num.get();
 			num.set(-1);
 			return retval;
 		}
@@ -298,7 +322,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void nextAll(Operator op) throws Exception
+	public void nextAll(final Operator op) throws Exception
 	{
 		child.nextAll(op);
 		num.set(Integer.MIN_VALUE + 1);
@@ -323,18 +347,18 @@ public final class MassDeleteOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void registerParent(Operator op) throws Exception
+	public void registerParent(final Operator op) throws Exception
 	{
 		throw new Exception("MassDeleteOperator does not support parents.");
 	}
 
 	@Override
-	public void removeChild(Operator op)
+	public void removeChild(final Operator op)
 	{
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 	}
 
@@ -345,28 +369,28 @@ public final class MassDeleteOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		throw new Exception("Tried to call serialize on mass delete operator");
 	}
 
 	@Override
-	public void setChildPos(int pos)
+	public void setChildPos(final int pos)
 	{
 	}
 
 	@Override
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 		this.node = node;
 	}
 
 	@Override
-	public void setPlan(Plan plan)
+	public void setPlan(final Plan plan)
 	{
 	}
 
-	public void setTransaction(Transaction tx)
+	public void setTransaction(final Transaction tx)
 	{
 		this.tx = tx;
 	}
@@ -375,16 +399,16 @@ public final class MassDeleteOperator implements Operator, Serializable
 	public void start() throws Exception
 	{
 		// get all nodes that contain data for this table
-		ArrayList<Integer> nodes = meta.getNodesForTable(schema, table, tx);
-		ArrayList<Object> tree = makeTree(nodes);
+		final ArrayList<Integer> nodes = MetaData.getNodesForTable(schema, table, tx);
+		final ArrayList<Object> tree = makeTree(nodes);
 		// send all of them a mass delete message for this table with this
 		// transaction
-		ArrayList<String> indexes = meta.getIndexFileNamesForTable(schema, table, tx);
-		ArrayList<ArrayList<String>> keys = meta.getKeys(indexes, tx);
-		ArrayList<ArrayList<String>> types = meta.getTypes(indexes, tx);
-		ArrayList<ArrayList<Boolean>> orders = meta.getOrders(indexes, tx);
-		int type = meta.getTypeForTable(schema, table, tx);
-		boolean ok = sendMassDeletes(tree, tx, meta.getCols2TypesForTable(schema, table, tx), meta.getPos2ColForTable(schema, table, tx), keys, types, orders, indexes, logged, type);
+		final ArrayList<String> indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
+		final ArrayList<ArrayList<String>> keys = MetaData.getKeys(indexes, tx);
+		final ArrayList<ArrayList<String>> types = MetaData.getTypes(indexes, tx);
+		final ArrayList<ArrayList<Boolean>> orders = MetaData.getOrders(indexes, tx);
+		final int type = MetaData.getTypeForTable(schema, table, tx);
+		final boolean ok = sendMassDeletes(tree, tx, MetaData.getCols2TypesForTable(schema, table, tx), MetaData.getPos2ColForTable(schema, table, tx), keys, types, orders, indexes, logged, type);
 		// if anyone responds not ok tell next() to throw an exception
 		if (!ok)
 		{
@@ -402,39 +426,33 @@ public final class MassDeleteOperator implements Operator, Serializable
 		return "MassDeleteOperator";
 	}
 
-	private int bytesToInt(byte[] val)
-	{
-		final int ret = java.nio.ByteBuffer.wrap(val).getInt();
-		return ret;
-	}
-
-	private boolean sendMassDeletes(ArrayList<Object> tree, Transaction tx, HashMap<String, String> cols2Types, TreeMap<Integer, String> pos2Col, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes, boolean logged, int type)
+	private boolean sendMassDeletes(final ArrayList<Object> tree, final Transaction tx, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> pos2Col, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final ArrayList<String> indexes, final boolean logged, final int type)
 	{
 		// all of them should respond OK with delete count
 		boolean allOK = true;
-		ArrayList<SendMassDeleteThread> threads = new ArrayList<SendMassDeleteThread>();
-		for (Object o : tree)
+		final ArrayList<SendMassDeleteThread> threads = new ArrayList<SendMassDeleteThread>();
+		for (final Object o : tree)
 		{
 			if (o instanceof Integer)
 			{
-				ArrayList<Object> list = new ArrayList<Object>(1);
+				final ArrayList<Object> list = new ArrayList<Object>(1);
 				list.add(o);
-				SendMassDeleteThread thread = new SendMassDeleteThread(list, tx, cols2Types, pos2Col, keys, types, orders, indexes, logged, type);
+				final SendMassDeleteThread thread = new SendMassDeleteThread(list, tx, cols2Types, pos2Col, keys, types, orders, indexes, logged, type);
 				threads.add(thread);
 			}
 			else
 			{
-				SendMassDeleteThread thread = new SendMassDeleteThread((ArrayList<Object>)o, tx, cols2Types, pos2Col, keys, types, orders, indexes, logged, type);
+				final SendMassDeleteThread thread = new SendMassDeleteThread((ArrayList<Object>)o, tx, cols2Types, pos2Col, keys, types, orders, indexes, logged, type);
 				threads.add(thread);
 			}
 		}
 
-		for (SendMassDeleteThread thread : threads)
+		for (final SendMassDeleteThread thread : threads)
 		{
 			thread.start();
 		}
 
-		for (SendMassDeleteThread thread : threads)
+		for (final SendMassDeleteThread thread : threads)
 		{
 			while (true)
 			{
@@ -443,11 +461,11 @@ public final class MassDeleteOperator implements Operator, Serializable
 					thread.join();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
-			boolean ok = thread.getOK();
+			final boolean ok = thread.getOK();
 			if (!ok)
 			{
 				allOK = false;
@@ -468,23 +486,6 @@ public final class MassDeleteOperator implements Operator, Serializable
 		}
 	}
 
-	private byte[] stringToBytes(String string)
-	{
-		byte[] data = null;
-		try
-		{
-			data = string.getBytes(StandardCharsets.UTF_8);
-		}
-		catch (Exception e)
-		{
-		}
-		byte[] len = intToBytes(data.length);
-		byte[] retval = new byte[data.length + len.length];
-		System.arraycopy(len, 0, retval, 0, len.length);
-		System.arraycopy(data, 0, retval, len.length, data.length);
-		return retval;
-	}
-
 	private class SendMassDeleteThread extends HRDBMSThread
 	{
 		private final ArrayList<Object> tree;
@@ -500,7 +501,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 		private final boolean logged;
 		private final int type;
 
-		public SendMassDeleteThread(ArrayList<Object> tree, Transaction tx, HashMap<String, String> cols2Types, TreeMap<Integer, String> pos2Col, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes, boolean logged, int type)
+		public SendMassDeleteThread(final ArrayList<Object> tree, final Transaction tx, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> pos2Col, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final ArrayList<String> indexes, final boolean logged, final int type)
 		{
 			this.tree = tree;
 			this.tx = tx;
@@ -530,7 +531,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 			sendMassDelete(tree, tx, keys, types, orders, indexes);
 		}
 
-		private void sendMassDelete(ArrayList<Object> tree, Transaction tx, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, ArrayList<String> indexes)
+		private void sendMassDelete(final ArrayList<Object> tree, final Transaction tx, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final ArrayList<String> indexes)
 		{
 			Object obj = tree.get(0);
 			while (obj instanceof ArrayList)
@@ -541,15 +542,16 @@ public final class MassDeleteOperator implements Operator, Serializable
 			Socket sock = null;
 			try
 			{
-				String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
+				// new MetaData();
+				final String hostname = MetaData.getHostNameForNode((Integer)obj, tx);
 				// sock = new Socket(hostname,
 				// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				sock = new Socket();
 				sock.setReceiveBufferSize(4194304);
 				sock.setSendBufferSize(4194304);
 				sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
-				OutputStream out = sock.getOutputStream();
-				byte[] outMsg = "MDELETE         ".getBytes(StandardCharsets.UTF_8);
+				final OutputStream out = sock.getOutputStream();
+				final byte[] outMsg = "MDELETE         ".getBytes(StandardCharsets.UTF_8);
 				outMsg[8] = 0;
 				outMsg[9] = 0;
 				outMsg[10] = 0;
@@ -572,7 +574,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 					out.write((byte)0);
 				}
 				out.write(intToBytes(type));
-				ObjectOutputStream objOut = new ObjectOutputStream(out);
+				final ObjectOutputStream objOut = new ObjectOutputStream(out);
 				objOut.writeObject(convertToHosts(tree, tx));
 				objOut.writeObject(indexes);
 				objOut.writeObject(keys);
@@ -584,11 +586,11 @@ public final class MassDeleteOperator implements Operator, Serializable
 				out.flush();
 				getConfirmation(sock);
 				int count = 4;
-				int off = 0;
-				byte[] numBytes = new byte[4];
+				final int off = 0;
+				final byte[] numBytes = new byte[4];
 				while (count > 0)
 				{
-					int temp = sock.getInputStream().read(numBytes, off, 4 - off);
+					final int temp = sock.getInputStream().read(numBytes, off, 4 - off);
 					if (temp == -1)
 					{
 						ok = false;
@@ -604,7 +606,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 				sock.close();
 				ok = true;
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				ok = false;
 				try
@@ -614,7 +616,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 						sock.close();
 					}
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 				}
 				HRDBMSWorker.logger.debug("", e);

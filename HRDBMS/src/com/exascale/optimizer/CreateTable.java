@@ -14,7 +14,7 @@ public class CreateTable extends SQLStatement
 	private ArrayList<Integer> colOrder;
 	private ArrayList<Integer> organization;
 
-	public CreateTable(TableName table, ArrayList<ColDef> cols, PrimaryKey pk, String nodeGroupExp, String nodeExp, String deviceExp, int type)
+	public CreateTable(final TableName table, final ArrayList<ColDef> cols, final PrimaryKey pk, final String nodeGroupExp, final String nodeExp, final String deviceExp, final int type)
 	{
 		this.table = table;
 		this.cols = cols;
@@ -25,7 +25,7 @@ public class CreateTable extends SQLStatement
 		this.type = type;
 	}
 
-	public CreateTable(TableName table, ArrayList<ColDef> cols, PrimaryKey pk, String nodeGroupExp, String nodeExp, String deviceExp, int type, ArrayList<Integer> colOrder)
+	public CreateTable(final TableName table, final ArrayList<ColDef> cols, final PrimaryKey pk, final String nodeGroupExp, final String nodeExp, final String deviceExp, final int type, final ArrayList<Integer> colOrder)
 	{
 		this.table = table;
 		this.cols = cols;
@@ -82,7 +82,7 @@ public class CreateTable extends SQLStatement
 		return type;
 	}
 
-	public void setOrganization(ArrayList<Integer> organization)
+	public void setOrganization(final ArrayList<Integer> organization)
 	{
 		this.organization = organization;
 	}

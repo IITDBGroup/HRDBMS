@@ -7,7 +7,7 @@ public class SPSCQueue
 	volatile long tail = 0;
 	final int length;
 
-	public SPSCQueue(int requestedSize)
+	public SPSCQueue(final int requestedSize)
 	{
 		q = new Object[Integer.highestOneBit(requestedSize)];
 		length = q.length;
@@ -35,7 +35,7 @@ public class SPSCQueue
 		return q[(int)((head + 1) & (length - 1))];
 	}
 
-	public void put(Object o)
+	public void put(final Object o)
 	{
 		while (tail - head > length)
 		{
@@ -43,7 +43,7 @@ public class SPSCQueue
 			{
 				Thread.sleep(1);
 			}
-			catch (InterruptedException e)
+			catch (final InterruptedException e)
 			{
 			}
 		}
@@ -60,12 +60,12 @@ public class SPSCQueue
 			{
 				Thread.sleep(1);
 			}
-			catch (InterruptedException e)
+			catch (final InterruptedException e)
 			{
 			}
 		}
 		final int index = (int)((head + 1) & (length - 1));
-		Object retval = q[index];
+		final Object retval = q[index];
 		q[index] = null;
 		head++;
 		return retval;

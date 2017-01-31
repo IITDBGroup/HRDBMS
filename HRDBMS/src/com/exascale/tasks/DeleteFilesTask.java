@@ -19,17 +19,18 @@ import com.exascale.threads.HRDBMSThread;
 
 public class DeleteFilesTask extends Task
 {
-	private static ArrayList<Object> convertToHosts(ArrayList<Object> tree, Transaction tx) throws Exception
+	private static ArrayList<Object> convertToHosts(final ArrayList<Object> tree, final Transaction tx) throws Exception
 	{
-		ArrayList<Object> retval = new ArrayList<Object>();
+		final ArrayList<Object> retval = new ArrayList<Object>();
 		int i = 0;
 		final int size = tree.size();
 		while (i < size)
 		{
-			Object obj = tree.get(i);
+			final Object obj = tree.get(i);
 			if (obj instanceof Integer)
 			{
-				retval.add(new MetaData().getHostNameForNode((Integer)obj, tx));
+				// new MetaData();
+				retval.add(MetaData.getHostNameForNode((Integer)obj, tx));
 			}
 			else
 			{
@@ -42,17 +43,17 @@ public class DeleteFilesTask extends Task
 		return retval;
 	}
 
-	private static void getConfirmation(Socket sock) throws Exception
+	private static void getConfirmation(final Socket sock) throws Exception
 	{
-		InputStream in = sock.getInputStream();
-		byte[] inMsg = new byte[2];
+		final InputStream in = sock.getInputStream();
+		final byte[] inMsg = new byte[2];
 
 		int count = 0;
 		while (count < 2)
 		{
 			try
 			{
-				int temp = in.read(inMsg, count, 2 - count);
+				final int temp = in.read(inMsg, count, 2 - count);
 				if (temp == -1)
 				{
 					in.close();
@@ -70,7 +71,7 @@ public class DeleteFilesTask extends Task
 			}
 		}
 
-		String inStr = new String(inMsg, StandardCharsets.UTF_8);
+		final String inStr = new String(inMsg, StandardCharsets.UTF_8);
 		if (!inStr.equals("OK"))
 		{
 			in.close();
@@ -81,7 +82,7 @@ public class DeleteFilesTask extends Task
 		{
 			in.close();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 		}
 	}
@@ -99,19 +100,19 @@ public class DeleteFilesTask extends Task
 		{
 			try
 			{
-				long start = System.currentTimeMillis();
-				ArrayList<String> tables = new ArrayList<String>();
-				ArrayList<String> indexes = new ArrayList<String>();
-				long target = Long.parseLong(HRDBMSWorker.getHParms().getProperty("old_file_cleanup_target_days")) * 24 * 60 * 60 * 1000;
+				final long start = System.currentTimeMillis();
+				final ArrayList<String> tables = new ArrayList<String>();
+				final ArrayList<String> indexes = new ArrayList<String>();
+				final long target = Long.parseLong(HRDBMSWorker.getHParms().getProperty("old_file_cleanup_target_days")) * 24 * 60 * 60 * 1000;
 				String sql = "SELECT SCHEMA, TABNAME FROM SYS.TABLES";
-				Connection conn = DriverManager.getConnection("jdbc:hrdbms://localhost:" + HRDBMSWorker.getHParms().getProperty("port_number"));
+				final Connection conn = DriverManager.getConnection("jdbc:hrdbms://localhost:" + HRDBMSWorker.getHParms().getProperty("port_number"));
 				conn.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
 				conn.setAutoCommit(false);
-				Statement stmt = conn.createStatement();
+				final Statement stmt = conn.createStatement();
 				ResultSet rs = stmt.executeQuery(sql);
 				while (rs.next())
 				{
-					String table = rs.getString(1) + "." + rs.getString(2);
+					final String table = rs.getString(1) + "." + rs.getString(2);
 					tables.add(table);
 				}
 
@@ -123,7 +124,7 @@ public class DeleteFilesTask extends Task
 				rs = stmt.executeQuery(sql);
 				while (rs.next())
 				{
-					String index = rs.getString(1) + "." + rs.getString(2);
+					final String index = rs.getString(1) + "." + rs.getString(2);
 					indexes.add(index);
 				}
 
@@ -132,28 +133,28 @@ public class DeleteFilesTask extends Task
 				conn.commit();
 				conn.close();
 
-				long end = System.currentTimeMillis();
-				long elapsed = end - start;
+				final long end = System.currentTimeMillis();
+				final long elapsed = end - start;
 				MaintenanceManager.schedule(DeleteFilesTask.this, -1, elapsed, end + target);
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.warn("DeleteFilesTask failed", e);
-				long target = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("old_file_cleanup_target_days")) * 24L * 60 * 60 * 1000;
+				final long target = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("old_file_cleanup_target_days")) * 24L * 60 * 60 * 1000;
 				MaintenanceManager.schedule(DeleteFilesTask.this, System.currentTimeMillis() + target);
 			}
 		}
 
-		private ArrayList<Object> makeTree(ArrayList<Integer> nodes)
+		private ArrayList<Object> makeTree(final ArrayList<Integer> nodes)
 		{
-			int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
+			final int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 			if (nodes.size() <= max)
 			{
-				ArrayList<Object> retval = new ArrayList<Object>(nodes);
+				final ArrayList<Object> retval = new ArrayList<Object>(nodes);
 				return retval;
 			}
 
-			ArrayList<Object> retval = new ArrayList<Object>();
+			final ArrayList<Object> retval = new ArrayList<Object>();
 			int i = 0;
 			while (i < max)
 			{
@@ -161,16 +162,16 @@ public class DeleteFilesTask extends Task
 				i++;
 			}
 
-			int remaining = nodes.size() - i;
-			int perNode = remaining / max + 1;
+			final int remaining = nodes.size() - i;
+			final int perNode = remaining / max + 1;
 
 			int j = 0;
 			final int size = nodes.size();
 			while (i < size)
 			{
-				int first = (Integer)retval.get(j);
+				final int first = (Integer)retval.get(j);
 				retval.remove(j);
-				ArrayList<Integer> list = new ArrayList<Integer>(perNode + 1);
+				final ArrayList<Integer> list = new ArrayList<Integer>(perNode + 1);
 				list.add(first);
 				int k = 0;
 				while (k < perNode && i < size)
@@ -193,7 +194,7 @@ public class DeleteFilesTask extends Task
 			i = 0;
 			while (i < retval.size())
 			{
-				ArrayList<Integer> list = (ArrayList<Integer>)retval.remove(i);
+				final ArrayList<Integer> list = (ArrayList<Integer>)retval.remove(i);
 				retval.add(i, makeTree(list));
 				i++;
 			}
@@ -201,37 +202,37 @@ public class DeleteFilesTask extends Task
 			return retval;
 		}
 
-		private void sendDeleteIndexes(ArrayList<String> indexes) throws Exception
+		private void sendDeleteIndexes(final ArrayList<String> indexes) throws Exception
 		{
-			Transaction tx = new Transaction(Transaction.ISOLATION_CS);
+			final Transaction tx = new Transaction(Transaction.ISOLATION_CS);
 
-			ArrayList<Integer> nodes = MetaData.getWorkerNodes();
-			ArrayList<Object> tree = makeTree(nodes);
+			final ArrayList<Integer> nodes = MetaData.getWorkerNodes();
+			final ArrayList<Object> tree = makeTree(nodes);
 
 			boolean allOK = true;
-			ArrayList<SendIndexThread> threads = new ArrayList<SendIndexThread>();
-			for (Object o : tree)
+			final ArrayList<SendIndexThread> threads = new ArrayList<SendIndexThread>();
+			for (final Object o : tree)
 			{
 				if (o instanceof Integer)
 				{
-					ArrayList<Object> list = new ArrayList<Object>(1);
+					final ArrayList<Object> list = new ArrayList<Object>(1);
 					list.add(o);
-					SendIndexThread thread = new SendIndexThread(list, tx, indexes);
+					final SendIndexThread thread = new SendIndexThread(list, tx, indexes);
 					threads.add(thread);
 				}
 				else
 				{
-					SendIndexThread thread = new SendIndexThread((ArrayList<Object>)o, tx, indexes);
+					final SendIndexThread thread = new SendIndexThread((ArrayList<Object>)o, tx, indexes);
 					threads.add(thread);
 				}
 			}
 
-			for (SendIndexThread thread : threads)
+			for (final SendIndexThread thread : threads)
 			{
 				thread.start();
 			}
 
-			for (SendIndexThread thread : threads)
+			for (final SendIndexThread thread : threads)
 			{
 				while (true)
 				{
@@ -240,11 +241,11 @@ public class DeleteFilesTask extends Task
 						thread.join();
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}
-				boolean ok = thread.getOK();
+				final boolean ok = thread.getOK();
 				if (!ok)
 				{
 					allOK = false;
@@ -259,36 +260,36 @@ public class DeleteFilesTask extends Task
 			}
 		}
 
-		private void sendDeleteTables(ArrayList<String> tables) throws Exception
+		private void sendDeleteTables(final ArrayList<String> tables) throws Exception
 		{
-			Transaction tx = new Transaction(Transaction.ISOLATION_CS);
-			ArrayList<Integer> nodes = MetaData.getWorkerNodes();
-			ArrayList<Object> tree = makeTree(nodes);
+			final Transaction tx = new Transaction(Transaction.ISOLATION_CS);
+			final ArrayList<Integer> nodes = MetaData.getWorkerNodes();
+			final ArrayList<Object> tree = makeTree(nodes);
 
 			boolean allOK = true;
-			ArrayList<SendTableThread> threads = new ArrayList<SendTableThread>();
-			for (Object o : tree)
+			final ArrayList<SendTableThread> threads = new ArrayList<SendTableThread>();
+			for (final Object o : tree)
 			{
 				if (o instanceof Integer)
 				{
-					ArrayList<Object> list = new ArrayList<Object>(1);
+					final ArrayList<Object> list = new ArrayList<Object>(1);
 					list.add(o);
-					SendTableThread thread = new SendTableThread(list, tx, tables);
+					final SendTableThread thread = new SendTableThread(list, tx, tables);
 					threads.add(thread);
 				}
 				else
 				{
-					SendTableThread thread = new SendTableThread((ArrayList<Object>)o, tx, tables);
+					final SendTableThread thread = new SendTableThread((ArrayList<Object>)o, tx, tables);
 					threads.add(thread);
 				}
 			}
 
-			for (SendTableThread thread : threads)
+			for (final SendTableThread thread : threads)
 			{
 				thread.start();
 			}
 
-			for (SendTableThread thread : threads)
+			for (final SendTableThread thread : threads)
 			{
 				while (true)
 				{
@@ -297,11 +298,11 @@ public class DeleteFilesTask extends Task
 						thread.join();
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}
-				boolean ok = thread.getOK();
+				final boolean ok = thread.getOK();
 				if (!ok)
 				{
 					allOK = false;
@@ -324,7 +325,7 @@ public class DeleteFilesTask extends Task
 		private final ArrayList<String> indexes;
 		private boolean ok = true;
 
-		public SendIndexThread(ArrayList<Object> tree, Transaction tx, ArrayList<String> indexes)
+		public SendIndexThread(final ArrayList<Object> tree, final Transaction tx, final ArrayList<String> indexes)
 		{
 			this.tree = tree;
 			this.tx = tx;
@@ -348,15 +349,16 @@ public class DeleteFilesTask extends Task
 			Socket sock = null;
 			try
 			{
-				String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
+				// new MetaData();
+				final String hostname = MetaData.getHostNameForNode((Integer)obj, tx);
 				// sock = new Socket(hostname,
 				// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				sock = new Socket();
 				sock.setReceiveBufferSize(4194304);
 				sock.setSendBufferSize(4194304);
 				sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
-				OutputStream out = sock.getOutputStream();
-				byte[] outMsg = "DELFIIDX        ".getBytes(StandardCharsets.UTF_8);
+				final OutputStream out = sock.getOutputStream();
+				final byte[] outMsg = "DELFIIDX        ".getBytes(StandardCharsets.UTF_8);
 				outMsg[8] = 0;
 				outMsg[9] = 0;
 				outMsg[10] = 0;
@@ -366,7 +368,7 @@ public class DeleteFilesTask extends Task
 				outMsg[14] = 0;
 				outMsg[15] = 0;
 				out.write(outMsg);
-				ObjectOutputStream objOut = new ObjectOutputStream(out);
+				final ObjectOutputStream objOut = new ObjectOutputStream(out);
 				objOut.writeObject(convertToHosts(tree, tx));
 				objOut.writeObject(indexes);
 				objOut.flush();
@@ -376,7 +378,7 @@ public class DeleteFilesTask extends Task
 				out.close();
 				sock.close();
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				try
 				{
@@ -385,7 +387,7 @@ public class DeleteFilesTask extends Task
 						sock.close();
 					}
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 				}
 				ok = false;
@@ -400,7 +402,7 @@ public class DeleteFilesTask extends Task
 		private final ArrayList<String> tables;
 		private boolean ok = true;
 
-		public SendTableThread(ArrayList<Object> tree, Transaction tx, ArrayList<String> tables)
+		public SendTableThread(final ArrayList<Object> tree, final Transaction tx, final ArrayList<String> tables)
 		{
 			this.tree = tree;
 			this.tx = tx;
@@ -424,15 +426,16 @@ public class DeleteFilesTask extends Task
 			Socket sock = null;
 			try
 			{
-				String hostname = new MetaData().getHostNameForNode((Integer)obj, tx);
+				// new MetaData();
+				final String hostname = MetaData.getHostNameForNode((Integer)obj, tx);
 				// sock = new Socket(hostname,
 				// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				sock = new Socket();
 				sock.setReceiveBufferSize(4194304);
 				sock.setSendBufferSize(4194304);
 				sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
-				OutputStream out = sock.getOutputStream();
-				byte[] outMsg = "DELFITBL        ".getBytes(StandardCharsets.UTF_8);
+				final OutputStream out = sock.getOutputStream();
+				final byte[] outMsg = "DELFITBL        ".getBytes(StandardCharsets.UTF_8);
 				outMsg[8] = 0;
 				outMsg[9] = 0;
 				outMsg[10] = 0;
@@ -442,7 +445,7 @@ public class DeleteFilesTask extends Task
 				outMsg[14] = 0;
 				outMsg[15] = 0;
 				out.write(outMsg);
-				ObjectOutputStream objOut = new ObjectOutputStream(out);
+				final ObjectOutputStream objOut = new ObjectOutputStream(out);
 				objOut.writeObject(convertToHosts(tree, tx));
 				objOut.writeObject(tables);
 				objOut.flush();
@@ -452,7 +455,7 @@ public class DeleteFilesTask extends Task
 				out.close();
 				sock.close();
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				try
 				{
@@ -461,7 +464,7 @@ public class DeleteFilesTask extends Task
 						sock.close();
 					}
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 				}
 				ok = false;

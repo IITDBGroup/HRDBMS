@@ -27,7 +27,7 @@ public class ConnectionManager extends HRDBMSThread
 		return in;
 	}
 
-	public static String remoteGetDataDirs(int from, int to, String host) throws Exception
+	public static String remoteGetDataDirs(final int from, final int to, final String host) throws Exception
 	{
 		final String cmd = "RGETDATD";
 		final byte[] fromBytes = intToBytes(from);
@@ -39,13 +39,13 @@ public class ConnectionManager extends HRDBMSThread
 		return result;
 	}
 
-	private static int bytesToInt(byte[] val)
+	private static int bytesToInt(final byte[] val)
 	{
 		final int x = java.nio.ByteBuffer.wrap(val).getInt();
 		return x;
 	}
 
-	private static byte[] formCall2Args(String cmd, byte[] arg1, byte[] arg2) throws UnsupportedEncodingException
+	private static byte[] formCall2Args(final String cmd, final byte[] arg1, final byte[] arg2) throws UnsupportedEncodingException
 	{
 		final byte[] cmdBytes = cmd.getBytes(StandardCharsets.UTF_8);
 		final int size = cmdBytes.length;
@@ -80,7 +80,7 @@ public class ConnectionManager extends HRDBMSThread
 		return retval;
 	}
 
-	private static byte[] intToBytes(int val)
+	private static byte[] intToBytes(final int val)
 	{
 		final byte[] buff = new byte[4];
 		buff[0] = (byte)(val >> 24);
@@ -90,12 +90,12 @@ public class ConnectionManager extends HRDBMSThread
 		return buff;
 	}
 
-	private static String rmiCall(byte[] data, String host) throws Exception
+	private static String rmiCall(final byte[] data, final String host) throws Exception
 	{
 		final int port = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"));
 		HRDBMSWorker.logger.debug("In rmiCall(), creating connection to " + host + " on port " + port);
 		// final Socket sock = new Socket();
-		Socket sock = new Socket();
+		final Socket sock = new Socket();
 		sock.setReceiveBufferSize(4194304);
 		sock.setSendBufferSize(4194304);
 		sock.connect(new InetSocketAddress(host, port));
@@ -198,7 +198,7 @@ public class ConnectionManager extends HRDBMSThread
 				// connection.");
 				if (accepting)
 				{
-					HRDBMSWorker.addThread(new ConnectionWorker(sock));
+					new ConnectionWorker(sock).start();
 				}
 				else
 				{
@@ -215,7 +215,7 @@ public class ConnectionManager extends HRDBMSThread
 		}
 	}
 
-	private void processMessage(String msg)
+	private void processMessage(final String msg)
 	{
 		if (msg.equals("STOP ACCEPT"))
 		{

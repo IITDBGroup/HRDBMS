@@ -13,22 +13,14 @@ public final class Phase2
 	private final MetaData meta;
 	private final Transaction tx;
 
-	public Phase2(RootOperator root, Transaction tx)
+	public Phase2(final RootOperator root, final Transaction tx)
 	{
 		this.root = root;
 		this.tx = tx;
 		meta = root.getMeta();
 	}
 
-	public void optimize() throws Exception
-	{
-		setPartitionMetaData(root);
-		updateTree(root);
-		// HRDBMSWorker.logger.debug("Exiting P2: ");
-		// Phase1.printTree(root, 0);
-	}
-
-	private ArrayList<Integer> determineHashMapEntries(TableScanOperator t, CNFFilter filter) throws Exception
+	private static ArrayList<Integer> determineHashMapEntries(final TableScanOperator t, final CNFFilter filter) throws Exception
 	{
 		if (t.isSingleNodeGroupSet())
 		{
@@ -78,7 +70,7 @@ public final class Phase2
 		}
 	}
 
-	private void setActiveDevices(TableScanOperator t, CNFFilter filter, Operator o) throws Exception
+	private static void setActiveDevices(final TableScanOperator t, final CNFFilter filter, final Operator o) throws Exception
 	{
 		if (t.isSingleDeviceSet())
 		{
@@ -151,7 +143,7 @@ public final class Phase2
 		}
 	}
 
-	private void setActiveNodes(TableScanOperator t, CNFFilter filter, Operator o, ArrayList<ArrayList<Integer>> nodeLists) throws Exception
+	private static void setActiveNodes(final TableScanOperator t, final CNFFilter filter, final Operator o, final ArrayList<ArrayList<Integer>> nodeLists) throws Exception
 	{
 		if (t.isSingleNodeSet())
 		{
@@ -173,11 +165,16 @@ public final class Phase2
 		{
 			if (filter != null && filter.hashFiltersPartitions(t.getNodeHash()))
 			{
+				// HRDBMSWorker.logger.debug("Hash DOES filter partitions");
 				if (t.allNodes())
 				{
 					for (final ArrayList<Integer> nodeList : nodeLists)
 					{
-						t.addActiveNodeForParent(nodeList.get((int)(filter.getPartitionHash() % nodeList.size())), o);
+						final int pos = (int)(filter.getPartitionHash() % nodeList.size());
+						t.addActiveNodeForParent(nodeList.get(pos), o);
+						// HRDBMSWorker.logger.debug("Nodelist is " + nodeList);
+						// HRDBMSWorker.logger.debug("Only need to look at node
+						// " + nodeList.get(pos) + " in position " + pos);
 					}
 				}
 				else
@@ -254,7 +251,15 @@ public final class Phase2
 		}
 	}
 
-	private void setPartitionMetaData(Operator op) throws Exception
+	public void optimize() throws Exception
+	{
+		setPartitionMetaData(root);
+		updateTree(root);
+		// HRDBMSWorker.logger.debug("Exiting P2: ");
+		// Phase1.printTree(root, 0);
+	}
+
+	private void setPartitionMetaData(final Operator op) throws Exception
 	{
 		if (op instanceof TableScanOperator)
 		{
@@ -273,7 +278,7 @@ public final class Phase2
 		}
 	}
 
-	private void updateTree(Operator op) throws Exception
+	private void updateTree(final Operator op) throws Exception
 	{
 		if (op instanceof TableScanOperator)
 		{
@@ -303,7 +308,7 @@ public final class Phase2
 						ArrayList<Integer> nodeList = t.getNodeList();
 						if (nodeList.get(0) == MetaData.PartitionMetaData.NODE_ALL)
 						{
-							nodeList = meta.getNodesForTable(t.getSchema(), t.getTable(), tx);
+							nodeList = MetaData.getNodesForTable(t.getSchema(), t.getTable(), tx);
 						}
 						final ArrayList<ArrayList<Integer>> nodeLists = new ArrayList<ArrayList<Integer>>(1);
 						nodeLists.add(nodeList);

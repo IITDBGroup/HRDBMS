@@ -10,9 +10,9 @@ public class ColOrderL
 	private static int lowScore = Integer.MAX_VALUE;
 	private static ArrayList<Integer> lowOrder = null;
 
-	public static void main(String[] args)
+	public static void main(final String[] args)
 	{
-		ArrayList<ArrayList<Integer>> accesses = new ArrayList<ArrayList<Integer>>();
+		final ArrayList<ArrayList<Integer>> accesses = new ArrayList<ArrayList<Integer>>();
 		ArrayList<Integer> access = new ArrayList<Integer>();
 		access.add(4);
 		access.add(5);
@@ -143,14 +143,14 @@ public class ColOrderL
 		int start = 0;
 		while (start < 15)
 		{
-			ArrayList<Thread> threads = new ArrayList<Thread>();
+			final ArrayList<Thread> threads = new ArrayList<Thread>();
 			boolean epFirst = true;
 			int i = 0;
 			while (i < 16)
 			{
 				if (i != 5 && i != 6)
 				{
-					Thread thread = new DoItThread(i, start, epFirst, accesses);
+					final Thread thread = new DoItThread(i, start, epFirst, accesses);
 					threads.add(thread);
 					thread.start();
 				}
@@ -158,7 +158,7 @@ public class ColOrderL
 				i++;
 			}
 
-			for (Thread thread : threads)
+			for (final Thread thread : threads)
 			{
 				while (true)
 				{
@@ -167,7 +167,7 @@ public class ColOrderL
 						thread.join();
 						break;
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 					}
 				}
@@ -180,7 +180,7 @@ public class ColOrderL
 			{
 				if (i != 5 && i != 6)
 				{
-					Thread thread = new DoItThread(i, start, epFirst, accesses);
+					final Thread thread = new DoItThread(i, start, epFirst, accesses);
 					threads.add(thread);
 					thread.start();
 				}
@@ -188,7 +188,7 @@ public class ColOrderL
 				i++;
 			}
 
-			for (Thread thread : threads)
+			for (final Thread thread : threads)
 			{
 				while (true)
 				{
@@ -197,7 +197,7 @@ public class ColOrderL
 						thread.join();
 						break;
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 					}
 				}
@@ -207,7 +207,7 @@ public class ColOrderL
 		}
 	}
 
-	private static void displayResults(String table, ArrayList<Integer> result)
+	private static void displayResults(final String table, final ArrayList<Integer> result)
 	{
 		String out = table + " = COLORDER(" + (result.get(0) + 1);
 		int i = 1;
@@ -221,9 +221,9 @@ public class ColOrderL
 		System.out.println(out);
 	}
 
-	private static ArrayList<Integer> doIt(int first, int start, boolean epFirst, ArrayList<ArrayList<Integer>> accesses)
+	private static ArrayList<Integer> doIt(final int first, final int start, final boolean epFirst, final ArrayList<ArrayList<Integer>> accesses)
 	{
-		ArrayList<Integer> cols = new ArrayList<Integer>();
+		final ArrayList<Integer> cols = new ArrayList<Integer>();
 		int j = 0;
 		while (j < 16)
 		{
@@ -235,13 +235,13 @@ public class ColOrderL
 			j++;
 		}
 
-		PermIterator permIter = new PermIterator(cols);
+		final PermIterator permIter = new PermIterator(cols);
 
 		while (permIter.hasNext())
 		{
-			ArrayList<Integer> temp = permIter.next();
+			final ArrayList<Integer> temp = permIter.next();
 			temp.add(0, first);
-			ArrayList<Integer> order = new ArrayList<Integer>();
+			final ArrayList<Integer> order = new ArrayList<Integer>();
 			int i = 0;
 			while (i < start)
 			{
@@ -264,7 +264,7 @@ public class ColOrderL
 				order.add(temp.get(i++));
 			}
 
-			int score = score(order, accesses);
+			final int score = score(order, accesses);
 
 			synchronized (lock)
 			{
@@ -281,9 +281,9 @@ public class ColOrderL
 		return lowOrder;
 	}
 
-	private static int score(ArrayList<Integer> order, ArrayList<ArrayList<Integer>> accesses)
+	private static int score(final ArrayList<Integer> order, final ArrayList<ArrayList<Integer>> accesses)
 	{
-		ArrayList<Integer> disk = new ArrayList<Integer>();
+		final ArrayList<Integer> disk = new ArrayList<Integer>();
 		disk.add(-1);
 		disk.addAll(order);
 		int copies = 1;
@@ -303,10 +303,10 @@ public class ColOrderL
 		}
 
 		int score = 0;
-		for (ArrayList<Integer> access : accesses)
+		for (final ArrayList<Integer> access : accesses)
 		{
-			HashSet<Integer> sbs = new HashSet<Integer>();
-			for (int col : access)
+			final HashSet<Integer> sbs = new HashSet<Integer>();
+			for (final int col : access)
 			{
 				int found = 0;
 				int i = 1;
@@ -316,12 +316,12 @@ public class ColOrderL
 					{
 						if (disk.get(i) == col)
 						{
-							int sb = i / 3;
+							final int sb = i / 3;
 							sbs.add(sb);
 							found++;
 						}
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						System.out.println("Looking for " + col + " in " + disk);
 						System.out.println("Found " + found + " instances");
@@ -345,7 +345,7 @@ public class ColOrderL
 		private final boolean epFirst;
 		private final ArrayList<ArrayList<Integer>> accesses;
 
-		public DoItThread(int first, int start, boolean epFirst, ArrayList<ArrayList<Integer>> accesses)
+		public DoItThread(final int first, final int start, final boolean epFirst, final ArrayList<ArrayList<Integer>> accesses)
 		{
 			this.first = first;
 			this.start = start;
@@ -369,7 +369,7 @@ public class ColOrderL
 		private int[] dirs;
 		private final ArrayList<Integer> initial;
 
-		public PermIterator(ArrayList<Integer> initial)
+		public PermIterator(final ArrayList<Integer> initial)
 		{
 			this.initial = initial;
 			n = initial.size();
@@ -401,10 +401,10 @@ public class ColOrderL
 		@Override
 		public ArrayList<Integer> next()
 		{
-			int[] r = makeNext();
+			final int[] r = makeNext();
 			next = null;
-			ArrayList<Integer> retval = new ArrayList<Integer>();
-			for (int index : r)
+			final ArrayList<Integer> retval = new ArrayList<Integer>();
+			for (final int index : r)
 			{
 				retval.add(initial.get(index));
 			}
@@ -446,7 +446,7 @@ public class ColOrderL
 			}
 
 			// swap with the element in its direction
-			int k = i + dirs[i];
+			final int k = i + dirs[i];
 			swap(i, k, dirs);
 			swap(i, k, perm);
 			// if it's at the start/end or the next element in the direction
@@ -468,9 +468,9 @@ public class ColOrderL
 			return (next = perm);
 		}
 
-		protected void swap(int i, int j, int[] arr)
+		protected void swap(final int i, final int j, final int[] arr)
 		{
-			int v = arr[i];
+			final int v = arr[i];
 			arr[i] = arr[j];
 			arr[j] = v;
 		}

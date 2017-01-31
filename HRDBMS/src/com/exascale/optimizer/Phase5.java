@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import com.exascale.filesystem.Page;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 import com.exascale.tables.Transaction;
@@ -12,6 +13,7 @@ public final class Phase5
 {
 	public static final long MAX_GB = (long)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("sort_gb_factor")));
 
+	private static final int N_MAX = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 	private final RootOperator root;
 	private final MetaData meta;
 	private final HashMap<Operator, Long> cCache = new HashMap<Operator, Long>();
@@ -19,7 +21,7 @@ public final class Phase5
 	private final HashMap<ArrayList<Filter>, Double> likelihoodCache;
 	private final HashMap<String, Integer> typeCache = new HashMap<String, Integer>();
 
-	public Phase5(RootOperator root, Transaction tx, HashMap<ArrayList<Filter>, Double> likelihoodCache)
+	public Phase5(final RootOperator root, final Transaction tx, final HashMap<ArrayList<Filter>, Double> likelihoodCache)
 	{
 		this.root = root;
 		this.tx = tx;
@@ -27,7 +29,7 @@ public final class Phase5
 		meta = root.getMeta();
 	}
 
-	public static void clearOpParents(Operator op, HashSet<Operator> touched)
+	public static void clearOpParents(final Operator op, final HashSet<Operator> touched)
 	{
 		if (touched.contains(op))
 		{
@@ -48,7 +50,120 @@ public final class Phase5
 		}
 	}
 
-	public long card(Operator op) throws Exception
+	private static void gatherSendsAndReceives(final NetworkHashReceiveOperator op, final HashSet<NetworkHashAndSendOperator> sends, final HashSet<NetworkHashReceiveOperator> receives) throws Exception
+	{
+		for (final Operator o : op.children())
+		{
+			sends.add((NetworkHashAndSendOperator)o);
+			final ArrayList<Operator> parents = ((NetworkHashAndSendOperator)o).parents();
+			for (final Operator o2 : parents)
+			{
+				receives.add((NetworkHashReceiveOperator)o2);
+			}
+		}
+	}
+
+	private static Index getIndexFor(final ArrayList<Index> indexes, final String col)
+	{
+		for (final Index index : indexes)
+		{
+			if (index.startsWith(col))
+			{
+				return index;
+			}
+		}
+
+		for (final Index index : indexes)
+		{
+			if (index.contains(col))
+			{
+				return index;
+			}
+		}
+
+		return null;
+	}
+
+	/*
+	 * public void optimize(boolean indexes) throws Exception { if (indexes) {
+	 * optimize(); return; }
+	 * 
+	 * setTableTypes(root, new HashSet<Operator>()); //addIndexesToTableScans();
+	 * // addIndexesToJoins(); turnOffDistinctUnion(root, false, new
+	 * HashSet<Operator>()); largeGBs(root, new HashSet<Operator>());
+	 * doMToNForAll(root, new HashSet<Operator>()); setCards(root, new
+	 * HashSet<Operator>()); setNumParents(root); // sanityCheck(root, -1);
+	 * setSpecificCoord(root, new HashSet<Operator>()); //
+	 * Phase1.printTree(root, 0); sortLimit(root, new HashSet<Operator>());
+	 * //indexOnlyScan(root, new HashSet<Operator>()); pruneTree(root, new
+	 * IdentityHashMap<Operator, Operator>()); }
+	 */
+
+	private static void reuseCompoundIndexes(final TableScanOperator table)
+	{
+		if (table.children().get(0) instanceof UnionOperator)
+		{
+			return;
+		}
+
+		final HashMap<String, IndexOperator> file2Index = new HashMap<String, IndexOperator>();
+		for (final Operator op : (ArrayList<Operator>)table.children().get(0).children().clone())
+		{
+			if (op.children().size() > 1)
+			{
+				continue;
+			}
+
+			final IndexOperator index = (IndexOperator)op.children().get(0);
+			if (!file2Index.containsKey(index.getFileName()))
+			{
+				file2Index.put(index.getFileName(), index);
+			}
+			else
+			{
+				file2Index.get(index.getFileName()).addSecondaryFilter(index.getFilter());
+				for (final Filter filter : index.getSecondary())
+				{
+					file2Index.get(index.getFileName()).addSecondaryFilter(filter);
+				}
+				table.children().get(0).removeChild(op);
+			}
+		}
+
+		// cCache.clear();
+	}
+
+	private static void reuseIndexes(final TableScanOperator table)
+	{
+		if (table.children().get(0) instanceof UnionOperator)
+		{
+			return;
+		}
+
+		final HashMap<String, IndexOperator> file2Index = new HashMap<String, IndexOperator>();
+		for (final Operator op : (ArrayList<Operator>)table.children().get(0).children().clone())
+		{
+			if (op.children().size() > 1)
+			{
+				continue;
+			}
+
+			final IndexOperator index = (IndexOperator)op.children().get(0);
+			if (!file2Index.containsKey(index.getFileName()))
+			{
+				file2Index.put(index.getFileName(), index);
+			}
+			else
+			{
+				file2Index.get(index.getFileName()).addSecondaryFilter(index.getFilter());
+				table.children().get(0).removeChild(op);
+			}
+		}
+
+		// cCache.clear();
+	}
+
+	public long card(final Operator op) throws Exception
 	{
 		final Long r = cCache.get(op);
 		if (r != null)
@@ -66,6 +181,7 @@ public final class Phase5
 		// addIndexesToJoins();
 		turnOffDistinctUnion(root, false, new HashSet<Operator>());
 		largeGBs(root, new HashSet<Operator>());
+		doMToNForAll(root, new HashSet<Operator>());
 		setCards(root, new HashSet<Operator>());
 		setNumParents(root);
 		// sanityCheck(root, -1);
@@ -76,7 +192,7 @@ public final class Phase5
 		pruneTree(root, new IdentityHashMap<Operator, Operator>());
 	}
 
-	public void printTree(Operator op, int indent) throws Exception
+	public void printTree(final Operator op, final int indent) throws Exception
 	{
 		String line = "";
 		int i = 0;
@@ -103,7 +219,7 @@ public final class Phase5
 			line += "(";
 			HRDBMSWorker.logger.debug(line);
 
-			for (Operator child : op.children())
+			for (final Operator child : op.children())
 			{
 				printTree(child, indent + 3);
 			}
@@ -159,7 +275,7 @@ public final class Phase5
 		}
 	}
 
-	private void addSort(TableScanOperator table) throws Exception
+	private void addSort(final TableScanOperator table) throws Exception
 	{
 		final Operator child = table.children().get(0);
 		table.removeChild(child);
@@ -183,13 +299,105 @@ public final class Phase5
 		// cCache.clear();
 	}
 
-	private long cardHJO(Operator op) throws Exception
+	private void buildNetwork(final HashSet<NetworkHashAndSendOperator> sends, final HashSet<NetworkHashReceiveOperator> receives) throws Exception
 	{
-		HashSet<HashMap<Filter, Filter>> hshm = ((HashJoinOperator)op).getHSHM();
-		double max = -1;
-		for (HashMap<Filter, Filter> hm : hshm)
+		for (final Operator o : receives)
 		{
-			double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
+			for (final Operator o2 : (ArrayList<Operator>)o.children().clone())
+			{
+				o2.removeChild(o2);
+			}
+		}
+
+		ArrayList<RoutingOperator> current = new ArrayList<RoutingOperator>();
+		int fromID = Phase4.id.getAndIncrement();
+		for (final NetworkHashAndSendOperator o : sends)
+		{
+			final Operator child = o.children().get(0);
+			o.removeChild(child);
+			final RoutingOperator route = new RoutingOperator(meta);
+			route.setNode(o.getNode());
+			route.setFirst(o.getHashCols());
+			route.setFromID(fromID);
+			route.setStarting(o.getStarting());
+			route.setNumNodes(o.getNumNodes());
+			route.add(child);
+			current.add(route);
+		}
+
+		final int maxHops = ResourceManager.MAX_HOPS;
+
+		int layers = 1;
+		int toID;
+		while (layers < maxHops)
+		{
+			// build another layer
+			final HashMap<Integer, RoutingOperator> nodeToOp = new HashMap<Integer, RoutingOperator>();
+			toID = fromID;
+			fromID = Phase4.id.getAndIncrement();
+			for (final Operator o : current)
+			{
+				final ArrayList<Integer> targets = ResourceManager.getNetworkTargetsForNode(o.getNode());
+				for (final int x : targets)
+				{
+					RoutingOperator route = nodeToOp.get(x);
+					if (route == null)
+					{
+						route = new RoutingOperator(meta);
+						route.setNode(x);
+						route.setToID(toID);
+						route.setFromID(fromID);
+						nodeToOp.put(x, route);
+					}
+
+					route.add(o);
+				}
+			}
+
+			layers++;
+			current = new ArrayList<RoutingOperator>(nodeToOp.values());
+		}
+
+		for (final NetworkHashReceiveOperator o : receives)
+		{
+			fromID = o.getID();
+			break;
+		}
+
+		for (final RoutingOperator o : current)
+		{
+			o.setLast();
+			o.setFromID(fromID);
+		}
+
+		// connect to receives
+		final HashMap<Integer, NetworkHashReceiveOperator> nodeToReceives = new HashMap<Integer, NetworkHashReceiveOperator>();
+		for (final NetworkHashReceiveOperator o : receives)
+		{
+			nodeToReceives.put(o.getNode(), o);
+		}
+
+		for (final RoutingOperator o : current)
+		{
+			final ArrayList<Integer> targets = ResourceManager.getNetworkTargetsForNode(o.getNode());
+			for (final int x : targets)
+			{
+				final NetworkHashReceiveOperator nhro = nodeToReceives.get(x);
+				if (nhro != null)
+				{
+					nhro.add(o);
+				}
+			}
+		}
+	}
+
+	private long cardHJO(final Operator op) throws Exception
+	{
+		final HashSet<HashMap<Filter, Filter>> hshm = ((HashJoinOperator)op).getHSHM();
+		double max = -1;
+		for (final HashMap<Filter, Filter> hm : hshm)
+		{
+			final double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
 			if (temp > max)
 			{
 				max = temp;
@@ -213,7 +421,7 @@ public final class Phase5
 		return retval;
 	}
 
-	private long cardMO(Operator op) throws Exception
+	private long cardMO(final Operator op) throws Exception
 	{
 		long groupCard;
 		if (((MultiOperator)op).getKeys().size() == 0)
@@ -224,7 +432,7 @@ public final class Phase5
 		{
 			groupCard = meta.getColgroupCard(((MultiOperator)op).getKeys(), root, tx, op);
 		}
-		long card = card(op.children().get(0));
+		final long card = card(op.children().get(0));
 		if (groupCard > card)
 		{
 			cCache.put(op, card);
@@ -244,13 +452,13 @@ public final class Phase5
 		return retval;
 	}
 
-	private long cardNL(Operator op) throws Exception
+	private long cardNL(final Operator op) throws Exception
 	{
-		HashSet<HashMap<Filter, Filter>> hshm = ((NestedLoopJoinOperator)op).getHSHM();
+		final HashSet<HashMap<Filter, Filter>> hshm = ((NestedLoopJoinOperator)op).getHSHM();
 		double max = -1;
-		for (HashMap<Filter, Filter> hm : hshm)
+		for (final HashMap<Filter, Filter> hm : hshm)
 		{
-			double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
+			final double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
 			if (temp > max)
 			{
 				max = temp;
@@ -274,7 +482,7 @@ public final class Phase5
 		return retval;
 	}
 
-	private long cardNorm(Operator op) throws Exception
+	private long cardNorm(final Operator op) throws Exception
 	{
 		long retval = card(op.children().get(0));
 		if (retval == 0)
@@ -285,7 +493,7 @@ public final class Phase5
 		return retval;
 	}
 
-	private long cardRX(Operator op) throws Exception
+	private long cardRX(final Operator op) throws Exception
 	{
 		long retval = 0;
 		for (final Operator o : op.children())
@@ -301,7 +509,7 @@ public final class Phase5
 		return retval;
 	}
 
-	private long cardSelect(Operator op) throws Exception
+	private long cardSelect(final Operator op) throws Exception
 	{
 		Double likelihood = likelihoodCache.get(((SelectOperator)op).getFilter());
 		if (likelihood == null)
@@ -321,7 +529,7 @@ public final class Phase5
 		return retval;
 	}
 
-	private long cardSetI(Operator op) throws Exception
+	private long cardSetI(final Operator op) throws Exception
 	{
 		long lCard = card(op.children().get(0));
 		long rCard = card(op.children().get(1));
@@ -346,7 +554,7 @@ public final class Phase5
 		}
 	}
 
-	private long cardTop(Operator op) throws Exception
+	private long cardTop(final Operator op) throws Exception
 	{
 		long retval = ((TopOperator)op).getRemaining();
 		long retval2 = card(op.children().get(0));
@@ -378,7 +586,7 @@ public final class Phase5
 		{
 			if (op.children().size() == 0)
 			{
-				long retval = (long)(meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx) * meta.likelihood(hshm, root, tx, op) * (1.0 / ((TableScanOperator)op).getNumNodes()));
+				long retval = (long)(MetaData.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx) * meta.likelihood(hshm, root, tx, op) * (1.0 / ((TableScanOperator)op).getNumNodes()));
 				if (retval == 0)
 				{
 					retval = 1;
@@ -414,7 +622,7 @@ public final class Phase5
 					}
 
 					op = origOp;
-					long retval = (long)(meta.likelihood(hshm, root, tx, op) * sum * (1.0 / ((TableScanOperator)op).getNumNodes()) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx));
+					long retval = (long)(meta.likelihood(hshm, root, tx, op) * sum * (1.0 / ((TableScanOperator)op).getNumNodes()) * MetaData.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx));
 					if (retval == 0)
 					{
 						retval = 1;
@@ -448,7 +656,7 @@ public final class Phase5
 					}
 
 					op = origOp;
-					long retval = (long)(meta.likelihood(hshm, root, tx, op) * z * (1.0 / ((TableScanOperator)op).getNumNodes()) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx));
+					long retval = (long)(meta.likelihood(hshm, root, tx, op) * z * (1.0 / ((TableScanOperator)op).getNumNodes()) * MetaData.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx));
 					if (retval == 0)
 					{
 						retval = 1;
@@ -461,7 +669,7 @@ public final class Phase5
 
 		if (op.children().size() == 0)
 		{
-			long retval = (long)((1.0 / ((TableScanOperator)op).getNumNodes()) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx));
+			long retval = (long)((1.0 / ((TableScanOperator)op).getNumNodes()) * MetaData.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx));
 			if (retval == 0)
 			{
 				retval = 1;
@@ -497,7 +705,7 @@ public final class Phase5
 				}
 
 				op = origOp;
-				long retval = (long)(sum * (1.0 / ((TableScanOperator)op).getNumNodes()) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx));
+				long retval = (long)(sum * (1.0 / ((TableScanOperator)op).getNumNodes()) * MetaData.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx));
 				if (retval == 0)
 				{
 					retval = 1;
@@ -531,7 +739,7 @@ public final class Phase5
 				}
 
 				op = origOp;
-				long retval = (long)(z * (1.0 / ((TableScanOperator)op).getNumNodes()) * meta.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx));
+				long retval = (long)(z * (1.0 / ((TableScanOperator)op).getNumNodes()) * MetaData.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx));
 				if (retval == 0)
 				{
 					retval = 1;
@@ -542,7 +750,7 @@ public final class Phase5
 		}
 	}
 
-	private long cardTX(Operator op) throws Exception
+	private long cardTX(final Operator op) throws Exception
 	{
 		long retval = card(op.children().get(0)) / ((NetworkHashAndSendOperator)op).parents().size();
 		if (retval == 0)
@@ -553,7 +761,24 @@ public final class Phase5
 		return retval;
 	}
 
-	private long cardTXRR(Operator op) throws Exception
+	private long cardTX2(final Operator op) throws Exception
+	{
+		long card = 0;
+		for (final Operator o : op.children())
+		{
+			card += card(o);
+		}
+
+		long retval = card / ((RoutingOperator)op).parents().size();
+		if (retval == 0)
+		{
+			retval = 1;
+		}
+		cCache.put(op, retval);
+		return retval;
+	}
+
+	private long cardTXRR(final Operator op) throws Exception
 	{
 		long retval = card(op.children().get(0)) / ((NetworkSendRROperator)op).parents().size();
 		if (retval == 0)
@@ -564,7 +789,7 @@ public final class Phase5
 		return retval;
 	}
 
-	private long cardUnion(Operator op) throws Exception
+	private long cardUnion(final Operator op) throws Exception
 	{
 		long retval = 0;
 		for (final Operator o : op.children())
@@ -580,7 +805,7 @@ public final class Phase5
 		return retval;
 	}
 
-	private long cardX(Operator op) throws Exception
+	private long cardX(final Operator op) throws Exception
 	{
 		long retval = card(op.children().get(0)) * card(op.children().get(1));
 		if (retval == 0)
@@ -596,7 +821,7 @@ public final class Phase5
 		return retval;
 	}
 
-	private void cleanupOrderedFilters(Operator op, HashSet<Operator> touched)
+	private void cleanupOrderedFilters(final Operator op, final HashSet<Operator> touched)
 	{
 		if (touched.contains(op))
 		{
@@ -617,7 +842,7 @@ public final class Phase5
 		}
 	}
 
-	private Operator cloneTree(Operator op) throws Exception
+	private Operator cloneTree(final Operator op) throws Exception
 	{
 		final Operator clone = op.clone();
 		for (final Operator o : op.children())
@@ -638,7 +863,7 @@ public final class Phase5
 		return clone;
 	}
 
-	private void compoundIndexes(TableScanOperator table) throws Exception
+	private void compoundIndexes(final TableScanOperator table) throws Exception
 	{
 		if (table.children().get(0) instanceof UnionOperator)
 		{
@@ -657,7 +882,7 @@ public final class Phase5
 			cols.addAll(index.getReferencedCols());
 		}
 
-		Index index = meta.getBestCompoundIndex(cols, table.getSchema(), table.getTable(), tx);
+		Index index = MetaData.getBestCompoundIndex(cols, table.getSchema(), table.getTable(), tx);
 		while (cols.size() > 0 && index != null)
 		{
 			for (final Operator op : table.children().get(0).children())
@@ -686,11 +911,11 @@ public final class Phase5
 			}
 
 			cols.removeAll(index.getKeys());
-			index = meta.getBestCompoundIndex(cols, table.getSchema(), table.getTable(), tx);
+			index = MetaData.getBestCompoundIndex(cols, table.getSchema(), table.getTable(), tx);
 		}
 	}
 
-	private void correctForDevices(TableScanOperator table) throws Exception
+	private void correctForDevices(final TableScanOperator table) throws Exception
 	{
 		for (final Operator child : (ArrayList<Operator>)table.children().clone())
 		{
@@ -717,7 +942,41 @@ public final class Phase5
 		// cCache.clear();
 	}
 
-	private void doubleCheckCNF(TableScanOperator table)
+	private void doMToN(final NetworkHashReceiveOperator receive) throws Exception
+	{
+		if (receive.children().size() > N_MAX)
+		{
+			final HashSet<NetworkHashAndSendOperator> sends = new HashSet<NetworkHashAndSendOperator>();
+			final HashSet<NetworkHashReceiveOperator> receives = new HashSet<NetworkHashReceiveOperator>();
+			gatherSendsAndReceives(receive, sends, receives);
+			buildNetwork(sends, receives);
+		}
+	}
+
+	private void doMToNForAll(final Operator op, final HashSet<Operator> visited) throws Exception
+	{
+		if (op instanceof NetworkSendOperator)
+		{
+			if (visited.contains(op))
+			{
+				return;
+			}
+
+			visited.add(op);
+		}
+
+		if (op instanceof NetworkReceiveOperator && op.getClass().equals(NetworkHashReceiveOperator.class) && (op.children().get(0) instanceof NetworkHashAndSendOperator))
+		{
+			doMToN((NetworkHashReceiveOperator)op);
+		}
+
+		for (final Operator o : op.children())
+		{
+			doMToNForAll(o, visited);
+		}
+	}
+
+	private void doubleCheckCNF(final TableScanOperator table)
 	{
 		final HashMap<String, Index> cols2Indexes = getCols2Indexes(table);
 		final CNFFilter cnf = table.getCNFForParent(table.firstParent());
@@ -790,7 +1049,7 @@ public final class Phase5
 		cnf.setHSHM(hshm);
 	}
 
-	private HashMap<String, Index> getCols2Indexes(Operator op)
+	private HashMap<String, Index> getCols2Indexes(final Operator op)
 	{
 		final HashMap<String, Index> retval = new HashMap<String, Index>();
 		if (op instanceof IndexOperator)
@@ -803,9 +1062,9 @@ public final class Phase5
 				{
 					if (retval.containsKey(col))
 					{
-						Index currentIndex = retval.get(col);
-						int currentI = currentIndex.getKeys().indexOf(col);
-						int newI = index.getKeys().indexOf(col);
+						final Index currentIndex = retval.get(col);
+						final int currentI = currentIndex.getKeys().indexOf(col);
+						final int newI = index.getKeys().indexOf(col);
 						if (newI < currentI)
 						{
 							retval.put(col, index);
@@ -831,28 +1090,7 @@ public final class Phase5
 		}
 	}
 
-	private Index getIndexFor(ArrayList<Index> indexes, String col)
-	{
-		for (final Index index : indexes)
-		{
-			if (index.startsWith(col))
-			{
-				return index;
-			}
-		}
-
-		for (final Index index : indexes)
-		{
-			if (index.contains(col))
-			{
-				return index;
-			}
-		}
-
-		return null;
-	}
-
-	private ArrayList<TableScanOperator> getTableScans(Operator op, HashSet<Operator> touched) throws Exception
+	private ArrayList<TableScanOperator> getTableScans(final Operator op, final HashSet<Operator> touched) throws Exception
 	{
 		ArrayList<TableScanOperator> retval = null;
 		if (touched.contains(op))
@@ -882,7 +1120,7 @@ public final class Phase5
 		return retval;
 	}
 
-	private boolean indexOnly(TableScanOperator table) throws Exception
+	private boolean indexOnly(final TableScanOperator table) throws Exception
 	{
 		if (table.isGetRID())
 		{
@@ -928,7 +1166,7 @@ public final class Phase5
 			HashMap<String, String> cols2Types = null;
 			try
 			{
-				cols2Types = meta.getCols2TypesForTable(table.getSchema(), table.getTable(), tx);
+				cols2Types = MetaData.getCols2TypesForTable(table.getSchema(), table.getTable(), tx);
 			}
 			catch (final Exception e)
 			{
@@ -975,9 +1213,19 @@ public final class Phase5
 		}
 	}
 
-	private void indexOnlyScan(Operator op, HashSet<Operator> touched) throws Exception
+	private void indexOnlyScan(final Operator op, final HashSet<Operator> touched) throws Exception
 	{
 		if (op instanceof NetworkSendOperator)
+		{
+			if (touched.contains(op))
+			{
+				return;
+			}
+
+			touched.add(op);
+		}
+
+		if (op instanceof RoutingOperator)
 		{
 			if (touched.contains(op))
 			{
@@ -990,20 +1238,20 @@ public final class Phase5
 		if (op instanceof TableScanOperator && op.children().size() == 0)
 		{
 			Index best = null;
-			TableScanOperator top = (TableScanOperator)op;
+			final TableScanOperator top = (TableScanOperator)op;
 			if (top.getType() == 0)
 			{
-				String[] needed = top.getMidPos2Col();
-				ArrayList<String> needed2 = new ArrayList<String>(needed.length);
-				for (String n : needed)
+				final String[] needed = top.getMidPos2Col();
+				final ArrayList<String> needed2 = new ArrayList<String>(needed.length);
+				for (final String n : needed)
 				{
 					needed2.add(n);
 				}
 
 				// if exists index with all these cols, use it
-				final ArrayList<Index> available = meta.getIndexesForTable(top.getSchema(), top.getTable(), tx);
+				final ArrayList<Index> available = MetaData.getIndexesForTable(top.getSchema(), top.getTable(), tx);
 				int bestSize = Integer.MAX_VALUE;
-				for (Index index : available)
+				for (final Index index : available)
 				{
 					if (index.getKeys().containsAll(needed2))
 					{
@@ -1022,13 +1270,13 @@ public final class Phase5
 			}
 		}
 
-		for (Operator o : op.children())
+		for (final Operator o : op.children())
 		{
 			indexOnlyScan(o, touched);
 		}
 	}
 
-	private void largeGBs(Operator op, HashSet<Operator> touched) throws Exception
+	private void largeGBs(final Operator op, final HashSet<Operator> touched) throws Exception
 	{
 		if (op instanceof NetworkSendOperator)
 		{
@@ -1042,23 +1290,23 @@ public final class Phase5
 
 		if (op instanceof MultiOperator)
 		{
-			long card = card(op);
+			final long card = card(op);
 			HRDBMSWorker.logger.debug("MultiOp with card = " + card);
 			if (card > MAX_GB)
 			{
 				HRDBMSWorker.logger.debug("External MO by factor " + ((card * 1.0) / MAX_GB) + "x");
-				MultiOperator mop = (MultiOperator)op;
+				final MultiOperator mop = (MultiOperator)op;
 				mop.setExternal();
 			}
 		}
 
-		for (Operator o : op.children())
+		for (final Operator o : op.children())
 		{
 			largeGBs(o, touched);
 		}
 	}
 
-	private long notCached(Operator op) throws Exception
+	private long notCached(final Operator op) throws Exception
 	{
 		if (op instanceof HashJoinOperator)
 		{
@@ -1088,6 +1336,11 @@ public final class Phase5
 		if (op instanceof NetworkHashAndSendOperator)
 		{
 			return cardTX(op);
+		}
+
+		if (op instanceof RoutingOperator)
+		{
+			return cardTX2(op);
 		}
 
 		if (op instanceof NetworkSendRROperator)
@@ -1133,11 +1386,11 @@ public final class Phase5
 		return cardNorm(op);
 	}
 
-	private void pruneTree(Operator op, IdentityHashMap<Operator, Operator> covered)
+	private void pruneTree(final Operator op, final IdentityHashMap<Operator, Operator> covered)
 	{
 		if (op instanceof NetworkHashReceiveOperator)
 		{
-			Operator o = op.children().get(0);
+			final Operator o = op.children().get(0);
 			if (covered.containsKey(o))
 			{
 				return;
@@ -1145,7 +1398,7 @@ public final class Phase5
 			else
 			{
 				((NetworkHashReceiveOperator)op).setSend();
-				for (Operator o2 : op.children())
+				for (final Operator o2 : op.children())
 				{
 					covered.put(o2, o2);
 				}
@@ -1153,7 +1406,7 @@ public final class Phase5
 		}
 		else if (op instanceof NetworkHashReceiveAndMergeOperator)
 		{
-			Operator o = op.children().get(0);
+			final Operator o = op.children().get(0);
 			if (covered.containsKey(o))
 			{
 				return;
@@ -1161,84 +1414,36 @@ public final class Phase5
 			else
 			{
 				((NetworkHashReceiveAndMergeOperator)op).setSend();
-				for (Operator o2 : op.children())
+				for (final Operator o2 : op.children())
+				{
+					covered.put(o2, o2);
+				}
+			}
+		}
+		else if (op instanceof RoutingOperator)
+		{
+			final Operator o = op.children().get(0);
+			if (covered.containsKey(o))
+			{
+				return;
+			}
+			else
+			{
+				((RoutingOperator)op).setSend();
+				for (final Operator o2 : op.children())
 				{
 					covered.put(o2, o2);
 				}
 			}
 		}
 
-		for (Operator o : op.children())
+		for (final Operator o : op.children())
 		{
 			pruneTree(o, covered);
 		}
 	}
 
-	private void reuseCompoundIndexes(TableScanOperator table)
-	{
-		if (table.children().get(0) instanceof UnionOperator)
-		{
-			return;
-		}
-
-		final HashMap<String, IndexOperator> file2Index = new HashMap<String, IndexOperator>();
-		for (final Operator op : (ArrayList<Operator>)table.children().get(0).children().clone())
-		{
-			if (op.children().size() > 1)
-			{
-				continue;
-			}
-
-			final IndexOperator index = (IndexOperator)op.children().get(0);
-			if (!file2Index.containsKey(index.getFileName()))
-			{
-				file2Index.put(index.getFileName(), index);
-			}
-			else
-			{
-				file2Index.get(index.getFileName()).addSecondaryFilter(index.getFilter());
-				for (final Filter filter : index.getSecondary())
-				{
-					file2Index.get(index.getFileName()).addSecondaryFilter(filter);
-				}
-				table.children().get(0).removeChild(op);
-			}
-		}
-
-		// cCache.clear();
-	}
-
-	private void reuseIndexes(TableScanOperator table)
-	{
-		if (table.children().get(0) instanceof UnionOperator)
-		{
-			return;
-		}
-
-		final HashMap<String, IndexOperator> file2Index = new HashMap<String, IndexOperator>();
-		for (final Operator op : (ArrayList<Operator>)table.children().get(0).children().clone())
-		{
-			if (op.children().size() > 1)
-			{
-				continue;
-			}
-
-			final IndexOperator index = (IndexOperator)op.children().get(0);
-			if (!file2Index.containsKey(index.getFileName()))
-			{
-				file2Index.put(index.getFileName(), index);
-			}
-			else
-			{
-				file2Index.get(index.getFileName()).addSecondaryFilter(index.getFilter());
-				table.children().get(0).removeChild(op);
-			}
-		}
-
-		// cCache.clear();
-	}
-
-	private void setCardForIntersectAndUnion(Operator op, long card)
+	private void setCardForIntersectAndUnion(final Operator op, final long card)
 	{
 		if (op instanceof IntersectOperator)
 		{
@@ -1255,9 +1460,19 @@ public final class Phase5
 		}
 	}
 
-	private void setCards(Operator op, HashSet<Operator> touched) throws Exception
+	private void setCards(final Operator op, final HashSet<Operator> touched) throws Exception
 	{
 		if (op instanceof NetworkSendOperator)
+		{
+			if (touched.contains(op))
+			{
+				return;
+			}
+
+			touched.add(op);
+		}
+
+		if (op instanceof RoutingOperator)
 		{
 			if (touched.contains(op))
 			{
@@ -1431,7 +1646,7 @@ public final class Phase5
 	 * for (Operator o : op.children()) { sanityCheck(o, node); } } }
 	 */
 
-	private void setDevice(Operator op, int device)
+	private void setDevice(final Operator op, final int device)
 	{
 		if (op instanceof IndexOperator)
 		{
@@ -1446,7 +1661,7 @@ public final class Phase5
 		}
 	}
 
-	private void setNumParents(Operator op)
+	private void setNumParents(final Operator op)
 	{
 		if (op instanceof NetworkSendOperator)
 		{
@@ -1457,15 +1672,34 @@ public final class Phase5
 			((NetworkSendOperator)op).clearParent();
 		}
 
+		if (op instanceof RoutingOperator)
+		{
+			if (!((RoutingOperator)op).setNumParents())
+			{
+				return;
+			}
+			((RoutingOperator)op).clearParent();
+		}
+
 		for (final Operator o : op.children())
 		{
 			setNumParents(o);
 		}
 	}
 
-	private void setSpecificCoord(Operator op, HashSet<Operator> touched) throws Exception
+	private void setSpecificCoord(final Operator op, final HashSet<Operator> touched) throws Exception
 	{
 		if (op instanceof NetworkSendOperator)
+		{
+			if (touched.contains(op))
+			{
+				return;
+			}
+
+			touched.add(op);
+		}
+
+		if (op instanceof RoutingOperator)
 		{
 			if (touched.contains(op))
 			{
@@ -1480,13 +1714,13 @@ public final class Phase5
 			op.setNode(MetaData.myCoordNum());
 		}
 
-		for (Operator o : op.children())
+		for (final Operator o : op.children())
 		{
 			setSpecificCoord(o, touched);
 		}
 	}
 
-	private void setTableTypes(Operator op, HashSet<Operator> touched) throws Exception
+	private void setTableTypes(final Operator op, final HashSet<Operator> touched) throws Exception
 	{
 		if (op instanceof NetworkSendOperator)
 		{
@@ -1500,11 +1734,11 @@ public final class Phase5
 
 		if (op instanceof TableScanOperator)
 		{
-			TableScanOperator top = (TableScanOperator)op;
+			final TableScanOperator top = (TableScanOperator)op;
 			Integer type = typeCache.get(top.getSchema() + "." + top.getTable());
 			if (type == null)
 			{
-				type = meta.getTypeForTable(top.getSchema(), top.getTable(), tx);
+				type = MetaData.getTypeForTable(top.getSchema(), top.getTable(), tx);
 				typeCache.put(top.getSchema() + "." + top.getTable(), type);
 			}
 
@@ -1512,15 +1746,25 @@ public final class Phase5
 			return;
 		}
 
-		for (Operator o : op.children())
+		for (final Operator o : op.children())
 		{
 			setTableTypes(o, touched);
 		}
 	}
 
-	private void sortLimit(Operator op, HashSet<Operator> touched)
+	private void sortLimit(final Operator op, final HashSet<Operator> touched)
 	{
 		if (op instanceof NetworkSendOperator)
+		{
+			if (touched.contains(op))
+			{
+				return;
+			}
+
+			touched.add(op);
+		}
+
+		if (op instanceof RoutingOperator)
 		{
 			if (touched.contains(op))
 			{
@@ -1534,9 +1778,9 @@ public final class Phase5
 		{
 			if (op.children().get(0) instanceof SortOperator)
 			{
-				SortOperator sop = (SortOperator)op.children().get(0);
-				TopOperator top = (TopOperator)op;
-				long limit = top.getRemaining();
+				final SortOperator sop = (SortOperator)op.children().get(0);
+				final TopOperator top = (TopOperator)op;
+				final long limit = top.getRemaining();
 
 				if (limit < ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")) / 2)
 				{
@@ -1545,13 +1789,13 @@ public final class Phase5
 			}
 		}
 
-		for (Operator o : op.children())
+		for (final Operator o : op.children())
 		{
 			sortLimit(o, touched);
 		}
 	}
 
-	private void turnOffDistinctUnion(Operator op, boolean seenIntersect, HashSet<Operator> touched)
+	private void turnOffDistinctUnion(final Operator op, boolean seenIntersect, final HashSet<Operator> touched)
 	{
 		if (op instanceof NetworkSendOperator)
 		{
@@ -1588,11 +1832,11 @@ public final class Phase5
 		}
 	}
 
-	private void useIndexes(String schema, String table, CNFFilter cnf, TableScanOperator tOp) throws Exception
+	private void useIndexes(final String schema, final String table, final CNFFilter cnf, final TableScanOperator tOp) throws Exception
 	{
 		final HashSet<HashMap<Filter, Filter>> hshm = cnf.getHSHM();
 		// System.out.println("HSHM is " + hshm);
-		final ArrayList<Index> available = meta.getIndexesForTable(schema, table, tx);
+		final ArrayList<Index> available = MetaData.getIndexesForTable(schema, table, tx);
 		for (final HashMap<Filter, Filter> hm : (HashSet<HashMap<Filter, Filter>>)hshm.clone())
 		{
 			// System.out.println("Looking at " + hm);
@@ -1618,7 +1862,7 @@ public final class Phase5
 				{
 					if (!f.leftIsColumn())
 					{
-						String literal = (String)f.leftLiteral();
+						final String literal = (String)f.leftLiteral();
 						if (literal.startsWith("%"))
 						{
 							likely += 1;
@@ -1627,7 +1871,7 @@ public final class Phase5
 
 					if (!f.rightIsColumn())
 					{
-						String literal = (String)f.rightLiteral();
+						final String literal = (String)f.rightLiteral();
 						if (literal.startsWith("%"))
 						{
 							likely += 1;
@@ -1680,7 +1924,7 @@ public final class Phase5
 							{
 								if (!f.leftIsColumn())
 								{
-									String literal = (String)f.leftLiteral();
+									final String literal = (String)f.leftLiteral();
 									if (literal.startsWith("%"))
 									{
 										likely += 1;
@@ -1689,7 +1933,7 @@ public final class Phase5
 
 								if (!f.rightIsColumn())
 								{
-									String literal = (String)f.rightLiteral();
+									final String literal = (String)f.rightLiteral();
 									if (literal.startsWith("%"))
 									{
 										likely += 1;
@@ -1743,13 +1987,32 @@ public final class Phase5
 						// HRDBMSWorker.logger.debug("Wanted to use an index on
 						// " + lcolumn + " but none existed");
 						// }
-						if (likely <= (1.0 / 10.0) && tOp.getType() == 0)
+						// if (likely <= (1.0 / 10.0) && tOp.getType() == 0)
+						// {
+						// HRDBMSWorker.logger.debug("Wanted to use an index on
+						// " + lcolumn + " but none existed");
+						// }
+						if (tOp.getType() == 0)
 						{
-							HRDBMSWorker.logger.debug("Wanted to use an index on " + lcolumn + " but none existed");
+							final long ct = card(tOp);
+							final double currentCost = ct / 165;
+							final double newCost = Math.E * Math.log(ct) + 2 * likely * ct;
+							if (newCost < currentCost)
+							{
+								HRDBMSWorker.logger.debug("Wanted to use an index on " + lcolumn + " but none existed");
+							}
 						}
-						else if (likely <= 0.0003 && tOp.getType() != 0)
+						else
 						{
-							HRDBMSWorker.logger.debug("Wanted to use an index on " + lcolumn + " but none existed");
+							// HRDBMSWorker.logger.debug("Wanted to use an index
+							// on " + lcolumn + " but none existed");
+							final long ct = card(tOp);
+							final double currentCost = tOp.getCols2Pos().size() * ct / (5500 * (Page.BLOCK_SIZE * 1.0) / (128.0 * 1024.0));
+							final double newCost = Math.E * Math.log(ct) + likely * ct + tOp.getCols2Pos().size() * likely * ct;
+							if (newCost < currentCost)
+							{
+								HRDBMSWorker.logger.debug("Wanted to use an index on " + lcolumn + " but none existed");
+							}
 						}
 					}
 
@@ -1758,30 +2021,34 @@ public final class Phase5
 				else
 				{
 					// determine if this index is better than a tablescan
+					doIt = false;
 					if (rcolumn == null)
 					{
 						if (index.getKeys().get(0).equals(lcolumn))
 						{
-							// if (likely > (12.0 / 53.0) ||
-							// !f.op().equals("E"))
-							if (likely > (1.0 / 10.0))
+							if (tOp.getType() == 0)
 							{
-								doIt = false;
+								final long ct = card(tOp);
+								final double currentCost = ct / 165;
+								final double newCost = Math.E * Math.log(ct) + 2 * likely * ct;
+								if (newCost < currentCost)
+								{
+									doIt = true;
+								}
 							}
-
-							if (likely > 0.0003 && tOp.getType() != 0)
+							else
 							{
-								doIt = false;
+								// HRDBMSWorker.logger.debug("Wanted to use an
+								// index on " + lcolumn + " but none existed");
+								final long ct = card(tOp);
+								final double currentCost = tOp.getCols2Pos().size() * ct / (5500 * (Page.BLOCK_SIZE * 1.0) / (128.0 * 1024.0));
+								final double newCost = Math.E * Math.log(ct) + likely * ct + tOp.getCols2Pos().size() * likely * ct;
+								if (newCost < currentCost)
+								{
+									doIt = true;
+								}
 							}
 						}
-						else
-						{
-							doIt = false;
-						}
-					}
-					else
-					{
-						doIt = false;
 					}
 
 					if (doIt)
@@ -1810,7 +2077,7 @@ public final class Phase5
 						tOp.add(union);
 						union.setNode(tOp.getNode());
 
-						for (Operator o : union.children())
+						for (final Operator o : union.children())
 						{
 							o.setNode(tOp.getNode());
 						}
@@ -1820,7 +2087,7 @@ public final class Phase5
 						tOp.children().get(0).add(union);
 						union.setNode(tOp.children().get(0).getNode());
 
-						for (Operator o : union.children())
+						for (final Operator o : union.children())
 						{
 							o.setNode(tOp.getNode());
 						}
@@ -1836,7 +2103,7 @@ public final class Phase5
 						intersect.setNode(tOp.getNode());
 						union.setNode(tOp.getNode());
 
-						for (Operator o : union.children())
+						for (final Operator o : union.children())
 						{
 							o.setNode(tOp.getNode());
 						}

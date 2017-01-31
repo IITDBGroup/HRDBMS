@@ -25,7 +25,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 			f.setAccessible(true);
 			unsafe = (sun.misc.Unsafe)f.get(null);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			unsafe = null;
 		}
@@ -54,36 +54,36 @@ public final class SemiJoinOperator implements Operator, Serializable
 	private long leftChildCard = 16;
 	private long txnum;
 
-	public SemiJoinOperator(ArrayList<String> cols, MetaData meta)
+	public SemiJoinOperator(final ArrayList<String> cols, final MetaData meta)
 	{
 		this.cols = cols;
 		this.meta = meta;
 	}
 
-	public SemiJoinOperator(HashSet<HashMap<Filter, Filter>> f, MetaData meta)
+	public SemiJoinOperator(final HashSet<HashMap<Filter, Filter>> f, final MetaData meta)
 	{
 		this.f = f;
 		this.meta = meta;
 		this.cols = new ArrayList<String>(0);
 	}
 
-	public SemiJoinOperator(String col, MetaData meta)
+	public SemiJoinOperator(final String col, final MetaData meta)
 	{
 		this.cols = new ArrayList<String>(1);
 		this.cols.add(col);
 		this.meta = meta;
 	}
 
-	private SemiJoinOperator(ArrayList<String> cols, HashSet<HashMap<Filter, Filter>> f, MetaData meta)
+	private SemiJoinOperator(final ArrayList<String> cols, final HashSet<HashMap<Filter, Filter>> f, final MetaData meta)
 	{
 		this.f = f;
 		this.cols = cols;
 		this.meta = meta;
 	}
 
-	public static SemiJoinOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static SemiJoinOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		SemiJoinOperator value = (SemiJoinOperator)unsafe.allocateInstance(SemiJoinOperator.class);
+		final SemiJoinOperator value = (SemiJoinOperator)unsafe.allocateInstance(SemiJoinOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.children = OperatorUtils.deserializeALOp(in, prev);
 		value.parent = OperatorUtils.deserializeOperator(in, prev);
@@ -107,7 +107,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void add(Operator op) throws Exception
+	public void add(final Operator op) throws Exception
 	{
 		if (children.size() < 2)
 		{
@@ -233,7 +233,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 		return indexAccess;
 	}
 
-	public ArrayList<String> getJoinForChild(Operator op)
+	public ArrayList<String> getJoinForChild(final Operator op)
 	{
 		if (cols.size() > 0)
 		{
@@ -344,7 +344,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 	{
 		try
 		{
-			HashSet<HashMap<Filter, Filter>> hshm = getHSHM();
+			final HashSet<HashMap<Filter, Filter>> hshm = getHSHM();
 			final ArrayList<String> retval = new ArrayList<String>(cols);
 			for (final HashMap<Filter, Filter> filters : hshm)
 			{
@@ -363,7 +363,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 			}
 			return retval;
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			return null;
 		}
@@ -403,13 +403,13 @@ public final class SemiJoinOperator implements Operator, Serializable
 	}
 
 	@Override
-	public Object next(Operator op) throws Exception
+	public Object next(final Operator op) throws Exception
 	{
 		return dynamicOp.next(this);
 	}
 
 	@Override
-	public void nextAll(Operator op) throws Exception
+	public void nextAll(final Operator op) throws Exception
 	{
 		dynamicOp.nextAll(this);
 		Object o = next(op);
@@ -438,7 +438,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void registerParent(Operator op) throws Exception
+	public void registerParent(final Operator op) throws Exception
 	{
 		if (parent == null)
 		{
@@ -451,12 +451,12 @@ public final class SemiJoinOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeChild(Operator op)
+	public void removeChild(final Operator op)
 	{
 		childPos = children.indexOf(op);
 		if (childPos == -1)
 		{
-			Exception e = new Exception();
+			final Exception e = new Exception();
 			HRDBMSWorker.logger.error("Removing a non-existent child!", e);
 		}
 		children.remove(op);
@@ -464,7 +464,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 		parent = null;
 	}
@@ -477,9 +477,9 @@ public final class SemiJoinOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -509,29 +509,29 @@ public final class SemiJoinOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void setChildPos(int pos)
+	public void setChildPos(final int pos)
 	{
 		childPos = pos;
 	}
 
-	public void setDynamicIndex(ArrayList<Index> indexes)
+	public void setDynamicIndex(final ArrayList<Index> indexes)
 	{
 		indexAccess = true;
 		this.dynamicIndexes = indexes;
 	}
 
 	@Override
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 		this.node = node;
 	}
 
 	@Override
-	public void setPlan(Plan plan)
+	public void setPlan(final Plan plan)
 	{
 	}
 
-	public boolean setRightChildCard(long card, long card2)
+	public boolean setRightChildCard(final long card, final long card2)
 	{
 		if (cardSet)
 		{
@@ -544,7 +544,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 		return true;
 	}
 
-	public void setTXNum(long txnum)
+	public void setTXNum(final long txnum)
 	{
 		this.txnum = txnum;
 	}
@@ -671,15 +671,15 @@ public final class SemiJoinOperator implements Operator, Serializable
 	@Override
 	public void start() throws Exception
 	{
-		boolean usesHash = usesHash();
-		boolean usesSort = usesSort();
-		HashSet<HashMap<Filter, Filter>> temp = getHSHM();
+		final boolean usesHash = usesHash();
+		final boolean usesSort = usesSort();
+		final HashSet<HashMap<Filter, Filter>> temp = getHSHM();
 
 		if (usesHash)
 		{
 			// HJO w/ existence + filter
-			ArrayList<String> lefts = this.getJoinForChild(children.get(0));
-			ArrayList<String> rights = this.getJoinForChild(children.get(1));
+			final ArrayList<String> lefts = this.getJoinForChild(children.get(0));
+			final ArrayList<String> rights = this.getJoinForChild(children.get(1));
 			dynamicOp = new HashJoinOperator(lefts.get(0), rights.get(0), meta);
 			((HashJoinOperator)dynamicOp).setTXNum(txnum);
 			if (lefts.size() > 1)
@@ -691,8 +691,8 @@ public final class SemiJoinOperator implements Operator, Serializable
 					i++;
 				}
 			}
-			Operator left = children.get(0);
-			Operator right = children.get(1);
+			final Operator left = children.get(0);
+			final Operator right = children.get(1);
 			removeChild(left);
 			removeChild(right);
 			if (left instanceof TableScanOperator)
@@ -725,8 +725,8 @@ public final class SemiJoinOperator implements Operator, Serializable
 			// prod w/ existence + filter + remove from left
 			dynamicOp = new ProductOperator(meta);
 			((ProductOperator)dynamicOp).setTXNum(txnum);
-			Operator left = children.get(0);
-			Operator right = children.get(1);
+			final Operator left = children.get(0);
+			final Operator right = children.get(1);
 			removeChild(left);
 			removeChild(right);
 			if (left instanceof TableScanOperator)
@@ -758,8 +758,8 @@ public final class SemiJoinOperator implements Operator, Serializable
 			// prod w/ existence + filter + remove from left
 			dynamicOp = new ProductOperator(meta);
 			((ProductOperator)dynamicOp).setTXNum(txnum);
-			Operator left = children.get(0);
-			Operator right = children.get(1);
+			final Operator left = children.get(0);
+			final Operator right = children.get(1);
 			removeChild(left);
 			removeChild(right);
 			if (left instanceof TableScanOperator)
