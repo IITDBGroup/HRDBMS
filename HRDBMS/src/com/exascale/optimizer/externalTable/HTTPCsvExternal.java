@@ -20,6 +20,7 @@ public class HTTPCsvExternal implements ExternalTableType
 	@Override
 	public void initialize(Properties params)
 	{
+		pos = 0;
 		// key to find the http address in the params object
 		String HTTP_ADDRESS = params.getProperty(HTTP_ADDRESS_KEY);
 		// list of rows found in the csv file in the http address that should be returned to the rows list.
