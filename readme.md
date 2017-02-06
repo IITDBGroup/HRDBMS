@@ -19,7 +19,8 @@ The [Wiki](https://github.com/IITDBGroup/HRDBMS/wiki) covers how to build, insta
 * [Command Line Client][cli]
 * [JDBC Driver][jdbc]
 * [SQL dialect][sql]
-* [Configuration File][config]
+* [Configuration file][config]
+* [Docker deployment][docker]
 
 ## Research ##
 
@@ -31,7 +32,7 @@ The [Wiki](https://github.com/IITDBGroup/HRDBMS/wiki) covers how to build, insta
 [cli]: https://github.com/IITDBGroup/HRDBMS/wiki/cli
 [jdbc]: https://github.com/IITDBGroup/HRDBMS/wiki/jdbc
 [config]: https://github.com/IITDBGroup/HRDBMS/wiki/config_file
-
+[docker]: https://github.com/IITDBGroup/HRDBMS/wiki/docker
 
 # Contact Info
 
