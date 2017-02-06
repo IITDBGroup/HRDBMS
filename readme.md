@@ -4,6 +4,33 @@ The nodes in an HRDBMS cluster are divided into 2 types: coordinators nodes and 
 
 The [Wiki](https://github.com/IITDBGroup/HRDBMS/wiki) covers how to build, install, configure, and start HRDBMS as well as discusses SQL syntax and how to use the JDBC driver and CLI interface.
 
+# HRDBMS Wiki #
+
+## Main ##
+
+* [Home][home]
+
+## Installation ##
+
+* [Build and Deployment][build]
+
+## Usage ##
+
+* [Command Line Client][cli]
+* [JDBC Driver][jdbc]
+* [SQL dialect][sql]
+* [Configuration File][config]
+
+## Research ##
+
+* [HRDBMS Research Webpage](http://www.cs.iit.edu/%7edbgroup/research/hrdbms.php)
+
+[home]: https://github.com/IITDBGroup/HRDBMS/wiki/Home
+[build]: https://github.com/IITDBGroup/HRDBMS/wiki/build
+[sql]: https://github.com/IITDBGroup/HRDBMS/wiki/sql_dialect
+[cli]: https://github.com/IITDBGroup/HRDBMS/wiki/cli
+[jdbc]: https://github.com/IITDBGroup/HRDBMS/wiki/jdbc
+[config]: https://github.com/IITDBGroup/HRDBMS/wiki/config_file
 
 
 # Contact Info
