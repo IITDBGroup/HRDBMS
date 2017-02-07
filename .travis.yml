@@ -1,0 +1,44 @@
+####################
+# set up languages
+language: java
+
+####################
+# Java versions to test against
+jdk:
+  - oraclejdk8
+
+####################
+# install packages
+#before_install:
+#  - travis/install-deps.sh
+
+####################
+# build script
+script:
+  - ant createJar
+
+####################
+# branch configuration
+branches:
+  only:
+  - merged
+
+####################
+# os environments
+sudo: required
+osx_image: xcode7.3
+
+####################
+# deploy
+#after_success:
+#  - ./travis/deploy.sh
+####################
+# build matrix
+matrix:
+  include:
+  - { os: linux, dist: precise }
+  - { os: linux, dist: trusty }
+  - { os: osx }
+  allow_failures:
+    - os: osx
+
