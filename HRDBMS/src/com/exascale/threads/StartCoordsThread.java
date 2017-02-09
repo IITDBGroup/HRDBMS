@@ -88,7 +88,7 @@ public class StartCoordsThread extends HRDBMSThread
 					// HRDBMSWorker.getHParms().getProperty("hrdbms_user");
 					HRDBMSWorker.logger.info("Starting coordinator " + host);
 					// TODO use  -cp HRDBMS.jar:. ... is it compatible with debugger?
-					final String command1 = "cd " + wd + "; ulimit -n " + HRDBMSWorker.getHParms().getProperty("max_open_files") + "; ulimit -u 100000; nohup " + cmd + " -Xmx" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xms" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xss" + HRDBMSWorker.getHParms().getProperty("stack_size") + " " + HRDBMSWorker.getHParms().getProperty("jvm_args") + " -classpath /home/hrdbms/app/bin: com.exascale.managers.HRDBMSWorker " + HRDBMSWorker.TYPE_COORD + " > /dev/null 2>&1 &";
+					final String command1 = "cd " + wd + "; ulimit -n " + HRDBMSWorker.getHParms().getProperty("max_open_files") + "; ulimit -u 100000; nohup " + cmd + " -Xmx" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xms" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xss" + HRDBMSWorker.getHParms().getProperty("stack_size") + " " + HRDBMSWorker.getHParms().getProperty("jvm_args") + " -cp /home/hrdbms/app/build/HRDBMS.jar: com.exascale.managers.HRDBMSWorker " + HRDBMSWorker.TYPE_COORD + " > /dev/null 2>&1 &";
 					try
 					{
 						// final java.util.Properties config = new
