@@ -1,8 +1,8 @@
-# Dockerfile to build mykh74/java:8 image
+# Dockerfile to build iitdbgroup/java:8 image
 
-FROM  phusion/baseimage:0.9.17
+FROM  phusion/baseimage:latest
 
-MAINTAINER  Author Name <author@email.com>
+MAINTAINER  Michael Kuzmyn <michael.kuzmyn@gmail.com>
 
 RUN echo "deb http://archive.ubuntu.com/ubuntu trusty main universe" > /etc/apt/sources.list
 

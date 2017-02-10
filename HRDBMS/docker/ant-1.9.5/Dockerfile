@@ -1,5 +1,5 @@
-# Dockerfile to build image mykh74/ant:1.9.5
-FROM mykh74/java:8
+# Dockerfile to build image iitdbgroup/ant:1.9.5
+FROM iitdbgroup/java:8
 
 # Installs Ant 
 ENV ANT_VERSION 1.9.5 
