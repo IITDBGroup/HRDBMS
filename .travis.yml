@@ -4,8 +4,8 @@ language: java
 
 ####################
 # Java versions to test against
-jdk:
-  - oraclejdk8
+#jdk:
+#  - oraclejdk8
 
 ####################
 # install packages
@@ -39,6 +39,6 @@ matrix:
   - { os: linux, dist: precise }
   - { os: linux, dist: trusty }
   - { os: osx }
-  allow_failures:
-    - os: osx
+#  allow_failures:
+#    - os: osx
 
