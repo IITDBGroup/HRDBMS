@@ -1,5 +1,5 @@
-# Dockerfile to build image mykh74/hrdbms:v1
-FROM mykh74/ant:1.9.5
+# Dockerfile to build image iitdbgroup/hrdbms:latest
+FROM iitdbgroup/ant:latest
 
 ## SSH server setting begin
 RUN apt-get update && apt-get -y install sudo && apt-get install -y openssh-server && apt-get install -y openssh-client
@@ -13,11 +13,10 @@ RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so
 
 ENV NOTVISIBLE "in users profile"
 RUN sudo echo "export VISIBLE=now" >> /etc/profile
+## SSH server setting end
 
-EXPOSE 22
 EXPOSE 5010
 EXPOSE 5015
-## SSH server setting end
 
 ## Add hrdbms user with sudo rights
 RUN useradd -ms /bin/bash hrdbms && echo "hrdbms:hrdbms" | chpasswd && adduser hrdbms sudo
@@ -30,8 +29,7 @@ WORKDIR /home/hrdbms
 RUN mkdir /home/hrdbms/.ssh
 RUN ssh-keygen -q -t rsa -N '' -f /home/hrdbms/.ssh/id_rsa
 RUN cp /home/hrdbms/.ssh/id_rsa.pub /home/hrdbms/.ssh/authorized_keys
-#ADD ../../build/HRDBMS.jar /home/hrdbms
-ADD huffman.dat /home/hrdbms 
+ADD huffman.dat /home/hrdbms
 ADD nodes.cfg /home/hrdbms
 ADD hparms /home/hrdbms
 
@@ -43,13 +41,6 @@ RUN mkdir /home/hrdbms/log
 RUN mkdir /home/hrdbms/temp1
 RUN mkdir /home/hrdbms/temp2
 RUN mkdir /home/hrdbms/archive
-
-## test script
-ADD hrdbms_script /home/hrdbms
-ADD region.tbl /home/hrdbms
-
-# hrdbms start script
-ADD hrdbms_start.sh /home/hrdbms
 
 USER root
 CMD ["/usr/sbin/sshd", "-D"]

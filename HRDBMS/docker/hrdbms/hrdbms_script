@@ -1,9 +1,0 @@
-connect to jdbc:hrdbms://17.17.0.2:3232
-CREATE TABLE REGION(R_REGIONKEY INTEGER NOT NULL PRIMARY KEY, R_NAME CHAR(25), R_COMMENT CHAR(152)) NONE ANY ALL,HASH,{R_REGIONKEY}
-commit
-load resume into region delimiter | from '/home/hrdbms/region.tbl'
-commit
-runstats on region
-commit
-select * from region
-quit

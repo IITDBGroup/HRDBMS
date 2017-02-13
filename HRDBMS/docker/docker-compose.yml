@@ -1,7 +1,7 @@
 version: "2.0"
 services:
   coordinator:
-     image: mykh74/hrdbms:v1
+     image: iitdbgroup/hrdbms:latest
      ports:
         - "5010:5010"
      volumes:
@@ -12,7 +12,7 @@ services:
         app_net:
           ipv4_address: 17.17.0.2
   worker:
-     image: mykh74/hrdbms:v1
+     image: iitdbgroup/hrdbms:latest
      ports:
         - "5015:5015"
      volumes:
