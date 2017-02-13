@@ -1844,12 +1844,21 @@ public class SQLParser
 			}
 		}
 
-		if(createExternalTable.getGeneralExtTableSpec() != null)
+		CreateExternalTableOperator op = null;
+		if (createExternalTable.getGeneralExtTableSpec() != null)
 		{
-			return new CreateExternalTableOperator(meta, schema, tbl, colDefs, createExternalTable.getGeneralExtTableSpec().getSourceList() , createExternalTable.getGeneralExtTableSpec().getAnyString(), createExternalTable.getGeneralExtTableSpec().getFilePathIdentifier());
+			op = new CreateExternalTableOperator(meta, schema, tbl, colDefs, createExternalTable.getGeneralExtTableSpec().getSourceList() , createExternalTable.getGeneralExtTableSpec().getAnyString(), createExternalTable.getGeneralExtTableSpec().getFilePathIdentifier());
+		} else if (createExternalTable.getJavaClassExtTableSpec() != null) {
+			JavaClassExtTableSpec tableSpec = createExternalTable.getJavaClassExtTableSpec();
+			op = new CreateExternalTableOperator(meta, schema, tbl, colDefs, tableSpec.getJavaClassName(), tableSpec.getKeyValueList());
+		} else {
+			// @todo is this else block needed?
+			String javaclass = new String("Undefined");
+			Properties tableproperties = new Properties();
+			op = new CreateExternalTableOperator(meta, schema, tbl, colDefs, javaclass, tableproperties);
 		}
-
-		return new CreateExternalTableOperator(meta, schema, tbl, colDefs, createExternalTable.getJavaClassExtTableSpec().getJavaClassName() , createExternalTable.getJavaClassExtTableSpec().getKeyValueList());
+		op.setTransaction(tx);
+		return op;
 	}
 
 	private Operator buildOperatorTreeFromCreateView(final CreateView createView) throws Exception

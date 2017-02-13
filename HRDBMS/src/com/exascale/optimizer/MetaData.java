@@ -313,7 +313,7 @@ public final class MetaData implements Serializable
 		populateIndex(schema, index, table, tx, cols2Pos);
 	}
 
-	public static void createExternalTable(String schema, String table, ArrayList<ColDef> defs,Transaction tx, String sourceList, String anyString, String filePathIdentifier, String javaClassName, Properties keyValueList) throws Exception
+	public void createExternalTable(String schema, String table, ArrayList<ColDef> defs,Transaction tx, String sourceList, String anyString, String filePathIdentifier, String javaClassName, Properties keyValueList) throws Exception
 	{
 		HashMap<String, String> cols2Types = new HashMap<String, String>();
 		for (ColDef def : defs)
@@ -335,7 +335,7 @@ public final class MetaData implements Serializable
 
 			cols2Types.put(name, type);
 		}
-		new MetaData().new PartitionMetaData(schema, table, "none", "any", "ALL,HASH,{col}", tx, cols2Types);
+		new MetaData().new PartitionMetaData(schema, table, "NONE", "ANY", "ALL,HASH,{COL}", tx, cols2Types);
 		// tables
 		// cols
 		// indexes
@@ -345,6 +345,12 @@ public final class MetaData implements Serializable
 		String typeFlag = "E";
 
 		PlanCacheManager.getInsertTable().setParms(tableID, schema, table, typeFlag).execute(tx);
+		if (!keyValueList.isEmpty()) {
+			PlanCacheManager.getInsertExternalTable().setParms(tableID, javaClassName, keyValueList.toString()).execute(tx);
+		} else {
+			// @todo FIX PARAMETERS SET UP FOR EXTERNAL TABLE
+			PlanCacheManager.getInsertExternalTable().setParms(tableID, javaClassName, "Undefined Parameters").execute(tx);
+		}
 		int colID = 0;
 		for (ColDef def : defs)
 		{
@@ -379,10 +385,10 @@ public final class MetaData implements Serializable
 			}
 
 			int pkpos = -1;
- 			/*if (pks.contains(name))
- 			{
- 				pkpos = pks.indexOf(name);
- 			}*/
+			/*if (pks.contains(name))
+			{
+				pkpos = pks.indexOf(name);
+			}*/
 
 			PlanCacheManager.getInsertCol().setParms(colID, tableID, name, type, length, scale, pkpos, def.isNullable()).execute(tx);
 			colID++;

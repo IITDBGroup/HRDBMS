@@ -3,19 +3,56 @@ package com.exascale.optimizer.externalTable;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Properties;	
+import java.util.*;
 
 public class HTTPCsvExternal implements ExternalTableType
 {
 
 	public static String HTTP_ADDRESS_KEY = "HttpAddress";
+	public static String FIELD_DELIMITER  = "fieldDelimiter";
+	public static String ROW_DELIMITER    = "rowDelimiter";
+	public static String FILE_NAME        = "fileName";
+
+	/**
+	 * List of acceptable parameters for HTTPCsvExternal class that can be passed through command line
+	 */
+	private static String[] paramList = {FIELD_DELIMITER, ROW_DELIMITER, FILE_NAME};
+
+	/**
+	 * List of required parameters for HTTPCsvExternal class to be passed through command line
+	 */
+	private static String[] requiredParams = {FILE_NAME};
+
 
 	// fields
 	private int pos;
 	//This list holds a list of rows that are found in the initialize method
 	private List<String[]> rows;
+
+	/**
+	 * Method checks if parameters entered from CLI are sufficient to create metadata about external table
+	 *
+	 * @param params
+	 */
+	static public void validateProperties(Properties params)
+	{
+		Enumeration e = params.propertyNames();
+
+		String[] reqParams = new String[params.size()];
+		int i = 0;
+		while (e.hasMoreElements()) {
+			String key = (String) e.nextElement();
+			reqParams[i++] = key;
+			if (!Arrays.asList(paramList).contains(key)) {
+				throw new RuntimeException("Parameter '" + key + "' does not exist in HTTPCsvExternal class");
+			}
+		}
+		for (i = 0; i < requiredParams.length; i++) {
+			if (!Arrays.asList(reqParams).contains(requiredParams[i])) {
+				throw new RuntimeException("Parameter '" + requiredParams[i] + "' has to be identified from CLI");
+			}
+		}
+	}
 
 	@Override
 	public void initialize(Properties params)

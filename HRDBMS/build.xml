@@ -56,6 +56,7 @@
     </target>
 	
 	<target name="download-dependencies" depends="init-ivy">
+		 <ivy:configure file="ivysettings.xml" override="true" />
 		 <ivy:resolve />
 		 <ivy:retrieve sync="false" type="jar,bundle" pattern="${librarydir}/[artifact].[ext]" />
 		<!-- classpath -->

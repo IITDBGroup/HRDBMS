@@ -18,10 +18,11 @@ organization : ORGANIZATION '(' INTEGER (',' INTEGER)* ')' ;
 
 createExternalTable : 'CREATE' 'EXTERNAL' 'TABLE' tableName '(' colDef (',' colDef)* ')' (generalExtTableSpec | javaClassExtTableSpec) ;
 generalExtTableSpec: 'IMPORT' 'FROM' sourceList 'FIELDS' 'DELIMITED' 'BY' anything 'ROWS' 'DELIMITED' 'BY' anything 'FILE' 'PATH' FILEPATHIDENTIFIER ;
-javaClassExtTableSpec: 'USING' javaClassName 'WITH' 'PARAMETERS' '(' keyValueList ')' ;
-javaClassName: JAVACLASSNAMEIDENTIFIER ('.' JAVACLASSNAMEIDENTIFIER)* '.java' ;
-keyValueList: anything ':' anything (',' anything ':' anything)*;
-anything : . ;
+javaClassExtTableSpec: 'USING' '"' javaClassName '"' 'WITH' 'PARAMETERS' '(' keyValueList ')' ;
+javaClassName: JAVACLASSNAMEIDENTIFIER ('.' JAVACLASSNAMEIDENTIFIER)* ;
+keyValueList: '"' anything '"' ':' '"' anything '"' (';' '"' anything '"' ':' '"' anything '"' )*?;
+anything :  (EscapeSequence | '""' | ~( '//' | '"'| ':' | ';' ))+ ;
+EscapeSequence : '\\' ('b'|'t'|'n'|'f'|'r'|'\"'|'\''|'\\') ;
 sourceList : 'LOCAL' | 'HDFS' | 'S3' ;
 
 colOrder : COLORDER '(' INTEGER (',' INTEGER)* ')' ;
@@ -46,7 +47,7 @@ dropIndex : 'DROP' 'INDEX' tableName ;
 
 load : 'LOAD' (REPLACE | RESUME) 'INTO' tableName ('DELIMITER' any)? 'FROM' remainder ;
 any : . ;
-remainder : .* EOF ;
+remainder : .*? EOF ;
 indexDef : columnName (DIRECTION)? ;
 colDef : columnName dataType notNull? primary? ;
 primaryKey : 'PRIMARY' 'KEY' '(' columnName (',' columnName)* ')' ;

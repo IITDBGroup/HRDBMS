@@ -5,7 +5,7 @@ services:
      ports:
         - "5010:5010"
      volumes:
-        - ../:/home/hrdbms/app
+        - ../:/home/hrdbms/app:z
      depends_on:
         - worker
      networks:
@@ -16,7 +16,7 @@ services:
      ports:
         - "5015:5015"
      volumes:
-        - ../:/home/hrdbms/app
+        - ../:/home/hrdbms/app:z
      networks:
         app_net:
           ipv4_address: 17.17.0.3

@@ -11,7 +11,5 @@ SelectLexer.java
 SelectListener.java
 SelectParser.java
 SelectVisitor.java
-# Ignore IvyIDEA user-specific files
-*.iml
 # Ignore IDEA user workspace settings
 workspace.xml

@@ -14,6 +14,12 @@ public class JavaClassExtTableSpec
 		this.keyValueList = keyValueList;
 	}
 
+	@Override
+	public JavaClassExtTableSpec clone()
+	{
+		return new JavaClassExtTableSpec(javaClassName, keyValueList);
+	}
+
 	public String getJavaClassName()
 	{
 		return javaClassName;
