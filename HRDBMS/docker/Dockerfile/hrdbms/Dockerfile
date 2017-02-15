@@ -29,9 +29,6 @@ WORKDIR /home/hrdbms
 RUN mkdir /home/hrdbms/.ssh
 RUN ssh-keygen -q -t rsa -N '' -f /home/hrdbms/.ssh/id_rsa
 RUN cp /home/hrdbms/.ssh/id_rsa.pub /home/hrdbms/.ssh/authorized_keys
-ADD huffman.dat /home/hrdbms
-ADD nodes.cfg /home/hrdbms
-ADD hparms /home/hrdbms
 
 ## HRDBMS directories
 RUN mkdir /home/hrdbms/data1
@@ -41,6 +38,7 @@ RUN mkdir /home/hrdbms/log
 RUN mkdir /home/hrdbms/temp1
 RUN mkdir /home/hrdbms/temp2
 RUN mkdir /home/hrdbms/archive
+ADD huffman.dat /home/hrdbms
 
 USER root
 CMD ["/usr/sbin/sshd", "-D"]
