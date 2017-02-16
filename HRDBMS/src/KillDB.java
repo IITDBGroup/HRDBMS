@@ -1,3 +1,5 @@
+import com.exascale.misc.HParms;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -6,6 +8,13 @@ import java.util.StringTokenizer;
 
 public class KillDB
 {
+	private static HParms hparms; // configurable parameters
+
+	public static HParms getHParms()
+	{
+		return hparms;
+	}
+
 	public static void main(final String[] args)
 	{
 		try
@@ -79,8 +88,7 @@ public class KillDB
 						// session.disconnect();
 						// HRDBMSWorker.logger.info("Command: " + "ssh -n -f " +
 						// host + " \"sh -c '" + command1 + "'\"");
-						// TODO set no host key check for easy docker deployment... make optional?
-						Runtime.getRuntime().exec(new String[] { "bash", "-c", "ssh -o StrictHostKeyChecking=no -n -f " + host + "  \"sh -c '" + cmd + "'\"" });
+						Runtime.getRuntime().exec(new String[] { "bash", "-c", "ssh " + getHParms().getProperty("ssh_args") + " -n -f " + host + "  \"sh -c '" + cmd + "'\"" });
 					}
 					catch (final Exception e)
 					{

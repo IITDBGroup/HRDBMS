@@ -71,8 +71,7 @@ public class StartCoordsThread extends HRDBMSThread
 						cmd += "/";
 					}
 
-					// TODO added options for docker/debugger... make optional?
-					cmd += "java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5010 ";
+					cmd += "java";
 				}
 
 				if (type.equals("C"))
@@ -87,8 +86,7 @@ public class StartCoordsThread extends HRDBMSThread
 					// final String user =
 					// HRDBMSWorker.getHParms().getProperty("hrdbms_user");
 					HRDBMSWorker.logger.info("Starting coordinator " + host);
-					// TODO use  -cp HRDBMS.jar:. ... is it compatible with debugger?
-					final String command1 = "cd " + wd + "; ulimit -n " + HRDBMSWorker.getHParms().getProperty("max_open_files") + "; ulimit -u 100000; nohup " + cmd + " -Xmx" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xms" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xss" + HRDBMSWorker.getHParms().getProperty("stack_size") + " " + HRDBMSWorker.getHParms().getProperty("jvm_args") + " -cp /home/hrdbms/app/build/HRDBMS.jar: com.exascale.managers.HRDBMSWorker " + HRDBMSWorker.TYPE_COORD + " > /dev/null 2>&1 &";
+					final String command1 = "cd " + wd + "; ulimit -n " + HRDBMSWorker.getHParms().getProperty("max_open_files") + "; ulimit -u 100000; nohup " + cmd + " -Xmx" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xms" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xss" + HRDBMSWorker.getHParms().getProperty("stack_size") + " " + HRDBMSWorker.getHParms().getProperty("jvm_args") + " " + HRDBMSWorker.getHParms().getProperty("coordinator_debug_jvm_args") + " -cp " + HRDBMSWorker.getHParms().getProperty("package_classpath") + ": com.exascale.managers.HRDBMSWorker " + HRDBMSWorker.TYPE_COORD + " > /dev/null 2>&1 &";
 					try
 					{
 						// final java.util.Properties config = new
@@ -118,9 +116,8 @@ public class StartCoordsThread extends HRDBMSThread
 						// }
 						// channel.disconnect();
 						// session.disconnect();
-						// TODO used no host key checking for easy docker deployment... make optional?
-						HRDBMSWorker.logger.info("Command: " + "ssh -o StrictHostKeyChecking=no -n -f " + host + "  \"bash -c '" + command1 + "'\"");
-						Runtime.getRuntime().exec(new String[] { "bash", "-c", "ssh -o StrictHostKeyChecking=no -n -f " + host + "  \"bash -c '" + command1 + "'\"" });
+						HRDBMSWorker.logger.info("Command: " + "ssh " + HRDBMSWorker.getHParms().getProperty("ssh_args") + " -n -f " + host + "  \"bash -c '" + command1 + "'\"");
+						Runtime.getRuntime().exec(new String[] { "bash", "-c", "ssh " + HRDBMSWorker.getHParms().getProperty("ssh_args") + " -n -f " + host + "  \"bash -c '" + command1 + "'\"" });
 					}
 					catch (final Exception e)
 					{
