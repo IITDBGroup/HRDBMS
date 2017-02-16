@@ -3,6 +3,8 @@ package com.exascale.optimizer;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
+import com.exascale.misc.HrdbmsConstants;
+import com.exascale.optimizer.externalTable.ExternalTableScanOperator;
 import org.antlr.v4.runtime.ANTLRInputStream;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
@@ -7091,10 +7093,15 @@ public class SQLParser
 			}
 		}
 
-		TableScanOperator op = null;
+		AbstractTableScanOperator op = null;
 		try
 		{
-			op = new TableScanOperator(schema, tblName, meta, tx);
+			// Determine if table is external
+			if(HrdbmsConstants.TABLETYPEEXTERNAL == MetaData.getTypeForTable(schema, tblName, tx)) {
+				op = new ExternalTableScanOperator(schema, tblName, meta, tx);
+			} else {
+				op = new TableScanOperator(schema, tblName, meta, tx);
+			}
 		}
 		catch (final Exception e)
 		{

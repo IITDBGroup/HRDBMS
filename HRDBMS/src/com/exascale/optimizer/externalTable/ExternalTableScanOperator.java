@@ -2,19 +2,17 @@ package com.exascale.optimizer.externalTable;
 
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.TreeMap;
-import com.exascale.misc.DataEndMarker;
+import com.exascale.optimizer.AbstractTableScanOperator;
 import com.exascale.optimizer.MetaData;
 import com.exascale.optimizer.Operator;
 import com.exascale.optimizer.OperatorUtils;
-import com.exascale.tables.Plan;
+import com.exascale.tables.Transaction;
 
-public final class ExternalTableScanOperator implements Operator, Serializable
+public final class ExternalTableScanOperator extends AbstractTableScanOperator
 {
 	private static sun.misc.Unsafe unsafe;
 
@@ -31,21 +29,13 @@ public final class ExternalTableScanOperator implements Operator, Serializable
 			unsafe = null;
 		}
 	}
-	private transient final MetaData meta;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
 
-	private Operator parent;
+	public ExternalTableScanOperator(final String schema, final String name, final MetaData meta, final Transaction tx) throws Exception {
+		super(schema, name, meta, tx);
+	}
 
-	private int node;
-
-	public ExternalTableScanOperator(MetaData meta)
-	{
-		this.meta = meta;
-		cols2Types = new HashMap<String, String>();
-		cols2Pos = new HashMap<String, Integer>();
-		pos2Col = new TreeMap<Integer, String>();
+	public ExternalTableScanOperator(final String schema, final String name, final MetaData meta, final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types) {
+		super(schema, name, meta, cols2Pos, pos2Col, cols2Types);
 	}
 
 	public static ExternalTableScanOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
@@ -61,22 +51,14 @@ public final class ExternalTableScanOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void add(Operator op) throws Exception
-	{
-		throw new Exception("ExternalTableScanOperator does not support children");
-	}
-
-	@Override
-	public ArrayList<Operator> children()
-	{
-		final ArrayList<Operator> retval = new ArrayList<Operator>(1);
-		return retval;
-	}
-
-	@Override
 	public ExternalTableScanOperator clone()
 	{
-		final ExternalTableScanOperator retval = new ExternalTableScanOperator(meta);
+		final ExternalTableScanOperator retval = null;
+		try {
+			new ExternalTableScanOperator(schema, name, meta, cols2Pos, pos2Col, cols2Types);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
 		retval.node = node;
 		return retval;
 	}
@@ -90,105 +72,21 @@ public final class ExternalTableScanOperator implements Operator, Serializable
 	}
 
 	@Override
-	public int getChildPos()
-	{
-		return 0;
-	}
-
-	@Override
-	public HashMap<String, Integer> getCols2Pos()
-	{
-		return cols2Pos;
-	}
-
-	@Override
-	public HashMap<String, String> getCols2Types()
-	{
-		return cols2Types;
-	}
-
-	@Override
-	public MetaData getMeta()
-	{
-		return meta;
-	}
-
-	@Override
-	public int getNode()
-	{
-		return node;
-	}
-
-	@Override
-	public TreeMap<Integer, String> getPos2Col()
-	{
-		return pos2Col;
-	}
-
-	@Override
-	public ArrayList<String> getReferences()
-	{
-		final ArrayList<String> retval = new ArrayList<String>(1);
-		return retval;
-	}
-
-	@Override
-	// @?Parallel
-	public Object next(Operator op) throws Exception
-	{
-		return new DataEndMarker();
-	}
-
-	@Override
-	public void nextAll(Operator op) throws Exception
-	{
-	}
-
-	@Override
-	public long numRecsReceived()
-	{
-		return 0;
-	}
-
-	@Override
 	public Operator parent()
 	{
 		return parent;
 	}
 
 	@Override
-	public boolean receivedDEM()
+	public void registerParent(Operator op)
 	{
-		return true;
-	}
-
-	@Override
-	public void registerParent(Operator op) throws Exception
-	{
-		if (parent == null)
-		{
-			parent = op;
+		if(parents.isEmpty()) {
+			super.registerParent(op);
 		}
 		else
 		{
-			throw new Exception("ExternalTableScanOperator only supports 1 parent.");
+			throw new UnsupportedOperationException("ExternalTableScanOperator only supports 1 parent.");
 		}
-	}
-
-	@Override
-	public void removeChild(Operator op)
-	{
-	}
-
-	@Override
-	public void removeParent(Operator op)
-	{
-		parent = null;
-	}
-
-	@Override
-	public void reset() throws Exception
-	{
 	}
 
 	@Override
@@ -208,42 +106,6 @@ public final class ExternalTableScanOperator implements Operator, Serializable
 		OperatorUtils.serializeTM(pos2Col, out, prev);
 		parent.serialize(out, prev);
 		OperatorUtils.writeInt(node, out);
-	}
-
-	@Override
-	public void setChildPos(int pos)
-	{
-	}
-
-	public void setCols2Pos(HashMap<String, Integer> cols2Pos)
-	{
-		this.cols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
-	}
-
-	public void setCols2Types(HashMap<String, String> cols2Types)
-	{
-		this.cols2Types = (HashMap<String, String>)cols2Types.clone();
-	}
-
-	@Override
-	public void setNode(int node)
-	{
-		this.node = node;
-	}
-
-	@Override
-	public void setPlan(Plan plan)
-	{
-	}
-
-	public void setPos2Col(TreeMap<Integer, String> pos2Col)
-	{
-		this.pos2Col = (TreeMap<Integer, String>)pos2Col.clone();
-	}
-
-	@Override
-	public void start() throws Exception
-	{
 	}
 
 	@Override

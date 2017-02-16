@@ -71,7 +71,7 @@ import com.exascale.threads.ConnectionWorker;
 import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.ThreadPoolThread;
 
-public final class TableScanOperator implements Operator, Serializable
+public final class TableScanOperator extends AbstractTableScanOperator
 {
 	private static int PREFETCH_REQUEST_SIZE_STATIC;
 	private static int PAGES_IN_ADVANCE_STATIC;
@@ -230,21 +230,12 @@ public final class TableScanOperator implements Operator, Serializable
 
 	private int PAGES_IN_ADVANCE;
 
-	private HashMap<String, String> cols2Types = new HashMap<String, String>();
-	private HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
-	private TreeMap<Integer, String> pos2Col = new TreeMap<Integer, String>();
-	private String name;
-	private String schema;
 	private transient ArrayList<String> ins;
-	private ArrayList<Operator> parents = new ArrayList<Operator>();
 	public transient volatile BufferedLinkedBlockingQueue readBuffer;
 	private transient volatile HashMap<Operator, BufferedLinkedBlockingQueue> readBuffers;
 	private boolean startDone = false;
 	private transient boolean optimize;
 	private transient HashMap<Operator, HashSet<HashMap<Filter, Filter>>> filters = new HashMap<Operator, HashSet<HashMap<Filter, Filter>>>();
-	protected HashMap<Operator, CNFFilter> orderedFilters = new HashMap<Operator, CNFFilter>();
-	private MetaData meta;
-	private transient HashMap<Operator, Operator> opParents = new HashMap<Operator, Operator>();
 	private ArrayList<Integer> neededPos;
 	private ArrayList<Integer> fetchPos;
 	private String[] midPos2Col;
@@ -255,7 +246,6 @@ public final class TableScanOperator implements Operator, Serializable
 	private transient HashMap<Operator, ArrayList<Integer>> activeDevices = new HashMap<Operator, ArrayList<Integer>>();
 	private transient HashMap<Operator, ArrayList<Integer>> activeNodes = new HashMap<Operator, ArrayList<Integer>>();
 	public ArrayList<Integer> devices = new ArrayList<Integer>();
-	private int node;
 	private boolean phase2Done = false;
 	public HashMap<Integer, Operator> device2Child = new HashMap<Integer, Operator>();
 	private ArrayList<Operator> children = new ArrayList<Operator>();
@@ -264,7 +254,6 @@ public final class TableScanOperator implements Operator, Serializable
 	private boolean indexOnly = false;
 	private transient volatile boolean forceDone;
 	public Transaction tx;
-	private String alias = "";
 	public boolean getRID = false;
 	private HashMap<String, String> tableCols2Types;
 	private TreeMap<Integer, String> tablePos2Col;
@@ -280,12 +269,7 @@ public final class TableScanOperator implements Operator, Serializable
 
 	public TableScanOperator(final String schema, final String name, final MetaData meta, final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> tablePos2Col, final HashMap<String, String> tableCols2Types, final HashMap<String, Integer> tableCols2Pos) throws Exception
 	{
-		this.meta = meta;
-		this.name = name;
-		this.schema = schema;
-		this.cols2Types = (HashMap<String, String>)cols2Types.clone();
-		this.cols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
-		this.pos2Col = (TreeMap<Integer, String>)pos2Col.clone();
+		super(schema, name, meta, cols2Pos, pos2Col, cols2Types);
 		this.tableCols2Types = tableCols2Types;
 		this.tablePos2Col = tablePos2Col;
 		this.tableCols2Pos = tableCols2Pos;
@@ -294,12 +278,7 @@ public final class TableScanOperator implements Operator, Serializable
 
 	public TableScanOperator(final String schema, final String name, final MetaData meta, final Transaction tx) throws Exception
 	{
-		this.meta = meta;
-		this.name = name;
-		this.schema = schema;
-		cols2Types = MetaData.getCols2TypesForTable(schema, name, tx);
-		cols2Pos = MetaData.getCols2PosForTable(schema, name, tx);
-		pos2Col = MetaData.cols2PosFlip(cols2Pos);
+		super(schema, name, meta, tx);
 		tableCols2Types = (HashMap<String, String>)cols2Types.clone();
 		tablePos2Col = (TreeMap<Integer, String>)pos2Col.clone();
 		tableCols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
@@ -317,12 +296,7 @@ public final class TableScanOperator implements Operator, Serializable
 
 	public TableScanOperator(final String schema, final String name, final MetaData meta, final Transaction tx, final boolean releaseLocks) throws Exception
 	{
-		this.meta = meta;
-		this.name = name;
-		this.schema = schema;
-		cols2Types = MetaData.getCols2TypesForTable(schema, name, tx);
-		cols2Pos = MetaData.getCols2PosForTable(schema, name, tx);
-		pos2Col = MetaData.cols2PosFlip(cols2Pos);
+		super(schema, name, meta, tx);
 		tableCols2Types = (HashMap<String, String>)cols2Types.clone();
 		tablePos2Col = (TreeMap<Integer, String>)pos2Col.clone();
 		tableCols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
@@ -332,12 +306,7 @@ public final class TableScanOperator implements Operator, Serializable
 
 	public TableScanOperator(final String schema, final String name, final MetaData meta, final Transaction tx, final boolean releaseLocks, final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Col) throws Exception
 	{
-		this.meta = meta;
-		this.name = name;
-		this.schema = schema;
-		cols2Types = MetaData.getCols2TypesForTable(schema, name, tx);
-		this.cols2Pos = cols2Pos;
-		this.pos2Col = pos2Col;
+		super(schema, name, meta, cols2Pos, pos2Col, MetaData.getCols2TypesForTable(schema, name, tx));
 		tableCols2Types = (HashMap<String, String>)cols2Types.clone();
 		tablePos2Col = (TreeMap<Integer, String>)pos2Col.clone();
 		tableCols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
@@ -870,18 +839,6 @@ public final class TableScanOperator implements Operator, Serializable
 		return orderedFilters.get(op);
 	}
 
-	@Override
-	public HashMap<String, Integer> getCols2Pos()
-	{
-		return cols2Pos;
-	}
-
-	@Override
-	public HashMap<String, String> getCols2Types()
-	{
-		return cols2Types;
-	}
-
 	public ArrayList<String> getDeviceHash()
 	{
 		return partMeta.getDeviceHash();
@@ -969,21 +926,9 @@ public final class TableScanOperator implements Operator, Serializable
 		return retval.getHSHM();
 	}
 
-	@Override
-	public MetaData getMeta()
-	{
-		return meta;
-	}
-
 	public String[] getMidPos2Col()
 	{
 		return midPos2Col;
-	}
-
-	@Override
-	public int getNode()
-	{
-		return node;
 	}
 
 	public ArrayList<String> getNodeGroupHash()
@@ -1126,19 +1071,6 @@ public final class TableScanOperator implements Operator, Serializable
 	public int getNumNodes()
 	{
 		return partMeta.getNumNodes();
-	}
-
-	@Override
-	public TreeMap<Integer, String> getPos2Col()
-	{
-		return pos2Col;
-	}
-
-	@Override
-	public ArrayList<String> getReferences()
-	{
-		final ArrayList<String> retval = new ArrayList<String>(0);
-		return retval;
 	}
 
 	public void getRID()
@@ -1379,27 +1311,10 @@ public final class TableScanOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void registerParent(final Operator op)
-	{
-		parents.add(op);
-		if (opParents.containsKey(op))
-		{
-			orderedFilters.put(op, orderedFilters.get(opParents.get(op)));
-			opParents.put(op.parent(), op);
-		}
-	}
-
-	@Override
 	public void removeChild(final Operator op)
 	{
 		children.remove(op);
 		op.removeParent(this);
-	}
-
-	@Override
-	public void removeParent(final Operator op)
-	{
-		parents.remove(op);
 	}
 
 	@Override
@@ -1483,40 +1398,9 @@ public final class TableScanOperator implements Operator, Serializable
 		OperatorUtils.writeInt(tType, out);
 	}
 
-	public void setAlias(final String alias)
-	{
-		this.alias = alias;
-		final TreeMap<Integer, String> newPos2Col = new TreeMap<Integer, String>();
-		final HashMap<String, Integer> newCols2Pos = new HashMap<String, Integer>();
-		final HashMap<String, String> newCols2Types = new HashMap<String, String>();
-		for (final Map.Entry entry : pos2Col.entrySet())
-		{
-			String val = (String)entry.getValue();
-			val = val.substring(val.indexOf('.') + 1);
-			newPos2Col.put((Integer)entry.getKey(), alias + "." + val);
-			newCols2Pos.put(alias + "." + val, (Integer)entry.getKey());
-		}
-
-		for (final Map.Entry entry : cols2Types.entrySet())
-		{
-			String val = (String)entry.getKey();
-			val = val.substring(val.indexOf('.') + 1);
-			newCols2Types.put(alias + "." + val, (String)entry.getValue());
-		}
-
-		pos2Col = newPos2Col;
-		cols2Pos = newCols2Pos;
-		cols2Types = newCols2Types;
-	}
-
 	public void setChildForDevice(final int device, final Operator child)
 	{
 		device2Child.put(device, child);
-	}
-
-	@Override
-	public void setChildPos(final int pos)
-	{
 	}
 
 	public void setCNFForParent(final Operator op, final CNFFilter filter)
@@ -1620,20 +1504,9 @@ public final class TableScanOperator implements Operator, Serializable
 		cols2Types = tempCols2Types;
 	}
 
-	@Override
-	public void setNode(final int node)
-	{
-		this.node = node;
-	}
-
 	public void setPhase2Done()
 	{
 		phase2Done = true;
-	}
-
-	@Override
-	public void setPlan(final Plan plan)
-	{
 	}
 
 	public void setSample(final long sPer)

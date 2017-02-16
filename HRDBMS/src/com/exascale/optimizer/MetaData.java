@@ -34,11 +34,7 @@ import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LockManager;
 import com.exascale.managers.PlanCacheManager;
 import com.exascale.managers.XAManager;
-import com.exascale.misc.DataEndMarker;
-import com.exascale.misc.FastStringTokenizer;
-import com.exascale.misc.MurmurHash;
-import com.exascale.misc.MyDate;
-import com.exascale.misc.Utils;
+import com.exascale.misc.*;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.ConnectionWorker;
 import com.exascale.threads.HRDBMSThread;
@@ -342,7 +338,7 @@ public final class MetaData implements Serializable
 		// indexcols
 		// partitioning
 		int tableID = PlanCacheManager.getNextTableID().setParms().execute(tx);
-		String typeFlag = "E";
+		String typeFlag = HrdbmsConstants.TABLESTRINGEXTERNAL;
 
 		PlanCacheManager.getInsertTable().setParms(tableID, schema, table, typeFlag).execute(tx);
 		if (!keyValueList.isEmpty()) {
