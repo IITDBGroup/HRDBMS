@@ -1,5 +1,5 @@
 # Dockerfile to build image iitdbgroup/hrdbms:latest
-FROM mykh74/ant:1.9.5
+FROM iitdbgroup/ant:latest
 
 ## SSH server setting begin
 RUN apt-get update && apt-get -y install sudo && apt-get install -y openssh-server && apt-get install -y openssh-client
