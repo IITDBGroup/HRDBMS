@@ -1279,21 +1279,6 @@ public final class TableScanOperator extends AbstractTableScanOperator
 		throw new UnsupportedOperationException("TableScanOperator does not support parent()");
 	}
 
-	public ArrayList<Operator> parents()
-	{
-		if (parents.size() == 0)
-		{
-			final ArrayList<Operator> retval = new ArrayList<Operator>();
-			{
-				retval.add(null);
-			}
-
-			return retval;
-		}
-
-		return parents;
-	}
-
 	public boolean phase2Done()
 	{
 		return phase2Done;

@@ -6543,7 +6543,7 @@ public class PlanCacheManager
 			worker.in.put(cmd);
 			tx.setIsolationLevel(iso);
 			final String type = (String)((ArrayList<Object>)obj).get(0);
-			if (type.equals("C"))
+			if (type.equals("E"))
 			{
 				return 1;
 			}

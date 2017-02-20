@@ -3,29 +3,27 @@ package com.exascale.optimizer.externalTable;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.TreeMap;
-import com.exascale.optimizer.AbstractTableScanOperator;
-import com.exascale.optimizer.MetaData;
-import com.exascale.optimizer.Operator;
-import com.exascale.optimizer.OperatorUtils;
+import com.exascale.misc.DataEndMarker;
+import com.exascale.optimizer.*;
 import com.exascale.tables.Transaction;
 
 public final class ExternalTableScanOperator extends AbstractTableScanOperator
 {
 	private static sun.misc.Unsafe unsafe;
 
-	static
-	{
-		try
-		{
+	private static int fakeRowsLimit = 5;
+	private static int fakeRowsCounter = 1;
+
+	static {
+		try {
 			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
 			f.setAccessible(true);
-			unsafe = (sun.misc.Unsafe)f.get(null);
-		}
-		catch (Exception e)
-		{
+			unsafe = (sun.misc.Unsafe) f.get(null);
+		} catch (Exception e) {
 			unsafe = null;
 		}
 	}
@@ -38,9 +36,8 @@ public final class ExternalTableScanOperator extends AbstractTableScanOperator
 		super(schema, name, meta, cols2Pos, pos2Col, cols2Types);
 	}
 
-	public static ExternalTableScanOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
-	{
-		ExternalTableScanOperator value = (ExternalTableScanOperator)unsafe.allocateInstance(ExternalTableScanOperator.class);
+	public static ExternalTableScanOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception {
+		ExternalTableScanOperator value = (ExternalTableScanOperator) unsafe.allocateInstance(ExternalTableScanOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
 		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
@@ -51,15 +48,13 @@ public final class ExternalTableScanOperator extends AbstractTableScanOperator
 	}
 
 	@Override
-	public ExternalTableScanOperator clone()
-	{
-		final ExternalTableScanOperator retval = null;
+	public ExternalTableScanOperator clone() {
+		ExternalTableScanOperator retval = null;
 		try {
-			new ExternalTableScanOperator(schema, name, meta, cols2Pos, pos2Col, cols2Types);
+			retval = new ExternalTableScanOperator(schema, name, meta, cols2Pos, pos2Col, cols2Types);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-		retval.node = node;
 		return retval;
 	}
 
@@ -112,5 +107,20 @@ public final class ExternalTableScanOperator extends AbstractTableScanOperator
 	public String toString()
 	{
 		return "ExternalTableScanOperator";
+	}
+
+	@Override
+	public Object next(final Operator op) throws Exception
+	{
+		if (fakeRowsLimit < fakeRowsCounter) {
+			return new DataEndMarker();
+		} else {
+			fakeRowsCounter++;
+            ArrayList fakeRow = new ArrayList();
+            fakeRow.add("A");
+            fakeRow.add("B");
+            fakeRow.add("C");
+			return fakeRow;
+		}
 	}
 }

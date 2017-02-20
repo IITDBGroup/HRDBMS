@@ -524,6 +524,7 @@ public final class Phase1
 				final Operator child = cloneTree(o);
 				clone.add(child);
 				clone.setChildPos(op.getChildPos());
+				// TODO Do we need to do the same logic as below for ExternalTableScanOperator?
 				if (o instanceof TableScanOperator)
 				{
 					final CNFFilter cnf = ((TableScanOperator)o).getCNFForParent(op);
@@ -1236,22 +1237,22 @@ public final class Phase1
 			{
 				try
 				{
-					if (op instanceof TableScanOperator)
+					if (op instanceof AbstractTableScanOperator)
 					{
-						final ArrayList<Operator> parents = (ArrayList<Operator>)((TableScanOperator)op).parents().clone();
+						final ArrayList<Operator> parents = (ArrayList<Operator>)((AbstractTableScanOperator)op).parents().clone();
 						for (final Operator op2 : parents)
 						{
 							op2.removeChild(op);
 							op2.add(op);
 							int i = 1;
-							while (i < ((TableScanOperator)op).parents().size())
+							while (i < ((AbstractTableScanOperator)op).parents().size())
 							{
-								leaves2.add(((TableScanOperator)op).parents().get(i));
+								leaves2.add(((AbstractTableScanOperator)op).parents().get(i));
 								i++;
 							}
 						}
 
-						op = ((TableScanOperator)op).parents().get(0);
+						op = ((AbstractTableScanOperator)op).parents().get(0);
 					}
 					else
 					{

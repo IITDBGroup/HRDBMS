@@ -98,7 +98,7 @@ public class StartDB
 					// final String user =
 					// HRDBMSWorker.getHParms().getProperty("hrdbms_user");
 					System.out.println("Starting master " + host);
-					final String command1 = "cd " + wd + "; ulimit -n " + getHParms().getProperty("max_open_files") + "; ulimit -u 100000; nohup " + cmd + " -Xmx" + getHParms().getProperty("Xmx_string") + " -Xms" + getHParms().getProperty("Xmx_string") + " -Xss" + getHParms().getProperty("stack_size") + " " + getHParms().getProperty("jvm_args") + " " + getHParms().getProperty("coordinator_debug_jvm_args") + " -cp " + getHParms().getProperty("package_classpath") + ":. com.exascale.managers.HRDBMSWorker 0" + " > /dev/null 2>&1 &";
+					final String command1 = "cd " + wd + "; ulimit -n " + getHParms().getProperty("max_open_files") + "; ulimit -u 100000; nohup " + cmd + " -Xmx" + getHParms().getProperty("Xmx_string") + " -Xms" + getHParms().getProperty("Xmx_string") + " -Xss" + getHParms().getProperty("stack_size") + " " + getHParms().getProperty("jvm_args") + " " + getHParms().getProperty("coordinator_debug_jvm_args") + " -cp " + getHParms().getProperty("package_classpath") + ": com.exascale.managers.HRDBMSWorker 0" + " > /dev/null 2>&1 &";
 					try
 					{
 						System.out.println("Command: " + "ssh " + getHParms().getProperty("ssh_args") + " -n -f " + host + "  \"bash -c '" + command1 + "'\"");

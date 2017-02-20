@@ -1,6 +1,5 @@
 package com.exascale.optimizer;
 
-import com.exascale.misc.DataEndMarker;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Transaction;
 
@@ -100,12 +99,6 @@ public abstract class AbstractTableScanOperator implements Operator, Serializabl
     }
 
     @Override
-    public Object next(Operator op) throws Exception
-    {
-        return new DataEndMarker();
-    }
-
-    @Override
     public void nextAll(Operator op) throws Exception
     {
     }
@@ -200,9 +193,23 @@ public abstract class AbstractTableScanOperator implements Operator, Serializabl
     @Override
     public String toString()
     {
-        return "ExternalTableScanOperator";
+        return "AbstractTableScanOperator";
     }
 
     @Override
     public Operator clone() { return null; };
+
+    public ArrayList<Operator> parents()
+    {
+        if (parents.size() == 0)
+        {
+            final ArrayList<Operator> retval = new ArrayList<Operator>();
+            {
+                retval.add(null);
+            }
+            return retval;
+        }
+        return parents;
+    }
+
 }
