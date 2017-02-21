@@ -1,5 +1,5 @@
 [![analytics](http://www.google-analytics.com/collect?v=1&t=pageview&_s=1&dl=https%3A%2F%2Fgithub.com%2FIITDBGroup%2FHRDBMS%2Fmain&_u=MAC~&cid=123456789&tid=UA-92255635-3)]()
-[![Build Status](https://travis-ci.org/IITDBGroup/HRDBMS.svg?branch=master)](https://travis-ci.org/IITDBGroup/HRDBMS)
+[![Build Status](https://travis-ci.org/IITDBGroup/HRDBMS.svg?branch=merged)](https://travis-ci.org/IITDBGroup/HRDBMS)
 
 # Overview
 HRDBMS is a relational database for analytics/complex queries that is designed to handle large amounts of data and run across large clusters.
