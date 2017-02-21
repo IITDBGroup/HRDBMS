@@ -9,6 +9,7 @@ env:
     - ANT_VERSION=1.9.5
     - ANT_HOME=/usr/share/ant/apache-ant-${ANT_VERSION}
     - PATH=${PATH}:/usr/share/ant/apache-ant-${ANT_VERSION}/bin
+    - ANT=/usr/local/bin/ant
 
 ####################
 # Java versions to test against
@@ -23,7 +24,7 @@ before_install:
 ####################
 # build script
 script:
-  - ant -f HRDBMS/build.xml createJar
+  - ${ANT} -f HRDBMS/build.xml createJar
 
 ####################
 # branch configuration
