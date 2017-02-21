@@ -3,14 +3,22 @@
 language: java
 
 ####################
+# set environment variables
+env:
+  global:
+    - ANT_VERSION=1.9.5
+    - ANT_HOME=/usr/share/ant/apache-ant-${ANT_VERSION}
+    - PATH=${PATH}:/usr/share/ant/apache-ant-${ANT_VERSION}/bin
+
+####################
 # Java versions to test against
 #jdk:
 #  - oraclejdk8
 
 ####################
 # install packages
-#before_install:
-#  - travis/install-deps.sh
+before_install:
+  - travis/install-deps.sh
 
 ####################
 # build script
