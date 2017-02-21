@@ -4,6 +4,12 @@
 FROM iitdbgroup/hrdbms:latest
 
 ########################################
+# Let HRDBMS user own huffman.dat
+########################################
+RUN chown hrdbms /home/hrdbms/huffman.dat \
+    && chgrp hrdbms /home/hrdbms/huffman.dat
+
+########################################
 # Install packages needed for building
 ########################################
 RUN apt-get -y update && apt-get install -y \
@@ -21,7 +27,7 @@ RUN wget -O /home/hrdbms/hrdbms.zip https://github.com/IITDBGroup/HRDBMS/archive
 RUN cd /home/hrdbms/HRDBMS-merged \
     && ant -f HRDBMS/build.xml createJar \
 	&& mv /home/hrdbms/HRDBMS-merged/HRDBMS/build/HRDBMS.jar /home/hrdbms/ \
-	&& cp /home/hrdbms/HRDBMS-merged/HRDBMS/huffman.dat /home/hrdbms/
+	&& cp /home/hrdbms/HRDBMS-merged/HRDBMS/huffman.dat /home/hrdbms/ \
 	&& rm -rf /home/hrdbms/HRDBMS-merged
 
 ########################################
