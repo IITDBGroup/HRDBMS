@@ -58,6 +58,7 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("critical_mem_percent", "15");
 		retval.setProperty("stack_size", "2M");
 		retval.setProperty("jvm_args", "-XX:+UseG1GC -XX:G1HeapRegionSize=32m -XX:+ParallelRefProcEnabled -XX:MaxDirectMemorySize=327772160000 -XX:+AggressiveOpts -XX:CompileThreshold=200 -Xbatch -XX:-TieredCompilation -XX:InitiatingHeapOccupancyPercent=25 -XX:MaxGCPauseMillis=1500 -XX:ParallelGCThreads=" + Runtime.getRuntime().availableProcessors());
+        retval.setProperty("package_classpath", "HRDBMS.jar");
 		retval.setProperty("external_factor", "68.0");
 		retval.setProperty("hash_external_factor", "120.0");
 		retval.setProperty("max_queued_load_flush_threads", "5");
