@@ -8,7 +8,7 @@ Xmx_string=2g
 jvm_args=-XX:+UseG1GC -XX:G1HeapRegionSize=2m -XX:+ParallelRefProcEnabled -XX:MaxDirectMemorySize=27772160000 -XX:+AggressiveOpts -XX:CompileThreshold=200 -Xbatch -XX:-TieredCompilation
 worker_debug_jvm_args=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5015
 coordinator_debug_jvm_args=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5010
-package_classpath=/home/hrdbms/app/build/HRDBMS.jar
+package_classpath=/home/hrdbms/HRDBMS.jar
 ssh_args=-o StrictHostKeyChecking=no
 pbpe_version=6
 max_pbpe_time=60000
