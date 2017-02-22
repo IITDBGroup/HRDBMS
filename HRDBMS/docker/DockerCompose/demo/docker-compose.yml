@@ -13,6 +13,8 @@ services:
         - worker_1
         - worker_2
      container_name: "hrdbms_coordinator"
+     ports:
+        - "5010:5010"
      networks:
         app_net:
           ipv4_address: 17.17.0.2
@@ -20,6 +22,8 @@ services:
      container_name: "hrdbms_worker_1"
      extends:
         service: node
+     ports:
+        - "5015:5015"
      networks:
         app_net:
           ipv4_address: 17.17.0.3
@@ -27,6 +31,8 @@ services:
      container_name: "hrdbms_worker_2"
      extends:
         service: node
+     ports:
+        - "5016:5015"
      networks:
         app_net:
           ipv4_address: 17.17.0.4          
