@@ -10,6 +10,6 @@ worker_debug_jvm_args=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,addr
 coordinator_debug_jvm_args=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5010
 package_classpath=/home/hrdbms/HRDBMS.jar
 ssh_args=-o StrictHostKeyChecking=no
-pbpe_version=6
+pbpe_version=2
 max_pbpe_time=60000
 
