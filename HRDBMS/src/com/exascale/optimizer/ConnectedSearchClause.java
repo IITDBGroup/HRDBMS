@@ -5,10 +5,20 @@ public class ConnectedSearchClause
 	private boolean and;
 	private SearchClause search;
 
-	public ConnectedSearchClause(SearchClause search, boolean and)
+	public ConnectedSearchClause(final SearchClause search, final boolean and)
 	{
 		this.search = search;
 		this.and = and;
+	}
+	
+	public String toString()
+	{
+		if (and)
+		{
+			return " AND " + search;
+		}
+		
+		return " OR " + search;
 	}
 
 	@Override
@@ -18,14 +28,14 @@ public class ConnectedSearchClause
 	}
 
 	@Override
-	public boolean equals(Object o)
+	public boolean equals(final Object o)
 	{
 		if (!(o instanceof ConnectedSearchClause))
 		{
 			return false;
 		}
 
-		ConnectedSearchClause rhs = (ConnectedSearchClause)o;
+		final ConnectedSearchClause rhs = (ConnectedSearchClause)o;
 		return and == rhs.and && search.equals(rhs.search);
 	}
 
@@ -48,12 +58,12 @@ public class ConnectedSearchClause
 		return and;
 	}
 
-	public void setAnd(boolean and)
+	public void setAnd(final boolean and)
 	{
 		this.and = and;
 	}
 
-	public void setSearch(SearchClause search)
+	public void setSearch(final SearchClause search)
 	{
 		this.search = search;
 	}

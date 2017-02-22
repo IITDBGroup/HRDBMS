@@ -2,7 +2,6 @@ package com.exascale.optimizer;
 
 import java.io.BufferedOutputStream;
 import java.io.InputStream;
-import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.net.InetSocketAddress;
@@ -13,7 +12,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
@@ -21,9 +19,6 @@ import com.exascale.filesystem.RID;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.HJOMultiHashMap;
-import com.exascale.misc.MultiHashMap;
-import com.exascale.misc.VHJOMultiHashMap;
-import com.exascale.optimizer.MetaData.PartitionMetaData;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.ConnectionWorker;
@@ -31,6 +26,10 @@ import com.exascale.threads.HRDBMSThread;
 
 public final class DeleteOperator implements Operator, Serializable
 {
+	private static HashMap<Long, HashMap<String, DeleteOperator>> txDelayedMaps = new HashMap<Long, HashMap<String, DeleteOperator>>();
+	private static IdentityHashMap<DeleteOperator, List<RIDAndIndexKeys>> delayedRows = new IdentityHashMap<DeleteOperator, List<RIDAndIndexKeys>>();
+	private static HashMap<Long, IdentityHashMap<DeleteOperator, DeleteOperator>> notYetStarted = new HashMap<Long, IdentityHashMap<DeleteOperator, DeleteOperator>>();
+	// private static AtomicInteger debugCounter = new AtomicInteger(0);
 	private Operator child;
 	private final MetaData meta;
 	private HashMap<String, String> cols2Types;
@@ -44,131 +43,52 @@ public final class DeleteOperator implements Operator, Serializable
 	private boolean done = false;
 	private HJOMultiHashMap map = new HJOMultiHashMap<Integer, RIDAndIndexKeys>();
 	private Transaction tx;
-	private static HashMap<Long, HashMap<String, DeleteOperator>> txDelayedMaps = new HashMap<Long, HashMap<String, DeleteOperator>>();
-	private static IdentityHashMap<DeleteOperator, List<RIDAndIndexKeys>> delayedRows = new IdentityHashMap<DeleteOperator, List<RIDAndIndexKeys>>();
-	private static HashMap<Long, IdentityHashMap<DeleteOperator, DeleteOperator>> notYetStarted = new HashMap<Long, IdentityHashMap<DeleteOperator, DeleteOperator>>();
-	//private static AtomicInteger debugCounter = new AtomicInteger(0);
 
-	public DeleteOperator(String schema, String table, MetaData meta)
+	public DeleteOperator(final String schema, final String table, final MetaData meta)
 	{
 		this.schema = schema;
 		this.table = table;
 		this.meta = meta;
 	}
-	
-	private static boolean registerDelayed(DeleteOperator caller, String schema, String table, int node, Transaction tx, List<RIDAndIndexKeys> rows)
-	{
-		synchronized(txDelayedMaps)
-		{
-			String key = schema + "." + table + "~" + node;
-			HashMap<String, DeleteOperator> map = txDelayedMaps.get(tx.number());
-			if (map == null)
-			{
-				map = new HashMap<String, DeleteOperator>();
-				map.put(key, caller);
-				delayedRows.put(caller, rows);
-				txDelayedMaps.put(tx.number(), map);
-				return true;
-			}
-			
-			DeleteOperator owner = map.get(key);
-			if (owner == null)
-			{
-				map.put(key, caller);
-				delayedRows.put(caller, rows);
-				return true;
-			}
-			
-			try
-			{
-				//List<RIDAndIndexKeys> currentList = delayedRows.get(owner);
-				//HRDBMSWorker.logger.debug("Retrieved current list for node " + node + " which has size " + currentList.size()); //DEBUG
-				//currentList.addAll(rows);
-				//HRDBMSWorker.logger.debug("After adding " + rows.size() + " it is now of size " + currentList.size()); //DEBUG
-				delayedRows.get(owner).addAll(rows);
-			}
-			catch(NullPointerException e)
-			{
-				HRDBMSWorker.logger.debug("Owner = " + owner + ", map.get(key) = " + map.get(key) + ", delayedRows.get(owner) = " + delayedRows.get(owner));
-			}
-			return false;
-		}
-	}
-	
-	private static boolean registerDelayedCantOwn(DeleteOperator caller, String schema, String table, int node, Transaction tx, List<RIDAndIndexKeys> rows)
-	{
-		synchronized(txDelayedMaps)
-		{
-			String key = schema + "." + table + "~" + node;
-			HashMap<String, DeleteOperator> map = txDelayedMaps.get(tx.number());
-			if (map == null)
-			{
-				return false;
-			}
-			
-			DeleteOperator owner = map.get(key);
-			if (owner == null)
-			{
-				return false;
-			}
-			
-			delayedRows.get(owner).addAll(rows);
-			return true;
-		}
-	}
-	
-	private static List<RIDAndIndexKeys> deregister(DeleteOperator owner, String schema, String table, int node, Transaction tx)
-	{
-		synchronized(txDelayedMaps)
-		{
-			List<RIDAndIndexKeys> retval = delayedRows.remove(owner);
-			HashMap<String, DeleteOperator> map = txDelayedMaps.get(tx.number());
-			String key = schema + "." + table + "~" + node;
-			map.remove(key);
-			if (map.size() == 0)
-			{
-				txDelayedMaps.remove(tx.number());
-			}
-			
-			return retval;
-		}
-	}
-	
-	public static void wakeUpDelayed(Transaction tx)
+
+	public static void wakeUpDelayed(final Transaction tx)
 	{
 		while (true)
 		{
-			synchronized(notYetStarted)
+			synchronized (notYetStarted)
 			{
-				IdentityHashMap<DeleteOperator, DeleteOperator> thisTx = notYetStarted.get(tx.number());
+				final IdentityHashMap<DeleteOperator, DeleteOperator> thisTx = notYetStarted.get(tx.number());
 				if (thisTx == null)
 				{
 					break;
 				}
 			}
-			
+
 			try
 			{
 				Thread.sleep(1);
 			}
-			catch(InterruptedException e)
-			{}
+			catch (final InterruptedException e)
+			{
+			}
 		}
-		
-		synchronized(txDelayedMaps)
+
+		synchronized (txDelayedMaps)
 		{
-			//HRDBMSWorker.logger.debug("Entering wakeUpDelayed with " + txDelayedMaps); //DEBUG
-			HashMap<String, DeleteOperator> map = txDelayedMaps.get(tx.number());
-			
+			// HRDBMSWorker.logger.debug("Entering wakeUpDelayed with " +
+			// txDelayedMaps); //DEBUG
+			final HashMap<String, DeleteOperator> map = txDelayedMaps.get(tx.number());
+
 			if (map == null)
 			{
 				return;
 			}
-	
-			//HRDBMSWorker.logger.debug("Waking up " + map.size() + " threads"); //DEBUG
-			for (DeleteOperator io : map.values())
+
+			// HRDBMSWorker.logger.debug("Waking up " + map.size() + "
+			// threads"); //DEBUG
+			for (final DeleteOperator io : map.values())
 			{
-				synchronized(io)
+				synchronized (io)
 				{
 					io.notify();
 				}
@@ -176,7 +96,24 @@ public final class DeleteOperator implements Operator, Serializable
 		}
 	}
 
-	private static byte[] intToBytes(int val)
+	private static List<RIDAndIndexKeys> deregister(final DeleteOperator owner, final String schema, final String table, final int node, final Transaction tx)
+	{
+		synchronized (txDelayedMaps)
+		{
+			final List<RIDAndIndexKeys> retval = delayedRows.remove(owner);
+			final HashMap<String, DeleteOperator> map = txDelayedMaps.get(tx.number());
+			final String key = schema + "." + table + "~" + node;
+			map.remove(key);
+			if (map.size() == 0)
+			{
+				txDelayedMaps.remove(tx.number());
+			}
+
+			return retval;
+		}
+	}
+
+	private static byte[] intToBytes(final int val)
 	{
 		final byte[] buff = new byte[4];
 		buff[0] = (byte)(val >> 24);
@@ -186,7 +123,7 @@ public final class DeleteOperator implements Operator, Serializable
 		return buff;
 	}
 
-	private static byte[] longToBytes(long val)
+	private static byte[] longToBytes(final long val)
 	{
 		final byte[] buff = new byte[8];
 		buff[0] = (byte)(val >> 56);
@@ -200,8 +137,88 @@ public final class DeleteOperator implements Operator, Serializable
 		return buff;
 	}
 
+	private static boolean registerDelayed(final DeleteOperator caller, final String schema, final String table, final int node, final Transaction tx, final List<RIDAndIndexKeys> rows)
+	{
+		synchronized (txDelayedMaps)
+		{
+			final String key = schema + "." + table + "~" + node;
+			HashMap<String, DeleteOperator> map = txDelayedMaps.get(tx.number());
+			if (map == null)
+			{
+				map = new HashMap<String, DeleteOperator>();
+				map.put(key, caller);
+				delayedRows.put(caller, rows);
+				txDelayedMaps.put(tx.number(), map);
+				return true;
+			}
+
+			final DeleteOperator owner = map.get(key);
+			if (owner == null)
+			{
+				map.put(key, caller);
+				delayedRows.put(caller, rows);
+				return true;
+			}
+
+			try
+			{
+				// List<RIDAndIndexKeys> currentList = delayedRows.get(owner);
+				// HRDBMSWorker.logger.debug("Retrieved current list for node "
+				// + node + " which has size " + currentList.size()); //DEBUG
+				// currentList.addAll(rows);
+				// HRDBMSWorker.logger.debug("After adding " + rows.size() + "
+				// it is now of size " + currentList.size()); //DEBUG
+				delayedRows.get(owner).addAll(rows);
+			}
+			catch (final NullPointerException e)
+			{
+				HRDBMSWorker.logger.debug("Owner = " + owner + ", map.get(key) = " + map.get(key) + ", delayedRows.get(owner) = " + delayedRows.get(owner));
+			}
+			return false;
+		}
+	}
+
+	private static boolean registerDelayedCantOwn(final DeleteOperator caller, final String schema, final String table, final int node, final Transaction tx, final List<RIDAndIndexKeys> rows)
+	{
+		synchronized (txDelayedMaps)
+		{
+			final String key = schema + "." + table + "~" + node;
+			final HashMap<String, DeleteOperator> map = txDelayedMaps.get(tx.number());
+			if (map == null)
+			{
+				return false;
+			}
+
+			final DeleteOperator owner = map.get(key);
+			if (owner == null)
+			{
+				return false;
+			}
+
+			delayedRows.get(owner).addAll(rows);
+			return true;
+		}
+	}
+
+	private static byte[] stringToBytes(final String string)
+	{
+		byte[] data = null;
+		try
+		{
+			data = string.getBytes(StandardCharsets.UTF_8);
+		}
+		catch (final Exception e)
+		{
+		}
+		final byte[] len = intToBytes(data.length);
+		final byte[] retval = new byte[data.length + len.length];
+		System.arraycopy(len, 0, retval, 0, len.length);
+		System.arraycopy(data, 0, retval, len.length, data.length);
+		return retval;
+	}
+
 	@Override
-	public void add(Operator op) throws Exception
+	public void add(final Operator op) throws Exception
 	{
 		if (child == null)
 		{
@@ -295,7 +312,7 @@ public final class DeleteOperator implements Operator, Serializable
 
 	@Override
 	// @?Parallel
-	public Object next(Operator op) throws Exception
+	public Object next(final Operator op) throws Exception
 	{
 		while (!done)
 		{
@@ -312,13 +329,13 @@ public final class DeleteOperator implements Operator, Serializable
 			return new DataEndMarker();
 		}
 
-		int retval = num.get();
+		final int retval = num.get();
 		num.set(-1);
 		return retval;
 	}
 
 	@Override
-	public void nextAll(Operator op) throws Exception
+	public void nextAll(final Operator op) throws Exception
 	{
 		child.nextAll(op);
 		Object o = next(op);
@@ -347,13 +364,13 @@ public final class DeleteOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void registerParent(Operator op) throws Exception
+	public void registerParent(final Operator op) throws Exception
 	{
 		throw new Exception("DeleteOperator does not support parents");
 	}
 
 	@Override
-	public void removeChild(Operator op)
+	public void removeChild(final Operator op)
 	{
 		if (op == child)
 		{
@@ -363,7 +380,7 @@ public final class DeleteOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 		parent = null;
 	}
@@ -375,28 +392,28 @@ public final class DeleteOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		throw new Exception("Trying to serialize a delete operator");
 	}
 
 	@Override
-	public void setChildPos(int pos)
+	public void setChildPos(final int pos)
 	{
 	}
 
 	@Override
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 		this.node = node;
 	}
 
 	@Override
-	public void setPlan(Plan plan)
+	public void setPlan(final Plan plan)
 	{
 	}
 
-	public void setTransaction(Transaction tx)
+	public void setTransaction(final Transaction tx)
 	{
 		this.tx = tx;
 	}
@@ -406,8 +423,8 @@ public final class DeleteOperator implements Operator, Serializable
 	{
 		if (ConnectionWorker.isDelayed(tx))
 		{
-			//notYetStarted.multiPut(tx.number(), this);
-			synchronized(notYetStarted)
+			// notYetStarted.multiPut(tx.number(), this);
+			synchronized (notYetStarted)
 			{
 				IdentityHashMap<DeleteOperator, DeleteOperator> thisTx = notYetStarted.get(tx.number());
 				if (thisTx == null)
@@ -415,7 +432,7 @@ public final class DeleteOperator implements Operator, Serializable
 					thisTx = new IdentityHashMap<DeleteOperator, DeleteOperator>();
 					notYetStarted.put(tx.number(), thisTx);
 				}
-			
+
 				thisTx.put(this, this);
 			}
 		}
@@ -430,30 +447,30 @@ public final class DeleteOperator implements Operator, Serializable
 		try
 		{
 			child.start();
-			indexes = meta.getIndexFileNamesForTable(schema, table, tx);
-			keys = meta.getKeys(indexes, tx);
-			types = meta.getTypes(indexes, tx);
-			orders = meta.getOrders(indexes, tx);
-			tP2C = meta.getPos2ColForTable(schema, table, tx);
-			tC2T = meta.getCols2TypesForTable(schema, table, tx);
-			type = meta.getTypeForTable(schema, table, tx);
+			indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
+			keys = MetaData.getKeys(indexes, tx);
+			types = MetaData.getTypes(indexes, tx);
+			orders = MetaData.getOrders(indexes, tx);
+			tP2C = MetaData.getPos2ColForTable(schema, table, tx);
+			tC2T = MetaData.getCols2TypesForTable(schema, table, tx);
+			type = MetaData.getTypeForTable(schema, table, tx);
 
 			Object o = child.next(this);
 			while (!(o instanceof DataEndMarker))
 			{
 				try
 				{
-					ArrayList<Object> row = (ArrayList<Object>)o;
-					int node = (Integer)row.get(child.getCols2Pos().get("_RID1"));
-					int device = (Integer)row.get(child.getCols2Pos().get("_RID2"));
-					int block = (Integer)row.get(child.getCols2Pos().get("_RID3"));
-					int rec = (Integer)row.get(child.getCols2Pos().get("_RID4"));
-					ArrayList<ArrayList<Object>> indexKeys = new ArrayList<ArrayList<Object>>();
-					for (String index : indexes)
+					final ArrayList<Object> row = (ArrayList<Object>)o;
+					final int node = (Integer)row.get(child.getCols2Pos().get("_RID1"));
+					final int device = (Integer)row.get(child.getCols2Pos().get("_RID2"));
+					final int block = (Integer)row.get(child.getCols2Pos().get("_RID3"));
+					final int rec = (Integer)row.get(child.getCols2Pos().get("_RID4"));
+					final ArrayList<ArrayList<Object>> indexKeys = new ArrayList<ArrayList<Object>>();
+					for (final String index : indexes)
 					{
-						ArrayList<Object> keys2 = new ArrayList<Object>();
-						ArrayList<String> cols = MetaData.getColsFromIndexFileName(index, tx, keys, indexes);
-						for (String col : cols)
+						final ArrayList<Object> keys2 = new ArrayList<Object>();
+						final ArrayList<String> cols = MetaData.getColsFromIndexFileName(index, tx, keys, indexes);
+						for (final String col : cols)
 						{
 							keys2.add(row.get(child.getCols2Pos().get(col)));
 						}
@@ -461,12 +478,13 @@ public final class DeleteOperator implements Operator, Serializable
 						indexKeys.add(keys2);
 					}
 
-					RID rid = new RID(node, device, block, rec);
-					//HRDBMSWorker.logger.debug("About to delete RID = " + rid); //DEBUG
-					RIDAndIndexKeys raik = new RIDAndIndexKeys(rid, indexKeys);
+					final RID rid = new RID(node, device, block, rec);
+					// HRDBMSWorker.logger.debug("About to delete RID = " +
+					// rid); //DEBUG
+					final RIDAndIndexKeys raik = new RIDAndIndexKeys(rid, indexKeys);
 					map.multiPut(node, raik);
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.debug("", e);
 					throw e;
@@ -494,14 +512,14 @@ public final class DeleteOperator implements Operator, Serializable
 				o = child.next(this);
 			}
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			if (ConnectionWorker.isDelayed(tx))
 			{
-				//notYetStarted.remove(tx.number(), this);
-				synchronized(notYetStarted)
+				// notYetStarted.remove(tx.number(), this);
+				synchronized (notYetStarted)
 				{
-					IdentityHashMap<DeleteOperator, DeleteOperator> thisTx = notYetStarted.get(tx.number());
+					final IdentityHashMap<DeleteOperator, DeleteOperator> thisTx = notYetStarted.get(tx.number());
 					thisTx.remove(this);
 					if (thisTx.size() == 0)
 					{
@@ -509,16 +527,16 @@ public final class DeleteOperator implements Operator, Serializable
 					}
 				}
 			}
-			
+
 			throw e;
 		}
-		
+
 		if (ConnectionWorker.isDelayed(tx))
 		{
-			//notYetStarted.remove(tx.number(), this);
-			synchronized(notYetStarted)
+			// notYetStarted.remove(tx.number(), this);
+			synchronized (notYetStarted)
 			{
-				IdentityHashMap<DeleteOperator, DeleteOperator> thisTx = notYetStarted.get(tx.number());
+				final IdentityHashMap<DeleteOperator, DeleteOperator> thisTx = notYetStarted.get(tx.number());
 				thisTx.remove(this);
 				if (thisTx.size() == 0)
 				{
@@ -527,11 +545,11 @@ public final class DeleteOperator implements Operator, Serializable
 			}
 		}
 
-		//if (map.totalSize() > 0)
-		//{
-		//	flush(indexes, keys, types, orders, tP2C, tC2T, type);
-		//}
-		
+		// if (map.totalSize() > 0)
+		// {
+		// flush(indexes, keys, types, orders, tP2C, tC2T, type);
+		// }
+
 		if (!ConnectionWorker.isDelayed(tx) && map.totalSize() > 0)
 		{
 			flush(indexes, keys, types, orders, tP2C, tC2T, type);
@@ -550,20 +568,126 @@ public final class DeleteOperator implements Operator, Serializable
 		return "DeleteOperator";
 	}
 
-	private void flush(ArrayList<String> indexes, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, TreeMap<Integer, String> tP2C, HashMap<String, String> tC2T, int type) throws Exception
+	private void delayedFlush(final ArrayList<String> indexes, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type) throws Exception
 	{
-		//HRDBMSWorker.logger.debug("Non-delayed flush for " + map.size() + " nodes and " + map.totalSize() + " rows"); //DEBUG
-		ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
-		for (Object o : map.getKeySet())
+		// HRDBMSWorker.logger.debug("Delayed flush with " + map.totalSize() + "
+		// entries"); //DEBUG
+		FlushThread thread = null;
+		int node = -1;
+		boolean realOwner = false;
+		int realNode = -1;
+		final HashSet copy = new HashSet(map.getKeySet());
+		for (final Object o : copy)
 		{
-			int node = (Integer)o;
-			List<RIDAndIndexKeys> list = map.get(node);
-			//HRDBMSWorker.logger.debug(list.size() + " rows for node " + node); //DEBUG
+			node = (Integer)o;
 			if (node == -1)
 			{
-				ArrayList<Integer> coords = MetaData.getCoordNodes();
+				HRDBMSWorker.logger.debug("Delayed flush in delete operation against system metadata is not allowed!");
+				throw new Exception("Delayed flush in delete operation against system metadata is not allowed!");
+			}
+			final List<RIDAndIndexKeys> list = map.get(node);
+			// HRDBMSWorker.logger.debug(list.size() + " rows for node " +
+			// node);
 
-				for (Integer coord : coords)
+			if (!realOwner)
+			{
+				final boolean owner = DeleteOperator.registerDelayed(this, schema, table, node, tx, list);
+				if (owner)
+				{
+					realOwner = true;
+					realNode = node;
+					// HRDBMSWorker.logger.debug("We will own node " +
+					// realNode); //DEBUG
+				}
+
+				map.multiRemove(o);
+			}
+			else
+			{
+				final boolean handled = DeleteOperator.registerDelayedCantOwn(this, schema, table, node, tx, list);
+				if (handled)
+				{
+					// HRDBMSWorker.logger.debug("Someone else wil own node " +
+					// node); //DEBUG
+					map.multiRemove(o);
+				}
+				// else
+				// {
+				// HRDBMSWorker.logger.debug("Found no one to own node " +
+				// node); //DEBUG
+				// }
+			}
+		}
+
+		if (map.size() > 0)
+		{
+			// HRDBMSWorker.logger.debug("After processing map was size " +
+			// map.size()); //DEBUG
+			flush(indexes, keys, types, orders, pos2Col, cols2Types, type);
+		}
+		// else
+		// {
+		// HRDBMSWorker.logger.debug("After processing map was empty"); //DEBUG
+		// }
+
+		if (!realOwner)
+		{
+			return;
+		}
+
+		// HRDBMSWorker.logger.debug("Sleeping for node " + realNode);
+		synchronized (this)
+		{
+			try
+			{
+				wait();
+			}
+			catch (final InterruptedException e)
+			{
+			}
+		}
+
+		final List<RIDAndIndexKeys> list = DeleteOperator.deregister(this, schema, table, realNode, tx);
+		// HRDBMSWorker.logger.debug("Woke up for node " + realNode + " with " +
+		// list.size() + " rows"); //DEBUG
+		thread = new FlushThread(list, indexes, realNode, keys, types, orders, pos2Col, cols2Types, type);
+		thread.start();
+
+		while (true)
+		{
+			try
+			{
+				thread.join();
+				break;
+			}
+			catch (final InterruptedException e)
+			{
+			}
+		}
+
+		if (!thread.getOK())
+		{
+			// HRDBMSWorker.logger.debug("IO setting num to MIN_VALUE");
+			num.set(Integer.MIN_VALUE);
+		}
+	}
+
+	private void flush(final ArrayList<String> indexes, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final TreeMap<Integer, String> tP2C, final HashMap<String, String> tC2T, final int type) throws Exception
+	{
+		// HRDBMSWorker.logger.debug("Non-delayed flush for " + map.size() + "
+		// nodes and " + map.totalSize() + " rows"); //DEBUG
+		final ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
+		for (final Object o : map.getKeySet())
+		{
+			final int node = (Integer)o;
+			final List<RIDAndIndexKeys> list = map.get(node);
+			// HRDBMSWorker.logger.debug(list.size() + " rows for node " +
+			// node); //DEBUG
+			if (node == -1)
+			{
+				final ArrayList<Integer> coords = MetaData.getCoordNodes();
+
+				for (final Integer coord : coords)
 				{
 					threads.add(new FlushThread(list, indexes, coord, keys, types, orders, tP2C, tC2T, type));
 				}
@@ -574,12 +698,12 @@ public final class DeleteOperator implements Operator, Serializable
 			}
 		}
 
-		for (FlushThread thread : threads)
+		for (final FlushThread thread : threads)
 		{
 			thread.start();
 		}
 
-		for (FlushThread thread : threads)
+		for (final FlushThread thread : threads)
 		{
 			while (true)
 			{
@@ -588,7 +712,7 @@ public final class DeleteOperator implements Operator, Serializable
 					thread.join();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -600,119 +724,6 @@ public final class DeleteOperator implements Operator, Serializable
 		}
 
 		map.clear();
-	}
-	
-	private void delayedFlush(ArrayList<String> indexes, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type) throws Exception
-	{
-		//HRDBMSWorker.logger.debug("Delayed flush with " + map.totalSize() + " entries"); //DEBUG
-		FlushThread thread = null;
-		int node = -1;
-		boolean realOwner = false;
-		int realNode = -1;
-		HashSet copy = new HashSet(map.getKeySet());
-		for (Object o : copy)
-		{
-			node = (Integer)o;
-			if (node == -1)
-			{
-				HRDBMSWorker.logger.debug("Delayed flush in delete operation against system metadata is not allowed!");
-				throw new Exception("Delayed flush in delete operation against system metadata is not allowed!");
-			}
-			List<RIDAndIndexKeys> list = map.get(node);
-			//HRDBMSWorker.logger.debug(list.size() + " rows for node " + node);
-			
-			if (!realOwner)
-			{
-				boolean owner = DeleteOperator.registerDelayed(this, schema, table, node, tx, list);
-				if (owner)
-				{
-					realOwner = true;
-					realNode = node;
-					//HRDBMSWorker.logger.debug("We will own node " + realNode); //DEBUG
-				}
-				
-				map.multiRemove(o);
-			}
-			else
-			{
-				boolean handled = DeleteOperator.registerDelayedCantOwn(this, schema, table, node, tx, list);
-				if (handled)
-				{
-					//HRDBMSWorker.logger.debug("Someone else wil own node " + node); //DEBUG
-					map.multiRemove(o);
-				}
-				//else
-				//{
-				//	HRDBMSWorker.logger.debug("Found no one to own node " + node); //DEBUG
-				//}
-			}
-		}
-		
-		if (map.size() > 0)
-		{
-			//HRDBMSWorker.logger.debug("After processing map was size " + map.size()); //DEBUG
-			flush(indexes, keys, types, orders, pos2Col, cols2Types, type);
-		}
-		//else
-		//{
-		//	HRDBMSWorker.logger.debug("After processing map was empty"); //DEBUG
-		//}
-		
-		if (!realOwner)
-		{
-			return;
-		}
-
-		//HRDBMSWorker.logger.debug("Sleeping for node " + realNode);
-		synchronized(this)
-		{
-			try
-			{
-				wait();
-			}
-			catch(InterruptedException e)
-			{}
-		}
-		
-		List<RIDAndIndexKeys> list = DeleteOperator.deregister(this, schema, table, realNode, tx);
-		//HRDBMSWorker.logger.debug("Woke up for node " + realNode + " with " + list.size() + " rows"); //DEBUG
-		thread = new FlushThread(list, indexes, realNode, keys, types, orders, pos2Col, cols2Types, type);
-		thread.start();
-
-		while (true)
-		{
-			try
-			{
-				thread.join();
-				break;
-			}
-			catch (InterruptedException e)
-			{
-			}
-		}
-		
-		if (!thread.getOK())
-		{
-			//HRDBMSWorker.logger.debug("IO setting num to MIN_VALUE");
-			num.set(Integer.MIN_VALUE);
-		}
-	}
-
-	private byte[] stringToBytes(String string)
-	{
-		byte[] data = null;
-		try
-		{
-			data = string.getBytes(StandardCharsets.UTF_8);
-		}
-		catch (Exception e)
-		{
-		}
-		byte[] len = intToBytes(data.length);
-		byte[] retval = new byte[data.length + len.length];
-		System.arraycopy(len, 0, retval, 0, len.length);
-		System.arraycopy(data, 0, retval, len.length, data.length);
-		return retval;
 	}
 
 	private class FlushThread extends HRDBMSThread
@@ -728,7 +739,7 @@ public final class DeleteOperator implements Operator, Serializable
 		private final HashMap<String, String> tC2T;
 		private final int type;
 
-		public FlushThread(List<RIDAndIndexKeys> list, ArrayList<String> indexes, int node, ArrayList<ArrayList<String>> keys, ArrayList<ArrayList<String>> types, ArrayList<ArrayList<Boolean>> orders, TreeMap<Integer, String> tP2C, HashMap<String, String> tC2T, int type)
+		public FlushThread(final List<RIDAndIndexKeys> list, final ArrayList<String> indexes, final int node, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final TreeMap<Integer, String> tP2C, final HashMap<String, String> tC2T, final int type)
 		{
 			this.list = list;
 			this.indexes = indexes;
@@ -751,19 +762,20 @@ public final class DeleteOperator implements Operator, Serializable
 		{
 			// send schema, table, tx, indexes, and list
 			Socket sock = null;
-			//int count = debugCounter.addAndGet(list.size()); //DEBUG
-			//HRDBMSWorker.logger.debug("Flushed " + count + " deletes");
+			// int count = debugCounter.addAndGet(list.size()); //DEBUG
+			// HRDBMSWorker.logger.debug("Flushed " + count + " deletes");
 			try
 			{
-				String hostname = new MetaData().getHostNameForNode(node, tx);
+				// new MetaData();
+				final String hostname = MetaData.getHostNameForNode(node, tx);
 				// sock = new Socket(hostname,
 				// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				sock = new Socket();
 				sock.setReceiveBufferSize(4194304);
 				sock.setSendBufferSize(4194304);
 				sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
-				OutputStream out = new BufferedOutputStream(sock.getOutputStream());
-				byte[] outMsg = "DELETE          ".getBytes(StandardCharsets.UTF_8);
+				final OutputStream out = new BufferedOutputStream(sock.getOutputStream());
+				final byte[] outMsg = "DELETE          ".getBytes(StandardCharsets.UTF_8);
 				outMsg[8] = 0;
 				outMsg[9] = 0;
 				outMsg[10] = 0;
@@ -777,30 +789,30 @@ public final class DeleteOperator implements Operator, Serializable
 				out.write(stringToBytes(schema));
 				out.write(stringToBytes(table));
 				out.write(intToBytes(type));
-				//ObjectOutputStream objOut = new ObjectOutputStream(out);
-				IdentityHashMap<Object, Long> prev = new IdentityHashMap<Object, Long>();
+				// ObjectOutputStream objOut = new ObjectOutputStream(out);
+				final IdentityHashMap<Object, Long> prev = new IdentityHashMap<Object, Long>();
 				OperatorUtils.serializeALS(indexes, out, prev);
-				//objOut.writeObject(indexes);
+				// objOut.writeObject(indexes);
 				OperatorUtils.serializeALRAIK(new ArrayList(list), out, prev);
-				//objOut.writeObject(new ArrayList(list));
+				// objOut.writeObject(new ArrayList(list));
 				OperatorUtils.serializeALALS(keys, out, prev);
-				//objOut.writeObject(keys);
+				// objOut.writeObject(keys);
 				OperatorUtils.serializeALALS(types, out, prev);
-				//objOut.writeObject(types);
+				// objOut.writeObject(types);
 				OperatorUtils.serializeALALB(orders, out, prev);
-				//objOut.writeObject(orders);
+				// objOut.writeObject(orders);
 				OperatorUtils.serializeTM(tP2C, out, prev);
-				//objOut.writeObject(tP2C);
+				// objOut.writeObject(tP2C);
 				OperatorUtils.serializeStringHM(tC2T, out, prev);
-				//objOut.writeObject(tC2T);
-				//objOut.flush();
+				// objOut.writeObject(tC2T);
+				// objOut.flush();
 				out.flush();
 				getConfirmation(sock);
-				//objOut.close();
+				// objOut.close();
 				out.close();
 				sock.close();
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 				try
@@ -810,24 +822,24 @@ public final class DeleteOperator implements Operator, Serializable
 						sock.close();
 					}
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 				}
 				ok = false;
 			}
 		}
 
-		private void getConfirmation(Socket sock) throws Exception
+		private void getConfirmation(final Socket sock) throws Exception
 		{
-			InputStream in = sock.getInputStream();
-			byte[] inMsg = new byte[2];
+			final InputStream in = sock.getInputStream();
+			final byte[] inMsg = new byte[2];
 
 			int count = 0;
 			while (count < 2)
 			{
 				try
 				{
-					int temp = in.read(inMsg, count, 2 - count);
+					final int temp = in.read(inMsg, count, 2 - count);
 					if (temp == -1)
 					{
 						in.close();
@@ -845,7 +857,7 @@ public final class DeleteOperator implements Operator, Serializable
 				}
 			}
 
-			String inStr = new String(inMsg, StandardCharsets.UTF_8);
+			final String inStr = new String(inMsg, StandardCharsets.UTF_8);
 			if (!inStr.equals("OK"))
 			{
 				in.close();
@@ -856,7 +868,7 @@ public final class DeleteOperator implements Operator, Serializable
 			{
 				in.close();
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 			}
 		}

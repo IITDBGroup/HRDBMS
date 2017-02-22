@@ -11,7 +11,7 @@ public class HRDBMSResultSetMetaData implements ResultSetMetaData
 	private final TreeMap<Integer, String> pos2Cols;
 	private final HashMap<String, String> cols2Types;
 
-	public HRDBMSResultSetMetaData(HashMap<String, Integer> cols2Pos, TreeMap<Integer, String> pos2Cols, HashMap<String, String> cols2Types)
+	public HRDBMSResultSetMetaData(final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Cols, final HashMap<String, String> cols2Types)
 	{
 		this.cols2Pos = cols2Pos;
 		this.pos2Cols = pos2Cols;
@@ -19,16 +19,16 @@ public class HRDBMSResultSetMetaData implements ResultSetMetaData
 	}
 
 	@Override
-	public String getCatalogName(int column) throws SQLException
+	public String getCatalogName(final int column) throws SQLException
 	{
 		return "";
 	}
 
 	@Override
-	public String getColumnClassName(int column) throws SQLException
+	public String getColumnClassName(final int column) throws SQLException
 	{
-		String name = pos2Cols.get(column - 1);
-		String type = cols2Types.get(name);
+		final String name = pos2Cols.get(column - 1);
+		final String type = cols2Types.get(name);
 
 		if (type.equals("CHAR"))
 		{
@@ -63,10 +63,10 @@ public class HRDBMSResultSetMetaData implements ResultSetMetaData
 	}
 
 	@Override
-	public int getColumnDisplaySize(int column) throws SQLException
+	public int getColumnDisplaySize(final int column) throws SQLException
 	{
-		String name = pos2Cols.get(column - 1);
-		int nameLen = name.length();
+		final String name = pos2Cols.get(column - 1);
+		final int nameLen = name.length();
 
 		if (nameLen < 16)
 		{
@@ -79,22 +79,22 @@ public class HRDBMSResultSetMetaData implements ResultSetMetaData
 	}
 
 	@Override
-	public String getColumnLabel(int column) throws SQLException
+	public String getColumnLabel(final int column) throws SQLException
 	{
 		return pos2Cols.get(column - 1);
 	}
 
 	@Override
-	public String getColumnName(int column) throws SQLException
+	public String getColumnName(final int column) throws SQLException
 	{
 		return pos2Cols.get(column - 1);
 	}
 
 	@Override
-	public int getColumnType(int column) throws SQLException
+	public int getColumnType(final int column) throws SQLException
 	{
-		String name = pos2Cols.get(column - 1);
-		String type = cols2Types.get(name);
+		final String name = pos2Cols.get(column - 1);
+		final String type = cols2Types.get(name);
 
 		if (type.equals("CHAR"))
 		{
@@ -123,97 +123,97 @@ public class HRDBMSResultSetMetaData implements ResultSetMetaData
 	}
 
 	@Override
-	public String getColumnTypeName(int column) throws SQLException
+	public String getColumnTypeName(final int column) throws SQLException
 	{
 		return cols2Types.get(pos2Cols.get(column - 1));
 	}
 
 	@Override
-	public int getPrecision(int column) throws SQLException
+	public int getPrecision(final int column) throws SQLException
 	{
 		return 0;
 	}
 
 	@Override
-	public int getScale(int column) throws SQLException
+	public int getScale(final int column) throws SQLException
 	{
 		return 0;
 	}
 
 	@Override
-	public String getSchemaName(int column) throws SQLException
+	public String getSchemaName(final int column) throws SQLException
 	{
 		return "";
 	}
 
 	@Override
-	public String getTableName(int column) throws SQLException
+	public String getTableName(final int column) throws SQLException
 	{
 		return "";
 	}
 
 	@Override
-	public boolean isAutoIncrement(int column) throws SQLException
+	public boolean isAutoIncrement(final int column) throws SQLException
 	{
 		return false;
 	}
 
 	@Override
-	public boolean isCaseSensitive(int column) throws SQLException
+	public boolean isCaseSensitive(final int column) throws SQLException
 	{
 		return false;
 	}
 
 	@Override
-	public boolean isCurrency(int column) throws SQLException
+	public boolean isCurrency(final int column) throws SQLException
 	{
 		return false;
 	}
 
 	@Override
-	public boolean isDefinitelyWritable(int column) throws SQLException
+	public boolean isDefinitelyWritable(final int column) throws SQLException
 	{
 		return false;
 	}
 
 	@Override
-	public int isNullable(int column) throws SQLException
+	public int isNullable(final int column) throws SQLException
 	{
 		return ResultSetMetaData.columnNullableUnknown;
 	}
 
 	@Override
-	public boolean isReadOnly(int column) throws SQLException
+	public boolean isReadOnly(final int column) throws SQLException
 	{
 		return false;
 	}
 
 	@Override
-	public boolean isSearchable(int column) throws SQLException
+	public boolean isSearchable(final int column) throws SQLException
 	{
 		return true;
 	}
 
 	@Override
-	public boolean isSigned(int column) throws SQLException
+	public boolean isSigned(final int column) throws SQLException
 	{
 		return true;
 	}
 
 	@Override
-	public boolean isWrapperFor(Class<?> iface) throws SQLException
+	public boolean isWrapperFor(final Class<?> iface) throws SQLException
 	{
 		return false;
 	}
 
 	@Override
-	public boolean isWritable(int column) throws SQLException
+	public boolean isWritable(final int column) throws SQLException
 	{
 		return true;
 	}
 
 	@Override
-	public <T> T unwrap(Class<T> iface) throws SQLException
+	public <T> T unwrap(final Class<T> iface) throws SQLException
 	{
 		throw new SQLException("Unwrap() is not supported.");
 	}

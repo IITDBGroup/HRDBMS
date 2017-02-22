@@ -22,9 +22,9 @@ public class MyReentrantLock extends ReentrantLock
 	{
 		super.lock();
 		// save stack trace to owners
-		StringWriter sw = new StringWriter();
+		final StringWriter sw = new StringWriter();
 		new Throwable("").printStackTrace(new PrintWriter(sw));
-		String stackTrace = sw.toString();
+		final String stackTrace = sw.toString();
 		synchronized (owners)
 		{
 			owners.add(stackTrace);

@@ -44,21 +44,21 @@ public class SQLParser
 	{
 	}
 
-	public SQLParser(String sql, ConnectionWorker connection, Transaction tx)
-	{
-		this.sql = new SQL(sql);
-		this.connection = connection;
-		this.tx = tx;
-	}
-	
-	public SQLParser(SQL sql, ConnectionWorker connection, Transaction tx)
+	public SQLParser(final SQL sql, final ConnectionWorker connection, final Transaction tx)
 	{
 		this.sql = sql;
 		this.connection = connection;
 		this.tx = tx;
 	}
 
-	public static void printTree(Operator op, int indent)
+	public SQLParser(final String sql, final ConnectionWorker connection, final Transaction tx)
+	{
+		this.sql = new SQL(sql);
+		this.connection = connection;
+		this.tx = tx;
+	}
+
+	public static void printTree(final Operator op, final int indent)
 	{
 		String line = "";
 		int i = 0;
@@ -84,7 +84,7 @@ public class SQLParser
 			line += "(";
 			HRDBMSWorker.logger.debug(line);
 
-			for (Operator child : op.children())
+			for (final Operator child : op.children())
 			{
 				printTree(child, indent + 3);
 			}
@@ -102,566 +102,11 @@ public class SQLParser
 		}
 	}
 
-	public void authorize()
-	{
-		authorized = true;
-	}
-
-	public boolean doesNotUseCurrentSchema()
-	{
-		return doesNotUseCurrentSchema;
-	}
-
-	public ArrayList<Operator> parse() throws Exception
-	{
-		ANTLRInputStream input = new ANTLRInputStream(sql.toString());
-		SelectLexer lexer = new SelectLexer(input);
-		CommonTokenStream tokens = new CommonTokenStream(lexer);
-		SelectParser parser = new SelectParser(tokens);
-		parser.setErrorHandler(new BailErrorStrategy());
-		ParseTree tree = parser.select();
-		SelectVisitorImpl visitor = new SelectVisitorImpl();
-		SQLStatement stmt = (SQLStatement)visitor.visit(tree);
-
-		if (stmt instanceof Select)
-		{
-			Operator op = buildOperatorTreeFromSelect((Select)stmt);
-			RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
-			retval.add(op);
-			// printTree(op, 0); // DEBUG
-			ArrayList<Operator> ops = new ArrayList<Operator>(1);
-			ops.add(retval);
-			return ops;
-		}
-
-		if (stmt instanceof Insert)
-		{
-			Insert insert = (Insert)stmt;
-			TableName table = insert.getTable();
-			if (!authorized && table.getSchema() != null && table.getSchema().equals("SYS"))
-			{
-				throw new ParseException("Catalog updates are not allowed");
-			}
-			ArrayList<Operator> op = buildOperatorTreeFromInsert((Insert)stmt);
-			return op;
-		}
-
-		if (stmt instanceof Update)
-		{
-			Update update = (Update)stmt;
-			TableName table = update.getTable();
-			if (!authorized && table.getSchema() != null && table.getSchema().equals("SYS"))
-			{
-				throw new ParseException("Catalog updates are not allowed");
-			}
-			ArrayList<Operator> ops = buildOperatorTreeFromUpdate((Update)stmt);
-			return ops;
-		}
-
-		if (stmt instanceof Delete)
-		{
-			Delete delete = (Delete)stmt;
-			TableName table = delete.getTable();
-			if (!authorized && table.getSchema() != null && table.getSchema().equals("SYS"))
-			{
-				throw new ParseException("Catalog updates are not allowed");
-			}
-			Operator op = buildOperatorTreeFromDelete((Delete)stmt);
-			ArrayList<Operator> ops = new ArrayList<Operator>(1);
-			ops.add(op);
-			return ops;
-		}
-
-		if (stmt instanceof Runstats)
-		{
-			Operator op = buildOperatorTreeFromRunstats((Runstats)stmt);
-			ArrayList<Operator> ops = new ArrayList<Operator>(1);
-			ops.add(op);
-			return ops;
-		}
-
-		if (stmt instanceof CreateTable)
-		{
-			CreateTable createTable = (CreateTable)stmt;
-			TableName table = createTable.getTable();
-			if (table.getSchema() != null && table.getSchema().equals("SYS"))
-			{
-				throw new ParseException("You cannot create new tables in the SYS schema");
-			}
-			Operator op = buildOperatorTreeFromCreateTable((CreateTable)stmt);
-			ArrayList<Operator> ops = new ArrayList<Operator>(1);
-			ops.add(op);
-			return ops;
-		}
-
-		if (stmt instanceof DropTable)
-		{
-			DropTable dropTable = (DropTable)stmt;
-			TableName table = dropTable.getTable();
-			if (table.getSchema() != null && table.getSchema().equals("SYS"))
-			{
-				throw new ParseException("You cannot drop tables in the SYS schema");
-			}
-			Operator op = buildOperatorTreeFromDropTable((DropTable)stmt);
-			ArrayList<Operator> ops = new ArrayList<Operator>(1);
-			ops.add(op);
-			return ops;
-		}
-
-		if (stmt instanceof CreateIndex)
-		{
-			Operator op = buildOperatorTreeFromCreateIndex((CreateIndex)stmt);
-			ArrayList<Operator> ops = new ArrayList<Operator>(1);
-			ops.add(op);
-			return ops;
-		}
-
-		if (stmt instanceof DropIndex)
-		{
-			Operator op = buildOperatorTreeFromDropIndex((DropIndex)stmt);
-			ArrayList<Operator> ops = new ArrayList<Operator>(1);
-			ops.add(op);
-			return ops;
-		}
-
-		if (stmt instanceof CreateView)
-		{
-			Operator op = buildOperatorTreeFromCreateView((CreateView)stmt);
-			ArrayList<Operator> ops = new ArrayList<Operator>(1);
-			ops.add(op);
-			return ops;
-		}
-
-		if (stmt instanceof DropView)
-		{
-			Operator op = buildOperatorTreeFromDropView((DropView)stmt);
-			ArrayList<Operator> ops = new ArrayList<Operator>(1);
-			ops.add(op);
-			return ops;
-		}
-
-		if (stmt instanceof Load)
-		{
-			Operator op = buildOperatorTreeFromLoad((Load)stmt);
-			ArrayList<Operator> ops = new ArrayList<Operator>(1);
-			ops.add(op);
-			return ops;
-		}
-
-		return null;
-	}
-
-	private Operator addComplexColumn(ArrayList<Object> row, Operator op, SubSelect sub) throws Exception
-	{
-		// colName, op, type, id, exp, prereq, done
-		if (!((Integer)row.get(5)).equals(-1))
-		{
-			// get the row
-			for (ArrayList<Object> r : complex)
-			{
-				if (r.get(3).equals(row.get(5)))
-				{
-					op = addComplexColumn(r, op, sub);
-					break;
-				}
-			}
-		}
-
-		if ((Boolean)row.get(7) == true)
-		{
-			return op;
-		}
-
-		if ((Integer)row.get(2) == TYPE_INLINE)
-		{
-			Operator o = (Operator)row.get(1);
-			if (o instanceof CaseOperator)
-			{
-				Expression exp = (Expression)row.get(4);
-				ArrayList<HashSet<HashMap<Filter, Filter>>> alhshm = new ArrayList<HashSet<HashMap<Filter, Filter>>>();
-				// HRDBMSWorker.logger.debug("Build SC has " +
-				// exp.getCases().size() + " cases to examine");
-				for (Case c : exp.getCases())
-				{
-					Operator top = op;
-					op = this.buildOperatorTreeFromSearchCondition(c.getCondition(), top, sub);
-					if (op == top)
-					{
-						HRDBMSWorker.logger.debug("Build SC when building a CaseOperator did not do anything");
-					}
-					else if (!(op instanceof SelectOperator))
-					{
-						HRDBMSWorker.logger.debug("Build SC when building a CaseOperator did something, but it wasn't a SelectOperator");
-					}
-					// add filters to alhshm and remove from tree
-					HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
-					while (op instanceof SelectOperator)
-					{
-						HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
-						for (Filter f : ((SelectOperator)op).getFilter())
-						{
-							hm.put(f, f);
-						}
-
-						hshm.add(hm);
-						op = op.children().get(0);
-						op.parent().removeChild(op);
-					}
-
-					Operator newTop = op;
-					while (op != top)
-					{
-						if (op.children().size() > 1)
-						{
-							throw new ParseException("Invalid search condition in a case expression");
-						}
-
-						if (op instanceof SelectOperator)
-						{
-							throw new ParseException("Internal error: stranded select operator when processing a case expression");
-						}
-
-						op = op.children().get(0);
-					}
-
-					op = newTop;
-					alhshm.add(hshm);
-				}
-
-				((CaseOperator)o).setFilters(alhshm);
-				String type = ((CaseOperator)o).getType();
-				ArrayList<Object> results = ((CaseOperator)o).getResults();
-				for (Object o2 : results)
-				{
-					if (o2 instanceof String)
-					{
-						if (((String)o2).startsWith("\u0000"))
-						{
-							String newType = getType(((String)o2).substring(1), op.getCols2Types());
-							if (type == null)
-							{
-								type = newType;
-							}
-							else if (type.equals("INT") && !newType.equals("INT"))
-							{
-								if (newType.equals("LONG") || newType.equals("FLOAT"))
-								{
-									type = newType;
-								}
-								else
-								{
-									throw new ParseException("All possible results in a case expression must have the same type");
-								}
-							}
-							else if (type.equals("LONG") && !newType.equals("LONG"))
-							{
-								if (newType.equals("INT"))
-								{
-								}
-								else if (newType.equals("FLOAT"))
-								{
-									type = newType;
-								}
-								else
-								{
-									throw new ParseException("All possible results in a case expression must have the same type");
-								}
-							}
-							else if (type.equals("FLOAT") && !newType.equals("FLOAT"))
-							{
-								if (newType.equals("INT") || newType.equals("LONG"))
-								{
-								}
-								else
-								{
-									throw new ParseException("All possible results in a case expression must have the same type");
-								}
-							}
-							else if (!type.equals(newType))
-							{
-								throw new ParseException("All possible results in a case expression must have the same type");
-							}
-						}
-					}
-				}
-				((CaseOperator)o).setType(type);
-				try
-				{
-					o.add(op);
-				}
-				catch (Exception e)
-				{
-					throw new ParseException(e.getMessage());
-				}
-				row.remove(7);
-				row.add(true);
-				return o;
-			}
-			try
-			{
-				o.add(op);
-			}
-			catch (Exception e)
-			{
-				throw new ParseException(e.getMessage());
-			}
-			row.remove(7);
-			row.add(true);
-			if (o instanceof YearOperator)
-			{
-				String name = o.getReferences().get(0);
-				String type = op.getCols2Types().get(name);
-
-				if (type == null)
-				{
-					throw new ParseException("A reference to column " + name + " was unable to be resolved.");
-				}
-
-				if (!type.equals("DATE"))
-				{
-					throw new ParseException("The YEAR() function cannot be used on a non-DATE column");
-				}
-			}
-			else if (o instanceof SubstringOperator)
-			{
-				String name = o.getReferences().get(0);
-				String type = op.getCols2Types().get(name);
-
-				if (type == null)
-				{
-					throw new ParseException("A reference to column " + name + " was unable to be resolved.");
-				}
-
-				if (!type.equals("CHAR"))
-				{
-					throw new ParseException("The SUBSTRING() function cannot be used on a non-character data");
-				}
-			}
-			else if (o instanceof Json_valueOperator)
-			{
-				String name = o.getReferences().get(0);
-				String type = op.getCols2Types().get(name);
-
-				if (type == null)
-				{
-					throw new ParseException("A reference to column " + name + " was unable to be resolved.");
-				}
-
-				if (!type.equals("CHAR"))
-				{
-					throw new ParseException("The JSON_VALUE() function cannot be used on a non-character data");
-				}
-			}
-			else if (o instanceof Json_queryOperator)
-			{
-				String name = o.getReferences().get(0);
-				String type = op.getCols2Types().get(name);
-
-				if (type == null)
-				{
-					throw new ParseException("A reference to column " + name + " was unable to be resolved.");
-				}
-
-				if (!type.equals("CHAR"))
-				{
-					throw new ParseException("The JSON_QUERY() function cannot be used on a non-character data");
-				}
-			}
-			else if (o instanceof DateMathOperator)
-			{
-				String name = o.getReferences().get(0);
-				String type = op.getCols2Types().get(name);
-
-				if (type == null)
-				{
-					throw new ParseException("A reference to column " + name + " was unable to be resolved.");
-				}
-
-				if (!type.equals("DATE"))
-				{
-					throw new ParseException("A DATE was expected but a different data type was found");
-				}
-			}
-			else if (o instanceof ConcatOperator)
-			{
-				String name1 = o.getReferences().get(0);
-				String type1 = op.getCols2Types().get(name1);
-				String name2 = o.getReferences().get(1);
-				String type2 = op.getCols2Types().get(name2);
-
-				if (type1 == null)
-				{
-					throw new ParseException("A reference to column " + name1 + " was unable to be resolved.");
-				}
-
-				if (type2 == null)
-				{
-					throw new ParseException("A reference to column " + name2 + " was unable to be resolved.");
-				}
-
-				if (!type1.equals("CHAR") || !type2.equals("CHAR"))
-				{
-					throw new ParseException("Concatenation is not supported for non-character data");
-				}
-			}
-			else if (o instanceof ExtendOperator)
-			{
-				for (String name : o.getReferences())
-				{
-					String type = op.getCols2Types().get(name);
-
-					if (type == null)
-					{
-						HRDBMSWorker.logger.debug("Looking for " + name + " in " + op.getCols2Types());
-						throw new ParseException("A reference to column " + name + " was unable to be resolved.");
-					}
-
-					if (type.equals("INT") || type.equals("LONG") || type.equals("FLOAT"))
-					{
-					}
-					else
-					{
-						throw new ParseException("A numeric data type was expected but a different data type was found");
-					}
-				}
-			}
-
-			return o;
-		}
-		else
-		{
-			// type group by
-			throw new ParseException("A WHERE clause cannot refer to an aggregate column. This must be done in the HAVING clause.");
-		}
-	}
-
-	private Operator addRename(Operator op, SearchCondition join) throws Exception
-	{
-		ArrayList<String> olds = new ArrayList<String>();
-		ArrayList<String> news = new ArrayList<String>();
-
-		if (join.getClause().getPredicate() != null)
-		{
-			Column col = join.getClause().getPredicate().getRHS().getColumn();
-			String c = "";
-			if (col.getTable() != null)
-			{
-				c += col.getTable();
-			}
-
-			c += ("." + col.getColumn());
-			olds.add(getMatchingCol(op, c));
-			String c2 = c.substring(0, c.indexOf('.') + 1);
-			c2 += ("_" + rewriteCounter);
-			c2 += c.substring(c.indexOf('.') + 1);
-			col.setColumn("_" + rewriteCounter++ + col.getColumn());
-			news.add(c2);
-		}
-		else
-		{
-			SearchCondition scond = join.getClause().getSearch();
-			Column col = scond.getClause().getPredicate().getRHS().getColumn();
-			String c = "";
-			if (col.getTable() != null)
-			{
-				c += col.getTable();
-			}
-
-			c += ("." + col.getColumn());
-			olds.add(getMatchingCol(op, c));
-			String c2 = c.substring(0, c.indexOf('.') + 1);
-			c2 += ("_" + rewriteCounter);
-			c2 += c.substring(c.indexOf('.') + 1);
-			col.setColumn("_" + rewriteCounter++ + col.getColumn());
-			news.add(c2);
-			for (ConnectedSearchClause csc : scond.getConnected())
-			{
-				col = csc.getSearch().getPredicate().getRHS().getColumn();
-				c = "";
-				if (col.getTable() != null)
-				{
-					c += col.getTable();
-				}
-
-				c += ("." + col.getColumn());
-				olds.add(getMatchingCol(op, c));
-				c2 = c.substring(0, c.indexOf('.') + 1);
-				c2 += ("_" + rewriteCounter);
-				c2 += c.substring(c.indexOf('.') + 1);
-				col.setColumn("_" + rewriteCounter++ + col.getColumn());
-				news.add(c2);
-			}
-		}
-
-		if (join.getConnected() != null && join.getConnected().size() > 0)
-		{
-			for (ConnectedSearchClause sc : join.getConnected())
-			{
-				if (sc.getSearch().getPredicate() != null)
-				{
-					Column col = sc.getSearch().getPredicate().getRHS().getColumn();
-					String c = "";
-					if (col.getTable() != null)
-					{
-						c += col.getTable();
-					}
-
-					c += ("." + col.getColumn());
-					olds.add(getMatchingCol(op, c));
-					String c2 = c.substring(0, c.indexOf('.') + 1);
-					c2 += ("_" + rewriteCounter);
-					c2 += c.substring(c.indexOf('.') + 1);
-					col.setColumn("_" + rewriteCounter++ + col.getColumn());
-					news.add(c2);
-				}
-				else
-				{
-					SearchCondition scond = sc.getSearch().getSearch();
-					Column col = scond.getClause().getPredicate().getRHS().getColumn();
-					String c = "";
-					if (col.getTable() != null)
-					{
-						c += col.getTable();
-					}
-
-					c += ("." + col.getColumn());
-					olds.add(getMatchingCol(op, c));
-					String c2 = c.substring(0, c.indexOf('.') + 1);
-					c2 += ("_" + rewriteCounter);
-					c2 += c.substring(c.indexOf('.') + 1);
-					col.setColumn("_" + rewriteCounter++ + col.getColumn());
-					news.add(c2);
-					for (ConnectedSearchClause csc : scond.getConnected())
-					{
-						col = csc.getSearch().getPredicate().getRHS().getColumn();
-						c = "";
-						if (col.getTable() != null)
-						{
-							c += col.getTable();
-						}
-
-						c += ("." + col.getColumn());
-						olds.add(getMatchingCol(op, c));
-						c2 = c.substring(0, c.indexOf('.') + 1);
-						c2 += ("_" + rewriteCounter);
-						c2 += c.substring(c.indexOf('.') + 1);
-						col.setColumn("_" + rewriteCounter++ + col.getColumn());
-						news.add(c2);
-					}
-				}
-			}
-		}
-
-		Operator rename = new RenameOperator(olds, news, meta);
-		rename.add(op);
-		return rename;
-	}
-
-	private boolean allAnd(SearchCondition s)
+	private static boolean allAnd(final SearchCondition s)
 	{
 		if (s.getConnected() != null && s.getConnected().size() > 0)
 		{
-			for (ConnectedSearchClause csc : s.getConnected())
+			for (final ConnectedSearchClause csc : s.getConnected())
 			{
 				if (!csc.isAnd())
 				{
@@ -673,13 +118,13 @@ public class SQLParser
 		return true;
 	}
 
-	private boolean allOredPreds(SearchCondition s)
+	private static boolean allOredPreds(final SearchCondition s)
 	{
-		SearchClause sc = s.getClause();
+		final SearchClause sc = s.getClause();
 		boolean allOredPreds = true;
 		if (sc.getPredicate() != null)
 		{
-			for (ConnectedSearchClause csc : s.getConnected())
+			for (final ConnectedSearchClause csc : s.getConnected())
 			{
 				if (csc.isAnd())
 				{
@@ -707,11 +152,11 @@ public class SQLParser
 		return false;
 	}
 
-	private boolean allOrs(SearchCondition s)
+	private static boolean allOrs(final SearchCondition s)
 	{
 		if (s.getConnected() != null && s.getConnected().size() > 0)
 		{
-			for (ConnectedSearchClause csc : s.getConnected())
+			for (final ConnectedSearchClause csc : s.getConnected())
 			{
 				if (csc.isAnd())
 				{
@@ -723,7 +168,7 @@ public class SQLParser
 		return true;
 	}
 
-	private boolean allPredicates(SearchCondition s)
+	private static boolean allPredicates(final SearchCondition s)
 	{
 		if (s.getClause().getPredicate() == null)
 		{
@@ -732,7 +177,7 @@ public class SQLParser
 
 		if (s.getConnected() != null && s.getConnected().size() > 0)
 		{
-			for (ConnectedSearchClause csc : s.getConnected())
+			for (final ConnectedSearchClause csc : s.getConnected())
 			{
 				if (csc.getSearch().getPredicate() == null)
 				{
@@ -744,9 +189,9 @@ public class SQLParser
 		return true;
 	}
 
-	private boolean allReferencesSatisfied(ArrayList<String> ref, Operator op)
+	private static boolean allReferencesSatisfied(final ArrayList<String> ref, final Operator op)
 	{
-		Set<String> set = op.getCols2Pos().keySet();
+		final Set<String> set = op.getCols2Pos().keySet();
 		for (String r : ref)
 		{
 			if (set.contains(r))
@@ -787,49 +232,729 @@ public class SQLParser
 		return true;
 	}
 
-	private Object buildNGBExtend(Operator op, ArrayList<Object> row, SubSelect sub) throws Exception
+	private static void checkSizeOfNewCols(final ArrayList<Column> newCols, final Operator op) throws ParseException
+	{
+		if (newCols.size() != op.getPos2Col().size())
+		{
+			throw new ParseException("The common table expression has the wrong number of columns");
+		}
+	}
+
+	private static ArrayList<Column> getRightColumns(final SearchCondition join)
+	{
+		final ArrayList<Column> retval = new ArrayList<Column>();
+		retval.add(join.getClause().getPredicate().getRHS().getColumn());
+
+		if (join.getConnected() != null && join.getConnected().size() > 0)
+		{
+			for (final ConnectedSearchClause csc : join.getConnected())
+			{
+				retval.add(csc.getSearch().getPredicate().getRHS().getColumn());
+			}
+		}
+
+		return retval;
+	}
+
+	private static String getType(String col, final HashMap<String, String> cols2Types) throws ParseException
+	{
+		String retval = cols2Types.get(col);
+
+		if (retval != null)
+		{
+			return retval;
+		}
+
+		if (col.indexOf('.') > 0)
+		{
+			throw new ParseException("Column " + col + " not found");
+		}
+
+		if (col.startsWith("."))
+		{
+			col = col.substring(1);
+		}
+
+		int matches = 0;
+		for (final Map.Entry entry : cols2Types.entrySet())
+		{
+			String name2 = (String)entry.getKey();
+			if (name2.contains("."))
+			{
+				name2 = name2.substring(name2.indexOf('.') + 1);
+			}
+
+			if (col.equals(name2))
+			{
+				matches++;
+				retval = (String)entry.getValue();
+			}
+		}
+
+		if (matches == 0)
+		{
+			throw new ParseException("Column " + col + " not found");
+		}
+
+		if (matches > 1)
+		{
+			throw new ParseException("Column " + col + " is ambiguous");
+		}
+
+		return retval;
+	}
+
+	private static boolean isAllEquals(final SearchCondition join)
+	{
+		if (!"E".equals(join.getClause().getPredicate().getOp()))
+		{
+			return false;
+		}
+
+		if (join.getConnected() != null && join.getConnected().size() > 0)
+		{
+			for (final ConnectedSearchClause csc : join.getConnected())
+			{
+				if (!"E".equals(csc.getSearch().getPredicate().getOp()))
+				{
+					return false;
+				}
+			}
+		}
+
+		return true;
+	}
+
+	private static boolean isCNF(final SearchCondition s)
+	{
+		final SearchClause sc = s.getClause();
+		if (sc.getPredicate() != null && (s.getConnected() == null || s.getConnected().size() == 0))
+		{
+			// single predicate
+			return true;
+		}
+
+		if (allOredPreds(s))
+		{
+			return true;
+		}
+
+		if (sc.getPredicate() == null)
+		{
+			if (sc.getSearch().getClause().getPredicate() == null)
+			{
+				return false;
+			}
+
+			if (sc.getSearch().getConnected() != null && sc.getSearch().getConnected().size() > 0)
+			{
+				for (final ConnectedSearchClause csc : sc.getSearch().getConnected())
+				{
+					if (csc.isAnd())
+					{
+						return false;
+					}
+
+					if (csc.getSearch().getPredicate() == null)
+					{
+						return false;
+					}
+				}
+			}
+		}
+
+		if (s.getConnected() != null && s.getConnected().size() > 0)
+		{
+			for (final ConnectedSearchClause csc : s.getConnected())
+			{
+				if (!csc.isAnd())
+				{
+					return false;
+				}
+
+				if (csc.getSearch().getPredicate() == null)
+				{
+					if (csc.getSearch().getSearch().getClause().getPredicate() == null)
+					{
+						return false;
+					}
+
+					if (csc.getSearch().getSearch().getConnected() != null && csc.getSearch().getSearch().getConnected().size() > 0)
+					{
+						for (final ConnectedSearchClause csc2 : csc.getSearch().getSearch().getConnected())
+						{
+							if (csc2.isAnd())
+							{
+								return false;
+							}
+
+							if (csc2.getSearch().getPredicate() == null)
+							{
+								return false;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		return true;
+	}
+
+	private static void negateSearchCondition(final SearchCondition s)
+	{
+		if (s.getConnected() != null && s.getConnected().size() > 0)
+		{
+			s.getClause().setNegated(!s.getClause().getNegated());
+			for (final ConnectedSearchClause clause : s.getConnected())
+			{
+				clause.setAnd(!clause.isAnd());
+				clause.getSearch().setNegated(!clause.getSearch().getNegated());
+			}
+
+			return;
+		}
+		else
+		{
+			s.getClause().setNegated(!s.getClause().getNegated());
+		}
+	}
+
+	private static void searchSingleTableForCTE(final String name, final ArrayList<Column> cols, final FullSelect cteSelect, final SingleTable table, final TableReference tref)
+	{
+		final TableName tblName = table.getName();
+		if (tblName.getSchema() == null && tblName.getName().equals(name))
+		{
+			// found a match
+			tref.removeSingleTable();
+			if (cols.size() > 0)
+			{
+				cteSelect.addCols(cols);
+			}
+			tref.addSelect(cteSelect);
+			if (table.getAlias() != null)
+			{
+				tref.setAlias(table.getAlias());
+			}
+		}
+	}
+
+	private static void updateSelectList(final SearchCondition join, final SubSelect select)
+	{
+		final ArrayList<Column> needed = new ArrayList<Column>();
+		if (join.getClause().getPredicate() != null)
+		{
+			needed.add(join.getClause().getPredicate().getRHS().getColumn());
+		}
+		else
+		{
+			final SearchCondition scond = join.getClause().getSearch();
+			needed.add(scond.getClause().getPredicate().getRHS().getColumn());
+			for (final ConnectedSearchClause csc : scond.getConnected())
+			{
+				needed.add(csc.getSearch().getPredicate().getRHS().getColumn());
+			}
+		}
+
+		if (join.getConnected() != null && join.getConnected().size() > 0)
+		{
+			for (final ConnectedSearchClause sc : join.getConnected())
+			{
+				if (sc.getSearch().getPredicate() != null)
+				{
+					needed.add(sc.getSearch().getPredicate().getRHS().getColumn());
+				}
+				else
+				{
+					final SearchCondition scond = sc.getSearch().getSearch();
+					needed.add(scond.getClause().getPredicate().getRHS().getColumn());
+					for (final ConnectedSearchClause csc : scond.getConnected())
+					{
+						needed.add(csc.getSearch().getPredicate().getRHS().getColumn());
+					}
+				}
+			}
+		}
+
+		final SelectClause sclause = select.getSelect();
+		if (sclause.isSelectStar())
+		{
+			return;
+		}
+
+		final ArrayList<SelectListEntry> list = sclause.getSelectList();
+		for (final Column col : needed)
+		{
+			boolean found = false;
+			for (final SelectListEntry entry : list)
+			{
+				// do we already have this col
+				if (entry.getName() != null)
+				{
+					continue;
+				}
+
+				if (!entry.isColumn())
+				{
+					continue;
+				}
+
+				if (entry.getColumn().equals(col))
+				{
+					found = true;
+				}
+			}
+
+			if (!found)
+			{
+				list.add(new SelectListEntry(col, null));
+			}
+		}
+	}
+
+	private static void verifyColumnsAreTheSame(final Operator lhs, final Operator rhs) throws ParseException
+	{
+		final TreeMap<Integer, String> lhsPos2Col = lhs.getPos2Col();
+		final TreeMap<Integer, String> rhsPos2Col = rhs.getPos2Col();
+
+		if (lhsPos2Col.size() != rhsPos2Col.size())
+		{
+			throw new ParseException("Cannot combine table with different number of columns");
+		}
+
+		int i = 0;
+		for (final String col : lhsPos2Col.values())
+		{
+			if (!lhs.getCols2Types().get(col).equals(rhs.getCols2Types().get(rhsPos2Col.get(new Integer(i)))))
+			{
+				throw new ParseException("Column types do not match when combining tables");
+			}
+
+			i++;
+		}
+	}
+
+	private static void verifyTypes(String lhs, final Operator lOp, String rhs, final Operator rOp) throws ParseException
+	{
+		String lhsType = null;
+		String rhsType = null;
+		if (Character.isDigit(lhs.charAt(0)) || lhs.charAt(0) == '-')
+		{
+			lhsType = "NUMBER";
+		}
+		else if (lhs.charAt(0) == '\'')
+		{
+			lhsType = "STRING";
+		}
+		else
+		{
+			String type = lOp.getCols2Types().get(lhs);
+			if (type == null)
+			{
+				if (lhs.contains("."))
+				{
+					lhs = lhs.substring(lhs.indexOf(".") + 1);
+				}
+				else
+				{
+				}
+
+				int matches = 0;
+				for (final String col : lOp.getCols2Types().keySet())
+				{
+					String col2;
+					if (col.contains("."))
+					{
+						col2 = col.substring(col.indexOf('.') + 1);
+					}
+					else
+					{
+						col2 = col;
+					}
+
+					if (col2.equals(lhs))
+					{
+						type = lOp.getCols2Types().get(col);
+						matches++;
+					}
+				}
+
+				if (matches != 1)
+				{
+					if (matches == 0)
+					{
+						HRDBMSWorker.logger.debug("Cols2Types is " + lOp.getCols2Types());
+						throw new ParseException("Column " + lhs + " does not exist");
+					}
+					else
+					{
+						throw new ParseException("Column " + lhs + " is ambiguous");
+					}
+				}
+			}
+
+			if (type.equals("CHAR"))
+			{
+				lhsType = "STRING";
+			}
+			else if (type.equals("INT") || type.equals("LONG") || type.equals("FLOAT"))
+			{
+				lhsType = "NUMBER";
+			}
+			else
+			{
+				lhsType = type;
+			}
+		}
+
+		if (Character.isDigit(rhs.charAt(0)) || rhs.charAt(0) == '-')
+		{
+			rhsType = "NUMBER";
+		}
+		else if (rhs.charAt(0) == '\'')
+		{
+			rhsType = "STRING";
+		}
+		else
+		{
+			String type = rOp.getCols2Types().get(rhs);
+			if (type == null)
+			{
+				if (rhs.contains("."))
+				{
+					rhs = rhs.substring(rhs.indexOf(".") + 1);
+				}
+				else
+				{
+				}
+
+				int matches = 0;
+				for (final String col : rOp.getCols2Types().keySet())
+				{
+					String col2;
+					if (col.contains("."))
+					{
+						col2 = col.substring(col.indexOf('.') + 1);
+					}
+					else
+					{
+						col2 = col;
+					}
+
+					if (col2.equals(rhs))
+					{
+						type = rOp.getCols2Types().get(col);
+						matches++;
+					}
+				}
+
+				if (matches != 1)
+				{
+					if (matches == 0)
+					{
+						throw new ParseException("Column " + rhs + " does not exist");
+					}
+					else
+					{
+						throw new ParseException("Column " + rhs + " is ambiguous");
+					}
+				}
+			}
+
+			if (type.equals("CHAR"))
+			{
+				rhsType = "STRING";
+			}
+			else if (type.equals("INT") || type.equals("LONG") || type.equals("FLOAT"))
+			{
+				rhsType = "NUMBER";
+			}
+			else
+			{
+				rhsType = type;
+			}
+		}
+
+		if (lhsType.equals("NUMBER") && rhsType.equals("NUMBER"))
+		{
+			return;
+		}
+		else if (lhsType.equals("STRING") && rhsType.equals("STRING"))
+		{
+			return;
+		}
+		else
+		{
+			throw new ParseException("Invalid comparison between " + lhsType + " and " + rhsType);
+		}
+	}
+
+	private static void verifyTypes(final String lhs, final String op, final String rhs, final Operator o) throws ParseException
+	{
+		String lhsType = null;
+		String rhsType = null;
+		if (Character.isDigit(lhs.charAt(0)) || lhs.charAt(0) == '-')
+		{
+			lhsType = "NUMBER";
+		}
+		else if (lhs.charAt(0) == '\'')
+		{
+			lhsType = "STRING";
+		}
+		else if (lhs.startsWith("DATE('"))
+		{
+			lhsType = "DATE";
+		}
+		else
+		{
+			final String type = o.getCols2Types().get(lhs);
+			if (type == null)
+			{
+				throw new ParseException("Column " + lhs + " does not exist");
+			}
+			else if (type.equals("CHAR"))
+			{
+				lhsType = "STRING";
+			}
+			else if (type.equals("INT") || type.equals("LONG") || type.equals("FLOAT"))
+			{
+				lhsType = "NUMBER";
+			}
+			else
+			{
+				lhsType = type;
+			}
+		}
+
+		if (Character.isDigit(rhs.charAt(0)) || rhs.charAt(0) == '-')
+		{
+			rhsType = "NUMBER";
+		}
+		else if (rhs.charAt(0) == '\'')
+		{
+			rhsType = "STRING";
+		}
+		else if (rhs.startsWith("DATE('"))
+		{
+			rhsType = "DATE";
+		}
+		else
+		{
+			final String type = o.getCols2Types().get(rhs);
+			if (type == null)
+			{
+				HRDBMSWorker.logger.debug("Looking for " + rhs + " in " + o.getCols2Types());
+				printTree(o, 0);
+				throw new ParseException("Column " + rhs + " does not exist");
+			}
+			else if (type.equals("CHAR"))
+			{
+				rhsType = "STRING";
+			}
+			else if (type.equals("INT") || type.equals("LONG") || type.equals("FLOAT"))
+			{
+				rhsType = "NUMBER";
+			}
+			else
+			{
+				rhsType = type;
+			}
+		}
+
+		if (lhsType.equals("NUMBER") && rhsType.equals("NUMBER"))
+		{
+			if (op.equals("E") || op.equals("NE") || op.equals("G") || op.equals("GE") || op.equals("L") || op.equals("LE"))
+			{
+				return;
+			}
+
+			throw new ParseException("Invalid operator for comparing 2 numbers: " + op);
+		}
+		else if (lhsType.equals("STRING") && rhsType.equals("STRING"))
+		{
+			if (op.equals("LI") || op.equals("NL") || op.equals("E") || op.equals("NE") || op.equals("G") || op.equals("GE") || op.equals("L") || op.equals("LE"))
+			{
+				return;
+			}
+
+			throw new ParseException("Invalid operator for comparing 2 string: " + op);
+		}
+		else if (lhsType.equals("DATE") && rhsType.equals("DATE"))
+		{
+			if (op.equals("E") || op.equals("NE") || op.equals("G") || op.equals("GE") || op.equals("L") || op.equals("LE"))
+			{
+				return;
+			}
+
+			throw new ParseException("Invalid operator for comparing 2 dates: " + op);
+		}
+		else
+		{
+			throw new ParseException("Invalid comparison between " + lhsType + " and " + rhsType);
+		}
+	}
+
+	public void authorize()
+	{
+		authorized = true;
+	}
+
+	public boolean doesNotUseCurrentSchema()
+	{
+		return doesNotUseCurrentSchema;
+	}
+
+	public ArrayList<Operator> parse() throws Exception
+	{
+		final ANTLRInputStream input = new ANTLRInputStream(sql.toString());
+		final SelectLexer lexer = new SelectLexer(input);
+		final CommonTokenStream tokens = new CommonTokenStream(lexer);
+		final SelectParser parser = new SelectParser(tokens);
+		parser.setErrorHandler(new BailErrorStrategy());
+		final ParseTree tree = parser.select();
+		final SelectVisitorImpl visitor = new SelectVisitorImpl();
+		final SQLStatement stmt = (SQLStatement)visitor.visit(tree);
+
+		if (stmt instanceof Select)
+		{
+			final Operator op = buildOperatorTreeFromSelect((Select)stmt);
+			final RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
+			retval.add(op);
+			// printTree(op, 0); // DEBUG
+			final ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			ops.add(retval);
+			return ops;
+		}
+
+		if (stmt instanceof Insert)
+		{
+			final Insert insert = (Insert)stmt;
+			final TableName table = insert.getTable();
+			if (!authorized && table.getSchema() != null && table.getSchema().equals("SYS"))
+			{
+				throw new ParseException("Catalog updates are not allowed");
+			}
+			final ArrayList<Operator> op = buildOperatorTreeFromInsert((Insert)stmt);
+			return op;
+		}
+
+		if (stmt instanceof Update)
+		{
+			final Update update = (Update)stmt;
+			final TableName table = update.getTable();
+			if (!authorized && table.getSchema() != null && table.getSchema().equals("SYS"))
+			{
+				throw new ParseException("Catalog updates are not allowed");
+			}
+			final ArrayList<Operator> ops = buildOperatorTreeFromUpdate((Update)stmt);
+			return ops;
+		}
+
+		if (stmt instanceof Delete)
+		{
+			final Delete delete = (Delete)stmt;
+			final TableName table = delete.getTable();
+			if (!authorized && table.getSchema() != null && table.getSchema().equals("SYS"))
+			{
+				throw new ParseException("Catalog updates are not allowed");
+			}
+			final Operator op = buildOperatorTreeFromDelete((Delete)stmt);
+			final ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			ops.add(op);
+			return ops;
+		}
+
+		if (stmt instanceof Runstats)
+		{
+			final Operator op = buildOperatorTreeFromRunstats((Runstats)stmt);
+			final ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			ops.add(op);
+			return ops;
+		}
+
+		if (stmt instanceof CreateTable)
+		{
+			final CreateTable createTable = (CreateTable)stmt;
+			final TableName table = createTable.getTable();
+			if (table.getSchema() != null && table.getSchema().equals("SYS"))
+			{
+				throw new ParseException("You cannot create new tables in the SYS schema");
+			}
+			final Operator op = buildOperatorTreeFromCreateTable((CreateTable)stmt);
+			final ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			ops.add(op);
+			return ops;
+		}
+
+		if (stmt instanceof DropTable)
+		{
+			final DropTable dropTable = (DropTable)stmt;
+			final TableName table = dropTable.getTable();
+			if (table.getSchema() != null && table.getSchema().equals("SYS"))
+			{
+				throw new ParseException("You cannot drop tables in the SYS schema");
+			}
+			final Operator op = buildOperatorTreeFromDropTable((DropTable)stmt);
+			final ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			ops.add(op);
+			return ops;
+		}
+
+		if (stmt instanceof CreateIndex)
+		{
+			final Operator op = buildOperatorTreeFromCreateIndex((CreateIndex)stmt);
+			final ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			ops.add(op);
+			return ops;
+		}
+
+		if (stmt instanceof DropIndex)
+		{
+			final Operator op = buildOperatorTreeFromDropIndex((DropIndex)stmt);
+			final ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			ops.add(op);
+			return ops;
+		}
+
+		if (stmt instanceof CreateView)
+		{
+			final Operator op = buildOperatorTreeFromCreateView((CreateView)stmt);
+			final ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			ops.add(op);
+			return ops;
+		}
+
+		if (stmt instanceof DropView)
+		{
+			final Operator op = buildOperatorTreeFromDropView((DropView)stmt);
+			final ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			ops.add(op);
+			return ops;
+		}
+
+		if (stmt instanceof Load)
+		{
+			final Operator op = buildOperatorTreeFromLoad((Load)stmt);
+			final ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			ops.add(op);
+			return ops;
+		}
+
+		return null;
+	}
+
+	private Operator addComplexColumn(final ArrayList<Object> row, Operator op, final SubSelect sub) throws Exception
 	{
 		// colName, op, type, id, exp, prereq, done
 		if (!((Integer)row.get(5)).equals(-1))
 		{
 			// get the row
-			for (ArrayList<Object> r : complex)
+			for (final ArrayList<Object> r : complex)
 			{
 				if (r.get(3).equals(row.get(5)))
 				{
-					try
-					{
-						Object o = addComplexColumn(r, op, sub);
-						op = (Operator)o;
-						break;
-					}
-					catch (Exception e)
-					{
-						if (row.get(1) instanceof Operator && !(row.get(1) instanceof CaseOperator) && allReferencesSatisfied(((Operator)row.get(1)).getReferences(), op))
-						{
-							break;
-						}
-						else if (row.get(1) instanceof CaseOperator)
-						{
-							if (allReferencesSatisfied(((CaseOperator)row.get(1)).getReferences(), op))
-							{
-								ArrayList<String> references = new ArrayList<String>();
-								Expression exp = (Expression)row.get(4);
-								ArrayList<Case> cases = exp.getCases();
-								for (Case c : cases)
-								{
-									references.addAll(getReferences(c.getCondition()));
-								}
-
-								if (allReferencesSatisfied(references, op))
-								{
-									break;
-								}
-							}
-						}
-
-						return null;
-					}
+					op = addComplexColumn(r, op, sub);
+					break;
 				}
 			}
 		}
@@ -841,16 +966,16 @@ public class SQLParser
 
 		if ((Integer)row.get(2) == TYPE_INLINE)
 		{
-			Operator o = (Operator)row.get(1);
+			final Operator o = (Operator)row.get(1);
 			if (o instanceof CaseOperator)
 			{
-				Expression exp = (Expression)row.get(4);
-				ArrayList<HashSet<HashMap<Filter, Filter>>> alhshm = new ArrayList<HashSet<HashMap<Filter, Filter>>>();
+				final Expression exp = (Expression)row.get(4);
+				final ArrayList<HashSet<HashMap<Filter, Filter>>> alhshm = new ArrayList<HashSet<HashMap<Filter, Filter>>>();
 				// HRDBMSWorker.logger.debug("Build SC has " +
 				// exp.getCases().size() + " cases to examine");
-				for (Case c : exp.getCases())
+				for (final Case c : exp.getCases())
 				{
-					Operator top = op;
+					final Operator top = op;
 					op = this.buildOperatorTreeFromSearchCondition(c.getCondition(), top, sub);
 					if (op == top)
 					{
@@ -861,11 +986,11 @@ public class SQLParser
 						HRDBMSWorker.logger.debug("Build SC when building a CaseOperator did something, but it wasn't a SelectOperator");
 					}
 					// add filters to alhshm and remove from tree
-					HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
+					final HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
 					while (op instanceof SelectOperator)
 					{
-						HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
-						for (Filter f : ((SelectOperator)op).getFilter())
+						final HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
+						for (final Filter f : ((SelectOperator)op).getFilter())
 						{
 							hm.put(f, f);
 						}
@@ -875,7 +1000,7 @@ public class SQLParser
 						op.parent().removeChild(op);
 					}
 
-					Operator newTop = op;
+					final Operator newTop = op;
 					while (op != top)
 					{
 						if (op.children().size() > 1)
@@ -897,14 +1022,14 @@ public class SQLParser
 
 				((CaseOperator)o).setFilters(alhshm);
 				String type = ((CaseOperator)o).getType();
-				ArrayList<Object> results = ((CaseOperator)o).getResults();
-				for (Object o2 : results)
+				final ArrayList<Object> results = ((CaseOperator)o).getResults();
+				for (final Object o2 : results)
 				{
 					if (o2 instanceof String)
 					{
 						if (((String)o2).startsWith("\u0000"))
 						{
-							String newType = getType(((String)o2).substring(1), op.getCols2Types());
+							final String newType = getType(((String)o2).substring(1), op.getCols2Types());
 							if (type == null)
 							{
 								type = newType;
@@ -956,7 +1081,7 @@ public class SQLParser
 				{
 					o.add(op);
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
@@ -968,17 +1093,16 @@ public class SQLParser
 			{
 				o.add(op);
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
-				HRDBMSWorker.logger.debug("", e);
 				throw new ParseException(e.getMessage());
 			}
 			row.remove(7);
 			row.add(true);
 			if (o instanceof YearOperator)
 			{
-				String name = o.getReferences().get(0);
-				String type = op.getCols2Types().get(name);
+				final String name = o.getReferences().get(0);
+				final String type = op.getCols2Types().get(name);
 
 				if (type == null)
 				{
@@ -992,8 +1116,8 @@ public class SQLParser
 			}
 			else if (o instanceof SubstringOperator)
 			{
-				String name = o.getReferences().get(0);
-				String type = op.getCols2Types().get(name);
+				final String name = o.getReferences().get(0);
+				final String type = op.getCols2Types().get(name);
 
 				if (type == null)
 				{
@@ -1037,8 +1161,8 @@ public class SQLParser
 			}
 			else if (o instanceof DateMathOperator)
 			{
-				String name = o.getReferences().get(0);
-				String type = op.getCols2Types().get(name);
+				final String name = o.getReferences().get(0);
+				final String type = op.getCols2Types().get(name);
 
 				if (type == null)
 				{
@@ -1052,10 +1176,10 @@ public class SQLParser
 			}
 			else if (o instanceof ConcatOperator)
 			{
-				String name1 = o.getReferences().get(0);
-				String type1 = op.getCols2Types().get(name1);
-				String name2 = o.getReferences().get(1);
-				String type2 = op.getCols2Types().get(name2);
+				final String name1 = o.getReferences().get(0);
+				final String type1 = op.getCols2Types().get(name1);
+				final String name2 = o.getReferences().get(1);
+				final String type2 = op.getCols2Types().get(name2);
 
 				if (type1 == null)
 				{
@@ -1074,9 +1198,447 @@ public class SQLParser
 			}
 			else if (o instanceof ExtendOperator)
 			{
-				for (String name : o.getReferences())
+				for (final String name : o.getReferences())
 				{
-					String type = op.getCols2Types().get(name);
+					final String type = op.getCols2Types().get(name);
+
+					if (type == null)
+					{
+						HRDBMSWorker.logger.debug("Looking for " + name + " in " + op.getCols2Types());
+						throw new ParseException("A reference to column " + name + " was unable to be resolved.");
+					}
+
+					if (type.equals("INT") || type.equals("LONG") || type.equals("FLOAT"))
+					{
+					}
+					else
+					{
+						throw new ParseException("A numeric data type was expected but a different data type was found");
+					}
+				}
+			}
+
+			return o;
+		}
+		else
+		{
+			// type group by
+			throw new ParseException("A WHERE clause cannot refer to an aggregate column. This must be done in the HAVING clause.");
+		}
+	}
+
+	private Operator addRename(final Operator op, final SearchCondition join) throws Exception
+	{
+		final ArrayList<String> olds = new ArrayList<String>();
+		final ArrayList<String> news = new ArrayList<String>();
+
+		if (join.getClause().getPredicate() != null)
+		{
+			final Column col = join.getClause().getPredicate().getRHS().getColumn();
+			String c = "";
+			if (col.getTable() != null)
+			{
+				c += col.getTable();
+			}
+
+			c += ("." + col.getColumn());
+			olds.add(getMatchingCol(op, c));
+			String c2 = c.substring(0, c.indexOf('.') + 1);
+			c2 += ("_" + rewriteCounter);
+			c2 += c.substring(c.indexOf('.') + 1);
+			col.setColumn("_" + rewriteCounter++ + col.getColumn());
+			news.add(c2);
+		}
+		else
+		{
+			final SearchCondition scond = join.getClause().getSearch();
+			Column col = scond.getClause().getPredicate().getRHS().getColumn();
+			String c = "";
+			if (col.getTable() != null)
+			{
+				c += col.getTable();
+			}
+
+			c += ("." + col.getColumn());
+			olds.add(getMatchingCol(op, c));
+			String c2 = c.substring(0, c.indexOf('.') + 1);
+			c2 += ("_" + rewriteCounter);
+			c2 += c.substring(c.indexOf('.') + 1);
+			col.setColumn("_" + rewriteCounter++ + col.getColumn());
+			news.add(c2);
+			for (final ConnectedSearchClause csc : scond.getConnected())
+			{
+				col = csc.getSearch().getPredicate().getRHS().getColumn();
+				c = "";
+				if (col.getTable() != null)
+				{
+					c += col.getTable();
+				}
+
+				c += ("." + col.getColumn());
+				olds.add(getMatchingCol(op, c));
+				c2 = c.substring(0, c.indexOf('.') + 1);
+				c2 += ("_" + rewriteCounter);
+				c2 += c.substring(c.indexOf('.') + 1);
+				col.setColumn("_" + rewriteCounter++ + col.getColumn());
+				news.add(c2);
+			}
+		}
+
+		if (join.getConnected() != null && join.getConnected().size() > 0)
+		{
+			for (final ConnectedSearchClause sc : join.getConnected())
+			{
+				if (sc.getSearch().getPredicate() != null)
+				{
+					final Column col = sc.getSearch().getPredicate().getRHS().getColumn();
+					String c = "";
+					if (col.getTable() != null)
+					{
+						c += col.getTable();
+					}
+
+					c += ("." + col.getColumn());
+					olds.add(getMatchingCol(op, c));
+					String c2 = c.substring(0, c.indexOf('.') + 1);
+					c2 += ("_" + rewriteCounter);
+					c2 += c.substring(c.indexOf('.') + 1);
+					col.setColumn("_" + rewriteCounter++ + col.getColumn());
+					news.add(c2);
+				}
+				else
+				{
+					final SearchCondition scond = sc.getSearch().getSearch();
+					Column col = scond.getClause().getPredicate().getRHS().getColumn();
+					String c = "";
+					if (col.getTable() != null)
+					{
+						c += col.getTable();
+					}
+
+					c += ("." + col.getColumn());
+					olds.add(getMatchingCol(op, c));
+					String c2 = c.substring(0, c.indexOf('.') + 1);
+					c2 += ("_" + rewriteCounter);
+					c2 += c.substring(c.indexOf('.') + 1);
+					col.setColumn("_" + rewriteCounter++ + col.getColumn());
+					news.add(c2);
+					for (final ConnectedSearchClause csc : scond.getConnected())
+					{
+						col = csc.getSearch().getPredicate().getRHS().getColumn();
+						c = "";
+						if (col.getTable() != null)
+						{
+							c += col.getTable();
+						}
+
+						c += ("." + col.getColumn());
+						olds.add(getMatchingCol(op, c));
+						c2 = c.substring(0, c.indexOf('.') + 1);
+						c2 += ("_" + rewriteCounter);
+						c2 += c.substring(c.indexOf('.') + 1);
+						col.setColumn("_" + rewriteCounter++ + col.getColumn());
+						news.add(c2);
+					}
+				}
+			}
+		}
+
+		final Operator rename = new RenameOperator(olds, news, meta);
+		rename.add(op);
+		return rename;
+	}
+
+	private Object buildNGBExtend(Operator op, final ArrayList<Object> row, final SubSelect sub) throws Exception
+	{
+		// colName, op, type, id, exp, prereq, done
+		if (!((Integer)row.get(5)).equals(-1))
+		{
+			// get the row
+			for (final ArrayList<Object> r : complex)
+			{
+				if (r.get(3).equals(row.get(5)))
+				{
+					try
+					{
+						final Object o = addComplexColumn(r, op, sub);
+						op = (Operator)o;
+						break;
+					}
+					catch (final Exception e)
+					{
+						if (row.get(1) instanceof Operator && !(row.get(1) instanceof CaseOperator) && allReferencesSatisfied(((Operator)row.get(1)).getReferences(), op))
+						{
+							break;
+						}
+						else if (row.get(1) instanceof CaseOperator)
+						{
+							if (allReferencesSatisfied(((CaseOperator)row.get(1)).getReferences(), op))
+							{
+								final ArrayList<String> references = new ArrayList<String>();
+								final Expression exp = (Expression)row.get(4);
+								final ArrayList<Case> cases = exp.getCases();
+								for (final Case c : cases)
+								{
+									references.addAll(getReferences(c.getCondition()));
+								}
+
+								if (allReferencesSatisfied(references, op))
+								{
+									break;
+								}
+							}
+						}
+
+						return null;
+					}
+				}
+			}
+		}
+
+		if ((Boolean)row.get(7) == true)
+		{
+			return op;
+		}
+
+		if ((Integer)row.get(2) == TYPE_INLINE)
+		{
+			final Operator o = (Operator)row.get(1);
+			if (o instanceof CaseOperator)
+			{
+				final Expression exp = (Expression)row.get(4);
+				final ArrayList<HashSet<HashMap<Filter, Filter>>> alhshm = new ArrayList<HashSet<HashMap<Filter, Filter>>>();
+				// HRDBMSWorker.logger.debug("Build SC has " +
+				// exp.getCases().size() + " cases to examine");
+				for (final Case c : exp.getCases())
+				{
+					final Operator top = op;
+					op = this.buildOperatorTreeFromSearchCondition(c.getCondition(), top, sub);
+					if (op == top)
+					{
+						HRDBMSWorker.logger.debug("Build SC when building a CaseOperator did not do anything");
+					}
+					else if (!(op instanceof SelectOperator))
+					{
+						HRDBMSWorker.logger.debug("Build SC when building a CaseOperator did something, but it wasn't a SelectOperator");
+					}
+					// add filters to alhshm and remove from tree
+					final HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
+					while (op instanceof SelectOperator)
+					{
+						final HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
+						for (final Filter f : ((SelectOperator)op).getFilter())
+						{
+							hm.put(f, f);
+						}
+
+						hshm.add(hm);
+						op = op.children().get(0);
+						op.parent().removeChild(op);
+					}
+
+					final Operator newTop = op;
+					while (op != top)
+					{
+						if (op.children().size() > 1)
+						{
+							throw new ParseException("Invalid search condition in a case expression");
+						}
+
+						if (op instanceof SelectOperator)
+						{
+							throw new ParseException("Internal error: stranded select operator when processing a case expression");
+						}
+
+						op = op.children().get(0);
+					}
+
+					op = newTop;
+					alhshm.add(hshm);
+				}
+
+				((CaseOperator)o).setFilters(alhshm);
+				String type = ((CaseOperator)o).getType();
+				final ArrayList<Object> results = ((CaseOperator)o).getResults();
+				for (final Object o2 : results)
+				{
+					if (o2 instanceof String)
+					{
+						if (((String)o2).startsWith("\u0000"))
+						{
+							final String newType = getType(((String)o2).substring(1), op.getCols2Types());
+							if (type == null)
+							{
+								type = newType;
+							}
+							else if (type.equals("INT") && !newType.equals("INT"))
+							{
+								if (newType.equals("LONG") || newType.equals("FLOAT"))
+								{
+									type = newType;
+								}
+								else
+								{
+									throw new ParseException("All possible results in a case expression must have the same type");
+								}
+							}
+							else if (type.equals("LONG") && !newType.equals("LONG"))
+							{
+								if (newType.equals("INT"))
+								{
+								}
+								else if (newType.equals("FLOAT"))
+								{
+									type = newType;
+								}
+								else
+								{
+									throw new ParseException("All possible results in a case expression must have the same type");
+								}
+							}
+							else if (type.equals("FLOAT") && !newType.equals("FLOAT"))
+							{
+								if (newType.equals("INT") || newType.equals("LONG"))
+								{
+								}
+								else
+								{
+									throw new ParseException("All possible results in a case expression must have the same type");
+								}
+							}
+							else if (!type.equals(newType))
+							{
+								throw new ParseException("All possible results in a case expression must have the same type");
+							}
+						}
+					}
+				}
+				((CaseOperator)o).setType(type);
+				try
+				{
+					o.add(op);
+				}
+				catch (final Exception e)
+				{
+					throw new ParseException(e.getMessage());
+				}
+				row.remove(7);
+				row.add(true);
+				return o;
+			}
+			try
+			{
+				o.add(op);
+			}
+			catch (final Exception e)
+			{
+				HRDBMSWorker.logger.debug("", e);
+				throw new ParseException(e.getMessage());
+			}
+			row.remove(7);
+			row.add(true);
+			if (o instanceof YearOperator)
+			{
+				final String name = o.getReferences().get(0);
+				final String type = op.getCols2Types().get(name);
+
+				if (type == null)
+				{
+					throw new ParseException("A reference to column " + name + " was unable to be resolved.");
+				}
+
+				if (!type.equals("DATE"))
+				{
+					throw new ParseException("The YEAR() function cannot be used on a non-DATE column");
+				}
+			}
+			else if (o instanceof SubstringOperator)
+			{
+				final String name = o.getReferences().get(0);
+				final String type = op.getCols2Types().get(name);
+
+				if (type == null)
+				{
+					throw new ParseException("A reference to column " + name + " was unable to be resolved.");
+				}
+
+				if (!type.equals("CHAR"))
+				{
+					throw new ParseException("The SUBSTRING() function cannot be used on a non-character data");
+				}
+			}
+			else if (o instanceof Json_valueOperator)
+			{
+				String name = o.getReferences().get(0);
+				String type = op.getCols2Types().get(name);
+
+				if (type == null)
+				{
+					throw new ParseException("A reference to column " + name + " was unable to be resolved.");
+				}
+
+				if (!type.equals("CHAR"))
+				{
+					throw new ParseException("The JSON_VALUE() function cannot be used on a non-character data");
+				}
+			}
+			else if (o instanceof Json_queryOperator)
+			{
+				String name = o.getReferences().get(0);
+				String type = op.getCols2Types().get(name);
+
+				if (type == null)
+				{
+					throw new ParseException("A reference to column " + name + " was unable to be resolved.");
+				}
+
+				if (!type.equals("CHAR"))
+				{
+					throw new ParseException("The JSON_QUERY() function cannot be used on a non-character data");
+				}
+			}
+			else if (o instanceof DateMathOperator)
+			{
+				final String name = o.getReferences().get(0);
+				final String type = op.getCols2Types().get(name);
+
+				if (type == null)
+				{
+					throw new ParseException("A reference to column " + name + " was unable to be resolved.");
+				}
+
+				if (!type.equals("DATE"))
+				{
+					throw new ParseException("A DATE was expected but a different data type was found");
+				}
+			}
+			else if (o instanceof ConcatOperator)
+			{
+				final String name1 = o.getReferences().get(0);
+				final String type1 = op.getCols2Types().get(name1);
+				final String name2 = o.getReferences().get(1);
+				final String type2 = op.getCols2Types().get(name2);
+
+				if (type1 == null)
+				{
+					throw new ParseException("A reference to column " + name1 + " was unable to be resolved.");
+				}
+
+				if (type2 == null)
+				{
+					throw new ParseException("A reference to column " + name2 + " was unable to be resolved.");
+				}
+
+				if (!type1.equals("CHAR") || !type2.equals("CHAR"))
+				{
+					throw new ParseException("Concatenation is not supported for non-character data");
+				}
+			}
+			else if (o instanceof ExtendOperator)
+			{
+				for (final String name : o.getReferences())
+				{
+					final String type = op.getCols2Types().get(name);
 
 					if (type == null)
 					{
@@ -1103,13 +1665,13 @@ public class SQLParser
 		}
 	}
 
-	private Operator buildNGBExtends(Operator op, SubSelect sub) throws Exception
+	private Operator buildNGBExtends(Operator op, final SubSelect sub) throws Exception
 	{
-		for (ArrayList<Object> row : complex)
+		for (final ArrayList<Object> row : complex)
 		{
 			if ((Boolean)row.get(7) == false && (Integer)row.get(2) != TYPE_GROUPBY && (row.get(6) == null || ((SubSelect)row.get(6)).equals(sub)))
 			{
-				Object o = buildNGBExtend(op, row, sub);
+				final Object o = buildNGBExtend(op, row, sub);
 				if (o != null && !(o instanceof Boolean))
 				{
 					op = (Operator)o;
@@ -1120,9 +1682,9 @@ public class SQLParser
 		return op;
 	}
 
-	private Operator buildOperatorTreeFromCreateIndex(CreateIndex createIndex) throws Exception
+	private Operator buildOperatorTreeFromCreateIndex(final CreateIndex createIndex) throws Exception
 	{
-		TableName table = createIndex.getTable();
+		final TableName table = createIndex.getTable();
 		String schema = null;
 		String tbl = null;
 		if (table.getSchema() == null)
@@ -1136,12 +1698,12 @@ public class SQLParser
 			tbl = table.getName();
 		}
 
-		if (!meta.verifyTableExistence(schema, tbl, tx))
+		if (!MetaData.verifyTableExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table does not exist");
 		}
 
-		String index = createIndex.getIndex().getName();
+		final String index = createIndex.getIndex().getName();
 		if (createIndex.getIndex().getSchema() != null)
 		{
 			throw new ParseException("Schemas cannot be specified for index names");
@@ -1152,16 +1714,16 @@ public class SQLParser
 			throw new ParseException("Index already exists");
 		}
 
-		boolean unique = createIndex.getUnique();
-		ArrayList<IndexDef> indexDefs = createIndex.getCols();
-		for (IndexDef def : indexDefs)
+		final boolean unique = createIndex.getUnique();
+		final ArrayList<IndexDef> indexDefs = createIndex.getCols();
+		for (final IndexDef def : indexDefs)
 		{
-			String col = def.getCol().getColumn();
+			final String col = def.getCol().getColumn();
 			if (def.getCol().getTable() != null)
 			{
 				throw new ParseException("Column names cannot be qualified with table names in a CREATE INDEX statement");
 			}
-			if (!meta.verifyColExistence(schema, tbl, col, tx))
+			if (!MetaData.verifyColExistence(schema, tbl, col, tx))
 			{
 				throw new ParseException("Column " + col + " does not exist");
 			}
@@ -1170,9 +1732,9 @@ public class SQLParser
 		return new CreateIndexOperator(schema, tbl, index, indexDefs, unique, meta);
 	}
 
-	private Operator buildOperatorTreeFromCreateTable(CreateTable createTable) throws Exception
+	private Operator buildOperatorTreeFromCreateTable(final CreateTable createTable) throws Exception
 	{
-		TableName table = createTable.getTable();
+		final TableName table = createTable.getTable();
 		String schema = null;
 		String tbl = null;
 		if (table.getSchema() == null)
@@ -1186,18 +1748,18 @@ public class SQLParser
 			tbl = table.getName();
 		}
 
-		if (meta.verifyTableExistence(schema, tbl, tx) || meta.verifyViewExistence(schema, tbl, tx))
+		if (MetaData.verifyTableExistence(schema, tbl, tx) || MetaData.verifyViewExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table or view already exists");
 		}
 
-		ArrayList<ColDef> colDefs = createTable.getCols();
-		HashSet<String> colNames = new HashSet<String>();
-		HashSet<String> pks = new HashSet<String>();
-		ArrayList<String> orderedPks = new ArrayList<String>();
-		for (ColDef def : colDefs)
+		final ArrayList<ColDef> colDefs = createTable.getCols();
+		final HashSet<String> colNames = new HashSet<String>();
+		final HashSet<String> pks = new HashSet<String>();
+		final ArrayList<String> orderedPks = new ArrayList<String>();
+		for (final ColDef def : colDefs)
 		{
-			String col = def.getCol().getColumn();
+			final String col = def.getCol().getColumn();
 			if (def.getCol().getTable() != null)
 			{
 				throw new ParseException("Column names cannot be qualified with table names in a CREATE TABLE statement");
@@ -1224,10 +1786,10 @@ public class SQLParser
 
 		if (createTable.getPK() != null)
 		{
-			ArrayList<Column> cols = createTable.getPK().getCols();
-			for (Column col : cols)
+			final ArrayList<Column> cols = createTable.getPK().getCols();
+			for (final Column col : cols)
 			{
-				String c = col.getColumn();
+				final String c = col.getColumn();
 				if (col.getTable() != null)
 				{
 					throw new ParseException("Column names cannot be qualified with table names in a CREATE TABLE statement");
@@ -1256,7 +1818,7 @@ public class SQLParser
 
 			int z = 1;
 			boolean ok = true;
-			ArrayList<Integer> colOrder = createTable.getColOrder();
+			final ArrayList<Integer> colOrder = createTable.getColOrder();
 			while (z <= colDefs.size())
 			{
 				if (!colOrder.contains(z++))
@@ -1280,13 +1842,13 @@ public class SQLParser
 
 		if (createTable.getType() != 0 && createTable.getOrganization() != null)
 		{
-			ArrayList<Integer> organization = createTable.getOrganization();
+			final ArrayList<Integer> organization = createTable.getOrganization();
 			if (organization.size() < 1 || organization.size() > colDefs.size())
 			{
 				throw new ParseException("ORGANIZATION clause has an invalid size");
 			}
 
-			for (int index : organization)
+			for (final int index : organization)
 			{
 				if (index < 1 || index > colDefs.size())
 				{
@@ -1300,10 +1862,10 @@ public class SQLParser
 		return retval;
 	}
 
-	private Operator buildOperatorTreeFromCreateView(CreateView createView) throws Exception
+	private Operator buildOperatorTreeFromCreateView(final CreateView createView) throws Exception
 	{
 		buildOperatorTreeFromFullSelect(createView.getSelect());
-		TableName table = createView.getView();
+		final TableName table = createView.getView();
 		String schema = null;
 		String tbl = null;
 		if (table.getSchema() == null)
@@ -1317,7 +1879,7 @@ public class SQLParser
 			tbl = table.getName();
 		}
 
-		if (meta.verifyTableExistence(schema, tbl, tx) || meta.verifyViewExistence(schema, tbl, tx))
+		if (MetaData.verifyTableExistence(schema, tbl, tx) || MetaData.verifyViewExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table or view already exists");
 		}
@@ -1325,9 +1887,9 @@ public class SQLParser
 		return new CreateViewOperator(schema, tbl, createView.getText(), meta);
 	}
 
-	private Operator buildOperatorTreeFromDelete(Delete delete) throws Exception
+	private Operator buildOperatorTreeFromDelete(final Delete delete) throws Exception
 	{
-		TableName table = delete.getTable();
+		final TableName table = delete.getTable();
 		String schema = null;
 		String tbl = null;
 		if (table.getSchema() == null)
@@ -1341,7 +1903,7 @@ public class SQLParser
 			tbl = table.getName();
 		}
 
-		if (!meta.verifyTableExistence(schema, tbl, tx))
+		if (!MetaData.verifyTableExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table does not exist");
 		}
@@ -1351,36 +1913,36 @@ public class SQLParser
 			return new MassDeleteOperator(schema, tbl, meta);
 		}
 
-		TableScanOperator scan = new TableScanOperator(schema, tbl, meta, tx);
+		final TableScanOperator scan = new TableScanOperator(schema, tbl, meta, tx);
 		Operator op = buildOperatorTreeFromWhere(delete.getWhere(), scan, null);
 		scan.getRID();
-		ArrayList<String> cols = new ArrayList<String>();
+		final ArrayList<String> cols = new ArrayList<String>();
 		cols.add("_RID1");
 		cols.add("_RID2");
 		cols.add("_RID3");
 		cols.add("_RID4");
-		cols.addAll(meta.getIndexColsForTable(schema, tbl, tx));
-		ProjectOperator project = new ProjectOperator(cols, meta);
+		cols.addAll(MetaData.getIndexColsForTable(schema, tbl, tx));
+		final ProjectOperator project = new ProjectOperator(cols, meta);
 		project.add(op);
 		op = project;
-		RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
+		final RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
 		retval.add(op);
-		Phase1 p1 = new Phase1(retval, tx);
+		final Phase1 p1 = new Phase1(retval, tx);
 		p1.optimize();
 		new Phase2(retval, tx).optimize();
 		new Phase3(retval, tx).optimize();
 		new Phase4(retval, tx).optimize();
 		new Phase5(retval, tx, p1.likelihoodCache).optimize();
-		DeleteOperator dOp = new DeleteOperator(schema, tbl, meta);
-		Operator child = retval.children().get(0);
+		final DeleteOperator dOp = new DeleteOperator(schema, tbl, meta);
+		final Operator child = retval.children().get(0);
 		retval.removeChild(child);
 		dOp.add(child);
 		return dOp;
 	}
 
-	private Operator buildOperatorTreeFromDropIndex(DropIndex dropIndex) throws Exception
+	private Operator buildOperatorTreeFromDropIndex(final DropIndex dropIndex) throws Exception
 	{
-		TableName table = dropIndex.getIndex();
+		final TableName table = dropIndex.getIndex();
 		String schema = null;
 		String tbl = null;
 		if (table.getSchema() == null)
@@ -1402,9 +1964,9 @@ public class SQLParser
 		return new DropIndexOperator(schema, tbl, meta);
 	}
 
-	private Operator buildOperatorTreeFromDropTable(DropTable dropTable) throws Exception
+	private Operator buildOperatorTreeFromDropTable(final DropTable dropTable) throws Exception
 	{
-		TableName table = dropTable.getTable();
+		final TableName table = dropTable.getTable();
 		String schema = null;
 		String tbl = null;
 		if (table.getSchema() == null)
@@ -1418,7 +1980,7 @@ public class SQLParser
 			tbl = table.getName();
 		}
 
-		if (!meta.verifyTableExistence(schema, tbl, tx))
+		if (!MetaData.verifyTableExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table does not exist");
 		}
@@ -1426,9 +1988,9 @@ public class SQLParser
 		return new DropTableOperator(schema, tbl, meta);
 	}
 
-	private Operator buildOperatorTreeFromDropView(DropView dropView) throws Exception
+	private Operator buildOperatorTreeFromDropView(final DropView dropView) throws Exception
 	{
-		TableName table = dropView.getView();
+		final TableName table = dropView.getView();
 		String schema = null;
 		String tbl = null;
 		if (table.getSchema() == null)
@@ -1442,7 +2004,7 @@ public class SQLParser
 			tbl = table.getName();
 		}
 
-		if (!meta.verifyViewExistence(schema, tbl, tx))
+		if (!MetaData.verifyViewExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table or view does not exist");
 		}
@@ -1450,18 +2012,18 @@ public class SQLParser
 		return new DropViewOperator(schema, tbl, meta);
 	}
 
-	private OperatorTypeAndName buildOperatorTreeFromExpression(Expression exp, String name, SubSelect sub) throws ParseException
+	private OperatorTypeAndName buildOperatorTreeFromExpression(final Expression exp, String name, final SubSelect sub) throws ParseException
 	{
 		if (exp.isLiteral())
 		{
-			Literal l = exp.getLiteral();
+			final Literal l = exp.getLiteral();
 			if (l.isNull())
 			{
 				// TODO
 			}
 			else
 			{
-				Object literal = l.getValue();
+				final Object literal = l.getValue();
 				if (literal instanceof Double || literal instanceof Long)
 				{
 					if (name != null)
@@ -1525,16 +2087,16 @@ public class SQLParser
 		}
 		else if (exp.isCase())
 		{
-			ArrayList<HashSet<HashMap<Filter, Filter>>> alhshm = new ArrayList<HashSet<HashMap<Filter, Filter>>>();
-			ArrayList<String> results = new ArrayList<String>();
+			final ArrayList<HashSet<HashMap<Filter, Filter>>> alhshm = new ArrayList<HashSet<HashMap<Filter, Filter>>>();
+			final ArrayList<String> results = new ArrayList<String>();
 			int prereq = -1;
 			String type = null;
-			for (Case c : exp.getCases())
+			for (final Case c : exp.getCases())
 			{
 				// handle search condition later
 				if (c.getResult().isColumn())
 				{
-					Column input = c.getResult().getColumn();
+					final Column input = c.getResult().getColumn();
 					String inputColumn = "";
 					if (input.getTable() != null)
 					{
@@ -1561,7 +2123,7 @@ public class SQLParser
 						// TODO
 					}
 
-					Object obj = c.getResult().getLiteral().getValue();
+					final Object obj = c.getResult().getLiteral().getValue();
 					if (obj instanceof String)
 					{
 						results.add("'" + obj + "'");
@@ -1581,7 +2143,7 @@ public class SQLParser
 						{
 							// fix
 							int i = 0;
-							for (String result : (ArrayList<String>)results.clone())
+							for (final String result : (ArrayList<String>)results.clone())
 							{
 								results.remove(i);
 								results.add(i, result + ".0");
@@ -1621,7 +2183,7 @@ public class SQLParser
 					continue;
 				}
 
-				OperatorTypeAndName otan = buildOperatorTreeFromExpression(c.getResult(), null, sub);
+				final OperatorTypeAndName otan = buildOperatorTreeFromExpression(c.getResult(), null, sub);
 				if (otan.getType() == TYPE_DAYS)
 				{
 					throw new ParseException("A case expression cannot return a result of type DAYS");
@@ -1640,9 +2202,9 @@ public class SQLParser
 				}
 				else if (otan.getType() == TYPE_DATE)
 				{
-					Date date = ((GregorianCalendar)otan.getOp()).getTime();
-					SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-					String dateString = sdf.format(date);
+					final Date date = ((GregorianCalendar)otan.getOp()).getTime();
+					final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+					final String dateString = sdf.format(date);
 					results.add("DATE('" + dateString + "')");
 					if (type == null)
 					{
@@ -1657,7 +2219,7 @@ public class SQLParser
 				{
 					results.add(otan.getName());
 
-					ArrayList<Object> row = new ArrayList<Object>();
+					final ArrayList<Object> row = new ArrayList<Object>();
 					row.add(otan.getName());
 					row.add(otan.getOp());
 					row.add(otan.getType());
@@ -1673,7 +2235,7 @@ public class SQLParser
 						// go all the way to the bottom and set the prereq to
 						// prereq
 						// then set prereq to the id of this one
-						ArrayList<Object> bottom = getBottomRow(row);
+						final ArrayList<Object> bottom = getBottomRow(row);
 						bottom.remove(5);
 						bottom.add(5, prereq);
 						prereq = (Integer)row.get(3);
@@ -1687,7 +2249,7 @@ public class SQLParser
 
 			if (exp.getDefault().isColumn())
 			{
-				Column input = exp.getDefault().getColumn();
+				final Column input = exp.getDefault().getColumn();
 				String inputColumn = "";
 				if (input.getTable() != null)
 				{
@@ -1713,7 +2275,7 @@ public class SQLParser
 					// TODO
 				}
 
-				Object obj = exp.getDefault().getLiteral().getValue();
+				final Object obj = exp.getDefault().getLiteral().getValue();
 				if (obj instanceof String)
 				{
 					results.add("'" + obj + "'");
@@ -1733,7 +2295,7 @@ public class SQLParser
 					{
 						// fix
 						int i = 0;
-						for (String result : (ArrayList<String>)results.clone())
+						for (final String result : (ArrayList<String>)results.clone())
 						{
 							results.remove(i);
 							results.add(i, result + ".0");
@@ -1772,7 +2334,7 @@ public class SQLParser
 			}
 			else
 			{
-				OperatorTypeAndName otan = buildOperatorTreeFromExpression(exp.getDefault(), null, sub);
+				final OperatorTypeAndName otan = buildOperatorTreeFromExpression(exp.getDefault(), null, sub);
 				if (otan.getType() == TYPE_DAYS)
 				{
 					throw new ParseException("A case expression cannot return a result of type DAYS");
@@ -1791,9 +2353,9 @@ public class SQLParser
 				}
 				else if (otan.getType() == TYPE_DATE)
 				{
-					Date date = ((GregorianCalendar)otan.getOp()).getTime();
-					SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-					String dateString = sdf.format(date);
+					final Date date = ((GregorianCalendar)otan.getOp()).getTime();
+					final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+					final String dateString = sdf.format(date);
 					results.add("DATE('" + dateString + "')");
 					if (type == null)
 					{
@@ -1808,7 +2370,7 @@ public class SQLParser
 				{
 					results.add(otan.getName());
 
-					ArrayList<Object> row = new ArrayList<Object>();
+					final ArrayList<Object> row = new ArrayList<Object>();
 					row.add(otan.getName());
 					row.add(otan.getOp());
 					row.add(otan.getType());
@@ -1824,7 +2386,7 @@ public class SQLParser
 						// go all the way to the bottom and set the prereq to
 						// prereq
 						// then set prereq to the id of this one
-						ArrayList<Object> bottom = getBottomRow(row);
+						final ArrayList<Object> bottom = getBottomRow(row);
 						bottom.remove(5);
 						bottom.add(5, prereq);
 						prereq = (Integer)row.get(3);
@@ -1853,19 +2415,19 @@ public class SQLParser
 		}
 		else if (exp.isFunction())
 		{
-			Function f = exp.getFunction();
-			String method = f.getName();
+			final Function f = exp.getFunction();
+			final String method = f.getName();
 			if (method.equals("MAX"))
 			{
-				ArrayList<Expression> args = f.getArgs();
+				final ArrayList<Expression> args = f.getArgs();
 				if (args.size() != 1)
 				{
 					throw new ParseException("MAX() requires only 1 argument");
 				}
-				Expression arg = args.get(0);
+				final Expression arg = args.get(0);
 				if (arg.isColumn())
 				{
-					Column input = arg.getColumn();
+					final Column input = arg.getColumn();
 					String inputColumn = "";
 					if (input.getTable() != null)
 					{
@@ -1898,7 +2460,7 @@ public class SQLParser
 				}
 				else if (arg.isExpression() || arg.isCase() || arg.isFunction())
 				{
-					OperatorTypeAndName retval = buildOperatorTreeFromExpression(arg, null, sub);
+					final OperatorTypeAndName retval = buildOperatorTreeFromExpression(arg, null, sub);
 					if (retval.getType() == TYPE_DATE)
 					{
 						throw new ParseException("The argument to MAX() cannot be a literal DATE");
@@ -1920,7 +2482,7 @@ public class SQLParser
 						throw new ParseException("The argument to MAX() cannot be an aggregation");
 					}
 
-					ArrayList<Object> row = new ArrayList<Object>();
+					final ArrayList<Object> row = new ArrayList<Object>();
 					row.add(retval.getName());
 					row.add(retval.getOp());
 					row.add(retval.getType());
@@ -1953,15 +2515,15 @@ public class SQLParser
 			}
 			else if (method.equals("MIN"))
 			{
-				ArrayList<Expression> args = f.getArgs();
+				final ArrayList<Expression> args = f.getArgs();
 				if (args.size() != 1)
 				{
 					throw new ParseException("MIN() requires only 1 argument");
 				}
-				Expression arg = args.get(0);
+				final Expression arg = args.get(0);
 				if (arg.isColumn())
 				{
-					Column input = arg.getColumn();
+					final Column input = arg.getColumn();
 					String inputColumn = "";
 					if (input.getTable() != null)
 					{
@@ -1995,7 +2557,7 @@ public class SQLParser
 				}
 				else if (arg.isExpression() || arg.isCase() || arg.isFunction())
 				{
-					OperatorTypeAndName retval = buildOperatorTreeFromExpression(arg, null, sub);
+					final OperatorTypeAndName retval = buildOperatorTreeFromExpression(arg, null, sub);
 					if (retval.getType() == TYPE_DATE)
 					{
 						throw new ParseException("The argument to MIN() cannot be a literal DATE");
@@ -2017,7 +2579,7 @@ public class SQLParser
 						throw new ParseException("The argument to MIN() cannot be an aggregation");
 					}
 
-					ArrayList<Object> row = new ArrayList<Object>();
+					final ArrayList<Object> row = new ArrayList<Object>();
 					row.add(retval.getName());
 					row.add(retval.getOp());
 					row.add(retval.getType());
@@ -2050,15 +2612,15 @@ public class SQLParser
 			}
 			else if (method.equals("AVG"))
 			{
-				ArrayList<Expression> args = f.getArgs();
+				final ArrayList<Expression> args = f.getArgs();
 				if (args.size() != 1)
 				{
 					throw new ParseException("AVG() requires only 1 argument");
 				}
-				Expression arg = args.get(0);
+				final Expression arg = args.get(0);
 				if (arg.isColumn())
 				{
-					Column input = arg.getColumn();
+					final Column input = arg.getColumn();
 					String inputColumn = "";
 					if (input.getTable() != null)
 					{
@@ -2091,7 +2653,7 @@ public class SQLParser
 				}
 				else if (arg.isExpression() || arg.isCase() || arg.isFunction())
 				{
-					OperatorTypeAndName retval = buildOperatorTreeFromExpression(arg, null, sub);
+					final OperatorTypeAndName retval = buildOperatorTreeFromExpression(arg, null, sub);
 					if (retval.getType() == TYPE_DATE)
 					{
 						throw new ParseException("The argument to AVG() cannot be a literal DATE");
@@ -2113,7 +2675,7 @@ public class SQLParser
 						throw new ParseException("The argument to AVG() cannot be an aggregation");
 					}
 
-					ArrayList<Object> row = new ArrayList<Object>();
+					final ArrayList<Object> row = new ArrayList<Object>();
 					row.add(retval.getName());
 					row.add(retval.getOp());
 					row.add(retval.getType());
@@ -2146,15 +2708,15 @@ public class SQLParser
 			}
 			else if (method.equals("SUM"))
 			{
-				ArrayList<Expression> args = f.getArgs();
+				final ArrayList<Expression> args = f.getArgs();
 				if (args.size() != 1)
 				{
 					throw new ParseException("SUM() requires only 1 argument");
 				}
-				Expression arg = args.get(0);
+				final Expression arg = args.get(0);
 				if (arg.isColumn())
 				{
-					Column input = arg.getColumn();
+					final Column input = arg.getColumn();
 					String inputColumn = "";
 					if (input.getTable() != null)
 					{
@@ -2187,7 +2749,7 @@ public class SQLParser
 				}
 				else if (arg.isExpression() || arg.isCase() || arg.isFunction())
 				{
-					OperatorTypeAndName retval = buildOperatorTreeFromExpression(arg, null, sub);
+					final OperatorTypeAndName retval = buildOperatorTreeFromExpression(arg, null, sub);
 					if (retval.getType() == TYPE_DATE)
 					{
 						throw new ParseException("The argument to SUM() cannot be a literal DATE");
@@ -2209,7 +2771,7 @@ public class SQLParser
 						throw new ParseException("The argument to SUM() cannot be an aggregation");
 					}
 
-					ArrayList<Object> row = new ArrayList<Object>();
+					final ArrayList<Object> row = new ArrayList<Object>();
 					row.add(retval.getName());
 					row.add(retval.getOp());
 					row.add(retval.getType());
@@ -2242,15 +2804,15 @@ public class SQLParser
 			}
 			else if (method.equals("COUNT"))
 			{
-				ArrayList<Expression> args = f.getArgs();
+				final ArrayList<Expression> args = f.getArgs();
 				if (args.size() != 1)
 				{
 					throw new ParseException("COUNT() requires only 1 argument");
 				}
-				Expression arg = args.get(0);
+				final Expression arg = args.get(0);
 				if (arg.isColumn())
 				{
-					Column input = arg.getColumn();
+					final Column input = arg.getColumn();
 					String inputColumn = "";
 					if (input.getTable() != null)
 					{
@@ -2307,50 +2869,50 @@ public class SQLParser
 			}
 			else if (method.equals("DATE"))
 			{
-				ArrayList<Expression> args = f.getArgs();
+				final ArrayList<Expression> args = f.getArgs();
 				if (args.size() != 1)
 				{
 					throw new ParseException("DATE() requires only 1 argument");
 				}
-				Expression arg = args.get(0);
+				final Expression arg = args.get(0);
 				if (!arg.isLiteral())
 				{
 					throw new ParseException("DATE() requires a literal string argument");
 				}
 
-				Object literal = arg.getLiteral().getValue();
+				final Object literal = arg.getLiteral().getValue();
 				if (!(literal instanceof String))
 				{
 					throw new ParseException("DATE() requires a literal string argument");
 				}
-				String dateString = (String)literal;
-				GregorianCalendar cal = new GregorianCalendar();
-				SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+				final String dateString = (String)literal;
+				final GregorianCalendar cal = new GregorianCalendar();
+				final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 				try
 				{
-					Date date = sdf.parse(dateString);
+					final Date date = sdf.parse(dateString);
 					cal.setTime(date);
 					return new OperatorTypeAndName(cal, TYPE_DATE, "", -1);
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					throw new ParseException("Date is not in the proper format");
 				}
 			}
 			else if (method.equals("DAYS"))
 			{
-				ArrayList<Expression> args = f.getArgs();
+				final ArrayList<Expression> args = f.getArgs();
 				if (args.size() != 1)
 				{
 					throw new ParseException("DAYS() requires only 1 argument");
 				}
-				Expression arg = args.get(0);
+				final Expression arg = args.get(0);
 				if (!arg.isLiteral())
 				{
 					throw new ParseException("DAYS() requires a literal numeric argument");
 				}
 
-				Object literal = arg.getLiteral().getValue();
+				final Object literal = arg.getLiteral().getValue();
 				if (literal instanceof Integer)
 				{
 					return new OperatorTypeAndName(literal, TYPE_DAYS, "", -1);
@@ -2366,18 +2928,18 @@ public class SQLParser
 			}
 			else if (method.equals("MONTHS"))
 			{
-				ArrayList<Expression> args = f.getArgs();
+				final ArrayList<Expression> args = f.getArgs();
 				if (args.size() != 1)
 				{
 					throw new ParseException("MONTHS() requires only 1 argument");
 				}
-				Expression arg = args.get(0);
+				final Expression arg = args.get(0);
 				if (!arg.isLiteral())
 				{
 					throw new ParseException("MONTHS() requires a literal numeric argument");
 				}
 
-				Object literal = arg.getLiteral().getValue();
+				final Object literal = arg.getLiteral().getValue();
 				if (literal instanceof Integer)
 				{
 					return new OperatorTypeAndName(literal, TYPE_MONTHS, "", -1);
@@ -2393,18 +2955,18 @@ public class SQLParser
 			}
 			else if (method.equals("YEARS"))
 			{
-				ArrayList<Expression> args = f.getArgs();
+				final ArrayList<Expression> args = f.getArgs();
 				if (args.size() != 1)
 				{
 					throw new ParseException("YEARS() requires only 1 argument");
 				}
-				Expression arg = args.get(0);
+				final Expression arg = args.get(0);
 				if (!arg.isLiteral())
 				{
 					throw new ParseException("YEARS() requires a literal numeric argument");
 				}
 
-				Object literal = arg.getLiteral().getValue();
+				final Object literal = arg.getLiteral().getValue();
 				if (literal instanceof Integer)
 				{
 					return new OperatorTypeAndName(literal, TYPE_YEARS, "", -1);
@@ -2420,17 +2982,17 @@ public class SQLParser
 			}
 			else if (method.equals("YEAR"))
 			{
-				ArrayList<Expression> args = f.getArgs();
+				final ArrayList<Expression> args = f.getArgs();
 				if (args.size() != 1)
 				{
 					throw new ParseException("YEAR() requires only 1 argument");
 				}
-				Expression arg = args.get(0);
+				final Expression arg = args.get(0);
 
 				if (arg.isColumn())
 				{
 					String colName = "";
-					Column col = arg.getColumn();
+					final Column col = arg.getColumn();
 					if (col.getTable() != null)
 					{
 						colName += col.getTable();
@@ -2455,11 +3017,11 @@ public class SQLParser
 				}
 				else if (arg.isFunction() || arg.isExpression() || arg.isCase())
 				{
-					OperatorTypeAndName retval = buildOperatorTreeFromExpression(arg, null, sub);
+					final OperatorTypeAndName retval = buildOperatorTreeFromExpression(arg, null, sub);
 					if (retval.getType() == TYPE_DATE)
 					{
-						GregorianCalendar cal = (GregorianCalendar)retval.getOp();
-						int literal = cal.get(Calendar.YEAR);
+						final GregorianCalendar cal = (GregorianCalendar)retval.getOp();
+						final int literal = cal.get(Calendar.YEAR);
 
 						if (name != null)
 						{
@@ -2493,7 +3055,7 @@ public class SQLParser
 						throw new ParseException("YEAR() cannot be called with an agrument that is an aggregation");
 					}
 
-					ArrayList<Object> row = new ArrayList<Object>();
+					final ArrayList<Object> row = new ArrayList<Object>();
 					row.add(retval.getName());
 					row.add(retval.getOp());
 					row.add(retval.getType());
@@ -2526,7 +3088,7 @@ public class SQLParser
 			}
 			else if (method.equals("SUBSTRING"))
 			{
-				ArrayList<Expression> args = f.getArgs();
+				final ArrayList<Expression> args = f.getArgs();
 				if (args.size() != 3 && args.size() != 2)
 				{
 					throw new ParseException("SUBSTRING() requires 2 or 3 arguments");
@@ -2600,13 +3162,13 @@ public class SQLParser
 				arg = args.get(0);
 				if (arg.isLiteral() || arg.isFunction() || arg.isExpression() || arg.isCase())
 				{
-					OperatorTypeAndName retval = buildOperatorTreeFromExpression(arg, null, sub);
+					final OperatorTypeAndName retval = buildOperatorTreeFromExpression(arg, null, sub);
 					if (retval.getType() == TYPE_DATE || retval.getType() == TYPE_DAYS || retval.getType() == TYPE_MONTHS || retval.getType() == TYPE_YEARS || retval.getType() == TYPE_GROUPBY)
 					{
 						throw new ParseException("Argument 1 to SUBSTRING must be a string");
 					}
 
-					ArrayList<Object> row = new ArrayList<Object>();
+					final ArrayList<Object> row = new ArrayList<Object>();
 					row.add(retval.getName());
 					row.add(retval.getOp());
 					row.add(retval.getType());
@@ -2635,7 +3197,7 @@ public class SQLParser
 				else if (arg.isColumn())
 				{
 					String colName = "";
-					Column col = arg.getColumn();
+					final Column col = arg.getColumn();
 					if (col.getTable() != null)
 					{
 						colName += col.getTable();
@@ -2831,8 +3393,8 @@ public class SQLParser
 		}
 		else if (exp.isExpression())
 		{
-			OperatorTypeAndName exp1 = buildOperatorTreeFromExpression(exp.getLHS(), null, sub);
-			OperatorTypeAndName exp2 = buildOperatorTreeFromExpression(exp.getRHS(), null, sub);
+			final OperatorTypeAndName exp1 = buildOperatorTreeFromExpression(exp.getLHS(), null, sub);
+			final OperatorTypeAndName exp2 = buildOperatorTreeFromExpression(exp.getRHS(), null, sub);
 			Column col1 = null;
 			Column col2 = null;
 			if (exp1 == null)
@@ -2851,19 +3413,19 @@ public class SQLParser
 				{
 					if (exp2 != null && exp2.getType() == TYPE_DAYS)
 					{
-						GregorianCalendar cal = (GregorianCalendar)exp1.getOp();
+						final GregorianCalendar cal = (GregorianCalendar)exp1.getOp();
 						cal.add(Calendar.DATE, (Integer)exp2.getOp());
 						return new OperatorTypeAndName(cal, TYPE_DATE, "", -1);
 					}
 					else if (exp2 != null && exp2.getType() == TYPE_MONTHS)
 					{
-						GregorianCalendar cal = (GregorianCalendar)exp1.getOp();
+						final GregorianCalendar cal = (GregorianCalendar)exp1.getOp();
 						cal.add(Calendar.MONTH, (Integer)exp2.getOp());
 						return new OperatorTypeAndName(cal, TYPE_DATE, "", -1);
 					}
 					else if (exp2 != null && exp2.getType() == TYPE_YEARS)
 					{
-						GregorianCalendar cal = (GregorianCalendar)exp1.getOp();
+						final GregorianCalendar cal = (GregorianCalendar)exp1.getOp();
 						cal.add(Calendar.YEAR, (Integer)exp2.getOp());
 						return new OperatorTypeAndName(cal, TYPE_DATE, "", -1);
 					}
@@ -2876,19 +3438,19 @@ public class SQLParser
 				{
 					if (exp2 != null && exp2.getType() == TYPE_DAYS)
 					{
-						GregorianCalendar cal = (GregorianCalendar)exp1.getOp();
+						final GregorianCalendar cal = (GregorianCalendar)exp1.getOp();
 						cal.add(Calendar.DATE, -1 * (Integer)exp2.getOp());
 						return new OperatorTypeAndName(cal, TYPE_DATE, "", -1);
 					}
 					else if (exp2 != null && exp2.getType() == TYPE_MONTHS)
 					{
-						GregorianCalendar cal = (GregorianCalendar)exp1.getOp();
+						final GregorianCalendar cal = (GregorianCalendar)exp1.getOp();
 						cal.add(Calendar.MONTH, -1 * (Integer)exp2.getOp());
 						return new OperatorTypeAndName(cal, TYPE_DATE, "", -1);
 					}
 					else if (exp2 != null && exp2.getType() == TYPE_YEARS)
 					{
-						GregorianCalendar cal = (GregorianCalendar)exp1.getOp();
+						final GregorianCalendar cal = (GregorianCalendar)exp1.getOp();
 						cal.add(Calendar.YEAR, -1 * (Integer)exp2.getOp());
 						return new OperatorTypeAndName(cal, TYPE_DATE, "", -1);
 					}
@@ -2908,19 +3470,19 @@ public class SQLParser
 				{
 					if (exp1 != null && exp1.getType() == TYPE_DAYS)
 					{
-						GregorianCalendar cal = (GregorianCalendar)exp2.getOp();
+						final GregorianCalendar cal = (GregorianCalendar)exp2.getOp();
 						cal.add(Calendar.DATE, (Integer)exp1.getOp());
 						return new OperatorTypeAndName(cal, TYPE_DATE, "", -1);
 					}
 					else if (exp1 != null && exp1.getType() == TYPE_MONTHS)
 					{
-						GregorianCalendar cal = (GregorianCalendar)exp2.getOp();
+						final GregorianCalendar cal = (GregorianCalendar)exp2.getOp();
 						cal.add(Calendar.MONTH, (Integer)exp1.getOp());
 						return new OperatorTypeAndName(cal, TYPE_DATE, "", -1);
 					}
 					else if (exp1 != null && exp1.getType() == TYPE_YEARS)
 					{
-						GregorianCalendar cal = (GregorianCalendar)exp2.getOp();
+						final GregorianCalendar cal = (GregorianCalendar)exp2.getOp();
 						cal.add(Calendar.YEAR, (Integer)exp1.getOp());
 						return new OperatorTypeAndName(cal, TYPE_DATE, "", -1);
 					}
@@ -2954,7 +3516,7 @@ public class SQLParser
 				// externalize exp2 if not col
 				if (exp2 != null)
 				{
-					ArrayList<Object> row = new ArrayList<Object>();
+					final ArrayList<Object> row = new ArrayList<Object>();
 					row.add(exp2.getName());
 					row.add(exp2.getOp());
 					row.add(exp2.getType());
@@ -3021,7 +3583,7 @@ public class SQLParser
 				// externalize exp2 if not col
 				if (exp2 != null)
 				{
-					ArrayList<Object> row = new ArrayList<Object>();
+					final ArrayList<Object> row = new ArrayList<Object>();
 					row.add(exp2.getName());
 					row.add(exp2.getOp());
 					row.add(exp2.getType());
@@ -3088,7 +3650,7 @@ public class SQLParser
 				// externalize exp2 if not col
 				if (exp2 != null)
 				{
-					ArrayList<Object> row = new ArrayList<Object>();
+					final ArrayList<Object> row = new ArrayList<Object>();
 					row.add(exp2.getName());
 					row.add(exp2.getOp());
 					row.add(exp2.getType());
@@ -3146,7 +3708,7 @@ public class SQLParser
 
 				if (exp1 != null)
 				{
-					ArrayList<Object> row = new ArrayList<Object>();
+					final ArrayList<Object> row = new ArrayList<Object>();
 					row.add(exp1.getName());
 					row.add(exp1.getOp());
 					row.add(exp1.getType());
@@ -3248,7 +3810,7 @@ public class SQLParser
 			{
 				if (exp1 != null)
 				{
-					ArrayList<Object> row = new ArrayList<Object>();
+					final ArrayList<Object> row = new ArrayList<Object>();
 					row.add(exp1.getName());
 					row.add(exp1.getOp());
 					row.add(exp1.getType());
@@ -3350,7 +3912,7 @@ public class SQLParser
 			{
 				if (exp1 != null)
 				{
-					ArrayList<Object> row = new ArrayList<Object>();
+					final ArrayList<Object> row = new ArrayList<Object>();
 					row.add(exp1.getName());
 					row.add(exp1.getOp());
 					row.add(exp1.getType());
@@ -3493,7 +4055,7 @@ public class SQLParser
 				}
 				else if (prereq1 != -1)
 				{
-					ArrayList<Object> bottom = getBottomRow(row);
+					final ArrayList<Object> bottom = getBottomRow(row);
 					bottom.remove(5);
 					bottom.add(5, prereq1);
 				}
@@ -3585,7 +4147,7 @@ public class SQLParser
 				}
 				else if (prereq1 != -1)
 				{
-					ArrayList<Object> bottom = getBottomRow(row);
+					final ArrayList<Object> bottom = getBottomRow(row);
 					bottom.remove(5);
 					bottom.add(5, prereq1);
 				}
@@ -3665,7 +4227,7 @@ public class SQLParser
 				}
 				else if (exp2.getPrereq() != -1 && myPrereq != -1)
 				{
-					ArrayList<Object> bottom = getBottomRow(getRow(myPrereq));
+					final ArrayList<Object> bottom = getBottomRow(getRow(myPrereq));
 					bottom.remove(5);
 					bottom.add(5, exp2.getPrereq());
 				}
@@ -3722,7 +4284,7 @@ public class SQLParser
 				int prereq = -1;
 				if (exp2 != null)
 				{
-					ArrayList<Object> row = new ArrayList<Object>();
+					final ArrayList<Object> row = new ArrayList<Object>();
 					row.add(exp2.getName());
 					row.add(exp2.getOp());
 					row.add(exp2.getType());
@@ -3733,7 +4295,7 @@ public class SQLParser
 					row.add(sub);
 					row.add(false);
 					complex.add(row);
-					ArrayList<Object> bottom = getBottomRow(row);
+					final ArrayList<Object> bottom = getBottomRow(row);
 					bottom.remove(5);
 					bottom.add(5, exp1.getPrereq());
 				}
@@ -3791,7 +4353,7 @@ public class SQLParser
 				int prereq = -1;
 				if (exp1 != null)
 				{
-					ArrayList<Object> row = new ArrayList<Object>();
+					final ArrayList<Object> row = new ArrayList<Object>();
 					row.add(exp1.getName());
 					row.add(exp1.getOp());
 					row.add(exp1.getType());
@@ -3802,7 +4364,7 @@ public class SQLParser
 					row.add(sub);
 					row.add(false);
 					complex.add(row);
-					ArrayList<Object> bottom = getBottomRow(row);
+					final ArrayList<Object> bottom = getBottomRow(row);
 					bottom.remove(5);
 					bottom.add(5, exp2.getPrereq());
 				}
@@ -3827,25 +4389,25 @@ public class SQLParser
 		return null;
 	}
 
-	private Operator buildOperatorTreeFromFetchFirst(FetchFirst fetchFirst, Operator op) throws ParseException
+	private Operator buildOperatorTreeFromFetchFirst(final FetchFirst fetchFirst, final Operator op) throws ParseException
 	{
 		try
 		{
-			TopOperator top = new TopOperator(fetchFirst.getNumber(), meta);
+			final TopOperator top = new TopOperator(fetchFirst.getNumber(), meta);
 			top.add(op);
 			return top;
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			throw new ParseException(e.getMessage());
 		}
 	}
 
-	private Operator buildOperatorTreeFromFrom(FromClause from, SubSelect sub) throws Exception
+	private Operator buildOperatorTreeFromFrom(final FromClause from, final SubSelect sub) throws Exception
 	{
-		ArrayList<TableReference> tables = from.getTables();
-		ArrayList<Operator> ops = new ArrayList<Operator>(tables.size());
-		for (TableReference table : tables)
+		final ArrayList<TableReference> tables = from.getTables();
+		final ArrayList<Operator> ops = new ArrayList<Operator>(tables.size());
+		for (final TableReference table : tables)
 		{
 			ops.add(buildOperatorTreeFromTableReference(table, sub));
 		}
@@ -3859,13 +4421,13 @@ public class SQLParser
 		ops.remove(0);
 		while (ops.size() > 0)
 		{
-			Operator product = new ProductOperator(meta);
+			final Operator product = new ProductOperator(meta);
 			try
 			{
 				product.add(top);
 				product.add(ops.get(0));
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
@@ -3876,7 +4438,7 @@ public class SQLParser
 		return top;
 	}
 
-	private Operator buildOperatorTreeFromFullSelect(FullSelect select) throws Exception
+	private Operator buildOperatorTreeFromFullSelect(final FullSelect select) throws Exception
 	{
 		Operator op;
 		if (select.getSubSelect() != null)
@@ -3889,9 +4451,9 @@ public class SQLParser
 		}
 
 		// handle connectedSelects
-		ArrayList<ConnectedSelect> connected = select.getConnected();
+		final ArrayList<ConnectedSelect> connected = select.getConnected();
 		Operator lhs = op;
-		for (ConnectedSelect cs : connected)
+		for (final ConnectedSelect cs : connected)
 		{
 			Operator rhs;
 			if (cs.getFull() != null)
@@ -3904,16 +4466,16 @@ public class SQLParser
 			}
 
 			verifyColumnsAreTheSame(lhs, rhs);
-			String combo = cs.getCombo();
+			final String combo = cs.getCombo();
 			if (combo.equals("UNION ALL"))
 			{
-				Operator newOp = new UnionOperator(false, meta);
+				final Operator newOp = new UnionOperator(false, meta);
 				try
 				{
 					newOp.add(lhs);
 					newOp.add(rhs);
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
@@ -3921,13 +4483,13 @@ public class SQLParser
 			}
 			else if (combo.equals("UNION"))
 			{
-				Operator newOp = new UnionOperator(true, meta);
+				final Operator newOp = new UnionOperator(true, meta);
 				try
 				{
 					newOp.add(lhs);
 					newOp.add(rhs);
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
@@ -3935,13 +4497,13 @@ public class SQLParser
 			}
 			else if (combo.equals("INTERSECT"))
 			{
-				Operator newOp = new IntersectOperator(meta);
+				final Operator newOp = new IntersectOperator(meta);
 				try
 				{
 					newOp.add(lhs);
 					newOp.add(rhs);
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
@@ -3949,13 +4511,13 @@ public class SQLParser
 			}
 			else if (combo.equals("EXCEPT"))
 			{
-				Operator newOp = new ExceptOperator(meta);
+				final Operator newOp = new ExceptOperator(meta);
 				try
 				{
 					newOp.add(lhs);
 					newOp.add(rhs);
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
@@ -3983,7 +4545,7 @@ public class SQLParser
 		return op;
 	}
 
-	private Operator buildOperatorTreeFromGroupBy(GroupBy groupBy, Operator op, SubSelect select) throws ParseException
+	private Operator buildOperatorTreeFromGroupBy(final GroupBy groupBy, final Operator op, final SubSelect select) throws ParseException
 	{
 		ArrayList<Column> cols;
 		ArrayList<String> vStr;
@@ -3992,7 +4554,7 @@ public class SQLParser
 		{
 			cols = groupBy.getCols();
 			vStr = new ArrayList<String>(cols.size());
-			for (Column col : cols)
+			for (final Column col : cols)
 			{
 				String colString = "";
 				if (col.getTable() != null)
@@ -4010,18 +4572,18 @@ public class SQLParser
 			vStr = new ArrayList<String>();
 		}
 
-		ArrayList<AggregateOperator> ops = new ArrayList<AggregateOperator>();
-		for (ArrayList<Object> row : complex)
+		final ArrayList<AggregateOperator> ops = new ArrayList<AggregateOperator>();
+		for (final ArrayList<Object> row : complex)
 		{
 			// colName, op, type, id, exp, prereq, done
 			if ((Boolean)row.get(7) == false && (Integer)row.get(2) == TYPE_GROUPBY && (row.get(6) == null || ((SubSelect)row.get(6)).equals(select)))
 			{
-				AggregateOperator agop = (AggregateOperator)row.get(1);
+				final AggregateOperator agop = (AggregateOperator)row.get(1);
 				if (agop instanceof AvgOperator)
 				{
-					String col = getMatchingCol(op, agop.getInputColumn());
+					final String col = getMatchingCol(op, agop.getInputColumn());
 					agop.setInput(col);
-					String type = op.getCols2Types().get(col);
+					final String type = op.getCols2Types().get(col);
 
 					if (type == null)
 					{
@@ -4040,9 +4602,9 @@ public class SQLParser
 				{
 					if (!agop.getInputColumn().equals(agop.outputColumn()))
 					{
-						String col = getMatchingCol(op, agop.getInputColumn());
+						final String col = getMatchingCol(op, agop.getInputColumn());
 						agop.setInput(col);
-						String type = op.getCols2Types().get(col);
+						final String type = op.getCols2Types().get(col);
 
 						if (type == null)
 						{
@@ -4054,9 +4616,9 @@ public class SQLParser
 				{
 					if (!agop.getInputColumn().equals(agop.outputColumn()))
 					{
-						String col = getMatchingCol(op, agop.getInputColumn());
+						final String col = getMatchingCol(op, agop.getInputColumn());
 						agop.setInput(col);
-						String type = op.getCols2Types().get(col);
+						final String type = op.getCols2Types().get(col);
 
 						if (type == null)
 						{
@@ -4067,9 +4629,9 @@ public class SQLParser
 				}
 				else if (agop instanceof MaxOperator)
 				{
-					String col = getMatchingCol(op, agop.getInputColumn());
+					final String col = getMatchingCol(op, agop.getInputColumn());
 					agop.setInput(col);
-					String type = op.getCols2Types().get(col);
+					final String type = op.getCols2Types().get(col);
 
 					if (type == null)
 					{
@@ -4119,9 +4681,9 @@ public class SQLParser
 				}
 				else if (agop instanceof MinOperator)
 				{
-					String col = getMatchingCol(op, agop.getInputColumn());
+					final String col = getMatchingCol(op, agop.getInputColumn());
 					agop.setInput(col);
-					String type = op.getCols2Types().get(col);
+					final String type = op.getCols2Types().get(col);
 
 					if (type == null)
 					{
@@ -4171,9 +4733,9 @@ public class SQLParser
 				}
 				else if (agop instanceof SumOperator)
 				{
-					String col = getMatchingCol(op, agop.getInputColumn());
+					final String col = getMatchingCol(op, agop.getInputColumn());
 					agop.setInput(col);
-					String type = op.getCols2Types().get(col);
+					final String type = op.getCols2Types().get(col);
 
 					if (type == null)
 					{
@@ -4204,12 +4766,12 @@ public class SQLParser
 		{
 			try
 			{
-				MultiOperator multi = new MultiOperator(ops, vStr, meta, false);
+				final MultiOperator multi = new MultiOperator(ops, vStr, meta, false);
 				try
 				{
 					multi.add(op);
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.debug("Exception trying to add MultiOperator.  Tree is: ");
 					printTree(op, 0);
@@ -4217,7 +4779,7 @@ public class SQLParser
 				}
 				return multi;
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
@@ -4228,15 +4790,15 @@ public class SQLParser
 		}
 	}
 
-	private Operator buildOperatorTreeFromHaving(Having having, Operator op, SubSelect sub) throws Exception
+	private Operator buildOperatorTreeFromHaving(final Having having, final Operator op, final SubSelect sub) throws Exception
 	{
-		SearchCondition search = having.getSearch();
+		final SearchCondition search = having.getSearch();
 		return buildOperatorTreeFromSearchCondition(search, op, sub);
 	}
 
-	private ArrayList<Operator> buildOperatorTreeFromInsert(Insert insert) throws Exception
+	private ArrayList<Operator> buildOperatorTreeFromInsert(final Insert insert) throws Exception
 	{
-		TableName table = insert.getTable();
+		final TableName table = insert.getTable();
 		String schema = null;
 		String tbl = null;
 		if (table.getSchema() == null)
@@ -4250,33 +4812,33 @@ public class SQLParser
 			tbl = table.getName();
 		}
 
-		if (!meta.verifyTableExistence(schema, tbl, tx))
+		if (!MetaData.verifyTableExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table does not exist");
 		}
 
 		if (insert.fromSelect())
 		{
-			Operator op = buildOperatorTreeFromFullSelect(insert.getSelect());
-			RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
+			final Operator op = buildOperatorTreeFromFullSelect(insert.getSelect());
+			final RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
 			retval.add(op);
-			Phase1 p1 = new Phase1(retval, tx);
+			final Phase1 p1 = new Phase1(retval, tx);
 			p1.optimize();
 			new Phase2(retval, tx).optimize();
 			new Phase3(retval, tx).optimize();
 			new Phase4(retval, tx).optimize();
 			new Phase5(retval, tx, p1.likelihoodCache).optimize();
 
-			if (!meta.verifyInsert(schema, tbl, op, tx))
+			if (!MetaData.verifyInsert(schema, tbl, op, tx))
 			{
 				throw new ParseException("The number of columns and/or data types from the select portion do not match the table being inserted into");
 			}
 
-			Operator iOp = new InsertOperator(schema, tbl, meta);
-			Operator child = retval.children().get(0);
+			final Operator iOp = new InsertOperator(schema, tbl, meta);
+			final Operator child = retval.children().get(0);
 			retval.removeChild(child);
 			iOp.add(child);
-			ArrayList<Operator> iOps = new ArrayList<Operator>(1);
+			final ArrayList<Operator> iOps = new ArrayList<Operator>(1);
 			iOps.add(iOp);
 			return iOps;
 		}
@@ -4285,9 +4847,9 @@ public class SQLParser
 			if (!insert.isMulti())
 			{
 				Operator op = new DummyOperator(meta);
-				for (Expression exp : insert.getExpressions())
+				for (final Expression exp : insert.getExpressions())
 				{
-					OperatorTypeAndName otan = buildOperatorTreeFromExpression(exp, null, null);
+					final OperatorTypeAndName otan = buildOperatorTreeFromExpression(exp, null, null);
 					if (otan.getType() != SQLParser.TYPE_INLINE && otan.getType() != SQLParser.TYPE_DATE)
 					{
 						throw new ParseException("Invalid expression in insert statement");
@@ -4295,26 +4857,26 @@ public class SQLParser
 
 					if (otan.getType() == SQLParser.TYPE_DATE)
 					{
-						SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-						String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
-						String name = "._E" + suffix++;
-						ExtendObjectOperator operator = new ExtendObjectOperator(DateParser.parse(dateString), name, meta);
+						final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+						final String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
+						final String name = "._E" + suffix++;
+						final ExtendObjectOperator operator = new ExtendObjectOperator(DateParser.parse(dateString), name, meta);
 						operator.add(op);
 						op = operator;
 					}
 					else
 					{
-						Operator operator = (Operator)otan.getOp();
+						final Operator operator = (Operator)otan.getOp();
 						operator.add(op);
 						op = operator;
 					}
 				}
 
-				if (!meta.verifyInsert(schema, tbl, op, tx))
+				if (!MetaData.verifyInsert(schema, tbl, op, tx))
 				{
 					throw new ParseException("The number of columns and/or data types from the select portion do not match the table being inserted into");
 				}
-			
+
 				Operator temp = op;
 				while (temp.children() != null && temp.children().size() > 0)
 				{
@@ -4322,31 +4884,31 @@ public class SQLParser
 					{
 						((ExtendOperator)temp).setSingleThreaded();
 					}
-				
+
 					temp = temp.children().get(0);
 				}
-			
+
 				if (temp instanceof ExtendOperator)
 				{
 					((ExtendOperator)temp).setSingleThreaded();
 				}
 
-				Operator iOp = new InsertOperator(schema, tbl, meta);
+				final Operator iOp = new InsertOperator(schema, tbl, meta);
 				iOp.add(op);
-				ArrayList<Operator> iOps = new ArrayList<Operator>(1);
+				final ArrayList<Operator> iOps = new ArrayList<Operator>(1);
 				iOps.add(iOp);
 				return iOps;
 			}
 			else
 			{
-				//multi-row insert
-				ArrayList<Operator> iOps = new ArrayList<Operator>(1);
-				for (ArrayList<Expression> exps : insert.getMultiExpressions())
+				// multi-row insert
+				final ArrayList<Operator> iOps = new ArrayList<Operator>(1);
+				for (final ArrayList<Expression> exps : insert.getMultiExpressions())
 				{
 					Operator op = new DummyOperator(meta);
-					for (Expression exp : exps)
+					for (final Expression exp : exps)
 					{
-						OperatorTypeAndName otan = buildOperatorTreeFromExpression(exp, null, null);
+						final OperatorTypeAndName otan = buildOperatorTreeFromExpression(exp, null, null);
 						if (otan.getType() != SQLParser.TYPE_INLINE && otan.getType() != SQLParser.TYPE_DATE)
 						{
 							throw new ParseException("Invalid expression in insert statement");
@@ -4354,26 +4916,26 @@ public class SQLParser
 
 						if (otan.getType() == SQLParser.TYPE_DATE)
 						{
-							SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-							String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
-							String name = "._E" + suffix++;
-							ExtendObjectOperator operator = new ExtendObjectOperator(DateParser.parse(dateString), name, meta);
+							final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+							final String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
+							final String name = "._E" + suffix++;
+							final ExtendObjectOperator operator = new ExtendObjectOperator(DateParser.parse(dateString), name, meta);
 							operator.add(op);
 							op = operator;
 						}
 						else
 						{
-							Operator operator = (Operator)otan.getOp();
+							final Operator operator = (Operator)otan.getOp();
 							operator.add(op);
 							op = operator;
 						}
 					}
 
-					if (!meta.verifyInsert(schema, tbl, op, tx))
+					if (!MetaData.verifyInsert(schema, tbl, op, tx))
 					{
 						throw new ParseException("The number of columns and/or data types from the select portion do not match the table being inserted into");
 					}
-			
+
 					Operator temp = op;
 					while (temp.children() != null && temp.children().size() > 0)
 					{
@@ -4381,28 +4943,28 @@ public class SQLParser
 						{
 							((ExtendOperator)temp).setSingleThreaded();
 						}
-				
+
 						temp = temp.children().get(0);
 					}
-			
+
 					if (temp instanceof ExtendOperator)
 					{
 						((ExtendOperator)temp).setSingleThreaded();
 					}
 
-					Operator iOp = new InsertOperator(schema, tbl, meta);
+					final Operator iOp = new InsertOperator(schema, tbl, meta);
 					iOp.add(op);
 					iOps.add(iOp);
 				}
-				
+
 				return iOps;
 			}
 		}
 	}
 
-	private Operator buildOperatorTreeFromLoad(Load load) throws Exception
+	private Operator buildOperatorTreeFromLoad(final Load load) throws Exception
 	{
-		TableName table = load.getTable();
+		final TableName table = load.getTable();
 		String schema = null;
 		String tbl = null;
 		if (table.getSchema() == null)
@@ -4416,7 +4978,7 @@ public class SQLParser
 			tbl = table.getName();
 		}
 
-		if (!meta.verifyTableExistence(schema, tbl, tx))
+		if (!MetaData.verifyTableExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table does not exist");
 		}
@@ -4424,23 +4986,23 @@ public class SQLParser
 		return new LoadOperator(schema, tbl, load.isReplace(), load.getDelimiter(), load.getGlob(), meta);
 	}
 
-	private Operator buildOperatorTreeFromOrderBy(OrderBy orderBy, Operator op) throws ParseException
+	private Operator buildOperatorTreeFromOrderBy(final OrderBy orderBy, final Operator op) throws ParseException
 	{
-		ArrayList<SortKey> keys = orderBy.getKeys();
-		ArrayList<String> columns = new ArrayList<String>(keys.size());
-		ArrayList<Boolean> orders = new ArrayList<Boolean>(keys.size());
+		final ArrayList<SortKey> keys = orderBy.getKeys();
+		final ArrayList<String> columns = new ArrayList<String>(keys.size());
+		final ArrayList<Boolean> orders = new ArrayList<Boolean>(keys.size());
 
-		for (SortKey key : keys)
+		for (final SortKey key : keys)
 		{
 			String colStr = null;
 			if (key.isColumn())
 			{
-				Column col = key.getColumn();
+				final Column col = key.getColumn();
 				if (col.getTable() != null)
 				{
 					colStr = col.getTable() + "." + col.getColumn();
 					int matches = 0;
-					for (String c : op.getPos2Col().values())
+					for (final String c : op.getPos2Col().values())
 					{
 						if (c.equals(colStr))
 						{
@@ -4462,12 +5024,12 @@ public class SQLParser
 					int matches = 0;
 					String table = null;
 					boolean withDot = true;
-					for (String c : op.getPos2Col().values())
+					for (final String c : op.getPos2Col().values())
 					{
 						if (c.contains("."))
 						{
-							String p1 = c.substring(0, c.indexOf('.'));
-							String p2 = c.substring(c.indexOf('.') + 1);
+							final String p1 = c.substring(0, c.indexOf('.'));
+							final String p2 = c.substring(c.indexOf('.') + 1);
 
 							if (p2.equals(col.getColumn()))
 							{
@@ -4519,20 +5081,20 @@ public class SQLParser
 
 		try
 		{
-			SortOperator sort = new SortOperator(columns, orders, meta);
+			final SortOperator sort = new SortOperator(columns, orders, meta);
 			sort.add(op);
 			return sort;
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			throw new ParseException(e.getMessage());
 		}
 	}
 
-	private Operator buildOperatorTreeFromRunstats(Runstats runstats) throws Exception
+	private Operator buildOperatorTreeFromRunstats(final Runstats runstats) throws Exception
 	{
-		TableName table = runstats.getTable();
+		final TableName table = runstats.getTable();
 		String schema = null;
 		String tbl = null;
 		if (table.getSchema() == null)
@@ -4546,8 +5108,8 @@ public class SQLParser
 			tbl = table.getName();
 		}
 
-		Transaction tx2 = new Transaction(Transaction.ISOLATION_RR);
-		if (!meta.verifyTableExistence(schema, tbl, tx2))
+		final Transaction tx2 = new Transaction(Transaction.ISOLATION_RR);
+		if (!MetaData.verifyTableExistence(schema, tbl, tx2))
 		{
 			tx2.commit();
 			throw new ParseException("Table does not exist");
@@ -4557,14 +5119,14 @@ public class SQLParser
 		return new RunstatsOperator(schema, tbl, meta);
 	}
 
-	private Operator buildOperatorTreeFromSearchCondition(SearchCondition search, Operator op, SubSelect sub) throws Exception
+	private Operator buildOperatorTreeFromSearchCondition(final SearchCondition search, Operator op, final SubSelect sub) throws Exception
 	{
 		if (search.getConnected() != null && search.getConnected().size() > 0)
 		{
 			convertToCNF(search);
 		}
 
-		SearchClause clause = search.getClause();
+		final SearchClause clause = search.getClause();
 
 		if (search.getConnected() != null && search.getConnected().size() > 0 && search.getConnected().get(0).isAnd())
 		{
@@ -4574,11 +5136,11 @@ public class SQLParser
 			}
 			else
 			{
-				ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+				final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
 				op = buildOperatorTreeFromSearchCondition(new SearchCondition(search.getClause(), cscs), op, sub);
 			}
 
-			for (ConnectedSearchClause csc : search.getConnected())
+			for (final ConnectedSearchClause csc : search.getConnected())
 			{
 				if (csc.getSearch().getPredicate() == null)
 				{
@@ -4586,7 +5148,7 @@ public class SQLParser
 				}
 				else
 				{
-					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+					final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
 					op = buildOperatorTreeFromSearchCondition(new SearchCondition(csc.getSearch(), cscs), op, sub);
 				}
 			}
@@ -4596,16 +5158,16 @@ public class SQLParser
 
 		if (search.getConnected() == null || search.getConnected().size() == 0)
 		{
-			boolean negated = clause.getNegated();
+			final boolean negated = clause.getNegated();
 			if (clause.getPredicate() != null)
 			{
-				Predicate pred = clause.getPredicate();
+				final Predicate pred = clause.getPredicate();
 				if (pred instanceof ExistsPredicate)
 				{
 					if (isCorrelated(((ExistsPredicate)pred).getSelect()))
 					{
-						SubSelect clone = ((ExistsPredicate)pred).getSelect().clone();
-						SearchCondition join = rewriteCorrelatedSubSelect(clone); // update
+						final SubSelect clone = ((ExistsPredicate)pred).getSelect().clone();
+						final SearchCondition join = rewriteCorrelatedSubSelect(clone); // update
 						// select
 						// list
 						// and
@@ -4633,9 +5195,9 @@ public class SQLParser
 						throw new ParseException("An EXISTS predicate must be correlated");
 					}
 				}
-				Expression lhs = pred.getLHS();
+				final Expression lhs = pred.getLHS();
 				String o = pred.getOp();
-				Expression rhs = pred.getRHS();
+				final Expression rhs = pred.getRHS();
 
 				if (o.equals("IN") || o.equals("NI"))
 				{
@@ -4645,12 +5207,12 @@ public class SQLParser
 					{
 						if (lhs.isLiteral())
 						{
-							Literal literal = lhs.getLiteral();
+							final Literal literal = lhs.getLiteral();
 							if (literal.isNull())
 							{
 								// TODO
 							}
-							Object value = literal.getValue();
+							final Object value = literal.getValue();
 							if (value instanceof String)
 							{
 								lhsStr = "'" + value.toString() + "'";
@@ -4662,13 +5224,13 @@ public class SQLParser
 						}
 						else if (lhs.isColumn())
 						{
-							Column col = lhs.getColumn();
+							final Column col = lhs.getColumn();
 							// is column unambiguous?
 							if (col.getTable() != null)
 							{
 								lhsStr = col.getTable() + "." + col.getColumn();
 								int matches = 0;
-								for (String c : op.getPos2Col().values())
+								for (final String c : op.getPos2Col().values())
 								{
 									if (c.equals(lhsStr))
 									{
@@ -4689,10 +5251,10 @@ public class SQLParser
 							{
 								int matches = 0;
 								String table = null;
-								for (String c : op.getPos2Col().values())
+								for (final String c : op.getPos2Col().values())
 								{
-									String p1 = c.substring(0, c.indexOf('.'));
-									String p2 = c.substring(c.indexOf('.') + 1);
+									final String p1 = c.substring(0, c.indexOf('.'));
+									final String p2 = c.substring(c.indexOf('.') + 1);
 
 									if (p2.equals(col.getColumn()))
 									{
@@ -4704,7 +5266,7 @@ public class SQLParser
 								if (matches == 0)
 								{
 									// could be a complex column
-									for (ArrayList<Object> row : complex)
+									for (final ArrayList<Object> row : complex)
 									{
 										// colName, op, type, id, exp, prereq,
 										// done
@@ -4724,7 +5286,7 @@ public class SQLParser
 										throw new ParseException("Column " + lhsStr + " is ambiguous");
 									}
 
-									for (ArrayList<Object> row : complex)
+									for (final ArrayList<Object> row : complex)
 									{
 										// colName, op, type, id, exp, prereq,
 										// done
@@ -4757,18 +5319,18 @@ public class SQLParser
 						}
 						else if (lhs.isSelect())
 						{
-							SubSelect sub2 = lhs.getSelect();
+							final SubSelect sub2 = lhs.getSelect();
 							if (isCorrelated(sub))
 							{
 								// lhsStr = getOneCol(sub);
-								SubSelect clone = sub2.clone();
-								SearchCondition join = rewriteCorrelatedSubSelect(clone); // update
+								final SubSelect clone = sub2.clone();
+								final SearchCondition join = rewriteCorrelatedSubSelect(clone); // update
 								// select
 								// list
 								// and
 								// search
 								// conditions
-								ProductOperator product = new ProductOperator(meta);
+								final ProductOperator product = new ProductOperator(meta);
 								try
 								{
 									product.add(op);
@@ -4777,7 +5339,7 @@ public class SQLParser
 									lhsStr = op2.getPos2Col().get(0);
 									product.add(op2);
 								}
-								catch (Exception e)
+								catch (final Exception e)
 								{
 									throw new ParseException(e.getMessage());
 								}
@@ -4785,12 +5347,12 @@ public class SQLParser
 							}
 							else
 							{
-								ProductOperator extend = new ProductOperator(meta);
+								final ProductOperator extend = new ProductOperator(meta);
 								if (!ensuresOnlyOneRow(sub))
 								{
 									throw new ParseException("A SubSelect is present which could return more than 1 row, but cannot do so.  Please rewrite it to ensure only 1 row is returned.");
 								}
-								Operator rhs2 = buildOperatorTreeFromSubSelect(sub, true);
+								final Operator rhs2 = buildOperatorTreeFromSubSelect(sub, true);
 								if (rhs2.getCols2Pos().size() != 1)
 								{
 									throw new ParseException("A SubSelect is present which must return only 1 column, but insted returns more than 1");
@@ -4800,7 +5362,7 @@ public class SQLParser
 									extend.add(op);
 									extend.add(rhs2);
 								}
-								catch (Exception e)
+								catch (final Exception e)
 								{
 									throw new ParseException(e.getMessage());
 								}
@@ -4813,7 +5375,7 @@ public class SQLParser
 							// check to see if complex already contains this
 							// expression
 							boolean found = false;
-							for (ArrayList<Object> row : complex)
+							for (final ArrayList<Object> row : complex)
 							{
 								// colName, op, type, id, exp, prereq, sub, done
 								if (row.get(4).equals(lhs) && row.get(6).equals(sub))
@@ -4831,7 +5393,7 @@ public class SQLParser
 							if (!found)
 							{
 								// if not, build it
-								OperatorTypeAndName otan = buildOperatorTreeFromExpression(lhs, null, sub);
+								final OperatorTypeAndName otan = buildOperatorTreeFromExpression(lhs, null, sub);
 								if (otan.getType() == TYPE_DAYS)
 								{
 									throw new ParseException("A type of DAYS is not allowed for a predicate");
@@ -4849,8 +5411,8 @@ public class SQLParser
 
 								if (otan.getType() == TYPE_DATE)
 								{
-									SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-									String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
+									final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+									final String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
 									// String name = "._E" + suffix++;
 									// ExtendObjectOperator operator = new
 									// ExtendObjectOperator(DateParser.parse(dateString),
@@ -4873,7 +5435,7 @@ public class SQLParser
 								{
 									// colName, op, type, id, exp, prereq, sub,
 									// done
-									ArrayList<Object> row = new ArrayList<Object>();
+									final ArrayList<Object> row = new ArrayList<Object>();
 									row.add(otan.getName());
 									row.add(otan.getOp());
 									row.add(otan.getType());
@@ -4906,55 +5468,55 @@ public class SQLParser
 					{
 						if ((o.equals("IN") && !negated) || (o.equals("NI") && negated))
 						{
-							ArrayList<Expression> list = rhs.getList();
-							Predicate predicate = new Predicate(lhs, "E", list.get(0));
-							SearchClause s1 = new SearchClause(predicate, false);
-							ArrayList<ConnectedSearchClause> ss = new ArrayList<ConnectedSearchClause>();
+							final ArrayList<Expression> list = rhs.getList();
+							final Predicate predicate = new Predicate(lhs, "E", list.get(0));
+							final SearchClause s1 = new SearchClause(predicate, false);
+							final ArrayList<ConnectedSearchClause> ss = new ArrayList<ConnectedSearchClause>();
 							int i = 1;
 							final int size = list.size();
 							while (i < size)
 							{
-								Expression exp = list.get(i);
-								Predicate p = new Predicate(lhs, "E", exp);
-								SearchClause s = new SearchClause(p, false);
-								ConnectedSearchClause cs = new ConnectedSearchClause(s, false);
+								final Expression exp = list.get(i);
+								final Predicate p = new Predicate(lhs, "E", exp);
+								final SearchClause s = new SearchClause(p, false);
+								final ConnectedSearchClause cs = new ConnectedSearchClause(s, false);
 								ss.add(cs);
 								i++;
 							}
 
-							SearchCondition sc = new SearchCondition(s1, ss);
+							final SearchCondition sc = new SearchCondition(s1, ss);
 							return buildOperatorTreeFromSearchCondition(sc, op, sub);
 						}
 						else
 						{
-							ArrayList<Expression> list = rhs.getList();
-							Predicate predicate = new Predicate(lhs, "NE", list.get(0));
-							SearchClause s1 = new SearchClause(predicate, false);
-							ArrayList<ConnectedSearchClause> ss = new ArrayList<ConnectedSearchClause>();
+							final ArrayList<Expression> list = rhs.getList();
+							final Predicate predicate = new Predicate(lhs, "NE", list.get(0));
+							final SearchClause s1 = new SearchClause(predicate, false);
+							final ArrayList<ConnectedSearchClause> ss = new ArrayList<ConnectedSearchClause>();
 							int i = 1;
 							final int size = list.size();
 							while (i < size)
 							{
-								Expression exp = list.get(i);
-								Predicate p = new Predicate(lhs, "NE", exp);
-								SearchClause s = new SearchClause(p, false);
-								ConnectedSearchClause cs = new ConnectedSearchClause(s, true);
+								final Expression exp = list.get(i);
+								final Predicate p = new Predicate(lhs, "NE", exp);
+								final SearchClause s = new SearchClause(p, false);
+								final ConnectedSearchClause cs = new ConnectedSearchClause(s, true);
 								ss.add(cs);
 								i++;
 							}
 
-							SearchCondition sc = new SearchCondition(s1, ss);
+							final SearchCondition sc = new SearchCondition(s1, ss);
 							return buildOperatorTreeFromSearchCondition(sc, op, sub);
 						}
 					}
 					else if (rhs.isSelect())
 					{
-						SubSelect sub2 = rhs.getSelect();
+						final SubSelect sub2 = rhs.getSelect();
 						if (isCorrelated(sub2))
 						{
 							// rhsStr = getOneCol(sub);
-							SubSelect clone = sub2.clone();
-							SearchCondition join = rewriteCorrelatedSubSelect(clone); // update
+							final SubSelect clone = sub2.clone();
+							final SearchCondition join = rewriteCorrelatedSubSelect(clone); // update
 							// select
 							// list
 							// and
@@ -4970,7 +5532,7 @@ public class SQLParser
 								{
 									op = connectWithSemiJoin(op, rhs2, join, new Filter(lhsStr, "E", rhsStr));
 								}
-								catch (Exception e)
+								catch (final Exception e)
 								{
 									throw new ParseException(e.getMessage());
 								}
@@ -4985,7 +5547,7 @@ public class SQLParser
 								{
 									op = connectWithAntiJoin(op, rhs2, join, new Filter(lhsStr, "E", rhsStr));
 								}
-								catch (Exception e)
+								catch (final Exception e)
 								{
 									throw new ParseException(e.getMessage());
 								}
@@ -4995,37 +5557,37 @@ public class SQLParser
 						}
 						else
 						{
-							Operator rhs2 = buildOperatorTreeFromSubSelect(sub2, true);
+							final Operator rhs2 = buildOperatorTreeFromSubSelect(sub2, true);
 							rhsStr = rhs2.getPos2Col().get(0);
 							verifyTypes(lhsStr, op, rhsStr, rhs2);
 							if ((o.equals("IN") && !negated) || (o.equals("NI") && negated))
 							{
-								ArrayList<String> cols = new ArrayList<String>();
+								final ArrayList<String> cols = new ArrayList<String>();
 								cols.add(lhsStr);
 								try
 								{
-									SemiJoinOperator join = new SemiJoinOperator(cols, meta);
+									final SemiJoinOperator join = new SemiJoinOperator(cols, meta);
 									join.add(op);
 									join.add(rhs2);
 									return join;
 								}
-								catch (Exception e)
+								catch (final Exception e)
 								{
 									throw new ParseException(e.getMessage());
 								}
 							}
 							else
 							{
-								ArrayList<String> cols = new ArrayList<String>();
+								final ArrayList<String> cols = new ArrayList<String>();
 								cols.add(lhsStr);
 								try
 								{
-									AntiJoinOperator join = new AntiJoinOperator(cols, meta);
+									final AntiJoinOperator join = new AntiJoinOperator(cols, meta);
 									join.add(op);
 									join.add(rhs2);
 									return join;
 								}
-								catch (Exception e)
+								catch (final Exception e)
 								{
 									throw new ParseException(e.getMessage());
 								}
@@ -5043,12 +5605,12 @@ public class SQLParser
 
 				if (lhs.isLiteral())
 				{
-					Literal literal = lhs.getLiteral();
+					final Literal literal = lhs.getLiteral();
 					if (literal.isNull())
 					{
 						// TODO
 					}
-					Object value = literal.getValue();
+					final Object value = literal.getValue();
 					if (value instanceof String)
 					{
 						lhsStr = "'" + value.toString() + "'";
@@ -5060,13 +5622,13 @@ public class SQLParser
 				}
 				else if (lhs.isColumn())
 				{
-					Column col = lhs.getColumn();
+					final Column col = lhs.getColumn();
 					// is column unambiguous?
 					if (col.getTable() != null)
 					{
 						lhsStr = col.getTable() + "." + col.getColumn();
 						int matches = 0;
-						for (String c : op.getPos2Col().values())
+						for (final String c : op.getPos2Col().values())
 						{
 							if (c.equals(lhsStr))
 							{
@@ -5087,10 +5649,10 @@ public class SQLParser
 					{
 						int matches = 0;
 						String table = null;
-						for (String c : op.getPos2Col().values())
+						for (final String c : op.getPos2Col().values())
 						{
-							String p1 = c.substring(0, c.indexOf('.'));
-							String p2 = c.substring(c.indexOf('.') + 1);
+							final String p1 = c.substring(0, c.indexOf('.'));
+							final String p2 = c.substring(c.indexOf('.') + 1);
 
 							if (p2.equals(col.getColumn()))
 							{
@@ -5102,7 +5664,7 @@ public class SQLParser
 						if (matches == 0)
 						{
 							// could be a complex column
-							for (ArrayList<Object> row : complex)
+							for (final ArrayList<Object> row : complex)
 							{
 								// colName, op, type, id, exp, prereq, done
 								if (row.get(0).equals("." + col.getColumn()) && row.get(6).equals(sub))
@@ -5121,7 +5683,7 @@ public class SQLParser
 								throw new ParseException("Column " + lhsStr + " is ambiguous");
 							}
 
-							for (ArrayList<Object> row : complex)
+							for (final ArrayList<Object> row : complex)
 							{
 								// colName, op, type, id, exp, prereq, done
 								if (row.get(0).equals("." + col.getColumn()) && row.get(6).equals(sub))
@@ -5153,18 +5715,18 @@ public class SQLParser
 				}
 				else if (lhs.isSelect())
 				{
-					SubSelect sub2 = lhs.getSelect();
+					final SubSelect sub2 = lhs.getSelect();
 					if (isCorrelated(sub))
 					{
 						// lhsStr = getOneCol(sub);
-						SubSelect clone = sub2.clone();
-						SearchCondition join = rewriteCorrelatedSubSelect(clone); // update
+						final SubSelect clone = sub2.clone();
+						final SearchCondition join = rewriteCorrelatedSubSelect(clone); // update
 						// select
 						// list
 						// and
 						// search
 						// conditions
-						ProductOperator product = new ProductOperator(meta);
+						final ProductOperator product = new ProductOperator(meta);
 						try
 						{
 							product.add(op);
@@ -5173,7 +5735,7 @@ public class SQLParser
 							lhsStr = op2.getPos2Col().get(0);
 							product.add(op2);
 						}
-						catch (Exception e)
+						catch (final Exception e)
 						{
 							throw new ParseException(e.getMessage());
 						}
@@ -5181,12 +5743,12 @@ public class SQLParser
 					}
 					else
 					{
-						ProductOperator extend = new ProductOperator(meta);
+						final ProductOperator extend = new ProductOperator(meta);
 						if (!ensuresOnlyOneRow(sub))
 						{
 							throw new ParseException("A SubSelect is present which could return more than 1 row, but cannot do so.  Please rewrite it to ensure only 1 row is returned.");
 						}
-						Operator rhs2 = buildOperatorTreeFromSubSelect(sub2, true);
+						final Operator rhs2 = buildOperatorTreeFromSubSelect(sub2, true);
 						if (rhs2.getCols2Pos().size() != 1)
 						{
 							throw new ParseException("A SubSelect is present which must return only 1 column, but insted returns more than 1");
@@ -5196,7 +5758,7 @@ public class SQLParser
 							extend.add(op);
 							extend.add(rhs2);
 						}
-						catch (Exception e)
+						catch (final Exception e)
 						{
 							throw new ParseException(e.getMessage());
 						}
@@ -5208,7 +5770,7 @@ public class SQLParser
 				{
 					// check to see if complex already contains this expression
 					boolean found = false;
-					for (ArrayList<Object> row : complex)
+					for (final ArrayList<Object> row : complex)
 					{
 						// colName, op, type, id, exp, prereq, sub, done
 						if (row.get(4).equals(lhs) && row.get(6).equals(sub))
@@ -5226,7 +5788,7 @@ public class SQLParser
 					if (!found)
 					{
 						// if not, build it
-						OperatorTypeAndName otan = buildOperatorTreeFromExpression(lhs, null, sub);
+						final OperatorTypeAndName otan = buildOperatorTreeFromExpression(lhs, null, sub);
 						if (otan.getType() == TYPE_DAYS)
 						{
 							throw new ParseException("A type of DAYS is not allowed for a predicate");
@@ -5244,8 +5806,8 @@ public class SQLParser
 
 						if (otan.getType() == TYPE_DATE)
 						{
-							SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-							String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
+							final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+							final String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
 							// String name = "._E" + suffix++;
 							// ExtendObjectOperator operator = new
 							// ExtendObjectOperator(DateParser.parse(dateString),
@@ -5266,7 +5828,7 @@ public class SQLParser
 						else
 						{
 							// colName, op, type, id, exp, prereq, sub, done
-							ArrayList<Object> row = new ArrayList<Object>();
+							final ArrayList<Object> row = new ArrayList<Object>();
 							row.add(otan.getName());
 							row.add(otan.getOp());
 							row.add(otan.getType());
@@ -5285,12 +5847,12 @@ public class SQLParser
 				// do the same for rhs
 				if (rhs.isLiteral())
 				{
-					Literal literal = rhs.getLiteral();
+					final Literal literal = rhs.getLiteral();
 					if (literal.isNull())
 					{
 						// TODO
 					}
-					Object value = literal.getValue();
+					final Object value = literal.getValue();
 					if (value instanceof String)
 					{
 						rhsStr = "'" + value.toString() + "'";
@@ -5302,13 +5864,13 @@ public class SQLParser
 				}
 				else if (rhs.isColumn())
 				{
-					Column col = rhs.getColumn();
+					final Column col = rhs.getColumn();
 					// is column unambiguous?
 					if (col.getTable() != null)
 					{
 						rhsStr = col.getTable() + "." + col.getColumn();
 						int matches = 0;
-						for (String c : op.getPos2Col().values())
+						for (final String c : op.getPos2Col().values())
 						{
 							if (c.equals(rhsStr))
 							{
@@ -5329,10 +5891,10 @@ public class SQLParser
 					{
 						int matches = 0;
 						String table = null;
-						for (String c : op.getPos2Col().values())
+						for (final String c : op.getPos2Col().values())
 						{
-							String p1 = c.substring(0, c.indexOf('.'));
-							String p2 = c.substring(c.indexOf('.') + 1);
+							final String p1 = c.substring(0, c.indexOf('.'));
+							final String p2 = c.substring(c.indexOf('.') + 1);
 
 							if (p2.equals(col.getColumn()))
 							{
@@ -5344,7 +5906,7 @@ public class SQLParser
 						if (matches == 0)
 						{
 							// could be a complex column
-							for (ArrayList<Object> row : complex)
+							for (final ArrayList<Object> row : complex)
 							{
 								// colName, op, type, id, exp, prereq, done
 								if (row.get(0).equals("." + col.getColumn()) && row.get(6).equals(sub))
@@ -5363,7 +5925,7 @@ public class SQLParser
 								throw new ParseException("Column " + lhsStr + " is ambiguous");
 							}
 
-							for (ArrayList<Object> row : complex)
+							for (final ArrayList<Object> row : complex)
 							{
 								// colName, op, type, id, exp, prereq, done
 								if (row.get(0).equals("." + col.getColumn()) && row.get(6).equals(sub))
@@ -5395,18 +5957,18 @@ public class SQLParser
 				}
 				else if (rhs.isSelect())
 				{
-					SubSelect sub2 = rhs.getSelect();
+					final SubSelect sub2 = rhs.getSelect();
 					if (isCorrelated(sub2))
 					{
 						// rhsStr = getOneCol(sub);
-						SubSelect clone = sub2.clone();
-						SearchCondition join = rewriteCorrelatedSubSelect(clone); // update
+						final SubSelect clone = sub2.clone();
+						final SearchCondition join = rewriteCorrelatedSubSelect(clone); // update
 						// select
 						// list
 						// and
 						// search
 						// conditions
-						ProductOperator product = new ProductOperator(meta);
+						final ProductOperator product = new ProductOperator(meta);
 						try
 						{
 							product.add(op);
@@ -5415,7 +5977,7 @@ public class SQLParser
 							rhsStr = op2.getPos2Col().get(0);
 							product.add(op2);
 						}
-						catch (Exception e)
+						catch (final Exception e)
 						{
 							throw new ParseException(e.getMessage());
 						}
@@ -5423,12 +5985,12 @@ public class SQLParser
 					}
 					else
 					{
-						ProductOperator extend = new ProductOperator(meta);
+						final ProductOperator extend = new ProductOperator(meta);
 						if (!ensuresOnlyOneRow(sub2))
 						{
 							throw new ParseException("A SubSelect is present which could return more than 1 row, but cannot do so.  Please rewrite it to ensure only 1 row is returned.");
 						}
-						Operator rhs2 = buildOperatorTreeFromSubSelect(sub2, true);
+						final Operator rhs2 = buildOperatorTreeFromSubSelect(sub2, true);
 						if (rhs2.getCols2Pos().size() != 1)
 						{
 							throw new ParseException("A SubSelect is present which must return only 1 column, but insted returns more than 1");
@@ -5438,7 +6000,7 @@ public class SQLParser
 							extend.add(op);
 							extend.add(rhs2);
 						}
-						catch (Exception e)
+						catch (final Exception e)
 						{
 							throw new ParseException(e.getMessage());
 						}
@@ -5450,7 +6012,7 @@ public class SQLParser
 				{
 					// check to see if complex already contains this expression
 					boolean found = false;
-					for (ArrayList<Object> row : complex)
+					for (final ArrayList<Object> row : complex)
 					{
 						// colName, op, type, id, exp, prereq, sub, done
 						if (row.get(4).equals(rhs) && row.get(6).equals(sub))
@@ -5468,7 +6030,7 @@ public class SQLParser
 					if (!found)
 					{
 						// if not, build it
-						OperatorTypeAndName otan = buildOperatorTreeFromExpression(rhs, null, sub);
+						final OperatorTypeAndName otan = buildOperatorTreeFromExpression(rhs, null, sub);
 						if (otan.getType() == TYPE_DAYS)
 						{
 							throw new ParseException("A type of DAYS is not allowed for a predicate");
@@ -5486,8 +6048,8 @@ public class SQLParser
 
 						if (otan.getType() == TYPE_DATE)
 						{
-							SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-							String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
+							final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+							final String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
 							// String name = "._E" + suffix++;
 							// ExtendObjectOperator operator = new
 							// ExtendObjectOperator(DateParser.parse(dateString),
@@ -5508,7 +6070,7 @@ public class SQLParser
 						else
 						{
 							// colName, op, type, id, exp, prereq, sub, done
-							ArrayList<Object> row = new ArrayList<Object>();
+							final ArrayList<Object> row = new ArrayList<Object>();
 							row.add(otan.getName());
 							row.add(otan.getOp());
 							row.add(otan.getType());
@@ -5563,18 +6125,18 @@ public class SQLParser
 				}
 				try
 				{
-					SelectOperator select = new SelectOperator(new Filter(lhsStr, o, rhsStr), meta);
+					final SelectOperator select = new SelectOperator(new Filter(lhsStr, o, rhsStr), meta);
 					select.add(op);
 					return select;
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
 			}
 			else
 			{
-				SearchCondition s = clause.getSearch();
+				final SearchCondition s = clause.getSearch();
 				if (!negated)
 				{
 					return buildOperatorTreeFromSearchCondition(s, op, sub);
@@ -5589,10 +6151,10 @@ public class SQLParser
 		else
 		{
 			// ored
-			ArrayList<Filter> ors = new ArrayList<Filter>();
-			ArrayList<SearchClause> preds = new ArrayList<SearchClause>();
+			final ArrayList<Filter> ors = new ArrayList<Filter>();
+			final ArrayList<SearchClause> preds = new ArrayList<SearchClause>();
 			preds.add(search.getClause());
-			for (ConnectedSearchClause csc : search.getConnected())
+			for (final ConnectedSearchClause csc : search.getConnected())
 			{
 				preds.add(csc.getSearch());
 			}
@@ -5600,16 +6162,16 @@ public class SQLParser
 			int i = 0;
 			while (i < preds.size())
 			{
-				SearchClause sc = preds.get(i);
-				boolean negated = sc.getNegated();
-				Predicate pred = sc.getPredicate();
+				final SearchClause sc = preds.get(i);
+				final boolean negated = sc.getNegated();
+				final Predicate pred = sc.getPredicate();
 				if (pred instanceof ExistsPredicate)
 				{
 					throw new ParseException("Restriction: An EXISTS predicate cannot be used with a logical OR");
 				}
-				Expression lhs = pred.getLHS();
+				final Expression lhs = pred.getLHS();
 				String o = pred.getOp();
-				Expression rhs = pred.getRHS();
+				final Expression rhs = pred.getRHS();
 
 				if (o.equals("IN") || o.equals("NI"))
 				{
@@ -5618,12 +6180,12 @@ public class SQLParser
 					{
 						if (lhs.isLiteral())
 						{
-							Literal literal = lhs.getLiteral();
+							final Literal literal = lhs.getLiteral();
 							if (literal.isNull())
 							{
 								// TODO
 							}
-							Object value = literal.getValue();
+							final Object value = literal.getValue();
 							if (value instanceof String)
 							{
 								lhsStr = "'" + value.toString() + "'";
@@ -5635,13 +6197,13 @@ public class SQLParser
 						}
 						else if (lhs.isColumn())
 						{
-							Column col = lhs.getColumn();
+							final Column col = lhs.getColumn();
 							// is column unambiguous?
 							if (col.getTable() != null)
 							{
 								lhsStr = col.getTable() + "." + col.getColumn();
 								int matches = 0;
-								for (String c : op.getPos2Col().values())
+								for (final String c : op.getPos2Col().values())
 								{
 									if (c.equals(lhsStr))
 									{
@@ -5662,10 +6224,10 @@ public class SQLParser
 							{
 								int matches = 0;
 								String table = null;
-								for (String c : op.getPos2Col().values())
+								for (final String c : op.getPos2Col().values())
 								{
-									String p1 = c.substring(0, c.indexOf('.'));
-									String p2 = c.substring(c.indexOf('.') + 1);
+									final String p1 = c.substring(0, c.indexOf('.'));
+									final String p2 = c.substring(c.indexOf('.') + 1);
 
 									if (p2.equals(col.getColumn()))
 									{
@@ -5677,7 +6239,7 @@ public class SQLParser
 								if (matches == 0)
 								{
 									// could be a complex column
-									for (ArrayList<Object> row : complex)
+									for (final ArrayList<Object> row : complex)
 									{
 										// colName, op, type, id, exp, prereq,
 										// done
@@ -5697,7 +6259,7 @@ public class SQLParser
 										throw new ParseException("Column " + lhsStr + " is ambiguous");
 									}
 
-									for (ArrayList<Object> row : complex)
+									for (final ArrayList<Object> row : complex)
 									{
 										// colName, op, type, id, exp, prereq,
 										// done
@@ -5737,7 +6299,7 @@ public class SQLParser
 							// check to see if complex already contains this
 							// expression
 							boolean found = false;
-							for (ArrayList<Object> row : complex)
+							for (final ArrayList<Object> row : complex)
 							{
 								// colName, op, type, id, exp, prereq, sub, done
 								if (row.get(4).equals(lhs) && row.get(6).equals(sub))
@@ -5755,7 +6317,7 @@ public class SQLParser
 							if (!found)
 							{
 								// if not, build it
-								OperatorTypeAndName otan = buildOperatorTreeFromExpression(lhs, null, sub);
+								final OperatorTypeAndName otan = buildOperatorTreeFromExpression(lhs, null, sub);
 								if (otan.getType() == TYPE_DAYS)
 								{
 									throw new ParseException("A type of DAYS is not allowed for a predicate");
@@ -5773,8 +6335,8 @@ public class SQLParser
 
 								if (otan.getType() == TYPE_DATE)
 								{
-									SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-									String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
+									final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+									final String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
 									// String name = "._E" + suffix++;
 									// ExtendObjectOperator operator = new
 									// ExtendObjectOperator(DateParser.parse(dateString),
@@ -5797,7 +6359,7 @@ public class SQLParser
 								{
 									// colName, op, type, id, exp, prereq, sub,
 									// done
-									ArrayList<Object> row = new ArrayList<Object>();
+									final ArrayList<Object> row = new ArrayList<Object>();
 									row.add(otan.getName());
 									row.add(otan.getOp());
 									row.add(otan.getType());
@@ -5830,18 +6392,18 @@ public class SQLParser
 					{
 						if ((o.equals("IN") && !negated) || (o.equals("NI") && negated))
 						{
-							ArrayList<Expression> list = rhs.getList();
-							Predicate predicate = new Predicate(lhs, "E", list.get(0));
-							SearchClause s1 = new SearchClause(predicate, false);
+							final ArrayList<Expression> list = rhs.getList();
+							final Predicate predicate = new Predicate(lhs, "E", list.get(0));
+							final SearchClause s1 = new SearchClause(predicate, false);
 							preds.add(s1);
-							new ArrayList<ConnectedSearchClause>();
+							// new ArrayList<ConnectedSearchClause>();
 							int j = 1;
 							final int size = list.size();
 							while (j < size)
 							{
-								Expression exp = list.get(j);
-								Predicate p = new Predicate(lhs, "E", exp);
-								SearchClause s = new SearchClause(p, false);
+								final Expression exp = list.get(j);
+								final Predicate p = new Predicate(lhs, "E", exp);
+								final SearchClause s = new SearchClause(p, false);
 								preds.add(s);
 								j++;
 							}
@@ -5851,17 +6413,17 @@ public class SQLParser
 						}
 						else
 						{
-							ArrayList<Expression> list = rhs.getList();
-							Predicate predicate = new Predicate(lhs, "NE", list.get(0));
-							SearchClause s1 = new SearchClause(predicate, false);
+							final ArrayList<Expression> list = rhs.getList();
+							final Predicate predicate = new Predicate(lhs, "NE", list.get(0));
+							final SearchClause s1 = new SearchClause(predicate, false);
 							preds.add(s1);
 							int j = 1;
 							final int size = list.size();
 							while (j < size)
 							{
-								Expression exp = list.get(j);
-								Predicate p = new Predicate(lhs, "NE", exp);
-								SearchClause s = new SearchClause(p, false);
+								final Expression exp = list.get(j);
+								final Predicate p = new Predicate(lhs, "NE", exp);
+								final SearchClause s = new SearchClause(p, false);
 								preds.add(s);
 								j++;
 							}
@@ -5885,12 +6447,12 @@ public class SQLParser
 
 				if (lhs.isLiteral())
 				{
-					Literal literal = lhs.getLiteral();
+					final Literal literal = lhs.getLiteral();
 					if (literal.isNull())
 					{
 						// TODO
 					}
-					Object value = literal.getValue();
+					final Object value = literal.getValue();
 					if (value instanceof String)
 					{
 						lhsStr = "'" + value.toString() + "'";
@@ -5902,13 +6464,13 @@ public class SQLParser
 				}
 				else if (lhs.isColumn())
 				{
-					Column col = lhs.getColumn();
+					final Column col = lhs.getColumn();
 					// is column unambiguous?
 					if (col.getTable() != null)
 					{
 						lhsStr = col.getTable() + "." + col.getColumn();
 						int matches = 0;
-						for (String c : op.getPos2Col().values())
+						for (final String c : op.getPos2Col().values())
 						{
 							if (c.equals(lhsStr))
 							{
@@ -5929,10 +6491,10 @@ public class SQLParser
 					{
 						int matches = 0;
 						String table = null;
-						for (String c : op.getPos2Col().values())
+						for (final String c : op.getPos2Col().values())
 						{
-							String p1 = c.substring(0, c.indexOf('.'));
-							String p2 = c.substring(c.indexOf('.') + 1);
+							final String p1 = c.substring(0, c.indexOf('.'));
+							final String p2 = c.substring(c.indexOf('.') + 1);
 
 							if (p2.equals(col.getColumn()))
 							{
@@ -5944,7 +6506,7 @@ public class SQLParser
 						if (matches == 0)
 						{
 							// could be a complex column
-							for (ArrayList<Object> row : complex)
+							for (final ArrayList<Object> row : complex)
 							{
 								// colName, op, type, id, exp, prereq, done
 								if (row.get(0).equals("." + col.getColumn()) && row.get(6).equals(sub))
@@ -5963,7 +6525,7 @@ public class SQLParser
 								throw new ParseException("Column " + lhsStr + " is ambiguous");
 							}
 
-							for (ArrayList<Object> row : complex)
+							for (final ArrayList<Object> row : complex)
 							{
 								// colName, op, type, id, exp, prereq, done
 								if (row.get(0).equals("." + col.getColumn()) && row.get(6).equals(sub))
@@ -5995,19 +6557,19 @@ public class SQLParser
 				}
 				else if (lhs.isSelect())
 				{
-					SubSelect sub2 = lhs.getSelect();
+					final SubSelect sub2 = lhs.getSelect();
 					if (isCorrelated(sub2))
 					{
 						throw new ParseException("Restriction: A correlated subquery cannot be used in a predicate that is part of a logical OR");
 					}
 					else
 					{
-						ProductOperator extend = new ProductOperator(meta);
+						final ProductOperator extend = new ProductOperator(meta);
 						if (!ensuresOnlyOneRow(sub2))
 						{
 							throw new ParseException("A SubSelect is present which could return more than 1 row, but cannot do so.  Please rewrite it to ensure only 1 row is returned.");
 						}
-						Operator rhs2 = buildOperatorTreeFromSubSelect(sub2, true);
+						final Operator rhs2 = buildOperatorTreeFromSubSelect(sub2, true);
 						if (rhs2.getCols2Pos().size() != 1)
 						{
 							throw new ParseException("A SubSelect is present which must return only 1 column, but insted returns more than 1");
@@ -6017,7 +6579,7 @@ public class SQLParser
 							extend.add(op);
 							extend.add(rhs2);
 						}
-						catch (Exception e)
+						catch (final Exception e)
 						{
 							throw new ParseException(e.getMessage());
 						}
@@ -6029,7 +6591,7 @@ public class SQLParser
 				{
 					// check to see if complex already contains this expression
 					boolean found = false;
-					for (ArrayList<Object> row : complex)
+					for (final ArrayList<Object> row : complex)
 					{
 						// colName, op, type, id, exp, prereq, sub, done
 						if (row.get(4).equals(lhs) && row.get(6).equals(sub))
@@ -6047,7 +6609,7 @@ public class SQLParser
 					if (!found)
 					{
 						// if not, build it
-						OperatorTypeAndName otan = buildOperatorTreeFromExpression(lhs, null, sub);
+						final OperatorTypeAndName otan = buildOperatorTreeFromExpression(lhs, null, sub);
 						if (otan.getType() == TYPE_DAYS)
 						{
 							throw new ParseException("A type of DAYS is not allowed for a predicate");
@@ -6065,8 +6627,8 @@ public class SQLParser
 
 						if (otan.getType() == TYPE_DATE)
 						{
-							SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-							String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
+							final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+							final String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
 							// String name = "._E" + suffix++;
 							// ExtendObjectOperator operator = new
 							// ExtendObjectOperator(DateParser.parse(dateString),
@@ -6087,7 +6649,7 @@ public class SQLParser
 						else
 						{
 							// colName, op, type, id, exp, prereq, sub, done
-							ArrayList<Object> row = new ArrayList<Object>();
+							final ArrayList<Object> row = new ArrayList<Object>();
 							row.add(otan.getName());
 							row.add(otan.getOp());
 							row.add(otan.getType());
@@ -6106,12 +6668,12 @@ public class SQLParser
 				// do the same for rhs
 				if (rhs.isLiteral())
 				{
-					Literal literal = rhs.getLiteral();
+					final Literal literal = rhs.getLiteral();
 					if (literal.isNull())
 					{
 						// TODO
 					}
-					Object value = literal.getValue();
+					final Object value = literal.getValue();
 					if (value instanceof String)
 					{
 						rhsStr = "'" + value.toString() + "'";
@@ -6123,13 +6685,13 @@ public class SQLParser
 				}
 				else if (rhs.isColumn())
 				{
-					Column col = rhs.getColumn();
+					final Column col = rhs.getColumn();
 					// is column unambiguous?
 					if (col.getTable() != null)
 					{
 						rhsStr = col.getTable() + "." + col.getColumn();
 						int matches = 0;
-						for (String c : op.getPos2Col().values())
+						for (final String c : op.getPos2Col().values())
 						{
 							if (c.equals(rhsStr))
 							{
@@ -6150,10 +6712,10 @@ public class SQLParser
 					{
 						int matches = 0;
 						String table = null;
-						for (String c : op.getPos2Col().values())
+						for (final String c : op.getPos2Col().values())
 						{
-							String p1 = c.substring(0, c.indexOf('.'));
-							String p2 = c.substring(c.indexOf('.') + 1);
+							final String p1 = c.substring(0, c.indexOf('.'));
+							final String p2 = c.substring(c.indexOf('.') + 1);
 
 							if (p2.equals(col.getColumn()))
 							{
@@ -6165,7 +6727,7 @@ public class SQLParser
 						if (matches == 0)
 						{
 							// could be a complex column
-							for (ArrayList<Object> row : complex)
+							for (final ArrayList<Object> row : complex)
 							{
 								// colName, op, type, id, exp, prereq, done
 								if (row.get(0).equals("." + col.getColumn()) && row.get(6).equals(sub))
@@ -6184,7 +6746,7 @@ public class SQLParser
 								throw new ParseException("Column " + lhsStr + " is ambiguous");
 							}
 
-							for (ArrayList<Object> row : complex)
+							for (final ArrayList<Object> row : complex)
 							{
 								// colName, op, type, id, exp, prereq, done
 								if (row.get(0).equals("." + col.getColumn()) && row.get(6).equals(sub))
@@ -6216,19 +6778,19 @@ public class SQLParser
 				}
 				else if (rhs.isSelect())
 				{
-					SubSelect sub2 = rhs.getSelect();
+					final SubSelect sub2 = rhs.getSelect();
 					if (isCorrelated(sub2))
 					{
 						throw new ParseException("Restriction: A correlated subquery cannot be used in a predicate that is part of a logical OR");
 					}
 					else
 					{
-						ProductOperator extend = new ProductOperator(meta);
+						final ProductOperator extend = new ProductOperator(meta);
 						if (!ensuresOnlyOneRow(sub2))
 						{
 							throw new ParseException("A SubSelect is present which could return more than 1 row, but cannot do so.  Please rewrite it to ensure only 1 row is returned.");
 						}
-						Operator rhs2 = buildOperatorTreeFromSubSelect(sub2, true);
+						final Operator rhs2 = buildOperatorTreeFromSubSelect(sub2, true);
 						if (rhs2.getCols2Pos().size() != 1)
 						{
 							throw new ParseException("A SubSelect is present which must return only 1 column, but insted returns more than 1");
@@ -6238,7 +6800,7 @@ public class SQLParser
 							extend.add(op);
 							extend.add(rhs2);
 						}
-						catch (Exception e)
+						catch (final Exception e)
 						{
 							throw new ParseException(e.getMessage());
 						}
@@ -6250,7 +6812,7 @@ public class SQLParser
 				{
 					// check to see if complex already contains this expression
 					boolean found = false;
-					for (ArrayList<Object> row : complex)
+					for (final ArrayList<Object> row : complex)
 					{
 						// colName, op, type, id, exp, prereq, sub, done
 						if (row.get(4).equals(rhs) && row.get(6).equals(sub))
@@ -6268,7 +6830,7 @@ public class SQLParser
 					if (!found)
 					{
 						// if not, build it
-						OperatorTypeAndName otan = buildOperatorTreeFromExpression(rhs, null, sub);
+						final OperatorTypeAndName otan = buildOperatorTreeFromExpression(rhs, null, sub);
 						if (otan.getType() == TYPE_DAYS)
 						{
 							throw new ParseException("A type of DAYS is not allowed for a predicate");
@@ -6286,8 +6848,8 @@ public class SQLParser
 
 						if (otan.getType() == TYPE_DATE)
 						{
-							SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-							String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
+							final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+							final String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
 							// String name = "._E" + suffix++;
 							// ExtendObjectOperator operator = new
 							// ExtendObjectOperator(DateParser.parse(dateString),
@@ -6308,7 +6870,7 @@ public class SQLParser
 						else
 						{
 							// colName, op, type, id, exp, prereq, sub, done
-							ArrayList<Object> row = new ArrayList<Object>();
+							final ArrayList<Object> row = new ArrayList<Object>();
 							row.add(otan.getName());
 							row.add(otan.getOp());
 							row.add(otan.getType());
@@ -6365,7 +6927,7 @@ public class SQLParser
 				{
 					ors.add(new Filter(lhsStr, o, rhsStr));
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
@@ -6375,22 +6937,22 @@ public class SQLParser
 
 			try
 			{
-				SelectOperator select = new SelectOperator(ors, meta);
+				final SelectOperator select = new SelectOperator(ors, meta);
 				select.add(op);
 				return select;
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
 		}
 	}
 
-	private Operator buildOperatorTreeFromSelect(Select select) throws Exception
+	private Operator buildOperatorTreeFromSelect(final Select select) throws Exception
 	{
 		if (select.getCTEs().size() > 0)
 		{
-			for (CTE cte : select.getCTEs())
+			for (final CTE cte : select.getCTEs())
 			{
 				importCTE(cte, select.getFullSelect());
 			}
@@ -6398,18 +6960,18 @@ public class SQLParser
 		return buildOperatorTreeFromFullSelect(select.getFullSelect());
 	}
 
-	private Operator buildOperatorTreeFromSelectClause(SelectClause select, Operator op, SubSelect sub, boolean subquery) throws ParseException
+	private Operator buildOperatorTreeFromSelectClause(final SelectClause select, Operator op, final SubSelect sub, final boolean subquery) throws ParseException
 	{
 		if (!select.isSelectStar())
 		{
 			ArrayList<String> cols = new ArrayList<String>();
-			ArrayList<SelectListEntry> selects = select.getSelectList();
+			final ArrayList<SelectListEntry> selects = select.getSelectList();
 			boolean needsRename = false;
-			for (SelectListEntry entry : selects)
+			for (final SelectListEntry entry : selects)
 			{
 				if (entry.isColumn())
 				{
-					Column col = entry.getColumn();
+					final Column col = entry.getColumn();
 					String colName = "";
 					if (col.getTable() != null)
 					{
@@ -6433,7 +6995,7 @@ public class SQLParser
 					else
 					{
 						// unnamed complex column
-						for (ArrayList<Object> row : complex)
+						for (final ArrayList<Object> row : complex)
 						{
 							if (row.get(4).equals(entry.getExpression()) && row.get(6).equals(sub))
 							{
@@ -6449,19 +7011,19 @@ public class SQLParser
 				}
 			}
 
-			ArrayList<String> newCols = new ArrayList<String>();
-			ArrayList<String> olds = new ArrayList<String>();
-			ArrayList<String> news = new ArrayList<String>();
+			final ArrayList<String> newCols = new ArrayList<String>();
+			final ArrayList<String> olds = new ArrayList<String>();
+			final ArrayList<String> news = new ArrayList<String>();
 			// HRDBMSWorker.logger.debug("Cols = " + cols);
 			for (String col : cols)
 			{
 				String col2 = null;
 				SelectListEntry sle = null;
-				for (SelectListEntry entry : selects)
+				for (final SelectListEntry entry : selects)
 				{
 					if (entry.isColumn())
 					{
-						Column c = entry.getColumn();
+						final Column c = entry.getColumn();
 						col2 = "";
 						if (c.getTable() != null)
 						{
@@ -6483,7 +7045,7 @@ public class SQLParser
 						}
 						else
 						{
-							for (ArrayList<Object> row : complex)
+							for (final ArrayList<Object> row : complex)
 							{
 								if (row.get(4).equals(entry.getExpression()) && row.get(6).equals(sub))
 								{
@@ -6508,7 +7070,7 @@ public class SQLParser
 					}
 				}
 
-				Integer pos = op.getCols2Pos().get(col);
+				final Integer pos = op.getCols2Pos().get(col);
 				// HRDBMSWorker.logger.debug("Cols2Pos = " + op.getCols2Pos());
 				if (pos == null)
 				{
@@ -6525,10 +7087,10 @@ public class SQLParser
 							col = col.substring(1);
 						}
 					}
-					for (String col3 : op.getCols2Pos().keySet())
+					for (final String col3 : op.getCols2Pos().keySet())
 					{
 						int matches = 0;
-						String u = col3.substring(col3.indexOf('.') + 1);
+						final String u = col3.substring(col3.indexOf('.') + 1);
 						if (col.equals(u))
 						{
 							newCols.add(col3);
@@ -6563,11 +7125,11 @@ public class SQLParser
 			// HRDBMSWorker.logger.debug("After all the magic, cols = " + cols);
 			try
 			{
-				ReorderOperator reorder = new ReorderOperator(cols, meta);
+				final ReorderOperator reorder = new ReorderOperator(cols, meta);
 				reorder.add(op);
 				op = reorder;
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
@@ -6580,7 +7142,7 @@ public class SQLParser
 					rename = new RenameOperator(olds, news, meta);
 					rename.add(op);
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
@@ -6592,8 +7154,8 @@ public class SQLParser
 		{
 			if (!subquery)
 			{
-				ArrayList<String> cols = new ArrayList<String>(op.getPos2Col().values().size());
-				for (String col : op.getPos2Col().values())
+				final ArrayList<String> cols = new ArrayList<String>(op.getPos2Col().values().size());
+				for (final String col : op.getPos2Col().values())
 				{
 					if (!col.startsWith("_"))
 					{
@@ -6602,11 +7164,11 @@ public class SQLParser
 				}
 				try
 				{
-					ReorderOperator reorder = new ReorderOperator(cols, meta);
+					final ReorderOperator reorder = new ReorderOperator(cols, meta);
 					reorder.add(op);
 					op = reorder;
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
@@ -6615,12 +7177,12 @@ public class SQLParser
 
 		if (!select.isSelectAll())
 		{
-			UnionOperator distinct = new UnionOperator(true, meta);
+			final UnionOperator distinct = new UnionOperator(true, meta);
 			try
 			{
 				distinct.add(op);
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
@@ -6630,9 +7192,9 @@ public class SQLParser
 		return op;
 	}
 
-	private Operator buildOperatorTreeFromSingleTable(SingleTable table) throws Exception
+	private Operator buildOperatorTreeFromSingleTable(final SingleTable table) throws Exception
 	{
-		TableName name = table.getName();
+		final TableName name = table.getName();
 		String schema, tblName;
 		if (name.getSchema() == null)
 		{
@@ -6646,20 +7208,20 @@ public class SQLParser
 
 		tblName = name.getName();
 
-		if (!meta.verifyTableExistence(schema, tblName, tx))
+		if (!MetaData.verifyTableExistence(schema, tblName, tx))
 		{
-			if (!meta.verifyViewExistence(schema, tblName, tx))
+			if (!MetaData.verifyViewExistence(schema, tblName, tx))
 			{
 				throw new ParseException("Table or view " + schema + "." + tblName + " does not exist");
 			}
 
-			SQLParser viewParser = new SQLParser(meta.getViewSQL(schema, tblName, tx), connection, tx);
+			final SQLParser viewParser = new SQLParser(MetaData.getViewSQL(schema, tblName, tx), connection, tx);
 			Operator op = null;
 			try
 			{
 				op = viewParser.parse().get(0);
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
@@ -6668,13 +7230,13 @@ public class SQLParser
 				doesNotUseCurrentSchema = false;
 			}
 
-			Operator retval = op.children().get(0);
+			final Operator retval = op.children().get(0);
 			op.removeChild(retval);
 
-			ArrayList<String> olds = new ArrayList<String>();
-			ArrayList<String> news = new ArrayList<String>();
+			final ArrayList<String> olds = new ArrayList<String>();
+			final ArrayList<String> news = new ArrayList<String>();
 
-			for (String c : retval.getCols2Pos().keySet())
+			for (final String c : retval.getCols2Pos().keySet())
 			{
 				if (!c.contains("."))
 				{
@@ -6689,7 +7251,7 @@ public class SQLParser
 			}
 			else
 			{
-				RenameOperator rename = new RenameOperator(olds, news, meta);
+				final RenameOperator rename = new RenameOperator(olds, news, meta);
 				rename.add(retval);
 				return rename;
 			}
@@ -6700,7 +7262,7 @@ public class SQLParser
 		{
 			op = new TableScanOperator(schema, tblName, meta, tx);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			throw new ParseException(e.getMessage());
 		}
@@ -6713,7 +7275,7 @@ public class SQLParser
 		return op;
 	}
 
-	private Operator buildOperatorTreeFromSubSelect(SubSelect select, boolean subquery) throws Exception
+	private Operator buildOperatorTreeFromSubSelect(final SubSelect select, final boolean subquery) throws Exception
 	{
 		Operator op = buildOperatorTreeFromFrom(select.getFrom(), select);
 		getComplexColumns(select.getSelect(), select, select.getHaving());
@@ -6764,7 +7326,7 @@ public class SQLParser
 		return op;
 	}
 
-	private Operator buildOperatorTreeFromTableReference(TableReference table, SubSelect sub) throws Exception
+	private Operator buildOperatorTreeFromTableReference(final TableReference table, final SubSelect sub) throws Exception
 	{
 		if (table.isSingleTable())
 		{
@@ -6773,17 +7335,17 @@ public class SQLParser
 
 		if (table.isSelect())
 		{
-			Operator op = buildOperatorTreeFromFullSelect(table.getSelect());
+			final Operator op = buildOperatorTreeFromFullSelect(table.getSelect());
 			if (table.getSelect().getCols() != null && table.getSelect().getCols().size() > 0)
 			{
 				// rename cols
 				checkSizeOfNewCols(table.getSelect().getCols(), op);
-				ArrayList<String> original = new ArrayList<String>();
-				ArrayList<String> newCols = new ArrayList<String>();
+				final ArrayList<String> original = new ArrayList<String>();
+				final ArrayList<String> newCols = new ArrayList<String>();
 				if (table.getAlias() == null)
 				{
 					int i = 0;
-					for (String col : op.getPos2Col().values())
+					for (final String col : op.getPos2Col().values())
 					{
 						original.add(col);
 						String newCol = col.substring(0, col.indexOf('.'));
@@ -6800,11 +7362,11 @@ public class SQLParser
 
 					try
 					{
-						RenameOperator rename = new RenameOperator(original, newCols, meta);
+						final RenameOperator rename = new RenameOperator(original, newCols, meta);
 						rename.add(op);
 						return rename;
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						throw new ParseException(e.getMessage());
 					}
@@ -6813,7 +7375,7 @@ public class SQLParser
 				{
 					// rename cols and table
 					int i = 0;
-					for (String col : op.getPos2Col().values())
+					for (final String col : op.getPos2Col().values())
 					{
 						original.add(col);
 						String newCol = table.getAlias();
@@ -6830,11 +7392,11 @@ public class SQLParser
 
 					try
 					{
-						RenameOperator rename = new RenameOperator(original, newCols, meta);
+						final RenameOperator rename = new RenameOperator(original, newCols, meta);
 						rename.add(op);
 						return rename;
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						throw new ParseException(e.getMessage());
 					}
@@ -6846,22 +7408,22 @@ public class SQLParser
 				if (table.getAlias() != null)
 				{
 					// rename table
-					ArrayList<String> original = new ArrayList<String>();
-					ArrayList<String> newCols = new ArrayList<String>();
-					for (String col : op.getPos2Col().values())
+					final ArrayList<String> original = new ArrayList<String>();
+					final ArrayList<String> newCols = new ArrayList<String>();
+					for (final String col : op.getPos2Col().values())
 					{
 						original.add(col);
-						String newCol = col.substring(col.indexOf('.') + 1);
+						final String newCol = col.substring(col.indexOf('.') + 1);
 						newCols.add(table.getAlias() + "." + newCol);
 					}
 
 					try
 					{
-						RenameOperator rename = new RenameOperator(original, newCols, meta);
+						final RenameOperator rename = new RenameOperator(original, newCols, meta);
 						rename.add(op);
 						return rename;
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						throw new ParseException(e.getMessage());
 					}
@@ -6873,15 +7435,15 @@ public class SQLParser
 			}
 		}
 
-		Operator op1 = buildOperatorTreeFromTableReference(table.getLHS(), sub);
-		Operator op2 = buildOperatorTreeFromTableReference(table.getRHS(), sub);
-		String op = table.getOp();
+		final Operator op1 = buildOperatorTreeFromTableReference(table.getLHS(), sub);
+		final Operator op2 = buildOperatorTreeFromTableReference(table.getRHS(), sub);
+		final String op = table.getOp();
 
 		if (op.equals("CP"))
 		{
 			try
 			{
-				ProductOperator product = new ProductOperator(meta);
+				final ProductOperator product = new ProductOperator(meta);
 				product.add(op1);
 				product.add(op2);
 				if (table.getAlias() != null)
@@ -6890,7 +7452,7 @@ public class SQLParser
 				}
 				return product;
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
@@ -6900,10 +7462,10 @@ public class SQLParser
 		{
 			try
 			{
-				ProductOperator product = new ProductOperator(meta);
+				final ProductOperator product = new ProductOperator(meta);
 				product.add(op1);
 				product.add(op2);
-				Operator o = buildOperatorTreeFromSearchCondition(table.getSearch(), product, sub);
+				final Operator o = buildOperatorTreeFromSearchCondition(table.getSearch(), product, sub);
 				if (table.getAlias() != null)
 				{
 					return handleAlias(table.getAlias(), o);
@@ -6911,7 +7473,7 @@ public class SQLParser
 
 				return o;
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
@@ -6935,9 +7497,9 @@ public class SQLParser
 		return null;
 	}
 
-	private ArrayList<Operator> buildOperatorTreeFromUpdate(Update update) throws Exception
+	private ArrayList<Operator> buildOperatorTreeFromUpdate(final Update update) throws Exception
 	{
-		TableName table = update.getTable();
+		final TableName table = update.getTable();
 		String schema = null;
 		String tbl = null;
 		if (table.getSchema() == null)
@@ -6951,13 +7513,13 @@ public class SQLParser
 			tbl = table.getName();
 		}
 
-		if (!meta.verifyTableExistence(schema, tbl, tx))
+		if (!MetaData.verifyTableExistence(schema, tbl, tx))
 		{
 			throw new ParseException("Table does not exist");
 		}
 
 		TableScanOperator scan = new TableScanOperator(schema, tbl, meta, tx);
-		
+
 		if (!update.isMulti())
 		{
 			Operator op = null;
@@ -6978,14 +7540,14 @@ public class SQLParser
 				op2.add(scan);
 				while (op2 != op)
 				{
-					Operator op3 = op2.parent();
+					final Operator op3 = op2.parent();
 					op3.removeChild(op2);
 					op3.add(op2);
 					op2 = op3;
 				}
 			}
 
-			ArrayList<String> buildList = new ArrayList<String>();
+			final ArrayList<String> buildList = new ArrayList<String>();
 
 			ArrayList<Expression> exps = null;
 			if (update.getExpression().isList())
@@ -6997,14 +7559,14 @@ public class SQLParser
 				exps = new ArrayList<Expression>();
 				exps.add(update.getExpression());
 			}
-			for (Expression exp : exps)
+			for (final Expression exp : exps)
 			{
 				if (exp.isColumn())
 				{
 					buildList.add(exp.getColumn().getColumn());
 					continue;
 				}
-				OperatorTypeAndName otan = buildOperatorTreeFromExpression(exp, null, null);
+				final OperatorTypeAndName otan = buildOperatorTreeFromExpression(exp, null, null);
 				if (otan.getType() != SQLParser.TYPE_INLINE && otan.getType() != SQLParser.TYPE_DATE)
 				{
 					throw new ParseException("Invalid expression in update statement");
@@ -7012,30 +7574,30 @@ public class SQLParser
 
 				if (otan.getType() == SQLParser.TYPE_DATE)
 				{
-					SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-					String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
-					String name = "._E" + suffix++;
-					ExtendObjectOperator operator = new ExtendObjectOperator(DateParser.parse(dateString), name, meta);
+					final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+					final String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
+					final String name = "._E" + suffix++;
+					final ExtendObjectOperator operator = new ExtendObjectOperator(DateParser.parse(dateString), name, meta);
 					operator.add(op);
 					op = operator;
 					buildList.add(name);
 				}
 				else
 				{
-					Operator operator = (Operator)otan.getOp();
+					final Operator operator = (Operator)otan.getOp();
 					operator.add(op);
 					op = operator;
 					buildList.add(otan.getName());
 				}
 			}
 
-			if (!meta.verifyUpdate(schema, tbl, update.getCols(), buildList, op, tx))
+			if (!MetaData.verifyUpdate(schema, tbl, update.getCols(), buildList, op, tx))
 			{
 				throw new ParseException("The number of columns and/or data types do not match the columns being updated");
 			}
 
-			ArrayList<String> cols = new ArrayList<String>();
-			for (String col : op.getPos2Col().values())
+			final ArrayList<String> cols = new ArrayList<String>();
+			for (final String col : op.getPos2Col().values())
 			{
 				cols.add(col);
 			}
@@ -7045,34 +7607,34 @@ public class SQLParser
 			// cols.add("_RID3");
 			// cols.add("_RID4");
 
-			ReorderOperator reorder = new ReorderOperator(cols, meta);
+			final ReorderOperator reorder = new ReorderOperator(cols, meta);
 			reorder.add(op);
 			op = reorder;
-			RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
+			final RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
 			retval.add(op);
-			Phase1 p1 = new Phase1(retval, tx);
+			final Phase1 p1 = new Phase1(retval, tx);
 			p1.optimize();
 			new Phase2(retval, tx).optimize();
 			new Phase3(retval, tx).optimize();
 			new Phase4(retval, tx).optimize();
 			new Phase5(retval, tx, p1.likelihoodCache).optimize();
-			UpdateOperator uOp = new UpdateOperator(schema, tbl, update.getCols(), buildList, meta);
-			Operator child = retval.children().get(0);
+			final UpdateOperator uOp = new UpdateOperator(schema, tbl, update.getCols(), buildList, meta);
+			final Operator child = retval.children().get(0);
 			retval.removeChild(child);
 			uOp.add(child);
-			ArrayList<Operator> uOps = new ArrayList<Operator>(1);
+			final ArrayList<Operator> uOps = new ArrayList<Operator>(1);
 			uOps.add(uOp);
 			return uOps;
 		}
 		else
 		{
-			TableScanOperator master = scan;
-			ArrayList<ArrayList<Column>> cols2 = update.getCols2();
-			ArrayList<Expression> exps2 = update.getExps2();
-			ArrayList<Where> wheres2 = update.getWheres2();
+			final TableScanOperator master = scan;
+			final ArrayList<ArrayList<Column>> cols2 = update.getCols2();
+			final ArrayList<Expression> exps2 = update.getExps2();
+			final ArrayList<Where> wheres2 = update.getWheres2();
 			int i = 0;
-			ArrayList<Operator> uOps = new ArrayList<Operator>();
-			for (ArrayList<Column> cols : cols2)
+			final ArrayList<Operator> uOps = new ArrayList<Operator>();
+			for (final ArrayList<Column> cols : cols2)
 			{
 				scan = master.clone();
 				Operator op = null;
@@ -7093,14 +7655,14 @@ public class SQLParser
 					op2.add(scan);
 					while (op2 != op)
 					{
-						Operator op3 = op2.parent();
+						final Operator op3 = op2.parent();
 						op3.removeChild(op2);
 						op3.add(op2);
 						op2 = op3;
 					}
 				}
 
-				ArrayList<String> buildList = new ArrayList<String>();
+				final ArrayList<String> buildList = new ArrayList<String>();
 
 				ArrayList<Expression> exps = null;
 				if (exps2.get(i).isList())
@@ -7112,14 +7674,14 @@ public class SQLParser
 					exps = new ArrayList<Expression>();
 					exps.add(exps2.get(i));
 				}
-				for (Expression exp : exps)
+				for (final Expression exp : exps)
 				{
 					if (exp.isColumn())
 					{
 						buildList.add(exp.getColumn().getColumn());
 						continue;
 					}
-					OperatorTypeAndName otan = buildOperatorTreeFromExpression(exp, null, null);
+					final OperatorTypeAndName otan = buildOperatorTreeFromExpression(exp, null, null);
 					if (otan.getType() != SQLParser.TYPE_INLINE && otan.getType() != SQLParser.TYPE_DATE)
 					{
 						throw new ParseException("Invalid expression in update statement");
@@ -7127,30 +7689,30 @@ public class SQLParser
 
 					if (otan.getType() == SQLParser.TYPE_DATE)
 					{
-						SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-						String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
-						String name = "._E" + suffix++;
-						ExtendObjectOperator operator = new ExtendObjectOperator(DateParser.parse(dateString), name, meta);
+						final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+						final String dateString = sdf.format(((GregorianCalendar)otan.getOp()).getTime());
+						final String name = "._E" + suffix++;
+						final ExtendObjectOperator operator = new ExtendObjectOperator(DateParser.parse(dateString), name, meta);
 						operator.add(op);
 						op = operator;
 						buildList.add(name);
 					}
 					else
 					{
-						Operator operator = (Operator)otan.getOp();
+						final Operator operator = (Operator)otan.getOp();
 						operator.add(op);
 						op = operator;
 						buildList.add(otan.getName());
 					}
 				}
 
-				if (!meta.verifyUpdate(schema, tbl, cols, buildList, op, tx))
+				if (!MetaData.verifyUpdate(schema, tbl, cols, buildList, op, tx))
 				{
 					throw new ParseException("The number of columns and/or data types do not match the columns being updated");
 				}
 
-				ArrayList<String> cols3 = new ArrayList<String>();
-				for (String col : op.getPos2Col().values())
+				final ArrayList<String> cols3 = new ArrayList<String>();
+				for (final String col : op.getPos2Col().values())
 				{
 					cols3.add(col);
 				}
@@ -7160,53 +7722,45 @@ public class SQLParser
 				// cols.add("_RID3");
 				// cols.add("_RID4");
 
-				ReorderOperator reorder = new ReorderOperator(cols3, meta);
+				final ReorderOperator reorder = new ReorderOperator(cols3, meta);
 				reorder.add(op);
 				op = reorder;
-				RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
+				final RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
 				retval.add(op);
-				Phase1 p1 = new Phase1(retval, tx);
+				final Phase1 p1 = new Phase1(retval, tx);
 				p1.optimize();
 				new Phase2(retval, tx).optimize();
 				new Phase3(retval, tx).optimize();
 				new Phase4(retval, tx).optimize();
 				new Phase5(retval, tx, p1.likelihoodCache).optimize();
-				UpdateOperator uOp = new UpdateOperator(schema, tbl, cols, buildList, meta);
-				Operator child = retval.children().get(0);
+				final UpdateOperator uOp = new UpdateOperator(schema, tbl, cols, buildList, meta);
+				final Operator child = retval.children().get(0);
 				retval.removeChild(child);
 				uOp.add(child);
 				uOps.add(uOp);
 				i++;
 			}
-			
+
 			return uOps;
 		}
 	}
 
-	private Operator buildOperatorTreeFromWhere(Where where, Operator op, SubSelect sub) throws Exception
+	private Operator buildOperatorTreeFromWhere(final Where where, final Operator op, final SubSelect sub) throws Exception
 	{
-		SearchCondition search = where.getSearch();
+		final SearchCondition search = where.getSearch();
 		return buildOperatorTreeFromSearchCondition(search, op, sub);
 	}
 
-	private void checkSizeOfNewCols(ArrayList<Column> newCols, Operator op) throws ParseException
-	{
-		if (newCols.size() != op.getPos2Col().size())
-		{
-			throw new ParseException("The common table expression has the wrong number of columns");
-		}
-	}
-
-	private Operator connectWithAntiJoin(Operator left, Operator right, SearchCondition join) throws ParseException
+	private Operator connectWithAntiJoin(final Operator left, final Operator right, final SearchCondition join) throws ParseException
 	{
 		// assume join is already cnf
 		// and contains only columns
-		HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
+		final HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
 		HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
 		if (join.getClause().getPredicate() != null)
 		{
-			Column l = join.getClause().getPredicate().getLHS().getColumn();
-			Column r = join.getClause().getPredicate().getRHS().getColumn();
+			final Column l = join.getClause().getPredicate().getLHS().getColumn();
+			final Column r = join.getClause().getPredicate().getRHS().getColumn();
 			String o = join.getClause().getPredicate().getOp();
 
 			if (join.getClause().getNegated())
@@ -7264,17 +7818,17 @@ public class SQLParser
 			try
 			{
 				verifyTypes(lhs, left, rhs, right);
-				Filter f = new Filter(lhs, o, rhs);
+				final Filter f = new Filter(lhs, o, rhs);
 				hm.put(f, f);
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
 		}
 		else
 		{
-			SearchCondition scond = join.getClause().getSearch();
+			final SearchCondition scond = join.getClause().getSearch();
 			Column l = scond.getClause().getPredicate().getLHS().getColumn();
 			Column r = scond.getClause().getPredicate().getRHS().getColumn();
 			String o = scond.getClause().getPredicate().getOp();
@@ -7334,15 +7888,15 @@ public class SQLParser
 			try
 			{
 				verifyTypes(lhs, left, rhs, right);
-				Filter f = new Filter(lhs, o, rhs);
+				final Filter f = new Filter(lhs, o, rhs);
 				hm.put(f, f);
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
 
-			for (ConnectedSearchClause csc : scond.getConnected())
+			for (final ConnectedSearchClause csc : scond.getConnected())
 			{
 				l = csc.getSearch().getPredicate().getLHS().getColumn();
 				r = csc.getSearch().getPredicate().getRHS().getColumn();
@@ -7403,10 +7957,10 @@ public class SQLParser
 				try
 				{
 					verifyTypes(lhs, left, rhs, right);
-					Filter f = new Filter(lhs, o, rhs);
+					final Filter f = new Filter(lhs, o, rhs);
 					hm.put(f, f);
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
@@ -7417,13 +7971,13 @@ public class SQLParser
 
 		if (join.getConnected() != null && join.getConnected().size() > 0)
 		{
-			for (ConnectedSearchClause sc : join.getConnected())
+			for (final ConnectedSearchClause sc : join.getConnected())
 			{
 				hm = new HashMap<Filter, Filter>();
 				if (sc.getSearch().getPredicate() != null)
 				{
-					Column l = sc.getSearch().getPredicate().getLHS().getColumn();
-					Column r = sc.getSearch().getPredicate().getRHS().getColumn();
+					final Column l = sc.getSearch().getPredicate().getLHS().getColumn();
+					final Column r = sc.getSearch().getPredicate().getRHS().getColumn();
 					String o = sc.getSearch().getPredicate().getOp();
 
 					if (sc.getSearch().getNegated())
@@ -7481,10 +8035,10 @@ public class SQLParser
 					try
 					{
 						verifyTypes(lhs, left, rhs, right);
-						Filter f = new Filter(lhs, o, rhs);
+						final Filter f = new Filter(lhs, o, rhs);
 						hm.put(f, f);
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						if (e instanceof ParseException)
 						{
@@ -7498,7 +8052,7 @@ public class SQLParser
 				}
 				else
 				{
-					SearchCondition scond = sc.getSearch().getSearch();
+					final SearchCondition scond = sc.getSearch().getSearch();
 					Column l = scond.getClause().getPredicate().getLHS().getColumn();
 					Column r = scond.getClause().getPredicate().getRHS().getColumn();
 					String o = scond.getClause().getPredicate().getOp();
@@ -7558,15 +8112,15 @@ public class SQLParser
 					try
 					{
 						verifyTypes(lhs, left, rhs, right);
-						Filter f = new Filter(lhs, o, rhs);
+						final Filter f = new Filter(lhs, o, rhs);
 						hm.put(f, f);
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						throw new ParseException(e.getMessage());
 					}
 
-					for (ConnectedSearchClause csc : scond.getConnected())
+					for (final ConnectedSearchClause csc : scond.getConnected())
 					{
 						l = csc.getSearch().getPredicate().getLHS().getColumn();
 						r = csc.getSearch().getPredicate().getRHS().getColumn();
@@ -7627,10 +8181,10 @@ public class SQLParser
 						try
 						{
 							verifyTypes(lhs, left, rhs, right);
-							Filter f = new Filter(lhs, o, rhs);
+							final Filter f = new Filter(lhs, o, rhs);
 							hm.put(f, f);
 						}
-						catch (Exception e)
+						catch (final Exception e)
 						{
 							throw new ParseException(e.getMessage());
 						}
@@ -7643,27 +8197,27 @@ public class SQLParser
 
 		try
 		{
-			AntiJoinOperator anti = new AntiJoinOperator(hshm, meta);
+			final AntiJoinOperator anti = new AntiJoinOperator(hshm, meta);
 			anti.add(left);
 			anti.add(right);
 			return anti;
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			throw new ParseException(e.getMessage());
 		}
 	}
 
-	private Operator connectWithAntiJoin(Operator left, Operator right, SearchCondition join, Filter filter) throws ParseException
+	private Operator connectWithAntiJoin(final Operator left, final Operator right, final SearchCondition join, final Filter filter) throws ParseException
 	{
 		// assume join is already cnf
 		// and contains only columns
-		HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
+		final HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
 		HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
 		if (join.getClause().getPredicate() != null)
 		{
-			Column l = join.getClause().getPredicate().getLHS().getColumn();
-			Column r = join.getClause().getPredicate().getRHS().getColumn();
+			final Column l = join.getClause().getPredicate().getLHS().getColumn();
+			final Column r = join.getClause().getPredicate().getRHS().getColumn();
 			String o = join.getClause().getPredicate().getOp();
 
 			if (join.getClause().getNegated())
@@ -7721,17 +8275,17 @@ public class SQLParser
 			try
 			{
 				verifyTypes(lhs, left, rhs, right);
-				Filter f = new Filter(lhs, o, rhs);
+				final Filter f = new Filter(lhs, o, rhs);
 				hm.put(f, f);
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
 		}
 		else
 		{
-			SearchCondition scond = join.getClause().getSearch();
+			final SearchCondition scond = join.getClause().getSearch();
 			Column l = scond.getClause().getPredicate().getLHS().getColumn();
 			Column r = scond.getClause().getPredicate().getRHS().getColumn();
 			String o = scond.getClause().getPredicate().getOp();
@@ -7791,15 +8345,15 @@ public class SQLParser
 			try
 			{
 				verifyTypes(lhs, left, rhs, right);
-				Filter f = new Filter(lhs, o, rhs);
+				final Filter f = new Filter(lhs, o, rhs);
 				hm.put(f, f);
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
 
-			for (ConnectedSearchClause csc : scond.getConnected())
+			for (final ConnectedSearchClause csc : scond.getConnected())
 			{
 				l = csc.getSearch().getPredicate().getLHS().getColumn();
 				r = csc.getSearch().getPredicate().getRHS().getColumn();
@@ -7860,10 +8414,10 @@ public class SQLParser
 				try
 				{
 					verifyTypes(lhs, left, rhs, right);
-					Filter f = new Filter(lhs, o, rhs);
+					final Filter f = new Filter(lhs, o, rhs);
 					hm.put(f, f);
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
@@ -7874,13 +8428,13 @@ public class SQLParser
 
 		if (join.getConnected() != null && join.getConnected().size() > 0)
 		{
-			for (ConnectedSearchClause sc : join.getConnected())
+			for (final ConnectedSearchClause sc : join.getConnected())
 			{
 				hm = new HashMap<Filter, Filter>();
 				if (sc.getSearch().getPredicate() != null)
 				{
-					Column l = sc.getSearch().getPredicate().getLHS().getColumn();
-					Column r = sc.getSearch().getPredicate().getRHS().getColumn();
+					final Column l = sc.getSearch().getPredicate().getLHS().getColumn();
+					final Column r = sc.getSearch().getPredicate().getRHS().getColumn();
 					String o = sc.getSearch().getPredicate().getOp();
 
 					if (sc.getSearch().getNegated())
@@ -7938,17 +8492,17 @@ public class SQLParser
 					try
 					{
 						verifyTypes(lhs, left, rhs, right);
-						Filter f = new Filter(lhs, o, rhs);
+						final Filter f = new Filter(lhs, o, rhs);
 						hm.put(f, f);
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						throw new ParseException(e.getMessage());
 					}
 				}
 				else
 				{
-					SearchCondition scond = sc.getSearch().getSearch();
+					final SearchCondition scond = sc.getSearch().getSearch();
 					Column l = scond.getClause().getPredicate().getLHS().getColumn();
 					Column r = scond.getClause().getPredicate().getRHS().getColumn();
 					String o = scond.getClause().getPredicate().getOp();
@@ -8008,15 +8562,15 @@ public class SQLParser
 					try
 					{
 						verifyTypes(lhs, left, rhs, right);
-						Filter f = new Filter(lhs, o, rhs);
+						final Filter f = new Filter(lhs, o, rhs);
 						hm.put(f, f);
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						throw new ParseException(e.getMessage());
 					}
 
-					for (ConnectedSearchClause csc : scond.getConnected())
+					for (final ConnectedSearchClause csc : scond.getConnected())
 					{
 						l = csc.getSearch().getPredicate().getLHS().getColumn();
 						r = csc.getSearch().getPredicate().getRHS().getColumn();
@@ -8077,10 +8631,10 @@ public class SQLParser
 						try
 						{
 							verifyTypes(lhs, left, rhs, right);
-							Filter f = new Filter(lhs, o, rhs);
+							final Filter f = new Filter(lhs, o, rhs);
 							hm.put(f, f);
 						}
-						catch (Exception e)
+						catch (final Exception e)
 						{
 							throw new ParseException(e.getMessage());
 						}
@@ -8097,27 +8651,27 @@ public class SQLParser
 
 		try
 		{
-			AntiJoinOperator anti = new AntiJoinOperator(hshm, meta);
+			final AntiJoinOperator anti = new AntiJoinOperator(hshm, meta);
 			anti.add(left);
 			anti.add(right);
 			return anti;
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			throw new ParseException(e.getMessage());
 		}
 	}
 
-	private Operator connectWithSemiJoin(Operator left, Operator right, SearchCondition join) throws ParseException
+	private Operator connectWithSemiJoin(final Operator left, final Operator right, final SearchCondition join) throws ParseException
 	{
 		// assume join is already cnf
 		// and contains only columns
-		HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
+		final HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
 		HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
 		if (join.getClause().getPredicate() != null)
 		{
-			Column l = join.getClause().getPredicate().getLHS().getColumn();
-			Column r = join.getClause().getPredicate().getRHS().getColumn();
+			final Column l = join.getClause().getPredicate().getLHS().getColumn();
+			final Column r = join.getClause().getPredicate().getRHS().getColumn();
 			String o = join.getClause().getPredicate().getOp();
 
 			if (join.getClause().getNegated())
@@ -8175,17 +8729,17 @@ public class SQLParser
 			try
 			{
 				verifyTypes(lhs, left, rhs, right);
-				Filter f = new Filter(lhs, o, rhs);
+				final Filter f = new Filter(lhs, o, rhs);
 				hm.put(f, f);
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
 		}
 		else
 		{
-			SearchCondition scond = join.getClause().getSearch();
+			final SearchCondition scond = join.getClause().getSearch();
 			Column l = scond.getClause().getPredicate().getLHS().getColumn();
 			Column r = scond.getClause().getPredicate().getRHS().getColumn();
 			String o = scond.getClause().getPredicate().getOp();
@@ -8245,15 +8799,15 @@ public class SQLParser
 			try
 			{
 				verifyTypes(lhs, left, rhs, right);
-				Filter f = new Filter(lhs, o, rhs);
+				final Filter f = new Filter(lhs, o, rhs);
 				hm.put(f, f);
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
 
-			for (ConnectedSearchClause csc : scond.getConnected())
+			for (final ConnectedSearchClause csc : scond.getConnected())
 			{
 				l = csc.getSearch().getPredicate().getLHS().getColumn();
 				r = csc.getSearch().getPredicate().getRHS().getColumn();
@@ -8314,10 +8868,10 @@ public class SQLParser
 				try
 				{
 					verifyTypes(lhs, left, rhs, right);
-					Filter f = new Filter(lhs, o, rhs);
+					final Filter f = new Filter(lhs, o, rhs);
 					hm.put(f, f);
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
@@ -8328,13 +8882,13 @@ public class SQLParser
 
 		if (join.getConnected() != null && join.getConnected().size() > 0)
 		{
-			for (ConnectedSearchClause sc : join.getConnected())
+			for (final ConnectedSearchClause sc : join.getConnected())
 			{
 				hm = new HashMap<Filter, Filter>();
 				if (sc.getSearch().getPredicate() != null)
 				{
-					Column l = sc.getSearch().getPredicate().getLHS().getColumn();
-					Column r = sc.getSearch().getPredicate().getRHS().getColumn();
+					final Column l = sc.getSearch().getPredicate().getLHS().getColumn();
+					final Column r = sc.getSearch().getPredicate().getRHS().getColumn();
 					String o = sc.getSearch().getPredicate().getOp();
 
 					if (sc.getSearch().getNegated())
@@ -8392,17 +8946,17 @@ public class SQLParser
 					try
 					{
 						verifyTypes(lhs, left, rhs, right);
-						Filter f = new Filter(lhs, o, rhs);
+						final Filter f = new Filter(lhs, o, rhs);
 						hm.put(f, f);
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						throw new ParseException(e.getMessage());
 					}
 				}
 				else
 				{
-					SearchCondition scond = sc.getSearch().getSearch();
+					final SearchCondition scond = sc.getSearch().getSearch();
 					Column l = scond.getClause().getPredicate().getLHS().getColumn();
 					Column r = scond.getClause().getPredicate().getRHS().getColumn();
 					String o = scond.getClause().getPredicate().getOp();
@@ -8462,15 +9016,15 @@ public class SQLParser
 					try
 					{
 						verifyTypes(lhs, left, rhs, right);
-						Filter f = new Filter(lhs, o, rhs);
+						final Filter f = new Filter(lhs, o, rhs);
 						hm.put(f, f);
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						throw new ParseException(e.getMessage());
 					}
 
-					for (ConnectedSearchClause csc : scond.getConnected())
+					for (final ConnectedSearchClause csc : scond.getConnected())
 					{
 						l = csc.getSearch().getPredicate().getLHS().getColumn();
 						r = csc.getSearch().getPredicate().getRHS().getColumn();
@@ -8531,10 +9085,10 @@ public class SQLParser
 						try
 						{
 							verifyTypes(lhs, left, rhs, right);
-							Filter f = new Filter(lhs, o, rhs);
+							final Filter f = new Filter(lhs, o, rhs);
 							hm.put(f, f);
 						}
-						catch (Exception e)
+						catch (final Exception e)
 						{
 							throw new ParseException(e.getMessage());
 						}
@@ -8547,27 +9101,27 @@ public class SQLParser
 
 		try
 		{
-			SemiJoinOperator semi = new SemiJoinOperator(hshm, meta);
+			final SemiJoinOperator semi = new SemiJoinOperator(hshm, meta);
 			semi.add(left);
 			semi.add(right);
 			return semi;
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			throw new ParseException(e.getMessage());
 		}
 	}
 
-	private Operator connectWithSemiJoin(Operator left, Operator right, SearchCondition join, Filter filter) throws ParseException
+	private Operator connectWithSemiJoin(final Operator left, final Operator right, final SearchCondition join, final Filter filter) throws ParseException
 	{
 		// assume join is already cnf
 		// and contains only columns
-		HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
+		final HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
 		HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
 		if (join.getClause().getPredicate() != null)
 		{
-			Column l = join.getClause().getPredicate().getLHS().getColumn();
-			Column r = join.getClause().getPredicate().getRHS().getColumn();
+			final Column l = join.getClause().getPredicate().getLHS().getColumn();
+			final Column r = join.getClause().getPredicate().getRHS().getColumn();
 			String o = join.getClause().getPredicate().getOp();
 
 			if (join.getClause().getNegated())
@@ -8625,17 +9179,17 @@ public class SQLParser
 			try
 			{
 				verifyTypes(lhs, left, rhs, right);
-				Filter f = new Filter(lhs, o, rhs);
+				final Filter f = new Filter(lhs, o, rhs);
 				hm.put(f, f);
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
 		}
 		else
 		{
-			SearchCondition scond = join.getClause().getSearch();
+			final SearchCondition scond = join.getClause().getSearch();
 			Column l = scond.getClause().getPredicate().getLHS().getColumn();
 			Column r = scond.getClause().getPredicate().getRHS().getColumn();
 			String o = scond.getClause().getPredicate().getOp();
@@ -8695,15 +9249,15 @@ public class SQLParser
 			try
 			{
 				verifyTypes(lhs, left, rhs, right);
-				Filter f = new Filter(lhs, o, rhs);
+				final Filter f = new Filter(lhs, o, rhs);
 				hm.put(f, f);
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				throw new ParseException(e.getMessage());
 			}
 
-			for (ConnectedSearchClause csc : scond.getConnected())
+			for (final ConnectedSearchClause csc : scond.getConnected())
 			{
 				l = csc.getSearch().getPredicate().getLHS().getColumn();
 				r = csc.getSearch().getPredicate().getRHS().getColumn();
@@ -8764,10 +9318,10 @@ public class SQLParser
 				try
 				{
 					verifyTypes(lhs, left, rhs, right);
-					Filter f = new Filter(lhs, o, rhs);
+					final Filter f = new Filter(lhs, o, rhs);
 					hm.put(f, f);
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					throw new ParseException(e.getMessage());
 				}
@@ -8778,13 +9332,13 @@ public class SQLParser
 
 		if (join.getConnected() != null && join.getConnected().size() > 0)
 		{
-			for (ConnectedSearchClause sc : join.getConnected())
+			for (final ConnectedSearchClause sc : join.getConnected())
 			{
 				hm = new HashMap<Filter, Filter>();
 				if (sc.getSearch().getPredicate() != null)
 				{
-					Column l = sc.getSearch().getPredicate().getLHS().getColumn();
-					Column r = sc.getSearch().getPredicate().getRHS().getColumn();
+					final Column l = sc.getSearch().getPredicate().getLHS().getColumn();
+					final Column r = sc.getSearch().getPredicate().getRHS().getColumn();
 					String o = sc.getSearch().getPredicate().getOp();
 
 					if (sc.getSearch().getNegated())
@@ -8842,17 +9396,17 @@ public class SQLParser
 					try
 					{
 						verifyTypes(lhs, left, rhs, right);
-						Filter f = new Filter(lhs, o, rhs);
+						final Filter f = new Filter(lhs, o, rhs);
 						hm.put(f, f);
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						throw new ParseException(e.getMessage());
 					}
 				}
 				else
 				{
-					SearchCondition scond = sc.getSearch().getSearch();
+					final SearchCondition scond = sc.getSearch().getSearch();
 					Column l = scond.getClause().getPredicate().getLHS().getColumn();
 					Column r = scond.getClause().getPredicate().getRHS().getColumn();
 					String o = scond.getClause().getPredicate().getOp();
@@ -8912,15 +9466,15 @@ public class SQLParser
 					try
 					{
 						verifyTypes(lhs, left, rhs, right);
-						Filter f = new Filter(lhs, o, rhs);
+						final Filter f = new Filter(lhs, o, rhs);
 						hm.put(f, f);
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						throw new ParseException(e.getMessage());
 					}
 
-					for (ConnectedSearchClause csc : scond.getConnected())
+					for (final ConnectedSearchClause csc : scond.getConnected())
 					{
 						l = csc.getSearch().getPredicate().getLHS().getColumn();
 						r = csc.getSearch().getPredicate().getRHS().getColumn();
@@ -8981,10 +9535,10 @@ public class SQLParser
 						try
 						{
 							verifyTypes(lhs, left, rhs, right);
-							Filter f = new Filter(lhs, o, rhs);
+							final Filter f = new Filter(lhs, o, rhs);
 							hm.put(f, f);
 						}
-						catch (Exception e)
+						catch (final Exception e)
 						{
 							throw new ParseException(e.getMessage());
 						}
@@ -9001,18 +9555,18 @@ public class SQLParser
 
 		try
 		{
-			SemiJoinOperator semi = new SemiJoinOperator(hshm, meta);
+			final SemiJoinOperator semi = new SemiJoinOperator(hshm, meta);
 			semi.add(left);
 			semi.add(right);
 			return semi;
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			throw new ParseException(e.getMessage());
 		}
 	}
 
-	private boolean containsAggregation(Expression exp)
+	private boolean containsAggregation(final Expression exp)
 	{
 		if (exp.isColumn())
 		{
@@ -9038,13 +9592,13 @@ public class SQLParser
 		}
 		else if (exp.isFunction())
 		{
-			Function f = exp.getFunction();
+			final Function f = exp.getFunction();
 			if (f.getName().equals("AVG") || f.getName().equals("COUNT") || f.getName().equals("MAX") || f.getName().equals("MIN") || f.getName().equals("SUM"))
 			{
 				return true;
 			}
 
-			for (Expression e : f.getArgs())
+			for (final Expression e : f.getArgs())
 			{
 				if (containsAggregation(e))
 				{
@@ -9056,7 +9610,7 @@ public class SQLParser
 		}
 		else if (exp.isList())
 		{
-			for (Expression e : exp.getList())
+			for (final Expression e : exp.getList())
 			{
 				if (containsAggregation(e))
 				{
@@ -9080,11 +9634,11 @@ public class SQLParser
 		}
 	}
 
-	private boolean containsAggregation(SearchClause clause)
+	private boolean containsAggregation(final SearchClause clause)
 	{
 		if (clause.getPredicate() != null)
 		{
-			Predicate p = clause.getPredicate();
+			final Predicate p = clause.getPredicate();
 			if (p.getLHS() == null)
 			{
 				return false;
@@ -9106,7 +9660,7 @@ public class SQLParser
 			return false;
 		}
 
-		SearchCondition search = clause.getSearch();
+		final SearchCondition search = clause.getSearch();
 		if (containsAggregation(search.getClause()))
 		{
 			return true;
@@ -9114,7 +9668,7 @@ public class SQLParser
 
 		if (search.getConnected() != null && search.getConnected().size() > 0)
 		{
-			for (ConnectedSearchClause csc : search.getConnected())
+			for (final ConnectedSearchClause csc : search.getConnected())
 			{
 				if (containsAggregation(csc.getSearch()))
 				{
@@ -9126,11 +9680,11 @@ public class SQLParser
 		return false;
 	}
 
-	private boolean containsCorrelatedCol(Expression exp, HashMap<String, Integer> cols2Pos) throws ParseException
+	private boolean containsCorrelatedCol(final Expression exp, final HashMap<String, Integer> cols2Pos) throws ParseException
 	{
 		if (exp.isColumn())
 		{
-			Column col = exp.getColumn();
+			final Column col = exp.getColumn();
 			String colString = "";
 			if (col.getTable() != null)
 			{
@@ -9199,7 +9753,7 @@ public class SQLParser
 		}
 		else if (exp.isFunction())
 		{
-			for (Expression e : exp.getFunction().getArgs())
+			for (final Expression e : exp.getFunction().getArgs())
 			{
 				if (containsCorrelatedCol(e, cols2Pos))
 				{
@@ -9211,7 +9765,7 @@ public class SQLParser
 		}
 		else if (exp.isCase())
 		{
-			for (Case c : exp.getCases())
+			for (final Case c : exp.getCases())
 			{
 				if (containsCorrelatedCol(c.getResult(), cols2Pos))
 				{
@@ -9228,7 +9782,7 @@ public class SQLParser
 		}
 		else if (exp.isList())
 		{
-			for (Expression e : exp.getList())
+			for (final Expression e : exp.getList())
 			{
 				if (containsCorrelatedCol(e, cols2Pos))
 				{
@@ -9254,769 +9808,807 @@ public class SQLParser
 
 	private void convertToCNF(SearchCondition s)
 	{
-		SearchClause sc = s.getClause();
-		if (sc.getPredicate() == null)
+		tail: while (true)
 		{
-			pushInwardAnyNegation(sc);
-		}
-
-		if (s.getConnected() != null && s.getConnected().size() > 0)
-		{
-			for (ConnectedSearchClause csc : s.getConnected())
-			{
-				if (csc.getSearch().getPredicate() == null)
-				{
-					pushInwardAnyNegation(csc.getSearch());
-				}
-			}
-		}
-
-		if (isCNF(s))
-		{
-			return;
-		}
-
-		if ((s.getConnected() == null || s.getConnected().size() == 0) && sc.getPredicate() == null)
-		{
-			SearchCondition s2 = sc.getSearch();
-			s.setClause(s2.getClause());
-			s.setConnected(s2.getConnected());
-			convertToCNF(s);
-			return;
-		}
-
-		if (allPredicates(s))
-		{
-			// we must have mixed ands and ors
-			ArrayList<SearchClause> preds = new ArrayList<SearchClause>();
-			SearchClause next = null;
-			ArrayList<ConnectedSearchClause> remainder = new ArrayList<ConnectedSearchClause>();
-			preds.add(sc);
-			boolean found = false;
-
-			for (ConnectedSearchClause csc : s.getConnected())
-			{
-				if (found)
-				{
-					remainder.add(csc);
-					continue;
-				}
-
-				if (csc.isAnd())
-				{
-					preds.add(csc.getSearch());
-				}
-				else
-				{
-					found = true;
-					next = csc.getSearch();
-				}
-			}
-
-			ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
-			for (SearchClause a : preds)
-			{
-				ArrayList<ConnectedSearchClause> b = new ArrayList<ConnectedSearchClause>(1);
-				ConnectedSearchClause b1 = new ConnectedSearchClause(next, false);
-				b.add(b1);
-				SearchCondition search = new SearchCondition(a, b);
-				searches.add(search);
-			}
-
-			SearchCondition first = searches.remove(0);
-			ArrayList<ConnectedSearchClause> b = new ArrayList<ConnectedSearchClause>();
-			for (SearchCondition s2 : searches)
-			{
-				SearchClause sc2 = new SearchClause(s2, false);
-				b.add(new ConnectedSearchClause(sc2, true));
-			}
-
-			SearchCondition s3 = new SearchCondition(new SearchClause(first, false), b);
-			s.setClause(new SearchClause(s3, false));
-			s.setConnected(remainder);
-			convertToCNF(s);
-			return;
-		}
-
-		if (s.getConnected().get(0).isAnd())
-		{
-			// starts with and
+			//HRDBMSWorker.logger.debug("Entering convertToCNF search condition = " + s);
+			SearchClause sc = s.getClause();
 			if (sc.getPredicate() == null)
 			{
-				convertToCNF(sc.getSearch());
+				pushInwardAnyNegation(sc);
+				//HRDBMSWorker.logger.debug("After negating first search clause, search condition = " + s);
 			}
 
-			if (s.getConnected().get(0).getSearch().getPredicate() == null)
+			if (s.getConnected() != null && s.getConnected().size() > 0)
 			{
-				convertToCNF(s.getConnected().get(0).getSearch().getSearch());
-			}
-
-			if (sc.getPredicate() != null || (allPredicates(sc.getSearch()) && allAnd(sc.getSearch())))
-			{
-				// A is all anded predicates
-				ArrayList<SearchClause> A = new ArrayList<SearchClause>();
-				if (sc.getPredicate() != null)
+				for (final ConnectedSearchClause csc : s.getConnected())
 				{
-					A.add(sc);
-				}
-				else
-				{
-					SearchCondition s2 = sc.getSearch();
-					A.add(s2.getClause());
-					for (ConnectedSearchClause csc : s2.getConnected())
+					if (csc.getSearch().getPredicate() == null)
 					{
-						A.add(csc.getSearch());
+						pushInwardAnyNegation(csc.getSearch());
 					}
 				}
+			}
+			
+			//HRDBMSWorker.logger.debug("After negating the rest, search condition = " + s);
 
-				// figure out what B is
-				SearchClause sc2 = s.getConnected().get(0).getSearch();
-				if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
+			if (isCNF(s))
+			{
+				return;
+			}
+
+			if ((s.getConnected() == null || s.getConnected().size() == 0) && sc.getPredicate() == null)
+			{
+				final SearchCondition s2 = sc.getSearch();
+				s.setClause(s2.getClause());
+				s.setConnected(s2.getConnected());
+				continue tail;
+			}
+
+			if (allPredicates(s))
+			{
+				// we must have mixed ands and ors
+				ArrayList<SearchClause> preds = new ArrayList<SearchClause>();
+				SearchClause next = null;
+				ArrayList<ConnectedSearchClause> remainder = new ArrayList<ConnectedSearchClause>();
+				preds.add(sc);
+				boolean found = false;
+
+				for (final ConnectedSearchClause csc : s.getConnected())
 				{
-					// B is all anded predicates
-					if (sc2.getPredicate() != null)
+					if (found)
 					{
-						A.add(sc2);
+						remainder.add(csc);
+						continue;
+					}
+
+					if (csc.isAnd())
+					{
+						preds.add(csc.getSearch());
 					}
 					else
 					{
-						SearchCondition s2 = sc2.getSearch();
+						found = true;
+						next = csc.getSearch();
+					}
+				}
+
+				ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
+				for (final SearchClause a : preds)
+				{
+					final ArrayList<ConnectedSearchClause> b = new ArrayList<ConnectedSearchClause>(1);
+					final ConnectedSearchClause b1 = new ConnectedSearchClause(next, false);
+					b.add(b1);
+					final SearchCondition search = new SearchCondition(a, b);
+					searches.add(search);
+				}
+
+				final SearchCondition first = searches.remove(0);
+				ArrayList<ConnectedSearchClause> b = new ArrayList<ConnectedSearchClause>();
+				for (final SearchCondition s2 : searches)
+				{
+					final SearchClause sc2 = new SearchClause(s2, false);
+					b.add(new ConnectedSearchClause(sc2, true));
+				}
+
+				SearchCondition s3 = new SearchCondition(new SearchClause(first, false), b);
+				s.setClause(new SearchClause(s3, false));
+				s.setConnected(remainder);
+				preds = null;
+				remainder = null;
+				searches = null;
+				b = null;
+				s3 = null;
+				continue tail;
+			}
+
+			if (s.getConnected().get(0).isAnd())
+			{
+				// starts with and
+				if (sc.getPredicate() == null)
+				{
+					convertToCNF(sc.getSearch());
+				}
+
+				if (s.getConnected().get(0).getSearch().getPredicate() == null)
+				{
+					convertToCNF(s.getConnected().get(0).getSearch().getSearch());
+				}
+
+				if (sc.getPredicate() != null || (allPredicates(sc.getSearch()) && allAnd(sc.getSearch())))
+				{
+					// A is all anded predicates
+					ArrayList<SearchClause> A = new ArrayList<SearchClause>();
+					if (sc.getPredicate() != null)
+					{
+						A.add(sc);
+					}
+					else
+					{
+						final SearchCondition s2 = sc.getSearch();
 						A.add(s2.getClause());
-						for (ConnectedSearchClause csc : s2.getConnected())
+						for (final ConnectedSearchClause csc : s2.getConnected())
 						{
 							A.add(csc.getSearch());
 						}
 					}
 
-					s.getConnected().remove(0);
-					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					SearchClause first = A.remove(0);
-					for (SearchClause search : A)
+					// figure out what B is
+					final SearchClause sc2 = s.getConnected().get(0).getSearch();
+					if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
 					{
-						cscs.add(new ConnectedSearchClause(search, true));
-					}
+						// B is all anded predicates
+						if (sc2.getPredicate() != null)
+						{
+							A.add(sc2);
+						}
+						else
+						{
+							final SearchCondition s2 = sc2.getSearch();
+							A.add(s2.getClause());
+							for (final ConnectedSearchClause csc : s2.getConnected())
+							{
+								A.add(csc.getSearch());
+							}
+						}
 
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
-				}
-				else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
-				{
-					// B all ors
-					s.getConnected().remove(0);
-					SearchClause first = A.remove(0);
-					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					for (SearchClause search : A)
-					{
-						cscs.add(new ConnectedSearchClause(search, true));
-					}
-
-					cscs.add(new ConnectedSearchClause(sc2, true));
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
-				}
-				else
-				{
-					// A AND B CNF
-					s.getConnected().remove(0);
-					ArrayList<ConnectedSearchClause> cscs = sc2.getSearch().getConnected();
-					if (cscs == null)
-					{
-						cscs = new ArrayList<ConnectedSearchClause>();
-					}
-					for (SearchClause search : A)
-					{
-						cscs.add(new ConnectedSearchClause(search, true));
-					}
-					sc2.getSearch().setConnected(cscs);
-					s.setClause(sc2);
-					convertToCNF(s);
-					return;
-				}
-			}
-			else if (allPredicates(sc.getSearch()) && allOrs(sc.getSearch()))
-			{
-				// A all ored preds
-				// figure out what B is
-				SearchClause sc2 = s.getConnected().get(0).getSearch();
-				if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
-				{
-					// B is all anded predicates
-					SearchClause first = sc;
-					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					if (sc2.getPredicate() != null)
-					{
 						s.getConnected().remove(0);
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						final SearchClause first = A.remove(0);
+						for (final SearchClause search : A)
+						{
+							cscs.add(new ConnectedSearchClause(search, true));
+						}
+
+						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+						A = null;
+						cscs = null;
+						continue tail;
+					}
+					else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
+					{
+						// B all ors
+						s.getConnected().remove(0);
+						final SearchClause first = A.remove(0);
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						for (final SearchClause search : A)
+						{
+							cscs.add(new ConnectedSearchClause(search, true));
+						}
+
 						cscs.add(new ConnectedSearchClause(sc2, true));
 						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-						convertToCNF(s);
-						return;
+						A = null;
+						cscs = null;
+						continue tail;
 					}
+					else
+					{
+						// A AND B CNF
+						s.getConnected().remove(0);
+						ArrayList<ConnectedSearchClause> cscs = sc2.getSearch().getConnected();
+						if (cscs == null)
+						{
+							cscs = new ArrayList<ConnectedSearchClause>();
+						}
+						for (final SearchClause search : A)
+						{
+							cscs.add(new ConnectedSearchClause(search, true));
+						}
+						sc2.getSearch().setConnected(cscs);
+						s.setClause(sc2);
+						A = null;
+						continue tail;
+					}
+				}
+				else if (allPredicates(sc.getSearch()) && allOrs(sc.getSearch()))
+				{
+					// A all ored preds
+					// figure out what B is
+					final SearchClause sc2 = s.getConnected().get(0).getSearch();
+					if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
+					{
+						// B is all anded predicates
+						final SearchClause first = sc;
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						if (sc2.getPredicate() != null)
+						{
+							s.getConnected().remove(0);
+							cscs.add(new ConnectedSearchClause(sc2, true));
+							s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+							cscs = null;
+							continue tail;
+						}
 
-					cscs.add(new ConnectedSearchClause(sc2.getSearch().getClause(), true));
-					if (sc2.getSearch().getConnected() != null)
-					{
-						cscs.addAll(sc2.getSearch().getConnected());
+						cscs.add(new ConnectedSearchClause(sc2.getSearch().getClause(), true));
+						if (sc2.getSearch().getConnected() != null)
+						{
+							cscs.addAll(sc2.getSearch().getConnected());
+						}
+						s.getConnected().remove(0);
+						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+						cscs = null;
+						continue tail;
 					}
-					s.getConnected().remove(0);
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
-				}
-				else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
-				{
-					// B all ors
-					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					SearchClause first = sc;
-					cscs.add(new ConnectedSearchClause(sc2, true));
-					s.getConnected().remove(0);
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
-				}
-				else
-				{
-					// A ors B CNF
-					s.getConnected().remove(0);
-					ArrayList<ConnectedSearchClause> cscs = sc2.getSearch().getConnected();
-					if (cscs == null)
+					else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
 					{
-						cscs = new ArrayList<ConnectedSearchClause>();
-					}
-					cscs.add(new ConnectedSearchClause(sc, true));
-					sc2.getSearch().setConnected(cscs);
-					s.setClause(sc2);
-					convertToCNF(s);
-					return;
-				}
-			}
-			else
-			{
-				// A is CNF
-				// figure out what B is
-				SearchClause sc2 = s.getConnected().get(0).getSearch();
-				if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
-				{
-					// A CNF B AND
-					s.getConnected().remove(0);
-					ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
-					if (cscs == null)
-					{
-						cscs = new ArrayList<ConnectedSearchClause>();
-					}
-
-					if (sc2.getPredicate() != null)
-					{
+						// B all ors
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						final SearchClause first = sc;
 						cscs.add(new ConnectedSearchClause(sc2, true));
+						s.getConnected().remove(0);
+						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+						cscs = null;
+						continue tail;
+					}
+					else
+					{
+						// A ors B CNF
+						s.getConnected().remove(0);
+						ArrayList<ConnectedSearchClause> cscs = sc2.getSearch().getConnected();
+						if (cscs == null)
+						{
+							cscs = new ArrayList<ConnectedSearchClause>();
+						}
+						cscs.add(new ConnectedSearchClause(sc, true));
+						sc2.getSearch().setConnected(cscs);
+						s.setClause(sc2);
+						cscs = null;
+						continue tail;
+					}
+				}
+				else
+				{
+					// A is CNF
+					// figure out what B is
+					final SearchClause sc2 = s.getConnected().get(0).getSearch();
+					if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
+					{
+						// A CNF B AND
+						s.getConnected().remove(0);
+						ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
+						if (cscs == null)
+						{
+							cscs = new ArrayList<ConnectedSearchClause>();
+						}
+
+						if (sc2.getPredicate() != null)
+						{
+							cscs.add(new ConnectedSearchClause(sc2, true));
+							sc.getSearch().setConnected(cscs);
+							cscs = null;
+							continue tail;
+						}
+
+						cscs.add(new ConnectedSearchClause(sc2.getSearch().getClause(), true));
+						if (sc2.getSearch().getConnected() != null)
+						{
+							cscs.addAll(sc2.getSearch().getConnected());
+						}
+
 						sc.getSearch().setConnected(cscs);
-						convertToCNF(s);
-						return;
+						cscs = null;
+						continue tail;
 					}
-
-					cscs.add(new ConnectedSearchClause(sc2.getSearch().getClause(), true));
-					if (sc2.getSearch().getConnected() != null)
+					else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
 					{
-						cscs.addAll(sc2.getSearch().getConnected());
-					}
+						// A CNF B OR
+						s.getConnected().remove(0);
+						ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
+						if (cscs == null)
+						{
+							cscs = new ArrayList<ConnectedSearchClause>();
+						}
 
-					sc.getSearch().setConnected(cscs);
-					convertToCNF(s);
-					return;
-				}
-				else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
-				{
-					// A CNF B OR
-					s.getConnected().remove(0);
-					ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
-					if (cscs == null)
-					{
-						cscs = new ArrayList<ConnectedSearchClause>();
-					}
-
-					sc.getSearch().setConnected(cscs);
-					cscs.add(new ConnectedSearchClause(sc2, true));
-					convertToCNF(s);
-					return;
-				}
-				else
-				{
-					// A CNF B CNF
-					s.getConnected().remove(0);
-					ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
-					if (cscs == null)
-					{
-						cscs = new ArrayList<ConnectedSearchClause>();
 						sc.getSearch().setConnected(cscs);
-					}
-
-					cscs.add(new ConnectedSearchClause(sc2.getSearch().getClause(), true));
-					if (sc2.getSearch().getConnected() != null)
-					{
-						cscs.addAll(sc2.getSearch().getConnected());
-					}
-
-					convertToCNF(s);
-					return;
-				}
-			}
-		}
-		else
-		{
-			// starts with or
-			if (sc.getPredicate() == null)
-			{
-				convertToCNF(sc.getSearch());
-			}
-
-			if (s.getConnected().get(0).getSearch().getPredicate() == null)
-			{
-				convertToCNF(s.getConnected().get(0).getSearch().getSearch());
-			}
-
-			if (sc.getPredicate() != null || (allPredicates(sc.getSearch()) && allAnd(sc.getSearch())))
-			{
-				// A is all anded predicates
-				ArrayList<SearchClause> A = new ArrayList<SearchClause>();
-				if (sc.getPredicate() != null)
-				{
-					A.add(sc);
-				}
-				else
-				{
-					SearchCondition s2 = sc.getSearch();
-					A.add(s2.getClause());
-					for (ConnectedSearchClause csc : s2.getConnected())
-					{
-						A.add(csc.getSearch());
-					}
-				}
-
-				// figure out what B is
-				SearchClause sc2 = s.getConnected().get(0).getSearch();
-				if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
-				{
-					// B is all anded predicates
-					ArrayList<SearchClause> B = new ArrayList<SearchClause>();
-					if (sc2.getPredicate() != null)
-					{
-						B.add(sc2);
+						cscs.add(new ConnectedSearchClause(sc2, true));
+						cscs = null;
+						continue tail;
 					}
 					else
 					{
-						SearchCondition s2 = sc2.getSearch();
-						B.add(s2.getClause());
-						for (ConnectedSearchClause csc : s2.getConnected())
+						// A CNF B CNF
+						s.getConnected().remove(0);
+						ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
+						if (cscs == null)
 						{
-							B.add(csc.getSearch());
+							cscs = new ArrayList<ConnectedSearchClause>();
+							sc.getSearch().setConnected(cscs);
 						}
-					}
 
-					ArrayList<SearchClause> searches = new ArrayList<SearchClause>();
-					for (SearchClause p1 : A)
-					{
-						for (SearchClause p2 : B)
+						cscs.add(new ConnectedSearchClause(sc2.getSearch().getClause(), true));
+						if (sc2.getSearch().getConnected() != null)
 						{
-							ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-							cscs.add(new ConnectedSearchClause(p2, false));
-							searches.add(new SearchClause(new SearchCondition(p1, cscs), false));
+							cscs.addAll(sc2.getSearch().getConnected());
 						}
-					}
 
-					SearchClause first = searches.remove(0);
-					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					for (SearchClause search : searches)
-					{
-						cscs.add(new ConnectedSearchClause(search, true));
+						cscs = null;
+						continue tail;
 					}
-					s.getConnected().remove(0);
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
-				}
-				else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
-				{
-					// B all ors
-					ArrayList<SearchClause> searches = new ArrayList<SearchClause>();
-					for (SearchClause a : A)
-					{
-						SearchClause search = sc2.clone();
-						search.getSearch().getConnected().add(new ConnectedSearchClause(a, false));
-						searches.add(search);
-					}
-
-					SearchClause first = searches.remove(0);
-					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					for (SearchClause search : searches)
-					{
-						cscs.add(new ConnectedSearchClause(search, true));
-					}
-					s.getConnected().remove(0);
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
-				}
-				else
-				{
-					// A AND B CNF
-					s.getConnected().remove(0);
-					// build list of ored clauses in B
-					SearchCondition scond = sc2.getSearch();
-					ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
-					if (scond.getClause().getPredicate() != null)
-					{
-						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-						searches.add(new SearchCondition(scond.getClause(), cscs));
-					}
-					else
-					{
-						searches.add(scond.getClause().getSearch());
-					}
-
-					for (ConnectedSearchClause csc : scond.getConnected())
-					{
-						if (csc.getSearch().getPredicate() != null)
-						{
-							ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-							searches.add(new SearchCondition(csc.getSearch(), cscs));
-						}
-						else
-						{
-							searches.add(csc.getSearch().getSearch());
-						}
-					}
-
-					ArrayList<SearchCondition> AB = new ArrayList<SearchCondition>();
-					for (SearchClause a : A)
-					{
-						for (SearchCondition b : searches)
-						{
-							SearchCondition ab = b.clone();
-							ab.getConnected().add(new ConnectedSearchClause(a, false));
-							AB.add(ab);
-						}
-					}
-
-					SearchClause first = new SearchClause(AB.remove(0), false);
-					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					for (SearchCondition ab : AB)
-					{
-						cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
-					}
-
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
-				}
-			}
-			else if (allPredicates(sc.getSearch()) && allOrs(sc.getSearch()))
-			{
-				// A all ored preds
-				// figure out what B is
-				SearchClause sc2 = s.getConnected().get(0).getSearch();
-				if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
-				{
-					// B is all anded predicates
-					ArrayList<SearchClause> B = new ArrayList<SearchClause>();
-					if (sc2.getPredicate() != null)
-					{
-						B.add(sc2);
-					}
-					else
-					{
-						SearchCondition s2 = sc2.getSearch();
-						B.add(s2.getClause());
-						for (ConnectedSearchClause csc : s2.getConnected())
-						{
-							B.add(csc.getSearch());
-						}
-					}
-
-					ArrayList<SearchClause> searches = new ArrayList<SearchClause>();
-					for (SearchClause b : B)
-					{
-						SearchClause search = sc.clone();
-						search.getSearch().getConnected().add(new ConnectedSearchClause(b, false));
-						searches.add(search);
-					}
-
-					SearchClause first = searches.remove(0);
-					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					for (SearchClause search : searches)
-					{
-						cscs.add(new ConnectedSearchClause(search, true));
-					}
-					s.getConnected().remove(0);
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
-				}
-				else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
-				{
-					// B all ors
-					s.getConnected().remove(0);
-					ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
-					cscs.add(new ConnectedSearchClause(sc2.getSearch().getClause(), false));
-					cscs.addAll(sc2.getSearch().getConnected());
-					convertToCNF(s);
-					return;
-				}
-				else
-				{
-					// A ors B CNF
-					s.getConnected().remove(0);
-					// build list of ored clauses in B
-					SearchCondition scond = sc2.getSearch();
-					ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
-					if (scond.getClause().getPredicate() != null)
-					{
-						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-						searches.add(new SearchCondition(scond.getClause(), cscs));
-					}
-					else
-					{
-						searches.add(scond.getClause().getSearch());
-					}
-
-					for (ConnectedSearchClause csc : scond.getConnected())
-					{
-						if (csc.getSearch().getPredicate() != null)
-						{
-							ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-							searches.add(new SearchCondition(csc.getSearch(), cscs));
-						}
-						else
-						{
-							searches.add(csc.getSearch().getSearch());
-						}
-					}
-
-					for (SearchCondition search : searches)
-					{
-						search.getConnected().add(new ConnectedSearchClause(sc.getSearch().getClause(), false));
-						for (ConnectedSearchClause csc : sc.getSearch().getConnected())
-						{
-							search.getConnected().add(csc);
-						}
-					}
-
-					SearchClause first = new SearchClause(searches.remove(0), false);
-					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					for (SearchCondition ab : searches)
-					{
-						cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
-					}
-
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
 				}
 			}
 			else
 			{
-				// A is CNF
-				// figure out what B is
-				SearchClause sc2 = s.getConnected().get(0).getSearch();
-				if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
+				// starts with or
+				if (sc.getPredicate() == null)
 				{
-					// A CNF B AND
-					ArrayList<SearchClause> B = new ArrayList<SearchClause>();
-					if (sc2.getPredicate() != null)
-					{
-						B.add(sc2);
-					}
-					else
-					{
-						SearchCondition s2 = sc2.getSearch();
-						B.add(s2.getClause());
-						for (ConnectedSearchClause csc : s2.getConnected())
-						{
-							B.add(csc.getSearch());
-						}
-					}
-
-					s.getConnected().remove(0);
-					// build list of ored clauses in A
-					SearchCondition scond = sc.getSearch();
-					ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
-					if (scond.getClause().getPredicate() != null)
-					{
-						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-						searches.add(new SearchCondition(scond.getClause(), cscs));
-					}
-					else
-					{
-						searches.add(scond.getClause().getSearch());
-					}
-
-					for (ConnectedSearchClause csc : scond.getConnected())
-					{
-						if (csc.getSearch().getPredicate() != null)
-						{
-							ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-							searches.add(new SearchCondition(csc.getSearch(), cscs));
-						}
-						else
-						{
-							searches.add(csc.getSearch().getSearch());
-						}
-					}
-
-					ArrayList<SearchCondition> AB = new ArrayList<SearchCondition>();
-					for (SearchClause b : B)
-					{
-						for (SearchCondition a : searches)
-						{
-							SearchCondition ab = a.clone();
-							ab.getConnected().add(new ConnectedSearchClause(b, false));
-							AB.add(ab);
-						}
-					}
-
-					SearchClause first = new SearchClause(AB.remove(0), false);
-					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					for (SearchCondition ab : AB)
-					{
-						cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
-					}
-
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
+					convertToCNF(sc.getSearch());
 				}
-				else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
+
+				if (s.getConnected().get(0).getSearch().getPredicate() == null)
 				{
-					// A CNF B OR
-					s.getConnected().remove(0);
-					// build list of ored clauses in A
-					SearchCondition scond = sc.getSearch();
-					ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
-					if (scond.getClause().getPredicate() != null)
+					convertToCNF(s.getConnected().get(0).getSearch().getSearch());
+				}
+
+				if (sc.getPredicate() != null || (allPredicates(sc.getSearch()) && allAnd(sc.getSearch())))
+				{
+					// A is all anded predicates
+					ArrayList<SearchClause> A = new ArrayList<SearchClause>();
+					if (sc.getPredicate() != null)
 					{
-						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-						searches.add(new SearchCondition(scond.getClause(), cscs));
+						A.add(sc);
 					}
 					else
 					{
-						searches.add(scond.getClause().getSearch());
+						final SearchCondition s2 = sc.getSearch();
+						A.add(s2.getClause());
+						for (final ConnectedSearchClause csc : s2.getConnected())
+						{
+							A.add(csc.getSearch());
+						}
 					}
 
-					for (ConnectedSearchClause csc : scond.getConnected())
+					// figure out what B is
+					final SearchClause sc2 = s.getConnected().get(0).getSearch();
+					if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
 					{
-						if (csc.getSearch().getPredicate() != null)
+						// B is all anded predicates
+						ArrayList<SearchClause> B = new ArrayList<SearchClause>();
+						if (sc2.getPredicate() != null)
 						{
-							ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-							searches.add(new SearchCondition(csc.getSearch(), cscs));
+							B.add(sc2);
 						}
 						else
 						{
-							searches.add(csc.getSearch().getSearch());
+							final SearchCondition s2 = sc2.getSearch();
+							B.add(s2.getClause());
+							for (final ConnectedSearchClause csc : s2.getConnected())
+							{
+								B.add(csc.getSearch());
+							}
 						}
-					}
 
-					for (SearchCondition search : searches)
-					{
-						search.getConnected().add(new ConnectedSearchClause(sc2.getSearch().getClause(), false));
-						for (ConnectedSearchClause csc : sc2.getSearch().getConnected())
+						ArrayList<SearchClause> searches = new ArrayList<SearchClause>();
+						for (final SearchClause p1 : A)
 						{
-							search.getConnected().add(csc);
+							for (final SearchClause p2 : B)
+							{
+								final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+								cscs.add(new ConnectedSearchClause(p2, false));
+								searches.add(new SearchClause(new SearchCondition(p1, cscs), false));
+							}
 						}
-					}
 
-					SearchClause first = new SearchClause(searches.remove(0), false);
-					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					for (SearchCondition ab : searches)
+						final SearchClause first = searches.remove(0);
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						for (final SearchClause search : searches)
+						{
+							cscs.add(new ConnectedSearchClause(search, true));
+						}
+						s.getConnected().remove(0);
+						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+						A = null;
+						B = null;
+						searches = null;
+						cscs = null;
+						continue tail;
+					}
+					else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
 					{
-						cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
-					}
+						// B all ors
+						ArrayList<SearchClause> searches = new ArrayList<SearchClause>();
+						for (final SearchClause a : A)
+						{
+							final SearchClause search = sc2.clone();
+							search.getSearch().getConnected().add(new ConnectedSearchClause(a, false));
+							searches.add(search);
+						}
 
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
+						final SearchClause first = searches.remove(0);
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						for (final SearchClause search : searches)
+						{
+							cscs.add(new ConnectedSearchClause(search, true));
+						}
+						s.getConnected().remove(0);
+						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+						A = null;
+						searches = null;
+						cscs = null;
+						continue tail;
+					}
+					else
+					{
+						// A AND B CNF
+						s.getConnected().remove(0);
+						// build list of ored clauses in B
+						final SearchCondition scond = sc2.getSearch();
+						ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
+						if (scond.getClause().getPredicate() != null)
+						{
+							final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+							searches.add(new SearchCondition(scond.getClause(), cscs));
+						}
+						else
+						{
+							searches.add(scond.getClause().getSearch());
+						}
+
+						for (final ConnectedSearchClause csc : scond.getConnected())
+						{
+							if (csc.getSearch().getPredicate() != null)
+							{
+								final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+								searches.add(new SearchCondition(csc.getSearch(), cscs));
+							}
+							else
+							{
+								searches.add(csc.getSearch().getSearch());
+							}
+						}
+
+						ArrayList<SearchCondition> AB = new ArrayList<SearchCondition>();
+						for (final SearchClause a : A)
+						{
+							for (final SearchCondition b : searches)
+							{
+								final SearchCondition ab = b.clone();
+								ab.getConnected().add(new ConnectedSearchClause(a, false));
+								AB.add(ab);
+							}
+						}
+
+						SearchClause first = new SearchClause(AB.remove(0), false);
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						for (final SearchCondition ab : AB)
+						{
+							cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
+						}
+
+						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+						A = null;
+						searches = null;
+						AB = null;
+						first = null;
+						cscs = null;
+						continue tail;
+					}
+				}
+				else if (allPredicates(sc.getSearch()) && allOrs(sc.getSearch()))
+				{
+					// A all ored preds
+					// figure out what B is
+					final SearchClause sc2 = s.getConnected().get(0).getSearch();
+					if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
+					{
+						// B is all anded predicates
+						ArrayList<SearchClause> B = new ArrayList<SearchClause>();
+						if (sc2.getPredicate() != null)
+						{
+							B.add(sc2);
+						}
+						else
+						{
+							final SearchCondition s2 = sc2.getSearch();
+							B.add(s2.getClause());
+							for (final ConnectedSearchClause csc : s2.getConnected())
+							{
+								B.add(csc.getSearch());
+							}
+						}
+
+						ArrayList<SearchClause> searches = new ArrayList<SearchClause>();
+						for (final SearchClause b : B)
+						{
+							final SearchClause search = sc.clone();
+							search.getSearch().getConnected().add(new ConnectedSearchClause(b, false));
+							searches.add(search);
+						}
+
+						final SearchClause first = searches.remove(0);
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						for (final SearchClause search : searches)
+						{
+							cscs.add(new ConnectedSearchClause(search, true));
+						}
+						s.getConnected().remove(0);
+						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+						B = null;
+						searches = null;
+						cscs = null;
+						continue tail;
+					}
+					else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
+					{
+						// B all ors
+						s.getConnected().remove(0);
+						final ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
+						cscs.add(new ConnectedSearchClause(sc2.getSearch().getClause(), false));
+						cscs.addAll(sc2.getSearch().getConnected());
+						continue tail;
+					}
+					else
+					{
+						// A ors B CNF
+						s.getConnected().remove(0);
+						// build list of ored clauses in B
+						final SearchCondition scond = sc2.getSearch();
+						ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
+						if (scond.getClause().getPredicate() != null)
+						{
+							final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+							searches.add(new SearchCondition(scond.getClause(), cscs));
+						}
+						else
+						{
+							searches.add(scond.getClause().getSearch());
+						}
+
+						for (final ConnectedSearchClause csc : scond.getConnected())
+						{
+							if (csc.getSearch().getPredicate() != null)
+							{
+								final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+								searches.add(new SearchCondition(csc.getSearch(), cscs));
+							}
+							else
+							{
+								searches.add(csc.getSearch().getSearch());
+							}
+						}
+
+						for (final SearchCondition search : searches)
+						{
+							search.getConnected().add(new ConnectedSearchClause(sc.getSearch().getClause(), false));
+							for (final ConnectedSearchClause csc : sc.getSearch().getConnected())
+							{
+								search.getConnected().add(csc);
+							}
+						}
+
+						final SearchClause first = new SearchClause(searches.remove(0), false);
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						for (final SearchCondition ab : searches)
+						{
+							cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
+						}
+
+						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+						searches = null;
+						cscs = null;
+						continue tail;
+					}
 				}
 				else
 				{
-					// A CNF B CNF
-					SearchCondition scond = sc.getSearch();
-					ArrayList<SearchCondition> A = new ArrayList<SearchCondition>();
-					if (scond.getClause().getPredicate() != null)
+					// A is CNF
+					// figure out what B is
+					SearchClause sc2 = s.getConnected().get(0).getSearch();
+					if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
 					{
-						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-						A.add(new SearchCondition(scond.getClause(), cscs));
-					}
-					else
-					{
-						A.add(scond.getClause().getSearch());
-					}
-
-					for (ConnectedSearchClause csc : scond.getConnected())
-					{
-						if (csc.getSearch().getPredicate() != null)
+						// A CNF B AND
+						ArrayList<SearchClause> B = new ArrayList<SearchClause>();
+						if (sc2.getPredicate() != null)
 						{
-							ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-							A.add(new SearchCondition(csc.getSearch(), cscs));
+							B.add(sc2);
 						}
 						else
 						{
-							A.add(csc.getSearch().getSearch());
+							final SearchCondition s2 = sc2.getSearch();
+							B.add(s2.getClause());
+							for (final ConnectedSearchClause csc : s2.getConnected())
+							{
+								B.add(csc.getSearch());
+							}
 						}
-					}
 
-					scond = sc2.getSearch();
-					ArrayList<SearchCondition> B = new ArrayList<SearchCondition>();
-					if (scond.getClause().getPredicate() != null)
-					{
-						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-						B.add(new SearchCondition(scond.getClause(), cscs));
-					}
-					else
-					{
-						B.add(scond.getClause().getSearch());
-					}
-
-					for (ConnectedSearchClause csc : scond.getConnected())
-					{
-						if (csc.getSearch().getPredicate() != null)
+						sc2 = null;
+						s.getConnected().remove(0);
+						s.setClause(null);
+						// build list of ored clauses in A
+						SearchCondition scond = sc.getSearch();
+						sc = null;
+						ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
+						if (scond.getClause().getPredicate() != null)
 						{
-							ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-							B.add(new SearchCondition(csc.getSearch(), cscs));
+							final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+							searches.add(new SearchCondition(scond.getClause(), cscs));
 						}
 						else
 						{
-							B.add(csc.getSearch().getSearch());
+							searches.add(scond.getClause().getSearch());
 						}
-					}
-
-					ArrayList<SearchCondition> AB = new ArrayList<SearchCondition>();
-					for (SearchCondition a : A)
-					{
-						for (SearchCondition b : B)
+						
+						for (final ConnectedSearchClause csc : scond.getConnected())
 						{
-							SearchCondition ab = a.clone();
-							ab.getConnected().add(new ConnectedSearchClause(b.getClause(), false));
-							ab.getConnected().addAll(b.getConnected());
-							AB.add(ab);
+							if (csc.getSearch().getPredicate() != null)
+							{
+								final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+								searches.add(new SearchCondition(csc.getSearch(), cscs));
+							}
+							else
+							{
+								searches.add(csc.getSearch().getSearch());
+							}
 						}
-					}
 
-					SearchClause first = new SearchClause(AB.remove(0), false);
-					ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
-					for (SearchCondition ab : AB)
+						scond = null;
+						ArrayList<SearchCondition> AB = new ArrayList<SearchCondition>();
+						HRDBMSWorker.logger.debug("Attempting to create " + (B.size() * 1l * searches.size()) + " new search conditions");
+						for (final SearchClause b : B)
+						{
+							for (final SearchCondition a : searches)
+							{
+								final SearchCondition ab = a.clone();
+								ab.getConnected().add(new ConnectedSearchClause(b, false));
+								AB.add(ab);
+							}
+						}
+
+						searches = null;
+						B = null;
+						SearchClause first = new SearchClause(AB.remove(0), false);
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						for (final SearchCondition ab : AB)
+						{
+							cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
+						}
+
+						AB = null;
+						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+						cscs = null;
+						first = null;
+						continue tail;
+					}
+					else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
 					{
-						cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
-					}
+						// A CNF B OR
+						s.getConnected().remove(0);
+						// build list of ored clauses in A
+						final SearchCondition scond = sc.getSearch();
+						ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
+						if (scond.getClause().getPredicate() != null)
+						{
+							final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+							searches.add(new SearchCondition(scond.getClause(), cscs));
+						}
+						else
+						{
+							searches.add(scond.getClause().getSearch());
+						}
 
-					s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
-					convertToCNF(s);
-					return;
+						for (final ConnectedSearchClause csc : scond.getConnected())
+						{
+							if (csc.getSearch().getPredicate() != null)
+							{
+								final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+								searches.add(new SearchCondition(csc.getSearch(), cscs));
+							}
+							else
+							{
+								searches.add(csc.getSearch().getSearch());
+							}
+						}
+
+						for (final SearchCondition search : searches)
+						{
+							search.getConnected().add(new ConnectedSearchClause(sc2.getSearch().getClause(), false));
+							for (final ConnectedSearchClause csc : sc2.getSearch().getConnected())
+							{
+								search.getConnected().add(csc);
+							}
+						}
+
+						SearchClause first = new SearchClause(searches.remove(0), false);
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						for (final SearchCondition ab : searches)
+						{
+							cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
+						}
+
+						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+						searches = null;
+						first = null;
+						cscs = null;
+						continue tail;
+					}
+					else
+					{
+						// A CNF B CNF
+						SearchCondition scond = sc.getSearch();
+						ArrayList<SearchCondition> A = new ArrayList<SearchCondition>();
+						if (scond.getClause().getPredicate() != null)
+						{
+							final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+							A.add(new SearchCondition(scond.getClause(), cscs));
+						}
+						else
+						{
+							A.add(scond.getClause().getSearch());
+						}
+
+						for (final ConnectedSearchClause csc : scond.getConnected())
+						{
+							if (csc.getSearch().getPredicate() != null)
+							{
+								final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+								A.add(new SearchCondition(csc.getSearch(), cscs));
+							}
+							else
+							{
+								A.add(csc.getSearch().getSearch());
+							}
+						}
+
+						scond = sc2.getSearch();
+						ArrayList<SearchCondition> B = new ArrayList<SearchCondition>();
+						if (scond.getClause().getPredicate() != null)
+						{
+							final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+							B.add(new SearchCondition(scond.getClause(), cscs));
+						}
+						else
+						{
+							B.add(scond.getClause().getSearch());
+						}
+
+						for (final ConnectedSearchClause csc : scond.getConnected())
+						{
+							if (csc.getSearch().getPredicate() != null)
+							{
+								final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+								B.add(new SearchCondition(csc.getSearch(), cscs));
+							}
+							else
+							{
+								B.add(csc.getSearch().getSearch());
+							}
+						}
+
+						ArrayList<SearchCondition> AB = new ArrayList<SearchCondition>();
+						for (final SearchCondition a : A)
+						{
+							for (final SearchCondition b : B)
+							{
+								final SearchCondition ab = a.clone();
+								ab.getConnected().add(new ConnectedSearchClause(b.getClause(), false));
+								ab.getConnected().addAll(b.getConnected());
+								AB.add(ab);
+							}
+						}
+
+						SearchClause first = new SearchClause(AB.remove(0), false);
+						ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+						for (final SearchCondition ab : AB)
+						{
+							cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
+						}
+
+						s.setClause(new SearchClause(new SearchCondition(first, cscs), false));
+						A = null;
+						B = null;
+						AB = null;
+						first = null;
+						cscs = null;
+						continue tail;
+					}
 				}
 			}
 		}
 	}
 
-	private boolean doesAggregation(ArrayList<Expression> args)
+	private boolean doesAggregation(final ArrayList<Expression> args)
 	{
-		for (Expression exp : args)
+		for (final Expression exp : args)
 		{
 			if (doesAggregation(exp))
 			{
@@ -10027,7 +10619,30 @@ public class SQLParser
 		return false;
 	}
 
-	private boolean doesAggregation(Expression exp)
+	/*
+	 * private String getOneCol(SubSelect sub) throws ParseException {
+	 * SelectClause select = sub.getSelect(); if (select.isSelectStar()) { throw
+	 * new ParseException(
+	 * "SELECT * is not allowed in a subselect that must return 1 column"); }
+	 *
+	 * ArrayList<SelectListEntry> list = select.getSelectList(); if (list.size()
+	 * != 1) { throw new ParseException(
+	 * "A subselect was used in a context where it must return 1 column, but instead returns a different number of columns"
+	 * ); }
+	 *
+	 * SelectListEntry entry = list.get(0); if (entry.isColumn()) { String
+	 * retval = ""; Column col = entry.getColumn(); if (col.getTable() != null)
+	 * { retval += col.getTable(); }
+	 *
+	 * retval += ("." + col.getColumn()); return retval; }
+	 *
+	 * String retval = entry.getName(); if (!retval.contains(".")) { retval =
+	 * "." + retval; }
+	 *
+	 * return retval; }
+	 */
+
+	private boolean doesAggregation(final Expression exp)
 	{
 		if (exp.isCountStar())
 		{
@@ -10038,8 +10653,8 @@ public class SQLParser
 
 		if (exp.isFunction())
 		{
-			Function f = exp.getFunction();
-			String method = f.getName();
+			final Function f = exp.getFunction();
+			final String method = f.getName();
 			if (method.equals("AVG") || method.equals("COUNT") || method.equals("MAX") || method.equals("MIN") || method.equals("SUM"))
 			{
 				return true;
@@ -10057,7 +10672,7 @@ public class SQLParser
 		return doesAggregation(args);
 	}
 
-	private boolean ensuresOnlyOneRow(SubSelect sub) throws Exception
+	private boolean ensuresOnlyOneRow(final SubSelect sub) throws Exception
 	{
 		if (sub.getFetchFirst() != null && sub.getFetchFirst().getNumber() == 1)
 		{
@@ -10072,16 +10687,16 @@ public class SQLParser
 		// if we find a column in the select list that uses a aggregation
 		// function, return true
 		// else return false
-		SelectClause select = sub.getSelect();
-		ArrayList<SelectListEntry> list = select.getSelectList();
-		for (SelectListEntry entry : list)
+		final SelectClause select = sub.getSelect();
+		final ArrayList<SelectListEntry> list = select.getSelectList();
+		for (final SelectListEntry entry : list)
 		{
 			if (entry.isColumn())
 			{
 				return false;
 			}
 
-			Expression exp = entry.getExpression();
+			final Expression exp = entry.getExpression();
 			if (exp.isCountStar())
 			{
 				return true;
@@ -10091,8 +10706,8 @@ public class SQLParser
 
 			if (exp.isFunction())
 			{
-				Function f = exp.getFunction();
-				String method = f.getName();
+				final Function f = exp.getFunction();
+				final String method = f.getName();
 				if (method.equals("AVG") || method.equals("COUNT") || method.equals("MAX") || method.equals("MIN") || method.equals("SUM"))
 				{
 					return true;
@@ -10130,16 +10745,16 @@ public class SQLParser
 		return row;
 	}
 
-	private void getComplexColumns(SelectClause select, SubSelect sub, Having having) throws ParseException
+	private void getComplexColumns(final SelectClause select, final SubSelect sub, final Having having) throws ParseException
 	{
-		ArrayList<SelectListEntry> selects = select.getSelectList();
-		for (SelectListEntry s : selects)
+		final ArrayList<SelectListEntry> selects = select.getSelectList();
+		for (final SelectListEntry s : selects)
 		{
 			if (!s.isColumn())
 			{
 				// complex column
-				Expression exp = s.getExpression();
-				OperatorTypeAndName op = buildOperatorTreeFromExpression(exp, s.getName(), sub);
+				final Expression exp = s.getExpression();
+				final OperatorTypeAndName op = buildOperatorTreeFromExpression(exp, s.getName(), sub);
 				if (op.getType() == TYPE_DAYS)
 				{
 					throw new ParseException("A type of DAYS is not allowed for a column in a select list");
@@ -10157,8 +10772,8 @@ public class SQLParser
 
 				if (op.getType() == TYPE_DATE)
 				{
-					SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-					String dateString = sdf.format(((GregorianCalendar)op.getOp()).getTime());
+					final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+					final String dateString = sdf.format(((GregorianCalendar)op.getOp()).getTime());
 
 					if (s.getName() != null)
 					{
@@ -10168,8 +10783,8 @@ public class SQLParser
 							sgetName = "." + sgetName;
 						}
 
-						ExtendObjectOperator operator = new ExtendObjectOperator(DateParser.parse(dateString), sgetName, meta);
-						ArrayList<Object> row = new ArrayList<Object>();
+						final ExtendObjectOperator operator = new ExtendObjectOperator(DateParser.parse(dateString), sgetName, meta);
+						final ArrayList<Object> row = new ArrayList<Object>();
 						row.add(sgetName);
 						row.add(operator);
 						row.add(TYPE_INLINE);
@@ -10182,9 +10797,9 @@ public class SQLParser
 					}
 					else
 					{
-						String name = "._E" + suffix++;
-						ExtendObjectOperator operator = new ExtendObjectOperator(DateParser.parse(dateString), name, meta);
-						ArrayList<Object> row = new ArrayList<Object>();
+						final String name = "._E" + suffix++;
+						final ExtendObjectOperator operator = new ExtendObjectOperator(DateParser.parse(dateString), name, meta);
+						final ArrayList<Object> row = new ArrayList<Object>();
 						row.add(name);
 						row.add(operator);
 						row.add(TYPE_INLINE);
@@ -10199,7 +10814,7 @@ public class SQLParser
 				else
 				{
 					// colName, op, type, id, exp, prereq, sub, done
-					ArrayList<Object> row = new ArrayList<Object>();
+					final ArrayList<Object> row = new ArrayList<Object>();
 					row.add(op.getName());
 					row.add(op.getOp());
 					row.add(op.getType());
@@ -10215,12 +10830,12 @@ public class SQLParser
 
 		if (having != null)
 		{
-			SearchCondition sc = having.getSearch();
+			final SearchCondition sc = having.getSearch();
 			processHavingSC(sc, sub);
 		}
 	}
 
-	private String getMatchingCol(Operator op, String col)
+	private String getMatchingCol(final Operator op, String col)
 	{
 		if (op.getCols2Pos().keySet().contains(col))
 		{
@@ -10233,7 +10848,7 @@ public class SQLParser
 				col = col.substring(col.indexOf('.') + 1);
 			}
 
-			for (String col2 : op.getCols2Pos().keySet())
+			for (final String col2 : op.getCols2Pos().keySet())
 			{
 				String col3 = null;
 				if (col2.contains("."))
@@ -10258,12 +10873,12 @@ public class SQLParser
 		}
 	}
 
-	private ArrayList<String> getReferences(Expression exp)
+	private ArrayList<String> getReferences(final Expression exp)
 	{
-		ArrayList<String> retval = new ArrayList<String>();
+		final ArrayList<String> retval = new ArrayList<String>();
 		if (exp.isCase())
 		{
-			for (Case c : exp.getCases())
+			for (final Case c : exp.getCases())
 			{
 				retval.addAll(getReferences(c.getCondition()));
 				retval.addAll(getReferences(c.getResult()));
@@ -10274,7 +10889,7 @@ public class SQLParser
 		else if (exp.isColumn())
 		{
 			String name = "";
-			Column c = exp.getColumn();
+			final Column c = exp.getColumn();
 			if (c.getTable() != null)
 			{
 				name += c.getTable();
@@ -10296,8 +10911,8 @@ public class SQLParser
 		}
 		else if (exp.isFunction())
 		{
-			Function f = exp.getFunction();
-			for (Expression e : f.getArgs())
+			final Function f = exp.getFunction();
+			for (final Expression e : f.getArgs())
 			{
 				retval.addAll(getReferences(e));
 			}
@@ -10306,8 +10921,8 @@ public class SQLParser
 		}
 		else if (exp.isList())
 		{
-			ArrayList<Expression> list = exp.getList();
-			for (Expression e : list)
+			final ArrayList<Expression> list = exp.getList();
+			for (final Expression e : list)
 			{
 				retval.addAll(getReferences(e));
 			}
@@ -10327,7 +10942,7 @@ public class SQLParser
 		return null;
 	}
 
-	private ArrayList<String> getReferences(SearchClause sc)
+	private ArrayList<String> getReferences(final SearchClause sc)
 	{
 		if (sc.getSearch() != null)
 		{
@@ -10335,21 +10950,21 @@ public class SQLParser
 		}
 		else
 		{
-			Predicate p = sc.getPredicate();
-			ArrayList<String> retval = new ArrayList<String>();
+			final Predicate p = sc.getPredicate();
+			final ArrayList<String> retval = new ArrayList<String>();
 			retval.addAll(getReferences(p.getLHS()));
 			retval.addAll(getReferences(p.getRHS()));
 			return retval;
 		}
 	}
 
-	private ArrayList<String> getReferences(SearchCondition sc)
+	private ArrayList<String> getReferences(final SearchCondition sc)
 	{
-		ArrayList<String> retval = new ArrayList<String>();
+		final ArrayList<String> retval = new ArrayList<String>();
 		retval.addAll(getReferences(sc.getClause()));
 		if (sc.getConnected() != null && sc.getConnected().size() > 0)
 		{
-			for (ConnectedSearchClause csc : sc.getConnected())
+			for (final ConnectedSearchClause csc : sc.getConnected())
 			{
 				retval.addAll(getReferences(csc.getSearch()));
 			}
@@ -10358,25 +10973,9 @@ public class SQLParser
 		return retval;
 	}
 
-	private ArrayList<Column> getRightColumns(SearchCondition join)
+	private ArrayList<Object> getRow(final int num)
 	{
-		ArrayList<Column> retval = new ArrayList<Column>();
-		retval.add(join.getClause().getPredicate().getRHS().getColumn());
-
-		if (join.getConnected() != null && join.getConnected().size() > 0)
-		{
-			for (ConnectedSearchClause csc : join.getConnected())
-			{
-				retval.add(csc.getSearch().getPredicate().getRHS().getColumn());
-			}
-		}
-
-		return retval;
-	}
-
-	private ArrayList<Object> getRow(int num)
-	{
-		for (ArrayList<Object> row : complex)
+		for (final ArrayList<Object> row : complex)
 		{
 			if (((Integer)row.get(3)) == num)
 			{
@@ -10387,106 +10986,35 @@ public class SQLParser
 		return null;
 	}
 
-	/*
-	 * private String getOneCol(SubSelect sub) throws ParseException {
-	 * SelectClause select = sub.getSelect(); if (select.isSelectStar()) { throw
-	 * new ParseException(
-	 * "SELECT * is not allowed in a subselect that must return 1 column"); }
-	 *
-	 * ArrayList<SelectListEntry> list = select.getSelectList(); if (list.size()
-	 * != 1) { throw new ParseException(
-	 * "A subselect was used in a context where it must return 1 column, but instead returns a different number of columns"
-	 * ); }
-	 *
-	 * SelectListEntry entry = list.get(0); if (entry.isColumn()) { String
-	 * retval = ""; Column col = entry.getColumn(); if (col.getTable() != null)
-	 * { retval += col.getTable(); }
-	 *
-	 * retval += ("." + col.getColumn()); return retval; }
-	 *
-	 * String retval = entry.getName(); if (!retval.contains(".")) { retval =
-	 * "." + retval; }
-	 *
-	 * return retval; }
-	 */
-
-	private String getType(String col, HashMap<String, String> cols2Types) throws ParseException
+	private Operator handleAlias(final String alias, final Operator op) throws ParseException
 	{
-		String retval = cols2Types.get(col);
+		final ArrayList<String> original = new ArrayList<String>();
+		final ArrayList<String> newCols = new ArrayList<String>();
 
-		if (retval != null)
-		{
-			return retval;
-		}
-
-		if (col.indexOf('.') > 0)
-		{
-			throw new ParseException("Column " + col + " not found");
-		}
-
-		if (col.startsWith("."))
-		{
-			col = col.substring(1);
-		}
-
-		int matches = 0;
-		for (Map.Entry entry : cols2Types.entrySet())
-		{
-			String name2 = (String)entry.getKey();
-			if (name2.contains("."))
-			{
-				name2 = name2.substring(name2.indexOf('.') + 1);
-			}
-
-			if (col.equals(name2))
-			{
-				matches++;
-				retval = (String)entry.getValue();
-			}
-		}
-
-		if (matches == 0)
-		{
-			throw new ParseException("Column " + col + " not found");
-		}
-
-		if (matches > 1)
-		{
-			throw new ParseException("Column " + col + " is ambiguous");
-		}
-
-		return retval;
-	}
-
-	private Operator handleAlias(String alias, Operator op) throws ParseException
-	{
-		ArrayList<String> original = new ArrayList<String>();
-		ArrayList<String> newCols = new ArrayList<String>();
-
-		for (String col : op.getPos2Col().values())
+		for (final String col : op.getPos2Col().values())
 		{
 			original.add(col);
-			String newCol = alias + "." + col.substring(col.indexOf('.') + 1);
+			final String newCol = alias + "." + col.substring(col.indexOf('.') + 1);
 			newCols.add(newCol);
 		}
 
 		try
 		{
-			RenameOperator rename = new RenameOperator(original, newCols, meta);
+			final RenameOperator rename = new RenameOperator(original, newCols, meta);
 			rename.add(op);
 			return rename;
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			throw new ParseException(e.getMessage());
 		}
 	}
 
-	private void importCTE(CTE cte, FullSelect select)
+	private void importCTE(final CTE cte, final FullSelect select)
 	{
-		String name = cte.getName();
-		ArrayList<Column> cols = cte.getCols();
-		FullSelect cteSelect = cte.getSelect();
+		final String name = cte.getName();
+		final ArrayList<Column> cols = cte.getCols();
+		final FullSelect cteSelect = cte.getSelect();
 
 		if (select.getSubSelect() != null)
 		{
@@ -10497,7 +11025,7 @@ public class SQLParser
 			searchFullSelectForCTE(name, cols, cteSelect, select.getFullSelect());
 		}
 
-		for (ConnectedSelect cs : select.getConnected())
+		for (final ConnectedSelect cs : select.getConnected())
 		{
 			if (cs.getSub() != null)
 			{
@@ -10510,119 +11038,22 @@ public class SQLParser
 		}
 	}
 
-	private boolean isAllEquals(SearchCondition join)
-	{
-		if (!"E".equals(join.getClause().getPredicate().getOp()))
-		{
-			return false;
-		}
-
-		if (join.getConnected() != null && join.getConnected().size() > 0)
-		{
-			for (ConnectedSearchClause csc : join.getConnected())
-			{
-				if (!"E".equals(csc.getSearch().getPredicate().getOp()))
-				{
-					return false;
-				}
-			}
-		}
-
-		return true;
-	}
-
-	private boolean isCNF(SearchCondition s)
-	{
-		SearchClause sc = s.getClause();
-		if (sc.getPredicate() != null && (s.getConnected() == null || s.getConnected().size() == 0))
-		{
-			// single predicate
-			return true;
-		}
-
-		if (allOredPreds(s))
-		{
-			return true;
-		}
-
-		if (sc.getPredicate() == null)
-		{
-			if (sc.getSearch().getClause().getPredicate() == null)
-			{
-				return false;
-			}
-
-			if (sc.getSearch().getConnected() != null && sc.getSearch().getConnected().size() > 0)
-			{
-				for (ConnectedSearchClause csc : sc.getSearch().getConnected())
-				{
-					if (csc.isAnd())
-					{
-						return false;
-					}
-
-					if (csc.getSearch().getPredicate() == null)
-					{
-						return false;
-					}
-				}
-			}
-		}
-
-		if (s.getConnected() != null && s.getConnected().size() > 0)
-		{
-			for (ConnectedSearchClause csc : s.getConnected())
-			{
-				if (!csc.isAnd())
-				{
-					return false;
-				}
-
-				if (csc.getSearch().getPredicate() == null)
-				{
-					if (csc.getSearch().getSearch().getClause().getPredicate() == null)
-					{
-						return false;
-					}
-
-					if (csc.getSearch().getSearch().getConnected() != null && csc.getSearch().getSearch().getConnected().size() > 0)
-					{
-						for (ConnectedSearchClause csc2 : csc.getSearch().getSearch().getConnected())
-						{
-							if (csc2.isAnd())
-							{
-								return false;
-							}
-
-							if (csc2.getSearch().getPredicate() == null)
-							{
-								return false;
-							}
-						}
-					}
-				}
-			}
-		}
-
-		return true;
-	}
-
-	private boolean isCorrelated(SubSelect select) throws Exception
+	private boolean isCorrelated(final SubSelect select) throws Exception
 	{
 		try
 		{
 			buildOperatorTreeFromSubSelect(select, true);
 		}
-		catch (ParseException e)
+		catch (final ParseException e)
 		{
-			String msg = e.getMessage();
+			final String msg = e.getMessage();
 			if (msg.startsWith("Column ") && msg.endsWith(" does not exist"))
 			{
 				// delete any entries in complex with sub=select
 				int i = 0;
 				while (i < complex.size())
 				{
-					ArrayList<Object> row = complex.get(i);
+					final ArrayList<Object> row = complex.get(i);
 					if (select.equals(row.get(6)))
 					{
 						complex.remove(i);
@@ -10642,7 +11073,7 @@ public class SQLParser
 		int i = 0;
 		while (i < complex.size())
 		{
-			ArrayList<Object> row = complex.get(i);
+			final ArrayList<Object> row = complex.get(i);
 			if (select.equals(row.get(6)))
 			{
 				complex.remove(i);
@@ -10654,32 +11085,13 @@ public class SQLParser
 		return false;
 	}
 
-	private void negateSearchCondition(SearchCondition s)
-	{
-		if (s.getConnected() != null && s.getConnected().size() > 0)
-		{
-			s.getClause().setNegated(!s.getClause().getNegated());
-			for (ConnectedSearchClause clause : s.getConnected())
-			{
-				clause.setAnd(!clause.isAnd());
-				clause.getSearch().setNegated(clause.getSearch().getNegated());
-			}
-
-			return;
-		}
-		else
-		{
-			s.getClause().setNegated(!s.getClause().getNegated());
-		}
-	}
-
-	private void processHavingExpression(Expression e, SubSelect sub) throws ParseException
+	private void processHavingExpression(final Expression e, final SubSelect sub) throws ParseException
 	{
 		if (e.isCountStar())
 		{
 			// see if complex has a row for this expression, if not add one
 			boolean ok = false;
-			for (ArrayList<Object> row : complex)
+			for (final ArrayList<Object> row : complex)
 			{
 				if (row.get(4).equals(e) && row.get(6).equals(sub))
 				{
@@ -10691,8 +11103,8 @@ public class SQLParser
 			if (!ok)
 			{
 				// add it
-				OperatorTypeAndName op = buildOperatorTreeFromExpression(e, null, sub);
-				ArrayList<Object> row = new ArrayList<Object>();
+				final OperatorTypeAndName op = buildOperatorTreeFromExpression(e, null, sub);
+				final ArrayList<Object> row = new ArrayList<Object>();
 				row.add(op.getName());
 				row.add(op.getOp());
 				row.add(op.getType());
@@ -10713,13 +11125,13 @@ public class SQLParser
 		}
 		else if (e.isFunction())
 		{
-			Function f = e.getFunction();
-			String name = f.getName();
+			final Function f = e.getFunction();
+			final String name = f.getName();
 			if (name.equals("AVG") || name.equals("SUM") || name.equals("COUNT") || name.equals("MAX") || name.equals("MIN"))
 			{
 				// see if complex has a row for this expression, if not add one
 				boolean ok = false;
-				for (ArrayList<Object> row : complex)
+				for (final ArrayList<Object> row : complex)
 				{
 					if (row.get(4).equals(e) && row.get(6).equals(sub))
 					{
@@ -10731,8 +11143,8 @@ public class SQLParser
 				if (!ok)
 				{
 					// add it
-					OperatorTypeAndName op = buildOperatorTreeFromExpression(e, null, sub);
-					ArrayList<Object> row = new ArrayList<Object>();
+					final OperatorTypeAndName op = buildOperatorTreeFromExpression(e, null, sub);
+					final ArrayList<Object> row = new ArrayList<Object>();
 					row.add(op.getName());
 					row.add(op.getOp());
 					row.add(op.getType());
@@ -10746,10 +11158,10 @@ public class SQLParser
 			}
 			else
 			{
-				ArrayList<Expression> args = f.getArgs();
+				final ArrayList<Expression> args = f.getArgs();
 				if (args != null && args.size() > 0)
 				{
-					for (Expression arg : args)
+					for (final Expression arg : args)
 					{
 						processHavingExpression(arg, sub);
 					}
@@ -10758,16 +11170,16 @@ public class SQLParser
 		}
 		else if (e.isList())
 		{
-			ArrayList<Expression> list = e.getList();
-			for (Expression e2 : list)
+			final ArrayList<Expression> list = e.getList();
+			for (final Expression e2 : list)
 			{
 				processHavingExpression(e2, sub);
 			}
 		}
 		else if (e.isCase())
 		{
-			ArrayList<Case> cases = e.getCases();
-			for (Case c : cases)
+			final ArrayList<Case> cases = e.getCases();
+			for (final Case c : cases)
 			{
 				processHavingExpression(c.getResult(), sub);
 				processHavingSC(c.getCondition(), sub);
@@ -10777,10 +11189,10 @@ public class SQLParser
 		}
 	}
 
-	private void processHavingPredicate(Predicate p, SubSelect sub) throws ParseException
+	private void processHavingPredicate(final Predicate p, final SubSelect sub) throws ParseException
 	{
-		Expression l = p.getLHS();
-		Expression r = p.getRHS();
+		final Expression l = p.getLHS();
+		final Expression r = p.getRHS();
 		if (l != null)
 		{
 			processHavingExpression(l, sub);
@@ -10792,9 +11204,9 @@ public class SQLParser
 		}
 	}
 
-	private void processHavingSC(SearchCondition sc, SubSelect sub) throws ParseException
+	private void processHavingSC(final SearchCondition sc, final SubSelect sub) throws ParseException
 	{
-		SearchClause search = sc.getClause();
+		final SearchClause search = sc.getClause();
 		if (search.getPredicate() != null)
 		{
 			processHavingPredicate(search.getPredicate(), sub);
@@ -10806,9 +11218,9 @@ public class SQLParser
 
 		if (sc.getConnected() != null && sc.getConnected().size() > 0)
 		{
-			for (ConnectedSearchClause search2 : sc.getConnected())
+			for (final ConnectedSearchClause search2 : sc.getConnected())
 			{
-				SearchClause search3 = search2.getSearch();
+				final SearchClause search3 = search2.getSearch();
 				if (search3.getPredicate() != null)
 				{
 					processHavingPredicate(search3.getPredicate(), sub);
@@ -10823,51 +11235,56 @@ public class SQLParser
 
 	private void pushInwardAnyNegation(SearchClause sc)
 	{
+		//HRDBMSWorker.logger.debug("Upon entering pushInwardAnyNegation(), sc = " + sc);
 		if (sc.getNegated())
 		{
 			negateSearchCondition(sc.getSearch());
 			sc.setNegated(false);
 		}
+		
+		//HRDBMSWorker.logger.debug("After negating search condition, sc = " + sc);
 
-		SearchCondition s = sc.getSearch();
+		final SearchCondition s = sc.getSearch();
 		sc = s.getClause();
 		if (sc.getPredicate() == null)
 		{
 			pushInwardAnyNegation(sc);
+			//HRDBMSWorker.logger.debug("After calling pushInwardAnyNegation on first clause, sc = " + sc);
 		}
 
 		if (s.getConnected() != null && s.getConnected().size() > 0)
 		{
-			for (ConnectedSearchClause csc : s.getConnected())
+			for (final ConnectedSearchClause csc : s.getConnected())
 			{
 				if (csc.getSearch().getPredicate() == null)
 				{
 					pushInwardAnyNegation(csc.getSearch());
+					//HRDBMSWorker.logger.debug("After calling pushInwardAnyNegation on subsequent clause, sc = " + sc);
 				}
 			}
 		}
 	}
 
-	private SearchCondition removeCorrelatedSearchCondition(SubSelect select, HashMap<String, Integer> cols2Pos) throws ParseException
+	private SearchCondition removeCorrelatedSearchCondition(final SubSelect select, final HashMap<String, Integer> cols2Pos) throws ParseException
 	{
-		SearchCondition search = select.getWhere().getSearch();
+		final SearchCondition search = select.getWhere().getSearch();
 		convertToCNF(search);
 		// for the clause and any connected
-		ArrayList<ConnectedSearchClause> searches = new ArrayList<ConnectedSearchClause>();
-		ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+		final ArrayList<ConnectedSearchClause> searches = new ArrayList<ConnectedSearchClause>();
+		final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
 		searches.add(new ConnectedSearchClause(search.getClause(), true));
 		if (search.getConnected() != null && search.getConnected().size() > 0)
 		{
 			searches.addAll(search.getConnected());
 		}
 
-		for (ConnectedSearchClause csc : searches)
+		for (final ConnectedSearchClause csc : searches)
 		{
 			// if it's a predicate and contains a correlated column, add to
 			// retval
 			if (csc.getSearch().getPredicate() != null)
 			{
-				Predicate p = csc.getSearch().getPredicate();
+				final Predicate p = csc.getSearch().getPredicate();
 				if (p.getLHS() != null && containsCorrelatedCol(p.getLHS(), cols2Pos))
 				{
 					if (p.getRHS() == null || !p.getRHS().isColumn())
@@ -10917,7 +11334,7 @@ public class SQLParser
 						throw new ParseException("Restriction: A correlated join condition in a correlated subquery cannot use the LIKE operator");
 					}
 
-					Predicate p2 = new Predicate(p.getRHS(), op, p.getLHS());
+					final Predicate p2 = new Predicate(p.getRHS(), op, p.getLHS());
 					csc.setSearch(new SearchClause(p2, csc.getSearch().getNegated()));
 					cscs.add(csc);
 				}
@@ -10928,7 +11345,7 @@ public class SQLParser
 				// must contain a correlated col
 				// add whole group to retval
 				boolean correlated = false;
-				SearchCondition s = csc.getSearch().getSearch();
+				final SearchCondition s = csc.getSearch().getSearch();
 				Predicate p = s.getClause().getPredicate();
 				if (p.getLHS() != null && containsCorrelatedCol(p.getLHS(), cols2Pos))
 				{
@@ -10941,7 +11358,7 @@ public class SQLParser
 
 				if (!correlated)
 				{
-					for (ConnectedSearchClause csc2 : s.getConnected())
+					for (final ConnectedSearchClause csc2 : s.getConnected())
 					{
 						p = csc2.getSearch().getPredicate();
 						if (p.getLHS() != null && containsCorrelatedCol(p.getLHS(), cols2Pos))
@@ -10970,7 +11387,7 @@ public class SQLParser
 						throw new ParseException("Restriction: In a correlated subquery all predicates in a list of logically ORed predicates must either be local or correlated");
 					}
 
-					for (ConnectedSearchClause csc2 : s.getConnected())
+					for (final ConnectedSearchClause csc2 : s.getConnected())
 					{
 						p = csc2.getSearch().getPredicate();
 						if (p.getLHS() == null || p.getRHS() == null)
@@ -10983,7 +11400,7 @@ public class SQLParser
 						}
 					}
 
-					ArrayList<ConnectedSearchClause> cscs2 = new ArrayList<ConnectedSearchClause>();
+					final ArrayList<ConnectedSearchClause> cscs2 = new ArrayList<ConnectedSearchClause>();
 					p = s.getClause().getPredicate();
 					if (containsCorrelatedCol(p.getLHS(), cols2Pos))
 					{
@@ -11034,11 +11451,11 @@ public class SQLParser
 							throw new ParseException("Restriction: A correlated join condition in a correlated subquery cannot use the LIKE operator");
 						}
 
-						Predicate p2 = new Predicate(p.getRHS(), op, p.getLHS());
+						final Predicate p2 = new Predicate(p.getRHS(), op, p.getLHS());
 						cscs2.add(new ConnectedSearchClause(new SearchClause(p2, csc.getSearch().getNegated()), false));
 					}
 
-					for (ConnectedSearchClause csc2 : s.getConnected())
+					for (final ConnectedSearchClause csc2 : s.getConnected())
 					{
 						p = csc2.getSearch().getPredicate();
 						if (containsCorrelatedCol(p.getLHS(), cols2Pos))
@@ -11090,12 +11507,12 @@ public class SQLParser
 								throw new ParseException("Restriction: A correlated join condition in a correlated subquery cannot use the LIKE operator");
 							}
 
-							Predicate p2 = new Predicate(p.getRHS(), op, p.getLHS());
+							final Predicate p2 = new Predicate(p.getRHS(), op, p.getLHS());
 							cscs2.add(new ConnectedSearchClause(new SearchClause(p2, csc2.getSearch().getNegated()), false));
 						}
 					}
 
-					SearchClause first = cscs2.remove(0).getSearch();
+					final SearchClause first = cscs2.remove(0).getSearch();
 					s.setClause(first);
 					s.setConnected(cscs2);
 					cscs.add(csc);
@@ -11104,14 +11521,14 @@ public class SQLParser
 		}
 
 		// update search and build retval
-		for (ConnectedSearchClause csc : cscs)
+		for (final ConnectedSearchClause csc : cscs)
 		{
 			searches.remove(csc);
 		}
 
 		if (searches.size() > 0)
 		{
-			SearchClause first = searches.remove(0).getSearch();
+			final SearchClause first = searches.remove(0).getSearch();
 			search.setClause(first);
 			search.setConnected(searches);
 		}
@@ -11120,15 +11537,15 @@ public class SQLParser
 			select.setWhere(null);
 		}
 
-		SearchClause first = cscs.remove(0).getSearch();
+		final SearchClause first = cscs.remove(0).getSearch();
 		return new SearchCondition(first, cscs);
 	}
 
-	private SearchCondition rewriteCorrelatedSubSelect(SubSelect select) throws Exception
+	private SearchCondition rewriteCorrelatedSubSelect(final SubSelect select) throws Exception
 	{
 		// update select list and search conditions and group by
-		FromClause from = select.getFrom();
-		Operator temp = buildOperatorTreeFromFrom(from, select);
+		final FromClause from = select.getFrom();
+		final Operator temp = buildOperatorTreeFromFrom(from, select);
 		SearchCondition retval = removeCorrelatedSearchCondition(select, temp.getCols2Pos());
 		updateSelectList(retval, select);
 		updateGroupBy(retval, select);
@@ -11136,15 +11553,15 @@ public class SQLParser
 		return retval;
 	}
 
-	private void searchFromForCTE(String name, ArrayList<Column> cols, FullSelect cteSelect, FromClause from)
+	private void searchFromForCTE(final String name, final ArrayList<Column> cols, final FullSelect cteSelect, final FromClause from)
 	{
-		for (TableReference table : from.getTables())
+		for (final TableReference table : from.getTables())
 		{
 			searchTableRefForCTE(name, cols, cteSelect, table);
 		}
 	}
 
-	private void searchFullSelectForCTE(String name, ArrayList<Column> cols, FullSelect cteSelect, FullSelect select)
+	private void searchFullSelectForCTE(final String name, final ArrayList<Column> cols, final FullSelect cteSelect, final FullSelect select)
 	{
 		if (select.getSubSelect() != null)
 		{
@@ -11155,7 +11572,7 @@ public class SQLParser
 			searchFullSelectForCTE(name, cols, cteSelect, select.getFullSelect());
 		}
 
-		for (ConnectedSelect cs : select.getConnected())
+		for (final ConnectedSelect cs : select.getConnected())
 		{
 			if (cs.getSub() != null)
 			{
@@ -11168,31 +11585,12 @@ public class SQLParser
 		}
 	}
 
-	private void searchSingleTableForCTE(String name, ArrayList<Column> cols, FullSelect cteSelect, SingleTable table, TableReference tref)
-	{
-		TableName tblName = table.getName();
-		if (tblName.getSchema() == null && tblName.getName().equals(name))
-		{
-			// found a match
-			tref.removeSingleTable();
-			if (cols.size() > 0)
-			{
-				cteSelect.addCols(cols);
-			}
-			tref.addSelect(cteSelect);
-			if (table.getAlias() != null)
-			{
-				tref.setAlias(table.getAlias());
-			}
-		}
-	}
-
-	private void searchSubSelectForCTE(String name, ArrayList<Column> cols, FullSelect cteSelect, SubSelect select)
+	private void searchSubSelectForCTE(final String name, final ArrayList<Column> cols, final FullSelect cteSelect, final SubSelect select)
 	{
 		searchFromForCTE(name, cols, cteSelect, select.getFrom());
 	}
 
-	private void searchTableRefForCTE(String name, ArrayList<Column> cols, FullSelect cteSelect, TableReference table)
+	private void searchTableRefForCTE(final String name, final ArrayList<Column> cols, final FullSelect cteSelect, final TableReference table)
 	{
 		if (table.isSingleTable())
 		{
@@ -11209,7 +11607,7 @@ public class SQLParser
 		}
 	}
 
-	private void updateGroupBy(SearchCondition join, SubSelect select) throws ParseException
+	private void updateGroupBy(final SearchCondition join, final SubSelect select) throws ParseException
 	{
 		if (updateGroupByNeeded(select))
 		{
@@ -11227,7 +11625,7 @@ public class SQLParser
 			// if group by already exists, add to it
 			if (select.getGroupBy() != null)
 			{
-				GroupBy groupBy = select.getGroupBy();
+				final GroupBy groupBy = select.getGroupBy();
 				groupBy.getCols().addAll(getRightColumns(join));
 			}
 			else
@@ -11238,33 +11636,33 @@ public class SQLParser
 		}
 	}
 
-	private boolean updateGroupByNeeded(SubSelect select)
+	private boolean updateGroupByNeeded(final SubSelect select)
 	{
 		if (select.getGroupBy() != null || select.getHaving() != null)
 		{
 			return true;
 		}
 
-		SelectClause s = select.getSelect();
-		ArrayList<SelectListEntry> list = s.getSelectList();
-		for (SelectListEntry entry : list)
+		final SelectClause s = select.getSelect();
+		final ArrayList<SelectListEntry> list = s.getSelectList();
+		for (final SelectListEntry entry : list)
 		{
 			if (entry.isColumn())
 			{
 				continue;
 			}
 
-			Expression exp = entry.getExpression();
+			final Expression exp = entry.getExpression();
 			if (containsAggregation(exp))
 			{
 				return true;
 			}
 		}
 
-		Where where = select.getWhere();
+		final Where where = select.getWhere();
 		if (where != null)
 		{
-			SearchCondition search = where.getSearch();
+			final SearchCondition search = where.getSearch();
 			if (containsAggregation(search.getClause()))
 			{
 				return true;
@@ -11272,7 +11670,7 @@ public class SQLParser
 
 			if (search.getConnected() != null && search.getConnected().size() > 0)
 			{
-				for (ConnectedSearchClause csc : search.getConnected())
+				for (final ConnectedSearchClause csc : search.getConnected())
 				{
 					if (containsAggregation(csc.getSearch()))
 					{
@@ -11285,361 +11683,6 @@ public class SQLParser
 		return false;
 	}
 
-	private void updateSelectList(SearchCondition join, SubSelect select)
-	{
-		ArrayList<Column> needed = new ArrayList<Column>();
-		if (join.getClause().getPredicate() != null)
-		{
-			needed.add(join.getClause().getPredicate().getRHS().getColumn());
-		}
-		else
-		{
-			SearchCondition scond = join.getClause().getSearch();
-			needed.add(scond.getClause().getPredicate().getRHS().getColumn());
-			for (ConnectedSearchClause csc : scond.getConnected())
-			{
-				needed.add(csc.getSearch().getPredicate().getRHS().getColumn());
-			}
-		}
-
-		if (join.getConnected() != null && join.getConnected().size() > 0)
-		{
-			for (ConnectedSearchClause sc : join.getConnected())
-			{
-				if (sc.getSearch().getPredicate() != null)
-				{
-					needed.add(sc.getSearch().getPredicate().getRHS().getColumn());
-				}
-				else
-				{
-					SearchCondition scond = sc.getSearch().getSearch();
-					needed.add(scond.getClause().getPredicate().getRHS().getColumn());
-					for (ConnectedSearchClause csc : scond.getConnected())
-					{
-						needed.add(csc.getSearch().getPredicate().getRHS().getColumn());
-					}
-				}
-			}
-		}
-
-		SelectClause sclause = select.getSelect();
-		if (sclause.isSelectStar())
-		{
-			return;
-		}
-
-		ArrayList<SelectListEntry> list = sclause.getSelectList();
-		for (Column col : needed)
-		{
-			boolean found = false;
-			for (SelectListEntry entry : list)
-			{
-				// do we already have this col
-				if (entry.getName() != null)
-				{
-					continue;
-				}
-
-				if (!entry.isColumn())
-				{
-					continue;
-				}
-
-				if (entry.getColumn().equals(col))
-				{
-					found = true;
-				}
-			}
-
-			if (!found)
-			{
-				list.add(new SelectListEntry(col, null));
-			}
-		}
-	}
-
-	private void verifyColumnsAreTheSame(Operator lhs, Operator rhs) throws ParseException
-	{
-		TreeMap<Integer, String> lhsPos2Col = lhs.getPos2Col();
-		TreeMap<Integer, String> rhsPos2Col = rhs.getPos2Col();
-
-		if (lhsPos2Col.size() != rhsPos2Col.size())
-		{
-			throw new ParseException("Cannot combine table with different number of columns");
-		}
-
-		int i = 0;
-		for (String col : lhsPos2Col.values())
-		{
-			if (!lhs.getCols2Types().get(col).equals(rhs.getCols2Types().get(rhsPos2Col.get(new Integer(i)))))
-			{
-				throw new ParseException("Column types do not match when combining tables");
-			}
-
-			i++;
-		}
-	}
-
-	private void verifyTypes(String lhs, Operator lOp, String rhs, Operator rOp) throws ParseException
-	{
-		String lhsType = null;
-		String rhsType = null;
-		if (Character.isDigit(lhs.charAt(0)) || lhs.charAt(0) == '-')
-		{
-			lhsType = "NUMBER";
-		}
-		else if (lhs.charAt(0) == '\'')
-		{
-			lhsType = "STRING";
-		}
-		else
-		{
-			String type = lOp.getCols2Types().get(lhs);
-			if (type == null)
-			{
-				if (lhs.contains("."))
-				{
-					lhs = lhs.substring(lhs.indexOf(".") + 1);
-				}
-				else
-				{
-				}
-
-				int matches = 0;
-				for (String col : lOp.getCols2Types().keySet())
-				{
-					String col2;
-					if (col.contains("."))
-					{
-						col2 = col.substring(col.indexOf('.') + 1);
-					}
-					else
-					{
-						col2 = col;
-					}
-
-					if (col2.equals(lhs))
-					{
-						type = lOp.getCols2Types().get(col);
-						matches++;
-					}
-				}
-
-				if (matches != 1)
-				{
-					if (matches == 0)
-					{
-						HRDBMSWorker.logger.debug("Cols2Types is " + lOp.getCols2Types());
-						throw new ParseException("Column " + lhs + " does not exist");
-					}
-					else
-					{
-						throw new ParseException("Column " + lhs + " is ambiguous");
-					}
-				}
-			}
-
-			if (type.equals("CHAR"))
-			{
-				lhsType = "STRING";
-			}
-			else if (type.equals("INT") || type.equals("LONG") || type.equals("FLOAT"))
-			{
-				lhsType = "NUMBER";
-			}
-			else
-			{
-				lhsType = type;
-			}
-		}
-
-		if (Character.isDigit(rhs.charAt(0)) || rhs.charAt(0) == '-')
-		{
-			rhsType = "NUMBER";
-		}
-		else if (rhs.charAt(0) == '\'')
-		{
-			rhsType = "STRING";
-		}
-		else
-		{
-			String type = rOp.getCols2Types().get(rhs);
-			if (type == null)
-			{
-				if (rhs.contains("."))
-				{
-					rhs = rhs.substring(rhs.indexOf(".") + 1);
-				}
-				else
-				{
-				}
-
-				int matches = 0;
-				for (String col : rOp.getCols2Types().keySet())
-				{
-					String col2;
-					if (col.contains("."))
-					{
-						col2 = col.substring(col.indexOf('.') + 1);
-					}
-					else
-					{
-						col2 = col;
-					}
-
-					if (col2.equals(rhs))
-					{
-						type = rOp.getCols2Types().get(col);
-						matches++;
-					}
-				}
-
-				if (matches != 1)
-				{
-					if (matches == 0)
-					{
-						throw new ParseException("Column " + rhs + " does not exist");
-					}
-					else
-					{
-						throw new ParseException("Column " + rhs + " is ambiguous");
-					}
-				}
-			}
-
-			if (type.equals("CHAR"))
-			{
-				rhsType = "STRING";
-			}
-			else if (type.equals("INT") || type.equals("LONG") || type.equals("FLOAT"))
-			{
-				rhsType = "NUMBER";
-			}
-			else
-			{
-				rhsType = type;
-			}
-		}
-
-		if (lhsType.equals("NUMBER") && rhsType.equals("NUMBER"))
-		{
-			return;
-		}
-		else if (lhsType.equals("STRING") && rhsType.equals("STRING"))
-		{
-			return;
-		}
-		else
-		{
-			throw new ParseException("Invalid comparison between " + lhsType + " and " + rhsType);
-		}
-	}
-
-	private void verifyTypes(String lhs, String op, String rhs, Operator o) throws ParseException
-	{
-		String lhsType = null;
-		String rhsType = null;
-		if (Character.isDigit(lhs.charAt(0)) || lhs.charAt(0) == '-')
-		{
-			lhsType = "NUMBER";
-		}
-		else if (lhs.charAt(0) == '\'')
-		{
-			lhsType = "STRING";
-		}
-		else if (lhs.startsWith("DATE('"))
-		{
-			lhsType = "DATE";
-		}
-		else
-		{
-			String type = o.getCols2Types().get(lhs);
-			if (type == null)
-			{
-				throw new ParseException("Column " + lhs + " does not exist");
-			}
-			else if (type.equals("CHAR"))
-			{
-				lhsType = "STRING";
-			}
-			else if (type.equals("INT") || type.equals("LONG") || type.equals("FLOAT"))
-			{
-				lhsType = "NUMBER";
-			}
-			else
-			{
-				lhsType = type;
-			}
-		}
-
-		if (Character.isDigit(rhs.charAt(0)) || rhs.charAt(0) == '-')
-		{
-			rhsType = "NUMBER";
-		}
-		else if (rhs.charAt(0) == '\'')
-		{
-			rhsType = "STRING";
-		}
-		else if (rhs.startsWith("DATE('"))
-		{
-			rhsType = "DATE";
-		}
-		else
-		{
-			String type = o.getCols2Types().get(rhs);
-			if (type == null)
-			{
-				HRDBMSWorker.logger.debug("Looking for " + rhs + " in " + o.getCols2Types());
-				printTree(o, 0);
-				throw new ParseException("Column " + rhs + " does not exist");
-			}
-			else if (type.equals("CHAR"))
-			{
-				rhsType = "STRING";
-			}
-			else if (type.equals("INT") || type.equals("LONG") || type.equals("FLOAT"))
-			{
-				rhsType = "NUMBER";
-			}
-			else
-			{
-				rhsType = type;
-			}
-		}
-
-		if (lhsType.equals("NUMBER") && rhsType.equals("NUMBER"))
-		{
-			if (op.equals("E") || op.equals("NE") || op.equals("G") || op.equals("GE") || op.equals("L") || op.equals("LE"))
-			{
-				return;
-			}
-
-			throw new ParseException("Invalid operator for comparing 2 numbers: " + op);
-		}
-		else if (lhsType.equals("STRING") && rhsType.equals("STRING"))
-		{
-			if (op.equals("LI") || op.equals("NL") || op.equals("E") || op.equals("NE") || op.equals("G") || op.equals("GE") || op.equals("L") || op.equals("LE"))
-			{
-				return;
-			}
-
-			throw new ParseException("Invalid operator for comparing 2 string: " + op);
-		}
-		else if (lhsType.equals("DATE") && rhsType.equals("DATE"))
-		{
-			if (op.equals("E") || op.equals("NE") || op.equals("G") || op.equals("GE") || op.equals("L") || op.equals("LE"))
-			{
-				return;
-			}
-
-			throw new ParseException("Invalid operator for comparing 2 dates: " + op);
-		}
-		else
-		{
-			throw new ParseException("Invalid comparison between " + lhsType + " and " + rhsType);
-		}
-	}
-
 	private static final class OperatorTypeAndName
 	{
 		Object op;
@@ -11647,7 +11690,7 @@ public class SQLParser
 		String name;
 		int prereq;
 
-		public OperatorTypeAndName(Object op, int type, String name, int prereq)
+		public OperatorTypeAndName(final Object op, final int type, final String name, final int prereq)
 		{
 			this.op = op;
 			this.type = type;

@@ -10,7 +10,7 @@ public class DataType implements Serializable
 
 	private final int scale;
 
-	public DataType(int type, int length, int scale)
+	public DataType(final int type, final int length, final int scale)
 	{
 		this.type = type;
 		this.length = length;

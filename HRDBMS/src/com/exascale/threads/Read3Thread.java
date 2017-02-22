@@ -32,12 +32,12 @@ public class Read3Thread extends HRDBMSThread
 	private ArrayList<Integer> cols;
 	private int layoutSize;
 
-	public Read3Thread(ArrayList<ReadThread> rThreads)
+	public Read3Thread(final ArrayList<ReadThread> rThreads)
 	{
 		this.rThreads = rThreads;
 	}
 
-	public Read3Thread(Page p, Page p2, Page p3, Block b, ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3)
+	public Read3Thread(final Page p, final Page p2, final Page p3, final Block b, final ByteBuffer bb, final ByteBuffer bb2, final ByteBuffer bb3)
 	{
 		this.description = "Read thread for buffer Manager";
 		this.setWait(false);
@@ -50,7 +50,7 @@ public class Read3Thread extends HRDBMSThread
 		this.bb3 = bb3;
 	}
 
-	public Read3Thread(Page p, Page p2, Page p3, Block b, ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3, ArrayList<Integer> cols, int layoutSize)
+	public Read3Thread(final Page p, final Page p2, final Page p3, final Block b, final ByteBuffer bb, final ByteBuffer bb2, final ByteBuffer bb3, final ArrayList<Integer> cols, final int layoutSize)
 	{
 		this.description = "Read thread for buffer Manager";
 		this.setWait(false);
@@ -65,7 +65,7 @@ public class Read3Thread extends HRDBMSThread
 		this.layoutSize = layoutSize;
 	}
 
-	public Read3Thread(Page p, Page p2, Page p3, Block b, ByteBuffer bb, ByteBuffer bb2, ByteBuffer bb3, Schema schema1, Schema schema2, Schema schema3, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos)
+	public Read3Thread(final Page p, final Page p2, final Page p3, final Block b, final ByteBuffer bb, final ByteBuffer bb2, final ByteBuffer bb3, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos)
 	{
 		this.description = "Read thread for buffer Manager";
 		this.setWait(false);
@@ -97,7 +97,7 @@ public class Read3Thread extends HRDBMSThread
 		{
 			if (rThreads != null)
 			{
-				for (ReadThread thread : rThreads)
+				for (final ReadThread thread : rThreads)
 				{
 					thread.join();
 				}
@@ -172,23 +172,23 @@ public class Read3Thread extends HRDBMSThread
 			{
 				// HRDBMSWorker.logger.debug("Short Read3Thread ending");
 			}
-			//this.terminate();
+			// this.terminate();
 		}
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.warn("I/O error occurred trying to read file: " + b.fileName() + ":" + b.number(), e);
 			ok = false;
-			//this.terminate();
+			// this.terminate();
 			return;
 		}
 		return;
 	}
 
-	public void setRank(int rank)
+	public void setRank(final int rank)
 	{
 	}
 
-	public void setRankSize(int rankSize)
+	public void setRankSize(final int rankSize)
 	{
 	}
 }

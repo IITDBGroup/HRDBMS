@@ -1,0 +1,53 @@
+####################
+# set up languages
+language: java
+
+####################
+# set environment variables
+env:
+  global:
+    - ANT_VERSION=1.9.5
+    - ANT_HOME=/usr/share/ant/apache-ant-${ANT_VERSION}
+    - PATH=${PATH}:/usr/share/ant/apache-ant-${ANT_VERSION}/bin
+    - ANT=/usr/local/bin/ant
+
+####################
+# Java versions to test against
+#jdk:
+#  - oraclejdk8
+
+####################
+# install packages
+before_install:
+  - travis/install-deps.sh
+
+####################
+# build script
+script:
+  - ${ANT} -f HRDBMS/build.xml createJar
+
+####################
+# branch configuration
+branches:
+  only:
+  - merged
+
+####################
+# os environments
+sudo: required
+osx_image: xcode7.3
+
+####################
+# deploy
+#after_success:
+#  - ./travis/deploy.sh
+####################
+# build matrix
+matrix:
+  include:
+  - { os: linux, dist: precise }
+  - { os: linux, dist: trusty }
+#  - { os: osx }
+#  allow_failures:
+#    - os: osx
+

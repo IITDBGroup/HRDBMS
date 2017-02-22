@@ -4,42 +4,13 @@ public class SQL
 {
 	private String internal;
 
-	public SQL(String sql)
+	public SQL(final String sql)
 	{
 		internal = toUpperCaseExceptQuoted(sql);
 		internal = removeExcessWhitespace(internal);
 	}
 
-	@Override
-	public boolean equals(Object rhs)
-	{
-		if (rhs == null)
-		{
-			return false;
-		}
-
-		if (rhs instanceof SQL)
-		{
-			final SQL r = (SQL)rhs;
-			return internal.equals(r.internal);
-		}
-
-		return false;
-	}
-
-	@Override
-	public int hashCode()
-	{
-		return internal.hashCode();
-	}
-
-	@Override
-	public String toString()
-	{
-		return internal;
-	}
-
-	private String removeExcessWhitespace(String in)
+	private static String removeExcessWhitespace(final String in)
 	{
 		String out = in.replace('\t', ' ');
 		out = out.replace('\n', ' ');
@@ -47,7 +18,7 @@ public class SQL
 		out = out.replace('\f', ' ');
 		int i = 0;
 		int whitespaceCount = 0;
-		StringBuilder out2 = new StringBuilder();
+		final StringBuilder out2 = new StringBuilder();
 		final int length = out.length();
 		while (i < length)
 		{
@@ -74,9 +45,9 @@ public class SQL
 		return out2.toString();
 	}
 
-	private String toUpperCaseExceptQuoted(String in)
+	private static String toUpperCaseExceptQuoted(final String in)
 	{
-		StringBuilder out = new StringBuilder();
+		final StringBuilder out = new StringBuilder();
 		int i = 0;
 		boolean quoted = false;
 		int quoteType = 0;
@@ -159,5 +130,34 @@ public class SQL
 		}
 
 		return out.toString();
+	}
+
+	@Override
+	public boolean equals(final Object rhs)
+	{
+		if (rhs == null)
+		{
+			return false;
+		}
+
+		if (rhs instanceof SQL)
+		{
+			final SQL r = (SQL)rhs;
+			return internal.equals(r.internal);
+		}
+
+		return false;
+	}
+
+	@Override
+	public int hashCode()
+	{
+		return internal.hashCode();
+	}
+
+	@Override
+	public String toString()
+	{
+		return internal;
 	}
 }

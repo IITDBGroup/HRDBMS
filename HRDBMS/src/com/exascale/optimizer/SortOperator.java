@@ -52,7 +52,7 @@ public final class SortOperator implements Operator, Serializable
 			// get unsafe offset to this field
 			edOff = unsafe.objectFieldOffset(fieldToRead);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			unsafe = null;
 		}
@@ -83,12 +83,12 @@ public final class SortOperator implements Operator, Serializable
 	private transient volatile boolean demReceived;
 	private long txnum;
 
-	public SortOperator(ArrayList<String> sortCols, ArrayList<Boolean> orders, MetaData meta)
+	public SortOperator(final ArrayList<String> sortCols, final ArrayList<Boolean> orders, final MetaData meta)
 	{
 		this.sortCols = sortCols;
 		this.orders = new boolean[orders.size()];
 		int i = 0;
-		for (boolean b : orders)
+		for (final boolean b : orders)
 		{
 			this.orders[i++] = b;
 		}
@@ -96,7 +96,7 @@ public final class SortOperator implements Operator, Serializable
 		received = new AtomicLong(0);
 	}
 
-	public SortOperator(ArrayList<String> sortCols, boolean[] orders, MetaData meta)
+	public SortOperator(final ArrayList<String> sortCols, final boolean[] orders, final MetaData meta)
 	{
 		this.sortCols = sortCols;
 		this.orders = orders;
@@ -104,9 +104,9 @@ public final class SortOperator implements Operator, Serializable
 		received = new AtomicLong(0);
 	}
 
-	public static SortOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static SortOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		SortOperator value = (SortOperator)unsafe.allocateInstance(SortOperator.class);
+		final SortOperator value = (SortOperator)unsafe.allocateInstance(SortOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.child = OperatorUtils.deserializeOperator(in, prev);
 		value.parent = OperatorUtils.deserializeOperator(in, prev);
@@ -133,7 +133,7 @@ public final class SortOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void add(Operator op) throws Exception
+	public void add(final Operator op) throws Exception
 	{
 		if (child == null)
 		{
@@ -144,12 +144,12 @@ public final class SortOperator implements Operator, Serializable
 			pos2Col = child.getPos2Col();
 			int i = 0;
 			sortPos = new int[sortCols.size()];
-			ArrayList<String> newSortCols = new ArrayList<String>();
+			final ArrayList<String> newSortCols = new ArrayList<String>();
 			for (final String sortCol : sortCols)
 			{
 				try
 				{
-					Integer pos = cols2Pos.get(sortCol);
+					final Integer pos = cols2Pos.get(sortCol);
 					if (pos != null)
 					{
 						sortPos[i] = pos;
@@ -168,7 +168,7 @@ public final class SortOperator implements Operator, Serializable
 						}
 
 						int matches = 0;
-						for (String col : cols2Pos.keySet())
+						for (final String col : cols2Pos.keySet())
 						{
 							String col2;
 							if (col.contains("."))
@@ -197,7 +197,7 @@ public final class SortOperator implements Operator, Serializable
 						}
 					}
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.debug("Could not find " + sortCol + " in " + cols2Pos);
 					throw e;
@@ -244,7 +244,7 @@ public final class SortOperator implements Operator, Serializable
 
 		if (externalFiles != null)
 		{
-			for (String fn : externalFiles)
+			for (final String fn : externalFiles)
 			{
 				new File(fn).delete();
 			}
@@ -307,8 +307,8 @@ public final class SortOperator implements Operator, Serializable
 
 	public ArrayList<Boolean> getOrders()
 	{
-		ArrayList<Boolean> retval = new ArrayList<Boolean>(orders.length);
-		for (boolean b : orders)
+		final ArrayList<Boolean> retval = new ArrayList<Boolean>(orders.length);
+		for (final boolean b : orders)
 		{
 			retval.add(b);
 		}
@@ -329,7 +329,7 @@ public final class SortOperator implements Operator, Serializable
 	}
 
 	@Override
-	public Object next(Operator op) throws Exception
+	public Object next(final Operator op) throws Exception
 	{
 		Object o;
 		o = readBuffer.take();
@@ -357,7 +357,7 @@ public final class SortOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void nextAll(Operator op) throws Exception
+	public void nextAll(final Operator op) throws Exception
 	{
 		// child.nextAll(op);
 		Object o = next(op);
@@ -386,7 +386,7 @@ public final class SortOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void registerParent(Operator op) throws Exception
+	public void registerParent(final Operator op) throws Exception
 	{
 		if (parent == null)
 		{
@@ -399,7 +399,7 @@ public final class SortOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeChild(Operator op)
+	public void removeChild(final Operator op)
 	{
 		if (op == child)
 		{
@@ -409,7 +409,7 @@ public final class SortOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 		parent = null;
 	}
@@ -453,9 +453,9 @@ public final class SortOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -480,7 +480,7 @@ public final class SortOperator implements Operator, Serializable
 		OperatorUtils.writeLong(txnum, out);
 	}
 
-	public boolean setChildCard(long card)
+	public boolean setChildCard(final long card)
 	{
 		if (cardSet)
 		{
@@ -493,27 +493,27 @@ public final class SortOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void setChildPos(int pos)
+	public void setChildPos(final int pos)
 	{
 	}
 
-	public void setLimit(long limit)
+	public void setLimit(final long limit)
 	{
 		this.limit = limit;
 	}
 
 	@Override
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 		this.node = node;
 	}
 
 	@Override
-	public void setPlan(Plan plan)
+	public void setPlan(final Plan plan)
 	{
 	}
 
-	public void setTXNum(long txnum)
+	public void setTXNum(final long txnum)
 	{
 		this.txnum = txnum;
 	}
@@ -551,8 +551,8 @@ public final class SortOperator implements Operator, Serializable
 	{
 		try
 		{
-			ReverseComparator cmp = new ReverseComparator();
-			AuxPairingHeap<ArrayList<Object>> bh = new AuxPairingHeap<ArrayList<Object>>(cmp);
+			final ReverseComparator cmp = new ReverseComparator();
+			final AuxPairingHeap<ArrayList<Object>> bh = new AuxPairingHeap<ArrayList<Object>>(cmp);
 			Object o = child.next(this);
 			if (o instanceof DataEndMarker)
 			{
@@ -570,14 +570,14 @@ public final class SortOperator implements Operator, Serializable
 					return;
 				}
 
-				ArrayList<Object> row = (ArrayList<Object>)o;
+				final ArrayList<Object> row = (ArrayList<Object>)o;
 				if (bh.size() < limit)
 				{
 					bh.insert(row);
 				}
 				else
 				{
-					int result = cmp.compare(row, bh.findMin());
+					final int result = cmp.compare(row, bh.findMin());
 					if (result > 0)
 					{
 						bh.insert(row);
@@ -597,7 +597,7 @@ public final class SortOperator implements Operator, Serializable
 			}
 
 			// sort and write to queue
-			ArrayList<ArrayList<Object>> result = new ArrayList<ArrayList<Object>>();
+			final ArrayList<ArrayList<Object>> result = new ArrayList<ArrayList<Object>>();
 			while (bh.size() > 0)
 			{
 				result.add(bh.extractMin());
@@ -605,231 +605,17 @@ public final class SortOperator implements Operator, Serializable
 
 			Collections.reverse(result);
 
-			for (ArrayList<Object> row : result)
+			for (final ArrayList<Object> row : result)
 			{
 				readBuffer.put(row);
 			}
 
 			readBuffer.put(new DataEndMarker());
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			readBuffer.put(e);
 		}
-	}
-
-	private void mediumSort()
-	{
-		ArrayList<ArrayList<ArrayList<Object>>> results = new ArrayList<ArrayList<ArrayList<Object>>>();
-		double factor = Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor"));
-		int size = (int)(ResourceManager.QUEUE_SIZE * factor);
-		result = new ArrayList<ArrayList<Object>>(size);
-		boolean done = false;
-		byte[] types = new byte[pos2Col.size()];
-		int j = 0;
-		for (String col : pos2Col.values())
-		{
-			String type = cols2Types.get(col);
-			if (type.equals("INT"))
-			{
-				types[j] = (byte)1;
-			}
-			else if (type.equals("FLOAT"))
-			{
-				types[j] = (byte)2;
-			}
-			else if (type.equals("CHAR"))
-			{
-				types[j] = (byte)4;
-			}
-			else if (type.equals("LONG"))
-			{
-				types[j] = (byte)0;
-			}
-			else if (type.equals("DATE"))
-			{
-				types[j] = (byte)3;
-			}
-			else
-			{
-				readBuffer.put(new Exception("Unknown type: " + type));
-				return;
-			}
-
-			j++;
-		}
-
-		j = 0;
-		while (!done)
-		{
-			int i = 0;
-			while (i < size)
-			{
-				try
-				{
-					Object o = child.next(SortOperator.this);
-					if (o instanceof DataEndMarker)
-					{
-						demReceived = true;
-						break;
-					}
-					else
-					{
-						received.getAndIncrement();
-					}
-
-					if (o instanceof Exception)
-					{
-						readBuffer.put(o);
-						return;
-					}
-
-					result.add((ArrayList<Object>)o);
-				}
-				catch (Exception e)
-				{
-					readBuffer.put(e);
-					return;
-				}
-
-				i++;
-			}
-
-			if (i < size)
-			{
-				done = true;
-			}
-
-			if (i == 0)
-			{
-				break;
-			}
-
-			if (result.size() < PARALLEL_SORT_MIN_NUM_ROWS)
-			{
-				try
-				{
-					// doSequentialSort(0, result.size() - 1);
-					result.sort(new MergeComparator2());
-				}
-				catch (Exception e)
-				{
-					readBuffer.put(e);
-					return;
-				}
-			}
-			else
-			{
-				// final ParallelSortThread t = doParallelSort(0,
-				// result.size() - 1);
-				// while (true)
-				// {
-				// try
-				// {
-				// t.join();
-				// break;
-				// }
-				// catch(InterruptedException e)
-				// {}
-				// }
-				Object[] underlying = (Object[])unsafe.getObject(result, edOff);
-				Arrays.parallelSort(underlying, 0, result.size(), new MergeComparator2());
-			}
-
-			results.add(result);
-			result = new ArrayList<ArrayList<Object>>(size);
-		}
-
-		result = null;
-		mergeIntoResult(results);
-		readBuffer.put(new DataEndMarker());
-		results = null;
-	}
-
-	private void mergeIntoResult(ArrayList<ArrayList<ArrayList<Object>>> results)
-	{
-		int[] poses = new int[results.size()];
-		AuxPairingHeap<ALOO> rows = new AuxPairingHeap<ALOO>(new MergeComparator());
-		ALOO minEntry;
-		int i = 0;
-		for (ArrayList<ArrayList<Object>> result : results)
-		{
-			try
-			{
-				final ArrayList<Object> row = readRow(result, i, poses);
-				if (row != null)
-				{
-					rows.insert(new ALOO(row, i));
-				}
-			}
-			catch (Exception e)
-			{
-				try
-				{
-					HRDBMSWorker.logger.debug("", e);
-					readBuffer.put(e);
-				}
-				catch (Exception f)
-				{
-				}
-				return;
-			}
-
-			i++;
-		}
-
-		while (rows.size() > 0)
-		{
-			minEntry = rows.extractMin();
-
-			while (true)
-			{
-				try
-				{
-					readBuffer.put(minEntry.getALO());
-					break;
-				}
-				catch (final Exception e)
-				{
-				}
-			}
-			try
-			{
-				// final ArrayList<Object> row = minEntry.getOp().readRow();
-				int slot = (Integer)minEntry.getOp();
-				final ArrayList<Object> row = readRow(results.get(slot), slot, poses);
-
-				if (row != null)
-				{
-					rows.insert(new ALOO(row, slot));
-				}
-			}
-			catch (Exception e)
-			{
-				try
-				{
-					HRDBMSWorker.logger.debug("", e);
-					readBuffer.put(e);
-				}
-				catch (Exception f)
-				{
-				}
-				return;
-			}
-		}
-	}
-
-	private ArrayList<Object> readRow(ArrayList<ArrayList<Object>> result, int i, int[] poses)
-	{
-		int pos = poses[i];
-		if (pos < result.size())
-		{
-			ArrayList<Object> retval = result.get(pos);
-			poses[i]++;
-			return retval;
-		}
-
-		return null;
 	}
 
 	private class ALOO
@@ -837,14 +623,14 @@ public final class SortOperator implements Operator, Serializable
 		private final ArrayList<Object> alo;
 		private final Object op;
 
-		public ALOO(ArrayList<Object> alo, Object op)
+		public ALOO(final ArrayList<Object> alo, final Object op)
 		{
 			this.alo = alo;
 			this.op = op;
 		}
 
 		@Override
-		public boolean equals(Object o)
+		public boolean equals(final Object o)
 		{
 			return this == o;
 		}
@@ -863,101 +649,24 @@ public final class SortOperator implements Operator, Serializable
 	private class MergeComparator implements Comparator<Object>
 	{
 		@Override
-		public int compare(Object l2, Object r2)
+		public int compare(final Object l2, final Object r2)
 		{
-			ALOO l = (ALOO)l2;
-			ALOO r = (ALOO)r2;
+			final ALOO l = (ALOO)l2;
+			final ALOO r = (ALOO)r2;
 			if (l == r)
 			{
 				return 0;
 			}
 
-			ArrayList<Object> lhs = l.getALO();
-			ArrayList<Object> rhs = r.getALO();
+			final ArrayList<Object> lhs = l.getALO();
+			final ArrayList<Object> rhs = r.getALO();
 			int result = 0;
 			int i = 0;
 
 			for (final int pos : sortPos)
 			{
 				Object lField = lhs.get(pos);
-				Object rField = rhs.get(pos);
-
-				if (lField instanceof Integer)
-				{
-					result = ((Integer)lField).compareTo((Integer)rField);
-				}
-				else if (lField instanceof Long)
-				{
-					result = ((Long)lField).compareTo((Long)rField);
-				}
-				else if (lField instanceof Double)
-				{
-					result = ((Double)lField).compareTo((Double)rField);
-				}
-				else if (lField instanceof String)
-				{
-					result = ((String)lField).compareTo((String)rField);
-				}
-				else if (lField instanceof MyDate)
-				{
-					result = ((MyDate)lField).compareTo(rField);
-				}
-				else
-				{
-					lField = null;
-					lField.toString();
-				}
-
-				if (orders[i])
-				{
-					if (result > 0)
-					{
-						return 1;
-					}
-					else if (result < 0)
-					{
-						return -1;
-					}
-				}
-				else
-				{
-					if (result > 0)
-					{
-						return -1;
-					}
-					else if (result < 0)
-					{
-						return 1;
-					}
-				}
-
-				i++;
-			}
-
-			return 0;
-		}
-	}
-
-	private class MergeComparator2 implements Comparator<Object>
-	{
-		@Override
-		public int compare(Object l, Object r)
-		{
-			if (l == r)
-			{
-				return 0;
-			}
-
-			ArrayList<Object> lhs = (ArrayList<Object>)l;
-			ArrayList<Object> rhs = (ArrayList<Object>)r;
-
-			int result = 0;
-			int i = 0;
-
-			for (final int pos : sortPos)
-			{
-				Object lField = lhs.get(pos);
-				Object rField = rhs.get(pos);
+				final Object rField = rhs.get(pos);
 
 				if (lField instanceof Integer)
 				{
@@ -1018,15 +727,15 @@ public final class SortOperator implements Operator, Serializable
 	private class ReverseComparator implements Comparator<Object>
 	{
 		@Override
-		public int compare(Object l, Object r)
+		public int compare(final Object l, final Object r)
 		{
 			if (l == r)
 			{
 				return 0;
 			}
 
-			ArrayList<Object> lhs = (ArrayList<Object>)l;
-			ArrayList<Object> rhs = (ArrayList<Object>)r;
+			final ArrayList<Object> lhs = (ArrayList<Object>)l;
+			final ArrayList<Object> rhs = (ArrayList<Object>)r;
 
 			int result = 0;
 			int i = 0;
@@ -1034,7 +743,7 @@ public final class SortOperator implements Operator, Serializable
 			for (final int pos : sortPos)
 			{
 				Object lField = lhs.get(pos);
-				Object rField = rhs.get(pos);
+				final Object rField = rhs.get(pos);
 
 				if (lField instanceof Integer)
 				{
@@ -1100,7 +809,7 @@ public final class SortOperator implements Operator, Serializable
 
 		CopyThread ct;
 
-		public SortThread(Operator child)
+		public SortThread(final Operator child)
 		{
 			this.child = child;
 		}
@@ -1121,23 +830,25 @@ public final class SortOperator implements Operator, Serializable
 					externalSort(0);
 					return;
 				}
-				
+
 				if (childCard > ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")))
 				{
 					// double percentInMem = (ResourceManager.QUEUE_SIZE *
 					// Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor"))
 					// / 2) / childCard;
 					// percentInMem = percentInMem / 4;
-					double percentInMem = 0;
+					final double percentInMem = 0;
 					externalSort(percentInMem);
 					return;
 				}
 
-				if (childCard > ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")) / 2)
-				{
-					mediumSort();
-					return;
-				}
+				// if (childCard > ResourceManager.QUEUE_SIZE *
+				// Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor"))
+				// / 2)
+				// {
+				// mediumSort();
+				// return;
+				// }
 
 				if (result == null)
 				{
@@ -1175,7 +886,7 @@ public final class SortOperator implements Operator, Serializable
 						// final ParallelSortThread t = doParallelSort(0,
 						// result.size() - 1);
 						// t.join();
-						Object[] underlying = (Object[])unsafe.getObject(result, edOff);
+						final Object[] underlying = (Object[])unsafe.getObject(result, edOff);
 						Arrays.parallelSort(underlying, 0, result.size(), new MergeComparator2());
 					}
 					// ResourceManager.NO_OFFLOAD.getAndDecrement();
@@ -1193,34 +904,34 @@ public final class SortOperator implements Operator, Serializable
 				{
 					readBuffer.put(e);
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 				}
 				return;
 			}
 		}
 
-		private void externalSort(double percentInMem)
+		private void externalSort(final double percentInMem)
 		{
-			ConcurrentHashMap<WriteDataThread, WriteDataThread> threads = new ConcurrentHashMap<WriteDataThread, WriteDataThread>();
-			ArrayList<ArrayList<ArrayList<Object>>> bins = new ArrayList<ArrayList<ArrayList<Object>>>();
+			final ConcurrentHashMap<WriteDataThread, WriteDataThread> threads = new ConcurrentHashMap<WriteDataThread, WriteDataThread>();
+			final ArrayList<ArrayList<ArrayList<Object>>> bins = new ArrayList<ArrayList<ArrayList<Object>>>();
 			HRDBMSWorker.logger.debug("Doing external sort");
 			// double factor =
 			// Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor"));
 			// int size = (int)(ResourceManager.QUEUE_SIZE * factor);
-			int size = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("sort_bucket_size"));
-			int numInMem = 0;
+			final int size = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("sort_bucket_size"));
+			final int numInMem = 0;
 			externalFiles = new ArrayList<String>();
 			result = new ArrayList<ArrayList<Object>>(size);
-			ConcurrentHashMap<String, HRDBMSThread> map = new ConcurrentHashMap<String, HRDBMSThread>();
-			ConcurrentHashMap<String, RandomAccessFile> map2 = new ConcurrentHashMap<String, RandomAccessFile>();
-			ConcurrentHashMap<String, FileChannel> map3 = new ConcurrentHashMap<String, FileChannel>();
+			final ConcurrentHashMap<String, HRDBMSThread> map = new ConcurrentHashMap<String, HRDBMSThread>();
+			final ConcurrentHashMap<String, RandomAccessFile> map2 = new ConcurrentHashMap<String, RandomAccessFile>();
+			final ConcurrentHashMap<String, FileChannel> map3 = new ConcurrentHashMap<String, FileChannel>();
 			boolean done = false;
-			byte[] types = new byte[pos2Col.size()];
+			final byte[] types = new byte[pos2Col.size()];
 			int j = 0;
-			for (String col : pos2Col.values())
+			for (final String col : pos2Col.values())
 			{
-				String type = cols2Types.get(col);
+				final String type = cols2Types.get(col);
 				if (type.equals("INT"))
 				{
 					types[j] = (byte)1;
@@ -1258,7 +969,7 @@ public final class SortOperator implements Operator, Serializable
 				{
 					try
 					{
-						Object o = child.next(SortOperator.this);
+						final Object o = child.next(SortOperator.this);
 						if (o instanceof DataEndMarker)
 						{
 							demReceived = true;
@@ -1277,7 +988,7 @@ public final class SortOperator implements Operator, Serializable
 
 						result.add((ArrayList<Object>)o);
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						readBuffer.put(e);
 						return;
@@ -1303,7 +1014,7 @@ public final class SortOperator implements Operator, Serializable
 						// doSequentialSort(0, result.size() - 1);
 						result.sort(new MergeComparator2());
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						readBuffer.put(e);
 						return;
@@ -1323,11 +1034,11 @@ public final class SortOperator implements Operator, Serializable
 					// catch(InterruptedException e)
 					// {}
 					// }
-					Object[] underlying = (Object[])unsafe.getObject(result, edOff);
+					final Object[] underlying = (Object[])unsafe.getObject(result, edOff);
 					Arrays.parallelSort(underlying, 0, result.size(), new MergeComparator2());
 				}
 
-				String fn = ResourceManager.TEMP_DIRS.get(j % ResourceManager.TEMP_DIRS.size()) + this.hashCode() + "" + System.currentTimeMillis() + ".extsrt";
+				final String fn = ResourceManager.TEMP_DIRS.get(j % ResourceManager.TEMP_DIRS.size()) + this.hashCode() + "" + System.currentTimeMillis() + ".extsrt";
 				externalFiles.add(fn);
 
 				try
@@ -1339,8 +1050,8 @@ public final class SortOperator implements Operator, Serializable
 					}
 					else
 					{
-						byte[] data = rsToBytes(result, types);
-						WriteDataThread thread = new WriteDataThread(fn, data, map2, map3);
+						final byte[] data = rsToBytes(result, types);
+						final WriteDataThread thread = new WriteDataThread(fn, data, map2, map3);
 						TempThread.start(thread, txnum);
 						threads.put(thread, thread);
 						map.put(fn, thread);
@@ -1348,7 +1059,7 @@ public final class SortOperator implements Operator, Serializable
 					}
 					j++;
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					readBuffer.put(e);
 					return;
@@ -1358,7 +1069,7 @@ public final class SortOperator implements Operator, Serializable
 			result = null;
 			// at this point all the threads are listed in the map
 			// some might be running still
-			for (Map.Entry entry : map.entrySet())
+			for (final Map.Entry entry : map.entrySet())
 			{
 				while (true)
 				{
@@ -1372,25 +1083,25 @@ public final class SortOperator implements Operator, Serializable
 						}
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}
 
 				try
 				{
-					ReadDataThread thread = new ReadDataThread((String)entry.getKey(), 0, size / map.size(), map2, map3, types);
+					final ReadDataThread thread = new ReadDataThread((String)entry.getKey(), 0, size / map.size(), map2, map3, types);
 					thread.doStart();
 					map.put((String)entry.getKey(), thread);
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.debug("", e);
 				}
 			}
 
 			// reads for all first chunks are started
-			for (Map.Entry entry : map.entrySet())
+			for (final Map.Entry entry : map.entrySet())
 			{
 				while (true)
 				{
@@ -1404,7 +1115,7 @@ public final class SortOperator implements Operator, Serializable
 						}
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}
@@ -1420,30 +1131,30 @@ public final class SortOperator implements Operator, Serializable
 			mergeIntoResult(map.values());
 			readBuffer.put(new DataEndMarker());
 
-			for (FileChannel fc : map3.values())
+			for (final FileChannel fc : map3.values())
 			{
 				try
 				{
 					fc.close();
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 				}
 			}
 
-			for (RandomAccessFile raf : map2.values())
+			for (final RandomAccessFile raf : map2.values())
 			{
 				try
 				{
 					raf.close();
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 				}
 			}
 		}
 
-		private final Object fromBytes(byte[] val, byte[] types) throws Exception
+		private final Object fromBytes(final byte[] val, final byte[] types) throws Exception
 		{
 			final ByteBuffer bb = ByteBuffer.wrap(val);
 			final int numFields = types.length;
@@ -1484,7 +1195,7 @@ public final class SortOperator implements Operator, Serializable
 				else if (types[i] == 4)
 				{
 					// string
-					int length = getCInt(bb);
+					final int length = getCInt(bb);
 
 					byte[] temp = new byte[length];
 					bb.get(temp);
@@ -1504,8 +1215,8 @@ public final class SortOperator implements Operator, Serializable
 					}
 					else
 					{
-						byte[] out = new byte[temp.length << 1];
-						int clen = Schema.CVarcharFV.decompress(temp, temp.length, out);
+						final byte[] out = new byte[temp.length << 1];
+						final int clen = Schema.CVarcharFV.decompress(temp, temp.length, out);
 						temp = new byte[clen];
 						System.arraycopy(out, 0, temp, 0, clen);
 						final String o = new String(temp, StandardCharsets.UTF_8);
@@ -1525,10 +1236,10 @@ public final class SortOperator implements Operator, Serializable
 			return retval;
 		}
 
-		private int getCInt(ByteBuffer bb)
+		private int getCInt(final ByteBuffer bb)
 		{
-			int temp = (bb.get() & 0xff);
-			int length = (temp >>> 5);
+			final int temp = (bb.get() & 0xff);
+			final int length = (temp >>> 5);
 			if (length == 1)
 			{
 				return (temp & 0x1f);
@@ -1560,10 +1271,10 @@ public final class SortOperator implements Operator, Serializable
 			}
 		}
 
-		private long getCLong(ByteBuffer bb)
+		private long getCLong(final ByteBuffer bb)
 		{
-			int temp = (bb.get() & 0xff);
-			int length = (temp >>> 4);
+			final int temp = (bb.get() & 0xff);
+			final int length = (temp >>> 4);
 			if (length == 1)
 			{
 				return (temp & 0x0f);
@@ -1618,16 +1329,16 @@ public final class SortOperator implements Operator, Serializable
 			}
 		}
 
-		private int getMedium(ByteBuffer bb)
+		private int getMedium(final ByteBuffer bb)
 		{
 			int retval = ((bb.getShort() & 0xffff) << 8);
 			retval += (bb.get() & 0xff);
 			return retval;
 		}
 
-		private void mergeIntoResult(Collection<HRDBMSThread> readThreads)
+		private void mergeIntoResult(final Collection<HRDBMSThread> readThreads)
 		{
-			AuxPairingHeap<ALOO> rows = new AuxPairingHeap<ALOO>(new MergeComparator());
+			final AuxPairingHeap<ALOO> rows = new AuxPairingHeap<ALOO>(new MergeComparator());
 			ALOO minEntry;
 			for (final HRDBMSThread op : readThreads)
 			{
@@ -1639,14 +1350,14 @@ public final class SortOperator implements Operator, Serializable
 						rows.insert(new ALOO(row, op));
 					}
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					try
 					{
 						HRDBMSWorker.logger.debug("", e);
 						readBuffer.put(e);
 					}
-					catch (Exception f)
+					catch (final Exception f)
 					{
 					}
 					return;
@@ -1676,14 +1387,14 @@ public final class SortOperator implements Operator, Serializable
 						rows.insert(new ALOO(row, minEntry.getOp()));
 					}
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					try
 					{
 						HRDBMSWorker.logger.debug("", e);
 						readBuffer.put(e);
 					}
-					catch (Exception f)
+					catch (final Exception f)
 					{
 					}
 					return;
@@ -1691,7 +1402,7 @@ public final class SortOperator implements Operator, Serializable
 			}
 		}
 
-		private void putCInt(ByteBuffer bb, int val)
+		private void putCInt(final ByteBuffer bb, int val)
 		{
 			if (val <= 31)
 			{
@@ -1725,7 +1436,7 @@ public final class SortOperator implements Operator, Serializable
 			}
 		}
 
-		private void putCLong(ByteBuffer bb, long val)
+		private void putCLong(final ByteBuffer bb, long val)
 		{
 			if (val <= 15)
 			{
@@ -1786,22 +1497,22 @@ public final class SortOperator implements Operator, Serializable
 			}
 		}
 
-		private void putMedium(ByteBuffer bb, int val)
+		private void putMedium(final ByteBuffer bb, final int val)
 		{
 			bb.put((byte)((val & 0xff0000) >> 16));
 			bb.put((byte)((val & 0xff00) >> 8));
 			bb.put((byte)(val & 0xff));
 		}
 
-		private final byte[] rsToBytes(ArrayList<ArrayList<Object>> rows, final byte[] types) throws Exception
+		private final byte[] rsToBytes(final ArrayList<ArrayList<Object>> rows, final byte[] types) throws Exception
 		{
 			final ByteBuffer[] results = new ByteBuffer[rows.size()];
 			int rIndex = 0;
-			ArrayList<byte[]> bytes = new ArrayList<byte[]>();
+			final ArrayList<byte[]> bytes = new ArrayList<byte[]>();
 			final ArrayList<Integer> stringCols = new ArrayList<Integer>(rows.get(0).size());
 			int startSize = 4;
 			int a = 0;
-			for (byte b : types)
+			for (final byte b : types)
 			{
 				if (b == 4)
 				{
@@ -1820,17 +1531,17 @@ public final class SortOperator implements Operator, Serializable
 				a++;
 			}
 
-			for (ArrayList<Object> val : rows)
+			for (final ArrayList<Object> val : rows)
 			{
 				int size = startSize;
-				for (int y : stringCols)
+				for (final int y : stringCols)
 				{
-					Object o = val.get(y);
+					final Object o = val.get(y);
 					byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
 					if (Schema.CVarcharFV.compress)
 					{
-						byte[] out = new byte[b.length * 3 + 1];
-						int clen = Schema.CVarcharFV.compress(b, b.length, out);
+						final byte[] out = new byte[b.length * 3 + 1];
+						final int clen = Schema.CVarcharFV.compress(b, b.length, out);
 						b = new byte[clen];
 						System.arraycopy(out, 0, b, 0, clen);
 					}
@@ -1861,13 +1572,13 @@ public final class SortOperator implements Operator, Serializable
 					}
 					else if (types[i] == 3)
 					{
-						int value = ((MyDate)o).getTime();
+						final int value = ((MyDate)o).getTime();
 						// retvalBB.putInt(value);
 						putMedium(retvalBB, value);
 					}
 					else if (types[i] == 4)
 					{
-						byte[] temp = bytes.get(x++);
+						final byte[] temp = bytes.get(x++);
 						// retvalBB.putInt(temp.length);
 						putCInt(retvalBB, temp.length);
 						retvalBB.put(temp);
@@ -1885,16 +1596,16 @@ public final class SortOperator implements Operator, Serializable
 			}
 
 			int count = 0;
-			for (ByteBuffer bb : results)
+			for (final ByteBuffer bb : results)
 			{
 				count += (bb.position() + 4);
 			}
 			final byte[] retval = new byte[count];
-			ByteBuffer retvalBB = ByteBuffer.wrap(retval);
+			final ByteBuffer retvalBB = ByteBuffer.wrap(retval);
 			int retvalPos = 0;
-			for (ByteBuffer bb : results)
+			for (final ByteBuffer bb : results)
 			{
-				byte[] ba = bb.array();
+				final byte[] ba = bb.array();
 				retvalBB.position(retvalPos);
 				retvalBB.putInt(bb.position());
 				retvalPos += 4;
@@ -1952,7 +1663,7 @@ public final class SortOperator implements Operator, Serializable
 					{
 						readBuffer.put(e);
 					}
-					catch (Exception f)
+					catch (final Exception f)
 					{
 					}
 					return;
@@ -1963,15 +1674,15 @@ public final class SortOperator implements Operator, Serializable
 		private class MergeComparator2 implements Comparator<Object>
 		{
 			@Override
-			public int compare(Object l, Object r)
+			public int compare(final Object l, final Object r)
 			{
 				if (l == r)
 				{
 					return 0;
 				}
 
-				ArrayList<Object> lhs = (ArrayList<Object>)l;
-				ArrayList<Object> rhs = (ArrayList<Object>)r;
+				final ArrayList<Object> lhs = (ArrayList<Object>)l;
+				final ArrayList<Object> rhs = (ArrayList<Object>)r;
 
 				int result = 0;
 				int i = 0;
@@ -1979,7 +1690,7 @@ public final class SortOperator implements Operator, Serializable
 				for (final int pos : sortPos)
 				{
 					Object lField = lhs.get(pos);
-					Object rField = rhs.get(pos);
+					final Object rField = rhs.get(pos);
 
 					if (lField instanceof Integer)
 					{
@@ -2053,7 +1764,7 @@ public final class SortOperator implements Operator, Serializable
 			private byte[] types;
 			private final boolean inMem;
 
-			public ReadDataThread(String fn, long offset, int numRecs, ConcurrentHashMap<String, RandomAccessFile> map2, ConcurrentHashMap<String, FileChannel> map3, byte[] types) throws Exception
+			public ReadDataThread(final String fn, final long offset, final int numRecs, final ConcurrentHashMap<String, RandomAccessFile> map2, final ConcurrentHashMap<String, FileChannel> map3, final byte[] types) throws Exception
 			{
 				if (fn == null)
 				{
@@ -2073,7 +1784,7 @@ public final class SortOperator implements Operator, Serializable
 				inMem = false;
 			}
 
-			public ReadDataThread(String fn, long offset, int numRecs, ConcurrentHashMap<String, RandomAccessFile> map2, ConcurrentHashMap<String, FileChannel> map3, byte[] types, int index, ArrayList<ArrayList<ArrayList<Object>>> bins)
+			public ReadDataThread(final String fn, final long offset, final int numRecs, final ConcurrentHashMap<String, RandomAccessFile> map2, final ConcurrentHashMap<String, FileChannel> map3, final byte[] types, final int index, final ArrayList<ArrayList<ArrayList<Object>>> bins)
 			{
 				this.data = bins.get(index);
 				inMem = true;
@@ -2155,7 +1866,7 @@ public final class SortOperator implements Operator, Serializable
 
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}
@@ -2173,12 +1884,12 @@ public final class SortOperator implements Operator, Serializable
 			{
 				try
 				{
-					FileChannel f = map3.get(fn);
-					FileChannel fc = new BufferedFileChannel(f, 1 * 1024 * 1024);
+					final FileChannel f = map3.get(fn);
+					final FileChannel fc = new BufferedFileChannel(f, 1 * 1024 * 1024);
 					//
 					fc.position(offset);
 					int i = 0;
-					ByteBuffer bb1 = ByteBuffer.allocate(4);
+					final ByteBuffer bb1 = ByteBuffer.allocate(4);
 
 					while (i < numRecs)
 					{
@@ -2189,15 +1900,15 @@ public final class SortOperator implements Operator, Serializable
 							return;
 						}
 						bb1.position(0);
-						int length = bb1.getInt();
-						ByteBuffer bb = ByteBuffer.allocate(length);
+						final int length = bb1.getInt();
+						final ByteBuffer bb = ByteBuffer.allocate(length);
 						fc.read(bb);
 						try
 						{
-							ArrayList<Object> row = (ArrayList<Object>)fromBytes(bb.array(), types);
+							final ArrayList<Object> row = (ArrayList<Object>)fromBytes(bb.array(), types);
 							data.add(row);
 						}
-						catch (Exception e)
+						catch (final Exception e)
 						{
 							HRDBMSWorker.logger.debug("", e);
 							throw e;
@@ -2207,7 +1918,7 @@ public final class SortOperator implements Operator, Serializable
 
 					offset = fc.position();
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.debug("", e);
 					ok = false;
@@ -2220,7 +1931,7 @@ public final class SortOperator implements Operator, Serializable
 		{
 			private volatile ArrayList<ArrayList<Object>> array;
 
-			public ReaderThread(ArrayList<ArrayList<Object>> array)
+			public ReaderThread(final ArrayList<ArrayList<Object>> array)
 			{
 				this.array = array;
 			}
@@ -2260,7 +1971,7 @@ public final class SortOperator implements Operator, Serializable
 					{
 						readBuffer.put(e);
 					}
-					catch (Exception f)
+					catch (final Exception f)
 					{
 					}
 					return;
@@ -2277,7 +1988,7 @@ public final class SortOperator implements Operator, Serializable
 			private final ConcurrentHashMap<String, RandomAccessFile> map2;
 			private final ConcurrentHashMap<String, FileChannel> map3;
 
-			public WriteDataThread(String fn, byte[] data, ConcurrentHashMap<String, RandomAccessFile> map2, ConcurrentHashMap<String, FileChannel> map3)
+			public WriteDataThread(final String fn, final byte[] data, final ConcurrentHashMap<String, RandomAccessFile> map2, final ConcurrentHashMap<String, FileChannel> map3)
 			{
 				this.fn = fn;
 				this.data = data;
@@ -2308,26 +2019,26 @@ public final class SortOperator implements Operator, Serializable
 							raf = new RandomAccessFile(fn, "rw");
 							break;
 						}
-						catch (FileNotFoundException e)
+						catch (final FileNotFoundException e)
 						{
 							ResourceManager.panic = true;
 							try
 							{
 								Thread.sleep(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("rm_sleep_time_ms")) / 2);
 							}
-							catch (Exception f)
+							catch (final Exception f)
 							{
 							}
 						}
 					}
 					map2.put(fn, raf);
-					FileChannel fc = raf.getChannel();
+					final FileChannel fc = raf.getChannel();
 					map3.put(fn, fc);
-					ByteBuffer bb = ByteBuffer.wrap(data);
+					final ByteBuffer bb = ByteBuffer.wrap(data);
 					fc.write(bb);
 					data = null;
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					ok = false;
 					this.e = e;

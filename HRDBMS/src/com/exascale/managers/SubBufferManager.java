@@ -7,7 +7,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 import com.exascale.exceptions.BufferPoolExhaustedException;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
@@ -28,10 +27,10 @@ public class SubBufferManager
 	private final boolean log;
 	private final MultiHashMap<Long, Page> myBuffers;
 	private volatile int clock = 0;
-	private ScalableStampedReentrantRWLock lock2 = new ScalableStampedReentrantRWLock();
+	private final ScalableStampedReentrantRWLock lock2 = new ScalableStampedReentrantRWLock();
 	public Lock lock;
 
-	public SubBufferManager(boolean log)
+	public SubBufferManager(final boolean log)
 	{
 		this.log = log;
 		myBuffers = new MultiHashMap<Long, Page>();
@@ -51,7 +50,7 @@ public class SubBufferManager
 		lock = lock2.writeLock();
 	}
 
-	public boolean cleanPage(int i) throws Exception
+	public boolean cleanPage(final int i) throws Exception
 	{
 		try
 		{
@@ -62,7 +61,7 @@ public class SubBufferManager
 				return false;
 			}
 
-			Page p = bp[i];
+			final Page p = bp[i];
 			if (p.isModified() && !p.isPinned())
 			{
 				p.setNotModified();
@@ -74,7 +73,7 @@ public class SubBufferManager
 			lock.unlock();
 			return false;
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			lock.unlock();
@@ -82,10 +81,10 @@ public class SubBufferManager
 		}
 	}
 
-	public HashSet<String> flushAll(FileChannel fc) throws Exception
+	public HashSet<String> flushAll(final FileChannel fc) throws Exception
 	{
-		ArrayList<Page> toPut = new ArrayList<Page>();
-		for (Page p : bp)
+		final ArrayList<Page> toPut = new ArrayList<Page>();
+		for (final Page p : bp)
 		{
 			if (p.isModified())
 			{
@@ -98,27 +97,24 @@ public class SubBufferManager
 		putThread = new PutThread(toPut);
 		putThread.start();
 
-		HashSet<String> retval = new HashSet<String>();
-		for (Page p : toPut)
+		final HashSet<String> retval = new HashSet<String>();
+		for (final Page p : toPut)
 		{
 			retval.add(p.block().fileName());
 		}
 
 		Exception e = null;
 		putThread.join();
-		if (e == null)
-		{
-			e = putThread.getException();
-		}
+		e = putThread.getException();
 
 		if (e != null)
 		{
 			throw e;
 		}
 
-		int desired = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("bp_pages")) / BufferManager.mLength;
+		final int desired = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("bp_pages")) / BufferManager.mLength;
 		int i = bp.length - 1;
-		int starting = bp.length;
+		final int starting = bp.length;
 		int toTrim = 0;
 
 		while (i >= 0 && starting - toTrim > desired && !bp[i].isModified() && !bp[i].isPinned())
@@ -130,9 +126,9 @@ public class SubBufferManager
 
 		if (toTrim > 0)
 		{
-			int newLength = starting - toTrim;
+			final int newLength = starting - toTrim;
 
-			Page[] bp2 = new Page[newLength];
+			final Page[] bp2 = new Page[newLength];
 			System.arraycopy(bp, 0, bp2, 0, newLength);
 			bp = bp2;
 			HRDBMSWorker.logger.debug("Trimmed " + toTrim + " pages off of an SBP");
@@ -141,7 +137,7 @@ public class SubBufferManager
 		return retval;
 	}
 
-	public Page getPage(Block b, long txnum)
+	public Page getPage(final Block b, final long txnum)
 	{
 		lock.lock();
 		try
@@ -154,7 +150,7 @@ public class SubBufferManager
 				return null;
 			}
 
-			Page retval = bp[index];
+			final Page retval = bp[index];
 
 			if (!retval.isPinnedBy(txnum))
 			{
@@ -165,7 +161,7 @@ public class SubBufferManager
 			lock.unlock();
 			return retval;
 		}
-		catch (Throwable e)
+		catch (final Throwable e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			lock.unlock();
@@ -173,12 +169,12 @@ public class SubBufferManager
 		}
 	}
 
-	public void invalidateFile(String fn) throws Exception
+	public void invalidateFile(final String fn) throws Exception
 	{
 		lock.lock();
 		try
 		{
-			for (Page p : bp)
+			for (final Page p : bp)
 			{
 				if (p.block() != null)
 				{
@@ -193,7 +189,7 @@ public class SubBufferManager
 
 			lock.unlock();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			lock.unlock();
@@ -201,7 +197,7 @@ public class SubBufferManager
 		}
 	}
 
-	public ReadThread pin(Block b, long txnum) throws Exception
+	public ReadThread pin(final Block b, final long txnum) throws Exception
 	{
 		ReadThread retval = null;
 		// Transaction.txListLock.readLock().lock();
@@ -251,7 +247,7 @@ public class SubBufferManager
 							{
 								retval = bp[index].assignToBlock(b, log);
 							}
-							catch (Exception e)
+							catch (final Exception e)
 							{
 								// Transaction.txListLock.unlock();
 								lock.unlock();
@@ -283,7 +279,7 @@ public class SubBufferManager
 						}
 
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.debug("", e);
 						lock.unlock();
@@ -291,7 +287,7 @@ public class SubBufferManager
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				// Transaction.txListLock.readLock().unlock();
 				throw e;
@@ -299,7 +295,7 @@ public class SubBufferManager
 		}
 	}
 
-	public ReadThread pin(Block b, long txnum, ArrayList<Integer> cols, int layoutSize) throws Exception
+	public ReadThread pin(final Block b, final long txnum, final ArrayList<Integer> cols, final int layoutSize) throws Exception
 	{
 		ReadThread retval = null;
 		// Transaction.txListLock.readLock().lock();
@@ -349,7 +345,7 @@ public class SubBufferManager
 							{
 								retval = bp[index].assignToBlock(b, log, cols, layoutSize);
 							}
-							catch (Exception e)
+							catch (final Exception e)
 							{
 								// Transaction.txListLock.unlock();
 								lock.unlock();
@@ -381,7 +377,7 @@ public class SubBufferManager
 						}
 
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.debug("", e);
 						lock.unlock();
@@ -389,7 +385,7 @@ public class SubBufferManager
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				// Transaction.txListLock.readLock().unlock();
 				throw e;
@@ -397,7 +393,7 @@ public class SubBufferManager
 		}
 	}
 
-	public ReadThread pin(Block b, long txnum, ArrayList<Integer> cols, int layoutSize, int rank, int rankSize) throws Exception
+	public ReadThread pin(final Block b, final long txnum, final ArrayList<Integer> cols, final int layoutSize, final int rank, final int rankSize) throws Exception
 	{
 		ReadThread retval = null;
 		// Transaction.txListLock.readLock().lock();
@@ -447,7 +443,7 @@ public class SubBufferManager
 							{
 								retval = bp[index].assignToBlock(b, log, cols, layoutSize, rank, rankSize);
 							}
-							catch (Exception e)
+							catch (final Exception e)
 							{
 								// Transaction.txListLock.unlock();
 								lock.unlock();
@@ -479,7 +475,7 @@ public class SubBufferManager
 						}
 
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.debug("", e);
 						lock.unlock();
@@ -487,7 +483,7 @@ public class SubBufferManager
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				// Transaction.txListLock.readLock().unlock();
 				throw e;
@@ -495,7 +491,7 @@ public class SubBufferManager
 		}
 	}
 
-	public ReadThread pin(Block b, long txnum, int rank, int rankSize) throws Exception
+	public ReadThread pin(final Block b, final long txnum, final int rank, final int rankSize) throws Exception
 	{
 		ReadThread retval = null;
 		// Transaction.txListLock.readLock().lock();
@@ -545,7 +541,7 @@ public class SubBufferManager
 							{
 								retval = bp[index].assignToBlock(b, log, rank, rankSize);
 							}
-							catch (Exception e)
+							catch (final Exception e)
 							{
 								// Transaction.txListLock.unlock();
 								lock.unlock();
@@ -577,7 +573,7 @@ public class SubBufferManager
 						}
 
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.debug("", e);
 						lock.unlock();
@@ -585,7 +581,7 @@ public class SubBufferManager
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				// Transaction.txListLock.readLock().unlock();
 				throw e;
@@ -593,7 +589,7 @@ public class SubBufferManager
 		}
 	}
 
-	public ReadThread pin(Block b, long txnum, int num, int rank, int rankSize) throws Exception
+	public ReadThread pin(final Block b, final long txnum, final int num, final int rank, final int rankSize) throws Exception
 	{
 		// int start = b.number();
 		// int end = start + num - 1;
@@ -615,13 +611,13 @@ public class SubBufferManager
 					try
 					{
 						int i = 0;
-						String fn = b.fileName();
+						final String fn = b.fileName();
 						int page = b.number();
 						boolean ok = true;
 						while (i < num)
 						{
-							Block block = new Block(fn, page++);
-							int index = findExistingPage(block);
+							final Block block = new Block(fn, page++);
+							final int index = findExistingPage(block);
 							if (index != -1)
 							{
 								ok = false;
@@ -651,7 +647,7 @@ public class SubBufferManager
 							// continue;
 							// }
 
-							ArrayList<Integer> indexes = chooseUnpinnedPages(num);
+							final ArrayList<Integer> indexes = chooseUnpinnedPages(num);
 
 							if (numNotTouched > 0)
 							{
@@ -663,7 +659,7 @@ public class SubBufferManager
 								numNotTouched = 0;
 							}
 
-							for (int index : indexes)
+							for (final int index : indexes)
 							{
 								if (bp[index].block() != null)
 								{
@@ -676,7 +672,7 @@ public class SubBufferManager
 							{
 								retval = bp[indexes.get(0)].assignToBlocks(b, num, log, indexes, bp, rank, rankSize);
 							}
-							catch (Exception e)
+							catch (final Exception e)
 							{
 								// Transaction.txListLock.unlock();
 								throw e;
@@ -686,7 +682,7 @@ public class SubBufferManager
 							page = b.number();
 							while (i < num)
 							{
-								Block nb = new Block(fn, page++);
+								final Block nb = new Block(fn, page++);
 								// HRDBMSWorker.logger.debug(nb + " in slot " +
 								// indexes.get(i));
 								pageLookup.put(nb, indexes.get(i));
@@ -696,7 +692,7 @@ public class SubBufferManager
 							i = 0;
 							while (i < num)
 							{
-								long lsn = LogManager.getLSN();
+								final long lsn = LogManager.getLSN();
 								bp[indexes.get(i)].pin(lsn, txnum);
 								i++;
 							}
@@ -715,7 +711,7 @@ public class SubBufferManager
 							return retval;
 						}
 					}
-					catch (Throwable e)
+					catch (final Throwable e)
 					{
 						HRDBMSWorker.logger.debug("", e);
 						lock.unlock();
@@ -723,7 +719,7 @@ public class SubBufferManager
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				// Transaction.txListLock.readLock().unlock();
 				HRDBMSWorker.logger.debug("", e);
@@ -732,10 +728,10 @@ public class SubBufferManager
 		}
 	}
 
-	public void pin(Block b, Transaction tx, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos) throws Exception
+	public void pin(final Block b, final Transaction tx, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos) throws Exception
 	{
 		// Transaction.txListLock.readLock().lock();
-		long txnum = tx.number();
+		final long txnum = tx.number();
 		{
 			try
 			{
@@ -782,7 +778,7 @@ public class SubBufferManager
 							{
 								bp[index].assignToBlock(b, log, schema, schemaMap, tx, fetchPos);
 							}
-							catch (Exception e)
+							catch (final Exception e)
 							{
 								// Transaction.txListLock.unlock();
 								lock.unlock();
@@ -813,7 +809,7 @@ public class SubBufferManager
 							return;
 						}
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.debug("", e);
 						lock.unlock();
@@ -821,7 +817,7 @@ public class SubBufferManager
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 				// Transaction.txListLock.readLock().unlock();
@@ -830,10 +826,10 @@ public class SubBufferManager
 		}
 	}
 
-	public void pin(Block b, Transaction tx, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos, int rank, int rankSize) throws Exception
+	public void pin(final Block b, final Transaction tx, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos, final int rank, final int rankSize) throws Exception
 	{
 		// Transaction.txListLock.readLock().lock();
-		long txnum = tx.number();
+		final long txnum = tx.number();
 		{
 			try
 			{
@@ -880,7 +876,7 @@ public class SubBufferManager
 							{
 								bp[index].assignToBlock(b, log, schema, schemaMap, tx, fetchPos, rank, rankSize);
 							}
-							catch (Exception e)
+							catch (final Exception e)
 							{
 								// Transaction.txListLock.unlock();
 								lock.unlock();
@@ -911,7 +907,7 @@ public class SubBufferManager
 							return;
 						}
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.debug("", e);
 						lock.unlock();
@@ -919,7 +915,7 @@ public class SubBufferManager
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 				// Transaction.txListLock.readLock().unlock();
@@ -928,7 +924,7 @@ public class SubBufferManager
 		}
 	}
 
-	public Read3Thread pin3(Block b, long txnum) throws Exception
+	public Read3Thread pin3(final Block b, final long txnum) throws Exception
 	{
 		// Transaction.txListLock.readLock().lock();
 		// HRDBMSWorker.logger.debug("Short SBM pin3 starting");
@@ -946,15 +942,15 @@ public class SubBufferManager
 					lock.lock();
 					try
 					{
-						Block b2 = new Block(b.fileName(), b.number() + 1);
-						Block b3 = new Block(b.fileName(), b.number() + 2);
+						final Block b2 = new Block(b.fileName(), b.number() + 1);
+						final Block b3 = new Block(b.fileName(), b.number() + 2);
 						int index = findExistingPage(b);
 						int index2 = findExistingPage(b2);
 						int index3 = findExistingPage(b3);
 
 						if (index != -1 || index2 != -1 || index3 != -1)
 						{
-							ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
+							final ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
 							ReadThread thread = pin(b, txnum);
 							if (thread != null)
 							{
@@ -978,7 +974,7 @@ public class SubBufferManager
 							}
 							else
 							{
-								Read3Thread thread2 = new Read3Thread(threads);
+								final Read3Thread thread2 = new Read3Thread(threads);
 								thread2.start();
 								return thread2;
 							}
@@ -992,7 +988,7 @@ public class SubBufferManager
 							// continue;
 							// }
 
-							ArrayList<Integer> indexes = chooseUnpinnedPages(b.fileName());
+							final ArrayList<Integer> indexes = chooseUnpinnedPages(b.fileName());
 
 							if (indexes == null)
 							{
@@ -1034,7 +1030,7 @@ public class SubBufferManager
 							{
 								retval = bp[index].assignToBlock3(b, b2, b3, log, bp[index2], bp[index3]);
 							}
-							catch (Exception e)
+							catch (final Exception e)
 							{
 								// Transaction.txListLock.unlock();
 								lock.unlock();
@@ -1060,7 +1056,7 @@ public class SubBufferManager
 							return retval;
 						}
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.debug("", e);
 						lock.unlock();
@@ -1068,7 +1064,7 @@ public class SubBufferManager
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				// Transaction.txListLock.readLock().unlock();
 				HRDBMSWorker.logger.debug("", e);
@@ -1077,7 +1073,7 @@ public class SubBufferManager
 		}
 	}
 
-	public Read3Thread pin3(Block b, long txnum, ArrayList<Integer> cols, int layoutSize) throws Exception
+	public Read3Thread pin3(final Block b, final long txnum, final ArrayList<Integer> cols, final int layoutSize) throws Exception
 	{
 		// Transaction.txListLock.readLock().lock();
 		// HRDBMSWorker.logger.debug("Short SBM pin3 starting");
@@ -1095,15 +1091,15 @@ public class SubBufferManager
 					lock.lock();
 					try
 					{
-						Block b2 = new Block(b.fileName(), b.number() + 1);
-						Block b3 = new Block(b.fileName(), b.number() + 2);
+						final Block b2 = new Block(b.fileName(), b.number() + 1);
+						final Block b3 = new Block(b.fileName(), b.number() + 2);
 						int index = findExistingPage(b);
 						int index2 = findExistingPage(b2);
 						int index3 = findExistingPage(b3);
 
 						if (index != -1 || index2 != -1 || index3 != -1)
 						{
-							ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
+							final ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
 							ReadThread thread = pin(b, txnum, cols, layoutSize);
 							if (thread != null)
 							{
@@ -1127,7 +1123,7 @@ public class SubBufferManager
 							}
 							else
 							{
-								Read3Thread thread2 = new Read3Thread(threads);
+								final Read3Thread thread2 = new Read3Thread(threads);
 								thread2.start();
 								return thread2;
 							}
@@ -1141,7 +1137,7 @@ public class SubBufferManager
 							// continue;
 							// }
 
-							ArrayList<Integer> indexes = chooseUnpinnedPages(b.fileName());
+							final ArrayList<Integer> indexes = chooseUnpinnedPages(b.fileName());
 
 							if (indexes == null)
 							{
@@ -1183,7 +1179,7 @@ public class SubBufferManager
 							{
 								retval = bp[index].assignToBlock3(b, b2, b3, log, bp[index2], bp[index3], cols, layoutSize);
 							}
-							catch (Exception e)
+							catch (final Exception e)
 							{
 								// Transaction.txListLock.unlock();
 								lock.unlock();
@@ -1209,7 +1205,7 @@ public class SubBufferManager
 							return retval;
 						}
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.debug("", e);
 						lock.unlock();
@@ -1217,7 +1213,7 @@ public class SubBufferManager
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				// Transaction.txListLock.readLock().unlock();
 				HRDBMSWorker.logger.debug("", e);
@@ -1226,7 +1222,7 @@ public class SubBufferManager
 		}
 	}
 
-	public Read3Thread pin3(Block b, long txnum, int rank, int rankSize) throws Exception
+	public Read3Thread pin3(final Block b, final long txnum, final int rank, final int rankSize) throws Exception
 	{
 		// Transaction.txListLock.readLock().lock();
 		// HRDBMSWorker.logger.debug("Short SBM pin3 starting");
@@ -1244,15 +1240,15 @@ public class SubBufferManager
 					lock.lock();
 					try
 					{
-						Block b2 = new Block(b.fileName(), b.number() + 1);
-						Block b3 = new Block(b.fileName(), b.number() + 2);
+						final Block b2 = new Block(b.fileName(), b.number() + 1);
+						final Block b3 = new Block(b.fileName(), b.number() + 2);
 						int index = findExistingPage(b);
 						int index2 = findExistingPage(b2);
 						int index3 = findExistingPage(b3);
 
 						if (index != -1 || index2 != -1 || index3 != -1)
 						{
-							ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
+							final ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
 							ReadThread thread = pin(b, txnum, rank, rankSize);
 							if (thread != null)
 							{
@@ -1276,7 +1272,7 @@ public class SubBufferManager
 							}
 							else
 							{
-								Read3Thread thread2 = new Read3Thread(threads);
+								final Read3Thread thread2 = new Read3Thread(threads);
 								thread2.start();
 								return thread2;
 							}
@@ -1290,7 +1286,7 @@ public class SubBufferManager
 							// continue;
 							// }
 
-							ArrayList<Integer> indexes = chooseUnpinnedPages(b.fileName());
+							final ArrayList<Integer> indexes = chooseUnpinnedPages(b.fileName());
 
 							if (indexes == null)
 							{
@@ -1332,7 +1328,7 @@ public class SubBufferManager
 							{
 								retval = bp[index].assignToBlock3(b, b2, b3, log, bp[index2], bp[index3], rank, rankSize);
 							}
-							catch (Exception e)
+							catch (final Exception e)
 							{
 								// Transaction.txListLock.unlock();
 								lock.unlock();
@@ -1358,7 +1354,7 @@ public class SubBufferManager
 							return retval;
 						}
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.debug("", e);
 						lock.unlock();
@@ -1366,7 +1362,7 @@ public class SubBufferManager
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				// Transaction.txListLock.readLock().unlock();
 				HRDBMSWorker.logger.debug("", e);
@@ -1375,11 +1371,11 @@ public class SubBufferManager
 		}
 	}
 
-	public void pin3(Block b, Transaction tx, Schema schema1, Schema schema2, Schema schema3, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos) throws Exception
+	public void pin3(final Block b, final Transaction tx, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos) throws Exception
 	{
 		// Transaction.txListLock.readLock().lock();
 		// HRDBMSWorker.logger.debug("Long SBM pin3 starting");
-		long txnum = tx.number();
+		final long txnum = tx.number();
 		{
 			try
 			{
@@ -1394,8 +1390,8 @@ public class SubBufferManager
 					try
 					{
 						int index = findExistingPage(b);
-						Block b2 = new Block(b.fileName(), b.number() + 1);
-						Block b3 = new Block(b.fileName(), b.number() + 2);
+						final Block b2 = new Block(b.fileName(), b.number() + 1);
+						final Block b3 = new Block(b.fileName(), b.number() + 2);
 						int index2 = findExistingPage(b2);
 						int index3 = findExistingPage(b3);
 
@@ -1416,7 +1412,7 @@ public class SubBufferManager
 							// continue;
 							// }
 
-							ArrayList<Integer> indexes = chooseUnpinnedPages(b.fileName());
+							final ArrayList<Integer> indexes = chooseUnpinnedPages(b.fileName());
 
 							if (indexes == null)
 							{
@@ -1458,7 +1454,7 @@ public class SubBufferManager
 							{
 								bp[index].assignToBlock3(b, b2, b3, log, schema1, schema2, schema3, schemaMap, tx, fetchPos, bp[index2], bp[index3]);
 							}
-							catch (Exception e)
+							catch (final Exception e)
 							{
 								// Transaction.txListLock.unlock();
 								lock.unlock();
@@ -1483,7 +1479,7 @@ public class SubBufferManager
 							return;
 						}
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.debug("", e);
 						lock.unlock();
@@ -1491,7 +1487,7 @@ public class SubBufferManager
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 				// Transaction.txListLock.readLock().unlock();
@@ -1500,11 +1496,11 @@ public class SubBufferManager
 		}
 	}
 
-	public void pin3(Block b, Transaction tx, Schema schema1, Schema schema2, Schema schema3, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos, int rank, int rankSize) throws Exception
+	public void pin3(final Block b, final Transaction tx, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos, final int rank, final int rankSize) throws Exception
 	{
 		// Transaction.txListLock.readLock().lock();
 		// HRDBMSWorker.logger.debug("Long SBM pin3 starting");
-		long txnum = tx.number();
+		final long txnum = tx.number();
 		{
 			try
 			{
@@ -1519,8 +1515,8 @@ public class SubBufferManager
 					try
 					{
 						int index = findExistingPage(b);
-						Block b2 = new Block(b.fileName(), b.number() + 1);
-						Block b3 = new Block(b.fileName(), b.number() + 2);
+						final Block b2 = new Block(b.fileName(), b.number() + 1);
+						final Block b3 = new Block(b.fileName(), b.number() + 2);
 						int index2 = findExistingPage(b2);
 						int index3 = findExistingPage(b3);
 
@@ -1541,7 +1537,7 @@ public class SubBufferManager
 							// continue;
 							// }
 
-							ArrayList<Integer> indexes = chooseUnpinnedPages(b.fileName());
+							final ArrayList<Integer> indexes = chooseUnpinnedPages(b.fileName());
 
 							if (indexes == null)
 							{
@@ -1583,7 +1579,7 @@ public class SubBufferManager
 							{
 								bp[index].assignToBlock3(b, b2, b3, log, schema1, schema2, schema3, schemaMap, tx, fetchPos, bp[index2], bp[index3], rank, rankSize);
 							}
-							catch (Exception e)
+							catch (final Exception e)
 							{
 								// Transaction.txListLock.unlock();
 								lock.unlock();
@@ -1608,7 +1604,7 @@ public class SubBufferManager
 							return;
 						}
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.debug("", e);
 						lock.unlock();
@@ -1616,7 +1612,7 @@ public class SubBufferManager
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 				// Transaction.txListLock.readLock().unlock();
@@ -1625,7 +1621,7 @@ public class SubBufferManager
 		}
 	}
 
-	public void pinFromMemory(Block b, long txnum, ByteBuffer data) throws Exception
+	public void pinFromMemory(final Block b, final long txnum, final ByteBuffer data) throws Exception
 	{
 		// Transaction.txListLock.readLock().lock();
 		{
@@ -1672,7 +1668,7 @@ public class SubBufferManager
 						{
 							bp[index].assignToBlockFromMemory(b, log, data);
 						}
-						catch (Exception e)
+						catch (final Exception e)
 						{
 							// Transaction.txListLock.unlock();
 							lock.unlock();
@@ -1689,7 +1685,7 @@ public class SubBufferManager
 						lock.unlock();
 						return;
 					}
-					catch (Throwable e)
+					catch (final Throwable e)
 					{
 						HRDBMSWorker.logger.debug("", e);
 						lock.unlock();
@@ -1697,7 +1693,7 @@ public class SubBufferManager
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 				// Transaction.txListLock.readLock().unlock();
@@ -1706,7 +1702,7 @@ public class SubBufferManager
 		}
 	}
 
-	public void pinSync(Block b, long txnum) throws Exception
+	public void pinSync(final Block b, final long txnum) throws Exception
 	{
 		// Transaction.txListLock.readLock().lock();
 		{
@@ -1764,7 +1760,7 @@ public class SubBufferManager
 							{
 								bp[index].assignToBlockSync(b, log);
 							}
-							catch (Exception e)
+							catch (final Exception e)
 							{
 								// Transaction.txListLock.unlock();
 								lock.unlock();
@@ -1789,7 +1785,7 @@ public class SubBufferManager
 						}
 
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.debug("", e);
 						lock.unlock();
@@ -1797,7 +1793,7 @@ public class SubBufferManager
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				// Transaction.txListLock.readLock().unlock();
 				throw e;
@@ -1805,10 +1801,10 @@ public class SubBufferManager
 		}
 	}
 
-	public void pinSync(Block b, Transaction tx, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos) throws Exception
+	public void pinSync(final Block b, final Transaction tx, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos) throws Exception
 	{
 		// Transaction.txListLock.readLock().lock();
-		long txnum = tx.number();
+		final long txnum = tx.number();
 		{
 			try
 			{
@@ -1864,7 +1860,7 @@ public class SubBufferManager
 							{
 								bp[index].assignToBlockSync(b, log, schema, schemaMap, tx, fetchPos);
 							}
-							catch (Exception e)
+							catch (final Exception e)
 							{
 								// Transaction.txListLock.unlock();
 								lock.unlock();
@@ -1889,7 +1885,7 @@ public class SubBufferManager
 							return;
 						}
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						HRDBMSWorker.logger.debug("", e);
 						lock.unlock();
@@ -1897,7 +1893,7 @@ public class SubBufferManager
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 				// Transaction.txListLock.readLock().unlock();
@@ -1906,43 +1902,43 @@ public class SubBufferManager
 		}
 	}
 
-	public ReadThread requestConsecutivePages(Block b, long txnum, int num, int rank, int rankSize) throws Exception
+	public ReadThread requestConsecutivePages(final Block b, final long txnum, final int num, final int rank, final int rankSize) throws Exception
 	{
 		try
 		{
 			return pin(b, txnum, num, rank, rankSize);
 		}
-		catch (Throwable e)
+		catch (final Throwable e)
 		{
 			HRDBMSWorker.logger.warn("Error fetching pages", e);
 			throw e;
 		}
 	}
 
-	public void requestPage(Block b, long txnum)
+	public void requestPage(final Block b, final long txnum)
 	{
 		try
 		{
 			pin(b, txnum);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.warn("Error fetching pages", e);
 		}
 	}
 
-	public void throwAwayPage(Block b) throws Exception
+	public void throwAwayPage(final Block b) throws Exception
 	{
 		lock.lock();
 		try
 		{
-			Page p = bp[pageLookup.get(b)];
+			final Page p = bp[pageLookup.get(b)];
 			p.setNotModified();
 			p.setPinTime(-1);
 			pageLookup.remove(p.block());
 			lock.unlock();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			lock.unlock();
@@ -1955,9 +1951,9 @@ public class SubBufferManager
 		lock.lock();
 		try
 		{
-			int desired = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("bp_pages")) / BufferManager.mLength;
+			final int desired = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("bp_pages")) / BufferManager.mLength;
 			int i = bp.length - 1;
-			int starting = bp.length;
+			final int starting = bp.length;
 			int toTrim = 0;
 
 			while (i >= 0 && starting - toTrim > desired && !bp[i].isModified() && !bp[i].isPinned())
@@ -1969,16 +1965,16 @@ public class SubBufferManager
 
 			if (toTrim > 0)
 			{
-				int newLength = starting - toTrim;
+				final int newLength = starting - toTrim;
 
-				Page[] bp2 = new Page[newLength];
+				final Page[] bp2 = new Page[newLength];
 				System.arraycopy(bp, 0, bp2, 0, newLength);
 				bp = bp2;
 				// HRDBMSWorker.logger.debug("Trimmed " + toTrim + " pages off
 				// of an SBP");
 			}
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 		}
@@ -1986,7 +1982,7 @@ public class SubBufferManager
 		lock.unlock();
 	}
 
-	public void unpin(Page p, long txnum)
+	public void unpin(final Page p, final long txnum)
 	{
 		lock.lock();
 		try
@@ -1997,7 +1993,7 @@ public class SubBufferManager
 			}
 			lock.unlock();
 		}
-		catch (Throwable e)
+		catch (final Throwable e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			lock.unlock();
@@ -2010,7 +2006,7 @@ public class SubBufferManager
 		lock.lock();
 		try
 		{
-			for (long tx : myBuffers.getKeySet())
+			for (final long tx : myBuffers.getKeySet())
 			{
 
 				for (final Page p : myBuffers.get(tx))
@@ -2023,7 +2019,7 @@ public class SubBufferManager
 
 			lock.unlock();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			lock.unlock();
@@ -2031,7 +2027,7 @@ public class SubBufferManager
 		}
 	}
 
-	public void unpinAll(long txnum)
+	public void unpinAll(final long txnum)
 	{
 		lock.lock();
 		try
@@ -2044,7 +2040,7 @@ public class SubBufferManager
 			myBuffers.remove(txnum);
 			lock.unlock();
 		}
-		catch (Throwable e)
+		catch (final Throwable e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			lock.unlock();
@@ -2052,7 +2048,7 @@ public class SubBufferManager
 		}
 	}
 
-	public void unpinAllExcept(long txnum, String iFn, Block inUse)
+	public void unpinAllExcept(final long txnum, final String iFn, final Block inUse)
 	{
 		lock.lock();
 		try
@@ -2068,7 +2064,7 @@ public class SubBufferManager
 
 			lock.unlock();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			lock.unlock();
@@ -2076,12 +2072,12 @@ public class SubBufferManager
 		}
 	}
 
-	public void unpinAllLessThan(long txnum, int lt, String tFn)
+	public void unpinAllLessThan(final long txnum, final int lt, final String tFn)
 	{
 		lock.lock();
 		try
 		{
-			String prefix = tFn.substring(0, tFn.lastIndexOf('/') + 1);
+			final String prefix = tFn.substring(0, tFn.lastIndexOf('/') + 1);
 			for (final Page p : myBuffers.get(txnum))
 			{
 				if (p.block().fileName().startsWith(prefix) && (p.block().fileName().endsWith("indx") || p.block().number() < lt - 1))
@@ -2093,7 +2089,7 @@ public class SubBufferManager
 
 			lock.unlock();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			lock.unlock();
@@ -2101,7 +2097,7 @@ public class SubBufferManager
 		}
 	}
 
-	public void unpinAllLessThan(long txnum, int lt, String tFn, boolean flag)
+	public void unpinAllLessThan(final long txnum, final int lt, final String tFn, final boolean flag)
 	{
 		lock.lock();
 		try
@@ -2117,7 +2113,7 @@ public class SubBufferManager
 
 			lock.unlock();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			lock.unlock();
@@ -2125,7 +2121,7 @@ public class SubBufferManager
 		}
 	}
 
-	public void unpinMyDevice(long txnum, String prefix)
+	public void unpinMyDevice(final long txnum, final String prefix)
 	{
 		lock.lock();
 		try
@@ -2141,7 +2137,7 @@ public class SubBufferManager
 
 			lock.unlock();
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			lock.unlock();
@@ -2149,31 +2145,31 @@ public class SubBufferManager
 		}
 	}
 
-	public void write(Page p, int off, byte[] data)
+	public void write(final Page p, final int off, final byte[] data)
 	{
 		p.buffer().position(off);
 		p.buffer().put(data);
 	}
 
-	private ReadThread bail(Block b, int num, long txnum) throws Exception
+	private ReadThread bail(final Block b, final int num, final long txnum) throws Exception
 	{
 		int page = b.number();
 		int i = 0;
-		String fn = b.fileName();
-		ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
+		final String fn = b.fileName();
+		final ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
 		while (i < num)
 		{
-			ReadThread thread = pin(new Block(fn, page++), txnum);
+			final ReadThread thread = pin(new Block(fn, page++), txnum);
 			threads.add(thread);
 			i++;
 		}
 
-		ReadThread retval = new ReadThread(threads);
+		final ReadThread retval = new ReadThread(threads);
 		retval.start();
 		return retval;
 	}
 
-	private int chooseUnpinnedPage(String newFN)
+	private int chooseUnpinnedPage(final String newFN)
 	{
 		lock.lock();
 		try
@@ -2192,14 +2188,14 @@ public class SubBufferManager
 				clock = 0;
 			}
 
-			int initialClock = clock;
+			final int initialClock = clock;
 			boolean start = true;
 
 			while (start || clock != initialClock)
 			{
 				start = false;
-				Page p = bp[clock];
-				int index = clock;
+				final Page p = bp[clock];
+				final int index = clock;
 				clock++;
 				if (clock == bp.length)
 				{
@@ -2228,8 +2224,8 @@ public class SubBufferManager
 			while (start || clock != initialClock)
 			{
 				start = false;
-				Page p = bp[clock];
-				int index = clock;
+				final Page p = bp[clock];
+				final int index = clock;
 				clock++;
 				if (clock == bp.length)
 				{
@@ -2260,7 +2256,7 @@ public class SubBufferManager
 				newLength = bp.length + 1;
 			}
 
-			Page[] bp2 = new Page[newLength];
+			final Page[] bp2 = new Page[newLength];
 			System.arraycopy(bp, 0, bp2, 0, bp.length);
 			int z = bp.length;
 			final int limit = bp2.length;
@@ -2273,7 +2269,7 @@ public class SubBufferManager
 			lock.unlock();
 			return chooseUnpinnedPage(newFN);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			lock.unlock();
@@ -2281,9 +2277,9 @@ public class SubBufferManager
 		}
 	}
 
-	private ArrayList<Integer> chooseUnpinnedPages(int num)
+	private ArrayList<Integer> chooseUnpinnedPages(final int num)
 	{
-		ArrayList<Integer> retval = new ArrayList<Integer>(num);
+		final ArrayList<Integer> retval = new ArrayList<Integer>(num);
 		lock.lock();
 		int i = 0;
 		outer: while (i < num)
@@ -2305,7 +2301,7 @@ public class SubBufferManager
 					clock = 0;
 				}
 
-				int initialClock = clock;
+				final int initialClock = clock;
 				boolean start = true;
 				boolean attempt2 = false;
 
@@ -2316,8 +2312,8 @@ public class SubBufferManager
 						attempt2 = true;
 					}
 					start = false;
-					Page p = bp[clock];
-					int index = clock;
+					final Page p = bp[clock];
+					final int index = clock;
 					clock++;
 					if (clock == bp.length)
 					{
@@ -2347,7 +2343,7 @@ public class SubBufferManager
 				lock.unlock();
 				return retval;
 			}
-			catch (Throwable e)
+			catch (final Throwable e)
 			{
 				lock.unlock();
 				throw e;
@@ -2358,9 +2354,9 @@ public class SubBufferManager
 		return retval;
 	}
 
-	private ArrayList<Integer> chooseUnpinnedPages(String newFN)
+	private ArrayList<Integer> chooseUnpinnedPages(final String newFN)
 	{
-		ArrayList<Integer> retval = new ArrayList<Integer>(3);
+		final ArrayList<Integer> retval = new ArrayList<Integer>(3);
 		lock.lock();
 		int i = 0;
 		outer: while (i < 3)
@@ -2382,14 +2378,14 @@ public class SubBufferManager
 					clock = 0;
 				}
 
-				int initialClock = clock;
+				final int initialClock = clock;
 				boolean start = true;
 
 				while (start || clock != initialClock)
 				{
 					start = false;
-					Page p = bp[clock];
-					int index = clock;
+					final Page p = bp[clock];
+					final int index = clock;
 					clock++;
 					if (clock == bp.length)
 					{
@@ -2408,8 +2404,8 @@ public class SubBufferManager
 				while (start || clock != initialClock)
 				{
 					start = false;
-					Page p = bp[clock];
-					int index = clock;
+					final Page p = bp[clock];
+					final int index = clock;
 					clock++;
 					if (clock == bp.length)
 					{
@@ -2430,7 +2426,7 @@ public class SubBufferManager
 					newLength = bp.length + 3;
 				}
 
-				Page[] bp2 = new Page[newLength];
+				final Page[] bp2 = new Page[newLength];
 				System.arraycopy(bp, 0, bp2, 0, bp.length);
 				int z = bp.length;
 				final int limit = bp2.length;
@@ -2448,7 +2444,7 @@ public class SubBufferManager
 
 				bp = bp2;
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 				lock.unlock();
@@ -2460,7 +2456,7 @@ public class SubBufferManager
 		return retval;
 	}
 
-	private void expandBP(int i, int num, ArrayList<Integer> retval)
+	private void expandBP(int i, final int num, final ArrayList<Integer> retval)
 	{
 		// expand bufferpool
 		int newLength = (int)(bp.length * 1.1);
@@ -2469,7 +2465,7 @@ public class SubBufferManager
 			newLength = bp.length + num;
 		}
 
-		Page[] bp2 = new Page[newLength];
+		final Page[] bp2 = new Page[newLength];
 		System.arraycopy(bp, 0, bp2, 0, bp.length);
 		int z = bp.length;
 		final int limit = bp2.length;
@@ -2488,7 +2484,7 @@ public class SubBufferManager
 		bp = bp2;
 	}
 
-	private int findExistingPage(Block b)
+	private int findExistingPage(final Block b)
 	{
 		lock.lock();
 		try
@@ -2503,7 +2499,7 @@ public class SubBufferManager
 			lock.unlock();
 			return temp.intValue();
 		}
-		catch (Throwable e)
+		catch (final Throwable e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			lock.unlock();
@@ -2519,7 +2515,7 @@ public class SubBufferManager
 		private final ConcurrentHashMap<Integer, Schema> schemaMap;
 		private final ArrayList<Integer> fetchPos;
 
-		public ParseThread(Page p, Schema schema, Transaction tx, ConcurrentHashMap<Integer, Schema> schemaMap, ArrayList<Integer> fetchPos)
+		public ParseThread(final Page p, final Schema schema, final Transaction tx, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos)
 		{
 			this.p = p;
 			this.schema = schema;
@@ -2537,7 +2533,7 @@ public class SubBufferManager
 				schemaMap.put(p.block().number(), schema);
 				schema.prepRowIter(fetchPos);
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 			}
@@ -2549,7 +2545,7 @@ public class SubBufferManager
 		private final ArrayList<Page> toPut;
 		private Exception e = null;
 
-		public PutThread(ArrayList<Page> toPut)
+		public PutThread(final ArrayList<Page> toPut)
 		{
 			this.toPut = toPut;
 		}
@@ -2562,7 +2558,7 @@ public class SubBufferManager
 		@Override
 		public void run()
 		{
-			for (Page p : toPut)
+			for (final Page p : toPut)
 			{
 				try
 				{
@@ -2572,7 +2568,7 @@ public class SubBufferManager
 						p.setNotModified();
 					}
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					this.e = e;
 					return;

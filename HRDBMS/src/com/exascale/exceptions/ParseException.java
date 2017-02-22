@@ -2,7 +2,7 @@ package com.exascale.exceptions;
 
 public class ParseException extends Exception
 {
-	public ParseException(String text)
+	public ParseException(final String text)
 	{
 		super(text);
 	}

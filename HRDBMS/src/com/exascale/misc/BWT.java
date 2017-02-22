@@ -13,7 +13,7 @@ public class BWT
 	}
 
 	// Static allocation of memory
-	public BWT(int size)
+	public BWT(final int size)
 	{
 		if (size < 0)
 		{
@@ -25,7 +25,7 @@ public class BWT
 		this.buckets = new int[256];
 	}
 
-	public boolean forward(IndexedByteArray src, IndexedByteArray dst)
+	public boolean forward(final IndexedByteArray src, final IndexedByteArray dst)
 	{
 		final byte[] input = src.array;
 		final byte[] output = dst.array;
@@ -69,18 +69,18 @@ public class BWT
 				continue;
 			}
 
-			int headRank = this.moveLyndonWordHead(sa, input, count, srcIdx, idxMin, i - idxMin, min);
+			final int headRank = this.moveLyndonWordHead(sa, input, count, srcIdx, idxMin, i - idxMin, min);
 			int refRank = headRank;
 
 			for (int j = i - 1; j > idxMin; j--)
 			{
 				// iterate through the new lyndon word from end to start
 				int testRank = isa[j];
-				int startRank = testRank;
+				final int startRank = testRank;
 
 				while (testRank < count - 1)
 				{
-					int nextRankStart = sa[testRank + 1];
+					final int nextRankStart = sa[testRank + 1];
 
 					if ((j > nextRankStart) || (input[srcIdx + j] != input[srcIdx + nextRankStart]) || (refRank < isa[nextRankStart + 1]))
 					{
@@ -131,7 +131,7 @@ public class BWT
 		return true;
 	}
 
-	public boolean inverse(IndexedByteArray src, IndexedByteArray dst)
+	public boolean inverse(final IndexedByteArray src, final IndexedByteArray dst)
 	{
 		final int count = 128 * 1024;
 
@@ -197,7 +197,7 @@ public class BWT
 		return true;
 	}
 
-	public boolean setSize(int size)
+	public boolean setSize(final int size)
 	{
 		if (size < 0)
 		{
@@ -213,7 +213,7 @@ public class BWT
 		return this.size;
 	}
 
-	private int moveLyndonWordHead(int[] sa, byte[] data, int count, int srcIdx, int start, int size, int rank)
+	private int moveLyndonWordHead(final int[] sa, final byte[] data, final int count, final int srcIdx, final int start, final int size, int rank)
 	{
 		final int[] isa = this.buffer;
 		final int end = start + size;

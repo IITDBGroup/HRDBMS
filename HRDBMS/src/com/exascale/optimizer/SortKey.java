@@ -7,14 +7,14 @@ public class SortKey
 	private final boolean isCol;
 	private final boolean direction;
 
-	public SortKey(Column col, boolean direction)
+	public SortKey(final Column col, final boolean direction)
 	{
 		this.col = col;
 		isCol = true;
 		this.direction = direction;
 	}
 
-	public SortKey(int num, boolean direction)
+	public SortKey(final int num, final boolean direction)
 	{
 		this.num = num;
 		isCol = false;

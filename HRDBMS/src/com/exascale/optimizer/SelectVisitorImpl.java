@@ -9,22 +9,22 @@ import com.exascale.misc.Utils;
 public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 {
 	@Override
-	public Expression visitAddSub(SelectParser.AddSubContext ctx)
+	public Expression visitAddSub(final SelectParser.AddSubContext ctx)
 	{
 		return new Expression((Expression)visit(ctx.expression(0)), ctx.op.getText(), (Expression)visit(ctx.expression(1)));
 	}
 
 	@Override
-	public Case visitCaseCase(SelectParser.CaseCaseContext ctx)
+	public Case visitCaseCase(final SelectParser.CaseCaseContext ctx)
 	{
 		return new Case((SearchCondition)visit(ctx.searchCondition()), (Expression)visit(ctx.expression()));
 	}
 
 	@Override
-	public Expression visitCaseExp(SelectParser.CaseExpContext ctx)
+	public Expression visitCaseExp(final SelectParser.CaseExpContext ctx)
 	{
-		ArrayList<Case> cases = new ArrayList<Case>(ctx.caseCase().size());
-		for (SelectParser.CaseCaseContext context : ctx.caseCase())
+		final ArrayList<Case> cases = new ArrayList<Case>(ctx.caseCase().size());
+		for (final SelectParser.CaseCaseContext context : ctx.caseCase())
 		{
 			cases.add((Case)visit(context));
 		}
@@ -32,22 +32,22 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public Column visitCol1Part(SelectParser.Col1PartContext ctx)
+	public Column visitCol1Part(final SelectParser.Col1PartContext ctx)
 	{
 		return new Column(ctx.IDENTIFIER().getText());
 	}
 
 	@Override
-	public Column visitCol2Part(SelectParser.Col2PartContext ctx)
+	public Column visitCol2Part(final SelectParser.Col2PartContext ctx)
 	{
 		return new Column(ctx.IDENTIFIER(0).getText(), ctx.IDENTIFIER(1).getText());
 	}
 
 	@Override
-	public ColDef visitColDef(SelectParser.ColDefContext ctx)
+	public ColDef visitColDef(final SelectParser.ColDefContext ctx)
 	{
-		Column col = (Column)visit(ctx.columnName());
-		String type = (String)visit(ctx.dataType());
+		final Column col = (Column)visit(ctx.columnName());
+		final String type = (String)visit(ctx.dataType());
 		boolean nullable = true;
 		boolean pk = false;
 		if (ctx.notNull() != null)
@@ -63,10 +63,10 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public ArrayList<Column> visitColList(SelectParser.ColListContext ctx)
+	public ArrayList<Column> visitColList(final SelectParser.ColListContext ctx)
 	{
-		ArrayList<Column> cols = new ArrayList<Column>();
-		for (SelectParser.ColumnNameContext context : ctx.columnName())
+		final ArrayList<Column> cols = new ArrayList<Column>();
+		for (final SelectParser.ColumnNameContext context : ctx.columnName())
 		{
 			cols.add((Column)visit(context));
 		}
@@ -75,16 +75,16 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public Expression visitColLiteral(SelectParser.ColLiteralContext ctx)
+	public Expression visitColLiteral(final SelectParser.ColLiteralContext ctx)
 	{
 		return new Expression((Column)visit(ctx.columnName()));
 	}
 
 	@Override
-	public ArrayList<Integer> visitColOrder(SelectParser.ColOrderContext ctx)
+	public ArrayList<Integer> visitColOrder(final SelectParser.ColOrderContext ctx)
 	{
-		ArrayList<Integer> colOrder = new ArrayList<Integer>();
-		for (TerminalNode node : ctx.INTEGER())
+		final ArrayList<Integer> colOrder = new ArrayList<Integer>();
+		for (final TerminalNode node : ctx.INTEGER())
 		{
 			colOrder.add(Integer.parseInt(node.getText().trim()));
 		}
@@ -93,40 +93,40 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public CTE visitCommonTableExpression(SelectParser.CommonTableExpressionContext ctx)
+	public CTE visitCommonTableExpression(final SelectParser.CommonTableExpressionContext ctx)
 	{
-		String tableName = ctx.IDENTIFIER().getText();
-		ArrayList<Column> cols = new ArrayList<Column>();
+		final String tableName = ctx.IDENTIFIER().getText();
+		final ArrayList<Column> cols = new ArrayList<Column>();
 
 		if (ctx.columnName() != null)
 		{
-			for (SelectParser.ColumnNameContext context : ctx.columnName())
+			for (final SelectParser.ColumnNameContext context : ctx.columnName())
 			{
 				cols.add((Column)visit(context));
 			}
 		}
 
-		FullSelect select = (FullSelect)visit(ctx.fullSelect());
+		final FullSelect select = (FullSelect)visit(ctx.fullSelect());
 		return new CTE(tableName, cols, select);
 	}
 
 	@Override
-	public Expression visitConcat(SelectParser.ConcatContext ctx)
+	public Expression visitConcat(final SelectParser.ConcatContext ctx)
 	{
 		return new Expression((Expression)visit(ctx.expression(0)), "||", (Expression)visit(ctx.expression(1)));
 	}
 
 	@Override
-	public ConnectedSearchClause visitConnectedSearchClause(SelectParser.ConnectedSearchClauseContext ctx)
+	public ConnectedSearchClause visitConnectedSearchClause(final SelectParser.ConnectedSearchClauseContext ctx)
 	{
-		boolean and = (ctx.AND() != null);
+		final boolean and = (ctx.AND() != null);
 		return new ConnectedSearchClause((SearchClause)visit(ctx.searchClause()), and);
 	}
 
 	@Override
-	public ConnectedSelect visitConnectedSelect(SelectParser.ConnectedSelectContext ctx)
+	public ConnectedSelect visitConnectedSelect(final SelectParser.ConnectedSelectContext ctx)
 	{
-		String combo = ctx.TABLECOMBINATION().getText();
+		final String combo = ctx.TABLECOMBINATION().getText();
 		if (ctx.subSelect() != null)
 		{
 			return new ConnectedSelect((SubSelect)visit(ctx.subSelect()), combo);
@@ -138,32 +138,32 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public String visitCorrelationClause(SelectParser.CorrelationClauseContext ctx)
+	public String visitCorrelationClause(final SelectParser.CorrelationClauseContext ctx)
 	{
 		return ctx.IDENTIFIER().getText();
 	}
 
 	@Override
-	public Expression visitCountDistinct(SelectParser.CountDistinctContext ctx)
+	public Expression visitCountDistinct(final SelectParser.CountDistinctContext ctx)
 	{
-		ArrayList<Expression> arguments = new ArrayList<Expression>(1);
+		final ArrayList<Expression> arguments = new ArrayList<Expression>(1);
 		arguments.add((Expression)visit(ctx.expression()));
 		return new Expression(new Function("COUNT", arguments, true));
 	}
 
 	@Override
-	public Expression visitCountStar(SelectParser.CountStarContext ctx)
+	public Expression visitCountStar(final SelectParser.CountStarContext ctx)
 	{
 		return new Expression();
 	}
 
 	@Override
-	public CreateIndex visitCreateIndex(SelectParser.CreateIndexContext ctx)
+	public CreateIndex visitCreateIndex(final SelectParser.CreateIndexContext ctx)
 	{
-		TableName index = (TableName)visit(ctx.tableName(0));
-		TableName table = (TableName)visit(ctx.tableName(1));
-		ArrayList<IndexDef> defs = new ArrayList<IndexDef>();
-		for (SelectParser.IndexDefContext context : ctx.indexDef())
+		final TableName index = (TableName)visit(ctx.tableName(0));
+		final TableName table = (TableName)visit(ctx.tableName(1));
+		final ArrayList<IndexDef> defs = new ArrayList<IndexDef>();
+		for (final SelectParser.IndexDefContext context : ctx.indexDef())
 		{
 			defs.add((IndexDef)visit(context));
 		}
@@ -177,11 +177,11 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public CreateTable visitCreateTable(SelectParser.CreateTableContext ctx)
+	public CreateTable visitCreateTable(final SelectParser.CreateTableContext ctx)
 	{
-		TableName table = (TableName)visit(ctx.tableName());
-		ArrayList<ColDef> cols = new ArrayList<ColDef>();
-		for (SelectParser.ColDefContext context : ctx.colDef())
+		final TableName table = (TableName)visit(ctx.tableName());
+		final ArrayList<ColDef> cols = new ArrayList<ColDef>();
+		for (final SelectParser.ColDefContext context : ctx.colDef())
 		{
 			cols.add((ColDef)visit(context));
 		}
@@ -227,7 +227,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 
 		if (ctx.organization() != null)
 		{
-			ArrayList<Integer> organization = (ArrayList<Integer>)visit(ctx.organization());
+			final ArrayList<Integer> organization = (ArrayList<Integer>)visit(ctx.organization());
 			retval.setOrganization(organization);
 		}
 
@@ -235,23 +235,23 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public CreateView visitCreateView(SelectParser.CreateViewContext ctx)
+	public CreateView visitCreateView(final SelectParser.CreateViewContext ctx)
 	{
-		TableName view = (TableName)visit(ctx.tableName());
-		FullSelect select = (FullSelect)visit(ctx.fullSelect());
-		int a = ctx.fullSelect().start.getStartIndex();
-		int b = ctx.fullSelect().stop.getStopIndex();
-		Interval interval = new Interval(a, b);
-		CharStream input = ctx.fullSelect().start.getInputStream();
-		String text = input.getText(interval);
+		final TableName view = (TableName)visit(ctx.tableName());
+		final FullSelect select = (FullSelect)visit(ctx.fullSelect());
+		final int a = ctx.fullSelect().start.getStartIndex();
+		final int b = ctx.fullSelect().stop.getStopIndex();
+		final Interval interval = new Interval(a, b);
+		final CharStream input = ctx.fullSelect().start.getInputStream();
+		final String text = input.getText(interval);
 		return new CreateView(view, select, text);
 	}
 
 	@Override
-	public TableReference visitCrossJoin(SelectParser.CrossJoinContext ctx)
+	public TableReference visitCrossJoin(final SelectParser.CrossJoinContext ctx)
 	{
-		TableReference lhs = (TableReference)visit(ctx.tableReference(0));
-		TableReference rhs = (TableReference)visit(ctx.tableReference(1));
+		final TableReference lhs = (TableReference)visit(ctx.tableReference(0));
+		final TableReference rhs = (TableReference)visit(ctx.tableReference(1));
 		String alias = null;
 		if (ctx.correlationClause() != null)
 		{
@@ -262,10 +262,10 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public TableReference visitCrossJoinP(SelectParser.CrossJoinPContext ctx)
+	public TableReference visitCrossJoinP(final SelectParser.CrossJoinPContext ctx)
 	{
-		TableReference lhs = (TableReference)visit(ctx.tableReference(0));
-		TableReference rhs = (TableReference)visit(ctx.tableReference(1));
+		final TableReference lhs = (TableReference)visit(ctx.tableReference(0));
+		final TableReference rhs = (TableReference)visit(ctx.tableReference(1));
 		String alias = null;
 
 		if (ctx.correlationClause() != null)
@@ -277,7 +277,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public String visitDataType(SelectParser.DataTypeContext ctx)
+	public String visitDataType(final SelectParser.DataTypeContext ctx)
 	{
 		if (ctx.int2() != null)
 		{
@@ -308,9 +308,9 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public Delete visitDelete(SelectParser.DeleteContext ctx)
+	public Delete visitDelete(final SelectParser.DeleteContext ctx)
 	{
-		TableName table = (TableName)visit(ctx.tableName());
+		final TableName table = (TableName)visit(ctx.tableName());
 		Where where = null;
 		if (ctx.whereClause() != null)
 		{
@@ -321,37 +321,37 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public DropIndex visitDropIndex(SelectParser.DropIndexContext ctx)
+	public DropIndex visitDropIndex(final SelectParser.DropIndexContext ctx)
 	{
 		return new DropIndex((TableName)visit(ctx.tableName()));
 	}
 
 	@Override
-	public DropTable visitDropTable(SelectParser.DropTableContext ctx)
+	public DropTable visitDropTable(final SelectParser.DropTableContext ctx)
 	{
 		return new DropTable((TableName)visit(ctx.tableName()));
 	}
 
 	@Override
-	public DropView visitDropView(SelectParser.DropViewContext ctx)
+	public DropView visitDropView(final SelectParser.DropViewContext ctx)
 	{
 		return new DropView((TableName)visit(ctx.tableName()));
 	}
 
 	@Override
-	public ExistsPredicate visitExistsPredicate(SelectParser.ExistsPredicateContext ctx)
+	public ExistsPredicate visitExistsPredicate(final SelectParser.ExistsPredicateContext ctx)
 	{
 		return new ExistsPredicate((SubSelect)visit(ctx.subSelect()));
 	}
 
 	@Override
-	public Expression visitExpSelect(SelectParser.ExpSelectContext ctx)
+	public Expression visitExpSelect(final SelectParser.ExpSelectContext ctx)
 	{
 		return new Expression((SubSelect)visit(ctx.subSelect()));
 	}
 
 	@Override
-	public FetchFirst visitFetchFirst(SelectParser.FetchFirstContext ctx)
+	public FetchFirst visitFetchFirst(final SelectParser.FetchFirstContext ctx)
 	{
 		long num = 1;
 		if (ctx.INTEGER() != null)
@@ -363,10 +363,10 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public FromClause visitFromClause(SelectParser.FromClauseContext ctx)
+	public FromClause visitFromClause(final SelectParser.FromClauseContext ctx)
 	{
-		ArrayList<TableReference> tables = new ArrayList<TableReference>(ctx.tableReference().size());
-		for (SelectParser.TableReferenceContext context : ctx.tableReference())
+		final ArrayList<TableReference> tables = new ArrayList<TableReference>(ctx.tableReference().size());
+		for (final SelectParser.TableReferenceContext context : ctx.tableReference())
 		{
 			tables.add((TableReference)visit(context));
 		}
@@ -375,13 +375,13 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public FullSelect visitFullSelect(SelectParser.FullSelectContext ctx)
+	public FullSelect visitFullSelect(final SelectParser.FullSelectContext ctx)
 	{
 		// (subSelect | '(' fullSelect ')') (connectedSelect)* (orderBy)?
 		// (fetchFirst)? ;
 		SubSelect sub = null;
 		FullSelect full = null;
-		ArrayList<ConnectedSelect> connected = new ArrayList<ConnectedSelect>();
+		final ArrayList<ConnectedSelect> connected = new ArrayList<ConnectedSelect>();
 		OrderBy orderBy = null;
 		FetchFirst fetchFirst = null;
 
@@ -396,7 +396,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 
 		if (ctx.connectedSelect() != null)
 		{
-			for (SelectParser.ConnectedSelectContext context : ctx.connectedSelect())
+			for (final SelectParser.ConnectedSelectContext context : ctx.connectedSelect())
 			{
 				connected.add((ConnectedSelect)visit(context));
 			}
@@ -416,10 +416,10 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public Expression visitFunction(SelectParser.FunctionContext ctx)
+	public Expression visitFunction(final SelectParser.FunctionContext ctx)
 	{
-		ArrayList<Expression> arguments = new ArrayList<Expression>(ctx.expression().size());
-		for (SelectParser.ExpressionContext context : ctx.expression())
+		final ArrayList<Expression> arguments = new ArrayList<Expression>(ctx.expression().size());
+		for (final SelectParser.ExpressionContext context : ctx.expression())
 		{
 			arguments.add((Expression)visit(context));
 		}
@@ -427,10 +427,10 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public GroupBy visitGroupBy(SelectParser.GroupByContext ctx)
+	public GroupBy visitGroupBy(final SelectParser.GroupByContext ctx)
 	{
-		ArrayList<Column> cols = new ArrayList<Column>(ctx.columnName().size());
-		for (SelectParser.ColumnNameContext context : ctx.columnName())
+		final ArrayList<Column> cols = new ArrayList<Column>(ctx.columnName().size());
+		for (final SelectParser.ColumnNameContext context : ctx.columnName())
 		{
 			cols.add((Column)visit(context));
 		}
@@ -439,15 +439,15 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public Having visitHavingClause(SelectParser.HavingClauseContext ctx)
+	public Having visitHavingClause(final SelectParser.HavingClauseContext ctx)
 	{
 		return new Having((SearchCondition)visit(ctx.searchCondition()));
 	}
 
 	@Override
-	public IndexDef visitIndexDef(SelectParser.IndexDefContext ctx)
+	public IndexDef visitIndexDef(final SelectParser.IndexDefContext ctx)
 	{
-		Column col = (Column)visit(ctx.columnName());
+		final Column col = (Column)visit(ctx.columnName());
 		boolean dir = true;
 		if (ctx.DIRECTION() != null)
 		{
@@ -461,17 +461,17 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public Insert visitInsert(SelectParser.InsertContext ctx)
+	public Insert visitInsert(final SelectParser.InsertContext ctx)
 	{
 		if (ctx.fullSelect() != null)
 		{
 			return new Insert((TableName)visit(ctx.tableName()), (FullSelect)visit(ctx.fullSelect()));
 		}
-		
+
 		if (ctx.valuesList().size() == 1)
 		{
-			ArrayList<Expression> exps = new ArrayList<Expression>();
-			for (SelectParser.ExpressionContext exp : ctx.valuesList().get(0).expression())
+			final ArrayList<Expression> exps = new ArrayList<Expression>();
+			for (final SelectParser.ExpressionContext exp : ctx.valuesList().get(0).expression())
 			{
 				exps.add((Expression)visit(exp));
 			}
@@ -479,36 +479,36 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 		}
 		else
 		{
-			ArrayList<ArrayList<Expression>> mExps = new ArrayList<ArrayList<Expression>>();
-			for (SelectParser.ValuesListContext ctx2 : ctx.valuesList())
+			final ArrayList<ArrayList<Expression>> mExps = new ArrayList<ArrayList<Expression>>();
+			for (final SelectParser.ValuesListContext ctx2 : ctx.valuesList())
 			{
-				ArrayList<Expression> exps = new ArrayList<Expression>();
-				for (SelectParser.ExpressionContext exp : ctx2.expression())
+				final ArrayList<Expression> exps = new ArrayList<Expression>();
+				for (final SelectParser.ExpressionContext exp : ctx2.expression())
 				{
 					exps.add((Expression)visit(exp));
 				}
-				
+
 				mExps.add(exps);
 			}
-			
+
 			return new Insert((TableName)visit(ctx.tableName()), mExps, true);
 		}
 	}
 
 	@Override
-	public Expression visitIsLiteral(SelectParser.IsLiteralContext ctx)
+	public Expression visitIsLiteral(final SelectParser.IsLiteralContext ctx)
 	{
 		return new Expression((Literal)visit(ctx.literal()));
 	}
 
 	@Override
-	public TableReference visitIsSingleTable(SelectParser.IsSingleTableContext ctx)
+	public TableReference visitIsSingleTable(final SelectParser.IsSingleTableContext ctx)
 	{
 		return new TableReference((SingleTable)visit(ctx.singleTable()));
 	}
 
 	@Override
-	public TableReference visitJoin(SelectParser.JoinContext ctx)
+	public TableReference visitJoin(final SelectParser.JoinContext ctx)
 	{
 		String op = ctx.JOINTYPE().getText();
 		if (op.equals("INNER"))
@@ -540,9 +540,9 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 			op = "F";
 		}
 
-		TableReference lhs = (TableReference)visit(ctx.tableReference(0));
-		TableReference rhs = (TableReference)visit(ctx.tableReference(1));
-		SearchCondition search = (SearchCondition)visit(ctx.searchCondition());
+		final TableReference lhs = (TableReference)visit(ctx.tableReference(0));
+		final TableReference rhs = (TableReference)visit(ctx.tableReference(1));
+		final SearchCondition search = (SearchCondition)visit(ctx.searchCondition());
 		String alias = null;
 		if (ctx.correlationClause() != null)
 		{
@@ -553,7 +553,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public TableReference visitJoinP(SelectParser.JoinPContext ctx)
+	public TableReference visitJoinP(final SelectParser.JoinPContext ctx)
 	{
 		String op = ctx.JOINTYPE().getText();
 		if (op.equals("INNER"))
@@ -585,9 +585,9 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 			op = "F";
 		}
 
-		TableReference lhs = (TableReference)visit(ctx.tableReference(0));
-		TableReference rhs = (TableReference)visit(ctx.tableReference(1));
-		SearchCondition search = (SearchCondition)visit(ctx.searchCondition());
+		final TableReference lhs = (TableReference)visit(ctx.tableReference(0));
+		final TableReference rhs = (TableReference)visit(ctx.tableReference(1));
+		final SearchCondition search = (SearchCondition)visit(ctx.searchCondition());
 		String alias = null;
 		if (ctx.correlationClause() != null)
 		{
@@ -598,10 +598,10 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public Expression visitList(SelectParser.ListContext ctx)
+	public Expression visitList(final SelectParser.ListContext ctx)
 	{
-		ArrayList<Expression> exps = new ArrayList<Expression>(ctx.expression().size());
-		for (SelectParser.ExpressionContext context : ctx.expression())
+		final ArrayList<Expression> exps = new ArrayList<Expression>(ctx.expression().size());
+		for (final SelectParser.ExpressionContext context : ctx.expression())
 		{
 			exps.add((Expression)visit(context));
 		}
@@ -610,7 +610,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public Load visitLoad(SelectParser.LoadContext ctx)
+	public Load visitLoad(final SelectParser.LoadContext ctx)
 	{
 		boolean replace = true;
 		if (ctx.RESUME() != null)
@@ -624,25 +624,25 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 			delimited = ctx.any().getText();
 		}
 
-		TableName table = (TableName)visit(ctx.tableName());
+		final TableName table = (TableName)visit(ctx.tableName());
 		String glob = ctx.remainder().getText();
-		int first = glob.indexOf('\'');
-		int second = glob.indexOf('\'', first + 1);
+		final int first = glob.indexOf('\'');
+		final int second = glob.indexOf('\'', first + 1);
 		glob = glob.substring(first + 1, second);
 
 		return new Load(table, replace, delimited, glob);
 	}
 
 	@Override
-	public Expression visitMulDiv(SelectParser.MulDivContext ctx)
+	public Expression visitMulDiv(final SelectParser.MulDivContext ctx)
 	{
 		return new Expression((Expression)visit(ctx.expression(0)), ctx.op.getText(), (Expression)visit(ctx.expression(1)));
 	}
 
 	@Override
-	public TableReference visitNestedTable(SelectParser.NestedTableContext ctx)
+	public TableReference visitNestedTable(final SelectParser.NestedTableContext ctx)
 	{
-		FullSelect fs = (FullSelect)visit(ctx.fullSelect());
+		final FullSelect fs = (FullSelect)visit(ctx.fullSelect());
 		if (ctx.correlationClause() != null)
 		{
 			return new TableReference(fs, (String)visit(ctx.correlationClause()));
@@ -654,7 +654,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public Predicate visitNormalPredicate(SelectParser.NormalPredicateContext ctx)
+	public Predicate visitNormalPredicate(final SelectParser.NormalPredicateContext ctx)
 	{
 		String op = ctx.operator().getText();
 		if (op.equals("="))
@@ -714,13 +714,13 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public Expression visitNullExp(SelectParser.NullExpContext ctx)
+	public Expression visitNullExp(final SelectParser.NullExpContext ctx)
 	{
 		return new Expression(new Literal(null));
 	}
 
 	@Override
-	public Predicate visitNullPredicate(SelectParser.NullPredicateContext ctx)
+	public Predicate visitNullPredicate(final SelectParser.NullPredicateContext ctx)
 	{
 		String op;
 		if (ctx.NULLOPERATOR().getText().equals("IS NULL"))
@@ -736,9 +736,9 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public Literal visitNumericLiteral(SelectParser.NumericLiteralContext ctx)
+	public Literal visitNumericLiteral(final SelectParser.NumericLiteralContext ctx)
 	{
-		String number = ctx.getText();
+		final String number = ctx.getText();
 		if (number.indexOf('.') != -1)
 		{
 			return new Literal(Double.parseDouble(number));
@@ -750,10 +750,10 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public OrderBy visitOrderBy(SelectParser.OrderByContext ctx)
+	public OrderBy visitOrderBy(final SelectParser.OrderByContext ctx)
 	{
-		ArrayList<SortKey> keys = new ArrayList<SortKey>(ctx.sortKey().size());
-		for (SelectParser.SortKeyContext context : ctx.sortKey())
+		final ArrayList<SortKey> keys = new ArrayList<SortKey>(ctx.sortKey().size());
+		for (final SelectParser.SortKeyContext context : ctx.sortKey())
 		{
 			keys.add((SortKey)visit(context));
 		}
@@ -762,10 +762,10 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public ArrayList<Integer> visitOrganization(SelectParser.OrganizationContext ctx)
+	public ArrayList<Integer> visitOrganization(final SelectParser.OrganizationContext ctx)
 	{
-		ArrayList<Integer> organization = new ArrayList<Integer>();
-		for (TerminalNode node : ctx.INTEGER())
+		final ArrayList<Integer> organization = new ArrayList<Integer>();
+		for (final TerminalNode node : ctx.INTEGER())
 		{
 			organization.add(Integer.parseInt(node.getText().trim()));
 		}
@@ -774,16 +774,16 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public Expression visitPExpression(SelectParser.PExpressionContext ctx)
+	public Expression visitPExpression(final SelectParser.PExpressionContext ctx)
 	{
 		return (Expression)visit(ctx.expression());
 	}
 
 	@Override
-	public PrimaryKey visitPrimaryKey(SelectParser.PrimaryKeyContext ctx)
+	public PrimaryKey visitPrimaryKey(final SelectParser.PrimaryKeyContext ctx)
 	{
-		ArrayList<Column> cols = new ArrayList<Column>();
-		for (SelectParser.ColumnNameContext context : ctx.columnName())
+		final ArrayList<Column> cols = new ArrayList<Column>();
+		for (final SelectParser.ColumnNameContext context : ctx.columnName())
 		{
 			cols.add((Column)visit(context));
 		}
@@ -792,13 +792,13 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public Runstats visitRunstats(SelectParser.RunstatsContext ctx)
+	public Runstats visitRunstats(final SelectParser.RunstatsContext ctx)
 	{
 		return new Runstats((TableName)visit(ctx.tableName()));
 	}
 
 	@Override
-	public SearchClause visitSearchClause(SelectParser.SearchClauseContext ctx)
+	public SearchClause visitSearchClause(final SelectParser.SearchClauseContext ctx)
 	{
 		boolean negated = false;
 		Predicate predicate;
@@ -821,13 +821,13 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public SearchCondition visitSearchCondition(SelectParser.SearchConditionContext ctx)
+	public SearchCondition visitSearchCondition(final SelectParser.SearchConditionContext ctx)
 	{
-		SearchClause search = (SearchClause)visit(ctx.searchClause());
-		ArrayList<ConnectedSearchClause> connected = new ArrayList<ConnectedSearchClause>();
+		final SearchClause search = (SearchClause)visit(ctx.searchClause());
+		final ArrayList<ConnectedSearchClause> connected = new ArrayList<ConnectedSearchClause>();
 		if (ctx.connectedSearchClause() != null)
 		{
-			for (SelectParser.ConnectedSearchClauseContext context : ctx.connectedSearchClause())
+			for (final SelectParser.ConnectedSearchClauseContext context : ctx.connectedSearchClause())
 			{
 				connected.add((ConnectedSearchClause)visit(context));
 			}
@@ -837,7 +837,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public SQLStatement visitSelect(SelectParser.SelectContext ctx)
+	public SQLStatement visitSelect(final SelectParser.SelectContext ctx)
 	{
 		if (ctx.insert() != null)
 		{
@@ -884,26 +884,26 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 			return (Runstats)visit(ctx.runstats());
 		}
 
-		ArrayList<CTE> ctes = new ArrayList<CTE>();
+		final ArrayList<CTE> ctes = new ArrayList<CTE>();
 
 		if (ctx.commonTableExpression() != null)
 		{
-			for (SelectParser.CommonTableExpressionContext context : ctx.commonTableExpression())
+			for (final SelectParser.CommonTableExpressionContext context : ctx.commonTableExpression())
 			{
 				ctes.add((CTE)visit(context));
 			}
 		}
 
-		FullSelect select = (FullSelect)visit(ctx.fullSelect());
+		final FullSelect select = (FullSelect)visit(ctx.fullSelect());
 		return new Select(ctes, select);
 	}
 
 	@Override
-	public SelectClause visitSelectClause(SelectParser.SelectClauseContext ctx)
+	public SelectClause visitSelectClause(final SelectParser.SelectClauseContext ctx)
 	{
 		boolean selectAll = true;
 		boolean selectStar = false;
-		ArrayList<SelectListEntry> selectList = new ArrayList<SelectListEntry>();
+		final ArrayList<SelectListEntry> selectList = new ArrayList<SelectListEntry>();
 		if (ctx.selecthow() != null)
 		{
 			if (!ctx.selecthow().getText().equals("ALL"))
@@ -918,7 +918,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 		}
 		else
 		{
-			for (SelectParser.SelectListEntryContext context : ctx.selectListEntry())
+			for (final SelectParser.SelectListEntryContext context : ctx.selectListEntry())
 			{
 				selectList.add((SelectListEntry)visit(context));
 			}
@@ -928,9 +928,9 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public SelectListEntry visitSelectColumn(SelectParser.SelectColumnContext ctx)
+	public SelectListEntry visitSelectColumn(final SelectParser.SelectColumnContext ctx)
 	{
-		Column col = (Column)visit(ctx.columnName());
+		final Column col = (Column)visit(ctx.columnName());
 		String alias = null;
 		if (ctx.IDENTIFIER() != null)
 		{
@@ -940,7 +940,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public SelectListEntry visitSelectExpression(SelectParser.SelectExpressionContext ctx)
+	public SelectListEntry visitSelectExpression(final SelectParser.SelectExpressionContext ctx)
 	{
 		String alias = null;
 		if (ctx.IDENTIFIER() != null)
@@ -951,7 +951,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public SingleTable visitSingleTable(SelectParser.SingleTableContext ctx)
+	public SingleTable visitSingleTable(final SelectParser.SingleTableContext ctx)
 	{
 		if (ctx.correlationClause() != null)
 		{
@@ -964,7 +964,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public SortKey visitSortKeyCol(SelectParser.SortKeyColContext ctx)
+	public SortKey visitSortKeyCol(final SelectParser.SortKeyColContext ctx)
 	{
 		boolean direction = true;
 		if (ctx.DIRECTION() != null)
@@ -978,7 +978,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public SortKey visitSortKeyInt(SelectParser.SortKeyIntContext ctx)
+	public SortKey visitSortKeyInt(final SelectParser.SortKeyIntContext ctx)
 	{
 		boolean direction = true;
 		if (ctx.DIRECTION() != null)
@@ -992,7 +992,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public Literal visitStringLiteral(SelectParser.StringLiteralContext ctx)
+	public Literal visitStringLiteral(final SelectParser.StringLiteralContext ctx)
 	{
 		String retval = ctx.STRING().getText();
 		retval = retval.substring(1, retval.length() - 1);
@@ -1000,10 +1000,10 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public SubSelect visitSubSelect(SelectParser.SubSelectContext ctx)
+	public SubSelect visitSubSelect(final SelectParser.SubSelectContext ctx)
 	{
-		SelectClause select = (SelectClause)visit(ctx.selectClause());
-		FromClause from = (FromClause)visit(ctx.fromClause());
+		final SelectClause select = (SelectClause)visit(ctx.selectClause());
+		final FromClause from = (FromClause)visit(ctx.fromClause());
 		Where where = null;
 		GroupBy groupBy = null;
 		Having having = null;
@@ -1039,22 +1039,22 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public TableName visitTable1Part(SelectParser.Table1PartContext ctx)
+	public TableName visitTable1Part(final SelectParser.Table1PartContext ctx)
 	{
 		return new TableName(ctx.IDENTIFIER().getText());
 	}
 
 	@Override
-	public TableName visitTable2Part(SelectParser.Table2PartContext ctx)
+	public TableName visitTable2Part(final SelectParser.Table2PartContext ctx)
 	{
 		return new TableName(ctx.IDENTIFIER(0).getText(), ctx.IDENTIFIER(1).getText());
 	}
 
 	@Override
-	public Update visitUpdate(SelectParser.UpdateContext ctx)
+	public Update visitUpdate(final SelectParser.UpdateContext ctx)
 	{
-		TableName table = (TableName)visit(ctx.tableName());
-		
+		final TableName table = (TableName)visit(ctx.tableName());
+
 		if (ctx.setClause().size() == 1)
 		{
 			ArrayList<Column> cols;
@@ -1067,7 +1067,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 			{
 				cols = (ArrayList<Column>)visit(ctx.setClause(0).colList());
 			}
-			Expression exp = (Expression)visit(ctx.setClause(0).expression());
+			final Expression exp = (Expression)visit(ctx.setClause(0).expression());
 			Where where = null;
 			if (ctx.setClause(0).whereClause() != null)
 			{
@@ -1076,11 +1076,11 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 
 			return new Update(table, cols, exp, where);
 		}
-		
-		ArrayList<ArrayList<Column>> cols2 = new ArrayList<ArrayList<Column>>();
-		ArrayList<Expression> exps2 = new ArrayList<Expression>();
-		ArrayList<Where> wheres2 = new ArrayList<Where>();
-		for (SelectParser.SetClauseContext ctx2 : ctx.setClause())
+
+		final ArrayList<ArrayList<Column>> cols2 = new ArrayList<ArrayList<Column>>();
+		final ArrayList<Expression> exps2 = new ArrayList<Expression>();
+		final ArrayList<Where> wheres2 = new ArrayList<Where>();
+		for (final SelectParser.SetClauseContext ctx2 : ctx.setClause())
 		{
 			ArrayList<Column> cols;
 			if (ctx2.colList() == null)
@@ -1092,23 +1092,23 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 			{
 				cols = (ArrayList<Column>)visit(ctx2.colList());
 			}
-			Expression exp = (Expression)visit(ctx2.expression());
+			final Expression exp = (Expression)visit(ctx2.expression());
 			Where where = null;
 			if (ctx2.whereClause() != null)
 			{
 				where = (Where)visit(ctx2.whereClause());
 			}
-			
+
 			cols2.add(cols);
 			exps2.add(exp);
 			wheres2.add(where);
 		}
-		
+
 		return new Update(table, cols2, exps2, wheres2);
 	}
 
 	@Override
-	public Where visitWhereClause(SelectParser.WhereClauseContext ctx)
+	public Where visitWhereClause(final SelectParser.WhereClauseContext ctx)
 	{
 		return new Where((SearchCondition)visit(ctx.searchCondition()));
 	}

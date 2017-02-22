@@ -5,7 +5,7 @@ import java.util.HashSet;
 
 public class ColOrderP
 {
-	public static void main(String[] args)
+	public static void main(final String[] args)
 	{
 		// supplier
 		ArrayList<Integer> columns = new ArrayList<Integer>();
@@ -291,14 +291,14 @@ public class ColOrderP
 		access = new ArrayList<Integer>();
 		access.add(1);
 		accesses.add(access);
-		long start = System.currentTimeMillis();
+		final long start = System.currentTimeMillis();
 		result = doIt(columns, accesses);
-		long end = System.currentTimeMillis();
+		final long end = System.currentTimeMillis();
 		System.out.println((end - start) + "ms");
 		displayResults("ORDERS", result);
 	}
 
-	private static void displayResults(String table, ArrayList<Integer> result)
+	private static void displayResults(final String table, final ArrayList<Integer> result)
 	{
 		String out = table + " = COLORDER(" + (result.get(0) + 1);
 		int i = 1;
@@ -312,17 +312,17 @@ public class ColOrderP
 		System.out.println(out);
 	}
 
-	private static ArrayList<Integer> doIt(ArrayList<Integer> columns, ArrayList<ArrayList<Integer>> accesses)
+	private static ArrayList<Integer> doIt(final ArrayList<Integer> columns, final ArrayList<ArrayList<Integer>> accesses)
 	{
 		int lowScore = Integer.MAX_VALUE;
 		ArrayList<Integer> lowOrder = null;
-		ArrayList<ArrayList<Integer>> perms = permutations(columns);
-		int size = perms.size();
+		final ArrayList<ArrayList<Integer>> perms = permutations(columns);
+		final int size = perms.size();
 		System.out.println(size + " permutations");
 
-		for (ArrayList<Integer> order : perms)
+		for (final ArrayList<Integer> order : perms)
 		{
-			int score = score(order, accesses);
+			final int score = score(order, accesses);
 			if (score < lowScore)
 			{
 				lowScore = score;
@@ -338,10 +338,10 @@ public class ColOrderP
 		return lowOrder;
 	}
 
-	private static ArrayList<ArrayList<Integer>> permutations(ArrayList<Integer> arr)
+	private static ArrayList<ArrayList<Integer>> permutations(final ArrayList<Integer> arr)
 	{
-		ArrayList<ArrayList<Integer>> resultList = new ArrayList<ArrayList<Integer>>();
-		int l = arr.size();
+		final ArrayList<ArrayList<Integer>> resultList = new ArrayList<ArrayList<Integer>>();
+		final int l = arr.size();
 		if (l == 0)
 		{
 			return resultList;
@@ -353,7 +353,7 @@ public class ColOrderP
 			return resultList;
 		}
 
-		ArrayList<Integer> subClone = new ArrayList<Integer>();
+		final ArrayList<Integer> subClone = new ArrayList<Integer>();
 		int i = 1;
 		while (i < l)
 		{
@@ -362,15 +362,15 @@ public class ColOrderP
 
 		for (i = 0; i < l; ++i)
 		{
-			int e = arr.get(i);
+			final int e = arr.get(i);
 			if (i > 0)
 			{
 				subClone.set(i - 1, arr.get(0));
 			}
-			ArrayList<ArrayList<Integer>> subPermutations = permutations(subClone);
-			for (ArrayList<Integer> sc : subPermutations)
+			final ArrayList<ArrayList<Integer>> subPermutations = permutations(subClone);
+			for (final ArrayList<Integer> sc : subPermutations)
 			{
-				ArrayList<Integer> clone = new ArrayList<Integer>();
+				final ArrayList<Integer> clone = new ArrayList<Integer>();
 				clone.add(e);
 				int j = 0;
 				while (j < l - 1)
@@ -390,9 +390,9 @@ public class ColOrderP
 		return resultList;
 	}
 
-	private static int score(ArrayList<Integer> order, ArrayList<ArrayList<Integer>> accesses)
+	private static int score(final ArrayList<Integer> order, final ArrayList<ArrayList<Integer>> accesses)
 	{
-		ArrayList<Integer> disk = new ArrayList<Integer>();
+		final ArrayList<Integer> disk = new ArrayList<Integer>();
 		disk.add(-1);
 		disk.addAll(order);
 		int copies = 1;
@@ -412,10 +412,10 @@ public class ColOrderP
 		}
 
 		int score = 0;
-		for (ArrayList<Integer> access : accesses)
+		for (final ArrayList<Integer> access : accesses)
 		{
-			HashSet<Integer> sbs = new HashSet<Integer>();
-			for (int col : access)
+			final HashSet<Integer> sbs = new HashSet<Integer>();
+			for (final int col : access)
 			{
 				int found = 0;
 				int i = 1;
@@ -425,12 +425,12 @@ public class ColOrderP
 					{
 						if (disk.get(i) == col)
 						{
-							int sb = i / 3;
+							final int sb = i / 3;
 							sbs.add(sb);
 							found++;
 						}
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						System.out.println("Looking for " + col + " in " + disk);
 						System.out.println("Found " + found + " instances");

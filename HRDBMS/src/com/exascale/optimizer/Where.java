@@ -4,7 +4,7 @@ public class Where
 {
 	private final SearchCondition search;
 
-	public Where(SearchCondition search)
+	public Where(final SearchCondition search)
 	{
 		this.search = search;
 	}

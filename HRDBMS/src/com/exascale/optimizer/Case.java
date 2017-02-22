@@ -5,7 +5,7 @@ public class Case
 	private final SearchCondition cond;
 	private final Expression result;
 
-	public Case(SearchCondition cond, Expression result)
+	public Case(final SearchCondition cond, final Expression result)
 	{
 		this.cond = cond;
 		this.result = result;
@@ -18,14 +18,14 @@ public class Case
 	}
 
 	@Override
-	public boolean equals(Object o)
+	public boolean equals(final Object o)
 	{
 		if (!(o instanceof Case))
 		{
 			return false;
 		}
 
-		Case rhs = (Case)o;
+		final Case rhs = (Case)o;
 
 		return cond.equals(rhs.cond) && result.equals(rhs.result);
 	}

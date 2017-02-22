@@ -33,7 +33,7 @@ public class Expression
 		isCase = false;
 	}
 
-	public Expression(ArrayList<Case> cases, Expression defaultResult)
+	public Expression(final ArrayList<Case> cases, final Expression defaultResult)
 	{
 		this.cases = cases;
 		this.defaultResult = defaultResult;
@@ -46,7 +46,7 @@ public class Expression
 		isCase = true;
 	}
 
-	public Expression(ArrayList<Expression> list)
+	public Expression(final ArrayList<Expression> list)
 	{
 		this.list = list;
 		isLiteral = false;
@@ -58,7 +58,7 @@ public class Expression
 		isCase = false;
 	}
 
-	public Expression(Column column)
+	public Expression(final Column column)
 	{
 		this.column = column;
 		isLiteral = false;
@@ -70,7 +70,7 @@ public class Expression
 		isCase = false;
 	}
 
-	public Expression(Expression lhs, String op, Expression rhs)
+	public Expression(final Expression lhs, final String op, final Expression rhs)
 	{
 		this.lhs = lhs;
 		this.op = op;
@@ -84,7 +84,7 @@ public class Expression
 		isCase = false;
 	}
 
-	public Expression(Function function)
+	public Expression(final Function function)
 	{
 		this.function = function;
 		isLiteral = false;
@@ -96,7 +96,7 @@ public class Expression
 		isCase = false;
 	}
 
-	public Expression(Literal literal)
+	public Expression(final Literal literal)
 	{
 		this.literal = literal;
 		isLiteral = true;
@@ -108,7 +108,7 @@ public class Expression
 		isCase = false;
 	}
 
-	public Expression(SubSelect select)
+	public Expression(final SubSelect select)
 	{
 		this.select = select;
 		isLiteral = false;
@@ -150,8 +150,8 @@ public class Expression
 
 		if (isList)
 		{
-			ArrayList<Expression> newList = new ArrayList<Expression>();
-			for (Expression e : list)
+			final ArrayList<Expression> newList = new ArrayList<Expression>();
+			for (final Expression e : list)
 			{
 				newList.add(e.clone());
 			}
@@ -161,8 +161,8 @@ public class Expression
 
 		if (isCase)
 		{
-			ArrayList<Case> newCases = new ArrayList<Case>();
-			for (Case c : cases)
+			final ArrayList<Case> newCases = new ArrayList<Case>();
+			for (final Case c : cases)
 			{
 				newCases.add(c.clone());
 			}
@@ -174,14 +174,14 @@ public class Expression
 	}
 
 	@Override
-	public boolean equals(Object o)
+	public boolean equals(final Object o)
 	{
 		if (o == null || !(o instanceof Expression))
 		{
 			return false;
 		}
 
-		Expression rhs = (Expression)o;
+		final Expression rhs = (Expression)o;
 
 		if (literal == null)
 		{

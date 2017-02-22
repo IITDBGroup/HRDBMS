@@ -39,7 +39,7 @@ public final class ExceptOperator implements Operator, Serializable
 			f.setAccessible(true);
 			unsafe = (sun.misc.Unsafe)f.get(null);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			unsafe = null;
 		}
@@ -71,15 +71,15 @@ public final class ExceptOperator implements Operator, Serializable
 	private transient AtomicLong received;
 	private transient volatile boolean demReceived;
 
-	public ExceptOperator(MetaData meta)
+	public ExceptOperator(final MetaData meta)
 	{
 		this.meta = meta;
 		received = new AtomicLong(0);
 	}
 
-	public static ExceptOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static ExceptOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		ExceptOperator value = (ExceptOperator)unsafe.allocateInstance(ExceptOperator.class);
+		final ExceptOperator value = (ExceptOperator)unsafe.allocateInstance(ExceptOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.children = OperatorUtils.deserializeALOp(in, prev);
 		value.parent = OperatorUtils.deserializeOperator(in, prev);
@@ -96,8 +96,178 @@ public final class ExceptOperator implements Operator, Serializable
 		return value;
 	}
 
+	private static long hash(final byte[] key) throws Exception
+	{
+		long eHash;
+		if (key == null)
+		{
+			eHash = 0;
+		}
+		else
+		{
+			eHash = MurmurHash.hash64(key, key.length);
+		}
+
+		return eHash & 0x7FFFFFFFFFFFFFFFL;
+	}
+
+	private static final byte[] toBytes(final Object v) throws Exception
+	{
+		ArrayList<byte[]> bytes = null;
+		ArrayList<Object> val;
+		if (v instanceof ArrayList)
+		{
+			val = (ArrayList<Object>)v;
+		}
+		else
+		{
+			final byte[] retval = new byte[9];
+			retval[0] = 0;
+			retval[1] = 0;
+			retval[2] = 0;
+			retval[3] = 5;
+			retval[4] = 0;
+			retval[5] = 0;
+			retval[6] = 0;
+			retval[7] = 1;
+			retval[8] = 5;
+			return retval;
+		}
+
+		int size = val.size() + 8;
+		final byte[] header = new byte[size];
+		int i = 8;
+		int z = 0;
+		int limit = val.size();
+		// for (final Object o : val)
+		while (z < limit)
+		{
+			final Object o = val.get(z++);
+			if (o instanceof Long)
+			{
+				header[i] = (byte)0;
+				size += 8;
+			}
+			else if (o instanceof Integer)
+			{
+				header[i] = (byte)1;
+				size += 4;
+			}
+			else if (o instanceof Double)
+			{
+				header[i] = (byte)2;
+				size += 8;
+			}
+			else if (o instanceof MyDate)
+			{
+				header[i] = (byte)3;
+				size += 4;
+			}
+			else if (o instanceof String)
+			{
+				header[i] = (byte)4;
+				final byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
+				size += (4 + b.length);
+
+				if (bytes == null)
+				{
+					bytes = new ArrayList<byte[]>();
+					bytes.add(b);
+				}
+				else
+				{
+					bytes.add(b);
+				}
+			}
+			// else if (o instanceof AtomicLong)
+			// {
+			// header[i] = (byte)6;
+			// size += 8;
+			// }
+			// else if (o instanceof AtomicBigDecimal)
+			// {
+			// header[i] = (byte)7;
+			// size += 8;
+			// }
+			else if (o instanceof ArrayList)
+			{
+				if (((ArrayList)o).size() != 0)
+				{
+					final Exception e = new Exception("Non-zero size ArrayList in toBytes()");
+					HRDBMSWorker.logger.error("Non-zero size ArrayList in toBytes()", e);
+					throw e;
+				}
+				header[i] = (byte)8;
+			}
+			else
+			{
+				HRDBMSWorker.logger.error("Unknown type " + o.getClass() + " in toBytes()");
+				HRDBMSWorker.logger.error(o);
+				throw new Exception("Unknown type " + o.getClass() + " in toBytes()");
+			}
+
+			i++;
+		}
+
+		final byte[] retval = new byte[size];
+		// System.out.println("In toBytes(), row has " + val.size() +
+		// " columns, object occupies " + size + " bytes");
+		System.arraycopy(header, 0, retval, 0, header.length);
+		i = 8;
+		final ByteBuffer retvalBB = ByteBuffer.wrap(retval);
+		retvalBB.putInt(size - 4);
+		retvalBB.putInt(val.size());
+		retvalBB.position(header.length);
+		int x = 0;
+		z = 0;
+		limit = val.size();
+		// for (final Object o : val)
+		while (z < limit)
+		{
+			final Object o = val.get(z++);
+			if (retval[i] == 0)
+			{
+				retvalBB.putLong((Long)o);
+			}
+			else if (retval[i] == 1)
+			{
+				retvalBB.putInt((Integer)o);
+			}
+			else if (retval[i] == 2)
+			{
+				retvalBB.putDouble((Double)o);
+			}
+			else if (retval[i] == 3)
+			{
+				retvalBB.putInt(((MyDate)o).getTime());
+			}
+			else if (retval[i] == 4)
+			{
+				final byte[] temp = bytes.get(x);
+				x++;
+				retvalBB.putInt(temp.length);
+				retvalBB.put(temp);
+			}
+			// else if (retval[i] == 6)
+			// {
+			// retvalBB.putLong(((AtomicLong)o).get());
+			// }
+			// else if (retval[i] == 7)
+			// {
+			// retvalBB.putDouble(((AtomicBigDecimal)o).get().doubleValue());
+			// }
+			else if (retval[i] == 8)
+			{
+			}
+
+			i++;
+		}
+
+		return retval;
+	}
+
 	@Override
-	public void add(Operator op) throws Exception
+	public void add(final Operator op) throws Exception
 	{
 		if (children.size() >= 2)
 		{
@@ -138,7 +308,7 @@ public final class ExceptOperator implements Operator, Serializable
 	@Override
 	public void close() throws Exception
 	{
-		for (Operator o : children)
+		for (final Operator o : children)
 		{
 			o.close();
 		}
@@ -196,7 +366,7 @@ public final class ExceptOperator implements Operator, Serializable
 	}
 
 	@Override
-	public Object next(Operator op2) throws Exception
+	public Object next(final Operator op2) throws Exception
 	{
 		Object o;
 		o = buffer.take();
@@ -224,7 +394,7 @@ public final class ExceptOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void nextAll(Operator op) throws Exception
+	public void nextAll(final Operator op) throws Exception
 	{
 		for (final Operator o : children)
 		{
@@ -256,7 +426,7 @@ public final class ExceptOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void registerParent(Operator op) throws Exception
+	public void registerParent(final Operator op) throws Exception
 	{
 		if (parent == null)
 		{
@@ -269,7 +439,7 @@ public final class ExceptOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeChild(Operator op)
+	public void removeChild(final Operator op)
 	{
 		childPos = children.indexOf(op);
 		children.remove(op);
@@ -277,7 +447,7 @@ public final class ExceptOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 		parent = null;
 	}
@@ -317,7 +487,7 @@ public final class ExceptOperator implements Operator, Serializable
 			}
 			else
 			{
-				Exception e = new Exception("ExceptOperator is inited more than once!");
+				final Exception e = new Exception("ExceptOperator is inited more than once!");
 				HRDBMSWorker.logger.error("ExceptOperator is inited more than once!");
 				buffer.put(e);
 				return;
@@ -327,9 +497,9 @@ public final class ExceptOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -351,12 +521,12 @@ public final class ExceptOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void setChildPos(int pos)
+	public void setChildPos(final int pos)
 	{
 		childPos = pos;
 	}
 
-	public boolean setEstimate(long estimate)
+	public boolean setEstimate(final long estimate)
 	{
 		if (estimateSet)
 		{
@@ -368,13 +538,13 @@ public final class ExceptOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 		this.node = node;
 	}
 
 	@Override
-	public void setPlan(Plan plan)
+	public void setPlan(final Plan plan)
 	{
 	}
 
@@ -401,7 +571,7 @@ public final class ExceptOperator implements Operator, Serializable
 		}
 		else
 		{
-			Exception e = new Exception("ExceptOperator is inited more than once!");
+			final Exception e = new Exception("ExceptOperator is inited more than once!");
 			HRDBMSWorker.logger.error("ExceptOperator is inited more than once!", e);
 			buffer.put(e);
 			return;
@@ -417,37 +587,37 @@ public final class ExceptOperator implements Operator, Serializable
 
 	private void cleanupExternal()
 	{
-		for (ArrayList<FileChannel> fc : fcs)
+		for (final ArrayList<FileChannel> fc : fcs)
 		{
-			for (FileChannel f : fc)
+			for (final FileChannel f : fc)
 			{
 				try
 				{
 					f.close();
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 				}
 			}
 		}
 
-		for (ArrayList<RandomAccessFile> raf : rafs)
+		for (final ArrayList<RandomAccessFile> raf : rafs)
 		{
-			for (RandomAccessFile r : raf)
+			for (final RandomAccessFile r : raf)
 			{
 				try
 				{
 					r.close();
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 				}
 			}
 		}
 
-		for (ArrayList<String> files : externalFiles)
+		for (final ArrayList<String> files : externalFiles)
 		{
-			for (String fn : files)
+			for (final String fn : files)
 			{
 				new File(fn).delete();
 			}
@@ -462,13 +632,13 @@ public final class ExceptOperator implements Operator, Serializable
 		fcs = new ArrayList<ArrayList<FileChannel>>();
 		while (i < numFiles)
 		{
-			ArrayList<String> files = new ArrayList<String>();
-			ArrayList<RandomAccessFile> raf = new ArrayList<RandomAccessFile>();
-			ArrayList<FileChannel> fc = new ArrayList<FileChannel>();
+			final ArrayList<String> files = new ArrayList<String>();
+			final ArrayList<RandomAccessFile> raf = new ArrayList<RandomAccessFile>();
+			final ArrayList<FileChannel> fc = new ArrayList<FileChannel>();
 			int j = 0; // child num
 			while (j < children.size())
 			{
-				String fn = ResourceManager.TEMP_DIRS.get(i % ResourceManager.TEMP_DIRS.size()) + this.hashCode() + "" + System.currentTimeMillis() + ".exths" + i + "." + j;
+				final String fn = ResourceManager.TEMP_DIRS.get(i % ResourceManager.TEMP_DIRS.size()) + this.hashCode() + "" + System.currentTimeMillis() + ".exths" + i + "." + j;
 				files.add(fn);
 				RandomAccessFile r = null;
 				while (true)
@@ -478,14 +648,14 @@ public final class ExceptOperator implements Operator, Serializable
 						r = new RandomAccessFile(fn, "rw");
 						break;
 					}
-					catch (FileNotFoundException e)
+					catch (final FileNotFoundException e)
 					{
 						ResourceManager.panic = true;
 						try
 						{
 							Thread.sleep(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("rm_sleep_time_ms")) / 2);
 						}
-						catch (Exception f)
+						catch (final Exception f)
 						{
 						}
 					}
@@ -517,7 +687,7 @@ public final class ExceptOperator implements Operator, Serializable
 					thread.join();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -533,196 +703,26 @@ public final class ExceptOperator implements Operator, Serializable
 		}
 	}
 
-	private void flushBucket(ArrayList<byte[]> bucket, int fileNum, int childNum) throws Exception
+	private void flushBucket(final ArrayList<byte[]> bucket, final int fileNum, final int childNum) throws Exception
 	{
-		FileChannel fc = fcs.get(fileNum).get(childNum);
-		for (byte[] data : bucket)
+		final FileChannel fc = fcs.get(fileNum).get(childNum);
+		for (final byte[] data : bucket)
 		{
-			ByteBuffer bb = ByteBuffer.wrap(data);
+			final ByteBuffer bb = ByteBuffer.wrap(data);
 			fc.write(bb);
 		}
 
 		bucket.clear();
 	}
 
-	private void flushBuckets(ArrayList<ArrayList<byte[]>> buckets, int childNum) throws Exception
+	private void flushBuckets(final ArrayList<ArrayList<byte[]>> buckets, final int childNum) throws Exception
 	{
 		int i = 0;
-		for (ArrayList<byte[]> bucket : buckets)
+		for (final ArrayList<byte[]> bucket : buckets)
 		{
 			flushBucket(bucket, i, childNum);
 			i++;
 		}
-	}
-
-	private long hash(byte[] key) throws Exception
-	{
-		long eHash;
-		if (key == null)
-		{
-			eHash = 0;
-		}
-		else
-		{
-			eHash = MurmurHash.hash64(key, key.length);
-		}
-
-		return eHash & 0x7FFFFFFFFFFFFFFFL;
-	}
-
-	private final byte[] toBytes(Object v) throws Exception
-	{
-		ArrayList<byte[]> bytes = null;
-		ArrayList<Object> val;
-		if (v instanceof ArrayList)
-		{
-			val = (ArrayList<Object>)v;
-		}
-		else
-		{
-			final byte[] retval = new byte[9];
-			retval[0] = 0;
-			retval[1] = 0;
-			retval[2] = 0;
-			retval[3] = 5;
-			retval[4] = 0;
-			retval[5] = 0;
-			retval[6] = 0;
-			retval[7] = 1;
-			retval[8] = 5;
-			return retval;
-		}
-
-		int size = val.size() + 8;
-		final byte[] header = new byte[size];
-		int i = 8;
-		int z = 0;
-		int limit = val.size();
-		// for (final Object o : val)
-		while (z < limit)
-		{
-			Object o = val.get(z++);
-			if (o instanceof Long)
-			{
-				header[i] = (byte)0;
-				size += 8;
-			}
-			else if (o instanceof Integer)
-			{
-				header[i] = (byte)1;
-				size += 4;
-			}
-			else if (o instanceof Double)
-			{
-				header[i] = (byte)2;
-				size += 8;
-			}
-			else if (o instanceof MyDate)
-			{
-				header[i] = (byte)3;
-				size += 4;
-			}
-			else if (o instanceof String)
-			{
-				header[i] = (byte)4;
-				byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
-				size += (4 + b.length);
-
-				if (bytes == null)
-				{
-					bytes = new ArrayList<byte[]>();
-					bytes.add(b);
-				}
-				else
-				{
-					bytes.add(b);
-				}
-			}
-			// else if (o instanceof AtomicLong)
-			// {
-			// header[i] = (byte)6;
-			// size += 8;
-			// }
-			// else if (o instanceof AtomicBigDecimal)
-			// {
-			// header[i] = (byte)7;
-			// size += 8;
-			// }
-			else if (o instanceof ArrayList)
-			{
-				if (((ArrayList)o).size() != 0)
-				{
-					Exception e = new Exception("Non-zero size ArrayList in toBytes()");
-					HRDBMSWorker.logger.error("Non-zero size ArrayList in toBytes()", e);
-					throw e;
-				}
-				header[i] = (byte)8;
-			}
-			else
-			{
-				HRDBMSWorker.logger.error("Unknown type " + o.getClass() + " in toBytes()");
-				HRDBMSWorker.logger.error(o);
-				throw new Exception("Unknown type " + o.getClass() + " in toBytes()");
-			}
-
-			i++;
-		}
-
-		final byte[] retval = new byte[size];
-		// System.out.println("In toBytes(), row has " + val.size() +
-		// " columns, object occupies " + size + " bytes");
-		System.arraycopy(header, 0, retval, 0, header.length);
-		i = 8;
-		final ByteBuffer retvalBB = ByteBuffer.wrap(retval);
-		retvalBB.putInt(size - 4);
-		retvalBB.putInt(val.size());
-		retvalBB.position(header.length);
-		int x = 0;
-		z = 0;
-		limit = val.size();
-		// for (final Object o : val)
-		while (z < limit)
-		{
-			Object o = val.get(z++);
-			if (retval[i] == 0)
-			{
-				retvalBB.putLong((Long)o);
-			}
-			else if (retval[i] == 1)
-			{
-				retvalBB.putInt((Integer)o);
-			}
-			else if (retval[i] == 2)
-			{
-				retvalBB.putDouble((Double)o);
-			}
-			else if (retval[i] == 3)
-			{
-				retvalBB.putInt(((MyDate)o).getTime());
-			}
-			else if (retval[i] == 4)
-			{
-				byte[] temp = bytes.get(x);
-				x++;
-				retvalBB.putInt(temp.length);
-				retvalBB.put(temp);
-			}
-			// else if (retval[i] == 6)
-			// {
-			// retvalBB.putLong(((AtomicLong)o).get());
-			// }
-			// else if (retval[i] == 7)
-			// {
-			// retvalBB.putDouble(((AtomicBigDecimal)o).get().doubleValue());
-			// }
-			else if (retval[i] == 8)
-			{
-			}
-
-			i++;
-		}
-
-		return retval;
 	}
 
 	private final class InitThread extends ThreadPoolThread
@@ -738,13 +738,13 @@ public final class ExceptOperator implements Operator, Serializable
 			}
 			else
 			{
-				Exception e = new Exception("ExceptOperator is inited more than once!");
+				final Exception e = new Exception("ExceptOperator is inited more than once!");
 				HRDBMSWorker.logger.error("ExceptOperator is inited more than once!", e);
 				try
 				{
 					buffer.put(e);
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 				}
 				return;
@@ -790,7 +790,7 @@ public final class ExceptOperator implements Operator, Serializable
 				{
 					createTempFiles();
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.debug("", e);
 					buffer.put(e);
@@ -867,7 +867,7 @@ public final class ExceptOperator implements Operator, Serializable
 			}
 
 			int count = 0;
-			for (Object row : sets.get(0))
+			for (final Object row : sets.get(0))
 			{
 				try
 				{
@@ -877,13 +877,13 @@ public final class ExceptOperator implements Operator, Serializable
 						count++;
 					}
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					try
 					{
 						buffer.put(e);
 					}
-					catch (Exception f)
+					catch (final Exception f)
 					{
 					}
 					return;
@@ -913,7 +913,7 @@ public final class ExceptOperator implements Operator, Serializable
 		private final int fileNum;
 		private final ArrayList<HashSet<ArrayList<Object>>> sets;
 
-		public ReadBackThread(int fileNum, ArrayList<HashSet<ArrayList<Object>>> sets)
+		public ReadBackThread(final int fileNum, final ArrayList<HashSet<ArrayList<Object>>> sets)
 		{
 			this.fileNum = fileNum;
 			this.sets = sets;
@@ -924,14 +924,14 @@ public final class ExceptOperator implements Operator, Serializable
 		{
 			try
 			{
-				ArrayList<FileChannel> fs = fcs.get(fileNum);
-				for (FileChannel f : fs)
+				final ArrayList<FileChannel> fs = fcs.get(fileNum);
+				for (final FileChannel f : fs)
 				{
-					FileChannel fc = new BufferedFileChannel(f, 8 * 1024 * 1024);
-					HashSet<ArrayList<Object>> set = new HashSet<ArrayList<Object>>();
+					final FileChannel fc = new BufferedFileChannel(f, 8 * 1024 * 1024);
+					final HashSet<ArrayList<Object>> set = new HashSet<ArrayList<Object>>();
 					sets.add(set);
 					fc.position(0);
-					ByteBuffer bb1 = ByteBuffer.allocate(4);
+					final ByteBuffer bb1 = ByteBuffer.allocate(4);
 					while (true)
 					{
 						bb1.position(0);
@@ -940,15 +940,15 @@ public final class ExceptOperator implements Operator, Serializable
 							break;
 						}
 						bb1.position(0);
-						int length = bb1.getInt();
-						ByteBuffer bb = ByteBuffer.allocate(length);
+						final int length = bb1.getInt();
+						final ByteBuffer bb = ByteBuffer.allocate(length);
 						fc.read(bb);
-						ArrayList<Object> row = (ArrayList<Object>)fromBytes(bb.array());
+						final ArrayList<Object> row = (ArrayList<Object>)fromBytes(bb.array());
 						set.add(row);
 					}
 				}
 
-				for (Object row : sets.get(0))
+				for (final Object row : sets.get(0))
 				{
 					try
 					{
@@ -957,13 +957,13 @@ public final class ExceptOperator implements Operator, Serializable
 							buffer.put(row);
 						}
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						try
 						{
 							buffer.put(e);
 						}
-						catch (Exception f)
+						catch (final Exception f)
 						{
 						}
 						return;
@@ -972,14 +972,14 @@ public final class ExceptOperator implements Operator, Serializable
 
 				sets.clear();
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 				buffer.put(e);
 			}
 		}
 
-		private final Object fromBytes(byte[] val) throws Exception
+		private final Object fromBytes(final byte[] val) throws Exception
 		{
 			final ByteBuffer bb = ByteBuffer.wrap(val);
 			final int numFields = bb.getInt();
@@ -1077,7 +1077,7 @@ public final class ExceptOperator implements Operator, Serializable
 		private final Operator op;
 		private final int childNum;
 
-		public ReadThread(int childNum)
+		public ReadThread(final int childNum)
 		{
 			this.childNum = childNum;
 			op = children.get(childNum);
@@ -1121,7 +1121,7 @@ public final class ExceptOperator implements Operator, Serializable
 					{
 						buffer.put(e);
 					}
-					catch (Exception f)
+					catch (final Exception f)
 					{
 					}
 					return;
@@ -1131,7 +1131,7 @@ public final class ExceptOperator implements Operator, Serializable
 			{
 				try
 				{
-					ArrayList<ArrayList<byte[]>> buckets = new ArrayList<ArrayList<byte[]>>();
+					final ArrayList<ArrayList<byte[]>> buckets = new ArrayList<ArrayList<byte[]>>();
 					int i = 0;
 					while (i < numFiles)
 					{
@@ -1157,9 +1157,9 @@ public final class ExceptOperator implements Operator, Serializable
 							return;
 						}
 
-						byte[] data = toBytes(o);
-						int hash = (int)(hash(data) % numFiles);
-						ArrayList<byte[]> bucket = buckets.get(hash);
+						final byte[] data = toBytes(o);
+						final int hash = (int)(hash(data) % numFiles);
+						final ArrayList<byte[]> bucket = buckets.get(hash);
 						bucket.add(data);
 						if (bucket.size() > 8192)
 						{
@@ -1179,7 +1179,7 @@ public final class ExceptOperator implements Operator, Serializable
 
 					flushBuckets(buckets, childNum);
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.debug("", e);
 					buffer.put(e);

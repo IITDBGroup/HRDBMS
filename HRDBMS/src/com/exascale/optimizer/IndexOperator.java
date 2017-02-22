@@ -25,7 +25,7 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 			f.setAccessible(true);
 			unsafe = (sun.misc.Unsafe)f.get(null);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			unsafe = null;
 		}
@@ -46,7 +46,7 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 
 	private DataEndMarker startCalledLock = new DataEndMarker();
 
-	public IndexOperator(Index index, MetaData meta)
+	public IndexOperator(final Index index, final MetaData meta)
 	{
 		this.index = index;
 		this.meta = meta;
@@ -57,9 +57,9 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 		received = new AtomicLong(0);
 	}
 
-	public static IndexOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static IndexOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		IndexOperator value = (IndexOperator)unsafe.allocateInstance(IndexOperator.class);
+		final IndexOperator value = (IndexOperator)unsafe.allocateInstance(IndexOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.meta = new MetaData();
 		value.parent = OperatorUtils.deserializeOperator(in, prev);
@@ -77,12 +77,12 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 	}
 
 	@Override
-	public void add(Operator op) throws Exception
+	public void add(final Operator op) throws Exception
 	{
 		throw new Exception("IndexOperator does not support children.");
 	}
 
-	public void addSecondaryFilter(Filter f)
+	public void addSecondaryFilter(final Filter f)
 	{
 		index.addSecondaryFilter(f);
 	}
@@ -184,11 +184,11 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 	}
 
 	@Override
-	public Object next(Operator op) throws Exception
+	public Object next(final Operator op) throws Exception
 	{
 		if (!forceDone)
 		{
-			Object o = index.next();
+			final Object o = index.next();
 			if (o instanceof DataEndMarker)
 			{
 				demReceived = true;
@@ -211,7 +211,7 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 	}
 
 	@Override
-	public void nextAll(Operator op) throws Exception
+	public void nextAll(final Operator op) throws Exception
 	{
 		forceDone = true;
 	}
@@ -235,7 +235,7 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 	}
 
 	@Override
-	public void registerParent(Operator op) throws Exception
+	public void registerParent(final Operator op) throws Exception
 	{
 		if (parent == null)
 		{
@@ -248,12 +248,12 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 	}
 
 	@Override
-	public void removeChild(Operator op)
+	public void removeChild(final Operator op)
 	{
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 		parent = null;
 	}
@@ -281,9 +281,9 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -305,21 +305,21 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 	}
 
 	@Override
-	public void setChildPos(int pos)
+	public void setChildPos(final int pos)
 	{
 	}
 
-	public void setDevice(int device)
+	public void setDevice(final int device)
 	{
 		this.device = device;
 	}
 
-	public void setIndex(Index index)
+	public void setIndex(final Index index)
 	{
 		this.index = index;
 	}
 
-	public void setIndexOnly(ArrayList<String> references, ArrayList<String> types)
+	public void setIndexOnly(final ArrayList<String> references, final ArrayList<String> types)
 	{
 		final ArrayList<String> orderedReferences = index.setIndexOnly(references, types);
 		int i = 0;
@@ -336,13 +336,13 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 	}
 
 	@Override
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 		this.node = node;
 	}
 
 	@Override
-	public void setPlan(Plan plan)
+	public void setPlan(final Plan plan)
 	{
 	}
 

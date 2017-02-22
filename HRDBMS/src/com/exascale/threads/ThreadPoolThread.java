@@ -32,8 +32,8 @@ public abstract class ThreadPoolThread implements Runnable
 		{
 		}
 	}
-	
-	public boolean join(int ms) throws InterruptedException
+
+	public boolean join(final int ms) throws InterruptedException
 	{
 		try
 		{
@@ -42,11 +42,11 @@ public abstract class ThreadPoolThread implements Runnable
 		catch (final ExecutionException e)
 		{
 		}
-		catch (TimeoutException e)
+		catch (final TimeoutException e)
 		{
 			return false;
 		}
-		
+
 		return true;
 	}
 
@@ -64,7 +64,7 @@ public abstract class ThreadPoolThread implements Runnable
 		}
 		else
 		{
-			Exception e = new Exception();
+			final Exception e = new Exception();
 			HRDBMSWorker.logger.debug("Starting a thread that has already been started", e);
 		}
 	}

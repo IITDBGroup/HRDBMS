@@ -199,7 +199,7 @@ public class ScalableStampedReentrantRWLock implements ReadWriteLock, java.io.Se
 		}
 
 		// Scan the array of Reader states
-		for (AtomicInteger readerState : localReadersStateArray)
+		for (final AtomicInteger readerState : localReadersStateArray)
 		{
 			while (readerState != null && readerState.get() == SRWL_STATE_READING)
 			{
@@ -260,7 +260,7 @@ public class ScalableStampedReentrantRWLock implements ReadWriteLock, java.io.Se
 		}
 
 		// Scan the array of Reader states
-		for (AtomicInteger readerState : localReadersStateArray)
+		for (final AtomicInteger readerState : localReadersStateArray)
 		{
 			if (readerState != null && readerState.get() == SRWL_STATE_READING)
 			{
@@ -299,7 +299,7 @@ public class ScalableStampedReentrantRWLock implements ReadWriteLock, java.io.Se
 	 *         and {@code false} if the waiting time elapsed before the lock
 	 *         could be acquired.
 	 */
-	public boolean exclusiveTryLockNanos(long nanosTimeout) throws InterruptedException
+	public boolean exclusiveTryLockNanos(final long nanosTimeout) throws InterruptedException
 	{
 		final long lastTime = System.nanoTime();
 		final long tidSelf = Thread.currentThread().getId();
@@ -330,7 +330,7 @@ public class ScalableStampedReentrantRWLock implements ReadWriteLock, java.io.Se
 		}
 
 		// Scan the array of Reader states
-		for (AtomicInteger readerState : localReadersStateArray)
+		for (final AtomicInteger readerState : localReadersStateArray)
 		{
 			while (readerState != null && readerState.get() == SRWL_STATE_READING)
 			{
@@ -528,7 +528,7 @@ public class ScalableStampedReentrantRWLock implements ReadWriteLock, java.io.Se
 	 *            the time to wait for the read lock in nanoseconds
 	 * @return {@code true} if the read lock was acquired
 	 */
-	public boolean sharedTryLockNanos(long nanosTimeout)
+	public boolean sharedTryLockNanos(final long nanosTimeout)
 	{
 		final long lastTime = System.nanoTime();
 		ReadersEntry localEntry = entry.get();
@@ -658,7 +658,7 @@ public class ScalableStampedReentrantRWLock implements ReadWriteLock, java.io.Se
 	 * @return true if the lock has not been exclusively acquired since issuance
 	 *         of the given stamp; else false
 	 */
-	public boolean validate(long stamp)
+	public boolean validate(final long stamp)
 	{
 		return stampedLock.validate(stamp);
 	}
@@ -695,7 +695,7 @@ public class ScalableStampedReentrantRWLock implements ReadWriteLock, java.io.Se
 	 *            The reader's state that we wish to remove from the
 	 *            ConcurrentLinkedQueue
 	 */
-	protected void removeState(AtomicInteger state)
+	protected void removeState(final AtomicInteger state)
 	{
 		readersStateList.remove(state);
 		// Setting the readersStateArrayRef to null will make the Writer
@@ -739,7 +739,7 @@ public class ScalableStampedReentrantRWLock implements ReadWriteLock, java.io.Se
 		}
 
 		@Override
-		public boolean tryLock(long timeout, TimeUnit unit) throws InterruptedException
+		public boolean tryLock(final long timeout, final TimeUnit unit) throws InterruptedException
 		{
 			if (Thread.interrupted())
 			{
@@ -787,7 +787,7 @@ public class ScalableStampedReentrantRWLock implements ReadWriteLock, java.io.Se
 		}
 
 		@Override
-		public boolean tryLock(long timeout, TimeUnit unit) throws InterruptedException
+		public boolean tryLock(final long timeout, final TimeUnit unit) throws InterruptedException
 		{
 			if (Thread.interrupted())
 			{
@@ -813,7 +813,7 @@ public class ScalableStampedReentrantRWLock implements ReadWriteLock, java.io.Se
 		public boolean isStampLocked = false;
 		public int reentrantReaderCount = 0;
 
-		public ReadersEntry(AtomicInteger state)
+		public ReadersEntry(final AtomicInteger state)
 		{
 			this.state = state;
 		}

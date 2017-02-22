@@ -9,20 +9,20 @@ public class Block implements Serializable
 	private final int blknum;
 	private transient volatile String string;
 
-	public Block(String str)
+	public Block(final String str)
 	{
 		final StringTokenizer tokens = new StringTokenizer(str, "~", false);
 		filename = tokens.nextToken();
 		blknum = Integer.parseInt(tokens.nextToken());
 	}
 
-	public Block(String filename, int number)
+	public Block(final String filename, final int number)
 	{
 		this.filename = filename;
 		this.blknum = number;
 	}
 
-	public int compareTo(Block b)
+	public int compareTo(final Block b)
 	{
 		if (b == null)
 		{
@@ -51,7 +51,7 @@ public class Block implements Serializable
 	}
 
 	@Override
-	public boolean equals(Object obj)
+	public boolean equals(final Object obj)
 	{
 		if (obj instanceof Block)
 		{

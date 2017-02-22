@@ -4,7 +4,7 @@ public class Having
 {
 	private final SearchCondition search;
 
-	public Having(SearchCondition search)
+	public Having(final SearchCondition search)
 	{
 		this.search = search;
 	}

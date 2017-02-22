@@ -21,14 +21,14 @@ public class Plan implements Serializable
 
 	// private HashMap<Integer, Integer> old2New = null;
 
-	public Plan(boolean reserved, ArrayList<Operator> trees)
+	public Plan(final boolean reserved, final ArrayList<Operator> trees)
 	{
 		time = System.currentTimeMillis();
 		this.reserved = reserved;
 		this.trees = trees;
 	}
 
-	public Plan(Plan p)
+	public Plan(final Plan p)
 	{
 		this.time = p.time;
 		this.reserved = p.reserved;
@@ -41,26 +41,38 @@ public class Plan implements Serializable
 		//
 		// old2New = null;
 	}
-	
-	public int getUpdateCount()
-	{
-		return updateCount2;
-	}
 
-	public void addNode(int node)
+	public void addNode(final int node)
 	{
 		touchedNodes.put(node, node);
 	}
 
-	public ArrayList<Operator> cloneArray(ArrayList<Operator> source)
+	public ArrayList<Operator> cloneArray(final ArrayList<Operator> source)
 	{
-		ArrayList<Operator> retval = new ArrayList<Operator>(source.size());
-		for (Operator tree : source)
+		final ArrayList<Operator> retval = new ArrayList<Operator>(source.size());
+		for (final Operator tree : source)
 		{
 			retval.add(clone(tree));
 		}
 
 		return retval;
+	}
+
+	@Override
+	public synchronized boolean equals(final Object rhs)
+	{
+		if (rhs == null)
+		{
+			return false;
+		}
+
+		if (!(rhs instanceof Plan))
+		{
+			return false;
+		}
+
+		final Plan r = (Plan)rhs;
+		return trees.equals(r.trees) && touchedNodes.equals(r.touchedNodes);
 	}
 
 	/*
@@ -93,23 +105,6 @@ public class Plan implements Serializable
 	 * for (Operator o : op.children()) { updateIDs(o); } }
 	 */
 
-	@Override
-	public synchronized boolean equals(Object rhs)
-	{
-		if (rhs == null)
-		{
-			return false;
-		}
-
-		if (!(rhs instanceof Plan))
-		{
-			return false;
-		}
-
-		Plan r = (Plan)rhs;
-		return trees.equals(r.trees) && touchedNodes.equals(r.touchedNodes);
-	}
-
 	public Operator execute() throws Exception
 	{
 		int i = 0;
@@ -124,9 +119,29 @@ public class Plan implements Serializable
 			i++;
 		}
 
-		Operator retval = trees.get(size - 1);
+		final Operator retval = trees.get(size - 1);
 		retval.start();
 		return retval;
+	}
+
+	public ArrayList<SubXAThread> executeMultiNoResult() throws Exception
+	{
+		int i = 0;
+		final int size = trees.size();
+		final ArrayList<SubXAThread> threads = new ArrayList<SubXAThread>(trees.size() - 1);
+		while (i < size - 1)
+		{
+			final SubXAThread thread = new SubXAThread(trees.get(i));
+			thread.start();
+			threads.add(thread);
+			i++;
+		}
+
+		final Operator retval = trees.get(size - 1);
+		retval.start();
+		updateCount2 = (Integer)retval.next(retval);
+		retval.close();
+		return threads;
 	}
 
 	public int executeNoResult() throws Exception
@@ -143,86 +158,17 @@ public class Plan implements Serializable
 			i++;
 		}
 
-		Operator retval = trees.get(size - 1);
+		final Operator retval = trees.get(size - 1);
 		retval.start();
-		int updateCount = (Integer)retval.next(retval);
-		retval.close();
-		return updateCount;
-	}
-	
-	public ArrayList<SubXAThread> executeMultiNoResult() throws Exception
-	{
-		int i = 0;
-		final int size = trees.size();
-		ArrayList<SubXAThread> threads = new ArrayList<SubXAThread>(trees.size() - 1);
-		while (i < size - 1)
+		Object o = retval.next(retval);
+		int updateCount = 0;
+		if (o instanceof Integer)
 		{
-			SubXAThread thread = new SubXAThread(trees.get(i));
-			thread.start();
-			threads.add(thread);
-			i++;
+			updateCount = (Integer)o;
 		}
 
-		Operator retval = trees.get(size - 1);
-		retval.start();
-		updateCount2 = (Integer)retval.next(retval);
 		retval.close();
-		return threads;
-	}
-	
-	public static class SubXAThread extends HRDBMSThread
-	{
-		private Operator tree;
-		private boolean ok = true;
-		private Exception e;
-		int updateCount = 0;
-		
-		public SubXAThread(Operator tree)
-		{
-			this.tree = tree;
-		}
-		
-		public void run()
-		{
-			try
-			{
-				tree.start();
-				while (true)
-				{
-					Object o = tree.next(tree);
-					if (o instanceof DataEndMarker)
-					{
-						break;
-					}
-					
-					if (o instanceof Integer)
-					{
-						updateCount = (Integer)o;
-					}
-				}
-				tree.close();
-			}
-			catch(Exception e)
-			{
-				ok = false;
-				this.e = e;
-			}
-		}
-		
-		public int getUpdateCount()
-		{
-			return updateCount;
-		}
-		
-		public boolean getOK()
-		{
-			return ok;
-		}
-		
-		public Exception getException()
-		{
-			return e;
-		}
+		return updateCount;
 	}
 
 	public long getTimeStamp()
@@ -240,6 +186,11 @@ public class Plan implements Serializable
 		return trees;
 	}
 
+	public int getUpdateCount()
+	{
+		return updateCount2;
+	}
+
 	@Override
 	public synchronized int hashCode()
 	{
@@ -254,15 +205,15 @@ public class Plan implements Serializable
 		return reserved;
 	}
 
-	public void setSample(long sPer)
+	public void setSample(final long sPer)
 	{
-		for (Operator op : trees)
+		for (final Operator op : trees)
 		{
 			setSample(op, sPer);
 		}
 	}
 
-	private Operator clone(Operator op)
+	private Operator clone(final Operator op)
 	{
 		final Operator clone = op.clone();
 		int i = 0;
@@ -309,7 +260,7 @@ public class Plan implements Serializable
 		return clone;
 	}
 
-	private void setSample(Operator op, long sPer)
+	private void setSample(final Operator op, final long sPer)
 	{
 		if (op instanceof TableScanOperator)
 		{
@@ -317,9 +268,65 @@ public class Plan implements Serializable
 		}
 		else
 		{
-			for (Operator o : op.children())
+			for (final Operator o : op.children())
 			{
 				setSample(o, sPer);
+			}
+		}
+	}
+
+	public static class SubXAThread extends HRDBMSThread
+	{
+		private final Operator tree;
+		private boolean ok = true;
+		private Exception e;
+		int updateCount = 0;
+
+		public SubXAThread(final Operator tree)
+		{
+			this.tree = tree;
+		}
+
+		public Exception getException()
+		{
+			return e;
+		}
+
+		public boolean getOK()
+		{
+			return ok;
+		}
+
+		public int getUpdateCount()
+		{
+			return updateCount;
+		}
+
+		@Override
+		public void run()
+		{
+			try
+			{
+				tree.start();
+				while (true)
+				{
+					final Object o = tree.next(tree);
+					if (o instanceof DataEndMarker)
+					{
+						break;
+					}
+
+					if (o instanceof Integer)
+					{
+						updateCount = (Integer)o;
+					}
+				}
+				tree.close();
+			}
+			catch (final Exception e)
+			{
+				ok = false;
+				this.e = e;
 			}
 		}
 	}

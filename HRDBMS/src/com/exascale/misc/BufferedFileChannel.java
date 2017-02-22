@@ -19,14 +19,14 @@ public class BufferedFileChannel extends FileChannel
 	private int intermediaryBufferSize;
 	private int intermediaryBufferPosition;
 
-	public BufferedFileChannel(FileChannel source) throws IOException
+	public BufferedFileChannel(final FileChannel source) throws IOException
 	{
 		this.source = source;
 		intermediaryBufferPosition = 0;
 		intermediaryBufferSize = 0;
 	}
 
-	public BufferedFileChannel(FileChannel source, int size) throws IOException
+	public BufferedFileChannel(final FileChannel source, final int size) throws IOException
 	{
 		this.source = source;
 		intermediaryBufferPosition = 0;
@@ -35,7 +35,7 @@ public class BufferedFileChannel extends FileChannel
 	}
 
 	@Override
-	public void force(boolean metaData) throws IOException
+	public void force(final boolean metaData) throws IOException
 	{
 		source.force(metaData);
 	}
@@ -46,13 +46,13 @@ public class BufferedFileChannel extends FileChannel
 	}
 
 	@Override
-	public FileLock lock(long position, long size, boolean shared) throws IOException
+	public FileLock lock(final long position, final long size, final boolean shared) throws IOException
 	{
 		throw new UnsupportedOperationException();
 	}
 
 	@Override
-	public MappedByteBuffer map(MapMode mode, long position, long size) throws IOException
+	public MappedByteBuffer map(final MapMode mode, final long position, final long size) throws IOException
 	{
 		throw new UnsupportedOperationException();
 	}
@@ -64,14 +64,14 @@ public class BufferedFileChannel extends FileChannel
 	}
 
 	@Override
-	public FileChannel position(long newPosition) throws IOException
+	public FileChannel position(final long newPosition) throws IOException
 	{
-		long bufferEndPosition = source.position();
-		long bufferStartPosition = bufferEndPosition - intermediaryBufferSize;
+		final long bufferEndPosition = source.position();
+		final long bufferStartPosition = bufferEndPosition - intermediaryBufferSize;
 		if (newPosition >= bufferStartPosition && newPosition <= bufferEndPosition)
 		{
 			// Only an optimization
-			long diff = newPosition - position();
+			final long diff = newPosition - position();
 			intermediaryBufferPosition += diff;
 		}
 		else
@@ -83,7 +83,7 @@ public class BufferedFileChannel extends FileChannel
 	}
 
 	@Override
-	public int read(ByteBuffer dst) throws IOException
+	public int read(final ByteBuffer dst) throws IOException
 	{
 		int read = 0;
 		while (read < dst.limit())
@@ -97,7 +97,7 @@ public class BufferedFileChannel extends FileChannel
 				}
 			}
 		}
-		int retval = (read == 0 && dst.limit() > 0 ? -1 : read);
+		final int retval = (read == 0 && dst.limit() > 0 ? -1 : read);
 		if (retval == -1)
 		{
 			intermediaryBuffer = null;
@@ -107,12 +107,12 @@ public class BufferedFileChannel extends FileChannel
 	}
 
 	@Override
-	public int read(ByteBuffer dst, long position) throws IOException
+	public int read(final ByteBuffer dst, final long position) throws IOException
 	{
 		throw new UnsupportedOperationException();
 	}
 
-	public int read(ByteBuffer dst, Object lock) throws IOException
+	public int read(final ByteBuffer dst, final Object lock) throws IOException
 	{
 		int read = 0;
 		while (read < dst.limit())
@@ -126,7 +126,7 @@ public class BufferedFileChannel extends FileChannel
 				}
 			}
 		}
-		int retval = (read == 0 && dst.limit() > 0 ? -1 : read);
+		final int retval = (read == 0 && dst.limit() > 0 ? -1 : read);
 		if (retval == -1)
 		{
 			intermediaryBuffer = null;
@@ -136,7 +136,7 @@ public class BufferedFileChannel extends FileChannel
 	}
 
 	@Override
-	public long read(ByteBuffer[] dsts, int offset, int length) throws IOException
+	public long read(final ByteBuffer[] dsts, final int offset, final int length) throws IOException
 	{
 		throw new UnsupportedOperationException();
 	}
@@ -148,57 +148,57 @@ public class BufferedFileChannel extends FileChannel
 	}
 
 	@Override
-	public long transferFrom(ReadableByteChannel src, long position, long count) throws IOException
+	public long transferFrom(final ReadableByteChannel src, final long position, final long count) throws IOException
 	{
 		throw new UnsupportedOperationException();
 	}
 
 	@Override
-	public long transferTo(long position, long count, WritableByteChannel target) throws IOException
+	public long transferTo(final long position, final long count, final WritableByteChannel target) throws IOException
 	{
 		throw new UnsupportedOperationException();
 	}
 
 	@Override
-	public FileChannel truncate(long size) throws IOException
+	public FileChannel truncate(final long size) throws IOException
 	{
 		source.truncate(size);
 		return this;
 	}
 
 	@Override
-	public FileLock tryLock(long position, long size, boolean shared) throws IOException
+	public FileLock tryLock(final long position, final long size, final boolean shared) throws IOException
 	{
 		throw new UnsupportedOperationException();
 	}
 
 	@Override
-	public int write(ByteBuffer src) throws IOException
+	public int write(final ByteBuffer src) throws IOException
 	{
 		throw new UnsupportedOperationException();
 	}
 
 	@Override
-	public int write(ByteBuffer src, long position) throws IOException
+	public int write(final ByteBuffer src, final long position) throws IOException
 	{
 		throw new UnsupportedOperationException();
 	}
 
 	@Override
-	public long write(ByteBuffer[] srcs, int offset, int length) throws IOException
+	public long write(final ByteBuffer[] srcs, final int offset, final int length) throws IOException
 	{
 		throw new UnsupportedOperationException();
 	}
 
 	private int fillUpIntermediaryBuffer() throws IOException
 	{
-		int result = source.read(ByteBuffer.wrap(intermediaryBuffer));
+		final int result = source.read(ByteBuffer.wrap(intermediaryBuffer));
 		intermediaryBufferPosition = 0;
 		intermediaryBufferSize = result == -1 ? 0 : result;
 		return result;
 	}
 
-	private int fillUpIntermediaryBuffer(Object lock) throws IOException
+	private int fillUpIntermediaryBuffer(final Object lock) throws IOException
 	{
 		int result = 0;
 		synchronized (lock)
@@ -210,9 +210,9 @@ public class BufferedFileChannel extends FileChannel
 		return result;
 	}
 
-	private int readAsMuchAsPossibleFromIntermediaryBuffer(ByteBuffer dst)
+	private int readAsMuchAsPossibleFromIntermediaryBuffer(final ByteBuffer dst)
 	{
-		int howMuchToRead = Math.min(dst.remaining(), remainingInIntermediaryBuffer());
+		final int howMuchToRead = Math.min(dst.remaining(), remainingInIntermediaryBuffer());
 		dst.put(intermediaryBuffer, intermediaryBufferPosition, howMuchToRead);
 		intermediaryBufferPosition += howMuchToRead;
 		return howMuchToRead;

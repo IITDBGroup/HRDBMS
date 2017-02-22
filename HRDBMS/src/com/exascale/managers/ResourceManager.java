@@ -5,14 +5,9 @@ import java.io.PrintWriter;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
-import java.lang.reflect.Field;
-import java.nio.charset.Charset;
-import java.nio.charset.CharsetEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Random;
 import java.util.StringTokenizer;
@@ -20,8 +15,6 @@ import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.SynchronousQueue;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.misc.HParms;
@@ -34,7 +27,6 @@ import com.exascale.optimizer.SemiJoinOperator;
 import com.exascale.optimizer.TableScanOperator;
 import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.ThreadPoolThread;
-import java.util.concurrent.ThreadPoolExecutor;
 
 public final class ResourceManager extends HRDBMSThread
 {
@@ -43,8 +35,9 @@ public final class ResourceManager extends HRDBMSThread
 	public static int QUEUE_SIZE;
 	public static int CUDA_SIZE;
 	public static ArrayList<String> TEMP_DIRS;
-	private static final AtomicLong idGen = new AtomicLong(0);
-	private static HashMap<Long, String> creations = new HashMap<Long, String>();
+	// private static final AtomicLong idGen = new AtomicLong(0);
+	// private static HashMap<Long, String> creations = new HashMap<Long,
+	// String>();
 	private static boolean PROFILE;
 	private static boolean DEADLOCK_DETECT;
 	public static boolean GPU;
@@ -53,9 +46,9 @@ public final class ResourceManager extends HRDBMSThread
 	public static final AtomicInteger objID = new AtomicInteger(0);
 	public static final long maxMemory;
 	public static volatile AtomicInteger NO_OFFLOAD = new AtomicInteger(0);
-	private static Charset cs = StandardCharsets.UTF_8;
-	private static sun.misc.Unsafe unsafe;
-	private static long offset;
+	// private static Charset cs = StandardCharsets.UTF_8;
+	// private static sun.misc.Unsafe unsafe;
+	// private static long offset;
 	public static volatile boolean panic = false;
 	private static ConcurrentHashMap<Operator, Operator> ops = new ConcurrentHashMap<Operator, Operator>();
 	private static HashMap<Integer, HashSet<Integer>> links = new HashMap<Integer, HashSet<Integer>>();
@@ -65,25 +58,25 @@ public final class ResourceManager extends HRDBMSThread
 	private static Random random = new Random();
 	private static int nodes;
 	private static int nMax;
-	public static volatile int MAX_HOPS = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("initial_max_hops"));  
+	public static volatile int MAX_HOPS = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("initial_max_hops"));
 	private static ConcurrentHashMap<Link, ArrayList<Integer>> routes = new ConcurrentHashMap<Link, ArrayList<Integer>>();
-	private final CharsetEncoder ce = cs.newEncoder();
+	// private final CharsetEncoder ce = cs.newEncoder();
 
 	static
 	{
-		try
-		{
-			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
-			f.setAccessible(true);
-			unsafe = (sun.misc.Unsafe)f.get(null);
-			final Field fieldToUpdate = String.class.getDeclaredField("value");
-			// get unsafe offset to this field
-			offset = unsafe.objectFieldOffset(fieldToUpdate);
-		}
-		catch (final Exception e)
-		{
-			unsafe = null;
-		}
+		// try
+		// {
+		// final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+		// f.setAccessible(true);
+		// unsafe = (sun.misc.Unsafe)f.get(null);
+		// final Field fieldToUpdate = String.class.getDeclaredField("value");
+		// // get unsafe offset to this field
+		// offset = unsafe.objectFieldOffset(fieldToUpdate);
+		// }
+		// catch (final Exception e)
+		// {
+		// unsafe = null;
+		// }
 		final HParms hparms = HRDBMSWorker.getHParms();
 		SLEEP_TIME = Integer.parseInt(hparms.getProperty("rm_sleep_time_ms")); // 10000
 		PROFILE = (hparms.getProperty("profile")).equals("true");
@@ -92,9 +85,7 @@ public final class ResourceManager extends HRDBMSThread
 		CUDA_SIZE = Integer.parseInt(hparms.getProperty("cuda_batch_size")); // 30720
 		GPU = (hparms.getProperty("gpu_offload")).equals("true");
 		cpus = Runtime.getRuntime().availableProcessors();
-		pool = new ThreadPoolExecutor(0, Integer.MAX_VALUE,
-                60, TimeUnit.SECONDS,
-                new SynchronousQueue<Runnable>());
+		pool = Executors.newCachedThreadPool();
 		maxMemory = Runtime.getRuntime().maxMemory();
 		if (GPU)
 		{
@@ -106,91 +97,17 @@ public final class ResourceManager extends HRDBMSThread
 			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.error("", e);
+				try
+				{
+					Thread.sleep(5000);
+				}
+				catch (final InterruptedException f)
+				{
+				}
 				System.exit(1);
 			}
 
 			HRDBMSWorker.logger.debug("CUDA code loaded");
-		}
-	}
-	
-	public static ArrayList<Integer> getRoute(int from, int to)
-	{
-		Link link = new Link(from, to);
-		ArrayList<Integer> retval = routes.get(link);
-		if (retval != null)
-		{
-			return retval;
-		}
-		
-		retval = computeRoute(from, to);
-		routes.putIfAbsent(link, retval);
-		return retval;
-	}
-	
-	private static ArrayList<Integer> computeRoute(int from, int to)
-	{
-		ArrayList<Integer> retval = new ArrayList<Integer>();
-		int current = from;
-		while (current != to)
-		{
-			HashSet<Integer> receive = links.get(current);
-			int temp = computeSendTo(to, receive);
-			retval.add(temp);
-			//used current -> temp
-			current = temp;
-		}
-		
-		return retval;
-	}
-	
-	public static ArrayList<Integer> getNetworkTargetsForNode(int source)
-	{
-		ArrayList<Integer> retval = new ArrayList<Integer>();
-		retval.add(source);
-		HashSet<Integer> targets = links.get(source);
-		retval.addAll(targets);
-		return retval;
-	}
-	
-	public static ArrayList<Integer> getAlternateMiddlemen(int source, int target, int primary)
-	{
-		if (primary == target)
-		{
-			return new ArrayList<Integer>();
-		}
-		
-		HashSet<Integer> middlemen = links.get(source);
-		HashSet<Integer> middlemen2 = links.get(target);
-		middlemen.retainAll(middlemen2);
-		middlemen.remove(primary);
-		return new ArrayList<Integer>(middlemen);
-	}
-	
-	private static class Link
-	{
-		private int a;
-		private int b;
-		
-		public Link(int a, int b)
-		{
-			this.a = a;
-			this.b = b;
-		}
-		
-		public boolean equals(Object r)
-		{
-			Link rhs = (Link)r;
-			return a == rhs.a && b == rhs.b;
-		}
-		
-		public int hashCode()
-		{
-			return (a << 15) + b;
-		}
-		
-		public String toString()
-		{
-			return "(" + a + ", " + b + ")";
 		}
 	}
 
@@ -211,11 +128,11 @@ public final class ResourceManager extends HRDBMSThread
 				}
 			}
 		}
-		
+
 		nodes = MetaData.numWorkerNodes;
 		nMax = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
-		
-		//build broadcast network
+
+		// build broadcast network
 		int i = 0;
 		while (i < nodes)
 		{
@@ -225,14 +142,14 @@ public final class ResourceManager extends HRDBMSThread
 				receive = new HashSet<Integer>();
 				links.put(i, receive);
 			}
-			
+
 			int k = 0;
-			double x = Math.pow(nodes * 1.0, (2.0 / (nMax * 1.0)));
+			final double x = Math.pow(nodes * 1.0, (2.0 / (nMax * 1.0)));
 			while (Math.pow(x, k) <= (nodes))
 			{
 				int offset = (int)Math.round(Math.pow(x, k));
 				offset = offset % nodes;
-				
+
 				if (offset > (nodes / 2))
 				{
 					goodDistances.add(nodes - offset);
@@ -252,19 +169,19 @@ public final class ResourceManager extends HRDBMSThread
 						receive2 = new HashSet<Integer>();
 						links.put(target, receive2);
 					}
-					
+
 					receive2.add(i);
 				}
-				
+
 				k++;
 			}
-			
+
 			i++;
 		}
-		
-		for (int distance1 : goodDistances)
+
+		for (final int distance1 : goodDistances)
 		{
-			for (int distance2 : goodDistances)
+			for (final int distance2 : goodDistances)
 			{
 				int value = distance1 + distance2;
 				value = value % nodes;
@@ -286,12 +203,12 @@ public final class ResourceManager extends HRDBMSThread
 		return ((Runtime.getRuntime().freeMemory()) * 100.0) / (maxMemory * 1.0) < CRITICAL_PERCENT_FREE;
 	}
 
-	public static void deregisterOperator(Operator op)
+	public static void deregisterOperator(final Operator op)
 	{
 		ops.remove(op);
 	}
 
-	public static boolean display(Operator op, int indent)
+	public static boolean display(final Operator op, final int indent)
 	{
 		try
 		{
@@ -350,7 +267,7 @@ public final class ResourceManager extends HRDBMSThread
 				}
 				else
 				{
-					for (Operator child : op.children())
+					for (final Operator child : op.children())
 					{
 						if (!display(child, indent + 3))
 						{
@@ -373,15 +290,118 @@ public final class ResourceManager extends HRDBMSThread
 
 			return unpin;
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			return false;
 		}
 	}
 
-	public static void registerOperator(Operator op)
+	public static ArrayList<Integer> getAlternateMiddlemen(final int source, final int target, final int primary)
+	{
+		if (primary == target)
+		{
+			return new ArrayList<Integer>();
+		}
+
+		final HashSet<Integer> middlemen = (HashSet<Integer>)links.get(source).clone();
+		final HashSet<Integer> middlemen2 = links.get(target);
+		middlemen.retainAll(middlemen2);
+		middlemen.remove(primary);
+		return new ArrayList<Integer>(middlemen);
+	}
+
+	public static ArrayList<Integer> getNetworkTargetsForNode(final int source)
+	{
+		final ArrayList<Integer> retval = new ArrayList<Integer>();
+		retval.add(source);
+		final HashSet<Integer> targets = links.get(source);
+		retval.addAll(targets);
+		return retval;
+	}
+
+	public static ArrayList<Integer> getRoute(final int from, final int to)
+	{
+		final Link link = new Link(from, to);
+		ArrayList<Integer> retval = (ArrayList<Integer>)routes.get(link).clone();
+		if (retval != null)
+		{
+			return retval;
+		}
+
+		retval = computeRoute(from, to);
+		routes.putIfAbsent(link, retval);
+		return retval;
+	}
+
+	public static void registerOperator(final Operator op)
 	{
 		ops.put(op, op);
+	}
+
+	private static ArrayList<Integer> computeRoute(final int from, final int to)
+	{
+		final ArrayList<Integer> retval = new ArrayList<Integer>();
+		int current = from;
+		while (current != to)
+		{
+			final HashSet<Integer> receive = links.get(current);
+			final int temp = computeSendTo(to, receive);
+			retval.add(temp);
+			// used current -> temp
+			current = temp;
+		}
+
+		return retval;
+	}
+
+	private static int computeSendTo(final int target, final HashSet<Integer> list)
+	{
+		int minDifference = Integer.MAX_VALUE;
+		int retval = -1;
+		final ArrayList<Integer> goldenOptions = new ArrayList<Integer>();
+		final ArrayList<Integer> silverOptions = new ArrayList<Integer>();
+
+		for (final int option : list)
+		{
+			int distance = Math.abs(target - option);
+			if (distance > (nodes / 2))
+			{
+				distance = nodes - distance;
+			}
+
+			if (distance < minDifference)
+			{
+				minDifference = distance;
+				retval = option;
+
+				if (distance == 0)
+				{
+					return option;
+				}
+			}
+
+			if (goodDistances.contains(distance))
+			{
+				goldenOptions.add(option);
+			}
+
+			if (okDistances.contains(distance))
+			{
+				silverOptions.add(option);
+			}
+		}
+
+		if (goldenOptions.size() > 0)
+		{
+			return goldenOptions.get(random.nextInt(goldenOptions.size()));
+		}
+
+		if (silverOptions.size() > 0)
+		{
+			return silverOptions.get(random.nextInt(silverOptions.size()));
+		}
+
+		return retval;
 	}
 
 	private static void displayQueryProgress()
@@ -392,7 +412,7 @@ public final class ResourceManager extends HRDBMSThread
 
 		synchronized (ops)
 		{
-			for (Operator op : ops.keySet())
+			for (final Operator op : ops.keySet())
 			{
 				try
 				{
@@ -400,7 +420,7 @@ public final class ResourceManager extends HRDBMSThread
 					{
 					}
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.debug("", e);
 				}
@@ -419,7 +439,7 @@ public final class ResourceManager extends HRDBMSThread
 		 */
 	}
 
-	private static void setDirs(String list)
+	private static void setDirs(final String list)
 	{
 		StringTokenizer tokens = new StringTokenizer(list, ",", false);
 		while (tokens.hasMoreTokens())
@@ -447,7 +467,15 @@ public final class ResourceManager extends HRDBMSThread
 		{
 			new ProfileThread().start();
 		}
-		new MonitorThread().start();
+		
+		try
+		{
+			new MonitorThread().start();
+		}
+		catch(Throwable e)
+		{
+			HRDBMSWorker.logger.debug("", e);
+		}
 		// new GCThread().start();
 		if (DEADLOCK_DETECT)
 		{
@@ -483,182 +511,41 @@ public final class ResourceManager extends HRDBMSThread
 		// {
 		// }
 		// }
-		
-			//System.out.println("Calculating hops");
-			AtomicInteger min = new AtomicInteger(Integer.MAX_VALUE);
-			AtomicInteger max = new AtomicInteger(Integer.MIN_VALUE);
-			AtomicInteger count = new AtomicInteger(0);
-			AtomicLong total = new AtomicLong(0);
-			ArrayList<HopThread> threads = new ArrayList<HopThread>();
-			threads.add(new HopThread(0, nodes / 3, min, max, count, total));
-			threads.add(new HopThread(nodes / 3, 2 * nodes / 3, min, max, count, total));
-			threads.add(new HopThread(2 * nodes / 3, nodes, min, max, count, total));
-			
-			for (HopThread thread : threads)
-			{
-				thread.start();
-			}
-			
-			for (HopThread thread : threads)
-			{
-				while (true)
-				{
-					try
-					{
-						thread.join();
-						break;
-					}
-					catch(InterruptedException e)
-					{}
-				}
-			}
-			
-			//System.out.println("Min hops = " + min.get() + ", max hops = " + max.get() + ", average hops = " + (total.get() * 1.0 / count.get()));
-			MAX_HOPS = max.get();
-			HRDBMSWorker.logger.info("Max hops is " + MAX_HOPS);
-	}
-	
-	private static class HopThread extends Thread
-	{
-		private int start;
-		private int stop;
-		AtomicInteger min;
-		AtomicInteger max;
-		AtomicInteger count;
-		AtomicLong total;
-		
-		public HopThread(int start, int stop, AtomicInteger min, AtomicInteger max, AtomicInteger count, AtomicLong total)
+
+		// System.out.println("Calculating hops");
+		final AtomicInteger min = new AtomicInteger(Integer.MAX_VALUE);
+		final AtomicInteger max = new AtomicInteger(Integer.MIN_VALUE);
+		final AtomicInteger count = new AtomicInteger(0);
+		final AtomicLong total = new AtomicLong(0);
+		final ArrayList<HopThread> threads = new ArrayList<HopThread>();
+		threads.add(new HopThread(0, nodes / 3, min, max, count, total));
+		threads.add(new HopThread(nodes / 3, 2 * nodes / 3, min, max, count, total));
+		threads.add(new HopThread(2 * nodes / 3, nodes, min, max, count, total));
+
+		for (final HopThread thread : threads)
 		{
-			this.start = start;
-			this.stop = stop;
-			this.min = min;
-			this.max = max;
-			this.count = count;
-			this.total = total;
+			thread.start();
 		}
-		
-		public void run()
+
+		for (final HopThread thread : threads)
 		{
-			int i = start;
-			while (i < stop)
+			while (true)
 			{
-				int j = 0;
-				while (j < nodes)
+				try
 				{
-					if (i != j)
-					{
-						//compute hops from i to j
-						
-						int current = i;
-						int hops = 0;
-						ArrayList<Integer> route = new ArrayList<Integer>();
-						while (current != j)
-						{
-							HashSet<Integer> receive = links.get(current);
-							int temp = computeSendTo(j, receive);
-							route.add(temp);
-							hops++;
-							//used current -> temp
-							synchronized(util)
-							{
-								AtomicInteger ai = util.get(new Link(current, temp));
-								if (ai == null)
-								{
-									ai = new AtomicInteger(0);
-									util.put(new Link(current, temp), ai);
-								}
-							
-								ai.getAndIncrement();
-							}
-							current = temp;
-						}
-						
-						routes.putIfAbsent(new Link(i, j), route);
-						
-						//count hops and update util
-						//int hops = aStarSearch(i, j);
-						
-						synchronized(min)
-						{
-							if (hops < min.get())
-							{
-								min.set(hops);
-							}
-						}
-						
-						synchronized(max)
-						{
-							if (hops > max.get())
-							{
-								max.set(hops);
-							}
-						}
-						
-						count.getAndIncrement();
-						total.addAndGet(hops);
-					}
-					
-					j++;
+					thread.join();
+					break;
 				}
-				
-				i++;
-				
-				if (i % 100 == 0)
+				catch (final InterruptedException e)
 				{
-					System.out.println(i);
 				}
 			}
 		}
-	}
-	
-	private static int computeSendTo(int target, HashSet<Integer> list)
-	{
-		int minDifference = Integer.MAX_VALUE;
-		int retval = -1;
-		ArrayList<Integer> goldenOptions = new ArrayList<Integer>();
-		ArrayList<Integer> silverOptions = new ArrayList<Integer>();
-		
-		for (int option : list)
-		{
-			int distance = Math.abs(target - option);
-			if (distance > (nodes / 2))
-			{
-				distance = nodes - distance;
-			}
-			
-			if (distance < minDifference)
-			{
-				minDifference = distance;
-				retval = option;
-				
-				if (distance == 0)
-				{
-					return option;
-				}
-			}
-			
-			if (goodDistances.contains(distance))
-			{
-				goldenOptions.add(option);
-			}
-			
-			if (okDistances.contains(distance))
-			{
-				silverOptions.add(option);
-			}
-		}
-		
-		if (goldenOptions.size() > 0)
-		{
-			return goldenOptions.get(random.nextInt(goldenOptions.size()));
-		}
-		
-		if (silverOptions.size() > 0)
-		{
-			return silverOptions.get(random.nextInt(silverOptions.size()));
-		}
-		
-		return retval;
+
+		// System.out.println("Min hops = " + min.get() + ", max hops = " +
+		// max.get() + ", average hops = " + (total.get() * 1.0 / count.get()));
+		MAX_HOPS = max.get();
+		HRDBMSWorker.logger.info("Max hops is " + MAX_HOPS);
 	}
 
 	private static final class DeadlockThread extends ThreadPoolThread
@@ -701,11 +588,137 @@ public final class ResourceManager extends HRDBMSThread
 		}
 	}
 
+	private static class HopThread extends Thread
+	{
+		private final int start;
+		private final int stop;
+		AtomicInteger min;
+		AtomicInteger max;
+		AtomicInteger count;
+		AtomicLong total;
+
+		public HopThread(final int start, final int stop, final AtomicInteger min, final AtomicInteger max, final AtomicInteger count, final AtomicLong total)
+		{
+			this.start = start;
+			this.stop = stop;
+			this.min = min;
+			this.max = max;
+			this.count = count;
+			this.total = total;
+		}
+
+		@Override
+		public void run()
+		{
+			int i = start;
+			while (i < stop)
+			{
+				int j = 0;
+				while (j < nodes)
+				{
+					if (i != j)
+					{
+						// compute hops from i to j
+
+						int current = i;
+						int hops = 0;
+						final ArrayList<Integer> route = new ArrayList<Integer>();
+						while (current != j)
+						{
+							final HashSet<Integer> receive = links.get(current);
+							final int temp = computeSendTo(j, receive);
+							route.add(temp);
+							hops++;
+							// used current -> temp
+							synchronized (util)
+							{
+								AtomicInteger ai = util.get(new Link(current, temp));
+								if (ai == null)
+								{
+									ai = new AtomicInteger(0);
+									util.put(new Link(current, temp), ai);
+								}
+
+								ai.getAndIncrement();
+							}
+							current = temp;
+						}
+
+						routes.putIfAbsent(new Link(i, j), route);
+
+						// count hops and update util
+						// int hops = aStarSearch(i, j);
+
+						synchronized (min)
+						{
+							if (hops < min.get())
+							{
+								min.set(hops);
+							}
+						}
+
+						synchronized (max)
+						{
+							if (hops > max.get())
+							{
+								max.set(hops);
+							}
+						}
+
+						count.getAndIncrement();
+						total.addAndGet(hops);
+					}
+
+					j++;
+				}
+
+				i++;
+
+				// if (i % 100 == 0)
+				// {
+				// System.out.println(i);
+				// }
+			}
+		}
+	}
+
+	private static class Link
+	{
+		private final int a;
+		private final int b;
+
+		public Link(final int a, final int b)
+		{
+			this.a = a;
+			this.b = b;
+		}
+
+		@Override
+		public boolean equals(final Object r)
+		{
+			final Link rhs = (Link)r;
+			return a == rhs.a && b == rhs.b;
+		}
+
+		@Override
+		public int hashCode()
+		{
+			return (a << 15) + b;
+		}
+
+		@Override
+		public String toString()
+		{
+			return "(" + a + ", " + b + ")";
+		}
+	}
+
 	private static final class MonitorThread extends ThreadPoolThread
 	{
 		@Override
 		public void run()
 		{
+			HRDBMSWorker.logger.debug("Starting monitor thread.");
 			// long last = System.currentTimeMillis();
 			// HashMap<GarbageCollectorMXBean, Long> map = new
 			// HashMap<GarbageCollectorMXBean, Long>();
@@ -749,23 +762,30 @@ public final class ResourceManager extends HRDBMSThread
 				// }
 				// last = temp;
 				//
-				HRDBMSWorker.logger.debug(((Runtime.getRuntime().freeMemory()) * 100.0) / (maxMemory * 1.0) + "% free - skipped " + TableScanOperator.skippedPages.get() + " pages in " + TableScanOperator.pbpeTime + "ms");
-
-				// for (SubBufferManager sbm : BufferManager.managers)
-				// {
-				// HRDBMSWorker.logger.debug("Owner is " +
-				// sbm.lock.whoIsOwner());
-				// HRDBMSWorker.logger.debug("Owners is " +
-				// sbm.lock.getOwners());
-				// }
-				// HRDBMSWorker.logger.debug("GC time was " + (pct * 100.0) +
-				// "%");
-				if (i % 12 == 0)
+				try
 				{
-					displayQueryProgress();
-				}
+					HRDBMSWorker.logger.debug(((Runtime.getRuntime().freeMemory()) * 100.0) / (maxMemory * 1.0) + "% free - skipped " + TableScanOperator.skippedPages.get() + " pages. figureOutProblemsTime = " + TableScanOperator.figureOutProblemsTime + ", SMTSolveTime = " + TableScanOperator.SMTSolveTime + ", nonSMTSolveTime = " + TableScanOperator.nonSMTSolveTime + ", pbpeMaintenanceTime = " + TableScanOperator.pbpeMaintenanceTime + ", SMTSolverCalls = " + TableScanOperator.SMTSolverCalls);
 
-				i++;
+					// for (SubBufferManager sbm : BufferManager.managers)
+					// {
+					// HRDBMSWorker.logger.debug("Owner is " +
+					// sbm.lock.whoIsOwner());
+					// HRDBMSWorker.logger.debug("Owners is " +
+					// sbm.lock.getOwners());
+					// }
+					// HRDBMSWorker.logger.debug("GC time was " + (pct * 100.0) +
+					// "%");
+					if (i % 12 == 0)
+					{
+						displayQueryProgress();
+					}
+
+					i++;
+				}
+				catch(Throwable e)
+				{
+					HRDBMSWorker.logger.debug("", e);
+				}
 				try
 				{
 					Thread.sleep(SLEEP_TIME);
@@ -856,7 +876,7 @@ public final class ResourceManager extends HRDBMSThread
 			int lineNum;
 			long count = 0;
 
-			public CodePosition(String file, int lineNum, String method)
+			public CodePosition(final String file, final int lineNum, final String method)
 			{
 				this.file = file;
 				this.lineNum = lineNum;
@@ -864,7 +884,7 @@ public final class ResourceManager extends HRDBMSThread
 			}
 
 			@Override
-			public int compareTo(Object rhs)
+			public int compareTo(final Object rhs)
 			{
 				final CodePosition cp = (CodePosition)rhs;
 				if (count < cp.count)
@@ -881,7 +901,7 @@ public final class ResourceManager extends HRDBMSThread
 			}
 
 			@Override
-			public boolean equals(Object rhs)
+			public boolean equals(final Object rhs)
 			{
 				if (rhs == null)
 				{

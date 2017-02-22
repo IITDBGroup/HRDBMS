@@ -19,9 +19,9 @@ public class LogRec implements Comparable<LogRec>
 
 	protected final ByteBuffer buffer;
 
-	public LogRec(FileChannel fc) throws IOException
+	public LogRec(final FileChannel fc) throws IOException
 	{
-		long orig = fc.position();
+		final long orig = fc.position();
 		fc.position(orig - 4); // leading size
 		final ByteBuffer size = ByteBuffer.allocate(4);
 		size.position(0);
@@ -43,7 +43,7 @@ public class LogRec implements Comparable<LogRec>
 		timestamp = buffer.getLong();
 	}
 
-	public LogRec(FileChannel fc, boolean partial) throws IOException
+	public LogRec(final FileChannel fc, final boolean partial) throws IOException
 	{
 		// fc.position(fc.position() - 4); // leading size
 		// final ByteBuffer size = ByteBuffer.allocate(4);
@@ -60,7 +60,7 @@ public class LogRec implements Comparable<LogRec>
 		txnum = buffer.getLong();
 	}
 
-	protected LogRec(int type, long txnum, ByteBuffer buffer)
+	protected LogRec(final int type, final long txnum, final ByteBuffer buffer)
 	{
 		this.type = type;
 		this.txnum = txnum;
@@ -77,7 +77,7 @@ public class LogRec implements Comparable<LogRec>
 	}
 
 	@Override
-	public int compareTo(LogRec arg0)
+	public int compareTo(final LogRec arg0)
 	{
 		if (lsn < arg0.lsn)
 		{
@@ -94,7 +94,7 @@ public class LogRec implements Comparable<LogRec>
 	}
 
 	@Override
-	public boolean equals(Object rhs)
+	public boolean equals(final Object rhs)
 	{
 		if (rhs == null)
 		{
@@ -160,12 +160,12 @@ public class LogRec implements Comparable<LogRec>
 		if (type == INSERT)
 		{
 			buffer.position(28);
-			char[] bytes2 = new char[buffer.getInt()];
+			final char[] bytes2 = new char[buffer.getInt()];
 			buffer.asCharBuffer().get(bytes2);
-			Block block = new Block(new String(bytes2));
+			final Block block = new Block(new String(bytes2));
 			buffer.position(32 + (bytes2.length << 1));
 			final int imageSize = buffer.getInt();
-			byte[] bytes = new byte[imageSize];
+			final byte[] bytes = new byte[imageSize];
 			buffer.get(bytes);
 			final byte[] after = new byte[imageSize];
 			buffer.get(after);
@@ -179,7 +179,7 @@ public class LogRec implements Comparable<LogRec>
 		if (type == EXTEND)
 		{
 			buffer.position(28);
-			byte[] bytes = new byte[buffer.getInt()];
+			final byte[] bytes = new byte[buffer.getInt()];
 			buffer.get(bytes);
 			Block block;
 			try
@@ -192,7 +192,7 @@ public class LogRec implements Comparable<LogRec>
 				return null;
 			}
 
-			ExtendLogRec retval = new ExtendLogRec(txnum, block);
+			final ExtendLogRec retval = new ExtendLogRec(txnum, block);
 			retval.setLSN(lsn);
 			retval.setTimeStamp(timestamp);
 			return retval;
@@ -201,7 +201,7 @@ public class LogRec implements Comparable<LogRec>
 		if (type == TRUNCATE)
 		{
 			buffer.position(28);
-			byte[] bytes = new byte[buffer.getInt()];
+			final byte[] bytes = new byte[buffer.getInt()];
 			buffer.get(bytes);
 			Block block;
 			try
@@ -214,7 +214,7 @@ public class LogRec implements Comparable<LogRec>
 				return null;
 			}
 
-			TruncateLogRec retval = new TruncateLogRec(txnum, block);
+			final TruncateLogRec retval = new TruncateLogRec(txnum, block);
 			retval.setLSN(lsn);
 			retval.setTimeStamp(timestamp);
 			return retval;
@@ -224,7 +224,7 @@ public class LogRec implements Comparable<LogRec>
 		{
 			buffer.position(28);
 			int size = buffer.getInt();
-			ArrayList<Integer> retval = new ArrayList<Integer>(size);
+			final ArrayList<Integer> retval = new ArrayList<Integer>(size);
 			while (size > 0)
 			{
 				retval.add(buffer.getInt());
@@ -238,7 +238,7 @@ public class LogRec implements Comparable<LogRec>
 		{
 			buffer.position(28);
 			int size = buffer.getInt();
-			ArrayList<Integer> retval = new ArrayList<Integer>(size);
+			final ArrayList<Integer> retval = new ArrayList<Integer>(size);
 			while (size > 0)
 			{
 				retval.add(buffer.getInt());
@@ -252,7 +252,7 @@ public class LogRec implements Comparable<LogRec>
 		{
 			buffer.position(28);
 			int size = buffer.getInt();
-			ArrayList<Integer> retval = new ArrayList<Integer>(size);
+			final ArrayList<Integer> retval = new ArrayList<Integer>(size);
 			while (size > 0)
 			{
 				retval.add(buffer.getInt());
@@ -265,14 +265,14 @@ public class LogRec implements Comparable<LogRec>
 		if (type == READY)
 		{
 			buffer.position(28);
-			int length = buffer.getInt();
-			byte[] data = new byte[length];
+			final int length = buffer.getInt();
+			final byte[] data = new byte[length];
 			buffer.get(data);
 			try
 			{
 				return new ReadyLogRec(txnum, new String(data, StandardCharsets.UTF_8));
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 			}
 		}
@@ -345,14 +345,14 @@ public class LogRec implements Comparable<LogRec>
 	{
 	}
 
-	public void setLSN(long lsn)
+	public void setLSN(final long lsn)
 	{
 		this.lsn = lsn;
 		buffer.position(12);
 		buffer.putLong(lsn);
 	}
 
-	public void setTimeStamp(long time)
+	public void setTimeStamp(final long time)
 	{
 		this.timestamp = time;
 		buffer.putLong(20, time);

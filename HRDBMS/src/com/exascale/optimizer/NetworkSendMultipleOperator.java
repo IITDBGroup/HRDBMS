@@ -28,7 +28,7 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 			f.setAccessible(true);
 			unsafe = (sun.misc.Unsafe)f.get(null);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			unsafe = null;
 		}
@@ -42,16 +42,16 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 
 	private transient String errorText;
 
-	public NetworkSendMultipleOperator(int id, MetaData meta)
+	public NetworkSendMultipleOperator(final int id, final MetaData meta)
 	{
 		this.id = id;
 		this.meta = meta;
 		received = new AtomicLong(0);
 	}
 
-	public static NetworkSendMultipleOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static NetworkSendMultipleOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		NetworkSendMultipleOperator value = (NetworkSendMultipleOperator)unsafe.allocateInstance(NetworkSendMultipleOperator.class);
+		final NetworkSendMultipleOperator value = (NetworkSendMultipleOperator)unsafe.allocateInstance(NetworkSendMultipleOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.meta = new MetaData();
 		value.child = OperatorUtils.deserializeOperator(in, prev);
@@ -76,7 +76,7 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 	}
 
 	@Override
-	public void addConnection(int fromNode, Socket sock)
+	public void addConnection(final int fromNode, final Socket sock)
 	{
 		connections.put(fromNode, sock);
 		try
@@ -160,7 +160,7 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 	@Override
 	public Operator parent()
 	{
-		Exception e = new Exception();
+		final Exception e = new Exception();
 		HRDBMSWorker.logger.error("NetworkSendMultipleOperator does not support parent()", e);
 		return null;
 	}
@@ -177,21 +177,21 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 	}
 
 	@Override
-	public void registerParent(Operator op)
+	public void registerParent(final Operator op)
 	{
 		parents.add(op);
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 		parents.remove(op);
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -219,9 +219,9 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev, boolean flag) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev, final boolean flag) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -249,7 +249,7 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 		OperatorUtils.writeBool(error, out);
 	}
 
-	public void setID(int id)
+	public void setID(final int id)
 	{
 		this.id = id;
 	}
@@ -270,8 +270,8 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 	@Override
 	public synchronized void start()
 	{
-		ArrayList<CompressedOutputStream> compOuts = new ArrayList<CompressedOutputStream>(outs.size());
-		for (OutputStream out : outs.values())
+		final ArrayList<CompressedOutputStream> compOuts = new ArrayList<CompressedOutputStream>(outs.size());
+		for (final OutputStream out : outs.values())
 		{
 			compOuts.add(new CompressedOutputStream(out));
 		}
@@ -328,12 +328,12 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 			{
 				child.close();
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 			}
 			// Thread.sleep(60 * 1000);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.debug("", e);
 			byte[] obj = null;
@@ -341,7 +341,7 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 			{
 				obj = toBytes(e);
 			}
-			catch (Exception f)
+			catch (final Exception f)
 			{
 				for (final OutputStream out : compOuts)
 				{
@@ -349,7 +349,7 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 					{
 						out.close();
 					}
-					catch (Exception g)
+					catch (final Exception g)
 					{
 					}
 				}
@@ -363,7 +363,7 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 					child.nextAll(this);
 					child.close();
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 					try
 					{
@@ -371,7 +371,7 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 						child.nextAll(this);
 						child.close();
 					}
-					catch (Exception g)
+					catch (final Exception g)
 					{
 					}
 				}

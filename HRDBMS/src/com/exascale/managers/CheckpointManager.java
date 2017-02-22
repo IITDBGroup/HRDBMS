@@ -12,7 +12,7 @@ public class CheckpointManager extends HRDBMSThread
 {
 	private final long offset;
 
-	public CheckpointManager(long offset)
+	public CheckpointManager(final long offset)
 	{
 		HRDBMSWorker.logger.info("Starting initialization of the Checkpoint Manager.");
 		this.setWait(true);
@@ -29,13 +29,13 @@ public class CheckpointManager extends HRDBMSThread
 		// for all blocks in bufferpool, if not pinned - flush, otherwise copy
 		// and rollback and flush
 
-		for (SubBufferManager sbm : BufferManager.managers)
+		for (final SubBufferManager sbm : BufferManager.managers)
 		{
 			sbm.lock.lock();
 		}
 
-		//Transaction.txListLock.lock();
-		synchronized(Transaction.txListLock)
+		// Transaction.txListLock.lock();
+		synchronized (Transaction.txListLock)
 		{
 			try
 			{
@@ -48,28 +48,28 @@ public class CheckpointManager extends HRDBMSThread
 						filename += "/";
 					}
 					filename += "xa.log";
-					RandomAccessFile f = LogManager.archive(Transaction.txList.keySet(), filename, true);
-					FileChannel fc = LogManager.getFile(filename);
-					FileChannel fc2 = f.getChannel();
+					final RandomAccessFile f = LogManager.archive(Transaction.txList.keySet(), filename, true);
+					final FileChannel fc = LogManager.getFile(filename);
+					final FileChannel fc2 = f.getChannel();
 					fc.truncate(0);
 					fc2.position(0);
 					fc.transferFrom(fc2, 0, fc2.size());
 					fc2.close();
 					f.close();
-					LogRec rec = new NQCheckLogRec(new HashSet<Long>(Transaction.txList.keySet()));
+					final LogRec rec = new NQCheckLogRec(new HashSet<Long>(Transaction.txList.keySet()));
 					LogManager.write(rec, filename);
 					LogManager.flush(rec.lsn(), filename);
 				}
-				RandomAccessFile f = LogManager.archive(Transaction.txList.keySet());
-				FileChannel fc2 = f.getChannel();
+				final RandomAccessFile f = LogManager.archive(Transaction.txList.keySet());
+				final FileChannel fc2 = f.getChannel();
 				BufferManager.flushAll(fc2);
-				FileChannel fc = LogManager.getFile(LogManager.filename);
+				final FileChannel fc = LogManager.getFile(LogManager.filename);
 				fc.truncate(0);
 				fc2.position(0);
 				fc.transferFrom(fc2, 0, fc2.size());
 				fc2.close();
 				f.close();
-				LogRec rec = new NQCheckLogRec(new HashSet<Long>(Transaction.txList.keySet()));
+				final LogRec rec = new NQCheckLogRec(new HashSet<Long>(Transaction.txList.keySet()));
 				LogManager.write(rec);
 				LogManager.flush(rec.lsn());
 				HRDBMSWorker.logger.debug("Checkpoint is complete");
@@ -81,8 +81,8 @@ public class CheckpointManager extends HRDBMSThread
 				return;
 			}
 		}
-		//Transaction.txListLock.unlock();
-		for (SubBufferManager sbm : BufferManager.managers)
+		// Transaction.txListLock.unlock();
+		for (final SubBufferManager sbm : BufferManager.managers)
 		{
 			sbm.lock.unlock();
 		}
@@ -94,7 +94,7 @@ public class CheckpointManager extends HRDBMSThread
 		final long sleep = Long.parseLong(HRDBMSWorker.getHParms().getProperty("checkpoint_freq_sec")) * 1000;
 		HRDBMSWorker.logger.info("Checkpoint Manager initialization complete.");
 		long i = 0;
-		long start = System.currentTimeMillis() - offset;
+		final long start = System.currentTimeMillis() - offset;
 
 		while (true)
 		{

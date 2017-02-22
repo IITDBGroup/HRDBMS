@@ -5,7 +5,7 @@ public class FreeSpace
 	private int startOffset;
 	private int endOffset;
 
-	public FreeSpace(int start, int end)
+	public FreeSpace(final int start, final int end)
 	{
 		startOffset = start;
 		endOffset = end;
@@ -21,12 +21,12 @@ public class FreeSpace
 		return startOffset;
 	}
 
-	public void setEnd(int end)
+	public void setEnd(final int end)
 	{
 		endOffset = end;
 	}
 
-	public void setStart(int start)
+	public void setStart(final int start)
 	{
 		startOffset = start;
 	}

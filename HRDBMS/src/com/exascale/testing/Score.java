@@ -5,9 +5,9 @@ import java.util.HashSet;
 
 public class Score
 {
-	public static void main(String[] args)
+	public static void main(final String[] args)
 	{
-		ArrayList<Integer> columns = new ArrayList<Integer>();
+		final ArrayList<Integer> columns = new ArrayList<Integer>();
 		columns.add(0);
 		columns.add(1);
 		columns.add(2);
@@ -300,9 +300,9 @@ public class Score
 		System.out.println("New score for LINEITEM(7) was " + score);
 	}
 
-	private static int score(ArrayList<Integer> order, ArrayList<ArrayList<Integer>> accesses)
+	private static int score(final ArrayList<Integer> order, final ArrayList<ArrayList<Integer>> accesses)
 	{
-		ArrayList<Integer> disk = new ArrayList<Integer>();
+		final ArrayList<Integer> disk = new ArrayList<Integer>();
 		disk.add(-1);
 		disk.addAll(order);
 		int copies = 1;
@@ -322,10 +322,10 @@ public class Score
 		}
 
 		int score = 0;
-		for (ArrayList<Integer> access : accesses)
+		for (final ArrayList<Integer> access : accesses)
 		{
-			HashSet<Integer> sbs = new HashSet<Integer>();
-			for (int col : access)
+			final HashSet<Integer> sbs = new HashSet<Integer>();
+			for (final int col : access)
 			{
 				int found = 0;
 				int i = 1;
@@ -335,12 +335,12 @@ public class Score
 					{
 						if (disk.get(i) == col)
 						{
-							int sb = i / 3;
+							final int sb = i / 3;
 							sbs.add(sb);
 							found++;
 						}
 					}
-					catch (Exception e)
+					catch (final Exception e)
 					{
 						System.out.println("Looking for " + col + " in " + disk);
 						System.out.println("Found " + found + " instances");

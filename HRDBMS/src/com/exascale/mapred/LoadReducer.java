@@ -15,17 +15,17 @@ public class LoadReducer extends Reducer<MyLongWritable, ALOWritable, MyLongWrit
 			// out = new PrintWriter(new FileWriter("hrdbms_reducer.log",
 			// true));
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 		}
 	}
 
 	@Override
-	public void reduce(MyLongWritable key, Iterable<ALOWritable> values, Context context) throws InterruptedException, IOException
+	public void reduce(final MyLongWritable key, final Iterable<ALOWritable> values, final Context context) throws InterruptedException, IOException
 	{
 		// out.println("Reducer started to process key = " + key.get());
 		// out.flush();
-		for (ALOWritable value : values)
+		for (final ALOWritable value : values)
 		{
 			context.write(key, value);
 		}

@@ -26,7 +26,7 @@ public final class CreateIndexOperator implements Operator, Serializable
 	private ArrayList<IndexDef> defs;
 	private final boolean unique;
 
-	public CreateIndexOperator(String schema, String table, String index, ArrayList<IndexDef> defs, boolean unique, MetaData meta)
+	public CreateIndexOperator(final String schema, final String table, final String index, final ArrayList<IndexDef> defs, final boolean unique, final MetaData meta)
 	{
 		this.meta = meta;
 		this.schema = schema;
@@ -37,7 +37,7 @@ public final class CreateIndexOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void add(Operator op) throws Exception
+	public void add(final Operator op) throws Exception
 	{
 		throw new Exception("CreateIndexOperator does not support children");
 	}
@@ -121,12 +121,12 @@ public final class CreateIndexOperator implements Operator, Serializable
 
 	@Override
 	// @?Parallel
-	public Object next(Operator op) throws Exception
+	public Object next(final Operator op) throws Exception
 	{
 		if (!done)
 		{
 			done = true;
-			meta.createIndex(schema, table, index, defs, unique, tx);
+			MetaData.createIndex(schema, table, index, defs, unique, tx);
 			return 1;
 		}
 		else
@@ -136,7 +136,7 @@ public final class CreateIndexOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void nextAll(Operator op) throws Exception
+	public void nextAll(final Operator op) throws Exception
 	{
 	}
 
@@ -159,18 +159,18 @@ public final class CreateIndexOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void registerParent(Operator op) throws Exception
+	public void registerParent(final Operator op) throws Exception
 	{
 		throw new Exception("CreateIndexOperator does not support parents.");
 	}
 
 	@Override
-	public void removeChild(Operator op)
+	public void removeChild(final Operator op)
 	{
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 	}
 
@@ -181,28 +181,28 @@ public final class CreateIndexOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		throw new Exception("Trying to serialize a create index operator");
 	}
 
 	@Override
-	public void setChildPos(int pos)
+	public void setChildPos(final int pos)
 	{
 	}
 
 	@Override
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 		this.node = node;
 	}
 
 	@Override
-	public void setPlan(Plan plan)
+	public void setPlan(final Plan plan)
 	{
 	}
 
-	public void setTransaction(Transaction tx)
+	public void setTransaction(final Transaction tx)
 	{
 		this.tx = tx;
 	}

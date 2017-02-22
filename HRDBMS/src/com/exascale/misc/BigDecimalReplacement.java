@@ -11,13 +11,13 @@ public class BigDecimalReplacement
 	private volatile BigDecimalReplacement queue = null;
 	private final ReentrantLock lock = new ReentrantLock();
 
-	public BigDecimalReplacement(double val)
+	public BigDecimalReplacement(final double val)
 	{
-		long bits = Double.doubleToLongBits(val);
+		final long bits = Double.doubleToLongBits(val);
 		data = new long[1];
 		data[0] = (bits & (0xFFFFFFFFFFFFFL)) + 0x10000000000000L;
 		pos = (bits & 0x8000000000000000L) == 0;
-		short exp = (short)(((bits & 0x7FF0000000000000L) >> 52) - 1023);
+		final short exp = (short)(((bits & 0x7FF0000000000000L) >> 52) - 1023);
 		decPos = (short)(52 - exp);
 		if (decPos < 0)
 		{
@@ -29,14 +29,51 @@ public class BigDecimalReplacement
 		}
 	}
 
-	private BigDecimalReplacement(long[] data, boolean pos, short decPos)
+	private BigDecimalReplacement(final long[] data, final boolean pos, final short decPos)
 	{
 		this.data = data;
 		this.pos = pos;
 		this.decPos = decPos;
 	}
 
-	public void add(BigDecimalReplacement val)
+	private static BigDecimalReplacement negate(final BigDecimalReplacement val, final BigDecimalReplacement toMatch)
+	{
+		final long[] valData = new long[toMatch.data.length];
+		System.arraycopy(val.data, 0, valData, 0, val.data.length);
+
+		int i = 0;
+		while (i < valData.length - 1)
+		{
+			valData[i] = ((~valData[i]) & 0x7FFFFFFFFFFFFFFFL);
+			i++;
+		}
+
+		valData[i] = (~valData[i]);
+		i = 0;
+		while (i < valData.length - 1)
+		{
+			valData[i] += 1;
+			if ((valData[i] & 0x8000000000000000L) == 0)
+			{
+				break;
+			}
+			else
+			{
+				valData[i] = (valData[i] & 0x7FFFFFFFFFFFFFFFL);
+			}
+
+			i++;
+		}
+
+		if (i == valData.length - 1)
+		{
+			valData[i] += 1;
+		}
+
+		return new BigDecimalReplacement(valData, true, val.decPos);
+	}
+
+	public void add(final BigDecimalReplacement val)
 	{
 		if (!lock.tryLock())
 		{
@@ -65,14 +102,14 @@ public class BigDecimalReplacement
 			resDecPos = this.decPos;
 		}
 
-		short max = (short)Math.max(data.length, rhs.data.length);
-		short min = (short)Math.min(data.length, rhs.data.length);
-		boolean lhsMin = (data.length == min);
+		final short max = (short)Math.max(data.length, rhs.data.length);
+		final short min = (short)Math.min(data.length, rhs.data.length);
+		final boolean lhsMin = (data.length == min);
 		int i = 0;
 		short carry = 0;
 		Boolean resultPos = null;
-		boolean lhsPos = pos;
-		boolean rhsPos = rhs.pos;
+		final boolean lhsPos = pos;
+		final boolean rhsPos = rhs.pos;
 		if (lhsPos && rhsPos)
 		{
 			resultPos = true;
@@ -213,7 +250,7 @@ public class BigDecimalReplacement
 				{
 					// bits to get from this digit
 					long toGet = (data[i] & high);
-					int bitCount = 64 - Long.numberOfLeadingZeros(high);
+					final int bitCount = 64 - Long.numberOfLeadingZeros(high);
 
 					if (bitCount >= 52)
 					{
@@ -225,12 +262,12 @@ public class BigDecimalReplacement
 						fraction = (toGet << (52 - bitCount));
 						if (i > 0)
 						{
-							int remainder = 52 - bitCount;
+							final int remainder = 52 - bitCount;
 							// get this many top bits from data[i-1] and shift
 							// into low order positions of fraction
 							long mask = 1;
 							mask = (mask << remainder) - 1;
-							int shift = 63 - remainder;
+							final int shift = 63 - remainder;
 							toGet = (data[i - 1] & (mask << shift));
 							fraction += (toGet >> shift);
 						}
@@ -257,7 +294,7 @@ public class BigDecimalReplacement
 		return Double.longBitsToDouble(bits);
 	}
 
-	private void delayedAdd(BigDecimalReplacement val)
+	private void delayedAdd(final BigDecimalReplacement val)
 	{
 		if (!queued)
 		{
@@ -277,24 +314,24 @@ public class BigDecimalReplacement
 
 	private void extendWithCarry()
 	{
-		long[] newData = new long[data.length + 1];
+		final long[] newData = new long[data.length + 1];
 		System.arraycopy(data, 0, newData, 0, data.length);
 		newData[data.length] = 1;
 		this.data = newData;
 	}
 
-	private void lowOrderZeroes(int distance)
+	private void lowOrderZeroes(final int distance)
 	{
-		int toAdd = distance / 63;
-		long[] result = new long[data.length + toAdd];
+		final int toAdd = distance / 63;
+		final long[] result = new long[data.length + toAdd];
 		System.arraycopy(data, 0, result, toAdd, data.length);
 		data = result;
 		decPos = (short)(decPos + toAdd * 63);
 	}
 
-	private void moveDec(BigDecimalReplacement toMatch)
+	private void moveDec(final BigDecimalReplacement toMatch)
 	{
-		int canMove = Long.numberOfLeadingZeros(data[data.length - 1]) - 1;
+		final int canMove = Long.numberOfLeadingZeros(data[data.length - 1]) - 1;
 		int distance = toMatch.decPos - decPos;
 		// long[] result = null;
 		if (distance <= canMove)
@@ -304,7 +341,7 @@ public class BigDecimalReplacement
 			long mask = 1;
 			mask = (mask << distance) - 1;
 			mask = (mask << (63 - distance));
-			int shift = 63 - distance;
+			final int shift = 63 - distance;
 			while (i >= 0)
 			{
 				data[i] = (data[i] << distance);
@@ -326,7 +363,7 @@ public class BigDecimalReplacement
 			distance = toMatch.decPos - decPos;
 		}
 
-		long[] result = new long[data.length + 1];
+		final long[] result = new long[data.length + 1];
 
 		int i = 0;
 		long mask = 1;
@@ -335,7 +372,7 @@ public class BigDecimalReplacement
 		while (i < data.length)
 		{
 			// get everything that will shift out
-			long temp = (data[i] & mask);
+			final long temp = (data[i] & mask);
 			result[i] += ((data[i] << distance) & 0x7FFFFFFFFFFFFFFFL);
 			result[i + 1] = (temp >> (63 - distance));
 			i++;
@@ -377,7 +414,7 @@ public class BigDecimalReplacement
 		}
 	}
 
-	private void negate(BigDecimalReplacement toMatch)
+	private void negate(final BigDecimalReplacement toMatch)
 	{
 		long[] valData = null;
 		if (toMatch.data.length != data.length)
@@ -422,43 +459,6 @@ public class BigDecimalReplacement
 		data = valData;
 	}
 
-	private BigDecimalReplacement negate(BigDecimalReplacement val, BigDecimalReplacement toMatch)
-	{
-		long[] valData = new long[toMatch.data.length];
-		System.arraycopy(val.data, 0, valData, 0, val.data.length);
-
-		int i = 0;
-		while (i < valData.length - 1)
-		{
-			valData[i] = ((~valData[i]) & 0x7FFFFFFFFFFFFFFFL);
-			i++;
-		}
-
-		valData[i] = (~valData[i]);
-		i = 0;
-		while (i < valData.length - 1)
-		{
-			valData[i] += 1;
-			if ((valData[i] & 0x8000000000000000L) == 0)
-			{
-				break;
-			}
-			else
-			{
-				valData[i] = (valData[i] & 0x7FFFFFFFFFFFFFFFL);
-			}
-
-			i++;
-		}
-
-		if (i == valData.length - 1)
-		{
-			valData[i] += 1;
-		}
-
-		return new BigDecimalReplacement(valData, true, val.decPos);
-	}
-
 	private void overflow()
 	{
 		int needed = decPos / 63;
@@ -467,7 +467,7 @@ public class BigDecimalReplacement
 			needed++;
 		}
 
-		long[] temp = new long[needed];
+		final long[] temp = new long[needed];
 		System.arraycopy(data, 0, temp, 0, data.length);
 		data = temp;
 	}
@@ -479,7 +479,7 @@ public class BigDecimalReplacement
 			queue.resolveQueue();
 		}
 
-		BigDecimalReplacement val = queue;
+		final BigDecimalReplacement val = queue;
 		BigDecimalReplacement rhs = null;
 		short resDecPos;
 		if (this.decPos < val.decPos)
@@ -501,14 +501,14 @@ public class BigDecimalReplacement
 			resDecPos = this.decPos;
 		}
 
-		short max = (short)Math.max(data.length, rhs.data.length);
-		short min = (short)Math.min(data.length, rhs.data.length);
-		boolean lhsMin = (data.length == min);
+		final short max = (short)Math.max(data.length, rhs.data.length);
+		final short min = (short)Math.min(data.length, rhs.data.length);
+		final boolean lhsMin = (data.length == min);
 		int i = 0;
 		short carry = 0;
 		Boolean resultPos = null;
-		boolean lhsPos = pos;
-		boolean rhsPos = rhs.pos;
+		final boolean lhsPos = pos;
+		final boolean rhsPos = rhs.pos;
 		if (lhsPos && rhsPos)
 		{
 			resultPos = true;
@@ -650,7 +650,7 @@ public class BigDecimalReplacement
 		{
 			toAdd++;
 		}
-		long[] temp = new long[data.length + toAdd];
+		final long[] temp = new long[data.length + toAdd];
 		System.arraycopy(data, 0, temp, toAdd, data.length);
 		data = temp;
 		decPos += (63 * toAdd);

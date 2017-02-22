@@ -40,7 +40,7 @@ public class PlanCacheManager
 		{
 			// add catalog plans
 			// getHostLookup
-			Transaction tx = new Transaction(Transaction.ISOLATION_RR);
+			final Transaction tx = new Transaction(Transaction.ISOLATION_RR);
 			MetaData meta = new MetaData();
 			ArrayList<String> keys = new ArrayList<String>();
 			ArrayList<String> types = new ArrayList<String>();
@@ -1631,7 +1631,7 @@ public class PlanCacheManager
 			reorder.add(hash);
 			orders = new ArrayList<Boolean>();
 			orders.add(true);
-			ArrayList<String> sortOrder = new ArrayList<String>();
+			final ArrayList<String> sortOrder = new ArrayList<String>();
 			sortOrder.add("B.INDEXNAME");
 			sort = new SortOperator(sortOrder, orders, meta);
 			sort.add(reorder);
@@ -1645,14 +1645,14 @@ public class PlanCacheManager
 			addPlan = false;
 			// HRDBMSWorker.logger.debug(planCache.toString());
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.fatal("Exception during catalog plan creation", e);
 			System.exit(1);
 		}
 	}
 
-	public static void addPlan(String sql, Plan p)
+	public static void addPlan(final String sql, final Plan p)
 	{
 		if (addPlan)
 		{
@@ -1661,7 +1661,7 @@ public class PlanCacheManager
 			{
 				planCache.put(new SQL(sql), p);
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				// lock.readLock().unlock();
 				throw e;
@@ -1670,7 +1670,7 @@ public class PlanCacheManager
 		}
 	}
 
-	public static Plan checkPlanCache(String sql)
+	public static Plan checkPlanCache(final String sql)
 	{
 		// lock.readLock().lock();
 		try
@@ -1685,7 +1685,7 @@ public class PlanCacheManager
 			// lock.readLock().unlock();
 			return new Plan(plan);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			// lock.readLock().unlock();
 			throw e;
@@ -1968,9 +1968,9 @@ public class PlanCacheManager
 	public static void invalidate()
 	{
 		// lock.writeLock().lock();
-		for (Map.Entry entry : planCache.entrySet())
+		for (final Map.Entry entry : planCache.entrySet())
 		{
-			Plan p = (Plan)entry.getValue();
+			final Plan p = (Plan)entry.getValue();
 			if (!p.isReserved())
 			{
 				planCache.remove(entry.getKey());
@@ -2022,12 +2022,12 @@ public class PlanCacheManager
 		private int indexID;
 		private int colID;
 
-		public CheckIndexForColPlan(Plan p)
+		public CheckIndexForColPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public Object execute(Transaction tx) throws Exception
+		public Object execute(final Transaction tx) throws Exception
 		{
 			if (tableID >= 0 && tableID <= 12)
 			{
@@ -2146,9 +2146,9 @@ public class PlanCacheManager
 				return new DataEndMarker();
 			}
 
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -2163,7 +2163,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -2185,7 +2185,7 @@ public class PlanCacheManager
 			return obj;
 		}
 
-		public CheckIndexForColPlan setParms(int tableID, int indexID, int colID) throws Exception
+		public CheckIndexForColPlan setParms(final int tableID, final int indexID, final int colID) throws Exception
 		{
 			this.tableID = tableID;
 			this.indexID = indexID;
@@ -2200,8 +2200,8 @@ public class PlanCacheManager
 			{
 				op = op.children().get(0);
 			}
-			IndexOperator iOp = (IndexOperator)op;
-			Index index = iOp.getIndex();
+			final IndexOperator iOp = (IndexOperator)op;
+			final Index index = iOp.getIndex();
 			index.setCondition(new Filter("INDEXCOLS.TABLEID", "E", Integer.toString(tableID)));
 			index.addSecondaryFilter(new Filter("INDEXCOLS.INDEXID", "E", Integer.toString(indexID)));
 			index.addSecondaryFilter(new Filter("INDEXCOLS.COLID", "E", Integer.toString(colID)));
@@ -2213,16 +2213,16 @@ public class PlanCacheManager
 	{
 		private final Plan p;
 
-		public ColCardPlan(Plan p)
+		public ColCardPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public long execute(Transaction tx) throws Exception
+		public long execute(final Transaction tx) throws Exception
 		{
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_UR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -2237,7 +2237,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -2261,7 +2261,7 @@ public class PlanCacheManager
 				throw (Exception)obj;
 			}
 
-			Long retval = (Long)((ArrayList<Object>)obj).get(0);
+			final Long retval = (Long)((ArrayList<Object>)obj).get(0);
 
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
@@ -2270,7 +2270,7 @@ public class PlanCacheManager
 			return retval;
 		}
 
-		public ColCardPlan setParms(String schema, String table, String col) throws Exception
+		public ColCardPlan setParms(final String schema, final String table, String col) throws Exception
 		{
 			if (col.contains("."))
 			{
@@ -2282,8 +2282,8 @@ public class PlanCacheManager
 			{
 				op = op.children().get(0);
 			}
-			IndexOperator iOp = (IndexOperator)op;
-			Index index = iOp.getIndex();
+			final IndexOperator iOp = (IndexOperator)op;
+			final Index index = iOp.getIndex();
 			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
 			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
 			while (!(op instanceof SelectOperator))
@@ -2297,7 +2297,7 @@ public class PlanCacheManager
 					op = op.parent();
 				}
 			}
-			SelectOperator select = (SelectOperator)op;
+			final SelectOperator select = (SelectOperator)op;
 			select.getFilter().remove(0);
 			select.getFilter().add(new Filter("B.COLNAME", "E", "'" + col + "'"));
 			return this;
@@ -2310,14 +2310,14 @@ public class PlanCacheManager
 		private String schema;
 		private String table;
 
-		public Cols2PosPlan(Plan p)
+		public Cols2PosPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(Transaction tx) throws Exception
+		public ArrayList<Object> execute(final Transaction tx) throws Exception
 		{
-			ArrayList<Object> retval = new ArrayList<Object>();
+			final ArrayList<Object> retval = new ArrayList<Object>();
 			if (schema.equals("SYS"))
 			{
 				if (table.equals("TABLES"))
@@ -2579,9 +2579,9 @@ public class PlanCacheManager
 				return retval;
 			}
 
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -2596,7 +2596,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -2622,7 +2622,7 @@ public class PlanCacheManager
 						obj = worker.out.take();
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}
@@ -2636,7 +2636,7 @@ public class PlanCacheManager
 			return retval;
 		}
 
-		public Cols2PosPlan setParms(String schema, String table) throws Exception
+		public Cols2PosPlan setParms(final String schema, final String table) throws Exception
 		{
 			this.table = table;
 			this.schema = schema;
@@ -2650,8 +2650,8 @@ public class PlanCacheManager
 			{
 				op = op.children().get(0);
 			}
-			IndexOperator iOp = (IndexOperator)op;
-			Index index = iOp.getIndex();
+			final IndexOperator iOp = (IndexOperator)op;
+			final Index index = iOp.getIndex();
 			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
 			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
 			return this;
@@ -2664,14 +2664,14 @@ public class PlanCacheManager
 		private String schema;
 		private String table;
 
-		public Cols2TypesPlan(Plan p)
+		public Cols2TypesPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(Transaction tx) throws Exception
+		public ArrayList<Object> execute(final Transaction tx) throws Exception
 		{
-			ArrayList<Object> retval = new ArrayList<Object>();
+			final ArrayList<Object> retval = new ArrayList<Object>();
 			if (schema.equals("SYS"))
 			{
 				if (table.equals("TABLES"))
@@ -2933,9 +2933,9 @@ public class PlanCacheManager
 				return retval;
 			}
 
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -2950,7 +2950,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -2976,7 +2976,7 @@ public class PlanCacheManager
 						obj = worker.out.take();
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}
@@ -2990,7 +2990,7 @@ public class PlanCacheManager
 			return retval;
 		}
 
-		public Cols2TypesPlan setParms(String schema, String table) throws Exception
+		public Cols2TypesPlan setParms(final String schema, final String table) throws Exception
 		{
 			this.table = table;
 			this.schema = schema;
@@ -3004,8 +3004,8 @@ public class PlanCacheManager
 			{
 				op = op.children().get(0);
 			}
-			IndexOperator iOp = (IndexOperator)op;
-			Index index = iOp.getIndex();
+			final IndexOperator iOp = (IndexOperator)op;
+			final Index index = iOp.getIndex();
 			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
 			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
 			return this;
@@ -3017,20 +3017,20 @@ public class PlanCacheManager
 		private final Plan p;
 		private String schema;
 
-		public ColTypePlan(Plan p)
+		public ColTypePlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public String execute(Transaction tx) throws Exception
+		public String execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
 				throw new Exception("getColType() should never be called on catalog tables");
 			}
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -3045,7 +3045,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -3070,7 +3070,7 @@ public class PlanCacheManager
 				throw (Exception)obj;
 			}
 
-			String retval = (String)((ArrayList<Object>)obj).get(0);
+			final String retval = (String)((ArrayList<Object>)obj).get(0);
 
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
@@ -3079,7 +3079,7 @@ public class PlanCacheManager
 			return retval;
 		}
 
-		public ColTypePlan setParms(String schema, String table, String col) throws Exception
+		public ColTypePlan setParms(final String schema, final String table, String col) throws Exception
 		{
 			if (col.contains("."))
 			{
@@ -3096,8 +3096,8 @@ public class PlanCacheManager
 			{
 				op = op.children().get(0);
 			}
-			IndexOperator iOp = (IndexOperator)op;
-			Index index = iOp.getIndex();
+			final IndexOperator iOp = (IndexOperator)op;
+			final Index index = iOp.getIndex();
 			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
 			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
 			while (!(op instanceof SelectOperator))
@@ -3111,7 +3111,7 @@ public class PlanCacheManager
 					op = op.parent();
 				}
 			}
-			SelectOperator select = (SelectOperator)op;
+			final SelectOperator select = (SelectOperator)op;
 			select.getFilter().remove(0);
 			select.getFilter().add(new Filter("B.COLNAME", "E", "'" + col + "'"));
 			return this;
@@ -3122,23 +3122,23 @@ public class PlanCacheManager
 	{
 		private final Plan p;
 
-		public CoordNodesPlan(Plan p)
+		public CoordNodesPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(Transaction tx) throws Exception
+		public ArrayList<Object> execute(final Transaction tx) throws Exception
 		{
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
 			cmd.add(1000000);
 			worker.in.put(cmd);
 
-			ArrayList<Object> retval = new ArrayList<Object>();
+			final ArrayList<Object> retval = new ArrayList<Object>();
 			Object obj = null;
 			while (true)
 			{
@@ -3147,7 +3147,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -3171,7 +3171,7 @@ public class PlanCacheManager
 						obj = worker.out.take();
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}
@@ -3194,21 +3194,21 @@ public class PlanCacheManager
 	{
 		private final Plan p;
 
-		public CountWorkerNodesPlan(Plan p)
+		public CountWorkerNodesPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public int execute(Transaction tx) throws Exception
+		public int execute(final Transaction tx) throws Exception
 		{
 			if (numWorkers != null)
 			{
 				return numWorkers;
 			}
 
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -3223,7 +3223,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -3246,7 +3246,7 @@ public class PlanCacheManager
 				throw new Exception("No result received when querying number of worker nodes");
 			}
 
-			int retval = ((Long)((ArrayList<Object>)obj).get(0)).intValue();
+			final int retval = ((Long)((ArrayList<Object>)obj).get(0)).intValue();
 			// HRDBMSWorker.logger.debug("There are " + retval +
 			// " worker nodes");
 			cmd = new ArrayList<Object>(1);
@@ -3267,20 +3267,20 @@ public class PlanCacheManager
 	{
 		private int tableID;
 
-		public void execute(Transaction tx) throws Exception
+		public void execute(final Transaction tx) throws Exception
 		{
-			String sql = "DELETE FROM SYS.COLDIST WHERE TABLEID = " + tableID;
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			final String sql = "DELETE FROM SYS.COLDIST WHERE TABLEID = " + tableID;
+			final XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 			worker.start();
 			worker.join();
-			int updateCount = worker.getUpdateCount();
+			final int updateCount = worker.getUpdateCount();
 			if (updateCount == -1)
 			{
 				throw worker.getException();
 			}
 		}
 
-		public DeleteColDistPlan setParms(int tableID)
+		public DeleteColDistPlan setParms(final int tableID)
 		{
 			this.tableID = tableID;
 			return this;
@@ -3291,20 +3291,20 @@ public class PlanCacheManager
 	{
 		private int tableID;
 
-		public void execute(Transaction tx) throws Exception
+		public void execute(final Transaction tx) throws Exception
 		{
-			String sql = "DELETE FROM SYS.COLUMNS WHERE TABLEID = " + tableID;
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			final String sql = "DELETE FROM SYS.COLUMNS WHERE TABLEID = " + tableID;
+			final XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 			worker.start();
 			worker.join();
-			int updateCount = worker.getUpdateCount();
+			final int updateCount = worker.getUpdateCount();
 			if (updateCount == -1)
 			{
 				throw worker.getException();
 			}
 		}
 
-		public DeleteColsPlan setParms(int tableID)
+		public DeleteColsPlan setParms(final int tableID)
 		{
 			this.tableID = tableID;
 			return this;
@@ -3315,20 +3315,20 @@ public class PlanCacheManager
 	{
 		private int tableID;
 
-		public void execute(Transaction tx) throws Exception
+		public void execute(final Transaction tx) throws Exception
 		{
-			String sql = "DELETE FROM SYS.COLSTATS WHERE TABLEID = " + tableID;
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			final String sql = "DELETE FROM SYS.COLSTATS WHERE TABLEID = " + tableID;
+			final XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 			worker.start();
 			worker.join();
-			int updateCount = worker.getUpdateCount();
+			final int updateCount = worker.getUpdateCount();
 			if (updateCount == -1)
 			{
 				throw worker.getException();
 			}
 		}
 
-		public DeleteColStatsPlan setParms(int tableID)
+		public DeleteColStatsPlan setParms(final int tableID)
 		{
 			this.tableID = tableID;
 			return this;
@@ -3340,20 +3340,20 @@ public class PlanCacheManager
 		private int tableID;
 		private int indexID;
 
-		public void execute(Transaction tx) throws Exception
+		public void execute(final Transaction tx) throws Exception
 		{
-			String sql = "DELETE FROM SYS.INDEXCOLS WHERE TABLEID = " + tableID + " AND INDEXID = " + indexID;
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			final String sql = "DELETE FROM SYS.INDEXCOLS WHERE TABLEID = " + tableID + " AND INDEXID = " + indexID;
+			final XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 			worker.start();
 			worker.join();
-			int updateCount = worker.getUpdateCount();
+			final int updateCount = worker.getUpdateCount();
 			if (updateCount == -1)
 			{
 				throw worker.getException();
 			}
 		}
 
-		public DeleteIndexColPlan setParms(int tableID, int indexID)
+		public DeleteIndexColPlan setParms(final int tableID, final int indexID)
 		{
 			this.tableID = tableID;
 			this.indexID = indexID;
@@ -3366,20 +3366,20 @@ public class PlanCacheManager
 		private int tableID;
 		private int indexID;
 
-		public void execute(Transaction tx) throws Exception
+		public void execute(final Transaction tx) throws Exception
 		{
-			String sql = "DELETE FROM SYS.INDEXES WHERE TABLEID = " + tableID + " AND INDEXID = " + indexID;
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			final String sql = "DELETE FROM SYS.INDEXES WHERE TABLEID = " + tableID + " AND INDEXID = " + indexID;
+			final XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 			worker.start();
 			worker.join();
-			int updateCount = worker.getUpdateCount();
+			final int updateCount = worker.getUpdateCount();
 			if (updateCount == -1)
 			{
 				throw worker.getException();
 			}
 		}
 
-		public DeleteIndexPlan setParms(int tableID, int indexID)
+		public DeleteIndexPlan setParms(final int tableID, final int indexID)
 		{
 			this.tableID = tableID;
 			this.indexID = indexID;
@@ -3392,20 +3392,20 @@ public class PlanCacheManager
 		private int tableID;
 		private int indexID;
 
-		public void execute(Transaction tx) throws Exception
+		public void execute(final Transaction tx) throws Exception
 		{
-			String sql = "DELETE FROM SYS.INDEXSTATS WHERE TABLEID = " + tableID + " AND INDEXID = " + indexID;
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			final String sql = "DELETE FROM SYS.INDEXSTATS WHERE TABLEID = " + tableID + " AND INDEXID = " + indexID;
+			final XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 			worker.start();
 			worker.join();
-			int updateCount = worker.getUpdateCount();
+			final int updateCount = worker.getUpdateCount();
 			if (updateCount == -1)
 			{
 				throw worker.getException();
 			}
 		}
 
-		public DeleteIndexStatsPlan setParms(int tableID, int indexID)
+		public DeleteIndexStatsPlan setParms(final int tableID, final int indexID)
 		{
 			this.tableID = tableID;
 			this.indexID = indexID;
@@ -3417,20 +3417,20 @@ public class PlanCacheManager
 	{
 		private int tableID;
 
-		public void execute(Transaction tx) throws Exception
+		public void execute(final Transaction tx) throws Exception
 		{
-			String sql = "DELETE FROM SYS.PARTITIONING WHERE TABLEID = " + tableID;
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			final String sql = "DELETE FROM SYS.PARTITIONING WHERE TABLEID = " + tableID;
+			final XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 			worker.start();
 			worker.join();
-			int updateCount = worker.getUpdateCount();
+			final int updateCount = worker.getUpdateCount();
 			if (updateCount == -1)
 			{
 				throw worker.getException();
 			}
 		}
 
-		public DeletePartitioningPlan setParms(int tableID)
+		public DeletePartitioningPlan setParms(final int tableID)
 		{
 			this.tableID = tableID;
 			return this;
@@ -3442,20 +3442,20 @@ public class PlanCacheManager
 		private String schema;
 		private String table;
 
-		public void execute(Transaction tx) throws Exception
+		public void execute(final Transaction tx) throws Exception
 		{
-			String sql = "DELETE FROM SYS.TABLES WHERE SCHEMA = " + "'" + schema + "'" + " AND TABNAME = " + "'" + table + "'";
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			final String sql = "DELETE FROM SYS.TABLES WHERE SCHEMA = " + "'" + schema + "'" + " AND TABNAME = " + "'" + table + "'";
+			final XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 			worker.start();
 			worker.join();
-			int updateCount = worker.getUpdateCount();
+			final int updateCount = worker.getUpdateCount();
 			if (updateCount == -1)
 			{
 				throw worker.getException();
 			}
 		}
 
-		public DeleteTablePlan setParms(String schema, String table)
+		public DeleteTablePlan setParms(final String schema, final String table)
 		{
 			this.schema = schema;
 			this.table = table;
@@ -3467,20 +3467,20 @@ public class PlanCacheManager
 	{
 		private int tableID;
 
-		public void execute(Transaction tx) throws Exception
+		public void execute(final Transaction tx) throws Exception
 		{
-			String sql = "DELETE FROM SYS.TABLESTATS WHERE TABLEID = " + tableID;
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			final String sql = "DELETE FROM SYS.TABLESTATS WHERE TABLEID = " + tableID;
+			final XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 			worker.start();
 			worker.join();
-			int updateCount = worker.getUpdateCount();
+			final int updateCount = worker.getUpdateCount();
 			if (updateCount == -1)
 			{
 				throw worker.getException();
 			}
 		}
 
-		public DeleteTableStatsPlan setParms(int tableID)
+		public DeleteTableStatsPlan setParms(final int tableID)
 		{
 			this.tableID = tableID;
 			return this;
@@ -3492,20 +3492,20 @@ public class PlanCacheManager
 		private String schema;
 		private String table;
 
-		public void execute(Transaction tx) throws Exception
+		public void execute(final Transaction tx) throws Exception
 		{
-			String sql = "DELETE FROM SYS.VIEWS WHERE SCHEMA = '" + schema + "' AND NAME = '" + table + "'";
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			final String sql = "DELETE FROM SYS.VIEWS WHERE SCHEMA = '" + schema + "' AND NAME = '" + table + "'";
+			final XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 			worker.start();
 			worker.join();
-			int updateCount = worker.getUpdateCount();
+			final int updateCount = worker.getUpdateCount();
 			if (updateCount == -1)
 			{
 				throw worker.getException();
 			}
 		}
 
-		public DeleteViewPlan setParms(String schema, String table)
+		public DeleteViewPlan setParms(final String schema, final String table)
 		{
 			this.schema = schema;
 			this.table = table;
@@ -3517,16 +3517,16 @@ public class PlanCacheManager
 	{
 		private final Plan p;
 
-		public DistPlan(Plan p)
+		public DistPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public Object execute(Transaction tx) throws Exception
+		public Object execute(final Transaction tx) throws Exception
 		{
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_UR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -3541,7 +3541,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -3563,15 +3563,15 @@ public class PlanCacheManager
 			return obj;
 		}
 
-		public DistPlan setParms(String schema, String table, String col) throws Exception
+		public DistPlan setParms(final String schema, final String table, final String col) throws Exception
 		{
 			Operator op = p.getTrees().get(0);
 			while (!(op instanceof IndexOperator))
 			{
 				op = op.children().get(0);
 			}
-			IndexOperator iOp = (IndexOperator)op;
-			Index index = iOp.getIndex();
+			final IndexOperator iOp = (IndexOperator)op;
+			final Index index = iOp.getIndex();
 			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
 			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
 			while (!(op instanceof SelectOperator))
@@ -3585,7 +3585,7 @@ public class PlanCacheManager
 					op = op.parent();
 				}
 			}
-			SelectOperator select = (SelectOperator)op;
+			final SelectOperator select = (SelectOperator)op;
 			select.getFilter().remove(0);
 			select.getFilter().add(new Filter("B.COLNAME", "E", "'" + col + "'"));
 			return this;
@@ -3596,16 +3596,16 @@ public class PlanCacheManager
 	{
 		private final Plan p;
 
-		public HostLookupPlan(Plan p)
+		public HostLookupPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public String execute(Transaction tx) throws Exception
+		public String execute(final Transaction tx) throws Exception
 		{
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -3620,7 +3620,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -3645,7 +3645,7 @@ public class PlanCacheManager
 				throw (Exception)obj;
 			}
 
-			String retval = (String)((ArrayList<Object>)obj).get(0);
+			final String retval = (String)((ArrayList<Object>)obj).get(0);
 
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
@@ -3665,9 +3665,9 @@ public class PlanCacheManager
 
 				node = MetaData.myCoordNum();
 			}
-			RootOperator root = (RootOperator)p.getTrees().get(0);
-			IndexOperator iOp = (IndexOperator)root.children().get(0).children().get(0);
-			Index index = iOp.getIndex();
+			final RootOperator root = (RootOperator)p.getTrees().get(0);
+			final IndexOperator iOp = (IndexOperator)root.children().get(0).children().get(0);
+			final Index index = iOp.getIndex();
 			index.setCondition(new Filter("NODES.NODEID", "E", Integer.toString(node)));
 			return this;
 		}
@@ -3677,16 +3677,16 @@ public class PlanCacheManager
 	{
 		private final Plan p;
 
-		public IndexCardPlan(Plan p)
+		public IndexCardPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public Object execute(Transaction tx) throws Exception
+		public Object execute(final Transaction tx) throws Exception
 		{
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_UR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -3701,7 +3701,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -3723,15 +3723,15 @@ public class PlanCacheManager
 			return obj;
 		}
 
-		public IndexCardPlan setParms(int tableID, int indexID) throws Exception
+		public IndexCardPlan setParms(final int tableID, final int indexID) throws Exception
 		{
 			Operator op = p.getTrees().get(0);
 			while (!(op instanceof IndexOperator))
 			{
 				op = op.children().get(0);
 			}
-			IndexOperator iOp = (IndexOperator)op;
-			Index index = iOp.getIndex();
+			final IndexOperator iOp = (IndexOperator)op;
+			final Index index = iOp.getIndex();
 			index.setCondition(new Filter("INDEXSTATS.TABLEID", "E", Integer.toString(tableID)));
 			index.addSecondaryFilter(new Filter("INDEXSTATS.INDEXID", "E", Integer.toString(indexID)));
 			return this;
@@ -3744,12 +3744,12 @@ public class PlanCacheManager
 		private int tableID;
 		private int indexID;
 
-		public IndexColCountPlan(Plan p)
+		public IndexColCountPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public int execute(Transaction tx) throws Exception
+		public int execute(final Transaction tx) throws Exception
 		{
 			if (tableID >= 0 && tableID <= 12)
 			{
@@ -3823,9 +3823,9 @@ public class PlanCacheManager
 				throw new Exception("Catalog index not found");
 			}
 
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -3840,7 +3840,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -3865,7 +3865,7 @@ public class PlanCacheManager
 				throw (Exception)obj;
 			}
 
-			Integer retval = ((Long)((ArrayList<Object>)obj).get(0)).intValue();
+			final Integer retval = ((Long)((ArrayList<Object>)obj).get(0)).intValue();
 
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
@@ -3874,7 +3874,7 @@ public class PlanCacheManager
 			return retval;
 		}
 
-		public IndexColCountPlan setParms(int tableID, int indexID) throws Exception
+		public IndexColCountPlan setParms(final int tableID, final int indexID) throws Exception
 		{
 			this.tableID = tableID;
 			this.indexID = indexID;
@@ -3888,8 +3888,8 @@ public class PlanCacheManager
 			{
 				op = op.children().get(0);
 			}
-			IndexOperator iOp = (IndexOperator)op;
-			Index index = iOp.getIndex();
+			final IndexOperator iOp = (IndexOperator)op;
+			final Index index = iOp.getIndex();
 			index.setCondition(new Filter("INDEXCOLS.TABLEID", "E", Integer.toString(tableID)));
 			index.addSecondaryFilter(new Filter("INDEXCOLS.INDEXID", "E", Integer.toString(indexID)));
 			return this;
@@ -3902,16 +3902,16 @@ public class PlanCacheManager
 		private String schema;
 		private String name;
 
-		public IndexColsForTablePlan(Plan p)
+		public IndexColsForTablePlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(Transaction tx) throws Exception
+		public ArrayList<Object> execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
-				ArrayList<Object> retval = new ArrayList<Object>();
+				final ArrayList<Object> retval = new ArrayList<Object>();
 				ArrayList<Object> row = new ArrayList<Object>();
 				if (name.equals("TABLES"))
 				{
@@ -4016,9 +4016,9 @@ public class PlanCacheManager
 				return retval;
 			}
 
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -4033,12 +4033,12 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
 
-			ArrayList<Object> retval = new ArrayList<Object>();
+			final ArrayList<Object> retval = new ArrayList<Object>();
 			while (!(obj instanceof DataEndMarker))
 			{
 				if (obj instanceof Exception)
@@ -4059,7 +4059,7 @@ public class PlanCacheManager
 						obj = worker.out.take();
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}
@@ -4072,7 +4072,7 @@ public class PlanCacheManager
 			return retval;
 		}
 
-		public IndexColsForTablePlan setParms(String schema, String name) throws Exception
+		public IndexColsForTablePlan setParms(final String schema, final String name) throws Exception
 		{
 			this.schema = schema;
 			this.name = name;
@@ -4086,7 +4086,7 @@ public class PlanCacheManager
 				op = op.children().get(0);
 			}
 
-			Index index = ((IndexOperator)op).getIndex();
+			final Index index = ((IndexOperator)op).getIndex();
 			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
 			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + name + "'"));
 			return this;
@@ -4099,16 +4099,16 @@ public class PlanCacheManager
 		private String schema;
 		private String name;
 
-		public IndexIDsForTablePlan(Plan p)
+		public IndexIDsForTablePlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(Transaction tx) throws Exception
+		public ArrayList<Object> execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
-				ArrayList<Object> retval = new ArrayList<Object>();
+				final ArrayList<Object> retval = new ArrayList<Object>();
 				ArrayList<Object> row = new ArrayList<Object>();
 				if (name.equals("TABLES"))
 				{
@@ -4189,9 +4189,9 @@ public class PlanCacheManager
 				return retval;
 			}
 
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -4206,12 +4206,12 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
 
-			ArrayList<Object> retval = new ArrayList<Object>();
+			final ArrayList<Object> retval = new ArrayList<Object>();
 			while (!(obj instanceof DataEndMarker))
 			{
 				if (obj instanceof Exception)
@@ -4232,7 +4232,7 @@ public class PlanCacheManager
 						obj = worker.out.take();
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}
@@ -4245,7 +4245,7 @@ public class PlanCacheManager
 			return retval;
 		}
 
-		public IndexIDsForTablePlan setParms(String schema, String name) throws Exception
+		public IndexIDsForTablePlan setParms(final String schema, final String name) throws Exception
 		{
 			this.schema = schema;
 			this.name = name;
@@ -4259,7 +4259,7 @@ public class PlanCacheManager
 				op = op.children().get(0);
 			}
 
-			Index index = ((IndexOperator)op).getIndex();
+			final Index index = ((IndexOperator)op).getIndex();
 			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
 			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + name + "'"));
 			return this;
@@ -4272,16 +4272,16 @@ public class PlanCacheManager
 		private String schema;
 		private String table;
 
-		public IndexPlan(Plan p)
+		public IndexPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(Transaction tx) throws Exception
+		public ArrayList<Object> execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
-				ArrayList<Object> retval = new ArrayList<Object>();
+				final ArrayList<Object> retval = new ArrayList<Object>();
 				ArrayList<Object> row = new ArrayList<Object>();
 				if (table.equals("TABLES"))
 				{
@@ -4362,9 +4362,9 @@ public class PlanCacheManager
 				return retval;
 			}
 
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -4379,12 +4379,12 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
 
-			ArrayList<Object> retval = new ArrayList<Object>();
+			final ArrayList<Object> retval = new ArrayList<Object>();
 			while (!(obj instanceof DataEndMarker))
 			{
 				if (obj instanceof Exception)
@@ -4405,7 +4405,7 @@ public class PlanCacheManager
 						obj = worker.out.take();
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}
@@ -4418,7 +4418,7 @@ public class PlanCacheManager
 			return retval;
 		}
 
-		public IndexPlan setParms(String schema, String table) throws Exception
+		public IndexPlan setParms(final String schema, final String table) throws Exception
 		{
 			this.schema = schema;
 			this.table = table;
@@ -4426,9 +4426,9 @@ public class PlanCacheManager
 			{
 				return this;
 			}
-			RootOperator root = (RootOperator)p.getTrees().get(0);
-			IndexOperator iOp = (IndexOperator)root.children().get(0).children().get(0).children().get(0).children().get(0).children().get(0);
-			Index index = iOp.getIndex();
+			final RootOperator root = (RootOperator)p.getTrees().get(0);
+			final IndexOperator iOp = (IndexOperator)root.children().get(0).children().get(0).children().get(0).children().get(0).children().get(0);
+			final Index index = iOp.getIndex();
 			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
 			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
 			return this;
@@ -4446,7 +4446,7 @@ public class PlanCacheManager
 		private int pkpos;
 		private boolean nullable;
 
-		public void execute(Transaction tx) throws Exception
+		public void execute(final Transaction tx) throws Exception
 		{
 			String nullString = null;
 			if (nullable)
@@ -4457,18 +4457,18 @@ public class PlanCacheManager
 			{
 				nullString = "'N'";
 			}
-			String sql = "INSERT INTO SYS.COLUMNS VALUES(" + cid + "," + tid + ",'" + name + "','" + type + "'," + length + "," + scale + "," + pkpos + "," + nullString + ")";
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			final String sql = "INSERT INTO SYS.COLUMNS VALUES(" + cid + "," + tid + ",'" + name + "','" + type + "'," + length + "," + scale + "," + pkpos + "," + nullString + ")";
+			final XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 			worker.start();
 			worker.join();
-			int updateCount = worker.getUpdateCount();
+			final int updateCount = worker.getUpdateCount();
 			if (updateCount == -1)
 			{
 				throw worker.getException();
 			}
 		}
 
-		public InsertColPlan setParms(int cid, int tid, String name, String type, int length, int scale, int pkpos, boolean nullable)
+		public InsertColPlan setParms(final int cid, final int tid, final String name, final String type, final int length, final int scale, final int pkpos, final boolean nullable)
 		{
 			this.cid = cid;
 			this.tid = tid;
@@ -4490,7 +4490,7 @@ public class PlanCacheManager
 		private int pos;
 		private boolean asc;
 
-		public void execute(Transaction tx) throws Exception
+		public void execute(final Transaction tx) throws Exception
 		{
 			String ascString = null;
 			if (asc)
@@ -4501,18 +4501,18 @@ public class PlanCacheManager
 			{
 				ascString = "'D'";
 			}
-			String sql = "INSERT INTO SYS.INDEXCOLS VALUES(" + indexID + "," + tableID + "," + colID + "," + pos + "," + ascString + ")";
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			final String sql = "INSERT INTO SYS.INDEXCOLS VALUES(" + indexID + "," + tableID + "," + colID + "," + pos + "," + ascString + ")";
+			final XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 			worker.start();
 			worker.join();
-			int updateCount = worker.getUpdateCount();
+			final int updateCount = worker.getUpdateCount();
 			if (updateCount == -1)
 			{
 				throw worker.getException();
 			}
 		}
 
-		public InsertIndexColPlan setParms(int indexID, int tableID, int colID, int pos, boolean asc)
+		public InsertIndexColPlan setParms(final int indexID, final int tableID, final int colID, final int pos, final boolean asc)
 		{
 			this.tableID = tableID;
 			this.indexID = indexID;
@@ -4530,7 +4530,7 @@ public class PlanCacheManager
 		private String name;
 		private boolean unique;
 
-		public void execute(Transaction tx) throws Exception
+		public void execute(final Transaction tx) throws Exception
 		{
 			String uString = null;
 			if (unique)
@@ -4541,18 +4541,18 @@ public class PlanCacheManager
 			{
 				uString = "'N'";
 			}
-			String sql = "INSERT INTO SYS.INDEXES VALUES(" + iid + ",'" + name + "'," + tid + "," + uString + ")";
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			final String sql = "INSERT INTO SYS.INDEXES VALUES(" + iid + ",'" + name + "'," + tid + "," + uString + ")";
+			final XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 			worker.start();
 			worker.join();
-			int updateCount = worker.getUpdateCount();
+			final int updateCount = worker.getUpdateCount();
 			if (updateCount == -1)
 			{
 				throw worker.getException();
 			}
 		}
 
-		public InsertIndexPlan setParms(int iid, String name, int tid, boolean unique)
+		public InsertIndexPlan setParms(final int iid, final String name, final int tid, final boolean unique)
 		{
 			this.iid = iid;
 			this.tid = tid;
@@ -4569,20 +4569,20 @@ public class PlanCacheManager
 		private String node;
 		private String dev;
 
-		public void execute(Transaction tx) throws Exception
+		public void execute(final Transaction tx) throws Exception
 		{
-			String sql = "INSERT INTO SYS.PARTITIONING VALUES(" + id + ",'" + group + "','" + node + "','" + dev + "')";
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			final String sql = "INSERT INTO SYS.PARTITIONING VALUES(" + id + ",'" + group + "','" + node + "','" + dev + "')";
+			final XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 			worker.start();
 			worker.join();
-			int updateCount = worker.getUpdateCount();
+			final int updateCount = worker.getUpdateCount();
 			if (updateCount == -1)
 			{
 				throw worker.getException();
 			}
 		}
 
-		public InsertPartitionPlan setParms(int id, String group, String node, String dev)
+		public InsertPartitionPlan setParms(final int id, final String group, final String node, final String dev)
 		{
 			this.id = id;
 			this.group = group;
@@ -4599,20 +4599,20 @@ public class PlanCacheManager
 		private String table;
 		private String type;
 
-		public void execute(Transaction tx) throws Exception
+		public void execute(final Transaction tx) throws Exception
 		{
-			String sql = "INSERT INTO SYS.TABLES VALUES(" + tableID + "," + "'" + schema + "'" + "," + "'" + table + "'" + "," + "'" + type + "')";
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			final String sql = "INSERT INTO SYS.TABLES VALUES(" + tableID + "," + "'" + schema + "'" + "," + "'" + table + "'" + "," + "'" + type + "')";
+			final XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 			worker.start();
 			worker.join();
-			int updateCount = worker.getUpdateCount();
+			final int updateCount = worker.getUpdateCount();
 			if (updateCount == -1)
 			{
 				throw worker.getException();
 			}
 		}
 
-		public InsertTablePlan setParms(int tableID, String schema, String table, String type)
+		public InsertTablePlan setParms(final int tableID, final String schema, final String table, final String type)
 		{
 			this.tableID = tableID;
 			this.schema = schema;
@@ -4629,22 +4629,22 @@ public class PlanCacheManager
 		private String table;
 		private String text;
 
-		public void execute(Transaction tx) throws Exception
+		public void execute(final Transaction tx) throws Exception
 		{
-			String textCopy = text.replace("'", "\\'");
-			String sql = "INSERT INTO SYS.VIEWS VALUES(" + id + ",'" + schema + "','" + table + "','" + textCopy + "')";
+			final String textCopy = text.replace("'", "\\'");
+			final String sql = "INSERT INTO SYS.VIEWS VALUES(" + id + ",'" + schema + "','" + table + "','" + textCopy + "')";
 			// HRDBMSWorker.logger.debug(sql);
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			final XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 			worker.start();
 			worker.join();
-			int updateCount = worker.getUpdateCount();
+			final int updateCount = worker.getUpdateCount();
 			if (updateCount == -1)
 			{
 				throw worker.getException();
 			}
 		}
 
-		public InsertViewPlan setParms(int id, String schema, String table, String text)
+		public InsertViewPlan setParms(final int id, final String schema, final String table, final String text)
 		{
 			this.id = id;
 			this.schema = schema;
@@ -4660,16 +4660,16 @@ public class PlanCacheManager
 		private int tableID;
 		private int indexID;
 
-		public KeysByIDPlan(Plan p)
+		public KeysByIDPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(Transaction tx) throws Exception
+		public ArrayList<Object> execute(final Transaction tx) throws Exception
 		{
 			if (tableID >= 0 && tableID <= 12)
 			{
-				ArrayList<Object> retval = new ArrayList<Object>();
+				final ArrayList<Object> retval = new ArrayList<Object>();
 				ArrayList<Object> row = new ArrayList<Object>();
 				if (tableID == 0 && indexID == 0)
 				{
@@ -4781,9 +4781,9 @@ public class PlanCacheManager
 				return retval;
 			}
 
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -4798,12 +4798,12 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
 
-			ArrayList<Object> retval = new ArrayList<Object>();
+			final ArrayList<Object> retval = new ArrayList<Object>();
 			while (!(obj instanceof DataEndMarker))
 			{
 				if (obj instanceof Exception)
@@ -4824,7 +4824,7 @@ public class PlanCacheManager
 						obj = worker.out.take();
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}
@@ -4837,7 +4837,7 @@ public class PlanCacheManager
 			return retval;
 		}
 
-		public KeysByIDPlan setParms(int tableID, int indexID) throws Exception
+		public KeysByIDPlan setParms(final int tableID, final int indexID) throws Exception
 		{
 			this.tableID = tableID;
 			this.indexID = indexID;
@@ -4851,7 +4851,7 @@ public class PlanCacheManager
 				op = op.children().get(0);
 			}
 
-			Index index = ((IndexOperator)op).getIndex();
+			final Index index = ((IndexOperator)op).getIndex();
 			index.setCondition(new Filter("INDEXCOLS.TABLEID", "E", Integer.toString(tableID)));
 			index.addSecondaryFilter(new Filter("INDEXCOLS.INDEXID", "E", Integer.toString(indexID)));
 			return this;
@@ -4864,16 +4864,16 @@ public class PlanCacheManager
 		private String schema;
 		private String name;
 
-		public KeysPlan(Plan p)
+		public KeysPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(Transaction tx) throws Exception
+		public ArrayList<Object> execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
-				ArrayList<Object> retval = new ArrayList<Object>();
+				final ArrayList<Object> retval = new ArrayList<Object>();
 				ArrayList<Object> row = new ArrayList<Object>();
 				if (name.equals("PKTABLES"))
 				{
@@ -5009,9 +5009,9 @@ public class PlanCacheManager
 				return retval;
 			}
 
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -5026,12 +5026,12 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
 
-			ArrayList<Object> retval = new ArrayList<Object>();
+			final ArrayList<Object> retval = new ArrayList<Object>();
 			while (!(obj instanceof DataEndMarker))
 			{
 				if (obj instanceof Exception)
@@ -5052,7 +5052,7 @@ public class PlanCacheManager
 						obj = worker.out.take();
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}
@@ -5065,7 +5065,7 @@ public class PlanCacheManager
 			return retval;
 		}
 
-		public KeysPlan setParms(String schema, String name) throws Exception
+		public KeysPlan setParms(final String schema, final String name) throws Exception
 		{
 			this.schema = schema;
 			this.name = name;
@@ -5108,12 +5108,12 @@ public class PlanCacheManager
 		private String table;
 		private String col;
 
-		public LengthPlan(Plan p)
+		public LengthPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public int execute(Transaction tx) throws Exception
+		public int execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
@@ -5214,9 +5214,9 @@ public class PlanCacheManager
 				throw new Exception("Column not found");
 			}
 
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -5231,7 +5231,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -5263,7 +5263,7 @@ public class PlanCacheManager
 			return (Integer)((ArrayList<Object>)obj).get(0);
 		}
 
-		public LengthPlan setParms(String schema, String table, String col) throws Exception
+		public LengthPlan setParms(final String schema, final String table, final String col) throws Exception
 		{
 			this.table = table;
 			this.schema = schema;
@@ -5278,8 +5278,8 @@ public class PlanCacheManager
 			{
 				op = op.children().get(0);
 			}
-			IndexOperator iOp = (IndexOperator)op;
-			Index index = iOp.getIndex();
+			final IndexOperator iOp = (IndexOperator)op;
+			final Index index = iOp.getIndex();
 			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
 			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
 			while (!(op instanceof SelectOperator))
@@ -5293,7 +5293,7 @@ public class PlanCacheManager
 					op = op.parent();
 				}
 			}
-			SelectOperator select = (SelectOperator)op;
+			final SelectOperator select = (SelectOperator)op;
 			select.getFilter().remove(0);
 			select.getFilter().add(new Filter("B.COLNAME", "E", "'" + col + "'"));
 			return this;
@@ -5304,20 +5304,20 @@ public class PlanCacheManager
 	{
 		private int tableID;
 
-		public void execute(Transaction tx) throws Exception
+		public void execute(final Transaction tx) throws Exception
 		{
-			String sql = "DELETE FROM SYS.INDEXCOLS WHERE TABLEID = " + tableID;
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			final String sql = "DELETE FROM SYS.INDEXCOLS WHERE TABLEID = " + tableID;
+			final XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 			worker.start();
 			worker.join();
-			int updateCount = worker.getUpdateCount();
+			final int updateCount = worker.getUpdateCount();
 			if (updateCount == -1)
 			{
 				throw worker.getException();
 			}
 		}
 
-		public MultiDeleteIndexColsPlan setParms(int tableID)
+		public MultiDeleteIndexColsPlan setParms(final int tableID)
 		{
 			this.tableID = tableID;
 			return this;
@@ -5328,20 +5328,20 @@ public class PlanCacheManager
 	{
 		private int tableID;
 
-		public void execute(Transaction tx) throws Exception
+		public void execute(final Transaction tx) throws Exception
 		{
-			String sql = "DELETE FROM SYS.INDEXES WHERE TABLEID = " + tableID;
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			final String sql = "DELETE FROM SYS.INDEXES WHERE TABLEID = " + tableID;
+			final XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 			worker.start();
 			worker.join();
-			int updateCount = worker.getUpdateCount();
+			final int updateCount = worker.getUpdateCount();
 			if (updateCount == -1)
 			{
 				throw worker.getException();
 			}
 		}
 
-		public MultiDeleteIndexesPlan setParms(int tableID)
+		public MultiDeleteIndexesPlan setParms(final int tableID)
 		{
 			this.tableID = tableID;
 			return this;
@@ -5352,20 +5352,20 @@ public class PlanCacheManager
 	{
 		private int tableID;
 
-		public void execute(Transaction tx) throws Exception
+		public void execute(final Transaction tx) throws Exception
 		{
-			String sql = "DELETE FROM SYS.INDEXSTATS WHERE TABLEID = " + tableID;
-			XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
+			final String sql = "DELETE FROM SYS.INDEXSTATS WHERE TABLEID = " + tableID;
+			final XAWorker worker = XAManager.executeAuthorizedUpdate(sql, tx);
 			worker.start();
 			worker.join();
-			int updateCount = worker.getUpdateCount();
+			final int updateCount = worker.getUpdateCount();
 			if (updateCount == -1)
 			{
 				throw worker.getException();
 			}
 		}
 
-		public MultiDeleteIndexStatsPlan setParms(int tableID)
+		public MultiDeleteIndexStatsPlan setParms(final int tableID)
 		{
 			this.tableID = tableID;
 			return this;
@@ -5376,16 +5376,16 @@ public class PlanCacheManager
 	{
 		private final Plan p;
 
-		public NextIndexIDPlan(Plan p)
+		public NextIndexIDPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public int execute(Transaction tx) throws Exception
+		public int execute(final Transaction tx) throws Exception
 		{
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -5400,7 +5400,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -5424,7 +5424,7 @@ public class PlanCacheManager
 				throw (Exception)obj;
 			}
 
-			int retval = (Integer)((ArrayList<Object>)obj).get(0);
+			final int retval = (Integer)((ArrayList<Object>)obj).get(0);
 
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
@@ -5433,7 +5433,7 @@ public class PlanCacheManager
 			return retval + 1;
 		}
 
-		public NextIndexIDPlan setParms(int tableID) throws Exception
+		public NextIndexIDPlan setParms(final int tableID) throws Exception
 		{
 			Operator op = p.getTrees().get(0);
 			while (op.children().size() != 0)
@@ -5441,7 +5441,7 @@ public class PlanCacheManager
 				op = op.children().get(0);
 			}
 
-			Index index = ((IndexOperator)op).getIndex();
+			final Index index = ((IndexOperator)op).getIndex();
 			index.setCondition(new Filter("INDEXES.TABLEID", "E", Integer.toString(tableID)));
 			return this;
 		}
@@ -5451,16 +5451,16 @@ public class PlanCacheManager
 	{
 		private final Plan p;
 
-		public NextTableIDPlan(Plan p)
+		public NextTableIDPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public int execute(Transaction tx) throws Exception
+		public int execute(final Transaction tx) throws Exception
 		{
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -5475,7 +5475,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -5500,7 +5500,7 @@ public class PlanCacheManager
 				throw (Exception)obj;
 			}
 
-			int retval = (Integer)((ArrayList<Object>)obj).get(0);
+			final int retval = (Integer)((ArrayList<Object>)obj).get(0);
 
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
@@ -5519,16 +5519,16 @@ public class PlanCacheManager
 	{
 		private final Plan p;
 
-		public NextViewIDPlan(Plan p)
+		public NextViewIDPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public int execute(Transaction tx) throws Exception
+		public int execute(final Transaction tx) throws Exception
 		{
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -5543,7 +5543,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -5568,7 +5568,7 @@ public class PlanCacheManager
 				throw (Exception)obj;
 			}
 
-			int retval = (Integer)((ArrayList<Object>)obj).get(0);
+			final int retval = (Integer)((ArrayList<Object>)obj).get(0);
 
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
@@ -5589,16 +5589,16 @@ public class PlanCacheManager
 		private String schema;
 		private String name;
 
-		public OrdersPlan(Plan p)
+		public OrdersPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(Transaction tx) throws Exception
+		public ArrayList<Object> execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
-				ArrayList<Object> retval = new ArrayList<Object>();
+				final ArrayList<Object> retval = new ArrayList<Object>();
 				ArrayList<Object> row = new ArrayList<Object>();
 				if (name.equals("PKTABLES"))
 				{
@@ -5710,9 +5710,9 @@ public class PlanCacheManager
 				return retval;
 			}
 
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -5727,12 +5727,12 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
 
-			ArrayList<Object> retval = new ArrayList<Object>();
+			final ArrayList<Object> retval = new ArrayList<Object>();
 			while (!(obj instanceof DataEndMarker))
 			{
 				if (obj instanceof Exception)
@@ -5753,7 +5753,7 @@ public class PlanCacheManager
 						obj = worker.out.take();
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}
@@ -5766,7 +5766,7 @@ public class PlanCacheManager
 			return retval;
 		}
 
-		public OrdersPlan setParms(String schema, String name) throws Exception
+		public OrdersPlan setParms(final String schema, final String name) throws Exception
 		{
 			this.schema = schema;
 			this.name = name;
@@ -5808,25 +5808,25 @@ public class PlanCacheManager
 		private String schema;
 		private String table;
 
-		public PartitioningPlan(Plan p)
+		public PartitioningPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(Transaction tx) throws Exception
+		public ArrayList<Object> execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
-				ArrayList<Object> retval = new ArrayList<Object>();
+				final ArrayList<Object> retval = new ArrayList<Object>();
 				retval.add("NONE");
 				retval.add("{-1}");
 				retval.add("{0}");
 				return retval;
 			}
 
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -5841,7 +5841,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -5865,7 +5865,7 @@ public class PlanCacheManager
 				throw (Exception)obj;
 			}
 
-			ArrayList<Object> retval = (ArrayList<Object>)obj;
+			final ArrayList<Object> retval = (ArrayList<Object>)obj;
 
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
@@ -5874,7 +5874,7 @@ public class PlanCacheManager
 			return retval;
 		}
 
-		public PartitioningPlan setParms(String schema, String table) throws Exception
+		public PartitioningPlan setParms(final String schema, final String table) throws Exception
 		{
 			this.schema = schema;
 			this.table = table;
@@ -5882,9 +5882,9 @@ public class PlanCacheManager
 			{
 				return this;
 			}
-			RootOperator root = (RootOperator)p.getTrees().get(0);
-			IndexOperator iOp = (IndexOperator)root.children().get(0).children().get(0).children().get(0).children().get(0);
-			Index index = iOp.getIndex();
+			final RootOperator root = (RootOperator)p.getTrees().get(0);
+			final IndexOperator iOp = (IndexOperator)root.children().get(0).children().get(0).children().get(0).children().get(0);
+			final Index index = iOp.getIndex();
 			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
 			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
 			return this;
@@ -5897,16 +5897,16 @@ public class PlanCacheManager
 		private String schema;
 		private String name;
 
-		public TableAndIndexIDPlan(Plan p)
+		public TableAndIndexIDPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(Transaction tx) throws Exception
+		public ArrayList<Object> execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
-				ArrayList<Object> retval = new ArrayList<Object>();
+				final ArrayList<Object> retval = new ArrayList<Object>();
 				if (name.equals("PKTABLES"))
 				{
 					retval.add(0);
@@ -6001,9 +6001,9 @@ public class PlanCacheManager
 				throw new Exception("Index not found");
 			}
 
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -6018,7 +6018,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -6048,7 +6048,7 @@ public class PlanCacheManager
 			return (ArrayList<Object>)obj;
 		}
 
-		public TableAndIndexIDPlan setParms(String schema, String name) throws Exception
+		public TableAndIndexIDPlan setParms(final String schema, final String name) throws Exception
 		{
 			this.schema = schema;
 			this.name = name;
@@ -6061,8 +6061,8 @@ public class PlanCacheManager
 			{
 				op = op.children().get(0);
 			}
-			IndexOperator iOp = (IndexOperator)op;
-			Index index = iOp.getIndex();
+			final IndexOperator iOp = (IndexOperator)op;
+			final Index index = iOp.getIndex();
 			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
 			while (!(op instanceof SelectOperator))
 			{
@@ -6075,7 +6075,7 @@ public class PlanCacheManager
 					op = op.parent();
 				}
 			}
-			SelectOperator select = (SelectOperator)op;
+			final SelectOperator select = (SelectOperator)op;
 			select.getFilter().remove(0);
 			select.getFilter().add(new Filter("B.INDEXNAME", "E", "'" + name + "'"));
 			return this;
@@ -6086,16 +6086,16 @@ public class PlanCacheManager
 	{
 		private final Plan p;
 
-		public TableCardPlan(Plan p)
+		public TableCardPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public long execute(Transaction tx) throws Exception
+		public long execute(final Transaction tx) throws Exception
 		{
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_UR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -6110,7 +6110,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -6134,7 +6134,7 @@ public class PlanCacheManager
 				throw (Exception)obj;
 			}
 
-			Long retval = (Long)((ArrayList<Object>)obj).get(0);
+			final Long retval = (Long)((ArrayList<Object>)obj).get(0);
 
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
@@ -6143,15 +6143,15 @@ public class PlanCacheManager
 			return retval;
 		}
 
-		public TableCardPlan setParms(String schema, String table) throws Exception
+		public TableCardPlan setParms(final String schema, final String table) throws Exception
 		{
 			Operator op = p.getTrees().get(0);
 			while (!(op instanceof IndexOperator))
 			{
 				op = op.children().get(0);
 			}
-			IndexOperator iOp = (IndexOperator)op;
-			Index index = iOp.getIndex();
+			final IndexOperator iOp = (IndexOperator)op;
+			final Index index = iOp.getIndex();
 			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
 			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
 			return this;
@@ -6164,12 +6164,12 @@ public class PlanCacheManager
 		private String schema;
 		private String name;
 
-		public TableIDPlan(Plan p)
+		public TableIDPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public int execute(Transaction tx) throws Exception
+		public int execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
@@ -6229,9 +6229,9 @@ public class PlanCacheManager
 				throw new Exception("Table not found: " + schema + "." + name);
 			}
 
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -6246,7 +6246,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -6276,7 +6276,7 @@ public class PlanCacheManager
 			return (Integer)((ArrayList<Object>)obj).get(0);
 		}
 
-		public TableIDPlan setParms(String schema, String name) throws Exception
+		public TableIDPlan setParms(final String schema, final String name) throws Exception
 		{
 			this.schema = schema;
 			this.name = name;
@@ -6290,7 +6290,7 @@ public class PlanCacheManager
 				op = op.children().get(0);
 			}
 
-			Index index = ((IndexOperator)op).getIndex();
+			final Index index = ((IndexOperator)op).getIndex();
 			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
 			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + name + "'"));
 			return this;
@@ -6302,21 +6302,21 @@ public class PlanCacheManager
 		private final Plan p;
 		private String schema;
 
-		public TableTypePlan(Plan p)
+		public TableTypePlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public int execute(Transaction tx) throws Exception
+		public int execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
 				return 0;
 			}
 
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -6331,7 +6331,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -6358,7 +6358,7 @@ public class PlanCacheManager
 			cmd.add("CLOSE");
 			worker.in.put(cmd);
 			tx.setIsolationLevel(iso);
-			String type = (String)((ArrayList<Object>)obj).get(0);
+			final String type = (String)((ArrayList<Object>)obj).get(0);
 			if (type.equals("C"))
 			{
 				return 1;
@@ -6369,7 +6369,7 @@ public class PlanCacheManager
 			}
 		}
 
-		public TableTypePlan setParms(String schema, String name) throws Exception
+		public TableTypePlan setParms(final String schema, final String name) throws Exception
 		{
 			this.schema = schema;
 			if (schema.equals("SYS"))
@@ -6382,7 +6382,7 @@ public class PlanCacheManager
 				op = op.children().get(0);
 			}
 
-			Index index = ((IndexOperator)op).getIndex();
+			final Index index = ((IndexOperator)op).getIndex();
 			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
 			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + name + "'"));
 			return this;
@@ -6395,16 +6395,16 @@ public class PlanCacheManager
 		private String schema;
 		private String name;
 
-		public TypesPlan(Plan p)
+		public TypesPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(Transaction tx) throws Exception
+		public ArrayList<Object> execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
-				ArrayList<Object> retval = new ArrayList<Object>();
+				final ArrayList<Object> retval = new ArrayList<Object>();
 				ArrayList<Object> row = new ArrayList<Object>();
 				if (name.equals("PKTABLES"))
 				{
@@ -6516,9 +6516,9 @@ public class PlanCacheManager
 				return retval;
 			}
 
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -6533,12 +6533,12 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
 
-			ArrayList<Object> retval = new ArrayList<Object>();
+			final ArrayList<Object> retval = new ArrayList<Object>();
 			while (!(obj instanceof DataEndMarker))
 			{
 				if (obj instanceof Exception)
@@ -6559,7 +6559,7 @@ public class PlanCacheManager
 						obj = worker.out.take();
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}
@@ -6572,7 +6572,7 @@ public class PlanCacheManager
 			return retval;
 		}
 
-		public TypesPlan setParms(String schema, String name) throws Exception
+		public TypesPlan setParms(final String schema, final String name) throws Exception
 		{
 			this.schema = schema;
 			this.name = name;
@@ -6614,17 +6614,17 @@ public class PlanCacheManager
 		private String schema;
 		private String table;
 
-		public UniqueIndexPlan(Plan p)
+		public UniqueIndexPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(Transaction tx) throws Exception
+		public ArrayList<Object> execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
-				ArrayList<Object> retval = new ArrayList<Object>();
-				ArrayList<Object> row = new ArrayList<Object>();
+				final ArrayList<Object> retval = new ArrayList<Object>();
+				final ArrayList<Object> row = new ArrayList<Object>();
 				if (table.equals("TABLES"))
 				{
 					row.add("PKTABLES");
@@ -6698,9 +6698,9 @@ public class PlanCacheManager
 				return retval;
 			}
 
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -6715,12 +6715,12 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
 
-			ArrayList<Object> retval = new ArrayList<Object>();
+			final ArrayList<Object> retval = new ArrayList<Object>();
 			while (!(obj instanceof DataEndMarker))
 			{
 				if (obj instanceof Exception)
@@ -6741,7 +6741,7 @@ public class PlanCacheManager
 						obj = worker.out.take();
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}
@@ -6754,7 +6754,7 @@ public class PlanCacheManager
 			return retval;
 		}
 
-		public UniqueIndexPlan setParms(String schema, String table) throws Exception
+		public UniqueIndexPlan setParms(final String schema, final String table) throws Exception
 		{
 			this.schema = schema;
 			this.table = table;
@@ -6762,9 +6762,9 @@ public class PlanCacheManager
 			{
 				return this;
 			}
-			RootOperator root = (RootOperator)p.getTrees().get(0);
-			IndexOperator iOp = (IndexOperator)root.children().get(0).children().get(0).children().get(0).children().get(0).children().get(0);
-			Index index = iOp.getIndex();
+			final RootOperator root = (RootOperator)p.getTrees().get(0);
+			final IndexOperator iOp = (IndexOperator)root.children().get(0).children().get(0).children().get(0).children().get(0).children().get(0);
+			final Index index = iOp.getIndex();
 			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
 			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
 			return this;
@@ -6777,16 +6777,16 @@ public class PlanCacheManager
 		private String schema;
 		private String table;
 
-		public UniquePlan(Plan p)
+		public UniquePlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(Transaction tx) throws Exception
+		public ArrayList<Object> execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
-				ArrayList<Object> retval = new ArrayList<Object>();
+				final ArrayList<Object> retval = new ArrayList<Object>();
 				ArrayList<Object> row = new ArrayList<Object>();
 				if (table.equals("TABLES"))
 				{
@@ -6882,9 +6882,9 @@ public class PlanCacheManager
 				return retval;
 			}
 
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -6899,12 +6899,12 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
 
-			ArrayList<Object> retval = new ArrayList<Object>();
+			final ArrayList<Object> retval = new ArrayList<Object>();
 			while (!(obj instanceof DataEndMarker))
 			{
 				if (obj instanceof Exception)
@@ -6925,7 +6925,7 @@ public class PlanCacheManager
 						obj = worker.out.take();
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}
@@ -6938,7 +6938,7 @@ public class PlanCacheManager
 			return retval;
 		}
 
-		public UniquePlan setParms(String schema, String table) throws Exception
+		public UniquePlan setParms(final String schema, final String table) throws Exception
 		{
 			this.schema = schema;
 			this.table = table;
@@ -6946,9 +6946,9 @@ public class PlanCacheManager
 			{
 				return this;
 			}
-			RootOperator root = (RootOperator)p.getTrees().get(0);
-			IndexOperator iOp = (IndexOperator)root.children().get(0).children().get(0).children().get(0).children().get(0);
-			Index index = iOp.getIndex();
+			final RootOperator root = (RootOperator)p.getTrees().get(0);
+			final IndexOperator iOp = (IndexOperator)root.children().get(0).children().get(0).children().get(0).children().get(0);
+			final Index index = iOp.getIndex();
 			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
 			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + table + "'"));
 			return this;
@@ -6961,16 +6961,16 @@ public class PlanCacheManager
 		private String schema;
 		private String name;
 
-		public VerifyIndexPlan(Plan p)
+		public VerifyIndexPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public Object execute(Transaction tx) throws Exception
+		public Object execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
-				ArrayList<Object> retval = new ArrayList<Object>();
+				final ArrayList<Object> retval = new ArrayList<Object>();
 				if (name.equals("PKTABLES"))
 				{
 					return retval;
@@ -7035,9 +7035,9 @@ public class PlanCacheManager
 				return new DataEndMarker();
 			}
 
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -7052,7 +7052,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -7073,7 +7073,7 @@ public class PlanCacheManager
 			return obj;
 		}
 
-		public VerifyIndexPlan setParms(String schema, String name) throws Exception
+		public VerifyIndexPlan setParms(final String schema, final String name) throws Exception
 		{
 			this.schema = schema;
 			this.name = name;
@@ -7086,8 +7086,8 @@ public class PlanCacheManager
 			{
 				op = op.children().get(0);
 			}
-			IndexOperator iOp = (IndexOperator)op;
-			Index index = iOp.getIndex();
+			final IndexOperator iOp = (IndexOperator)op;
+			final Index index = iOp.getIndex();
 			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
 			while (!(op instanceof SelectOperator))
 			{
@@ -7100,7 +7100,7 @@ public class PlanCacheManager
 					op = op.parent();
 				}
 			}
-			SelectOperator select = (SelectOperator)op;
+			final SelectOperator select = (SelectOperator)op;
 			select.getFilter().remove(0);
 			select.getFilter().add(new Filter("B.INDEXNAME", "E", "'" + name + "'"));
 			return this;
@@ -7113,16 +7113,16 @@ public class PlanCacheManager
 		private String schema;
 		private String name;
 
-		public VerifyTableExistPlan(Plan p)
+		public VerifyTableExistPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public Object execute(Transaction tx) throws Exception
+		public Object execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
-				ArrayList<Object> retval = new ArrayList<Object>();
+				final ArrayList<Object> retval = new ArrayList<Object>();
 				if (name.equals("TABLES"))
 				{
 					return retval;
@@ -7179,9 +7179,9 @@ public class PlanCacheManager
 				return new DataEndMarker();
 			}
 
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -7196,7 +7196,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -7217,7 +7217,7 @@ public class PlanCacheManager
 			return obj;
 		}
 
-		public VerifyTableExistPlan setParms(String schema, String name) throws Exception
+		public VerifyTableExistPlan setParms(final String schema, final String name) throws Exception
 		{
 			this.schema = schema;
 			this.name = name;
@@ -7231,7 +7231,7 @@ public class PlanCacheManager
 				op = op.children().get(0);
 			}
 
-			Index index = ((IndexOperator)op).getIndex();
+			final Index index = ((IndexOperator)op).getIndex();
 			index.setCondition(new Filter("TABLES.SCHEMA", "E", "'" + schema + "'"));
 			index.addSecondaryFilter(new Filter("TABLES.TABNAME", "E", "'" + name + "'"));
 			return this;
@@ -7242,16 +7242,16 @@ public class PlanCacheManager
 	{
 		private final Plan p;
 
-		public VerifyViewExistPlan(Plan p)
+		public VerifyViewExistPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public Object execute(Transaction tx) throws Exception
+		public Object execute(final Transaction tx) throws Exception
 		{
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -7266,7 +7266,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -7287,7 +7287,7 @@ public class PlanCacheManager
 			return obj;
 		}
 
-		public VerifyViewExistPlan setParms(String schema, String name) throws Exception
+		public VerifyViewExistPlan setParms(final String schema, final String name) throws Exception
 		{
 			Operator op = p.getTrees().get(0);
 			while (op.children().size() != 0)
@@ -7295,7 +7295,7 @@ public class PlanCacheManager
 				op = op.children().get(0);
 			}
 
-			Index index = ((IndexOperator)op).getIndex();
+			final Index index = ((IndexOperator)op).getIndex();
 			index.setCondition(new Filter("VIEWS.SCHEMA", "E", "'" + schema + "'"));
 			index.addSecondaryFilter(new Filter("VIEWS.NAME", "E", "'" + name + "'"));
 			return this;
@@ -7306,16 +7306,16 @@ public class PlanCacheManager
 	{
 		private final Plan p;
 
-		public ViewSQLPlan(Plan p)
+		public ViewSQLPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public String execute(Transaction tx) throws Exception
+		public String execute(final Transaction tx) throws Exception
 		{
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
@@ -7330,7 +7330,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -7360,7 +7360,7 @@ public class PlanCacheManager
 			return (String)((ArrayList<Object>)obj).get(0);
 		}
 
-		public ViewSQLPlan setParms(String schema, String name) throws Exception
+		public ViewSQLPlan setParms(final String schema, final String name) throws Exception
 		{
 			Operator op = p.getTrees().get(0);
 			while (op.children().size() != 0)
@@ -7368,7 +7368,7 @@ public class PlanCacheManager
 				op = op.children().get(0);
 			}
 
-			Index index = ((IndexOperator)op).getIndex();
+			final Index index = ((IndexOperator)op).getIndex();
 			index.setCondition(new Filter("VIEWS.SCHEMA", "E", "'" + schema + "'"));
 			index.addSecondaryFilter(new Filter("VIEWS.NAME", "E", "'" + name + "'"));
 			return this;
@@ -7379,23 +7379,23 @@ public class PlanCacheManager
 	{
 		private final Plan p;
 
-		public WorkerNodesPlan(Plan p)
+		public WorkerNodesPlan(final Plan p)
 		{
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(Transaction tx) throws Exception
+		public ArrayList<Object> execute(final Transaction tx) throws Exception
 		{
-			int iso = tx.getIsolationLevel();
+			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
-			XAWorker worker = XAManager.executeCatalogQuery(p, tx);
+			final XAWorker worker = XAManager.executeCatalogQuery(p, tx);
 			worker.start();
 			ArrayList<Object> cmd = new ArrayList<Object>(2);
 			cmd.add("NEXT");
 			cmd.add(1000000000);
 			worker.in.put(cmd);
 
-			ArrayList<Object> retval = new ArrayList<Object>();
+			final ArrayList<Object> retval = new ArrayList<Object>();
 			Object obj = null;
 			while (true)
 			{
@@ -7404,7 +7404,7 @@ public class PlanCacheManager
 					obj = worker.out.take();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -7428,7 +7428,7 @@ public class PlanCacheManager
 						obj = worker.out.take();
 						break;
 					}
-					catch (InterruptedException e)
+					catch (final InterruptedException e)
 					{
 					}
 				}

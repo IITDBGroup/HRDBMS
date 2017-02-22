@@ -1,8 +1,7 @@
 package com.exascale.optimizer;
 
-import java.io.InputStream;
 import java.io.BufferedOutputStream;
-import java.io.ObjectOutputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.net.InetSocketAddress;
@@ -14,7 +13,6 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
@@ -22,7 +20,6 @@ import com.exascale.filesystem.RID;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.HJOMultiHashMap;
-import com.exascale.misc.MultiHashMap;
 import com.exascale.optimizer.MetaData.PartitionMetaData;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Transaction;
@@ -56,7 +53,7 @@ public final class UpdateOperator implements Operator, Serializable
 	private ArrayList<ArrayList<String>> types;
 	private ArrayList<ArrayList<Boolean>> orders;
 
-	public UpdateOperator(String schema, String table, ArrayList<Column> cols, ArrayList<String> buildList, MetaData meta)
+	public UpdateOperator(final String schema, final String table, final ArrayList<Column> cols, final ArrayList<String> buildList, final MetaData meta)
 	{
 		this.schema = schema;
 		this.table = table;
@@ -64,172 +61,45 @@ public final class UpdateOperator implements Operator, Serializable
 		this.cols = cols;
 		this.buildList = buildList;
 	}
-	
-	private static boolean registerDelayed(UpdateOperator caller, String schema, String table, int node, Transaction tx, List<RIDAndIndexKeys> rows, List<ArrayList<Object>> rows2)
-	{
-		synchronized(txDelayedMaps)
-		{
-			String key = schema + "." + table + "~" + node;
-			HashMap<String, UpdateOperator> map = txDelayedMaps.get(tx.number());
-			if (map == null)
-			{
-				map = new HashMap<String, UpdateOperator>();
-				map.put(key, caller);
-				
-				if (rows != null)
-				{
-					delayedRows.put(caller, rows);
-				}
-				
-				if (rows2 != null)
-				{
-					delayedRows2.put(caller, rows2);
-				}
-				txDelayedMaps.put(tx.number(), map);
-				return true;
-			}
-			
-			UpdateOperator owner = map.get(key);
-			if (owner == null)
-			{
-				map.put(key, caller);
-				if (rows != null)
-				{
-					delayedRows.put(caller, rows);
-				}
-				
-				if (rows2 != null)
-				{
-					delayedRows2.put(caller, rows2);
-				}
-				return true;
-			}
-			
-			try
-			{
-				List<RIDAndIndexKeys> myDelayedRows = delayedRows.get(owner);
-				if (myDelayedRows != null)
-				{
-					myDelayedRows.addAll(rows);
-				}
-				else
-				{
-					delayedRows.put(owner, rows);
-				}
-				
-				List<ArrayList<Object>> myDelayedRows2 = delayedRows2.get(owner);
-				if (myDelayedRows2 != null)
-				{
-					myDelayedRows2.addAll(rows2);
-				}
-				else
-				{
-					delayedRows2.put(owner, rows2);
-				}
-			}
-			catch(NullPointerException e)
-			{
-				HRDBMSWorker.logger.debug("Owner = " + owner + ", map.get(key) = " + map.get(key) + ", delayedRows.get(owner) = " + delayedRows.get(owner));
-			}
-			return false;
-		}
-	}
-	
-	private static boolean registerDelayedCantOwn(UpdateOperator caller, String schema, String table, int node, Transaction tx, List<RIDAndIndexKeys> rows, List<ArrayList<Object>> rows2)
-	{
-		synchronized(txDelayedMaps)
-		{
-			String key = schema + "." + table + "~" + node;
-			HashMap<String, UpdateOperator> map = txDelayedMaps.get(tx.number());
-			if (map == null)
-			{
-				return false;
-			}
-			
-			UpdateOperator owner = map.get(key);
-			if (owner == null)
-			{
-				return false;
-			}
-			
-			List<RIDAndIndexKeys> myDelayedRows = delayedRows.get(owner);
-			if (myDelayedRows != null)
-			{
-				myDelayedRows.addAll(rows);
-			}
-			else
-			{
-				delayedRows.put(owner, rows);
-			}
-			
-			List<ArrayList<Object>> myDelayedRows2 = delayedRows2.get(owner);
-			if (myDelayedRows2 != null)
-			{
-				myDelayedRows2.addAll(rows2);
-			}
-			else
-			{
-				delayedRows2.put(owner, rows2);
-			}
-			return true;
-		}
-	}
-	
-	private static ArrayList deregister(UpdateOperator owner, String schema, String table, int node, Transaction tx)
-	{
-		ArrayList retval = new ArrayList(2);
-		synchronized(txDelayedMaps)
-		{
-			List<RIDAndIndexKeys> retval1 = delayedRows.remove(owner);
-			retval.add(retval1);
-			List<ArrayList<Object>> retval2 = delayedRows2.remove(owner);
-			retval.add(retval2);
-			HashMap<String, UpdateOperator> map = txDelayedMaps.get(tx.number());
-			String key = schema + "." + table + "~" + node;
-			map.remove(key);
-			if (map.size() == 0)
-			{
-				txDelayedMaps.remove(tx.number());
-			}
-		}	
-		return retval;
-	}
-	
-	public static void wakeUpDelayed(Transaction tx)
+
+	public static void wakeUpDelayed(final Transaction tx)
 	{
 		while (true)
 		{
-			synchronized(notYetStarted)
+			synchronized (notYetStarted)
 			{
-				IdentityHashMap<UpdateOperator, UpdateOperator> thisTx = notYetStarted.get(tx.number());
+				final IdentityHashMap<UpdateOperator, UpdateOperator> thisTx = notYetStarted.get(tx.number());
 				if (thisTx == null)
 				{
 					break;
 				}
 			}
-			
+
 			try
 			{
 				Thread.sleep(1);
 			}
-			catch(InterruptedException e)
-			{}
+			catch (final InterruptedException e)
+			{
+			}
 		}
-		
-		synchronized(txDelayedMaps)
+
+		synchronized (txDelayedMaps)
 		{
-			//HRDBMSWorker.logger.debug("Entering wakeUpDelayed with " + txDelayedMaps); //DEBUG
-			HashMap<String, UpdateOperator> map = txDelayedMaps.get(tx.number());
-			
+			// HRDBMSWorker.logger.debug("Entering wakeUpDelayed with " +
+			// txDelayedMaps); //DEBUG
+			final HashMap<String, UpdateOperator> map = txDelayedMaps.get(tx.number());
+
 			if (map == null)
 			{
 				return;
 			}
-	
-			//HRDBMSWorker.logger.debug("Waking up " + map.size() + " threads"); //DEBUG
-			for (UpdateOperator io : map.values())
+
+			// HRDBMSWorker.logger.debug("Waking up " + map.size() + "
+			// threads"); //DEBUG
+			for (final UpdateOperator io : map.values())
 			{
-				synchronized(io)
+				synchronized (io)
 				{
 					io.notify();
 				}
@@ -237,7 +107,79 @@ public final class UpdateOperator implements Operator, Serializable
 		}
 	}
 
-	private static byte[] intToBytes(int val)
+	private static void cast(final ArrayList<Object> row, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types)
+	{
+		int i = 0;
+		final int size = pos2Col.size();
+		while (i < size)
+		{
+			final String type = cols2Types.get(pos2Col.get(i));
+			final Object o = row.get(i);
+			if (type.equals("INT"))
+			{
+				if (o instanceof Long)
+				{
+					row.remove(i);
+					row.add(i, ((Long)o).intValue());
+				}
+				else if (o instanceof Double)
+				{
+					row.remove(i);
+					row.add(i, ((Double)o).intValue());
+				}
+			}
+			else if (type.equals("LONG"))
+			{
+				if (o instanceof Integer)
+				{
+					row.remove(i);
+					row.add(i, ((Integer)o).longValue());
+				}
+				else if (o instanceof Double)
+				{
+					row.remove(i);
+					row.add(i, ((Double)o).longValue());
+				}
+			}
+			else if (type.equals("FLOAT"))
+			{
+				if (o instanceof Integer)
+				{
+					row.remove(i);
+					row.add(i, ((Integer)o).doubleValue());
+				}
+				else if (o instanceof Long)
+				{
+					row.remove(i);
+					row.add(i, ((Long)o).doubleValue());
+				}
+			}
+
+			i++;
+		}
+	}
+
+	private static ArrayList deregister(final UpdateOperator owner, final String schema, final String table, final int node, final Transaction tx)
+	{
+		final ArrayList retval = new ArrayList(2);
+		synchronized (txDelayedMaps)
+		{
+			final List<RIDAndIndexKeys> retval1 = delayedRows.remove(owner);
+			retval.add(retval1);
+			final List<ArrayList<Object>> retval2 = delayedRows2.remove(owner);
+			retval.add(retval2);
+			final HashMap<String, UpdateOperator> map = txDelayedMaps.get(tx.number());
+			final String key = schema + "." + table + "~" + node;
+			map.remove(key);
+			if (map.size() == 0)
+			{
+				txDelayedMaps.remove(tx.number());
+			}
+		}
+		return retval;
+	}
+
+	private static byte[] intToBytes(final int val)
 	{
 		final byte[] buff = new byte[4];
 		buff[0] = (byte)(val >> 24);
@@ -247,7 +189,7 @@ public final class UpdateOperator implements Operator, Serializable
 		return buff;
 	}
 
-	private static byte[] longToBytes(long val)
+	private static byte[] longToBytes(final long val)
 	{
 		final byte[] buff = new byte[8];
 		buff[0] = (byte)(val >> 56);
@@ -261,8 +203,135 @@ public final class UpdateOperator implements Operator, Serializable
 		return buff;
 	}
 
+	private static boolean registerDelayed(final UpdateOperator caller, final String schema, final String table, final int node, final Transaction tx, final List<RIDAndIndexKeys> rows, final List<ArrayList<Object>> rows2)
+	{
+		synchronized (txDelayedMaps)
+		{
+			final String key = schema + "." + table + "~" + node;
+			HashMap<String, UpdateOperator> map = txDelayedMaps.get(tx.number());
+			if (map == null)
+			{
+				map = new HashMap<String, UpdateOperator>();
+				map.put(key, caller);
+
+				if (rows != null)
+				{
+					delayedRows.put(caller, rows);
+				}
+
+				if (rows2 != null)
+				{
+					delayedRows2.put(caller, rows2);
+				}
+				txDelayedMaps.put(tx.number(), map);
+				return true;
+			}
+
+			final UpdateOperator owner = map.get(key);
+			if (owner == null)
+			{
+				map.put(key, caller);
+				if (rows != null)
+				{
+					delayedRows.put(caller, rows);
+				}
+
+				if (rows2 != null)
+				{
+					delayedRows2.put(caller, rows2);
+				}
+				return true;
+			}
+
+			try
+			{
+				final List<RIDAndIndexKeys> myDelayedRows = delayedRows.get(owner);
+				if (myDelayedRows != null)
+				{
+					myDelayedRows.addAll(rows);
+				}
+				else
+				{
+					delayedRows.put(owner, rows);
+				}
+
+				final List<ArrayList<Object>> myDelayedRows2 = delayedRows2.get(owner);
+				if (myDelayedRows2 != null)
+				{
+					myDelayedRows2.addAll(rows2);
+				}
+				else
+				{
+					delayedRows2.put(owner, rows2);
+				}
+			}
+			catch (final NullPointerException e)
+			{
+				HRDBMSWorker.logger.debug("Owner = " + owner + ", map.get(key) = " + map.get(key) + ", delayedRows.get(owner) = " + delayedRows.get(owner));
+			}
+			return false;
+		}
+	}
+
+	private static boolean registerDelayedCantOwn(final UpdateOperator caller, final String schema, final String table, final int node, final Transaction tx, final List<RIDAndIndexKeys> rows, final List<ArrayList<Object>> rows2)
+	{
+		synchronized (txDelayedMaps)
+		{
+			final String key = schema + "." + table + "~" + node;
+			final HashMap<String, UpdateOperator> map = txDelayedMaps.get(tx.number());
+			if (map == null)
+			{
+				return false;
+			}
+
+			final UpdateOperator owner = map.get(key);
+			if (owner == null)
+			{
+				return false;
+			}
+
+			final List<RIDAndIndexKeys> myDelayedRows = delayedRows.get(owner);
+			if (myDelayedRows != null)
+			{
+				myDelayedRows.addAll(rows);
+			}
+			else
+			{
+				delayedRows.put(owner, rows);
+			}
+
+			final List<ArrayList<Object>> myDelayedRows2 = delayedRows2.get(owner);
+			if (myDelayedRows2 != null)
+			{
+				myDelayedRows2.addAll(rows2);
+			}
+			else
+			{
+				delayedRows2.put(owner, rows2);
+			}
+			return true;
+		}
+	}
+
+	private static byte[] stringToBytes(final String string)
+	{
+		byte[] data = null;
+		try
+		{
+			data = string.getBytes(StandardCharsets.UTF_8);
+		}
+		catch (final Exception e)
+		{
+		}
+		final byte[] len = intToBytes(data.length);
+		final byte[] retval = new byte[data.length + len.length];
+		System.arraycopy(len, 0, retval, 0, len.length);
+		System.arraycopy(data, 0, retval, len.length, data.length);
+		return retval;
+	}
+
 	@Override
-	public void add(Operator op) throws Exception
+	public void add(final Operator op) throws Exception
 	{
 		if (child == null)
 		{
@@ -367,7 +436,7 @@ public final class UpdateOperator implements Operator, Serializable
 
 	@Override
 	// @?Parallel
-	public Object next(Operator op) throws Exception
+	public Object next(final Operator op) throws Exception
 	{
 		while (!done)
 		{
@@ -384,13 +453,13 @@ public final class UpdateOperator implements Operator, Serializable
 			return new DataEndMarker();
 		}
 
-		int retval = num.get();
+		final int retval = num.get();
 		num.set(-1);
 		return retval;
 	}
 
 	@Override
-	public void nextAll(Operator op) throws Exception
+	public void nextAll(final Operator op) throws Exception
 	{
 		child.nextAll(op);
 		Object o = next(op);
@@ -419,13 +488,13 @@ public final class UpdateOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void registerParent(Operator op) throws Exception
+	public void registerParent(final Operator op) throws Exception
 	{
 		throw new Exception("UpdateOperator does not support parents");
 	}
 
 	@Override
-	public void removeChild(Operator op)
+	public void removeChild(final Operator op)
 	{
 		if (op == child)
 		{
@@ -435,7 +504,7 @@ public final class UpdateOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 		parent = null;
 	}
@@ -447,29 +516,29 @@ public final class UpdateOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		throw new Exception("Tried to call serialize on update operator");
 	}
 
 	@Override
-	public void setChildPos(int pos)
+	public void setChildPos(final int pos)
 	{
 	}
 
 	@Override
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 		this.node = node;
 	}
 
 	@Override
-	public void setPlan(Plan plan)
+	public void setPlan(final Plan plan)
 	{
 		this.plan = plan;
 	}
 
-	public void setTransaction(Transaction tx)
+	public void setTransaction(final Transaction tx)
 	{
 		this.tx = tx;
 	}
@@ -479,8 +548,8 @@ public final class UpdateOperator implements Operator, Serializable
 	{
 		if (ConnectionWorker.isDelayed(tx))
 		{
-			//notYetStarted.multiPut(tx.number(), this);
-			synchronized(notYetStarted)
+			// notYetStarted.multiPut(tx.number(), this);
+			synchronized (notYetStarted)
 			{
 				IdentityHashMap<UpdateOperator, UpdateOperator> thisTx = notYetStarted.get(tx.number());
 				if (thisTx == null)
@@ -488,55 +557,56 @@ public final class UpdateOperator implements Operator, Serializable
 					thisTx = new IdentityHashMap<UpdateOperator, UpdateOperator>();
 					notYetStarted.put(tx.number(), thisTx);
 				}
-			
+
 				thisTx.put(this, this);
 			}
 		}
-		
+
 		int type = -1;
 		PartitionMetaData spmd = null;
 		ArrayList<String> indexes = null;
 		try
 		{
 			child.start();
-			indexes = meta.getIndexFileNamesForTable(schema, table, tx);
-			keys = meta.getKeys(indexes, tx);
-			types = meta.getTypes(indexes, tx);
-			orders = meta.getOrders(indexes, tx);
-			HashMap<Integer, Integer> pos2Length = new HashMap<Integer, Integer>();
-			cols2Pos = meta.getCols2PosForTable(schema, table, tx);
+			indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
+			keys = MetaData.getKeys(indexes, tx);
+			types = MetaData.getTypes(indexes, tx);
+			orders = MetaData.getOrders(indexes, tx);
+			final HashMap<Integer, Integer> pos2Length = new HashMap<Integer, Integer>();
+			cols2Pos = MetaData.getCols2PosForTable(schema, table, tx);
 			pos2Col = MetaData.cols2PosFlip(cols2Pos);
-			cols2Types = new MetaData().getCols2TypesForTable(schema, table, tx);
+			// new MetaData();
+			cols2Types = MetaData.getCols2TypesForTable(schema, table, tx);
 			spmd = new MetaData().getPartMeta(schema, table, tx);
-			type = meta.getTypeForTable(schema, table, tx);
-			for (Map.Entry entry : cols2Types.entrySet())
+			type = MetaData.getTypeForTable(schema, table, tx);
+			for (final Map.Entry entry : cols2Types.entrySet())
 			{
 				if (entry.getValue().equals("CHAR"))
 				{
-					int length = meta.getLengthForCharCol(schema, table, (String)entry.getKey(), tx);
+					final int length = MetaData.getLengthForCharCol(schema, table, (String)entry.getKey(), tx);
 					pos2Length.put(cols2Pos.get(entry.getKey()), length);
 				}
 			}
 
-			PartitionMetaData pmeta = new MetaData().new PartitionMetaData(schema, table, tx);
+			final PartitionMetaData pmeta = new MetaData().new PartitionMetaData(schema, table, tx);
 
-			int numNodes = MetaData.numWorkerNodes;
+			final int numNodes = MetaData.numWorkerNodes;
 			Object o = child.next(this);
 			while (!(o instanceof DataEndMarker))
 			{
 				try
 				{
-					ArrayList<Object> row = (ArrayList<Object>)o;
-					int node = (Integer)row.get(child.getCols2Pos().get("_RID1"));
-					int device = (Integer)row.get(child.getCols2Pos().get("_RID2"));
-					int block = (Integer)row.get(child.getCols2Pos().get("_RID3"));
-					int rec = (Integer)row.get(child.getCols2Pos().get("_RID4"));
-					ArrayList<ArrayList<Object>> indexKeys = new ArrayList<ArrayList<Object>>();
-					for (String index : indexes)
+					final ArrayList<Object> row = (ArrayList<Object>)o;
+					final int node = (Integer)row.get(child.getCols2Pos().get("_RID1"));
+					final int device = (Integer)row.get(child.getCols2Pos().get("_RID2"));
+					final int block = (Integer)row.get(child.getCols2Pos().get("_RID3"));
+					final int rec = (Integer)row.get(child.getCols2Pos().get("_RID4"));
+					final ArrayList<ArrayList<Object>> indexKeys = new ArrayList<ArrayList<Object>>();
+					for (final String index : indexes)
 					{
-						ArrayList<Object> keys2 = new ArrayList<Object>();
-						ArrayList<String> cols = MetaData.getColsFromIndexFileName(index, tx, keys, indexes);
-						for (String col : cols)
+						final ArrayList<Object> keys2 = new ArrayList<Object>();
+						final ArrayList<String> cols = MetaData.getColsFromIndexFileName(index, tx, keys, indexes);
+						for (final String col : cols)
 						{
 							keys2.add(row.get(child.getCols2Pos().get(col)));
 						}
@@ -544,17 +614,17 @@ public final class UpdateOperator implements Operator, Serializable
 						indexKeys.add(keys2);
 					}
 
-					RIDAndIndexKeys raik = new RIDAndIndexKeys(new RID(node, device, block, rec), indexKeys);
+					final RIDAndIndexKeys raik = new RIDAndIndexKeys(new RID(node, device, block, rec), indexKeys);
 					map.multiPut(node, raik);
 
-					ArrayList<Object> row2 = new ArrayList<Object>();
-					for (String col : pos2Col.values())
+					final ArrayList<Object> row2 = new ArrayList<Object>();
+					for (final String col : pos2Col.values())
 					{
 						boolean contains = false;
 						int index = -1;
-						String col1 = col.substring(col.indexOf('.') + 1);
+						final String col1 = col.substring(col.indexOf('.') + 1);
 						int i = 0;
-						for (Column col2 : cols)
+						for (final Column col2 : cols)
 						{
 							if (col2.getColumn().equals(col1))
 							{
@@ -572,7 +642,7 @@ public final class UpdateOperator implements Operator, Serializable
 						else
 						{
 							String toGet = buildList.get(index);
-							Integer indx = child.getCols2Pos().get(toGet);
+							final Integer indx = child.getCols2Pos().get(toGet);
 							if (indx != null)
 							{
 								row2.add(row.get(indx));
@@ -584,7 +654,7 @@ public final class UpdateOperator implements Operator, Serializable
 									toGet = toGet.substring(toGet.indexOf('.') + 1);
 								}
 
-								for (Map.Entry entry : child.getCols2Pos().entrySet())
+								for (final Map.Entry entry : child.getCols2Pos().entrySet())
 								{
 									String temp = (String)entry.getKey();
 									if (temp.contains("."))
@@ -603,7 +673,7 @@ public final class UpdateOperator implements Operator, Serializable
 					}
 
 					cast(row2, pos2Col, cols2Types);
-					for (Map.Entry entry : pos2Length.entrySet())
+					for (final Map.Entry entry : pos2Length.entrySet())
 					{
 						if (((String)row2.get((Integer)entry.getKey())).length() > (Integer)entry.getValue())
 						{
@@ -611,14 +681,14 @@ public final class UpdateOperator implements Operator, Serializable
 							return;
 						}
 					}
-					ArrayList<Integer> nodes = MetaData.determineNode(schema, table, row2, tx, pmeta, cols2Pos, numNodes);
-					for (Integer n : nodes)
+					final ArrayList<Integer> nodes = MetaData.determineNode(schema, table, row2, tx, pmeta, cols2Pos, numNodes);
+					for (final Integer n : nodes)
 					{
 						plan.addNode(n);
 						map2.multiPut(n, row2);
 					}
 				}
-				catch (Exception e)
+				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.debug("", e);
 					throw e;
@@ -646,14 +716,14 @@ public final class UpdateOperator implements Operator, Serializable
 				o = child.next(this);
 			}
 		}
-		catch(Exception e)
+		catch (final Exception e)
 		{
 			if (ConnectionWorker.isDelayed(tx))
 			{
-				//notYetStarted.remove(tx.number(), this);
-				synchronized(notYetStarted)
+				// notYetStarted.remove(tx.number(), this);
+				synchronized (notYetStarted)
 				{
-					IdentityHashMap<UpdateOperator, UpdateOperator> thisTx = notYetStarted.get(tx.number());
+					final IdentityHashMap<UpdateOperator, UpdateOperator> thisTx = notYetStarted.get(tx.number());
 					thisTx.remove(this);
 					if (thisTx.size() == 0)
 					{
@@ -661,17 +731,17 @@ public final class UpdateOperator implements Operator, Serializable
 					}
 				}
 			}
-			
+
 			HRDBMSWorker.logger.debug("", e);
 			throw e;
 		}
-		
+
 		if (ConnectionWorker.isDelayed(tx))
 		{
-			//notYetStarted.remove(tx.number(), this);
-			synchronized(notYetStarted)
+			// notYetStarted.remove(tx.number(), this);
+			synchronized (notYetStarted)
 			{
-				IdentityHashMap<UpdateOperator, UpdateOperator> thisTx = notYetStarted.get(tx.number());
+				final IdentityHashMap<UpdateOperator, UpdateOperator> thisTx = notYetStarted.get(tx.number());
 				thisTx.remove(this);
 				if (thisTx.size() == 0)
 				{
@@ -679,7 +749,7 @@ public final class UpdateOperator implements Operator, Serializable
 				}
 			}
 		}
-		
+
 		if (!ConnectionWorker.isDelayed(tx) && map.totalSize() > 0)
 		{
 			flush(indexes, spmd, cols2Pos, pos2Col, cols2Types, type);
@@ -698,72 +768,124 @@ public final class UpdateOperator implements Operator, Serializable
 		return "UpdateOperator";
 	}
 
-	private void cast(ArrayList<Object> row, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types)
+	private void delayedFlush(final ArrayList<String> indexes, final PartitionMetaData spmd, final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type) throws Exception
 	{
-		int i = 0;
-		final int size = pos2Col.size();
-		while (i < size)
+		FlushThread thread = null;
+		int node = -1;
+		boolean realOwner = false;
+		int realNode = -1;
+		HashSet copy = new HashSet(map.getKeySet());
+		for (final Object o : copy)
 		{
-			String type = cols2Types.get(pos2Col.get(i));
-			Object o = row.get(i);
-			if (type.equals("INT"))
+			node = (Integer)o;
+			if (node < 0)
 			{
-				if (o instanceof Long)
-				{
-					row.remove(i);
-					row.add(i, ((Long)o).intValue());
-				}
-				else if (o instanceof Double)
-				{
-					row.remove(i);
-					row.add(i, ((Double)o).intValue());
-				}
-			}
-			else if (type.equals("LONG"))
-			{
-				if (o instanceof Integer)
-				{
-					row.remove(i);
-					row.add(i, ((Integer)o).longValue());
-				}
-				else if (o instanceof Double)
-				{
-					row.remove(i);
-					row.add(i, ((Double)o).longValue());
-				}
-			}
-			else if (type.equals("FLOAT"))
-			{
-				if (o instanceof Integer)
-				{
-					row.remove(i);
-					row.add(i, ((Integer)o).doubleValue());
-				}
-				else if (o instanceof Long)
-				{
-					row.remove(i);
-					row.add(i, ((Long)o).doubleValue());
-				}
+				throw new Exception("Delayed flush not allowed for system metadata");
 			}
 
-			i++;
+			final List<RIDAndIndexKeys> list = map.get(node);
+			final List<ArrayList<Object>> list2 = map2.get(node);
+
+			if (!realOwner)
+			{
+				final boolean owner = UpdateOperator.registerDelayed(this, schema, table, node, tx, list, list2);
+				if (owner)
+				{
+					realOwner = true;
+					realNode = node;
+				}
+
+				map.multiRemove(o);
+				map2.multiRemove(node);
+			}
+			else
+			{
+				final boolean handled = UpdateOperator.registerDelayedCantOwn(this, schema, table, node, tx, list, list2);
+				if (handled)
+				{
+					map.multiRemove(o);
+					map2.multiRemove(node);
+				}
+			}
+		}
+
+		if (map2.size() > 0)
+		{
+			copy = new HashSet(map.getKeySet());
+			for (final Object o : copy)
+			{
+				node = (Integer)o;
+				final List<RIDAndIndexKeys> list = map.get(node);
+				final List<ArrayList<Object>> list2 = map2.get(node);
+
+				final boolean handled = UpdateOperator.registerDelayedCantOwn(this, schema, table, node, tx, list, list2);
+				if (handled)
+				{
+					map.multiRemove(o);
+					map2.multiRemove(node);
+				}
+			}
+		}
+
+		if (map.size() > 0 || map2.size() > 0)
+		{
+			flush(indexes, spmd, cols2Pos, pos2Col, cols2Types, type);
+		}
+
+		if (!realOwner)
+		{
+			return;
+		}
+
+		synchronized (this)
+		{
+			try
+			{
+				wait();
+			}
+			catch (final InterruptedException e)
+			{
+			}
+		}
+
+		final ArrayList lists = UpdateOperator.deregister(this, schema, table, realNode, tx);
+		final List<RIDAndIndexKeys> list = (List<RIDAndIndexKeys>)lists.get(0);
+		final List<ArrayList<Object>> list2 = (List<ArrayList<Object>>)lists.get(1);
+		thread = new FlushThread(list, indexes, node, list2, cols2Pos, spmd, pos2Col, cols2Types, type);
+		thread.start();
+
+		while (true)
+		{
+			try
+			{
+				thread.join();
+				break;
+			}
+			catch (final InterruptedException e)
+			{
+			}
+		}
+
+		if (!thread.getOK())
+		{
+			num.set(Integer.MIN_VALUE);
 		}
 	}
 
-	private void flush(ArrayList<String> indexes, PartitionMetaData spmd, HashMap<String, Integer> cols2Pos, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type) throws Exception
+	private void flush(final ArrayList<String> indexes, final PartitionMetaData spmd, final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type) throws Exception
 	{
-		ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
-		for (Object o : map.getKeySet())
+		final ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
+		for (final Object o : map.getKeySet())
 		{
-			int node = (Integer)o;
-			List<RIDAndIndexKeys> list = map.get(node);
-			List<ArrayList<Object>> list2 = map2.get(node);
+			final int node = (Integer)o;
+			final List<RIDAndIndexKeys> list = map.get(node);
+			final List<ArrayList<Object>> list2 = map2.get(node);
 			map2.multiRemove(node);
 			if (node == -1)
 			{
-				ArrayList<Integer> coords = MetaData.getCoordNodes();
+				final ArrayList<Integer> coords = MetaData.getCoordNodes();
 
-				for (Integer coord : coords)
+				for (final Integer coord : coords)
 				{
 					threads.add(new FlushThread(list, indexes, coord, list2, cols2Pos, spmd, pos2Col, cols2Types, type));
 				}
@@ -774,21 +896,21 @@ public final class UpdateOperator implements Operator, Serializable
 			}
 		}
 
-		for (FlushThread thread : threads)
+		for (final FlushThread thread : threads)
 		{
 			thread.start();
 		}
 
-		ArrayList<FlushThread2> threads2 = new ArrayList<FlushThread2>();
-		for (Object o : map2.getKeySet())
+		final ArrayList<FlushThread2> threads2 = new ArrayList<FlushThread2>();
+		for (final Object o : map2.getKeySet())
 		{
-			int node = (Integer)o;
-			List<ArrayList<Object>> list = map2.get(node);
+			final int node = (Integer)o;
+			final List<ArrayList<Object>> list = map2.get(node);
 			if (node == -1)
 			{
-				ArrayList<Integer> coords = MetaData.getCoordNodes();
+				final ArrayList<Integer> coords = MetaData.getCoordNodes();
 
-				for (Integer coord : coords)
+				for (final Integer coord : coords)
 				{
 					threads2.add(new FlushThread2(list, indexes, coord, cols2Pos, spmd, pos2Col, cols2Types, type));
 				}
@@ -799,12 +921,12 @@ public final class UpdateOperator implements Operator, Serializable
 			}
 		}
 
-		for (FlushThread2 thread : threads2)
+		for (final FlushThread2 thread : threads2)
 		{
 			thread.start();
 		}
 
-		for (FlushThread thread : threads)
+		for (final FlushThread thread : threads)
 		{
 			while (true)
 			{
@@ -813,7 +935,7 @@ public final class UpdateOperator implements Operator, Serializable
 					thread.join();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -826,7 +948,7 @@ public final class UpdateOperator implements Operator, Serializable
 
 		map.clear();
 
-		for (FlushThread2 thread : threads2)
+		for (final FlushThread2 thread : threads2)
 		{
 			while (true)
 			{
@@ -835,7 +957,7 @@ public final class UpdateOperator implements Operator, Serializable
 					thread.join();
 					break;
 				}
-				catch (InterruptedException e)
+				catch (final InterruptedException e)
 				{
 				}
 			}
@@ -849,126 +971,6 @@ public final class UpdateOperator implements Operator, Serializable
 		map2.clear();
 
 		// TODO update global unique indexes here
-	}
-	
-	private void delayedFlush(ArrayList<String> indexes, PartitionMetaData spmd, HashMap<String, Integer> cols2Pos, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type) throws Exception
-	{
-		FlushThread thread = null;
-		int node = -1;
-		boolean realOwner = false;
-		int realNode = -1;
-		HashSet copy = new HashSet(map.getKeySet());
-		for (Object o : copy)
-		{
-			node = (Integer)o;
-			if (node < 0)
-			{
-				throw new Exception("Delayed flush not allowed for system metadata");
-			}
-			
-			List<RIDAndIndexKeys> list = map.get(node);
-			List<ArrayList<Object>> list2 = map2.get(node);
-			
-			if (!realOwner)
-			{
-				boolean owner = UpdateOperator.registerDelayed(this, schema, table, node, tx, list, list2);
-				if (owner)
-				{
-					realOwner = true;
-					realNode = node;
-				}
-				
-				map.multiRemove(o);
-				map2.multiRemove(node);
-			}
-			else
-			{
-				boolean handled = UpdateOperator.registerDelayedCantOwn(this, schema, table, node, tx, list, list2);
-				if (handled)
-				{
-					map.multiRemove(o);
-					map2.multiRemove(node);
-				}
-			}
-		}
-		
-		if (map2.size() > 0)
-		{
-			copy = new HashSet(map.getKeySet());
-			for (Object o : copy)
-			{
-				node = (Integer)o;
-				List<RIDAndIndexKeys> list = map.get(node);
-				List<ArrayList<Object>> list2 = map2.get(node);
-				
-				boolean handled = UpdateOperator.registerDelayedCantOwn(this, schema, table, node, tx, list, list2);
-				if (handled)
-				{
-					map.multiRemove(o);
-					map2.multiRemove(node);
-				}
-			}
-		}
-		
-		if (map.size() > 0 || map2.size() > 0)
-		{
-			flush(indexes, spmd, cols2Pos, pos2Col, cols2Types, type);
-		}
-		
-		if (!realOwner)
-		{
-			return;
-		}
-
-		synchronized(this)
-		{
-			try
-			{
-				wait();
-			}
-			catch(InterruptedException e)
-			{}
-		}
-		
-		ArrayList lists = UpdateOperator.deregister(this, schema, table, realNode, tx);
-		List<RIDAndIndexKeys> list = (List<RIDAndIndexKeys>)lists.get(0);
-		List<ArrayList<Object>> list2 = (List<ArrayList<Object>>)lists.get(1);
-		thread = new FlushThread(list, indexes, node, list2, cols2Pos, spmd, pos2Col, cols2Types, type);
-		thread.start();
-
-		while (true)
-		{
-			try
-			{
-				thread.join();
-				break;
-			}
-			catch (InterruptedException e)
-			{
-			}
-		}
-		
-		if (!thread.getOK())
-		{
-			num.set(Integer.MIN_VALUE);
-		}
-	}
-
-	private byte[] stringToBytes(String string)
-	{
-		byte[] data = null;
-		try
-		{
-			data = string.getBytes(StandardCharsets.UTF_8);
-		}
-		catch (Exception e)
-		{
-		}
-		byte[] len = intToBytes(data.length);
-		byte[] retval = new byte[data.length + len.length];
-		System.arraycopy(len, 0, retval, 0, len.length);
-		System.arraycopy(data, 0, retval, len.length, data.length);
-		return retval;
 	}
 
 	private class FlushThread extends HRDBMSThread
@@ -984,7 +986,7 @@ public final class UpdateOperator implements Operator, Serializable
 		private final int type;
 		private final TreeMap<Integer, String> pos2Col;
 
-		public FlushThread(List<RIDAndIndexKeys> list, ArrayList<String> indexes, int node, List<ArrayList<Object>> list2, HashMap<String, Integer> cols2Pos, PartitionMetaData pmd, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type)
+		public FlushThread(final List<RIDAndIndexKeys> list, final ArrayList<String> indexes, final int node, final List<ArrayList<Object>> list2, final HashMap<String, Integer> cols2Pos, final PartitionMetaData pmd, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type)
 		{
 			if (list != null)
 			{
@@ -1024,7 +1026,8 @@ public final class UpdateOperator implements Operator, Serializable
 			Socket sock = null;
 			try
 			{
-				String hostname = new MetaData().getHostNameForNode(node, tx);
+				// new MetaData();
+				final String hostname = MetaData.getHostNameForNode(node, tx);
 				// sock = new Socket(hostname,
 				// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				sock = new Socket();
@@ -1033,7 +1036,7 @@ public final class UpdateOperator implements Operator, Serializable
 				sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 				OutputStream out = sock.getOutputStream();
 				out = new BufferedOutputStream(out);
-				byte[] outMsg = "UPDATE          ".getBytes(StandardCharsets.UTF_8);
+				final byte[] outMsg = "UPDATE          ".getBytes(StandardCharsets.UTF_8);
 				outMsg[8] = 0;
 				outMsg[9] = 0;
 				outMsg[10] = 0;
@@ -1050,38 +1053,38 @@ public final class UpdateOperator implements Operator, Serializable
 				out.write(stringToBytes(pmd.getNGExp()));
 				out.write(stringToBytes(pmd.getNExp()));
 				out.write(stringToBytes(pmd.getDExp()));
-				//ObjectOutputStream objOut = new ObjectOutputStream(out);
-				IdentityHashMap<Object, Long> prev = new IdentityHashMap<Object, Long>();
+				// ObjectOutputStream objOut = new ObjectOutputStream(out);
+				final IdentityHashMap<Object, Long> prev = new IdentityHashMap<Object, Long>();
 				OperatorUtils.serializeALS(indexes, out, prev);
-				//objOut.writeObject(indexes);
+				// objOut.writeObject(indexes);
 				OperatorUtils.serializeALRAIK(new ArrayList(list), out, prev);
-				//objOut.writeObject(new ArrayList(list));
+				// objOut.writeObject(new ArrayList(list));
 				OperatorUtils.serializeALALS(keys, out, prev);
-				//objOut.writeObject(keys);
+				// objOut.writeObject(keys);
 				OperatorUtils.serializeALALS(types, out, prev);
-				//objOut.writeObject(types);
+				// objOut.writeObject(types);
 				OperatorUtils.serializeALALB(orders, out, prev);
-				//objOut.writeObject(orders);
+				// objOut.writeObject(orders);
 				OperatorUtils.serializeALALO(new ArrayList(list2), out, prev);
-				//objOut.writeObject(new ArrayList(list2));
+				// objOut.writeObject(new ArrayList(list2));
 				OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
-				//objOut.writeObject(cols2Pos);
-				//objOut.writeObject(pmd);
+				// objOut.writeObject(cols2Pos);
+				// objOut.writeObject(pmd);
 				OperatorUtils.serializeTM(pos2Col, out, prev);
-				//objOut.writeObject(pos2Col);
+				// objOut.writeObject(pos2Col);
 				if (cols2Types == null)
 				{
 					HRDBMSWorker.logger.debug("UO FT is about to serialize a null cols2Types");
 				}
 				OperatorUtils.serializeStringHM(cols2Types, out, prev);
-				//objOut.writeObject(cols2Types);
-				//objOut.flush();
+				// objOut.writeObject(cols2Types);
+				// objOut.flush();
 				out.flush();
 				getConfirmation(sock);
 				out.close();
 				sock.close();
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				HRDBMSWorker.logger.debug("", e);
 				try
@@ -1091,24 +1094,24 @@ public final class UpdateOperator implements Operator, Serializable
 						sock.close();
 					}
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 				}
 				ok = false;
 			}
 		}
 
-		private void getConfirmation(Socket sock) throws Exception
+		private void getConfirmation(final Socket sock) throws Exception
 		{
-			InputStream in = sock.getInputStream();
-			byte[] inMsg = new byte[2];
+			final InputStream in = sock.getInputStream();
+			final byte[] inMsg = new byte[2];
 
 			int count = 0;
 			while (count < 2)
 			{
 				try
 				{
-					int temp = in.read(inMsg, count, 2 - count);
+					final int temp = in.read(inMsg, count, 2 - count);
 					if (temp == -1)
 					{
 						in.close();
@@ -1126,7 +1129,7 @@ public final class UpdateOperator implements Operator, Serializable
 				}
 			}
 
-			String inStr = new String(inMsg, StandardCharsets.UTF_8);
+			final String inStr = new String(inMsg, StandardCharsets.UTF_8);
 			if (!inStr.equals("OK"))
 			{
 				in.close();
@@ -1137,7 +1140,7 @@ public final class UpdateOperator implements Operator, Serializable
 			{
 				in.close();
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 			}
 		}
@@ -1155,7 +1158,7 @@ public final class UpdateOperator implements Operator, Serializable
 		private final HashMap<String, String> cols2Types;
 		private final int type;
 
-		public FlushThread2(List<ArrayList<Object>> list, ArrayList<String> indexes, int node, HashMap<String, Integer> cols2Pos, PartitionMetaData spmd, TreeMap<Integer, String> pos2Col, HashMap<String, String> cols2Types, int type)
+		public FlushThread2(final List<ArrayList<Object>> list, final ArrayList<String> indexes, final int node, final HashMap<String, Integer> cols2Pos, final PartitionMetaData spmd, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type)
 		{
 			this.list = list;
 			this.indexes = indexes;
@@ -1179,7 +1182,8 @@ public final class UpdateOperator implements Operator, Serializable
 			Socket sock = null;
 			try
 			{
-				String hostname = new MetaData().getHostNameForNode(node, tx);
+				// new MetaData();
+				final String hostname = MetaData.getHostNameForNode(node, tx);
 				// sock = new Socket(hostname,
 				// Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number")));
 				sock = new Socket();
@@ -1188,7 +1192,7 @@ public final class UpdateOperator implements Operator, Serializable
 				sock.connect(new InetSocketAddress(hostname, Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"))));
 				OutputStream out = sock.getOutputStream();
 				out = new BufferedOutputStream(out);
-				byte[] outMsg = "INSERT          ".getBytes(StandardCharsets.UTF_8);
+				final byte[] outMsg = "INSERT          ".getBytes(StandardCharsets.UTF_8);
 				outMsg[8] = 0;
 				outMsg[9] = 0;
 				outMsg[10] = 0;
@@ -1205,7 +1209,7 @@ public final class UpdateOperator implements Operator, Serializable
 				out.write(stringToBytes(spmd.getNGExp()));
 				out.write(stringToBytes(spmd.getNExp()));
 				out.write(stringToBytes(spmd.getDExp()));
-				IdentityHashMap<Object, Long> prev = new IdentityHashMap<Object, Long>();
+				final IdentityHashMap<Object, Long> prev = new IdentityHashMap<Object, Long>();
 				OperatorUtils.serializeALS(indexes, out, prev);
 				OperatorUtils.serializeALALO(new ArrayList(list), out, prev);
 				OperatorUtils.serializeALALS(keys, out, prev);
@@ -1218,22 +1222,22 @@ public final class UpdateOperator implements Operator, Serializable
 					HRDBMSWorker.logger.debug("UO FT2 is about to serialize a null cols2Types");
 				}
 				OperatorUtils.serializeStringHM(cols2Types, out, prev);
-				//ObjectOutputStream objOut = new ObjectOutputStream(out);
-				//objOut.writeObject(indexes);
-				//objOut.writeObject(new ArrayList(list));
-				//objOut.writeObject(keys);
-				//objOut.writeObject(types);
-				//objOut.writeObject(orders);
-				//objOut.writeObject(cols2Pos);
-				//objOut.writeObject(pos2Col);
-				//objOut.writeObject(cols2Types);
-				//objOut.flush();
+				// ObjectOutputStream objOut = new ObjectOutputStream(out);
+				// objOut.writeObject(indexes);
+				// objOut.writeObject(new ArrayList(list));
+				// objOut.writeObject(keys);
+				// objOut.writeObject(types);
+				// objOut.writeObject(orders);
+				// objOut.writeObject(cols2Pos);
+				// objOut.writeObject(pos2Col);
+				// objOut.writeObject(cols2Types);
+				// objOut.flush();
 				out.flush();
 				getConfirmation(sock);
-				//objOut.close();
+				// objOut.close();
 				sock.close();
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				try
 				{
@@ -1242,7 +1246,7 @@ public final class UpdateOperator implements Operator, Serializable
 						sock.close();
 					}
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 				}
 				ok = false;
@@ -1250,17 +1254,17 @@ public final class UpdateOperator implements Operator, Serializable
 			}
 		}
 
-		private void getConfirmation(Socket sock) throws Exception
+		private void getConfirmation(final Socket sock) throws Exception
 		{
-			InputStream in = sock.getInputStream();
-			byte[] inMsg = new byte[2];
+			final InputStream in = sock.getInputStream();
+			final byte[] inMsg = new byte[2];
 
 			int count = 0;
 			while (count < 2)
 			{
 				try
 				{
-					int temp = in.read(inMsg, count, 2 - count);
+					final int temp = in.read(inMsg, count, 2 - count);
 					if (temp == -1)
 					{
 						in.close();
@@ -1278,7 +1282,7 @@ public final class UpdateOperator implements Operator, Serializable
 				}
 			}
 
-			String inStr = new String(inMsg, StandardCharsets.UTF_8);
+			final String inStr = new String(inMsg, StandardCharsets.UTF_8);
 			if (!inStr.equals("OK"))
 			{
 				in.close();
@@ -1289,7 +1293,7 @@ public final class UpdateOperator implements Operator, Serializable
 			{
 				in.close();
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 			}
 		}

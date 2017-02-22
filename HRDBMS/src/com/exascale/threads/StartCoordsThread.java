@@ -17,7 +17,7 @@ public class StartCoordsThread extends HRDBMSThread
 		this.description = "Start Coordinators";
 	}
 
-	public static boolean isThisMyIpAddress(InetAddress addr)
+	public static boolean isThisMyIpAddress(final InetAddress addr)
 	{
 		// Check if the address is a valid special local or loop back
 		if (addr.isAnyLocalAddress() || addr.isLoopbackAddress())
@@ -86,10 +86,9 @@ public class StartCoordsThread extends HRDBMSThread
 					// final String user =
 					// HRDBMSWorker.getHParms().getProperty("hrdbms_user");
 					HRDBMSWorker.logger.info("Starting coordinator " + host);
-					final String command1 = "cd " + wd + "; ulimit -n " + HRDBMSWorker.getHParms().getProperty("max_open_files") + "; ulimit -u 100000; nohup " + cmd + " -Xmx" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xms" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xss" + HRDBMSWorker.getHParms().getProperty("stack_size") + " " + HRDBMSWorker.getHParms().getProperty("jvm_args") + " -cp HRDBMS.jar:. com.exascale.managers.HRDBMSWorker " + HRDBMSWorker.TYPE_COORD + " > /dev/null 2>&1 &";
+					final String command1 = "cd " + wd + "; ulimit -n " + HRDBMSWorker.getHParms().getProperty("max_open_files") + "; ulimit -u 100000; nohup " + cmd + " -Xmx" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xms" + HRDBMSWorker.getHParms().getProperty("Xmx_string") + " -Xss" + HRDBMSWorker.getHParms().getProperty("stack_size") + " " + HRDBMSWorker.getHParms().getProperty("jvm_args") + " " + HRDBMSWorker.getHParms().getProperty("coordinator_debug_jvm_args") + " -cp " + HRDBMSWorker.getHParms().getProperty("package_classpath") + ":. com.exascale.managers.HRDBMSWorker " + HRDBMSWorker.TYPE_COORD + " > /dev/null 2>&1 &";
 					try
 					{
-
 						// final java.util.Properties config = new
 						// java.util.Properties();
 						// config.put("StrictHostKeyChecking", "no");
@@ -117,8 +116,8 @@ public class StartCoordsThread extends HRDBMSThread
 						// }
 						// channel.disconnect();
 						// session.disconnect();
-						HRDBMSWorker.logger.info("Command: " + "ssh -n -f " + host + "  \"bash -c '" + command1 + "'\"");
-						Runtime.getRuntime().exec(new String[] { "bash", "-c", "ssh -n -f " + host + "  \"bash -c '" + command1 + "'\"" });
+						HRDBMSWorker.logger.info("Command: " + "ssh " + HRDBMSWorker.getHParms().getProperty("ssh_args") + " -n -f " + host + "  \"bash -c '" + command1 + "'\"");
+						Runtime.getRuntime().exec(new String[] { "bash", "-c", "ssh " + HRDBMSWorker.getHParms().getProperty("ssh_args") + " -n -f " + host + "  \"bash -c '" + command1 + "'\"" });
 					}
 					catch (final Exception e)
 					{
@@ -128,6 +127,7 @@ public class StartCoordsThread extends HRDBMSThread
 
 				line = in.readLine();
 			}
+			in.close();
 			HRDBMSWorker.logger.debug("Start Coordinator is about to terminate.");
 			HRDBMSWorker.getThreadList().remove(index);
 			HRDBMSWorker.terminateThread(index);

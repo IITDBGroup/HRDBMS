@@ -6,7 +6,7 @@ public abstract class Task implements Comparable<Task>
 	private long estimate;
 
 	@Override
-	public int compareTo(Task rhs)
+	public int compareTo(final Task rhs)
 	{
 		if (time < rhs.time)
 		{
@@ -34,12 +34,12 @@ public abstract class Task implements Comparable<Task>
 
 	public abstract void run();
 
-	public void setEstimatedTime(long estimate)
+	public void setEstimatedTime(final long estimate)
 	{
 		this.estimate = estimate;
 	}
 
-	public void setExecuteTime(long time)
+	public void setExecuteTime(final long time)
 	{
 		this.time = time;
 	}

@@ -30,12 +30,12 @@ public class ReadThread extends HRDBMSThread
 	private ArrayList<Integer> indexes;
 	private Page[] bp;
 
-	public ReadThread(ArrayList<ReadThread> subThreads)
+	public ReadThread(final ArrayList<ReadThread> subThreads)
 	{
 		this.subThreads = subThreads;
 	}
 
-	public ReadThread(Page p, Block b, ByteBuffer bb)
+	public ReadThread(final Page p, final Block b, final ByteBuffer bb)
 	{
 		this.description = "Read thread for buffer Manager";
 		this.setWait(false);
@@ -44,7 +44,7 @@ public class ReadThread extends HRDBMSThread
 		this.bb = bb;
 	}
 
-	public ReadThread(Page p, Block b, ByteBuffer bb, ArrayList<Integer> cols, int layoutSize)
+	public ReadThread(final Page p, final Block b, final ByteBuffer bb, final ArrayList<Integer> cols, final int layoutSize)
 	{
 		this.description = "Read thread for buffer Manager";
 		this.setWait(false);
@@ -55,7 +55,7 @@ public class ReadThread extends HRDBMSThread
 		this.layoutSize = layoutSize;
 	}
 
-	public ReadThread(Page p, Block b, ByteBuffer bb, Schema schema, ConcurrentHashMap<Integer, Schema> schemaMap, Transaction tx, ArrayList<Integer> fetchPos)
+	public ReadThread(final Page p, final Block b, final ByteBuffer bb, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos)
 	{
 		this.description = "Read thread for buffer Manager";
 		this.setWait(false);
@@ -68,7 +68,7 @@ public class ReadThread extends HRDBMSThread
 		this.fetchPos = fetchPos;
 	}
 
-	public ReadThread(Page p, int num, ArrayList<Integer> indexes, Page[] bp, int rank, int rankSize)
+	public ReadThread(final Page p, final int num, final ArrayList<Integer> indexes, final Page[] bp, final int rank, final int rankSize)
 	{
 		this.p = p;
 		this.num = num;
@@ -89,12 +89,12 @@ public class ReadThread extends HRDBMSThread
 		{
 			if (subThreads != null)
 			{
-				for (ReadThread thread : subThreads)
+				for (final ReadThread thread : subThreads)
 				{
 					thread.join();
 				}
 
-				//this.terminate();
+				// this.terminate();
 				return;
 			}
 
@@ -120,7 +120,7 @@ public class ReadThread extends HRDBMSThread
 				b = p.block();
 				bb = p.buffer();
 				final FileChannel fc = FileManager.getFile(b.fileName());
-				ByteBuffer[] bbs = new ByteBuffer[num];
+				final ByteBuffer[] bbs = new ByteBuffer[num];
 				bbs[0] = bb;
 				int i = 1;
 				while (i < num)
@@ -138,7 +138,7 @@ public class ReadThread extends HRDBMSThread
 					i++;
 				}
 
-				//this.terminate();
+				// this.terminate();
 				return;
 			}
 
@@ -191,23 +191,23 @@ public class ReadThread extends HRDBMSThread
 				schemaMap.put(p.block().number(), schema);
 				schema.prepRowIter(fetchPos);
 			}
-			//this.terminate();
+			// this.terminate();
 		}
 		catch (final Exception e)
 		{
 			HRDBMSWorker.logger.warn("I/O error occurred trying to read file: " + b.fileName() + ":" + b.number(), e);
 			ok = false;
-			//this.terminate();
+			// this.terminate();
 			return;
 		}
 		return;
 	}
 
-	public void setRank(int rank)
+	public void setRank(final int rank)
 	{
 	}
 
-	public void setRankSize(int rankSize)
+	public void setRankSize(final int rankSize)
 	{
 	}
 }

@@ -7,7 +7,7 @@ public class RIDChange
 	private final RID oldRID;
 	private final RID newRID;
 
-	public RIDChange(RID oldRID, RID newRID)
+	public RIDChange(final RID oldRID, final RID newRID)
 	{
 		this.oldRID = oldRID;
 		this.newRID = newRID;

@@ -7,17 +7,17 @@ public class InternalResultSet
 	private final ArrayList<ArrayList<Object>> data;
 	private int pos = -1;
 
-	public InternalResultSet(ArrayList<ArrayList<Object>> data)
+	public InternalResultSet(final ArrayList<ArrayList<Object>> data)
 	{
 		this.data = data;
 	}
 
-	public Integer getInt(int colPos)
+	public Integer getInt(final int colPos)
 	{
 		return (Integer)(data.get(pos).get(colPos - 1));
 	}
 
-	public String getString(int colPos)
+	public String getString(final int colPos)
 	{
 		return (String)(data.get(pos).get(colPos - 1));
 	}

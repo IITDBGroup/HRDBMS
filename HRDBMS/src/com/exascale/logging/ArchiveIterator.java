@@ -24,7 +24,7 @@ public class ArchiveIterator implements Iterator<LogRec>
 	private int index = 0;
 	private RandomAccessFile raf;
 
-	public ArchiveIterator(String filename) throws IOException
+	public ArchiveIterator(final String filename) throws IOException
 	{
 		this.fn = filename;
 		String name = HRDBMSWorker.getHParms().getProperty("archive_dir");
@@ -38,23 +38,23 @@ public class ArchiveIterator implements Iterator<LogRec>
 
 		// find all archive files
 		final ArrayList<Path> files = new ArrayList<Path>();
-		int split = fn.lastIndexOf('/');
-		String dir = fn.substring(0, split);
-		String relative = fn.substring(split + 1);
-		String firstPart = relative.substring(0, relative.indexOf('*'));
-		File dirFile = new File(dir);
-		File[] files3 = dirFile.listFiles();
-		for (File f : files3)
+		final int split = fn.lastIndexOf('/');
+		final String dir = fn.substring(0, split);
+		final String relative = fn.substring(split + 1);
+		final String firstPart = relative.substring(0, relative.indexOf('*'));
+		final File dirFile = new File(dir);
+		final File[] files3 = dirFile.listFiles();
+		for (final File f : files3)
 		{
-			String fStr = f.getName();
+			final String fStr = f.getName();
 			if (fStr.startsWith(firstPart) && fStr.endsWith(".archive"))
 			{
 				files.add(f.toPath());
 			}
 		}
 
-		ArrayList<String> files2 = new ArrayList<String>();
-		for (Path file : files)
+		final ArrayList<String> files2 = new ArrayList<String>();
+		for (final Path file : files)
 		{
 			files2.add(file.toAbsolutePath().toString());
 		}
@@ -71,14 +71,14 @@ public class ArchiveIterator implements Iterator<LogRec>
 				raf = new RandomAccessFile(this.files.get(index), "r");
 				break;
 			}
-			catch (FileNotFoundException e)
+			catch (final FileNotFoundException e)
 			{
 				ResourceManager.panic = true;
 				try
 				{
 					Thread.sleep(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("rm_sleep_time_ms")) / 2);
 				}
-				catch (Exception f)
+				catch (final Exception f)
 				{
 				}
 			}
@@ -128,14 +128,14 @@ public class ArchiveIterator implements Iterator<LogRec>
 						raf = new RandomAccessFile(this.files.get(index), "r");
 						break;
 					}
-					catch (FileNotFoundException e)
+					catch (final FileNotFoundException e)
 					{
 						ResourceManager.panic = true;
 						try
 						{
 							Thread.sleep(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("rm_sleep_time_ms")) / 2);
 						}
-						catch (Exception f)
+						catch (final Exception f)
 						{
 						}
 					}
@@ -159,7 +159,7 @@ public class ArchiveIterator implements Iterator<LogRec>
 					}
 				}
 			}
-			catch (Exception e)
+			catch (final Exception e)
 			{
 				return null;
 			}

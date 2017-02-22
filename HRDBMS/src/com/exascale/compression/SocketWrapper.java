@@ -47,14 +47,14 @@ public abstract class SocketWrapper extends Socket
 	 * @throws SocketException
 	 *             if creating the socket failed.
 	 */
-	public SocketWrapper(Socket socket) throws SocketException
+	public SocketWrapper(final Socket socket) throws SocketException
 	{
 		super(new SocketImplWrapper(socket));
 		this.socket = socket;
 	}
 
 	@Override
-	public void bind(SocketAddress bindpoint) throws IOException
+	public void bind(final SocketAddress bindpoint) throws IOException
 	{
 		socket.bind(bindpoint);
 	}
@@ -66,13 +66,13 @@ public abstract class SocketWrapper extends Socket
 	}
 
 	@Override
-	public void connect(SocketAddress endpoint, int timeout) throws IOException
+	public void connect(final SocketAddress endpoint, final int timeout) throws IOException
 	{
 		socket.connect(endpoint, timeout);
 	}
 
 	@Override
-	public boolean equals(Object obj)
+	public boolean equals(final Object obj)
 	{
 		// this is important! otherwise we get internal_error alerts in
 		// SSL-layer!

@@ -7,14 +7,14 @@ public class SelectListEntry
 	private final String name;
 	private final boolean isCol;
 
-	public SelectListEntry(Column col, String name)
+	public SelectListEntry(final Column col, final String name)
 	{
 		this.col = col;
 		this.name = name;
 		isCol = true;
 	}
 
-	public SelectListEntry(Expression exp, String name)
+	public SelectListEntry(final Expression exp, final String name)
 	{
 		this.exp = exp;
 		this.name = name;

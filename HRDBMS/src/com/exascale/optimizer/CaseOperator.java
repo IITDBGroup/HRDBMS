@@ -30,7 +30,7 @@ public final class CaseOperator implements Operator, Serializable
 			f.setAccessible(true);
 			unsafe = (sun.misc.Unsafe)f.get(null);
 		}
-		catch (Exception e)
+		catch (final Exception e)
 		{
 			unsafe = null;
 		}
@@ -54,7 +54,7 @@ public final class CaseOperator implements Operator, Serializable
 	private transient AtomicLong received;
 	private transient volatile boolean demReceived;
 
-	public CaseOperator(ArrayList<HashSet<HashMap<Filter, Filter>>> filters, ArrayList<String> results, String name, String type, MetaData meta)
+	public CaseOperator(final ArrayList<HashSet<HashMap<Filter, Filter>>> filters, final ArrayList<String> results, final String name, final String type, final MetaData meta)
 	{
 		received = new AtomicLong(0);
 		this.filters = filters;
@@ -120,9 +120,9 @@ public final class CaseOperator implements Operator, Serializable
 		}
 	}
 
-	public static CaseOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception
+	public static CaseOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		CaseOperator value = (CaseOperator)unsafe.allocateInstance(CaseOperator.class);
+		final CaseOperator value = (CaseOperator)unsafe.allocateInstance(CaseOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
 		value.filters = OperatorUtils.deserializeALHSHM(in, prev);
 		value.results = OperatorUtils.deserializeALO(in, prev);
@@ -141,8 +141,42 @@ public final class CaseOperator implements Operator, Serializable
 		return value;
 	}
 
+	private static boolean passesCase(final ArrayList<Object> row, final HashMap<String, Integer> cols2Pos, final HashSet<HashMap<Filter, Filter>> ands) throws Exception
+	{
+		for (final HashMap<Filter, Filter> ors : ands)
+		{
+			if (!passesOredCondition(row, cols2Pos, ors))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	private static boolean passesOredCondition(final ArrayList<Object> row, final HashMap<String, Integer> cols2Pos, final HashMap<Filter, Filter> filters) throws Exception
+	{
+		try
+		{
+			for (final Map.Entry entry : filters.entrySet())
+			{
+				if (((Filter)entry.getKey()).passes(row, cols2Pos))
+				{
+					return true;
+				}
+			}
+		}
+		catch (final Exception e)
+		{
+			HRDBMSWorker.logger.error("", e);
+			throw e;
+		}
+
+		return false;
+	}
+
 	@Override
-	public void add(Operator op) throws Exception
+	public void add(final Operator op) throws Exception
 	{
 		if (child == null)
 		{
@@ -251,7 +285,7 @@ public final class CaseOperator implements Operator, Serializable
 	}
 
 	@Override
-	public Object next(Operator op) throws Exception
+	public Object next(final Operator op) throws Exception
 	{
 		final Object o = child.next(this);
 
@@ -310,7 +344,7 @@ public final class CaseOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void nextAll(Operator op) throws Exception
+	public void nextAll(final Operator op) throws Exception
 	{
 		child.nextAll(op);
 		Object o = next(op);
@@ -339,7 +373,7 @@ public final class CaseOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void registerParent(Operator op) throws Exception
+	public void registerParent(final Operator op) throws Exception
 	{
 		if (parent == null)
 		{
@@ -352,7 +386,7 @@ public final class CaseOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeChild(Operator op)
+	public void removeChild(final Operator op)
 	{
 		if (op == child)
 		{
@@ -362,7 +396,7 @@ public final class CaseOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void removeParent(Operator op)
+	public void removeParent(final Operator op)
 	{
 		parent = null;
 	}
@@ -374,9 +408,9 @@ public final class CaseOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		Long id = prev.get(this);
+		final Long id = prev.get(this);
 		if (id != null)
 		{
 			OperatorUtils.serializeReference(id, out);
@@ -400,11 +434,11 @@ public final class CaseOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void setChildPos(int pos)
+	public void setChildPos(final int pos)
 	{
 	}
 
-	public void setFilters(ArrayList<HashSet<HashMap<Filter, Filter>>> filters)
+	public void setFilters(final ArrayList<HashSet<HashMap<Filter, Filter>>> filters)
 	{
 		this.filters = filters;
 
@@ -429,17 +463,17 @@ public final class CaseOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void setNode(int node)
+	public void setNode(final int node)
 	{
 		this.node = node;
 	}
 
 	@Override
-	public void setPlan(Plan plan)
+	public void setPlan(final Plan plan)
 	{
 	}
 
-	public void setType(String type)
+	public void setType(final String type)
 	{
 		this.type = type;
 		if (cols2Types != null)
@@ -460,7 +494,7 @@ public final class CaseOperator implements Operator, Serializable
 		return "CaseOperator: filters = " + filters + " results = " + origResults;
 	}
 
-	private Object getColumn(String name, ArrayList<Object> row) throws Exception
+	private Object getColumn(String name, final ArrayList<Object> row) throws Exception
 	{
 		Integer pos = cols2Pos.get(name);
 		if (pos != null)
@@ -479,7 +513,7 @@ public final class CaseOperator implements Operator, Serializable
 		}
 
 		int matches = 0;
-		for (Map.Entry entry : cols2Pos.entrySet())
+		for (final Map.Entry entry : cols2Pos.entrySet())
 		{
 			String name2 = (String)entry.getKey();
 			if (name2.contains("."))
@@ -505,39 +539,5 @@ public final class CaseOperator implements Operator, Serializable
 		}
 
 		return row.get(pos);
-	}
-
-	private boolean passesCase(ArrayList<Object> row, HashMap<String, Integer> cols2Pos, HashSet<HashMap<Filter, Filter>> ands) throws Exception
-	{
-		for (final HashMap<Filter, Filter> ors : ands)
-		{
-			if (!passesOredCondition(row, cols2Pos, ors))
-			{
-				return false;
-			}
-		}
-
-		return true;
-	}
-
-	private boolean passesOredCondition(ArrayList<Object> row, HashMap<String, Integer> cols2Pos, HashMap<Filter, Filter> filters) throws Exception
-	{
-		try
-		{
-			for (final Map.Entry entry : filters.entrySet())
-			{
-				if (((Filter)entry.getKey()).passes(row, cols2Pos))
-				{
-					return true;
-				}
-			}
-		}
-		catch (final Exception e)
-		{
-			HRDBMSWorker.logger.error("", e);
-			throw e;
-		}
-
-		return false;
 	}
 }
