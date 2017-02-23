@@ -1329,7 +1329,7 @@ public class PlanCacheManager
 			tOp.setChildForDevice(0, iOp);
 			needed = new ArrayList<String>();
 			needed.add("EXTERNALTABLES.JAVACLASSNAME");
-			needed.add("EXTERNALTABLES.PARAMETERS");
+			needed.add("EXTERNALTABLES.PARAMETER");
 			tOp.setNeededCols(needed);
 			tOp.setNode(-1);
 			tOp.setPhase2Done();
@@ -1339,7 +1339,7 @@ public class PlanCacheManager
 			trees = new ArrayList<Operator>();
 			trees.add(root);
 			p = new Plan(true, trees);
-			addPlan("SELECT JAVACLASSNAME, PARAMETERS FROM SYS.EXTERNALTABLES WHERE TABLEID = ?", p);
+			addPlan("SELECT JAVACLASSNAME, PARAMETER FROM SYS.EXTERNALTABLES WHERE TABLEID = ?", p);
 
 			// getVerifyViewExist
 			meta = new MetaData();
@@ -1735,7 +1735,7 @@ public class PlanCacheManager
 	
 	public static ExternalTableInfoPlan getExternalTableInfo()
 	{
-		return new ExternalTableInfoPlan(checkPlanCache("SELECT JAVACLASSNAME, PARAMETERS FROM SYS.EXTERNALTABLES WHERE TABLEID = ?"));
+		return new ExternalTableInfoPlan(checkPlanCache("SELECT JAVACLASSNAME, PARAMETER FROM SYS.EXTERNALTABLES WHERE TABLEID = ?"));
 	}
 
 	public static CheckIndexForColPlan getCheckIndexForCol()
@@ -2402,7 +2402,7 @@ public class PlanCacheManager
 					row.add(1);
 					retval.add(row);
 					row = new ArrayList<Object>();
-					row.add("PARAMETERS");
+					row.add("PARAMETER");
 					row.add(2);
 					retval.add(row);
 				}
@@ -2771,7 +2771,7 @@ public class PlanCacheManager
 					row.add("VARCHAR");
 					retval.add(row);
 					row = new ArrayList<Object>();
-					row.add("PARAMETERS");
+					row.add("PARAMETER");
 					row.add("VARCHAR");
 					retval.add(row);
 				}
@@ -5298,7 +5298,7 @@ public class PlanCacheManager
 						return 4096;
 					}
 
-					if (col.equals("PARAMETERS"))
+					if (col.equals("PARAMETER"))
 					{
 						return 65536;
 					}

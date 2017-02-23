@@ -309,6 +309,24 @@ public final class MetaData implements Serializable
 		populateIndex(schema, index, table, tx, cols2Pos);
 	}
 
+	public void getExternalTableInfo(String theSchema, String theTable, Transaction tx) throws Exception {
+		HRDBMSWorker.logger.info("readyforplancache");
+		// TODO - use tableIdCache... need to be locked?
+		final Object tableId = PlanCacheManager.getVerifyTableExist().setParms(theSchema, theTable).execute(tx);
+		if(tableId instanceof ArrayList && !((ArrayList)tableId).isEmpty() && ((ArrayList)tableId).get(0) instanceof Integer) {
+			final Object o = PlanCacheManager.getExternalTableInfo().setParms((Integer) ((ArrayList)tableId).get(0)).execute(tx);
+			HRDBMSWorker.logger.info("plancached" + o.getClass().getCanonicalName());
+			// check what kind of class the o is .. arraylist of string.
+
+			if (o instanceof DataEndMarker) {
+				// do something
+			} else {
+
+			}
+			// return class name and params
+		}
+	}
+
 	public void createExternalTable(String schema, String table, ArrayList<ColDef> defs,Transaction tx, String sourceList, String anyString, String filePathIdentifier, String javaClassName, Properties keyValueList) throws Exception
 	{
 		HashMap<String, String> cols2Types = new HashMap<String, String>();

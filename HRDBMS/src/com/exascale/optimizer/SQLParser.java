@@ -7097,7 +7097,9 @@ public class SQLParser
 		try
 		{
 			// Determine if table is external
+			HRDBMSWorker.logger.info("gettypefortable" + MetaData.getTypeForTable(schema, tblName, tx));
 			if(1 == MetaData.getTypeForTable(schema, tblName, tx)) {
+				meta.getExternalTableInfo(schema, tblName, tx);
 				op = new ExternalTableScanOperator(schema, tblName, meta, tx);
 			} else {
 				op = new TableScanOperator(schema, tblName, meta, tx);

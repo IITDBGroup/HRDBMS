@@ -172,35 +172,38 @@ public class HRDBMSWorker
 			HRDBMSWorker.logger.debug(key + "-> " + hparms.getProperty(key));
 		}
 
-		new FileManager();
-		new Schema.CVarcharFV();
-		addThread(new BufferManager(true));
-		addThread(new XAManager());
-		connectionThread = addThread(new ConnectionManager());
-		checkpoint = new CheckpointManager(System.currentTimeMillis() - start);
-		addThread(checkpoint);
-		logThread = addThread(new LogManager());
-		logger.info("Starting initialization of the Lock Manager.");
-		addThread(new LockManager());
-		logger.info("Lock Manager initialization complete.");
-		resourceThread = addThread(new ResourceManager());
+		try {
+			new FileManager();
+			new Schema.CVarcharFV();
+			addThread(new BufferManager(true));
+			addThread(new XAManager());
+			connectionThread = addThread(new ConnectionManager());
+			checkpoint = new CheckpointManager(System.currentTimeMillis() - start);
+			addThread(checkpoint);
+			logThread = addThread(new LogManager());
+			logger.info("Starting initialization of the Lock Manager.");
+			addThread(new LockManager());
+			logger.info("Lock Manager initialization complete.");
+			resourceThread = addThread(new ResourceManager());
 
-		// if (type == TYPE_MASTER || type == TYPE_COORD)
-		// {
-		// addThread(new MaintenanceManager());
-		// }
+			// if (type == TYPE_MASTER || type == TYPE_COORD)
+			// {
+			// addThread(new MaintenanceManager());
+			// }
 
-		SortOperator.init();
+			SortOperator.init();
 
-		int i = 0;
-		while (i < Runtime.getRuntime().availableProcessors())
-		{
-			new WarmUpThread().start();
-			i++;
+			int i = 0;
+			while (i < Runtime.getRuntime().availableProcessors()) {
+				new WarmUpThread().start();
+				i++;
+			}
+
+			TempThread.initialize();
+			hibernate();
+		} catch(Throwable t) {
+			logger.error("foundit", t);
 		}
-
-		TempThread.initialize();
-		hibernate();
 	}
 
 	public static void terminateThread(final long index)

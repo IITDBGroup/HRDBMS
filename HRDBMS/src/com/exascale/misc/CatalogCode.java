@@ -31,6 +31,7 @@ import com.exascale.filesystem.RID;
 import com.exascale.managers.FileManager;
 import com.exascale.managers.HRDBMSWorker;
 
+/** Sets up HRDBMS's internal metadata tables in the SYS schema. The cattxt file in the project's root directory has similar information but appears not to be used */
 public class CatalogCode
 {
 	private static TreeMap<String, Long> vars = new TreeMap<String, Long>();
@@ -106,7 +107,7 @@ public class CatalogCode
 
 		+ "(0, 12, TABLEID, INT, 4, 0, 0, N)\n" + "(1, 12, INDEXID, INT, 4, 0, 1, N)\n" + "(2, 12, NUMDISTINCT, BIGINT, 8, 0, -1, N)\n"
 
-		+ "(0, 13, TABLEID, INT, 4, 0, 0, N)\n" + "(1, 13, JAVACLASSNAME, VARCHAR, 4096, 0, -1, N)\n" + "(2, 13, PARAMETERS, VARCHAR, 65536, 0, -1, N)\n"
+		+ "(0, 13, TABLEID, INT, 4, 0, 0, N)\n" + "(1, 13, JAVACLASSNAME, VARCHAR, 4096, 0, -1, N)\n" + "(2, 13, PARAMETER, VARCHAR, 65536, 0, -1, N)\n"
 
 		+ "SYS.VIEWS(INT, VARCHAR, VARCHAR, VARCHAR)\n" + "0\n"
 

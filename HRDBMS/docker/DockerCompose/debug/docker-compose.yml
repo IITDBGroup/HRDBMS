@@ -14,6 +14,7 @@ services:
         - "5010:5010"
      depends_on:
         - worker
+        - worker2
      container_name: "hrdbms_coordinator"
      networks:
         app_net:
@@ -27,6 +28,15 @@ services:
      networks:
         app_net:
           ipv4_address: 17.17.0.3
+  worker2:
+     container_name: "hrdbms_worker2"
+     extends:
+        service: node
+     ports:
+        - "5020:5020"
+     networks:
+        app_net:
+          ipv4_address: 17.17.0.4
 networks:
   app_net:
       driver: bridge
