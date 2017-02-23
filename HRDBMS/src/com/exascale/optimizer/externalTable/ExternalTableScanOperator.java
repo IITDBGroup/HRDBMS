@@ -7,7 +7,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.TreeMap;
-
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.optimizer.*;
@@ -60,6 +59,17 @@ public final class ExternalTableScanOperator extends AbstractTableScanOperator
 			HRDBMSWorker.logger.error("clone", e);
 		}
 		return retval;
+	}
+
+	@Override
+	public void start() throws Exception
+	{
+		// TODO It should be updated later. Java class and params should be defined in External Table metadata
+//		String className = "com.exascale.optimizer.externalTable.HTTPCsvExternal";
+//		externalProcessor = (ExternalTableType) Class.forName(className).newInstance();
+//		Properties params = new Properties();
+//		params.put("HttpAddress", "https://www.ibm.com/support/knowledgecenter/en/SVU13_7.2.1/com.ibm.ismsaas.doc/reference/AssetsImportCompleteSample.csv");
+//		externalProcessor.initialize(params);
 	}
 
 	@Override
@@ -116,15 +126,11 @@ public final class ExternalTableScanOperator extends AbstractTableScanOperator
 	@Override
 	public Object next(final Operator op) throws Exception
 	{
-		if (fakeRowsLimit < fakeRowsCounter) {
+        ArrayList row = tableImpl.next();
+		if (row == null) {
 			return new DataEndMarker();
 		} else {
-			fakeRowsCounter++;
-            ArrayList fakeRow = new ArrayList();
-            fakeRow.add("A");
-            fakeRow.add("B");
-            fakeRow.add("C");
-			return fakeRow;
+			return row;
 		}
 	}
 }

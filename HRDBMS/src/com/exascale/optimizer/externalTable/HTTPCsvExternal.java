@@ -1,5 +1,6 @@
 package com.exascale.optimizer.externalTable;
 
+import javax.lang.model.element.Element;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.URL;
@@ -10,24 +11,22 @@ public class HTTPCsvExternal implements ExternalTableType
 
 	public static String HTTP_ADDRESS_KEY = "HttpAddress";
 	public static String FIELD_DELIMITER  = "fieldDelimiter";
-	public static String ROW_DELIMITER    = "rowDelimiter";
-	public static String FILE_NAME        = "fileName";
 
 	/**
 	 * List of acceptable parameters for HTTPCsvExternal class that can be passed through command line
 	 */
-	private static String[] paramList = {FIELD_DELIMITER, ROW_DELIMITER, FILE_NAME};
+	private static String[] paramList = {FIELD_DELIMITER, HTTP_ADDRESS_KEY};
 
 	/**
 	 * List of required parameters for HTTPCsvExternal class to be passed through command line
 	 */
-	private static String[] requiredParams = {FILE_NAME};
+	private static String[] requiredParams = {HTTP_ADDRESS_KEY};
 
 
 	// fields
 	private int pos;
 	//This list holds a list of rows that are found in the initialize method
-	private List<String[]> rows;
+	private List<ArrayList> rows;
 
 	/**
 	 * Method checks if parameters entered from CLI are sufficient to create metadata about external table
@@ -60,7 +59,7 @@ public class HTTPCsvExternal implements ExternalTableType
 		// key to find the http address in the params object
 		String HTTP_ADDRESS = params.getProperty(HTTP_ADDRESS_KEY);
 		// list of rows found in the csv file in the http address that should be returned to the rows list.
-		List<String[]> rowsToReturn = new ArrayList<String[]>();
+		List<ArrayList> rowsToReturn = new ArrayList<>();
 
 		try
 		{
@@ -79,7 +78,9 @@ public class HTTPCsvExternal implements ExternalTableType
 			 */
 			while ((inputLine = in.readLine()) != null)
 			{
-				String[] output = inputLine.split(separator);
+				ArrayList<String> output = new ArrayList<>(Arrays.asList(inputLine.split(separator)));
+
+
 				rowsToReturn.add(output);
 			}
 			in.close();
@@ -93,17 +94,13 @@ public class HTTPCsvExternal implements ExternalTableType
 	}
 
 	@Override
-	public String[] next()
+	public ArrayList next()
 	{
-		if (rows.get(pos) != null)
-		{
-			return rows.get(pos);
-		}
-		else
-		{
+		try {
+			return rows.get(pos++);
+		} catch (IndexOutOfBoundsException ex )	{
 			return null;
 		}
-
 	}
 
 	@Override
