@@ -7,6 +7,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.TreeMap;
+
+import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.optimizer.*;
 import com.exascale.tables.Transaction;
@@ -14,9 +16,9 @@ import com.exascale.tables.Transaction;
 public final class ExternalTableScanOperator extends AbstractTableScanOperator
 {
 	private static sun.misc.Unsafe unsafe;
-
 	private static int fakeRowsLimit = 5;
 	private static int fakeRowsCounter = 1;
+	private ExternalTableType tableImpl = null;
 
 	static {
 		try {
@@ -28,12 +30,14 @@ public final class ExternalTableScanOperator extends AbstractTableScanOperator
 		}
 	}
 
-	public ExternalTableScanOperator(final String schema, final String name, final MetaData meta, final Transaction tx) throws Exception {
+	public ExternalTableScanOperator(ExternalTableType tableImpl, final String schema, final String name, final MetaData meta, final Transaction tx) throws Exception {
 		super(schema, name, meta, tx);
+		this.tableImpl = tableImpl;
 	}
 
-	public ExternalTableScanOperator(final String schema, final String name, final MetaData meta, final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types) {
+	public ExternalTableScanOperator(ExternalTableType tableImpl, final String schema, final String name, final MetaData meta, final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types) {
 		super(schema, name, meta, cols2Pos, pos2Col, cols2Types);
+		this.tableImpl = tableImpl;
 	}
 
 	public static ExternalTableScanOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception {
@@ -51,9 +55,9 @@ public final class ExternalTableScanOperator extends AbstractTableScanOperator
 	public ExternalTableScanOperator clone() {
 		ExternalTableScanOperator retval = null;
 		try {
-			retval = new ExternalTableScanOperator(schema, name, meta, cols2Pos, pos2Col, cols2Types);
+			retval = new ExternalTableScanOperator(tableImpl, schema, name, meta, cols2Pos, pos2Col, cols2Types);
 		} catch (Exception e) {
-			e.printStackTrace();
+			HRDBMSWorker.logger.error("clone", e);
 		}
 		return retval;
 	}

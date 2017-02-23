@@ -15,16 +15,7 @@ import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Properties;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Random;
-import java.util.Set;
-import java.util.StringTokenizer;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import com.exascale.exceptions.ParseException;
@@ -309,22 +300,21 @@ public final class MetaData implements Serializable
 		populateIndex(schema, index, table, tx, cols2Pos);
 	}
 
-	public void getExternalTableInfo(String theSchema, String theTable, Transaction tx) throws Exception {
-		HRDBMSWorker.logger.info("readyforplancache");
+	/** Returns the Java class name and parameter of the passed external table */
+	public List<String> getExternalTableInfo(String theSchema, String theTable, Transaction tx) throws Exception {
 		// TODO - use tableIdCache... need to be locked?
 		final Object tableId = PlanCacheManager.getVerifyTableExist().setParms(theSchema, theTable).execute(tx);
 		if(tableId instanceof ArrayList && !((ArrayList)tableId).isEmpty() && ((ArrayList)tableId).get(0) instanceof Integer) {
 			final Object o = PlanCacheManager.getExternalTableInfo().setParms((Integer) ((ArrayList)tableId).get(0)).execute(tx);
 			HRDBMSWorker.logger.info("plancached" + o.getClass().getCanonicalName());
-			// check what kind of class the o is .. arraylist of string.
 
-			if (o instanceof DataEndMarker) {
-				// do something
-			} else {
-
+			if (o instanceof Exception) {
+				throw (Exception)o;
+			} else if(o instanceof ArrayList){
+				return (List<String>)o;
 			}
-			// return class name and params
 		}
+		return null;
 	}
 
 	public void createExternalTable(String schema, String table, ArrayList<ColDef> defs,Transaction tx, String sourceList, String anyString, String filePathIdentifier, String javaClassName, Properties keyValueList) throws Exception
