@@ -7099,16 +7099,8 @@ public class SQLParser
 		{
 			// Determine if table is external
 			if(1 == MetaData.getTypeForTable(schema, tblName, tx)) {
-				List<String> classNameParameter = meta.getExternalTableInfo(schema, tblName, tx);
-				Object extObject = Class.forName(classNameParameter.get(0)).getConstructor().newInstance();
-				if(extObject instanceof ExternalTableType) {
-					ExternalTableType extTable = (ExternalTableType)extObject;
-					// TODO - parse classNameParameter.get(1) into a Java Properties object and pass to initialize
-					extTable.initialize(null);
-					op = new ExternalTableScanOperator(extTable, schema, tblName, meta, tx);
-				} else {
-					throw new IllegalArgumentException("Needed ExternalTableType but got " + extObject.getClass().getCanonicalName());
-				}
+				ExternalTableType extTable = meta.getExternalTable(schema, tblName, tx);
+   			    op = new ExternalTableScanOperator(extTable, schema, tblName, meta, tx);
 			} else {
 				op = new TableScanOperator(schema, tblName, meta, tx);
 			}

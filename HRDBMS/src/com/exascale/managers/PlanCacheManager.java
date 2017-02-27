@@ -7456,7 +7456,7 @@ public class PlanCacheManager
 			this.p = p;
 		}
 
-		public Object execute(Transaction tx) throws Exception
+		public ArrayList execute(Transaction tx) throws Exception
 		{
 			int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
@@ -7480,20 +7480,25 @@ public class PlanCacheManager
 				}
 			}
 
-			if (obj instanceof Exception)
-			{
+			if (obj instanceof Exception) {
 				cmd = new ArrayList<Object>(1);
 				cmd.add("CLOSE");
 				worker.in.put(cmd);
 				tx.setIsolationLevel(iso);
 				throw (Exception)obj;
+			} else if (obj instanceof DataEndMarker) {
+				cmd = new ArrayList<Object>(1);
+				cmd.add("CLOSE");
+				worker.in.put(cmd);
+				tx.setIsolationLevel(iso);
+				throw new Exception("Metadata for external table not found");
 			}
 
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
 			worker.in.put(cmd);
 			tx.setIsolationLevel(iso);
-			return obj;
+			return (ArrayList<Object>) obj;
 		}
 
 		public ExternalTableInfoPlan setParms(int tableID) throws Exception

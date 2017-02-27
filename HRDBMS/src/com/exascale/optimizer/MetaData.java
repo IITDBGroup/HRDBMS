@@ -1,12 +1,6 @@
 package com.exascale.optimizer;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.io.InputStream;
-import java.io.ObjectOutputStream;
-import java.io.OutputStream;
-import java.io.Serializable;
+import java.io.*;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
@@ -26,6 +20,7 @@ import com.exascale.managers.LockManager;
 import com.exascale.managers.PlanCacheManager;
 import com.exascale.managers.XAManager;
 import com.exascale.misc.*;
+import com.exascale.optimizer.externalTable.ExternalTableType;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.ConnectionWorker;
 import com.exascale.threads.HRDBMSThread;
@@ -301,20 +296,30 @@ public final class MetaData implements Serializable
 	}
 
 	/** Returns the Java class name and parameter of the passed external table */
-	public List<String> getExternalTableInfo(String theSchema, String theTable, Transaction tx) throws Exception {
-		// TODO - use tableIdCache... need to be locked?
-		final Object tableId = PlanCacheManager.getVerifyTableExist().setParms(theSchema, theTable).execute(tx);
-		if(tableId instanceof ArrayList && !((ArrayList)tableId).isEmpty() && ((ArrayList)tableId).get(0) instanceof Integer) {
-			final Object o = PlanCacheManager.getExternalTableInfo().setParms((Integer) ((ArrayList)tableId).get(0)).execute(tx);
-			HRDBMSWorker.logger.info("plancached" + o.getClass().getCanonicalName());
+	public ExternalTableType getExternalTable(String theSchema, String theTable, Transaction tx) throws Exception {
+        Integer tableID = getTableIDCache.get(theSchema + "." + theTable);
+        if (tableID == null) {
+            tableID = PlanCacheManager.getTableID().setParms(theSchema, theTable).execute(tx);
+            getTableIDCache.put(theSchema + "." + theTable, tableID);
+        }
+        final ArrayList<Object> meta = PlanCacheManager.getExternalTableInfo().setParms(tableID).execute(tx);
 
-			if (o instanceof Exception) {
-				throw (Exception)o;
-			} else if(o instanceof ArrayList){
-				return (List<String>)o;
-			}
-		}
-		return null;
+        Object extObject;
+        try {
+            extObject = Class.forName((String) meta.get(0)).getConstructor().newInstance();
+        } catch (ClassNotFoundException e) {
+            throw new IllegalArgumentException("Class " + ((String) meta.get(0)) + "does not exist");
+        }
+
+        if(extObject instanceof ExternalTableType) {
+            ExternalTableType extTable = (ExternalTableType) extObject;
+            Properties parameters = new Properties();
+            parameters.load(new StringReader((((String) meta.get(1)).replace("@#$", "\n"))));
+            extTable.setParameters(parameters);
+            return extTable;
+        } else {
+            throw new IllegalArgumentException("Needed ExternalTableType but got " + extObject.getClass().getCanonicalName());
+        }
 	}
 
 	public void createExternalTable(String schema, String table, ArrayList<ColDef> defs,Transaction tx, String sourceList, String anyString, String filePathIdentifier, String javaClassName, Properties keyValueList) throws Exception
@@ -350,7 +355,9 @@ public final class MetaData implements Serializable
 
 		PlanCacheManager.getInsertTable().setParms(tableID, schema, table, typeFlag).execute(tx);
 		if (!keyValueList.isEmpty()) {
-			PlanCacheManager.getInsertExternalTable().setParms(tableID, javaClassName, keyValueList.toString()).execute(tx);
+			OutputStream os = new ByteArrayOutputStream();
+			keyValueList.store(os, null);
+			PlanCacheManager.getInsertExternalTable().setParms(tableID, javaClassName, (os.toString()).replace("\n", "@#$")).execute(tx);
 		} else {
 			// @todo FIX PARAMETERS SET UP FOR EXTERNAL TABLE
 			PlanCacheManager.getInsertExternalTable().setParms(tableID, javaClassName, "Undefined Parameters").execute(tx);
