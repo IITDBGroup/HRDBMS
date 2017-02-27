@@ -5,7 +5,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Properties;
 import java.util.ArrayList;
-import com.exascale.optimizer.externalTable.HTTPCsvExternal;
+import com.exascale.optimizer.externalTable.ExternalTableType;
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.misc.Interval;
 import org.antlr.v4.runtime.tree.TerminalNode;
@@ -267,7 +267,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 			} catch (NoSuchMethodException | SecurityException e) {
 				throw new RuntimeException("Java class " + javaClassName + " does not contain 'validateProperties' static method.");
 			}
-			if (!HTTPCsvExternal.class.isAssignableFrom(javaClass)) {
+			if (!ExternalTableType.class.isAssignableFrom(javaClass)) {
 				throw new RuntimeException("Class " + javaClassName + " does not implement ExternalTableType.");
 			}
 			if (!Modifier.isStatic( validateProperties.getModifiers() )) {
