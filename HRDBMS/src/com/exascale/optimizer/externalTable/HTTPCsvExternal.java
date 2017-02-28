@@ -33,7 +33,7 @@ public class HTTPCsvExternal implements ExternalTableType
 	 *
 	 * @param params
 	 */
-	static public void validateProperties(Properties params)
+	static public void validateProperties(String params)
 	{
 		Enumeration e = params.propertyNames();
 

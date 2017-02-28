@@ -3,10 +3,8 @@ package com.exascale.optimizer.externalTable;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.TreeMap;
+import java.util.*;
+
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.optimizer.*;
@@ -15,8 +13,6 @@ import com.exascale.tables.Transaction;
 public final class ExternalTableScanOperator extends AbstractTableScanOperator
 {
 	private static sun.misc.Unsafe unsafe;
-	private static int fakeRowsLimit = 5;
-	private static int fakeRowsCounter = 1;
 	private ExternalTableType tableImpl = null;
 
 	static {
@@ -126,7 +122,7 @@ public final class ExternalTableScanOperator extends AbstractTableScanOperator
 	@Override
 	public Object next(final Operator op) throws Exception
 	{
-        ArrayList row = tableImpl.next();
+        List<?> row = tableImpl.next();
 		if (row == null) {
 			return new DataEndMarker();
 		} else {
