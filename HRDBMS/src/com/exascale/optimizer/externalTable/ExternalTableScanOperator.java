@@ -57,23 +57,24 @@ public final class ExternalTableScanOperator extends AbstractTableScanOperator
 		return retval;
 	}
 
-	@Override
-	public void start() throws Exception
-	{
-		// TODO It should be updated later. Java class and params should be defined in External Table metadata
-//		String className = "com.exascale.optimizer.externalTable.HTTPCsvExternal";
-//		externalProcessor = (ExternalTableType) Class.forName(className).newInstance();
-//		Properties params = new Properties();
-//		params.put("HttpAddress", "https://www.ibm.com/support/knowledgecenter/en/SVU13_7.2.1/com.ibm.ismsaas.doc/reference/AssetsImportCompleteSample.csv");
-//		externalProcessor.initialize(params);
-	}
+    @Override
+    public void start() throws Exception
+    {
+		tableImpl.setCols2Pos(cols2Pos);
+		tableImpl.setCols2Types(cols2Types);
+		tableImpl.setPos2Col(pos2Col);
+		tableImpl.setSchema(schema);
+		tableImpl.setName(name);
+		tableImpl.start();
+    }
 
-	@Override
+    @Override
 	public void close() throws Exception
 	{
 		cols2Pos = null;
 		cols2Types = null;
 		pos2Col = null;
+		tableImpl.close();
 	}
 
 	@Override
