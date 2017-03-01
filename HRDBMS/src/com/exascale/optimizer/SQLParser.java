@@ -3,7 +3,7 @@ package com.exascale.optimizer;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
-import com.exascale.misc.HrdbmsConstants;
+import com.exascale.optimizer.externalTable.CreateExternalTableOperator;
 import com.exascale.optimizer.externalTable.ExternalTableScanOperator;
 import com.exascale.optimizer.externalTable.ExternalTableType;
 import org.antlr.v4.runtime.ANTLRInputStream;
@@ -1805,6 +1805,7 @@ public class SQLParser
 		return retval;
 	}
 
+	/** Handles parsing of the create external table statement. */
 	private Operator buildOperatorTreeFromCreateExternalTable(CreateExternalTable createExternalTable) throws Exception
 	{
 		TableName table = createExternalTable.getTable();
@@ -1848,17 +1849,11 @@ public class SQLParser
 		}
 
 		CreateExternalTableOperator op = null;
-		if (createExternalTable.getGeneralExtTableSpec() != null)
-		{
-			op = new CreateExternalTableOperator(meta, schema, tbl, colDefs, createExternalTable.getGeneralExtTableSpec().getSourceList() , createExternalTable.getGeneralExtTableSpec().getAnyString(), createExternalTable.getGeneralExtTableSpec().getFilePathIdentifier());
-		} else if (createExternalTable.getJavaClassExtTableSpec() != null) {
+		if (createExternalTable.getJavaClassExtTableSpec() != null) {
 			JavaClassExtTableSpec tableSpec = createExternalTable.getJavaClassExtTableSpec();
-			op = new CreateExternalTableOperator(meta, schema, tbl, colDefs, tableSpec.getJavaClassName(), tableSpec.getKeyValueList());
+			op = new CreateExternalTableOperator(meta, schema, tbl, colDefs, tableSpec.getJavaClassName(), tableSpec.getParams());
 		} else {
-			// @todo is this else block needed?
-			String javaclass = new String("Undefined");
-			Properties tableproperties = new Properties();
-			op = new CreateExternalTableOperator(meta, schema, tbl, colDefs, javaclass, tableproperties);
+			throw new UnsupportedOperationException("External table implementation requires a Java class");
 		}
 		op.setTransaction(tx);
 		return op;

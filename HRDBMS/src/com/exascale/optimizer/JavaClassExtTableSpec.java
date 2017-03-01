@@ -1,32 +1,27 @@
 package com.exascale.optimizer;
 
-import java.util.Map;
-import java.util.Properties;
-
+/** Each external table is specified by the canonical name of the implementing Java class and the parameter string */
 public class JavaClassExtTableSpec
 {
-	private final String javaClassName;
-	private final Properties keyValueList;
+	private final String javaClassName, params;
 	
-	public JavaClassExtTableSpec(String javaClassName, Properties keyValueList)
+	public JavaClassExtTableSpec(String javaClassName, String params)
 	{
 		this.javaClassName = javaClassName;
-		this.keyValueList = keyValueList;
+		this.params = params;
 	}
 
 	@Override
 	public JavaClassExtTableSpec clone()
 	{
-		return new JavaClassExtTableSpec(javaClassName, keyValueList);
+		return new JavaClassExtTableSpec(javaClassName, params);
 	}
-
 	public String getJavaClassName()
 	{
 		return javaClassName;
 	}
-
-	public Properties getKeyValueList()
+	public String getParams()
 	{
-		return keyValueList;
+		return params;
 	}
 }

@@ -239,6 +239,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 
 		return retval;
 	}
+
 	public CreateExternalTable visitCreateExternalTable(SelectParser.CreateExternalTableContext ctx)
 	{
 		TableName table = (TableName)visit(ctx.tableName());
@@ -257,45 +258,48 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 		else
 		{
 			String javaClassName = ctx.javaClassExtTableSpec().javaClassName().getText();
-			Class<?> javaClass;
-			Method validateProperties;
-			try {
-				javaClass = Class.forName( javaClassName );
-				validateProperties = javaClass.getMethod("validateProperties", Properties.class);
-			} catch( ClassNotFoundException e ) {
-				throw new RuntimeException("Java class " + javaClassName + " does not exist!");
-			} catch (NoSuchMethodException | SecurityException e) {
-				throw new RuntimeException("Java class " + javaClassName + " does not contain 'validateProperties' static method.");
-			}
-			if (!ExternalTableType.class.isAssignableFrom(javaClass)) {
-				throw new RuntimeException("Class " + javaClassName + " does not implement ExternalTableType.");
-			}
-			if (!Modifier.isStatic( validateProperties.getModifiers() )) {
-				throw new RuntimeException("Method 'validateProperties' should be static in " + javaClassName + " class.");
-			}
-			Properties keyValueList = new Properties();
-			String key = null;
-			for (SelectParser.AnythingContext context : ctx.javaClassExtTableSpec().keyValueList().anything())
-			{
-				if (key == null) {
-					key = context.getText();
-				} else {
-					keyValueList.put(key, context.getText());
-					key = null;
-				}
-			}
-			Object[] args = new Object[1];
-			args[0] = keyValueList;
-			try {
-				validateProperties.invoke(null, args);
-			} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-				String message = "";
-				if (e.getClass() == InvocationTargetException.class) {
-					message = ((InvocationTargetException) e).getTargetException().getMessage();
-				}
-				throw new RuntimeException("ValidateProperties error. " + message);
-			}
-			JavaClassExtTableSpec javaClassExtTableSpec = new JavaClassExtTableSpec(javaClassName, keyValueList);
+			String params = ctx.javaClassExtTableSpec().json().getText();
+
+			// TODO - add back validation.
+//			Class<?> javaClass;
+//			Method validateProperties;
+//			try {
+//				javaClass = Class.forName( javaClassName );
+//				validateProperties = javaClass.getMethod("validateProperties", Properties.class);
+//			} catch( ClassNotFoundException e ) {
+//				throw new RuntimeException("Java class " + javaClassName + " does not exist!");
+//			} catch (NoSuchMethodException | SecurityException e) {
+//				throw new RuntimeException("Java class " + javaClassName + " does not contain 'validateProperties' static method.");
+//			}
+//			if (!ExternalTableType.class.isAssignableFrom(javaClass)) {
+//				throw new RuntimeException("Class " + javaClassName + " does not implement ExternalTableType.");
+//			}
+//			if (!Modifier.isStatic( validateProperties.getModifiers() )) {
+//				throw new RuntimeException("Method 'validateProperties' should be static in " + javaClassName + " class.");
+//			}
+//			Properties keyValueList = new Properties();
+//			String key = null;
+//			for (SelectParser.AnythingContext context : ctx.javaClassExtTableSpec().keyValueList().anything())
+//			{
+//				if (key == null) {
+//					key = context.getText();
+//				} else {
+//					keyValueList.put(key, context.getText());
+//					key = null;
+//				}
+//			}
+//			Object[] args = new Object[1];
+//			args[0] = keyValueList;
+//			try {
+//				validateProperties.invoke(null, args);
+//			} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+//				String message = "";
+//				if (e.getClass() == InvocationTargetException.class) {
+//					message = ((InvocationTargetException) e).getTargetException().getMessage();
+//				}
+//				throw new RuntimeException("ValidateProperties error. " + message);
+//			}
+			JavaClassExtTableSpec javaClassExtTableSpec = new JavaClassExtTableSpec(javaClassName, params);
 			return new CreateExternalTable(table, cols, javaClassExtTableSpec);
 		}
 	}

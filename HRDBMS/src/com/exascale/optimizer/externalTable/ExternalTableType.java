@@ -1,5 +1,6 @@
 package com.exascale.optimizer.externalTable;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.HashMap;
 import java.util.TreeMap;
@@ -8,7 +9,7 @@ import java.util.TreeMap;
 public interface ExternalTableType
 {
 	/** Sets the passed properties to help set up the external table implementation */
-	void initialize(String params);
+	void setParams(String params) throws IOException;
 	/** Returns the next result from the external table */
 	List<?> next();
 	boolean hasNext();

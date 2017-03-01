@@ -25,7 +25,9 @@ import com.exascale.tables.Transaction;
 import com.exascale.threads.ConnectionWorker;
 import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.XAWorker;
+import org.antlr.v4.runtime.misc.Pair;
 
+/** Metadata about the tables and other objects stored in HRDBMS */
 public final class MetaData implements Serializable
 {
 	private static final HashMap<ConnectionWorker, String> defaultSchemas = new HashMap<ConnectionWorker, String>();
@@ -313,37 +315,16 @@ public final class MetaData implements Serializable
 
         if(extObject instanceof ExternalTableType) {
             ExternalTableType extTable = (ExternalTableType) extObject;
-            Properties parameters = new Properties();
-            parameters.load(new StringReader((((String) meta.get(1)).replace("@#$", "\n"))));
-            extTable.setParameters(parameters);
+            extTable.setParams(meta.get(1).toString());
             return extTable;
         } else {
             throw new IllegalArgumentException("Needed ExternalTableType but got " + extObject.getClass().getCanonicalName());
         }
 	}
 
-	public void createExternalTable(String schema, String table, ArrayList<ColDef> defs,Transaction tx, String sourceList, String anyString, String filePathIdentifier, String javaClassName, Properties keyValueList) throws Exception
+	public void createExternalTable(String schema, String table, List<ColDef> defs, Transaction tx, String javaClassName, String params) throws Exception
 	{
-		HashMap<String, String> cols2Types = new HashMap<String, String>();
-		for (ColDef def : defs)
-		{
-			String name = def.getCol().getColumn();
-			String type = def.getType();
-			if (type.equals("LONG"))
-			{
-				type = "BIGINT";
-			}
-			else if (type.equals("FLOAT"))
-			{
-				type = "DOUBLE";
-			}
-			else if (type.startsWith("CHAR"))
-			{
-				type = "VARCHAR";
-			}
-
-			cols2Types.put(name, type);
-		}
+		HashMap<String, String> cols2Types = getCols2Types(defs);
 		new MetaData().new PartitionMetaData(schema, table, "NONE", "ANY", "ALL,HASH,{COL}", tx, cols2Types);
 		// tables
 		// cols
@@ -354,14 +335,8 @@ public final class MetaData implements Serializable
 		String typeFlag = HrdbmsConstants.TABLESTRINGEXTERNAL;
 
 		PlanCacheManager.getInsertTable().setParms(tableID, schema, table, typeFlag).execute(tx);
-		if (!keyValueList.isEmpty()) {
-			OutputStream os = new ByteArrayOutputStream();
-			keyValueList.store(os, null);
-			PlanCacheManager.getInsertExternalTable().setParms(tableID, javaClassName, (os.toString()).replace("\n", "@#$")).execute(tx);
-		} else {
-			// @todo FIX PARAMETERS SET UP FOR EXTERNAL TABLE
-			PlanCacheManager.getInsertExternalTable().setParms(tableID, javaClassName, "Undefined Parameters").execute(tx);
-		}
+		PlanCacheManager.getInsertExternalTable().setParms(tableID, javaClassName, params).execute(tx);
+
 		int colID = 0;
 		for (ColDef def : defs)
 		{
@@ -371,29 +346,9 @@ public final class MetaData implements Serializable
 			String type = def.getType();
 			int length = 0;
 			int scale = 0;
-			if (type.equals("LONG"))
-			{
-				type = "BIGINT";
-				length = 8;
-			}
-			else if (type.equals("FLOAT"))
-			{
-				type = "DOUBLE";
-				length = 8;
-			}
-			else if (type.equals("INT"))
-			{
-				length = 4;
-			}
-			else if (type.equals("DATE"))
-			{
-				length = 8;
-			}
-			else if (type.startsWith("CHAR"))
-			{
-				length = Integer.parseInt(type.substring(5, type.length() - 1));
-				type = "VARCHAR";
-			}
+			Pair<String, Integer> typeLength = getTypeLength(type);
+			type = typeLength.a;
+			length = typeLength.b;
 
 			int pkpos = -1;
 			/*if (pks.contains(name))
@@ -432,29 +387,30 @@ public final class MetaData implements Serializable
 		// }
 	}
 
+	/** Returns the base data type, and the length of the data type */
+	private static Pair<String, Integer> getTypeLength(String type) {
+		int length = 0;
+		if (type.equals("LONG")) {
+			type = "BIGINT";
+			length = 8;
+		} else if (type.equals("FLOAT")) {
+			type = "DOUBLE";
+			length = 8;
+		} else if (type.equals("INT")) {
+			length = 4;
+		} else if (type.equals("DATE")) {
+			length = 8;
+		} else if (type.startsWith("CHAR")) {
+			length = Integer.parseInt(type.substring(5, type.length() - 1));
+			type = "VARCHAR";
+		}
+		return new Pair<>(type, length);
+	}
+
 	public static void createTable(final String schema, final String table, final ArrayList<ColDef> defs, final ArrayList<String> pks, final Transaction tx, final String nodeGroupExp, final String nodeExp, final String deviceExp, final int tType, final ArrayList<Integer> colOrder, final ArrayList<Integer> organization) throws Exception
 	{
 		// validate expressions
-		final HashMap<String, String> cols2Types = new HashMap<String, String>();
-		for (final ColDef def : defs)
-		{
-			final String name = def.getCol().getColumn();
-			String type = def.getType();
-			if (type.equals("LONG"))
-			{
-				type = "BIGINT";
-			}
-			else if (type.equals("FLOAT"))
-			{
-				type = "DOUBLE";
-			}
-			else if (type.startsWith("CHAR"))
-			{
-				type = "VARCHAR";
-			}
-
-			cols2Types.put(name, type);
-		}
+		final HashMap<String, String> cols2Types = getCols2Types(defs);
 
 		new MetaData().new PartitionMetaData(schema, table, nodeGroupExp, nodeExp, deviceExp, tx, cols2Types);
 		// tables
@@ -479,29 +435,9 @@ public final class MetaData implements Serializable
 			String type = def.getType();
 			int length = 0;
 			final int scale = 0;
-			if (type.equals("LONG"))
-			{
-				type = "BIGINT";
-				length = 8;
-			}
-			else if (type.equals("FLOAT"))
-			{
-				type = "DOUBLE";
-				length = 8;
-			}
-			else if (type.equals("INT"))
-			{
-				length = 4;
-			}
-			else if (type.equals("DATE"))
-			{
-				length = 8;
-			}
-			else if (type.startsWith("CHAR"))
-			{
-				length = Integer.parseInt(type.substring(5, type.length() - 1));
-				type = "VARCHAR";
-			}
+			Pair<String, Integer> typeLength = getTypeLength(type);
+			type = typeLength.a;
+			length = typeLength.b;
 
 			int pkpos = -1;
 			if (pks.contains(name))
@@ -6710,4 +6646,32 @@ public final class MetaData implements Serializable
 			}
 		}
 	}
+
+	private static HashMap<String, String> getCols2Types(final List<ColDef> defs) {
+		HashMap<String, String> cols2Types = new HashMap<>();
+		for (ColDef def : defs)
+		{
+			String name = def.getCol().getColumn();
+			String type = def.getType();
+			if (type.equals("LONG"))
+			{
+				type = "BIGINT";
+			}
+			else if (type.equals("FLOAT"))
+			{
+				type = "DOUBLE";
+			}
+			else if (type.startsWith("CHAR"))
+			{
+				type = "VARCHAR";
+			}
+
+			cols2Types.put(name, type);
+		}
+		return cols2Types;
+	}
+
+	public static ReentrantLock getTableMetaLock() { return tableMetaLock; }
+	public static ConcurrentHashMap<String, Boolean> getTableExistenceCache() { return tableExistenceCache; }
+	public static ConcurrentHashMap<String, Integer> getTableTypeCache() { return tableTypeCache; }
 }

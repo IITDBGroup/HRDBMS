@@ -1,5 +1,7 @@
 grammar Select;
 
+import JSON;
+
 // Note that the select rule is a bit of a misnomer. In addition to select queries, it defines all other valid statements.
 select : (insert EOF) | (update EOF) | (delete EOF) | (createExternalTable EOF) | (createTable EOF) | (createIndex EOF) | (createView EOF) | (dropTable EOF) | (dropIndex EOF) | (dropView EOF) | (load EOF) | (runstats EOF) | ((('WITH' commonTableExpression (',' commonTableExpression)*)? fullSelect) EOF);
 
@@ -18,9 +20,8 @@ organization : ORGANIZATION '(' INTEGER (',' INTEGER)* ')' ;
 
 createExternalTable : 'CREATE' 'EXTERNAL' 'TABLE' tableName '(' colDef (',' colDef)* ')' (generalExtTableSpec | javaClassExtTableSpec) ;
 generalExtTableSpec: 'IMPORT' 'FROM' sourceList 'FIELDS' 'DELIMITED' 'BY' anything 'ROWS' 'DELIMITED' 'BY' anything 'FILE' 'PATH' FILEPATHIDENTIFIER ;
-javaClassExtTableSpec: 'USING' '"' javaClassName '"' 'WITH' 'PARAMETERS' '(' keyValueList ')' ;
+javaClassExtTableSpec: 'USING' '"' javaClassName '"' 'WITH' 'PARAMETERS' '(' json ')' ;
 javaClassName: JAVACLASSNAMEIDENTIFIER ('.' JAVACLASSNAMEIDENTIFIER)* ;
-keyValueList: '"' anything '"' ':' '"' anything '"' (';' '"' anything '"' ':' '"' anything '"' )*?;
 anything :  (EscapeSequence | '""' | ~( '//' | '"'| ':' | ';' ))+ ;
 EscapeSequence : '\\' ('b'|'t'|'n'|'f'|'r'|'\"'|'\''|'\\') ;
 sourceList : 'LOCAL' | 'HDFS' | 'S3' ;

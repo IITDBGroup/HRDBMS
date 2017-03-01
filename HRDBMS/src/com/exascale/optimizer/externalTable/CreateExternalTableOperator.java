@@ -1,71 +1,41 @@
-package com.exascale.optimizer;
+package com.exascale.optimizer.externalTable;
 
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
-import java.util.Map;
-import java.util.Properties;
 import java.util.TreeMap;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.optimizer.ColDef;
+import com.exascale.optimizer.MetaData;
+import com.exascale.optimizer.Operator;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Transaction;
 
+/** Operator corresponding to a create external table statement */
 public final class CreateExternalTableOperator implements Operator, Serializable
 {
 	private final MetaData meta;
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
 	private TreeMap<Integer, String> pos2Col;
-	private Operator parent;
 	private int node;
 	private boolean done = false;
 	private Transaction tx;
 	private final String schema;
 	private final String table;
-	private int type;
 	private ArrayList<ColDef> cols;
-	private String sourceList;
-	private String anyString;
-	private String filePathIdentifier;
-	private String javaClassName;
-	private Properties keyValueList;	
-	
-	
-	
-	public CreateExternalTableOperator(MetaData meta, String schema, String table, ArrayList<ColDef> cols, String sourceList, String anyString, String filePathIdentifier, String javaClassName, Properties keyValueList)
-	{
-		this.meta = meta;
-		this.schema = schema;
-		this.table = table;
-		this.cols = cols;
-		this.sourceList = sourceList;
-		this.anyString = anyString;
-		this.filePathIdentifier = filePathIdentifier;
-		this.javaClassName = javaClassName;
-		this.keyValueList = keyValueList;
-	}
+	private String javaClassName, params;
 
-	public CreateExternalTableOperator(MetaData meta, String schema, String table, ArrayList<ColDef> cols, String sourceList, String anyString, String filePathIdentifier)
-	{
-		this.meta = meta;
-		this.schema = schema;
-		this.table = table;
-		this.cols = cols;
-		this.sourceList = sourceList;
-		this.anyString = anyString;
-		this.filePathIdentifier = filePathIdentifier;
-	}	
-	
-	public CreateExternalTableOperator(MetaData meta, String schema, String table, ArrayList<ColDef> cols, String javaClassName, Properties keyValueList)
+	public CreateExternalTableOperator(MetaData meta, String schema, String table, ArrayList<ColDef> cols, String javaClassName, String params)
 	{
 		this.meta = meta;
 		this.schema = schema;
 		this.table = table;
 		this.cols = cols;
 		this.javaClassName = javaClassName;
-		this.keyValueList = keyValueList;
+		this.params = params;
 	}
 
 	@Override
@@ -85,7 +55,7 @@ public final class CreateExternalTableOperator implements Operator, Serializable
 	@Override
 	public Operator clone()
 	{
-		final CreateExternalTableOperator retval = new CreateExternalTableOperator(meta, schema, table, cols, sourceList, anyString, filePathIdentifier, javaClassName, keyValueList);
+		final CreateExternalTableOperator retval = new CreateExternalTableOperator(meta, schema, table, cols, javaClassName, params);
 		retval.node = node;
 		return retval;
 	}
@@ -97,7 +67,7 @@ public final class CreateExternalTableOperator implements Operator, Serializable
 		cols2Types = null;
 		pos2Col = null;
 		cols = null;
-		keyValueList = null;		
+		params = null;
 	}
 	
 	@Override
@@ -149,11 +119,11 @@ public final class CreateExternalTableOperator implements Operator, Serializable
 		if (!done)
 		{
 			done = true;
-			meta.tableMetaLock.lock();
-			meta.createExternalTable(schema, table, cols, tx, sourceList, anyString, filePathIdentifier, javaClassName, keyValueList);
-			meta.tableTypeCache.remove(schema + "." + table);
-			meta.tableExistenceCache.remove(schema + "." + table);
-			meta.tableMetaLock.unlock();
+			meta.getTableMetaLock().lock();
+			meta.createExternalTable(schema, table, cols, tx, javaClassName, params);
+			meta.getTableTypeCache().remove(schema + "." + table);
+			meta.getTableExistenceCache().remove(schema + "." + table);
+			meta.getTableMetaLock().unlock();
 			return 1;
 		}
 		else
@@ -176,7 +146,7 @@ public final class CreateExternalTableOperator implements Operator, Serializable
 	@Override
 	public Operator parent()
 	{
-		return parent;
+		return null;
 	}
 	
 	@Override
