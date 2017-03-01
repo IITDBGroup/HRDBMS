@@ -20,7 +20,7 @@ organization : ORGANIZATION '(' INTEGER (',' INTEGER)* ')' ;
 
 createExternalTable : 'CREATE' 'EXTERNAL' 'TABLE' tableName '(' colDef (',' colDef)* ')' (generalExtTableSpec | javaClassExtTableSpec) ;
 generalExtTableSpec: 'IMPORT' 'FROM' sourceList 'FIELDS' 'DELIMITED' 'BY' anything 'ROWS' 'DELIMITED' 'BY' anything 'FILE' 'PATH' FILEPATHIDENTIFIER ;
-javaClassExtTableSpec: 'USING' '"' javaClassName '"' 'WITH' 'PARAMETERS' '(' json ')' ;
+javaClassExtTableSpec: 'USING' '"' javaClassName '"' 'WITH' 'PARAMETERS' '"' json '"' ;
 javaClassName: JAVACLASSNAMEIDENTIFIER ('.' JAVACLASSNAMEIDENTIFIER)* ;
 anything :  (EscapeSequence | '""' | ~( '//' | '"'| ':' | ';' ))+ ;
 EscapeSequence : '\\' ('b'|'t'|'n'|'f'|'r'|'\"'|'\''|'\\') ;
