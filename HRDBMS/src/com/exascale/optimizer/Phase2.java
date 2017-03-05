@@ -40,13 +40,7 @@ public final class Phase2
 			}
 			else
 			{
-				final ArrayList<Integer> retval = new ArrayList<Integer>(t.getNodeGroupHashMap().size());
-				for (final int id : t.getNodeGroupHashMap().keySet())
-				{
-					retval.add(id);
-				}
-
-				return retval;
+				return new ArrayList<>(t.getNodeGroupHashMap().keySet());
 			}
 		}
 		else
@@ -60,13 +54,7 @@ public final class Phase2
 			}
 			else
 			{
-				final ArrayList<Integer> retval = new ArrayList<Integer>(t.getNodeGroupHashMap().size());
-				for (final int id : t.getNodeGroupHashMap().keySet())
-				{
-					retval.add(id);
-				}
-
-				return retval;
+				return new ArrayList<>(t.getNodeGroupHashMap().keySet());
 			}
 		}
 	}
@@ -94,22 +82,7 @@ public final class Phase2
 			}
 			else
 			{
-				if (t.allDevices())
-				{
-					int i = 0;
-					while (i < t.getNumDevices())
-					{
-						t.addActiveDeviceForParent(i, o);
-						i++;
-					}
-				}
-				else
-				{
-					for (final int j : t.deviceSet())
-					{
-						t.addActiveDeviceForParent(j, o);
-					}
-				}
+				addDevices(t, o);
 			}
 		}
 		else
@@ -124,22 +97,26 @@ public final class Phase2
 			}
 			else
 			{
-				if (t.allDevices())
-				{
-					int i = 0;
-					while (i < t.getNumDevices())
-					{
-						t.addActiveDeviceForParent(i, o);
-						i++;
-					}
-				}
-				else
-				{
-					for (final int j : t.deviceSet())
-					{
-						t.addActiveDeviceForParent(j, o);
-					}
-				}
+				addDevices(t, o);
+			}
+		}
+	}
+
+	private static void addDevices(final TableScanOperator tableScanOperator, final Operator operator) {
+		if (tableScanOperator.allDevices())
+		{
+			int i = 0;
+			while (i < tableScanOperator.getNumDevices())
+			{
+				tableScanOperator.addActiveDeviceForParent(i, operator);
+				i++;
+			}
+		}
+		else
+		{
+			for (final int j : tableScanOperator.deviceSet())
+			{
+				tableScanOperator.addActiveDeviceForParent(j, operator);
 			}
 		}
 	}
@@ -188,26 +165,7 @@ public final class Phase2
 			}
 			else
 			{
-				if (t.allNodes())
-				{
-					for (final ArrayList<Integer> nodeList : nodeLists)
-					{
-						for (final Integer node : nodeList)
-						{
-							t.addActiveNodeForParent(node, o);
-						}
-					}
-				}
-				else
-				{
-					for (final int j : t.nodeSet())
-					{
-						for (final ArrayList<Integer> nodeList : nodeLists)
-						{
-							t.addActiveNodeForParent(nodeList.get(j), o);
-						}
-					}
-				}
+				addNodes(t, o, nodeLists);
 			}
 		}
 		else
@@ -228,25 +186,29 @@ public final class Phase2
 			}
 			else
 			{
-				if (t.allNodes())
+				addNodes(t, o, nodeLists);
+			}
+		}
+	}
+
+	private static void addNodes(final TableScanOperator tableScanOperator, Operator operator, final ArrayList<ArrayList<Integer>> nodeLists) {
+		if (tableScanOperator.allNodes())
+		{
+			for (final ArrayList<Integer> nodeList : nodeLists)
+			{
+				for (final Integer node : nodeList)
 				{
-					for (final ArrayList<Integer> nodeList : nodeLists)
-					{
-						for (final Integer node : nodeList)
-						{
-							t.addActiveNodeForParent(node, o);
-						}
-					}
+					tableScanOperator.addActiveNodeForParent(node, operator);
 				}
-				else
+			}
+		}
+		else
+		{
+			for (final int j : tableScanOperator.nodeSet())
+			{
+				for (final ArrayList<Integer> nodeList : nodeLists)
 				{
-					for (final int j : t.nodeSet())
-					{
-						for (final ArrayList<Integer> nodeList : nodeLists)
-						{
-							t.addActiveNodeForParent(nodeList.get(j), o);
-						}
-					}
+					tableScanOperator.addActiveNodeForParent(nodeList.get(j), operator);
 				}
 			}
 		}

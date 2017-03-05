@@ -19,6 +19,7 @@ import com.exascale.misc.HJOMultiHashMap;
 import com.exascale.misc.MurmurHash;
 import com.exascale.misc.MyDate;
 
+/** Filter based on a conjunctive normal form expression */
 public class CNFFilter implements Serializable
 {
 	private static sun.misc.Unsafe unsafe;

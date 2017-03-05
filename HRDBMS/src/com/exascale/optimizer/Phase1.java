@@ -235,75 +235,39 @@ public final class Phase1
 		// printTree(root, 0); //DEBUG
 	}
 
+	private double adjust(Operator op, double r) throws Exception {
+		double retval = r;
+		while (true)
+		{
+			if (op instanceof SelectOperator)
+			{
+				retval *= ((SelectOperator)op).likelihood(tx);
+			}
+			else if (op instanceof ProjectOperator || op instanceof RenameOperator || op instanceof ReorderOperator)
+			{
+			}
+			else if (op instanceof TableScanOperator)
+			{
+				// HRDBMSWorker.logger.debug("Adjust is returning " + retval);
+				return retval;
+			}
+			else
+			{
+				// HRDBMSWorker.logger.debug("Adjust is returning " + r);
+				return r;
+			}
+
+			op = op.children().get(0);
+		}
+	}
+
 	private double adjust(final Operator left, final Operator right, final double r) throws Exception
 	{
-		double retval = r;
 		if (card(left) < card(right))
 		{
-			Operator op = left;
-			while (true)
-			{
-				if (op instanceof SelectOperator)
-				{
-					retval *= ((SelectOperator)op).likelihood(tx);
-				}
-				else if (op instanceof ProjectOperator)
-				{
-				}
-				else if (op instanceof RenameOperator)
-				{
-				}
-				else if (op instanceof ReorderOperator)
-				{
-				}
-				else if (op instanceof TableScanOperator)
-				{
-					// HRDBMSWorker.logger.debug("Adjust is returning " +
-					// retval);
-					return retval;
-				}
-				else
-				{
-					// HRDBMSWorker.logger.debug("Adjust is returning " + r);
-					return r;
-				}
-
-				op = op.children().get(0);
-			}
+			return adjust(left, r);
 		}
-		else
-		{
-			Operator op = right;
-			while (true)
-			{
-				if (op instanceof SelectOperator)
-				{
-					retval *= ((SelectOperator)op).likelihood(tx);
-				}
-				else if (op instanceof ProjectOperator)
-				{
-				}
-				else if (op instanceof RenameOperator)
-				{
-				}
-				else if (op instanceof ReorderOperator)
-				{
-				}
-				else if (op instanceof TableScanOperator)
-				{
-					// HRDBMSWorker.logger.debug("Adjust is returning " +
-					// retval);
-					return retval;
-				}
-				else
-				{
-					// HRDBMSWorker.logger.debug("Adjust is returning " + r);
-					return r;
-				}
-
-				op = op.children().get(0);
-			}
-		}
+		return adjust(right, r);
 	}
 
 	private long cardHJO(final Operator op) throws Exception
