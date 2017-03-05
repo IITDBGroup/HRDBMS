@@ -1,6 +1,8 @@
 package com.exascale.misc;
 
+import com.exascale.managers.HRDBMSWorker;
 import com.exascale.optimizer.MetaData;
+import com.exascale.optimizer.Operator;
 import com.exascale.tables.Transaction;
 
 import java.util.ArrayList;
@@ -29,6 +31,51 @@ public final class Utils
 		}
 
 		return retval;
+	}
+
+	/** Recurses through operator tree and prints for debugging purposes */
+	public static void printTree(final Operator op, final int indent)
+	{
+		String line = "";
+		int i = 0;
+		while (i < indent)
+		{
+			line += " ";
+			i++;
+		}
+
+		line += op;
+		HRDBMSWorker.logger.debug(line);
+
+		if (op.children().size() > 0)
+		{
+			line = "";
+			i = 0;
+			while (i < indent)
+			{
+				line += " ";
+				i++;
+			}
+
+			line += "(";
+			HRDBMSWorker.logger.debug(line);
+
+			for (final Operator child : op.children())
+			{
+				printTree(child, indent + 3);
+			}
+
+			line = "";
+			i = 0;
+			while (i < indent)
+			{
+				line += " ";
+				i++;
+			}
+
+			line += ")";
+			HRDBMSWorker.logger.debug(line);
+		}
 	}
 
 	public static final double parseDouble(final String s)

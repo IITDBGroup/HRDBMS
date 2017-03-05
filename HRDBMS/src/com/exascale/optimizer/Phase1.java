@@ -10,6 +10,7 @@ import com.exascale.managers.HRDBMSWorker;
 import com.exascale.optimizer.MetaData.PartitionMetaData;
 import com.exascale.tables.Transaction;
 
+/** Employs standard optimizations based on assumption of a single-node execution plan. */
 public final class Phase1
 {
 	private final RootOperator root;
@@ -27,50 +28,6 @@ public final class Phase1
 		this.root = root;
 		this.tx = tx;
 		this.clone = cloneTree(root);
-	}
-
-	public static void printTree(final Operator op, final int indent)
-	{
-		String line = "";
-		int i = 0;
-		while (i < indent)
-		{
-			line += " ";
-			i++;
-		}
-
-		line += op;
-		HRDBMSWorker.logger.debug(line);
-
-		if (op.children().size() > 0)
-		{
-			line = "";
-			i = 0;
-			while (i < indent)
-			{
-				line += " ";
-				i++;
-			}
-
-			line += "(";
-			HRDBMSWorker.logger.debug(line);
-
-			for (final Operator child : op.children())
-			{
-				printTree(child, indent + 3);
-			}
-
-			line = "";
-			i = 0;
-			while (i < indent)
-			{
-				line += " ";
-				i++;
-			}
-
-			line += ")";
-			HRDBMSWorker.logger.debug(line);
-		}
 	}
 
 	private static boolean anyHope(Operator op)

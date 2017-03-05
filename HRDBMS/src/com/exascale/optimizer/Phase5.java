@@ -192,51 +192,6 @@ public final class Phase5
 		pruneTree(root, new IdentityHashMap<Operator, Operator>());
 	}
 
-	public void printTree(final Operator op, final int indent) throws Exception
-	{
-		String line = "";
-		int i = 0;
-		while (i < indent)
-		{
-			line += " ";
-			i++;
-		}
-
-		line += "(" + card(op) + ") ";
-		line += op;
-		HRDBMSWorker.logger.debug(line);
-
-		if (op.children().size() > 0)
-		{
-			line = "";
-			i = 0;
-			while (i < indent)
-			{
-				line += " ";
-				i++;
-			}
-
-			line += "(";
-			HRDBMSWorker.logger.debug(line);
-
-			for (final Operator child : op.children())
-			{
-				printTree(child, indent + 3);
-			}
-
-			line = "";
-			i = 0;
-			while (i < indent)
-			{
-				line += " ";
-				i++;
-			}
-
-			line += ")";
-			HRDBMSWorker.logger.debug(line);
-		}
-	}
-
 	private void addIndexesToTableScans() throws Exception
 	{
 		final ArrayList<TableScanOperator> s = getTableScans(root, new HashSet<Operator>());

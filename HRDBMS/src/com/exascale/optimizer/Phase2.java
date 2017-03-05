@@ -7,6 +7,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.tables.Transaction;
 
+/** Splits table scans across nodes according to partitioning scheme. */
 public final class Phase2
 {
 	private final RootOperator root;

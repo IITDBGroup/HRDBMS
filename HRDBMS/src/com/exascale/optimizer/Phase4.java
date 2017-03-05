@@ -10,6 +10,7 @@ import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 import com.exascale.tables.Transaction;
 
+/** Replaces full table scans with index scans; employs partition elimination */
 public final class Phase4
 {
 	private static final int MAX_LOCAL_NO_HASH_PRODUCT = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_local_no_hash_product")); // 1000000

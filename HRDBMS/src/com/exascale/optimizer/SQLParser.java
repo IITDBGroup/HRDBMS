@@ -3,6 +3,7 @@ package com.exascale.optimizer;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
+import com.exascale.misc.Utils;
 import com.exascale.optimizer.externalTable.CreateExternalTableOperator;
 import com.exascale.optimizer.externalTable.ExternalTableScanOperator;
 import com.exascale.optimizer.externalTable.ExternalTableType;
@@ -53,50 +54,6 @@ public class SQLParser
 		this.sql = new SQL(sql);
 		this.connection = connection;
 		this.tx = tx;
-	}
-
-	public static void printTree(final Operator op, final int indent)
-	{
-		String line = "";
-		int i = 0;
-		while (i < indent)
-		{
-			line += " ";
-			i++;
-		}
-
-		line += op;
-		HRDBMSWorker.logger.debug(line);
-
-		if (op.children().size() > 0)
-		{
-			line = "";
-			i = 0;
-			while (i < indent)
-			{
-				line += " ";
-				i++;
-			}
-
-			line += "(";
-			HRDBMSWorker.logger.debug(line);
-
-			for (final Operator child : op.children())
-			{
-				printTree(child, indent + 3);
-			}
-
-			line = "";
-			i = 0;
-			while (i < indent)
-			{
-				line += " ";
-				i++;
-			}
-
-			line += ")";
-			HRDBMSWorker.logger.debug(line);
-		}
 	}
 
 	private static boolean allAnd(final SearchCondition s)
@@ -741,7 +698,7 @@ public class SQLParser
 			if (type == null)
 			{
 				HRDBMSWorker.logger.debug("Looking for " + rhs + " in " + o.getCols2Types());
-				printTree(o, 0);
+				Utils.printTree(o, 0);
 				throw new ParseException("Column " + rhs + " does not exist");
 			}
 			else if (type.equals("CHAR"))
@@ -817,7 +774,7 @@ public class SQLParser
 			final Operator op = buildOperatorTreeFromSelect((Select)stmt);
 			final RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
 			retval.add(op);
-			// printTree(op, 0); // DEBUG
+			// Utils.printTree(op, 0); // DEBUG
 			final ArrayList<Operator> ops = new ArrayList<Operator>(1);
 			ops.add(retval);
 			return ops;
@@ -4606,7 +4563,7 @@ public class SQLParser
 				catch (final Exception e)
 				{
 					HRDBMSWorker.logger.debug("Exception trying to add MultiOperator.  Tree is: ");
-					printTree(op, 0);
+					Utils.printTree(op, 0);
 					throw e;
 				}
 				return multi;
@@ -4881,7 +4838,7 @@ public class SQLParser
 
 					if (matches == 0)
 					{
-						printTree(op, 0);
+						Utils.printTree(op, 0);
 						throw new ParseException("Column " + col.getColumn() + " does not exist");
 					}
 					else if (matches > 1)
@@ -10705,7 +10662,7 @@ public class SQLParser
 			}
 
 			HRDBMSWorker.logger.debug("Could not find " + col + " in " + op.getCols2Pos().keySet());
-			Phase1.printTree(op, 0);
+			Utils.printTree(op, 0);
 			HRDBMSWorker.logger.debug(complex);
 			return col;
 		}
