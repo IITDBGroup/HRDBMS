@@ -1,7 +1,36 @@
 package com.exascale.misc;
 
+import com.exascale.optimizer.MetaData;
+import com.exascale.tables.Transaction;
+
+import java.util.ArrayList;
+
 public final class Utils
 {
+	public static ArrayList<Object> convertToHosts(final ArrayList<Object> tree, final Transaction tx) throws Exception
+	{
+		final ArrayList<Object> retval = new ArrayList<Object>();
+		int i = 0;
+		final int size = tree.size();
+		while (i < size)
+		{
+			final Object obj = tree.get(i);
+			if (obj instanceof Integer)
+			{
+				// new MetaData();
+				retval.add(MetaData.getHostNameForNode((Integer)obj, tx));
+			}
+			else
+			{
+				retval.add(convertToHosts((ArrayList<Object>)obj, tx));
+			}
+
+			i++;
+		}
+
+		return retval;
+	}
+
 	public static final double parseDouble(final String s)
 	{
 		final int p = s.indexOf('.');

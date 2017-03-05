@@ -92,30 +92,6 @@ public final class LoadOperator implements Operator, Serializable
 		this.meta = meta;
 	}
 
-	private static ArrayList<Object> convertToHosts(final ArrayList<Object> tree, final Transaction tx) throws Exception
-	{
-		final ArrayList<Object> retval = new ArrayList<Object>();
-		int i = 0;
-		final int size = tree.size();
-		while (i < size)
-		{
-			final Object obj = tree.get(i);
-			if (obj instanceof Integer)
-			{
-				// new MetaData();
-				retval.add(MetaData.getHostNameForNode((Integer)obj, tx));
-			}
-			else
-			{
-				retval.add(convertToHosts((ArrayList<Object>)obj, tx));
-			}
-
-			i++;
-		}
-
-		return retval;
-	}
-
 	private static boolean doSendLDMD(final ArrayList<Object> tree, final String key, final LoadMetaData ldmd, final Transaction tx)
 	{
 		Object obj = tree.get(0);
@@ -151,7 +127,7 @@ public final class LoadOperator implements Operator, Serializable
 			out.write(length);
 			out.write(data);
 			final ObjectOutputStream objOut = new ObjectOutputStream(out);
-			objOut.writeObject(convertToHosts(tree, tx));
+			objOut.writeObject(Utils.convertToHosts(tree, tx));
 			objOut.writeObject(ldmd);
 			objOut.flush();
 			out.flush();
@@ -212,7 +188,7 @@ public final class LoadOperator implements Operator, Serializable
 			out.write(length);
 			out.write(data);
 			final ObjectOutputStream objOut = new ObjectOutputStream(out);
-			objOut.writeObject(convertToHosts(tree, tx));
+			objOut.writeObject(Utils.convertToHosts(tree, tx));
 			objOut.flush();
 			out.flush();
 			getConfirmation(sock);

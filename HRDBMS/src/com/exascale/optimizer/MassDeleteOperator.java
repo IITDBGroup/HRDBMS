@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.Utils;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.HRDBMSThread;
@@ -54,30 +55,6 @@ public final class MassDeleteOperator implements Operator, Serializable
 	{
 		final int ret = java.nio.ByteBuffer.wrap(val).getInt();
 		return ret;
-	}
-
-	private static ArrayList<Object> convertToHosts(final ArrayList<Object> tree, final Transaction tx) throws Exception
-	{
-		final ArrayList<Object> retval = new ArrayList<Object>();
-		int i = 0;
-		final int size = tree.size();
-		while (i < size)
-		{
-			final Object obj = tree.get(i);
-			if (obj instanceof Integer)
-			{
-				// new MetaData();
-				retval.add(MetaData.getHostNameForNode((Integer)obj, tx));
-			}
-			else
-			{
-				retval.add(convertToHosts((ArrayList<Object>)obj, tx));
-			}
-
-			i++;
-		}
-
-		return retval;
 	}
 
 	private static void getConfirmation(final Socket sock) throws Exception
@@ -575,7 +552,7 @@ public final class MassDeleteOperator implements Operator, Serializable
 				}
 				out.write(intToBytes(type));
 				final ObjectOutputStream objOut = new ObjectOutputStream(out);
-				objOut.writeObject(convertToHosts(tree, tx));
+				objOut.writeObject(Utils.convertToHosts(tree, tx));
 				objOut.writeObject(indexes);
 				objOut.writeObject(keys);
 				objOut.writeObject(types);

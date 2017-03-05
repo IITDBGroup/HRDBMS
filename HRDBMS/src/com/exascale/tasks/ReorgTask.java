@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.TreeMap;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.MaintenanceManager;
+import com.exascale.misc.Utils;
 import com.exascale.optimizer.Index;
 import com.exascale.optimizer.MetaData;
 import com.exascale.tables.Transaction;
@@ -284,30 +285,6 @@ public class ReorgTask extends Task
 			this.uniques = uniques;
 		}
 
-		private static ArrayList<Object> convertToHosts(final ArrayList<Object> tree, final Transaction tx) throws Exception
-		{
-			final ArrayList<Object> retval = new ArrayList<Object>();
-			int i = 0;
-			final int size = tree.size();
-			while (i < size)
-			{
-				final Object obj = tree.get(i);
-				if (obj instanceof Integer)
-				{
-					// new MetaData();
-					retval.add(MetaData.getHostNameForNode((Integer)obj, tx));
-				}
-				else
-				{
-					retval.add(convertToHosts((ArrayList<Object>)obj, tx));
-				}
-
-				i++;
-			}
-
-			return retval;
-		}
-
 		private static boolean sendReorg(final ArrayList<Object> tree, final String schema, final String table, final ArrayList<Index> indexes, final Transaction tx, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> pos2Col, final ArrayList<Boolean> uniques)
 		{
 			Object obj = tree.get(0);
@@ -343,7 +320,7 @@ public class ReorgTask extends Task
 				final byte[] txBytes = longToBytes(tx.number());
 				out.write(txBytes);
 				final ObjectOutputStream objOut = new ObjectOutputStream(out);
-				objOut.writeObject(convertToHosts(tree, tx));
+				objOut.writeObject(Utils.convertToHosts(tree, tx));
 				objOut.writeObject(indexes);
 				objOut.writeObject(cols2Types);
 				objOut.writeObject(pos2Col);

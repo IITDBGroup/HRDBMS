@@ -257,60 +257,11 @@ public class XAManager extends HRDBMSThread
 
 	public static XAWorker executeQuery(final String sql, final Transaction tx, final ConnectionWorker conn) throws Exception
 	{
-		final SQL sql3 = new SQL(sql);
-		final String sql2 = sql3.toString();
-		if (!(sql2.startsWith("SELECT") || sql2.startsWith("WITH")))
-		{
-			throw new Exception("Not a select statement");
-		}
-		// HRDBMSWorker.logger.debug("About to check plan cache");
-		Plan plan = PlanCacheManager.checkPlanCache(sql2);
-
-		if (plan == null)
-		{
-			try
-			{
-				// HRDBMSWorker.logger.debug("Did not find plan in cache");
-				final SQLParser parse = new SQLParser(sql3, conn, tx);
-				// HRDBMSWorker.logger.debug("Created SQL parser");
-				final ArrayList<Operator> array = parse.parse();
-				// HRDBMSWorker.logger.debug("Parsing completed");
-				final Operator op = array.get(0);
-				final Phase1 p1 = new Phase1((RootOperator)op, tx);
-				p1.optimize();
-				// HRDBMSWorker.logger.debug("Phase 1 completed");
-				new Phase2((RootOperator)op, tx).optimize();
-				// HRDBMSWorker.logger.debug("Phase 2 completed");
-				new Phase3((RootOperator)op, tx).optimize();
-				// HRDBMSWorker.logger.debug("Phase 3 completed");
-				new Phase4((RootOperator)op, tx).optimize();
-				// HRDBMSWorker.logger.debug("Phase 4 completed");
-				new Phase5((RootOperator)op, tx, p1.likelihoodCache).optimize();
-				// HRDBMSWorker.logger.debug("Phase 5 completed");
-				// Phase1.printTree(op, 0); // DEBUG
-				plan = new Plan(false, array);
-
-				// if (parse.doesNotUseCurrentSchema())
-				// {
-				// PlanCacheManager.addPlan(sql2, new Plan(plan));
-				// }
-			}
-			catch (final Throwable e)
-			{
-				HRDBMSWorker.logger.debug("Error in executeQuery", e);
-				throw e;
-			}
-		}
-		else
-		{
-			// HRDBMSWorker.logger.debug("Did find plan in cache");
-		}
-
-		txs.multiPut(tx, plan);
-		return new XAWorker(plan, tx, true);
+		return executeQuery(sql, tx, conn, null);
 	}
 
-	public static XAWorker executeQuery(final String sql, final Transaction tx, final ConnectionWorker conn, final long sPer) throws Exception
+	/** Main logic to run through the query planning and execution of a select statement */
+	public static XAWorker executeQuery(final String sql, final Transaction tx, final ConnectionWorker conn, final Long sPer) throws Exception
 	{
 		final SQL sql3 = new SQL(sql);
 		final String sql2 = sql3.toString();
@@ -362,7 +313,9 @@ public class XAManager extends HRDBMSThread
 		}
 
 		txs.multiPut(tx, plan);
-		plan.setSample(sPer);
+		if(sPer != null) {
+			plan.setSample(sPer);
+		}
 		return new XAWorker(plan, tx, true);
 	}
 
@@ -539,30 +492,6 @@ public class XAManager extends HRDBMSThread
 		}
 
 		return false;
-	}
-
-	private static ArrayList<Object> convertToHosts(final ArrayList<Object> tree, final Transaction tx) throws Exception
-	{
-		final ArrayList<Object> retval = new ArrayList<Object>();
-		int i = 0;
-		final int size = tree.size();
-		while (i < size)
-		{
-			final Object obj = tree.get(i);
-			if (obj instanceof Integer)
-			{
-				// new MetaData();
-				retval.add(MetaData.getHostNameForNode((Integer)obj, tx));
-			}
-			else
-			{
-				retval.add(convertToHosts((ArrayList<Object>)obj, tx));
-			}
-
-			i++;
-		}
-
-		return retval;
 	}
 
 	private static ArrayList<Integer> getAllNodes(final ArrayList<Object> tree, final int remove)

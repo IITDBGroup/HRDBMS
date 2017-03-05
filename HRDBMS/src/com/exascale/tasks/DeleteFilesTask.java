@@ -13,36 +13,13 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.MaintenanceManager;
+import com.exascale.misc.Utils;
 import com.exascale.optimizer.MetaData;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.HRDBMSThread;
 
 public class DeleteFilesTask extends Task
 {
-	private static ArrayList<Object> convertToHosts(final ArrayList<Object> tree, final Transaction tx) throws Exception
-	{
-		final ArrayList<Object> retval = new ArrayList<Object>();
-		int i = 0;
-		final int size = tree.size();
-		while (i < size)
-		{
-			final Object obj = tree.get(i);
-			if (obj instanceof Integer)
-			{
-				// new MetaData();
-				retval.add(MetaData.getHostNameForNode((Integer)obj, tx));
-			}
-			else
-			{
-				retval.add(convertToHosts((ArrayList<Object>)obj, tx));
-			}
-
-			i++;
-		}
-
-		return retval;
-	}
-
 	private static void getConfirmation(final Socket sock) throws Exception
 	{
 		final InputStream in = sock.getInputStream();
@@ -369,7 +346,7 @@ public class DeleteFilesTask extends Task
 				outMsg[15] = 0;
 				out.write(outMsg);
 				final ObjectOutputStream objOut = new ObjectOutputStream(out);
-				objOut.writeObject(convertToHosts(tree, tx));
+				objOut.writeObject(Utils.convertToHosts(tree, tx));
 				objOut.writeObject(indexes);
 				objOut.flush();
 				out.flush();
