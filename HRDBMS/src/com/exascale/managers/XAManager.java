@@ -18,6 +18,7 @@ import com.exascale.logging.PrepareLogRec;
 import com.exascale.logging.ReadyLogRec;
 import com.exascale.logging.XAAbortLogRec;
 import com.exascale.logging.XACommitLogRec;
+import com.exascale.misc.Utils;
 import com.exascale.misc.VHJOMultiHashMap;
 import com.exascale.optimizer.CreateIndexOperator;
 import com.exascale.optimizer.DeleteOperator;
@@ -844,7 +845,7 @@ public class XAManager extends HRDBMSThread
 			outMsg[15] = 0;
 			out.write(outMsg);
 			final ObjectOutputStream objOut = new ObjectOutputStream(out);
-			objOut.writeObject(convertToHosts(tree, tx));
+			objOut.writeObject(Utils.convertToHosts(tree, tx));
 			objOut.flush();
 			out.flush();
 			getConfirmation(sock);
@@ -946,7 +947,7 @@ public class XAManager extends HRDBMSThread
 			out.write(outMsg);
 			out.write(longToBytes(tx.number()));
 			final ObjectOutputStream objOut = new ObjectOutputStream(out);
-			objOut.writeObject(convertToHosts(tree, tx2));
+			objOut.writeObject(Utils.convertToHosts(tree, tx2));
 			// tx2.commit();
 			objOut.flush();
 			out.flush();
@@ -1198,7 +1199,7 @@ public class XAManager extends HRDBMSThread
 			out.write(length);
 			out.write(data);
 			final ObjectOutputStream objOut = new ObjectOutputStream(out);
-			objOut.writeObject(convertToHosts(tree, tx));
+			objOut.writeObject(Utils.convertToHosts(tree, tx));
 			objOut.flush();
 			out.flush();
 			getConfirmation(sock);
@@ -1276,7 +1277,7 @@ public class XAManager extends HRDBMSThread
 			out.write(outMsg);
 			out.write(longToBytes(tx.number()));
 			final ObjectOutputStream objOut = new ObjectOutputStream(out);
-			objOut.writeObject(convertToHosts(tree, tx2));
+			objOut.writeObject(Utils.convertToHosts(tree, tx2));
 			// tx2.commit();
 			objOut.flush();
 			out.flush();

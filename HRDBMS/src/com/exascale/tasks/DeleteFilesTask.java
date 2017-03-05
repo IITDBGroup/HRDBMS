@@ -423,7 +423,7 @@ public class DeleteFilesTask extends Task
 				outMsg[15] = 0;
 				out.write(outMsg);
 				final ObjectOutputStream objOut = new ObjectOutputStream(out);
-				objOut.writeObject(convertToHosts(tree, tx));
+				objOut.writeObject(Utils.convertToHosts(tree, tx));
 				objOut.writeObject(tables);
 				objOut.flush();
 				out.flush();
