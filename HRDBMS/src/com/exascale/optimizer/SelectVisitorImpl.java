@@ -6,11 +6,13 @@ import java.lang.reflect.Modifier;
 import java.util.Properties;
 import java.util.ArrayList;
 import com.exascale.optimizer.externalTable.ExternalTableType;
+import com.exascale.optimizer.externalTable.JSONUtils;
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.misc.Interval;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import com.exascale.misc.Utils;
 import com.exascale.optimizer.externalTable.CreateExternalTable;
+import org.apache.hadoop.fs.swift.util.JSONUtil;
 
 public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 {
@@ -259,46 +261,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 		{
 			String javaClassName = ctx.javaClassExtTableSpec().javaClassName().getText();
 			String params = ctx.javaClassExtTableSpec().json().getText();
-
-			// TODO - add back validation.
-//			Class<?> javaClass;
-//			Method validateProperties;
-//			try {
-//				javaClass = Class.forName( javaClassName );
-//				validateProperties = javaClass.getMethod("validateProperties", Properties.class);
-//			} catch( ClassNotFoundException e ) {
-//				throw new RuntimeException("Java class " + javaClassName + " does not exist!");
-//			} catch (NoSuchMethodException | SecurityException e) {
-//				throw new RuntimeException("Java class " + javaClassName + " does not contain 'validateProperties' static method.");
-//			}
-//			if (!ExternalTableType.class.isAssignableFrom(javaClass)) {
-//				throw new RuntimeException("Class " + javaClassName + " does not implement ExternalTableType.");
-//			}
-//			if (!Modifier.isStatic( validateProperties.getModifiers() )) {
-//				throw new RuntimeException("Method 'validateProperties' should be static in " + javaClassName + " class.");
-//			}
-//			Properties keyValueList = new Properties();
-//			String key = null;
-//			for (SelectParser.AnythingContext context : ctx.javaClassExtTableSpec().keyValueList().anything())
-//			{
-//				if (key == null) {
-//					key = context.getText();
-//				} else {
-//					keyValueList.put(key, context.getText());
-//					key = null;
-//				}
-//			}
-//			Object[] args = new Object[1];
-//			args[0] = keyValueList;
-//			try {
-//				validateProperties.invoke(null, args);
-//			} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-//				String message = "";
-//				if (e.getClass() == InvocationTargetException.class) {
-//					message = ((InvocationTargetException) e).getTargetException().getMessage();
-//				}
-//				throw new RuntimeException("ValidateProperties error. " + message);
-//			}
+			JSONUtils.validate(javaClassName, params);
 			JavaClassExtTableSpec javaClassExtTableSpec = new JavaClassExtTableSpec(javaClassName, params);
 			return new CreateExternalTable(table, cols, javaClassExtTableSpec);
 		}

@@ -21,6 +21,7 @@ import com.exascale.managers.PlanCacheManager;
 import com.exascale.managers.XAManager;
 import com.exascale.misc.*;
 import com.exascale.optimizer.externalTable.ExternalTableType;
+import com.exascale.optimizer.externalTable.JSONUtils;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.ConnectionWorker;
 import com.exascale.threads.HRDBMSThread;
@@ -315,7 +316,9 @@ public final class MetaData implements Serializable
 
         if(extObject instanceof ExternalTableType) {
             ExternalTableType extTable = (ExternalTableType) extObject;
-            extTable.setParams(meta.get(1).toString());
+            extTable.setParams(
+                    JSONUtils.toObject(meta.get(1).toString(), extTable.getParamsClass())
+            );
             return extTable;
         } else {
             throw new IllegalArgumentException("Needed ExternalTableType but got " + extObject.getClass().getCanonicalName());

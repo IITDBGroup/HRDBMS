@@ -1,12 +1,8 @@
 package com.exascale.optimizer.externalTable;
 
 import com.exascale.misc.MyDate;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import java.io.BufferedReader;
-import java.io.IOException;
 import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.*;
 
@@ -27,44 +23,10 @@ public class HTTPCsvExternal implements ExternalTableType
 	/** Parameters defined in SYS.EXTERNALTABLES */
 	private CsvExternalParams params;
 
-	/** checks if parameters entered from CLI are sufficient to create metadata about external table */
-	//TODO - ADD BACK VALIDATION
-//	static public void validateProperties(String params)
-//	{
-//		Enumeration e = params.propertyNames();
-//
-//		String[] reqParams = new String[params.size()];
-//		int i = 0;
-//		while (e.hasMoreElements()) {
-//			String key = (String) e.nextElement();
-//			reqParams[i++] = key;
-//			if (!Arrays.asList(paramList).contains(key)) {
-//				throw new RuntimeException("Parameter '" + key + "' does not exist in HTTPCsvExternal class");
-//			}
-//		}
-//		for (i = 0; i < requiredParams.length; i++) {
-//			if (!Arrays.asList(reqParams).contains(requiredParams[i])) {
-//				throw new RuntimeException("Parameter '" + requiredParams[i] + "' has to be identified from CLI");
-//			}
-//		}
-//		checkHttpAddress(params.getProperty(HTTP_ADDRESS_KEY));
-//	}
-
-	/** Check if HTTP address return 200 status code */
-	private static boolean checkHttpAddress(String csvFile) {
-		try {
-			URL u = new URL(csvFile);
-			HttpURLConnection huc = (HttpURLConnection) u.openConnection();
-			huc.setRequestMethod("HEAD");
-			huc.connect();
-			if (HttpURLConnection.HTTP_OK == huc.getResponseCode()) {
-				return true;
-			}
-		} catch (Exception e) {
-
-		}
-		throw new RuntimeException("URL '" + csvFile + "' does not respond");
-	}
+    public Class getParamsClass() throws NoSuchFieldException
+    {
+        return this.getClass().getDeclaredField("params").getType();
+    }
 
 	public void setCols2Types(HashMap<String, String> cols2Types) {
 		this.cols2Types = cols2Types;
@@ -85,14 +47,11 @@ public class HTTPCsvExternal implements ExternalTableType
 	@Override
 	public void start()
 	{
-		// check if csv file can be downloaded
-		checkHttpAddress(params.getUrl());
-
 		try {
 			URL csvFile = new URL(params.getUrl());
 			input = new BufferedReader(new InputStreamReader(csvFile.openStream()));
 		} catch (Exception e) {
-			throw new RuntimeException("Unable to download CSV file " + params.getUrl());
+			throw new ExternalTableException("Unable to download CSV file " + params.getUrl());
 		}
 
 		skipHeader();
@@ -107,14 +66,16 @@ public class HTTPCsvExternal implements ExternalTableType
 				line++;
 			}
 		} catch (Exception e) {
-			throw new RuntimeException("Unable to read header in CSV file " + params.getUrl());
+			throw new ExternalTableException("Unable to read header in CSV file " + params.getUrl());
 		}
 	}
 
 	@Override
-	public void setParams(String params) throws IOException {
-		ObjectMapper mapper = new ObjectMapper();
-		this.params = mapper.readValue(params, CsvExternalParams.class);
+	public void setParams(ExternalParamsInterface params) {
+		this.params = (CsvExternalParams) params;
+        if (!params.valid()) {
+            throw new ExternalTableException("Parameters are not valid");
+        }
 	}
 
 	@Override
@@ -124,7 +85,7 @@ public class HTTPCsvExternal implements ExternalTableType
 			line++;
 			inputLine = input.readLine();
 		} catch (Exception e) {
-			throw new RuntimeException("Unable to read line "+ line +" in CSV file " + params.getUrl());
+			throw new ExternalTableException("Unable to read line "+ line +" in CSV file " + params.getUrl());
 		}
 
 		/** This is the parser splitting the data that it found into columns of a map. */
@@ -138,7 +99,7 @@ public class HTTPCsvExternal implements ExternalTableType
 
 	@Override
 	public boolean hasNext() {
-		return false;
+		throw new UnsupportedOperationException("hasNext method is not supported in HTTPCsvExternal in this stage");
 	}
 
 	/** Convert csv line into table row.
@@ -148,7 +109,7 @@ public class HTTPCsvExternal implements ExternalTableType
 		final ArrayList<Object> retval = new ArrayList<Object>();
 		ArrayList<String> row = new ArrayList<>(Arrays.asList(inputLine.split(params.getDelimiter())));
 		if (row.size() != pos2Col.size()) {
-			throw new RuntimeException(
+			throw new ExternalTableException(
 					"Line: " + line
 							+ ".\nSize of external table does not match column count in CSV file '" + params.getUrl() + "'."
 							+ "\nColumns in csv file: " + row.size()
@@ -179,7 +140,7 @@ public class HTTPCsvExternal implements ExternalTableType
 					retval.add(new MyDate(year, month, day));
 				}
 			} catch (Exception e) {
-				throw new RuntimeException(
+				throw new ExternalTableException(
 						"Line: " + line + ", column: " + column + "\n"
 						+ "Error conversion '" + row.get(column) + "' to type '" + type + "'."
 				);
@@ -193,7 +154,7 @@ public class HTTPCsvExternal implements ExternalTableType
 	@Override
 	public void reset()
 	{
-		throw new RuntimeException("Reset method is not supported in HTTPCsvExternal in this stage");
+		throw new UnsupportedOperationException("Reset method is not supported in HTTPCsvExternal in this stage");
 	}
 
 	@Override
@@ -202,7 +163,7 @@ public class HTTPCsvExternal implements ExternalTableType
 		try {
 			input.close();
 		} catch (Exception e) {
-			throw new RuntimeException("Error during closing InputBuffer reading CSV file");
+			throw new ExternalTableException("Error during closing InputBuffer reading CSV file");
 		}
 	}
 }

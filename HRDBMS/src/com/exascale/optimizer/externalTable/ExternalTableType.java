@@ -9,7 +9,8 @@ import java.util.TreeMap;
 public interface ExternalTableType
 {
 	/** Sets the passed properties to help set up the external table implementation */
-	void setParams(String params) throws IOException;
+	void setParams(ExternalParamsInterface params);
+	Class<ExternalParamsInterface> getParamsClass() throws NoSuchFieldException;
 	/** Returns the next result from the external table */
 	List<?> next();
 	boolean hasNext();
