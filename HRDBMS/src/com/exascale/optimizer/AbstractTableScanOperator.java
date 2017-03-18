@@ -23,6 +23,8 @@ public abstract class AbstractTableScanOperator implements Operator, Serializabl
     protected String name;
     protected String schema;
     protected String alias = "";
+    protected boolean set = false;
+    protected transient MetaData.PartitionMetaData partMeta; // OK now that clone won't
 
     public AbstractTableScanOperator(final String schema, final String name, final MetaData meta, final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types) {
         this.meta = meta;
@@ -141,6 +143,18 @@ public abstract class AbstractTableScanOperator implements Operator, Serializabl
     public void reset() throws Exception
     {
     }
+
+    public boolean metaDataSet()
+    {
+        return set;
+    }
+
+    public void setMetaData(final Transaction t) throws Exception
+    {
+        set = true;
+        partMeta = meta.getPartMeta(schema, name, t);
+    }
+
 
     public void setAlias(final String alias)
     {

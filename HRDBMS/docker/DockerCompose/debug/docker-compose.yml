@@ -33,7 +33,7 @@ services:
      extends:
         service: node
      ports:
-        - "5020:5020"
+        - "5020:5015"
      networks:
         app_net:
           ipv4_address: 17.17.0.4

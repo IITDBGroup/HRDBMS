@@ -41,7 +41,7 @@ public class JSONUtils {
         } catch (ClassNotFoundException e) {
             throw new RuntimeException("Params class not found");
         } catch (IOException e) {
-            throw new RuntimeException("Error conversion String to JSON.");
+            throw new RuntimeException("Error conversion String to JSON: " + e.getMessage());
         }
         if (!params.valid()) {
             throw new RuntimeException("JSON parameters are not valid");

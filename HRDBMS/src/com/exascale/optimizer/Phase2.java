@@ -224,9 +224,9 @@ public final class Phase2
 
 	private void setPartitionMetaData(final Operator op) throws Exception
 	{
-		if (op instanceof TableScanOperator)
+		if (op instanceof AbstractTableScanOperator)
 		{
-			final TableScanOperator t = (TableScanOperator)op;
+			final AbstractTableScanOperator t = (AbstractTableScanOperator)op;
 			if (!t.metaDataSet())
 			{
 				t.setMetaData(tx);
