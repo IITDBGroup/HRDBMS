@@ -1,0 +1,15 @@
+version: "2.0"
+services:
+  hadoop:
+      container_name: "hadoop"
+      image: hadoop
+      networks:
+         app_net:
+            ipv4_address: 17.17.0.5
+networks:
+  app_net:
+      driver: bridge
+      ipam:
+          config:
+              - subnet: 17.17.0.0/8
+                gateway: 17.17.0.1

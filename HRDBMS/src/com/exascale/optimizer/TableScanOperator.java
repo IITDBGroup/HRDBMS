@@ -236,8 +236,7 @@ public final class TableScanOperator extends AbstractTableScanOperator
 	private ArrayList<Integer> fetchPos;
 	private String[] midPos2Col;
 	private HashMap<String, String> midCols2Types;
-	private boolean set = false;
-	private transient PartitionMetaData partMeta; // OK now that clone won't
+
 	// happen at runtime?
 	private transient HashMap<Operator, ArrayList<Integer>> activeDevices = new HashMap<Operator, ArrayList<Integer>>();
 	private transient HashMap<Operator, ArrayList<Integer>> activeNodes = new HashMap<Operator, ArrayList<Integer>>();
@@ -1162,11 +1161,6 @@ public final class TableScanOperator extends AbstractTableScanOperator
 		return partMeta.isSingleNodeSet();
 	}
 
-	public boolean metaDataSet()
-	{
-		return set;
-	}
-
 	@Override
 	public Object next(final Operator op) throws Exception
 	{
@@ -1403,12 +1397,6 @@ public final class TableScanOperator extends AbstractTableScanOperator
 	{
 		this.scanIndex = scanIndex;
 		scanIndex.setTransaction(new Transaction(0));
-	}
-
-	public void setMetaData(final Transaction t) throws Exception
-	{
-		set = true;
-		partMeta = meta.getPartMeta(schema, name, t);
 	}
 
 	public void setNeededCols(ArrayList<String> needed)

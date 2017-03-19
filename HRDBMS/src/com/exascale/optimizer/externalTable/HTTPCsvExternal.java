@@ -48,10 +48,10 @@ public class HTTPCsvExternal implements ExternalTableType
 	public void start()
 	{
 		try {
-			URL csvFile = new URL(params.getUrl());
+			URL csvFile = new URL(params.getLocation());
 			input = new BufferedReader(new InputStreamReader(csvFile.openStream()));
 		} catch (Exception e) {
-			throw new ExternalTableException("Unable to download CSV file " + params.getUrl());
+			throw new ExternalTableException("Unable to download CSV file " + params.getLocation());
 		}
 
 		skipHeader();
@@ -66,7 +66,7 @@ public class HTTPCsvExternal implements ExternalTableType
 				line++;
 			}
 		} catch (Exception e) {
-			throw new ExternalTableException("Unable to read header in CSV file " + params.getUrl());
+			throw new ExternalTableException("Unable to read header in CSV file " + params.getLocation());
 		}
 	}
 
@@ -85,7 +85,7 @@ public class HTTPCsvExternal implements ExternalTableType
 			line++;
 			inputLine = input.readLine();
 		} catch (Exception e) {
-			throw new ExternalTableException("Unable to read line "+ line +" in CSV file " + params.getUrl());
+			throw new ExternalTableException("Unable to read line "+ line +" in CSV file " + params.getLocation());
 		}
 
 		/** This is the parser splitting the data that it found into columns of a map. */
@@ -111,7 +111,7 @@ public class HTTPCsvExternal implements ExternalTableType
 		if (row.size() != pos2Col.size()) {
 			throw new ExternalTableException(
 					"Line: " + line
-							+ ".\nSize of external table does not match column count in CSV file '" + params.getUrl() + "'."
+							+ ".\nSize of external table does not match column count in CSV file '" + params.getLocation() + "'."
 							+ "\nColumns in csv file: " + row.size()
 							+ "\nColumns defined in external table schema: " + pos2Col.size()
 			);
