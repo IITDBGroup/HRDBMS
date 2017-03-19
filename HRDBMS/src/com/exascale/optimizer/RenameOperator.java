@@ -12,6 +12,7 @@ import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.HrdbmsType;
 import com.exascale.tables.Plan;
 
 public final class RenameOperator implements Operator, Serializable
@@ -394,7 +395,7 @@ public final class RenameOperator implements Operator, Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(38, out);
+		OperatorUtils.writeType(HrdbmsType.RENAME, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		child.serialize(out, prev);
 		parent.serialize(out, prev);

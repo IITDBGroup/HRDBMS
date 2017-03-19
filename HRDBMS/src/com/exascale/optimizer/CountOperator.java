@@ -10,6 +10,7 @@ import java.util.IdentityHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.ResourceManager;
+import com.exascale.misc.HrdbmsType;
 
 public final class CountOperator implements AggregateOperator, Serializable
 {
@@ -115,7 +116,7 @@ public final class CountOperator implements AggregateOperator, Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(53, out);
+		OperatorUtils.writeType(HrdbmsType.COUNT, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.writeString(input, out, prev);
 		OperatorUtils.writeString(output, out, prev);

@@ -18,6 +18,7 @@ import com.exascale.managers.ResourceManager;
 import com.exascale.misc.BufferedLinkedBlockingQueue;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.FastStringTokenizer;
+import com.exascale.misc.HrdbmsType;
 import com.exascale.tables.Plan;
 import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.ThreadPoolThread;
@@ -362,7 +363,7 @@ public final class ExtendOperator implements Operator, Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(27, out);
+		OperatorUtils.writeType(HrdbmsType.EXTEND, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		child.serialize(out, prev);
 		parent.serialize(out, prev);

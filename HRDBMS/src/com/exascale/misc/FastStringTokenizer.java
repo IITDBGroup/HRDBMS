@@ -140,7 +140,7 @@ public final class FastStringTokenizer implements Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(62, out);
+		OperatorUtils.writeType(HrdbmsType.FST, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.writeInt(index, out);
 		OperatorUtils.writeString(delim, out, prev);

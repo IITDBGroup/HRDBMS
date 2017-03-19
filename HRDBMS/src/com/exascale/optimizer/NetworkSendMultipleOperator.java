@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedOutputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.HrdbmsType;
 
 public final class NetworkSendMultipleOperator extends NetworkSendOperator
 {
@@ -198,7 +199,7 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 			return;
 		}
 
-		OperatorUtils.writeType(76, out);
+		OperatorUtils.writeType(HrdbmsType.NSMO, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		// recreate meta
 		child.serialize(out, prev);
@@ -228,7 +229,7 @@ public final class NetworkSendMultipleOperator extends NetworkSendOperator
 			return;
 		}
 
-		OperatorUtils.writeType(76, out);
+		OperatorUtils.writeType(HrdbmsType.NSMO, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		// recreate meta
 		// child.serialize(out, prev);

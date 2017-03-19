@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.TreeMap;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.HrdbmsType;
 import com.exascale.tables.Plan;
 
 public final class DEMOperator implements Operator, Serializable
@@ -198,7 +199,7 @@ public final class DEMOperator implements Operator, Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(23, out);
+		OperatorUtils.writeType(HrdbmsType.DEMOPERATOR, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.serializeStringHM(cols2Types, out, prev);
 		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);

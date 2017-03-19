@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.TreeMap;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.HrdbmsType;
 import com.exascale.tables.Plan;
 
 public final class RootOperator implements Operator, Serializable
@@ -240,7 +241,7 @@ public final class RootOperator implements Operator, Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(40, out);
+		OperatorUtils.writeType(HrdbmsType.ROOT, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		child.serialize(out, prev);
 		OperatorUtils.serializeStringHM(cols2Types, out, prev);

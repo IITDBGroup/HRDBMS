@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.TreeMap;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.HrdbmsType;
 import com.exascale.tables.Plan;
 
 public final class NestedLoopJoinOperator extends JoinOperator implements Serializable
@@ -405,7 +406,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 			return;
 		}
 
-		OperatorUtils.writeType(59, out);
+		OperatorUtils.writeType(HrdbmsType.NL, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.serializeALOp(children, out, prev);
 		parent.serialize(out, prev);

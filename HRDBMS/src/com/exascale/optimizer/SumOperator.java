@@ -11,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.BigDecimalReplacement;
+import com.exascale.misc.HrdbmsType;
 
 public final class SumOperator implements AggregateOperator, Serializable
 {
@@ -112,7 +113,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(56, out);
+		OperatorUtils.writeType(HrdbmsType.SUM, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.writeString(input, out, prev);
 		OperatorUtils.writeString(output, out, prev);

@@ -13,6 +13,7 @@ import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.HrdbmsType;
 import com.exascale.tables.Plan;
 
 public final class ProjectOperator implements Operator, Serializable
@@ -310,7 +311,7 @@ public final class ProjectOperator implements Operator, Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(37, out);
+		OperatorUtils.writeType(HrdbmsType.PROJECT, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		child.serialize(out, prev);
 		OperatorUtils.serializeALS(cols, out, prev);

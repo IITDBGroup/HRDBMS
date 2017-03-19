@@ -27,15 +27,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
-import com.exascale.misc.BloomFilter;
-import com.exascale.misc.BufferedFileChannel;
-import com.exascale.misc.BufferedLinkedBlockingQueue;
-import com.exascale.misc.DataEndMarker;
-import com.exascale.misc.HJOMultiHashMap;
-import com.exascale.misc.MurmurHash;
-import com.exascale.misc.MyDate;
-import com.exascale.misc.ScalableStampedReentrantRWLock;
-import com.exascale.misc.VHJOMultiHashMap;
+import com.exascale.misc.*;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Schema;
 import com.exascale.threads.HRDBMSThread;
@@ -1296,7 +1288,7 @@ public final class HashJoinOperator extends JoinOperator implements Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(60, out);
+		OperatorUtils.writeType(HrdbmsType.HJO, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.serializeALOp(children, out, prev);
 		parent.serialize(out, prev);

@@ -25,10 +25,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedInputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
-import com.exascale.misc.BufferedFileChannel;
-import com.exascale.misc.BufferedLinkedBlockingQueue;
-import com.exascale.misc.DataEndMarker;
-import com.exascale.misc.MyDate;
+import com.exascale.misc.*;
 import com.exascale.tables.Plan;
 import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.TempThread;
@@ -352,7 +349,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(35, out);
+		OperatorUtils.writeType(HrdbmsType.NRO, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		// recreate meta
 		OperatorUtils.serializeALOp(children, out, prev);

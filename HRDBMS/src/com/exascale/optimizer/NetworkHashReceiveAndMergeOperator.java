@@ -21,6 +21,7 @@ import com.exascale.compression.CompressedInputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.AuxPairingHeap;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.HrdbmsType;
 import com.exascale.misc.MyDate;
 import com.exascale.threads.ThreadPoolThread;
 
@@ -230,7 +231,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 			return;
 		}
 
-		OperatorUtils.writeType(73, out);
+		OperatorUtils.writeType(HrdbmsType.NHRAM, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		// recreate meta
 		if (send)

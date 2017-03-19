@@ -13,12 +13,15 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.misc.FastStringTokenizer;
+import com.exascale.misc.HrdbmsType;
 import com.exascale.misc.MyDate;
+import com.exascale.optimizer.externalTable.ExternalTableScanOperator;
 
 public class OperatorUtils
 {
 	private static AtomicLong id = new AtomicLong(0);
 
+	//TODO - CONVERT THIS TO USE THE com.exascale.misc.HrdbmsType enum everywhere.
 	// 0 - reference
 	// 1 - AntiJoin
 	// 2 - HMStringString
@@ -129,15 +132,15 @@ public class OperatorUtils
 
 	public static ArrayDeque<String> deserializeADS(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (ArrayDeque<String>)readReference(in, prev);
 		}
 
-		if (type != 29)
+		if (!HrdbmsType.ADS.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 29 but received " + type);
+			throw new Exception("Corrupted stream. Expected type ADS but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -161,54 +164,36 @@ public class OperatorUtils
 
 	public static AggregateOperator deserializeAgOp(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
-		{
-			return (AggregateOperator)readReference(in, prev);
+		final HrdbmsType type = getType(in);
+		switch(type) {
+			case REFERENCE:
+				return (AggregateOperator) readReference(in, prev);
+			case AVG:
+				return AvgOperator.deserialize(in, prev);
+			case COUNTDISTINCT:
+				return CountDistinctOperator.deserialize(in, prev);
+			case COUNT:
+				return CountOperator.deserialize(in, prev);
+			case MAX:
+				return MaxOperator.deserialize(in, prev);
+			case MIN:
+				return MinOperator.deserialize(in, prev);
+			case SUM:
+				return SumOperator.deserialize(in, prev);
+			default:
+				throw new Exception("Unknown type in deserializeAgOp(): " + type);
 		}
-
-		if (type == 51)
-		{
-			return AvgOperator.deserialize(in, prev);
-		}
-
-		if (type == 52)
-		{
-			return CountDistinctOperator.deserialize(in, prev);
-		}
-
-		if (type == 53)
-		{
-			return CountOperator.deserialize(in, prev);
-		}
-
-		if (type == 54)
-		{
-			return MaxOperator.deserialize(in, prev);
-		}
-
-		if (type == 55)
-		{
-			return MinOperator.deserialize(in, prev);
-		}
-
-		if (type == 56)
-		{
-			return SumOperator.deserialize(in, prev);
-		}
-
-		throw new Exception("Unknown type in deserializeAgOp(): " + type);
 	}
 
 	public static ArrayList<AggregateOperator> deserializeALAgOp(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (ArrayList<AggregateOperator>)readReference(in, prev);
 		}
 
-		if (type != 34)
+		if (!HrdbmsType.ALAGOP.equals(type))
 		{
 			throw new Exception("Corrupted stream. Expected type 34 but received " + type);
 		}
@@ -234,15 +219,15 @@ public class OperatorUtils
 
 	public static ArrayList<ArrayList<Boolean>> deserializeALALB(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (ArrayList<ArrayList<Boolean>>)readReference(in, prev);
 		}
 
-		if (type != 86)
+		if (!HrdbmsType.ALALB.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 86 but received " + type);
+			throw new Exception("Corrupted stream. Expected type ALALB but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -266,15 +251,15 @@ public class OperatorUtils
 
 	public static ArrayList<ArrayList<Filter>> deserializeALALF(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (ArrayList<ArrayList<Filter>>)readReference(in, prev);
 		}
 
-		if (type != 67)
+		if (!HrdbmsType.ALALF.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 67 but received " + type);
+			throw new Exception("Corrupted stream. Expected type ALALF but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -298,15 +283,15 @@ public class OperatorUtils
 
 	public static ArrayList<ArrayList<Object>> deserializeALALO(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (ArrayList<ArrayList<Object>>)readReference(in, prev);
 		}
 
-		if (type != 84)
+		if (!HrdbmsType.ALALO.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 84 but received " + type);
+			throw new Exception("Corrupted stream. Expected type ALALO but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -330,15 +315,15 @@ public class OperatorUtils
 
 	public static ArrayList<ArrayList<String>> deserializeALALS(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (ArrayList<ArrayList<String>>)readReference(in, prev);
 		}
 
-		if (type != 85)
+		if (!HrdbmsType.ALALS.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 85 but received " + type);
+			throw new Exception("Corrupted stream. Expected type ALALS but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -362,15 +347,15 @@ public class OperatorUtils
 
 	public static ArrayList<Boolean> deserializeALB(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (ArrayList<Boolean>)readReference(in, prev);
 		}
 
-		if (type != 45)
+		if (!HrdbmsType.ALB.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 45 but received " + type);
+			throw new Exception("Corrupted stream. Expected type ALB but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -394,15 +379,15 @@ public class OperatorUtils
 
 	public static ArrayList<Filter> deserializeALF(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (ArrayList<Filter>)readReference(in, prev);
 		}
 
-		if (type != 42)
+		if (!HrdbmsType.ALF.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 42 but received " + type);
+			throw new Exception("Corrupted stream. Expected type ALF but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -426,15 +411,15 @@ public class OperatorUtils
 
 	public static ArrayList<HashSet<HashMap<Filter, Filter>>> deserializeALHSHM(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (ArrayList<HashSet<HashMap<Filter, Filter>>>)readReference(in, prev);
 		}
 
-		if (type != 11)
+		if (HrdbmsType.ALHSHM.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 11 but received " + type);
+			throw new Exception("Corrupted stream. Expected type ALHSHM but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -444,7 +429,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final ArrayList<HashSet<HashMap<Filter, Filter>>> retval = new ArrayList<HashSet<HashMap<Filter, Filter>>>(size);
+		final ArrayList<HashSet<HashMap<Filter, Filter>>> retval = new ArrayList<>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -458,15 +443,15 @@ public class OperatorUtils
 
 	public static ArrayList<Integer> deserializeALI(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (ArrayList<Integer>)readReference(in, prev);
 		}
 
-		if (type != 7)
+		if (!HrdbmsType.ALI.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 7 but received " + type);
+			throw new Exception("Corrupted stream. Expected type ALI but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -490,15 +475,15 @@ public class OperatorUtils
 
 	public static ArrayList<Index> deserializeALIndx(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (ArrayList<Index>)readReference(in, prev);
 		}
 
-		if (type != 10)
+		if (!HrdbmsType.ALINDX.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 10 but received " + type);
+			throw new Exception("Corrupted stream. Expected type ALINDX but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -522,15 +507,15 @@ public class OperatorUtils
 
 	public static ArrayList<Object> deserializeALO(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
-		if (type == 0)
+		HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (ArrayList<Object>)readReference(in, prev);
 		}
 
-		if (type != 12)
+		if (!HrdbmsType.ALO.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 12 but received " + type);
+			throw new Exception("Corrupted stream. Expected type ALO but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -548,28 +533,28 @@ public class OperatorUtils
 			type = getType(in);
 			switch (type)
 			{
-				case 0:
+				case REFERENCE:
 					retval.add(readReference(in, prev));
 					break;
-				case 3:
+				case STRING:
 					retval.add(readStringKnown(in, prev));
 					break;
-				case 13:
+				case DOUBLE:
 					retval.add(readDoubleClassKnown(in));
 					break;
-				case 15:
+				case LONG:
 					retval.add(readLongClassKnown(in));
 					break;
-				case 17:
+				case INTEGER:
 					retval.add(readIntClassKnown(in));
 					break;
-				case 19:
+				case MYDATE:
 					retval.add(readDateKnown(in));
 					break;
-				case 12:
-				case 14:
-				case 16:
-				case 18:
+				case DOUBLENULL:
+				case LONGNULL:
+				case INTEGERNULL:
+				case MYDATENULL:
 					retval.add(null);
 					break;
 				default:
@@ -584,15 +569,15 @@ public class OperatorUtils
 
 	public static ArrayList<Operator> deserializeALOp(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (ArrayList<Operator>)readReference(in, prev);
 		}
 
-		if (type != 32)
+		if (!HrdbmsType.ALOP.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 32 but received " + type);
+			throw new Exception("Corrupted stream. Expected type ALOP but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -602,7 +587,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final ArrayList<Operator> retval = new ArrayList<Operator>(size);
+		final ArrayList<Operator> retval = new ArrayList<>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -616,15 +601,15 @@ public class OperatorUtils
 
 	public static ArrayList<RIDAndIndexKeys> deserializeALRAIK(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (ArrayList<RIDAndIndexKeys>)readReference(in, prev);
 		}
 
-		if (type != 87)
+		if (!HrdbmsType.ALRAIK.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 87 but received " + type);
+			throw new Exception("Corrupted stream. Expected type ALRAIK but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -634,7 +619,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final ArrayList<RIDAndIndexKeys> retval = new ArrayList<RIDAndIndexKeys>(size);
+		final ArrayList<RIDAndIndexKeys> retval = new ArrayList<>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -649,15 +634,15 @@ public class OperatorUtils
 
 	public static ArrayList<String> deserializeALS(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (ArrayList<String>)readReference(in, prev);
 		}
 
-		if (type != 6)
+		if (!HrdbmsType.ALS.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 6 but received " + type);
+			throw new Exception("Corrupted stream. Expected type ALS but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -667,7 +652,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final ArrayList<String> retval = new ArrayList<String>(size);
+		final ArrayList<String> retval = new ArrayList<>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -681,15 +666,15 @@ public class OperatorUtils
 
 	public static boolean[] deserializeBoolArray(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (boolean[])readReference(in, prev);
 		}
 
-		if (type != 83)
+		if (!HrdbmsType.BOOLARRAY.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 83 but received " + type);
+			throw new Exception("Corrupted stream. Expected type BOOLARRAY but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -713,20 +698,20 @@ public class OperatorUtils
 
 	public static CNFFilter deserializeCNF(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (CNFFilter)readReference(in, prev);
 		}
 
-		if (type == 61)
+		if (HrdbmsType.CNFNULL.equals(type))
 		{
 			return null;
 		}
 
-		if (type != 63)
+		if (!HrdbmsType.CNF.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 63 but received " + type);
+			throw new Exception("Corrupted stream. Expected type CNF but received " + type);
 		}
 
 		return CNFFilter.deserializeKnown(in, prev); // already read type
@@ -734,20 +719,20 @@ public class OperatorUtils
 
 	public static Filter deserializeFilter(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (Filter)readReference(in, prev);
 		}
 
-		if (type == 69)
+		if (HrdbmsType.FILTERNULL.equals(type))
 		{
 			return null;
 		}
 
-		if (type != 65)
+		if (!HrdbmsType.FILTER.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 65 but received " + type);
+			throw new Exception("Corrupted stream. Expected type FILTER but received " + type);
 		}
 
 		return Filter.deserializeKnown(in, prev); // type already read
@@ -755,20 +740,20 @@ public class OperatorUtils
 
 	public static FastStringTokenizer deserializeFST(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (FastStringTokenizer)readReference(in, prev);
 		}
 
-		if (type == 28)
+		if (HrdbmsType.FSTNULL.equals(type))
 		{
 			return null;
 		}
 
-		if (type != 62)
+		if (!HrdbmsType.FST.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 62 but received " + type);
+			throw new Exception("Corrupted stream. Expected type FST but received " + type);
 		}
 
 		return FastStringTokenizer.deserializeKnown(in, prev); // already read
@@ -777,13 +762,13 @@ public class OperatorUtils
 
 	public static HashMap<Filter, Filter> deserializeHMF(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (HashMap<Filter, Filter>)readReference(in, prev);
 		}
 
-		if (type != 9)
+		if (!HrdbmsType.HMF.equals(type))
 		{
 			throw new Exception("Corrupted stream. Expected type 9 but received " + type);
 		}
@@ -795,7 +780,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final HashMap<Filter, Filter> retval = new HashMap<Filter, Filter>(4 * size / 3 + 1);
+		final HashMap<Filter, Filter> retval = new HashMap<>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -811,15 +796,15 @@ public class OperatorUtils
 
 	public static HashMap<Integer, Operator> deserializeHMIntOp(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (HashMap<Integer, Operator>)readReference(in, prev);
 		}
 
-		if (type != 80)
+		if (!HrdbmsType.HMINTOP.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 80 but received " + type);
+			throw new Exception("Corrupted stream. Expected type HMINTOP but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -845,15 +830,15 @@ public class OperatorUtils
 
 	public static HashMap<Operator, CNFFilter> deserializeHMOpCNF(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (HashMap<Operator, CNFFilter>)readReference(in, prev);
 		}
 
-		if (type != 79)
+		if (!HrdbmsType.HMOPCNF.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 79 but received " + type);
+			throw new Exception("Corrupted stream. Expected type HMOPCNF but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -863,7 +848,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final HashMap<Operator, CNFFilter> retval = new HashMap<Operator, CNFFilter>(4 * size / 3 + 1);
+		final HashMap<Operator, CNFFilter> retval = new HashMap<>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -879,15 +864,15 @@ public class OperatorUtils
 
 	public static HashSet<HashMap<Filter, Filter>> deserializeHSHM(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (HashSet<HashMap<Filter, Filter>>)readReference(in, prev);
 		}
 
-		if (type != 8)
+		if (!HrdbmsType.HSHM.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 8 but received " + type);
+			throw new Exception("Corrupted stream. Expected type HSHM but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -897,7 +882,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final HashSet<HashMap<Filter, Filter>> retval = new HashSet<HashMap<Filter, Filter>>(4 * size / 3 + 1);
+		final HashSet<HashMap<Filter, Filter>> retval = new HashSet<>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -911,15 +896,15 @@ public class OperatorUtils
 
 	public static HashSet<Object> deserializeHSO(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		int type = getType(in);
-		if (type == 0)
+		HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (HashSet<Object>)readReference(in, prev);
 		}
 
-		if (type != 43)
+		if (!HrdbmsType.HSO.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 43 but received " + type);
+			throw new Exception("Corrupted stream. Expected type HSO but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -937,28 +922,28 @@ public class OperatorUtils
 			type = getType(in);
 			switch (type)
 			{
-				case 0:
+				case REFERENCE:
 					retval.add(readReference(in, prev));
 					break;
-				case 3:
+				case STRING:
 					retval.add(readStringKnown(in, prev));
 					break;
-				case 13:
+				case DOUBLE:
 					retval.add(readDoubleClassKnown(in));
 					break;
-				case 15:
+				case LONG:
 					retval.add(readLongClassKnown(in));
 					break;
-				case 17:
+				case INTEGER:
 					retval.add(readIntClassKnown(in));
 					break;
-				case 19:
+				case MYDATE:
 					retval.add(readDateKnown(in));
 					break;
-				case 12:
-				case 14:
-				case 16:
-				case 18:
+				case DOUBLENULL:
+				case LONGNULL:
+				case INTEGERNULL:
+				case MYDATENULL:
 					retval.add(null);
 					break;
 				default:
@@ -973,15 +958,15 @@ public class OperatorUtils
 
 	public static HashSet<String> deserializeHSS(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (HashSet<String>)readReference(in, prev);
 		}
 
-		if (type != 68)
+		if (!HrdbmsType.HSS.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 68 but received " + type);
+			throw new Exception("Corrupted stream. Expected type HSS but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -1005,20 +990,20 @@ public class OperatorUtils
 
 	public static Index deserializeIndex(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (Index)readReference(in, prev);
 		}
 
-		if (type == 82)
+		if (HrdbmsType.INDEXNULL.equals(type))
 		{
 			return null;
 		}
 
-		if (type != 64)
+		if (!HrdbmsType.INDEX.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 64 but received " + type);
+			throw new Exception("Corrupted stream. Expected type INDEX but received " + type);
 		}
 
 		return Index.deserializeKnown(in, prev);
@@ -1026,15 +1011,15 @@ public class OperatorUtils
 
 	public static int[] deserializeIntArray(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (int[])readReference(in, prev);
 		}
 
-		if (type != 46)
+		if (!HrdbmsType.INTARRAY.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 46 but received " + type);
+			throw new Exception("Corrupted stream. Expected type INTARRAY but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -1058,165 +1043,86 @@ public class OperatorUtils
 
 	public static Operator deserializeOperator(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
+		final HrdbmsType type = getType(in);
 		switch (type)
 		{
-			// 0 - reference
-			case 0:
+			case REFERENCE:
 				return (Operator)readReference(in, prev);
-			// 1 - AntiJoin
-			case 1:
+			case ANTIJOIN:
 				return AntiJoinOperator.deserialize(in, prev);
-			// 2 - HMStringString
-			// 3 - String
-			// 4 - HMStringInt
-			// 5 - TreeMap
-			// 6 - ALS
-			// 7 - ALI
-			// 8 - HSHM
-			// 9 - HMF
-			// 10 - ALIndx
-			// 11 - ALHSHM
-			// 12 - Double null
-			// 13 - Double
-			// 14 - Long null
-			// 15 - Long
-			// 16 - Integer null
-			// 17 - Integer
-			// 18 - MyDate null
-			// 19 - MyDate
-			// 20 - Case
-			case 20:
+			case CASE:
 				return CaseOperator.deserialize(in, prev);
-			// 21 - Concat
-			case 21:
+			case CONCATE:
 				return ConcatOperator.deserialize(in, prev);
-			// 22 - DateMath
-			case 22:
+			case DATEMATH:
 				return DateMathOperator.deserialize(in, prev);
-			// 23 - DEMOperator
-			case 23:
+			case DEMOPERATOR:
 				return DEMOperator.deserialize(in, prev);
-			// 24 - DummyOperator
-			case 24:
+			case DUMMYOPERATOR:
 				return DummyOperator.deserialize(in, prev);
-			// 25 - Except
-			case 25:
+			case EXCEPT:
 				return ExceptOperator.deserialize(in, prev);
-			// 26 - ExtendObject
-			case 26:
+			case EXTENDOBJECT:
 				return ExtendObjectOperator.deserialize(in, prev);
-			// 27 - Extend
-			case 27:
+			case EXTEND:
 				return ExtendOperator.deserialize(in, prev);
-			// 28 - FST null
-			// 29 - ADS
-			// 30 - IndexOperator
-			case 30:
+			case INDEXOPERATOR:
 				return IndexOperator.deserialize(in, prev);
-			// 31 - Intersect
-			case 31:
+			case INTERSECT:
 				return IntersectOperator.deserialize(in, prev);
-			// 32 - ALOp
-			// 33 - Multi
-			case 33:
+			case MULTI:
 				return MultiOperator.deserialize(in, prev);
-			// 34 - ALAgOp
-			// 35 - NRO
-			case 35:
+			case NRO:
 				return NetworkReceiveOperator.deserialize(in, prev);
-			// 36 - NSO
-			case 36:
+			case NSO:
 				return NetworkSendOperator.deserialize(in, prev);
-			// 37 - Project
-			case 37:
+			case PROJECT:
 				return ProjectOperator.deserialize(in, prev);
-			// 38 - Rename
-			case 38:
+			case RENAME:
 				return RenameOperator.deserialize(in, prev);
-			// 39 - Reorder
-			case 39:
+			case REORDER:
 				return ReorderOperator.deserialize(in, prev);
-			// 40 - Root
-			case 40:
+			case ROOT:
 				return RootOperator.deserialize(in, prev);
-			// 41 - Select
-			case 41:
+			case SELECT:
 				return SelectOperator.deserialize(in, prev);
-			// 42 - ALF
-			// 43 - HSO
-			// 44 - Sort
-			case 44:
+			case SORT:
 				return SortOperator.deserialize(in, prev);
-			// 45 - ALB
-			// 46 - IntArray
-			// 47 - Substring
-			case 47:
+			case SUBSTRING:
 				return SubstringOperator.deserialize(in, prev);
-			// 48 - Top
-			case 48:
+			case TOP:
 				return TopOperator.deserialize(in, prev);
-			// 49 - Union
-			case 49:
+			case UNION:
 				return UnionOperator.deserialize(in, prev);
-			// 50 - Year
-			case 50:
+			case YEAR:
 				return YearOperator.deserialize(in, prev);
-			// 51 - Avg
-			// 52 - CountDistinct
-			// 53 - Count
-			// 54 - Max
-			// 55 - Min
-			// 56 - Sum
-			// 57 - SJO
-			case 57:
+			case SJO:
 				return SemiJoinOperator.deserialize(in, prev);
-			// 58 - Product
-			case 58:
+			case PRODUCT:
 				return ProductOperator.deserialize(in, prev);
-			// 59 - NL
-			case 59:
+			case NL:
 				return NestedLoopJoinOperator.deserialize(in, prev);
-			// 60 - HJO
-			case 60:
+			case HJO:
 				return HashJoinOperator.deserialize(in, prev);
-			// 61 - CNF null
-			// 62 - FST
-			// 63 - CNF
-			// 64 - Index
-			// 65 - Filter
-			// 66 - StringArray
-			// 67 - ALALF
-			// 68 - HSS
-			// 69 - Filter null
-			// 70 - Bool null
-			// 71 - Bool class
-			// 72 - NHAS
-			case 72:
+			case NHAS:
 				return NetworkHashAndSendOperator.deserialize(in, prev);
-			// 73 - NHRAM
-			case 73:
+			case NHRAM:
 				return NetworkHashReceiveAndMergeOperator.deserialize(in, prev);
-			// 74 - NHRO
-			case 74:
+			case NHRO:
 				return NetworkHashReceiveOperator.deserialize(in, prev);
-			// 75 - NRAM
-			case 75:
+			case NRAM:
 				return NetworkReceiveAndMergeOperator.deserialize(in, prev);
-			// 76 - NSMO
-			case 76:
+			case NSMO:
 				return NetworkSendMultipleOperator.deserialize(in, prev);
-			// 77 - NSRR
-			case 77:
+			case NSRR:
 				return NetworkSendRROperator.deserialize(in, prev);
-			// 78 - TSO
-			case 78:
+			case TSO:
 				return TableScanOperator.deserialize(in, prev);
-			// 79 - HMOpCNF
-			// 80 - HMIntOp
-			case 81:
+			case ETSO:
+				return ExternalTableScanOperator.deserialize(in, prev);
+			case OPERATORNULL:
 				return null;
-			case 85:
+			case ROUTING:
 				return RoutingOperator.deserialize(in, prev);
 			default:
 				throw new Exception("Unknown type in deserialize operator: " + type);
@@ -1225,15 +1131,15 @@ public class OperatorUtils
 
 	public static String[] deserializeStringArray(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (String[])readReference(in, prev);
 		}
 
-		if (type != 66)
+		if (!HrdbmsType.STRINGARRAY.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 66 but received " + type);
+			throw new Exception("Corrupted stream. Expected type STRINGARRAY but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -1257,15 +1163,15 @@ public class OperatorUtils
 
 	public static HashMap<String, String> deserializeStringHM(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (HashMap<String, String>)readReference(in, prev);
 		}
 
-		if (type != 2)
+		if (!HrdbmsType.HMSTRINGSTRING.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 2, found type " + type);
+			throw new Exception("Corrupted stream. Expected type HMSTRINGSTRING, found type " + type);
 		}
 
 		final long id = readLong(in);
@@ -1293,15 +1199,15 @@ public class OperatorUtils
 
 	public static HashMap<String, Integer> deserializeStringIntHM(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (HashMap<String, Integer>)readReference(in, prev);
 		}
 
-		if (type != 4)
+		if (!HrdbmsType.HMSTRINGINT.equals(type))
 		{
-			throw new Exception("Corrupted stream.  Expected type 4 but received " + type);
+			throw new Exception("Corrupted stream.  Expected type HMSTRINGINT but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -1327,15 +1233,15 @@ public class OperatorUtils
 
 	public static TreeMap<Integer, String> deserializeTM(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (TreeMap<Integer, String>)readReference(in, prev);
 		}
 
-		if (type != 5)
+		if (!HrdbmsType.TREEMAP.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 5 but received " + type);
+			throw new Exception("Corrupted stream. Expected type TREEMAP but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -1359,9 +1265,9 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static int getType(final InputStream in) throws Exception
+	public static HrdbmsType getType(final InputStream in) throws Exception
 	{
-		return in.read();
+		return HrdbmsType.fromInt(in.read());
 	}
 
 	public static void read(final byte[] data, final InputStream in) throws Exception
@@ -1387,15 +1293,15 @@ public class OperatorUtils
 
 	public static Boolean readBoolClass(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 70)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.BOOLNULL.equals(type))
 		{
 			return null;
 		}
 
-		if (type != 71)
+		if (!HrdbmsType.BOOLCLASS.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 71 but received " + type);
+			throw new Exception("Corrupted stream. Expected type BOOLCLASS but received " + type);
 		}
 
 		return readBool(in);
@@ -1403,15 +1309,15 @@ public class OperatorUtils
 
 	public static MyDate readDate(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 18)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.MYDATENULL.equals(type))
 		{
 			return null;
 		}
 
-		if (type != 19)
+		if (!HrdbmsType.MYDATE.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 19 but received " + type);
+			throw new Exception("Corrupted stream. Expected type MYDATE but received " + type);
 		}
 
 		final byte[] data = new byte[4];
@@ -1430,15 +1336,15 @@ public class OperatorUtils
 
 	public static Double readDoubleClass(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 12)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.DOUBLENULL.equals(type))
 		{
 			return null;
 		}
 
-		if (type != 13)
+		if (!HrdbmsType.DOUBLE.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 13 but received " + type);
+			throw new Exception("Corrupted stream. Expected type DOUBLE but received " + type);
 		}
 
 		final byte[] data = new byte[8];
@@ -1464,15 +1370,15 @@ public class OperatorUtils
 
 	public static Integer readIntClass(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 16)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.INTEGERNULL.equals(type))
 		{
 			return null;
 		}
 
-		if (type != 17)
+		if (!HrdbmsType.INTEGER.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 17 but received " + type);
+			throw new Exception("Corrupted stream. Expected type INTEGER but received " + type);
 		}
 
 		final byte[] data = new byte[4];
@@ -1496,15 +1402,15 @@ public class OperatorUtils
 
 	public static Long readLongClass(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 14)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.LONGNULL.equals(type))
 		{
 			return null;
 		}
 
-		if (type != 15)
+		if (!HrdbmsType.LONG.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 15 but received " + type);
+			throw new Exception("Corrupted stream. Expected type LONG but received " + type);
 		}
 
 		final byte[] data = new byte[8];
@@ -1521,25 +1427,25 @@ public class OperatorUtils
 
 	public static Object readObject(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
+		final HrdbmsType type = getType(in);
 		switch (type)
 		{
-			case 0:
+			case REFERENCE:
 				return readReference(in, prev);
-			case 3:
+			case STRING:
 				return readStringKnown(in, prev);
-			case 13:
+			case DOUBLE:
 				return readDoubleClassKnown(in);
-			case 15:
+			case LONG:
 				return readLongClassKnown(in);
-			case 17:
+			case INTEGER:
 				return readIntClassKnown(in);
-			case 19:
+			case MYDATE:
 				return readDateKnown(in);
-			case 12:
-			case 14:
-			case 16:
-			case 18:
+			case DOUBLENULL:
+			case LONGNULL:
+			case INTEGERNULL:
+			case MYDATENULL:
 				return null;
 			default:
 				throw new Exception("Unexpected type in readObject(): " + type);
@@ -1567,20 +1473,20 @@ public class OperatorUtils
 
 	public static String readString(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
-		final int type = getType(in);
-		if (type == 0)
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (String)readReference(in, prev);
 		}
 
-		if (type == 86)
+		if (HrdbmsType.NULLSTRING.equals(type))
 		{
 			return null;
 		}
 
-		if (type != 3)
+		if (!HrdbmsType.STRING.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 3 but received " + type);
+			throw new Exception("Corrupted stream. Expected type STRING but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -1612,7 +1518,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(29, out);
+			writeType(HrdbmsType.ADS, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -1624,7 +1530,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(29, out);
+		writeType(HrdbmsType.ADS, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
 		final Iterator<String> iter = als.descendingIterator();
@@ -1640,7 +1546,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(34, out);
+			writeType(HrdbmsType.ALAGOP, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -1652,7 +1558,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(34, out);
+		writeType(HrdbmsType.ALAGOP, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
 		for (final AggregateOperator entry : als)
@@ -1667,7 +1573,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(86, out);
+			writeType(HrdbmsType.ALALB, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -1679,7 +1585,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(86, out);
+		writeType(HrdbmsType.ALALB, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
 		for (final ArrayList<Boolean> entry : als)
@@ -1694,7 +1600,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(67, out);
+			writeType(HrdbmsType.ALALF, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -1706,7 +1612,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(67, out);
+		writeType(HrdbmsType.ALALF, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
 		for (final ArrayList<Filter> entry : als)
@@ -1721,7 +1627,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(84, out);
+			writeType(HrdbmsType.ALALO, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -1733,7 +1639,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(84, out);
+		writeType(HrdbmsType.ALALO, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
 		for (final ArrayList<Object> entry : als)
@@ -1748,7 +1654,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(85, out);
+			writeType(HrdbmsType.ALALS, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -1760,7 +1666,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(85, out);
+		writeType(HrdbmsType.ALALS, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
 		for (final ArrayList<String> entry : als)
@@ -1775,7 +1681,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(45, out);
+			writeType(HrdbmsType.ALB, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -1787,7 +1693,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(45, out);
+		writeType(HrdbmsType.ALB, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
 		for (final Boolean entry : als)
@@ -1802,7 +1708,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(42, out);
+			writeType(HrdbmsType.ALF, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -1814,7 +1720,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(42, out);
+		writeType(HrdbmsType.ALF, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
 		for (final Filter entry : als)
@@ -1829,7 +1735,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(11, out);
+			writeType(HrdbmsType.ALHSHM, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -1841,7 +1747,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(11, out);
+		writeType(HrdbmsType.ALHSHM, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
 		for (final HashSet<HashMap<Filter, Filter>> entry : als)
@@ -1856,7 +1762,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(7, out);
+			writeType(HrdbmsType.ALI, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -1868,7 +1774,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(7, out);
+		writeType(HrdbmsType.ALI, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
 		for (final Integer entry : als)
@@ -1883,7 +1789,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(10, out);
+			writeType(HrdbmsType.ALINDX, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -1895,7 +1801,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(10, out);
+		writeType(HrdbmsType.ALINDX, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
 		for (final Index entry : als)
@@ -1910,7 +1816,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(12, out);
+			writeType(HrdbmsType.ALO, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -1922,7 +1828,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(12, out);
+		writeType(HrdbmsType.ALO, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
 		for (final Object entry : als)
@@ -1960,7 +1866,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(32, out);
+			writeType(HrdbmsType.ALOP, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -1972,7 +1878,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(32, out);
+		writeType(HrdbmsType.ALOP, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
 		for (final Operator entry : als)
@@ -1987,7 +1893,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(32, out);
+			writeType(HrdbmsType.ALOP, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -1999,7 +1905,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(32, out);
+		writeType(HrdbmsType.ALOP, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
 		for (final Operator entry : als)
@@ -2014,7 +1920,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(87, out);
+			writeType(HrdbmsType.ALRAIK, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -2026,7 +1932,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(87, out);
+		writeType(HrdbmsType.ALRAIK, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
 		for (final RIDAndIndexKeys entry : als)
@@ -2041,7 +1947,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(6, out);
+			writeType(HrdbmsType.ALS, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -2053,7 +1959,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(6, out);
+		writeType(HrdbmsType.ALS, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
 		for (final String entry : als)
@@ -2068,7 +1974,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(83, out);
+			writeType(HrdbmsType.BOOLARRAY, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -2080,7 +1986,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(83, out);
+		writeType(HrdbmsType.BOOLARRAY, out);
 		prev.put(als, writeID(out));
 		writeShort(als.length, out);
 		for (final boolean entry : als)
@@ -2095,7 +2001,7 @@ public class OperatorUtils
 	{
 		if (d == null)
 		{
-			writeType(61, out);
+			writeType(HrdbmsType.CNFNULL, out);
 			return;
 		}
 
@@ -2106,7 +2012,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(69, out);
+			writeType(HrdbmsType.FILTERNULL, out);
 			return;
 		}
 
@@ -2117,7 +2023,7 @@ public class OperatorUtils
 	{
 		if (d == null)
 		{
-			writeType(28, out);
+			writeType(HrdbmsType.FSTNULL, out);
 			return;
 		}
 
@@ -2128,7 +2034,7 @@ public class OperatorUtils
 	{
 		if (hmf == null)
 		{
-			writeType(9, out);
+			writeType(HrdbmsType.HMF, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -2140,7 +2046,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(9, out);
+		writeType(HrdbmsType.HMF, out);
 		prev.put(hmf, writeID(out));
 		writeShort(hmf.size(), out);
 		for (final Filter entry : hmf.keySet())
@@ -2155,7 +2061,7 @@ public class OperatorUtils
 	{
 		if (hm == null)
 		{
-			writeType(80, out);
+			writeType(HrdbmsType.HMINTOP, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -2167,7 +2073,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(80, out);
+		writeType(HrdbmsType.HMINTOP, out);
 		prev.put(hm, writeID(out));
 		writeShort(hm.size(), out);
 		for (final Map.Entry<Integer, Operator> entry : hm.entrySet())
@@ -2186,7 +2092,7 @@ public class OperatorUtils
 	{
 		if (hm == null)
 		{
-			writeType(79, out);
+			writeType(HrdbmsType.HMOPCNF, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -2198,7 +2104,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(79, out);
+		writeType(HrdbmsType.HMOPCNF, out);
 		prev.put(hm, writeID(out));
 		writeShort(hm.size(), out);
 		for (final Map.Entry<Operator, CNFFilter> entry : hm.entrySet())
@@ -2217,7 +2123,7 @@ public class OperatorUtils
 	{
 		if (hshm == null)
 		{
-			writeType(8, out);
+			writeType(HrdbmsType.HSHM, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -2229,7 +2135,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(8, out);
+		writeType(HrdbmsType.HSHM, out);
 		prev.put(hshm, writeID(out));
 		writeShort(hshm.size(), out);
 		for (final HashMap<Filter, Filter> entry : hshm)
@@ -2244,7 +2150,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(43, out);
+			writeType(HrdbmsType.HSO, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -2256,7 +2162,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(43, out);
+		writeType(HrdbmsType.HSO, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
 		for (final Object entry : als)
@@ -2294,7 +2200,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(68, out);
+			writeType(HrdbmsType.HSS, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -2306,7 +2212,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(68, out);
+		writeType(HrdbmsType.HSS, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
 		for (final String entry : als)
@@ -2321,7 +2227,7 @@ public class OperatorUtils
 	{
 		if (i == null)
 		{
-			writeType(82, out);
+			writeType(HrdbmsType.INDEXNULL, out);
 			return;
 		}
 		else
@@ -2334,7 +2240,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(46, out);
+			writeType(HrdbmsType.INTARRAY, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -2346,7 +2252,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(46, out);
+		writeType(HrdbmsType.INTARRAY, out);
 		prev.put(als, writeID(out));
 		writeShort(als.length, out);
 		for (final int entry : als)
@@ -2361,7 +2267,7 @@ public class OperatorUtils
 	{
 		if (op == null)
 		{
-			writeType(81, out);
+			writeType(HrdbmsType.OPERATORNULL, out);
 			return;
 		}
 		else
@@ -2372,7 +2278,7 @@ public class OperatorUtils
 
 	public static void serializeReference(final long id, final OutputStream out) throws Exception
 	{
-		writeType(0, out);
+		writeType(HrdbmsType.REFERENCE, out);
 		writeLong(id, out);
 	}
 
@@ -2380,7 +2286,7 @@ public class OperatorUtils
 	{
 		if (als == null)
 		{
-			writeType(66, out);
+			writeType(HrdbmsType.STRINGARRAY, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -2392,7 +2298,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(66, out);
+		writeType(HrdbmsType.STRINGARRAY, out);
 		prev.put(als, writeID(out));
 		writeShort(als.length, out);
 		for (final String entry : als)
@@ -2407,7 +2313,7 @@ public class OperatorUtils
 	{
 		if (hm == null)
 		{
-			writeType(2, out);
+			writeType(HrdbmsType.HMSTRINGSTRING, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -2419,7 +2325,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(2, out);
+		writeType(HrdbmsType.HMSTRINGSTRING, out);
 		prev.put(hm, writeID(out));
 
 		writeShort(hm.size(), out);
@@ -2439,7 +2345,7 @@ public class OperatorUtils
 	{
 		if (hm == null)
 		{
-			writeType(4, out);
+			writeType(HrdbmsType.HMSTRINGINT, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -2451,7 +2357,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(4, out);
+		writeType(HrdbmsType.HMSTRINGINT, out);
 		prev.put(hm, writeID(out));
 		writeShort(hm.size(), out);
 		for (final Map.Entry<String, Integer> entry : hm.entrySet())
@@ -2470,7 +2376,7 @@ public class OperatorUtils
 	{
 		if (hm == null)
 		{
-			writeType(5, out);
+			writeType(HrdbmsType.TREEMAP, out);
 			writeLong(-1, out);
 			return;
 		}
@@ -2482,7 +2388,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(5, out);
+		writeType(HrdbmsType.TREEMAP, out);
 		prev.put(hm, writeID(out));
 		writeShort(hm.size(), out);
 		for (final Map.Entry<Integer, String> entry : hm.entrySet())
@@ -2513,11 +2419,11 @@ public class OperatorUtils
 	{
 		if (d == null)
 		{
-			writeType(70, out);
+			writeType(HrdbmsType.BOOLNULL, out);
 			return;
 		}
 
-		writeType(71, out);
+		writeType(HrdbmsType.BOOLCLASS, out);
 		writeBool(d, out);
 		return;
 	}
@@ -2526,11 +2432,11 @@ public class OperatorUtils
 	{
 		if (d == null)
 		{
-			writeType(18, out);
+			writeType(HrdbmsType.MYDATENULL, out);
 			return;
 		}
 
-		writeType(19, out);
+		writeType(HrdbmsType.MYDATE, out);
 		out.write(intToBytes(d.getTime()));
 		return;
 	}
@@ -2539,11 +2445,11 @@ public class OperatorUtils
 	{
 		if (d == null)
 		{
-			writeType(12, out);
+			writeType(HrdbmsType.DOUBLENULL, out);
 			return;
 		}
 
-		writeType(13, out);
+		writeType(HrdbmsType.DOUBLE, out);
 		out.write(longToBytes(Double.doubleToRawLongBits(d)));
 		return;
 	}
@@ -2564,11 +2470,11 @@ public class OperatorUtils
 	{
 		if (d == null)
 		{
-			writeType(16, out);
+			writeType(HrdbmsType.INTEGERNULL, out);
 			return;
 		}
 
-		writeType(17, out);
+		writeType(HrdbmsType.INTEGER, out);
 		out.write(intToBytes(d));
 		return;
 	}
@@ -2582,11 +2488,11 @@ public class OperatorUtils
 	{
 		if (d == null)
 		{
-			writeType(14, out);
+			writeType(HrdbmsType.LONGNULL, out);
 			return;
 		}
 
-		writeType(15, out);
+		writeType(HrdbmsType.LONG, out);
 		out.write(longToBytes(d));
 		return;
 	}
@@ -2632,7 +2538,7 @@ public class OperatorUtils
 	{
 		if (s == null)
 		{
-			writeType(86, out);
+			writeType(HrdbmsType.NULLSTRING, out);
 			return;
 		}
 
@@ -2643,7 +2549,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(3, out);
+		writeType(HrdbmsType.STRING, out);
 		prev.put(s, writeID(out));
 		final byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
 		writeShort(bytes.length, out);
@@ -2651,9 +2557,9 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void writeType(final int type, final OutputStream out) throws Exception
+	public static void writeType(final HrdbmsType type, final OutputStream out) throws Exception
 	{
-		out.write(type);
+		out.write(type.ordinal());
 	}
 
 	private static byte[] intToBytes(final int val)

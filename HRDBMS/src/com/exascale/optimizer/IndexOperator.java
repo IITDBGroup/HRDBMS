@@ -11,6 +11,7 @@ import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.HrdbmsType;
 import com.exascale.tables.Plan;
 
 public final class IndexOperator implements Operator, Cloneable, Serializable
@@ -290,7 +291,7 @@ public final class IndexOperator implements Operator, Cloneable, Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(30, out);
+		OperatorUtils.writeType(HrdbmsType.INDEXOPERATOR, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		// recreate meta
 		parent.serialize(out, prev);

@@ -11,7 +11,7 @@ import com.exascale.managers.ResourceManager;
 import com.exascale.optimizer.MetaData.PartitionMetaData;
 import com.exascale.tables.Transaction;
 
-/** Pushes operators from the coordinator down to the worker nodes */
+/** Pushes operators from the coordinator down to the worker nodes.  Makes hierarchical intermediate layers if the coordinator would be talking to too many nodes. */
 public final class Phase3
 {
 	protected static final int MAX_INCOMING_CONNECTIONS = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes")); // 100

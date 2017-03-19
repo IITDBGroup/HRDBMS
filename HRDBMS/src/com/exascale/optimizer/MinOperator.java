@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import com.exascale.managers.HRDBMSWorker;
+import com.exascale.misc.HrdbmsType;
 import com.exascale.misc.MyDate;
 
 public final class MinOperator implements AggregateOperator, Serializable
@@ -150,7 +151,7 @@ public final class MinOperator implements AggregateOperator, Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(55, out);
+		OperatorUtils.writeType(HrdbmsType.MIN, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.writeString(input, out, prev);
 		OperatorUtils.writeString(output, out, prev);

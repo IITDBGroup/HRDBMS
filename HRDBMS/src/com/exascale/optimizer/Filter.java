@@ -9,10 +9,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import com.exascale.managers.HRDBMSWorker;
-import com.exascale.misc.DateParser;
-import com.exascale.misc.FastStringTokenizer;
-import com.exascale.misc.MyDate;
-import com.exascale.misc.Utils;
+import com.exascale.misc.*;
 
 public class Filter implements Cloneable, Serializable
 {
@@ -72,20 +69,16 @@ public class Filter implements Cloneable, Serializable
 	public static Filter deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
 		final Filter value = (Filter)unsafe.allocateInstance(Filter.class);
-		final int type = OperatorUtils.getType(in);
-		if (type == 0)
-		{
-			return (Filter)OperatorUtils.readReference(in, prev);
-		}
-
-		if (type == 69)
-		{
-			return null;
-		}
-
-		if (type != 65)
-		{
-			throw new Exception("Corrupted stream. Expected type 65 but received " + type);
+		final HrdbmsType type = OperatorUtils.getType(in);
+		switch(type) {
+			case REFERENCE:
+				return (Filter) OperatorUtils.readReference(in, prev);
+			case FILTERNULL:
+				return null;
+			case FILTER:
+				break;
+			default:
+				throw new Exception("Corrupted stream. Expected FILTER type but received " + type);
 		}
 
 		prev.put(OperatorUtils.readLong(in), value);
@@ -430,7 +423,7 @@ public class Filter implements Cloneable, Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(65, out);
+		OperatorUtils.writeType(HrdbmsType.FILTER, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.writeString(val1, out, prev);
 		OperatorUtils.writeString(op, out, prev);

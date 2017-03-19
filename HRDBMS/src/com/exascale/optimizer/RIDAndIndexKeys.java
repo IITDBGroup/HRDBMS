@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import com.exascale.filesystem.RID;
+import com.exascale.misc.HrdbmsType;
 
 public class RIDAndIndexKeys implements Serializable
 {
@@ -39,15 +40,15 @@ public class RIDAndIndexKeys implements Serializable
 	public static RIDAndIndexKeys deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
 		final RIDAndIndexKeys value = (RIDAndIndexKeys)unsafe.allocateInstance(RIDAndIndexKeys.class);
-		final int type = OperatorUtils.getType(in);
-		if (type == 0)
+		final HrdbmsType type = OperatorUtils.getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (RIDAndIndexKeys)OperatorUtils.readReference(in, prev);
 		}
 
-		if (type != 88)
+		if (!HrdbmsType.RAIK.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 88 but received " + type);
+			throw new Exception("Corrupted stream. Expected type RAIK but received " + type);
 		}
 
 		prev.put(OperatorUtils.readLong(in), value);
@@ -105,7 +106,7 @@ public class RIDAndIndexKeys implements Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(88, out);
+		OperatorUtils.writeType(HrdbmsType.RAIK, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.writeInt(rid.getNode(), out);
 		OperatorUtils.writeInt(rid.getDevice(), out);

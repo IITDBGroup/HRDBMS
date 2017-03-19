@@ -12,6 +12,7 @@ import java.util.IdentityHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.HrdbmsType;
 
 public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 {
@@ -134,7 +135,7 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 			return;
 		}
 
-		OperatorUtils.writeType(74, out);
+		OperatorUtils.writeType(HrdbmsType.NHRO, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		// recreate meta
 		if (send)

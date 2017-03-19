@@ -19,10 +19,7 @@ import java.util.IdentityHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedInputStream;
 import com.exascale.managers.HRDBMSWorker;
-import com.exascale.misc.AuxPairingHeap;
-import com.exascale.misc.DataEndMarker;
-import com.exascale.misc.MyDate;
-import com.exascale.misc.SPSCQueue;
+import com.exascale.misc.*;
 import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.ThreadPoolThread;
 
@@ -223,7 +220,7 @@ public final class NetworkReceiveAndMergeOperator extends NetworkReceiveOperator
 			return;
 		}
 
-		OperatorUtils.writeType(73, out);
+		OperatorUtils.writeType(HrdbmsType.NRAM, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		// recreate meta
 		OperatorUtils.serializeALOp(children, out, prev);

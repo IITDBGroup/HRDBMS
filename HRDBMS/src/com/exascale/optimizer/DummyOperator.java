@@ -10,6 +10,7 @@ import java.util.IdentityHashMap;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.HrdbmsType;
 import com.exascale.tables.Plan;
 
 public final class DummyOperator implements Operator, Serializable
@@ -214,7 +215,7 @@ public final class DummyOperator implements Operator, Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(24, out);
+		OperatorUtils.writeType(HrdbmsType.DUMMYOPERATOR, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.serializeStringHM(cols2Types, out, prev);
 		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);

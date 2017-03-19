@@ -25,11 +25,7 @@ import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LockManager;
 import com.exascale.managers.LogManager;
 import com.exascale.managers.ResourceManager;
-import com.exascale.misc.ArrayListLong;
-import com.exascale.misc.BufferedLinkedBlockingQueue;
-import com.exascale.misc.DataEndMarker;
-import com.exascale.misc.MyDate;
-import com.exascale.misc.RowComparator;
+import com.exascale.misc.*;
 import com.exascale.tables.Schema;
 import com.exascale.tables.Schema.FieldValue;
 import com.exascale.tables.Transaction;
@@ -119,15 +115,15 @@ public final class Index implements Serializable
 	public static Index deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
 		final Index value = (Index)unsafe.allocateInstance(Index.class);
-		final int type = OperatorUtils.getType(in);
-		if (type == 0)
+		final HrdbmsType type = OperatorUtils.getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
 		{
 			return (Index)OperatorUtils.readReference(in, prev);
 		}
 
-		if (type != 64)
+		if (!HrdbmsType.INDEX.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type 64 but received " + type);
+			throw new Exception("Corrupted stream. Expected type INDEX but received " + type);
 		}
 
 		prev.put(OperatorUtils.readLong(in), value);
@@ -1159,7 +1155,7 @@ public final class Index implements Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(64, out);
+		OperatorUtils.writeType(HrdbmsType.INDEX, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.writeString(fileName, out, prev);
 		OperatorUtils.serializeALS(keys, out, prev);

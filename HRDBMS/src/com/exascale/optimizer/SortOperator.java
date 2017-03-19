@@ -23,11 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
-import com.exascale.misc.AuxPairingHeap;
-import com.exascale.misc.BufferedFileChannel;
-import com.exascale.misc.BufferedLinkedBlockingQueue;
-import com.exascale.misc.DataEndMarker;
-import com.exascale.misc.MyDate;
+import com.exascale.misc.*;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Schema;
 import com.exascale.threads.HRDBMSThread;
@@ -462,7 +458,7 @@ public final class SortOperator implements Operator, Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(44, out);
+		OperatorUtils.writeType(HrdbmsType.SORT, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		child.serialize(out, prev);
 		parent.serialize(out, prev);

@@ -14,10 +14,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
 import com.exascale.managers.HRDBMSWorker;
-import com.exascale.misc.DataEndMarker;
-import com.exascale.misc.HJOMultiHashMap;
-import com.exascale.misc.MurmurHash;
-import com.exascale.misc.MyDate;
+import com.exascale.misc.*;
 
 /** Filter based on a conjunctive normal form expression */
 public class CNFFilter implements Serializable
@@ -784,7 +781,7 @@ public class CNFFilter implements Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(63, out);
+		OperatorUtils.writeType(HrdbmsType.CNF, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.serializeALALF(filters, out, prev);
 		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
@@ -792,7 +789,7 @@ public class CNFFilter implements Serializable
 
 	public void setHSHM(final HashSet<HashMap<Filter, Filter>> hshm)
 	{
-		filters = new ArrayList<ArrayList<Filter>>(hshm.size());
+		filters = new ArrayList<>(hshm.size());
 		for (final HashMap<Filter, Filter> hm : hshm)
 		{
 			final ArrayList<Filter> ors = new ArrayList<Filter>(hm.keySet());

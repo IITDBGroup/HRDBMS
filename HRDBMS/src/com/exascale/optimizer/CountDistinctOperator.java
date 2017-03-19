@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 import com.exascale.misc.BufferedFileChannel;
+import com.exascale.misc.HrdbmsType;
 import com.exascale.misc.MurmurHash;
 import com.exascale.misc.MyDate;
 import com.exascale.threads.HRDBMSThread;
@@ -113,7 +114,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 			return;
 		}
 
-		OperatorUtils.writeType(52, out);
+		OperatorUtils.writeType(HrdbmsType.COUNTDISTINCT, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.writeString(input, out, prev);
 		OperatorUtils.writeString(output, out, prev);

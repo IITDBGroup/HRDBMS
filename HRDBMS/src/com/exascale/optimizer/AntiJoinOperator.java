@@ -11,6 +11,7 @@ import java.util.IdentityHashMap;
 import java.util.TreeMap;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.HrdbmsType;
 import com.exascale.tables.Plan;
 
 public final class AntiJoinOperator implements Operator, Serializable
@@ -483,7 +484,7 @@ public final class AntiJoinOperator implements Operator, Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(1, out);
+		OperatorUtils.writeType(HrdbmsType.ANTIJOIN, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.serializeALOp(children, out, prev);
 		parent.serialize(out, prev);

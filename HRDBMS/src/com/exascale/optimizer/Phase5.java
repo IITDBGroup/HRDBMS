@@ -9,6 +9,7 @@ import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 import com.exascale.tables.Transaction;
 
+/** Replaces full table scans with index scans; employs partition elimination */
 public final class Phase5
 {
 	public static final long MAX_GB = (long)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("sort_gb_factor")));

@@ -12,10 +12,7 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
-import com.exascale.misc.DataEndMarker;
-import com.exascale.misc.DateParser;
-import com.exascale.misc.FastStringTokenizer;
-import com.exascale.misc.Utils;
+import com.exascale.misc.*;
 import com.exascale.tables.Plan;
 
 public final class CaseOperator implements Operator, Serializable
@@ -417,7 +414,7 @@ public final class CaseOperator implements Operator, Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(20, out);
+		OperatorUtils.writeType(HrdbmsType.CASE, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.serializeALHSHM(filters, out, prev);
 		OperatorUtils.serializeALO(results, out, prev);

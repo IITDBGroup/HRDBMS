@@ -11,6 +11,7 @@ import java.util.IdentityHashMap;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.HrdbmsType;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Transaction;
 
@@ -467,7 +468,7 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(41, out);
+		OperatorUtils.writeType(HrdbmsType.SELECT, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.serializeALF(filters, out, prev);
 		child.serialize(out, prev);

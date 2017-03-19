@@ -22,10 +22,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
-import com.exascale.misc.BufferedLinkedBlockingQueue;
-import com.exascale.misc.DataEndMarker;
-import com.exascale.misc.MyDate;
-import com.exascale.misc.SPSCQueue;
+import com.exascale.misc.*;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Schema;
 import com.exascale.threads.HRDBMSThread;
@@ -356,7 +353,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(58, out);
+		OperatorUtils.writeType(HrdbmsType.PRODUCT, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.serializeALOp(children, out, prev);
 		parent.serialize(out, prev);

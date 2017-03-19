@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import com.exascale.managers.HRDBMSWorker;
+import com.exascale.misc.HrdbmsType;
 import com.exascale.misc.MyDate;
 
 public final class MaxOperator implements AggregateOperator, Serializable
@@ -151,7 +152,7 @@ public final class MaxOperator implements AggregateOperator, Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(54, out);
+		OperatorUtils.writeType(HrdbmsType.MAX, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.writeString(input, out, prev);
 		OperatorUtils.writeString(output, out, prev);

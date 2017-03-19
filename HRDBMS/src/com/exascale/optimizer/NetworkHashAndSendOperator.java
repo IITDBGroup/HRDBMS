@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedOutputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.HrdbmsType;
 import com.exascale.misc.MurmurHash;
 
 public final class NetworkHashAndSendOperator extends NetworkSendOperator
@@ -311,7 +312,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 			return;
 		}
 
-		OperatorUtils.writeType(72, out);
+		OperatorUtils.writeType(HrdbmsType.NHAS, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		// recreate meta
 		child.serialize(out, prev);
@@ -344,7 +345,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 			return;
 		}
 
-		OperatorUtils.writeType(72, out);
+		OperatorUtils.writeType(HrdbmsType.NHAS, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		// recreate meta
 		// child.serialize(out, prev);

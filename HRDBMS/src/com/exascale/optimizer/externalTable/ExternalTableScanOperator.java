@@ -7,6 +7,7 @@ import java.util.*;
 
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.HrdbmsType;
 import com.exascale.optimizer.*;
 import com.exascale.tables.Transaction;
 
@@ -105,7 +106,7 @@ public final class ExternalTableScanOperator extends AbstractTableScanOperator
 			return;
 		}
 
-		OperatorUtils.writeType(23, out);
+		OperatorUtils.writeType(HrdbmsType.ETSO, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.serializeStringHM(cols2Types, out, prev);
 		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);

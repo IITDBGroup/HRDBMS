@@ -25,7 +25,7 @@ public final class Phase2
 	{
 		if (t.isSingleNodeGroupSet())
 		{
-			final ArrayList<Integer> retval = new ArrayList<Integer>(1);
+			final ArrayList<Integer> retval = new ArrayList<>(1);
 			retval.add(t.getSingleNodeGroup());
 			return retval;
 		}
@@ -241,6 +241,7 @@ public final class Phase2
 		}
 	}
 
+	/** This method does the real work */
 	private void updateTree(final Operator op) throws Exception
 	{
 		if (op instanceof TableScanOperator)
@@ -273,7 +274,7 @@ public final class Phase2
 						{
 							nodeList = MetaData.getNodesForTable(t.getSchema(), t.getTable(), tx);
 						}
-						final ArrayList<ArrayList<Integer>> nodeLists = new ArrayList<ArrayList<Integer>>(1);
+						final ArrayList<ArrayList<Integer>> nodeLists = new ArrayList<>(1);
 						nodeLists.add(nodeList);
 						setActiveNodes(t, filter, o, nodeLists);
 						setActiveDevices(t, filter, o);

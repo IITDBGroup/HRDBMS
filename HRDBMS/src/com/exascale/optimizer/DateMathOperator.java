@@ -14,10 +14,7 @@ import java.util.IdentityHashMap;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
-import com.exascale.misc.DataEndMarker;
-import com.exascale.misc.DateParser;
-import com.exascale.misc.MyDate;
-import com.exascale.misc.MySimpleDateFormat;
+import com.exascale.misc.*;
 import com.exascale.tables.Plan;
 
 public final class DateMathOperator implements Operator, Serializable
@@ -337,7 +334,7 @@ public final class DateMathOperator implements Operator, Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(22, out);
+		OperatorUtils.writeType(HrdbmsType.DATEMATH, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		child.serialize(out, prev);
 		parent.serialize(out, prev);

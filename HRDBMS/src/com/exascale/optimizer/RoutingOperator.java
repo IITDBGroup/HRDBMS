@@ -29,6 +29,7 @@ import com.exascale.compression.CompressedOutputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.HrdbmsType;
 import com.exascale.misc.MurmurHash;
 import com.exascale.misc.MyDate;
 import com.exascale.tables.Plan;
@@ -512,7 +513,7 @@ public final class RoutingOperator implements Operator
 			return;
 		}
 
-		OperatorUtils.writeType(85, out);
+		OperatorUtils.writeType(HrdbmsType.ROUTING, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.serializeALS(hashCols, out, prev);
 		OperatorUtils.writeInt(this.fromID, out);

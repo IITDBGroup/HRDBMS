@@ -30,6 +30,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
+
+import com.exascale.misc.*;
 import org.sosy_lab.common.ShutdownManager;
 import org.sosy_lab.common.configuration.Configuration;
 import org.sosy_lab.common.configuration.InvalidConfigurationException;
@@ -53,12 +55,6 @@ import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.LockManager;
 import com.exascale.managers.ResourceManager;
 import com.exascale.managers.SMTLogManager;
-import com.exascale.misc.BufferedLinkedBlockingQueue;
-import com.exascale.misc.CompressedBitSet;
-import com.exascale.misc.DataEndMarker;
-import com.exascale.misc.HParms;
-import com.exascale.misc.MultiHashMap;
-import com.exascale.misc.MyDate;
 import com.exascale.optimizer.MetaData.PartitionMetaData;
 import com.exascale.tables.DataType;
 import com.exascale.tables.Plan;
@@ -1348,7 +1344,7 @@ public final class TableScanOperator extends AbstractTableScanOperator
 			return;
 		}
 
-		OperatorUtils.writeType(78, out);
+		OperatorUtils.writeType(HrdbmsType.TSO, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		OperatorUtils.serializeStringHM(cols2Types, out, prev);
 		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);

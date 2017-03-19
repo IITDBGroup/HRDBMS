@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedOutputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.HrdbmsType;
 import com.exascale.misc.MyDate;
 import com.exascale.tables.Plan;
 
@@ -335,7 +336,7 @@ public class NetworkSendOperator implements Operator, Serializable
 			return;
 		}
 
-		OperatorUtils.writeType(36, out);
+		OperatorUtils.writeType(HrdbmsType.NSO, out);
 		prev.put(this, OperatorUtils.writeID(out));
 		// recreate meta
 		child.serialize(out, prev);
