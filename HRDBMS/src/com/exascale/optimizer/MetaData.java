@@ -329,7 +329,7 @@ public final class MetaData implements Serializable
 	{
 		HashMap<String, String> cols2Types = getCols2Types(defs);
 		// TODO setup partionion metadata according to type of external source
-		new MetaData().new PartitionMetaData(schema, table, "NONE", "ANY", "ALL,HASH,{COL}", tx, cols2Types);
+		new MetaData().new PartitionMetaData(schema, table, "NONE", "ALL,HASH,{R_COL1}", "ALL,HASH,{R_COL1}", tx, cols2Types);
 		// tables
 		// cols
 		// indexes

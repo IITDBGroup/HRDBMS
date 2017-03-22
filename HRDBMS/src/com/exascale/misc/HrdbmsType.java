@@ -90,10 +90,12 @@ public enum HrdbmsType {
     ALALB, // 86 - ALALB
     ALRAIK, // 87 - ALRAIK
     RAIK, // 88 - RAIK
-    ETSO, // 89 - external table scan op
-    NULLSTRING,
-    ROUTING,
-    ALO;
+    ETSO, // 89 - external table scan
+    NULLSTRING, // 90 - NULL String
+    ROUTING,  // 91 - Routing
+    ALO, // 92 - ArrayList of Objects
+    CSVEXTERNALTABLE, // 93 - External Table Implementation
+    CSVEXTERNALPARAMS; // 94 - External Table Parameters
     // Make sure to add new values at the end to maintain the above ordinals as they should be.
 
     public static HrdbmsType fromInt(int value) { return HrdbmsType.values()[value]; }

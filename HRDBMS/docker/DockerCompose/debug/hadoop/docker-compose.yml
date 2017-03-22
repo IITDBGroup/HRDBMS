@@ -2,7 +2,7 @@ version: "2.0"
 services:
   hadoop:
       container_name: "hadoop"
-      image: hadoop
+      image: mykh74/hadoop:latest
       networks:
          app_net:
             ipv4_address: 17.17.0.5

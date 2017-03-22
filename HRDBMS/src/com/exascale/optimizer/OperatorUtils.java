@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.misc.FastStringTokenizer;
 import com.exascale.misc.HrdbmsType;
 import com.exascale.misc.MyDate;
-import com.exascale.optimizer.externalTable.ExternalTableScanOperator;
+import com.exascale.optimizer.externalTable.*;
 
 public class OperatorUtils
 {
@@ -738,7 +738,35 @@ public class OperatorUtils
 		return Filter.deserializeKnown(in, prev); // type already read
 	}
 
-	public static FastStringTokenizer deserializeFST(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+    public static HTTPCsvExternal deserializeCSVExternal(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+    {
+        final HrdbmsType type = getType(in);
+        if (HrdbmsType.REFERENCE.equals(type))
+        {
+            return (HTTPCsvExternal)readReference(in, prev);
+        }
+        if (!HrdbmsType.CSVEXTERNALTABLE.equals(type))
+        {
+            throw new Exception("Corrupted stream. Expected type EXTERNALTABLE but received " + type);
+        }
+        return HTTPCsvExternal.deserializeKnown(in, prev); // type already read
+    }
+
+    public static CsvExternalParams deserializeCSVExternalParams(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+    {
+        final HrdbmsType type = getType(in);
+        if (HrdbmsType.REFERENCE.equals(type))
+        {
+            return (CsvExternalParams)readReference(in, prev);
+        }
+        if (!HrdbmsType.CSVEXTERNALPARAMS.equals(type))
+        {
+            throw new Exception("Corrupted stream. Expected type EXTERNALTABLE but received " + type);
+        }
+        return CsvExternalParams.deserializeKnown(in, prev); // type already read
+    }
+
+    public static FastStringTokenizer deserializeFST(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
@@ -1995,6 +2023,32 @@ public class OperatorUtils
 		}
 
 		return;
+	}
+
+	/**
+	 * Serialize CSV External Table Implementation
+	 */
+	public static void serializeCsvExternal(final HTTPCsvExternal csv, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		if (csv == null)
+		{
+			writeType(HrdbmsType.CSVEXTERNALTABLE, out);
+			return;
+		}
+		csv.serialize(out, prev);
+	}
+
+	/**
+	 * Serialize CSV External Table Parameters
+	 */
+	public static void serializeCSVExternalParams(final CsvExternalParams params, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		if (params == null)
+		{
+			writeType(HrdbmsType.CSVEXTERNALPARAMS, out);
+			return;
+		}
+		params.serialize(out, prev);
 	}
 
 	public static void serializeCNF(final CNFFilter d, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception

@@ -1,17 +1,41 @@
 package com.exascale.optimizer.externalTable;
 
+import com.exascale.misc.HrdbmsType;
+import com.exascale.optimizer.OperatorUtils;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
 import java.io.BufferedReader;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.lang.reflect.Field;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
 
 /** Properties for the CSV external table implementation */
 public class CsvExternalParams implements ExternalParamsInterface {
+
+    private static sun.misc.Unsafe unsafe;
+
+    static
+    {
+        try
+        {
+            final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+            f.setAccessible(true);
+            unsafe = (sun.misc.Unsafe)f.get(null);
+        }
+        catch (final Exception e)
+        {
+            unsafe = null;
+        }
+    }
+
     public enum Source{URL, HDFS};
     @JsonProperty
     private Source source = Source.URL;
@@ -82,4 +106,29 @@ public class CsvExternalParams implements ExternalParamsInterface {
         throw new RuntimeException("URL '" + csvFile + "' does not respond");
     }
 
+    public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception {
+        final Long id = prev.get(this);
+        if (id != null) {
+            OperatorUtils.serializeReference(id, out);
+            return;
+        }
+
+        OperatorUtils.writeType(HrdbmsType.CSVEXTERNALPARAMS, out);
+        prev.put(this, OperatorUtils.writeID(out));
+        OperatorUtils.writeString(location, out, prev);
+        OperatorUtils.writeString(delimiter, out, prev);
+        OperatorUtils.writeBool(ignoreHeader, out);
+        OperatorUtils.writeInt(source.ordinal(), out);
+    }
+
+    public static CsvExternalParams deserializeKnown(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+    {
+        final CsvExternalParams value = (CsvExternalParams)unsafe.allocateInstance(CsvExternalParams.class);
+        prev.put(OperatorUtils.readLong(in), value);
+        value.location = OperatorUtils.readString(in, prev);
+        value.delimiter = OperatorUtils.readString(in, prev);
+        value.ignoreHeader = OperatorUtils.readBool(in);
+        value.source = Source.values()[OperatorUtils.readInt(in)];
+        return value;
+    }
 }

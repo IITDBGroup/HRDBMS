@@ -67,26 +67,26 @@ import com.exascale.threads.ConnectionWorker;
 import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.ThreadPoolThread;
 
-public final class TableScanOperator extends AbstractTableScanOperator
+public class TableScanOperator extends AbstractTableScanOperator
 {
-	private static int PREFETCH_REQUEST_SIZE_STATIC;
-	private static int PAGES_IN_ADVANCE_STATIC;
-	private static int MAX_PBPE_TIME;
+	protected static int PREFETCH_REQUEST_SIZE_STATIC;
+	protected static int PAGES_IN_ADVANCE_STATIC;
+	protected static int MAX_PBPE_TIME;
 	public static AtomicInteger tsoCount = new AtomicInteger(0);
 
-	private static sun.misc.Unsafe unsafe;
-	private static long offset;
+	protected static sun.misc.Unsafe unsafe;
+	protected static long offset;
 
 	public static MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>> noResults;
 	public static ConcurrentHashMap<HashSet<HashMap<Filter, Filter>>, AtomicLong> noResultCounts;
 	public static AtomicInteger skippedPages = new AtomicInteger(0);
-	private static Object intraTxLock = new Object();
-	private static HashMap<String, AtomicInteger> sharedDmlTxCounters = new HashMap<String, AtomicInteger>();
-	private static Configuration config;
-	private static LogManager logger;
-	private static ShutdownManager shutdown;
+	protected static Object intraTxLock = new Object();
+	protected static HashMap<String, AtomicInteger> sharedDmlTxCounters = new HashMap<String, AtomicInteger>();
+	protected static Configuration config;
+	protected static LogManager logger;
+	protected static ShutdownManager shutdown;
 	public static volatile ConcurrentHashMap<String, MultiHashMap<Integer, CNFEntry>> pbpeCache2;
-	private static ConcurrentLinkedQueue contextQ;
+	protected static ConcurrentLinkedQueue contextQ;
 	public static AtomicLong figureOutProblemsTime = new AtomicLong(0);
 	public static AtomicLong SMTSolveTime = new AtomicLong(0);
 	public static AtomicLong nonSMTSolveTime = new AtomicLong(0);
@@ -222,45 +222,45 @@ public final class TableScanOperator extends AbstractTableScanOperator
 		}
 	}
 
-	private int PREFETCH_REQUEST_SIZE;
+	protected int PREFETCH_REQUEST_SIZE;
 
-	private int PAGES_IN_ADVANCE;
+	protected int PAGES_IN_ADVANCE;
 
-	private transient ArrayList<String> ins;
+	protected transient ArrayList<String> ins;
 	public transient volatile BufferedLinkedBlockingQueue readBuffer;
-	private transient volatile HashMap<Operator, BufferedLinkedBlockingQueue> readBuffers;
-	private boolean startDone = false;
-	private transient boolean optimize;
-	private transient HashMap<Operator, HashSet<HashMap<Filter, Filter>>> filters = new HashMap<Operator, HashSet<HashMap<Filter, Filter>>>();
-	private ArrayList<Integer> neededPos;
-	private ArrayList<Integer> fetchPos;
-	private String[] midPos2Col;
-	private HashMap<String, String> midCols2Types;
+	protected transient volatile HashMap<Operator, BufferedLinkedBlockingQueue> readBuffers;
+	protected boolean startDone = false;
+	protected transient boolean optimize;
+	protected transient HashMap<Operator, HashSet<HashMap<Filter, Filter>>> filters = new HashMap<Operator, HashSet<HashMap<Filter, Filter>>>();
+	protected ArrayList<Integer> neededPos;
+	protected ArrayList<Integer> fetchPos;
+	protected String[] midPos2Col;
+	protected HashMap<String, String> midCols2Types;
 
-	// happen at runtime?
-	private transient HashMap<Operator, ArrayList<Integer>> activeDevices = new HashMap<Operator, ArrayList<Integer>>();
-	private transient HashMap<Operator, ArrayList<Integer>> activeNodes = new HashMap<Operator, ArrayList<Integer>>();
-	public ArrayList<Integer> devices = new ArrayList<Integer>();
-	private boolean phase2Done = false;
-	public HashMap<Integer, Operator> device2Child = new HashMap<Integer, Operator>();
-	private ArrayList<Operator> children = new ArrayList<Operator>();
-	private transient ArrayList<String> randomIns;
-	private transient HashMap<String, Integer> ins2Device;
-	private boolean indexOnly = false;
-	private transient volatile boolean forceDone;
-	public Transaction tx;
+    // happen at runtime?
+    protected transient HashMap<Operator, ArrayList<Integer>> activeDevices = new HashMap<Operator, ArrayList<Integer>>();
+    protected transient HashMap<Operator, ArrayList<Integer>> activeNodes = new HashMap<Operator, ArrayList<Integer>>();
+    public ArrayList<Integer> devices = new ArrayList<Integer>();
+    protected boolean phase2Done = false;
+    public HashMap<Integer, Operator> device2Child = new HashMap<Integer, Operator>();
+    protected ArrayList<Operator> children = new ArrayList<Operator>();
+    protected transient ArrayList<String> randomIns;
+    protected transient HashMap<String, Integer> ins2Device;
+    protected boolean indexOnly = false;
+    protected transient volatile boolean forceDone;
+    public Transaction tx;
 	public boolean getRID = false;
-	private HashMap<String, String> tableCols2Types;
-	private TreeMap<Integer, String> tablePos2Col;
-	private HashMap<String, Integer> tableCols2Pos;
-	private boolean releaseLocks = false;
-	private boolean sample = false;
-	private long sPer;
-	private Index scanIndex = null;
-	private transient AtomicLong received;
-	private transient volatile boolean demReceived;
-	private int tType = 0;
-	private volatile transient HashSet<Integer> referencesHash = null;
+	protected HashMap<String, String> tableCols2Types;
+	protected TreeMap<Integer, String> tablePos2Col;
+	protected HashMap<String, Integer> tableCols2Pos;
+	protected boolean releaseLocks = false;
+	protected boolean sample = false;
+	protected long sPer;
+	protected Index scanIndex = null;
+	protected transient AtomicLong received;
+	protected transient volatile boolean demReceived;
+	protected int tType = 0;
+	protected volatile transient HashSet<Integer> referencesHash = null;
 
 	public TableScanOperator(final String schema, final String name, final MetaData meta, final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> tablePos2Col, final HashMap<String, String> tableCols2Types, final HashMap<String, Integer> tableCols2Pos) throws Exception
 	{
@@ -406,7 +406,7 @@ public final class TableScanOperator extends AbstractTableScanOperator
 		return retval;
 	}
 
-	private static boolean canAnythingInRangeSatisfyFilters(final ArrayList<Filter> filters, Object lowLE, Object highLE) throws Exception
+	protected static boolean canAnythingInRangeSatisfyFilters(final ArrayList<Filter> filters, Object lowLE, Object highLE) throws Exception
 	{
 		if (lowLE == null)
 		{

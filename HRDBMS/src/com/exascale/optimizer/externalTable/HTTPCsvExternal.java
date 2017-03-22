@@ -1,13 +1,32 @@
 package com.exascale.optimizer.externalTable;
 
+import com.exascale.misc.HrdbmsType;
 import com.exascale.misc.MyDate;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
+import com.exascale.optimizer.OperatorUtils;
+
+import java.io.*;
+import java.lang.reflect.Field;
 import java.net.URL;
 import java.util.*;
 
-public class HTTPCsvExternal implements ExternalTableType
+public class HTTPCsvExternal  implements ExternalTableType, Serializable
 {
+	private static sun.misc.Unsafe unsafe;
+
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (final Exception e)
+		{
+			unsafe = null;
+		}
+	}
+
 	protected HashMap<String, String> cols2Types;
 	protected HashMap<String, Integer> cols2Pos;
 	protected TreeMap<Integer, String> pos2Col;
@@ -166,4 +185,25 @@ public class HTTPCsvExternal implements ExternalTableType
 			throw new ExternalTableException("Error during closing InputBuffer reading CSV file");
 		}
 	}
+
+	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception {
+		final Long id = prev.get(this);
+		if (id != null) {
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(HrdbmsType.CSVEXTERNALTABLE, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		OperatorUtils.serializeCSVExternalParams(params, out, prev);
+	}
+
+	public static HTTPCsvExternal deserializeKnown(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	{
+		final HTTPCsvExternal value = (HTTPCsvExternal)unsafe.allocateInstance(HTTPCsvExternal.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.params = OperatorUtils.deserializeCSVExternalParams(in, prev);
+		return value;
+	}
+
 }
