@@ -2,7 +2,7 @@ version: "2.0"
 services:
   node:
     image: iitdbgroup/hrdbms:latest
-    container_name: "hrdbms_node"
+    container_name: "hrdbmsnode"
     volumes:
         - ../../../:/home/hrdbms/app:z
         - ./hparms:/home/hrdbms/hparms
@@ -15,32 +15,28 @@ services:
      depends_on:
         - worker
         - worker2
-     container_name: "hrdbms_coordinator"
+     container_name: "hrdbmscoordinator"
      networks:
-        app_net:
+        appnet:
           ipv4_address: 17.17.0.2
   worker:
-     container_name: "hrdbms_worker"
+     container_name: "hrdbmsworker"
      extends:
         service: node
      ports:
         - "5015:5015"
      networks:
-        app_net:
+        appnet:
           ipv4_address: 17.17.0.3
   worker2:
-     container_name: "hrdbms_worker2"
+     container_name: "hrdbmsworker2"
      extends:
         service: node
      ports:
         - "5020:5015"
      networks:
-        app_net:
+        appnet:
           ipv4_address: 17.17.0.4
 networks:
-  app_net:
-      driver: bridge
-      ipam:
-          config:
-              - subnet: 17.17.0.0/8
-                gateway: 17.17.0.1
+  appnet:
+    external: true

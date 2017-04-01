@@ -58,7 +58,7 @@
 	<target name="download-dependencies" depends="init-ivy">
 		 <ivy:configure file="ivysettings.xml" override="true" />
 		 <ivy:resolve />
-		 <ivy:retrieve sync="false" type="jar,bundle" pattern="${librarydir}/[artifact].[ext]" />
+		 <ivy:retrieve sync="false" type="jar,bundle" pattern="${librarydir}/[organisation].[module].[artifact]-[revision](-[classifier]).[ext]" />
 		<!-- classpath -->
 		<path id="classpath">
 			<fileset dir="${librarydir}"/>
@@ -95,8 +95,7 @@
 	<target name="createParser">
 		<path id="classpath">
 			<fileset dir="${librarydir}">
-				<include name="antlr*.jar"/>
-				<include name="ST4.jar"/>
+				<include name="*antlr*.jar"/>
 			</fileset>
 		</path>
 		<java classname="org.antlr.v4.Tool" classpathref="classpath">

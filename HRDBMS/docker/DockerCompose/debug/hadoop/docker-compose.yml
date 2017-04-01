@@ -4,12 +4,8 @@ services:
       container_name: "hadoop"
       image: mykh74/hadoop:latest
       networks:
-         app_net:
+         appnet:
             ipv4_address: 17.17.0.5
 networks:
-  app_net:
-      driver: bridge
-      ipam:
-          config:
-              - subnet: 17.17.0.0/8
-                gateway: 17.17.0.1
+  appnet:
+    external: true

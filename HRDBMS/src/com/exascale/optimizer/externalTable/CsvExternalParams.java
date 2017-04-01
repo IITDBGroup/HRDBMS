@@ -71,22 +71,22 @@ public class CsvExternalParams implements ExternalParamsInterface {
 
     /** Check if file exists in HDFS */
     private static boolean fileExists(String fileName) {
-        try{
-            // TODO this code does work becuase of Hadoop library dependecies conflicts, etc
-            Path pt=new Path(fileName);
-            FileSystem fs = FileSystem.get(new Configuration());
-            BufferedReader br=new BufferedReader(new InputStreamReader(fs.open(pt)));
-            String line;
-            line=br.readLine();
-            while (line != null){
-                System.out.println(line);
-                line=br.readLine();
-            }
-        }catch(Exception e){
-            String mess = e.getMessage();
-            e.printStackTrace();
-            StackTraceElement[] st = e.getStackTrace();
-        }
+//        try{
+//            // TODO this code does work becuase of Hadoop library dependecies conflicts, etc
+//            Path pt=new Path(fileName);
+//            FileSystem fs = FileSystem.get(new Configuration());
+//            BufferedReader br=new BufferedReader(new InputStreamReader(fs.open(pt)));
+//            String line;
+//            line=br.readLine();
+//            while (line != null){
+//                System.out.println(line);
+//                line=br.readLine();
+//            }
+//        }catch(Exception e){
+//            String mess = e.getMessage();
+//            e.printStackTrace();
+//            StackTraceElement[] st = e.getStackTrace();
+//        }
         return true;
     }
 
