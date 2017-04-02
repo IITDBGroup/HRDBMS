@@ -1,25 +1,17 @@
 package com.exascale.optimizer.externalTable;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.TreeMap;
-
-import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.optimizer.ColDef;
 import com.exascale.optimizer.MetaData;
 import com.exascale.optimizer.Operator;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Transaction;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
 
 /** Operator corresponding to a create external table statement */
 public final class CreateExternalTableOperator implements Operator, Serializable
@@ -126,22 +118,6 @@ public final class CreateExternalTableOperator implements Operator, Serializable
 	{
 		if (!done)
 		{
-			Configuration conf = new Configuration();
-			conf.addResource(new Path("core-site.xml"));
-			conf.addResource(new Path("hdfs-site.xml"));
-
-			//BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
-			HRDBMSWorker.logger.info("Enter the file path...");
-			String filePath = "hdfs://17.17.0.5:9000/user/root/input/log4j.properties";
-			try {
-				Path path = new Path(filePath);
-				FileSystem fs = path.getFileSystem(conf);
-				FSDataInputStream inputStream = fs.open(path);
-				HRDBMSWorker.logger.info("isavail " + inputStream.available());
-				fs.close();
-			} catch(Exception e) {
-				HRDBMSWorker.logger.warn("banned", e);
-			}
 			done = true;
 			meta.getTableMetaLock().lock();
 			meta.createExternalTable(schema, table, cols, tx, javaClassName, params);

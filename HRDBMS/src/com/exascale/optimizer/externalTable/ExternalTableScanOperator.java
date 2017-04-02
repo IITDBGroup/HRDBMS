@@ -30,7 +30,7 @@ public final class ExternalTableScanOperator extends TableScanOperator
     public ExternalTableScanOperator(ExternalTableType tableImpl, final String schema, final String name, final MetaData meta, final Transaction tx) throws Exception {
 		super(schema, name, meta, tx);
 		this.tableImpl = tableImpl;
-	}
+    }
 
     public ExternalTableScanOperator(ExternalTableType tableImpl, final String schema, final String name, final MetaData meta, final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> tablePos2Col, final HashMap<String, String> tableCols2Types, final HashMap<String, Integer> tableCols2Pos) throws Exception
     {
@@ -39,7 +39,6 @@ public final class ExternalTableScanOperator extends TableScanOperator
     }
 
 	public static ExternalTableScanOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception {
-        // TODO fix code duplication
         final ExternalTableScanOperator value = (ExternalTableScanOperator) unsafe.allocateInstance(ExternalTableScanOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
         value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
@@ -87,7 +86,6 @@ public final class ExternalTableScanOperator extends TableScanOperator
 
 	@Override
 	public ExternalTableScanOperator clone() {
-		// code duplication
 		ExternalTableScanOperator retval = null;
 		try
 		{
@@ -139,7 +137,15 @@ public final class ExternalTableScanOperator extends TableScanOperator
 		return retval;
 	}
 
-    @Override
+	@Override
+    public void setNeededCols(ArrayList<String> needed)
+    {
+        // method body intentionally left blank
+		// to prevent column disorder in SELECT from external source
+    }
+
+
+	@Override
     public void start() throws Exception
     {
 		tableImpl.setCols2Pos(cols2Pos);
@@ -180,7 +186,6 @@ public final class ExternalTableScanOperator extends TableScanOperator
 	@Override
 	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
 	{
-        // TODO fix code duplication
 		final Long id = prev.get(this);
 		if (id != null)
 		{

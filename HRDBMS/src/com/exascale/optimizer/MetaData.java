@@ -316,6 +316,12 @@ public final class MetaData implements Serializable
 
         if(extObject instanceof ExternalTableType) {
             ExternalTableType extTable = (ExternalTableType) extObject;
+            extTable.setCols2Types(getCols2TypesForTable(theSchema, theTable, tx));
+            HashMap<String, Integer> cols2Pos = getCols2PosForTable(theSchema, theTable, tx);
+            extTable.setCols2Pos(cols2Pos);
+            extTable.setPos2Col(cols2PosFlip(cols2Pos));
+            extTable.setName(theTable);
+            extTable.setSchema(theSchema);
             extTable.setParams(
                     JSONUtils.toObject(meta.get(1).toString(), extTable.getParamsClass())
             );

@@ -3,6 +3,8 @@ package com.exascale.optimizer.externalTable;
 import com.exascale.misc.HrdbmsType;
 import com.exascale.misc.MyDate;
 import com.exascale.optimizer.OperatorUtils;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.*;
 
 import java.io.*;
 import java.lang.reflect.Field;
@@ -67,10 +69,19 @@ public class HTTPCsvExternal  implements ExternalTableType, Serializable
 	public void start()
 	{
 		try {
-			URL csvFile = new URL(params.getLocation());
-			input = new BufferedReader(new InputStreamReader(csvFile.openStream()));
+            if (params.getSource() == CsvExternalParams.Source.HDFS) {
+                Configuration conf = new Configuration();
+                Path path = new Path(params.getLocation());
+                FileSystem fs = path.getFileSystem(conf);
+                FSDataInputStream inputStream = fs.open(path);
+                System.out.println(inputStream.available());
+                input = new BufferedReader(new InputStreamReader(inputStream));
+            } else if (params.getSource() == CsvExternalParams.Source.URL) {
+                URL csvFile = new URL(params.getLocation());
+                input = new BufferedReader(new InputStreamReader(csvFile.openStream()));
+            }
 		} catch (Exception e) {
-			throw new ExternalTableException("Unable to download CSV file " + params.getLocation());
+			throw new ExternalTableException("Unable to read CSV file " + params.getLocation());
 		}
 
 		skipHeader();
@@ -118,7 +129,7 @@ public class HTTPCsvExternal  implements ExternalTableType, Serializable
 
 	@Override
 	public boolean hasNext() {
-		throw new UnsupportedOperationException("hasNext method is not supported in HTTPCsvExternal in this stage");
+		throw new UnsupportedOperationException("hasNext method is not supported in CsvExternal in this stage");
 	}
 
 	/** Convert csv line into table row.
@@ -173,7 +184,7 @@ public class HTTPCsvExternal  implements ExternalTableType, Serializable
 	@Override
 	public void reset()
 	{
-		throw new UnsupportedOperationException("Reset method is not supported in HTTPCsvExternal in this stage");
+		throw new UnsupportedOperationException("Reset method is not supported in CsvExternal in this stage");
 	}
 
 	@Override

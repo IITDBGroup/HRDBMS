@@ -5,7 +5,7 @@ docker-compose -f ./../docker-compose.yml -f ./docker-compose.yml down
 docker-compose -f ./../docker-compose.yml -f ./docker-compose.yml up -d
 
 #start hrdbms
-docker exec --user hrdbms hrdbms_coordinator java -cp /home/hrdbms/app/build/HRDBMS.jar: StartDB
+docker exec --user hrdbms hrdbmscoordinator java -cp /home/hrdbms/app/build/HRDBMS.jar: StartDB
 
 # wait until hadoop is launched
 sleep 10
