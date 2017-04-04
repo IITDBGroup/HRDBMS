@@ -1,7 +1,7 @@
 version: "2.0"
 services:
   node:
-    image: iitdbgroup/hrdbms:latest
+    image: iitdbgroup/hrdbms:dev-env
     container_name: "hrdbmsnode"
     volumes:
         - ../../../:/home/hrdbms/app:z
