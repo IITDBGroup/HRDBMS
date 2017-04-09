@@ -19,7 +19,7 @@ public class HDFSRead4 {
         Path path = new Path(filePath);
         DistributedFileSystem fs = (DistributedFileSystem) path.getFileSystem(conf);
         HdfsDataInputStream inputStream = (HdfsDataInputStream) fs.open(path);
-
+        String previousLine = "";
         List<LocatedBlock> blocks = inputStream.getAllBlocks();
         for (LocatedBlock b : blocks) {
             DFSClient dfsClient = fs.getClient();
@@ -36,7 +36,6 @@ public class HDFSRead4 {
             long bytesRead = 0;
             ByteBuffer bb = ByteBuffer.wrap(buf);
             BufferedReader r = wrapByteBuffer(bb);
-            String inputLine;
             try {
                 while ((cnt = blockReader.read(bb)) > 0) {
                     bytesRead += cnt;
@@ -45,9 +44,20 @@ public class HDFSRead4 {
                     throw new IOException("Recorded block size is " + b.getBlock().getNumBytes() +
                             ", but datanode returned " +bytesRead+" bytes");
                 }
+
+                String inputLine;
+                boolean newBlock = true;
                 do {
                     inputLine = r.readLine();
-                    System.out.println(inputLine);
+                    if (inputLine != null) {
+                        if (newBlock) {
+                            previousLine = previousLine + inputLine;
+                            newBlock = false;
+                        } else {
+                            System.out.println(previousLine);
+                            previousLine = inputLine;
+                        }
+                    }
                 } while (inputLine != null);
 
             } catch (Exception e) {
@@ -55,8 +65,9 @@ public class HDFSRead4 {
             } finally {
                 try {blockReader.close(); } catch (Exception e1) {}
             }
-
         }
+        if (!previousLine.equals(""))
+            System.out.println(previousLine);
         fs.close();
 
     }
