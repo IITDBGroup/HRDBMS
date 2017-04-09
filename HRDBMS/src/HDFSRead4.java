@@ -15,10 +15,7 @@ public class HDFSRead4 {
     public static void main(String[] args) throws IOException {
 
         Configuration conf = new Configuration();
-        conf.addResource(new Path("core-site.xml"));
-        conf.addResource(new Path("hdfs-site.xml"));
-
-        String filePath = "hdfs://17.17.0.5:9000/user/root/csv_type.csv";
+        String filePath = "hdfs://17.17.0.5:9000/user/root/file.csv";
         Path path = new Path(filePath);
         DistributedFileSystem fs = (DistributedFileSystem) path.getFileSystem(conf);
         HdfsDataInputStream inputStream = (HdfsDataInputStream) fs.open(path);
@@ -31,25 +28,28 @@ public class HDFSRead4 {
             DatanodeInfo chosenNode = b.getLocations()[0];
             String var9 = chosenNode.getXferAddr(false);
             InetSocketAddress targetAddr = NetUtils.createSocketAddr(var9);
-            BlockReader blockReader = (new BlockReaderFactory(fs.getClient().getConf())).setInetSocketAddress(targetAddr).setRemotePeerFactory(fs.getClient()).setDatanodeInfo(  chosenNode ).setStorageType(b.getStorageTypes()[0]).setFileName(/* this.src */ path.toUri().getPath()).setBlock(b.getBlock()).setBlockToken(b.getBlockToken()).setStartOffset(b.getStartOffset()).setVerifyChecksum(true).setClientName(fs.getClient().getClientName()).setLength(b.getBlock().getNumBytes() - b.getStartOffset()).setCachingStrategy(dfsClient.getDefaultReadCachingStrategy()).setAllowShortCircuitLocalReads(true).setClientCacheContext(dfsClient.getClientContext())/*.setUserGroupInformation(dfsClient.ugi)*/.setConfiguration(conf).build();
-            byte[] buf = new byte[1024];
+            BlockReader blockReader = (new BlockReaderFactory(fs.getClient().getConf())).setInetSocketAddress(targetAddr).setRemotePeerFactory(fs.getClient()).setDatanodeInfo(  chosenNode ).setStorageType(b.getStorageTypes()[0]).setFileName(/* this.src */ path.toUri().getPath()).setBlock(b.getBlock()).setBlockToken(b.getBlockToken()).setStartOffset(0).setVerifyChecksum(true).setClientName(fs.getClient().getClientName()).setLength(b.getBlock().getNumBytes()).setCachingStrategy(dfsClient.getDefaultReadCachingStrategy()).setAllowShortCircuitLocalReads(true).setClientCacheContext(dfsClient.getClientContext())/*.setUserGroupInformation(dfsClient.ugi)*/.setConfiguration(conf).build();
+            // TODO Not sure if it is Ok to have byte buffer with the size equal to a block size.
+            //      Believe we may need to fix the code.
+            byte[] buf = new byte[(int) b.getBlockSize()];
             int cnt = 0;
             long bytesRead = 0;
+            ByteBuffer bb = ByteBuffer.wrap(buf);
+            BufferedReader r = wrapByteBuffer(bb);
+            String inputLine;
             try {
-                while ((cnt = blockReader.read(buf, 0, buf.length)) > 0) {
-                    ByteBuffer bb = ByteBuffer.wrap(buf);
-                    BufferedReader r = wrapByteBuffer(bb);
-                    String inputLine;
-                    do {
-                        inputLine = r.readLine();
-                        System.out.println(inputLine);
-                    } while (inputLine != null);
+                while ((cnt = blockReader.read(bb)) > 0) {
                     bytesRead += cnt;
                 }
                 if ( bytesRead != b.getBlock().getNumBytes() ) {
                     throw new IOException("Recorded block size is " + b.getBlock().getNumBytes() +
                             ", but datanode returned " +bytesRead+" bytes");
                 }
+                do {
+                    inputLine = r.readLine();
+                    System.out.println(inputLine);
+                } while (inputLine != null);
+
             } catch (Exception e) {
                 e.printStackTrace();
             } finally {
