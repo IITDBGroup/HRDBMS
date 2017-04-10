@@ -240,6 +240,6 @@ public final class ExternalTableScanOperator extends TableScanOperator
         } else {
             return row;
         }
-		return null;
+		return next(op);
 	}
 }
