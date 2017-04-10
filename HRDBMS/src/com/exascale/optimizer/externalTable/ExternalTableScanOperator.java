@@ -172,18 +172,6 @@ public final class ExternalTableScanOperator extends TableScanOperator
 	}
 
 	@Override
-	public void registerParent(Operator op)
-	{
-		if(parents.isEmpty()) {
-			super.registerParent(op);
-		}
-		else
-		{
-			throw new UnsupportedOperationException("ExternalTableScanOperator only supports 1 parent.");
-		}
-	}
-
-	@Override
 	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		final Long id = prev.get(this);
@@ -235,19 +223,23 @@ public final class ExternalTableScanOperator extends TableScanOperator
 	}
 
 	@Override
-	public String toString()
-	{
-		return "ExternalTableScanOperator";
-	}
-
-	@Override
 	public Object next(final Operator op) throws Exception
 	{
         List<?> row = tableImpl.next();
-		if (row == null) {
-			return new DataEndMarker();
-		} else {
-			return row;
-		}
+        if (row == null) {
+            return new DataEndMarker();
+        }
+
+        CNFFilter filter = orderedFilters.get(parents.get(0));
+        if (filter != null)
+        {
+            if (filter.passes((ArrayList<Object>)row))
+            {
+                return row;
+            }
+        } else {
+            return row;
+        }
+		return null;
 	}
 }
