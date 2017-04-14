@@ -766,6 +766,20 @@ public class OperatorUtils
         return CsvExternalParams.deserializeKnown(in, prev); // type already read
     }
 
+	public static HDFSCsvExternal deserializeHDFSCsvExternal(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	{
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
+		{
+			return (HDFSCsvExternal)readReference(in, prev);
+		}
+		if (!HrdbmsType.HDFSCSVEXTERNALTABLE.equals(type))
+		{
+			throw new Exception("Corrupted stream. Expected type EXTERNALTABLE but received " + type);
+		}
+		return HDFSCsvExternal.deserializeKnown(in, prev); // type already read
+	}
+
     public static FastStringTokenizer deserializeFST(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
@@ -2037,6 +2051,19 @@ public class OperatorUtils
 		}
 		csv.serialize(out, prev);
 	}
+
+    /**
+     * Serialize CSV External Table Implementation
+     */
+    public static void serializeHDFSCsvExternal(final HDFSCsvExternal csv, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+    {
+        if (csv == null)
+        {
+            writeType(HrdbmsType.HDFSCSVEXTERNALTABLE, out);
+            return;
+        }
+        csv.serialize(out, prev);
+    }
 
 	/**
 	 * Serialize CSV External Table Parameters

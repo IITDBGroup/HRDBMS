@@ -36,13 +36,13 @@ public class HTTPCsvExternal  implements ExternalTableType, Serializable
 	protected String schema;
 
 	/** Reader to read csv file */
-	private BufferedReader input;
+	protected BufferedReader input;
 
 	/** Line in CSV file */
-	private int line = 0;
+	protected int line = 0;
 
 	/** Parameters defined in SYS.EXTERNALTABLES */
-	private CsvExternalParams params;
+	protected CsvExternalParams params;
 
     public Class getParamsClass() throws NoSuchFieldException
     {
@@ -88,7 +88,7 @@ public class HTTPCsvExternal  implements ExternalTableType, Serializable
 	}
 
 	/** Skip header of CSV file if metadata parameters define to do so */
-	private void skipHeader() {
+	protected void skipHeader() {
 		try {
 			if (params.getIgnoreHeader()) {
 				// skip header;
@@ -134,7 +134,7 @@ public class HTTPCsvExternal  implements ExternalTableType, Serializable
 
 	/** Convert csv line into table row.
 	 *  Runtime exception is thrown when type of CSV column does not match type of table column	 */
-	private ArrayList<Object> convertCsvLineToObject(final String inputLine)
+	protected ArrayList<Object> convertCsvLineToObject(final String inputLine)
 	{
 		final ArrayList<Object> retval = new ArrayList<Object>();
 		ArrayList<String> row = new ArrayList<>(Arrays.asList(inputLine.split(params.getDelimiter())));

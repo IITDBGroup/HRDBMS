@@ -75,7 +75,9 @@ public final class ExternalTableScanOperator extends TableScanOperator
         value.demReceived = false;
         value.tType = OperatorUtils.readInt(in);
         String implClass = OperatorUtils.readString(in, prev);
-        if (implClass.equals("HTTPCsvExternal")) {
+        if (implClass.equals("HDFSCsvExternal")) {
+            value.tableImpl = OperatorUtils.deserializeHDFSCsvExternal(in, prev);
+        } else if (implClass.equals("HTTPCsvExternal")) {
             value.tableImpl = OperatorUtils.deserializeCSVExternal(in, prev);
         } else {
             throw new Exception("Unknown External Table implementation");
@@ -214,7 +216,10 @@ public final class ExternalTableScanOperator extends TableScanOperator
 		OperatorUtils.writeLong(sPer, out);
 		OperatorUtils.serializeIndex(scanIndex, out, prev);
 		OperatorUtils.writeInt(tType, out);
-        if (tableImpl instanceof HTTPCsvExternal) {
+        if (tableImpl instanceof HDFSCsvExternal) {
+            OperatorUtils.writeString("HDFSCsvExternal", out, prev);
+            OperatorUtils.serializeHDFSCsvExternal((HDFSCsvExternal) tableImpl, out, prev);
+        } else if (tableImpl instanceof HTTPCsvExternal) {
             OperatorUtils.writeString("HTTPCsvExternal", out, prev);
             OperatorUtils.serializeCsvExternal((HTTPCsvExternal) tableImpl, out, prev);
         } else {
@@ -225,21 +230,20 @@ public final class ExternalTableScanOperator extends TableScanOperator
 	@Override
 	public Object next(final Operator op) throws Exception
 	{
-        List<?> row = tableImpl.next();
-        if (row == null) {
-            return new DataEndMarker();
-        }
+        do {
+            List<?> row = tableImpl.next();
+            if (row == null) {
+                return new DataEndMarker();
+            }
 
-        CNFFilter filter = orderedFilters.get(parents.get(0));
-        if (filter != null)
-        {
-            if (filter.passes((ArrayList<Object>)row))
-            {
+            CNFFilter filter = orderedFilters.get(parents.get(0));
+            if (filter != null) {
+                if (filter.passes((ArrayList<Object>) row)) {
+                    return row;
+                }
+            } else {
                 return row;
             }
-        } else {
-            return row;
-        }
-		return next(op);
+        } while (true);
 	}
 }
