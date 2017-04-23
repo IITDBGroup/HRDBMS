@@ -20,7 +20,6 @@ import java.util.concurrent.locks.LockSupport;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.HJOMultiHashMap;
-import com.exascale.optimizer.MetaData.PartitionMetaData;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.ConnectionWorker;
@@ -477,7 +476,7 @@ public final class InsertOperator implements Operator, Serializable
 		}
 
 		Object o = child.next(this);
-		final PartitionMetaData pmeta = new MetaData().new PartitionMetaData(schema, table, tx);
+		final PartitionMetaData pmeta = new PartitionMetaData(schema, table, tx);
 		final int numNodes = MetaData.numWorkerNodes;
 		MasterFlushThread mft = null;
 		

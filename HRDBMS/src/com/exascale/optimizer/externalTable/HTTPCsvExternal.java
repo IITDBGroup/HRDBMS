@@ -11,6 +11,7 @@ import java.lang.reflect.Field;
 import java.net.URL;
 import java.util.*;
 
+/** External table implementation providing ability to read CSV from a URL */
 public class HTTPCsvExternal  implements ExternalTableType, Serializable
 {
 	private static sun.misc.Unsafe unsafe;

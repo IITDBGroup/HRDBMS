@@ -17,10 +17,10 @@ import org.apache.hadoop.net.NetUtils;
 import java.io.*;
 import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
-import java.net.URL;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+/** External table implementation for reading from an HDFS URL */
 public class HDFSCsvExternal extends HTTPCsvExternal
 {
 	private static sun.misc.Unsafe unsafe;
@@ -41,14 +41,12 @@ public class HDFSCsvExternal extends HTTPCsvExternal
 
 	private DFSClient dfsClient;
 	private List<LocatedBlock> blocks;
-	private String previousLine = "";
     private Path path;
     private Configuration conf;
     private Iterator blockIterator;
     private Long blockId;
     private int node;
     private int numNodes;
-
 
     /** Parameters defined in SYS.EXTERNALTABLES */
     protected CsvExternalParams params;
@@ -76,7 +74,6 @@ public class HDFSCsvExternal extends HTTPCsvExternal
         }
     }
 
-
     @Override
 	public void start()
 	{
@@ -93,7 +90,6 @@ public class HDFSCsvExternal extends HTTPCsvExternal
         } catch (Exception e) {
 			throw new ExternalTableException("Unable to download CSV file " + params.getLocation());
 		}
-
 	}
 
     /** Skip header of CSV file if metadata parameters define to do so */
@@ -144,7 +140,6 @@ public class HDFSCsvExternal extends HTTPCsvExternal
         return null;
     }
 
-
     /** Convert csv line into table row.
      *  Runtime exception is thrown when type of CSV column does not match type of table column	 */
     protected ArrayList<Object> convertCsvLineToObject(final ArrayList<String> row)
@@ -194,7 +189,7 @@ public class HDFSCsvExternal extends HTTPCsvExternal
 	@Override
 	public void reset()
 	{
-		throw new UnsupportedOperationException("Reset method is not supported in HTTPCsvExternal in this stage");
+		throw new UnsupportedOperationException("Reset method is not supported in HDFSCsvExternal in this stage");
 	}
 
     public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception {
@@ -208,7 +203,6 @@ public class HDFSCsvExternal extends HTTPCsvExternal
         prev.put(this, OperatorUtils.writeID(out));
         OperatorUtils.serializeCSVExternalParams(params, out, prev);
     }
-
 
 	public static HDFSCsvExternal deserializeKnown(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
@@ -268,5 +262,4 @@ public class HDFSCsvExternal extends HTTPCsvExternal
     private static BufferedReader wrapByteBuffer(ByteBuffer byteBuffer) {
         return wrapByteArray(byteBuffer.array());
     }
-
 }

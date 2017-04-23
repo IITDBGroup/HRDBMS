@@ -270,7 +270,7 @@ public final class Phase2
 						// node is hash or range
 						// node is set or ALL
 						ArrayList<Integer> nodeList = t.getNodeList();
-						if (nodeList.get(0) == MetaData.PartitionMetaData.NODE_ALL)
+						if (nodeList.get(0) == PartitionMetaData.NODE_ALL)
 						{
 							nodeList = MetaData.getNodesForTable(t.getSchema(), t.getTable(), tx);
 						}

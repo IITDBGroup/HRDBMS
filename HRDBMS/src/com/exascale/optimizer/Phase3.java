@@ -8,7 +8,7 @@ import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
-import com.exascale.optimizer.MetaData.PartitionMetaData;
+import com.exascale.optimizer.PartitionMetaData;
 import com.exascale.tables.Transaction;
 
 /** Pushes operators from the coordinator down to the worker nodes.  Makes hierarchical intermediate layers if the coordinator would be talking to too many nodes. */

@@ -82,7 +82,7 @@ import com.exascale.optimizer.IndexOperator;
 import com.exascale.optimizer.InsertOperator;
 import com.exascale.optimizer.LoadMetaData;
 import com.exascale.optimizer.MetaData;
-import com.exascale.optimizer.MetaData.PartitionMetaData;
+import com.exascale.optimizer.PartitionMetaData;
 import com.exascale.optimizer.NetworkReceiveOperator;
 import com.exascale.optimizer.NetworkSendOperator;
 import com.exascale.optimizer.Operator;
@@ -4034,7 +4034,7 @@ public class ConnectionWorker extends HRDBMSThread
 				cols2Types2.put(col, (String)entry.getValue());
 			}
 
-			partMeta = new MetaData().new PartitionMetaData(schema, table, ngExp, nExp, dExp, new Transaction(txNum), cols2Types2);
+			partMeta = new PartitionMetaData(schema, table, ngExp, nExp, dExp, new Transaction(txNum), cols2Types2);
 		}
 		catch (final Exception e)
 		{
@@ -6548,7 +6548,7 @@ public class ConnectionWorker extends HRDBMSThread
 				cols2Types2.put(col, (String)entry.getValue());
 			}
 
-			pmd = new MetaData().new PartitionMetaData(schema, table, ngExp, nExp, dExp, new Transaction(txNum), cols2Types2);
+			pmd = new PartitionMetaData(schema, table, ngExp, nExp, dExp, new Transaction(txNum), cols2Types2);
 		}
 		catch (final Exception e)
 		{

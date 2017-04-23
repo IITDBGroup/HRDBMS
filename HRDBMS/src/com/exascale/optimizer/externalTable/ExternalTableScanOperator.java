@@ -31,14 +31,14 @@ public final class ExternalTableScanOperator extends TableScanOperator
     public ExternalTableScanOperator(ExternalTableType tableImpl, final String schema, final String name, final MetaData meta, final Transaction tx) throws Exception {
 		super(schema, name, meta, tx);
 		this.tableImpl = tableImpl;
-        this.numNodes = meta.numWorkerNodes;
+        this.numNodes = MetaData.numWorkerNodes;
     }
 
     public ExternalTableScanOperator(ExternalTableType tableImpl, final String schema, final String name, final MetaData meta, final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> tablePos2Col, final HashMap<String, String> tableCols2Types, final HashMap<String, Integer> tableCols2Pos) throws Exception
     {
         super(schema, name, meta, cols2Pos, pos2Col, cols2Types, tablePos2Col, tableCols2Types, tableCols2Pos);
         this.tableImpl = tableImpl;
-        this.numNodes = meta.numWorkerNodes;
+        this.numNodes = MetaData.numWorkerNodes;
     }
 
 	public static ExternalTableScanOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception {
@@ -79,9 +79,9 @@ public final class ExternalTableScanOperator extends TableScanOperator
         value.demReceived = false;
         value.tType = OperatorUtils.readInt(in);
         String implClass = OperatorUtils.readString(in, prev);
-        if (implClass.equals("HDFSCsvExternal")) {
+        if (implClass.equals(HDFSCsvExternal.class.getSimpleName())) {
             value.tableImpl = OperatorUtils.deserializeHDFSCsvExternal(in, prev);
-        } else if (implClass.equals("HTTPCsvExternal")) {
+        } else if (implClass.equals(HTTPCsvExternal.class.getSimpleName())) {
             value.tableImpl = OperatorUtils.deserializeCSVExternal(in, prev);
         } else {
             throw new Exception("Unknown External Table implementation");
@@ -227,10 +227,10 @@ public final class ExternalTableScanOperator extends TableScanOperator
 		OperatorUtils.serializeIndex(scanIndex, out, prev);
 		OperatorUtils.writeInt(tType, out);
         if (tableImpl instanceof HDFSCsvExternal) {
-            OperatorUtils.writeString("HDFSCsvExternal", out, prev);
+            OperatorUtils.writeString(HDFSCsvExternal.class.getSimpleName(), out, prev);
             OperatorUtils.serializeHDFSCsvExternal((HDFSCsvExternal) tableImpl, out, prev);
         } else if (tableImpl instanceof HTTPCsvExternal) {
-            OperatorUtils.writeString("HTTPCsvExternal", out, prev);
+            OperatorUtils.writeString(HTTPCsvExternal.class.getSimpleName(), out, prev);
             OperatorUtils.serializeCsvExternal((HTTPCsvExternal) tableImpl, out, prev);
         } else {
             throw new Exception("Unknown External Table implementation");

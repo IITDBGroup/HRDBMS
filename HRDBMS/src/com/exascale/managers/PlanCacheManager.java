@@ -24,6 +24,7 @@ import com.exascale.tables.SQL;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.XAWorker;
 
+/** Maintains a cache of query plans for commonly run queries internal to HRDBMS */
 public class PlanCacheManager
 {
 	private static ConcurrentHashMap<SQL, Plan> planCache = new ConcurrentHashMap<SQL, Plan>(16, 0.75f, 6 * ResourceManager.cpus);

@@ -4,7 +4,6 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.TreeMap;
-import com.exascale.optimizer.MetaData.PartitionMetaData;
 
 public class LoadMetaData implements Serializable
 {

@@ -48,7 +48,6 @@ import com.exascale.misc.LOMultiHashMap;
 import com.exascale.misc.MyDate;
 import com.exascale.misc.ScalableStampedRWLock;
 import com.exascale.misc.Utils;
-import com.exascale.optimizer.MetaData.PartitionMetaData;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.HRDBMSThread;
@@ -1559,7 +1558,7 @@ public final class LoadOperator implements Operator, Serializable
 			{
 				final BufferedReader in = new BufferedReader(new FileReader(file), 64 * 1024);
 				Object o = next(in);
-				final PartitionMetaData pmeta = new MetaData().new PartitionMetaData(schema, table, tx);
+				final PartitionMetaData pmeta = new PartitionMetaData(schema, table, tx);
 				final int numNodes = MetaData.numWorkerNodes;
 				while (!(o instanceof DataEndMarker))
 				{
