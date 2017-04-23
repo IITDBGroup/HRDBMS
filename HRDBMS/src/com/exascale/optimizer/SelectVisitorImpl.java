@@ -263,6 +263,9 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 			String params = ctx.javaClassExtTableSpec().json().getText();
 			JSONUtils.validate(javaClassName, params);
 			JavaClassExtTableSpec javaClassExtTableSpec = new JavaClassExtTableSpec(javaClassName, params);
+			if (javaClassName.equals("com.exascale.optimizer.externalTable.HDFSCsvExternal")) {
+				cols.add(new ColDef(new Column("_HDFS_BLOCK_ID"), "INT", false, false));
+			}
 			return new CreateExternalTable(table, cols, javaClassExtTableSpec);
 		}
 	}

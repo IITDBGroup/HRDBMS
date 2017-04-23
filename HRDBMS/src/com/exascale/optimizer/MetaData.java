@@ -334,8 +334,7 @@ public final class MetaData implements Serializable
 	public void createExternalTable(String schema, String table, List<ColDef> defs, Transaction tx, String javaClassName, String params) throws Exception
 	{
 		HashMap<String, String> cols2Types = getCols2Types(defs);
-		// TODO setup partionion metadata according to type of external source
-		new MetaData().new PartitionMetaData(schema, table, "NONE", "ALL,HASH,{R_COL1}", "ALL,HASH,{R_COL1}", tx, cols2Types);
+		new MetaData().new PartitionMetaData(schema, table, "NONE", "ANY", "ALL,HASH,{COL}", tx, cols2Types);
 		// tables
 		// cols
 		// indexes
@@ -372,7 +371,11 @@ public final class MetaData implements Serializable
 
 		String partColName = defs.get(0).getCol().getColumn();
 
-		PlanCacheManager.getInsertPartition().setParms(tableID, "NONE", "ANY", "ALL,HASH,{"+ partColName +"}").execute(tx);
+		if (javaClassName.equals("com.exascale.optimizer.externalTable.HDFSCsvExternal")) {
+			PlanCacheManager.getInsertPartition().setParms(tableID, "NONE", "ALL,HASH,{_HDFS_BLOCK_ID}", "ALL,HASH,{" + partColName + "}").execute(tx);
+		} else {
+			PlanCacheManager.getInsertPartition().setParms(tableID, "NONE", "ANY", "ALL,HASH,{" + partColName + "}").execute(tx);
+		}
 		// int indexID = -1;
 		// if (pks != null && pks.size() != 0)
 		// {

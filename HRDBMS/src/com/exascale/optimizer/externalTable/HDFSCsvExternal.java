@@ -45,9 +45,23 @@ public class HDFSCsvExternal extends HTTPCsvExternal
     private Path path;
     private Configuration conf;
     private Iterator blockIterator;
+    private Long blockId;
+    private int node;
+    private int numNodes;
+
 
     /** Parameters defined in SYS.EXTERNALTABLES */
     protected CsvExternalParams params;
+
+    public void setNumNodes(int numNodes)
+    {
+        this.numNodes = numNodes;
+    }
+
+    public void setNode(int node)
+    {
+        this.node = node;
+    }
 
     public Class getParamsClass() throws NoSuchFieldException
     {
@@ -74,9 +88,8 @@ public class HDFSCsvExternal extends HTTPCsvExternal
 			blocks = inputStream.getAllBlocks();
 			dfsClient = fs.getClient();
             blockIterator = blocks.iterator();
-            LocatedBlock block = (LocatedBlock) blockIterator.next();
-            readBlock(block);
-            skipHeader();
+            readBlock();
+            skipHeader();  // it is a possible bug if we have multiple workers
         } catch (Exception e) {
 			throw new ExternalTableException("Unable to download CSV file " + params.getLocation());
 		}
@@ -103,57 +116,47 @@ public class HDFSCsvExternal extends HTTPCsvExternal
             line++;
             inputLine = input.readLine();
 
-            // we can put the logic as follows:
-            // output previous line only
-            // if we read a new block, we check if previous line is full line
-            //     if previous line is fully completed csv line, we output the line
-            //     if it is not, we output previous line + current
-            if (inputLine == null && blockIterator.hasNext()) {
-                LocatedBlock block = (LocatedBlock) blockIterator.next();
-                readBlock(block);
-                inputLine = input.readLine();
-            }
-
-                /** This is the parser splitting the data that it found into columns of a map. */
-            if (inputLine != null)
+            while (inputLine != null || (inputLine == null && blockIterator.hasNext()))
             {
-                // temporal solution - skipping lines split across two blocks
-                ArrayList<String> row = new ArrayList<>(Arrays.asList(inputLine.split(params.getDelimiter())));
-                if (row.size() != pos2Col.size()) {
-                    inputLine = input.readLine();
-                    inputLine = input.readLine();
+                if (inputLine == null && blockIterator.hasNext()) {
+                    if (readBlock())
+                        inputLine = input.readLine();
+                    else
+                        return null;
                 }
-                return convertCsvLineToObject(inputLine);
-            } else {
-                return null;
+                if (inputLine != null) {
+                    // temporal solution - skipping lines that do not have necessary quantity of columns
+                    ArrayList<String> row = new ArrayList<>(Arrays.asList(inputLine.split(params.getDelimiter())));
+                    if (row.size() + 1 != pos2Col.size()) {
+                        inputLine = input.readLine();
+                    } else {
+                        try {
+                            return convertCsvLineToObject(row);
+                        } catch (Exception e) {
+                            inputLine = input.readLine();
+                        }
+                    }
+                }
             }
-
         } catch (Exception e) {
             throw new ExternalTableException("Unable to read line "+ line +" in CSV file " + params.getLocation());
         }
+        return null;
     }
 
 
     /** Convert csv line into table row.
      *  Runtime exception is thrown when type of CSV column does not match type of table column	 */
-    protected ArrayList<Object> convertCsvLineToObject(final String inputLine)
+    protected ArrayList<Object> convertCsvLineToObject(final ArrayList<String> row)
     {
         final ArrayList<Object> retval = new ArrayList<Object>();
-        ArrayList<String> row = new ArrayList<>(Arrays.asList(inputLine.split(params.getDelimiter())));
-        if (row.size() != pos2Col.size()) {
-            throw new ExternalTableException(
-                    "Line: " + line
-                            + ".\nSize of external table does not match column count in CSV file '" + params.getLocation() + "'."
-                            + "\nColumns in csv file: " + row.size()
-                            + "\nColumns defined in external table schema: " + pos2Col.size()
-            );
-        }
-
         int column = 0;
         for (final Map.Entry<Integer, String> entry : pos2Col.entrySet()) {
             String type = cols2Types.get(entry.getValue());
             try {
-                if (type.equals("INT")) {
+                if (entry.getKey() == row.size()) {
+                    retval.add(blockId);
+                } else if (type.equals("INT")) {
                     retval.add(Integer.parseInt(row.get(column)));
                 } else if (type.equals("LONG")) {
                     retval.add(Long.parseLong(row.get(column)));
@@ -215,9 +218,17 @@ public class HDFSCsvExternal extends HTTPCsvExternal
 		return value;
 	}
 
-	private void readBlock(LocatedBlock block)
+	private boolean readBlock()
 	{
         try {
+            LocatedBlock block = (LocatedBlock) blockIterator.next();
+            blockId = block.getBlock().getBlockId();
+            if (blockId % numNodes != node) {
+                if (blockIterator.hasNext())
+                    return readBlock();
+                else
+                    return false;
+            }
             // it should be a better way to choose node
             DatanodeInfo chosenNode = block.getLocations()[0];
             String var9 = chosenNode.getXferAddr(false);
@@ -243,6 +254,7 @@ public class HDFSCsvExternal extends HTTPCsvExternal
 		} catch (Exception e) {
             throw new ExternalTableException("Block reading error: " + e.getMessage());
 		}
+		return true;
 	}
 
     private static BufferedReader wrapByteArray(byte[] byteArr) {

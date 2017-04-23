@@ -16,6 +16,7 @@ public final class ExternalTableScanOperator extends TableScanOperator
 {
 	private static sun.misc.Unsafe unsafe;
 	private ExternalTableType tableImpl = null;
+    private int numNodes;
 
 	static {
 		try {
@@ -30,12 +31,14 @@ public final class ExternalTableScanOperator extends TableScanOperator
     public ExternalTableScanOperator(ExternalTableType tableImpl, final String schema, final String name, final MetaData meta, final Transaction tx) throws Exception {
 		super(schema, name, meta, tx);
 		this.tableImpl = tableImpl;
+        this.numNodes = meta.numWorkerNodes;
     }
 
     public ExternalTableScanOperator(ExternalTableType tableImpl, final String schema, final String name, final MetaData meta, final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> tablePos2Col, final HashMap<String, String> tableCols2Types, final HashMap<String, Integer> tableCols2Pos) throws Exception
     {
         super(schema, name, meta, cols2Pos, pos2Col, cols2Types, tablePos2Col, tableCols2Types, tableCols2Pos);
         this.tableImpl = tableImpl;
+        this.numNodes = meta.numWorkerNodes;
     }
 
 	public static ExternalTableScanOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception {
@@ -57,6 +60,7 @@ public final class ExternalTableScanOperator extends TableScanOperator
         value.set = OperatorUtils.readBool(in);
         value.devices = OperatorUtils.deserializeALI(in, prev);
         value.node = OperatorUtils.readInt(in);
+        value.numNodes = OperatorUtils.readInt(in);
         value.phase2Done = OperatorUtils.readBool(in);
         value.device2Child = OperatorUtils.deserializeHMIntOp(in, prev);
         value.children = OperatorUtils.deserializeALOp(in, prev);
@@ -121,6 +125,7 @@ public final class ExternalTableScanOperator extends TableScanOperator
 		retval.partMeta = partMeta;
 		retval.phase2Done = phase2Done;
 		retval.node = node;
+        retval.numNodes = numNodes;
 		retval.sample = sample;
 		retval.sPer = sPer;
 		retval.scanIndex = scanIndex;
@@ -155,7 +160,11 @@ public final class ExternalTableScanOperator extends TableScanOperator
 		tableImpl.setPos2Col(pos2Col);
 		tableImpl.setSchema(schema);
 		tableImpl.setName(name);
-		tableImpl.start();
+        if (tableImpl instanceof HDFSCsvExternal) {
+            ((HDFSCsvExternal) tableImpl).setNode(node);
+            ((HDFSCsvExternal) tableImpl).setNumNodes(numNodes);
+        }
+        tableImpl.start();
     }
 
     @Override
@@ -201,6 +210,7 @@ public final class ExternalTableScanOperator extends TableScanOperator
 		OperatorUtils.writeBool(set, out);
 		OperatorUtils.serializeALI(devices, out, prev);
 		OperatorUtils.writeInt(node, out);
+        OperatorUtils.writeInt(numNodes, out);
 		OperatorUtils.writeBool(phase2Done, out);
 		OperatorUtils.serializeHMIntOp(device2Child, out, prev);
 		OperatorUtils.serializeALOp(children, out, prev);
