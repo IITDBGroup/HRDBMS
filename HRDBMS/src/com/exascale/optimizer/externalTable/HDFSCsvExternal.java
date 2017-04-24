@@ -41,13 +41,13 @@ public class HDFSCsvExternal extends HTTPCsvExternal
 
 	private DFSClient dfsClient;
 	private List<LocatedBlock> blocks;
-	private String previousLine = "";
     private Path path;
     private Configuration conf;
     private Iterator blockIterator;
     private Long blockId;
     private int node;
     private int numNodes;
+    private Long firstBlockId;
 
 
     /** Parameters defined in SYS.EXTERNALTABLES */
@@ -89,7 +89,6 @@ public class HDFSCsvExternal extends HTTPCsvExternal
 			dfsClient = fs.getClient();
             blockIterator = blocks.iterator();
             readBlock();
-            skipHeader();  // it is a possible bug if we have multiple workers
         } catch (Exception e) {
 			throw new ExternalTableException("Unable to download CSV file " + params.getLocation());
 		}
@@ -111,12 +110,15 @@ public class HDFSCsvExternal extends HTTPCsvExternal
 
     @Override
     public ArrayList next() {
+        if (input == null) {
+            return null;
+        }
         String inputLine;
         try {
             line++;
             inputLine = input.readLine();
 
-            while (inputLine != null || (inputLine == null && blockIterator.hasNext()))
+            while (inputLine != null || blockIterator.hasNext())
             {
                 if (inputLine == null && blockIterator.hasNext()) {
                     if (readBlock())
@@ -147,9 +149,9 @@ public class HDFSCsvExternal extends HTTPCsvExternal
 
     /** Convert csv line into table row.
      *  Runtime exception is thrown when type of CSV column does not match type of table column	 */
-    protected ArrayList<Object> convertCsvLineToObject(final ArrayList<String> row)
+    private ArrayList<Object> convertCsvLineToObject(final ArrayList<String> row)
     {
-        final ArrayList<Object> retval = new ArrayList<Object>();
+        final ArrayList<Object> retval = new ArrayList<>();
         int column = 0;
         for (final Map.Entry<Integer, String> entry : pos2Col.entrySet()) {
             String type = cols2Types.get(entry.getValue());
@@ -223,11 +225,11 @@ public class HDFSCsvExternal extends HTTPCsvExternal
         try {
             LocatedBlock block = (LocatedBlock) blockIterator.next();
             blockId = block.getBlock().getBlockId();
+            if (firstBlockId == null) {
+                firstBlockId = blockId;
+            }
             if (blockId % numNodes != node) {
-                if (blockIterator.hasNext())
-                    return readBlock();
-                else
-                    return false;
+                return blockIterator.hasNext() && readBlock();
             }
             // it should be a better way to choose node
             DatanodeInfo chosenNode = block.getLocations()[0];
@@ -254,6 +256,9 @@ public class HDFSCsvExternal extends HTTPCsvExternal
 		} catch (Exception e) {
             throw new ExternalTableException("Block reading error: " + e.getMessage());
 		}
+		if (firstBlockId.equals(blockId)) {
+            skipHeader();
+        }
 		return true;
 	}
 
