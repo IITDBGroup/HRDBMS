@@ -5,7 +5,9 @@ import com.exascale.optimizer.OperatorUtils;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
 
 import java.io.BufferedReader;
 import java.io.InputStream;
@@ -13,6 +15,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.lang.reflect.Field;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -71,14 +74,17 @@ public class CsvExternalParams implements ExternalParamsInterface {
 
     /** Check if file exists in HDFS */
     private static boolean fileExists(String fileName) {
-        try{
-            FileSystem fileSystem = FileSystem.get(new Configuration());
+        try {
+            Configuration conf = new Configuration();
+            conf.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
+            conf.set("fs.file.impl", LocalFileSystem.class.getName());
+            FileSystem fileSystem = FileSystem.get(new URI(fileName), conf);
             Path path = new Path(fileName);
             if (!fileSystem.exists(path)) {
-                throw new RuntimeException("File '" + fileName + "' does not respond");
+                throw new IllegalArgumentException("File '" + fileName + "' does not exist");
             }
-        }catch(Exception e){
-            throw new RuntimeException("File '" + fileName + "' does not respond");
+        } catch(Exception e) {
+            throw new IllegalArgumentException(e);
         }
         return true;
     }

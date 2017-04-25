@@ -22,7 +22,7 @@ import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.MurmurHash;
 import com.exascale.misc.MyDate;
 import com.exascale.optimizer.MetaData;
-import com.exascale.optimizer.MetaData.PartitionMetaData;
+import com.exascale.optimizer.PartitionMetaData;
 
 public class LoadMapper extends Mapper<LongWritable, Text, MyLongWritable, ALOWritable>
 {

@@ -7,7 +7,6 @@ import java.util.HashSet;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import com.exascale.managers.HRDBMSWorker;
-import com.exascale.optimizer.MetaData.PartitionMetaData;
 import com.exascale.tables.Transaction;
 
 /** Employs standard optimizations based on assumption of a single-node execution plan. */

@@ -4,6 +4,7 @@ import com.exascale.misc.HrdbmsType;
 import com.exascale.misc.MyDate;
 import com.exascale.optimizer.OperatorUtils;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.BlockReader;
 import org.apache.hadoop.hdfs.BlockReaderFactory;
@@ -17,10 +18,10 @@ import org.apache.hadoop.net.NetUtils;
 import java.io.*;
 import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
-import java.net.URL;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+/** External table implementation for reading from an HDFS URL */
 public class HDFSCsvExternal extends HTTPCsvExternal
 {
 	private static sun.misc.Unsafe unsafe;
@@ -49,7 +50,6 @@ public class HDFSCsvExternal extends HTTPCsvExternal
     private int numNodes;
     private Long firstBlockId;
 
-
     /** Parameters defined in SYS.EXTERNALTABLES */
     protected CsvExternalParams params;
 
@@ -76,12 +76,13 @@ public class HDFSCsvExternal extends HTTPCsvExternal
         }
     }
 
-
     @Override
 	public void start()
 	{
 		try {
 			conf = new Configuration();
+            conf.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
+            conf.set("fs.file.impl", LocalFileSystem.class.getName());
 			path = new Path(params.getLocation());
 			DistributedFileSystem fs = (DistributedFileSystem) path.getFileSystem(conf);
 			HdfsDataInputStream inputStream = (HdfsDataInputStream) fs.open(path);
@@ -92,7 +93,6 @@ public class HDFSCsvExternal extends HTTPCsvExternal
         } catch (Exception e) {
 			throw new ExternalTableException("Unable to download CSV file " + params.getLocation());
 		}
-
 	}
 
     /** Skip header of CSV file if metadata parameters define to do so */
@@ -146,7 +146,6 @@ public class HDFSCsvExternal extends HTTPCsvExternal
         return null;
     }
 
-
     /** Convert csv line into table row.
      *  Runtime exception is thrown when type of CSV column does not match type of table column	 */
     private ArrayList<Object> convertCsvLineToObject(final ArrayList<String> row)
@@ -196,7 +195,7 @@ public class HDFSCsvExternal extends HTTPCsvExternal
 	@Override
 	public void reset()
 	{
-		throw new UnsupportedOperationException("Reset method is not supported in HTTPCsvExternal in this stage");
+		throw new UnsupportedOperationException("Reset method is not supported in HDFSCsvExternal in this stage");
 	}
 
     public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception {
@@ -210,7 +209,6 @@ public class HDFSCsvExternal extends HTTPCsvExternal
         prev.put(this, OperatorUtils.writeID(out));
         OperatorUtils.serializeCSVExternalParams(params, out, prev);
     }
-
 
 	public static HDFSCsvExternal deserializeKnown(final InputStream in, final HashMap<Long, Object> prev) throws Exception
 	{
@@ -273,5 +271,4 @@ public class HDFSCsvExternal extends HTTPCsvExternal
     private static BufferedReader wrapByteBuffer(ByteBuffer byteBuffer) {
         return wrapByteArray(byteBuffer.array());
     }
-
 }
