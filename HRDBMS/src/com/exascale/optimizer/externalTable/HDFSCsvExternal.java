@@ -4,6 +4,7 @@ import com.exascale.misc.HrdbmsType;
 import com.exascale.misc.MyDate;
 import com.exascale.optimizer.OperatorUtils;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.BlockReader;
 import org.apache.hadoop.hdfs.BlockReaderFactory;
@@ -79,6 +80,8 @@ public class HDFSCsvExternal extends HTTPCsvExternal
 	{
 		try {
 			conf = new Configuration();
+            conf.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
+            conf.set("fs.file.impl", LocalFileSystem.class.getName());
 			path = new Path(params.getLocation());
 			DistributedFileSystem fs = (DistributedFileSystem) path.getFileSystem(conf);
 			HdfsDataInputStream inputStream = (HdfsDataInputStream) fs.open(path);
