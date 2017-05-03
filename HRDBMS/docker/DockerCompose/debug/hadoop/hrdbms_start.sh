@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+docker network create -d bridge --subnet 17.17.0.0/8 --gateway 17.17.0.1 appnet
+
 docker-compose -f ./../docker-compose.yml -f ./docker-compose.yml down
 # merging two compose yml files: fist one sets up hrdbms, second - hadoop
 docker-compose -f ./../docker-compose.yml -f ./docker-compose.yml up -d

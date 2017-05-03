@@ -21,7 +21,6 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /** External table implementation for reading from an HDFS URL */
 public class HDFSCsvExternal extends HTTPCsvExternal
@@ -48,64 +47,65 @@ public class HDFSCsvExternal extends HTTPCsvExternal
     private Path path;
     private Configuration conf;
     private Long blockId;
+    private int curentBlockIndex;
     private int node;
     private int numNodes;
-    private AtomicInteger currentBlockIndex;
+    private int line;
 
     private class ProcessingBlock
     {
-        private boolean firstLine;
-        private boolean lastLine;
+        private boolean firstLine = false;
+        private boolean lastLine = false;
         private String previousLine;
         private String nextBlockFistLine;
-        private Long blockId;
+        private LocatedBlock block;
         private int blockIndex;
 
-        synchronized int getBlockIndex() {
+        int getBlockIndex() {
             return blockIndex;
         }
 
-        synchronized void setBlockIndex(int blockIndex) {
+        void setBlockIndex(int blockIndex) {
             this.blockIndex = blockIndex;
         }
 
-        synchronized Long getBlockId() {
-            return blockId;
+        synchronized LocatedBlock getBlock() {
+            return block;
         }
 
-        synchronized void setBlockId(Long blockId) {
-            this.blockId = blockId;
+        synchronized void setBlock(LocatedBlock block) {
+            this.block = block;
         }
 
-        synchronized boolean isFirstLine() {
+        boolean isFirstLine() {
             return firstLine;
         }
 
-        synchronized void setFirstLine(boolean firstLine) {
+        void setFirstLine(boolean firstLine) {
             this.firstLine = firstLine;
         }
 
-        synchronized boolean isLastLine() {
+        boolean isLastLine() {
             return lastLine;
         }
 
-        synchronized void setLastLine(boolean lastLine) {
+        void setLastLine(boolean lastLine) {
             this.lastLine = lastLine;
         }
 
-        synchronized String getPreviousLine() {
+        String getPreviousLine() {
             return previousLine;
         }
 
-        synchronized void setPreviousLine(String previousLine) {
+        void setPreviousLine(String previousLine) {
             this.previousLine = previousLine;
         }
 
-        synchronized String getNextBlockFistLine() {
+        String getNextBlockFistLine() {
             return nextBlockFistLine;
         }
 
-        synchronized void setNextBlockFistLine(String completedFistLine) {
+        void setNextBlockFistLine(String completedFistLine) {
             this.nextBlockFistLine = completedFistLine;
         }
     }
@@ -149,13 +149,30 @@ public class HDFSCsvExternal extends HTTPCsvExternal
 			HdfsDataInputStream inputStream = (HdfsDataInputStream) fs.open(path);
 			blocks = inputStream.getAllBlocks();
 			dfsClient = fs.getClient();
-            processingBlocks = new ConcurrentHashMap<>();
+            processingBlocks = initBlocks();
             input = null;
+            this.curentBlockIndex = -1;
             this.line = 0;
         } catch (Exception e) {
 			throw new ExternalTableException("Unable to download CSV file " + params.getLocation());
 		}
 	}
+
+    private ConcurrentHashMap<Integer, ProcessingBlock> initBlocks()
+    {
+        ConcurrentHashMap<Integer, ProcessingBlock> processingBlocks = new ConcurrentHashMap<>();
+        ProcessingBlock pb;
+        int key = 0;
+        for (LocatedBlock block : blocks) {
+            pb = new ProcessingBlock();
+            pb.setBlock(block);
+            pb.setBlockIndex(key);
+            processingBlocks.put(key, pb);
+            key++;
+        }
+        return processingBlocks;
+    }
+
 
     /** Skip header of CSV file if metadata parameters define to do so */
     protected void skipHeader() {
@@ -174,25 +191,17 @@ public class HDFSCsvExternal extends HTTPCsvExternal
     public ArrayList next() {
         String currentLine, nextLine;
         ArrayList row;
-        int curentBlockIndex;
 
         try {
             // reading first block
             if (input == null) {
                 curentBlockIndex = readBlock(-1);
-                if (curentBlockIndex == -1) {
-                    return null;
-                }
             }
-
-            this.line++;
-            ProcessingBlock processingBlock = findProcessingBlock(blockId);
-            if (processingBlock != null) {
-                curentBlockIndex = processingBlock.getBlockIndex();
-            } else {
-                throw new ExternalTableException("Index for block id " + blockId + " is not found!");
+            if (curentBlockIndex == -1) {
+                return null;
             }
-
+            line++;
+            ProcessingBlock processingBlock = this.processingBlocks.get(curentBlockIndex);
 
             // output the first line of the next block if it is read together with the last line of the previous block
             if (processingBlock.getNextBlockFistLine() != null) {
@@ -218,7 +227,7 @@ public class HDFSCsvExternal extends HTTPCsvExternal
                 if (processingBlock.getPreviousLine() == null) {
                     return null;
                 } else {
-                    if (curentBlockIndex + 1 == blocks.size()) {
+                    if (this.curentBlockIndex + 1 == blocks.size()) {
                         // last line of the last block
                         return convertCsvLineToObject(processingBlock.getPreviousLine());
                     } else {
@@ -245,7 +254,7 @@ public class HDFSCsvExternal extends HTTPCsvExternal
             // fist line of the block
             else if (processingBlock.isFirstLine()) {
                 processingBlock.setFirstLine(false);
-                if (curentBlockIndex != 0) {
+                if (this.curentBlockIndex != 0) {
                     // skip line that belongs to two consecutive blocks
                     // as it is already read during reading previous block
                     currentLine = input.readLine();
@@ -268,19 +277,6 @@ public class HDFSCsvExternal extends HTTPCsvExternal
                     "Unable to read row " + line + " counted by worker. CSV file " + params.getLocation()
                     + ". Error message: " + e.getMessage()
                 );
-        }
-        return null;
-    }
-
-    private ProcessingBlock findProcessingBlock(Long blockId)
-    {
-        ProcessingBlock block;
-        for (Object o : processingBlocks.entrySet()) {
-            Map.Entry pair = (Map.Entry) o;
-            block = (ProcessingBlock) pair.getValue();
-            if (block.getBlockId().equals(blockId)) {
-                return block;
-            }
         }
         return null;
     }
@@ -379,7 +375,6 @@ public class HDFSCsvExternal extends HTTPCsvExternal
         }
         curBlockIndex++;
         LocatedBlock block = blocks.get(curBlockIndex);
-        blockId = block.getBlock().getBlockId();
         if (curBlockIndex % numNodes != node) {
             return readBlock(curBlockIndex);
         }
@@ -387,22 +382,18 @@ public class HDFSCsvExternal extends HTTPCsvExternal
         // TODO Size of Byte buffer is equal to the size of a block. We may need to fix the code
         //      as it can be not an optimal solution.
         byte[] buf = new byte[(int) block.getBlockSize()];
-        input = readBlock(block, buf);
+        this.input = readBlock(block, buf);
 
 		if (curBlockIndex == 0) {
             skipHeader();
         }
-
-        if (processingBlocks.containsKey(curBlockIndex)) {
-            return readBlock(curBlockIndex);
+        ProcessingBlock processingBlock = processingBlocks.get(curBlockIndex);
+        if (processingBlock.isFirstLine()) {
+            throw new ExternalTableException("First line of block with id " + blockId + " has been already read!");
         }
-
-        ProcessingBlock processingBlock = new ProcessingBlock();
-        processingBlocks.put(curBlockIndex, processingBlock);
         processingBlock.setFirstLine(true);
-        processingBlock.setLastLine(false);
-        processingBlock.setBlockIndex(curBlockIndex);
-        processingBlock.setBlockId(blockId);
+        this.curentBlockIndex = curBlockIndex;
+        blockId =  block.getBlock().getBlockId();
 		return curBlockIndex;
 	}
 
@@ -435,10 +426,10 @@ public class HDFSCsvExternal extends HTTPCsvExternal
                 while ((cnt = blockReader.read(bb)) > 0) {
                     bytesRead += cnt;
                 }
-//                if (bytesRead != block.getBlock().getNumBytes()) {
-//                    throw new IOException("Recorded block size is " + block.getBlock().getNumBytes() +
-//                            ", but datanode returned " + bytesRead + " bytes");
-//                }
+                if (bytesRead != buf.length) {
+                    throw new IOException("Byte array's size is " + buf.length +
+                            ", but it has been read " + bytesRead + " bytes");
+                }
             } finally {
                 try {blockReader.close(); } catch (Exception e1) {}
             }
