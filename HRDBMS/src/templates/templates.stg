@@ -1,0 +1,30 @@
+ArithmeticOperator(dataType, varName, leftOperand, operator, rightOperand)::="<dataType> <varName> = <leftOperand> <operator> <rightOperand>;"
+ConditionalOperator(dataType,varName, leftOperand, operator, rightOperand)::="boolean <varName> = <leftOperand> <operator> <rightOperand>;"
+Function(dataType,varName,code)::="<dataType> <varName> = <code>;"
+MyExpr(imports,name,code,ReturnType,returnObject)::="<imports>
+public class <name> implements ExprEvaluator {
+
+       public static Object eval (ArrayList\<Object> rowl,ArrayList\<Object> rowr) {
+                 <code>
+              return <returnObject>;
+       }
+
+}"
+IfStatement(condition,code)::="if(<condition>){
+<code>
+}
+"
+ElseIfStatement(condition,code)::="else if(<condition>){
+<code>
+}
+"
+ElseStatement(code)::="else{
+<code>
+}
+"
+SubFunction(name,arg1,arg2)::="<name>(<arg1>,<arg2>)"
+ConcatFunc(varname,final_var,code)::="StringBuilder <varname>= new StringBuilder();
+<code>
+String <final_var>=<varname>.toString();"
+SubStringFunc(varname,arg1,start,end,final_var)::="StringBuilder <varname>= new StringBuilder(<arg1>);
+String <final_var>= <varname>.substring(<start>,<end>);"

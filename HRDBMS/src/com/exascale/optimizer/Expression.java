@@ -1,6 +1,7 @@
 package com.exascale.optimizer;
 
 import java.util.ArrayList;
+import net.sf.antcontrib.logic.condition.IsLessThan;
 
 public class Expression
 {
@@ -68,6 +69,8 @@ public class Expression
 		isSelect = false;
 		isList = false;
 		isCase = false;
+		lhs=null;
+		rhs=null;
 	}
 
 	public Expression(final Expression lhs, final String op, final Expression rhs)
@@ -94,6 +97,9 @@ public class Expression
 		isSelect = false;
 		isList = false;
 		isCase = false;
+		lhs=null;
+		rhs=null;
+		op=null;
 	}
 
 	public Expression(final Literal literal)
@@ -106,6 +112,8 @@ public class Expression
 		isSelect = false;
 		isList = false;
 		isCase = false;
+		lhs=null;
+		rhs=null;
 	}
 
 	public Expression(final SubSelect select)
