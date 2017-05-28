@@ -11,11 +11,12 @@ import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.HrdbmsType;
 import com.exascale.optimizer.*;
 import com.exascale.tables.Transaction;
+import com.exascale.threads.ThreadPoolThread;
 
 public final class ExternalTableScanOperator extends TableScanOperator
 {
 	private static sun.misc.Unsafe unsafe;
-	private ExternalTableType tableImpl = null;
+
     private int numNodes;
 
 	static {
@@ -160,19 +161,19 @@ public final class ExternalTableScanOperator extends TableScanOperator
 		tableImpl.setPos2Col(pos2Col);
 		tableImpl.setSchema(schema);
 		tableImpl.setName(name);
-        if (tableImpl instanceof HDFSCsvExternal) {
-            ((HDFSCsvExternal) tableImpl).setNode(node);
-            ((HDFSCsvExternal) tableImpl).setNumNodes(numNodes);
-        }
-        tableImpl.start();
+		if (tableImpl instanceof HDFSCsvExternal) {
+			((HDFSCsvExternal) tableImpl).setNode(node);
+			((HDFSCsvExternal) tableImpl).setNumNodes(numNodes);
+		}
+		tableImpl.start();
+
+		super.start();
     }
 
     @Override
 	public void close() throws Exception
 	{
-		cols2Pos = null;
-		cols2Types = null;
-		pos2Col = null;
+		super.close();
 		tableImpl.close();
 	}
 
@@ -237,23 +238,23 @@ public final class ExternalTableScanOperator extends TableScanOperator
         }
 	}
 
-	@Override
-	public synchronized Object next(final Operator op) throws Exception
-	{
-        do {
-            List<?> row = tableImpl.next();
-            if (row == null) {
-                return new DataEndMarker();
-            }
-
-            CNFFilter filter = orderedFilters.get(parents.get(0));
-            if (filter != null) {
-                if (filter.passes((ArrayList<Object>) row)) {
-                    return row;
-                }
-            } else {
-                return row;
-            }
-        } while (true);
-	}
+//	@Override
+//	public synchronized Object next(final Operator op) throws Exception
+//	{
+//        do {
+//            List<?> row = tableImpl.next();
+//            if (row == null) {
+//                return new DataEndMarker();
+//            }
+//
+//            CNFFilter filter = orderedFilters.get(parents.get(0));
+//            if (filter != null) {
+//                if (filter.passes((ArrayList<Object>) row)) {
+//                    return row;
+//                }
+//            } else {
+//                return row;
+//            }
+//        } while (true);
+//	}
 }

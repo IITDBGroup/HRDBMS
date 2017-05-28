@@ -12,18 +12,8 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.*;
 import java.util.BitSet;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Set;
-import java.util.StringTokenizer;
-import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -32,6 +22,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 
 import com.exascale.misc.*;
+import com.exascale.optimizer.externalTable.ExternalTableType;
 import org.sosy_lab.common.ShutdownManager;
 import org.sosy_lab.common.configuration.Configuration;
 import org.sosy_lab.common.configuration.InvalidConfigurationException;
@@ -92,6 +83,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 	public static AtomicInteger SMTSolverCalls = new AtomicInteger(0);
 	public static ConcurrentHashMap<String, HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet>> problemCache;
 	public static LinkedBlockingQueue<String> prtq;
+    protected ExternalTableType tableImpl = null;
 
 	static
 	{
@@ -3602,6 +3594,37 @@ public class TableScanOperator extends AbstractTableScanOperator
 			}
 		}
 
+        public synchronized void externalTableRead()
+        {
+            try {
+                do {
+                    List<?> row = tableImpl.next();
+                    if (row == null) {
+                        readBuffer.put(new DataEndMarker());
+                    }
+
+                    CNFFilter filter = orderedFilters.get(parents.get(0));
+                    if (filter != null) {
+                        if (filter.passes((ArrayList<Object>) row)) {
+                            readBuffer.put(row);
+                        }
+                    } else {
+                        readBuffer.put(row);
+                    }
+                } while (true);
+            } catch (final Exception e)  {
+                HRDBMSWorker.logger.error("", e);
+                try
+                {
+                    readBuffer.put(e);
+                }
+                catch (final Exception f)
+                {
+                }
+                return;
+            }
+        }
+
 		@Override
 		public final void run()
 		{
@@ -3609,7 +3632,9 @@ public class TableScanOperator extends AbstractTableScanOperator
 
 			try
 			{
-				if (tType == 0)
+                if (tableImpl != null) {
+                    externalTableRead();
+                } else if (tType == 0)
 				{
 					rowTableRT();
 				}
