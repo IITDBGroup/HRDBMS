@@ -119,7 +119,7 @@ public class HTTPCsvExternal  implements ExternalTableType, Serializable
 			line++;
 			inputLine = input.readLine();
 		} catch (Exception e) {
-			throw new ExternalTableException("Unable to read line "+ line +" in CSV file " + params.getLocation());
+			throw new ExternalTableException(e);
 		}
 
 		/** This is the parser splitting the data that it found into columns of a map. */

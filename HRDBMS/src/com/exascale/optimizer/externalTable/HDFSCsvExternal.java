@@ -1,5 +1,6 @@
 package com.exascale.optimizer.externalTable;
 
+import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.HrdbmsType;
 import com.exascale.misc.MyDate;
 import com.exascale.optimizer.OperatorUtils;
@@ -141,7 +142,7 @@ public class HDFSCsvExternal extends HTTPCsvExternal
                 }
             }
         } catch (Exception e) {
-            throw new ExternalTableException("Unable to read line "+ line +" in CSV file " + params.getLocation());
+            throw new ExternalTableException(e);
         }
         return null;
     }
@@ -237,6 +238,7 @@ public class HDFSCsvExternal extends HTTPCsvExternal
             // TODO Size of Byte buffer is equal to the size of a block. We may need to fix the code as it is not an optimal solution.
             byte[] buf = new byte[(int) block.getBlockSize()];
             ByteBuffer bb = ByteBuffer.wrap(buf);
+            HRDBMSWorker.logger.debug(String.format("Thread %d Node %d read block %d of size %d", Thread.currentThread().getId(), node, blockId, block.getBlockSize()));
             input = wrapByteBuffer(bb);
             try {
                 int cnt;
@@ -252,7 +254,7 @@ public class HDFSCsvExternal extends HTTPCsvExternal
                 try {blockReader.close(); } catch (Exception e1) {}
             }
 		} catch (Exception e) {
-            throw new ExternalTableException("Block reading error: " + e.getMessage());
+            throw new ExternalTableException(e);
 		}
 		if (firstBlockId.equals(blockId)) {
             skipHeader();

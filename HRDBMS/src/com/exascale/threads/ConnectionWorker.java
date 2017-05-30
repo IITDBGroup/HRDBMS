@@ -745,41 +745,6 @@ public class ConnectionWorker extends HRDBMSThread
 		bb.put((byte)(val & 0xff));
 	}
 
-	private static void readNonCoord(final byte[] arg, final InputStream in) throws Exception
-	{
-		int count = 0;
-		final int length = arg.length;
-		while (count < length)
-		{
-			final int temp = in.read(arg, count, arg.length - count);
-			if (temp == -1)
-			{
-				throw new Exception("Hit end of stream when reading from socket");
-			}
-			else
-			{
-				count += temp;
-			}
-		}
-	}
-
-	private static void readNonCoord(final byte[] arg, final int offset, final int length, final InputStream in2) throws Exception
-	{
-		int count = 0;
-		while (count < length)
-		{
-			final int temp = in2.read(arg, count + offset, length - count);
-			if (temp == -1)
-			{
-				throw new Exception("Hit end of stream when reading from socket");
-			}
-			else
-			{
-				count += temp;
-			}
-		}
-	}
-
 	private static ByteBuffer readRawRS(final InputStream in2) throws Exception
 	{
 		int bbSize = 16 * 1024 * 1024 - 1;
@@ -5344,30 +5309,31 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 	}
 
+	/** Read from the socket into the passed byte array */
 	private void readNonCoord(final byte[] arg) throws Exception
 	{
-		int count = 0;
-		final int length = arg.length;
-		while (count < length)
-		{
-			final int temp = sock.getInputStream().read(arg, count, arg.length - count);
-			if (temp == -1)
-			{
-				throw new Exception("Hit end of stream when reading from socket");
-			}
-			else
-			{
-				count += temp;
-			}
-		}
+		readNonCoord(arg, 0, arg.length, sock.getInputStream());
 	}
 
+	/** Read from the socket into the passed byte array */
 	private void readNonCoord(final byte[] arg, final int offset, final int length) throws Exception
+	{
+		readNonCoord(arg, offset, length, sock.getInputStream());
+	}
+
+	/** Read into the passed byte array from the passed input stream */
+	private static void readNonCoord(final byte[] arg, final InputStream in) throws Exception
+	{
+		readNonCoord(arg, 0, arg.length, in);
+	}
+
+	/** Read into the passed byte array from the passed input stream */
+	private static void readNonCoord(final byte[] arg, final int offset, final int length, final InputStream in2) throws Exception
 	{
 		int count = 0;
 		while (count < length)
 		{
-			final int temp = sock.getInputStream().read(arg, count + offset, length - count);
+			final int temp = in2.read(arg, count + offset, length - count);
 			if (temp == -1)
 			{
 				throw new Exception("Hit end of stream when reading from socket");

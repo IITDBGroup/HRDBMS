@@ -91,6 +91,7 @@ public final class LoadOperator implements Operator, Serializable
 		this.meta = meta;
 	}
 
+	/** Sends load metadata to worker */
 	private static boolean doSendLDMD(final ArrayList<Object> tree, final String key, final LoadMetaData ldmd, final Transaction tx)
 	{
 		Object obj = tree.get(0);
@@ -212,6 +213,7 @@ public final class LoadOperator implements Operator, Serializable
 		}
 	}
 
+	/** Reads an ack from the passed socket */
 	private static void getConfirmation(final Socket sock) throws Exception
 	{
 		final InputStream in = sock.getInputStream();
@@ -280,6 +282,7 @@ public final class LoadOperator implements Operator, Serializable
 		return buff;
 	}
 
+	/** Arranges worker nodes into a tree */
 	private static ArrayList<Object> makeTree(final ArrayList<Integer> nodes)
 	{
 		final int max = MAX_NEIGHBOR_NODES;
@@ -495,6 +498,7 @@ public final class LoadOperator implements Operator, Serializable
 		return retval;
 	}
 
+	/** Sends load metadata to workers */
 	private static boolean sendLDMD(final ArrayList<Object> tree, final String key, final LoadMetaData ldmd, final Transaction tx)
 	{
 		boolean allOK = true;
@@ -988,7 +992,7 @@ public final class LoadOperator implements Operator, Serializable
 	@Override
 	public String toString()
 	{
-		return "InsertOperator";
+		return "LoadOperator";
 	}
 
 	private void doHDFS(final String schema, final String table, final Transaction tx, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final HashMap<Integer, Integer> pos2Length, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final ArrayList<String> indexes, final int type)
