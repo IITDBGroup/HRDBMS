@@ -238,7 +238,7 @@ public final class ExternalTableScanOperator extends TableScanOperator
 	}
 
 	@Override
-	public Object next(final Operator op) throws Exception
+	public synchronized Object next(final Operator op) throws Exception
 	{
         do {
             List<?> row = tableImpl.next();

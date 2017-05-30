@@ -21,6 +21,7 @@ import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** External table implementation for reading from an HDFS URL */
 public class HDFSCsvExternal extends HTTPCsvExternal
@@ -43,13 +44,73 @@ public class HDFSCsvExternal extends HTTPCsvExternal
 
 	private DFSClient dfsClient;
 	private List<LocatedBlock> blocks;
+    private ConcurrentHashMap<Integer, ProcessingBlock> processingBlocks;
     private Path path;
     private Configuration conf;
-    private Iterator blockIterator;
     private Long blockId;
+    private int currentBlockIndex;
     private int node;
     private int numNodes;
-    private Long firstBlockId;
+    private int line;
+
+    private class ProcessingBlock
+    {
+        private boolean firstLine = false;
+        private boolean lastLine = false;
+        private String previousLine;
+        private String nextBlockFistLine;
+        private LocatedBlock block;
+        private int blockIndex;
+
+        int getBlockIndex() {
+            return blockIndex;
+        }
+
+        void setBlockIndex(int blockIndex) {
+            this.blockIndex = blockIndex;
+        }
+
+        synchronized LocatedBlock getBlock() {
+            return block;
+        }
+
+        synchronized void setBlock(LocatedBlock block) {
+            this.block = block;
+        }
+
+        boolean isFirstLine() {
+            return firstLine;
+        }
+
+        void setFirstLine(boolean firstLine) {
+            this.firstLine = firstLine;
+        }
+
+        boolean isLastLine() {
+            return lastLine;
+        }
+
+        void setLastLine(boolean lastLine) {
+            this.lastLine = lastLine;
+        }
+
+        String getPreviousLine() {
+            return previousLine;
+        }
+
+        void setPreviousLine(String previousLine) {
+            this.previousLine = previousLine;
+        }
+
+        String getNextBlockFistLine() {
+            return nextBlockFistLine;
+        }
+
+        void setNextBlockFistLine(String completedFistLine) {
+            this.nextBlockFistLine = completedFistLine;
+        }
+    }
+
 
     /** Parameters defined in SYS.EXTERNALTABLES */
     protected CsvExternalParams params;
@@ -89,12 +150,30 @@ public class HDFSCsvExternal extends HTTPCsvExternal
 			HdfsDataInputStream inputStream = (HdfsDataInputStream) fs.open(path);
 			blocks = inputStream.getAllBlocks();
 			dfsClient = fs.getClient();
-            blockIterator = blocks.iterator();
-            readBlock();
+            processingBlocks = initBlocks();
+            input = null;
+            this.currentBlockIndex = -1;
+            this.line = 0;
         } catch (Exception e) {
 			throw new ExternalTableException("Unable to download CSV file " + params.getLocation());
 		}
 	}
+
+    private ConcurrentHashMap<Integer, ProcessingBlock> initBlocks()
+    {
+        ConcurrentHashMap<Integer, ProcessingBlock> processingBlocks = new ConcurrentHashMap<>();
+        ProcessingBlock pb;
+        int key = 0;
+        for (LocatedBlock block : blocks) {
+            pb = new ProcessingBlock();
+            pb.setBlock(block);
+            pb.setBlockIndex(key);
+            processingBlocks.put(key, pb);
+            key++;
+        }
+        return processingBlocks;
+    }
+
 
     /** Skip header of CSV file if metadata parameters define to do so */
     protected void skipHeader() {
@@ -111,47 +190,115 @@ public class HDFSCsvExternal extends HTTPCsvExternal
 
     @Override
     public ArrayList next() {
-        if (input == null) {
-            return null;
-        }
-        String inputLine;
-        try {
-            line++;
-            inputLine = input.readLine();
+        String currentLine, nextLine;
+        ArrayList row;
 
-            while (inputLine != null || blockIterator.hasNext())
-            {
-                if (inputLine == null && blockIterator.hasNext()) {
-                    if (readBlock())
-                        inputLine = input.readLine();
-                    else
-                        return null;
+        try {
+            // reading first block
+            if (input == null) {
+                currentBlockIndex = readBlock(-1);
+            }
+            if (currentBlockIndex == -1) {
+                return null;
+            }
+            line++;
+            ProcessingBlock processingBlock = this.processingBlocks.get(currentBlockIndex);
+
+            // output the first line of the next block if it is read together with the last line of the previous block
+            if (processingBlock.getNextBlockFistLine() != null) {
+                row = convertCsvLineToObject(processingBlock.getNextBlockFistLine());
+                processingBlock.setNextBlockFistLine(null);
+                return row;
+            }
+
+            // reading next block
+            if (processingBlock.isLastLine()) {
+                currentBlockIndex = readBlock(currentBlockIndex);
+                if (currentBlockIndex == -1) {
+                    return null;
                 }
-                if (inputLine != null) {
-                    // temporal solution - skipping lines that do not have necessary quantity of columns
-                    ArrayList<String> row = new ArrayList<>(Arrays.asList(inputLine.split(params.getDelimiter())));
-                    if (row.size() + 1 != pos2Col.size()) {
-                        inputLine = input.readLine();
+                processingBlock = this.processingBlocks.get(currentBlockIndex);
+            }
+
+            currentLine = input.readLine();
+
+            // end of the block
+            if (currentLine == null) {
+                processingBlock.setLastLine(true);
+                if (processingBlock.getPreviousLine() == null) {
+                    return null;
+                } else {
+                    if (this.currentBlockIndex + 1 == blocks.size()) {
+                        // last line of the last block
+                        return convertCsvLineToObject(processingBlock.getPreviousLine());
                     } else {
-                        try {
-                            return convertCsvLineToObject(row);
-                        } catch (Exception e) {
-                            inputLine = input.readLine();
+                        // the end of the block, but the next block is available
+                        nextLine = readNextBlockFistLine(currentBlockIndex);
+                        if (isCorrectSize(processingBlock.getPreviousLine() + nextLine)) {
+                            row = convertCsvLineToObject(processingBlock.getPreviousLine() + nextLine);
+                        } else if (isCorrectSize(processingBlock.getPreviousLine()) && isCorrectSize(nextLine)) {
+                            row = convertCsvLineToObject(processingBlock.getPreviousLine());
+                            processingBlock.setNextBlockFistLine(nextLine);
+                        } else {
+                            throw new ExternalTableException(
+                                    "Something wrong with reading the end of HDFS block."
+                                    + "First part of line: " + processingBlock.getPreviousLine() + "."
+                                    + "Second part of line: " + nextLine + "."
+                            );
                         }
+                        processingBlock.setPreviousLine(null);
+                        return row;
                     }
                 }
             }
+
+            // fist line of the block
+            else if (processingBlock.isFirstLine()) {
+                processingBlock.setFirstLine(false);
+                if (this.currentBlockIndex != 0) {
+                    // skip line that belongs to two consecutive blocks
+                    // as it is already read during reading previous block
+                    currentLine = input.readLine();
+                }
+                row = convertCsvLineToObject(currentLine);
+                nextLine = input.readLine();
+                processingBlock.setPreviousLine(nextLine);
+                return row;
+            }
+
+            // line inside of HDFS block
+            else if (!processingBlock.isFirstLine()) {
+                row = convertCsvLineToObject(processingBlock.getPreviousLine());
+                processingBlock.setPreviousLine(currentLine);
+                return row;
+            }
+
         } catch (Exception e) {
             throw new ExternalTableException(e);
         }
         return null;
     }
 
-    /** Convert csv line into table row.
-     *  Runtime exception is thrown when type of CSV column does not match type of table column	 */
-    private ArrayList<Object> convertCsvLineToObject(final ArrayList<String> row)
+    private boolean isCorrectSize(final String inputLine)
+    {
+        ArrayList<String> row = new ArrayList<>(Arrays.asList(inputLine.split(params.getDelimiter())));
+        return (row.size() + 1 == pos2Col.size());
+    }
+
+    /** Convert csv line into table row. */
+    protected ArrayList<Object> convertCsvLineToObject(final String inputLine)
     {
         final ArrayList<Object> retval = new ArrayList<>();
+        ArrayList<String> row = new ArrayList<>(Arrays.asList(inputLine.split(params.getDelimiter())));
+        if (row.size() + 1 != pos2Col.size()) {
+            throw new ExternalTableException(
+                    "Line: " + inputLine
+                            + ".\nSize of external table does not match column count in CSV file '" + params.getLocation() + "'."
+                            + "\nColumns in csv file: " + row.size()
+                            + "\nColumns defined in external table schema: " + pos2Col.size()
+            );
+        }
+
         int column = 0;
         for (final Map.Entry<Integer, String> entry : pos2Col.entrySet()) {
             String type = cols2Types.get(entry.getValue());
@@ -178,7 +325,7 @@ public class HDFSCsvExternal extends HTTPCsvExternal
                 }
             } catch (Exception e) {
                 throw new ExternalTableException(
-                        "Line: " + line + ", column: " + column + "\n"
+                        "Line: " + inputLine + ", column: " + column + "\n"
                                 + "Error conversion '" + row.get(column) + "' to type '" + type + "'."
                 );
             }
@@ -219,24 +366,56 @@ public class HDFSCsvExternal extends HTTPCsvExternal
 		return value;
 	}
 
-	private boolean readBlock()
+	private int readBlock(int curBlockIndex)
 	{
+        if (curBlockIndex + 1 >= blocks.size()) {
+            return -1;
+        }
+        curBlockIndex++;
+        LocatedBlock block = blocks.get(curBlockIndex);
+        if (curBlockIndex % numNodes != node) {
+            return readBlock(curBlockIndex);
+        }
+
+        // TODO Size of Byte buffer is equal to the size of a block. We may need to fix the code
+        //      as it can be not an optimal solution.
+        byte[] buf = new byte[(int) block.getBlockSize()];
+        this.input = readBlock(block, buf);
+
+		if (curBlockIndex == 0) {
+            skipHeader();
+        }
+        ProcessingBlock processingBlock = processingBlocks.get(curBlockIndex);
+        if (processingBlock.isFirstLine()) {
+            throw new ExternalTableException("First line of block with id " + blockId + " has been already read!");
+        }
+        processingBlock.setFirstLine(true);
+        this.currentBlockIndex = curBlockIndex;
+        blockId =  block.getBlock().getBlockId();
+		return curBlockIndex;
+	}
+
+    private String readNextBlockFistLine(int curBlockIndex) throws  IOException
+    {
+        if (curBlockIndex + 1 == blocks.size()) {
+            return null;
+        }
+        LocatedBlock block = blocks.get(curBlockIndex + 1);
+        // TODO we need to put the length of row instead of hardcoded value
+        byte[] buf = new byte[8192];
+        input = readBlock(block, buf);
+        return input.readLine();
+    }
+
+    private BufferedReader readBlock(LocatedBlock block, byte[] buf)
+    {
+        BufferedReader input;
         try {
-            LocatedBlock block = (LocatedBlock) blockIterator.next();
-            blockId = block.getBlock().getBlockId();
-            if (firstBlockId == null) {
-                firstBlockId = blockId;
-            }
-            if (blockId % numNodes != node) {
-                return blockIterator.hasNext() && readBlock();
-            }
             // it should be a better way to choose node
             DatanodeInfo chosenNode = block.getLocations()[0];
             String var9 = chosenNode.getXferAddr(false);
             InetSocketAddress targetAddr = NetUtils.createSocketAddr(var9);
             BlockReader blockReader = (new BlockReaderFactory(dfsClient.getConf())).setInetSocketAddress(targetAddr).setRemotePeerFactory(dfsClient).setDatanodeInfo(chosenNode).setStorageType(block.getStorageTypes()[0]).setFileName(/* this.src */ path.toUri().getPath()).setBlock(block.getBlock()).setBlockToken(block.getBlockToken()).setStartOffset(0).setVerifyChecksum(true).setClientName(dfsClient.getClientName()).setLength(block.getBlock().getNumBytes()).setCachingStrategy(dfsClient.getDefaultReadCachingStrategy()).setAllowShortCircuitLocalReads(true).setClientCacheContext(dfsClient.getClientContext())/*.setUserGroupInformation(dfsClient.ugi)*/.setConfiguration(conf).build();
-            // TODO Size of Byte buffer is equal to the size of a block. We may need to fix the code as it is not an optimal solution.
-            byte[] buf = new byte[(int) block.getBlockSize()];
             ByteBuffer bb = ByteBuffer.wrap(buf);
             HRDBMSWorker.logger.debug(String.format("Thread %d Node %d read block %d of size %d", Thread.currentThread().getId(), node, blockId, block.getBlockSize()));
             input = wrapByteBuffer(bb);
@@ -246,21 +425,18 @@ public class HDFSCsvExternal extends HTTPCsvExternal
                 while ((cnt = blockReader.read(bb)) > 0) {
                     bytesRead += cnt;
                 }
-                if (bytesRead != block.getBlock().getNumBytes()) {
-                    throw new IOException("Recorded block size is " + block.getBlock().getNumBytes() +
-                            ", but datanode returned " + bytesRead + " bytes");
+                if (bytesRead != buf.length) {
+                    throw new IOException("Byte array's size is " + buf.length +
+                            ", but it has been read " + bytesRead + " bytes");
                 }
             } finally {
-                try {blockReader.close(); } catch (Exception e1) {}
+                try { blockReader.close(); } catch (Exception e1) {}
             }
 		} catch (Exception e) {
             throw new ExternalTableException(e);
 		}
-		if (firstBlockId.equals(blockId)) {
-            skipHeader();
-        }
-		return true;
-	}
+        return input;
+    }
 
     private static BufferedReader wrapByteArray(byte[] byteArr) {
         return wrapByteArray(byteArr, 0, byteArr.length);
