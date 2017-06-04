@@ -294,7 +294,7 @@ public class XAManager extends HRDBMSThread
 				// HRDBMSWorker.logger.debug("Phase 4 completed");
 				new Phase5((RootOperator)op, tx, p1.likelihoodCache).optimize();
 				// HRDBMSWorker.logger.debug("Phase 5 completed");
-				// Phase1.printTree(op, 0); // DEBUG
+				Utils.printTree(op, 0);
 				plan = new Plan(false, array);
 
 				// if (parse.doesNotUseCurrentSchema())

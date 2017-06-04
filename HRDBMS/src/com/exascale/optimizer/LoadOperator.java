@@ -707,7 +707,7 @@ public final class LoadOperator implements Operator, Serializable
 
 		if (num.get() == Long.MIN_VALUE)
 		{
-			throw new Exception("An error occured during a load operation");
+			throw new Exception("An error occurred during a load operation");
 		}
 
 		if (num.get() < 0)

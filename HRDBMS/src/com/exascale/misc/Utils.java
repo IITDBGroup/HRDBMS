@@ -36,6 +36,9 @@ public final class Utils
 	/** Recurses through operator tree and prints for debugging purposes */
 	public static void printTree(final Operator op, final int indent)
 	{
+		if(!HRDBMSWorker.logger.isDebugEnabled()) {
+			return;
+		}
 		String line = "";
 		int i = 0;
 		while (i < indent)
