@@ -93,7 +93,7 @@ public final class ExternalTableScanOperator extends TableScanOperator
 
 	@Override
 	public ExternalTableScanOperator clone() {
-		ExternalTableScanOperator retval = null;
+		ExternalTableScanOperator retval;
 		try
 		{
 			retval = new ExternalTableScanOperator(tableImpl, schema, name, meta, cols2Pos, pos2Col, cols2Types, tablePos2Col, tableCols2Types, tableCols2Pos);
@@ -161,13 +161,19 @@ public final class ExternalTableScanOperator extends TableScanOperator
 		tableImpl.setPos2Col(pos2Col);
 		tableImpl.setSchema(schema);
 		tableImpl.setName(name);
-		if (tableImpl instanceof HDFSCsvExternal) {
-			((HDFSCsvExternal) tableImpl).setNode(node);
-			((HDFSCsvExternal) tableImpl).setNumNodes(numNodes);
+
+		if (tableImpl instanceof MultiThreadedExternalTableType) {
+			((MultiThreadedExternalTableType) tableImpl).setNode(node);
+			((MultiThreadedExternalTableType) tableImpl).setNumNodes(numNodes);
+			((MultiThreadedExternalTableType) tableImpl).setNumDevices(devices.size());
 		}
+
 		tableImpl.start();
 
-		super.start();
+		if (tableImpl instanceof MultiThreadedExternalTableType) {
+            super.start();
+		}
+
     }
 
     @Override
@@ -238,23 +244,27 @@ public final class ExternalTableScanOperator extends TableScanOperator
         }
 	}
 
-//	@Override
-//	public synchronized Object next(final Operator op) throws Exception
-//	{
-//        do {
-//            List<?> row = tableImpl.next();
-//            if (row == null) {
-//                return new DataEndMarker();
-//            }
-//
-//            CNFFilter filter = orderedFilters.get(parents.get(0));
-//            if (filter != null) {
-//                if (filter.passes((ArrayList<Object>) row)) {
-//                    return row;
-//                }
-//            } else {
-//                return row;
-//            }
-//        } while (true);
-//	}
+	@Override
+	public synchronized Object next(final Operator op) throws Exception
+	{
+		if (tableImpl instanceof MultiThreadedExternalTableType) {
+			return super.next(op);
+		} else {
+			do {
+				List<?> row = tableImpl.next();
+				if (row == null) {
+					return new DataEndMarker();
+				}
+
+				CNFFilter filter = orderedFilters.get(parents.get(0));
+				if (filter != null) {
+					if (filter.passes((ArrayList<Object>) row)) {
+						return row;
+					}
+				} else {
+					return row;
+				}
+			} while (true);
+		}
+	}
 }

@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 
 import com.exascale.misc.*;
+import com.exascale.optimizer.externalTable.MultiThreadedExternalTableType;
 import com.exascale.optimizer.externalTable.ExternalTableType;
 import org.sosy_lab.common.ShutdownManager;
 import org.sosy_lab.common.configuration.Configuration;
@@ -83,6 +84,8 @@ public class TableScanOperator extends AbstractTableScanOperator
 	public static AtomicInteger SMTSolverCalls = new AtomicInteger(0);
 	public static ConcurrentHashMap<String, HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet>> problemCache;
 	public static LinkedBlockingQueue<String> prtq;
+
+    // Class responsible to read data from external sources
     protected ExternalTableType tableImpl = null;
 
 	static
@@ -1669,13 +1672,20 @@ public class TableScanOperator extends AbstractTableScanOperator
 		int start = 0;
 		private String pbpeDebug1;
 		private String pbpeDebug2;
+		private int deviceIndex;
 
 		public ReaderThread(final String in)
 		{
 			this.in = in;
 		}
 
-		public ReaderThread(final String in2, final boolean marker)
+        public ReaderThread(final int deviceIndex)
+        {
+            this.deviceIndex = deviceIndex;
+        }
+
+
+        public ReaderThread(final String in2, final boolean marker)
 		{
 			this.in2 = in2;
 		}
@@ -3594,13 +3604,17 @@ public class TableScanOperator extends AbstractTableScanOperator
 			}
 		}
 
-        public synchronized void externalTableRead()
+        public void externalTableRead()
         {
+            MultiThreadedExternalTableType externalReader;
+            externalReader = ((MultiThreadedExternalTableType) tableImpl).clone();
+            externalReader.setDevice(this.deviceIndex);
             try {
                 do {
-                    List<?> row = tableImpl.next();
+                    List<?> row;
+                    row = externalReader.next();
                     if (row == null) {
-                        readBuffer.put(new DataEndMarker());
+                        return;
                     }
 
                     CNFFilter filter = orderedFilters.get(parents.get(0));
@@ -4734,9 +4748,15 @@ public class TableScanOperator extends AbstractTableScanOperator
 				}
 				else
 				{
+                    int j = 0;
 					for (final String in : ins)
 					{
-						final ReaderThread read = new ReaderThread(in);
+                        final ReaderThread read;
+                        if (tableImpl != null) {
+                            read = new ReaderThread(j++);
+                        } else {
+                            read = new ReaderThread(in);
+                        }
 						read.start();
 						reads.add(read);
 					}

@@ -24,7 +24,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** External table implementation for reading from an HDFS URL */
-public class HDFSCsvExternal extends HTTPCsvExternal
+public class HDFSCsvExternal extends HTTPCsvExternal implements MultiThreadedExternalTableType
 {
 	private static sun.misc.Unsafe unsafe;
 
@@ -50,7 +50,9 @@ public class HDFSCsvExternal extends HTTPCsvExternal
     private Long blockId;
     private int currentBlockIndex;
     private int node;
+    private int device;
     private int numNodes;
+    private int numDevices;
     private int line;
 
     private class ProcessingBlock
@@ -70,11 +72,11 @@ public class HDFSCsvExternal extends HTTPCsvExternal
             this.blockIndex = blockIndex;
         }
 
-        synchronized LocatedBlock getBlock() {
+        LocatedBlock getBlock() {
             return block;
         }
 
-        synchronized void setBlock(LocatedBlock block) {
+        void setBlock(LocatedBlock block) {
             this.block = block;
         }
 
@@ -120,6 +122,16 @@ public class HDFSCsvExternal extends HTTPCsvExternal
         this.numNodes = numNodes;
     }
 
+    public void setNumDevices(int numDevices)
+    {
+        this.numDevices = numDevices;
+    }
+
+    public void setDevice(int device)
+    {
+        this.device = device;
+    }
+
     public void setNode(int node)
     {
         this.node = node;
@@ -136,6 +148,39 @@ public class HDFSCsvExternal extends HTTPCsvExternal
         if (!params.valid()) {
             throw new ExternalTableException("Parameters are not valid");
         }
+    }
+
+    @Override
+    public HDFSCsvExternal clone()
+    {
+        HDFSCsvExternal retval;
+        try
+        {
+            retval = new HDFSCsvExternal();
+        }
+        catch (final Exception e)
+        {
+            HRDBMSWorker.logger.error("", e);
+            return null;
+        }
+        retval.cols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
+        retval.pos2Col = (TreeMap<Integer, String>)pos2Col.clone();
+        retval.cols2Types = (HashMap<String, String>)cols2Types.clone();
+        retval.schema = schema;
+        retval.name = name;
+        retval.node = node;
+        retval.numNodes = numNodes;
+        retval.numDevices = numDevices;
+        retval.dfsClient = dfsClient;
+        retval.blocks = blocks;
+        retval.processingBlocks = processingBlocks;
+        retval.path = path;
+        retval.conf = conf;
+        retval.blockId = blockId;
+        retval.currentBlockIndex = currentBlockIndex;
+        retval.params = (CsvExternalParams) params;
+
+        return retval;
     }
 
     @Override
@@ -373,7 +418,7 @@ public class HDFSCsvExternal extends HTTPCsvExternal
         }
         curBlockIndex++;
         LocatedBlock block = blocks.get(curBlockIndex);
-        if (curBlockIndex % numNodes != node) {
+        if (curBlockIndex % (numNodes * numDevices) != node * numDevices + device) {
             return readBlock(curBlockIndex);
         }
 
