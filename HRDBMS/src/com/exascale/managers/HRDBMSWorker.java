@@ -106,7 +106,7 @@ public class HRDBMSWorker
 	{
 		logger = Logger.getLogger("LOG");
 		BasicConfigurator.configure();
-		fa = new RollingFileAppender(new PatternLayout("%d{ISO8601}\t%p\t%C{1}: %m%n"), "hrdbms.log", true);
+		fa = new RollingFileAppender(new PatternLayout("%d{ISO8601}\t%p\t%C{1}/%t: %m%n"), "hrdbms.log", true);
 		((RollingFileAppender)fa).setMaxBackupIndex(1);
 		((RollingFileAppender)fa).setMaximumFileSize(2 * 1024L * 1024L * 1024L);
 		fa.activateOptions();
@@ -126,7 +126,8 @@ public class HRDBMSWorker
 			System.exit(1);
 		}
 
-		// ensureAllocation();
+		String logLevel = hparms.getProperty("logLevel", "ALL");
+		logger.setLevel(Level.toLevel(logLevel, Level.ALL));
 
 		try
 		{

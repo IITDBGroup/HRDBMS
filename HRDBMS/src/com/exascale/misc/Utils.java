@@ -33,10 +33,10 @@ public final class Utils
 		return retval;
 	}
 
-	/** Recurses through operator tree and prints for debugging purposes */
+	/** Recurses through operator tree and prints for debugging purposes at the TRACE level */
 	public static void printTree(final Operator op, final int indent)
 	{
-		if(!HRDBMSWorker.logger.isDebugEnabled()) {
+		if(!HRDBMSWorker.logger.isTraceEnabled()) {
 			return;
 		}
 		String line = "";
@@ -48,7 +48,7 @@ public final class Utils
 		}
 
 		line += op;
-		HRDBMSWorker.logger.debug(line);
+		HRDBMSWorker.logger.trace(line);
 
 		if (op.children().size() > 0)
 		{
@@ -61,7 +61,7 @@ public final class Utils
 			}
 
 			line += "(";
-			HRDBMSWorker.logger.debug(line);
+			HRDBMSWorker.logger.trace(line);
 
 			for (final Operator child : op.children())
 			{
@@ -77,7 +77,7 @@ public final class Utils
 			}
 
 			line += ")";
-			HRDBMSWorker.logger.debug(line);
+			HRDBMSWorker.logger.trace(line);
 		}
 	}
 

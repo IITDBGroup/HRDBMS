@@ -270,31 +270,49 @@ public class XAManager extends HRDBMSThread
 		{
 			throw new Exception("Not a select statement");
 		}
-		// HRDBMSWorker.logger.debug("About to check plan cache");
+		final boolean traceEnabled = HRDBMSWorker.logger.isTraceEnabled();
 		Plan plan = PlanCacheManager.checkPlanCache(sql2);
 
 		if (plan == null)
 		{
 			try
 			{
-				// HRDBMSWorker.logger.debug("Did not find plan in cache");
+				if(traceEnabled) {
+					HRDBMSWorker.logger.trace("Did not find plan in cache");
+				}
 				final SQLParser parse = new SQLParser(sql3, conn, tx);
-				// HRDBMSWorker.logger.debug("Created SQL parser");
 				final ArrayList<Operator> array = parse.parse();
 				final Operator op = array.get(0);
-				// HRDBMSWorker.logger.debug("Parsing completed");
+				if(traceEnabled) {
+					HRDBMSWorker.logger.trace("Parsing completed");
+					Utils.printTree(op, 0);
+				}
 				final Phase1 p1 = new Phase1((RootOperator)op, tx);
 				p1.optimize();
-				// HRDBMSWorker.logger.debug("Phase 1 completed");
+				if(traceEnabled) {
+					HRDBMSWorker.logger.trace("Phase 1 completed");
+					Utils.printTree(op, 0);
+				}
 				new Phase2((RootOperator)op, tx).optimize();
-				// HRDBMSWorker.logger.debug("Phase 2 completed");
+				if(traceEnabled) {
+					HRDBMSWorker.logger.trace("Phase 2 completed");
+					Utils.printTree(op, 0);
+				}
 				new Phase3((RootOperator)op, tx).optimize();
-				// HRDBMSWorker.logger.debug("Phase 3 completed");
+				if(traceEnabled) {
+					HRDBMSWorker.logger.trace("Phase 3 completed");
+					Utils.printTree(op, 0);
+				}
 				new Phase4((RootOperator)op, tx).optimize();
-				// HRDBMSWorker.logger.debug("Phase 4 completed");
+				if(traceEnabled) {
+					HRDBMSWorker.logger.trace("Phase 4 completed");
+					Utils.printTree(op, 0);
+				}
 				new Phase5((RootOperator)op, tx, p1.likelihoodCache).optimize();
-				// HRDBMSWorker.logger.debug("Phase 5 completed");
-				Utils.printTree(op, 0);
+				if(traceEnabled) {
+					HRDBMSWorker.logger.trace("Phase 5 completed");
+					Utils.printTree(op, 0);
+				}
 				plan = new Plan(false, array);
 
 				// if (parse.doesNotUseCurrentSchema())
