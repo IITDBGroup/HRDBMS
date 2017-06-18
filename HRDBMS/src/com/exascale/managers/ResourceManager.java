@@ -27,6 +27,7 @@ import com.exascale.optimizer.SemiJoinOperator;
 import com.exascale.optimizer.TableScanOperator;
 import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.ThreadPoolThread;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 public final class ResourceManager extends HRDBMSThread
 {
@@ -85,7 +86,8 @@ public final class ResourceManager extends HRDBMSThread
 		CUDA_SIZE = Integer.parseInt(hparms.getProperty("cuda_batch_size")); // 30720
 		GPU = (hparms.getProperty("gpu_offload")).equals("true");
 		cpus = Runtime.getRuntime().availableProcessors();
-		pool = Executors.newCachedThreadPool();
+		pool = Executors.newCachedThreadPool(new ThreadFactoryBuilder().setNameFormat("c.e.m.ResourceManager-pool%d").build());
+
 		maxMemory = Runtime.getRuntime().maxMemory();
 		if (GPU)
 		{
@@ -599,6 +601,7 @@ public final class ResourceManager extends HRDBMSThread
 
 		public HopThread(final int start, final int stop, final AtomicInteger min, final AtomicInteger max, final AtomicInteger count, final AtomicLong total)
 		{
+			super("c.e.m.HopThread");
 			this.start = start;
 			this.stop = stop;
 			this.min = min;

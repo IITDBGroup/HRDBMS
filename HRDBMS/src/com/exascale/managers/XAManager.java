@@ -359,6 +359,10 @@ public class XAManager extends HRDBMSThread
 		}
 
 		final ArrayList<Operator> array = parse.parse();
+		if(HRDBMSWorker.logger.isTraceEnabled()) {
+			HRDBMSWorker.logger.trace("Parsing completed");
+			Utils.printTree(array.get(0), 0);
+		}
 		final Plan plan = new Plan(false, array);
 		txs.multiPut(tx, plan);
 		return new XAWorker(plan, tx, false);

@@ -344,6 +344,7 @@ public class LoadRecordWriter extends RecordWriter
 
 		public ConfirmationThread(final String hostname, final String portString, final String table, final int device, final ArrayList<ArrayList<Object>> rows)
 		{
+			super("c.e.m.ConfirmationThread");
 			this.hostname = hostname;
 			this.portString = portString;
 			this.table = table;
@@ -408,6 +409,7 @@ public class LoadRecordWriter extends RecordWriter
 
 		public LoadThread(final String hostname, final String portString, final String table, final HashMap<Integer, ArrayList<ArrayList<Object>>> rows)
 		{
+			super("c.e.m.LoadThread");
 			this.hostname = hostname;
 			this.portString = portString;
 			this.table = table;

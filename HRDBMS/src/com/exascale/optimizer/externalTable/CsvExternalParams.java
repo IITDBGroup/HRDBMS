@@ -91,18 +91,20 @@ public class CsvExternalParams implements ExternalParamsInterface {
 
     /** Check if HTTP address return 200 status code */
     private static boolean checkHttpAddress(String csvFile) {
-        try {
-            URL u = new URL(csvFile);
-            HttpURLConnection huc = (HttpURLConnection) u.openConnection();
-            huc.setRequestMethod("HEAD");
-            huc.connect();
-            if (HttpURLConnection.HTTP_OK == huc.getResponseCode()) {
-                return true;
+        if(csvFile.startsWith("http")) {
+            try {
+                URL u = new URL(csvFile);
+                HttpURLConnection huc = (HttpURLConnection) u.openConnection();
+                huc.setRequestMethod("HEAD");
+                huc.connect();
+                if (HttpURLConnection.HTTP_OK != huc.getResponseCode()) {
+                    return false;
+                }
+            } catch (Exception e) {
+                throw new RuntimeException("URL '" + csvFile + "' does not respond", e);
             }
-        } catch (Exception e) {
-
         }
-        throw new RuntimeException("URL '" + csvFile + "' does not respond");
+        return true;
     }
 
     public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception {
