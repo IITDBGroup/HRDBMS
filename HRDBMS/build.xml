@@ -92,12 +92,7 @@
 	</target>  -->
 
 	<!-- CREATE PARSER -->
-	<target name="createParser">
-		<path id="classpath">
-			<fileset dir="${librarydir}">
-				<include name="*antlr*.jar"/>
-			</fileset>
-		</path>
+	<target name="createParser" depends="clean">
 		<java classname="org.antlr.v4.Tool" classpathref="classpath">
 			<arg value="-visitor"/>
 			<arg value="-package"/>
@@ -109,7 +104,8 @@
 	</target>
 	
 	<!-- COMPILE SYSTEM -->
-	<target name="compile" depends="clean">
+	<target name="compile" depends="createParser">
+<echo>KLASPATH ${toString:classpath}</echo>
 		<depend srcdir="${sourcedir}"
 		        destdir="${binarydir}"
 		        cache="depcache"
