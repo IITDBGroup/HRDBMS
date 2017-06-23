@@ -105,7 +105,6 @@
 	
 	<!-- COMPILE SYSTEM -->
 	<target name="compile" depends="createParser">
-<echo>KLASPATH ${toString:classpath}</echo>
 		<depend srcdir="${sourcedir}"
 		        destdir="${binarydir}"
 		        cache="depcache"
