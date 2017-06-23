@@ -256,10 +256,6 @@ public final class ExternalTableScanOperator extends TableScanOperator
 					return new DataEndMarker();
 				}
 
-				if (orderedFilters.size() == 0) {
-                    return row;
-                }
-
 				CNFFilter filter = orderedFilters.get(parents.get(0));
 				if (filter != null) {
 					if (filter.passes((ArrayList<Object>) row)) {
