@@ -1,10 +1,8 @@
 <ivysettings>
-    <include url="${ivy.default.settings.dir}/ivysettings.xml"/>
-    <property name="ivy.repo.url" value="http://www.sosy-lab.org/ivy"/>
-    <settings defaultResolver="chain"/>
-    <resolvers>
-        <chain name="chain">
-            <ibiblio name="central" m2compatible="true" />
-        </chain>
-    </resolvers>
+  <settings defaultResolver="chain" />
+  <resolvers>
+    <chain name="chain">
+      <ibiblio name="securedcentral" m2compatible="true" root="https://repo1.maven.org/maven2" />
+    </chain>
+  </resolvers>
 </ivysettings>
