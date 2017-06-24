@@ -33,6 +33,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
+
+import com.exascale.optimizer.externalTable.*;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
@@ -862,91 +864,81 @@ public final class LoadOperator implements Operator, Serializable
 			}
 		}
 
-		if (glob.startsWith("hdfs://"))
-		{
-			doHDFS(schema, table, tx, pos2Col, cols2Types, pos2Length, keys, types, orders, indexes, type);
-			MetaData.cluster(schema, table, tx, pos2Col, cols2Types, type);
-			return;
-		}
+//		if (glob.startsWith("hdfs://"))
+//		{
+//			doHDFS(schema, table, tx, pos2Col, cols2Types, pos2Length, keys, types, orders, indexes, type);
+//			MetaData.cluster(schema, table, tx, pos2Col, cols2Types, type);
+//			return;
+//		}
+        final ArrayList<ReadThread> threads = new ArrayList<>();
+        final PartitionMetaData spmd = new MetaData().getPartMeta(schema, table, tx);
+        if (glob.startsWith("hdfs://")) {
+            threads.add(new ExternalReadThread(glob, pos2Length, indexes, cols2Pos, cols2Types, pos2Col, spmd, keys, types, orders, type));
+        } else {
+            // figure out what files to read from
+            final ArrayList<Path> files = new ArrayList<Path>();
+            final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + glob);
+            int a = 0;
+            int b = 0;
+            while (a < glob.length()) {
+                if (glob.charAt(a) == '/') {
+                    b = a;
+                }
 
-		// figure out what files to read from
-		final ArrayList<Path> files = new ArrayList<Path>();
-		final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + glob);
-		int a = 0;
-		int b = 0;
-		while (a < glob.length())
-		{
-			if (glob.charAt(a) == '/')
-			{
-				b = a;
-			}
+                if (glob.charAt(a) == '*') {
+                    break;
+                }
 
-			if (glob.charAt(a) == '*')
-			{
-				break;
-			}
+                a++;
+            }
 
-			a++;
-		}
+            final String startingPath = glob.substring(0, b + 1);
+            final Set<FileVisitOption> options = new HashSet<FileVisitOption>();
+            final HashSet<String> dirs = new HashSet<String>();
+            options.add(FileVisitOption.FOLLOW_LINKS);
+            HRDBMSWorker.logger.debug("Starting search with directory: " + startingPath);
+            Files.walkFileTree(Paths.get(startingPath), options, Integer.MAX_VALUE, new SimpleFileVisitor<Path>() {
+                @Override
+                public FileVisitResult postVisitDirectory(final Path file, final IOException exc) throws IOException {
+                    return FileVisitResult.CONTINUE;
+                }
 
-		final String startingPath = glob.substring(0, b + 1);
-		final Set<FileVisitOption> options = new HashSet<FileVisitOption>();
-		final HashSet<String> dirs = new HashSet<String>();
-		options.add(FileVisitOption.FOLLOW_LINKS);
-		HRDBMSWorker.logger.debug("Starting search with directory: " + startingPath);
-		Files.walkFileTree(Paths.get(startingPath), options, Integer.MAX_VALUE, new SimpleFileVisitor<Path>() {
-			@Override
-			public FileVisitResult postVisitDirectory(final Path file, final IOException exc) throws IOException
-			{
-				return FileVisitResult.CONTINUE;
-			}
+                @Override
+                public FileVisitResult visitFile(final Path file, final java.nio.file.attribute.BasicFileAttributes attrs) throws IOException {
+                    try {
+                        final String dir = file.getParent().toString();
+                        if (!dirs.contains(dir)) {
+                            dirs.add(dir);
+                            HRDBMSWorker.logger.debug("New directory visited: " + dir);
+                        }
+                        if (matcher.matches(file)) {
+                            files.add(file);
+                        }
+                        return FileVisitResult.CONTINUE;
+                    } catch (final Exception e) {
+                        HRDBMSWorker.logger.debug("", e);
+                        return FileVisitResult.CONTINUE;
+                    }
+                }
 
-			@Override
-			public FileVisitResult visitFile(final Path file, final java.nio.file.attribute.BasicFileAttributes attrs) throws IOException
-			{
-				try
-				{
-					final String dir = file.getParent().toString();
-					if (!dirs.contains(dir))
-					{
-						dirs.add(dir);
-						HRDBMSWorker.logger.debug("New directory visited: " + dir);
-					}
-					if (matcher.matches(file))
-					{
-						files.add(file);
-					}
-					return FileVisitResult.CONTINUE;
-				}
-				catch (final Exception e)
-				{
-					HRDBMSWorker.logger.debug("", e);
-					return FileVisitResult.CONTINUE;
-				}
-			}
+                @Override
+                public FileVisitResult visitFileFailed(final Path file, final IOException exc) throws IOException {
+                    return FileVisitResult.CONTINUE;
+                }
+            });
 
-			@Override
-			public FileVisitResult visitFileFailed(final Path file, final IOException exc) throws IOException
-			{
-				return FileVisitResult.CONTINUE;
-			}
-		});
 
-		final ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
-		final PartitionMetaData spmd = new MetaData().getPartMeta(schema, table, tx);
-		if (files.size() == 0)
-		{
-			throw new Exception("Load input files were not found!");
-		}
-		HRDBMSWorker.logger.debug("Going to load from: ");
-		int debug = 1;
-		for (final Path path : files)
-		{
-			HRDBMSWorker.logger.debug(debug + ") " + path);
-			debug++;
-			threads.add(new ReadThread(path.toFile(), pos2Length, indexes, cols2Pos, cols2Types, pos2Col, spmd, keys, types, orders, type));
-		}
-
+            if (files.size() == 0) {
+                throw new Exception("Load input files were not found!");
+            }
+            HRDBMSWorker.logger.debug("Going to load from: ");
+            int debug = 1;
+            for (final Path path : files) {
+                HRDBMSWorker.logger.debug(debug + ") " + path);
+                debug++;
+                threads.add(new ReadThread(path.toFile(), pos2Length, indexes, cols2Pos, cols2Types, pos2Col, spmd, keys, types, orders, type));
+            }
+        }
 		for (final ReadThread thread : threads)
 		{
 			thread.start();
@@ -1513,21 +1505,157 @@ public final class LoadOperator implements Operator, Serializable
 		}
 	}
 
+	private class ExternalReadThread extends ReadThread {
+
+        private ExternalTableScanOperator op;
+
+		public ExternalReadThread(final String file, final HashMap<Integer, Integer> pos2Length, final ArrayList<String> indexes, final HashMap<String, Integer> cols2Pos, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> pos2Col, final PartitionMetaData spmd, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final int type) {
+            super(pos2Length, indexes, cols2Pos, cols2Types, pos2Col, spmd, keys, types, orders, type);
+		}
+
+        @Override
+        public void run()
+        {
+            FlushMasterThread master = null;
+            try
+            {
+                // hardcoded class initialization. Input should be given by user
+                ExternalTableType extTable = new HTTPCsvExternal();
+                extTable.setCols2Types(meta.getCols2TypesForTable(schema, table, tx));
+                HashMap<String, Integer> cols2Pos = meta.getCols2PosForTable(schema, table, tx);
+                extTable.setCols2Pos(cols2Pos);
+                extTable.setPos2Col(meta.cols2PosFlip(cols2Pos));
+                extTable.setName(table);
+                extTable.setSchema(schema);
+                // hardcoded parameters. Input should be given by user
+                extTable.setParams(
+                    JSONUtils.toObject("{\"source\":\"HDFS\",\"ignoreHeader\":\"true\",\"delimiter\":\",\",\"location\":\""+ glob + "\"}", extTable.getParamsClass())
+                );
+
+                op = new ExternalTableScanOperator(extTable, schema, table, meta, tx);
+                op.start();
+                Object o = op.next(LoadOperator.this);
+                final PartitionMetaData pmeta = new PartitionMetaData(schema, table, tx);
+                final int numNodes = MetaData.numWorkerNodes;
+                while (!(o instanceof DataEndMarker))
+                {
+                    final ArrayList<Object> row = (ArrayList<Object>)o;
+                    num++;
+                    for (final Map.Entry entry : pos2Length.entrySet())
+                    {
+                        if (((String)row.get((Integer)entry.getKey())).length() > (Integer)entry.getValue())
+                        {
+                            ok = false;
+                            return;
+                        }
+                    }
+                    final ArrayList<Integer> nodes = MetaData.determineNode(schema, table, row, tx, pmeta, cols2Pos, numNodes);
+                    final int device = MetaData.determineDevice(row, pmeta, cols2Pos);
+
+                    lock.readLock().lock();
+                    for (final Integer node : nodes)
+                    {
+                        plan.addNode(node);
+                        final long key = (((long)node) << 32) + device;
+                        map.multiPut(key, row);
+                    }
+                    lock.readLock().unlock();
+                    if (map.totalSize() > MAX_BATCH)
+                    {
+                        if (master != null)
+                        {
+                            master.join();
+                            if (!master.getOK())
+                            {
+                                throw new Exception("Error flushing inserts");
+                            }
+                        }
+
+                        master = flush(indexes, spmd, keys, types, orders, pos2Col, cols2Types, type);
+                    }
+
+                    o = op.next(LoadOperator.this);
+                }
+
+                if (master != null)
+                {
+                    master.join();
+                    if (!master.getOK())
+                    {
+                        throw new Exception("Error flushing inserts");
+                    }
+                }
+
+                if (map.totalSize() > 0)
+                {
+                    master = flush(indexes, spmd, keys, types, orders, true, pos2Col, cols2Types, type);
+                    master.join();
+                    if (!master.getOK())
+                    {
+                        throw new Exception("Error flushing inserts");
+                    }
+                }
+
+                int count;
+                lock.readLock().lock();
+                count = waitThreads.size();
+                lock.readLock().unlock();
+
+                while (count > 0 && map.totalSize() == 0)
+                {
+                    master = flush(indexes, spmd, keys, types, orders, true, pos2Col, cols2Types, type);
+                    master.join();
+                    if (!master.getOK())
+                    {
+                        throw new Exception("Error flushing inserts");
+                    }
+
+                    lock.readLock().lock();
+                    count = waitThreads.size();
+                    lock.readLock().unlock();
+                }
+
+                synchronized (fThreads)
+                {
+                    for (final FlushThread thread : fThreads)
+                    {
+                        if (thread.started())
+                        {
+                            thread.join();
+                            if (!thread.getOK())
+                            {
+                                throw new Exception("Error flushing inserts");
+                            }
+                        }
+                    }
+                }
+                op.close();
+            }
+            catch (final Exception e)
+            {
+                ok = false;
+                HRDBMSWorker.logger.debug("", e);
+            }
+        }
+
+
+    }
+
 	private class ReadThread extends HRDBMSThread
 	{
 		private final File file;
-		private final HashMap<Integer, Integer> pos2Length;
-		private final ArrayList<String> indexes;
-		private boolean ok = true;
-		private volatile long num = 0;
-		private final HashMap<String, Integer> cols2Pos;
+		protected final HashMap<Integer, Integer> pos2Length;
+        protected final ArrayList<String> indexes;
+        protected boolean ok = true;
+        protected volatile long num = 0;
+        protected final HashMap<String, Integer> cols2Pos;
 		PartitionMetaData spmd;
-		private final ArrayList<ArrayList<String>> keys;
-		private final ArrayList<ArrayList<String>> types;
-		private final ArrayList<ArrayList<Boolean>> orders;
-		private final TreeMap<Integer, String> pos2Col;
-		private final HashMap<String, String> cols2Types;
-		private final int type;
+        protected final ArrayList<ArrayList<String>> keys;
+        protected final ArrayList<ArrayList<String>> types;
+        protected final ArrayList<ArrayList<Boolean>> orders;
+        protected final TreeMap<Integer, String> pos2Col;
+        protected final HashMap<String, String> cols2Types;
+        protected final int type;
 
 		public ReadThread(final File file, final HashMap<Integer, Integer> pos2Length, final ArrayList<String> indexes, final HashMap<String, Integer> cols2Pos, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> pos2Col, final PartitionMetaData spmd, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final int type)
 		{
@@ -1544,7 +1672,22 @@ public final class LoadOperator implements Operator, Serializable
 			this.type = type;
 		}
 
-		public long getNum()
+        public ReadThread(final HashMap<Integer, Integer> pos2Length, final ArrayList<String> indexes, final HashMap<String, Integer> cols2Pos, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> pos2Col, final PartitionMetaData spmd, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final int type)
+        {
+            this.pos2Length = pos2Length;
+            this.indexes = indexes;
+            this.cols2Pos = cols2Pos;
+            this.spmd = spmd;
+            this.keys = keys;
+            this.types = types;
+            this.orders = orders;
+            this.pos2Col = pos2Col;
+            this.cols2Types = cols2Types;
+            this.type = type;
+            this.file = null;
+        }
+
+        public long getNum()
 		{
 			return num;
 		}
