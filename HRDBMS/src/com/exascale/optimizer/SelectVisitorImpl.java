@@ -1,19 +1,13 @@
 package com.exascale.optimizer;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
-import java.util.Properties;
 import java.util.ArrayList;
-import com.exascale.optimizer.externalTable.ExternalTableType;
-import com.exascale.optimizer.externalTable.HDFSCsvExternal;
-import com.exascale.optimizer.externalTable.JSONUtils;
+
+import com.exascale.optimizer.externalTable.*;
+import com.exascale.optimizer.load.Load;
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.misc.Interval;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import com.exascale.misc.Utils;
-import com.exascale.optimizer.externalTable.CreateExternalTable;
-import org.apache.hadoop.fs.swift.util.JSONUtil;
 
 public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 {
@@ -666,7 +660,12 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 		final int second = glob.indexOf('\'', first + 1);
 		glob = glob.substring(first + 1, second);
 
-		return new Load(table, replace, delimited, glob);
+		TableName extTable = null;
+		if(ctx.externalTableName() != null) {
+			extTable = (TableName) visit(ctx.externalTableName().tableName());
+		}
+
+		return new Load(table, replace, delimited, glob, extTable);
 	}
 
 	@Override

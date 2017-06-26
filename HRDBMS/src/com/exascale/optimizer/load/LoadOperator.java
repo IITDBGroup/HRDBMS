@@ -1,4 +1,4 @@
-package com.exascale.optimizer;
+package com.exascale.optimizer.load;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -34,6 +34,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 
+import com.exascale.optimizer.*;
 import com.exascale.optimizer.externalTable.*;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.Job;
@@ -68,8 +69,7 @@ public final class LoadOperator implements Operator, Serializable
 	private Operator parent;
 	private int node;
 	private transient Plan plan;
-	private final String schema;
-	private final String table;
+	private final String schema, table, externalTable;
 	private final AtomicLong num = new AtomicLong(0);
 	private volatile boolean done = false;
 	private final LOMultiHashMap map = new LOMultiHashMap<Long, ArrayList<Object>>();
@@ -83,7 +83,7 @@ public final class LoadOperator implements Operator, Serializable
 	private volatile transient ArrayList<FlushThread> waitThreads;
 	private transient ScalableStampedRWLock lock;
 
-	public LoadOperator(final String schema, final String table, final boolean replace, final String delimiter, final String glob, final MetaData meta)
+	public LoadOperator(final String schema, final String table, final boolean replace, final String delimiter, final String glob, final MetaData meta, final String externalTable)
 	{
 		this.schema = schema;
 		this.table = table;
@@ -91,6 +91,7 @@ public final class LoadOperator implements Operator, Serializable
 		this.delimiter = delimiter;
 		this.glob = glob;
 		this.meta = meta;
+		this.externalTable = externalTable;
 	}
 
 	/** Sends load metadata to worker */
@@ -630,7 +631,7 @@ public final class LoadOperator implements Operator, Serializable
 	@Override
 	public LoadOperator clone()
 	{
-		final LoadOperator retval = new LoadOperator(schema, table, replace, delimiter, glob, meta);
+		final LoadOperator retval = new LoadOperator(schema, table, replace, delimiter, glob, meta, externalTable);
 		retval.node = node;
 		return retval;
 	}
@@ -872,8 +873,8 @@ public final class LoadOperator implements Operator, Serializable
 //		}
         final ArrayList<ReadThread> threads = new ArrayList<>();
         final PartitionMetaData spmd = new MetaData().getPartMeta(schema, table, tx);
-        if (glob.startsWith("hdfs://")) {
-            threads.add(new ExternalReadThread(glob, pos2Length, indexes, cols2Pos, cols2Types, pos2Col, spmd, keys, types, orders, type));
+        if (externalTable != null) {
+            threads.add(new ExternalReadThread(pos2Length, indexes, cols2Pos, cols2Types, pos2Col, spmd, keys, types, orders, type));
         } else {
             // figure out what files to read from
             final ArrayList<Path> files = new ArrayList<Path>();
@@ -1506,11 +1507,10 @@ public final class LoadOperator implements Operator, Serializable
 	}
 
 	private class ExternalReadThread extends ReadThread {
-
         private ExternalTableScanOperator op;
 
-		public ExternalReadThread(final String file, final HashMap<Integer, Integer> pos2Length, final ArrayList<String> indexes, final HashMap<String, Integer> cols2Pos, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> pos2Col, final PartitionMetaData spmd, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final int type) {
-            super(pos2Length, indexes, cols2Pos, cols2Types, pos2Col, spmd, keys, types, orders, type);
+		public ExternalReadThread(final HashMap<Integer, Integer> pos2Length, final ArrayList<String> indexes, final HashMap<String, Integer> cols2Pos, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> pos2Col, final PartitionMetaData spmd, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final int type) {
+            super(null, pos2Length, indexes, cols2Pos, cols2Types, pos2Col, spmd, keys, types, orders, type);
 		}
 
         @Override
@@ -1519,20 +1519,8 @@ public final class LoadOperator implements Operator, Serializable
             FlushMasterThread master = null;
             try
             {
-                // hardcoded class initialization. Input should be given by user
-                ExternalTableType extTable = new HTTPCsvExternal();
-                extTable.setCols2Types(meta.getCols2TypesForTable(schema, table, tx));
-                HashMap<String, Integer> cols2Pos = meta.getCols2PosForTable(schema, table, tx);
-                extTable.setCols2Pos(cols2Pos);
-                extTable.setPos2Col(meta.cols2PosFlip(cols2Pos));
-                extTable.setName(table);
-                extTable.setSchema(schema);
-                // hardcoded parameters. Input should be given by user
-                extTable.setParams(
-                    JSONUtils.toObject("{\"source\":\"HDFS\",\"ignoreHeader\":\"true\",\"delimiter\":\",\",\"location\":\""+ glob + "\"}", extTable.getParamsClass())
-                );
-
-                op = new ExternalTableScanOperator(extTable, schema, table, meta, tx);
+				ExternalTableType extTable = meta.getExternalTable(schema, externalTable, tx);
+				op = new ExternalTableScanOperator(extTable, schema, externalTable, meta, tx);
                 op.start();
                 Object o = op.next(LoadOperator.this);
                 final PartitionMetaData pmeta = new PartitionMetaData(schema, table, tx);
@@ -1671,21 +1659,6 @@ public final class LoadOperator implements Operator, Serializable
 			this.cols2Types = cols2Types;
 			this.type = type;
 		}
-
-        public ReadThread(final HashMap<Integer, Integer> pos2Length, final ArrayList<String> indexes, final HashMap<String, Integer> cols2Pos, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> pos2Col, final PartitionMetaData spmd, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final int type)
-        {
-            this.pos2Length = pos2Length;
-            this.indexes = indexes;
-            this.cols2Pos = cols2Pos;
-            this.spmd = spmd;
-            this.keys = keys;
-            this.types = types;
-            this.orders = orders;
-            this.pos2Col = pos2Col;
-            this.cols2Types = cols2Types;
-            this.type = type;
-            this.file = null;
-        }
 
         public long getNum()
 		{

@@ -80,7 +80,7 @@ import com.exascale.optimizer.Index;
 import com.exascale.optimizer.Index.IndexRecord;
 import com.exascale.optimizer.IndexOperator;
 import com.exascale.optimizer.InsertOperator;
-import com.exascale.optimizer.LoadMetaData;
+import com.exascale.optimizer.load.LoadMetaData;
 import com.exascale.optimizer.MetaData;
 import com.exascale.optimizer.PartitionMetaData;
 import com.exascale.optimizer.NetworkReceiveOperator;

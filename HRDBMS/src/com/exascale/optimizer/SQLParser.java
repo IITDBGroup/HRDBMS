@@ -4,16 +4,15 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 
 import com.exascale.misc.Utils;
-import com.exascale.optimizer.externalTable.CreateExternalTableOperator;
-import com.exascale.optimizer.externalTable.ExternalTableScanOperator;
-import com.exascale.optimizer.externalTable.ExternalTableType;
+import com.exascale.optimizer.externalTable.*;
+import com.exascale.optimizer.load.Load;
+import com.exascale.optimizer.load.LoadOperator;
 import org.antlr.v4.runtime.ANTLRInputStream;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
 import com.exascale.exceptions.ParseException;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DateParser;
-import com.exascale.optimizer.externalTable.CreateExternalTable;
 import com.exascale.tables.SQL;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.ConnectionWorker;
@@ -1763,44 +1762,35 @@ public class SQLParser
 	}
 
 	/** Handles parsing of the create external table statement. */
-	private Operator buildOperatorTreeFromCreateExternalTable(CreateExternalTable createExternalTable) throws Exception
-	{
+	private Operator buildOperatorTreeFromCreateExternalTable(CreateExternalTable createExternalTable) throws Exception {
 		TableName table = createExternalTable.getTable();
 		String schema = null;
 		String tbl = null;
-		if (table.getSchema() == null)
-		{
+		if (table.getSchema() == null) {
 			schema = new MetaData(connection).getCurrentSchema();
 			tbl = table.getName();
-		}
-		else
-		{
+		} else {
 			schema = table.getSchema();
 			tbl = table.getName();
 		}
 
-		if (meta.verifyTableExistence(schema, tbl, tx) || meta.verifyViewExistence(schema, tbl, tx))
-		{
+		if (meta.verifyTableExistence(schema, tbl, tx) || meta.verifyViewExistence(schema, tbl, tx)) {
 			throw new ParseException("External Table already exists");
 		}
 
 		ArrayList<ColDef> colDefs = createExternalTable.getCols();
 		HashSet<String> colNames = new HashSet<String>();
-		for (ColDef def : colDefs)
-		{
+		for (ColDef def : colDefs) {
 			String col = def.getCol().getColumn();
-			if (def.getCol().getTable() != null)
-			{
+			if (def.getCol().getTable() != null) {
 				throw new ParseException("Column names cannot be qualified with table names in a CREATE TABLE statement");
 			}
 
-			if (!colNames.add(col))
-			{
+			if (!colNames.add(col)) {
 				throw new ParseException("CREATE TABLE statement had a duplicate column names");
 			}
 
-			if (def.isNullable() && def.isPK())
-			{
+			if (def.isNullable() && def.isPK()) {
 				throw new ParseException("A column cannot be nullable and part of the primary key");
 			}
 		}
@@ -4772,7 +4762,7 @@ public class SQLParser
 			throw new ParseException("Table does not exist");
 		}
 
-		return new LoadOperator(schema, tbl, load.isReplace(), load.getDelimiter(), load.getGlob(), meta);
+		return new LoadOperator(schema, tbl, load.isReplace(), load.getDelimiter(), load.getGlob(), meta, load.getExtTable().getName());
 	}
 
 	private Operator buildOperatorTreeFromOrderBy(final OrderBy orderBy, final Operator op) throws ParseException

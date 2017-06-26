@@ -23,7 +23,7 @@ import com.exascale.misc.VHJOMultiHashMap;
 import com.exascale.optimizer.CreateIndexOperator;
 import com.exascale.optimizer.DeleteOperator;
 import com.exascale.optimizer.InsertOperator;
-import com.exascale.optimizer.LoadOperator;
+import com.exascale.optimizer.load.LoadOperator;
 import com.exascale.optimizer.MassDeleteOperator;
 import com.exascale.optimizer.MetaData;
 import com.exascale.optimizer.NetworkReceiveOperator;

@@ -1,4 +1,6 @@
-package com.exascale.optimizer;
+package com.exascale.optimizer.load;
+
+import com.exascale.optimizer.PartitionMetaData;
 
 import java.io.Serializable;
 import java.util.ArrayList;

@@ -1,4 +1,4 @@
-package com.exascale.optimizer;
+package com.exascale.optimizer.externalTable;
 
 public class GeneralExtTableSpec
 {

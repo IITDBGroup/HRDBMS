@@ -1,4 +1,4 @@
-package com.exascale.optimizer;
+package com.exascale.optimizer.externalTable;
 
 /** Each external table is specified by the canonical name of the implementing Java class and the parameter string */
 public class JavaClassExtTableSpec

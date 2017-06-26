@@ -19,7 +19,7 @@ import com.exascale.optimizer.DropViewOperator;
 import com.exascale.optimizer.HashJoinOperator;
 import com.exascale.optimizer.IndexOperator;
 import com.exascale.optimizer.InsertOperator;
-import com.exascale.optimizer.LoadOperator;
+import com.exascale.optimizer.load.LoadOperator;
 import com.exascale.optimizer.MassDeleteOperator;
 import com.exascale.optimizer.MultiOperator;
 import com.exascale.optimizer.NestedLoopJoinOperator;

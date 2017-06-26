@@ -2,8 +2,6 @@ package com.exascale.optimizer.externalTable;
 
 import java.util.ArrayList;
 import com.exascale.optimizer.ColDef;
-import com.exascale.optimizer.GeneralExtTableSpec;
-import com.exascale.optimizer.JavaClassExtTableSpec;
 import com.exascale.optimizer.SQLStatement;
 import com.exascale.optimizer.TableName;
 
