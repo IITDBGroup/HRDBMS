@@ -45,7 +45,7 @@ dropView : 'DROP' 'VIEW' tableName ;
 createIndex : 'CREATE' UNIQUE? 'INDEX' tableName 'ON' tableName '(' indexDef (',' indexDef)* ')' ;
 dropIndex : 'DROP' 'INDEX' tableName ;
 
-load : 'LOAD' (REPLACE | RESUME) 'INTO' tableName ((('DELIMITER' any)? 'FROM' remainder) | 'FROM' 'EXTERNAL' externalTableName);
+load : 'LOAD' (REPLACE | RESUME) 'INTO' tableName ((('DELIMITER' any)? 'FROM' remainder) | 'EXTERNAL' 'FROM' externalTableName);
 externalTableName : tableName ;
 any : . ;
 remainder : .*? EOF ;

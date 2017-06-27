@@ -655,10 +655,13 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 		}
 
 		final TableName table = (TableName)visit(ctx.tableName());
-		String glob = ctx.remainder().getText();
-		final int first = glob.indexOf('\'');
-		final int second = glob.indexOf('\'', first + 1);
-		glob = glob.substring(first + 1, second);
+		String glob = null;
+		if(ctx.remainder() != null) {
+			glob = ctx.remainder().getText();
+			final int first = glob.indexOf('\'');
+			final int second = glob.indexOf('\'', first + 1);
+			glob = glob.substring(first + 1, second);
+		}
 
 		TableName extTable = null;
 		if(ctx.externalTableName() != null) {
