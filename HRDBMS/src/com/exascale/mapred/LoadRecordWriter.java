@@ -1,7 +1,6 @@
 package com.exascale.mapred;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -10,12 +9,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+
+import com.exascale.optimizer.OperatorUtils;
 import org.apache.hadoop.mapreduce.RecordWriter;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import com.exascale.misc.MyDate;
 import com.exascale.optimizer.MetaData;
-import com.exascale.mapred.MyLongWritable;
-
 
 public class LoadRecordWriter extends RecordWriter
 {
@@ -47,60 +46,6 @@ public class LoadRecordWriter extends RecordWriter
 
 			return retval;
 		}
-	}
-
-	private static void getConfirmation(final Socket sock) throws Exception
-	{
-		final InputStream in = sock.getInputStream();
-		final byte[] inMsg = new byte[2];
-
-		int count = 0;
-		while (count < 2)
-		{
-			try
-			{
-				final int temp = in.read(inMsg, count, 2 - count);
-				if (temp == -1)
-				{
-					in.close();
-					throw new Exception();
-				}
-				else
-				{
-					count += temp;
-				}
-			}
-			catch (final Exception e)
-			{
-				in.close();
-				throw new Exception();
-			}
-		}
-
-		final String inStr = new String(inMsg, StandardCharsets.UTF_8);
-		if (!inStr.equals("OK"))
-		{
-			in.close();
-			throw new Exception();
-		}
-
-		try
-		{
-			in.close();
-		}
-		catch (final Exception e)
-		{
-		}
-	}
-
-	private static byte[] intToBytes(final int val)
-	{
-		final byte[] buff = new byte[4];
-		buff[0] = (byte)(val >> 24);
-		buff[1] = (byte)((val & 0x00FF0000) >> 16);
-		buff[2] = (byte)((val & 0x0000FF00) >> 8);
-		buff[3] = (byte)((val & 0x000000FF));
-		return buff;
 	}
 
 	private static final byte[] rsToBytes(final ArrayList<ArrayList<Object>> rows) throws Exception
@@ -379,16 +324,16 @@ public class LoadRecordWriter extends RecordWriter
 				outMsg[14] = 0;
 				outMsg[15] = 0;
 				out.write(outMsg);
-				final byte[] dev = intToBytes(device);
+				final byte[] dev = OperatorUtils.intToBytes(device);
 				out.write(dev);
 				final byte[] data = table.getBytes(StandardCharsets.UTF_8);
-				final byte[] length = intToBytes(data.length);
+				final byte[] length = OperatorUtils.intToBytes(data.length);
 				out.write(length);
 				out.write(data);
 				out.write(rsToBytes(rows));
 				out.flush();
 				rows.clear();
-				getConfirmation(sock);
+				OperatorUtils.getConfirmation(sock);
 				out.close();
 				sock.close();
 			}

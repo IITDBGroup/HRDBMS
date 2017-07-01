@@ -1,5 +1,7 @@
 package com.exascale.optimizer.externalTable;
 
+/** A short cut syntax for loading from a CSV.  Recommended to use the Java Class ext table spec with HTTPCsvExternal instead. */
+@Deprecated
 public class GeneralExtTableSpec
 {
 	private final String sourceList;

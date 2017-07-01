@@ -3173,6 +3173,7 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
+	/** Generates cardinality statistics for use by the optimizer */
 	public HashMap<String, Double> generateCard(final Operator op, final Transaction tx, final Operator tree) throws Exception
 	{
 		final HashMap<Operator, ArrayList<String>> tables = new HashMap<Operator, ArrayList<String>>();

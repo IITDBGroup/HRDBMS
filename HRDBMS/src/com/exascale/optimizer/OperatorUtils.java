@@ -2,16 +2,13 @@ package com.exascale.optimizer;
 
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.Socket;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
+
+import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.FastStringTokenizer;
 import com.exascale.misc.HrdbmsType;
 import com.exascale.misc.MyDate;
@@ -19,6 +16,7 @@ import com.exascale.optimizer.externalTable.*;
 
 public class OperatorUtils
 {
+	public static int MAX_NEIGHBOR_NODES = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 	private static AtomicLong id = new AtomicLong(0);
 
 	//TODO - CONVERT THIS TO USE THE com.exascale.misc.HrdbmsType enum everywhere.
@@ -2643,7 +2641,7 @@ public class OperatorUtils
 		out.write(type.ordinal());
 	}
 
-	private static byte[] intToBytes(final int val)
+	public static byte[] intToBytes(final int val)
 	{
 		final byte[] buff = new byte[4];
 		buff[0] = (byte)(val >> 24);
@@ -2653,7 +2651,7 @@ public class OperatorUtils
 		return buff;
 	}
 
-	private static byte[] longToBytes(final long val)
+	public static byte[] longToBytes(final long val)
 	{
 		final byte[] buff = new byte[8];
 		buff[0] = (byte)(val >> 56);
@@ -2667,11 +2665,273 @@ public class OperatorUtils
 		return buff;
 	}
 
-	// private static byte[] shortToBytes(int val)
-	// {
-	// final byte[] buff = new byte[2];
-	// buff[0] = (byte)((val & 0x0000FF00) >> 8);
-	// buff[1] = (byte)((val & 0x000000FF));
-	// return buff;
-	// }
+	public static byte[] stringToBytes(final String string) {
+		byte[] data = null;
+		try
+		{
+			data = string.getBytes(StandardCharsets.UTF_8);
+		}
+		catch (final Exception e)
+		{
+		}
+		final byte[] len = intToBytes(data.length);
+		final byte[] retval = new byte[data.length + len.length];
+		System.arraycopy(len, 0, retval, 0, len.length);
+		System.arraycopy(data, 0, retval, len.length, data.length);
+		return retval;
+	}
+
+	public static byte[] rsToBytes(final List<ArrayList<Object>> rows) throws Exception
+	{
+		final ByteBuffer[] results = new ByteBuffer[rows.size()];
+		int rIndex = 0;
+		final ArrayList<byte[]> bytes = new ArrayList<byte[]>();
+		for (final ArrayList<Object> val : rows)
+		{
+			bytes.clear();
+			int size = val.size() + 8;
+			final byte[] header = new byte[size];
+			int i = 8;
+			for (final Object o : val)
+			{
+				if (o instanceof Long)
+				{
+					header[i] = (byte)0;
+					size += 8;
+				}
+				else if (o instanceof Integer)
+				{
+					header[i] = (byte)1;
+					size += 4;
+				}
+				else if (o instanceof Double)
+				{
+					header[i] = (byte)2;
+					size += 8;
+				}
+				else if (o instanceof MyDate)
+				{
+					header[i] = (byte)3;
+					size += 4;
+				}
+				else if (o instanceof String)
+				{
+					header[i] = (byte)4;
+					final byte[] b = ((String)o).getBytes(StandardCharsets.UTF_8);
+					size += (4 + b.length);
+					bytes.add(b);
+				}
+				// else if (o instanceof AtomicLong)
+				// {
+				// header[i] = (byte)6;
+				// size += 8;
+				// }
+				// else if (o instanceof AtomicBigDecimal)
+				// {
+				// header[i] = (byte)7;
+				// size += 8;
+				// }
+				else if (o instanceof ArrayList)
+				{
+					if (((ArrayList)o).size() != 0)
+					{
+						final Exception e = new Exception("Non-zero size ArrayList in toBytes()");
+						throw e;
+					}
+					header[i] = (byte)8;
+				}
+				else
+				{
+					throw new Exception("Unknown type " + o.getClass() + " in toBytes()");
+				}
+
+				i++;
+			}
+
+			final byte[] retval = new byte[size];
+			// System.out.println("In toBytes(), row has " + val.size() +
+			// " columns, object occupies " + size + " bytes");
+			System.arraycopy(header, 0, retval, 0, header.length);
+			i = 8;
+			final ByteBuffer retvalBB = ByteBuffer.wrap(retval);
+			retvalBB.putInt(size - 4);
+			retvalBB.putInt(val.size());
+			retvalBB.position(header.length);
+			int bOff = 0;
+			for (final Object o : val)
+			{
+				if (retval[i] == 0)
+				{
+					retvalBB.putLong((Long)o);
+					// if ((Long)o < 0)
+					// {
+					// HRDBMSWorker.logger.debug("Negative long value in
+					// rsToBytes: "
+					// + o);
+					// }
+				}
+				else if (retval[i] == 1)
+				{
+					retvalBB.putInt((Integer)o);
+					// if ((Integer)o < 0)
+					// {
+					// HRDBMSWorker.logger.debug("Negative int value in
+					// rsToBytes: "
+					// + o);
+					// }
+				}
+				else if (retval[i] == 2)
+				{
+					retvalBB.putDouble((Double)o);
+				}
+				else if (retval[i] == 3)
+				{
+					retvalBB.putInt(((MyDate)o).getTime());
+				}
+				else if (retval[i] == 4)
+				{
+					final byte[] temp = bytes.get(bOff++);
+					retvalBB.putInt(temp.length);
+					retvalBB.put(temp);
+				}
+				// else if (retval[i] == 6)
+				// {
+				// retvalBB.putLong(((AtomicLong)o).get());
+				// }
+				// else if (retval[i] == 7)
+				// {
+				// retvalBB.putDouble(((AtomicBigDecimal)o).get().doubleValue());
+				// }
+				else if (retval[i] == 8)
+				{
+				}
+
+				i++;
+			}
+
+			results[rIndex++] = retvalBB;
+		}
+
+		int count = 0;
+		for (final ByteBuffer bb : results)
+		{
+			count += bb.capacity();
+		}
+		final byte[] retval = new byte[count + 4];
+		final ByteBuffer temp = ByteBuffer.allocate(4);
+		temp.asIntBuffer().put(results.length);
+		System.arraycopy(temp.array(), 0, retval, 0, 4);
+		int retvalPos = 4;
+		for (final ByteBuffer bb : results)
+		{
+			final byte[] ba = bb.array();
+			System.arraycopy(ba, 0, retval, retvalPos, ba.length);
+			retvalPos += ba.length;
+		}
+
+		return retval;
+	}
+
+	/** Reads an ack from the passed socket */
+	public static void getConfirmation(final Socket sock) throws Exception
+	{
+		final InputStream in = sock.getInputStream();
+		final byte[] inMsg = new byte[2];
+
+		int count = 0;
+		while (count < 2)
+		{
+			try
+			{
+				final int temp = in.read(inMsg, count, 2 - count);
+				if (temp == -1)
+				{
+					in.close();
+					throw new Exception();
+				}
+				else
+				{
+					count += temp;
+				}
+			}
+			catch (final Exception e)
+			{
+				in.close();
+				throw new Exception();
+			}
+		}
+
+		final String inStr = new String(inMsg, StandardCharsets.UTF_8);
+		if (!inStr.equals("OK"))
+		{
+			in.close();
+			throw new Exception();
+		}
+
+		try
+		{
+			in.close();
+		}
+		catch (final Exception e)
+		{
+		}
+	}
+
+	/** Arranges worker nodes into a tree */
+	public static ArrayList<Object> makeTree(final ArrayList<Integer> nodes)
+	{
+		final int max = MAX_NEIGHBOR_NODES;
+		if (nodes.size() <= max)
+		{
+			final ArrayList<Object> retval = new ArrayList<Object>(nodes);
+			return retval;
+		}
+
+		final ArrayList<Object> retval = new ArrayList<Object>();
+		int i = 0;
+		while (i < max)
+		{
+			retval.add(nodes.get(i));
+			i++;
+		}
+
+		final int remaining = nodes.size() - i;
+		final int perNode = remaining / max + 1;
+
+		int j = 0;
+		final int size = nodes.size();
+		while (i < size)
+		{
+			final int first = (Integer)retval.get(j);
+			retval.remove(j);
+			final ArrayList<Integer> list = new ArrayList<Integer>(perNode + 1);
+			list.add(first);
+			int k = 0;
+			while (k < perNode && i < size)
+			{
+				list.add(nodes.get(i));
+				i++;
+				k++;
+			}
+
+			retval.add(j, list);
+			j++;
+		}
+
+		if (((ArrayList<Integer>)retval.get(0)).size() <= max)
+		{
+			return retval;
+		}
+
+		// more than 2 tier
+		i = 0;
+		while (i < retval.size())
+		{
+			final ArrayList<Integer> list = (ArrayList<Integer>)retval.remove(i);
+			retval.add(i, makeTree(list));
+			i++;
+		}
+
+		return retval;
+	}
 }

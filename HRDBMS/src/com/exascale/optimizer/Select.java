@@ -13,6 +13,7 @@ public class Select extends SQLStatement
 		this.select = select;
 	}
 
+	/** Returns a list of common table expressions associated with this select */
 	public ArrayList<CTE> getCTEs()
 	{
 		return ctes;

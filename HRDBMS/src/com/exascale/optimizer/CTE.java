@@ -2,6 +2,7 @@ package com.exascale.optimizer;
 
 import java.util.ArrayList;
 
+/** Represents a common table expression */
 public class CTE
 {
 	private final String name;

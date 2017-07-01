@@ -6727,6 +6727,7 @@ public class SQLParser
 		}
 	}
 
+	/** Builds execution plan for the entire select statement including common table expressions and the select itself (fullSelect) */
 	private Operator buildOperatorTreeFromSelect(final Select select) throws Exception
 	{
 		if (select.getCTEs().size() > 0)

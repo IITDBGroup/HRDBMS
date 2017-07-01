@@ -9,6 +9,7 @@ import com.exascale.tables.Plan;
 
 public interface Operator
 {
+	/** Add the passed operator as a child of this operator */
 	public void add(Operator op) throws Exception;
 
 	public ArrayList<Operator> children();

@@ -17,6 +17,7 @@ createTable : 'CREATE' COLUMN? 'TABLE' tableName '(' colDef (',' colDef)* (',' p
 organization : ORGANIZATION '(' INTEGER (',' INTEGER)* ')' ;
 
 createExternalTable : 'CREATE' 'EXTERNAL' 'TABLE' tableName '(' colDef (',' colDef)* ')' (generalExtTableSpec | javaClassExtTableSpec) ;
+// Note generalExtTableSpec is deprecated, use javaClassExtTableSpec
 generalExtTableSpec: 'IMPORT' 'FROM' sourceList 'FIELDS' 'DELIMITED' 'BY' anything 'ROWS' 'DELIMITED' 'BY' anything 'FILE' 'PATH' FILEPATHIDENTIFIER ;
 javaClassExtTableSpec: 'USING' '"' javaClassName '"' 'WITH' 'PARAMETERS' '(' json ')' ;
 json: ~(')')+ ;
