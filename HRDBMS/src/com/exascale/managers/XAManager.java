@@ -36,7 +36,7 @@ import com.exascale.optimizer.Phase4;
 import com.exascale.optimizer.Phase5;
 import com.exascale.optimizer.RootOperator;
 import com.exascale.optimizer.RoutingOperator;
-import com.exascale.optimizer.SQLParser;
+import com.exascale.optimizer.parse.SQLParser;
 import com.exascale.optimizer.UpdateOperator;
 import com.exascale.tables.Plan;
 import com.exascale.tables.SQL;

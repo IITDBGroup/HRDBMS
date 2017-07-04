@@ -13,7 +13,7 @@ import org.apache.log4j.Logger;
 import org.apache.log4j.PatternLayout;
 import org.apache.log4j.RollingFileAppender;
 import com.exascale.misc.HParms;
-import com.exascale.optimizer.SQLParser;
+import com.exascale.optimizer.parse.SQLParser;
 import com.exascale.optimizer.SortOperator;
 import com.exascale.tables.Schema;
 import com.exascale.threads.HRDBMSThread;

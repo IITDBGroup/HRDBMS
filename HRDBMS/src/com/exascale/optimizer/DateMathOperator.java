@@ -15,6 +15,7 @@ import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.*;
+import com.exascale.optimizer.parse.SQLParser;
 import com.exascale.tables.Plan;
 
 public final class DateMathOperator implements Operator, Serializable

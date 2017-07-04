@@ -1,7 +1,8 @@
-package com.exascale.optimizer;
+package com.exascale.optimizer.parse;
 
 import java.util.ArrayList;
 
+import com.exascale.optimizer.*;
 import com.exascale.optimizer.externalTable.*;
 import com.exascale.optimizer.load.Load;
 import org.antlr.v4.runtime.CharStream;
