@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/** Starts up several child threads to flush data out to the workers */
 public class FlushMasterThread extends HRDBMSThread {
     private final ArrayList<String> indexes;
     private boolean ok;
@@ -67,7 +68,7 @@ public class FlushMasterThread extends HRDBMSThread {
                     return;
                 }
 
-                threads = new ArrayList<FlushThread>();
+                threads = new ArrayList<>();
                 for (final Object o : loadOperator.getMap().getKeySet())
                 {
                     final long key = (Long)o;

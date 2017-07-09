@@ -1,73 +1,71 @@
 package com.exascale.optimizer.load;
 
-import java.io.IOException;
-import java.io.ObjectOutputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
-import java.net.InetSocketAddress;
-import java.net.Socket;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.FileSystems;
-import java.nio.file.FileVisitOption;
-import java.nio.file.FileVisitResult;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.PathMatcher;
-import java.nio.file.Paths;
-import java.nio.file.SimpleFileVisitor;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeMap;
+import java.lang.reflect.Field;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 
+import com.exascale.misc.HrdbmsType;
 import com.exascale.optimizer.*;
+import com.exascale.optimizer.externalTable.ExternalTableScanOperator;
+import com.exascale.threads.ThreadPoolThread;
+import com.google.common.collect.Lists;
 import org.antlr.v4.runtime.misc.Pair;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
-import com.exascale.misc.FastStringTokenizer;
 import com.exascale.misc.LOMultiHashMap;
 import com.exascale.misc.ScalableStampedRWLock;
-import com.exascale.misc.Utils;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Transaction;
-import com.exascale.threads.HRDBMSThread;
 
-/** Note that all the Thread classes in this package were once inner classes of LoadOperator.  They were broken out
- *  into top-level classes to improve maintainability.  But there's still weird interplay between all the classes. */
 public final class LoadOperator implements Operator, Serializable
 {
-	static String DATA_DIRS = HRDBMSWorker.getHParms().getProperty("data_directories");
 	static long MAX_QUEUED = Long.parseLong(HRDBMSWorker.getHParms().getProperty("max_queued_load_flush_threads"));
 	static int PORT_NUMBER = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"));
 	static int MAX_BATCH = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_batch"));
-	private final MetaData meta;
+	private transient MetaData meta;
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
 	private TreeMap<Integer, String> pos2Col;
-	private Operator parent;
+	private Operator parent, child;
 	private int node;
 	private transient Plan plan;
-	private final String schema, table, externalTable;
-	private final AtomicLong num = new AtomicLong(0);
-	private volatile boolean done = false;
-	private final LOMultiHashMap map = new LOMultiHashMap<Long, ArrayList<Object>>();
+	private String schema;
+	private String table;
+	private transient final AtomicLong num = new AtomicLong(0);
+	private volatile transient boolean done = false;
+	private transient final LOMultiHashMap map = new LOMultiHashMap<Long, ArrayList<Object>>();
 	private Transaction tx;
-	private final boolean replace;
-	private final String delimiter;
-	private final String glob;
-	private final ArrayList<FlushThread> fThreads = new ArrayList<FlushThread>();
-	private transient ConcurrentHashMap<Pair, AtomicInteger> waitTill;
-	private volatile transient ArrayList<FlushThread> waitThreads;
+	private boolean replace;
+	private String delimiter;
+	private String glob;
+	private transient final List<FlushThread> fThreads = new ArrayList<FlushThread>();
+	private transient Map<Pair, AtomicInteger> waitTill;
+	private volatile transient List<FlushThread> waitThreads;
 	private transient ScalableStampedRWLock lock;
+	private static sun.misc.Unsafe unsafe;
 
-	public LoadOperator(final String schema, final String table, final boolean replace, final String delimiter, final String glob, final MetaData meta, final String externalTable)
+	static
+	{
+		try
+		{
+			final Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+			f.setAccessible(true);
+			unsafe = (sun.misc.Unsafe)f.get(null);
+		}
+		catch (final Exception e)
+		{
+			unsafe = null;
+		}
+	}
+
+	/**TODO - get rid of unused parameters */
+	public LoadOperator(final String schema, final String table, final boolean replace, final String delimiter, final String glob, final MetaData meta)
 	{
 		this.schema = schema;
 		this.table = table;
@@ -75,255 +73,176 @@ public final class LoadOperator implements Operator, Serializable
 		this.delimiter = delimiter;
 		this.glob = glob;
 		this.meta = meta;
-		this.externalTable = externalTable;
 	}
 
-	/** Sends load metadata to worker */
-	private static boolean doSendLDMD(final ArrayList<Object> tree, final String key, final LoadMetaData ldmd, final Transaction tx)
+	@Override
+	public void start() throws Exception
 	{
-		Object obj = tree.get(0);
-		while (obj instanceof ArrayList)
-		{
-			obj = ((ArrayList)obj).get(0);
+		if (child != null) {
+			child.start();
+		} else {
+			throw new UnsupportedOperationException("Please load using an external table.");
+			// See prior commit for code to reintroduce this feature.
 		}
 
-		Socket sock = null;
-		try
+		lock = new ScalableStampedRWLock();
+		waitTill = new ConcurrentHashMap<>(64 * 16 * 1024, 0.75f, 64);
+		waitThreads = new ArrayList<>();
+		if (replace)
 		{
-			final String hostname = MetaData.getHostNameForNode((Integer)obj, tx);
-			sock = new Socket();
-			sock.setReceiveBufferSize(4194304);
-			sock.setSendBufferSize(4194304);
-			sock.connect(new InetSocketAddress(hostname, PORT_NUMBER));
-			final OutputStream out = sock.getOutputStream();
-			final byte[] outMsg = "SETLDMD         ".getBytes(StandardCharsets.UTF_8);
-			outMsg[8] = 0;
-			outMsg[9] = 0;
-			outMsg[10] = 0;
-			outMsg[11] = 0;
-			outMsg[12] = 0;
-			outMsg[13] = 0;
-			outMsg[14] = 0;
-			outMsg[15] = 0;
-			out.write(outMsg);
-			final byte[] data = key.getBytes(StandardCharsets.UTF_8);
-			final byte[] length = OperatorUtils.intToBytes(data.length);
-			out.write(length);
-			out.write(data);
-			final ObjectOutputStream objOut = new ObjectOutputStream(out);
-			objOut.writeObject(Utils.convertToHosts(tree, tx));
-			objOut.writeObject(ldmd);
-			objOut.flush();
-			out.flush();
-			OperatorUtils.getConfirmation(sock);
-			objOut.close();
-			out.close();
-			sock.close();
-			return true;
+			throw new UnsupportedOperationException("Replace option no longer supported");
+			// See prior commit for MassDeleteOperator code to reintroduce this feature.
 		}
-		catch (final Exception e)
+
+		cols2Pos = MetaData.getCols2PosForTable(schema, table, tx);
+		pos2Col = MetaData.cols2PosFlip(cols2Pos);
+		cols2Types = MetaData.getCols2TypesForTable(schema, table, tx);
+		final int type = MetaData.getTypeForTable(schema, table, tx);
+
+		final ArrayList<String> indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
+		final List<String> indexNames = new ArrayList<>();
+		for (final String s : indexes)
 		{
-			try
+			final int start = s.indexOf('.') + 1;
+			final int end = s.indexOf('.', start);
+			indexNames.add(s.substring(start, end));
+		}
+		// DEBUG
+		// if (indexes.size() == 0)
+		// {
+		// Exception e = new Exception();
+		// HRDBMSWorker.logger.debug("No indexes found", e);
+		// }
+		// DEBUG
+		final ArrayList<ArrayList<String>> keys = MetaData.getKeys(indexes, tx);
+		// DEBUG
+		// HRDBMSWorker.logger.debug("Keys = " + keys);
+		// DEBUG
+		final ArrayList<ArrayList<String>> types = MetaData.getTypes(indexes, tx);
+		// DEBUG
+		// HRDBMSWorker.logger.debug("Types = " + types);
+		// DEBUG
+		final ArrayList<ArrayList<Boolean>> orders = MetaData.getOrders(indexes, tx);
+		// DEBUG
+		// HRDBMSWorker.logger.debug("Orders = " + orders);
+		// DEBUG
+
+		final HashMap<Integer, Integer> pos2Length = new HashMap<>();
+		for (final Map.Entry entry : cols2Types.entrySet())
+		{
+			if (entry.getValue().equals("CHAR"))
 			{
-				if (sock != null)
-				{
-					sock.close();
-				}
+				final int length = MetaData.getLengthForCharCol(schema, table, (String)entry.getKey(), tx);
+				pos2Length.put(cols2Pos.get(entry.getKey()), length);
 			}
-			catch (final Exception f)
-			{
-			}
-			return false;
-		}
-	}
-
-	private static boolean doSendRemoveLDMD(final ArrayList<Object> tree, final String key, final Transaction tx)
-	{
-		Object obj = tree.get(0);
-		while (obj instanceof ArrayList)
-		{
-			obj = ((ArrayList)obj).get(0);
 		}
 
-		Socket sock = null;
-		try
-		{
-			final String hostname = MetaData.getHostNameForNode((Integer)obj, tx);
-			sock = new Socket();
-			sock.setReceiveBufferSize(4194304);
-			sock.setSendBufferSize(4194304);
-			sock.connect(new InetSocketAddress(hostname, PORT_NUMBER));
-			final OutputStream out = sock.getOutputStream();
-			final byte[] outMsg = "DELLDMD         ".getBytes(StandardCharsets.UTF_8);
-			outMsg[8] = 0;
-			outMsg[9] = 0;
-			outMsg[10] = 0;
-			outMsg[11] = 0;
-			outMsg[12] = 0;
-			outMsg[13] = 0;
-			outMsg[14] = 0;
-			outMsg[15] = 0;
-			out.write(outMsg);
-			final byte[] data = key.getBytes(StandardCharsets.UTF_8);
-			final byte[] length = OperatorUtils.intToBytes(data.length);
-			out.write(length);
-			out.write(data);
-			final ObjectOutputStream objOut = new ObjectOutputStream(out);
-			objOut.writeObject(Utils.convertToHosts(tree, tx));
-			objOut.flush();
-			out.flush();
-			OperatorUtils.getConfirmation(sock);
-			objOut.close();
-			out.close();
-			sock.close();
-			return true;
-		}
-		catch (final Exception e)
-		{
-			try
-			{
-				if (sock != null)
-				{
-					sock.close();
-				}
-			}
-			catch (final Exception f)
-			{
-			}
-			return false;
-		}
-	}
+		final List<ReadThread> threads = new ArrayList<>();
+		final PartitionMetaData spmd = new MetaData().getPartMeta(schema, table, tx);
 
-	private static int numDevicesPerNode()
-	{
-		final String dirs = DATA_DIRS;
-		final FastStringTokenizer tokens = new FastStringTokenizer(dirs, ",", false);
-		return tokens.allTokens().length;
-	}
+		threads.add(new ExternalReadThread(this, pos2Length, indexes, spmd, keys, types, orders, type));
+		threads.forEach(ThreadPoolThread::start);
 
-	/** Sends load metadata to workers */
-	private static boolean sendLDMD(final ArrayList<Object> tree, final String key, final LoadMetaData ldmd, final Transaction tx)
-	{
 		boolean allOK = true;
-		final ArrayList<SendLDMDThread> threads = new ArrayList<SendLDMDThread>();
-		for (final Object o : tree)
-		{
-			if (o instanceof Integer)
-			{
-				final ArrayList<Object> list = new ArrayList<Object>(1);
-				list.add(o);
-				final SendLDMDThread thread = new SendLDMDThread(list, key, ldmd, tx);
-				threads.add(thread);
-			}
-			else
-			{
-				final SendLDMDThread thread = new SendLDMDThread((ArrayList<Object>)o, key, ldmd, tx);
-				threads.add(thread);
-			}
-		}
-
-		for (final SendLDMDThread thread : threads)
-		{
-			thread.start();
-		}
-
-		for (final SendLDMDThread thread : threads)
+		for (final ReadThread thread : threads)
 		{
 			while (true)
 			{
 				try
 				{
 					thread.join();
+					if (!thread.getOK())
+					{
+						allOK = false;
+					}
+
+					num.getAndAdd(thread.getNum());
 					break;
 				}
 				catch (final InterruptedException e)
 				{
 				}
 			}
-			final boolean ok = thread.getOK();
-			if (!ok)
-			{
-				allOK = false;
-			}
 		}
 
-		return allOK;
-	}
-
-	private static boolean sendRemoveLDMD(final ArrayList<Object> tree, final String key, final Transaction tx)
-	{
-		boolean allOK = true;
-		final ArrayList<SendRemoveLDMDThread> threads = new ArrayList<SendRemoveLDMDThread>();
-		for (final Object o : tree)
+		if (!allOK)
 		{
-			if (o instanceof Integer)
-			{
-				final ArrayList<Object> list = new ArrayList<Object>(1);
-				list.add(o);
-				final SendRemoveLDMDThread thread = new SendRemoveLDMDThread(list, key, tx);
-				threads.add(thread);
-			}
-			else
-			{
-				final SendRemoveLDMDThread thread = new SendRemoveLDMDThread((ArrayList<Object>)o, key, tx);
-				threads.add(thread);
-			}
+			num.set(Long.MIN_VALUE);
 		}
 
-		for (final SendRemoveLDMDThread thread : threads)
+		// Note that we cluster the data on loading, but don't keep it up to date with new inserts
+		MetaData.cluster(schema, table, tx, pos2Col, cols2Types, type);
+
+		for (final String index : indexNames)
 		{
-			thread.start();
+			MetaData.populateIndex(schema, index, table, tx, cols2Pos);
 		}
 
-		for (final SendRemoveLDMDThread thread : threads)
-		{
-			while (true)
-			{
-				try
-				{
-					thread.join();
-					break;
-				}
-				catch (final InterruptedException e)
-				{
-				}
-			}
-			final boolean ok = thread.getOK();
-			if (!ok)
-			{
-				allOK = false;
-			}
-		}
-
-		return allOK;
-	}
-
-
-
-	@Override
-	public void add(final Operator op) throws Exception
-	{
-		throw new Exception("LoadOperator does not support children");
+		done = true;
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	// @?Parallel
+	public Object next(final Operator op) throws Exception
 	{
-		final ArrayList<Operator> retval = new ArrayList<Operator>(1);
-		return retval;
+		while (!done)
+		{
+			LockSupport.parkNanos(500);
+		}
+
+		if (num.get() == Long.MIN_VALUE)
+		{
+			throw new Exception("An error occurred during a load operation");
+		}
+
+		if (num.get() < 0)
+		{
+			return new DataEndMarker();
+		}
+
+		final long retval = num.get();
+		num.set(-1);
+		return new Integer((int)retval);
 	}
 
 	@Override
-	public LoadOperator clone()
+	public void nextAll(final Operator op) throws Exception
 	{
-		final LoadOperator retval = new LoadOperator(schema, table, replace, delimiter, glob, meta, externalTable);
-		retval.node = node;
-		return retval;
+		child.nextAll(op);
+		Object o = next(op);
+		while (!(o instanceof DataEndMarker) && !(o instanceof Exception))
+		{
+			o = next(op);
+		}
 	}
 
 	@Override
 	public void close() throws Exception
 	{
+		child.close();
+	}
+
+	@Override
+	public void reset() throws Exception
+	{
+		throw new Exception("LoadOperator does not support reset()");
+	}
+
+	@Override
+	public void add(final Operator op) throws Exception
+	{
+		if(child != null) {
+			throw new IllegalStateException("LoadOperator only supports 1 child");
+		}
+
+		child = op;
+		child.registerParent(this);
+	}
+
+	@Override
+	public ArrayList<Operator> children()
+	{
+		return child == null ? Lists.newArrayList() : Lists.newArrayList(child);
 	}
 
 	@Override
@@ -370,8 +289,7 @@ public final class LoadOperator implements Operator, Serializable
 	@Override
 	public ArrayList<String> getReferences()
 	{
-		final ArrayList<String> retval = new ArrayList<String>();
-		return retval;
+		return Lists.newArrayList();  //TODO needed?
 	}
 
 	public String getSchema()
@@ -385,39 +303,9 @@ public final class LoadOperator implements Operator, Serializable
 	}
 
 	@Override
-	// @?Parallel
-	public Object next(final Operator op) throws Exception
-	{
-		while (!done)
-		{
-			LockSupport.parkNanos(500);
-		}
-
-		if (num.get() == Long.MIN_VALUE)
-		{
-			throw new Exception("An error occurred during a load operation");
-		}
-
-		if (num.get() < 0)
-		{
-			return new DataEndMarker();
-		}
-
-		final long retval = num.get();
-		num.set(-1);
-		return new Integer((int)retval);
-	}
-
-	@Override
-	public void nextAll(final Operator op) throws Exception
-	{
-		num.set(-1);
-	}
-
-	@Override
 	public long numRecsReceived()
 	{
-		return 0;
+		return num.get();
 	}
 
 	@Override
@@ -435,13 +323,17 @@ public final class LoadOperator implements Operator, Serializable
 	@Override
 	public void registerParent(final Operator op) throws Exception
 	{
-		throw new Exception("LoadOperator does not support parents");
+		if(parent != null) {
+			throw new IllegalStateException("LoadOperator can only support one parent");
+		}
+		parent = op;
 	}
 
 	@Override
 	public void removeChild(final Operator op)
 	{
-
+		child.removeParent(this);
+		child = null;
 	}
 
 	@Override
@@ -451,15 +343,57 @@ public final class LoadOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void reset() throws Exception
+	public LoadOperator clone()
 	{
-		throw new Exception("LoadOperator does not support reset()");
+		final LoadOperator retval = new LoadOperator(schema, table, replace, delimiter, glob, meta);
+		retval.node = node;
+		return retval;
 	}
 
 	@Override
 	public void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
-		throw new Exception("Tried to call serialize on load operator");
+		final Long id = prev.get(this);
+		if (id != null)
+		{
+			OperatorUtils.serializeReference(id, out);
+			return;
+		}
+
+		OperatorUtils.writeType(HrdbmsType.LOADO, out);
+		prev.put(this, OperatorUtils.writeID(out));
+		child.serialize(out, prev);
+		parent.serialize(out, prev);
+		OperatorUtils.serializeStringHM(cols2Types, out, prev);
+		OperatorUtils.serializeStringIntHM(cols2Pos, out, prev);
+		OperatorUtils.serializeTM(pos2Col, out, prev);
+		OperatorUtils.writeString(schema, out, prev);
+		OperatorUtils.writeString(table, out, prev);
+		OperatorUtils.writeString(delimiter, out, prev);
+		OperatorUtils.writeString(glob, out, prev);
+		OperatorUtils.writeLong(tx.number(), out);
+		OperatorUtils.writeBool(replace, out);
+		OperatorUtils.writeInt(node, out);
+	}
+
+	public static LoadOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	{
+		final LoadOperator value = (LoadOperator)unsafe.allocateInstance(LoadOperator.class);
+		prev.put(OperatorUtils.readLong(in), value);
+		value.child = OperatorUtils.deserializeOperator(in, prev);
+		value.parent = OperatorUtils.deserializeOperator(in, prev);
+		value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
+		value.cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
+		value.pos2Col = OperatorUtils.deserializeTM(in, prev);
+		value.schema = OperatorUtils.readString(in, prev);
+		value.table = OperatorUtils.readString(in, prev);
+		value.delimiter = OperatorUtils.readString(in, prev);
+		value.glob = OperatorUtils.readString(in, prev);
+		value.tx = new Transaction(OperatorUtils.readLong(in));
+		value.replace = OperatorUtils.readBool(in);
+		value.node = OperatorUtils.readInt(in);
+		value.meta = new MetaData();
+		return value;
 	}
 
 	@Override
@@ -485,250 +419,29 @@ public final class LoadOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void start() throws Exception
-	{
-		lock = new ScalableStampedRWLock();
-		waitTill = new ConcurrentHashMap<Pair, AtomicInteger>(64 * 16 * 1024, 0.75f, 64);
-		waitThreads = new ArrayList<FlushThread>();
-		if (replace)
-		{
-			final MassDeleteOperator delete = new MassDeleteOperator(schema, table, meta, false);
-			delete.setPlan(plan);
-			delete.setTransaction(tx);
-			delete.start();
-			delete.next(this);
-			delete.close();
-		}
-
-		cols2Pos = MetaData.getCols2PosForTable(schema, table, tx);
-		pos2Col = MetaData.cols2PosFlip(cols2Pos);
-		cols2Types = MetaData.getCols2TypesForTable(schema, table, tx);
-		final int type = MetaData.getTypeForTable(schema, table, tx);
-
-		final ArrayList<String> indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
-		final ArrayList<String> indexNames = new ArrayList<String>();
-		for (final String s : indexes)
-		{
-			final int start = s.indexOf('.') + 1;
-			final int end = s.indexOf('.', start);
-			indexNames.add(s.substring(start, end));
-		}
-		// DEBUG
-		// if (indexes.size() == 0)
-		// {
-		// Exception e = new Exception();
-		// HRDBMSWorker.logger.debug("No indexes found", e);
-		// }
-		// DEBUG
-		final ArrayList<ArrayList<String>> keys = MetaData.getKeys(indexes, tx);
-		// DEBUG
-		// HRDBMSWorker.logger.debug("Keys = " + keys);
-		// DEBUG
-		final ArrayList<ArrayList<String>> types = MetaData.getTypes(indexes, tx);
-		// DEBUG
-		// HRDBMSWorker.logger.debug("Types = " + types);
-		// DEBUG
-		final ArrayList<ArrayList<Boolean>> orders = MetaData.getOrders(indexes, tx);
-		// DEBUG
-		// HRDBMSWorker.logger.debug("Orders = " + orders);
-		// DEBUG
-
-		final HashMap<Integer, Integer> pos2Length = new HashMap<Integer, Integer>();
-		for (final Map.Entry entry : cols2Types.entrySet())
-		{
-			if (entry.getValue().equals("CHAR"))
-			{
-				final int length = MetaData.getLengthForCharCol(schema, table, (String)entry.getKey(), tx);
-				pos2Length.put(cols2Pos.get(entry.getKey()), length);
-			}
-		}
-
-        final ArrayList<ReadThread> threads = new ArrayList<>();
-        final PartitionMetaData spmd = new MetaData().getPartMeta(schema, table, tx);
-        if (externalTable != null) {
-            threads.add(new ExternalReadThread(this, pos2Length, indexes, spmd, keys, types, orders, type));
-        } else {
-            // figure out what files to read from
-            final ArrayList<Path> files = new ArrayList<Path>();
-            final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + glob);
-            int a = 0;
-            int b = 0;
-            while (a < glob.length()) {
-                if (glob.charAt(a) == '/') {
-                    b = a;
-                }
-
-                if (glob.charAt(a) == '*') {
-                    break;
-                }
-
-                a++;
-            }
-
-            final String startingPath = glob.substring(0, b + 1);
-            final Set<FileVisitOption> options = new HashSet<FileVisitOption>();
-            final HashSet<String> dirs = new HashSet<String>();
-            options.add(FileVisitOption.FOLLOW_LINKS);
-            HRDBMSWorker.logger.debug("Starting search with directory: " + startingPath);
-            Files.walkFileTree(Paths.get(startingPath), options, Integer.MAX_VALUE, new SimpleFileVisitor<Path>() {
-                @Override
-                public FileVisitResult postVisitDirectory(final Path file, final IOException exc) throws IOException {
-                    return FileVisitResult.CONTINUE;
-                }
-
-                @Override
-                public FileVisitResult visitFile(final Path file, final java.nio.file.attribute.BasicFileAttributes attrs) throws IOException {
-                    try {
-                        final String dir = file.getParent().toString();
-                        if (!dirs.contains(dir)) {
-                            dirs.add(dir);
-                            HRDBMSWorker.logger.debug("New directory visited: " + dir);
-                        }
-                        if (matcher.matches(file)) {
-                            files.add(file);
-                        }
-                        return FileVisitResult.CONTINUE;
-                    } catch (final Exception e) {
-                        HRDBMSWorker.logger.debug("", e);
-                        return FileVisitResult.CONTINUE;
-                    }
-                }
-
-                @Override
-                public FileVisitResult visitFileFailed(final Path file, final IOException exc) throws IOException {
-                    return FileVisitResult.CONTINUE;
-                }
-            });
-
-
-            if (files.size() == 0) {
-                throw new Exception("Load input files were not found!");
-            }
-            HRDBMSWorker.logger.debug("Going to load from: ");
-            int debug = 1;
-            for (final Path path : files) {
-                HRDBMSWorker.logger.debug(debug + ") " + path);
-                debug++;
-                threads.add(new ReadThread(this, path.toFile(), pos2Length, indexes, spmd, keys, types, orders, type));
-            }
-        }
-		for (final ReadThread thread : threads)
-		{
-			thread.start();
-		}
-
-		boolean allOK = true;
-		for (final ReadThread thread : threads)
-		{
-			while (true)
-			{
-				try
-				{
-					thread.join();
-					if (!thread.getOK())
-					{
-						allOK = false;
-					}
-
-					num.getAndAdd(thread.getNum());
-					break;
-				}
-				catch (final InterruptedException e)
-				{
-				}
-			}
-		}
-
-		if (!allOK)
-		{
-			num.set(Long.MIN_VALUE);
-		}
-
-		MetaData.cluster(schema, table, tx, pos2Col, cols2Types, type);
-
-		for (final String index : indexNames)
-		{
-			MetaData.populateIndex(schema, index, table, tx, cols2Pos);
-		}
-
-		done = true;
-	}
-
-	@Override
 	public String toString()
 	{
 		return "LoadOperator";
 	}
 
+	// Note that all the Thread classes in this package were once inner classes of LoadOperator.  They were broken out
+	// into top-level classes to improve maintainability.  But there's still weird interplay between all the classes.
+	// Hence, these getters and setters:
 	Transaction getTransaction() { return tx; }
 
-	ConcurrentHashMap<Pair, AtomicInteger> getWaitTill() { return waitTill; }
+	Map<Pair, AtomicInteger> getWaitTill() { return waitTill; }
 
 	ScalableStampedRWLock getLock() { return lock; }
 
 	LOMultiHashMap getMap() { return map; }
 
-	ArrayList<FlushThread> getWaitThreads() { return waitThreads; }
+	List<FlushThread> getWaitThreads() { return waitThreads; }
 
-	void setWaitThreads(ArrayList<FlushThread> waitThreads) { this.waitThreads = waitThreads;}
+	void setWaitThreads(List<FlushThread> waitThreads) { this.waitThreads = waitThreads; }
 
-	ArrayList<FlushThread> getFlushThreads() { return fThreads; }
+	List<FlushThread> getFlushThreads() { return fThreads; }
 
 	String getDelimiter() { return delimiter; }
 
-	String getExternalTable() { return externalTable; }
-
-	private static class SendLDMDThread extends HRDBMSThread
-	{
-		private final ArrayList<Object> tree;
-		private final String key;
-		private final LoadMetaData ldmd;
-		private boolean ok;
-		private final Transaction tx;
-
-		public SendLDMDThread(final ArrayList<Object> tree, final String key, final LoadMetaData ldmd, final Transaction tx)
-		{
-			this.tree = tree;
-			this.key = key;
-			this.ldmd = ldmd;
-			this.tx = tx;
-		}
-
-		public boolean getOK()
-		{
-			return ok;
-		}
-
-		@Override
-		public void run()
-		{
-			ok = doSendLDMD(tree, key, ldmd, tx);
-		}
-	}
-
-	private static class SendRemoveLDMDThread extends HRDBMSThread
-	{
-		private final ArrayList<Object> tree;
-		private final String key;
-		private boolean ok;
-		private final Transaction tx;
-
-		public SendRemoveLDMDThread(final ArrayList<Object> tree, final String key, final Transaction tx)
-		{
-			this.tree = tree;
-			this.key = key;
-			this.tx = tx;
-		}
-
-		public boolean getOK()
-		{
-			return ok;
-		}
-
-		@Override
-		public void run()
-		{
-			ok = doSendRemoveLDMD(tree, key, tx);
-		}
-	}
+	ExternalTableScanOperator getChild() { return child == null ? null : (ExternalTableScanOperator) child; }
 }

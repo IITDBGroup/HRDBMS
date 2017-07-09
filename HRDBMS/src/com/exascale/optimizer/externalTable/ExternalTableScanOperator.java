@@ -152,7 +152,6 @@ public final class ExternalTableScanOperator extends TableScanOperator
 		// to prevent column disorder in SELECT from external source
     }
 
-
 	@Override
     public void start() throws Exception
     {
@@ -173,7 +172,6 @@ public final class ExternalTableScanOperator extends TableScanOperator
 		if (tableImpl instanceof MultiThreadedExternalTableType) {
             super.start();
 		}
-
     }
 
     @Override

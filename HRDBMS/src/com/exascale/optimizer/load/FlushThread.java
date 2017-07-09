@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.TreeMap;
 
+/** Sends data to be loaded to the worker over the network. */
 public class FlushThread extends HRDBMSThread
 {
     private List<ArrayList<Object>> list;
@@ -94,6 +95,7 @@ public class FlushThread extends HRDBMSThread
                     Thread.sleep(5000);
                 }
             }
+            // The other side of this connection is read in ConnectionWorker.load()
             final OutputStream out = sock.getOutputStream();
             final byte[] outMsg = "LOAD            ".getBytes(StandardCharsets.UTF_8);
             outMsg[8] = 0;

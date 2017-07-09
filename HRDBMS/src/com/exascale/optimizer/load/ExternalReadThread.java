@@ -5,17 +5,18 @@ import com.exascale.misc.DataEndMarker;
 import com.exascale.optimizer.MetaData;
 import com.exascale.optimizer.PartitionMetaData;
 import com.exascale.optimizer.externalTable.ExternalTableScanOperator;
-import com.exascale.optimizer.externalTable.ExternalTableType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
+/** Read data from an external table on the workers */
 public class ExternalReadThread extends ReadThread {
     private ExternalTableScanOperator op;
 
     public ExternalReadThread(final LoadOperator loadOperator, final HashMap<Integer, Integer> pos2Length, final ArrayList<String> indexes, final PartitionMetaData spmd, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final int type) {
         super(loadOperator, null, pos2Length, indexes, spmd, keys, types, orders, type);
+        op = loadOperator.getChild();
     }
 
     @Override
@@ -24,9 +25,6 @@ public class ExternalReadThread extends ReadThread {
         FlushMasterThread master = null;
         try
         {
-            ExternalTableType extTable = loadOperator.getMeta().getExternalTable(loadOperator.getSchema(), loadOperator.getExternalTable(), loadOperator.getTransaction());
-            op = new ExternalTableScanOperator(extTable, loadOperator.getSchema(), loadOperator.getExternalTable(), loadOperator.getMeta(), loadOperator.getTransaction());
-            op.start();
             Object o = op.next(loadOperator);
             final PartitionMetaData pmeta = new PartitionMetaData(loadOperator.getSchema(), loadOperator.getTable(), loadOperator.getTransaction());
             final int numNodes = MetaData.numWorkerNodes;
@@ -79,6 +77,7 @@ public class ExternalReadThread extends ReadThread {
                 }
             }
 
+            // TODO - there were slight changes made to ReadThread,  incorporate them.
             if (loadOperator.getMap().totalSize() > 0)
             {
                 master = FlushMasterThread.flush(loadOperator, indexes, spmd, keys, types, orders, true, type);
@@ -122,7 +121,6 @@ public class ExternalReadThread extends ReadThread {
                     }
                 }
             }
-            op.close();
         }
         catch (final Exception e)
         {

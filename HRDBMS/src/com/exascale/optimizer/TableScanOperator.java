@@ -57,6 +57,7 @@ import com.exascale.threads.ConnectionWorker;
 import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.ThreadPoolThread;
 
+/** Leaf operator that reads rows from an HRDBMS table */
 public class TableScanOperator extends AbstractTableScanOperator
 {
 	protected static int PREFETCH_REQUEST_SIZE_STATIC;
@@ -87,6 +88,45 @@ public class TableScanOperator extends AbstractTableScanOperator
 
     // Class responsible to read data from external sources
     protected ExternalTableType tableImpl = null;
+	protected int PREFETCH_REQUEST_SIZE;
+
+	protected int PAGES_IN_ADVANCE;
+
+	protected transient ArrayList<String> ins;
+	public transient volatile BufferedLinkedBlockingQueue readBuffer;
+	protected transient volatile HashMap<Operator, BufferedLinkedBlockingQueue> readBuffers;
+	protected boolean startDone = false;
+	protected transient boolean optimize;
+	protected transient HashMap<Operator, HashSet<HashMap<Filter, Filter>>> filters = new HashMap<Operator, HashSet<HashMap<Filter, Filter>>>();
+	protected ArrayList<Integer> neededPos;
+	protected ArrayList<Integer> fetchPos;
+	protected String[] midPos2Col;
+	protected HashMap<String, String> midCols2Types;
+
+	// happen at runtime?
+	protected transient HashMap<Operator, ArrayList<Integer>> activeDevices = new HashMap<Operator, ArrayList<Integer>>();
+	protected transient HashMap<Operator, ArrayList<Integer>> activeNodes = new HashMap<Operator, ArrayList<Integer>>();
+	public ArrayList<Integer> devices = new ArrayList<Integer>();
+	protected boolean phase2Done = false;
+	public HashMap<Integer, Operator> device2Child = new HashMap<Integer, Operator>();
+	protected ArrayList<Operator> children = new ArrayList<Operator>();
+	protected transient ArrayList<String> randomIns;
+	protected transient HashMap<String, Integer> ins2Device;
+	protected boolean indexOnly = false;
+	protected transient volatile boolean forceDone;
+	public Transaction tx;
+	public boolean getRID = false;
+	protected HashMap<String, String> tableCols2Types;
+	protected TreeMap<Integer, String> tablePos2Col;
+	protected HashMap<String, Integer> tableCols2Pos;
+	protected boolean releaseLocks = false;
+	protected boolean sample = false;
+	protected long sPer;
+	protected Index scanIndex = null;
+	protected transient AtomicLong received;
+	protected transient volatile boolean demReceived;
+	protected int tType = 0;
+	protected volatile transient HashSet<Integer> referencesHash = null;
 
 	static
 	{
@@ -214,46 +254,6 @@ public class TableScanOperator extends AbstractTableScanOperator
 			HRDBMSWorker.logger.debug("", e);
 		}
 	}
-
-	protected int PREFETCH_REQUEST_SIZE;
-
-	protected int PAGES_IN_ADVANCE;
-
-	protected transient ArrayList<String> ins;
-	public transient volatile BufferedLinkedBlockingQueue readBuffer;
-	protected transient volatile HashMap<Operator, BufferedLinkedBlockingQueue> readBuffers;
-	protected boolean startDone = false;
-	protected transient boolean optimize;
-	protected transient HashMap<Operator, HashSet<HashMap<Filter, Filter>>> filters = new HashMap<Operator, HashSet<HashMap<Filter, Filter>>>();
-	protected ArrayList<Integer> neededPos;
-	protected ArrayList<Integer> fetchPos;
-	protected String[] midPos2Col;
-	protected HashMap<String, String> midCols2Types;
-
-    // happen at runtime?
-    protected transient HashMap<Operator, ArrayList<Integer>> activeDevices = new HashMap<Operator, ArrayList<Integer>>();
-    protected transient HashMap<Operator, ArrayList<Integer>> activeNodes = new HashMap<Operator, ArrayList<Integer>>();
-    public ArrayList<Integer> devices = new ArrayList<Integer>();
-    protected boolean phase2Done = false;
-    public HashMap<Integer, Operator> device2Child = new HashMap<Integer, Operator>();
-    protected ArrayList<Operator> children = new ArrayList<Operator>();
-    protected transient ArrayList<String> randomIns;
-    protected transient HashMap<String, Integer> ins2Device;
-    protected boolean indexOnly = false;
-    protected transient volatile boolean forceDone;
-    public Transaction tx;
-	public boolean getRID = false;
-	protected HashMap<String, String> tableCols2Types;
-	protected TreeMap<Integer, String> tablePos2Col;
-	protected HashMap<String, Integer> tableCols2Pos;
-	protected boolean releaseLocks = false;
-	protected boolean sample = false;
-	protected long sPer;
-	protected Index scanIndex = null;
-	protected transient AtomicLong received;
-	protected transient volatile boolean demReceived;
-	protected int tType = 0;
-	protected volatile transient HashSet<Integer> referencesHash = null;
 
 	public TableScanOperator(final String schema, final String name, final MetaData meta, final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> tablePos2Col, final HashMap<String, String> tableCols2Types, final HashMap<String, Integer> tableCols2Pos) throws Exception
 	{

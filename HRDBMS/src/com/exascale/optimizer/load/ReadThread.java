@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
 
+/** Load data from a file on the coordinator without using an external table as intermediary */
 public class ReadThread extends HRDBMSThread
 {
     private final File file;
@@ -71,13 +72,14 @@ public class ReadThread extends HRDBMSThread
         try
         {
             final BufferedReader in = new BufferedReader(new FileReader(file), 64 * 1024);
-            Object o = next(in);
+            Object o = next(in);  // Read a row from the file.
             final PartitionMetaData pmeta = new PartitionMetaData(loadOperator.getSchema(), loadOperator.getTable(), loadOperator.getTransaction());
             final int numNodes = MetaData.numWorkerNodes;
             while (!(o instanceof DataEndMarker))
             {
                 final ArrayList<Object> row = (ArrayList<Object>)o;
                 num++;
+                // Check the length of character columns against the schema
                 for (final Map.Entry entry : pos2Length.entrySet())
                 {
                     if (((String)row.get((Integer)entry.getKey())).length() > (Integer)entry.getValue())
@@ -94,9 +96,11 @@ public class ReadThread extends HRDBMSThread
                 {
                     loadOperator.getPlan().addNode(node);
                     final long key = (((long)node) << 32) + device;
+                    // Assign this row to be sent to a particular device on a particular node.
                     loadOperator.getMap().multiPut(key, row);
                 }
                 loadOperator.getLock().readLock().unlock();
+                // Periodically flush pending inserts from the queue (loadOperator.getMap)
                 if (loadOperator.getMap().totalSize() > LoadOperator.MAX_BATCH)
                 {
                     if (master != null)
@@ -138,6 +142,7 @@ public class ReadThread extends HRDBMSThread
             count = loadOperator.getWaitThreads().size();
             loadOperator.getLock().readLock().unlock();
 
+            // Wait for the master flush thread to empty out into the child flush threads.
             while (count > 0 && loadOperator.getMap().totalSize() == 0)
             {
                 master = FlushMasterThread.flush(loadOperator, indexes, spmd, keys, types, orders, true, type);
@@ -152,6 +157,7 @@ public class ReadThread extends HRDBMSThread
                 loadOperator.getLock().readLock().unlock();
             }
 
+            // Wait for any child flush threads to finish their work.
             synchronized (loadOperator.getFlushThreads())
             {
                 for (final FlushThread thread : loadOperator.getFlushThreads())

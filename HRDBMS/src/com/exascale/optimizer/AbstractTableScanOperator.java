@@ -10,6 +10,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
 
+/** Initial efforts at an external table scan operator involved subclassing AbstractTableScanOperator.  However,
+ *  subclassing TableScanOperator proved more workable. */
 public abstract class AbstractTableScanOperator implements Operator, Serializable {
     protected transient MetaData meta;
     protected transient HashMap<Operator, Operator> opParents = new HashMap<Operator, Operator>();
@@ -155,7 +157,6 @@ public abstract class AbstractTableScanOperator implements Operator, Serializabl
         partMeta = meta.getPartMeta(schema, name, t);
     }
 
-
     public void setAlias(final String alias)
     {
         this.alias = alias;
@@ -181,7 +182,6 @@ public abstract class AbstractTableScanOperator implements Operator, Serializabl
         cols2Pos = newCols2Pos;
         cols2Types = newCols2Types;
     }
-
 
     @Override
     public void setChildPos(final int pos)
@@ -225,5 +225,4 @@ public abstract class AbstractTableScanOperator implements Operator, Serializabl
         }
         return parents;
     }
-
 }

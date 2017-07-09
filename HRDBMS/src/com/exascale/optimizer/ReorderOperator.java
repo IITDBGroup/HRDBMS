@@ -158,7 +158,7 @@ public final class ReorderOperator implements Operator, Serializable
 		}
 		else
 		{
-			throw new Exception("ReorderOperator only supports 1 child.");
+			throw new IllegalStateException("ReorderOperator only supports 1 child.");
 		}
 	}
 

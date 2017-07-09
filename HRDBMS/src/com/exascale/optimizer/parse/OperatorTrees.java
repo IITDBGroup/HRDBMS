@@ -993,7 +993,11 @@ public class OperatorTrees extends AbstractParseController {
             throw new ParseException("Table does not exist");
         }
 
-        return new LoadOperator(schema, tbl, load.isReplace(), load.getDelimiter(), load.getGlob(), meta, load.getExtTable().getName());
+        ExternalTableType extTable = meta.getExternalTable(schema, load.getExtTable().getName(), tx);
+        Operator child = new ExternalTableScanOperator(extTable, schema, load.getExtTable().getName(), meta, tx);
+        Operator op = new LoadOperator(schema, tbl, load.isReplace(), load.getDelimiter(), load.getGlob(), meta);
+        op.add(child);
+        return op;
     }
 
     Operator buildOperatorTreeFromOrderBy(final OrderBy orderBy, final Operator op) throws ParseException

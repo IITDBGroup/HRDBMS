@@ -13,6 +13,7 @@ import com.exascale.misc.FastStringTokenizer;
 import com.exascale.misc.HrdbmsType;
 import com.exascale.misc.MyDate;
 import com.exascale.optimizer.externalTable.*;
+import com.exascale.optimizer.load.LoadOperator;
 
 public class OperatorUtils
 {
@@ -1164,6 +1165,8 @@ public class OperatorUtils
 				return null;
 			case ROUTING:
 				return RoutingOperator.deserialize(in, prev);
+			case LOADO:
+				return LoadOperator.deserialize(in, prev);
 			default:
 				throw new Exception("Unknown type in deserialize operator: " + type);
 		}
