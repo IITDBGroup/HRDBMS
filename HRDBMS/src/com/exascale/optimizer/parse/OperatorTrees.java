@@ -997,7 +997,16 @@ public class OperatorTrees extends AbstractParseController {
         Operator child = new ExternalTableScanOperator(extTable, schema, load.getExtTable().getName(), meta, tx);
         Operator op = new LoadOperator(schema, tbl, load.isReplace(), load.getDelimiter(), load.getGlob(), meta);
         op.add(child);
-        return op;
+
+        final RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
+        retval.add(op);
+        final Phase1 p1 = new Phase1(retval, tx);
+        p1.optimize();
+        new Phase2(retval, tx).optimize();
+        new Phase3(retval, tx).optimize();
+        new Phase4(retval, tx).optimize();
+        new Phase5(retval, tx, p1.likelihoodCache).optimize();
+        return retval;
     }
 
     Operator buildOperatorTreeFromOrderBy(final OrderBy orderBy, final Operator op) throws ParseException

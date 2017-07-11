@@ -45,6 +45,7 @@ import com.exascale.threads.ConnectionWorker;
 import com.exascale.threads.HRDBMSThread;
 import com.exascale.threads.XAWorker;
 
+/** Manages statement execution */
 public class XAManager extends HRDBMSThread
 {
 	public static VHJOMultiHashMap<Transaction, Plan> txs = new VHJOMultiHashMap<Transaction, Plan>();
@@ -205,6 +206,7 @@ public class XAManager extends HRDBMSThread
 		}
 	}
 
+	/** Runs an update against internal metadata tables */
 	public static XAWorker executeAuthorizedUpdate(final String sql, final Transaction tx) throws Exception
 	{
 		final SQL sql3 = new SQL(sql);
@@ -338,6 +340,7 @@ public class XAManager extends HRDBMSThread
 		return new XAWorker(plan, tx, true);
 	}
 
+	/** Runs an update against a user's table */
 	public static XAWorker executeUpdate(final String sql, final Transaction tx, final ConnectionWorker conn) throws Exception
 	{
 		final SQL sql3 = new SQL(sql);

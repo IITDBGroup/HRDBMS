@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.concurrent.ThreadLocalRandom;
 import com.exascale.managers.HRDBMSWorker;
+import com.exascale.optimizer.load.LoadOperator;
 import com.exascale.tables.Transaction;
 
 /** Splits table scans across nodes according to partitioning scheme. */
@@ -244,8 +245,47 @@ public final class Phase2
 	/** This method does the real work */
 	private void updateTree(final Operator op) throws Exception
 	{
-		if (op instanceof TableScanOperator)
-		{
+		if(op instanceof LoadOperator) {
+			final LoadOperator t = (LoadOperator)op;
+			if (t.isPhase2Done()) {
+				return;
+			}
+			t.phase2Done();
+			Operator o = t.parent();
+			if(o != null) {
+				ArrayList<Integer> nodeList = meta.getNodesForTable(t.getSchema(), t.getTable(), tx);
+				final ArrayList<ArrayList<Integer>> nodeLists = new ArrayList<>(1);
+				nodeLists.add(nodeList);
+				o.removeChild(op);
+
+				final NetworkReceiveOperator receive = new NetworkReceiveOperator(meta);
+				for (final int node : nodeList)
+				{
+					final LoadOperator lo = t.clone();
+					lo.setNode(node);
+					final NetworkSendOperator send = new NetworkSendOperator(node, meta);
+					try
+					{
+						send.add(lo);
+						receive.add(send);
+					}
+					catch (final Exception e)
+					{
+						HRDBMSWorker.logger.error("", e);
+						throw e;
+					}
+				}
+				try
+				{
+					o.add(receive);
+				}
+				catch (final Exception e)
+				{
+					HRDBMSWorker.logger.error("", e);
+					throw e;
+				}
+			}
+		} else if (op instanceof TableScanOperator)	{
 			final TableScanOperator t = (TableScanOperator)op;
 			if (t.phase2Done())
 			{

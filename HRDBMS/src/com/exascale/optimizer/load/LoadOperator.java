@@ -28,6 +28,7 @@ public final class LoadOperator implements Operator, Serializable
 	static long MAX_QUEUED = Long.parseLong(HRDBMSWorker.getHParms().getProperty("max_queued_load_flush_threads"));
 	static int PORT_NUMBER = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"));
 	static int MAX_BATCH = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_batch"));
+	private static sun.misc.Unsafe unsafe;
 	private transient MetaData meta;
 	private HashMap<String, String> cols2Types;
 	private HashMap<String, Integer> cols2Pos;
@@ -44,11 +45,11 @@ public final class LoadOperator implements Operator, Serializable
 	private boolean replace;
 	private String delimiter;
 	private String glob;
+	protected boolean phase2Done = false;
 	private transient final List<FlushThread> fThreads = new ArrayList<FlushThread>();
 	private transient Map<Pair, AtomicInteger> waitTill;
 	private volatile transient List<FlushThread> waitThreads;
 	private transient ScalableStampedRWLock lock;
-	private static sun.misc.Unsafe unsafe;
 
 	static
 	{
@@ -374,6 +375,7 @@ public final class LoadOperator implements Operator, Serializable
 		OperatorUtils.writeLong(tx.number(), out);
 		OperatorUtils.writeBool(replace, out);
 		OperatorUtils.writeInt(node, out);
+		OperatorUtils.writeBool(phase2Done, out);
 	}
 
 	public static LoadOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
@@ -392,6 +394,7 @@ public final class LoadOperator implements Operator, Serializable
 		value.tx = new Transaction(OperatorUtils.readLong(in));
 		value.replace = OperatorUtils.readBool(in);
 		value.node = OperatorUtils.readInt(in);
+		value.phase2Done = OperatorUtils.readBool(in);
 		value.meta = new MetaData();
 		return value;
 	}
@@ -423,6 +426,9 @@ public final class LoadOperator implements Operator, Serializable
 	{
 		return "LoadOperator";
 	}
+
+	public void phase2Done() { phase2Done = true; }
+	public boolean isPhase2Done() { return phase2Done; }
 
 	// Note that all the Thread classes in this package were once inner classes of LoadOperator.  They were broken out
 	// into top-level classes to improve maintainability.  But there's still weird interplay between all the classes.
