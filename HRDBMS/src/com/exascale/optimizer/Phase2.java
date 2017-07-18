@@ -263,6 +263,8 @@ public final class Phase2
 				{
 					final LoadOperator lo = t.clone();
 					lo.setNode(node);
+					lo.add(t.children().get(0));
+
 					final NetworkSendOperator send = new NetworkSendOperator(node, meta);
 					try
 					{
