@@ -39,28 +39,28 @@ public final class Utils
 		if(!HRDBMSWorker.logger.isTraceEnabled()) {
 			return;
 		}
-		String line = "";
-		int i = 0;
-		while (i < indent)
+		StringBuilder line = new StringBuilder();
+		for (int i = 0; i < indent; i++)
 		{
-			line += " ";
-			i++;
+			line.append(" ");
 		}
+		line.append(op).append("[").append(System.identityHashCode(op)).append("]");
 
-		line += op;
+		try {
+			Object p = op.parent();
+			line.append(" parent:").append(p == null ? "" : System.identityHashCode(op.parent()));
+		} catch(UnsupportedOperationException e) {}
+
 		HRDBMSWorker.logger.trace(line);
 
-		if (op.children().size() > 0)
+		if (!op.children().isEmpty())
 		{
-			line = "";
-			i = 0;
-			while (i < indent)
+			line = new StringBuilder();
+			for (int i = 0; i < indent; i++)
 			{
-				line += " ";
-				i++;
+				line.append(" ");
 			}
-
-			line += "(";
+			line.append("(");
 			HRDBMSWorker.logger.trace(line);
 
 			for (final Operator child : op.children())
@@ -68,15 +68,12 @@ public final class Utils
 				printTree(child, indent + 3);
 			}
 
-			line = "";
-			i = 0;
-			while (i < indent)
+			line = new StringBuilder();
+			for (int i = 0; i < indent; i++)
 			{
-				line += " ";
-				i++;
+				line.append(" ");
 			}
-
-			line += ")";
+			line.append(")");
 			HRDBMSWorker.logger.trace(line);
 		}
 	}
