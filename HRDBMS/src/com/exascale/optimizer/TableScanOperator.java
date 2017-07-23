@@ -3617,13 +3617,17 @@ public class TableScanOperator extends AbstractTableScanOperator
                         return;
                     }
 
-                    CNFFilter filter = orderedFilters.get(parents.get(0));
-                    if (filter != null) {
-                        if (filter.passes((ArrayList<Object>) row)) {
+                    if (orderedFilters.size() == 0) {
+                        readBuffer.put(row);
+                    } else {
+                        CNFFilter filter = orderedFilters.get(parents.get(0));
+                        if (filter != null) {
+                            if (filter.passes((ArrayList<Object>) row)) {
+                                readBuffer.put(row);
+                            }
+                        } else {
                             readBuffer.put(row);
                         }
-                    } else {
-                        readBuffer.put(row);
                     }
                 } while (true);
             } catch (final Exception e)  {

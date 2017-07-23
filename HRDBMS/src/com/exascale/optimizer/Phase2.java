@@ -252,41 +252,39 @@ public final class Phase2
 			}
 			t.phase2Done();
 			Operator o = t.parent();
-			if(o != null) {
-				ArrayList<Integer> nodeList = meta.getNodesForTable(t.getSchema(), t.getTable(), tx);
-				final ArrayList<ArrayList<Integer>> nodeLists = new ArrayList<>(1);
-				nodeLists.add(nodeList);
-				o.removeChild(op);
+            o.removeChild(op);
+            ArrayList<Integer> nodeList = meta.getNodesForTable(t.getSchema(), t.getTable(), tx);
+            final ArrayList<ArrayList<Integer>> nodeLists = new ArrayList<>(1);
+            nodeLists.add(nodeList);
 
-				final NetworkReceiveOperator receive = new NetworkReceiveOperator(meta);
-				for (final int node : nodeList)
-				{
-					final LoadOperator lo = t.clone();
-					lo.setNode(node);
-					lo.add(t.children().get(0));
+            final NetworkReceiveOperator receive = new NetworkReceiveOperator(meta);
+            for (final int node : nodeList)
+            {
+                final LoadOperator lo = t.clone();
+                lo.setNode(node);
+                lo.add(t.children().get(0).clone());
 
-					final NetworkSendOperator send = new NetworkSendOperator(node, meta);
-					try
-					{
-						send.add(lo);
-						receive.add(send);
-					}
-					catch (final Exception e)
-					{
-						HRDBMSWorker.logger.error("", e);
-						throw e;
-					}
-				}
-				try
-				{
-					o.add(receive);
-				}
-				catch (final Exception e)
-				{
-					HRDBMSWorker.logger.error("", e);
-					throw e;
-				}
-			}
+                final NetworkSendOperator send = new NetworkSendOperator(node, meta);
+                try
+                {
+                    send.add(lo);
+                    receive.add(send);
+                }
+                catch (final Exception e)
+                {
+                    HRDBMSWorker.logger.error("", e);
+                    throw e;
+                }
+            }
+            try
+            {
+                o.add(receive);
+            }
+            catch (final Exception e)
+            {
+                HRDBMSWorker.logger.error("", e);
+                throw e;
+            }
 		} else if (op instanceof TableScanOperator)	{
 			final TableScanOperator t = (TableScanOperator)op;
 			if (t.phase2Done())

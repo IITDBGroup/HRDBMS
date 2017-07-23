@@ -66,7 +66,7 @@ public final class LoadOperator implements Operator, Serializable
 	}
 
 	/**TODO - get rid of unused parameters */
-	public LoadOperator(final String schema, final String table, final boolean replace, final String delimiter, final String glob, final MetaData meta)
+	public LoadOperator(final String schema, final String table, final boolean replace, final String delimiter, final String glob, final MetaData meta, final Transaction tx) throws Exception
 	{
 		this.schema = schema;
 		this.table = table;
@@ -74,9 +74,29 @@ public final class LoadOperator implements Operator, Serializable
 		this.delimiter = delimiter;
 		this.glob = glob;
 		this.meta = meta;
-	}
+        this.tx = tx;
+        cols2Types = MetaData.getCols2TypesForTable(schema, table, tx);
+        cols2Pos = MetaData.getCols2PosForTable(schema, table, tx);
+        pos2Col = MetaData.cols2PosFlip(cols2Pos);
+    }
 
-	@Override
+    public LoadOperator(final String schema, final String table, final boolean replace, final String delimiter, final String glob, final MetaData meta,
+                        final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final HashMap<String, Integer> cols2Pos, final Transaction tx)
+    {
+        this.schema = schema;
+        this.table = table;
+        this.replace = replace;
+        this.delimiter = delimiter;
+        this.glob = glob;
+        this.meta = meta;
+        this.cols2Types = cols2Types;
+        this.cols2Pos = cols2Pos;
+        this.pos2Col = pos2Col;
+        this.tx = tx;
+    }
+
+
+    @Override
 	public void start() throws Exception
 	{
 		if (child != null) {
@@ -95,9 +115,6 @@ public final class LoadOperator implements Operator, Serializable
 			// See prior commit for MassDeleteOperator code to reintroduce this feature.
 		}
 
-		cols2Pos = MetaData.getCols2PosForTable(schema, table, tx);
-		pos2Col = MetaData.cols2PosFlip(cols2Pos);
-		cols2Types = MetaData.getCols2TypesForTable(schema, table, tx);
 		final int type = MetaData.getTypeForTable(schema, table, tx);
 
 		final ArrayList<String> indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
@@ -346,7 +363,7 @@ public final class LoadOperator implements Operator, Serializable
 	@Override
 	public LoadOperator clone()
 	{
-		final LoadOperator retval = new LoadOperator(schema, table, replace, delimiter, glob, meta);
+		final LoadOperator retval = new LoadOperator(schema, table, replace, delimiter, glob, meta, pos2Col, cols2Types, cols2Pos, tx);
 		retval.node = node;
 		return retval;
 	}

@@ -995,7 +995,7 @@ public class OperatorTrees extends AbstractParseController {
 
         ExternalTableType extTable = meta.getExternalTable(schema, load.getExtTable().getName(), tx);
         Operator child = new ExternalTableScanOperator(extTable, schema, load.getExtTable().getName(), meta, tx);
-        Operator op = new LoadOperator(schema, tbl, load.isReplace(), load.getDelimiter(), load.getGlob(), meta);
+        LoadOperator op = new LoadOperator(schema, tbl, load.isReplace(), load.getDelimiter(), load.getGlob(), meta, tx);
         op.add(child);
 
         final RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
