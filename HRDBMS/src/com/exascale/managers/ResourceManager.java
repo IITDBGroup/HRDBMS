@@ -5,13 +5,7 @@ import java.io.PrintWriter;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Random;
-import java.util.StringTokenizer;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -35,9 +29,9 @@ public final class ResourceManager extends HRDBMSThread
 	private static int CRITICAL_PERCENT_FREE = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("critical_mem_percent"));
 	public static int QUEUE_SIZE;
 	public static int CUDA_SIZE;
-	public static ArrayList<String> TEMP_DIRS;
+	public static List<String> TEMP_DIRS;
 	// private static final AtomicLong idGen = new AtomicLong(0);
-	// private static HashMap<Long, String> creations = new HashMap<Long,
+	// private static Map<Long, String> creations = new HashMap<Long,
 	// String>();
 	private static boolean PROFILE;
 	private static boolean DEADLOCK_DETECT;
@@ -52,15 +46,15 @@ public final class ResourceManager extends HRDBMSThread
 	// private static long offset;
 	public static volatile boolean panic = false;
 	private static ConcurrentHashMap<Operator, Operator> ops = new ConcurrentHashMap<Operator, Operator>();
-	private static HashMap<Integer, HashSet<Integer>> links = new HashMap<Integer, HashSet<Integer>>();
-	private static HashMap<Link, AtomicInteger> util = new HashMap<Link, AtomicInteger>();
-	private static HashSet<Integer> goodDistances = new HashSet<Integer>();
-	private static HashSet<Integer> okDistances = new HashSet<Integer>();
+	private static Map<Integer, Set<Integer>> links = new HashMap<>();
+	private static Map<Link, AtomicInteger> util = new HashMap<Link, AtomicInteger>();
+	private static Set<Integer> goodDistances = new HashSet<Integer>();
+	private static Set<Integer> okDistances = new HashSet<Integer>();
 	private static Random random = new Random();
 	private static int nodes;
 	private static int nMax;
 	public static volatile int MAX_HOPS = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("initial_max_hops"));
-	private static ConcurrentHashMap<Link, ArrayList<Integer>> routes = new ConcurrentHashMap<Link, ArrayList<Integer>>();
+	private static ConcurrentHashMap<Link, List<Integer>> routes = new ConcurrentHashMap<>();
 	// private final CharsetEncoder ce = cs.newEncoder();
 
 	static
@@ -138,7 +132,7 @@ public final class ResourceManager extends HRDBMSThread
 		int i = 0;
 		while (i < nodes)
 		{
-			HashSet<Integer> receive = links.get(i);
+			Set<Integer> receive = links.get(i);
 			if (receive == null)
 			{
 				receive = new HashSet<Integer>();
@@ -165,7 +159,7 @@ public final class ResourceManager extends HRDBMSThread
 				if (target != i)
 				{
 					receive.add(target);
-					HashSet<Integer> receive2 = links.get(target);
+					Set<Integer> receive2 = links.get(target);
 					if (receive2 == null)
 					{
 						receive2 = new HashSet<Integer>();
@@ -298,33 +292,33 @@ public final class ResourceManager extends HRDBMSThread
 		}
 	}
 
-	public static ArrayList<Integer> getAlternateMiddlemen(final int source, final int target, final int primary)
+	public static List<Integer> getAlternateMiddlemen(final int source, final int target, final int primary)
 	{
 		if (primary == target)
 		{
 			return new ArrayList<Integer>();
 		}
 
-		final HashSet<Integer> middlemen = (HashSet<Integer>)links.get(source).clone();
-		final HashSet<Integer> middlemen2 = links.get(target);
+		final Set<Integer> middlemen = new HashSet<>(links.get(source));
+		final Set<Integer> middlemen2 = links.get(target);
 		middlemen.retainAll(middlemen2);
 		middlemen.remove(primary);
 		return new ArrayList<Integer>(middlemen);
 	}
 
-	public static ArrayList<Integer> getNetworkTargetsForNode(final int source)
+	public static List<Integer> getNetworkTargetsForNode(final int source)
 	{
-		final ArrayList<Integer> retval = new ArrayList<Integer>();
+		final List<Integer> retval = new ArrayList<Integer>();
 		retval.add(source);
-		final HashSet<Integer> targets = links.get(source);
+		final Set<Integer> targets = links.get(source);
 		retval.addAll(targets);
 		return retval;
 	}
 
-	public static ArrayList<Integer> getRoute(final int from, final int to)
+	public static List<Integer> getRoute(final int from, final int to)
 	{
 		final Link link = new Link(from, to);
-		ArrayList<Integer> retval = (ArrayList<Integer>)routes.get(link).clone();
+		List<Integer> retval = new ArrayList<>(routes.get(link));
 		if (retval != null)
 		{
 			return retval;
@@ -340,13 +334,13 @@ public final class ResourceManager extends HRDBMSThread
 		ops.put(op, op);
 	}
 
-	private static ArrayList<Integer> computeRoute(final int from, final int to)
+	private static List<Integer> computeRoute(final int from, final int to)
 	{
-		final ArrayList<Integer> retval = new ArrayList<Integer>();
+		final List<Integer> retval = new ArrayList<Integer>();
 		int current = from;
 		while (current != to)
 		{
-			final HashSet<Integer> receive = links.get(current);
+			final Set<Integer> receive = links.get(current);
 			final int temp = computeSendTo(to, receive);
 			retval.add(temp);
 			// used current -> temp
@@ -356,12 +350,12 @@ public final class ResourceManager extends HRDBMSThread
 		return retval;
 	}
 
-	private static int computeSendTo(final int target, final HashSet<Integer> list)
+	private static int computeSendTo(final int target, final Set<Integer> list)
 	{
 		int minDifference = Integer.MAX_VALUE;
 		int retval = -1;
-		final ArrayList<Integer> goldenOptions = new ArrayList<Integer>();
-		final ArrayList<Integer> silverOptions = new ArrayList<Integer>();
+		final List<Integer> goldenOptions = new ArrayList<Integer>();
+		final List<Integer> silverOptions = new ArrayList<Integer>();
 
 		for (final int option : list)
 		{
@@ -519,7 +513,7 @@ public final class ResourceManager extends HRDBMSThread
 		final AtomicInteger max = new AtomicInteger(Integer.MIN_VALUE);
 		final AtomicInteger count = new AtomicInteger(0);
 		final AtomicLong total = new AtomicLong(0);
-		final ArrayList<HopThread> threads = new ArrayList<HopThread>();
+		final List<HopThread> threads = new ArrayList<HopThread>();
 		threads.add(new HopThread(0, nodes / 3, min, max, count, total));
 		threads.add(new HopThread(nodes / 3, 2 * nodes / 3, min, max, count, total));
 		threads.add(new HopThread(2 * nodes / 3, nodes, min, max, count, total));
@@ -625,10 +619,10 @@ public final class ResourceManager extends HRDBMSThread
 
 						int current = i;
 						int hops = 0;
-						final ArrayList<Integer> route = new ArrayList<Integer>();
+						final List<Integer> route = new ArrayList<Integer>();
 						while (current != j)
 						{
-							final HashSet<Integer> receive = links.get(current);
+							final Set<Integer> receive = links.get(current);
 							final int temp = computeSendTo(j, receive);
 							route.add(temp);
 							hops++;
@@ -802,7 +796,7 @@ public final class ResourceManager extends HRDBMSThread
 
 	private static final class ProfileThread extends ThreadPoolThread
 	{
-		private final HashMap<CodePosition, CodePosition> counts = new HashMap<CodePosition, CodePosition>();
+		private final Map<CodePosition, CodePosition> counts = new HashMap<CodePosition, CodePosition>();
 
 		long samples = 0;
 

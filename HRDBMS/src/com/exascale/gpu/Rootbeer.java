@@ -29,7 +29,7 @@ public class Rootbeer
 			}
 
 			i = 0;
-			ArrayDeque<String> ad = first.master.clone();
+			ArrayDeque<String> ad = new ArrayDeque<>(first.master);
 			while (!ad.isEmpty())
 			{
 				i += (ad.pop().getBytes("US-ASCII").length + 1);
@@ -38,7 +38,7 @@ public class Rootbeer
 			final byte[] prefixBytes = new byte[i];
 			i = 0;
 
-			ad = first.master.clone();
+			ad = new ArrayDeque<>(first.master);
 			while (!ad.isEmpty())
 			{
 				final String pre = ad.pop();

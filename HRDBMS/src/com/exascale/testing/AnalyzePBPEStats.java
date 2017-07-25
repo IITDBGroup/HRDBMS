@@ -3,15 +3,7 @@ package com.exascale.testing;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.ObjectInputStream;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.optimizer.CNFFilter;
@@ -19,7 +11,7 @@ import com.exascale.optimizer.Filter;
 
 public class AnalyzePBPEStats
 {
-	private static ConcurrentHashMap<HashSet<HashMap<Filter, Filter>>, AtomicLong> noResultCounts;
+	private static ConcurrentHashMap<HashSet<Map<Filter, Filter>>, AtomicLong> noResultCounts;
 	
 	public static void main(String[] args)
 	{
@@ -29,29 +21,29 @@ public class AnalyzePBPEStats
 			try
 			{
 				ObjectInputStream in2 = new ObjectInputStream(new FileInputStream("pbpe.stats"));
-				noResultCounts = (ConcurrentHashMap<HashSet<HashMap<Filter, Filter>>, AtomicLong>)in2.readObject();
+				noResultCounts = (ConcurrentHashMap<HashSet<Map<Filter, Filter>>, AtomicLong>)in2.readObject();
 			}
 			catch(Exception e)
 			{
-				noResultCounts = new ConcurrentHashMap<HashSet<HashMap<Filter, Filter>>, AtomicLong>();
+				noResultCounts = new ConcurrentHashMap<HashSet<Map<Filter, Filter>>, AtomicLong>();
 			}
 		}
 		else
 		{
-			noResultCounts = new ConcurrentHashMap<HashSet<HashMap<Filter, Filter>>, AtomicLong>();
+			noResultCounts = new ConcurrentHashMap<HashSet<Map<Filter, Filter>>, AtomicLong>();
 		}
 		
-		Map<HashSet<HashMap<Filter, Filter>>, AtomicLong> sorted = sortByValue(noResultCounts);
-		ArrayList<HashSet<HashMap<Filter, Filter>>> l_hshms = new ArrayList<HashSet<HashMap<Filter, Filter>>>();
-		ArrayList<HashSet<HashMap<Filter, Filter>>> o_hshms = new ArrayList<HashSet<HashMap<Filter, Filter>>>();
-		ArrayList<HashSet<HashMap<Filter, Filter>>> ps_hshms = new ArrayList<HashSet<HashMap<Filter, Filter>>>();
-		ArrayList<HashSet<HashMap<Filter, Filter>>> p_hshms = new ArrayList<HashSet<HashMap<Filter, Filter>>>();
-		ArrayList<HashSet<HashMap<Filter, Filter>>> s_hshms = new ArrayList<HashSet<HashMap<Filter, Filter>>>();
-		ArrayList<HashSet<HashMap<Filter, Filter>>> c_hshms = new ArrayList<HashSet<HashMap<Filter, Filter>>>();
-		for (HashSet<HashMap<Filter, Filter>> hshm : sorted.keySet())
+		Map<HashSet<Map<Filter, Filter>>, AtomicLong> sorted = sortByValue(noResultCounts);
+		ArrayList<Set<Map<Filter, Filter>>> l_hshms = new ArrayList<Set<Map<Filter, Filter>>>();
+		ArrayList<Set<Map<Filter, Filter>>> o_hshms = new ArrayList<Set<Map<Filter, Filter>>>();
+		ArrayList<Set<Map<Filter, Filter>>> ps_hshms = new ArrayList<Set<Map<Filter, Filter>>>();
+		ArrayList<Set<Map<Filter, Filter>>> p_hshms = new ArrayList<Set<Map<Filter, Filter>>>();
+		ArrayList<Set<Map<Filter, Filter>>> s_hshms = new ArrayList<Set<Map<Filter, Filter>>>();
+		ArrayList<Set<Map<Filter, Filter>>> c_hshms = new ArrayList<Set<Map<Filter, Filter>>>();
+		for (Set<Map<Filter, Filter>> hshm : sorted.keySet())
 		{
 			String colName = null;
-			for (HashMap<Filter, Filter> hm : hshm)
+			for (Map<Filter, Filter> hm : hshm)
 			{
 				for (Filter f : hm.keySet())
 				{
@@ -215,21 +207,21 @@ public class AnalyzePBPEStats
 		System.out.println(sql);
 	}
 	
-	 public static Map<HashSet<HashMap<Filter, Filter>>, AtomicLong> 
-     sortByValue( ConcurrentHashMap<HashSet<HashMap<Filter, Filter>>, AtomicLong> map )
+	 public static Map<HashSet<Map<Filter, Filter>>, AtomicLong>
+     sortByValue( ConcurrentHashMap<HashSet<Map<Filter, Filter>>, AtomicLong> map )
  {
-     List<Map.Entry<HashSet<HashMap<Filter, Filter>>, AtomicLong>> list =
-         new LinkedList<Map.Entry<HashSet<HashMap<Filter, Filter>>, AtomicLong>>( map.entrySet() );
-     Collections.sort( list, new Comparator<Map.Entry<HashSet<HashMap<Filter, Filter>>, AtomicLong>>()
+     List<Map.Entry<HashSet<Map<Filter, Filter>>, AtomicLong>> list =
+         new LinkedList<Map.Entry<HashSet<Map<Filter, Filter>>, AtomicLong>>( map.entrySet() );
+     Collections.sort( list, new Comparator<Map.Entry<HashSet<Map<Filter, Filter>>, AtomicLong>>()
      {
-         public int compare( Map.Entry<HashSet<HashMap<Filter, Filter>>, AtomicLong> o1, Map.Entry<HashSet<HashMap<Filter, Filter>>, AtomicLong> o2 )
+         public int compare( Map.Entry<HashSet<Map<Filter, Filter>>, AtomicLong> o1, Map.Entry<HashSet<Map<Filter, Filter>>, AtomicLong> o2 )
          {
              return -1 * Long.compare(o1.getValue().longValue(), o2.getValue().longValue());
          }
      } );
 
-     Map<HashSet<HashMap<Filter, Filter>>, AtomicLong> result = new LinkedHashMap<HashSet<HashMap<Filter, Filter>>, AtomicLong>();
-     for (Map.Entry<HashSet<HashMap<Filter, Filter>>, AtomicLong> entry : list)
+     Map<HashSet<Map<Filter, Filter>>, AtomicLong> result = new LinkedHashMap<HashSet<Map<Filter, Filter>>, AtomicLong>();
+     for (Map.Entry<HashSet<Map<Filter, Filter>>, AtomicLong> entry : list)
      {
          result.put( entry.getKey(), entry.getValue() );
      }

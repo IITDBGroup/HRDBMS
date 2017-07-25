@@ -2,9 +2,7 @@ package com.exascale.managers;
 
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 import com.exascale.exceptions.BufferPoolExhaustedException;
@@ -23,7 +21,7 @@ public class SubBufferManager
 	Page[] bp;
 	private final int numAvailable;
 	private int numNotTouched;
-	private final HashMap<Block, Integer> pageLookup;
+	private final Map<Block, Integer> pageLookup;
 	private final boolean log;
 	private final MultiHashMap<Long, Page> myBuffers;
 	private volatile int clock = 0;
@@ -81,9 +79,9 @@ public class SubBufferManager
 		}
 	}
 
-	public HashSet<String> flushAll(final FileChannel fc) throws Exception
+	public Set<String> flushAll(final FileChannel fc) throws Exception
 	{
-		final ArrayList<Page> toPut = new ArrayList<Page>();
+		final List<Page> toPut = new ArrayList<Page>();
 		for (final Page p : bp)
 		{
 			if (p.isModified())
@@ -97,7 +95,7 @@ public class SubBufferManager
 		putThread = new PutThread(toPut);
 		putThread.start();
 
-		final HashSet<String> retval = new HashSet<String>();
+		final Set<String> retval = new HashSet<String>();
 		for (final Page p : toPut)
 		{
 			retval.add(p.block().fileName());
@@ -295,7 +293,7 @@ public class SubBufferManager
 		}
 	}
 
-	public ReadThread pin(final Block b, final long txnum, final ArrayList<Integer> cols, final int layoutSize) throws Exception
+	public ReadThread pin(final Block b, final long txnum, final List<Integer> cols, final int layoutSize) throws Exception
 	{
 		ReadThread retval = null;
 		// Transaction.txListLock.readLock().lock();
@@ -393,7 +391,7 @@ public class SubBufferManager
 		}
 	}
 
-	public ReadThread pin(final Block b, final long txnum, final ArrayList<Integer> cols, final int layoutSize, final int rank, final int rankSize) throws Exception
+	public ReadThread pin(final Block b, final long txnum, final List<Integer> cols, final int layoutSize, final int rank, final int rankSize) throws Exception
 	{
 		ReadThread retval = null;
 		// Transaction.txListLock.readLock().lock();
@@ -647,7 +645,7 @@ public class SubBufferManager
 							// continue;
 							// }
 
-							final ArrayList<Integer> indexes = chooseUnpinnedPages(num);
+							final List<Integer> indexes = chooseUnpinnedPages(num);
 
 							if (numNotTouched > 0)
 							{
@@ -728,7 +726,7 @@ public class SubBufferManager
 		}
 	}
 
-	public void pin(final Block b, final Transaction tx, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos) throws Exception
+	public void pin(final Block b, final Transaction tx, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final List<Integer> fetchPos) throws Exception
 	{
 		// Transaction.txListLock.readLock().lock();
 		final long txnum = tx.number();
@@ -826,7 +824,7 @@ public class SubBufferManager
 		}
 	}
 
-	public void pin(final Block b, final Transaction tx, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos, final int rank, final int rankSize) throws Exception
+	public void pin(final Block b, final Transaction tx, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final List<Integer> fetchPos, final int rank, final int rankSize) throws Exception
 	{
 		// Transaction.txListLock.readLock().lock();
 		final long txnum = tx.number();
@@ -950,7 +948,7 @@ public class SubBufferManager
 
 						if (index != -1 || index2 != -1 || index3 != -1)
 						{
-							final ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
+							final List<ReadThread> threads = new ArrayList<ReadThread>();
 							ReadThread thread = pin(b, txnum);
 							if (thread != null)
 							{
@@ -988,7 +986,7 @@ public class SubBufferManager
 							// continue;
 							// }
 
-							final ArrayList<Integer> indexes = chooseUnpinnedPages(b.fileName());
+							final List<Integer> indexes = chooseUnpinnedPages(b.fileName());
 
 							if (indexes == null)
 							{
@@ -1073,7 +1071,7 @@ public class SubBufferManager
 		}
 	}
 
-	public Read3Thread pin3(final Block b, final long txnum, final ArrayList<Integer> cols, final int layoutSize) throws Exception
+	public Read3Thread pin3(final Block b, final long txnum, final List<Integer> cols, final int layoutSize) throws Exception
 	{
 		// Transaction.txListLock.readLock().lock();
 		// HRDBMSWorker.logger.debug("Short SBM pin3 starting");
@@ -1099,7 +1097,7 @@ public class SubBufferManager
 
 						if (index != -1 || index2 != -1 || index3 != -1)
 						{
-							final ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
+							final List<ReadThread> threads = new ArrayList<ReadThread>();
 							ReadThread thread = pin(b, txnum, cols, layoutSize);
 							if (thread != null)
 							{
@@ -1137,7 +1135,7 @@ public class SubBufferManager
 							// continue;
 							// }
 
-							final ArrayList<Integer> indexes = chooseUnpinnedPages(b.fileName());
+							final List<Integer> indexes = chooseUnpinnedPages(b.fileName());
 
 							if (indexes == null)
 							{
@@ -1248,7 +1246,7 @@ public class SubBufferManager
 
 						if (index != -1 || index2 != -1 || index3 != -1)
 						{
-							final ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
+							final List<ReadThread> threads = new ArrayList<ReadThread>();
 							ReadThread thread = pin(b, txnum, rank, rankSize);
 							if (thread != null)
 							{
@@ -1286,7 +1284,7 @@ public class SubBufferManager
 							// continue;
 							// }
 
-							final ArrayList<Integer> indexes = chooseUnpinnedPages(b.fileName());
+							final List<Integer> indexes = chooseUnpinnedPages(b.fileName());
 
 							if (indexes == null)
 							{
@@ -1371,7 +1369,7 @@ public class SubBufferManager
 		}
 	}
 
-	public void pin3(final Block b, final Transaction tx, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos) throws Exception
+	public void pin3(final Block b, final Transaction tx, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final List<Integer> fetchPos) throws Exception
 	{
 		// Transaction.txListLock.readLock().lock();
 		// HRDBMSWorker.logger.debug("Long SBM pin3 starting");
@@ -1412,7 +1410,7 @@ public class SubBufferManager
 							// continue;
 							// }
 
-							final ArrayList<Integer> indexes = chooseUnpinnedPages(b.fileName());
+							final List<Integer> indexes = chooseUnpinnedPages(b.fileName());
 
 							if (indexes == null)
 							{
@@ -1496,7 +1494,7 @@ public class SubBufferManager
 		}
 	}
 
-	public void pin3(final Block b, final Transaction tx, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos, final int rank, final int rankSize) throws Exception
+	public void pin3(final Block b, final Transaction tx, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final List<Integer> fetchPos, final int rank, final int rankSize) throws Exception
 	{
 		// Transaction.txListLock.readLock().lock();
 		// HRDBMSWorker.logger.debug("Long SBM pin3 starting");
@@ -1537,7 +1535,7 @@ public class SubBufferManager
 							// continue;
 							// }
 
-							final ArrayList<Integer> indexes = chooseUnpinnedPages(b.fileName());
+							final List<Integer> indexes = chooseUnpinnedPages(b.fileName());
 
 							if (indexes == null)
 							{
@@ -1801,7 +1799,7 @@ public class SubBufferManager
 		}
 	}
 
-	public void pinSync(final Block b, final Transaction tx, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos) throws Exception
+	public void pinSync(final Block b, final Transaction tx, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final List<Integer> fetchPos) throws Exception
 	{
 		// Transaction.txListLock.readLock().lock();
 		final long txnum = tx.number();
@@ -2156,7 +2154,7 @@ public class SubBufferManager
 		int page = b.number();
 		int i = 0;
 		final String fn = b.fileName();
-		final ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
+		final List<ReadThread> threads = new ArrayList<ReadThread>();
 		while (i < num)
 		{
 			final ReadThread thread = pin(new Block(fn, page++), txnum);
@@ -2277,9 +2275,9 @@ public class SubBufferManager
 		}
 	}
 
-	private ArrayList<Integer> chooseUnpinnedPages(final int num)
+	private List<Integer> chooseUnpinnedPages(final int num)
 	{
-		final ArrayList<Integer> retval = new ArrayList<Integer>(num);
+		final List<Integer> retval = new ArrayList<Integer>(num);
 		lock.lock();
 		int i = 0;
 		outer: while (i < num)
@@ -2354,9 +2352,9 @@ public class SubBufferManager
 		return retval;
 	}
 
-	private ArrayList<Integer> chooseUnpinnedPages(final String newFN)
+	private List<Integer> chooseUnpinnedPages(final String newFN)
 	{
-		final ArrayList<Integer> retval = new ArrayList<Integer>(3);
+		final List<Integer> retval = new ArrayList<Integer>(3);
 		lock.lock();
 		int i = 0;
 		outer: while (i < 3)
@@ -2456,7 +2454,7 @@ public class SubBufferManager
 		return retval;
 	}
 
-	private void expandBP(int i, final int num, final ArrayList<Integer> retval)
+	private void expandBP(int i, final int num, final List<Integer> retval)
 	{
 		// expand bufferpool
 		int newLength = (int)(bp.length * 1.1);
@@ -2513,9 +2511,9 @@ public class SubBufferManager
 		private final Schema schema;
 		private final Transaction tx;
 		private final ConcurrentHashMap<Integer, Schema> schemaMap;
-		private final ArrayList<Integer> fetchPos;
+		private final List<Integer> fetchPos;
 
-		public ParseThread(final Page p, final Schema schema, final Transaction tx, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos)
+		public ParseThread(final Page p, final Schema schema, final Transaction tx, final ConcurrentHashMap<Integer, Schema> schemaMap, final List<Integer> fetchPos)
 		{
 			this.p = p;
 			this.schema = schema;
@@ -2542,10 +2540,10 @@ public class SubBufferManager
 
 	private class PutThread extends HRDBMSThread
 	{
-		private final ArrayList<Page> toPut;
+		private final List<Page> toPut;
 		private Exception e = null;
 
-		public PutThread(final ArrayList<Page> toPut)
+		public PutThread(final List<Page> toPut)
 		{
 			this.toPut = toPut;
 		}

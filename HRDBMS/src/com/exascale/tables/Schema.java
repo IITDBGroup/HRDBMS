@@ -11,16 +11,8 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.TreeMap;
-import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.LockSupport;
 import com.exascale.exceptions.LockAbortException;
@@ -94,17 +86,17 @@ public class Schema
 	private final CharsetDecoder cd = cs.newDecoder();
 	private int nodeNumber = -2;
 	private int deviceNumber = -2;
-	private TreeMap<Integer, Page> pageGroup = new TreeMap<Integer, Page>();
+	private Map<Integer, Page> pageGroup = new TreeMap<Integer, Page>();
 	private boolean addOpen = true;
-	private ArrayList<Page> pPrev;
+	private List<Page> pPrev;
 	private ConcurrentHashMap<RID, FieldValue[]> recCache;
-	private HashMap<Integer, int[][]> offsetArraySet;
-	private HashMap<Integer, Map<RID, Integer>> rowIDToIndexSet;
-	private HashMap<Integer, ArrayList<RID>> rowIDSet;
+	private Map<Integer, int[][]> offsetArraySet;
+	private Map<Integer, Map<RID, Integer>> rowIDToIndexSet;
+	private Map<Integer, List<RID>> rowIDSet;
 	private boolean fixed = false;
-	private ArrayList<Byte> headerBytes;
-	private ArrayList<Integer> colOrder;
-	private ArrayList<RID> rowIDsAL;
+	private List<Byte> headerBytes;
+	private List<Integer> colOrder;
+	private List<RID> rowIDsAL;
 	private int cachedLenLen = -1;
 	private TreeSet<RID> copy = null;
 
@@ -135,7 +127,7 @@ public class Schema
 	{
 		if (!fixed)
 		{
-			final HashMap<Integer, DataType> newMap = new HashMap<Integer, DataType>();
+			final Map<Integer, DataType> newMap = new HashMap<Integer, DataType>();
 			for (final Map.Entry entry : colTypes.entrySet())
 			{
 				final int key = (int)entry.getKey();
@@ -691,9 +683,9 @@ public class Schema
 		}
 	}
 
-	public ArrayList<FieldValue> getRowForColTable(final RID rid) throws Exception
+	public List<FieldValue> getRowForColTable(final RID rid) throws Exception
 	{
-		final ArrayList<FieldValue> alfv = new ArrayList<FieldValue>();
+		final List<FieldValue> alfv = new ArrayList<FieldValue>();
 
 		for (final Map.Entry entry2 : pageGroup.entrySet())
 		{
@@ -880,12 +872,12 @@ public class Schema
 
 	public RID insertRowColTable(final FieldValue[] vals) throws Exception
 	{
-		final ArrayList<Integer> offs = hasEnoughSpace(vals);
+		final List<Integer> offs = hasEnoughSpace(vals);
 		if (offs != null)
 		{
 			if (Transaction.reorder)
 			{
-				final ArrayList<Integer> colOrder = this.getColOrder();
+				final List<Integer> colOrder = this.getColOrder();
 				final int first = colOrder.get(0);
 				this.p = pageGroup.get(first);
 			}
@@ -918,7 +910,7 @@ public class Schema
 			RID rid = null;
 			if (Transaction.reorder)
 			{
-				final ArrayList<Integer> colOrder = this.getColOrder();
+				final List<Integer> colOrder = this.getColOrder();
 				final int first = colOrder.get(0);
 				rowIDsAL = rowIDSet.get(first);
 				cachedLenLen = -1;
@@ -1180,12 +1172,12 @@ public class Schema
 
 	public RID insertRowColTableAppend(final FieldValue[] vals) throws Exception
 	{
-		final ArrayList<Integer> offs = hasEnoughSpace(vals);
+		final List<Integer> offs = hasEnoughSpace(vals);
 		if (offs != null)
 		{
 			if (Transaction.reorder)
 			{
-				final ArrayList<Integer> colOrder = this.getColOrder();
+				final List<Integer> colOrder = this.getColOrder();
 				final int first = colOrder.get(0);
 				this.p = pageGroup.get(first);
 			}
@@ -1218,7 +1210,7 @@ public class Schema
 			RID rid = null;
 			if (Transaction.reorder)
 			{
-				final ArrayList<Integer> colOrder = this.getColOrder();
+				final List<Integer> colOrder = this.getColOrder();
 				final int first = colOrder.get(0);
 				rowIDsAL = rowIDSet.get(first);
 				cachedLenLen = -1;
@@ -1555,7 +1547,7 @@ public class Schema
 		}
 	}
 
-	public void prepRowIter(final ArrayList<Integer> fetchPos) throws Exception
+	public void prepRowIter(final List<Integer> fetchPos) throws Exception
 	{
 		try
 		{
@@ -1581,8 +1573,8 @@ public class Schema
 		addOpen = false;
 		offsetArraySet = new HashMap<Integer, int[][]>();
 		rowIDToIndexSet = new HashMap<Integer, Map<RID, Integer>>();
-		rowIDSet = new HashMap<Integer, ArrayList<RID>>();
-		// recCache = new HashMap<RID, ArrayList<FieldValue>>();
+		rowIDSet = new HashMap<Integer, List<RID>>();
+		// recCache = new HashMap<RID, List<FieldValue>>();
 		try
 		{
 			rowIDsSet = false;
@@ -1797,7 +1789,7 @@ public class Schema
 			// }
 
 			int colPos = 0;
-			final ArrayList<ReadThread> threads = new ArrayList<ReadThread>();
+			final List<ReadThread> threads = new ArrayList<ReadThread>();
 
 			for (final Map.Entry entry2 : pageGroup.entrySet())
 			{
@@ -2033,7 +2025,7 @@ public class Schema
 
 		final ByteBuffer buff = ByteBuffer.allocate(Page.BLOCK_SIZE);
 		buff.position(0);
-		final ArrayList<Byte> hb = getHeaderBytes();
+		final List<Byte> hb = getHeaderBytes();
 		buff.put((byte)1);
 		putMedium(buff, 0); // RID list length
 
@@ -2105,7 +2097,7 @@ public class Schema
 
 		final ByteBuffer buff = ByteBuffer.allocate(Page.BLOCK_SIZE);
 		buff.position(0);
-		final ArrayList<Byte> hb = getHeaderBytes();
+		final List<Byte> hb = getHeaderBytes();
 		buff.put((byte)1);
 		putMedium(buff, 0); // RID list length
 
@@ -2245,7 +2237,7 @@ public class Schema
 		return i + 1;
 	}
 
-	private ArrayList<Integer> getColOrder() throws Exception
+	private List<Integer> getColOrder() throws Exception
 	{
 		if (colOrder == null)
 		{
@@ -2273,7 +2265,7 @@ public class Schema
 		return myDev;
 	}
 
-	private ArrayList<Byte> getHeaderBytes() throws Exception
+	private List<Byte> getHeaderBytes() throws Exception
 	{
 		if (headerBytes == null)
 		{
@@ -2301,9 +2293,9 @@ public class Schema
 		return myNode;
 	}
 
-	private ArrayList<Integer> hasEnoughSpace(final FieldValue[] vals) throws Exception
+	private List<Integer> hasEnoughSpace(final FieldValue[] vals) throws Exception
 	{
-		final ArrayList<Integer> retval = new ArrayList<Integer>(vals.length);
+		final List<Integer> retval = new ArrayList<Integer>(vals.length);
 		int pos = 0;
 		while (pos < pageGroup.size())
 		{
@@ -2424,16 +2416,16 @@ public class Schema
 			final String pfn = p.block().fileName();
 			final Block pblk = p.block();
 			int mColNum = -1;
-			HashMap<Integer, Integer> map = null;
+			Map<Integer, Integer> map = null;
 			if (Transaction.reorder)
 			{
-				ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = null;
+				ConcurrentHashMap<String, Map<Integer, Integer>> colMap = null;
 				synchronized (Transaction.colMaps)
 				{
 					colMap = Transaction.colMaps.get(tx);
 					if (colMap == null)
 					{
-						colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
+						colMap = new ConcurrentHashMap<String, Map<Integer, Integer>>();
 						Transaction.colMaps.put(tx, colMap);
 					}
 				}
@@ -2492,16 +2484,16 @@ public class Schema
 		final String pfn = p.block().fileName();
 		final Block pblk = p.block();
 		int mColNum = -1;
-		HashMap<Integer, Integer> map = null;
+		Map<Integer, Integer> map = null;
 		if (Transaction.reorder)
 		{
-			ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = null;
+			ConcurrentHashMap<String, Map<Integer, Integer>> colMap = null;
 			synchronized (Transaction.colMaps)
 			{
 				colMap = Transaction.colMaps.get(tx);
 				if (colMap == null)
 				{
-					colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
+					colMap = new ConcurrentHashMap<String, Map<Integer, Integer>>();
 					Transaction.colMaps.put(tx, colMap);
 				}
 			}
@@ -2899,9 +2891,9 @@ public class Schema
 	{
 		public static final boolean compress = HRDBMSWorker.getHParms().getProperty("enable_cvarchar_compression").equals("true");
 		private final static int NUM_SYM = 668;
-		// private static HashMap<Integer, Integer> freq = new HashMap<Integer,
+		// private static Map<Integer, Integer> freq = new HashMap<Integer,
 		// Integer>();
-		// private static HashMap<Integer, HuffmanNode> treeParts = new
+		// private static Map<Integer, HuffmanNode> treeParts = new
 		// HashMap<Integer, HuffmanNode>();
 		// private static HuffmanNode tree;
 		private final static int[] encode = new int[NUM_SYM];
@@ -4615,7 +4607,7 @@ public class Schema
 			return retval;
 		}
 
-		public FieldValue[] getAllCols(final ArrayList<Integer> fetchPos) throws Exception
+		public FieldValue[] getAllCols(final List<Integer> fetchPos) throws Exception
 		{
 			try
 			{

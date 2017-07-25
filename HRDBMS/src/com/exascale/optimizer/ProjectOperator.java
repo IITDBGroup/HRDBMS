@@ -4,12 +4,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
@@ -34,29 +29,29 @@ public final class ProjectOperator implements Operator, Serializable
 		}
 	}
 	private Operator child;
-	private ArrayList<String> cols;
+	private List<String> cols;
 	private transient final MetaData meta;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
+	private Map<String, String> cols2Types;
+	private Map<String, Integer> cols2Pos;
+	private Map<Integer, String> pos2Col;
 	private Operator parent;
-	private HashMap<String, Integer> childCols2Pos;
+	private Map<String, Integer> childCols2Pos;
 	private int node;
 
-	private transient ArrayList<Integer> pos2Get;
+	private transient List<Integer> pos2Get;
 
 	private volatile boolean startDone = false;
 	private transient AtomicLong received;
 	private transient volatile boolean demReceived;
 
-	public ProjectOperator(final ArrayList<String> cols, final MetaData meta)
+	public ProjectOperator(final List<String> cols, final MetaData meta)
 	{
 		this.cols = cols;
 		this.meta = meta;
 		received = new AtomicLong(0);
 	}
 
-	public static ProjectOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static ProjectOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final ProjectOperator value = (ProjectOperator)unsafe.allocateInstance(ProjectOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -84,7 +79,7 @@ public final class ProjectOperator implements Operator, Serializable
 			if (child.getCols2Types() != null)
 			{
 				childCols2Pos = child.getCols2Pos();
-				Map temp = (HashMap<String, String>)child.getCols2Types().clone();
+				Map temp = new HashMap<>(child.getCols2Types());
 				cols2Types = new HashMap<String, String>();
 				Set<Map.Entry> set = temp.entrySet();
 				for (final Map.Entry entry : set)
@@ -118,9 +113,9 @@ public final class ProjectOperator implements Operator, Serializable
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
-		final ArrayList<Operator> retval = new ArrayList<Operator>(1);
+		final List<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
@@ -152,13 +147,13 @@ public final class ProjectOperator implements Operator, Serializable
 	}
 
 	@Override
-	public HashMap<String, Integer> getCols2Pos()
+	public Map<String, Integer> getCols2Pos()
 	{
 		return cols2Pos;
 	}
 
 	@Override
-	public HashMap<String, String> getCols2Types()
+	public Map<String, String> getCols2Types()
 	{
 		return cols2Types;
 	}
@@ -176,15 +171,15 @@ public final class ProjectOperator implements Operator, Serializable
 	}
 
 	@Override
-	public TreeMap<Integer, String> getPos2Col()
+	public Map<Integer, String> getPos2Col()
 	{
 		return pos2Col;
 	}
 
 	@Override
-	public ArrayList<String> getReferences()
+	public List<String> getReferences()
 	{
-		final ArrayList<String> retval = new ArrayList<String>(cols);
+		final List<String> retval = new ArrayList<String>(cols);
 		return retval;
 	}
 
@@ -208,8 +203,8 @@ public final class ProjectOperator implements Operator, Serializable
 			throw (Exception)o;
 		}
 
-		final ArrayList<Object> row = (ArrayList<Object>)o;
-		final ArrayList<Object> retval = new ArrayList<Object>(pos2Get.size());
+		final List<Object> row = (List<Object>)o;
+		final List<Object> retval = new ArrayList<Object>(pos2Get.size());
 		int z = 0;
 		final int limit = pos2Get.size();
 		// for (final int pos : pos2Get)

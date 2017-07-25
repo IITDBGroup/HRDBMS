@@ -4,11 +4,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.TreeMap;
+import java.util.*;
+
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.HrdbmsType;
@@ -32,22 +29,22 @@ public final class SemiJoinOperator implements Operator, Serializable
 		}
 	}
 
-	private ArrayList<Operator> children = new ArrayList<Operator>(2);
+	private List<Operator> children = new ArrayList<Operator>(2);
 
 	private Operator parent;
 
-	private HashMap<String, String> cols2Types;
+	private Map<String, String> cols2Types;
 
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
+	private Map<String, Integer> cols2Pos;
+	private Map<Integer, String> pos2Col;
 	private MetaData meta;
-	private ArrayList<String> cols;
-	private volatile ArrayList<Integer> poses;
+	private List<String> cols;
+	private volatile List<Integer> poses;
 	private int childPos = -1;
-	private HashSet<HashMap<Filter, Filter>> f = null;
+	private Set<Map<Filter, Filter>> f = null;
 	private int node;
 	private boolean indexAccess = false;
-	private ArrayList<Index> dynamicIndexes;
+	private List<Index> dynamicIndexes;
 	private long rightChildCard = 16;
 	private boolean alreadySorted = false;
 	private boolean cardSet = false;
@@ -55,13 +52,13 @@ public final class SemiJoinOperator implements Operator, Serializable
 	private long leftChildCard = 16;
 	private long txnum;
 
-	public SemiJoinOperator(final ArrayList<String> cols, final MetaData meta)
+	public SemiJoinOperator(final List<String> cols, final MetaData meta)
 	{
 		this.cols = cols;
 		this.meta = meta;
 	}
 
-	public SemiJoinOperator(final HashSet<HashMap<Filter, Filter>> f, final MetaData meta)
+	public SemiJoinOperator(final Set<Map<Filter, Filter>> f, final MetaData meta)
 	{
 		this.f = f;
 		this.meta = meta;
@@ -75,14 +72,14 @@ public final class SemiJoinOperator implements Operator, Serializable
 		this.meta = meta;
 	}
 
-	private SemiJoinOperator(final ArrayList<String> cols, final HashSet<HashMap<Filter, Filter>> f, final MetaData meta)
+	private SemiJoinOperator(final List<String> cols, final Set<Map<Filter, Filter>> f, final MetaData meta)
 	{
 		this.f = f;
 		this.cols = cols;
 		this.meta = meta;
 	}
 
-	public static SemiJoinOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static SemiJoinOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final SemiJoinOperator value = (SemiJoinOperator)unsafe.allocateInstance(SemiJoinOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -148,7 +145,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
 		return children;
 	}
@@ -188,25 +185,25 @@ public final class SemiJoinOperator implements Operator, Serializable
 	}
 
 	@Override
-	public HashMap<String, Integer> getCols2Pos()
+	public Map<String, Integer> getCols2Pos()
 	{
 		return cols2Pos;
 	}
 
 	@Override
-	public HashMap<String, String> getCols2Types()
+	public Map<String, String> getCols2Types()
 	{
 		return cols2Types;
 	}
 
-	public HashSet<HashMap<Filter, Filter>> getHSHM() throws Exception
+	public Set<Map<Filter, Filter>> getHSHM() throws Exception
 	{
 		if (f != null)
 		{
 			return f;
 		}
 
-		final HashSet<HashMap<Filter, Filter>> retval = new HashSet<HashMap<Filter, Filter>>();
+		final Set<Map<Filter, Filter>> retval = new HashSet<Map<Filter, Filter>>();
 		int i = 0;
 		for (final String col : children.get(1).getPos2Col().values())
 		{
@@ -220,7 +217,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 				HRDBMSWorker.logger.error("", e);
 				throw e;
 			}
-			final HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
+			final Map<Filter, Filter> hm = new HashMap<Filter, Filter>();
 			hm.put(filter, filter);
 			retval.add(hm);
 			i++;
@@ -234,7 +231,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 		return indexAccess;
 	}
 
-	public ArrayList<String> getJoinForChild(final Operator op)
+	public List<String> getJoinForChild(final Operator op)
 	{
 		if (cols.size() > 0)
 		{
@@ -249,7 +246,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 		}
 
 		Filter x = null;
-		for (final HashMap<Filter, Filter> filters : f)
+		for (final Map<Filter, Filter> filters : f)
 		{
 			if (filters.size() == 1)
 			{
@@ -280,25 +277,25 @@ public final class SemiJoinOperator implements Operator, Serializable
 
 		if (op.getCols2Pos().keySet().contains(x.leftColumn()))
 		{
-			final ArrayList<String> retval = new ArrayList<String>(1);
+			final List<String> retval = new ArrayList<String>(1);
 			retval.add(x.leftColumn());
 			return retval;
 		}
 
-		final ArrayList<String> retval = new ArrayList<String>(1);
+		final List<String> retval = new ArrayList<String>(1);
 		retval.add(x.rightColumn());
 		return retval;
 	}
 
-	public ArrayList<String> getLefts()
+	public List<String> getLefts()
 	{
 		if (cols.size() > 0)
 		{
 			return cols;
 		}
 
-		final ArrayList<String> retval = new ArrayList<String>(f.size());
-		for (final HashMap<Filter, Filter> filters : f)
+		final List<String> retval = new ArrayList<String>(f.size());
+		for (final Map<Filter, Filter> filters : f)
 		{
 			if (filters.size() == 1)
 			{
@@ -335,19 +332,19 @@ public final class SemiJoinOperator implements Operator, Serializable
 	}
 
 	@Override
-	public TreeMap<Integer, String> getPos2Col()
+	public Map<Integer, String> getPos2Col()
 	{
 		return pos2Col;
 	}
 
 	@Override
-	public ArrayList<String> getReferences()
+	public List<String> getReferences()
 	{
 		try
 		{
-			final HashSet<HashMap<Filter, Filter>> hshm = getHSHM();
-			final ArrayList<String> retval = new ArrayList<String>(cols);
-			for (final HashMap<Filter, Filter> filters : hshm)
+			final Set<Map<Filter, Filter>> hshm = getHSHM();
+			final List<String> retval = new ArrayList<String>(cols);
+			for (final Map<Filter, Filter> filters : hshm)
 			{
 				for (final Filter filter : filters.keySet())
 				{
@@ -370,16 +367,16 @@ public final class SemiJoinOperator implements Operator, Serializable
 		}
 	}
 
-	public ArrayList<String> getRights()
+	public List<String> getRights()
 	{
 		if (cols.size() > 0)
 		{
-			final ArrayList<String> retval = new ArrayList<String>(children.get(1).getCols2Pos().keySet());
+			final List<String> retval = new ArrayList<String>(children.get(1).getCols2Pos().keySet());
 			return retval;
 		}
 
-		final ArrayList<String> retval = new ArrayList<String>(f.size());
-		for (final HashMap<Filter, Filter> filters : f)
+		final List<String> retval = new ArrayList<String>(f.size());
+		for (final Map<Filter, Filter> filters : f)
 		{
 			if (filters.size() == 1)
 			{
@@ -515,7 +512,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 		childPos = pos;
 	}
 
-	public void setDynamicIndex(final ArrayList<Index> indexes)
+	public void setDynamicIndex(final List<Index> indexes)
 	{
 		indexAccess = true;
 		this.dynamicIndexes = indexes;
@@ -550,14 +547,14 @@ public final class SemiJoinOperator implements Operator, Serializable
 		this.txnum = txnum;
 	}
 
-	public ArrayList<String> sortKeys()
+	public List<String> sortKeys()
 	{
 		if (cols.size() > 0)
 		{
 			return null;
 		}
 
-		for (final HashMap<Filter, Filter> filters : f)
+		for (final Map<Filter, Filter> filters : f)
 		{
 			if (filters.size() == 1)
 			{
@@ -593,7 +590,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 								// children.get(1).getCols2Pos().get(vStr);
 							}
 
-							final ArrayList<String> retval = new ArrayList<String>(1);
+							final List<String> retval = new ArrayList<String>(1);
 							retval.add(vStr);
 							return retval;
 						}
@@ -609,14 +606,14 @@ public final class SemiJoinOperator implements Operator, Serializable
 		return null;
 	}
 
-	public ArrayList<Boolean> sortOrders()
+	public List<Boolean> sortOrders()
 	{
 		if (cols.size() > 0)
 		{
 			return null;
 		}
 
-		for (final HashMap<Filter, Filter> filters : f)
+		for (final Map<Filter, Filter> filters : f)
 		{
 			if (filters.size() == 1)
 			{
@@ -653,7 +650,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 								// children.get(1).getCols2Pos().get(vStr);
 							}
 
-							final ArrayList<Boolean> retval = new ArrayList<Boolean>(1);
+							final List<Boolean> retval = new ArrayList<Boolean>(1);
 							retval.add(vBool);
 							return retval;
 						}
@@ -674,13 +671,13 @@ public final class SemiJoinOperator implements Operator, Serializable
 	{
 		final boolean usesHash = usesHash();
 		final boolean usesSort = usesSort();
-		final HashSet<HashMap<Filter, Filter>> temp = getHSHM();
+		final Set<Map<Filter, Filter>> temp = getHSHM();
 
 		if (usesHash)
 		{
 			// HJO w/ existence + filter
-			final ArrayList<String> lefts = this.getJoinForChild(children.get(0));
-			final ArrayList<String> rights = this.getJoinForChild(children.get(1));
+			final List<String> lefts = this.getJoinForChild(children.get(0));
+			final List<String> rights = this.getJoinForChild(children.get(1));
 			dynamicOp = new HashJoinOperator(lefts.get(0), rights.get(0), meta);
 			((HashJoinOperator)dynamicOp).setTXNum(txnum);
 			if (lefts.size() > 1)
@@ -802,7 +799,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 			return true;
 		}
 
-		for (final HashMap<Filter, Filter> filters : f)
+		for (final Map<Filter, Filter> filters : f)
 		{
 			if (filters.size() == 1)
 			{
@@ -828,7 +825,7 @@ public final class SemiJoinOperator implements Operator, Serializable
 
 		boolean isSort = false;
 
-		for (final HashMap<Filter, Filter> filters : f)
+		for (final Map<Filter, Filter> filters : f)
 		{
 			if (filters.size() == 1)
 			{

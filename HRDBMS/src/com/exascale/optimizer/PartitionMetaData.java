@@ -7,9 +7,7 @@ import com.exascale.misc.Utils;
 import com.exascale.tables.Transaction;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.StringTokenizer;
+import java.util.*;
 
 /** POJO representation of SYS.PARTITIONING metadata */
 public class PartitionMetaData implements Serializable
@@ -19,28 +17,28 @@ public class PartitionMetaData implements Serializable
     public static final int NODE_ALL = -1;
     private static final int DEVICE_ALL = -1;
     public static final String NONE = "NONE", ANY = "ANY", ALL = "ALL", HASH = "HASH", RANGE = "RANGE";
-    private ArrayList<Integer> nodeGroupSet;
-    private ArrayList<String> nodeGroupHash;
-    private ArrayList<Object> nodeGroupRange;
+    private List<Integer> nodeGroupSet;
+    private List<String> nodeGroupHash;
+    private List<Object> nodeGroupRange;
     private int numNodeGroups;
     private String nodeGroupRangeCol;
-    private HashMap<Integer, ArrayList<Integer>> nodeGroupHashMap;
-    private ArrayList<Integer> nodeSet;
+    private Map<Integer, List<Integer>> nodeGroupHashMap;
+    private List<Integer> nodeSet;
     private int numNodes;
-    private ArrayList<String> nodeHash;
-    private ArrayList<Object> nodeRange;
+    private List<String> nodeHash;
+    private List<Object> nodeRange;
     private String nodeRangeCol;
     private int numDevices;
-    private ArrayList<Integer> deviceSet;
-    private ArrayList<String> deviceHash;
-    private ArrayList<Object> deviceRange;
+    private List<Integer> deviceSet;
+    private List<String> deviceHash;
+    private List<Object> deviceRange;
     private String deviceRangeCol;
     private final String schema;
     private final String table;
     private final Transaction tx;
     private final String ngExp, nExp, dExp;
 
-    public PartitionMetaData(final String schema, final String table, final String ngExp, final String nExp, final String dExp, final Transaction tx, final HashMap<String, String> cols2Types) throws Exception
+    public PartitionMetaData(final String schema, final String table, final String ngExp, final String nExp, final String dExp, final Transaction tx, final Map<String, String> cols2Types) throws Exception
     {
         this.schema = schema;
         this.table = table;
@@ -58,7 +56,7 @@ public class PartitionMetaData implements Serializable
         this.schema = schema;
         this.table = table;
         this.tx = tx;
-        ArrayList<Object> row = MetaData.getPartitioningCache(schema + "." + table);
+        List<Object> row = MetaData.getPartitioningCache(schema + "." + table);
         if (row == null)
         {
             row = PlanCacheManager.getPartitioning().setParms(schema, table).execute(tx);
@@ -92,12 +90,12 @@ public class PartitionMetaData implements Serializable
         return deviceHash != null;
     }
 
-    public ArrayList<Integer> deviceSet()
+    public List<Integer> deviceSet()
     {
         return deviceSet;
     }
 
-    public ArrayList<String> getDeviceHash()
+    public List<String> getDeviceHash()
     {
         return deviceHash;
     }
@@ -107,7 +105,7 @@ public class PartitionMetaData implements Serializable
         return deviceRangeCol;
     }
 
-    public ArrayList<Object> getDeviceRanges()
+    public List<Object> getDeviceRanges()
     {
         return deviceRange;
     }
@@ -127,12 +125,12 @@ public class PartitionMetaData implements Serializable
         return ngExp;
     }
 
-    public ArrayList<String> getNodeGroupHash()
+    public List<String> getNodeGroupHash()
     {
         return nodeGroupHash;
     }
 
-    public HashMap<Integer, ArrayList<Integer>> getNodeGroupHashMap()
+    public Map<Integer, List<Integer>> getNodeGroupHashMap()
     {
         return nodeGroupHashMap;
     }
@@ -142,12 +140,12 @@ public class PartitionMetaData implements Serializable
         return nodeGroupRangeCol;
     }
 
-    public ArrayList<Object> getNodeGroupRanges()
+    public List<Object> getNodeGroupRanges()
     {
         return nodeGroupRange;
     }
 
-    public ArrayList<String> getNodeHash()
+    public List<String> getNodeHash()
     {
         return nodeHash;
     }
@@ -157,7 +155,7 @@ public class PartitionMetaData implements Serializable
         return nodeRangeCol;
     }
 
-    public ArrayList<Object> getNodeRanges()
+    public List<Object> getNodeRanges()
     {
         return nodeRange;
     }
@@ -227,7 +225,7 @@ public class PartitionMetaData implements Serializable
         return nodeGroupHash != null;
     }
 
-    public ArrayList<Integer> nodeGroupSet()
+    public List<Integer> nodeGroupSet()
     {
         return nodeGroupSet;
     }
@@ -237,7 +235,7 @@ public class PartitionMetaData implements Serializable
         return nodeHash != null;
     }
 
-    public ArrayList<Integer> nodeSet()
+    public List<Integer> nodeSet()
     {
         return nodeSet;
     }
@@ -256,14 +254,14 @@ public class PartitionMetaData implements Serializable
         nodeGroupSet = new ArrayList<Integer>();
         numNodeGroups = 0;
         int setNum = 0;
-        nodeGroupHashMap = new HashMap<Integer, ArrayList<Integer>>();
+        nodeGroupHashMap = new HashMap<Integer, List<Integer>>();
         while (tokens2.hasMoreTokens())
         {
             final String nodesInGroup = tokens2.nextToken();
             nodeGroupSet.add(setNum);
             numNodeGroups++;
 
-            final ArrayList<Integer> nodeListForGroup = new ArrayList<Integer>();
+            final List<Integer> nodeListForGroup = new ArrayList<Integer>();
             final FastStringTokenizer tokens3 = new FastStringTokenizer(nodesInGroup, "|", false);
             while (tokens3.hasMoreTokens())
             {
@@ -343,7 +341,7 @@ public class PartitionMetaData implements Serializable
         }
     }
 
-    private void setDData2(final String exp, final HashMap<String, String> cols2Types) throws Exception
+    private void setDData2(final String exp, final Map<String, String> cols2Types) throws Exception
     {
         final FastStringTokenizer tokens = new FastStringTokenizer(exp, ",", false);
         final String first = tokens.nextToken();
@@ -481,7 +479,7 @@ public class PartitionMetaData implements Serializable
         }
     }
 
-    private void setNData2(final String exp, final HashMap<String, String> cols2Types) throws Exception
+    private void setNData2(final String exp, final Map<String, String> cols2Types) throws Exception
     {
         final FastStringTokenizer tokens = new FastStringTokenizer(exp, ",", false);
         final String first = tokens.nextToken();
@@ -579,7 +577,7 @@ public class PartitionMetaData implements Serializable
         otherNG(exp);
     }
 
-    private void setNGData2(final String exp, final HashMap<String, String> cols2Types) throws Exception
+    private void setNGData2(final String exp, final Map<String, String> cols2Types) throws Exception
     {
         if (exp.equals(NONE))
         {
@@ -595,7 +593,7 @@ public class PartitionMetaData implements Serializable
         nodeGroupSet = new ArrayList<Integer>();
         numNodeGroups = 0;
         int setNum = 0;
-        nodeGroupHashMap = new HashMap<Integer, ArrayList<Integer>>();
+        nodeGroupHashMap = new HashMap<Integer, List<Integer>>();
         int expectedNumNodesInGroup = -1;
         while (tokens2.hasMoreTokens())
         {
@@ -604,7 +602,7 @@ public class PartitionMetaData implements Serializable
             nodeGroupSet.add(setNum);
             numNodeGroups++;
 
-            final ArrayList<Integer> nodeListForGroup = new ArrayList<Integer>();
+            final List<Integer> nodeListForGroup = new ArrayList<Integer>();
             final FastStringTokenizer tokens3 = new FastStringTokenizer(nodesInGroup, "|", false);
             while (tokens3.hasMoreTokens())
             {
@@ -695,7 +693,7 @@ public class PartitionMetaData implements Serializable
         nodeRange = convertRangeStringToObject(set, schema, table, nodeRangeCol, tx);
     }
 
-    private static ArrayList<Object> convertRangeStringToObject(final String set, final String schema, final String table, final String rangeCol, final Transaction tx) throws Exception
+    private static List<Object> convertRangeStringToObject(final String set, final String schema, final String table, final String rangeCol, final Transaction tx) throws Exception
     {
         String type = MetaData.getColTypeCache(schema + "." + table + "." + rangeCol);
         if (type == null)
@@ -703,7 +701,7 @@ public class PartitionMetaData implements Serializable
             type = PlanCacheManager.getColType().setParms(schema, table, rangeCol).execute(tx);
             MetaData.putColTypeCache(schema + "." + table + "." + rangeCol, type);
         }
-        final ArrayList<Object> retval = new ArrayList<Object>();
+        final List<Object> retval = new ArrayList<Object>();
         final StringTokenizer tokens = new StringTokenizer(set, "{}|");
         while (tokens.hasMoreTokens())
         {
@@ -736,9 +734,9 @@ public class PartitionMetaData implements Serializable
         return retval;
     }
 
-    private static ArrayList<Object> convertRangeStringToObject(final String set, final String schema, final String table, final String rangeCol, final Transaction tx, final String type) throws Exception
+    private static List<Object> convertRangeStringToObject(final String set, final String schema, final String table, final String rangeCol, final Transaction tx, final String type) throws Exception
     {
-        final ArrayList<Object> retval = new ArrayList<Object>();
+        final List<Object> retval = new ArrayList<Object>();
         final StringTokenizer tokens = new StringTokenizer(set, "{}|");
         while (tokens.hasMoreTokens())
         {

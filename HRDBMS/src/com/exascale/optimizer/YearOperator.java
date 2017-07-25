@@ -4,10 +4,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.HrdbmsType;
@@ -33,9 +30,9 @@ public final class YearOperator implements Operator, Serializable
 	}
 	private Operator child;
 	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
+	private Map<String, String> cols2Types;
+	private Map<String, Integer> cols2Pos;
+	private Map<Integer, String> pos2Col;
 	private String col;
 	private String name;
 	private int colPos;
@@ -54,7 +51,7 @@ public final class YearOperator implements Operator, Serializable
 		received = new AtomicLong(0);
 	}
 
-	public static YearOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static YearOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final YearOperator value = (YearOperator)unsafe.allocateInstance(YearOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -81,11 +78,11 @@ public final class YearOperator implements Operator, Serializable
 			child.registerParent(this);
 			if (child.getCols2Types() != null)
 			{
-				cols2Types = (HashMap<String, String>)child.getCols2Types().clone();
+				cols2Types = new HashMap<>(child.getCols2Types());
 				cols2Types.put(name, "INT");
-				cols2Pos = (HashMap<String, Integer>)child.getCols2Pos().clone();
+				cols2Pos = new HashMap<>(child.getCols2Pos());
 				cols2Pos.put(name, cols2Pos.size());
-				pos2Col = (TreeMap<Integer, String>)child.getPos2Col().clone();
+				pos2Col = new HashMap<>(child.getPos2Col());
 				pos2Col.put(pos2Col.size(), name);
 				Integer colPos1 = cols2Pos.get(col);
 				if (colPos1 == null)
@@ -126,9 +123,9 @@ public final class YearOperator implements Operator, Serializable
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
-		final ArrayList<Operator> retval = new ArrayList<Operator>(1);
+		final List<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
@@ -157,13 +154,13 @@ public final class YearOperator implements Operator, Serializable
 	}
 
 	@Override
-	public HashMap<String, Integer> getCols2Pos()
+	public Map<String, Integer> getCols2Pos()
 	{
 		return cols2Pos;
 	}
 
 	@Override
-	public HashMap<String, String> getCols2Types()
+	public Map<String, String> getCols2Types()
 	{
 		return cols2Types;
 	}
@@ -186,15 +183,15 @@ public final class YearOperator implements Operator, Serializable
 	}
 
 	@Override
-	public TreeMap<Integer, String> getPos2Col()
+	public Map<Integer, String> getPos2Col()
 	{
 		return pos2Col;
 	}
 
 	@Override
-	public ArrayList<String> getReferences()
+	public List<String> getReferences()
 	{
-		final ArrayList<String> retval = new ArrayList<String>(1);
+		final List<String> retval = new ArrayList<String>(1);
 		retval.add(col);
 		return retval;
 	}
@@ -218,7 +215,7 @@ public final class YearOperator implements Operator, Serializable
 			throw (Exception)o;
 		}
 
-		final ArrayList<Object> row = (ArrayList<Object>)o;
+		final List<Object> row = (List<Object>)o;
 		row.add(((MyDate)row.get(colPos)).getYear());
 		return row;
 	}

@@ -1,20 +1,21 @@
 package com.exascale.optimizer;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class Function
 {
 	private final String name;
-	private final ArrayList<Expression> args;
+	private final List<Expression> args;
 	boolean distinct = false;
 
-	public Function(final String name, final ArrayList<Expression> args)
+	public Function(final String name, final List<Expression> args)
 	{
 		this.name = name;
 		this.args = args;
 	}
 
-	public Function(final String name, final ArrayList<Expression> args, final boolean distinct)
+	public Function(final String name, final List<Expression> args, final boolean distinct)
 	{
 		this.name = name;
 		this.args = args;
@@ -29,7 +30,7 @@ public class Function
 			return new Function(name, args, distinct);
 		}
 
-		final ArrayList<Expression> newArgs = new ArrayList<Expression>();
+		final List<Expression> newArgs = new ArrayList<Expression>();
 		for (final Expression e : args)
 		{
 			newArgs.add(e.clone());
@@ -50,7 +51,7 @@ public class Function
 		return name.equals(r.name) && args.equals(r.args) && distinct == r.distinct;
 	}
 
-	public ArrayList<Expression> getArgs()
+	public List<Expression> getArgs()
 	{
 		return args;
 	}

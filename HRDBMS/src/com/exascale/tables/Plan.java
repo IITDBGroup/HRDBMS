@@ -2,6 +2,7 @@ package com.exascale.tables;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import com.exascale.managers.HRDBMSWorker;
@@ -15,13 +16,13 @@ public class Plan implements Serializable
 {
 	private transient final long time;
 	private transient final boolean reserved;
-	private final ArrayList<Operator> trees;
+	private final List<Operator> trees;
 	private transient final ConcurrentHashMap<Integer, Integer> touchedNodes = new ConcurrentHashMap<Integer, Integer>();
 	private int updateCount2 = 0;
 
-	// private HashMap<Integer, Integer> old2New = null;
+	// private Map<Integer, Integer> old2New = null;
 
-	public Plan(final boolean reserved, final ArrayList<Operator> trees)
+	public Plan(final boolean reserved, final List<Operator> trees)
 	{
 		time = System.currentTimeMillis();
 		this.reserved = reserved;
@@ -47,9 +48,9 @@ public class Plan implements Serializable
 		touchedNodes.put(node, node);
 	}
 
-	public ArrayList<Operator> cloneArray(final ArrayList<Operator> source)
+	public List<Operator> cloneArray(final List<Operator> source)
 	{
-		final ArrayList<Operator> retval = new ArrayList<Operator>(source.size());
+		final List<Operator> retval = new ArrayList<Operator>(source.size());
 		for (final Operator tree : source)
 		{
 			retval.add(clone(tree));
@@ -124,11 +125,11 @@ public class Plan implements Serializable
 		return retval;
 	}
 
-	public ArrayList<SubXAThread> executeMultiNoResult() throws Exception
+	public List<SubXAThread> executeMultiNoResult() throws Exception
 	{
 		int i = 0;
 		final int size = trees.size();
-		final ArrayList<SubXAThread> threads = new ArrayList<SubXAThread>(trees.size() - 1);
+		final List<SubXAThread> threads = new ArrayList<SubXAThread>(trees.size() - 1);
 		while (i < size - 1)
 		{
 			final SubXAThread thread = new SubXAThread(trees.get(i));
@@ -181,7 +182,7 @@ public class Plan implements Serializable
 		return new ArrayList<Integer>(touchedNodes.keySet());
 	}
 
-	public ArrayList<Operator> getTrees()
+	public List<Operator> getTrees()
 	{
 		return trees;
 	}

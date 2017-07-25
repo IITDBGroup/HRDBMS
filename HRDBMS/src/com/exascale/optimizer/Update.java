@@ -1,19 +1,20 @@
 package com.exascale.optimizer;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class Update extends SQLStatement
 {
 	private final TableName table;
-	private ArrayList<Column> cols;
+	private List<Column> cols;
 	private Expression exp;
 	private Where where;
 	private final boolean multi;
-	private ArrayList<ArrayList<Column>> cols2;
-	private ArrayList<Expression> exps2;
-	private ArrayList<Where> wheres2;
+	private List<List<Column>> cols2;
+	private List<Expression> exps2;
+	private List<Where> wheres2;
 
-	public Update(final TableName table, final ArrayList<ArrayList<Column>> cols2, final ArrayList<Expression> exps2, final ArrayList<Where> wheres2)
+	public Update(final TableName table, final List<List<Column>> cols2, final List<Expression> exps2, final List<Where> wheres2)
 	{
 		this.table = table;
 		this.cols2 = cols2;
@@ -22,7 +23,7 @@ public class Update extends SQLStatement
 		this.multi = true;
 	}
 
-	public Update(final TableName table, final ArrayList<Column> cols, final Expression exp, final Where where)
+	public Update(final TableName table, final List<Column> cols, final Expression exp, final Where where)
 	{
 		this.table = table;
 		this.cols = cols;
@@ -31,12 +32,12 @@ public class Update extends SQLStatement
 		this.multi = false;
 	}
 
-	public ArrayList<Column> getCols()
+	public List<Column> getCols()
 	{
 		return cols;
 	}
 
-	public ArrayList<ArrayList<Column>> getCols2()
+	public List<List<Column>> getCols2()
 	{
 		return cols2;
 	}
@@ -46,7 +47,7 @@ public class Update extends SQLStatement
 		return exp;
 	}
 
-	public ArrayList<Expression> getExps2()
+	public List<Expression> getExps2()
 	{
 		return exps2;
 	}
@@ -61,7 +62,7 @@ public class Update extends SQLStatement
 		return where;
 	}
 
-	public ArrayList<Where> getWheres2()
+	public List<Where> getWheres2()
 	{
 		return wheres2;
 	}

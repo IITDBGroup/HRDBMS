@@ -4,9 +4,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.ResourceManager;
@@ -50,7 +48,7 @@ public final class CountOperator implements AggregateOperator, Serializable
 		this.meta = meta;
 	}
 
-	public static CountOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static CountOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final CountOperator value = (CountOperator)unsafe.allocateInstance(CountOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -67,7 +65,7 @@ public final class CountOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public AggregateResultThread getHashThread(final HashMap<String, Integer> cols2Pos)
+	public AggregateResultThread getHashThread(final Map<String, Integer> cols2Pos)
 	{
 		return new CountHashThread(cols2Pos);
 	}
@@ -89,7 +87,7 @@ public final class CountOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public AggregateResultThread newProcessingThread(final ArrayList<ArrayList<Object>> rows, final HashMap<String, Integer> cols2Pos)
+	public AggregateResultThread newProcessingThread(final List<List<Object>> rows, final Map<String, Integer> cols2Pos)
 	{
 		return new CountThread(rows, cols2Pos);
 	}
@@ -145,10 +143,10 @@ public final class CountOperator implements AggregateOperator, Serializable
 	{
 		// private final DiskBackedALOHashMap<AtomicLong> results = new
 		// DiskBackedALOHashMap<AtomicLong>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
-		private ConcurrentHashMap<ArrayList<Object>, AtomicLong> results = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS <= Integer.MAX_VALUE ? (int)NUM_GROUPS : Integer.MAX_VALUE, 0.75f, 6 * ResourceManager.cpus);
+		private ConcurrentHashMap<List<Object>, AtomicLong> results = new ConcurrentHashMap<>(NUM_GROUPS <= Integer.MAX_VALUE ? (int)NUM_GROUPS : Integer.MAX_VALUE, 0.75f, 6 * ResourceManager.cpus);
 		private int pos;
 
-		public CountHashThread(final HashMap<String, Integer> cols2Pos)
+		public CountHashThread(final Map<String, Integer> cols2Pos)
 		{
 			if (input != null)
 			{
@@ -164,14 +162,14 @@ public final class CountOperator implements AggregateOperator, Serializable
 		}
 
 		@Override
-		public Object getResult(final ArrayList<Object> keys)
+		public Object getResult(final List<Object> keys)
 		{
 			return results.get(keys).longValue();
 		}
 
 		// @Parallel
 		@Override
-		public final void put(final ArrayList<Object> row, final ArrayList<Object> group)
+		public final void put(final List<Object> row, final List<Object> group)
 		{
 			row.get(pos);
 			// TODO only do following if val not null
@@ -191,11 +189,11 @@ public final class CountOperator implements AggregateOperator, Serializable
 
 	private final class CountThread extends AggregateResultThread
 	{
-		private final ArrayList<ArrayList<Object>> rows;
+		private final List<List<Object>> rows;
 		private long result;
 		private int pos;
 
-		public CountThread(final ArrayList<ArrayList<Object>> rows, final HashMap<String, Integer> cols2Pos)
+		public CountThread(final List<List<Object>> rows, final Map<String, Integer> cols2Pos)
 		{
 			this.rows = rows;
 			if (input != null)
@@ -231,7 +229,7 @@ public final class CountOperator implements AggregateOperator, Serializable
 				while (z < limit)
 				{
 					final Object o = rows.get(z++);
-					final ArrayList<Object> row = (ArrayList<Object>)o;
+					final List<Object> row = (List<Object>)o;
 					row.get(pos);
 					result++; // TODO only increment if not null
 				}

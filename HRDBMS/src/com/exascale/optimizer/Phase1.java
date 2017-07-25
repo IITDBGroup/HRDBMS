@@ -1,10 +1,6 @@
 package com.exascale.optimizer;
 
-import java.util.ArrayList;
-import java.util.ConcurrentModificationException;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.tables.Transaction;
@@ -17,10 +13,10 @@ public final class Phase1
 	private final Transaction tx;
 	private final Operator clone;
 	private final MetaData meta = new MetaData();
-	private final HashSet<Operator> done2 = new HashSet<Operator>();
-	private final HashSet<Operator> done = new HashSet<Operator>();
-	private final HashMap<String, String> ftLookup = new HashMap<String, String>();
-	public HashMap<ArrayList<Filter>, Double> likelihoodCache = new HashMap<ArrayList<Filter>, Double>();
+	private final Set<Operator> done2 = new HashSet<Operator>();
+	private final Set<Operator> done = new HashSet<Operator>();
+	private final Map<String, String> ftLookup = new HashMap<String, String>();
+	public Map<List<Filter>, Double> likelihoodCache = new HashMap<List<Filter>, Double>();
 
 	public Phase1(final RootOperator root, final Transaction tx) throws Exception
 	{
@@ -44,7 +40,7 @@ public final class Phase1
 		return true;
 	}
 
-	private static Operator getSubtreeForCol(final String col, final ArrayList<Operator> subtrees)
+	private static Operator getSubtreeForCol(final String col, final List<Operator> subtrees)
 	{
 		for (final Operator op : subtrees)
 		{
@@ -271,9 +267,9 @@ public final class Phase1
 
 	private long cardHJO(final Operator op) throws Exception
 	{
-		final HashSet<HashMap<Filter, Filter>> hshm = ((HashJoinOperator)op).getHSHM();
+		final Set<Map<Filter, Filter>> hshm = ((HashJoinOperator)op).getHSHM();
 		double max = -1;
-		for (final HashMap<Filter, Filter> hm : hshm)
+		for (final Map<Filter, Filter> hm : hshm)
 		{
 			final double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
 			if (temp > max)
@@ -311,9 +307,9 @@ public final class Phase1
 
 	private long cardNL(final Operator op) throws Exception
 	{
-		final HashSet<HashMap<Filter, Filter>> hshm = ((NestedLoopJoinOperator)op).getHSHM();
+		final Set<Map<Filter, Filter>> hshm = ((NestedLoopJoinOperator)op).getHSHM();
 		double max = -1;
-		for (final HashMap<Filter, Filter> hm : hshm)
+		for (final Map<Filter, Filter> hm : hshm)
 		{
 			final double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
 			if (temp > max)
@@ -467,7 +463,7 @@ public final class Phase1
 	{
 		if (op instanceof SelectOperator)
 		{
-			final ArrayList<Filter> filters = ((SelectOperator)op).getFilter();
+			final List<Filter> filters = ((SelectOperator)op).getFilter();
 			boolean isJoin = true;
 			for (final Filter filter : filters)
 			{
@@ -503,7 +499,7 @@ public final class Phase1
 			if (child instanceof JoinOperator)
 			{
 				final JoinOperator join = JoinOperator.manufactureJoin((JoinOperator)child, (SelectOperator)op, op.getMeta());
-				final ArrayList<Operator> children = (ArrayList<Operator>)child.children().clone();
+				final List<Operator> children = new ArrayList<>(child.children());
 				for (final Operator child2 : children)
 				{
 					child.removeChild(child2);
@@ -569,16 +565,16 @@ public final class Phase1
 		}
 	}
 
-	private ArrayList<Operator> getLeaves(final Operator op)
+	private List<Operator> getLeaves(final Operator op)
 	{
 		if (op.children().size() == 0)
 		{
-			final ArrayList<Operator> retval = new ArrayList<Operator>(1);
+			final List<Operator> retval = new ArrayList<Operator>(1);
 			retval.add(op);
 			return retval;
 		}
 
-		final ArrayList<Operator> retval = new ArrayList<Operator>();
+		final List<Operator> retval = new ArrayList<Operator>();
 		for (final Operator o : op.children())
 		{
 			retval.addAll(getLeaves(o));
@@ -587,14 +583,14 @@ public final class Phase1
 		return retval;
 	}
 
-	private SelectOperator getMostPromisingSelect(final ArrayList<SelectOperator> selects, final ArrayList<Operator> subtrees, final Operator current) throws Exception
+	private SelectOperator getMostPromisingSelect(final List<SelectOperator> selects, final List<Operator> subtrees, final Operator current) throws Exception
 	{
 		double minLikelihood = Double.MAX_VALUE;
 		SelectOperator minSelect = null;
 		if (current == null)
 		{
 			// HRDBMSWorker.logger.debug("Current is null");
-			final HashSet<SubtreePair> pairs = new HashSet<SubtreePair>();
+			final Set<SubtreePair> pairs = new HashSet<SubtreePair>();
 			outer: for (final SelectOperator select : selects)
 			{
 				Double likelihood = likelihoodCache.get(select.getFilter());
@@ -605,11 +601,11 @@ public final class Phase1
 				}
 				// HRDBMSWorker.logger.debug("Initial likelihood for " + select
 				// + " is " + likelihood);
-				final ArrayList<Filter> filters = select.getFilter();
+				final List<Filter> filters = select.getFilter();
 				Operator left = null;
 				Operator right = null;
-				final ArrayList<String> lefts = new ArrayList<String>();
-				final ArrayList<String> rights = new ArrayList<String>();
+				final List<String> lefts = new ArrayList<String>();
+				final List<String> rights = new ArrayList<String>();
 				for (final Filter filter : filters)
 				{
 					if (filter.leftIsColumn() && filter.rightIsColumn())
@@ -714,13 +710,13 @@ public final class Phase1
 		}
 
 		// HRDBMSWorker.logger.debug("Current is not null");
-		final HashSet<SubtreePair> pairs = new HashSet<SubtreePair>();
+		final Set<SubtreePair> pairs = new HashSet<SubtreePair>();
 		outer2: for (final SelectOperator select : selects)
 		{
 			Double likelihood = Double.MAX_VALUE;
 			Operator left = null;
 			Operator right = null;
-			final ArrayList<Filter> filters = select.getFilter();
+			final List<Filter> filters = select.getFilter();
 			for (final Filter filter : filters)
 			{
 				if (filter.leftIsColumn() && filter.rightIsColumn())
@@ -837,11 +833,11 @@ public final class Phase1
 			}
 			// HRDBMSWorker.logger.debug("Initial likelihood for " + select + "
 			// is " + likelihood);
-			final ArrayList<Filter> filters = select.getFilter();
+			final List<Filter> filters = select.getFilter();
 			Operator left = null;
 			Operator right = null;
-			final ArrayList<String> lefts = new ArrayList<String>();
-			final ArrayList<String> rights = new ArrayList<String>();
+			final List<String> lefts = new ArrayList<String>();
+			final List<String> rights = new ArrayList<String>();
 			for (final Filter filter : filters)
 			{
 				if (filter.leftIsColumn() && filter.rightIsColumn())
@@ -940,7 +936,7 @@ public final class Phase1
 		return minSelect;
 	}
 
-	private void getReferences(final Operator o, final HashSet<String> references)
+	private void getReferences(final Operator o, final Set<String> references)
 	{
 		references.addAll(o.getReferences());
 		for (final Operator op : o.children())
@@ -1001,9 +997,9 @@ public final class Phase1
 	{
 		if (op instanceof SemiJoinOperator)
 		{
-			final HashSet<HashMap<Filter, Filter>> hshm = ((SemiJoinOperator)op).getHSHM();
-			final HashSet<String> cols = new HashSet<String>();
-			for (final HashMap<Filter, Filter> hm : hshm)
+			final Set<Map<Filter, Filter>> hshm = ((SemiJoinOperator)op).getHSHM();
+			final Set<String> cols = new HashSet<String>();
+			for (final Map<Filter, Filter> hm : hshm)
 			{
 				for (final Filter f : hm.keySet())
 				{
@@ -1021,7 +1017,7 @@ public final class Phase1
 				}
 			}
 
-			final ArrayList<String> toProject = new ArrayList<String>();
+			final List<String> toProject = new ArrayList<String>();
 			for (final String col : cols)
 			{
 				if (op.children().get(1).getCols2Pos().keySet().contains(col))
@@ -1041,9 +1037,9 @@ public final class Phase1
 		}
 		else if (op instanceof AntiJoinOperator)
 		{
-			final HashSet<HashMap<Filter, Filter>> hshm = ((AntiJoinOperator)op).getHSHM();
-			final HashSet<String> cols = new HashSet<String>();
-			for (final HashMap<Filter, Filter> hm : hshm)
+			final Set<Map<Filter, Filter>> hshm = ((AntiJoinOperator)op).getHSHM();
+			final Set<String> cols = new HashSet<String>();
+			for (final Map<Filter, Filter> hm : hshm)
 			{
 				for (final Filter f : hm.keySet())
 				{
@@ -1061,7 +1057,7 @@ public final class Phase1
 				}
 			}
 
-			final ArrayList<String> toProject = new ArrayList<String>();
+			final List<String> toProject = new ArrayList<String>();
 			for (final String col : cols)
 			{
 				if (op.children().get(1).getCols2Pos().keySet().contains(col))
@@ -1094,13 +1090,13 @@ public final class Phase1
 
 	private void pushDownProjects() throws Exception
 	{
-		final HashSet<String> references = new HashSet<String>();
+		final Set<String> references = new HashSet<String>();
 		for (final Operator o : root.children())
 		{
 			getReferences(o, references);
 		}
 
-		final ArrayList<Operator> leaves = getLeaves(root);
+		final List<Operator> leaves = getLeaves(root);
 
 		for (final Operator op : leaves)
 		{
@@ -1109,9 +1105,9 @@ public final class Phase1
 				try
 				{
 					final TableScanOperator table = (TableScanOperator)op;
-					final HashMap<String, Integer> cols2Pos = table.getCols2Pos();
-					final TreeMap<Integer, String> pos2Col = table.getPos2Col();
-					final ArrayList<String> needed = new ArrayList<String>(references.size());
+					final Map<String, Integer> cols2Pos = table.getCols2Pos();
+					final Map<Integer, String> pos2Col = table.getPos2Col();
+					final List<String> needed = new ArrayList<String>(references.size());
 					for (final String col : references)
 					{
 						if (cols2Pos.containsKey(col))
@@ -1149,7 +1145,7 @@ public final class Phase1
 			}
 		}
 
-		final ArrayList<Operator> leaves2 = new ArrayList<Operator>();
+		final List<Operator> leaves2 = new ArrayList<Operator>();
 		for (Operator op : leaves)
 		{
 			while (!(op instanceof RootOperator))
@@ -1158,7 +1154,7 @@ public final class Phase1
 				{
 					if (op instanceof AbstractTableScanOperator)
 					{
-						final ArrayList<Operator> parents = (ArrayList<Operator>)((AbstractTableScanOperator)op).parents().clone();
+						final List<Operator> parents = new ArrayList<>(((AbstractTableScanOperator)op).parents());
 						for (final Operator op2 : parents)
 						{
 							op2.removeChild(op);
@@ -1228,7 +1224,7 @@ public final class Phase1
 				return;
 			}
 
-			final ArrayList<Operator> children = op.children();
+			final List<Operator> children = op.children();
 			final Operator child = children.get(0);
 
 			// look at opportunity to push down across child
@@ -1244,7 +1240,7 @@ public final class Phase1
 			{
 				final Operator grandChild = child.children().get(i);
 				// can I push down to be a parent of this operator?
-				final ArrayList<String> references = ((SelectOperator)op).getReferences();
+				final List<String> references = ((SelectOperator)op).getReferences();
 				if (child instanceof RenameOperator)
 				{
 					((RenameOperator)child).reverseUpdateReferences(references);
@@ -1255,7 +1251,7 @@ public final class Phase1
 					((HashJoinOperator)child).reverseUpdateReferences(references, i);
 				}
 
-				final HashMap<String, Integer> gcCols2Pos = grandChild.getCols2Pos();
+				final Map<String, Integer> gcCols2Pos = grandChild.getCols2Pos();
 				boolean ok = true;
 				for (final String reference : references)
 				{
@@ -1360,7 +1356,7 @@ public final class Phase1
 			}
 
 			final SelectOperator sop = (SelectOperator)op;
-			final ArrayList<Filter> filters = sop.getFilter();
+			final List<Filter> filters = sop.getFilter();
 
 			for (final Filter filter : filters)
 			{
@@ -1395,7 +1391,7 @@ public final class Phase1
 				}
 			}
 
-			final ArrayList<Operator> children = op.children();
+			final List<Operator> children = op.children();
 			final Operator child = children.get(0);
 
 			// look at opportunity to push down across child
@@ -1411,7 +1407,7 @@ public final class Phase1
 			{
 				final Operator grandChild = child.children().get(i);
 				// can I push down to be a parent of this operator?
-				final ArrayList<String> references = ((SelectOperator)op).getReferences();
+				final List<String> references = ((SelectOperator)op).getReferences();
 				if (child instanceof RenameOperator)
 				{
 					((RenameOperator)child).reverseUpdateReferences(references);
@@ -1422,7 +1418,7 @@ public final class Phase1
 					((HashJoinOperator)child).reverseUpdateReferences(references, i);
 				}
 
-				final HashMap<String, Integer> gcCols2Pos = grandChild.getCols2Pos();
+				final Map<String, Integer> gcCols2Pos = grandChild.getCols2Pos();
 				boolean ok = true;
 				for (final String reference : references)
 				{
@@ -1543,7 +1539,7 @@ public final class Phase1
 		{
 			if (op instanceof SelectOperator)
 			{
-				final ArrayList<SelectOperator> selects = new ArrayList<SelectOperator>();
+				final List<SelectOperator> selects = new ArrayList<SelectOperator>();
 				selects.add((SelectOperator)op);
 				reorderProducts(op.children().get(0), selects, op);
 			}
@@ -1564,7 +1560,7 @@ public final class Phase1
 		}
 	}
 
-	private void reorderProducts(Operator op, final ArrayList<SelectOperator> selects, final Operator top) throws Exception
+	private void reorderProducts(Operator op, final List<SelectOperator> selects, final Operator top) throws Exception
 	{
 		while (op instanceof SelectOperator)
 		{
@@ -1584,8 +1580,8 @@ public final class Phase1
 			return;
 		}
 
-		final ArrayList<Operator> subtrees = new ArrayList<Operator>();
-		final ArrayList<Operator> queued = new ArrayList<Operator>();
+		final List<Operator> subtrees = new ArrayList<Operator>();
+		final List<Operator> queued = new ArrayList<Operator>();
 		queued.add(op);
 		while (queued.size() != 0)
 		{
@@ -1626,7 +1622,7 @@ public final class Phase1
 			}
 		}
 
-		final ArrayList<Operator> backup = (ArrayList<Operator>)subtrees.clone();
+		final List<Operator> backup = new ArrayList<>(subtrees);
 
 		// stuff above top
 		// string of selects
@@ -1638,15 +1634,15 @@ public final class Phase1
 			select.parent().removeChild(select);
 		}
 		selects.get(selects.size() - 1).removeChild(selects.get(selects.size() - 1).children().get(0));
-		final ArrayList<SelectOperator> selectsCopy = (ArrayList<SelectOperator>)selects.clone();
+		final List<SelectOperator> selectsCopy = new ArrayList<>(selects);
 		transitive(selectsCopy);
 
 		Operator newProd = null;
-		final ArrayList<SelectOperator> delay = new ArrayList<SelectOperator>();
+		final List<SelectOperator> delay = new ArrayList<SelectOperator>();
 		while (selectsCopy.size() > 0)
 		{
 			final SelectOperator select = getMostPromisingSelect(selectsCopy, subtrees, newProd);
-			final ArrayList<Filter> filters = select.getFilter();
+			final List<Filter> filters = select.getFilter();
 			int i = 0;
 			Operator theLeft = null;
 			Operator theRight = null;
@@ -1725,11 +1721,11 @@ public final class Phase1
 				temp.add(newProd);
 				newProd = temp;
 
-				for (final SelectOperator s2 : (ArrayList<SelectOperator>)selectsCopy.clone())
+				for (final SelectOperator s2 : new ArrayList<>(selectsCopy))
 				{
 					if (s2 != select)
 					{
-						final ArrayList<Filter> f2s = s2.getFilter();
+						final List<Filter> f2s = s2.getFilter();
 						boolean ok = true;
 						for (final Filter f2 : f2s)
 						{
@@ -1826,12 +1822,12 @@ public final class Phase1
 		}
 	}
 
-	private void transitive(final ArrayList<SelectOperator> list) throws Exception
+	private void transitive(final List<SelectOperator> list) throws Exception
 	{
 		final ConcurrentHashMap<Filter, Filter> set = new ConcurrentHashMap<Filter, Filter>();
 		for (final SelectOperator op : list)
 		{
-			final ArrayList<Filter> ors = op.getFilter();
+			final List<Filter> ors = op.getFilter();
 			if (ors.size() == 1)
 			{
 				final Filter f = ors.get(0);

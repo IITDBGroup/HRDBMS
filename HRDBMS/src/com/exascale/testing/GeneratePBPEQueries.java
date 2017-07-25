@@ -4,6 +4,7 @@ import java.io.FileWriter;
 import java.io.PrintWriter;
 import java.util.HashSet;
 import java.util.Random;
+import java.util.Set;
 
 public class GeneratePBPEQueries
 {
@@ -161,7 +162,7 @@ public class GeneratePBPEQueries
 				x = random.nextInt(5) + 1;
 				String brand = "Brand#" + t;
 				brand += x;
-				final HashSet<Integer> sizes = new HashSet<Integer>();
+				final Set<Integer> sizes = new HashSet<Integer>();
 				while (sizes.size() < 8)
 				{
 					sizes.add(random.nextInt(50) + 1);

@@ -9,12 +9,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.Random;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.locks.LockSupport;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
@@ -60,33 +55,33 @@ public final class Index implements Serializable
 	}
 	private static final double promoRate = 1.0d / Math.exp(1.0d);
 	private String fileName;
-	private ArrayList<String> keys;
-	private ArrayList<String> types;
-	private ArrayList<Boolean> orders;
+	private List<String> keys;
+	private List<String> types;
+	private List<Boolean> orders;
 	private Filter f;
-	private ArrayList<Filter> secondary = new ArrayList<Filter>();
+	private List<Filter> secondary = new ArrayList<Filter>();
 	private boolean positioned = false;
 	private transient ArrayListLong ridList;
 	private transient String col;
 	private transient String op;
-	private transient ArrayList<Filter> terminates;
+	private transient List<Filter> terminates;
 	private transient IndexRecord line;
 	// private MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
-	private HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
+	private Map<String, Integer> cols2Pos = new HashMap<String, Integer>();
 	private boolean indexOnly = false;
-	private ArrayList<Integer> fetches = new ArrayList<Integer>();
-	private ArrayList<String> fetchTypes = new ArrayList<String>();
-	private transient ArrayList<Object> row;
+	private List<Integer> fetches = new ArrayList<Integer>();
+	private List<String> fetchTypes = new ArrayList<String>();
+	private transient List<Object> row;
 	private volatile boolean delayed = false;
-	private ArrayList<Filter> delayedConditions;
-	private HashMap<String, String> renames;
+	private List<Filter> delayedConditions;
+	private Map<String, String> renames;
 	private transient BufferedLinkedBlockingQueue queue;
 	private transient IndexWriterThread iwt;
 	private transient volatile Thread lastThread = null;
 	// private long offset = 9;
 	private Transaction tx;
 	private volatile Boolean isUniqueVar = null;
-	public HashMap<Block, Page> myPages = new HashMap<Block, Page>();
+	public Map<Block, Page> myPages = new HashMap<Block, Page>();
 	private CharsetDecoder cd = cs.newDecoder();
 	private CharsetEncoder ce = cs.newEncoder();
 	private transient Random random;
@@ -94,9 +89,9 @@ public final class Index implements Serializable
 
 	private RowComparator rc;
 
-	public HashMap<Long, ArrayList<Object>> cache = new HashMap<Long, ArrayList<Object>>();
+	public Map<Long, List<Object>> cache = new HashMap<>();
 
-	public Index(final String fileName, final ArrayList<String> keys, final ArrayList<String> types, final ArrayList<Boolean> orders)
+	public Index(final String fileName, final List<String> keys, final List<String> types, final List<Boolean> orders)
 	{
 		this.fileName = fileName;
 		this.keys = keys;
@@ -112,7 +107,7 @@ public final class Index implements Serializable
 		rc = new RowComparator(orders, types);
 	}
 
-	public static Index deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Index deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final Index value = (Index)unsafe.allocateInstance(Index.class);
 		final HrdbmsType type = OperatorUtils.getType(in);
@@ -146,13 +141,13 @@ public final class Index implements Serializable
 		value.isUniqueVar = OperatorUtils.readBoolClass(in, prev);
 		value.myPages = new HashMap<Block, Page>();
 		value.rc = new RowComparator(value.orders, value.types);
-		value.cache = new HashMap<Long, ArrayList<Object>>();
+		value.cache = new HashMap<>();
 		value.cd = cs.newDecoder();
 		value.ce = cs.newEncoder();
 		return value;
 	}
 
-	public static Index deserializeKnown(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Index deserializeKnown(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final Index value = (Index)unsafe.allocateInstance(Index.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -175,13 +170,13 @@ public final class Index implements Serializable
 		value.isUniqueVar = OperatorUtils.readBoolClass(in, prev);
 		value.myPages = new HashMap<Block, Page>();
 		value.rc = new RowComparator(value.orders, value.types);
-		value.cache = new HashMap<Long, ArrayList<Object>>();
+		value.cache = new HashMap<Long, List<Object>>();
 		value.cd = cs.newDecoder();
 		value.ce = cs.newEncoder();
 		return value;
 	}
 
-	// public HashSet<Block> changedBlocks = new HashSet<Block>();
+	// public Set<Block> changedBlocks = new HashSet<Block>();
 	// private static long MAX_PAGES;
 
 	// static
@@ -191,9 +186,9 @@ public final class Index implements Serializable
 	// MetaData.getNumDevices()) / 15;
 	// }
 
-	public static ArrayList<Object> fvaToAlo(final FieldValue[] fva)
+	public static List<Object> fvaToAlo(final FieldValue[] fva)
 	{
-		final ArrayList<Object> retval = new ArrayList<Object>(fva.length);
+		final List<Object> retval = new ArrayList<Object>(fva.length);
 		for (final FieldValue fv : fva)
 		{
 			retval.add(fv.getValue());
@@ -209,7 +204,7 @@ public final class Index implements Serializable
 		return size <= remaining;
 	}
 
-	private static FieldValue[] aloToFieldValues(final ArrayList<Object> row)
+	private static FieldValue[] aloToFieldValues(final List<Object> row)
 	{
 		final FieldValue[] retval = new FieldValue[row.size()];
 		int i = 0;
@@ -246,9 +241,9 @@ public final class Index implements Serializable
 		return retval;
 	}
 
-	private static ArrayList<Filter> deepClone(final ArrayList<Filter> in)
+	private static List<Filter> deepClone(final List<Filter> in)
 	{
-		final ArrayList<Filter> out = new ArrayList<Filter>();
+		final List<Filter> out = new ArrayList<Filter>();
 		for (final Filter f : in)
 		{
 			out.add(f.clone());
@@ -299,7 +294,7 @@ public final class Index implements Serializable
 		retval.indexOnly = indexOnly;
 		if (fetches != null)
 		{
-			retval.fetches = (ArrayList<Integer>)fetches.clone();
+			retval.fetches = new ArrayList<>(fetches);
 		}
 		else
 		{
@@ -307,7 +302,7 @@ public final class Index implements Serializable
 		}
 		if (fetchTypes != null)
 		{
-			retval.fetchTypes = (ArrayList<String>)fetchTypes.clone();
+			retval.fetchTypes = new ArrayList<>(fetchTypes);
 		}
 		else
 		{
@@ -316,7 +311,7 @@ public final class Index implements Serializable
 		retval.delayed = delayed;
 		if (renames != null)
 		{
-			retval.renames = (HashMap<String, String>)renames.clone();
+			retval.renames = new HashMap<>(renames);
 		}
 		else
 		{
@@ -381,7 +376,7 @@ public final class Index implements Serializable
 		return keys.contains(col);
 	}
 
-	public void delete(final ArrayList<Object> keys, final RID rid) throws Exception
+	public void delete(final List<Object> keys, final RID rid) throws Exception
 	{
 		this.setEqualsPosMulti(keys, true);
 		IndexRecord rec = line;
@@ -469,7 +464,7 @@ public final class Index implements Serializable
 		return l.equals(r);
 	}
 
-	public IndexRecord get(final ArrayList<Object> keys) throws Exception
+	public IndexRecord get(final List<Object> keys) throws Exception
 	{
 		setEqualsPosMulti(keys);
 		IndexRecord rec = line;
@@ -509,19 +504,19 @@ public final class Index implements Serializable
 		return f;
 	}
 
-	public ArrayList<String> getKeys()
+	public List<String> getKeys()
 	{
 		return keys;
 	}
 
-	public ArrayList<Boolean> getOrders()
+	public List<Boolean> getOrders()
 	{
 		return orders;
 	}
 
-	public ArrayList<String> getReferencedCols()
+	public List<String> getReferencedCols()
 	{
-		final ArrayList<String> retval = new ArrayList<String>();
+		final List<String> retval = new ArrayList<String>();
 		if (f.leftIsColumn())
 		{
 			retval.add(f.leftColumn());
@@ -557,17 +552,17 @@ public final class Index implements Serializable
 		return retval;
 	}
 
-	public ArrayList<Filter> getSecondary()
+	public List<Filter> getSecondary()
 	{
 		return secondary;
 	}
 
-	public ArrayList<String> getTypes()
+	public List<String> getTypes()
 	{
 		return types;
 	}
 
-	public void insert(final ArrayList<Object> keys, final RID rid) throws Exception
+	public void insert(final List<Object> keys, final RID rid) throws Exception
 	{
 		setEqualsPosMulti(keys, true);
 		final IndexRecord rec = line;
@@ -609,11 +604,11 @@ public final class Index implements Serializable
 
 	public void insert(final FieldValue[] keys, final RID rid) throws Exception
 	{
-		final ArrayList<Object> alo = fvaToAlo(keys);
+		final List<Object> alo = fvaToAlo(keys);
 		insert(alo, rid);
 	}
 
-	public void insertNoLog(final ArrayList<Object> keys, final RID rid) throws Exception
+	public void insertNoLog(final List<Object> keys, final RID rid) throws Exception
 	{
 		// DEBUG
 		// if (keys.size() == 0)
@@ -903,7 +898,7 @@ public final class Index implements Serializable
 		}
 	}
 
-	public void replace(final ArrayList<Object> keys, final RID oldRid, final RID newRid) throws Exception
+	public void replace(final List<Object> keys, final RID oldRid, final RID newRid) throws Exception
 	{
 		setEqualsPosMulti(keys, true);
 		IndexRecord rec = line;
@@ -964,7 +959,7 @@ public final class Index implements Serializable
 		delayed = true;
 	}
 
-	public void scan(final CNFFilter filter, final boolean sample, final int get, final int skip, final BufferedLinkedBlockingQueue queue, final String[] fetchP2C, final TreeMap<Integer, String> finalP2C, final Transaction tx, final boolean getRID) throws Exception
+	public void scan(final CNFFilter filter, final boolean sample, final int get, final int skip, final BufferedLinkedBlockingQueue queue, final String[] fetchP2C, final Map<Integer, String> finalP2C, final Transaction tx, final boolean getRID) throws Exception
 	{
 		LockManager.sLock(new Block(fileName, -1), tx.number());
 		// FileManager.getFile(fileName);
@@ -980,8 +975,8 @@ public final class Index implements Serializable
 			throw new Exception("Unable to open file " + fileName);
 		}
 
-		final ArrayList<Integer> fetchPos = new ArrayList<Integer>();
-		final ArrayList<Integer> keepPos = new ArrayList<Integer>();
+		final List<Integer> fetchPos = new ArrayList<Integer>();
+		final List<Integer> keepPos = new ArrayList<Integer>();
 		for (final String s : fetchP2C)
 		{
 			final int indx = keys.indexOf(s);
@@ -997,7 +992,7 @@ public final class Index implements Serializable
 
 		int onPage = 0;
 		int lastRequested = -1;
-		final ArrayList<Object> row = new ArrayList<Object>(fetchPos.size());
+		final List<Object> row = new ArrayList<Object>(fetchPos.size());
 		int get2 = get;
 		int skip2 = skip;
 		int get3 = get;
@@ -1021,7 +1016,7 @@ public final class Index implements Serializable
 				}
 				else
 				{
-					final ArrayList<Block> toRequest = new ArrayList<Block>();
+					final List<Block> toRequest = new ArrayList<Block>();
 					int i = 0;
 					final int length = lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1;
 					while (i < length)
@@ -1098,7 +1093,7 @@ public final class Index implements Serializable
 				final IndexRecord rec = new IndexRecord(fileName, b.number(), offset, tx, p);
 				if (rec.isLeaf() && !rec.isStart() && !rec.isTombstone())
 				{
-					final ArrayList<Object> r = rec.getKeysAndScroll(types);
+					final List<Object> r = rec.getKeysAndScroll(types);
 					for (final int pos : fetchPos)
 					{
 						row.add(r.get(pos));
@@ -1106,7 +1101,7 @@ public final class Index implements Serializable
 
 					if (filter.passes(row))
 					{
-						final ArrayList<Object> r2 = new ArrayList<Object>();
+						final List<Object> r2 = new ArrayList<Object>();
 
 						if (getRID)
 						{
@@ -1182,7 +1177,7 @@ public final class Index implements Serializable
 		this.f = f;
 	}
 
-	public synchronized void setDelayedConditions(final ArrayList<Filter> filters)
+	public synchronized void setDelayedConditions(final List<Filter> filters)
 	{
 		this.delayedConditions = filters;
 		for (final Filter filter : filters)
@@ -1213,10 +1208,10 @@ public final class Index implements Serializable
 		// System.out.println("Starting index scan after delay");
 	}
 
-	public ArrayList<String> setIndexOnly(final ArrayList<String> references, final ArrayList<String> types)
+	public List<String> setIndexOnly(final List<String> references, final List<String> types)
 	{
 		indexOnly = true;
-		final ArrayList<String> retval = new ArrayList<String>(keys.size());
+		final List<String> retval = new ArrayList<String>(keys.size());
 		int i = 0;
 		for (final String col : keys)
 		{
@@ -1233,7 +1228,7 @@ public final class Index implements Serializable
 		return retval;
 	}
 
-	public void setRenames(final HashMap<String, String> renames)
+	public void setRenames(final Map<String, String> renames)
 	{
 		this.renames = renames;
 	}
@@ -1368,7 +1363,7 @@ public final class Index implements Serializable
 		}
 	}
 
-	public IndexRecord writeNewLeaf(final ArrayList<Object> keys, final RID rid) throws Exception
+	public IndexRecord writeNewLeaf(final List<Object> keys, final RID rid) throws Exception
 	{
 		Block b = new Block(fileName, -1);
 		LockManager.xLock(b, tx.number());
@@ -1433,7 +1428,7 @@ public final class Index implements Serializable
 		}
 	}
 
-	public IndexRecord writeNewLeafNoLog(final ArrayList<Object> keys, final RID rid) throws Exception
+	public IndexRecord writeNewLeafNoLog(final List<Object> keys, final RID rid) throws Exception
 	{
 		Block b = new Block(fileName, -1);
 		// LockManager.xLock(b, tx.number());
@@ -1870,12 +1865,12 @@ public final class Index implements Serializable
 		}
 	}
 
-	private final int compare(final ArrayList<Object> vals, final ArrayList<Object> r)
+	private final int compare(final List<Object> vals, final List<Object> r)
 	{
 		return rc.compare(vals, r);
 	}
 
-	private final int compare(final ArrayList<Object> vals, final ArrayList<Object> r, final boolean debug)
+	private final int compare(final List<Object> vals, final List<Object> r, final boolean debug)
 	{
 		return rc.compare(vals, r, true);
 	}
@@ -2099,7 +2094,7 @@ public final class Index implements Serializable
 			return false;
 		}
 
-		final ArrayList<Object> row = line.getKeys(types);
+		final List<Object> row = line.getKeys(types);
 
 		try
 		{
@@ -2141,12 +2136,12 @@ public final class Index implements Serializable
 		}
 	}
 
-	private byte[] genKeyBytes(final ArrayList<Object> keys2) throws Exception
+	private byte[] genKeyBytes(final List<Object> keys2) throws Exception
 	{
 		final FieldValue[] keys = aloToFieldValues(keys2);
 		int size = keys.length;
 		int i = 0;
-		final ArrayList<byte[]> bytes = new ArrayList<byte[]>();
+		final List<byte[]> bytes = new ArrayList<byte[]>();
 		for (final byte type : typesBytes)
 		{
 			if (type == 0)
@@ -2258,7 +2253,7 @@ public final class Index implements Serializable
 			return false;
 		}
 
-		final ArrayList<Object> row = line.getKeys(types);
+		final List<Object> row = line.getKeys(types);
 
 		try
 		{
@@ -2360,7 +2355,7 @@ public final class Index implements Serializable
 
 			if (!line.isStart())
 			{
-				final ArrayList<Object> k = line.getKeys(types);
+				final List<Object> k = line.getKeys(types);
 				// DEBUG
 				// HRDBMSWorker.logger.debug("Key is " + k);
 				// DEBUG
@@ -2428,7 +2423,7 @@ public final class Index implements Serializable
 		}
 	}
 
-	private final void setEqualsPosMulti(final ArrayList<Object> vals) throws Exception
+	private final void setEqualsPosMulti(final List<Object> vals) throws Exception
 	{
 		final Block b = new Block(fileName, 0);
 		Page p = myPages.get(b);
@@ -2524,7 +2519,7 @@ public final class Index implements Serializable
 		}
 	}
 
-	private final void setEqualsPosMulti(final ArrayList<Object> vals, final boolean xLock) throws Exception
+	private final void setEqualsPosMulti(final List<Object> vals, final boolean xLock) throws Exception
 	{
 		if (!xLock)
 		{
@@ -2700,8 +2695,8 @@ public final class Index implements Serializable
 			{
 				if (multiPos)
 				{
-					final ArrayList<Object> pos = new ArrayList<Object>();
-					final ArrayList<Filter> combined = new ArrayList<Filter>();
+					final List<Object> pos = new ArrayList<Object>();
+					final List<Filter> combined = new ArrayList<Filter>();
 					combined.add(f);
 					combined.addAll(secondary);
 
@@ -3169,7 +3164,7 @@ public final class Index implements Serializable
 			isNull = true;
 		}
 
-		public int compareTo(final ArrayList<Object> rhs) throws Exception
+		public int compareTo(final List<Object> rhs) throws Exception
 		{
 			if (isStart())
 			{
@@ -3179,7 +3174,7 @@ public final class Index implements Serializable
 			return compare(getKeys(types), rhs);
 		}
 
-		public int compareTo(final ArrayList<Object> rhs, final boolean debug) throws Exception
+		public int compareTo(final List<Object> rhs, final boolean debug) throws Exception
 		{
 			if (isStart())
 			{
@@ -3249,7 +3244,7 @@ public final class Index implements Serializable
 			}
 		}
 
-		public ArrayList<Object> getKeys(final ArrayList<String> types) throws Exception
+		public List<Object> getKeys(final List<String> types) throws Exception
 		{
 			try
 			{
@@ -3262,7 +3257,7 @@ public final class Index implements Serializable
 				// }
 				// DEBUG
 
-				final ArrayList<Object> retval = new ArrayList<Object>(types.size());
+				final List<Object> retval = new ArrayList<Object>(types.size());
 				int o = 0;
 				if (isLeaf)
 				{
@@ -3355,11 +3350,11 @@ public final class Index implements Serializable
 			}
 		}
 
-		public ArrayList<Object> getKeysAndScroll(final ArrayList<String> types) throws Exception
+		public List<Object> getKeysAndScroll(final List<String> types) throws Exception
 		{
 			try
 			{
-				final ArrayList<Object> retval = new ArrayList<Object>(types.size());
+				final List<Object> retval = new ArrayList<Object>(types.size());
 				int o = 0;
 				if (isLeaf)
 				{
@@ -3519,9 +3514,9 @@ public final class Index implements Serializable
 			return keyBytes;
 		}
 
-		public boolean keysMatch(final ArrayList<Object> keys) throws Exception
+		public boolean keysMatch(final List<Object> keys) throws Exception
 		{
-			final ArrayList<Object> r = getKeys(types);
+			final List<Object> r = getKeys(types);
 
 			// RowComparator rc = new RowComparator(orders, types);
 			return rc.compare(keys, r) == 0;
@@ -3781,7 +3776,7 @@ public final class Index implements Serializable
 
 	private final class IndexWriterThread extends ThreadPoolThread
 	{
-		public IndexWriterThread(final ArrayList<String> keys)
+		public IndexWriterThread(final List<String> keys)
 		{
 		}
 
@@ -3811,7 +3806,7 @@ public final class Index implements Serializable
 							// }
 						}
 
-						final ArrayList<Object> al = new ArrayList<Object>(1);
+						final List<Object> al = new ArrayList<Object>(1);
 						al.add(getPartialRid());
 						queue.put(al);
 
@@ -3853,7 +3848,7 @@ public final class Index implements Serializable
 						}
 
 						ridList.add(getPartialRid());
-						final ArrayList<Object> keys = line.getKeys(types);
+						final List<Object> keys = line.getKeys(types);
 						int z = 0;
 						final int limit = fetches.size();
 						// for (final int pos : fetches)
@@ -3880,7 +3875,7 @@ public final class Index implements Serializable
 					}
 					try
 					{
-						queue.put(row.clone());
+						queue.put(new ArrayList<>(row));
 					}
 					catch (final Exception e)
 					{

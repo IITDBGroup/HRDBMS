@@ -4,12 +4,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.*;
@@ -33,25 +28,25 @@ public final class CaseOperator implements Operator, Serializable
 		}
 	}
 	private transient final MetaData meta;
-	private ArrayList<HashSet<HashMap<Filter, Filter>>> filters;
-	private ArrayList<Object> results;
+	private List<Set<Map<Filter, Filter>>> filters;
+	private List<Object> results;
 	private Operator child = null;
 	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
+	private Map<String, String> cols2Types;
+	private Map<String, Integer> cols2Pos;
+	private Map<Integer, String> pos2Col;
 	private String name;
 	private String type;
 	// private MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
-	private ArrayList<String> origResults;
+	private List<String> origResults;
 
-	private ArrayList<String> references = new ArrayList<String>();
+	private List<String> references = new ArrayList<String>();
 
 	private int node;
 	private transient AtomicLong received;
 	private transient volatile boolean demReceived;
 
-	public CaseOperator(final ArrayList<HashSet<HashMap<Filter, Filter>>> filters, final ArrayList<String> results, final String name, final String type, final MetaData meta)
+	public CaseOperator(final List<Set<Map<Filter, Filter>>> filters, final List<String> results, final String name, final String type, final MetaData meta)
 	{
 		received = new AtomicLong(0);
 		this.filters = filters;
@@ -62,9 +57,9 @@ public final class CaseOperator implements Operator, Serializable
 
 		this.results = new ArrayList<Object>(results.size());
 
-		for (final HashSet<HashMap<Filter, Filter>> filter : filters)
+		for (final Set<Map<Filter, Filter>> filter : filters)
 		{
-			for (final HashMap<Filter, Filter> f : filter)
+			for (final Map<Filter, Filter> f : filter)
 			{
 				for (final Filter f2 : f.keySet())
 				{
@@ -117,7 +112,7 @@ public final class CaseOperator implements Operator, Serializable
 		}
 	}
 
-	public static CaseOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static CaseOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final CaseOperator value = (CaseOperator)unsafe.allocateInstance(CaseOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -138,9 +133,9 @@ public final class CaseOperator implements Operator, Serializable
 		return value;
 	}
 
-	private static boolean passesCase(final ArrayList<Object> row, final HashMap<String, Integer> cols2Pos, final HashSet<HashMap<Filter, Filter>> ands) throws Exception
+	private static boolean passesCase(final List<Object> row, final Map<String, Integer> cols2Pos, final Set<Map<Filter, Filter>> ands) throws Exception
 	{
-		for (final HashMap<Filter, Filter> ors : ands)
+		for (final Map<Filter, Filter> ors : ands)
 		{
 			if (!passesOredCondition(row, cols2Pos, ors))
 			{
@@ -151,7 +146,7 @@ public final class CaseOperator implements Operator, Serializable
 		return true;
 	}
 
-	private static boolean passesOredCondition(final ArrayList<Object> row, final HashMap<String, Integer> cols2Pos, final HashMap<Filter, Filter> filters) throws Exception
+	private static boolean passesOredCondition(final List<Object> row, final Map<String, Integer> cols2Pos, final Map<Filter, Filter> filters) throws Exception
 	{
 		try
 		{
@@ -181,11 +176,11 @@ public final class CaseOperator implements Operator, Serializable
 			child.registerParent(this);
 			if (child.getCols2Types() != null)
 			{
-				cols2Types = (HashMap<String, String>)child.getCols2Types().clone();
+				cols2Types = new HashMap<>(child.getCols2Types());
 				cols2Types.put(name, type);
-				cols2Pos = (HashMap<String, Integer>)child.getCols2Pos().clone();
+				cols2Pos = new HashMap<>(child.getCols2Pos());
 				cols2Pos.put(name, cols2Pos.size());
-				pos2Col = (TreeMap<Integer, String>)child.getPos2Col().clone();
+				pos2Col = new HashMap<>(child.getPos2Col());
 				pos2Col.put(pos2Col.size(), name);
 			}
 		}
@@ -196,9 +191,9 @@ public final class CaseOperator implements Operator, Serializable
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
-		final ArrayList<Operator> retval = new ArrayList<Operator>(1);
+		final List<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
@@ -231,13 +226,13 @@ public final class CaseOperator implements Operator, Serializable
 	}
 
 	@Override
-	public HashMap<String, Integer> getCols2Pos()
+	public Map<String, Integer> getCols2Pos()
 	{
 		return cols2Pos;
 	}
 
 	@Override
-	public HashMap<String, String> getCols2Types()
+	public Map<String, String> getCols2Types()
 	{
 		return cols2Types;
 	}
@@ -260,18 +255,18 @@ public final class CaseOperator implements Operator, Serializable
 	}
 
 	@Override
-	public TreeMap<Integer, String> getPos2Col()
+	public Map<Integer, String> getPos2Col()
 	{
 		return pos2Col;
 	}
 
 	@Override
-	public ArrayList<String> getReferences()
+	public List<String> getReferences()
 	{
 		return references;
 	}
 
-	public ArrayList<Object> getResults()
+	public List<Object> getResults()
 	{
 		return results;
 	}
@@ -300,15 +295,15 @@ public final class CaseOperator implements Operator, Serializable
 			int i = 0;
 			int z = 0;
 			final int limit = filters.size();
-			// for (final HashSet<HashMap<Filter, Filter>> aCase : filters)
+			// for (final Set<Map<Filter, Filter>> aCase : filters)
 			while (z <= limit)
 			{
-				if (z == limit || passesCase((ArrayList<Object>)o, cols2Pos, filters.get(z++)))
+				if (z == limit || passesCase((List<Object>)o, cols2Pos, filters.get(z++)))
 				{
 					Object obj = results.get(i);
 					if (obj instanceof String && ((String)obj).startsWith("\u0000"))
 					{
-						obj = getColumn(((String)obj).substring(1), (ArrayList<Object>)o);
+						obj = getColumn(((String)obj).substring(1), (List<Object>)o);
 					}
 
 					if (obj instanceof Integer && type.equals("LONG"))
@@ -324,7 +319,7 @@ public final class CaseOperator implements Operator, Serializable
 						obj = new Double((Long)obj);
 					}
 
-					((ArrayList<Object>)o).add(obj);
+					((List<Object>)o).add(obj);
 					return o;
 				}
 				i++;
@@ -435,13 +430,13 @@ public final class CaseOperator implements Operator, Serializable
 	{
 	}
 
-	public void setFilters(final ArrayList<HashSet<HashMap<Filter, Filter>>> filters)
+	public void setFilters(final List<Set<Map<Filter, Filter>>> filters)
 	{
 		this.filters = filters;
 
-		for (final HashSet<HashMap<Filter, Filter>> filter : filters)
+		for (final Set<Map<Filter, Filter>> filter : filters)
 		{
-			for (final HashMap<Filter, Filter> f : filter)
+			for (final Map<Filter, Filter> f : filter)
 			{
 				for (final Filter f2 : f.keySet())
 				{
@@ -491,7 +486,7 @@ public final class CaseOperator implements Operator, Serializable
 		return "CaseOperator: filters = " + filters + " results = " + origResults;
 	}
 
-	private Object getColumn(String name, final ArrayList<Object> row) throws Exception
+	private Object getColumn(String name, final List<Object> row) throws Exception
 	{
 		Integer pos = cols2Pos.get(name);
 		if (pos != null)

@@ -4,12 +4,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.List;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.gpu.Kernel;
 import com.exascale.gpu.Rootbeer;
@@ -43,21 +38,21 @@ public final class ExtendOperator implements Operator, Serializable
 
 	private Operator child;
 	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
+	private Map<String, String> cols2Types;
+	private Map<String, Integer> cols2Pos;
+	private Map<Integer, String> pos2Col;
 	private String prefix;
 	private transient final MetaData meta;
 	private String name;
 	private int node;
 	private FastStringTokenizer tokens;
-	private ArrayDeque<String> master;
+	private Deque<String> master;
 	private transient BufferedLinkedBlockingQueue queue;
-	private transient volatile ArrayList<Integer> poses;
+	private transient volatile List<Integer> poses;
 
 	private volatile boolean startDone = false;
 
-	private transient volatile ArrayList<Double> literals;
+	private transient volatile List<Double> literals;
 	private transient AtomicLong received;
 	private transient volatile boolean demReceived;
 	private boolean singleThreaded = false;
@@ -68,7 +63,7 @@ public final class ExtendOperator implements Operator, Serializable
 		this.meta = meta;
 		this.name = name;
 		this.tokens = new FastStringTokenizer(prefix, ",", false);
-		this.master = new ArrayDeque<String>();
+		this.master = new ArrayDeque<>();
 		for (final String token : tokens.allTokens())
 		{
 			master.push(token);
@@ -76,7 +71,7 @@ public final class ExtendOperator implements Operator, Serializable
 		received = new AtomicLong(0);
 	}
 
-	public static ExtendOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static ExtendOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final ExtendOperator value = (ExtendOperator)unsafe.allocateInstance(ExtendOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -106,11 +101,11 @@ public final class ExtendOperator implements Operator, Serializable
 			child.registerParent(this);
 			if (child.getCols2Types() != null)
 			{
-				cols2Types = (HashMap<String, String>)child.getCols2Types().clone();
+				cols2Types = new HashMap<>(child.getCols2Types());
 				cols2Types.put(name, "FLOAT");
-				cols2Pos = (HashMap<String, Integer>)child.getCols2Pos().clone();
+				cols2Pos = new HashMap<>(child.getCols2Pos());
 				cols2Pos.put(name, cols2Pos.size());
-				pos2Col = (TreeMap<Integer, String>)child.getPos2Col().clone();
+				pos2Col = new HashMap<>(child.getPos2Col());
 				pos2Col.put(pos2Col.size(), name);
 			}
 		}
@@ -121,9 +116,9 @@ public final class ExtendOperator implements Operator, Serializable
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
-		final ArrayList<Operator> retval = new ArrayList<Operator>(1);
+		final List<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
@@ -163,13 +158,13 @@ public final class ExtendOperator implements Operator, Serializable
 	}
 
 	@Override
-	public HashMap<String, Integer> getCols2Pos()
+	public Map<String, Integer> getCols2Pos()
 	{
 		return cols2Pos;
 	}
 
 	@Override
-	public HashMap<String, String> getCols2Types()
+	public Map<String, String> getCols2Types()
 	{
 		return cols2Types;
 	}
@@ -192,7 +187,7 @@ public final class ExtendOperator implements Operator, Serializable
 	}
 
 	@Override
-	public TreeMap<Integer, String> getPos2Col()
+	public Map<Integer, String> getPos2Col()
 	{
 		return pos2Col;
 	}
@@ -203,9 +198,9 @@ public final class ExtendOperator implements Operator, Serializable
 	}
 
 	@Override
-	public ArrayList<String> getReferences()
+	public List<String> getReferences()
 	{
-		final ArrayList<String> retval = new ArrayList<String>();
+		final List<String> retval = new ArrayList<String>();
 		final FastStringTokenizer tokens = new FastStringTokenizer(prefix, ",", false);
 		while (tokens.hasMoreTokens())
 		{
@@ -429,7 +424,7 @@ public final class ExtendOperator implements Operator, Serializable
 		return "ExtendOperator: " + name + "=" + prefix;
 	}
 
-	private Object notCached(String temp, final ArrayList<Object> row, final ArrayList<Integer> p)
+	private Object notCached(String temp, final List<Object> row, final List<Integer> p)
 	{
 		Integer x = cols2Pos.get(temp);
 		if (x == null)
@@ -464,11 +459,11 @@ public final class ExtendOperator implements Operator, Serializable
 		return row.get(x);
 	}
 
-	private final Double parsePrefixDouble(final ArrayList<Object> row, final ArrayDeque<Object> execStack)
+	private final Double parsePrefixDouble(final List<Object> row, final ArrayDeque<Object> execStack)
 	{
 		ArrayList<Integer> p = null;
 		ArrayList<Double> ds = null;
-		final ArrayDeque<String> parseStack = master.clone();
+		final Deque<String> parseStack = new ArrayDeque<>(master);
 		int i = 0;
 		int j = 0;
 		// System.out.println("Starting parse stack = " + parseStack);
@@ -606,12 +601,12 @@ public final class ExtendOperator implements Operator, Serializable
 
 	public static final class ExtendKernel implements Kernel
 	{
-		public ArrayList<Object> row;
-		public ArrayDeque master;
-		public ArrayList<Integer> poses;
-		public ArrayList<Double> calced;
+		public List<Object> row;
+		public Deque master;
+		public List<Integer> poses;
+		public List<Double> calced;
 
-		public ExtendKernel(final ArrayList<Object> row, final ArrayDeque master, final ArrayList<Integer> poses, final ArrayList<Double> calced)
+		public ExtendKernel(final List<Object> row, final Deque master, final List<Integer> poses, final List<Double> calced)
 		{
 			this.row = row;
 			this.master = master;
@@ -619,7 +614,7 @@ public final class ExtendOperator implements Operator, Serializable
 			this.calced = calced;
 		}
 
-		public ArrayList<Object> getRow()
+		public List<Object> getRow()
 		{
 			return row;
 		}
@@ -642,7 +637,7 @@ public final class ExtendOperator implements Operator, Serializable
 			{
 				jobs = new ArrayList<Kernel>(ResourceManager.CUDA_SIZE);
 			}
-			final ArrayList<Double> calced = new ArrayList<Double>();
+			final List<Double> calced = new ArrayList<Double>();
 			final ArrayDeque<Object> execStack = new ArrayDeque<Object>();
 			int i = 0;
 			while (true)
@@ -728,7 +723,7 @@ public final class ExtendOperator implements Operator, Serializable
 					}
 				}
 
-				final ArrayList<Object> row = (ArrayList<Object>)o;
+				final List<Object> row = (List<Object>)o;
 				if (poses == null || !ResourceManager.GPU)
 				{
 					final Double ppd = parsePrefixDouble(row, execStack);
@@ -803,7 +798,7 @@ public final class ExtendOperator implements Operator, Serializable
 				return;
 			}
 
-			final ArrayList<GPUThread> threads = new ArrayList<GPUThread>();
+			final List<GPUThread> threads = new ArrayList<GPUThread>();
 			int z = 0;
 			int limit = Runtime.getRuntime().availableProcessors();
 			final int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("extend_max_par"));

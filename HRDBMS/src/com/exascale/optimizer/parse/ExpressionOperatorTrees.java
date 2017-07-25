@@ -92,8 +92,8 @@ public class ExpressionOperatorTrees extends AbstractParseController {
         }
         else if (exp.isCase())
         {
-            final ArrayList<HashSet<HashMap<Filter, Filter>>> alhshm = new ArrayList<HashSet<HashMap<Filter, Filter>>>();
-            final ArrayList<String> results = new ArrayList<String>();
+            final List<Set<Map<Filter, Filter>>> alhshm = new ArrayList<Set<Map<Filter, Filter>>>();
+            final List<String> results = new ArrayList<String>();
             int prereq = -1;
             String type = null;
             for (final Case c : exp.getCases())
@@ -148,7 +148,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
                         {
                             // fix
                             int i = 0;
-                            for (final String result : (ArrayList<String>)results.clone())
+                            for (final String result : new ArrayList<>(results))
                             {
                                 results.remove(i);
                                 results.add(i, result + ".0");
@@ -224,7 +224,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
                 {
                     results.add(otan.getName());
 
-                    final ArrayList<Object> row = new ArrayList<Object>();
+                    final List<Object> row = new ArrayList<Object>();
                     row.add(otan.getName());
                     row.add(otan.getOp());
                     row.add(otan.getType());
@@ -240,7 +240,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
                         // go all the way to the bottom and set the prereq to
                         // prereq
                         // then set prereq to the id of this one
-                        final ArrayList<Object> bottom = getBottomRow(row);
+                        final List<Object> bottom = getBottomRow(row);
                         bottom.remove(5);
                         bottom.add(5, prereq);
                         prereq = (Integer)row.get(3);
@@ -300,7 +300,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
                     {
                         // fix
                         int i = 0;
-                        for (final String result : (ArrayList<String>)results.clone())
+                        for (final String result : new ArrayList<>(results))
                         {
                             results.remove(i);
                             results.add(i, result + ".0");
@@ -375,7 +375,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
                 {
                     results.add(otan.getName());
 
-                    final ArrayList<Object> row = new ArrayList<Object>();
+                    final List<Object> row = new ArrayList<Object>();
                     row.add(otan.getName());
                     row.add(otan.getOp());
                     row.add(otan.getType());
@@ -391,7 +391,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
                         // go all the way to the bottom and set the prereq to
                         // prereq
                         // then set prereq to the id of this one
-                        final ArrayList<Object> bottom = getBottomRow(row);
+                        final List<Object> bottom = getBottomRow(row);
                         bottom.remove(5);
                         bottom.add(5, prereq);
                         prereq = (Integer)row.get(3);
@@ -424,7 +424,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
             final String method = f.getName();
             if (method.equals("MAX"))
             {
-                final ArrayList<Expression> args = f.getArgs();
+                final List<Expression> args = f.getArgs();
                 if (args.size() != 1)
                 {
                     throw new ParseException("MAX() requires only 1 argument");
@@ -487,7 +487,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
                         throw new ParseException("The argument to MAX() cannot be an aggregation");
                     }
 
-                    final ArrayList<Object> row = new ArrayList<Object>();
+                    final List<Object> row = new ArrayList<Object>();
                     row.add(retval.getName());
                     row.add(retval.getOp());
                     row.add(retval.getType());
@@ -520,7 +520,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
             }
             else if (method.equals("MIN"))
             {
-                final ArrayList<Expression> args = f.getArgs();
+                final List<Expression> args = f.getArgs();
                 if (args.size() != 1)
                 {
                     throw new ParseException("MIN() requires only 1 argument");
@@ -584,7 +584,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
                         throw new ParseException("The argument to MIN() cannot be an aggregation");
                     }
 
-                    final ArrayList<Object> row = new ArrayList<Object>();
+                    final List<Object> row = new ArrayList<Object>();
                     row.add(retval.getName());
                     row.add(retval.getOp());
                     row.add(retval.getType());
@@ -617,7 +617,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
             }
             else if (method.equals("AVG"))
             {
-                final ArrayList<Expression> args = f.getArgs();
+                final List<Expression> args = f.getArgs();
                 if (args.size() != 1)
                 {
                     throw new ParseException("AVG() requires only 1 argument");
@@ -680,7 +680,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
                         throw new ParseException("The argument to AVG() cannot be an aggregation");
                     }
 
-                    final ArrayList<Object> row = new ArrayList<Object>();
+                    final List<Object> row = new ArrayList<Object>();
                     row.add(retval.getName());
                     row.add(retval.getOp());
                     row.add(retval.getType());
@@ -713,7 +713,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
             }
             else if (method.equals("SUM"))
             {
-                final ArrayList<Expression> args = f.getArgs();
+                final List<Expression> args = f.getArgs();
                 if (args.size() != 1)
                 {
                     throw new ParseException("SUM() requires only 1 argument");
@@ -776,7 +776,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
                         throw new ParseException("The argument to SUM() cannot be an aggregation");
                     }
 
-                    final ArrayList<Object> row = new ArrayList<Object>();
+                    final List<Object> row = new ArrayList<Object>();
                     row.add(retval.getName());
                     row.add(retval.getOp());
                     row.add(retval.getType());
@@ -809,7 +809,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
             }
             else if (method.equals("COUNT"))
             {
-                final ArrayList<Expression> args = f.getArgs();
+                final List<Expression> args = f.getArgs();
                 if (args.size() != 1)
                 {
                     throw new ParseException("COUNT() requires only 1 argument");
@@ -874,7 +874,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
             }
             else if (method.equals("DATE"))
             {
-                final ArrayList<Expression> args = f.getArgs();
+                final List<Expression> args = f.getArgs();
                 if (args.size() != 1)
                 {
                     throw new ParseException("DATE() requires only 1 argument");
@@ -906,7 +906,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
             }
             else if (method.equals("DAYS"))
             {
-                final ArrayList<Expression> args = f.getArgs();
+                final List<Expression> args = f.getArgs();
                 if (args.size() != 1)
                 {
                     throw new ParseException("DAYS() requires only 1 argument");
@@ -933,7 +933,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
             }
             else if (method.equals("MONTHS"))
             {
-                final ArrayList<Expression> args = f.getArgs();
+                final List<Expression> args = f.getArgs();
                 if (args.size() != 1)
                 {
                     throw new ParseException("MONTHS() requires only 1 argument");
@@ -960,7 +960,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
             }
             else if (method.equals("YEARS"))
             {
-                final ArrayList<Expression> args = f.getArgs();
+                final List<Expression> args = f.getArgs();
                 if (args.size() != 1)
                 {
                     throw new ParseException("YEARS() requires only 1 argument");
@@ -987,7 +987,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
             }
             else if (method.equals("YEAR"))
             {
-                final ArrayList<Expression> args = f.getArgs();
+                final List<Expression> args = f.getArgs();
                 if (args.size() != 1)
                 {
                     throw new ParseException("YEAR() requires only 1 argument");
@@ -1060,7 +1060,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
                         throw new ParseException("YEAR() cannot be called with an agrument that is an aggregation");
                     }
 
-                    final ArrayList<Object> row = new ArrayList<Object>();
+                    final List<Object> row = new ArrayList<Object>();
                     row.add(retval.getName());
                     row.add(retval.getOp());
                     row.add(retval.getType());
@@ -1093,7 +1093,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
             }
             else if (method.equals("SUBSTRING"))
             {
-                final ArrayList<Expression> args = f.getArgs();
+                final List<Expression> args = f.getArgs();
                 if (args.size() != 3 && args.size() != 2)
                 {
                     throw new ParseException("SUBSTRING() requires 2 or 3 arguments");
@@ -1173,7 +1173,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
                         throw new ParseException("Argument 1 to SUBSTRING must be a string");
                     }
 
-                    final ArrayList<Object> row = new ArrayList<Object>();
+                    final List<Object> row = new ArrayList<Object>();
                     row.add(retval.getName());
                     row.add(retval.getOp());
                     row.add(retval.getType());
@@ -1356,7 +1356,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
                 // externalize exp2 if not col
                 if (exp2 != null)
                 {
-                    final ArrayList<Object> row = new ArrayList<Object>();
+                    final List<Object> row = new ArrayList<Object>();
                     row.add(exp2.getName());
                     row.add(exp2.getOp());
                     row.add(exp2.getType());
@@ -1423,7 +1423,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
                 // externalize exp2 if not col
                 if (exp2 != null)
                 {
-                    final ArrayList<Object> row = new ArrayList<Object>();
+                    final List<Object> row = new ArrayList<Object>();
                     row.add(exp2.getName());
                     row.add(exp2.getOp());
                     row.add(exp2.getType());
@@ -1490,7 +1490,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
                 // externalize exp2 if not col
                 if (exp2 != null)
                 {
-                    final ArrayList<Object> row = new ArrayList<Object>();
+                    final List<Object> row = new ArrayList<Object>();
                     row.add(exp2.getName());
                     row.add(exp2.getOp());
                     row.add(exp2.getType());
@@ -1548,7 +1548,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
 
                 if (exp1 != null)
                 {
-                    final ArrayList<Object> row = new ArrayList<Object>();
+                    final List<Object> row = new ArrayList<Object>();
                     row.add(exp1.getName());
                     row.add(exp1.getOp());
                     row.add(exp1.getType());
@@ -1650,7 +1650,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
             {
                 if (exp1 != null)
                 {
-                    final ArrayList<Object> row = new ArrayList<Object>();
+                    final List<Object> row = new ArrayList<Object>();
                     row.add(exp1.getName());
                     row.add(exp1.getOp());
                     row.add(exp1.getType());
@@ -1752,7 +1752,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
             {
                 if (exp1 != null)
                 {
-                    final ArrayList<Object> row = new ArrayList<Object>();
+                    final List<Object> row = new ArrayList<Object>();
                     row.add(exp1.getName());
                     row.add(exp1.getOp());
                     row.add(exp1.getType());
@@ -1895,7 +1895,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
                 }
                 else if (prereq1 != -1)
                 {
-                    final ArrayList<Object> bottom = getBottomRow(row);
+                    final List<Object> bottom = getBottomRow(row);
                     bottom.remove(5);
                     bottom.add(5, prereq1);
                 }
@@ -1987,7 +1987,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
                 }
                 else if (prereq1 != -1)
                 {
-                    final ArrayList<Object> bottom = getBottomRow(row);
+                    final List<Object> bottom = getBottomRow(row);
                     bottom.remove(5);
                     bottom.add(5, prereq1);
                 }
@@ -2066,7 +2066,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
                 }
                 else if (exp2.getPrereq() != -1 && myPrereq != -1)
                 {
-                    final ArrayList<Object> bottom = getBottomRow(getRow(myPrereq));
+                    final List<Object> bottom = getBottomRow(getRow(myPrereq));
                     bottom.remove(5);
                     bottom.add(5, exp2.getPrereq());
                 }
@@ -2123,7 +2123,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
                 int prereq = -1;
                 if (exp2 != null)
                 {
-                    final ArrayList<Object> row = new ArrayList<Object>();
+                    final List<Object> row = new ArrayList<Object>();
                     row.add(exp2.getName());
                     row.add(exp2.getOp());
                     row.add(exp2.getType());
@@ -2134,7 +2134,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
                     row.add(sub);
                     row.add(false);
                     model.getComplex().add(row);
-                    final ArrayList<Object> bottom = getBottomRow(row);
+                    final List<Object> bottom = getBottomRow(row);
                     bottom.remove(5);
                     bottom.add(5, exp1.getPrereq());
                 }
@@ -2192,7 +2192,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
                 int prereq = -1;
                 if (exp1 != null)
                 {
-                    final ArrayList<Object> row = new ArrayList<Object>();
+                    final List<Object> row = new ArrayList<Object>();
                     row.add(exp1.getName());
                     row.add(exp1.getOp());
                     row.add(exp1.getType());
@@ -2203,7 +2203,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
                     row.add(sub);
                     row.add(false);
                     model.getComplex().add(row);
-                    final ArrayList<Object> bottom = getBottomRow(row);
+                    final List<Object> bottom = getBottomRow(row);
                     bottom.remove(5);
                     bottom.add(5, exp2.getPrereq());
                 }
@@ -2228,7 +2228,7 @@ public class ExpressionOperatorTrees extends AbstractParseController {
         return null;
     }
 
-    private ArrayList<Object> getBottomRow(ArrayList<Object> row)
+    private List<Object> getBottomRow(List<Object> row)
     {
         while ((Integer)row.get(5) != -1)
         {
@@ -2238,9 +2238,9 @@ public class ExpressionOperatorTrees extends AbstractParseController {
         return row;
     }
 
-    private ArrayList<Object> getRow(final int num)
+    private List<Object> getRow(final int num)
     {
-        for (final ArrayList<Object> row : model.getComplex())
+        for (final List<Object> row : model.getComplex())
         {
             if (((Integer)row.get(3)) == num)
             {

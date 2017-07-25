@@ -1,12 +1,13 @@
 package com.exascale.optimizer;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class OrderBy
 {
-	private final ArrayList<SortKey> keys;
+	private final List<SortKey> keys;
 
-	public OrderBy(final ArrayList<SortKey> keys)
+	public OrderBy(final List<SortKey> keys)
 	{
 		this.keys = keys;
 	}
@@ -14,7 +15,7 @@ public class OrderBy
 	@Override
 	public OrderBy clone()
 	{
-		final ArrayList<SortKey> newKeys = new ArrayList<SortKey>();
+		final List<SortKey> newKeys = new ArrayList<SortKey>();
 		for (final SortKey key : keys)
 		{
 			newKeys.add(key.clone());
@@ -23,7 +24,7 @@ public class OrderBy
 		return new OrderBy(newKeys);
 	}
 
-	public ArrayList<SortKey> getKeys()
+	public List<SortKey> getKeys()
 	{
 		return keys;
 	}

@@ -5,6 +5,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 import com.exascale.client.HRDBMSConnection;
 
@@ -189,7 +190,7 @@ public class InsertTest
 
 		if (!doUpdate)
 		{
-			final ArrayList<Integer> results = new ArrayList<Integer>(count);
+			final List<Integer> results = new ArrayList<Integer>(count);
 			conn = DriverManager.getConnection("jdbc:hrdbms://localhost:3232");
 			conn.setAutoCommit(false);
 			stmt = conn.createStatement();

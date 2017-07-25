@@ -4,9 +4,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
@@ -47,7 +45,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 		this.isInt = isInt;
 	}
 
-	public static SumOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static SumOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final SumOperator value = (SumOperator)unsafe.allocateInstance(SumOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -67,7 +65,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public AggregateResultThread getHashThread(final HashMap<String, Integer> cols2Pos) throws Exception
+	public AggregateResultThread getHashThread(final Map<String, Integer> cols2Pos) throws Exception
 	{
 		return new SumHashThread(cols2Pos);
 	}
@@ -79,7 +77,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public AggregateResultThread newProcessingThread(final ArrayList<ArrayList<Object>> rows, final HashMap<String, Integer> cols2Pos)
+	public AggregateResultThread newProcessingThread(final List<List<Object>> rows, final Map<String, Integer> cols2Pos)
 	{
 		return new SumThread(rows, cols2Pos);
 	}
@@ -148,11 +146,11 @@ public final class SumOperator implements AggregateOperator, Serializable
 	{
 		// private final DiskBackedALOHashMap<AtomicDouble> results = new
 		// DiskBackedALOHashMap<AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
-		private ConcurrentHashMap<ArrayList<Object>, Object> results = new ConcurrentHashMap<ArrayList<Object>, Object>();
-		private final HashMap<String, Integer> cols2Pos;
+		private ConcurrentHashMap<List<Object>, Object> results = new ConcurrentHashMap<List<Object>, Object>();
+		private final Map<String, Integer> cols2Pos;
 		private int pos;
 
-		public SumHashThread(final HashMap<String, Integer> cols2Pos) throws Exception
+		public SumHashThread(final Map<String, Integer> cols2Pos) throws Exception
 		{
 			this.cols2Pos = cols2Pos;
 			try
@@ -188,7 +186,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 		}
 
 		@Override
-		public Object getResult(final ArrayList<Object> keys) throws Exception
+		public Object getResult(final List<Object> keys) throws Exception
 		{
 			if (isInt)
 			{
@@ -207,7 +205,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 				{
 					HRDBMSWorker.logger.error("Types are " + key.getClass());
 				}
-				for (final ArrayList<Object> keys2 : results.keySet())
+				for (final List<Object> keys2 : results.keySet())
 				{
 					for (final Object key : keys2)
 					{
@@ -221,7 +219,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 
 		// @Parallel
 		@Override
-		public final void put(final ArrayList<Object> row, final ArrayList<Object> group) throws Exception
+		public final void put(final List<Object> row, final List<Object> group) throws Exception
 		{
 			if (!isInt)
 			{
@@ -233,7 +231,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 			}
 		}
 
-		private void doublePut(final ArrayList<Object> row, final ArrayList<Object> group) throws Exception
+		private void doublePut(final List<Object> row, final List<Object> group) throws Exception
 		{
 			final Object o = row.get(pos);
 			BigDecimalReplacement val;
@@ -263,7 +261,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 			}
 		}
 
-		private void intPut(final ArrayList<Object> row, final ArrayList<Object> group) throws Exception
+		private void intPut(final List<Object> row, final List<Object> group) throws Exception
 		{
 			final Object o = row.get(pos);
 			Long val;
@@ -291,12 +289,12 @@ public final class SumOperator implements AggregateOperator, Serializable
 
 	private final class SumThread extends AggregateResultThread
 	{
-		private final ArrayList<ArrayList<Object>> rows;
-		private final HashMap<String, Integer> cols2Pos;
+		private final List<List<Object>> rows;
+		private final Map<String, Integer> cols2Pos;
 		private BigDecimalReplacement result;
 		private long result2;
 
-		public SumThread(final ArrayList<ArrayList<Object>> rows, final HashMap<String, Integer> cols2Pos)
+		public SumThread(final List<List<Object>> rows, final Map<String, Integer> cols2Pos)
 		{
 			this.rows = rows;
 			this.cols2Pos = cols2Pos;
@@ -338,7 +336,7 @@ public final class SumOperator implements AggregateOperator, Serializable
 			while (z < limit)
 			{
 				final Object orow = rows.get(z++);
-				final ArrayList<Object> row = (ArrayList<Object>)orow;
+				final List<Object> row = (List<Object>)orow;
 				if (isInt)
 				{
 					final Object o = row.get(pos);

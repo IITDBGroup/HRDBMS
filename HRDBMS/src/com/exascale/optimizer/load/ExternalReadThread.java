@@ -8,14 +8,15 @@ import com.exascale.optimizer.externalTable.ExternalTableScanOperator;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Read data from an external table on the workers */
 public class ExternalReadThread extends ReadThread {
     private ExternalTableScanOperator op;
 
-    public ExternalReadThread(final LoadOperator loadOperator, final HashMap<Integer, Integer> pos2Length, final ArrayList<String> indexes, final PartitionMetaData spmd, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final int type) {
-        super(loadOperator, null, pos2Length, indexes, spmd, keys, types, orders, type);
+    public ExternalReadThread(final LoadOperator loadOperator, final Map<Integer, Integer> pos2Length, final List<String> indexes, final List<List<String>> keys, final List<List<String>> types, final List<List<Boolean>> orders, final int type) {
+        super(loadOperator, null, pos2Length, indexes, keys, types, orders, type);
         op = loadOperator.getChild();
     }
 
@@ -30,7 +31,7 @@ public class ExternalReadThread extends ReadThread {
             final int numNodes = MetaData.numWorkerNodes;
             while (!(o instanceof DataEndMarker))
             {
-                final ArrayList<Object> row = (ArrayList<Object>)o;
+                final List<Object> row = (List<Object>)o;
                 num++;
                 for (final Map.Entry entry : pos2Length.entrySet())
                 {
@@ -40,7 +41,7 @@ public class ExternalReadThread extends ReadThread {
                         return;
                     }
                 }
-                final ArrayList<Integer> nodes = MetaData.determineNode(loadOperator.getSchema(), loadOperator.getTable(), row, loadOperator.getTransaction(), pmeta, cols2Pos, numNodes);
+                final List<Integer> nodes = MetaData.determineNode(loadOperator.getSchema(), loadOperator.getTable(), row, loadOperator.getTransaction(), pmeta, cols2Pos, numNodes);
                 final int device = MetaData.determineDevice(row, pmeta, cols2Pos);
 
                 loadOperator.getLock().readLock().lock();
@@ -62,7 +63,7 @@ public class ExternalReadThread extends ReadThread {
                         }
                     }
 
-                    master = FlushMasterThread.flush(loadOperator, indexes, spmd, keys, types, orders, type);
+                    master = FlushMasterThread.flush(loadOperator, indexes, keys, types, orders, type);
                 }
 
                 o = op.next(loadOperator);
@@ -80,7 +81,7 @@ public class ExternalReadThread extends ReadThread {
             // TODO - there were slight changes made to ReadThread,  incorporate them.
             if (loadOperator.getMap().totalSize() > 0)
             {
-                master = FlushMasterThread.flush(loadOperator, indexes, spmd, keys, types, orders, true, type);
+                master = FlushMasterThread.flush(loadOperator, indexes, keys, types, orders, true, type);
                 master.join();
                 if (!master.getOK())
                 {
@@ -95,7 +96,7 @@ public class ExternalReadThread extends ReadThread {
 
             while (count > 0 && loadOperator.getMap().totalSize() == 0)
             {
-                master = FlushMasterThread.flush(loadOperator, indexes, spmd, keys, types, orders, true, type);
+                master = FlushMasterThread.flush(loadOperator, indexes, keys, types, orders, true, type);
                 master.join();
                 if (!master.getOK())
                 {

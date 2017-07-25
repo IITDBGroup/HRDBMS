@@ -3,6 +3,7 @@ package com.exascale.threads;
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map.Entry;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -12,7 +13,7 @@ import com.exascale.managers.ResourceManager;
 
 public class TempThread extends HRDBMSThread
 {
-	private static ConcurrentHashMap<Long, ArrayList<HRDBMSThread>> threads = new ConcurrentHashMap<Long, ArrayList<HRDBMSThread>>();
+	private static ConcurrentHashMap<Long, List<HRDBMSThread>> threads = new ConcurrentHashMap<Long, List<HRDBMSThread>>();
 	private static int FACTOR;
 	private static ArrayBlockingQueue<ByteBuffer> cache = new ArrayBlockingQueue<ByteBuffer>(1000000);
 
@@ -110,7 +111,7 @@ public class TempThread extends HRDBMSThread
 		{
 			synchronized (threads)
 			{
-				ArrayList<HRDBMSThread> al = threads.get(txnum);
+				List<HRDBMSThread> al = threads.get(txnum);
 				if (al == null)
 				{
 					al = new ArrayList<HRDBMSThread>();
@@ -127,7 +128,7 @@ public class TempThread extends HRDBMSThread
 
 				for (final Entry entry : threads.entrySet())
 				{
-					final ArrayList<HRDBMSThread> al2 = (ArrayList<HRDBMSThread>)entry.getValue();
+					final List<HRDBMSThread> al2 = (List<HRDBMSThread>)entry.getValue();
 
 					if (al2 != al)
 					{
@@ -163,7 +164,7 @@ public class TempThread extends HRDBMSThread
 		}
 	}
 
-	private boolean tryHandleNow(final ArrayList<HRDBMSThread> al)
+	private boolean tryHandleNow(final List<HRDBMSThread> al)
 	{
 		if (al.size() < (ResourceManager.TEMP_DIRS.size() * FACTOR))
 		{

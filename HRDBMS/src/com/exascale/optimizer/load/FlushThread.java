@@ -12,28 +12,25 @@ import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.TreeMap;
+import java.util.*;
 
 /** Sends data to be loaded to the worker over the network. */
 public class FlushThread extends HRDBMSThread
 {
-    private List<ArrayList<Object>> list;
-    private ArrayList<String> indexes;
+    private List<List<Object>> list;
+    private List<String> indexes;
     private boolean ok = true;
     private final long key;
-    private HashMap<String, Integer> cols2Pos;
-    private ArrayList<ArrayList<String>> keys;
-    private ArrayList<ArrayList<String>> types;
-    private ArrayList<ArrayList<Boolean>> orders;
-    private final TreeMap<Integer, String> pos2Col;
-    private final HashMap<String, String> cols2Types;
+    private Map<String, Integer> cols2Pos;
+    private List<List<String>> keys;
+    private List<List<String>> types;
+    private List<List<Boolean>> orders;
+    private final Map<Integer, String> pos2Col;
+    private final Map<String, String> cols2Types;
     private final int type;
     private final LoadOperator loadOperator;
 
-    public FlushThread(final List<ArrayList<Object>> list, final ArrayList<String> indexes, final long key, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final int type, final LoadOperator loadOperator)
+    public FlushThread(final List<List<Object>> list, final List<String> indexes, final long key, final List<List<String>> keys, final List<List<String>> types, final List<List<Boolean>> orders, final int type, final LoadOperator loadOperator)
     {
         this.list = list;
         this.indexes = indexes;

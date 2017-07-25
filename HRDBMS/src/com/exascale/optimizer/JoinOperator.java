@@ -1,14 +1,12 @@
 package com.exascale.optimizer;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.*;
 
 public abstract class JoinOperator implements Operator
 {
 	public static JoinOperator manufactureJoin(final JoinOperator prod, final SelectOperator select, final MetaData meta) throws Exception
 	{
-		final ArrayList<Filter> filters = select.getFilter();
+		final List<Filter> filters = select.getFilter();
 		if (prod instanceof ProductOperator)
 		{
 			if (filters.size() == 1)
@@ -50,16 +48,16 @@ public abstract class JoinOperator implements Operator
 		}
 	}
 
-	public abstract void addJoinCondition(ArrayList<Filter> filters);
+	public abstract void addJoinCondition(List<Filter> filters);
 
 	public abstract void addJoinCondition(String left, String right) throws Exception;
 
 	@Override
 	public abstract JoinOperator clone();
 
-	public abstract HashSet<HashMap<Filter, Filter>> getHSHMFilter();
+	public abstract Set<Map<Filter, Filter>> getHSHMFilter();
 
 	public abstract boolean getIndexAccess();
 
-	public abstract ArrayList<String> getJoinForChild(Operator op);
+	public abstract List<String> getJoinForChild(Operator op);
 }

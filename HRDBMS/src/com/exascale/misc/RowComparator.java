@@ -2,6 +2,8 @@ package com.exascale.misc;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.List;
+
 import com.exascale.managers.HRDBMSWorker;
 
 public final class RowComparator implements Comparator
@@ -12,7 +14,7 @@ public final class RowComparator implements Comparator
 
 	// private MySimpleDateFormat sdf = new MySimpleDateFormat("yyyy-MM-dd");
 
-	public RowComparator(final ArrayList<Boolean> orders, final ArrayList<String> types)
+	public RowComparator(final List<Boolean> orders, final List<String> types)
 	{
 		this.orders = new boolean[orders.size()];
 		this.types = new String[types.size()];
@@ -31,13 +33,13 @@ public final class RowComparator implements Comparator
 		int result;
 
 		final int size = types.length;
-		ArrayList<Object> lhs = null;
-		ArrayList<Object> rhs = null;
+		List<Object> lhs = null;
+		List<Object> rhs = null;
 		int i = 0;
 
 		if (arg0 instanceof ArrayList)
 		{
-			lhs = (ArrayList<Object>)arg0;
+			lhs = (List<Object>)arg0;
 		}
 		else
 		{
@@ -80,7 +82,7 @@ public final class RowComparator implements Comparator
 
 		if (arg1 instanceof ArrayList)
 		{
-			rhs = (ArrayList<Object>)arg1;
+			rhs = (List<Object>)arg1;
 		}
 		else
 		{
@@ -190,13 +192,13 @@ public final class RowComparator implements Comparator
 
 		final int size = types.length;
 		HRDBMSWorker.logger.debug("Type is " + types);
-		ArrayList<Object> lhs = null;
-		ArrayList<Object> rhs = null;
+		List<Object> lhs = null;
+		List<Object> rhs = null;
 		int i = 0;
 
 		if (arg0 instanceof ArrayList)
 		{
-			lhs = (ArrayList<Object>)arg0;
+			lhs = (List<Object>)arg0;
 		}
 		else
 		{
@@ -239,7 +241,7 @@ public final class RowComparator implements Comparator
 
 		if (arg1 instanceof ArrayList)
 		{
-			rhs = (ArrayList<Object>)arg1;
+			rhs = (List<Object>)arg1;
 		}
 		else
 		{

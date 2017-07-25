@@ -4,10 +4,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.text.ParseException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
+import java.util.*;
+
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.*;
 
@@ -49,7 +47,7 @@ public class Filter implements Cloneable, Serializable
 
 	private String orig2;
 
-	public Filter(final String val1, final String op, final String val2) throws Exception
+	public Filter(final String val1, final String op, final String val2)
 	{
 		this.val1 = val1;
 		this.orig1 = val1;
@@ -66,7 +64,7 @@ public class Filter implements Cloneable, Serializable
 	{
 	}
 
-	public static Filter deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Filter deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final Filter value = (Filter)unsafe.allocateInstance(Filter.class);
 		final HrdbmsType type = OperatorUtils.getType(in);
@@ -102,7 +100,7 @@ public class Filter implements Cloneable, Serializable
 		return value;
 	}
 
-	public static Filter deserializeKnown(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Filter deserializeKnown(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final Filter value = (Filter)unsafe.allocateInstance(Filter.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -126,7 +124,7 @@ public class Filter implements Cloneable, Serializable
 		return value;
 	}
 
-	private static Object get(final ArrayList<Object> lRow, final ArrayList<Object> rRow, final int pos)
+	private static Object get(final List<Object> lRow, final List<Object> rRow, final int pos)
 	{
 		if (pos < lRow.size())
 		{
@@ -265,7 +263,7 @@ public class Filter implements Cloneable, Serializable
 		return op;
 	}
 
-	public final boolean passes(final ArrayList<Object> lRow, final ArrayList<Object> rRow, final HashMap<String, Integer> cols2Pos) throws Exception
+	public final boolean passes(final List<Object> lRow, final List<Object> rRow, final Map<String, Integer> cols2Pos) throws Exception
 	{
 		if (cols2Pos == null)
 		{
@@ -317,7 +315,7 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 
-	public final boolean passes(final ArrayList<Object> row, final HashMap<String, Integer> cols2Pos) throws Exception
+	public final boolean passes(final List<Object> row, final Map<String, Integer> cols2Pos) throws Exception
 	{
 		if (cols2Pos == null)
 		{
@@ -462,7 +460,7 @@ public class Filter implements Cloneable, Serializable
 		orig2 = newCol;
 	}
 
-	private boolean compare(final Comparable lhs, final Comparable rhs) throws Exception
+	private boolean compare(final Comparable lhs, final Comparable rhs)
 	{
 		if (op.equals("E"))
 		{
@@ -522,10 +520,10 @@ public class Filter implements Cloneable, Serializable
 			// \
 		}
 
-		throw new Exception("Unknown op type in Filter");
+		throw new IllegalArgumentException("Unknown op type in Filter");
 	}
 
-	private boolean compare(final double lhs, final double rhs) throws Exception
+	private boolean compare(final double lhs, final double rhs)
 	{
 		if (op.equals("E"))
 		{
@@ -557,10 +555,10 @@ public class Filter implements Cloneable, Serializable
 			return lhs != rhs;
 		}
 
-		throw new Exception("Unknown op type in Filter");
+		throw new IllegalArgumentException("Unknown op type in Filter");
 	}
 
-	private boolean doBackwards(final HashMap<String, Integer> cols2Pos, final ArrayList<Object> lRow, final ArrayList<Object> rRow) throws Exception
+	private boolean doBackwards(final Map<String, Integer> cols2Pos, final List<Object> lRow, final List<Object> rRow) throws Exception
 	{
 		if (lVal1 != null)
 		{
@@ -616,7 +614,7 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 
-	private boolean doBackwards2(final HashMap<String, Integer> cols2Pos, final ArrayList<Object> row) throws Exception
+	private boolean doBackwards2(final Map<String, Integer> cols2Pos, final List<Object> row) throws Exception
 	{
 		if (lVal1 != null)
 		{
@@ -674,7 +672,7 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 
-	private void lessCommon() throws Exception
+	private void lessCommon()
 	{
 		if (fVal1 != null)
 		{
@@ -721,7 +719,7 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 
-	private void parseLHS() throws ParseException
+	private void parseLHS()
 	{
 		if (val1.startsWith("DATE('"))
 		{
@@ -753,7 +751,7 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 
-	private void parseRHS() throws ParseException
+	private void parseRHS()
 	{
 		if (val2.startsWith("DATE('"))
 		{
@@ -785,7 +783,7 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 
-	private boolean passesDate(final HashMap<String, Integer> cols2Pos, final Object lo, final ArrayList<Object> lRow, final ArrayList<Object> rRow) throws Exception
+	private boolean passesDate(final Map<String, Integer> cols2Pos, final Object lo, final List<Object> lRow, final List<Object> rRow) throws Exception
 	{
 		if (dVal2 != null)
 		{
@@ -804,7 +802,7 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 
-	private boolean passesDate2(final HashMap<String, Integer> cols2Pos, final Object lo, final ArrayList<Object> row) throws Exception
+	private boolean passesDate2(final Map<String, Integer> cols2Pos, final Object lo, final List<Object> row) throws Exception
 	{
 		if (dVal2 != null)
 		{
@@ -823,7 +821,7 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 
-	private boolean passesDouble(final HashMap<String, Integer> cols2Pos, final Object lo, final ArrayList<Object> lRow, final ArrayList<Object> rRow) throws Exception
+	private boolean passesDouble(final Map<String, Integer> cols2Pos, final Object lo, final List<Object> lRow, final List<Object> rRow) throws Exception
 	{
 		if (fVal2 != null)
 		{
@@ -846,7 +844,7 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 
-	private boolean passesDouble2(final HashMap<String, Integer> cols2Pos, final Object lo, final ArrayList<Object> row) throws Exception
+	private boolean passesDouble2(final Map<String, Integer> cols2Pos, final Object lo, final List<Object> row) throws Exception
 	{
 		if (fVal2 != null)
 		{
@@ -869,7 +867,7 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 
-	private boolean passesInteger(final HashMap<String, Integer> cols2Pos, final Object lo, final ArrayList<Object> lRow, final ArrayList<Object> rRow) throws Exception
+	private boolean passesInteger(final Map<String, Integer> cols2Pos, final Object lo, final List<Object> lRow, final List<Object> rRow) throws Exception
 	{
 		if (fVal2 != null)
 		{
@@ -892,7 +890,7 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 
-	private boolean passesInteger2(final HashMap<String, Integer> cols2Pos, final Object lo, final ArrayList<Object> row) throws Exception
+	private boolean passesInteger2(final Map<String, Integer> cols2Pos, final Object lo, final List<Object> row) throws Exception
 	{
 		if (fVal2 != null)
 		{
@@ -915,7 +913,7 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 
-	private boolean passesLong(final HashMap<String, Integer> cols2Pos, final Object lo, final ArrayList<Object> lRow, final ArrayList<Object> rRow) throws Exception
+	private boolean passesLong(final Map<String, Integer> cols2Pos, final Object lo, final List<Object> lRow, final List<Object> rRow) throws Exception
 	{
 		if (fVal2 != null)
 		{
@@ -938,7 +936,7 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 
-	private boolean passesLong2(final HashMap<String, Integer> cols2Pos, final Object lo, final ArrayList<Object> row) throws Exception
+	private boolean passesLong2(final Map<String, Integer> cols2Pos, final Object lo, final List<Object> row) throws Exception
 	{
 		if (fVal2 != null)
 		{
@@ -961,7 +959,7 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 
-	private boolean passesString(final HashMap<String, Integer> cols2Pos, final Object lo, final ArrayList<Object> lRow, final ArrayList<Object> rRow) throws Exception
+	private boolean passesString(final Map<String, Integer> cols2Pos, final Object lo, final List<Object> lRow, final List<Object> rRow) throws Exception
 	{
 		if (colVal2 != null)
 		{
@@ -980,7 +978,7 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 
-	private boolean passesString2(final HashMap<String, Integer> cols2Pos, final Object lo, final ArrayList<Object> row) throws Exception
+	private boolean passesString2(final Map<String, Integer> cols2Pos, final Object lo, final List<Object> row) throws Exception
 	{
 		if (colVal2 != null)
 		{
@@ -999,7 +997,7 @@ public class Filter implements Cloneable, Serializable
 		}
 	}
 
-	private void setAlwaysVars() throws Exception
+	private void setAlwaysVars()
 	{
 		if (colVal1 != null)
 		{

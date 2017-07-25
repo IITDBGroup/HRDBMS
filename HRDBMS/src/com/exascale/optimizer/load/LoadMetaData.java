@@ -3,34 +3,32 @@ package com.exascale.optimizer.load;
 import com.exascale.optimizer.PartitionMetaData;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.TreeMap;
+import java.util.*;
 
 public class LoadMetaData implements Serializable
 {
 	// numNodes = (Integer)objIn.readObject();
 	// delimiter = (String)objIn.readObject();
-	// pos2Col = (TreeMap<Integer, String>)objIn.readObject();
-	// cols2Types = (HashMap<String, String>)objIn.readObject();
-	// pos2Length = (HashMap<Integer, Integer>)objIn.readObject();
+	// pos2Col = (Map<Integer, String>)objIn.readObject();
+	// cols2Types = (Map<String, String>)objIn.readObject();
+	// pos2Length = (Map<Integer, Integer>)objIn.readObject();
 	// pmd = (PartitionMetaData)objIn.readObject();
 	public int numNodes;
 	public String delimiter;
-	public TreeMap<Integer, String> pos2Col;
-	public HashMap<String, String> cols2Types;
-	public HashMap<Integer, Integer> pos2Length;
+	public Map<Integer, String> pos2Col;
+	public Map<String, String> cols2Types;
+	public Map<Integer, Integer> pos2Length;
 	public PartitionMetaData pmd;
-	public ArrayList<Integer> workerNodes;
-	public ArrayList<Integer> coordNodes;
+	public List<Integer> workerNodes;
+	public List<Integer> coordNodes;
 	public long txNum;
-	public ArrayList<ArrayList<String>> keys;
-	public ArrayList<ArrayList<String>> types;
-	public ArrayList<ArrayList<Boolean>> orders;
-	public ArrayList<String> indexes;
+	public List<List<String>> keys;
+	public List<List<String>> types;
+	public List<List<Boolean>> orders;
+	public List<String> indexes;
 	public int type;
 
-	public LoadMetaData(final int numNodes, final String delimiter, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final HashMap<Integer, Integer> pos2Length, final PartitionMetaData pmd, final ArrayList<Integer> workerNodes, final ArrayList<Integer> coordNodes, final long txNum, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final ArrayList<String> indexes, final int type)
+	public LoadMetaData(final int numNodes, final String delimiter, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types, final Map<Integer, Integer> pos2Length, final PartitionMetaData pmd, final List<Integer> workerNodes, final List<Integer> coordNodes, final long txNum, final List<List<String>> keys, final List<List<String>> types, final List<List<Boolean>> orders, final List<String> indexes, final int type)
 	{
 		this.numNodes = numNodes;
 		this.delimiter = delimiter;

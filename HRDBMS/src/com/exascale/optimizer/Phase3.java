@@ -1,10 +1,6 @@
 package com.exascale.optimizer;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
@@ -54,9 +50,9 @@ public final class Phase3
 		}
 	}
 
-	private static boolean containsAll(final ArrayList<String> fs, final ArrayList<String> hs, final PartitionMetaData pmd) throws Exception
+	private static boolean containsAll(final List<String> fs, final List<String> hs, final PartitionMetaData pmd) throws Exception
 	{
-		final ArrayList<String> swizzled = new ArrayList<String>();
+		final List<String> swizzled = new ArrayList<String>();
 		final String table = pmd.getTable();
 		for (final String s : hs)
 		{
@@ -112,9 +108,9 @@ public final class Phase3
 			return true;
 		}
 		final TopOperator parent = (TopOperator)receive.parent();
-		final ArrayList<Operator> children = (ArrayList<Operator>)receive.children().clone();
-		final HashMap<Operator, Operator> send2Child = new HashMap<Operator, Operator>();
-		final HashMap<Operator, CNFFilter> send2CNF = new HashMap<Operator, CNFFilter>();
+		final List<Operator> children = new ArrayList<>(receive.children());
+		final Map<Operator, Operator> send2Child = new HashMap<Operator, Operator>();
+		final Map<Operator, CNFFilter> send2CNF = new HashMap<Operator, CNFFilter>();
 		for (final Operator child : children)
 		{
 			send2Child.put(child, child.children().get(0));
@@ -151,9 +147,9 @@ public final class Phase3
 		return false;
 	}
 
-	private static boolean needsRehash(final ArrayList<ArrayList<String>> current, final ArrayList<String> toHash)
+	private static boolean needsRehash(final List<List<String>> current, final List<String> toHash)
 	{
-		for (final ArrayList<String> hash : current)
+		for (final List<String> hash : current)
 		{
 			if (toHash.equals(hash) && hash.size() > 0)
 			{
@@ -168,9 +164,9 @@ public final class Phase3
 	{
 		final Operator parent = receive.parent();
 		final Operator grandParent = parent.parent();
-		final ArrayList<Operator> children = receive.children();
-		final HashMap<Operator, Operator> send2Child = new HashMap<Operator, Operator>();
-		final HashMap<Operator, CNFFilter> send2CNF = new HashMap<Operator, CNFFilter>();
+		final List<Operator> children = receive.children();
+		final Map<Operator, Operator> send2Child = new HashMap<Operator, Operator>();
+		final Map<Operator, CNFFilter> send2CNF = new HashMap<Operator, CNFFilter>();
 		for (final Operator child : children)
 		{
 			send2Child.put(child, child.children().get(0));
@@ -289,7 +285,7 @@ public final class Phase3
 	public void optimize() throws Exception
 	{
 		pushDownGB(root);
-		// final ArrayList<NetworkReceiveOperator> receives = getReceives(root);
+		// final List<NetworkReceiveOperator> receives = getReceives(root);
 		// for (final NetworkReceiveOperator receive : receives)
 		// {
 		// makeHierarchical(receive);
@@ -338,9 +334,9 @@ public final class Phase3
 
 	private long cardHJO(final Operator op) throws Exception
 	{
-		final HashSet<HashMap<Filter, Filter>> hshm = ((HashJoinOperator)op).getHSHM();
+		final Set<Map<Filter, Filter>> hshm = ((HashJoinOperator)op).getHSHM();
 		double max = -1;
-		for (final HashMap<Filter, Filter> hm : hshm)
+		for (final Map<Filter, Filter> hm : hshm)
 		{
 			final double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
 			if (temp > max)
@@ -378,9 +374,9 @@ public final class Phase3
 
 	private long cardNL(final Operator op) throws Exception
 	{
-		final HashSet<HashMap<Filter, Filter>> hshm = ((NestedLoopJoinOperator)op).getHSHM();
+		final Set<Map<Filter, Filter>> hshm = ((NestedLoopJoinOperator)op).getHSHM();
 		double max = -1;
-		for (final HashMap<Filter, Filter> hm : hshm)
+		for (final Map<Filter, Filter> hm : hshm)
 		{
 			final double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
 			if (temp > max)
@@ -468,7 +464,7 @@ public final class Phase3
 
 	private long cardTSO(final Operator op) throws Exception
 	{
-		final HashSet<HashMap<Filter, Filter>> hshm = ((TableScanOperator)op).getHSHM();
+		final Set<Map<Filter, Filter>> hshm = ((TableScanOperator)op).getHSHM();
 		if (hshm != null)
 		{
 			return (long)(MetaData.getTableCard(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx) * meta.likelihood(hshm, root, tx, op) * (1.0 / ((TableScanOperator)op).getNumNodes()));
@@ -556,7 +552,7 @@ public final class Phase3
 		}
 		else
 		{
-			for (final Operator o : (ArrayList<Operator>)op.children().clone())
+			for (final Operator o : new ArrayList<>(op.children()))
 			{
 				cleanupStrandedTables(o);
 			}
@@ -656,19 +652,19 @@ public final class Phase3
 	{
 		final int oldSuffix = colSuffix;
 		final Operator orig = parent.parent();
-		final ArrayList<String> cols = new ArrayList<String>(parent.getPos2Col().values());
+		final List<String> cols = new ArrayList<String>(parent.getPos2Col().values());
 		ArrayList<String> oldCols = null;
 		ArrayList<String> newCols = null;
 
 		while (pClone.hasAvg())
 		{
 			final String avgCol = pClone.getAvgCol();
-			final ArrayList<String> newCols2 = new ArrayList<String>(2);
+			final List<String> newCols2 = new ArrayList<String>(2);
 			final String newCol1 = "_P" + colSuffix++;
 			final String newCol2 = "_P" + colSuffix++;
 			newCols2.add(newCol1);
 			newCols2.add(newCol2);
-			final HashMap<String, ArrayList<String>> old2News = new HashMap<String, ArrayList<String>>();
+			final Map<String, List<String>> old2News = new HashMap<String, List<String>>();
 			old2News.put(avgCol, newCols2);
 			pClone.replaceAvgWithSumAndCount(old2News);
 			parent.replaceAvgWithSumAndCount(old2News);
@@ -690,7 +686,7 @@ public final class Phase3
 		colSuffix = oldSuffix;
 		oldCols = new ArrayList(pClone.getOutputCols());
 		newCols = new ArrayList(pClone.getInputCols());
-		final HashMap<String, String> old2New2 = new HashMap<String, String>();
+		final Map<String, String> old2New2 = new HashMap<String, String>();
 		int counter = 10;
 		int i = 0;
 		for (final String col : oldCols)
@@ -777,8 +773,8 @@ public final class Phase3
 			return;
 		}
 
-		final ArrayList<String> group1 = (ArrayList<String>)mop.getKeys().clone();
-		final ArrayList<String> group2 = (ArrayList<String>)group1.clone();
+		final List<String> group1 = new ArrayList<>(mop.getKeys());
+		final List<String> group2 = new ArrayList<>(group1);
 		for (final String col : hjop.getLefts())
 		{
 			if (!group1.contains(col))
@@ -858,19 +854,19 @@ public final class Phase3
 	{
 		final int oldSuffix = colSuffix;
 		final Operator orig = parent.parent();
-		final ArrayList<String> cols = new ArrayList<String>(parent.getPos2Col().values());
+		final List<String> cols = new ArrayList<String>(parent.getPos2Col().values());
 		ArrayList<String> oldCols = null;
 		ArrayList<String> newCols = null;
 
 		while (pClone.hasAvg())
 		{
 			final String avgCol = pClone.getAvgCol();
-			final ArrayList<String> newCols2 = new ArrayList<String>(2);
+			final List<String> newCols2 = new ArrayList<String>(2);
 			final String newCol1 = "_P" + colSuffix++;
 			final String newCol2 = "_P" + colSuffix++;
 			newCols2.add(newCol1);
 			newCols2.add(newCol2);
-			final HashMap<String, ArrayList<String>> old2News = new HashMap<String, ArrayList<String>>();
+			final Map<String, List<String>> old2News = new HashMap<String, List<String>>();
 			old2News.put(avgCol, newCols2);
 			pClone.replaceAvgWithSumAndCount(old2News);
 			parent.replaceAvgWithSumAndCount(old2News);
@@ -892,7 +888,7 @@ public final class Phase3
 		colSuffix = oldSuffix;
 		oldCols = new ArrayList(pClone.getOutputCols());
 		newCols = new ArrayList(pClone.getInputCols());
-		final HashMap<String, String> old2New2 = new HashMap<String, String>();
+		final Map<String, String> old2New2 = new HashMap<String, String>();
 		int counter = 10;
 		int i = 0;
 		for (final String col : oldCols)
@@ -971,16 +967,16 @@ public final class Phase3
 		}
 	}
 
-	private ArrayList<ArrayList<String>> getCurrentHash(final Operator op) throws Exception
+	private List<List<String>> getCurrentHash(final Operator op) throws Exception
 	{
 		if (op instanceof TableScanOperator)
 		{
 			final PartitionMetaData pmd = meta.getPartMeta(((TableScanOperator)op).getSchema(), ((TableScanOperator)op).getTable(), tx);
 			if (pmd.nodeIsHash())
 			{
-				final ArrayList<String> retval = (ArrayList<String>)pmd.getNodeHash().clone();
-				final ArrayList<ArrayList<String>> r = new ArrayList<ArrayList<String>>();
-				for (final String s : (ArrayList<String>)retval.clone())
+				final List<String> retval = new ArrayList<>(pmd.getNodeHash());
+				final List<List<String>> r = new ArrayList<List<String>>();
+				for (final String s : new ArrayList<>(retval))
 				{
 					if (!s.contains("."))
 					{
@@ -1004,8 +1000,8 @@ public final class Phase3
 			}
 			else
 			{
-				final ArrayList<String> als = new ArrayList<String>();
-				final ArrayList<ArrayList<String>> retval = new ArrayList<ArrayList<String>>();
+				final List<String> als = new ArrayList<String>();
+				final List<List<String>> retval = new ArrayList<List<String>>();
 				retval.add(als);
 				return retval;
 			}
@@ -1013,20 +1009,20 @@ public final class Phase3
 
 		if (op instanceof NetworkSendMultipleOperator || op instanceof NetworkSendRROperator)
 		{
-			final ArrayList<String> als = new ArrayList<String>();
-			final ArrayList<ArrayList<String>> retval = new ArrayList<ArrayList<String>>();
+			final List<String> als = new ArrayList<String>();
+			final List<List<String>> retval = new ArrayList<List<String>>();
 			retval.add(als);
 			return retval;
 		}
 
 		if (op instanceof NetworkHashAndSendOperator)
 		{
-			final ArrayList<ArrayList<String>> retval = new ArrayList<ArrayList<String>>();
-			retval.add((ArrayList<String>)((NetworkHashAndSendOperator)op).getHashCols().clone());
+			final List<List<String>> retval = new ArrayList<List<String>>();
+			retval.add(new ArrayList<>(((NetworkHashAndSendOperator)op).getHashCols()));
 			return retval;
 		}
 
-		final ArrayList<ArrayList<String>> retval = new ArrayList<ArrayList<String>>();
+		final List<List<String>> retval = new ArrayList<List<String>>();
 		for (final Operator o : op.children())
 		{
 			retval.addAll(getCurrentHash(o));
@@ -1057,9 +1053,9 @@ public final class Phase3
 		}
 	}
 
-	private ArrayList<NetworkReceiveOperator> getReceives(final Operator op)
+	private List<NetworkReceiveOperator> getReceives(final Operator op)
 	{
-		final ArrayList<NetworkReceiveOperator> retval = new ArrayList<NetworkReceiveOperator>();
+		final List<NetworkReceiveOperator> retval = new ArrayList<NetworkReceiveOperator>();
 		if (!(op instanceof NetworkReceiveOperator))
 		{
 			for (final Operator child : op.children())
@@ -1081,16 +1077,16 @@ public final class Phase3
 		}
 	}
 
-	private ArrayList<TableScanOperator> getTableOperators(final Operator op)
+	private List<TableScanOperator> getTableOperators(final Operator op)
 	{
 		if (op instanceof TableScanOperator)
 		{
-			final ArrayList<TableScanOperator> retval = new ArrayList<TableScanOperator>(1);
+			final List<TableScanOperator> retval = new ArrayList<TableScanOperator>(1);
 			retval.add((TableScanOperator)op);
 			return retval;
 		}
 
-		final ArrayList<TableScanOperator> retval = new ArrayList<TableScanOperator>();
+		final List<TableScanOperator> retval = new ArrayList<TableScanOperator>();
 		for (final Operator o : op.children())
 		{
 			retval.addAll(getTableOperators(o));
@@ -1111,8 +1107,8 @@ public final class Phase3
 		{
 			if (containsNoSend(receive.parent().children().get(0)) && containsNoSend(receive.parent().children().get(1)))
 			{
-				final ArrayList<TableScanOperator> left = getTableOperators(receive.parent().children().get(0));
-				final ArrayList<TableScanOperator> right = getTableOperators(receive.parent().children().get(1));
+				final List<TableScanOperator> left = getTableOperators(receive.parent().children().get(0));
+				final List<TableScanOperator> right = getTableOperators(receive.parent().children().get(1));
 				final int node = left.get(0).getNode();
 				for (final TableScanOperator table : left)
 				{
@@ -1176,7 +1172,7 @@ public final class Phase3
 				else
 				{
 					leftTree = new UnionOperator(false, meta);
-					for (final Operator child : (ArrayList<Operator>)receive.children().clone())
+					for (final Operator child : new ArrayList<>(receive.children()))
 					{
 						if (child.children().size() == 0)
 						{
@@ -1205,10 +1201,10 @@ public final class Phase3
 			{
 				return false;
 			}
-			final ArrayList<String> lefts = parent.getLefts();
-			final ArrayList<String> rights = parent.getRights();
+			final List<String> lefts = parent.getLefts();
+			final List<String> rights = parent.getRights();
 			int i = 0;
-			final HashSet<String> tables = new HashSet<String>();
+			final Set<String> tables = new HashSet<String>();
 			while (i < lefts.size())
 			{
 				String temp = meta.getTableForCol(lefts.get(i), parent);
@@ -1231,7 +1227,7 @@ public final class Phase3
 				return false;
 			}
 
-			final ArrayList<PartitionMetaData> pmetas = new ArrayList<PartitionMetaData>(tables.size());
+			final List<PartitionMetaData> pmetas = new ArrayList<PartitionMetaData>(tables.size());
 			for (String table : tables)
 			{
 				final String schema = table.substring(0, table.indexOf('.'));
@@ -1239,8 +1235,8 @@ public final class Phase3
 				pmetas.add(meta.getPartMeta(schema, table, tx));
 			}
 
-			final ArrayList<ArrayList<String>> lhash = getCurrentHash(parent.children().get(0));
-			final ArrayList<ArrayList<String>> rhash = getCurrentHash(parent.children().get(1));
+			final List<List<String>> lhash = getCurrentHash(parent.children().get(0));
+			final List<List<String>> rhash = getCurrentHash(parent.children().get(1));
 
 			if (pmetas.get(0).noNodeGroupSet() && pmetas.get(1).noNodeGroupSet())
 			{
@@ -1280,8 +1276,8 @@ public final class Phase3
 			// HRDBMSWorker.logger.debug("Both are any");
 			if (containsNoSend(receive.parent().children().get(0)) && containsNoSend(receive.parent().children().get(1)))
 			{
-				final ArrayList<TableScanOperator> left = getTableOperators(receive.parent().children().get(0));
-				final ArrayList<TableScanOperator> right = getTableOperators(receive.parent().children().get(1));
+				final List<TableScanOperator> left = getTableOperators(receive.parent().children().get(0));
+				final List<TableScanOperator> right = getTableOperators(receive.parent().children().get(1));
 				final int node = left.get(0).getNode();
 				for (final TableScanOperator table : left)
 				{
@@ -1341,7 +1337,7 @@ public final class Phase3
 				else
 				{
 					leftTree = new UnionOperator(false, meta);
-					for (final Operator child : (ArrayList<Operator>)receive.children().clone())
+					for (final Operator child : new ArrayList<>(receive.children()))
 					{
 						if (child.children().size() == 0)
 						{
@@ -1371,10 +1367,10 @@ public final class Phase3
 			{
 				return false;
 			}
-			final ArrayList<String> lefts = parent.getLefts();
-			final ArrayList<String> rights = parent.getRights();
+			final List<String> lefts = parent.getLefts();
+			final List<String> rights = parent.getRights();
 			int i = 0;
-			final HashSet<String> tables = new HashSet<String>();
+			final Set<String> tables = new HashSet<String>();
 			while (i < lefts.size())
 			{
 				String name = meta.getTableForCol(lefts.get(i), parent);
@@ -1397,7 +1393,7 @@ public final class Phase3
 				return false;
 			}
 
-			final ArrayList<PartitionMetaData> pmetas = new ArrayList<PartitionMetaData>(tables.size());
+			final List<PartitionMetaData> pmetas = new ArrayList<PartitionMetaData>(tables.size());
 			for (String table : tables)
 			{
 				final String schema = table.substring(0, table.indexOf('.'));
@@ -1405,8 +1401,8 @@ public final class Phase3
 				pmetas.add(meta.getPartMeta(schema, table, tx));
 			}
 
-			final ArrayList<ArrayList<String>> lhash = getCurrentHash(parent.children().get(0));
-			final ArrayList<ArrayList<String>> rhash = getCurrentHash(parent.children().get(1));
+			final List<List<String>> lhash = getCurrentHash(parent.children().get(0));
+			final List<List<String>> rhash = getCurrentHash(parent.children().get(1));
 
 			if (pmetas.get(0).noNodeGroupSet() && pmetas.get(1).noNodeGroupSet())
 			{
@@ -1449,8 +1445,8 @@ public final class Phase3
 		{
 			int i = 0;
 			boolean doIt = true;
-			final HashSet<String> tables = new HashSet<String>();
-			final HashMap<String, ArrayList<String>> table2Cols = new HashMap<String, ArrayList<String>>();
+			final Set<String> tables = new HashSet<String>();
+			final Map<String, List<String>> table2Cols = new HashMap<String, List<String>>();
 			while (i < parent.getKeys().size())
 			{
 				final String name = meta.getTableForCol(parent.getKeys().get(i), parent);
@@ -1460,7 +1456,7 @@ public final class Phase3
 					break;
 				}
 				tables.add(name);
-				ArrayList<String> cols = table2Cols.get(name);
+				List<String> cols = table2Cols.get(name);
 				if (cols == null)
 				{
 					cols = new ArrayList<String>();
@@ -1533,11 +1529,11 @@ public final class Phase3
 		card(parent);
 		if (!noLargeUpstreamJoins(parent) && parent.getKeys().size() > 0)
 		{
-			final ArrayList<String> cols2 = new ArrayList<String>(parent.getKeys());
+			final List<String> cols2 = new ArrayList<String>(parent.getKeys());
 			boolean rehash = false;
 			for (final Operator o : receive.children())
 			{
-				final ArrayList<ArrayList<String>> currentHash = getCurrentHash(o);
+				final List<List<String>> currentHash = getCurrentHash(o);
 				if (needsRehash(currentHash, cols2))
 				{
 					rehash = true;
@@ -1548,8 +1544,8 @@ public final class Phase3
 			{
 				final int starting = getStartingNode(MetaData.numWorkerNodes);
 				final int ID = Phase4.id.getAndIncrement();
-				final ArrayList<NetworkHashAndSendOperator> sends = new ArrayList<NetworkHashAndSendOperator>(receive.children().size());
-				for (Operator o : (ArrayList<Operator>)receive.children().clone())
+				final List<NetworkHashAndSendOperator> sends = new ArrayList<NetworkHashAndSendOperator>(receive.children().size());
+				for (Operator o : new ArrayList<>(receive.children()))
 				{
 					final Operator temp = o.children().get(0);
 					o.removeChild(temp);
@@ -1580,7 +1576,7 @@ public final class Phase3
 				}
 
 				int i = 0;
-				final ArrayList<NetworkHashReceiveOperator> receives = new ArrayList<NetworkHashReceiveOperator>();
+				final List<NetworkHashReceiveOperator> receives = new ArrayList<NetworkHashReceiveOperator>();
 				while (i < MetaData.numWorkerNodes)
 				{
 					final NetworkHashReceiveOperator hrec = new NetworkHashReceiveOperator(ID, meta);
@@ -1638,7 +1634,7 @@ public final class Phase3
 			}
 			else
 			{
-				for (final Operator o : (ArrayList<Operator>)receive.children().clone())
+				for (final Operator o : new ArrayList<>(receive.children()))
 				{
 					final Operator temp = o.children().get(0);
 					o.removeChild(temp);
@@ -1693,8 +1689,8 @@ public final class Phase3
 			{
 				final int starting = getStartingNode(MetaData.numWorkerNodes);
 				final int ID = Phase4.id.getAndIncrement();
-				final ArrayList<NetworkHashAndSendOperator> sends = new ArrayList<NetworkHashAndSendOperator>(receive.children().size());
-				for (Operator o : (ArrayList<Operator>)receive.children().clone())
+				final List<NetworkHashAndSendOperator> sends = new ArrayList<NetworkHashAndSendOperator>(receive.children().size());
+				for (Operator o : new ArrayList<>(receive.children()))
 				{
 					final Operator temp = o.children().get(0);
 					o.removeChild(temp);
@@ -1707,7 +1703,7 @@ public final class Phase3
 					}
 
 					final String input = parent.getInputCols().get(0);
-					final ArrayList<String> cols2 = new ArrayList<String>();
+					final List<String> cols2 = new ArrayList<String>();
 					cols2.add(input);
 					final NetworkHashAndSendOperator send = new NetworkHashAndSendOperator(cols2, MetaData.numWorkerNodes, ID, starting, meta);
 					try
@@ -1728,7 +1724,7 @@ public final class Phase3
 				}
 
 				int i = 0;
-				final ArrayList<NetworkHashReceiveOperator> receives = new ArrayList<NetworkHashReceiveOperator>();
+				final List<NetworkHashReceiveOperator> receives = new ArrayList<NetworkHashReceiveOperator>();
 				while (i < MetaData.numWorkerNodes)
 				{
 					final NetworkHashReceiveOperator hrec = new NetworkHashReceiveOperator(ID, meta);
@@ -1772,14 +1768,14 @@ public final class Phase3
 
 				try
 				{
-					final ArrayList<String> old = new ArrayList<String>();
-					final ArrayList<String> newCols = new ArrayList<String>();
+					final List<String> old = new ArrayList<String>();
+					final List<String> newCols = new ArrayList<String>();
 					old.add(receive.getPos2Col().get(0));
 					newCols.add("_P" + colSuffix++);
 					final RenameOperator rename = new RenameOperator(old, newCols, meta);
 					rename.add(receive);
 					parent.changeCD2Add();
-					final ArrayList<String> newInputs = new ArrayList<String>();
+					final List<String> newInputs = new ArrayList<String>();
 					newInputs.add("_P" + (colSuffix - 1));
 					parent.updateInputColumns(parent.getOutputCols(), newInputs);
 					parent.add(rename);
@@ -1798,9 +1794,9 @@ public final class Phase3
 			return false;
 		}
 
-		final ArrayList<Operator> children = receive.children();
-		final HashMap<Operator, Operator> send2Child = new HashMap<Operator, Operator>();
-		final HashMap<Operator, CNFFilter> send2CNF = new HashMap<Operator, CNFFilter>();
+		final List<Operator> children = receive.children();
+		final Map<Operator, Operator> send2Child = new HashMap<Operator, Operator>();
+		final Map<Operator, CNFFilter> send2CNF = new HashMap<Operator, CNFFilter>();
 		for (final Operator child : children)
 		{
 			send2Child.put(child, child.children().get(0));
@@ -1818,7 +1814,7 @@ public final class Phase3
 		final int oldSuffix = colSuffix;
 		final Operator orig = parent.parent();
 		MultiOperator pClone;
-		final ArrayList<String> cols = new ArrayList<String>(parent.getPos2Col().values());
+		final List<String> cols = new ArrayList<String>(parent.getPos2Col().values());
 		ArrayList<String> oldCols = null;
 		ArrayList<String> newCols = null;
 
@@ -1828,12 +1824,12 @@ public final class Phase3
 			while (pClone.hasAvg())
 			{
 				final String avgCol = pClone.getAvgCol();
-				final ArrayList<String> newCols2 = new ArrayList<String>(2);
+				final List<String> newCols2 = new ArrayList<String>(2);
 				final String newCol1 = "_P" + colSuffix++;
 				final String newCol2 = "_P" + colSuffix++;
 				newCols2.add(newCol1);
 				newCols2.add(newCol2);
-				final HashMap<String, ArrayList<String>> old2News = new HashMap<String, ArrayList<String>>();
+				final Map<String, List<String>> old2News = new HashMap<String, List<String>>();
 				old2News.put(avgCol, newCols2);
 				pClone.replaceAvgWithSumAndCount(old2News);
 				parent.replaceAvgWithSumAndCount(old2News);
@@ -1855,7 +1851,7 @@ public final class Phase3
 			colSuffix = oldSuffix;
 			oldCols = new ArrayList(pClone.getOutputCols());
 			newCols = new ArrayList(pClone.getInputCols());
-			final HashMap<String, String> old2New2 = new HashMap<String, String>();
+			final Map<String, String> old2New2 = new HashMap<String, String>();
 			int counter = 10;
 			int i = 0;
 			for (final String col : oldCols)
@@ -1956,8 +1952,8 @@ public final class Phase3
 		{
 			if (containsNoSend(receive.parent().children().get(0)) && containsNoSend(receive.parent().children().get(1)))
 			{
-				final ArrayList<TableScanOperator> left = getTableOperators(receive.parent().children().get(0));
-				final ArrayList<TableScanOperator> right = getTableOperators(receive.parent().children().get(1));
+				final List<TableScanOperator> left = getTableOperators(receive.parent().children().get(0));
+				final List<TableScanOperator> right = getTableOperators(receive.parent().children().get(1));
 				final int node = left.get(0).getNode();
 				for (final TableScanOperator table : left)
 				{
@@ -2016,7 +2012,7 @@ public final class Phase3
 				else
 				{
 					leftTree = new UnionOperator(false, meta);
-					for (final Operator child : (ArrayList<Operator>)receive.children().clone())
+					for (final Operator child : new ArrayList<>(receive.children()))
 					{
 						if (child.children().size() == 0)
 						{
@@ -2050,15 +2046,15 @@ public final class Phase3
 				return false;
 			}
 
-			final ArrayList<String> lefts = parent.getJoinForChild(parent.children().get(0));
-			final ArrayList<String> rights = parent.getJoinForChild(parent.children().get(1));
+			final List<String> lefts = parent.getJoinForChild(parent.children().get(0));
+			final List<String> rights = parent.getJoinForChild(parent.children().get(1));
 
 			if (lefts == null || rights == null)
 			{
 				return false;
 			}
 			int i = 0;
-			final HashSet<String> tables = new HashSet<String>();
+			final Set<String> tables = new HashSet<String>();
 			while (i < lefts.size())
 			{
 				String temp = meta.getTableForCol(lefts.get(i), parent);
@@ -2081,7 +2077,7 @@ public final class Phase3
 				return false;
 			}
 
-			final ArrayList<PartitionMetaData> pmetas = new ArrayList<PartitionMetaData>(tables.size());
+			final List<PartitionMetaData> pmetas = new ArrayList<PartitionMetaData>(tables.size());
 			for (String table : tables)
 			{
 				final String schema = table.substring(0, table.indexOf('.'));
@@ -2089,8 +2085,8 @@ public final class Phase3
 				pmetas.add(meta.getPartMeta(schema, table, tx));
 			}
 
-			final ArrayList<ArrayList<String>> lhash = getCurrentHash(parent.children().get(0));
-			final ArrayList<ArrayList<String>> rhash = getCurrentHash(parent.children().get(1));
+			final List<List<String>> lhash = getCurrentHash(parent.children().get(0));
+			final List<List<String>> rhash = getCurrentHash(parent.children().get(1));
 
 			if (pmetas.get(0).noNodeGroupSet() && pmetas.get(1).noNodeGroupSet())
 			{
@@ -2128,8 +2124,8 @@ public final class Phase3
 		{
 			if (containsNoSend(receive.parent().children().get(0)) && containsNoSend(receive.parent().children().get(1)))
 			{
-				final ArrayList<TableScanOperator> left = getTableOperators(receive.parent().children().get(0));
-				final ArrayList<TableScanOperator> right = getTableOperators(receive.parent().children().get(1));
+				final List<TableScanOperator> left = getTableOperators(receive.parent().children().get(0));
+				final List<TableScanOperator> right = getTableOperators(receive.parent().children().get(1));
 				final int node = left.get(0).getNode();
 				for (final TableScanOperator table : left)
 				{
@@ -2189,7 +2185,7 @@ public final class Phase3
 				else
 				{
 					leftTree = new UnionOperator(false, meta);
-					for (final Operator child : (ArrayList<Operator>)receive.children().clone())
+					for (final Operator child : new ArrayList<>(receive.children()))
 					{
 						if (child.children().size() == 0)
 						{
@@ -2231,8 +2227,8 @@ public final class Phase3
 			// HRDBMSWorker.logger.debug("Both are any");
 			if (containsNoSend(receive.parent().children().get(0)) && containsNoSend(receive.parent().children().get(1)))
 			{
-				final ArrayList<TableScanOperator> left = getTableOperators(receive.parent().children().get(0));
-				final ArrayList<TableScanOperator> right = getTableOperators(receive.parent().children().get(1));
+				final List<TableScanOperator> left = getTableOperators(receive.parent().children().get(0));
+				final List<TableScanOperator> right = getTableOperators(receive.parent().children().get(1));
 				final int node = left.get(0).getNode();
 				for (final TableScanOperator table : left)
 				{
@@ -2297,7 +2293,7 @@ public final class Phase3
 				else
 				{
 					leftTree = new UnionOperator(false, meta);
-					for (final Operator child : (ArrayList<Operator>)receive.children().clone())
+					for (final Operator child : new ArrayList<>(receive.children()))
 					{
 						if (child.children().size() == 0)
 						{
@@ -2329,10 +2325,10 @@ public final class Phase3
 				// but at least 1 of them does");
 				return false;
 			}
-			final ArrayList<String> lefts = parent.getLefts();
-			final ArrayList<String> rights = parent.getRights();
+			final List<String> lefts = parent.getLefts();
+			final List<String> rights = parent.getRights();
 			int i = 0;
-			final HashSet<String> tables = new HashSet<String>();
+			final Set<String> tables = new HashSet<String>();
 			while (i < lefts.size())
 			{
 				String temp = meta.getTableForCol(lefts.get(i), parent);
@@ -2362,7 +2358,7 @@ public final class Phase3
 				return false;
 			}
 
-			final ArrayList<PartitionMetaData> pmetas = new ArrayList<PartitionMetaData>(tables.size());
+			final List<PartitionMetaData> pmetas = new ArrayList<PartitionMetaData>(tables.size());
 			for (String table : tables)
 			{
 				final String schema = table.substring(0, table.indexOf('.'));
@@ -2370,8 +2366,8 @@ public final class Phase3
 				pmetas.add(meta.getPartMeta(schema, table, tx));
 			}
 
-			final ArrayList<ArrayList<String>> lhash = getCurrentHash(parent.children().get(0));
-			final ArrayList<ArrayList<String>> rhash = getCurrentHash(parent.children().get(1));
+			final List<List<String>> lhash = getCurrentHash(parent.children().get(0));
+			final List<List<String>> rhash = getCurrentHash(parent.children().get(1));
 
 			if (pmetas.get(0).noNodeGroupSet() && pmetas.get(1).noNodeGroupSet())
 			{
@@ -2412,9 +2408,9 @@ public final class Phase3
 		}
 		final SortOperator parent = (SortOperator)receive.parent();
 		final Operator grandParent = parent.parent();
-		final ArrayList<Operator> children = (ArrayList<Operator>)receive.children().clone();
-		final HashMap<Operator, Operator> send2Child = new HashMap<Operator, Operator>();
-		final HashMap<Operator, CNFFilter> send2CNF = new HashMap<Operator, CNFFilter>();
+		final List<Operator> children = new ArrayList<>(receive.children());
+		final Map<Operator, Operator> send2Child = new HashMap<Operator, Operator>();
+		final Map<Operator, CNFFilter> send2CNF = new HashMap<Operator, CNFFilter>();
 		for (final Operator child : children)
 		{
 			send2Child.put(child, child.children().get(0));
@@ -2431,7 +2427,7 @@ public final class Phase3
 		}
 		parent.removeChild(receive);
 		grandParent.removeChild(parent);
-		receive = new NetworkReceiveAndMergeOperator((ArrayList<String>)parent.getKeys().clone(), (ArrayList<Boolean>)parent.getOrders().clone(), meta);
+		receive = new NetworkReceiveAndMergeOperator(new ArrayList<>(parent.getKeys()), new ArrayList<>(parent.getOrders()), meta);
 
 		try
 		{
@@ -2502,7 +2498,7 @@ public final class Phase3
 			return true;
 		}
 
-		final ArrayList<TableScanOperator> tables = new ArrayList<TableScanOperator>();
+		final List<TableScanOperator> tables = new ArrayList<TableScanOperator>();
 		for (final Operator child : receive.parent().children())
 		{
 			tables.addAll(getTableOperators(child));
@@ -2559,7 +2555,7 @@ public final class Phase3
 				numPerMiddle++;
 			}
 
-			final ArrayList<Operator> sends = (ArrayList<Operator>)receive.children().clone();
+			final List<Operator> sends = new ArrayList<>(receive.children());
 			for (final Operator send : sends)
 			{
 				receive.removeChild(send);
@@ -2576,7 +2572,7 @@ public final class Phase3
 			}
 
 			int i = 0;
-			final ArrayList<Integer> notUsed = new ArrayList<Integer>();
+			final List<Integer> notUsed = new ArrayList<Integer>();
 			while (i < MetaData.numWorkerNodes)
 			{
 				notUsed.add(i++);
@@ -2654,8 +2650,8 @@ public final class Phase3
 		// Driver.printTree(0, root);
 		// System.out.println("makeLocal()");
 		boolean doAdd = false;
-		final ArrayList<Operator> inserts = new ArrayList<Operator>();
-		final ArrayList<Operator> finals = new ArrayList<Operator>();
+		final List<Operator> inserts = new ArrayList<Operator>();
+		final List<Operator> finals = new ArrayList<Operator>();
 		Operator insert = tree1;
 		while (true)
 		{
@@ -2980,7 +2976,7 @@ public final class Phase3
 		}
 		else
 		{
-			for (final Operator o : (ArrayList<Operator>)op.children().clone())
+			for (final Operator o : new ArrayList<>(op.children()))
 			{
 				pruneTree(o, node);
 			}
@@ -2999,9 +2995,9 @@ public final class Phase3
 			HRDBMSWorker.logger.error("Isolated tree");
 			throw e;
 		}
-		final ArrayList<Operator> children = receive.children();
-		final HashMap<Operator, Operator> send2Child = new HashMap<Operator, Operator>();
-		final HashMap<Operator, CNFFilter> send2CNF = new HashMap<Operator, CNFFilter>();
+		final List<Operator> children = receive.children();
+		final Map<Operator, Operator> send2Child = new HashMap<Operator, Operator>();
+		final Map<Operator, CNFFilter> send2CNF = new HashMap<Operator, CNFFilter>();
 		for (final Operator child : children)
 		{
 			send2Child.put(child, child.children().get(0));
@@ -3076,11 +3072,11 @@ public final class Phase3
 	private void pushUpReceives() throws Exception
 	{
 		boolean workToDo = true;
-		final ArrayList<NetworkReceiveOperator> completed = new ArrayList<NetworkReceiveOperator>();
+		final List<NetworkReceiveOperator> completed = new ArrayList<NetworkReceiveOperator>();
 		while (workToDo)
 		{
 			workToDo = false;
-			final ArrayList<NetworkReceiveOperator> receives = getReceives(root);
+			final List<NetworkReceiveOperator> receives = getReceives(root);
 			for (final NetworkReceiveOperator receive : receives)
 			{
 				while (true)
@@ -3340,7 +3336,7 @@ public final class Phase3
 		}
 		else
 		{
-			for (final Operator o : (ArrayList<Operator>)op.children().clone())
+			for (final Operator o : new ArrayList<>(op.children()))
 			{
 				removeLocalSendReceive(o);
 			}

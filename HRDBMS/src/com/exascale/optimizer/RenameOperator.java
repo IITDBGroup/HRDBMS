@@ -4,11 +4,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
@@ -34,20 +30,20 @@ public final class RenameOperator implements Operator, Serializable
 	}
 	private Operator child;
 	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
-	private HashMap<String, String> old2New = new HashMap<String, String>();
+	private Map<String, String> cols2Types;
+	private Map<String, Integer> cols2Pos;
+	private Map<Integer, String> pos2Col;
+	private Map<String, String> old2New = new HashMap<String, String>();
 	private transient final MetaData meta;
-	private ArrayList<String> oldVals;
+	private List<String> oldVals;
 
-	private ArrayList<String> newVals;
+	private List<String> newVals;
 
 	private int node;
 	private transient AtomicLong received;
 	private transient volatile boolean demReceived;
 
-	public RenameOperator(final ArrayList<String> oldVals, final ArrayList<String> newVals, final MetaData meta) throws Exception
+	public RenameOperator(final List<String> oldVals, final List<String> newVals, final MetaData meta) throws Exception
 	{
 		this.oldVals = oldVals;
 		this.newVals = newVals;
@@ -71,7 +67,7 @@ public final class RenameOperator implements Operator, Serializable
 		received = new AtomicLong(0);
 	}
 
-	public static RenameOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static RenameOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final RenameOperator value = (RenameOperator)unsafe.allocateInstance(RenameOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -148,9 +144,9 @@ public final class RenameOperator implements Operator, Serializable
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
-		final ArrayList<Operator> retval = new ArrayList<Operator>(1);
+		final List<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
@@ -160,7 +156,7 @@ public final class RenameOperator implements Operator, Serializable
 	{
 		try
 		{
-			final RenameOperator retval = new RenameOperator((ArrayList<String>)oldVals.clone(), (ArrayList<String>)newVals.clone(), meta);
+			final RenameOperator retval = new RenameOperator(new ArrayList<>(oldVals), new ArrayList<>(newVals), meta);
 			retval.node = node;
 			return retval;
 		}
@@ -189,20 +185,20 @@ public final class RenameOperator implements Operator, Serializable
 	}
 
 	@Override
-	public HashMap<String, Integer> getCols2Pos()
+	public Map<String, Integer> getCols2Pos()
 	{
 		return cols2Pos;
 	}
 
 	@Override
-	public HashMap<String, String> getCols2Types()
+	public Map<String, String> getCols2Types()
 	{
 		return cols2Types;
 	}
 
-	public HashMap<String, String> getIndexRenames() throws Exception
+	public Map<String, String> getIndexRenames() throws Exception
 	{
-		final HashMap<String, String> retval = new HashMap<String, String>();
+		final Map<String, String> retval = new HashMap<String, String>();
 		int i = 0;
 		try
 		{
@@ -234,19 +230,19 @@ public final class RenameOperator implements Operator, Serializable
 	}
 
 	@Override
-	public TreeMap<Integer, String> getPos2Col()
+	public Map<Integer, String> getPos2Col()
 	{
 		return pos2Col;
 	}
 
 	@Override
-	public ArrayList<String> getReferences()
+	public List<String> getReferences()
 	{
-		final ArrayList<String> retval = new ArrayList<String>(old2New.keySet());
+		final List<String> retval = new ArrayList<String>(old2New.keySet());
 		return retval;
 	}
 
-	public HashMap<String, String> getRenameMap()
+	public Map<String, String> getRenameMap()
 	{
 		return old2New;
 	}
@@ -335,11 +331,11 @@ public final class RenameOperator implements Operator, Serializable
 		child.reset();
 	}
 
-	public void reverseUpdateReferences(final ArrayList<String> references)
+	public void reverseUpdateReferences(final List<String> references)
 	{
 		for (final Map.Entry entry : old2New.entrySet())
 		{
-			final ArrayList temp = new ArrayList(1);
+			final List temp = new ArrayList(1);
 			temp.add(entry.getValue());
 			if (references.removeAll(temp))
 			{
@@ -436,11 +432,11 @@ public final class RenameOperator implements Operator, Serializable
 		return "RenameOperator: " + old2New;
 	}
 
-	public void updateReferences(final ArrayList<String> references)
+	public void updateReferences(final List<String> references)
 	{
 		for (final Map.Entry entry : old2New.entrySet())
 		{
-			final ArrayList temp = new ArrayList(1);
+			final List temp = new ArrayList(1);
 			temp.add(entry.getKey());
 			if (references.removeAll(temp))
 			{

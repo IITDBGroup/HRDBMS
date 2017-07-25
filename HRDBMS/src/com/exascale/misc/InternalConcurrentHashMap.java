@@ -3,16 +3,7 @@ package com.exascale.misc;
 import java.lang.reflect.Field;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.Hashtable;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Set;
-import java.util.Spliterator;
+import java.util.*;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
@@ -1751,7 +1742,7 @@ public class InternalConcurrentHashMap
 			final Traverser it = new Traverser(t, t.length, 0, t.length);
 			for (Node p; (p = it.advance()) != null;)
 			{
-				ArrayList<Object> v;
+				List<Object> v;
 				if ((v = p.val) == value || (v != null && value.equals(v)))
 				{
 					return true;
@@ -1831,7 +1822,7 @@ public class InternalConcurrentHashMap
 			final Traverser it = new Traverser(t, f, 0, f);
 			for (Node p; (p = it.advance()) != null;)
 			{
-				final ArrayList<Object> val = p.val;
+				final List<Object> val = p.val;
 				final Object v = m.get(p.key);
 				if (v == null || (v != val && !v.equals(val)))
 				{
@@ -1843,7 +1834,7 @@ public class InternalConcurrentHashMap
 			{
 				final MapEntry e = iter.next();
 				long mk;
-				ArrayList<Object> mv, v;
+				List<Object> mv, v;
 				if ((mk = e.getKey()) == -1 || (mv = e.getValue()) == null || (v = get(mk)) == null || (mv != v && !mv.equals(v)))
 				{
 					return false;
@@ -1917,7 +1908,7 @@ public class InternalConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key is null
 	 */
-	public ArrayList<Object> get(final long key)
+	public List<Object> get(final long key)
 	{
 		// try
 		// {
@@ -1968,9 +1959,9 @@ public class InternalConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key is null
 	 */
-	public ArrayList<Object> getOrDefault(final long key, final ArrayList<Object> defaultValue)
+	public List<Object> getOrDefault(final long key, final List<Object> defaultValue)
 	{
-		ArrayList<Object> v;
+		List<Object> v;
 		return (v = get(key)) == null ? defaultValue : v;
 	}
 
@@ -2259,7 +2250,7 @@ public class InternalConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the mappedValue is null
 	 */
-	public KeySetView keySet(final ArrayList<Object> mappedValue)
+	public KeySetView keySet(final List<Object> mappedValue)
 	{
 		if (mappedValue == null)
 		{
@@ -2313,7 +2304,7 @@ public class InternalConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key or value is null
 	 */
-	public ArrayList<Object> put(final long key, final ArrayList<Object> value)
+	public List<Object> put(final long key, final List<Object> value)
 	{
 		// try
 		// {
@@ -2369,7 +2360,7 @@ public class InternalConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key or value is null
 	 */
-	public ArrayList<Object> putIfAbsent(final long key, final ArrayList<Object> value)
+	public List<Object> putIfAbsent(final long key, final List<Object> value)
 	{
 		// try
 		// {
@@ -2395,7 +2386,7 @@ public class InternalConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key is null
 	 */
-	public ArrayList<Object> remove(final long key)
+	public List<Object> remove(final long key)
 	{
 		// try
 		// {
@@ -2414,7 +2405,7 @@ public class InternalConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key is null
 	 */
-	public boolean remove(final long key, final ArrayList<Object> value)
+	public boolean remove(final long key, final List<Object> value)
 	{
 		if (key == -1)
 		{
@@ -2433,7 +2424,7 @@ public class InternalConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key or value is null
 	 */
-	public ArrayList<Object> replace(final long key, final ArrayList<Object> value)
+	public List<Object> replace(final long key, final List<Object> value)
 	{
 		// try
 		// {
@@ -2456,7 +2447,7 @@ public class InternalConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if any of the arguments are null
 	 */
-	public boolean replace(final long key, final ArrayList<Object> oldValue, final ArrayList<Object> newValue)
+	public boolean replace(final long key, final List<Object> oldValue, final List<Object> newValue)
 	{
 		if (key == -1 || oldValue == null || newValue == null)
 		{
@@ -2506,7 +2497,7 @@ public class InternalConcurrentHashMap
 			for (;;)
 			{
 				final long k = p.key;
-				final ArrayList<Object> v = p.val;
+				final List<Object> v = p.val;
 				sb.append(k);
 				sb.append('=');
 				sb.append(v);
@@ -2886,7 +2877,7 @@ public class InternalConcurrentHashMap
 							{
 								final int ph = p.hash;
 								final long pk = p.key;
-								final ArrayList<Object> pv = p.val;
+								final List<Object> pv = p.val;
 								if ((ph & n) == 0)
 								{
 									ln = new Node(ph, pk, pv, ln);
@@ -3160,7 +3151,7 @@ public class InternalConcurrentHashMap
 	}
 
 	/** Implementation for put and putIfAbsent */
-	final ArrayList<Object> putVal(final long key, final ArrayList<Object> value, final boolean onlyIfAbsent)
+	final List<Object> putVal(final long key, final List<Object> value, final boolean onlyIfAbsent)
 	{
 		if (key == -1 || value == null)
 		{
@@ -3189,7 +3180,7 @@ public class InternalConcurrentHashMap
 			}
 			else
 			{
-				ArrayList<Object> oldVal = null;
+				List<Object> oldVal = null;
 				synchronized (f)
 				{
 					if (tabAt(tab, i) == f)
@@ -3254,7 +3245,7 @@ public class InternalConcurrentHashMap
 	 * value with v, conditional upon match of cv if non-null. If resulting
 	 * value is null, delete.
 	 */
-	final ArrayList<Object> replaceNode(final long key, final ArrayList<Object> value, final Object cv)
+	final List<Object> replaceNode(final long key, final List<Object> value, final Object cv)
 	{
 		final int hash = spread((int)(key ^ (key >>> 32)));
 		for (Node[] tab = table;;)
@@ -3271,7 +3262,7 @@ public class InternalConcurrentHashMap
 			}
 			else
 			{
-				ArrayList<Object> oldVal = null;
+				List<Object> oldVal = null;
 				boolean validated = false;
 				synchronized (f)
 				{
@@ -3284,7 +3275,7 @@ public class InternalConcurrentHashMap
 							{
 								if (e.hash == hash && ((e.key) == key))
 								{
-									final ArrayList<Object> ev = e.val;
+									final List<Object> ev = e.val;
 									if (cv == null || cv == ev || (ev != null && cv.equals(ev)))
 									{
 										oldVal = ev;
@@ -3317,7 +3308,7 @@ public class InternalConcurrentHashMap
 							TreeNode r, p;
 							if ((r = t.root) != null && (p = r.findTreeNode(hash, key, null)) != null)
 							{
-								final ArrayList<Object> pv = p.val;
+								final List<Object> pv = p.val;
 								if (cv == null || cv == pv || (pv != null && cv.equals(pv)))
 								{
 									oldVal = pv;
@@ -3386,7 +3377,7 @@ public class InternalConcurrentHashMap
 				throw new NoSuchElementException();
 			}
 			final long k = p.key;
-			final ArrayList<Object> v = p.val;
+			final List<Object> v = p.val;
 			lastReturned = p;
 			advance();
 			return new MapEntry(k, v, map);
@@ -3413,7 +3404,7 @@ public class InternalConcurrentHashMap
 		public boolean contains(final Object o)
 		{
 			long k;
-			ArrayList<Object> v, r;
+			List<Object> v, r;
 			Node e;
 			return ((o instanceof Node) && (k = (e = (Node)o).getKey()) != -1 && (r = map.get(k)) != null && (v = e.getValue()) != null && (v == r || v.equals(r)));
 		}
@@ -3465,7 +3456,7 @@ public class InternalConcurrentHashMap
 		public boolean remove(final Object o)
 		{
 			long k;
-			ArrayList<Object> v;
+			List<Object> v;
 			Node e;
 			return ((o instanceof Node) && (k = (e = (Node)o).getKey()) != -1 && (v = e.getValue()) != null && map.remove(k, v));
 		}
@@ -3604,9 +3595,9 @@ public class InternalConcurrentHashMap
 	 */
 	public static class KeySetView extends CollectionView
 	{
-		private final ArrayList<Object> value;
+		private final List<Object> value;
 
-		KeySetView(final InternalConcurrentHashMap map, final ArrayList<Object> value)
+		KeySetView(final InternalConcurrentHashMap map, final List<Object> value)
 		{ // non-public
 			super(map);
 			this.value = value;
@@ -3626,7 +3617,7 @@ public class InternalConcurrentHashMap
 		 */
 		public boolean add(final long e)
 		{
-			ArrayList<Object> v;
+			List<Object> v;
 			if ((v = value) == null)
 			{
 				throw new UnsupportedOperationException();
@@ -3652,7 +3643,7 @@ public class InternalConcurrentHashMap
 		 * @return the default mapped value for additions, or {@code null} if
 		 *         not supported
 		 */
-		public ArrayList<Object> getMappedValue()
+		public List<Object> getMappedValue()
 		{
 			return value;
 		}
@@ -4476,10 +4467,10 @@ public class InternalConcurrentHashMap
 	static public final class MapEntry
 	{
 		final long key; // non-null
-		ArrayList<Object> val; // non-null
+		List<Object> val; // non-null
 		final InternalConcurrentHashMap map;
 
-		MapEntry(final long key, final ArrayList<Object> val, final InternalConcurrentHashMap map)
+		MapEntry(final long key, final List<Object> val, final InternalConcurrentHashMap map)
 		{
 			this.key = key;
 			this.val = val;
@@ -4490,7 +4481,7 @@ public class InternalConcurrentHashMap
 		public boolean equals(final Object o)
 		{
 			long k;
-			ArrayList<Object> v;
+			List<Object> v;
 			if (o instanceof Node)
 			{
 				Node e;
@@ -4512,7 +4503,7 @@ public class InternalConcurrentHashMap
 			return key;
 		}
 
-		public ArrayList<Object> getValue()
+		public List<Object> getValue()
 		{
 			return val;
 		}
@@ -4531,13 +4522,13 @@ public class InternalConcurrentHashMap
 		 * which case the put will re-establish). We do not and cannot guarantee
 		 * more.
 		 */
-		public ArrayList<Object> setValue(final ArrayList<Object> value)
+		public List<Object> setValue(final List<Object> value)
 		{
 			if (value == null)
 			{
 				throw new NullPointerException();
 			}
-			final ArrayList<Object> v = val;
+			final List<Object> v = val;
 			val = value;
 			map.put(key, value);
 			return v;
@@ -4558,7 +4549,7 @@ public class InternalConcurrentHashMap
 		}
 
 		@Override
-		public final ArrayList<Object> next()
+		public final List<Object> next()
 		{
 			// try
 			// {
@@ -4567,7 +4558,7 @@ public class InternalConcurrentHashMap
 			{
 				throw new NoSuchElementException();
 			}
-			final ArrayList<Object> v = p.val;
+			final List<Object> v = p.val;
 			lastReturned = p;
 			advance();
 			return v;
@@ -4580,7 +4571,7 @@ public class InternalConcurrentHashMap
 		}
 
 		@Override
-		public final ArrayList<Object> nextElement()
+		public final List<Object> nextElement()
 		{
 			return next();
 		}
@@ -4598,7 +4589,7 @@ public class InternalConcurrentHashMap
 			super(map);
 		}
 
-		public final boolean add(final ArrayList<Object> e)
+		public final boolean add(final List<Object> e)
 		{
 			throw new UnsupportedOperationException();
 		}
@@ -4882,10 +4873,10 @@ public class InternalConcurrentHashMap
 	{
 		final int hash;
 		final long key;
-		volatile ArrayList<Object> val;
+		volatile List<Object> val;
 		volatile Node next;
 
-		Node(final int hash, final long key, final ArrayList<Object> val, final Node next)
+		Node(final int hash, final long key, final List<Object> val, final Node next)
 		{
 			this.hash = hash;
 			this.key = key;
@@ -4897,7 +4888,7 @@ public class InternalConcurrentHashMap
 		public final boolean equals(final Object o)
 		{
 			long k;
-			ArrayList<Object> v, u;
+			List<Object> v, u;
 			if (o instanceof Node)
 			{
 				Node e;
@@ -4919,7 +4910,7 @@ public class InternalConcurrentHashMap
 			return key;
 		}
 
-		public final ArrayList<Object> getValue()
+		public final List<Object> getValue()
 		{
 			return val;
 		}
@@ -4930,7 +4921,7 @@ public class InternalConcurrentHashMap
 			return ((int)(key ^ (key >>> 32))) ^ val.hashCode();
 		}
 
-		public final ArrayList<Object> setValue(final ArrayList<Object> value)
+		public final List<Object> setValue(final List<Object> value)
 		{
 			throw new UnsupportedOperationException();
 		}
@@ -5645,7 +5636,7 @@ public class InternalConcurrentHashMap
 		 *
 		 * @return null if added
 		 */
-		final TreeNode putTreeVal(final int h, final long k, final ArrayList<Object> v)
+		final TreeNode putTreeVal(final int h, final long k, final List<Object> v)
 		{
 			Class<?> kc = null;
 			boolean searched = false;
@@ -5902,7 +5893,7 @@ public class InternalConcurrentHashMap
 		TreeNode prev; // needed to unlink next upon deletion
 		boolean red;
 
-		TreeNode(final int hash, final long key, final ArrayList<Object> val, final Node next, final TreeNode parent)
+		TreeNode(final int hash, final long key, final List<Object> val, final Node next, final TreeNode parent)
 		{
 			super(hash, key, val, next);
 			this.parent = parent;

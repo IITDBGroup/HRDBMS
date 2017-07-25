@@ -10,10 +10,7 @@ import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
@@ -57,7 +54,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 		this.meta = meta;
 	}
 
-	public static CountDistinctOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static CountDistinctOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final CountDistinctOperator value = (CountDistinctOperator)unsafe.allocateInstance(CountDistinctOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -75,7 +72,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 	}
 
 	@Override
-	public AggregateResultThread getHashThread(final HashMap<String, Integer> cols2Pos)
+	public AggregateResultThread getHashThread(final Map<String, Integer> cols2Pos)
 	{
 		return new CountDistinctHashThread(cols2Pos);
 	}
@@ -87,7 +84,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 	}
 
 	@Override
-	public AggregateResultThread newProcessingThread(final ArrayList<ArrayList<Object>> rows, final HashMap<String, Integer> cols2Pos)
+	public AggregateResultThread newProcessingThread(final List<List<Object>> rows, final Map<String, Integer> cols2Pos)
 	{
 		return new CountDistinctThread(rows, cols2Pos);
 	}
@@ -149,21 +146,21 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 	{
 		// private final DiskBackedALOHashMap<AtomicLong> results = new
 		// DiskBackedALOHashMap<AtomicLong>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
-		private ConcurrentHashMap<ArrayList<Object>, AtomicLong> results = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS <= Integer.MAX_VALUE ? (int)NUM_GROUPS : Integer.MAX_VALUE, 0.75f, 6 * ResourceManager.cpus);
+		private ConcurrentHashMap<List<Object>, AtomicLong> results = new ConcurrentHashMap<>(NUM_GROUPS <= Integer.MAX_VALUE ? (int)NUM_GROUPS : Integer.MAX_VALUE, 0.75f, 6 * ResourceManager.cpus);
 		private ConcurrentHashMap<ByteBuffer, ByteBuffer> hashSet;
 		private final int pos;
 		private boolean inMem = true;
-		private ArrayList<String> externalFiles;
-		private ArrayList<ArrayList<byte[]>> bins;
+		private List<String> externalFiles;
+		private List<List<byte[]>> bins;
 		final int numBins = 257;
 		private int size;
-		private HashMap<Integer, FlushBinThread> threads;
-		private ArrayList<FileChannel> channels;
+		private Map<Integer, FlushBinThread> threads;
+		private List<FileChannel> channels;
 		private byte[] types;
 		private volatile boolean done = false;
-		private ArrayList<RandomAccessFile> files1;
+		private List<RandomAccessFile> files1;
 
-		public CountDistinctHashThread(final HashMap<String, Integer> cols2Pos)
+		public CountDistinctHashThread(final Map<String, Integer> cols2Pos)
 		{
 			pos = cols2Pos.get(input);
 			if (ResourceManager.criticalMem())
@@ -184,11 +181,11 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 				try
 				{
 					externalFiles = new ArrayList<String>(numBins);
-					final ArrayList<String> fns1 = createFNs(numBins, 0);
+					final List<String> fns1 = createFNs(numBins, 0);
 					externalFiles.addAll(fns1);
 					files1 = createFiles(fns1);
 					channels = createChannels(files1);
-					bins = new ArrayList<ArrayList<byte[]>>();
+					bins = new ArrayList<List<byte[]>>();
 					threads = new HashMap<Integer, FlushBinThread>();
 					size = (int)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor")) / (numBins >> 3));
 					int i = 0;
@@ -213,7 +210,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 		}
 
 		@Override
-		public Object getResult(final ArrayList<Object> keys)
+		public Object getResult(final List<Object> keys)
 		{
 			if (inMem)
 			{
@@ -229,10 +226,10 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 						int i = 0;
 						int z = 0;
 						final int limit = bins.size();
-						// for (ArrayList<byte[]> bin : bins)
+						// for (List<byte[]> bin : bins)
 						while (z < limit)
 						{
-							final ArrayList<byte[]> bin = bins.get(z++);
+							final List<byte[]> bin = bins.get(z++);
 							if (bin.size() > 0)
 							{
 								final FlushBinThread thread = new FlushBinThread(bin, types, channels.get(i));
@@ -285,7 +282,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 						thread5.start();
 						final HashDataThread thread6 = new HashDataThread(channels.get(1), types, results);
 						thread6.start();
-						final ArrayList<HashDataThread> rightThreads = new ArrayList<HashDataThread>();
+						final List<HashDataThread> rightThreads = new ArrayList<HashDataThread>();
 						rightThreads.add(thread5);
 						rightThreads.add(thread6);
 
@@ -366,9 +363,9 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 
 		// @Parallel
 		@Override
-		public final void put(final ArrayList<Object> row, final ArrayList<Object> group) throws Exception
+		public final void put(final List<Object> row, final List<Object> group) throws Exception
 		{
-			final ArrayList<Object> consolidated = new ArrayList<Object>();
+			final List<Object> consolidated = new ArrayList<Object>();
 			consolidated.addAll(group);
 			consolidated.add(row.get(pos));
 			if (inMem)
@@ -470,8 +467,8 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 
 				synchronized (bins)
 				{
-					final ArrayList<byte[]> bin = bins.get(x);
-					// writeToHashTable(hash, (ArrayList<Object>)o);
+					final List<byte[]> bin = bins.get(x);
+					// writeToHashTable(hash, (List<Object>)o);
 					bin.add(data);
 
 					if (bin.size() == size)
@@ -494,9 +491,9 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 			}
 		}
 
-		private ArrayList<FileChannel> createChannels(final ArrayList<RandomAccessFile> files)
+		private List<FileChannel> createChannels(final List<RandomAccessFile> files)
 		{
-			final ArrayList<FileChannel> retval = new ArrayList<FileChannel>(files.size());
+			final List<FileChannel> retval = new ArrayList<FileChannel>(files.size());
 			for (final RandomAccessFile raf : files)
 			{
 				retval.add(raf.getChannel());
@@ -505,9 +502,9 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 			return retval;
 		}
 
-		private ArrayList<RandomAccessFile> createFiles(final ArrayList<String> fns) throws Exception
+		private List<RandomAccessFile> createFiles(final List<String> fns) throws Exception
 		{
-			final ArrayList<RandomAccessFile> retval = new ArrayList<RandomAccessFile>(fns.size());
+			final List<RandomAccessFile> retval = new ArrayList<RandomAccessFile>(fns.size());
 			for (final String fn : fns)
 			{
 				while (true)
@@ -535,9 +532,9 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 			return retval;
 		}
 
-		private ArrayList<String> createFNs(final int num, final int extra)
+		private List<String> createFNs(final int num, final int extra)
 		{
-			final ArrayList<String> retval = new ArrayList<String>(num);
+			final List<String> retval = new ArrayList<String>(num);
 			int i = 0;
 			while (i < num)
 			{
@@ -556,8 +553,8 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 
 		private final byte[] toBytes(final Object v, final byte[] types) throws Exception
 		{
-			final ArrayList<byte[]> bytes = new ArrayList<byte[]>();
-			final ArrayList<Object> val = (ArrayList<Object>)v;
+			final List<byte[]> bytes = new ArrayList<byte[]>();
+			final List<Object> val = (List<Object>)v;
 
 			int size = 4;
 			int i = 0;
@@ -631,12 +628,12 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 
 	private final class CountDistinctThread extends AggregateResultThread
 	{
-		private final ArrayList<ArrayList<Object>> rows;
+		private final List<List<Object>> rows;
 		private long result;
 		private final int pos;
-		private final HashSet<Object> distinct = new HashSet<Object>();
+		private final Set<Object> distinct = new HashSet<Object>();
 
-		public CountDistinctThread(final ArrayList<ArrayList<Object>> rows, final HashMap<String, Integer> cols2Pos)
+		public CountDistinctThread(final List<List<Object>> rows, final Map<String, Integer> cols2Pos)
 		{
 			this.rows = rows;
 			pos = cols2Pos.get(input);
@@ -662,7 +659,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 			while (z < limit)
 			{
 				final Object o = rows.get(z++);
-				final ArrayList<Object> row = (ArrayList<Object>)o;
+				final List<Object> row = (List<Object>)o;
 				final Object val = row.get(pos);
 				distinct.add(val);
 			}
@@ -673,12 +670,12 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 
 	private class FlushBinThread extends HRDBMSThread
 	{
-		private final ArrayList<byte[]> bin;
+		private final List<byte[]> bin;
 		private final FileChannel fc;
 		private boolean ok = true;
 		private Exception e;
 
-		public FlushBinThread(final ArrayList<byte[]> bin, final byte[] types, final FileChannel fc)
+		public FlushBinThread(final List<byte[]> bin, final byte[] types, final FileChannel fc)
 		{
 			this.bin = bin;
 			this.fc = fc;
@@ -739,10 +736,10 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 		private boolean ok = true;
 		private Exception e;
 		private final byte[] types;
-		private final ConcurrentHashMap<ArrayList<Object>, AtomicLong> results;
-		private HashMap<ArrayList<Object>, ArrayList<Object>> set = new HashMap<ArrayList<Object>, ArrayList<Object>>();
+		private final ConcurrentHashMap<List<Object>, AtomicLong> results;
+		private Map<List<Object>, List<Object>> set = new HashMap<>();
 
-		public HashDataThread(final FileChannel fc, final byte[] types, final ConcurrentHashMap<ArrayList<Object>, AtomicLong> results)
+		public HashDataThread(final FileChannel fc, final byte[] types, final ConcurrentHashMap<List<Object>, AtomicLong> results)
 		{
 			try
 			{
@@ -785,8 +782,8 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 					final int length = bb1.getInt();
 					final ByteBuffer bb = ByteBuffer.allocate(length);
 					fc.read(bb);
-					final ArrayList<Object> row = (ArrayList<Object>)fromBytes(bb.array(), types);
-					final ArrayList<Object> group = new ArrayList<Object>(row.size() - 1);
+					final List<Object> row = (List<Object>)fromBytes(bb.array(), types);
+					final List<Object> group = new ArrayList<Object>(row.size() - 1);
 					int i = 0;
 					while (i < row.size() - 1)
 					{
@@ -825,7 +822,7 @@ public final class CountDistinctOperator implements AggregateOperator, Serializa
 				return new ArrayList<Object>();
 			}
 
-			final ArrayList<Object> retval = new ArrayList<Object>(numFields);
+			final List<Object> retval = new ArrayList<Object>(numFields);
 			int i = 0;
 			while (i < numFields)
 			{

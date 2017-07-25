@@ -9,10 +9,7 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.Locale;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedOutputStream;
@@ -38,20 +35,20 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 			unsafe = null;
 		}
 	}
-	private ArrayList<String> hashCols;
+	private List<String> hashCols;
 	private int numNodes;
 	private int id;
 	private int starting;
 	private ConcurrentHashMap<Integer, Socket> connections = new ConcurrentHashMap<Integer, Socket>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
 	private transient OutputStream[] outs = null;
-	private ArrayList<Operator> parents = new ArrayList<Operator>();
+	private List<Operator> parents = new ArrayList<Operator>();
 	private boolean error = false;
 
 	private transient String errorText;
 
 	private int connCount = 0;
 
-	public NetworkHashAndSendOperator(final ArrayList<String> hashCols, final long numNodes, final int id, final int starting, final MetaData meta) throws Exception
+	public NetworkHashAndSendOperator(final List<String> hashCols, final long numNodes, final int id, final int starting, final MetaData meta) throws Exception
 	{
 		this.hashCols = hashCols;
 		if (numNodes > MetaData.numWorkerNodes)
@@ -68,7 +65,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		received = new AtomicLong(0);
 	}
 
-	public static NetworkHashAndSendOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static NetworkHashAndSendOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final NetworkHashAndSendOperator value = (NetworkHashAndSendOperator)unsafe.allocateInstance(NetworkHashAndSendOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -108,7 +105,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		{
 			if (key instanceof ArrayList)
 			{
-				final byte[] data = toBytesForHash((ArrayList<Object>)key);
+				final byte[] data = toBytesForHash((List<Object>)key);
 				eHash = MurmurHash.hash64(data, data.length);
 			}
 			else
@@ -121,7 +118,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		return eHash;
 	}
 
-	private static byte[] toBytesForHash(final ArrayList<Object> key)
+	private static byte[] toBytesForHash(final List<Object> key)
 	{
 		final StringBuilder sb = new StringBuilder();
 		for (final Object o : key)
@@ -237,7 +234,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		super.close();
 	}
 
-	public ArrayList<String> getHashCols()
+	public List<String> getHashCols()
 	{
 		return hashCols;
 	}
@@ -279,7 +276,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		return null;
 	}
 
-	public ArrayList<Operator> parents()
+	public List<Operator> parents()
 	{
 		return parents;
 	}
@@ -433,7 +430,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 				{
 					received.getAndIncrement();
 				}
-				final ArrayList<Object> key = new ArrayList<Object>(hashCols.size());
+				final List<Object> key = new ArrayList<Object>(hashCols.size());
 				while (!(o instanceof DataEndMarker))
 				{
 					final byte[] obj;
@@ -462,7 +459,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 						final String col = hashCols.get(z++);
 						int pos = -1;
 						pos = child.getCols2Pos().get(col);
-						key.add(((ArrayList<Object>)o).get(pos));
+						key.add(((List<Object>)o).get(pos));
 					}
 
 					final int hash = (int)(starting + ((0x7FFFFFFFFFFFFFFFL & hash(key)) % numNodes));

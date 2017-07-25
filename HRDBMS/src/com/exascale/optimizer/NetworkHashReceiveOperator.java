@@ -9,6 +9,7 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
@@ -43,7 +44,7 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 		received = new AtomicLong(0);
 	}
 
-	public static NetworkHashReceiveOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static NetworkHashReceiveOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final NetworkHashReceiveOperator value = (NetworkHashReceiveOperator)unsafe.allocateInstance(NetworkHashReceiveOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);

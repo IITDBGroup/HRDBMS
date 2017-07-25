@@ -1,10 +1,7 @@
 package com.exascale.optimizer.externalTable;
 
 import java.io.OutputStream;
-import java.util.IdentityHashMap;
-import java.util.List;
-import java.util.HashMap;
-import java.util.TreeMap;
+import java.util.*;
 
 /** Defines an implementation of a specific type of external table */
 public interface ExternalTableType
@@ -19,9 +16,9 @@ public interface ExternalTableType
 	void reset();
 	void start();
 	void close();
-	void setCols2Types(HashMap<String, String> cols2Types);
-	void setCols2Pos(HashMap<String, Integer> cols2Pos);
-	void setPos2Col(TreeMap<Integer, String> pos2Col);
+	void setCols2Types(Map<String, String> cols2Types);
+	void setCols2Pos(Map<String, Integer> cols2Pos);
+	void setPos2Col(Map<Integer, String> pos2Col);
 	void setName(String name);
 	void setSchema(String schema);
     void serialize(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception;

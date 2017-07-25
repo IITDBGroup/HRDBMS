@@ -4,15 +4,7 @@ import java.io.ObjectStreamField;
 import java.lang.reflect.Field;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Hashtable;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Set;
-import java.util.Spliterator;
+import java.util.*;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
@@ -128,7 +120,7 @@ import java.util.stream.Stream;
  * <li>Mapped reductions that accumulate the results of a given function applied
  * to each element.</li>
  *
- * <li>Reductions to scalar doubles, ArrayList<Object>s, and ints, using a given
+ * <li>Reductions to scalar doubles, List<Object>s, and ints, using a given
  * basis value.</li>
  *
  * </ul>
@@ -156,7 +148,7 @@ import java.util.stream.Stream;
  * quiescent). Conversely, because keys and values in the map are never null,
  * null serves as a reliable atomic indicator of the current lack of any result.
  * To maintain this property, null serves as an implicit basis for all
- * non-scalar reduction operations. For the double, ArrayList<Object>, and int
+ * non-scalar reduction operations. For the double, List<Object>, and int
  * versions, the basis should be one that, when combined with any other value,
  * returns that other value (more formally, it should be the identity element
  * for the reduction). Most common reductions have these properties; for
@@ -1058,11 +1050,11 @@ public class ReverseConcurrentHashMap
 	/*
 	 * @SuppressWarnings("serial") static final class MapReduceKeysToLongTask
 	 * extends BulkTask<Long> { final ToLongFunction<? super K> transformer;
-	 * final LongBinaryOperator reducer; final ArrayList<Object> basis;
+	 * final LongBinaryOperator reducer; final List<Object> basis;
 	 * ArrayList<Object> result; MapReduceKeysToLongTask<K,V> rights, nextRight;
 	 * MapReduceKeysToLongTask (BulkTask<K,V,?> p, int b, int i, int f,
 	 * Node<K,V>[] t, MapReduceKeysToLongTask<K,V> nextRight, ToLongFunction<?
-	 * super K> transformer, ArrayList<Object> basis, LongBinaryOperator
+	 * super K> transformer, List<Object> basis, LongBinaryOperator
 	 * reducer) { super(p, b, i, f, t); this.nextRight = nextRight;
 	 * this.transformer = transformer; this.basis = basis; this.reducer =
 	 * reducer; } public final Long getRawResult() { return result; } public
@@ -1087,11 +1079,11 @@ public class ReverseConcurrentHashMap
 	 * @SuppressWarnings("serial") static final class
 	 * MapReduceValuesToLongTask<K,V> extends BulkTask<K,V,Long> { final
 	 * ToLongFunction<? super V> transformer; final LongBinaryOperator reducer;
-	 * final ArrayList<Object> basis; ArrayList<Object> result;
+	 * final List<Object> basis; ArrayList<Object> result;
 	 * MapReduceValuesToLongTask<K,V> rights, nextRight;
 	 * MapReduceValuesToLongTask (BulkTask<K,V,?> p, int b, int i, int f,
 	 * Node<K,V>[] t, MapReduceValuesToLongTask<K,V> nextRight, ToLongFunction<?
-	 * super V> transformer, ArrayList<Object> basis, LongBinaryOperator
+	 * super V> transformer, List<Object> basis, LongBinaryOperator
 	 * reducer) { super(p, b, i, f, t); this.nextRight = nextRight;
 	 * this.transformer = transformer; this.basis = basis; this.reducer =
 	 * reducer; } public final Long getRawResult() { return result; } public
@@ -1115,11 +1107,11 @@ public class ReverseConcurrentHashMap
 	/*
 	 * @SuppressWarnings("serial") static final class MapReduceEntriesToLongTask
 	 * extends BulkTask<Long> { final ToLongFunction<Map.Entry transformer;
-	 * final LongBinaryOperator reducer; final ArrayList<Object> basis;
+	 * final LongBinaryOperator reducer; final List<Object> basis;
 	 * ArrayList<Object> result; MapReduceEntriesToLongTask rights, nextRight;
 	 * MapReduceEntriesToLongTask (BulkTask<?> p, int b, int i, int f, Node[] t,
 	 * MapReduceEntriesToLongTask nextRight, ToLongFunction<Map.Entry>
-	 * transformer, ArrayList<Object> basis, LongBinaryOperator reducer) {
+	 * transformer, List<Object> basis, LongBinaryOperator reducer) {
 	 * super(p, b, i, f, t); this.nextRight = nextRight; this.transformer =
 	 * transformer; this.basis = basis; this.reducer = reducer; } public final
 	 * Long getRawResult() { return result; } public final void compute() {
@@ -1144,11 +1136,11 @@ public class ReverseConcurrentHashMap
 	 * @SuppressWarnings("serial") static final class
 	 * MapReduceMappingsToLongTask extends BulkTask<K,V,Long> { final
 	 * ToLongBiFunction<? super K, ? super V> transformer; final
-	 * LongBinaryOperator reducer; final ArrayList<Object> basis;
+	 * LongBinaryOperator reducer; final List<Object> basis;
 	 * ArrayList<Object> result; MapReduceMappingsToLongTask<K,V> rights,
 	 * nextRight; MapReduceMappingsToLongTask (BulkTask<K,V,?> p, int b, int i,
 	 * int f, Node<K,V>[] t, MapReduceMappingsToLongTask<K,V> nextRight,
-	 * ToLongBiFunction<? super K, ? super V> transformer, ArrayList<Object>
+	 * ToLongBiFunction<? super K, ? super V> transformer, List<Object>
 	 * basis, LongBinaryOperator reducer) { super(p, b, i, f, t); this.nextRight
 	 * = nextRight; this.transformer = transformer; this.basis = basis;
 	 * this.reducer = reducer; } public final Long getRawResult() { return
@@ -1723,7 +1715,7 @@ public class ReverseConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key is null
 	 */
-	public boolean containsKey(final ArrayList<Object> key)
+	public boolean containsKey(final List<Object> key)
 	{
 		return get(key) != -1;
 	}
@@ -1829,7 +1821,7 @@ public class ReverseConcurrentHashMap
 			while (iter.hasNext())
 			{
 				final MapEntry e = iter.next();
-				ArrayList<Object> mk;
+				List<Object> mk;
 				long mv, v;
 				if ((mk = e.getKey()) == null || (mv = e.getValue()) == -1 || (v = get(mk)) == -1 || (mv != v))
 				{
@@ -1853,14 +1845,14 @@ public class ReverseConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key is null
 	 */
-	public long get(final ArrayList<Object> key)
+	public long get(final List<Object> key)
 	{
 		// try
 		// {
 		Node[] tab;
 		Node e, p;
 		int n, eh;
-		ArrayList<Object> ek;
+		List<Object> ek;
 		final int h = spread(key.hashCode());
 		if ((tab = table) != null && (n = tab.length) > 0 && (e = tabAt(tab, (n - 1) & h)) != null)
 		{
@@ -1920,7 +1912,7 @@ public class ReverseConcurrentHashMap
 	 * @SuppressWarnings("unchecked") V v = (V) s.readObject(); if (k != null &&
 	 * v != null) { p = new Node<K,V>(spread(k.hashCode()), k, v, p); ++size; }
 	 * else break; } if (size == 0L) sizeCtl = 0; else { int n; if (size >=
-	 * (ArrayList<Object>)(MAXIMUM_CAPACITY >>> 1)) n = MAXIMUM_CAPACITY; else {
+	 * (List<Object>)(MAXIMUM_CAPACITY >>> 1)) n = MAXIMUM_CAPACITY; else {
 	 * int sz = (int)size; n = tableSizeFor(sz + (sz >>> 1) + 1); }
 	 *
 	 * @SuppressWarnings("unchecked") Node<K,V>[] tab = (Node<K,V>[])new
@@ -1957,7 +1949,7 @@ public class ReverseConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key is null
 	 */
-	public long getOrDefault(final ArrayList<Object> key, final long defaultValue)
+	public long getOrDefault(final List<Object> key, final long defaultValue)
 	{
 		long v;
 		return (v = get(key)) == -1 ? defaultValue : v;
@@ -2152,7 +2144,7 @@ public class ReverseConcurrentHashMap
 	 * remappingFunction.apply(key, p.val); if (val != null) p.val = val; else {
 	 * delta = -1; if (t.removeTreeNode(p)) setTabAt(tab, i,
 	 * untreeify(t.first)); } } } } } if (binCount != 0) break; } } if (delta !=
-	 * 0) addCount((ArrayList<Object>)delta, binCount); return val; }
+	 * 0) addCount((List<Object>)delta, binCount); return val; }
 	 */
 	/**
 	 * Attempts to compute a mapping for the specified key and its current
@@ -2204,7 +2196,7 @@ public class ReverseConcurrentHashMap
 	 * val); } } else if (p != null) { delta = -1; if (t.removeTreeNode(p))
 	 * setTabAt(tab, i, untreeify(t.first)); } } } } if (binCount != 0) { if
 	 * (binCount >= TREEIFY_THRESHOLD) treeifyBin(tab, i); break; } } } if
-	 * (delta != 0) addCount((ArrayList<Object>)delta, binCount); return val; }
+	 * (delta != 0) addCount((List<Object>)delta, binCount); return val; }
 	 */
 	/**
 	 * If the specified key is not already associated with a (non-null) value,
@@ -2253,7 +2245,7 @@ public class ReverseConcurrentHashMap
 	 * != null) { delta = -1; if (t.removeTreeNode(p)) setTabAt(tab, i,
 	 * untreeify(t.first)); } } } } if (binCount != 0) { if (binCount >=
 	 * TREEIFY_THRESHOLD) treeifyBin(tab, i); break; } } } if (delta != 0)
-	 * addCount((ArrayList<Object>)delta, binCount); return val; }
+	 * addCount((List<Object>)delta, binCount); return val; }
 	 */
 	// Hashtable legacy methods
 
@@ -2313,7 +2305,7 @@ public class ReverseConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key or value is null
 	 */
-	public long put(final ArrayList<Object> key, final long value)
+	public long put(final List<Object> key, final long value)
 	{
 		// try
 		// {
@@ -2369,7 +2361,7 @@ public class ReverseConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key or value is null
 	 */
-	public long putIfAbsent(final ArrayList<Object> key, final long value)
+	public long putIfAbsent(final List<Object> key, final long value)
 	{
 		// try
 		// {
@@ -2395,7 +2387,7 @@ public class ReverseConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key is null
 	 */
-	public long remove(final ArrayList<Object> key)
+	public long remove(final List<Object> key)
 	{
 		// try
 		// {
@@ -2414,7 +2406,7 @@ public class ReverseConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key is null
 	 */
-	public boolean remove(final ArrayList<Object> key, final long value)
+	public boolean remove(final List<Object> key, final long value)
 	{
 		if (key == null)
 		{
@@ -2433,7 +2425,7 @@ public class ReverseConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if the specified key or value is null
 	 */
-	public long replace(final ArrayList<Object> key, final long value)
+	public long replace(final List<Object> key, final long value)
 	{
 		// try
 		// {
@@ -2456,7 +2448,7 @@ public class ReverseConcurrentHashMap
 	 * @throws NullPointerException
 	 *             if any of the arguments are null
 	 */
-	public boolean replace(final ArrayList<Object> key, final long oldValue, final long newValue)
+	public boolean replace(final List<Object> key, final long oldValue, final long newValue)
 	{
 		if (key == null || oldValue == -1 || newValue == -1)
 		{
@@ -2505,7 +2497,7 @@ public class ReverseConcurrentHashMap
 		{
 			for (;;)
 			{
-				final ArrayList<Object> k = p.key;
+				final List<Object> k = p.key;
 				final long v = p.val;
 				sb.append(k);
 				sb.append('=');
@@ -2885,7 +2877,7 @@ public class ReverseConcurrentHashMap
 							for (Node p = f; p != lastRun; p = p.next)
 							{
 								final int ph = p.hash;
-								final ArrayList<Object> pk = p.key;
+								final List<Object> pk = p.key;
 								final long pv = p.val;
 								if ((ph & n) == 0)
 								{
@@ -3160,7 +3152,7 @@ public class ReverseConcurrentHashMap
 	}
 
 	/** Implementation for put and putIfAbsent */
-	final long putVal(final ArrayList<Object> key, final long value, final boolean onlyIfAbsent)
+	final long putVal(final List<Object> key, final long value, final boolean onlyIfAbsent)
 	{
 		if (key == null || value == -1)
 		{
@@ -3199,7 +3191,7 @@ public class ReverseConcurrentHashMap
 							binCount = 1;
 							for (Node e = f;; ++binCount)
 							{
-								ArrayList<Object> ek;
+								List<Object> ek;
 								if (e.hash == hash && ((ek = e.key) == key || ek != null && key.equals(ek)))
 								{
 									oldVal = e.val;
@@ -3255,7 +3247,7 @@ public class ReverseConcurrentHashMap
 	 * value with v, conditional upon match of cv if non-null. If resulting
 	 * value is null, delete.
 	 */
-	final long replaceNode(final ArrayList<Object> key, final long value, final long cv)
+	final long replaceNode(final List<Object> key, final long value, final long cv)
 	{
 		final int hash = spread(key.hashCode());
 		for (Node[] tab = table;;)
@@ -3283,7 +3275,7 @@ public class ReverseConcurrentHashMap
 							validated = true;
 							for (Node e = f, pred = null;;)
 							{
-								ArrayList<Object> ek;
+								List<Object> ek;
 								if (e.hash == hash && ((ek = e.key) == key || (ek != null && key.equals(ek))))
 								{
 									final long ev = e.val;
@@ -3387,7 +3379,7 @@ public class ReverseConcurrentHashMap
 			{
 				throw new NoSuchElementException();
 			}
-			final ArrayList<Object> k = p.key;
+			final List<Object> k = p.key;
 			final long v = p.val;
 			lastReturned = p;
 			advance();
@@ -3414,7 +3406,7 @@ public class ReverseConcurrentHashMap
 
 		public boolean contains(final Object o)
 		{
-			ArrayList<Object> k;
+			List<Object> k;
 			long v, r;
 			Node e;
 			return ((o instanceof Node) && (k = (e = (Node)o).getKey()) != null && (r = map.get(k)) != -1 && (v = e.getValue()) != -1 && (v == r));
@@ -3466,7 +3458,7 @@ public class ReverseConcurrentHashMap
 
 		public boolean remove(final Object o)
 		{
-			ArrayList<Object> k;
+			List<Object> k;
 			long v;
 			Node e;
 			return ((o instanceof Node) && (k = (e = (Node)o).getKey()) != null && (v = e.getValue()) != -1 && map.remove(k, v));
@@ -3498,20 +3490,20 @@ public class ReverseConcurrentHashMap
 			super(tab, index, size, limit, map);
 		}
 
-		public final ArrayList<Object> next()
+		public final List<Object> next()
 		{
 			Node p;
 			if ((p = next) == null)
 			{
 				throw new NoSuchElementException();
 			}
-			final ArrayList<Object> k = p.key;
+			final List<Object> k = p.key;
 			lastReturned = p;
 			advance();
 			return k;
 		}
 
-		public final ArrayList<Object> nextElement()
+		public final List<Object> nextElement()
 		{
 			return next();
 		}
@@ -3537,7 +3529,7 @@ public class ReverseConcurrentHashMap
 	 * == null) return false; action.accept(p.key); return true; }
 	 */
 	/*
-	 * public ArrayList<Object> estimateSize() { return est; }
+	 * public List<Object> estimateSize() { return est; }
 	 *
 	 * public int characteristics() { return Spliterator.DISTINCT |
 	 * Spliterator.CONCURRENT | Spliterator.NONNULL; } }
@@ -3564,7 +3556,7 @@ public class ReverseConcurrentHashMap
 	 */
 
 	/*
-	 * public ArrayList<Object> estimateSize() { return est; }
+	 * public List<Object> estimateSize() { return est; }
 	 *
 	 * public int characteristics() { return Spliterator.CONCURRENT |
 	 * Spliterator.NONNULL; } }
@@ -3573,7 +3565,7 @@ public class ReverseConcurrentHashMap
 	 * static final class EntrySpliterator extends Traverser implements
 	 * Spliterator<Map.Entry> { final ReverseConcurrentHashMap map; // To export
 	 * MapEntry ArrayList<Object> est; // size estimate EntrySpliterator(Node[]
-	 * tab, int size, int index, int limit, ArrayList<Object> est,
+	 * tab, int size, int index, int limit, List<Object> est,
 	 * ReverseConcurrentHashMap map) { super(tab, size, index, limit); this.map
 	 * = map; this.est = est; }
 	 *
@@ -3590,7 +3582,7 @@ public class ReverseConcurrentHashMap
 	 * advance()) == null) return false; action.accept(new MapEntry(p.key,
 	 * p.val, map)); return true; }
 	 *
-	 * public ArrayList<Object> estimateSize() { return est; }
+	 * public List<Object> estimateSize() { return est; }
 	 *
 	 * public int characteristics() { return Spliterator.DISTINCT |
 	 * Spliterator.CONCURRENT | Spliterator.NONNULL; } }
@@ -3629,7 +3621,7 @@ public class ReverseConcurrentHashMap
 		 * @throws UnsupportedOperationException
 		 *             if no default mapped value for additions was provided
 		 */
-		public boolean add(final ArrayList<Object> e)
+		public boolean add(final List<Object> e)
 		{
 			long v;
 			if ((v = value) == -1)
@@ -3645,7 +3637,7 @@ public class ReverseConcurrentHashMap
 		 * @throws NullPointerException
 		 *             if the specified key is null
 		 */
-		public boolean contains(final ArrayList<Object> o)
+		public boolean contains(final List<Object> o)
 		{
 			return map.containsKey(o);
 		}
@@ -3684,7 +3676,7 @@ public class ReverseConcurrentHashMap
 		 * @throws NullPointerException
 		 *             if the specified key is null
 		 */
-		public boolean remove(final ArrayList<Object> o)
+		public boolean remove(final List<Object> o)
 		{
 			return map.remove(o) != -1;
 		}
@@ -3709,7 +3701,7 @@ public class ReverseConcurrentHashMap
 		 */
 
 		/*
-		 * public int hashCode() { int h = 0; for (ArrayList<Object> e : this) h
+		 * public int hashCode() { int h = 0; for (List<Object> e : this) h
 		 * += e.hashCode(); return h; }
 		 */
 
@@ -3746,7 +3738,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public void forEach(ArrayList<Object> parallelismThreshold, BiConsumer<?
+	 * public void forEach(List<Object> parallelismThreshold, BiConsumer<?
 	 * super K,? super V> action) { if (action == null) throw new
 	 * NullPointerException(); new ForEachMappingTask<K,V> (null,
 	 * batchFor(parallelismThreshold), 0, 0, table, action).invoke(); }
@@ -3769,7 +3761,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public <U> void forEach(ArrayList<Object> parallelismThreshold,
+	 * public <U> void forEach(List<Object> parallelismThreshold,
 	 * BiFunction<? super K, ? super V, ? extends U> transformer, Consumer<?
 	 * super U> action) { if (transformer == null || action == null) throw new
 	 * NullPointerException(); new ForEachTransformedMappingTask<K,V,U> (null,
@@ -3794,7 +3786,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public <U> U search(ArrayList<Object> parallelismThreshold, BiFunction<?
+	 * public <U> U search(List<Object> parallelismThreshold, BiFunction<?
 	 * super K, ? super V, ? extends U> searchFunction) { if (searchFunction ==
 	 * null) throw new NullPointerException(); return new
 	 * SearchMappingsTask<K,V,U> (null, batchFor(parallelismThreshold), 0, 0,
@@ -3820,7 +3812,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public <U> U reduce(ArrayList<Object> parallelismThreshold, BiFunction<?
+	 * public <U> U reduce(List<Object> parallelismThreshold, BiFunction<?
 	 * super K, ? super V, ? extends U> transformer, BiFunction<? super U, ?
 	 * super U, ? extends U> reducer) { if (transformer == null || reducer ==
 	 * null) throw new NullPointerException(); return new
@@ -3846,7 +3838,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public double reduceToDouble(ArrayList<Object> parallelismThreshold,
+	 * public double reduceToDouble(List<Object> parallelismThreshold,
 	 * ToDoubleBiFunction<? super K, ? super V> transformer, double basis,
 	 * DoubleBinaryOperator reducer) { if (transformer == null || reducer ==
 	 * null) throw new NullPointerException(); return new
@@ -3872,7 +3864,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public ArrayList<Object> reduceToLong(ArrayList<Object>
+	 * public List<Object> reduceToLong(List<Object>
 	 * parallelismThreshold, ToLongBiFunction<? super K, ? super V> transformer,
 	 * ArrayList<Object> basis, LongBinaryOperator reducer) { if (transformer ==
 	 * null || reducer == null) throw new NullPointerException(); return new
@@ -3898,7 +3890,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public int reduceToInt(ArrayList<Object> parallelismThreshold,
+	 * public int reduceToInt(List<Object> parallelismThreshold,
 	 * ToIntBiFunction<? super K, ? super V> transformer, int basis,
 	 * IntBinaryOperator reducer) { if (transformer == null || reducer == null)
 	 * throw new NullPointerException(); return new
@@ -3916,7 +3908,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public void forEachKey(ArrayList<Object> parallelismThreshold, Consumer<?
+	 * public void forEachKey(List<Object> parallelismThreshold, Consumer<?
 	 * super K> action) { if (action == null) throw new NullPointerException();
 	 * new ForEachKeyTask<K,V> (null, batchFor(parallelismThreshold), 0, 0,
 	 * table, action).invoke(); }
@@ -3938,7 +3930,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public <U> void forEachKey(ArrayList<Object> parallelismThreshold,
+	 * public <U> void forEachKey(List<Object> parallelismThreshold,
 	 * Function<? super K, ? extends U> transformer, Consumer<? super U> action)
 	 * { if (transformer == null || action == null) throw new
 	 * NullPointerException(); new ForEachTransformedKeyTask<K,V,U> (null,
@@ -3963,7 +3955,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public <U> U searchKeys(ArrayList<Object> parallelismThreshold,
+	 * public <U> U searchKeys(List<Object> parallelismThreshold,
 	 * Function<? super K, ? extends U> searchFunction) { if (searchFunction ==
 	 * null) throw new NullPointerException(); return new SearchKeysTask<K,V,U>
 	 * (null, batchFor(parallelismThreshold), 0, 0, table, searchFunction, new
@@ -3983,7 +3975,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public K reduceKeys(ArrayList<Object> parallelismThreshold, BiFunction<?
+	 * public K reduceKeys(List<Object> parallelismThreshold, BiFunction<?
 	 * super K, ? super K, ? extends K> reducer) { if (reducer == null) throw
 	 * new NullPointerException(); return new ReduceKeysTask<K,V> (null,
 	 * batchFor(parallelismThreshold), 0, 0, table, null, reducer).invoke(); }
@@ -4007,7 +3999,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public <U> U reduceKeys(ArrayList<Object> parallelismThreshold,
+	 * public <U> U reduceKeys(List<Object> parallelismThreshold,
 	 * Function<? super K, ? extends U> transformer, BiFunction<? super U, ?
 	 * super U, ? extends U> reducer) { if (transformer == null || reducer ==
 	 * null) throw new NullPointerException(); return new
@@ -4032,7 +4024,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public double reduceKeysToDouble(ArrayList<Object> parallelismThreshold,
+	 * public double reduceKeysToDouble(List<Object> parallelismThreshold,
 	 * ToDoubleFunction<? super K> transformer, double basis,
 	 * DoubleBinaryOperator reducer) { if (transformer == null || reducer ==
 	 * null) throw new NullPointerException(); return new
@@ -4057,7 +4049,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public ArrayList<Object> reduceKeysToLong(ArrayList<Object>
+	 * public List<Object> reduceKeysToLong(List<Object>
 	 * parallelismThreshold, ToLongFunction<? super K> transformer,
 	 * ArrayList<Object> basis, LongBinaryOperator reducer) { if (transformer ==
 	 * null || reducer == null) throw new NullPointerException(); return new
@@ -4082,7 +4074,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public int reduceKeysToInt(ArrayList<Object> parallelismThreshold,
+	 * public int reduceKeysToInt(List<Object> parallelismThreshold,
 	 * ToIntFunction<? super K> transformer, int basis, IntBinaryOperator
 	 * reducer) { if (transformer == null || reducer == null) throw new
 	 * NullPointerException(); return new MapReduceKeysToIntTask<K,V> (null,
@@ -4100,7 +4092,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public void forEachValue(ArrayList<Object> parallelismThreshold,
+	 * public void forEachValue(List<Object> parallelismThreshold,
 	 * Consumer<? super V> action) { if (action == null) throw new
 	 * NullPointerException(); new ForEachValueTask<K,V> (null,
 	 * batchFor(parallelismThreshold), 0, 0, table, action).invoke(); }
@@ -4122,7 +4114,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public <U> void forEachValue(ArrayList<Object> parallelismThreshold,
+	 * public <U> void forEachValue(List<Object> parallelismThreshold,
 	 * Function<? super V, ? extends U> transformer, Consumer<? super U> action)
 	 * { if (transformer == null || action == null) throw new
 	 * NullPointerException(); new ForEachTransformedValueTask<K,V,U> (null,
@@ -4148,7 +4140,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public <U> U searchValues(ArrayList<Object> parallelismThreshold,
+	 * public <U> U searchValues(List<Object> parallelismThreshold,
 	 * Function<? super V, ? extends U> searchFunction) { if (searchFunction ==
 	 * null) throw new NullPointerException(); return new
 	 * SearchValuesTask<K,V,U> (null, batchFor(parallelismThreshold), 0, 0,
@@ -4167,7 +4159,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public V reduceValues(ArrayList<Object> parallelismThreshold,
+	 * public V reduceValues(List<Object> parallelismThreshold,
 	 * BiFunction<? super V, ? super V, ? extends V> reducer) { if (reducer ==
 	 * null) throw new NullPointerException(); return new ReduceValuesTask<K,V>
 	 * (null, batchFor(parallelismThreshold), 0, 0, table, null,
@@ -4193,7 +4185,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public <U> U reduceValues(ArrayList<Object> parallelismThreshold,
+	 * public <U> U reduceValues(List<Object> parallelismThreshold,
 	 * Function<? super V, ? extends U> transformer, BiFunction<? super U, ?
 	 * super U, ? extends U> reducer) { if (transformer == null || reducer ==
 	 * null) throw new NullPointerException(); return new
@@ -4219,7 +4211,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public double reduceValuesToDouble(ArrayList<Object>
+	 * public double reduceValuesToDouble(List<Object>
 	 * parallelismThreshold, ToDoubleFunction<? super V> transformer, double
 	 * basis, DoubleBinaryOperator reducer) { if (transformer == null || reducer
 	 * == null) throw new NullPointerException(); return new
@@ -4245,7 +4237,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public ArrayList<Object> reduceValuesToLong(ArrayList<Object>
+	 * public List<Object> reduceValuesToLong(List<Object>
 	 * parallelismThreshold, ToLongFunction<? super V> transformer,
 	 * ArrayList<Object> basis, LongBinaryOperator reducer) { if (transformer ==
 	 * null || reducer == null) throw new NullPointerException(); return new
@@ -4271,7 +4263,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public int reduceValuesToInt(ArrayList<Object> parallelismThreshold,
+	 * public int reduceValuesToInt(List<Object> parallelismThreshold,
 	 * ToIntFunction<? super V> transformer, int basis, IntBinaryOperator
 	 * reducer) { if (transformer == null || reducer == null) throw new
 	 * NullPointerException(); return new MapReduceValuesToIntTask<K,V> (null,
@@ -4290,7 +4282,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public void forEachEntry(ArrayList<Object> parallelismThreshold,
+	 * public void forEachEntry(List<Object> parallelismThreshold,
 	 * Consumer<? super Map.Entry> action) { if (action == null) throw new
 	 * NullPointerException(); new ForEachEntryTask(null,
 	 * batchFor(parallelismThreshold), 0, 0, table, action).invoke(); }
@@ -4313,7 +4305,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public <U> void forEachEntry(ArrayList<Object> parallelismThreshold,
+	 * public <U> void forEachEntry(List<Object> parallelismThreshold,
 	 * Function<Map.Entry, ? extends U> transformer, Consumer<? super U> action)
 	 * { if (transformer == null || action == null) throw new
 	 * NullPointerException(); new ForEachTransformedEntryTask<U> (null,
@@ -4339,7 +4331,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public <U> U searchEntries(ArrayList<Object> parallelismThreshold,
+	 * public <U> U searchEntries(List<Object> parallelismThreshold,
 	 * Function<Map.Entry, ? extends U> searchFunction) { if (searchFunction ==
 	 * null) throw new NullPointerException(); return new SearchEntriesTask<U>
 	 * (null, batchFor(parallelismThreshold), 0, 0, table, searchFunction, new
@@ -4359,7 +4351,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public Map.Entry reduceEntries(ArrayList<Object> parallelismThreshold,
+	 * public Map.Entry reduceEntries(List<Object> parallelismThreshold,
 	 * BiFunction<Map.Entry, Map.Entry, ? extends Map.Entry> reducer) { if
 	 * (reducer == null) throw new NullPointerException(); return new
 	 * ReduceEntriesTask (null, batchFor(parallelismThreshold), 0, 0, table,
@@ -4386,7 +4378,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public <U> U reduceEntries(ArrayList<Object> parallelismThreshold,
+	 * public <U> U reduceEntries(List<Object> parallelismThreshold,
 	 * Function<Map.Entry, ? extends U> transformer, BiFunction<? super U, ?
 	 * super U, ? extends U> reducer) { if (transformer == null || reducer ==
 	 * null) throw new NullPointerException(); return new
@@ -4413,7 +4405,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public double reduceEntriesToDouble(ArrayList<Object>
+	 * public double reduceEntriesToDouble(List<Object>
 	 * parallelismThreshold, ToDoubleFunction<Map.Entry> transformer, double
 	 * basis, DoubleBinaryOperator reducer) { if (transformer == null || reducer
 	 * == null) throw new NullPointerException(); return new
@@ -4440,7 +4432,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public ArrayList<Object> reduceEntriesToLong(ArrayList<Object>
+	 * public List<Object> reduceEntriesToLong(List<Object>
 	 * parallelismThreshold, ToLongFunction<Map.Entry> transformer,
 	 * ArrayList<Object> basis, LongBinaryOperator reducer) { if (transformer ==
 	 * null || reducer == null) throw new NullPointerException(); return new
@@ -4467,7 +4459,7 @@ public class ReverseConcurrentHashMap
 	 * @since 1.8
 	 */
 	/*
-	 * public int reduceEntriesToInt(ArrayList<Object> parallelismThreshold,
+	 * public int reduceEntriesToInt(List<Object> parallelismThreshold,
 	 * ToIntFunction<Map.Entry> transformer, int basis, IntBinaryOperator
 	 * reducer) { if (transformer == null || reducer == null) throw new
 	 * NullPointerException(); return new MapReduceEntriesToIntTask (null,
@@ -4482,11 +4474,11 @@ public class ReverseConcurrentHashMap
 	 */
 	static public final class MapEntry
 	{
-		final ArrayList<Object> key; // non-null
+		final List<Object> key; // non-null
 		long val; // non-null
 		final ReverseConcurrentHashMap map;
 
-		MapEntry(final ArrayList<Object> key, final long val, final ReverseConcurrentHashMap map)
+		MapEntry(final List<Object> key, final long val, final ReverseConcurrentHashMap map)
 		{
 			this.key = key;
 			this.val = val;
@@ -4496,7 +4488,7 @@ public class ReverseConcurrentHashMap
 		@Override
 		public boolean equals(final Object o)
 		{
-			ArrayList<Object> k;
+			List<Object> k;
 			long v;
 			if (o instanceof Node)
 			{
@@ -4514,7 +4506,7 @@ public class ReverseConcurrentHashMap
 			}
 		}
 
-		public ArrayList<Object> getKey()
+		public List<Object> getKey()
 		{
 			return key;
 		}
@@ -4829,7 +4821,7 @@ public class ReverseConcurrentHashMap
 		}
 
 		@Override
-		Node find(final int h, final ArrayList<Object> k)
+		Node find(final int h, final List<Object> k)
 		{
 			// loop to avoid arbitrarily deep recursion on forwarding nodes
 			outer: for (Node[] tab = nextTable;;)
@@ -4877,11 +4869,11 @@ public class ReverseConcurrentHashMap
 	static class Node
 	{
 		final int hash;
-		final ArrayList<Object> key;
+		final List<Object> key;
 		volatile long val;
 		volatile Node next;
 
-		Node(final int hash, final ArrayList<Object> key, final long val, final Node next)
+		Node(final int hash, final List<Object> key, final long val, final Node next)
 		{
 			this.hash = hash;
 			this.key = key;
@@ -4892,7 +4884,7 @@ public class ReverseConcurrentHashMap
 		@Override
 		public final boolean equals(final Object o)
 		{
-			ArrayList<Object> k;
+			List<Object> k;
 			long v;
 			if (o instanceof Node)
 			{
@@ -4910,7 +4902,7 @@ public class ReverseConcurrentHashMap
 			}
 		}
 
-		public final ArrayList<Object> getKey()
+		public final List<Object> getKey()
 		{
 			return key;
 		}
@@ -4940,14 +4932,14 @@ public class ReverseConcurrentHashMap
 		/**
 		 * Virtualized support for map.get(); overridden in subclasses.
 		 */
-		Node find(final int h, final ArrayList<Object> k)
+		Node find(final int h, final List<Object> k)
 		{
 			Node e = this;
 			if (k != null)
 			{
 				do
 				{
-					ArrayList<Object> ek;
+					List<Object> ek;
 					if (e.hash == h && ((ek = e.key) == k || (ek != null && k.equals(ek))))
 					{
 						return e;
@@ -5191,13 +5183,13 @@ public class ReverseConcurrentHashMap
 				}
 				else
 				{
-					final ArrayList<Object> k = x.key;
+					final List<Object> k = x.key;
 					final int h = x.hash;
 					Class<?> kc = null;
 					for (TreeNode p = r;;)
 					{
 						int dir, ph;
-						final ArrayList<Object> pk = p.key;
+						final List<Object> pk = p.key;
 						if ((ph = p.hash) > h)
 						{
 							dir = -1;
@@ -5599,7 +5591,7 @@ public class ReverseConcurrentHashMap
 		 * available.
 		 */
 		@Override
-		final Node find(final int h, final ArrayList<Object> k)
+		final Node find(final int h, final List<Object> k)
 		{
 			if (k != null)
 			{
@@ -5641,14 +5633,14 @@ public class ReverseConcurrentHashMap
 		 *
 		 * @return null if added
 		 */
-		final TreeNode putTreeVal(final int h, final ArrayList<Object> k, final long v)
+		final TreeNode putTreeVal(final int h, final List<Object> k, final long v)
 		{
 			Class<?> kc = null;
 			boolean searched = false;
 			for (TreeNode p = root;;)
 			{
 				int dir, ph;
-				ArrayList<Object> pk;
+				List<Object> pk;
 				if (p == null)
 				{
 					first = root = new TreeNode(h, k, v, null, null);
@@ -5898,14 +5890,14 @@ public class ReverseConcurrentHashMap
 		TreeNode prev; // needed to unlink next upon deletion
 		boolean red;
 
-		TreeNode(final int hash, final ArrayList<Object> key, final long val, final Node next, final TreeNode parent)
+		TreeNode(final int hash, final List<Object> key, final long val, final Node next, final TreeNode parent)
 		{
 			super(hash, key, val, next);
 			this.parent = parent;
 		}
 
 		@Override
-		Node find(final int h, final ArrayList<Object> k)
+		Node find(final int h, final List<Object> k)
 		{
 			return findTreeNode(h, k, null);
 		}
@@ -5914,7 +5906,7 @@ public class ReverseConcurrentHashMap
 		 * Returns the TreeNode (or null if not found) for the given key
 		 * starting at given root.
 		 */
-		final TreeNode findTreeNode(final int h, final ArrayList<Object> k, Class<?> kc)
+		final TreeNode findTreeNode(final int h, final List<Object> k, Class<?> kc)
 		{
 			if (k != null)
 			{
@@ -5922,7 +5914,7 @@ public class ReverseConcurrentHashMap
 				do
 				{
 					int ph, dir;
-					ArrayList<Object> pk;
+					List<Object> pk;
 					TreeNode q;
 					final TreeNode pl = p.left, pr = p.right;
 					if ((ph = p.hash) > h)

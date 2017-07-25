@@ -1,18 +1,18 @@
 package com.exascale.optimizer;
 
 import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.TreeMap;
+import java.util.*;
+
 import com.exascale.tables.Plan;
+
+import javax.naming.OperationNotSupportedException;
 
 public interface Operator
 {
 	/** Add the passed operator as a child of this operator */
 	public void add(Operator op) throws Exception;
 
-	public ArrayList<Operator> children();
+	public List<Operator> children();
 
 	public Operator clone();
 
@@ -20,17 +20,17 @@ public interface Operator
 
 	public int getChildPos();
 
-	public HashMap<String, Integer> getCols2Pos();
+	public Map<String, Integer> getCols2Pos();
 
-	public HashMap<String, String> getCols2Types();
+	public Map<String, String> getCols2Types();
 
 	public MetaData getMeta();
 
 	public int getNode();
 
-	public TreeMap<Integer, String> getPos2Col();
+	public Map<Integer, String> getPos2Col();
 
-	public ArrayList<String> getReferences();
+	public List<String> getReferences();
 
 	public Object next(Operator op) throws Exception;
 

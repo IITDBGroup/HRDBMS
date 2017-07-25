@@ -3,6 +3,7 @@ package com.exascale.threads;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
@@ -27,12 +28,12 @@ public class Read3Thread extends HRDBMSThread
 	private Schema schema3;
 	private ConcurrentHashMap<Integer, Schema> schemaMap;
 	private Transaction tx;
-	private ArrayList<Integer> fetchPos;
-	private ArrayList<ReadThread> rThreads;
-	private ArrayList<Integer> cols;
+	private List<Integer> fetchPos;
+	private List<ReadThread> rThreads;
+	private List<Integer> cols;
 	private int layoutSize;
 
-	public Read3Thread(final ArrayList<ReadThread> rThreads)
+	public Read3Thread(final List<ReadThread> rThreads)
 	{
 		this.rThreads = rThreads;
 	}
@@ -50,7 +51,7 @@ public class Read3Thread extends HRDBMSThread
 		this.bb3 = bb3;
 	}
 
-	public Read3Thread(final Page p, final Page p2, final Page p3, final Block b, final ByteBuffer bb, final ByteBuffer bb2, final ByteBuffer bb3, final ArrayList<Integer> cols, final int layoutSize)
+	public Read3Thread(final Page p, final Page p2, final Page p3, final Block b, final ByteBuffer bb, final ByteBuffer bb2, final ByteBuffer bb3, final List<Integer> cols, final int layoutSize)
 	{
 		this.description = "Read thread for buffer Manager";
 		this.setWait(false);
@@ -65,7 +66,7 @@ public class Read3Thread extends HRDBMSThread
 		this.layoutSize = layoutSize;
 	}
 
-	public Read3Thread(final Page p, final Page p2, final Page p3, final Block b, final ByteBuffer bb, final ByteBuffer bb2, final ByteBuffer bb3, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos)
+	public Read3Thread(final Page p, final Page p2, final Page p3, final Block b, final ByteBuffer bb, final ByteBuffer bb2, final ByteBuffer bb3, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final List<Integer> fetchPos)
 	{
 		this.description = "Read thread for buffer Manager";
 		this.setWait(false);

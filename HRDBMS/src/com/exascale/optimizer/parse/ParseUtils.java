@@ -117,7 +117,7 @@ public class ParseUtils {
         return true;
     }
 
-    static boolean allReferencesSatisfied(final ArrayList<String> ref, final Operator op)
+    static boolean allReferencesSatisfied(final List<String> ref, final Operator op)
     {
         final Set<String> set = op.getCols2Pos().keySet();
         for (String r : ref)
@@ -160,7 +160,7 @@ public class ParseUtils {
         return true;
     }
 
-    static void checkSizeOfNewCols(final ArrayList<Column> newCols, final Operator op) throws ParseException
+    static void checkSizeOfNewCols(final List<Column> newCols, final Operator op) throws ParseException
     {
         if (newCols.size() != op.getPos2Col().size())
         {
@@ -168,9 +168,9 @@ public class ParseUtils {
         }
     }
 
-    static ArrayList<Column> getRightColumns(final SearchCondition join)
+    static List<Column> getRightColumns(final SearchCondition join)
     {
-        final ArrayList<Column> retval = new ArrayList<Column>();
+        final List<Column> retval = new ArrayList<Column>();
         retval.add(join.getClause().getPredicate().getRHS().getColumn());
 
         if (join.getConnected() != null && join.getConnected().size() > 0)
@@ -184,7 +184,7 @@ public class ParseUtils {
         return retval;
     }
 
-    static String getType(String col, final HashMap<String, String> cols2Types) throws ParseException
+    static String getType(String col, final Map<String, String> cols2Types) throws ParseException
     {
         String retval = cols2Types.get(col);
 
@@ -233,7 +233,7 @@ public class ParseUtils {
     }
 
 
-    static void searchSingleTableForCTE(final String name, final ArrayList<Column> cols, final FullSelect cteSelect, final SingleTable table, final TableReference tref)
+    static void searchSingleTableForCTE(final String name, final List<Column> cols, final FullSelect cteSelect, final SingleTable table, final TableReference tref)
     {
         final TableName tblName = table.getName();
         if (tblName.getSchema() == null && tblName.getName().equals(name))
@@ -254,7 +254,7 @@ public class ParseUtils {
 
     static void updateSelectList(final SearchCondition join, final SubSelect select)
     {
-        final ArrayList<Column> needed = new ArrayList<Column>();
+        final List<Column> needed = new ArrayList<Column>();
         if (join.getClause().getPredicate() != null)
         {
             needed.add(join.getClause().getPredicate().getRHS().getColumn());
@@ -295,7 +295,7 @@ public class ParseUtils {
             return;
         }
 
-        final ArrayList<SelectListEntry> list = sclause.getSelectList();
+        final List<SelectListEntry> list = sclause.getSelectList();
         for (final Column col : needed)
         {
             boolean found = false;
@@ -327,8 +327,8 @@ public class ParseUtils {
 
     static void verifyColumnsAreTheSame(final Operator lhs, final Operator rhs) throws ParseException
     {
-        final TreeMap<Integer, String> lhsPos2Col = lhs.getPos2Col();
-        final TreeMap<Integer, String> rhsPos2Col = rhs.getPos2Col();
+        final Map<Integer, String> lhsPos2Col = lhs.getPos2Col();
+        final Map<Integer, String> rhsPos2Col = rhs.getPos2Col();
 
         if (lhsPos2Col.size() != rhsPos2Col.size())
         {
@@ -607,7 +607,7 @@ public class ParseUtils {
         }
     }
 
-    static boolean containsCorrelatedCol(final Expression exp, final HashMap<String, Integer> cols2Pos) throws ParseException
+    static boolean containsCorrelatedCol(final Expression exp, final Map<String, Integer> cols2Pos) throws ParseException
     {
         if (exp.isColumn())
         {
@@ -802,9 +802,9 @@ public class ParseUtils {
         }
     }
 
-    static ArrayList<String> getReferences(final Expression exp)
+    static List<String> getReferences(final Expression exp)
     {
-        final ArrayList<String> retval = new ArrayList<String>();
+        final List<String> retval = new ArrayList<String>();
         if (exp.isCase())
         {
             for (final Case c : exp.getCases())
@@ -850,7 +850,7 @@ public class ParseUtils {
         }
         else if (exp.isList())
         {
-            final ArrayList<Expression> list = exp.getList();
+            final List<Expression> list = exp.getList();
             for (final Expression e : list)
             {
                 retval.addAll(getReferences(e));
@@ -871,7 +871,7 @@ public class ParseUtils {
         return null;
     }
 
-    static ArrayList<String> getReferences(final SearchClause sc)
+    static List<String> getReferences(final SearchClause sc)
     {
         if (sc.getSearch() != null)
         {
@@ -880,16 +880,16 @@ public class ParseUtils {
         else
         {
             final Predicate p = sc.getPredicate();
-            final ArrayList<String> retval = new ArrayList<String>();
+            final List<String> retval = new ArrayList<String>();
             retval.addAll(getReferences(p.getLHS()));
             retval.addAll(getReferences(p.getRHS()));
             return retval;
         }
     }
 
-    static ArrayList<String> getReferences(final SearchCondition sc)
+    static List<String> getReferences(final SearchCondition sc)
     {
-        final ArrayList<String> retval = new ArrayList<String>();
+        final List<String> retval = new ArrayList<String>();
         retval.addAll(getReferences(sc.getClause()));
         if (sc.getConnected() != null && sc.getConnected().size() > 0)
         {
@@ -902,7 +902,7 @@ public class ParseUtils {
         return retval;
     }
 
-    static boolean doesAggregation(final ArrayList<Expression> args)
+    static boolean doesAggregation(final List<Expression> args)
     {
         for (final Expression exp : args)
         {
@@ -922,7 +922,7 @@ public class ParseUtils {
             return true;
         }
 
-        ArrayList<Expression> args = null;
+        List<Expression> args = null;
 
         if (exp.isFunction())
         {
@@ -961,7 +961,7 @@ public class ParseUtils {
         // function, return true
         // else return false
         final SelectClause select = sub.getSelect();
-        final ArrayList<SelectListEntry> list = select.getSelectList();
+        final List<SelectListEntry> list = select.getSelectList();
         for (final SelectListEntry entry : list)
         {
             if (entry.isColumn())
@@ -975,7 +975,7 @@ public class ParseUtils {
                 return true;
             }
 
-            ArrayList<Expression> args = null;
+            List<Expression> args = null;
 
             if (exp.isFunction())
             {
@@ -1011,8 +1011,8 @@ public class ParseUtils {
 
     static Operator handleAlias(final String alias, final Operator op, MetaData meta) throws ParseException
     {
-        final ArrayList<String> original = new ArrayList<String>();
-        final ArrayList<String> newCols = new ArrayList<String>();
+        final List<String> original = new ArrayList<String>();
+        final List<String> newCols = new ArrayList<String>();
 
         for (final String col : op.getPos2Col().values())
         {
@@ -1033,7 +1033,7 @@ public class ParseUtils {
         }
     }
 
-    static void searchFromForCTE(final String name, final ArrayList<Column> cols, final FullSelect cteSelect, final FromClause from)
+    static void searchFromForCTE(final String name, final List<Column> cols, final FullSelect cteSelect, final FromClause from)
     {
         for (final TableReference table : from.getTables())
         {
@@ -1041,7 +1041,7 @@ public class ParseUtils {
         }
     }
 
-    static void searchFullSelectForCTE(final String name, final ArrayList<Column> cols, final FullSelect cteSelect, final FullSelect select)
+    static void searchFullSelectForCTE(final String name, final List<Column> cols, final FullSelect cteSelect, final FullSelect select)
     {
         if (select.getSubSelect() != null)
         {
@@ -1065,12 +1065,12 @@ public class ParseUtils {
         }
     }
 
-    static void searchSubSelectForCTE(final String name, final ArrayList<Column> cols, final FullSelect cteSelect, final SubSelect select)
+    static void searchSubSelectForCTE(final String name, final List<Column> cols, final FullSelect cteSelect, final SubSelect select)
     {
         searchFromForCTE(name, cols, cteSelect, select.getFrom());
     }
 
-    static void searchTableRefForCTE(final String name, final ArrayList<Column> cols, final FullSelect cteSelect, final TableReference table)
+    static void searchTableRefForCTE(final String name, final List<Column> cols, final FullSelect cteSelect, final TableReference table)
     {
         if (table.isSingleTable())
         {
@@ -1096,7 +1096,7 @@ public class ParseUtils {
         }
 
         final SelectClause s = select.getSelect();
-        final ArrayList<SelectListEntry> list = s.getSelectList();
+        final List<SelectListEntry> list = s.getSelectList();
         for (final SelectListEntry entry : list)
         {
             if (entry.isColumn())

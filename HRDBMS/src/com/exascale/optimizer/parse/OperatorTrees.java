@@ -45,10 +45,10 @@ public class OperatorTrees extends AbstractParseController {
             throw new ParseException("Table or view already exists");
         }
 
-        final ArrayList<ColDef> colDefs = createTable.getCols();
-        final HashSet<String> colNames = new HashSet<String>();
-        final HashSet<String> pks = new HashSet<String>();
-        final ArrayList<String> orderedPks = new ArrayList<String>();
+        final List<ColDef> colDefs = createTable.getCols();
+        final Set<String> colNames = new HashSet<String>();
+        final Set<String> pks = new HashSet<String>();
+        final List<String> orderedPks = new ArrayList<String>();
         for (final ColDef def : colDefs)
         {
             final String col = def.getCol().getColumn();
@@ -78,7 +78,7 @@ public class OperatorTrees extends AbstractParseController {
 
         if (createTable.getPK() != null)
         {
-            final ArrayList<Column> cols = createTable.getPK().getCols();
+            final List<Column> cols = createTable.getPK().getCols();
             for (final Column col : cols)
             {
                 final String c = col.getColumn();
@@ -110,7 +110,7 @@ public class OperatorTrees extends AbstractParseController {
 
             int z = 1;
             boolean ok = true;
-            final ArrayList<Integer> colOrder = createTable.getColOrder();
+            final List<Integer> colOrder = createTable.getColOrder();
             while (z <= colDefs.size())
             {
                 if (!colOrder.contains(z++))
@@ -134,7 +134,7 @@ public class OperatorTrees extends AbstractParseController {
 
         if (createTable.getType() != 0 && createTable.getOrganization() != null)
         {
-            final ArrayList<Integer> organization = createTable.getOrganization();
+            final List<Integer> organization = createTable.getOrganization();
             if (organization.size() < 1 || organization.size() > colDefs.size())
             {
                 throw new ParseException("ORGANIZATION clause has an invalid size");
@@ -171,7 +171,7 @@ public class OperatorTrees extends AbstractParseController {
             throw new ParseException("External Table already exists");
         }
 
-        ArrayList<ColDef> colDefs = createExternalTable.getCols();
+        List<ColDef> colDefs = createExternalTable.getCols();
         HashSet<String> colNames = new HashSet<String>();
         for (ColDef def : colDefs) {
             String col = def.getCol().getColumn();
@@ -232,7 +232,7 @@ public class OperatorTrees extends AbstractParseController {
         }
 
         final boolean unique = createIndex.getUnique();
-        final ArrayList<IndexDef> indexDefs = createIndex.getCols();
+        final List<IndexDef> indexDefs = createIndex.getCols();
         for (final IndexDef def : indexDefs)
         {
             final String col = def.getCol().getColumn();
@@ -303,7 +303,7 @@ public class OperatorTrees extends AbstractParseController {
         final TableScanOperator scan = new TableScanOperator(schema, tbl, meta, tx);
         Operator op = buildOperatorTreeFromWhere(delete.getWhere(), scan, null);
         scan.getRID();
-        final ArrayList<String> cols = new ArrayList<String>();
+        final List<String> cols = new ArrayList<String>();
         cols.add("_RID1");
         cols.add("_RID2");
         cols.add("_RID3");
@@ -415,8 +415,8 @@ public class OperatorTrees extends AbstractParseController {
 
     Operator buildOperatorTreeFromFrom(final FromClause from, final SubSelect sub) throws Exception
     {
-        final ArrayList<TableReference> tables = from.getTables();
-        final ArrayList<Operator> ops = new ArrayList<Operator>(tables.size());
+        final List<TableReference> tables = from.getTables();
+        final List<Operator> ops = new ArrayList<Operator>(tables.size());
         for (final TableReference table : tables)
         {
             ops.add(buildOperatorTreeFromTableReference(table, sub));
@@ -461,7 +461,7 @@ public class OperatorTrees extends AbstractParseController {
         }
 
         // handle connectedSelects
-        final ArrayList<ConnectedSelect> connected = select.getConnected();
+        final List<ConnectedSelect> connected = select.getConnected();
         Operator lhs = op;
         for (final ConnectedSelect cs : connected)
         {
@@ -557,8 +557,8 @@ public class OperatorTrees extends AbstractParseController {
 
     Operator buildOperatorTreeFromGroupBy(final GroupBy groupBy, final Operator op, final SubSelect select) throws ParseException
     {
-        ArrayList<Column> cols;
-        ArrayList<String> vStr;
+        List<Column> cols;
+        List<String> vStr;
 
         if (groupBy != null)
         {
@@ -581,8 +581,8 @@ public class OperatorTrees extends AbstractParseController {
             vStr = new ArrayList<String>();
         }
 
-        final ArrayList<AggregateOperator> ops = new ArrayList<>();
-        for (final ArrayList<Object> row : model.getComplex())
+        final List<AggregateOperator> ops = new ArrayList<>();
+        for (final List<Object> row : model.getComplex())
         {
             // colName, op, type, id, exp, prereq, done
             if ((Boolean)row.get(7) == false && (Integer)row.get(2) == TYPE_GROUPBY && (row.get(6) == null || ((SubSelect)row.get(6)).equals(select)))
@@ -805,7 +805,7 @@ public class OperatorTrees extends AbstractParseController {
         return searchOperatorTrees.buildOperatorTreeFromSearchCondition(having.getSearch(), op, sub);
     }
 
-    ArrayList<Operator> buildOperatorTreeFromInsert(final Insert insert) throws Exception
+    List<Operator> buildOperatorTreeFromInsert(final Insert insert) throws Exception
     {
         final TableName table = insert.getTable();
         String schema = null;
@@ -847,7 +847,7 @@ public class OperatorTrees extends AbstractParseController {
             final Operator child = retval.children().get(0);
             retval.removeChild(child);
             iOp.add(child);
-            final ArrayList<Operator> iOps = new ArrayList<Operator>(1);
+            final List<Operator> iOps = new ArrayList<Operator>(1);
             iOps.add(iOp);
             return iOps;
         }
@@ -905,15 +905,15 @@ public class OperatorTrees extends AbstractParseController {
 
                 final Operator iOp = new InsertOperator(schema, tbl, meta);
                 iOp.add(op);
-                final ArrayList<Operator> iOps = new ArrayList<Operator>(1);
+                final List<Operator> iOps = new ArrayList<Operator>(1);
                 iOps.add(iOp);
                 return iOps;
             }
             else
             {
                 // multi-row insert
-                final ArrayList<Operator> iOps = new ArrayList<Operator>(1);
-                for (final ArrayList<Expression> exps : insert.getMultiExpressions())
+                final List<Operator> iOps = new ArrayList<Operator>(1);
+                for (final List<Expression> exps : insert.getMultiExpressions())
                 {
                     Operator op = new DummyOperator(meta);
                     for (final Expression exp : exps)
@@ -1011,9 +1011,9 @@ public class OperatorTrees extends AbstractParseController {
 
     Operator buildOperatorTreeFromOrderBy(final OrderBy orderBy, final Operator op) throws ParseException
     {
-        final ArrayList<SortKey> keys = orderBy.getKeys();
-        final ArrayList<String> columns = new ArrayList<>(keys.size());
-        final ArrayList<Boolean> orders = new ArrayList<>(keys.size());
+        final List<SortKey> keys = orderBy.getKeys();
+        final List<String> columns = new ArrayList<>(keys.size());
+        final List<Boolean> orders = new ArrayList<>(keys.size());
 
         for (final SortKey key : keys)
         {
@@ -1159,8 +1159,8 @@ public class OperatorTrees extends AbstractParseController {
     {
         if (!select.isSelectStar())
         {
-            ArrayList<String> cols = new ArrayList<String>();
-            final ArrayList<SelectListEntry> selects = select.getSelectList();
+            List<String> cols = new ArrayList<String>();
+            final List<SelectListEntry> selects = select.getSelectList();
             boolean needsRename = false;
             for (final SelectListEntry entry : selects)
             {
@@ -1190,7 +1190,7 @@ public class OperatorTrees extends AbstractParseController {
                     else
                     {
                         // unnamed complex column
-                        for (final ArrayList<Object> row : model.getComplex())
+                        for (final List<Object> row : model.getComplex())
                         {
                             if (row.get(4).equals(entry.getExpression()) && row.get(6).equals(sub))
                             {
@@ -1206,9 +1206,9 @@ public class OperatorTrees extends AbstractParseController {
                 }
             }
 
-            final ArrayList<String> newCols = new ArrayList<String>();
-            final ArrayList<String> olds = new ArrayList<String>();
-            final ArrayList<String> news = new ArrayList<String>();
+            final List<String> newCols = new ArrayList<String>();
+            final List<String> olds = new ArrayList<String>();
+            final List<String> news = new ArrayList<String>();
             // HRDBMSWorker.logger.debug("Cols = " + cols);
             for (String col : cols)
             {
@@ -1240,7 +1240,7 @@ public class OperatorTrees extends AbstractParseController {
                         }
                         else
                         {
-                            for (final ArrayList<Object> row : model.getComplex())
+                            for (final List<Object> row : model.getComplex())
                             {
                                 if (row.get(4).equals(entry.getExpression()) && row.get(6).equals(sub))
                                 {
@@ -1349,7 +1349,7 @@ public class OperatorTrees extends AbstractParseController {
         {
             if (!subquery)
             {
-                final ArrayList<String> cols = new ArrayList<String>(op.getPos2Col().values().size());
+                final List<String> cols = new ArrayList<String>(op.getPos2Col().values().size());
                 for (final String col : op.getPos2Col().values())
                 {
                     if (!col.startsWith("_"))
@@ -1428,8 +1428,8 @@ public class OperatorTrees extends AbstractParseController {
             final Operator retval = op.children().get(0);
             op.removeChild(retval);
 
-            final ArrayList<String> olds = new ArrayList<String>();
-            final ArrayList<String> news = new ArrayList<String>();
+            final List<String> olds = new ArrayList<String>();
+            final List<String> news = new ArrayList<String>();
 
             for (final String c : retval.getCols2Pos().keySet())
             {
@@ -1541,8 +1541,8 @@ public class OperatorTrees extends AbstractParseController {
             {
                 // rename cols
                 checkSizeOfNewCols(table.getSelect().getCols(), op);
-                final ArrayList<String> original = new ArrayList<String>();
-                final ArrayList<String> newCols = new ArrayList<String>();
+                final List<String> original = new ArrayList<String>();
+                final List<String> newCols = new ArrayList<String>();
                 if (table.getAlias() == null)
                 {
                     int i = 0;
@@ -1609,8 +1609,8 @@ public class OperatorTrees extends AbstractParseController {
                 if (table.getAlias() != null)
                 {
                     // rename table
-                    final ArrayList<String> original = new ArrayList<String>();
-                    final ArrayList<String> newCols = new ArrayList<String>();
+                    final List<String> original = new ArrayList<String>();
+                    final List<String> newCols = new ArrayList<String>();
                     for (final String col : op.getPos2Col().values())
                     {
                         original.add(col);
@@ -1734,7 +1734,7 @@ public class OperatorTrees extends AbstractParseController {
         }
     }
 
-    ArrayList<Operator> buildOperatorTreeFromUpdate(final Update update) throws Exception
+    List<Operator> buildOperatorTreeFromUpdate(final Update update) throws Exception
     {
         final TableName table = update.getTable();
         String schema = null;
@@ -1784,9 +1784,9 @@ public class OperatorTrees extends AbstractParseController {
                 }
             }
 
-            final ArrayList<String> buildList = new ArrayList<String>();
+            final List<String> buildList = new ArrayList<String>();
 
-            ArrayList<Expression> exps = null;
+            List<Expression> exps = null;
             if (update.getExpression().isList())
             {
                 exps = update.getExpression().getList();
@@ -1804,7 +1804,7 @@ public class OperatorTrees extends AbstractParseController {
                 throw new ParseException("The number of columns and/or data types do not match the columns being updated");
             }
 
-            final ArrayList<String> cols = new ArrayList<String>();
+            final List<String> cols = new ArrayList<String>();
             for (final String col : op.getPos2Col().values())
             {
                 cols.add(col);
@@ -1825,19 +1825,19 @@ public class OperatorTrees extends AbstractParseController {
             final Operator child = retval.children().get(0);
             retval.removeChild(child);
             uOp.add(child);
-            final ArrayList<Operator> uOps = new ArrayList<Operator>(1);
+            final List<Operator> uOps = new ArrayList<Operator>(1);
             uOps.add(uOp);
             return uOps;
         }
         else
         {
             final TableScanOperator master = scan;
-            final ArrayList<ArrayList<Column>> cols2 = update.getCols2();
-            final ArrayList<Expression> exps2 = update.getExps2();
-            final ArrayList<Where> wheres2 = update.getWheres2();
+            final List<List<Column>> cols2 = update.getCols2();
+            final List<Expression> exps2 = update.getExps2();
+            final List<Where> wheres2 = update.getWheres2();
             int i = 0;
-            final ArrayList<Operator> uOps = new ArrayList<Operator>();
-            for (final ArrayList<Column> cols : cols2)
+            final List<Operator> uOps = new ArrayList<Operator>();
+            for (final List<Column> cols : cols2)
             {
                 scan = master.clone();
                 Operator op = null;
@@ -1865,9 +1865,9 @@ public class OperatorTrees extends AbstractParseController {
                     }
                 }
 
-                final ArrayList<String> buildList = new ArrayList<String>();
+                final List<String> buildList = new ArrayList<String>();
 
-                ArrayList<Expression> exps = null;
+                List<Expression> exps = null;
                 if (exps2.get(i).isList())
                 {
                     exps = exps2.get(i).getList();
@@ -1884,7 +1884,7 @@ public class OperatorTrees extends AbstractParseController {
                     throw new ParseException("The number of columns and/or data types do not match the columns being updated");
                 }
 
-                final ArrayList<String> cols3 = new ArrayList<String>();
+                final List<String> cols3 = new ArrayList<String>();
                 for (final String col : op.getPos2Col().values())
                 {
                     cols3.add(col);
@@ -1921,7 +1921,7 @@ public class OperatorTrees extends AbstractParseController {
     private static void importCTE(final CTE cte, final FullSelect select)
     {
         final String name = cte.getName();
-        final ArrayList<Column> cols = cte.getCols();
+        final List<Column> cols = cte.getCols();
         final FullSelect cteSelect = cte.getSelect();
 
         if (select.getSubSelect() != null)
@@ -1946,13 +1946,13 @@ public class OperatorTrees extends AbstractParseController {
         }
     }
 
-    Operator addComplexColumn(final ArrayList<Object> row, Operator op, final SubSelect sub) throws Exception
+    Operator addComplexColumn(final List<Object> row, Operator op, final SubSelect sub) throws Exception
     {
         // colName, op, type, id, exp, prereq, done
         if (!((Integer)row.get(5)).equals(-1))
         {
             // get the row
-            for (final ArrayList<Object> r : model.getComplex())
+            for (final List<Object> r : model.getComplex())
             {
                 if (r.get(3).equals(row.get(5)))
                 {
@@ -2064,13 +2064,13 @@ public class OperatorTrees extends AbstractParseController {
         }
     }
 
-    private Object buildNGBExtend(Operator op, final ArrayList<Object> row, final SubSelect sub) throws Exception
+    private Object buildNGBExtend(Operator op, final List<Object> row, final SubSelect sub) throws Exception
     {
         // colName, op, type, id, exp, prereq, done
         if (!(row.get(5)).equals(-1))
         {
             // get the row
-            for (final ArrayList<Object> r : model.getComplex())
+            for (final List<Object> r : model.getComplex())
             {
                 if (r.get(3).equals(row.get(5)))
                 {
@@ -2090,9 +2090,9 @@ public class OperatorTrees extends AbstractParseController {
                         {
                             if (allReferencesSatisfied(((CaseOperator)row.get(1)).getReferences(), op))
                             {
-                                final ArrayList<String> references = new ArrayList<>();
+                                final List<String> references = new ArrayList<>();
                                 final Expression exp = (Expression)row.get(4);
-                                final ArrayList<Case> cases = exp.getCases();
+                                final List<Case> cases = exp.getCases();
                                 for (final Case c : cases)
                                 {
                                     references.addAll(getReferences(c.getCondition()));
@@ -2215,7 +2215,7 @@ public class OperatorTrees extends AbstractParseController {
 
     private Operator buildNGBExtends(Operator op, final SubSelect sub) throws Exception
     {
-        for (final ArrayList<Object> row : model.getComplex())
+        for (final List<Object> row : model.getComplex())
         {
             if ((Boolean)row.get(7) == false && (Integer)row.get(2) != TYPE_GROUPBY && (row.get(6) == null || (row.get(6)).equals(sub)))
             {
@@ -2232,7 +2232,7 @@ public class OperatorTrees extends AbstractParseController {
 
     private void getComplexColumns(final SelectClause select, final SubSelect sub, final Having having) throws ParseException
     {
-        final ArrayList<SelectListEntry> selects = select.getSelectList();
+        final List<SelectListEntry> selects = select.getSelectList();
         for (final SelectListEntry s : selects)
         {
             if (!s.isColumn())
@@ -2270,7 +2270,7 @@ public class OperatorTrees extends AbstractParseController {
                         }
 
                         final ExtendObjectOperator operator = new ExtendObjectOperator(DateParser.parse(dateString), sgetName, meta);
-                        final ArrayList<Object> row = new ArrayList<Object>();
+                        final List<Object> row = new ArrayList<Object>();
                         row.add(sgetName);
                         row.add(operator);
                         row.add(TYPE_INLINE);
@@ -2285,7 +2285,7 @@ public class OperatorTrees extends AbstractParseController {
                     {
                         final String name = "._E" + model.getAndIncrementSuffix();
                         final ExtendObjectOperator operator = new ExtendObjectOperator(DateParser.parse(dateString), name, meta);
-                        final ArrayList<Object> row = new ArrayList<Object>();
+                        final List<Object> row = new ArrayList<Object>();
                         row.add(name);
                         row.add(operator);
                         row.add(TYPE_INLINE);
@@ -2300,7 +2300,7 @@ public class OperatorTrees extends AbstractParseController {
                 else
                 {
                     // colName, op, type, id, exp, prereq, sub, done
-                    final ArrayList<Object> row = new ArrayList<Object>();
+                    final List<Object> row = new ArrayList<Object>();
                     row.add(op.getName());
                     row.add(op.getOp());
                     row.add(op.getType());
@@ -2328,7 +2328,7 @@ public class OperatorTrees extends AbstractParseController {
         {
             // see if complex has a row for this expression, if not add one
             boolean ok = false;
-            for (final ArrayList<Object> row : model.getComplex())
+            for (final List<Object> row : model.getComplex())
             {
                 if (row.get(4).equals(e) && row.get(6).equals(sub))
                 {
@@ -2341,7 +2341,7 @@ public class OperatorTrees extends AbstractParseController {
             {
                 // add it
                 final SQLParser.OperatorTypeAndName op = expressionOperatorTrees.buildOperatorTreeFromExpression(e, null, sub);
-                final ArrayList<Object> row = new ArrayList<Object>();
+                final List<Object> row = new ArrayList<Object>();
                 row.add(op.getName());
                 row.add(op.getOp());
                 row.add(op.getType());
@@ -2368,7 +2368,7 @@ public class OperatorTrees extends AbstractParseController {
             {
                 // see if complex has a row for this expression, if not add one
                 boolean ok = false;
-                for (final ArrayList<Object> row : model.getComplex())
+                for (final List<Object> row : model.getComplex())
                 {
                     if (row.get(4).equals(e) && row.get(6).equals(sub))
                     {
@@ -2381,7 +2381,7 @@ public class OperatorTrees extends AbstractParseController {
                 {
                     // add it
                     final SQLParser.OperatorTypeAndName op = expressionOperatorTrees.buildOperatorTreeFromExpression(e, null, sub);
-                    final ArrayList<Object> row = new ArrayList<Object>();
+                    final List<Object> row = new ArrayList<Object>();
                     row.add(op.getName());
                     row.add(op.getOp());
                     row.add(op.getType());
@@ -2395,7 +2395,7 @@ public class OperatorTrees extends AbstractParseController {
             }
             else
             {
-                final ArrayList<Expression> args = f.getArgs();
+                final List<Expression> args = f.getArgs();
                 if (args != null && args.size() > 0)
                 {
                     for (final Expression arg : args)
@@ -2407,7 +2407,7 @@ public class OperatorTrees extends AbstractParseController {
         }
         else if (e.isList())
         {
-            final ArrayList<Expression> list = e.getList();
+            final List<Expression> list = e.getList();
             for (final Expression e2 : list)
             {
                 processHavingExpression(e2, sub);
@@ -2415,7 +2415,7 @@ public class OperatorTrees extends AbstractParseController {
         }
         else if (e.isCase())
         {
-            final ArrayList<Case> cases = e.getCases();
+            final List<Case> cases = e.getCases();
             for (final Case c : cases)
             {
                 processHavingExpression(c.getResult(), sub);
@@ -2470,12 +2470,12 @@ public class OperatorTrees extends AbstractParseController {
         }
     }
 
-    private boolean checkForCaseOperator(Operator o, final ArrayList<Object> row, Operator op, final SubSelect sub) throws Exception {
+    private boolean checkForCaseOperator(Operator o, final List<Object> row, Operator op, final SubSelect sub) throws Exception {
         if (o instanceof CaseOperator)
         {
             SearchOperatorTrees searchOperatorTrees = new SearchOperatorTrees(connection, tx, meta, model);
             final Expression exp = (Expression)row.get(4);
-            final ArrayList<HashSet<HashMap<Filter, Filter>>> alhshm = new ArrayList<HashSet<HashMap<Filter, Filter>>>();
+            final List<Set<Map<Filter, Filter>>> alhshm = new ArrayList<Set<Map<Filter, Filter>>>();
             // HRDBMSWorker.logger.debug("Build SC has " +
             // exp.getCases().size() + " cases to examine");
             for (final Case c : exp.getCases())
@@ -2491,10 +2491,10 @@ public class OperatorTrees extends AbstractParseController {
                     HRDBMSWorker.logger.debug("Build SC when building a CaseOperator did something, but it wasn't a SelectOperator");
                 }
                 // add filters to alhshm and remove from tree
-                final HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
+                final Set<Map<Filter, Filter>> hshm = new HashSet<Map<Filter, Filter>>();
                 while (op instanceof SelectOperator)
                 {
-                    final HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
+                    final Map<Filter, Filter> hm = new HashMap<Filter, Filter>();
                     for (final Filter f : ((SelectOperator)op).getFilter())
                     {
                         hm.put(f, f);
@@ -2527,7 +2527,7 @@ public class OperatorTrees extends AbstractParseController {
 
             ((CaseOperator)o).setFilters(alhshm);
             String type = ((CaseOperator)o).getType();
-            final ArrayList<Object> results = ((CaseOperator)o).getResults();
+            final List<Object> results = ((CaseOperator)o).getResults();
             for (final Object o2 : results)
             {
                 if (o2 instanceof String)

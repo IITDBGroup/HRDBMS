@@ -17,6 +17,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.List;
 
 public class HRDBMSStatement implements Statement
 {
@@ -45,8 +46,8 @@ public class HRDBMSStatement implements Statement
 	private HRDBMSResultSet result;
 	private int updateCount = -1;
 	private int fetchSize = 30000;
-	protected ArrayList<Object> parms = new ArrayList<Object>();
-	private final ArrayList<String> batch = new ArrayList<String>();
+	protected List<Object> parms = new ArrayList<Object>();
+	private final List<String> batch = new ArrayList<String>();
 
 	private final CharsetEncoder ce = cs.newEncoder();
 

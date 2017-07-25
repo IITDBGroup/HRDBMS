@@ -4,9 +4,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
+import java.util.*;
+
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.HrdbmsType;
 import com.exascale.misc.MyDate;
@@ -65,7 +64,7 @@ public final class MaxOperator implements AggregateOperator, Serializable
 		}
 	}
 
-	public static MaxOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static MaxOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final MaxOperator value = (MaxOperator)unsafe.allocateInstance(MaxOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -94,7 +93,7 @@ public final class MaxOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public AggregateResultThread getHashThread(final HashMap<String, Integer> cols2Pos) throws Exception
+	public AggregateResultThread getHashThread(final Map<String, Integer> cols2Pos) throws Exception
 	{
 		return new MaxHashThread(cols2Pos);
 	}
@@ -106,7 +105,7 @@ public final class MaxOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public AggregateResultThread newProcessingThread(final ArrayList<ArrayList<Object>> rows, final HashMap<String, Integer> cols2Pos)
+	public AggregateResultThread newProcessingThread(final List<List<Object>> rows, final Map<String, Integer> cols2Pos)
 	{
 		return new MaxThread(rows, cols2Pos);
 	}
@@ -211,11 +210,11 @@ public final class MaxOperator implements AggregateOperator, Serializable
 	{
 		// private final DiskBackedALOHashMap<AtomicDouble> maxes = new
 		// DiskBackedALOHashMap<AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
-		private HashMap<ArrayList<Object>, Object> maxes = new HashMap<ArrayList<Object>, Object>();
-		private final HashMap<String, Integer> cols2Pos;
+		private Map<List<Object>, Object> maxes = new HashMap<>();
+		private final Map<String, Integer> cols2Pos;
 		private int pos;
 
-		public MaxHashThread(final HashMap<String, Integer> cols2Pos) throws Exception
+		public MaxHashThread(final Map<String, Integer> cols2Pos) throws Exception
 		{
 			this.cols2Pos = cols2Pos;
 			try
@@ -237,14 +236,14 @@ public final class MaxOperator implements AggregateOperator, Serializable
 		}
 
 		@Override
-		public Object getResult(final ArrayList<Object> keys)
+		public Object getResult(final List<Object> keys)
 		{
 			return maxes.get(keys);
 		}
 
 		// @Parallel
 		@Override
-		public final void put(final ArrayList<Object> row, final ArrayList<Object> group)
+		public final void put(final List<Object> row, final List<Object> group)
 		{
 			final Object o = row.get(pos);
 			final Comparable val = (Comparable)o;
@@ -269,11 +268,11 @@ public final class MaxOperator implements AggregateOperator, Serializable
 
 	private final class MaxThread extends AggregateResultThread
 	{
-		private final ArrayList<ArrayList<Object>> rows;
-		private final HashMap<String, Integer> cols2Pos;
+		private final List<List<Object>> rows;
+		private final Map<String, Integer> cols2Pos;
 		private Comparable max;
 
-		public MaxThread(final ArrayList<ArrayList<Object>> rows, final HashMap<String, Integer> cols2Pos)
+		public MaxThread(final List<List<Object>> rows, final Map<String, Integer> cols2Pos)
 		{
 			this.rows = rows;
 			this.cols2Pos = cols2Pos;
@@ -302,7 +301,7 @@ public final class MaxOperator implements AggregateOperator, Serializable
 			while (z < limit)
 			{
 				final Object orow = rows.get(z++);
-				final ArrayList<Object> row = (ArrayList<Object>)orow;
+				final List<Object> row = (List<Object>)orow;
 				if (isInt)
 				{
 					final Integer o = (Integer)row.get(pos);

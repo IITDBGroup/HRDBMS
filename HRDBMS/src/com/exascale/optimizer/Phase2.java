@@ -1,8 +1,6 @@
 package com.exascale.optimizer;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.optimizer.load.LoadOperator;
@@ -22,11 +20,11 @@ public final class Phase2
 		meta = root.getMeta();
 	}
 
-	private static ArrayList<Integer> determineHashMapEntries(final TableScanOperator t, final CNFFilter filter) throws Exception
+	private static List<Integer> determineHashMapEntries(final TableScanOperator t, final CNFFilter filter) throws Exception
 	{
 		if (t.isSingleNodeGroupSet())
 		{
-			final ArrayList<Integer> retval = new ArrayList<>(1);
+			final List<Integer> retval = new ArrayList<>(1);
 			retval.add(t.getSingleNodeGroup());
 			return retval;
 		}
@@ -35,7 +33,7 @@ public final class Phase2
 		{
 			if (filter != null && filter.hashFiltersPartitions(t.getNodeGroupHash()))
 			{
-				final ArrayList<Integer> retval = new ArrayList<Integer>(1);
+				final List<Integer> retval = new ArrayList<Integer>(1);
 				retval.add(t.nodeGroupSet().get((int)(filter.getPartitionHash() % t.getNumNodeGroups())));
 				return retval;
 			}
@@ -49,8 +47,8 @@ public final class Phase2
 			// node group range
 			if (filter != null && filter.rangeFiltersPartitions(t.getNodeGroupRangeCol()))
 			{
-				final ArrayList<Filter> f = filter.getRangeFilters();
-				final ArrayList<Integer> devices = t.getNodeGroupsMatchingRangeFilters(f);
+				final List<Filter> f = filter.getRangeFilters();
+				final List<Integer> devices = t.getNodeGroupsMatchingRangeFilters(f);
 				return devices;
 			}
 			else
@@ -91,9 +89,9 @@ public final class Phase2
 			// device range
 			if (filter != null && filter.rangeFiltersPartitions(t.getDeviceRangeCol()))
 			{
-				final ArrayList<Filter> f = filter.getRangeFilters();
+				final List<Filter> f = filter.getRangeFilters();
 				// handle devices all or devices set
-				final ArrayList<Integer> devices = t.getDevicesMatchingRangeFilters(f);
+				final List<Integer> devices = t.getDevicesMatchingRangeFilters(f);
 				t.addActiveDevicesForParent(devices, o);
 			}
 			else
@@ -122,11 +120,11 @@ public final class Phase2
 		}
 	}
 
-	private static void setActiveNodes(final TableScanOperator t, final CNFFilter filter, final Operator o, final ArrayList<ArrayList<Integer>> nodeLists) throws Exception
+	private static void setActiveNodes(final TableScanOperator t, final CNFFilter filter, final Operator o, final List<List<Integer>> nodeLists) throws Exception
 	{
 		if (t.isSingleNodeSet())
 		{
-			for (final ArrayList<Integer> nodeList : nodeLists)
+			for (final List<Integer> nodeList : nodeLists)
 			{
 				if (t.getSingleNode() == -1)
 				{
@@ -147,7 +145,7 @@ public final class Phase2
 				// HRDBMSWorker.logger.debug("Hash DOES filter partitions");
 				if (t.allNodes())
 				{
-					for (final ArrayList<Integer> nodeList : nodeLists)
+					for (final List<Integer> nodeList : nodeLists)
 					{
 						final int pos = (int)(filter.getPartitionHash() % nodeList.size());
 						t.addActiveNodeForParent(nodeList.get(pos), o);
@@ -158,7 +156,7 @@ public final class Phase2
 				}
 				else
 				{
-					for (final ArrayList<Integer> nodeList : nodeLists)
+					for (final List<Integer> nodeList : nodeLists)
 					{
 						t.addActiveNodeForParent(nodeList.get(t.nodeSet().get((int)(filter.getPartitionHash() % t.getNumNodes()))), o);
 					}
@@ -174,12 +172,12 @@ public final class Phase2
 			// node range
 			if (filter != null && filter.rangeFiltersPartitions(t.getNodeRangeCol()))
 			{
-				final ArrayList<Filter> f = filter.getRangeFilters();
+				final List<Filter> f = filter.getRangeFilters();
 				// handle nodes all or nodes set
-				final ArrayList<Integer> nodes = t.getNodesMatchingRangeFilters(f);
+				final List<Integer> nodes = t.getNodesMatchingRangeFilters(f);
 				for (final Integer node : nodes)
 				{
-					for (final ArrayList<Integer> nodeList : nodeLists)
+					for (final List<Integer> nodeList : nodeLists)
 					{
 						t.addActiveNodeForParent(nodeList.get(node), o);
 					}
@@ -192,10 +190,10 @@ public final class Phase2
 		}
 	}
 
-	private static void addNodes(final TableScanOperator tableScanOperator, Operator operator, final ArrayList<ArrayList<Integer>> nodeLists) {
+	private static void addNodes(final TableScanOperator tableScanOperator, Operator operator, final List<List<Integer>> nodeLists) {
 		if (tableScanOperator.allNodes())
 		{
-			for (final ArrayList<Integer> nodeList : nodeLists)
+			for (final List<Integer> nodeList : nodeLists)
 			{
 				for (final Integer node : nodeList)
 				{
@@ -207,7 +205,7 @@ public final class Phase2
 		{
 			for (final int j : tableScanOperator.nodeSet())
 			{
-				for (final ArrayList<Integer> nodeList : nodeLists)
+				for (final List<Integer> nodeList : nodeLists)
 				{
 					tableScanOperator.addActiveNodeForParent(nodeList.get(j), operator);
 				}
@@ -253,8 +251,8 @@ public final class Phase2
 			t.phase2Done();
 			Operator o = t.parent();
             o.removeChild(op);
-            ArrayList<Integer> nodeList = meta.getNodesForTable(t.getSchema(), t.getTable(), tx);
-            final ArrayList<ArrayList<Integer>> nodeLists = new ArrayList<>(1);
+            List<Integer> nodeList = meta.getNodesForTable(t.getSchema(), t.getTable(), tx);
+            final List<List<Integer>> nodeLists = new ArrayList<>(1);
             nodeLists.add(nodeList);
 
             final NetworkReceiveOperator receive = new NetworkReceiveOperator(meta);
@@ -309,12 +307,12 @@ public final class Phase2
 					{
 						// node is hash or range
 						// node is set or ALL
-						ArrayList<Integer> nodeList = t.getNodeList();
+						List<Integer> nodeList = t.getNodeList();
 						if (nodeList.get(0) == PartitionMetaData.NODE_ALL)
 						{
 							nodeList = MetaData.getNodesForTable(t.getSchema(), t.getTable(), tx);
 						}
-						final ArrayList<ArrayList<Integer>> nodeLists = new ArrayList<>(1);
+						final List<List<Integer>> nodeLists = new ArrayList<>(1);
 						nodeLists.add(nodeList);
 						setActiveNodes(t, filter, o, nodeLists);
 						setActiveDevices(t, filter, o);
@@ -322,9 +320,9 @@ public final class Phase2
 				}
 				else
 				{
-					final HashMap<Integer, ArrayList<Integer>> nodeGroupHashMap = t.getNodeGroupHashMap();
-					final ArrayList<Integer> entries = determineHashMapEntries(t, filter);
-					final ArrayList<ArrayList<Integer>> nodeLists = new ArrayList<ArrayList<Integer>>(entries.size());
+					final Map<Integer, List<Integer>> nodeGroupHashMap = t.getNodeGroupHashMap();
+					final List<Integer> entries = determineHashMapEntries(t, filter);
+					final List<List<Integer>> nodeLists = new ArrayList<List<Integer>>(entries.size());
 					for (final int entry : entries)
 					{
 						nodeLists.add(nodeGroupHashMap.get(entry));
@@ -337,19 +335,19 @@ public final class Phase2
 			for (final Operator o : t.parents())
 			{
 				// get rid of duplicates in node and device lists
-				final HashSet hs = new HashSet();
-				final ArrayList<Integer> nodeList = t.getNodeList(o);
+				final Set hs = new HashSet();
+				final List<Integer> nodeList = t.getNodeList(o);
 				hs.addAll(nodeList);
 				nodeList.clear();
 				nodeList.addAll(hs);
 				hs.clear();
-				final ArrayList<Integer> deviceList = t.getDeviceList(o);
+				final List<Integer> deviceList = t.getDeviceList(o);
 				hs.addAll(deviceList);
 				deviceList.clear();
 				deviceList.addAll(hs);
 			}
 
-			final ArrayList<Operator> parents = (ArrayList<Operator>)t.parents().clone();
+			final List<Operator> parents = new ArrayList<>(t.parents());
 			for (final Operator o : parents)
 			{
 				o.removeChild(op);
@@ -358,7 +356,7 @@ public final class Phase2
 			for (final Operator o : parents)
 			{
 				final NetworkReceiveOperator receive = new NetworkReceiveOperator(meta);
-				final ArrayList<Integer> nodeList = t.getNodeList(o);
+				final List<Integer> nodeList = t.getNodeList(o);
 				for (final int node : nodeList)
 				{
 					final TableScanOperator table = t.clone();
@@ -395,7 +393,7 @@ public final class Phase2
 		}
 		else
 		{
-			for (final Operator o : (ArrayList<Operator>)op.children().clone())
+			for (final Operator o : new ArrayList<>(op.children()))
 			{
 				updateTree(o);
 			}

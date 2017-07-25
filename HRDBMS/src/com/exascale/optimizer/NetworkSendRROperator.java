@@ -7,9 +7,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Field;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedOutputStream;
@@ -37,7 +35,7 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 	private int id;
 	private ConcurrentHashMap<Integer, Socket> connections = new ConcurrentHashMap<Integer, Socket>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
 	private ConcurrentHashMap<Integer, OutputStream> outs = new ConcurrentHashMap<Integer, OutputStream>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
-	private ArrayList<Operator> parents = new ArrayList<Operator>();
+	private List<Operator> parents = new ArrayList<Operator>();
 
 	private boolean error = false;
 
@@ -50,7 +48,7 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 		received = new AtomicLong(0);
 	}
 
-	public static NetworkSendRROperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static NetworkSendRROperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final NetworkSendRROperator value = (NetworkSendRROperator)unsafe.allocateInstance(NetworkSendRROperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -166,7 +164,7 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 		return null;
 	}
 
-	public ArrayList<Operator> parents()
+	public List<Operator> parents()
 	{
 		return parents;
 	}
@@ -271,7 +269,7 @@ public final class NetworkSendRROperator extends NetworkSendOperator
 	@Override
 	public synchronized void start()
 	{
-		final ArrayList<OutputStream> outs2 = new ArrayList<OutputStream>(outs.size());
+		final List<OutputStream> outs2 = new ArrayList<OutputStream>(outs.size());
 		for (final OutputStream out : outs.values())
 		{
 			outs2.add(new CompressedOutputStream(out));

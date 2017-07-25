@@ -15,12 +15,7 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.Random;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedInputStream;
 import com.exascale.managers.HRDBMSWorker;
@@ -58,17 +53,17 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	}
 	protected CharsetDecoder cd = cs.newDecoder();
 	protected MetaData meta;
-	protected ArrayList<Operator> children = new ArrayList<Operator>();
+	protected List<Operator> children = new ArrayList<Operator>();
 	protected Operator parent;
-	protected HashMap<String, String> cols2Types;
-	protected HashMap<String, Integer> cols2Pos;
+	protected Map<String, String> cols2Types;
+	protected Map<String, Integer> cols2Pos;
 
-	protected TreeMap<Integer, String> pos2Col;
-	protected transient HashMap<Operator, Socket> socks;
-	protected transient HashMap<Operator, OutputStream> outs;
-	protected transient HashMap<Operator, InputStream> ins;
+	protected Map<Integer, String> pos2Col;
+	protected transient Map<Operator, Socket> socks;
+	protected transient Map<Operator, OutputStream> outs;
+	protected transient Map<Operator, InputStream> ins;
 	protected transient BufferedLinkedBlockingQueue outBuffer;
-	protected transient ArrayList<ReadThread> threads;
+	protected transient List<ReadThread> threads;
 	protected volatile boolean fullyStarted = false;
 	// protected AtomicLong readCounter = new AtomicLong(0);
 	// protected AtomicLong bytes = new AtomicLong(0);
@@ -92,7 +87,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 		received = new AtomicLong(0);
 	}
 
-	public static NetworkReceiveOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static NetworkReceiveOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final NetworkReceiveOperator value = (NetworkReceiveOperator)unsafe.allocateInstance(NetworkReceiveOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -153,7 +148,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
 		return children;
 	}
@@ -210,13 +205,13 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	}
 
 	@Override
-	public HashMap<String, Integer> getCols2Pos()
+	public Map<String, Integer> getCols2Pos()
 	{
 		return cols2Pos;
 	}
 
 	@Override
-	public HashMap<String, String> getCols2Types()
+	public Map<String, String> getCols2Types()
 	{
 		return cols2Types;
 	}
@@ -234,13 +229,13 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	}
 
 	@Override
-	public TreeMap<Integer, String> getPos2Col()
+	public Map<Integer, String> getPos2Col()
 	{
 		return pos2Col;
 	}
 
 	@Override
-	public ArrayList<String> getReferences()
+	public List<String> getReferences()
 	{
 		return null;
 	}
@@ -724,7 +719,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 			{
 				return fromBytesException(bb);
 			}
-			final ArrayList<Object> retval = new ArrayList<Object>(numFields);
+			final List<Object> retval = new ArrayList<Object>(numFields);
 			int i = 0;
 
 			while (i < numFields)

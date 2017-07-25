@@ -1,14 +1,15 @@
 package com.exascale.optimizer;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class SelectClause
 {
 	private final boolean selectAll;
 	private final boolean selectStar;
-	private final ArrayList<SelectListEntry> selectList;
+	private final List<SelectListEntry> selectList;
 
-	public SelectClause(final boolean selectAll, final boolean selectStar, final ArrayList<SelectListEntry> selectList)
+	public SelectClause(final boolean selectAll, final boolean selectStar, final List<SelectListEntry> selectList)
 	{
 		this.selectAll = selectAll;
 		this.selectStar = selectStar;
@@ -34,7 +35,7 @@ public class SelectClause
 		return new SelectClause(selectAll, selectStar, selectList);
 	}
 
-	public ArrayList<SelectListEntry> getSelectList()
+	public List<SelectListEntry> getSelectList()
 	{
 		return selectList;
 	}

@@ -51,7 +51,7 @@ public class SQLParser extends AbstractParseController
 	}
 
 	/** Main point of entry */
-	public ArrayList<Operator> parse() throws Exception
+	public List<Operator> parse() throws Exception
 	{
 		final ANTLRInputStream input = new ANTLRInputStream(sql.toString());
 		final SelectLexer lexer = new SelectLexer(input);
@@ -69,7 +69,7 @@ public class SQLParser extends AbstractParseController
 			final RootOperator retval = new RootOperator(meta.generateCard(op, tx, op), new MetaData());
 			retval.add(op);
 			// Utils.printTree(op, 0); // DEBUG
-			final ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			final List<Operator> ops = new ArrayList<Operator>(1);
 			ops.add(retval);
 			return ops;
 		}
@@ -82,7 +82,7 @@ public class SQLParser extends AbstractParseController
 			{
 				throw new ParseException("Catalog updates are not allowed");
 			}
-			final ArrayList<Operator> op = operatorTrees.buildOperatorTreeFromInsert((Insert)stmt);
+			final List<Operator> op = operatorTrees.buildOperatorTreeFromInsert((Insert)stmt);
 			return op;
 		}
 
@@ -94,7 +94,7 @@ public class SQLParser extends AbstractParseController
 			{
 				throw new ParseException("Catalog updates are not allowed");
 			}
-			final ArrayList<Operator> ops = operatorTrees.buildOperatorTreeFromUpdate((Update)stmt);
+			final List<Operator> ops = operatorTrees.buildOperatorTreeFromUpdate((Update)stmt);
 			return ops;
 		}
 
@@ -107,7 +107,7 @@ public class SQLParser extends AbstractParseController
 				throw new ParseException("Catalog updates are not allowed");
 			}
 			final Operator op = operatorTrees.buildOperatorTreeFromDelete((Delete)stmt);
-			final ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			final List<Operator> ops = new ArrayList<Operator>(1);
 			ops.add(op);
 			return ops;
 		}
@@ -115,7 +115,7 @@ public class SQLParser extends AbstractParseController
 		if (stmt instanceof Runstats)
 		{
 			final Operator op = operatorTrees.buildOperatorTreeFromRunstats((Runstats)stmt);
-			final ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			final List<Operator> ops = new ArrayList<Operator>(1);
 			ops.add(op);
 			return ops;
 		}
@@ -129,7 +129,7 @@ public class SQLParser extends AbstractParseController
 				throw new ParseException("You cannot create new tables in the SYS schema");  // Reserved for internal use
 			}
 			final Operator op = operatorTrees.buildOperatorTreeFromCreateTable((CreateTable)stmt);
-			final ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			final List<Operator> ops = new ArrayList<Operator>(1);
 			ops.add(op);
 			return ops;
 		}
@@ -149,7 +149,7 @@ public class SQLParser extends AbstractParseController
 				throw new ParseException("You cannot drop tables in the SYS schema");
 			}
 			final Operator op = operatorTrees.buildOperatorTreeFromDropTable((DropTable)stmt);
-			final ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			final List<Operator> ops = new ArrayList<Operator>(1);
 			ops.add(op);
 			return ops;
 		}
@@ -157,7 +157,7 @@ public class SQLParser extends AbstractParseController
 		if (stmt instanceof CreateIndex)
 		{
 			final Operator op = operatorTrees.buildOperatorTreeFromCreateIndex((CreateIndex)stmt);
-			final ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			final List<Operator> ops = new ArrayList<Operator>(1);
 			ops.add(op);
 			return ops;
 		}
@@ -165,7 +165,7 @@ public class SQLParser extends AbstractParseController
 		if (stmt instanceof DropIndex)
 		{
 			final Operator op = operatorTrees.buildOperatorTreeFromDropIndex((DropIndex)stmt);
-			final ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			final List<Operator> ops = new ArrayList<Operator>(1);
 			ops.add(op);
 			return ops;
 		}
@@ -173,7 +173,7 @@ public class SQLParser extends AbstractParseController
 		if (stmt instanceof CreateView)
 		{
 			final Operator op = operatorTrees.buildOperatorTreeFromCreateView((CreateView)stmt);
-			final ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			final List<Operator> ops = new ArrayList<Operator>(1);
 			ops.add(op);
 			return ops;
 		}
@@ -181,7 +181,7 @@ public class SQLParser extends AbstractParseController
 		if (stmt instanceof DropView)
 		{
 			final Operator op = operatorTrees.buildOperatorTreeFromDropView((DropView)stmt);
-			final ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			final List<Operator> ops = new ArrayList<Operator>(1);
 			ops.add(op);
 			return ops;
 		}
@@ -189,7 +189,7 @@ public class SQLParser extends AbstractParseController
 		if (stmt instanceof Load)
 		{
 			final Operator op = operatorTrees.buildOperatorTreeFromLoad((Load)stmt);
-			final ArrayList<Operator> ops = new ArrayList<Operator>(1);
+			final List<Operator> ops = new ArrayList<Operator>(1);
 			ops.add(op);
 			return ops;
 		}
@@ -235,12 +235,12 @@ public class SQLParser extends AbstractParseController
 
 	public static class Model {
 		private int complexID = 0;
-		private final ArrayList<ArrayList<Object>> complex = new ArrayList<ArrayList<Object>>();
+		private final List<List<Object>> complex = new ArrayList<List<Object>>();
 		private int rewriteCounter = 0;
 		private int suffix = 0;
 		private boolean doesNotUseCurrentSchema = true;
 
-		public ArrayList<ArrayList<Object>> getComplex() { return complex; }
+		public List<List<Object>> getComplex() { return complex; }
 		public int getRewrites() { return rewriteCounter; }
 		public int getAndIncrementRewrites() { return rewriteCounter++; }
 		public int getAndIncrementSuffix() { return suffix++; }

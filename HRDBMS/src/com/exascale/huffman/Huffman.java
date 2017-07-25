@@ -7,21 +7,15 @@ import java.io.FileReader;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.SortedSet;
-import java.util.TreeMap;
-import java.util.TreeSet;
 
 public class Huffman
 {
 	private final static int NUM_SYM = 668;
-	// private static HashMap<Integer, Integer> freq = new HashMap<Integer,
+	// private static Map<Integer, Integer> freq = new HashMap<Integer,
 	// Integer>();
-	// private static HashMap<Integer, HuffmanNode> treeParts = new
+	// private static Map<Integer, HuffmanNode> treeParts = new
 	// HashMap<Integer, HuffmanNode>();
 	// private static HuffmanNode tree;
 	private final static int[] encode = new int[NUM_SYM];
@@ -31,8 +25,8 @@ public class Huffman
 	private final static int[][] codeExtended = new int[256][256];
 	private final static int[][] codeExtended2 = new int[NUM_SYM - 256][256];
 	private final static int[][] codeExtended3 = new int[NUM_SYM - 256][256];
-	private static HashMap<Integer, Integer> freq = new HashMap<Integer, Integer>();
-	private static HashMap<Integer, HuffmanNode> treeParts = new HashMap<Integer, HuffmanNode>();
+	private static Map<Integer, Integer> freq = new HashMap<Integer, Integer>();
+	private static Map<Integer, HuffmanNode> treeParts = new HashMap<Integer, HuffmanNode>();
 	private static HuffmanNode tree;
 
 	private final static byte[][] decodeExtended = { { 't', 'h' }, { 'T', 'H' }, { 't', 'H' }, { 'T', 'h' }, { 'h', 'e' }, { 'H', 'E' }, { 'h', 'E' }, { 'H', 'e' }, { 'T', 'H', 'E' }, { 't', 'h', 'e' }, { 'T', 'h', 'e' }, { 't', 'H', 'e' }, { 't', 'h', 'E' }, { 'T', 'H', 'e' }, { 't', 'H', 'E' }, { 'T', 'h', 'E' }, { 'i', 'n' }, { 'I', 'N' }, { 'I', 'n' }, { 'i', 'N' }, { 'e', 'r' }, { 'E', 'R' }, { 'E', 'r' }, { 'e', 'R' }, { 'a', 'n' }, { 'A', 'N' }, { 'A', 'n' }, { 'a', 'N' }, { 'r', 'e' }, { 'R', 'E' }, { 'R', 'e' }, { 'r', 'E' }, { 'o', 'n' }, { 'O', 'N' }, { 'O', 'n' }, { 'o', 'N' }, { 'a', 't' }, { 'A', 'T' }, { 'A', 't' }, { 'a', 'T' }, { 'e', 'n' }, { 'E', 'N' }, { 'E', 'n' }, { 'e', 'N' }, { 'n', 'd' }, { 'N', 'D' }, { 'N', 'd' }, { 'n', 'D' }, { 't', 'i' }, { 'T', 'I' }, { 'T', 'i' }, { 't', 'I' }, { 'e', 's' }, { 'E', 'S' }, { 'E', 's' }, { 'e', 'S' }, { 'o', 'r' }, { 'O', 'R' }, { 'O', 'r' }, { 'o', 'R' }, { 't', 'e' }, { 'T', 'E' }, { 'T', 'e' }, { 't', 'E' }, { 'o', 'f' }, { 'O', 'F' }, { 'O', 'f' }, { 'o', 'F' }, { 'e', 'd' }, { 'E', 'D' }, { 'E', 'd' }, { 'e', 'D' }, { 'i', 's' }, { 'I', 'S' }, { 'I', 's' }, { 'i', 'S' }, { 'i', 't' }, { 'I', 'T' }, { 'I', 't' }, { 'i', 'T' }, { 'a', 'l' }, { 'A', 'L' }, { 'A', 'l' }, { 'a', 'L' }, { 'a', 'r' }, { 'A', 'R' }, { 'A', 'r' }, { 'a', 'R' }, { 's', 't' }, { 'S', 'T' }, { 'S', 't' }, { 's', 'T' }, { 't', 'o' }, { 'T', 'O' }, { 'T', 'o' }, { 't', 'O' }, { 'n', 't' }, { 'N', 'T' }, { 'N', 't' }, { 'n', 'T' }, { 'n', 'g' }, { 'N', 'G' }, { 'N', 'g' }, { 'n', 'G' }, { 'a', 'n', 'd' }, { 'A', 'N', 'D' }, { 'A', 'n', 'd' }, { 'a', 'N', 'd' }, { 'a', 'n', 'D' }, { 'A', 'N', 'd' }, { 'a', 'N', 'D' }, { 'A', 'n', 'D' }, { 's', 'e' }, { 'S', 'E' }, { 'S', 'e' }, { 's', 'E' }, { 'h', 'a' }, { 'H', 'A' }, { 'H', 'a' }, { 'h', 'A' }, { 'a', 's' }, { 'A', 'S' }, { 'A', 's' }, { 'a', 'S' }, { 'o', 'u' }, { 'O', 'U' }, { 'O', 'u' }, { 'o', 'U' }, { 'i', 'o' }, { 'I', 'O' }, { 'I', 'o' }, { 'i', 'O' }, { 'l', 'e' }, { 'L', 'E' }, { 'L', 'e' }, { 'l', 'E' }, { 'v', 'e' }, { 'V', 'E' }, { 'V', 'e' }, { 'v', 'E' }, { 'c', 'o' }, { 'C', 'O' }, { 'C', 'o' }, { 'c', 'O' }, { 'm', 'e' }, { 'M', 'E' }, { 'M', 'e' }, { 'm', 'E' }, { 'd', 'e' }, { 'D', 'E' }, { 'D', 'e' }, { 'd', 'E' }, { 'h', 'i' }, { 'H', 'I' }, { 'H', 'i' }, { 'h', 'I' }, { 'r', 'i' }, { 'R', 'I' }, { 'R', 'i' }, { 'r', 'I' }, { 'r', 'o' }, { 'R', 'O' }, { 'R', 'o' }, { 'r', 'O' }, { 'i', 'c' }, { 'I', 'C' }, { 'I', 'c' }, { 'i', 'C' }, { 'i', 'n', 'g' }, { 'I', 'N', 'G' }, { 'I', 'n', 'g' }, { 'i', 'N', 'g' }, { 'i', 'n', 'G' }, { 'I', 'N', 'g' }, { 'i', 'N', 'G' }, { 'I', 'n', 'G' }, { 'i', 'o', 'n' }, { 'I', 'O', 'N' }, { 'I', 'o', 'n' }, { 'i', 'O', 'n' }, { 'i', 'o', 'N' }, { 'I', 'O', 'n' }, { 'i', 'O', 'N' }, { 'I', 'o', 'N' }, { 'n', 'e' }, { 'N', 'E' }, { 'N', 'e' }, { 'n', 'E' }, { 'e', 'a' }, { 'E', 'A' }, { 'E', 'a' }, { 'e', 'A' }, { 'r', 'a' }, { 'R', 'A' }, { 'R', 'a' }, { 'r', 'A' }, { 'c', 'e' }, { 'C', 'E' }, { 'C', 'e' }, { 'c', 'E' }, { 'l', 'i' }, { 'L', 'I' }, { 'L', 'i' }, { 'l', 'I' }, { 'c', 'h' }, { 'C', 'H' }, { 'C', 'h' }, { 'c', 'H' }, { 'l', 'l' }, { 'L', 'L' }, { 'L', 'l' }, { 'l', 'L' }, { 'b', 'e' }, { 'B', 'E' }, { 'B', 'e' }, { 'b', 'E' }, { 'm', 'a' }, { 'M', 'A' }, { 'M', 'a' }, { 'm', 'A' }, { 's', 'i' }, { 'S', 'I' }, { 'S', 'i' }, { 's', 'I' }, { 'o', 'm' }, { 'O', 'M' }, { 'O', 'm' }, { 'o', 'M' }, { 'u', 'r' }, { 'U', 'R' }, { 'U', 'r' }, { 'u', 'R' }, { 'c', 'a' }, { 'C', 'A' }, { 'C', 'a' }, { 'c', 'A' }, { 'e', 'l' }, { 'E', 'L' }, { 'E', 'l' }, { 'e', 'L' }, { 't', 'a' }, { 'T', 'A' }, { 'T', 'a' }, { 't', 'A' }, { 'l', 'a' }, { 'L', 'A' }, { 'L', 'a' }, { 'l', 'A' }, { 'n', 's' }, { 'N', 'S' }, { 'N', 's' }, { 'n', 'S' }, { 'd', 'i' }, { 'D', 'I' }, { 'D', 'i' }, { 'd', 'I' }, { 'f', 'o' }, { 'F', 'O' }, { 'F', 'o' }, { 'f', 'O' }, { 'h', 'o' }, { 'H', 'O' }, { 'H', 'o' }, { 'h', 'O' }, { 'p', 'e' }, { 'P', 'E' }, { 'P', 'e' }, { 'p', 'E' }, { 'e', 'c' }, { 'E', 'C' }, { 'E', 'c' }, { 'e', 'C' }, { 'p', 'r' }, { 'P', 'R' }, { 'P', 'r' }, { 'p', 'R' }, { 'n', 'o' }, { 'N', 'O' }, { 'N', 'o' }, { 'n', 'O' }, { 'c', 't' }, { 'C', 'T' }, { 'C', 't' }, { 'c', 'T' }, { 'u', 's' }, { 'U', 'S' }, { 'U', 's' }, { 'u', 'S' }, { 'a', 'c' }, { 'A', 'C' }, { 'A', 'c' }, { 'a', 'C' }, { 'o', 't' }, { 'O', 'T' }, { 'O', 't' }, { 'o', 'T' }, { 'i', 'l' }, { 'I', 'L' }, { 'I', 'l' }, { 'i', 'L' }, { 't', 'r' }, { 'T', 'R' }, { 'T', 'r' }, { 't', 'R' }, { 'l', 'y' }, { 'L', 'Y' }, { 'L', 'y' }, { 'l', 'Y' }, { 'n', 'c' }, { 'N', 'C' }, { 'N', 'c' }, { 'n', 'C' }, { 'e', 't' }, { 'E', 'T' }, { 'E', 't' }, { 'e', 'T' }, { 'u', 't' }, { 'U', 'T' }, { 'U', 't' }, { 'u', 'T' }, { 's', 's' }, { 'S', 'S' }, { 'S', 's' }, { 's', 'S' }, { 's', 'o' }, { 'S', 'O' }, { 'S', 'o' }, { 's', 'O' }, { 'r', 's' }, { 'R', 'S' }, { 'R', 's' }, { 'r', 'S' }, { 'u', 'n' }, { 'U', 'N' }, { 'U', 'n' }, { 'u', 'N' }, { 'l', 'o' }, { 'L', 'O' }, { 'L', 'o' }, { 'l', 'O' }, { 'w', 'a' }, { 'W', 'A' }, { 'W', 'a' }, { 'w', 'A' }, { 'g', 'e' }, { 'G', 'E' }, { 'G', 'e' }, { 'g', 'E' }, { 'i', 'e' }, { 'I', 'E' }, { 'I', 'e' }, { 'i', 'E' }, { 'w', 'h' }, { 'W', 'H' }, { 'W', 'h' }, { 'w', 'H' }, { 't', 'i', 'o' }, { 'T', 'I', 'O' }, { 'T', 'i', 'o' }, { 't', 'I', 'o' }, { 't', 'i', 'O' }, { 'T', 'I', 'o' }, { 'T', 'i', 'O' }, { 't', 'I', 'O' }, { 'e', 'n', 't' }, { 'E', 'N', 'T' }, { 'E', 'n', 't' }, { 'e', 'N', 't' }, { 'e', 'n', 'T' }, { 'E', 'N', 't' }, { 'E', 'n', 'T' }, { 'e', 'N', 'T' }, { 'a', 't', 'i' }, { 'A', 'T', 'I' }, { 'A', 't', 'i' }, { 'a', 'T', 'i' }, { 'a', 't', 'I' }, { 'A', 'T', 'i' }, { 'A', 't', 'I' }, { 'a', 'T', 'I' }, { 'f', 'o', 'r' }, { 'F', 'O', 'R' }, { 'F', 'o', 'r' }, { 'f', 'O', 'r' }, { 'f', 'o', 'R' }, { 'F', 'O', 'r' }, { 'F', 'o', 'R' }, { 'f', 'O', 'R' }, { 'h', 'e', 'r' }, { 'H', 'E', 'R' }, { 'H', 'e', 'r' }, { 'h', 'E', 'r' }, { 'h', 'e', 'R' }, { 'H', 'E', 'r' }, { 'H', 'e', 'R' }, { 'h', 'E', 'R' }, { 't', 'i', 'o', 'n' }, { 'T', 'I', 'O', 'N' }, { 'T', 'i', 'o', 'n' }, { 't', 'I', 'o', 'n' }, { 't', 'i', 'O', 'n' }, { 't', 'i', 'o', 'N' }, { 'T', 'I', 'o', 'n' }, { 'T', 'i', 'O', 'n' }, { 'T', 'i', 'o', 'N' }, { 't', 'I', 'O', 'n' }, { 't', 'I', 'o', 'N' }, { 't', 'i', 'O', 'N' }, { 'T', 'I', 'O', 'n' }, { 'T', 'I', 'o', 'N' }, { 'T', 'i', 'O', 'N' }, { 't', 'I', 'O', 'N' } };
@@ -1016,7 +1010,7 @@ public class Huffman
 			tree = treeParts.get(key);
 		}
 
-		final TreeMap<Integer, String> codes = new TreeMap<Integer, String>();
+		final Map<Integer, String> codes = new TreeMap<Integer, String>();
 		traverse(tree, codes, "");
 		for (final Entry entry : codes.entrySet())
 		{
@@ -1109,7 +1103,7 @@ public class Huffman
 			final Code code = new Code();
 			int length = 0;
 			int temp = 0;
-			final ArrayList<Byte> bytes = new ArrayList<Byte>();
+			final List<Byte> bytes = new ArrayList<Byte>();
 			int x = 0x800000;
 			HuffmanNode node = tree;
 			while (x != 0)
@@ -1709,7 +1703,7 @@ public class Huffman
 		in.close();
 	}
 
-	private static void traverse(final HuffmanNode node, final TreeMap<Integer, String> codes, final String str)
+	private static void traverse(final HuffmanNode node, final Map<Integer, String> codes, final String str)
 	{
 		if (node.left == null && node.right == null)
 		{

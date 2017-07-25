@@ -3,6 +3,7 @@ package com.exascale.threads;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import com.exascale.filesystem.Block;
 import com.exascale.filesystem.Page;
@@ -21,16 +22,16 @@ public class ReadThread extends HRDBMSThread
 	private Schema schema;
 	private ConcurrentHashMap<Integer, Schema> schemaMap;
 	private Transaction tx;
-	private ArrayList<Integer> fetchPos;
-	private ArrayList<Integer> cols;
+	private List<Integer> fetchPos;
+	private List<Integer> cols;
 	private int layoutSize;
-	private ArrayList<ReadThread> subThreads;
+	private List<ReadThread> subThreads;
 	private boolean consecutive = false;
 	private int num = -1;
-	private ArrayList<Integer> indexes;
+	private List<Integer> indexes;
 	private Page[] bp;
 
-	public ReadThread(final ArrayList<ReadThread> subThreads)
+	public ReadThread(final List<ReadThread> subThreads)
 	{
 		this.subThreads = subThreads;
 	}
@@ -44,7 +45,7 @@ public class ReadThread extends HRDBMSThread
 		this.bb = bb;
 	}
 
-	public ReadThread(final Page p, final Block b, final ByteBuffer bb, final ArrayList<Integer> cols, final int layoutSize)
+	public ReadThread(final Page p, final Block b, final ByteBuffer bb, final List<Integer> cols, final int layoutSize)
 	{
 		this.description = "Read thread for buffer Manager";
 		this.setWait(false);
@@ -55,7 +56,7 @@ public class ReadThread extends HRDBMSThread
 		this.layoutSize = layoutSize;
 	}
 
-	public ReadThread(final Page p, final Block b, final ByteBuffer bb, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos)
+	public ReadThread(final Page p, final Block b, final ByteBuffer bb, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final List<Integer> fetchPos)
 	{
 		this.description = "Read thread for buffer Manager";
 		this.setWait(false);
@@ -68,7 +69,7 @@ public class ReadThread extends HRDBMSThread
 		this.fetchPos = fetchPos;
 	}
 
-	public ReadThread(final Page p, final int num, final ArrayList<Integer> indexes, final Page[] bp, final int rank, final int rankSize)
+	public ReadThread(final Page p, final int num, final List<Integer> indexes, final Page[] bp, final int rank, final int rankSize)
 	{
 		this.p = p;
 		this.num = num;

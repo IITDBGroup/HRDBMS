@@ -60,11 +60,11 @@ import java.util.RandomAccess;
  *
  * <p>
  * <a name="fail-fast"/> The iterators returned by this class's
- * {@link #iterator() iterator} and {@link #listIterator(int) listIterator}
+ * {@link #iterator() iterator} and listIterator(int) listIterator
  * methods are <em>fail-fast</em>: if the list is structurally modified at any
  * time after the iterator is created, in any way except through the iterator's
- * own {@link ListIterator#remove() remove} or {@link ListIterator#add(Object)
- * add} methods, the iterator will throw a
+ * own ListIterator#remove() remove or ListIterator#add(Object)
+ * add methods, the iterator will throw a
  * {@link ConcurrentModificationException}. Thus, in the face of concurrent
  * modification, the iterator fails quickly and cleanly, rather than risking
  * arbitrary, non-deterministic behavior at an undetermined time in the future.
@@ -86,9 +86,7 @@ import java.util.RandomAccess;
  * @author Josh Bloch
  * @author Neal Gafter
  * @see Collection
- * @see List
  * @see LinkedList
- * @see Vector
  * @since 1.2
  */
 

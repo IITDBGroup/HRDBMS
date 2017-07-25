@@ -35,14 +35,14 @@ public final class ExternalTableScanOperator extends TableScanOperator
         this.numNodes = MetaData.numWorkerNodes;
     }
 
-    public ExternalTableScanOperator(ExternalTableType tableImpl, final String schema, final String name, final MetaData meta, final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> tablePos2Col, final HashMap<String, String> tableCols2Types, final HashMap<String, Integer> tableCols2Pos) throws Exception
+    public ExternalTableScanOperator(ExternalTableType tableImpl, final String schema, final String name, final MetaData meta, final Map<String, Integer> cols2Pos, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types, final Map<Integer, String> tablePos2Col, final Map<String, String> tableCols2Types, final Map<String, Integer> tableCols2Pos) throws Exception
     {
         super(schema, name, meta, cols2Pos, pos2Col, cols2Types, tablePos2Col, tableCols2Types, tableCols2Pos);
         this.tableImpl = tableImpl;
         this.numNodes = MetaData.numWorkerNodes;
     }
 
-	public static ExternalTableScanOperator deserialize(InputStream in, HashMap<Long, Object> prev) throws Exception {
+	public static ExternalTableScanOperator deserialize(InputStream in, Map<Long, Object> prev) throws Exception {
         final ExternalTableScanOperator value = (ExternalTableScanOperator) unsafe.allocateInstance(ExternalTableScanOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
         value.cols2Types = OperatorUtils.deserializeStringHM(in, prev);
@@ -105,11 +105,11 @@ public final class ExternalTableScanOperator extends TableScanOperator
 		}
 		if (neededPos != null)
 		{
-			retval.neededPos = (ArrayList<Integer>)neededPos.clone();
+			retval.neededPos = new ArrayList<>(neededPos);
 		}
 		if (fetchPos != null)
 		{
-			retval.fetchPos = (ArrayList<Integer>)fetchPos.clone();
+			retval.fetchPos = new ArrayList<>(fetchPos);
 		}
 		if (midPos2Col != null)
 		{
@@ -117,11 +117,11 @@ public final class ExternalTableScanOperator extends TableScanOperator
 		}
 		if (midCols2Types != null)
 		{
-			retval.midCols2Types = (HashMap<String, String>)midCols2Types.clone();
+			retval.midCols2Types = new HashMap<>(midCols2Types);
 		}
-		retval.cols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
-		retval.pos2Col = (TreeMap<Integer, String>)pos2Col.clone();
-		retval.cols2Types = (HashMap<String, String>)cols2Types.clone();
+		retval.cols2Pos = new HashMap<>(cols2Pos);
+		retval.pos2Col = new HashMap<>(pos2Col);
+		retval.cols2Types = new HashMap<>(cols2Types);
 		retval.set = set;
 		retval.partMeta = partMeta;
 		retval.phase2Done = phase2Done;
@@ -133,7 +133,7 @@ public final class ExternalTableScanOperator extends TableScanOperator
 		retval.tType = tType;
 		if (devices != null)
 		{
-			retval.devices = (ArrayList<Integer>)devices.clone();
+			retval.devices = new ArrayList<>(devices);
 		}
 		retval.indexOnly = indexOnly;
 		if (alias != null && !alias.equals(""))
@@ -146,7 +146,7 @@ public final class ExternalTableScanOperator extends TableScanOperator
 	}
 
 	@Override
-    public void setNeededCols(ArrayList<String> needed)
+    public void setNeededCols(List<String> needed)
     {
         // method body intentionally left blank
 		// to prevent column disorder in SELECT from external source
@@ -260,7 +260,7 @@ public final class ExternalTableScanOperator extends TableScanOperator
 
 				CNFFilter filter = orderedFilters.get(parents.get(0));
 				if (filter != null) {
-					if (filter.passes((ArrayList<Object>) row)) {
+					if (filter.passes((List<Object>) row)) {
 						return row;
 					}
 				} else {

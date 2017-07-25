@@ -1876,7 +1876,7 @@ public final class CompressedBitSet extends BitSet implements Externalizable, It
 	 */
 	public List<Integer> toList()
 	{
-		final ArrayList<Integer> v = new ArrayList<Integer>();
+		final List<Integer> v = new ArrayList<Integer>();
 		final EWAHIterator i = this.getEWAHIterator();
 		int pos = 0;
 		while (i.hasNext())

@@ -27,15 +27,15 @@ import com.exascale.threads.HRDBMSThread;
 
 public final class UpdateOperator implements Operator, Serializable
 {
-	private static HashMap<Long, IdentityHashMap<UpdateOperator, UpdateOperator>> notYetStarted = new HashMap<Long, IdentityHashMap<UpdateOperator, UpdateOperator>>();
-	private static HashMap<Long, HashMap<String, UpdateOperator>> txDelayedMaps = new HashMap<Long, HashMap<String, UpdateOperator>>();
+	private static Map<Long, IdentityHashMap<UpdateOperator, UpdateOperator>> notYetStarted = new HashMap<Long, IdentityHashMap<UpdateOperator, UpdateOperator>>();
+	private static Map<Long, Map<String, UpdateOperator>> txDelayedMaps = new HashMap<Long, Map<String, UpdateOperator>>();
 	private static IdentityHashMap<UpdateOperator, List<RIDAndIndexKeys>> delayedRows = new IdentityHashMap<UpdateOperator, List<RIDAndIndexKeys>>();
-	private static IdentityHashMap<UpdateOperator, List<ArrayList<Object>>> delayedRows2 = new IdentityHashMap<UpdateOperator, List<ArrayList<Object>>>();
+	private static IdentityHashMap<UpdateOperator, List<List<Object>>> delayedRows2 = new IdentityHashMap<UpdateOperator, List<List<Object>>>();
 	private Operator child;
 	private final MetaData meta;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
+	private Map<String, String> cols2Types;
+	private Map<String, Integer> cols2Pos;
+	private Map<Integer, String> pos2Col;
 	private Operator parent;
 	private int node;
 	private transient Plan plan;
@@ -44,15 +44,15 @@ public final class UpdateOperator implements Operator, Serializable
 	private final AtomicInteger num = new AtomicInteger(0);
 	private boolean done = false;
 	private HJOMultiHashMap map = new HJOMultiHashMap<Integer, RIDAndIndexKeys>();
-	private HJOMultiHashMap map2 = new HJOMultiHashMap<Integer, ArrayList<Object>>();
+	private HJOMultiHashMap map2 = new HJOMultiHashMap<Integer, List<Object>>();
 	private Transaction tx;
-	private ArrayList<Column> cols;
-	private ArrayList<String> buildList;
-	private ArrayList<ArrayList<String>> keys;
-	private ArrayList<ArrayList<String>> types;
-	private ArrayList<ArrayList<Boolean>> orders;
+	private List<Column> cols;
+	private List<String> buildList;
+	private List<List<String>> keys;
+	private List<List<String>> types;
+	private List<List<Boolean>> orders;
 
-	public UpdateOperator(final String schema, final String table, final ArrayList<Column> cols, final ArrayList<String> buildList, final MetaData meta)
+	public UpdateOperator(final String schema, final String table, final List<Column> cols, final List<String> buildList, final MetaData meta)
 	{
 		this.schema = schema;
 		this.table = table;
@@ -87,7 +87,7 @@ public final class UpdateOperator implements Operator, Serializable
 		{
 			// HRDBMSWorker.logger.debug("Entering wakeUpDelayed with " +
 			// txDelayedMaps); //DEBUG
-			final HashMap<String, UpdateOperator> map = txDelayedMaps.get(tx.number());
+			final Map<String, UpdateOperator> map = txDelayedMaps.get(tx.number());
 
 			if (map == null)
 			{
@@ -106,7 +106,7 @@ public final class UpdateOperator implements Operator, Serializable
 		}
 	}
 
-	private static void cast(final ArrayList<Object> row, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types)
+	private static void cast(final List<Object> row, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types)
 	{
 		int i = 0;
 		final int size = pos2Col.size();
@@ -158,16 +158,16 @@ public final class UpdateOperator implements Operator, Serializable
 		}
 	}
 
-	private static ArrayList deregister(final UpdateOperator owner, final String schema, final String table, final int node, final Transaction tx)
+	private static List deregister(final UpdateOperator owner, final String schema, final String table, final int node, final Transaction tx)
 	{
-		final ArrayList retval = new ArrayList(2);
+		final List retval = new ArrayList(2);
 		synchronized (txDelayedMaps)
 		{
 			final List<RIDAndIndexKeys> retval1 = delayedRows.remove(owner);
 			retval.add(retval1);
-			final List<ArrayList<Object>> retval2 = delayedRows2.remove(owner);
+			final List<List<Object>> retval2 = delayedRows2.remove(owner);
 			retval.add(retval2);
-			final HashMap<String, UpdateOperator> map = txDelayedMaps.get(tx.number());
+			final Map<String, UpdateOperator> map = txDelayedMaps.get(tx.number());
 			final String key = schema + "." + table + "~" + node;
 			map.remove(key);
 			if (map.size() == 0)
@@ -202,12 +202,12 @@ public final class UpdateOperator implements Operator, Serializable
 		return buff;
 	}
 
-	private static boolean registerDelayed(final UpdateOperator caller, final String schema, final String table, final int node, final Transaction tx, final List<RIDAndIndexKeys> rows, final List<ArrayList<Object>> rows2)
+	private static boolean registerDelayed(final UpdateOperator caller, final String schema, final String table, final int node, final Transaction tx, final List<RIDAndIndexKeys> rows, final List<List<Object>> rows2)
 	{
 		synchronized (txDelayedMaps)
 		{
 			final String key = schema + "." + table + "~" + node;
-			HashMap<String, UpdateOperator> map = txDelayedMaps.get(tx.number());
+			Map<String, UpdateOperator> map = txDelayedMaps.get(tx.number());
 			if (map == null)
 			{
 				map = new HashMap<String, UpdateOperator>();
@@ -254,7 +254,7 @@ public final class UpdateOperator implements Operator, Serializable
 					delayedRows.put(owner, rows);
 				}
 
-				final List<ArrayList<Object>> myDelayedRows2 = delayedRows2.get(owner);
+				final List<List<Object>> myDelayedRows2 = delayedRows2.get(owner);
 				if (myDelayedRows2 != null)
 				{
 					myDelayedRows2.addAll(rows2);
@@ -272,12 +272,12 @@ public final class UpdateOperator implements Operator, Serializable
 		}
 	}
 
-	private static boolean registerDelayedCantOwn(final UpdateOperator caller, final String schema, final String table, final int node, final Transaction tx, final List<RIDAndIndexKeys> rows, final List<ArrayList<Object>> rows2)
+	private static boolean registerDelayedCantOwn(final UpdateOperator caller, final String schema, final String table, final int node, final Transaction tx, final List<RIDAndIndexKeys> rows, final List<List<Object>> rows2)
 	{
 		synchronized (txDelayedMaps)
 		{
 			final String key = schema + "." + table + "~" + node;
-			final HashMap<String, UpdateOperator> map = txDelayedMaps.get(tx.number());
+			final Map<String, UpdateOperator> map = txDelayedMaps.get(tx.number());
 			if (map == null)
 			{
 				return false;
@@ -299,7 +299,7 @@ public final class UpdateOperator implements Operator, Serializable
 				delayedRows.put(owner, rows);
 			}
 
-			final List<ArrayList<Object>> myDelayedRows2 = delayedRows2.get(owner);
+			final List<List<Object>> myDelayedRows2 = delayedRows2.get(owner);
 			if (myDelayedRows2 != null)
 			{
 				myDelayedRows2.addAll(rows2);
@@ -344,9 +344,9 @@ public final class UpdateOperator implements Operator, Serializable
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
-		final ArrayList<Operator> retval = new ArrayList<Operator>(1);
+		final List<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
@@ -382,13 +382,13 @@ public final class UpdateOperator implements Operator, Serializable
 	}
 
 	@Override
-	public HashMap<String, Integer> getCols2Pos()
+	public Map<String, Integer> getCols2Pos()
 	{
 		return cols2Pos;
 	}
 
 	@Override
-	public HashMap<String, String> getCols2Types()
+	public Map<String, String> getCols2Types()
 	{
 		return cols2Types;
 	}
@@ -411,15 +411,15 @@ public final class UpdateOperator implements Operator, Serializable
 	}
 
 	@Override
-	public TreeMap<Integer, String> getPos2Col()
+	public Map<Integer, String> getPos2Col()
 	{
 		return pos2Col;
 	}
 
 	@Override
-	public ArrayList<String> getReferences()
+	public List<String> getReferences()
 	{
-		final ArrayList<String> retval = new ArrayList<String>();
+		final List<String> retval = new ArrayList<String>();
 		return retval;
 	}
 
@@ -563,7 +563,7 @@ public final class UpdateOperator implements Operator, Serializable
 
 		int type = -1;
 		PartitionMetaData spmd = null;
-		ArrayList<String> indexes = null;
+		List<String> indexes = null;
 		try
 		{
 			child.start();
@@ -571,7 +571,7 @@ public final class UpdateOperator implements Operator, Serializable
 			keys = MetaData.getKeys(indexes, tx);
 			types = MetaData.getTypes(indexes, tx);
 			orders = MetaData.getOrders(indexes, tx);
-			final HashMap<Integer, Integer> pos2Length = new HashMap<Integer, Integer>();
+			final Map<Integer, Integer> pos2Length = new HashMap<Integer, Integer>();
 			cols2Pos = MetaData.getCols2PosForTable(schema, table, tx);
 			pos2Col = MetaData.cols2PosFlip(cols2Pos);
 			// new MetaData();
@@ -595,16 +595,16 @@ public final class UpdateOperator implements Operator, Serializable
 			{
 				try
 				{
-					final ArrayList<Object> row = (ArrayList<Object>)o;
+					final List<Object> row = (List<Object>)o;
 					final int node = (Integer)row.get(child.getCols2Pos().get("_RID1"));
 					final int device = (Integer)row.get(child.getCols2Pos().get("_RID2"));
 					final int block = (Integer)row.get(child.getCols2Pos().get("_RID3"));
 					final int rec = (Integer)row.get(child.getCols2Pos().get("_RID4"));
-					final ArrayList<ArrayList<Object>> indexKeys = new ArrayList<ArrayList<Object>>();
+					final List<List<Object>> indexKeys = new ArrayList<List<Object>>();
 					for (final String index : indexes)
 					{
-						final ArrayList<Object> keys2 = new ArrayList<Object>();
-						final ArrayList<String> cols = MetaData.getColsFromIndexFileName(index, tx, keys, indexes);
+						final List<Object> keys2 = new ArrayList<Object>();
+						final List<String> cols = MetaData.getColsFromIndexFileName(index, tx, keys, indexes);
 						for (final String col : cols)
 						{
 							keys2.add(row.get(child.getCols2Pos().get(col)));
@@ -616,7 +616,7 @@ public final class UpdateOperator implements Operator, Serializable
 					final RIDAndIndexKeys raik = new RIDAndIndexKeys(new RID(node, device, block, rec), indexKeys);
 					map.multiPut(node, raik);
 
-					final ArrayList<Object> row2 = new ArrayList<Object>();
+					final List<Object> row2 = new ArrayList<Object>();
 					for (final String col : pos2Col.values())
 					{
 						boolean contains = false;
@@ -680,7 +680,7 @@ public final class UpdateOperator implements Operator, Serializable
 							return;
 						}
 					}
-					final ArrayList<Integer> nodes = MetaData.determineNode(schema, table, row2, tx, pmeta, cols2Pos, numNodes);
+					final List<Integer> nodes = MetaData.determineNode(schema, table, row2, tx, pmeta, cols2Pos, numNodes);
 					for (final Integer n : nodes)
 					{
 						plan.addNode(n);
@@ -767,7 +767,7 @@ public final class UpdateOperator implements Operator, Serializable
 		return "UpdateOperator";
 	}
 
-	private void delayedFlush(final ArrayList<String> indexes, final PartitionMetaData spmd, final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type) throws Exception
+	private void delayedFlush(final List<String> indexes, final PartitionMetaData spmd, final Map<String, Integer> cols2Pos, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types, final int type) throws Exception
 	{
 		FlushThread thread = null;
 		int node = -1;
@@ -783,7 +783,7 @@ public final class UpdateOperator implements Operator, Serializable
 			}
 
 			final List<RIDAndIndexKeys> list = map.get(node);
-			final List<ArrayList<Object>> list2 = map2.get(node);
+			final List<List<Object>> list2 = map2.get(node);
 
 			if (!realOwner)
 			{
@@ -815,7 +815,7 @@ public final class UpdateOperator implements Operator, Serializable
 			{
 				node = (Integer)o;
 				final List<RIDAndIndexKeys> list = map.get(node);
-				final List<ArrayList<Object>> list2 = map2.get(node);
+				final List<List<Object>> list2 = map2.get(node);
 
 				final boolean handled = UpdateOperator.registerDelayedCantOwn(this, schema, table, node, tx, list, list2);
 				if (handled)
@@ -847,9 +847,9 @@ public final class UpdateOperator implements Operator, Serializable
 			}
 		}
 
-		final ArrayList lists = UpdateOperator.deregister(this, schema, table, realNode, tx);
+		final List lists = UpdateOperator.deregister(this, schema, table, realNode, tx);
 		final List<RIDAndIndexKeys> list = (List<RIDAndIndexKeys>)lists.get(0);
-		final List<ArrayList<Object>> list2 = (List<ArrayList<Object>>)lists.get(1);
+		final List<List<Object>> list2 = (List<List<Object>>)lists.get(1);
 		thread = new FlushThread(list, indexes, node, list2, cols2Pos, spmd, pos2Col, cols2Types, type);
 		thread.start();
 
@@ -871,18 +871,18 @@ public final class UpdateOperator implements Operator, Serializable
 		}
 	}
 
-	private void flush(final ArrayList<String> indexes, final PartitionMetaData spmd, final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type) throws Exception
+	private void flush(final List<String> indexes, final PartitionMetaData spmd, final Map<String, Integer> cols2Pos, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types, final int type) throws Exception
 	{
-		final ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
+		final List<FlushThread> threads = new ArrayList<FlushThread>();
 		for (final Object o : map.getKeySet())
 		{
 			final int node = (Integer)o;
 			final List<RIDAndIndexKeys> list = map.get(node);
-			final List<ArrayList<Object>> list2 = map2.get(node);
+			final List<List<Object>> list2 = map2.get(node);
 			map2.multiRemove(node);
 			if (node == -1)
 			{
-				final ArrayList<Integer> coords = MetaData.getCoordNodes();
+				final List<Integer> coords = MetaData.getCoordNodes();
 
 				for (final Integer coord : coords)
 				{
@@ -900,14 +900,14 @@ public final class UpdateOperator implements Operator, Serializable
 			thread.start();
 		}
 
-		final ArrayList<FlushThread2> threads2 = new ArrayList<FlushThread2>();
+		final List<FlushThread2> threads2 = new ArrayList<FlushThread2>();
 		for (final Object o : map2.getKeySet())
 		{
 			final int node = (Integer)o;
-			final List<ArrayList<Object>> list = map2.get(node);
+			final List<List<Object>> list = map2.get(node);
 			if (node == -1)
 			{
-				final ArrayList<Integer> coords = MetaData.getCoordNodes();
+				final List<Integer> coords = MetaData.getCoordNodes();
 
 				for (final Integer coord : coords)
 				{
@@ -975,17 +975,17 @@ public final class UpdateOperator implements Operator, Serializable
 	private class FlushThread extends HRDBMSThread
 	{
 		private final List<RIDAndIndexKeys> list;
-		private final ArrayList<String> indexes;
+		private final List<String> indexes;
 		private boolean ok = true;
 		private final int node;
-		private final List<ArrayList<Object>> list2;
-		private final HashMap<String, Integer> cols2Pos;
+		private final List<List<Object>> list2;
+		private final Map<String, Integer> cols2Pos;
 		private final PartitionMetaData pmd;
-		private final HashMap<String, String> cols2Types;
+		private final Map<String, String> cols2Types;
 		private final int type;
-		private final TreeMap<Integer, String> pos2Col;
+		private final Map<Integer, String> pos2Col;
 
-		public FlushThread(final List<RIDAndIndexKeys> list, final ArrayList<String> indexes, final int node, final List<ArrayList<Object>> list2, final HashMap<String, Integer> cols2Pos, final PartitionMetaData pmd, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type)
+		public FlushThread(final List<RIDAndIndexKeys> list, final List<String> indexes, final int node, final List<List<Object>> list2, final Map<String, Integer> cols2Pos, final PartitionMetaData pmd, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types, final int type)
 		{
 			if (list != null)
 			{
@@ -1003,7 +1003,7 @@ public final class UpdateOperator implements Operator, Serializable
 			}
 			else
 			{
-				this.list2 = new ArrayList<ArrayList<Object>>();
+				this.list2 = new ArrayList<List<Object>>();
 			}
 			this.cols2Pos = cols2Pos;
 			this.pmd = pmd;
@@ -1147,17 +1147,17 @@ public final class UpdateOperator implements Operator, Serializable
 
 	private class FlushThread2 extends HRDBMSThread
 	{
-		private final List<ArrayList<Object>> list;
-		private final ArrayList<String> indexes;
+		private final List<List<Object>> list;
+		private final List<String> indexes;
 		private boolean ok = true;
 		private final int node;
-		private final HashMap<String, Integer> cols2Pos;
+		private final Map<String, Integer> cols2Pos;
 		private final PartitionMetaData spmd;
-		private final TreeMap<Integer, String> pos2Col;
-		private final HashMap<String, String> cols2Types;
+		private final Map<Integer, String> pos2Col;
+		private final Map<String, String> cols2Types;
 		private final int type;
 
-		public FlushThread2(final List<ArrayList<Object>> list, final ArrayList<String> indexes, final int node, final HashMap<String, Integer> cols2Pos, final PartitionMetaData spmd, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type)
+		public FlushThread2(final List<List<Object>> list, final List<String> indexes, final int node, final Map<String, Integer> cols2Pos, final PartitionMetaData spmd, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types, final int type)
 		{
 			this.list = list;
 			this.indexes = indexes;

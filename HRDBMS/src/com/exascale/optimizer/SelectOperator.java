@@ -4,11 +4,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.HrdbmsType;
@@ -34,20 +30,20 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 		}
 	}
 	private transient final MetaData meta;
-	private ArrayList<Filter> filters;
+	private List<Filter> filters;
 	private Operator child = null;
 	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
+	private Map<String, String> cols2Types;
+	private Map<String, Integer> cols2Pos;
+	private Map<Integer, String> pos2Col;
 	// private AtomicLong passed = new AtomicLong(0);
 	// private AtomicLong total = new AtomicLong(0);
-	private ArrayList<String> references = new ArrayList<String>();
+	private List<String> references = new ArrayList<String>();
 	private int node;
 	private boolean hash = false;
 	boolean always = false;
 
-	private HashSet<Object> hashSet;
+	private Set<Object> hashSet;
 
 	private String hashCol = null;
 
@@ -55,7 +51,7 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 	private transient AtomicLong received;
 	private transient volatile boolean demReceived;
 
-	public SelectOperator(final ArrayList<Filter> filters, final MetaData meta)
+	public SelectOperator(final List<Filter> filters, final MetaData meta)
 	{
 		this.filters = filters;
 		this.meta = meta;
@@ -183,7 +179,7 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 		received = new AtomicLong(0);
 	}
 
-	public static SelectOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static SelectOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final SelectOperator value = (SelectOperator)unsafe.allocateInstance(SelectOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -228,9 +224,9 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
-		final ArrayList<Operator> retval = new ArrayList<Operator>(1);
+		final List<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
@@ -238,7 +234,7 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 	@Override
 	public SelectOperator clone()
 	{
-		final ArrayList<Filter> filtersDeepClone = new ArrayList<Filter>(filters.size());
+		final List<Filter> filtersDeepClone = new ArrayList<Filter>(filters.size());
 		for (final Filter f : filters)
 		{
 			filtersDeepClone.add(f.clone());
@@ -267,18 +263,18 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 	}
 
 	@Override
-	public HashMap<String, Integer> getCols2Pos()
+	public Map<String, Integer> getCols2Pos()
 	{
 		return cols2Pos;
 	}
 
 	@Override
-	public HashMap<String, String> getCols2Types()
+	public Map<String, String> getCols2Types()
 	{
 		return cols2Types;
 	}
 
-	public ArrayList<Filter> getFilter()
+	public List<Filter> getFilter()
 	{
 		return filters;
 	}
@@ -296,13 +292,13 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 	}
 
 	@Override
-	public TreeMap<Integer, String> getPos2Col()
+	public Map<Integer, String> getPos2Col()
 	{
 		return pos2Col;
 	}
 
 	@Override
-	public ArrayList<String> getReferences()
+	public List<String> getReferences()
 	{
 		return references;
 	}
@@ -346,7 +342,7 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 
 			if (hash)
 			{
-				final ArrayList<Object> row = (ArrayList<Object>)o;
+				final List<Object> row = (List<Object>)o;
 				Object obj = row.get(hashPos);
 				if (obj instanceof Long)
 				{
@@ -367,7 +363,7 @@ public final class SelectOperator implements Operator, Cloneable, Serializable
 				while (z < limit)
 				{
 					final Filter filter = filters.get(z++);
-					if (filter.passes((ArrayList<Object>)o, cols2Pos))
+					if (filter.passes((List<Object>)o, cols2Pos))
 					{
 						// passed.getAndIncrement();
 						return o;

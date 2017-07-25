@@ -4,9 +4,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.ResourceManager;
@@ -45,7 +43,7 @@ public final class AvgOperator implements AggregateOperator, Serializable
 		this.meta = meta;
 	}
 
-	public static AvgOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static AvgOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final AvgOperator value = (AvgOperator)unsafe.allocateInstance(AvgOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -62,7 +60,7 @@ public final class AvgOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public AggregateResultThread getHashThread(final HashMap<String, Integer> cols2Pos)
+	public AggregateResultThread getHashThread(final Map<String, Integer> cols2Pos)
 	{
 		return new AvgHashThread(cols2Pos);
 	}
@@ -74,7 +72,7 @@ public final class AvgOperator implements AggregateOperator, Serializable
 	}
 
 	@Override
-	public AggregateResultThread newProcessingThread(final ArrayList<ArrayList<Object>> rows, final HashMap<String, Integer> cols2Pos)
+	public AggregateResultThread newProcessingThread(final List<List<Object>> rows, final Map<String, Integer> cols2Pos)
 	{
 		return new AvgThread(rows, cols2Pos);
 	}
@@ -132,11 +130,11 @@ public final class AvgOperator implements AggregateOperator, Serializable
 		// DiskBackedALOHashMap<AtomicDouble>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
 		// private final DiskBackedALOHashMap<AtomicLong> counts = new
 		// DiskBackedALOHashMap<AtomicLong>(NUM_GROUPS > 0 ? NUM_GROUPS : 16);
-		private ConcurrentHashMap<ArrayList<Object>, BigDecimalReplacement> sums = new ConcurrentHashMap<ArrayList<Object>, BigDecimalReplacement>();
-		private ConcurrentHashMap<ArrayList<Object>, AtomicLong> counts = new ConcurrentHashMap<ArrayList<Object>, AtomicLong>(NUM_GROUPS <= Integer.MAX_VALUE ? (int)NUM_GROUPS : Integer.MAX_VALUE, 0.75f, 6 * ResourceManager.cpus);
+		private ConcurrentHashMap<List<Object>, BigDecimalReplacement> sums = new ConcurrentHashMap<>();
+		private ConcurrentHashMap<List<Object>, AtomicLong> counts = new ConcurrentHashMap<>(NUM_GROUPS <= Integer.MAX_VALUE ? (int)NUM_GROUPS : Integer.MAX_VALUE, 0.75f, 6 * ResourceManager.cpus);
 		private final int pos;
 
-		public AvgHashThread(final HashMap<String, Integer> cols2Pos)
+		public AvgHashThread(final Map<String, Integer> cols2Pos)
 		{
 			pos = cols2Pos.get(input);
 		}
@@ -165,14 +163,14 @@ public final class AvgOperator implements AggregateOperator, Serializable
 		}
 
 		@Override
-		public Object getResult(final ArrayList<Object> keys)
+		public Object getResult(final List<Object> keys)
 		{
 			return sums.get(keys).doubleValue() / counts.get(keys).get();
 		}
 
 		// @Parallel
 		@Override
-		public final void put(final ArrayList<Object> row, final ArrayList<Object> group)
+		public final void put(final List<Object> row, final List<Object> group)
 		{
 			final Double v = ((Number)row.get(pos)).doubleValue();
 			final BigDecimalReplacement val = new BigDecimalReplacement(v);
@@ -205,12 +203,12 @@ public final class AvgOperator implements AggregateOperator, Serializable
 
 	private final class AvgThread extends AggregateResultThread
 	{
-		private final ArrayList<ArrayList<Object>> rows;
-		private final HashMap<String, Integer> cols2Pos;
+		private final List<List<Object>> rows;
+		private final Map<String, Integer> cols2Pos;
 		private BigDecimalReplacement result;
 		private double result2;
 
-		public AvgThread(final ArrayList<ArrayList<Object>> rows, final HashMap<String, Integer> cols2Pos)
+		public AvgThread(final List<List<Object>> rows, final Map<String, Integer> cols2Pos)
 		{
 			this.rows = rows;
 			this.cols2Pos = cols2Pos;
@@ -240,7 +238,7 @@ public final class AvgOperator implements AggregateOperator, Serializable
 			while (z < limit)
 			{
 				final Object orow = rows.get(z++);
-				final ArrayList<Object> row = (ArrayList<Object>)orow;
+				final List<Object> row = (List<Object>)orow;
 				numRows++;
 				result.add(new BigDecimalReplacement((Double)row.get(pos)));
 			}

@@ -3,6 +3,7 @@ package com.exascale.filesystem;
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import com.exascale.managers.FileManager;
@@ -46,7 +47,7 @@ public class Page
 	private volatile long timePinned = -1;
 	private volatile long lsn;
 	private ScalableStampedReentrantRWLock lock;
-	public volatile ArrayList<RID> rowIDsAL;
+	public volatile List<RID> rowIDsAL;
 	public volatile int[][] offsetArray;
 	private volatile boolean readDone = false;
 
@@ -97,7 +98,7 @@ public class Page
 		return retval;
 	}
 
-	public ReadThread assignToBlock(final Block b, final boolean log, final ArrayList<Integer> cols, final int layoutSize) throws Exception
+	public ReadThread assignToBlock(final Block b, final boolean log, final List<Integer> cols, final int layoutSize) throws Exception
 	{
 		lock.writeLock().lock();
 		rowIDsAL = null;
@@ -126,7 +127,7 @@ public class Page
 		return retval;
 	}
 
-	public ReadThread assignToBlock(final Block b, final boolean log, final ArrayList<Integer> cols, final int layoutSize, final int rank, final int rankSize) throws Exception
+	public ReadThread assignToBlock(final Block b, final boolean log, final List<Integer> cols, final int layoutSize, final int rank, final int rankSize) throws Exception
 	{
 		lock.writeLock().lock();
 		rowIDsAL = null;
@@ -211,7 +212,7 @@ public class Page
 		return retval;
 	}
 
-	public void assignToBlock(final Block b, final boolean log, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos) throws Exception
+	public void assignToBlock(final Block b, final boolean log, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final List<Integer> fetchPos) throws Exception
 	{
 		lock.writeLock().lock();
 		{
@@ -241,7 +242,7 @@ public class Page
 		lock.writeLock().unlock();
 	}
 
-	public void assignToBlock(final Block b, final boolean log, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos, final int rank, final int rankSize) throws Exception
+	public void assignToBlock(final Block b, final boolean log, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final List<Integer> fetchPos, final int rank, final int rankSize) throws Exception
 	{
 		lock.writeLock().lock();
 		{
@@ -341,7 +342,7 @@ public class Page
 		// HRDBMSWorker.logger.debug("Short Page pin3 ending");
 	}
 
-	public Read3Thread assignToBlock3(final Block b, final Block b2, final Block b3, final boolean log, final Page p2, final Page p3, final ArrayList<Integer> cols, final int layoutSize) throws Exception
+	public Read3Thread assignToBlock3(final Block b, final Block b2, final Block b3, final boolean log, final Page p2, final Page p3, final List<Integer> cols, final int layoutSize) throws Exception
 	{
 		// HRDBMSWorker.logger.debug("Short Page pin3 starting");
 		lock.writeLock().lock();
@@ -481,7 +482,7 @@ public class Page
 		// HRDBMSWorker.logger.debug("Short Page pin3 ending");
 	}
 
-	public void assignToBlock3(final Block b, final Block b2, final Block b3, final boolean log, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos, final Page p2, final Page p3) throws Exception
+	public void assignToBlock3(final Block b, final Block b2, final Block b3, final boolean log, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final List<Integer> fetchPos, final Page p2, final Page p3) throws Exception
 	{
 		// HRDBMSWorker.logger.debug("Long Page pin3 starting");
 		try
@@ -552,7 +553,7 @@ public class Page
 		lock.writeLock().unlock();
 	}
 
-	public void assignToBlock3(final Block b, final Block b2, final Block b3, final boolean log, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos, final Page p2, final Page p3, final int rank, final int rankSize) throws Exception
+	public void assignToBlock3(final Block b, final Block b2, final Block b3, final boolean log, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final List<Integer> fetchPos, final Page p2, final Page p3, final int rank, final int rankSize) throws Exception
 	{
 		// HRDBMSWorker.logger.debug("Long Page pin3 starting");
 		try
@@ -649,7 +650,7 @@ public class Page
 		lock.writeLock().unlock();
 	}
 
-	public ReadThread assignToBlocks(final Block b, final int num, final boolean log, final ArrayList<Integer> indexes, final Page[] bp, final int rank, final int rankSize) throws Exception
+	public ReadThread assignToBlocks(final Block b, final int num, final boolean log, final List<Integer> indexes, final Page[] bp, final int rank, final int rankSize) throws Exception
 	{
 		// HRDBMSWorker.logger.debug("Short Page pin3 starting");
 		ReadThread retval = null;
@@ -730,7 +731,7 @@ public class Page
 		lock.writeLock().unlock();
 	}
 
-	public void assignToBlockSync(final Block b, final boolean log, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos) throws Exception
+	public void assignToBlockSync(final Block b, final boolean log, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final List<Integer> fetchPos) throws Exception
 	{
 		lock.writeLock().lock();
 		{

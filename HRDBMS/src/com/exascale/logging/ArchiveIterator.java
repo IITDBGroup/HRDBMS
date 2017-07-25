@@ -10,6 +10,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
+
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
 
@@ -20,7 +22,7 @@ public class ArchiveIterator implements Iterator<LogRec>
 	private FileChannel fc;
 	private int size;
 	private String fn;
-	private final ArrayList<String> files;
+	private final List<String> files;
 	private int index = 0;
 	private RandomAccessFile raf;
 
@@ -37,7 +39,7 @@ public class ArchiveIterator implements Iterator<LogRec>
 		this.fn = name;
 
 		// find all archive files
-		final ArrayList<Path> files = new ArrayList<Path>();
+		final List<Path> files = new ArrayList<Path>();
 		final int split = fn.lastIndexOf('/');
 		final String dir = fn.substring(0, split);
 		final String relative = fn.substring(split + 1);
@@ -53,7 +55,7 @@ public class ArchiveIterator implements Iterator<LogRec>
 			}
 		}
 
-		final ArrayList<String> files2 = new ArrayList<String>();
+		final List<String> files2 = new ArrayList<String>();
 		for (final Path file : files)
 		{
 			files2.add(file.toAbsolutePath().toString());

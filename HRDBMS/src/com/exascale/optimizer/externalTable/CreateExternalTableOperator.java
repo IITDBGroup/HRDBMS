@@ -2,10 +2,8 @@ package com.exascale.optimizer.externalTable;
 
 import java.io.OutputStream;
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.TreeMap;
+import java.util.*;
+
 import com.exascale.misc.DataEndMarker;
 import com.exascale.optimizer.ColDef;
 import com.exascale.optimizer.MetaData;
@@ -17,18 +15,18 @@ import com.exascale.tables.Transaction;
 public final class CreateExternalTableOperator implements Operator, Serializable
 {
 	private final MetaData meta;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
+	private Map<String, String> cols2Types;
+	private Map<String, Integer> cols2Pos;
+	private Map<Integer, String> pos2Col;
 	private int node;
 	private boolean done = false;
 	private Transaction tx;
 	private final String schema;
 	private final String table;
-	private ArrayList<ColDef> cols;
+	private List<ColDef> cols;
 	private String javaClassName, params;
 
-	public CreateExternalTableOperator(MetaData meta, String schema, String table, ArrayList<ColDef> cols, String javaClassName, String params)
+	public CreateExternalTableOperator(MetaData meta, String schema, String table, List<ColDef> cols, String javaClassName, String params)
 	{
 		this.meta = meta;
 		this.schema = schema;
@@ -46,9 +44,9 @@ public final class CreateExternalTableOperator implements Operator, Serializable
 	}
 	
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
-		final ArrayList<Operator> retval = new ArrayList<Operator>(1);
+		final List<Operator> retval = new ArrayList<Operator>(1);
 		return retval;
 	}
 	
@@ -77,13 +75,13 @@ public final class CreateExternalTableOperator implements Operator, Serializable
 	}
 	
 	@Override
-	public HashMap<String, Integer> getCols2Pos()
+	public Map<String, Integer> getCols2Pos()
 	{
 		return cols2Pos;
 	}
 	
 	@Override
-	public HashMap<String, String> getCols2Types()
+	public Map<String, String> getCols2Types()
 	{
 		return cols2Types;
 	}
@@ -101,15 +99,15 @@ public final class CreateExternalTableOperator implements Operator, Serializable
 	}
 	
 	@Override
-	public TreeMap<Integer, String> getPos2Col()
+	public Map<Integer, String> getPos2Col()
 	{
 		return pos2Col;
 	}
 	
 	@Override
-	public ArrayList<String> getReferences()
+	public List<String> getReferences()
 	{
-		final ArrayList<String> retval = new ArrayList<String>();
+		final List<String> retval = new ArrayList<String>();
 		return retval;
 	}
 	

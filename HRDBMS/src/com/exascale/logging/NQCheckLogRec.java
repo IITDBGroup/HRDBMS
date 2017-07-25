@@ -2,12 +2,13 @@ package com.exascale.logging;
 
 import java.nio.ByteBuffer;
 import java.util.HashSet;
+import java.util.Set;
 
 public class NQCheckLogRec extends LogRec
 {
-	private final HashSet<Long> txs;
+	private final Set<Long> txs;
 
-	public NQCheckLogRec(final HashSet<Long> txs)
+	public NQCheckLogRec(final Set<Long> txs)
 	{
 		super(LogRec.NQCHECK, -1, ByteBuffer.allocate(32 + 8 * txs.size()));
 		this.txs = txs;
@@ -20,7 +21,7 @@ public class NQCheckLogRec extends LogRec
 		}
 	}
 
-	public HashSet<Long> getOpenTxs()
+	public Set<Long> getOpenTxs()
 	{
 		return txs;
 	}

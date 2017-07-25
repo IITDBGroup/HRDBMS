@@ -2,6 +2,7 @@ package com.exascale.misc;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Vector;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -125,7 +126,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 				return;
 			}
 
-			if (o instanceof ArrayList && ((ArrayList)o).size() == 0)
+			if (o instanceof ArrayList && ((List)o).size() == 0)
 			{
 				HRDBMSWorker.logger.debug("ArrayList of size zero was placed on queue");
 				return;
@@ -167,7 +168,7 @@ public final class BufferedLinkedBlockingQueue implements Serializable
 				return true;
 			}
 
-			if (o instanceof ArrayList && ((ArrayList)o).size() == 0)
+			if (o instanceof ArrayList && ((List)o).size() == 0)
 			{
 				HRDBMSWorker.logger.debug("ArrayList of size zero was placed on queue");
 				return true;

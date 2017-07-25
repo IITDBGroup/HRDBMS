@@ -7,13 +7,7 @@ import java.io.Serializable;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
@@ -28,13 +22,13 @@ import com.exascale.threads.HRDBMSThread;
 public final class InsertOperator implements Operator, Serializable
 {
 	private static ConcurrentHashMap<String, InetSocketAddress> addrCache = new ConcurrentHashMap<String, InetSocketAddress>();
-	private static HashMap<Long, HashMap<String, InsertOperator>> txDelayedMaps = new HashMap<Long, HashMap<String, InsertOperator>>();
-	private static IdentityHashMap<InsertOperator, ArrayList<ArrayList<Object>>> delayedRows = new IdentityHashMap<InsertOperator, ArrayList<ArrayList<Object>>>();
+	private static Map<Long, Map<String, InsertOperator>> txDelayedMaps = new HashMap<Long, Map<String, InsertOperator>>();
+	private static IdentityHashMap<InsertOperator, List<List<Object>>> delayedRows = new IdentityHashMap<InsertOperator, List<List<Object>>>();
 	private Operator child;
 	private final MetaData meta;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
+	private Map<String, String> cols2Types;
+	private Map<String, Integer> cols2Pos;
+	private Map<Integer, String> pos2Col;
 	private Operator parent;
 	private int node;
 	private transient Plan plan;
@@ -42,7 +36,7 @@ public final class InsertOperator implements Operator, Serializable
 	private final String table;
 	private final AtomicInteger num = new AtomicInteger(0);
 	private boolean done = false;
-	private HJOMultiHashMap map = new HJOMultiHashMap<Integer, ArrayList<Object>>();
+	private HJOMultiHashMap map = new HJOMultiHashMap<Integer, List<Object>>();
 	private Transaction tx;
 	private transient String[] colTypes;
 
@@ -57,7 +51,7 @@ public final class InsertOperator implements Operator, Serializable
 	{
 		synchronized (txDelayedMaps)
 		{
-			final HashMap<String, InsertOperator> map = txDelayedMaps.get(tx.number());
+			final Map<String, InsertOperator> map = txDelayedMaps.get(tx.number());
 
 			if (map == null)
 			{
@@ -74,7 +68,7 @@ public final class InsertOperator implements Operator, Serializable
 		}
 	}
 
-	private void cast(final ArrayList<Object> row, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types)
+	private void cast(final List<Object> row, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types)
 	{
 		int i = 0;
 		final int size = pos2Col.size();
@@ -126,12 +120,12 @@ public final class InsertOperator implements Operator, Serializable
 		}
 	}
 
-	private static ArrayList<ArrayList<Object>> deregister(final InsertOperator owner, final String schema, final String table, final int node, final Transaction tx)
+	private static List<List<Object>> deregister(final InsertOperator owner, final String schema, final String table, final int node, final Transaction tx)
 	{
 		synchronized (txDelayedMaps)
 		{
-			final ArrayList<ArrayList<Object>> retval = delayedRows.remove(owner);
-			final HashMap<String, InsertOperator> map = txDelayedMaps.get(tx.number());
+			final List<List<Object>> retval = delayedRows.remove(owner);
+			final Map<String, InsertOperator> map = txDelayedMaps.get(tx.number());
 			final String key = schema + "." + table + "~" + node;
 			map.remove(key);
 			if (map.size() == 0)
@@ -167,12 +161,12 @@ public final class InsertOperator implements Operator, Serializable
 		return buff;
 	}
 
-	private static boolean registerDelayed(final InsertOperator caller, final String schema, final String table, final int node, final Transaction tx, final ArrayList<ArrayList<Object>> rows)
+	private static boolean registerDelayed(final InsertOperator caller, final String schema, final String table, final int node, final Transaction tx, final List<List<Object>> rows)
 	{
 		synchronized (txDelayedMaps)
 		{
 			final String key = schema + "." + table + "~" + node;
-			HashMap<String, InsertOperator> map = txDelayedMaps.get(tx.number());
+			Map<String, InsertOperator> map = txDelayedMaps.get(tx.number());
 			if (map == null)
 			{
 				map = new HashMap<String, InsertOperator>();
@@ -195,12 +189,12 @@ public final class InsertOperator implements Operator, Serializable
 		}
 	}
 
-	private static boolean registerDelayedCantOwn(final InsertOperator caller, final String schema, final String table, final int node, final Transaction tx, final List<ArrayList<Object>> rows)
+	private static boolean registerDelayedCantOwn(final InsertOperator caller, final String schema, final String table, final int node, final Transaction tx, final List<List<Object>> rows)
 	{
 		synchronized (txDelayedMaps)
 		{
 			final String key = schema + "." + table + "~" + node;
-			final HashMap<String, InsertOperator> map = txDelayedMaps.get(tx.number());
+			final Map<String, InsertOperator> map = txDelayedMaps.get(tx.number());
 			if (map == null)
 			{
 				return false;
@@ -249,9 +243,9 @@ public final class InsertOperator implements Operator, Serializable
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
-		final ArrayList<Operator> retval = new ArrayList<Operator>(1);
+		final List<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
@@ -281,13 +275,13 @@ public final class InsertOperator implements Operator, Serializable
 	}
 
 	@Override
-	public HashMap<String, Integer> getCols2Pos()
+	public Map<String, Integer> getCols2Pos()
 	{
 		return cols2Pos;
 	}
 
 	@Override
-	public HashMap<String, String> getCols2Types()
+	public Map<String, String> getCols2Types()
 	{
 		return cols2Types;
 	}
@@ -310,15 +304,15 @@ public final class InsertOperator implements Operator, Serializable
 	}
 
 	@Override
-	public TreeMap<Integer, String> getPos2Col()
+	public Map<Integer, String> getPos2Col()
 	{
 		return pos2Col;
 	}
 
 	@Override
-	public ArrayList<String> getReferences()
+	public List<String> getReferences()
 	{
-		final ArrayList<String> retval = new ArrayList<String>();
+		final List<String> retval = new ArrayList<String>();
 		return retval;
 	}
 
@@ -447,12 +441,12 @@ public final class InsertOperator implements Operator, Serializable
 	public void start() throws Exception
 	{	
 		child.start();
-		final ArrayList<String> indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
-		final HashMap<Integer, Integer> pos2Length = new HashMap<Integer, Integer>();
-		final HashMap<String, Integer> cols2Pos = MetaData.getCols2PosForTable(schema, table, tx);
-		final TreeMap<Integer, String> pos2Col = MetaData.cols2PosFlip(cols2Pos);
+		final List<String> indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
+		final Map<Integer, Integer> pos2Length = new HashMap<Integer, Integer>();
+		final Map<String, Integer> cols2Pos = MetaData.getCols2PosForTable(schema, table, tx);
+		final Map<Integer, String> pos2Col = MetaData.cols2PosFlip(cols2Pos);
 		// new MetaData();
-		final HashMap<String, String> cols2Types = MetaData.getCols2TypesForTable(schema, table, tx);
+		final Map<String, String> cols2Types = MetaData.getCols2TypesForTable(schema, table, tx);
 		final int size = pos2Col.size();
 		colTypes = new String[size];
 		int i = 0;
@@ -462,9 +456,9 @@ public final class InsertOperator implements Operator, Serializable
 			i++;
 		}
 		final PartitionMetaData spmd = new MetaData().getPartMeta(schema, table, tx);
-		final ArrayList<ArrayList<String>> keys = MetaData.getKeys(indexes, tx);
-		final ArrayList<ArrayList<String>> types = MetaData.getTypes(indexes, tx);
-		final ArrayList<ArrayList<Boolean>> orders = MetaData.getOrders(indexes, tx);
+		final List<List<String>> keys = MetaData.getKeys(indexes, tx);
+		final List<List<String>> types = MetaData.getTypes(indexes, tx);
+		final List<List<Boolean>> orders = MetaData.getOrders(indexes, tx);
 		final int type = MetaData.getTypeForTable(schema, table, tx);
 		for (final Map.Entry entry : cols2Types.entrySet())
 		{
@@ -482,7 +476,7 @@ public final class InsertOperator implements Operator, Serializable
 		
 		while (!(o instanceof DataEndMarker))
 		{
-			final ArrayList<Object> row = (ArrayList<Object>)o;
+			final List<Object> row = (List<Object>)o;
 			cast(row, pos2Col, cols2Types);
 			for (final Map.Entry entry : pos2Length.entrySet())
 			{
@@ -493,7 +487,7 @@ public final class InsertOperator implements Operator, Serializable
 					return;
 				}
 			}
-			final ArrayList<Integer> nodes = MetaData.determineNode(schema, table, row, tx, pmeta, cols2Pos, numNodes);
+			final List<Integer> nodes = MetaData.determineNode(schema, table, row, tx, pmeta, cols2Pos, numNodes);
 			for (final Integer node : nodes)
 			{
 				plan.addNode(node);
@@ -513,7 +507,7 @@ public final class InsertOperator implements Operator, Serializable
 				}
 				
 				mft = flush(indexes, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
-				map = new HJOMultiHashMap<Integer, ArrayList<Object>>();
+				map = new HJOMultiHashMap<Integer, List<Object>>();
 			}
 			else if (map.totalSize() > Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_batch")))
 			{
@@ -528,7 +522,7 @@ public final class InsertOperator implements Operator, Serializable
 				}
 				
 				mft = flush(indexes, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
-				map = new HJOMultiHashMap<Integer, ArrayList<Object>>();
+				map = new HJOMultiHashMap<Integer, List<Object>>();
 			}
 
 			o = child.next(this);
@@ -573,17 +567,17 @@ public final class InsertOperator implements Operator, Serializable
 		return "InsertOperator";
 	}
 
-	private void delayedFlush(final ArrayList<String> indexes, final HashMap<String, Integer> cols2Pos, final PartitionMetaData spmd, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type)
+	private void delayedFlush(final List<String> indexes, final Map<String, Integer> cols2Pos, final PartitionMetaData spmd, final List<List<String>> keys, final List<List<String>> types, final List<List<Boolean>> orders, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types, final int type)
 	{
 		FlushThread thread = null;
 		int node = -1;
 		boolean realOwner = false;
 		int realNode = -1;
-		final HashSet copy = new HashSet(map.getKeySet());
+		final Set copy = new HashSet(map.getKeySet());
 		for (final Object o : copy)
 		{
 			node = (Integer)o;
-			final ArrayList<ArrayList<Object>> list = map.get(node);
+			final List<List<Object>> list = map.get(node);
 
 			if (!realOwner)
 			{
@@ -641,7 +635,7 @@ public final class InsertOperator implements Operator, Serializable
 			}
 		}
 
-		final ArrayList<ArrayList<Object>> list = InsertOperator.deregister(this, schema, table, realNode, tx);
+		final List<List<Object>> list = InsertOperator.deregister(this, schema, table, realNode, tx);
 		thread = new FlushThread(list, indexes, realNode, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
 		thread.start();
 
@@ -664,7 +658,7 @@ public final class InsertOperator implements Operator, Serializable
 		}
 	}
 
-	private MasterFlushThread flush(final ArrayList<String> indexes, final HashMap<String, Integer> cols2Pos, final PartitionMetaData spmd, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type)
+	private MasterFlushThread flush(final List<String> indexes, final Map<String, Integer> cols2Pos, final PartitionMetaData spmd, final List<List<String>> keys, final List<List<String>> types, final List<List<Boolean>> orders, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types, final int type)
 	{
 		MasterFlushThread mft = new MasterFlushThread(indexes, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type, map);
 		mft.start();
@@ -673,18 +667,18 @@ public final class InsertOperator implements Operator, Serializable
 	
 	private class MasterFlushThread extends HRDBMSThread
 	{
-		private ArrayList<String> indexes;
-		private HashMap<String, Integer> cols2Pos;
+		private List<String> indexes;
+		private Map<String, Integer> cols2Pos;
 		private PartitionMetaData spmd;
-		private ArrayList<ArrayList<String>> keys;
-		private ArrayList<ArrayList<String>> types;
-		private ArrayList<ArrayList<Boolean>> orders;
-		private TreeMap<Integer, String> pos2Col;
-		private HashMap<String, String> cols2Types;
+		private List<List<String>> keys;
+		private List<List<String>> types;
+		private List<List<Boolean>> orders;
+		private Map<Integer, String> pos2Col;
+		private Map<String, String> cols2Types;
 		private int type;
 		private HJOMultiHashMap localMap;
 		
-		public MasterFlushThread(final ArrayList<String> indexes, final HashMap<String, Integer> cols2Pos, final PartitionMetaData spmd, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type, HJOMultiHashMap localMap)
+		public MasterFlushThread(final List<String> indexes, final Map<String, Integer> cols2Pos, final PartitionMetaData spmd, final List<List<String>> keys, final List<List<String>> types, final List<List<Boolean>> orders, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types, final int type, HJOMultiHashMap localMap)
 		{
 			this.indexes = indexes;
 			this.cols2Pos = cols2Pos;
@@ -700,11 +694,11 @@ public final class InsertOperator implements Operator, Serializable
 		
 		public void run()
 		{
-			final ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
+			final List<FlushThread> threads = new ArrayList<FlushThread>();
 			for (final Object o : localMap.getKeySet())
 			{
 				final int node = (Integer)o;
-				final ArrayList<ArrayList<Object>> list = localMap.get(node);
+				final List<List<Object>> list = localMap.get(node);
 				FlushThread thread = new FlushThread(list, indexes, node, cols2Pos, spmd, keys, types, orders, pos2Col, cols2Types, type);
 				threads.add(thread);
 				thread.start();
@@ -741,20 +735,20 @@ public final class InsertOperator implements Operator, Serializable
 
 	private class FlushThread extends HRDBMSThread
 	{
-		private final ArrayList<ArrayList<Object>> list;
-		private final ArrayList<String> indexes;
+		private final List<List<Object>> list;
+		private final List<String> indexes;
 		private boolean ok = true;
 		private final int node;
-		private final HashMap<String, Integer> cols2Pos;
+		private final Map<String, Integer> cols2Pos;
 		private final PartitionMetaData spmd;
-		private final ArrayList<ArrayList<String>> keys;
-		private final ArrayList<ArrayList<String>> types;
-		private final ArrayList<ArrayList<Boolean>> orders;
-		private final TreeMap<Integer, String> pos2Col;
-		private final HashMap<String, String> cols2Types;
+		private final List<List<String>> keys;
+		private final List<List<String>> types;
+		private final List<List<Boolean>> orders;
+		private final Map<Integer, String> pos2Col;
+		private final Map<String, String> cols2Types;
 		private final int type;
 
-		public FlushThread(final ArrayList<ArrayList<Object>> list, final ArrayList<String> indexes, final int node, final HashMap<String, Integer> cols2Pos, final PartitionMetaData spmd, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type)
+		public FlushThread(final List<List<Object>> list, final List<String> indexes, final int node, final Map<String, Integer> cols2Pos, final PartitionMetaData spmd, final List<List<String>> keys, final List<List<String>> types, final List<List<Boolean>> orders, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types, final int type)
 		{
 			this.list = list;
 			this.indexes = indexes;

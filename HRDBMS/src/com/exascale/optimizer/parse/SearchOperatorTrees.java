@@ -7,9 +7,7 @@ import com.exascale.tables.Transaction;
 import com.exascale.threads.ConnectionWorker;
 
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.GregorianCalendar;
-import java.util.HashMap;
+import java.util.*;
 
 import static com.exascale.optimizer.parse.ParseUtils.*;
 import static com.exascale.optimizer.parse.SQLParser.*;
@@ -45,7 +43,7 @@ public class SearchOperatorTrees extends AbstractParseController {
             }
             else
             {
-                final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+                final List<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
                 op = buildOperatorTreeFromSearchCondition(new SearchCondition(search.getClause(), cscs), op, sub);
             }
 
@@ -57,7 +55,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                 }
                 else
                 {
-                    final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+                    final List<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
                     op = buildOperatorTreeFromSearchCondition(new SearchCondition(csc.getSearch(), cscs), op, sub);
                 }
             }
@@ -137,10 +135,10 @@ public class SearchOperatorTrees extends AbstractParseController {
                     {
                         if ((o.equals("IN") && !negated) || (o.equals("NI") && negated))
                         {
-                            final ArrayList<Expression> list = rhs.getList();
+                            final List<Expression> list = rhs.getList();
                             final Predicate predicate = new Predicate(lhs, "E", list.get(0));
                             final SearchClause s1 = new SearchClause(predicate, false);
-                            final ArrayList<ConnectedSearchClause> ss = new ArrayList<ConnectedSearchClause>();
+                            final List<ConnectedSearchClause> ss = new ArrayList<ConnectedSearchClause>();
                             int i = 1;
                             final int size = list.size();
                             while (i < size)
@@ -158,10 +156,10 @@ public class SearchOperatorTrees extends AbstractParseController {
                         }
                         else
                         {
-                            final ArrayList<Expression> list = rhs.getList();
+                            final List<Expression> list = rhs.getList();
                             final Predicate predicate = new Predicate(lhs, "NE", list.get(0));
                             final SearchClause s1 = new SearchClause(predicate, false);
-                            final ArrayList<ConnectedSearchClause> ss = new ArrayList<ConnectedSearchClause>();
+                            final List<ConnectedSearchClause> ss = new ArrayList<ConnectedSearchClause>();
                             int i = 1;
                             final int size = list.size();
                             while (i < size)
@@ -231,7 +229,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                             verifyTypes(lhsStr, op, rhsStr, rhs2);
                             if ((o.equals("IN") && !negated) || (o.equals("NI") && negated))
                             {
-                                final ArrayList<String> cols = new ArrayList<String>();
+                                final List<String> cols = new ArrayList<String>();
                                 cols.add(lhsStr);
                                 try
                                 {
@@ -247,7 +245,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                             }
                             else
                             {
-                                final ArrayList<String> cols = new ArrayList<String>();
+                                final List<String> cols = new ArrayList<String>();
                                 cols.add(lhsStr);
                                 try
                                 {
@@ -318,8 +316,8 @@ public class SearchOperatorTrees extends AbstractParseController {
         else
         {
             // ored
-            final ArrayList<Filter> ors = new ArrayList<Filter>();
-            final ArrayList<SearchClause> preds = new ArrayList<SearchClause>();
+            final List<Filter> ors = new ArrayList<Filter>();
+            final List<SearchClause> preds = new ArrayList<SearchClause>();
             preds.add(search.getClause());
             for (final ConnectedSearchClause csc : search.getConnected())
             {
@@ -406,7 +404,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                                 if (matches == 0)
                                 {
                                     // could be a complex column
-                                    for (final ArrayList<Object> row : model.getComplex())
+                                    for (final List<Object> row : model.getComplex())
                                     {
                                         // colName, op, type, id, exp, prereq,
                                         // done
@@ -426,7 +424,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                                         throw new ParseException("Column " + lhsStr + " is ambiguous");
                                     }
 
-                                    for (final ArrayList<Object> row : model.getComplex())
+                                    for (final List<Object> row : model.getComplex())
                                     {
                                         // colName, op, type, id, exp, prereq,
                                         // done
@@ -466,7 +464,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                             // check to see if complex already contains this
                             // expression
                             boolean found = false;
-                            for (final ArrayList<Object> row : model.getComplex())
+                            for (final List<Object> row : model.getComplex())
                             {
                                 // colName, op, type, id, exp, prereq, sub, done
                                 if (row.get(4).equals(lhs) && row.get(6).equals(sub))
@@ -511,7 +509,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                                 {
                                     // colName, op, type, id, exp, prereq, sub,
                                     // done
-                                    final ArrayList<Object> row = new ArrayList<Object>();
+                                    final List<Object> row = new ArrayList<Object>();
                                     row.add(otan.getName());
                                     row.add(otan.getOp());
                                     row.add(otan.getType());
@@ -544,7 +542,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                     {
                         if ((o.equals("IN") && !negated) || (o.equals("NI") && negated))
                         {
-                            final ArrayList<Expression> list = rhs.getList();
+                            final List<Expression> list = rhs.getList();
                             final Predicate predicate = new Predicate(lhs, "E", list.get(0));
                             final SearchClause s1 = new SearchClause(predicate, false);
                             preds.add(s1);
@@ -565,7 +563,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                         }
                         else
                         {
-                            final ArrayList<Expression> list = rhs.getList();
+                            final List<Expression> list = rhs.getList();
                             final Predicate predicate = new Predicate(lhs, "NE", list.get(0));
                             final SearchClause s1 = new SearchClause(predicate, false);
                             preds.add(s1);
@@ -666,7 +664,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                         if (matches == 0)
                         {
                             // could be a complex column
-                            for (final ArrayList<Object> row : model.getComplex())
+                            for (final List<Object> row : model.getComplex())
                             {
                                 // colName, op, type, id, exp, prereq, done
                                 if (row.get(0).equals("." + col.getColumn()) && row.get(6).equals(sub))
@@ -685,7 +683,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                                 throw new ParseException("Column " + lhsStr + " is ambiguous");
                             }
 
-                            for (final ArrayList<Object> row : model.getComplex())
+                            for (final List<Object> row : model.getComplex())
                             {
                                 // colName, op, type, id, exp, prereq, done
                                 if (row.get(0).equals("." + col.getColumn()) && row.get(6).equals(sub))
@@ -751,7 +749,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                 {
                     // check to see if complex already contains this expression
                     boolean found = false;
-                    for (final ArrayList<Object> row : model.getComplex())
+                    for (final List<Object> row : model.getComplex())
                     {
                         // colName, op, type, id, exp, prereq, sub, done
                         if (row.get(4).equals(rhs) && row.get(6).equals(sub))
@@ -809,7 +807,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                         else
                         {
                             // colName, op, type, id, exp, prereq, sub, done
-                            final ArrayList<Object> row = new ArrayList<Object>();
+                            final List<Object> row = new ArrayList<Object>();
                             row.add(otan.getName());
                             row.add(otan.getOp());
                             row.add(otan.getType());
@@ -953,13 +951,13 @@ public class SearchOperatorTrees extends AbstractParseController {
         return true;
     }
 
-    private static SearchCondition removeCorrelatedSearchCondition(final SubSelect select, final HashMap<String, Integer> cols2Pos) throws ParseException
+    private static SearchCondition removeCorrelatedSearchCondition(final SubSelect select, final Map<String, Integer> cols2Pos) throws ParseException
     {
         final SearchCondition search = select.getWhere().getSearch();
         convertToCNF(search);
         // for the clause and any connected
-        final ArrayList<ConnectedSearchClause> searches = new ArrayList<ConnectedSearchClause>();
-        final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+        final List<ConnectedSearchClause> searches = new ArrayList<ConnectedSearchClause>();
+        final List<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
         searches.add(new ConnectedSearchClause(search.getClause(), true));
         if (search.getConnected() != null && search.getConnected().size() > 0)
         {
@@ -1088,7 +1086,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                         }
                     }
 
-                    final ArrayList<ConnectedSearchClause> cscs2 = new ArrayList<ConnectedSearchClause>();
+                    final List<ConnectedSearchClause> cscs2 = new ArrayList<ConnectedSearchClause>();
                     p = s.getClause().getPredicate();
                     if (containsCorrelatedCol(p.getLHS(), cols2Pos))
                     {
@@ -1310,7 +1308,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                 if (matches == 0)
                 {
                     // could be a complex column
-                    for (final ArrayList<Object> row : model.getComplex())
+                    for (final List<Object> row : model.getComplex())
                     {
                         // colName, op, type, id, exp, prereq,
                         // done
@@ -1330,7 +1328,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                         throw new ParseException("Column " + lhsStr + " is ambiguous");
                     }
 
-                    for (final ArrayList<Object> row : model.getComplex())
+                    for (final List<Object> row : model.getComplex())
                     {
                         // colName, op, type, id, exp, prereq,
                         // done
@@ -1419,7 +1417,7 @@ public class SearchOperatorTrees extends AbstractParseController {
             // check to see if complex already contains this
             // expression
             boolean found = false;
-            for (final ArrayList<Object> row : model.getComplex())
+            for (final List<Object> row : model.getComplex())
             {
                 // colName, op, type, id, exp, prereq, sub, done
                 if (row.get(4).equals(lhs) && row.get(6).equals(sub))
@@ -1479,7 +1477,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                 {
                     // colName, op, type, id, exp, prereq, sub,
                     // done
-                    final ArrayList<Object> row = new ArrayList<Object>();
+                    final List<Object> row = new ArrayList<Object>();
                     row.add(otan.getName());
                     row.add(otan.getOp());
                     row.add(otan.getType());
@@ -1559,7 +1557,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                 if (matches == 0)
                 {
                     // could be a complex column
-                    for (final ArrayList<Object> row : model.getComplex())
+                    for (final List<Object> row : model.getComplex())
                     {
                         // colName, op, type, id, exp, prereq, done
                         if (row.get(0).equals("." + col.getColumn()) && row.get(6).equals(sub))
@@ -1578,7 +1576,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                         throw new ParseException("Column " + rhsStr + " is ambiguous");
                     }
 
-                    for (final ArrayList<Object> row : model.getComplex())
+                    for (final List<Object> row : model.getComplex())
                     {
                         // colName, op, type, id, exp, prereq, done
                         if (row.get(0).equals("." + col.getColumn()) && row.get(6).equals(sub))
@@ -1665,7 +1663,7 @@ public class SearchOperatorTrees extends AbstractParseController {
         {
             // check to see if complex already contains this expression
             boolean found = false;
-            for (final ArrayList<Object> row : model.getComplex())
+            for (final List<Object> row : model.getComplex())
             {
                 // colName, op, type, id, exp, prereq, sub, done
                 if (row.get(4).equals(rhs) && row.get(6).equals(sub))
@@ -1708,7 +1706,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                 else
                 {
                     // colName, op, type, id, exp, prereq, sub, done
-                    final ArrayList<Object> row = new ArrayList<Object>();
+                    final List<Object> row = new ArrayList<Object>();
                     row.add(otan.getName());
                     row.add(otan.getOp());
                     row.add(otan.getType());
@@ -1795,7 +1793,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                 ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
                 for (final SearchClause a : preds)
                 {
-                    final ArrayList<ConnectedSearchClause> b = new ArrayList<ConnectedSearchClause>(1);
+                    final List<ConnectedSearchClause> b = new ArrayList<ConnectedSearchClause>(1);
                     final ConnectedSearchClause b1 = new ConnectedSearchClause(next, false);
                     b.add(b1);
                     final SearchCondition search = new SearchCondition(a, b);
@@ -1905,7 +1903,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                     {
                         // A AND B CNF
                         s.getConnected().remove(0);
-                        ArrayList<ConnectedSearchClause> cscs = sc2.getSearch().getConnected();
+                        List<ConnectedSearchClause> cscs = sc2.getSearch().getConnected();
                         if (cscs == null)
                         {
                             cscs = new ArrayList<ConnectedSearchClause>();
@@ -1964,7 +1962,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                     {
                         // A ors B CNF
                         s.getConnected().remove(0);
-                        ArrayList<ConnectedSearchClause> cscs = sc2.getSearch().getConnected();
+                        List<ConnectedSearchClause> cscs = sc2.getSearch().getConnected();
                         if (cscs == null)
                         {
                             cscs = new ArrayList<ConnectedSearchClause>();
@@ -1985,7 +1983,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                     {
                         // A CNF B AND
                         s.getConnected().remove(0);
-                        ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
+                        List<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
                         if (cscs == null)
                         {
                             cscs = new ArrayList<ConnectedSearchClause>();
@@ -2013,7 +2011,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                     {
                         // A CNF B OR
                         s.getConnected().remove(0);
-                        ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
+                        List<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
                         if (cscs == null)
                         {
                             cscs = new ArrayList<ConnectedSearchClause>();
@@ -2028,7 +2026,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                     {
                         // A CNF B CNF
                         s.getConnected().remove(0);
-                        ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
+                        List<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
                         if (cscs == null)
                         {
                             cscs = new ArrayList<ConnectedSearchClause>();
@@ -2097,12 +2095,12 @@ public class SearchOperatorTrees extends AbstractParseController {
                             }
                         }
 
-                        ArrayList<SearchClause> searches = new ArrayList<SearchClause>();
+                        List<SearchClause> searches = new ArrayList<SearchClause>();
                         for (final SearchClause p1 : A)
                         {
                             for (final SearchClause p2 : B)
                             {
-                                final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+                                final List<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
                                 cscs.add(new ConnectedSearchClause(p2, false));
                                 searches.add(new SearchClause(new SearchCondition(p1, cscs), false));
                             }
@@ -2125,7 +2123,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                     else if (allPredicates(sc2.getSearch()) && allOrs(sc2.getSearch()))
                     {
                         // B all ors
-                        ArrayList<SearchClause> searches = new ArrayList<SearchClause>();
+                        List<SearchClause> searches = new ArrayList<SearchClause>();
                         for (final SearchClause a : A)
                         {
                             final SearchClause search = sc2.clone();
@@ -2134,7 +2132,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                         }
 
                         final SearchClause first = searches.remove(0);
-                        ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+                        List<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
                         for (final SearchClause search : searches)
                         {
                             cscs.add(new ConnectedSearchClause(search, true));
@@ -2152,10 +2150,10 @@ public class SearchOperatorTrees extends AbstractParseController {
                         s.getConnected().remove(0);
                         // build list of ored clauses in B
                         final SearchCondition scond = sc2.getSearch();
-                        ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
+                        List<SearchCondition> searches = new ArrayList<SearchCondition>();
                         if (scond.getClause().getPredicate() != null)
                         {
-                            final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+                            final List<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
                             searches.add(new SearchCondition(scond.getClause(), cscs));
                         }
                         else
@@ -2167,7 +2165,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                         {
                             if (csc.getSearch().getPredicate() != null)
                             {
-                                final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+                                final List<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
                                 searches.add(new SearchCondition(csc.getSearch(), cscs));
                             }
                             else
@@ -2176,7 +2174,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                             }
                         }
 
-                        ArrayList<SearchCondition> AB = new ArrayList<SearchCondition>();
+                        List<SearchCondition> AB = new ArrayList<SearchCondition>();
                         for (final SearchClause a : A)
                         {
                             for (final SearchCondition b : searches)
@@ -2188,7 +2186,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                         }
 
                         SearchClause first = new SearchClause(AB.remove(0), false);
-                        ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+                        List<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
                         for (final SearchCondition ab : AB)
                         {
                             cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
@@ -2211,7 +2209,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                     if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
                     {
                         // B is all anded predicates
-                        ArrayList<SearchClause> B = new ArrayList<SearchClause>();
+                        List<SearchClause> B = new ArrayList<SearchClause>();
                         if (sc2.getPredicate() != null)
                         {
                             B.add(sc2);
@@ -2226,7 +2224,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                             }
                         }
 
-                        ArrayList<SearchClause> searches = new ArrayList<SearchClause>();
+                        List<SearchClause> searches = new ArrayList<SearchClause>();
                         for (final SearchClause b : B)
                         {
                             final SearchClause search = sc.clone();
@@ -2235,7 +2233,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                         }
 
                         final SearchClause first = searches.remove(0);
-                        ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+                        List<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
                         for (final SearchClause search : searches)
                         {
                             cscs.add(new ConnectedSearchClause(search, true));
@@ -2251,7 +2249,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                     {
                         // B all ors
                         s.getConnected().remove(0);
-                        final ArrayList<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
+                        final List<ConnectedSearchClause> cscs = sc.getSearch().getConnected();
                         cscs.add(new ConnectedSearchClause(sc2.getSearch().getClause(), false));
                         cscs.addAll(sc2.getSearch().getConnected());
                         continue tail;
@@ -2262,10 +2260,10 @@ public class SearchOperatorTrees extends AbstractParseController {
                         s.getConnected().remove(0);
                         // build list of ored clauses in B
                         final SearchCondition scond = sc2.getSearch();
-                        ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
+                        List<SearchCondition> searches = new ArrayList<SearchCondition>();
                         if (scond.getClause().getPredicate() != null)
                         {
-                            final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+                            final List<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
                             searches.add(new SearchCondition(scond.getClause(), cscs));
                         }
                         else
@@ -2277,7 +2275,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                         {
                             if (csc.getSearch().getPredicate() != null)
                             {
-                                final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+                                final List<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
                                 searches.add(new SearchCondition(csc.getSearch(), cscs));
                             }
                             else
@@ -2296,7 +2294,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                         }
 
                         final SearchClause first = new SearchClause(searches.remove(0), false);
-                        ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+                        List<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
                         for (final SearchCondition ab : searches)
                         {
                             cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
@@ -2316,7 +2314,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                     if (sc2.getPredicate() != null || (allPredicates(sc2.getSearch()) && allAnd(sc2.getSearch())))
                     {
                         // A CNF B AND
-                        ArrayList<SearchClause> B = new ArrayList<SearchClause>();
+                        List<SearchClause> B = new ArrayList<SearchClause>();
                         if (sc2.getPredicate() != null)
                         {
                             B.add(sc2);
@@ -2337,10 +2335,10 @@ public class SearchOperatorTrees extends AbstractParseController {
                         // build list of ored clauses in A
                         SearchCondition scond = sc.getSearch();
                         sc = null;
-                        ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
+                        List<SearchCondition> searches = new ArrayList<SearchCondition>();
                         if (scond.getClause().getPredicate() != null)
                         {
-                            final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+                            final List<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
                             searches.add(new SearchCondition(scond.getClause(), cscs));
                         }
                         else
@@ -2352,7 +2350,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                         {
                             if (csc.getSearch().getPredicate() != null)
                             {
-                                final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+                                final List<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
                                 searches.add(new SearchCondition(csc.getSearch(), cscs));
                             }
                             else
@@ -2362,7 +2360,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                         }
 
                         scond = null;
-                        ArrayList<SearchCondition> AB = new ArrayList<SearchCondition>();
+                        List<SearchCondition> AB = new ArrayList<SearchCondition>();
                         HRDBMSWorker.logger.debug("Attempting to create " + (B.size() * 1l * searches.size()) + " new search conditions");
                         for (final SearchClause b : B)
                         {
@@ -2395,10 +2393,10 @@ public class SearchOperatorTrees extends AbstractParseController {
                         s.getConnected().remove(0);
                         // build list of ored clauses in A
                         final SearchCondition scond = sc.getSearch();
-                        ArrayList<SearchCondition> searches = new ArrayList<SearchCondition>();
+                        List<SearchCondition> searches = new ArrayList<SearchCondition>();
                         if (scond.getClause().getPredicate() != null)
                         {
-                            final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+                            final List<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
                             searches.add(new SearchCondition(scond.getClause(), cscs));
                         }
                         else
@@ -2410,7 +2408,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                         {
                             if (csc.getSearch().getPredicate() != null)
                             {
-                                final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+                                final List<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
                                 searches.add(new SearchCondition(csc.getSearch(), cscs));
                             }
                             else
@@ -2429,7 +2427,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                         }
 
                         SearchClause first = new SearchClause(searches.remove(0), false);
-                        ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+                        List<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
                         for (final SearchCondition ab : searches)
                         {
                             cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
@@ -2445,10 +2443,10 @@ public class SearchOperatorTrees extends AbstractParseController {
                     {
                         // A CNF B CNF
                         SearchCondition scond = sc.getSearch();
-                        ArrayList<SearchCondition> A = new ArrayList<SearchCondition>();
+                        List<SearchCondition> A = new ArrayList<SearchCondition>();
                         if (scond.getClause().getPredicate() != null)
                         {
-                            final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+                            final List<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
                             A.add(new SearchCondition(scond.getClause(), cscs));
                         }
                         else
@@ -2460,7 +2458,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                         {
                             if (csc.getSearch().getPredicate() != null)
                             {
-                                final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+                                final List<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
                                 A.add(new SearchCondition(csc.getSearch(), cscs));
                             }
                             else
@@ -2470,10 +2468,10 @@ public class SearchOperatorTrees extends AbstractParseController {
                         }
 
                         scond = sc2.getSearch();
-                        ArrayList<SearchCondition> B = new ArrayList<SearchCondition>();
+                        List<SearchCondition> B = new ArrayList<SearchCondition>();
                         if (scond.getClause().getPredicate() != null)
                         {
-                            final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+                            final List<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
                             B.add(new SearchCondition(scond.getClause(), cscs));
                         }
                         else
@@ -2485,7 +2483,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                         {
                             if (csc.getSearch().getPredicate() != null)
                             {
-                                final ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+                                final List<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
                                 B.add(new SearchCondition(csc.getSearch(), cscs));
                             }
                             else
@@ -2494,7 +2492,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                             }
                         }
 
-                        ArrayList<SearchCondition> AB = new ArrayList<SearchCondition>();
+                        List<SearchCondition> AB = new ArrayList<SearchCondition>();
                         for (final SearchCondition a : A)
                         {
                             for (final SearchCondition b : B)
@@ -2507,7 +2505,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                         }
 
                         SearchClause first = new SearchClause(AB.remove(0), false);
-                        ArrayList<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
+                        List<ConnectedSearchClause> cscs = new ArrayList<ConnectedSearchClause>();
                         for (final SearchCondition ab : AB)
                         {
                             cscs.add(new ConnectedSearchClause(new SearchClause(ab, false), true));
@@ -2586,7 +2584,7 @@ public class SearchOperatorTrees extends AbstractParseController {
                 int i = 0;
                 while (i < model.getComplex().size())
                 {
-                    final ArrayList<Object> row = model.getComplex().get(i);
+                    final List<Object> row = model.getComplex().get(i);
                     if (select.equals(row.get(6)))
                     {
                         model.getComplex().remove(i);
@@ -2606,7 +2604,7 @@ public class SearchOperatorTrees extends AbstractParseController {
         int i = 0;
         while (i < model.getComplex().size())
         {
-            final ArrayList<Object> row = model.getComplex().get(i);
+            final List<Object> row = model.getComplex().get(i);
             if (select.equals(row.get(6)))
             {
                 model.getComplex().remove(i);
@@ -2620,8 +2618,8 @@ public class SearchOperatorTrees extends AbstractParseController {
 
     private Operator addRename(final Operator op, final SearchCondition join) throws Exception
     {
-        final ArrayList<String> olds = new ArrayList<String>();
-        final ArrayList<String> news = new ArrayList<String>();
+        final List<String> olds = new ArrayList<String>();
+        final List<String> news = new ArrayList<String>();
 
         if (join.getClause().getPredicate() != null)
         {

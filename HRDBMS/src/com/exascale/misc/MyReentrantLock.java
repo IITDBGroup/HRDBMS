@@ -3,17 +3,18 @@ package com.exascale.misc;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class MyReentrantLock extends ReentrantLock
 {
-	private final ArrayList<String> owners = new ArrayList<String>();
+	private final List<String> owners = new ArrayList<String>();
 
-	public ArrayList<String> getOwners()
+	public List<String> getOwners()
 	{
 		synchronized (owners)
 		{
-			return (ArrayList<String>)owners.clone();
+			return new ArrayList<>(owners);
 		}
 	}
 

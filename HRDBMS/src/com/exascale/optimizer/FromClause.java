@@ -1,12 +1,13 @@
 package com.exascale.optimizer;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class FromClause
 {
-	private final ArrayList<TableReference> tables;
+	private final List<TableReference> tables;
 
-	public FromClause(final ArrayList<TableReference> tables)
+	public FromClause(final List<TableReference> tables)
 	{
 		this.tables = tables;
 	}
@@ -14,7 +15,7 @@ public class FromClause
 	@Override
 	public FromClause clone()
 	{
-		final ArrayList<TableReference> newTables = new ArrayList<TableReference>();
+		final List<TableReference> newTables = new ArrayList<TableReference>();
 		for (final TableReference t : tables)
 		{
 			newTables.add(t.clone());
@@ -23,7 +24,7 @@ public class FromClause
 		return new FromClause(newTables);
 	}
 
-	public ArrayList<TableReference> getTables()
+	public List<TableReference> getTables()
 	{
 		return tables;
 	}

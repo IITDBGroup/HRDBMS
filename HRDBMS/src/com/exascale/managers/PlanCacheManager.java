@@ -1,6 +1,7 @@
 package com.exascale.managers;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import com.exascale.misc.DataEndMarker;
@@ -24,7 +25,8 @@ import com.exascale.tables.SQL;
 import com.exascale.tables.Transaction;
 import com.exascale.threads.XAWorker;
 
-/** Maintains a cache of query plans for commonly run queries internal to HRDBMS */
+/** Maintains a cache of query plans for commonly run queries internal to HRDBMS.
+ *  Note that this class can only be used on the coordinator node. */
 public class PlanCacheManager
 {
 	private static ConcurrentHashMap<SQL, Plan> planCache = new ConcurrentHashMap<SQL, Plan>(16, 0.75f, 6 * ResourceManager.cpus);
@@ -43,9 +45,9 @@ public class PlanCacheManager
 			// getHostLookup
 			final Transaction tx = new Transaction(Transaction.ISOLATION_RR);
 			MetaData meta = new MetaData();
-			ArrayList<String> keys = new ArrayList<String>();
-			ArrayList<String> types = new ArrayList<String>();
-			ArrayList<Boolean> orders = new ArrayList<Boolean>();
+			List<String> keys = new ArrayList<String>();
+			List<String> types = new ArrayList<String>();
+			List<Boolean> orders = new ArrayList<Boolean>();
 			keys.add("NODES.NODEID");
 			types.add("INT");
 			orders.add(true);
@@ -1663,7 +1665,7 @@ public class PlanCacheManager
 			reorder.add(hash);
 			orders = new ArrayList<Boolean>();
 			orders.add(true);
-			final ArrayList<String> sortOrder = new ArrayList<String>();
+			final List<String> sortOrder = new ArrayList<String>();
 			sortOrder.add("B.INDEXNAME");
 			sort = new SortOperator(sortOrder, orders, meta);
 			sort.add(reorder);
@@ -2315,7 +2317,7 @@ public class PlanCacheManager
 				throw (Exception)obj;
 			}
 
-			final Long retval = (Long)((ArrayList<Object>)obj).get(0);
+			final Long retval = (Long)((List<Object>)obj).get(0);
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
 			worker.in.put(cmd);
@@ -2368,9 +2370,9 @@ public class PlanCacheManager
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(final Transaction tx) throws Exception
+		public List<Object> execute(final Transaction tx) throws Exception
 		{
-			final ArrayList<Object> retval = new ArrayList<Object>();
+			final List<Object> retval = new ArrayList<Object>();
 			if (schema.equals("SYS"))
 			{
 				if (table.equals("TABLES"))
@@ -2737,9 +2739,9 @@ public class PlanCacheManager
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(final Transaction tx) throws Exception
+		public List<Object> execute(final Transaction tx) throws Exception
 		{
-			final ArrayList<Object> retval = new ArrayList<Object>();
+			final List<Object> retval = new ArrayList<Object>();
 			if (schema.equals("SYS"))
 			{
 				if (table.equals("TABLES"))
@@ -3073,7 +3075,7 @@ public class PlanCacheManager
 			return retval;
 		}
 
-		public Cols2TypesPlan setParms(final String schema, final String table) throws Exception
+		public Cols2TypesPlan setParms(final String schema, final String table)
 		{
 			this.table = table;
 			this.schema = schema;
@@ -3153,7 +3155,7 @@ public class PlanCacheManager
 				throw (Exception)obj;
 			}
 
-			final String retval = (String)((ArrayList<Object>)obj).get(0);
+			final String retval = (String)((List<Object>)obj).get(0);
 
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
@@ -3210,7 +3212,7 @@ public class PlanCacheManager
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(final Transaction tx) throws Exception
+		public List<Object> execute(final Transaction tx) throws Exception
 		{
 			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
@@ -3221,7 +3223,7 @@ public class PlanCacheManager
 			cmd.add(1000000);
 			worker.in.put(cmd);
 
-			final ArrayList<Object> retval = new ArrayList<Object>();
+			final List<Object> retval = new ArrayList<Object>();
 			Object obj = null;
 			while (true)
 			{
@@ -3329,7 +3331,7 @@ public class PlanCacheManager
 				throw new Exception("No result received when querying number of worker nodes");
 			}
 
-			final int retval = ((Long)((ArrayList<Object>)obj).get(0)).intValue();
+			final int retval = ((Long)((List<Object>)obj).get(0)).intValue();
 			// HRDBMSWorker.logger.debug("There are " + retval +
 			// " worker nodes");
 			cmd = new ArrayList<Object>(1);
@@ -3752,7 +3754,7 @@ public class PlanCacheManager
 				throw (Exception)obj;
 			}
 
-			final String retval = (String)((ArrayList<Object>)obj).get(0);
+			final String retval = (String)((List<Object>)obj).get(0);
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
 			worker.in.put(cmd);
@@ -3975,7 +3977,7 @@ public class PlanCacheManager
 				throw (Exception)obj;
 			}
 
-			final Integer retval = ((Long)((ArrayList<Object>)obj).get(0)).intValue();
+			final Integer retval = ((Long)((List<Object>)obj).get(0)).intValue();
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
 			worker.in.put(cmd);
@@ -4016,11 +4018,11 @@ public class PlanCacheManager
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(final Transaction tx) throws Exception
+		public List<Object> execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
-				final ArrayList<Object> retval = new ArrayList<Object>();
+				final List<Object> retval = new ArrayList<Object>();
 				ArrayList<Object> row = new ArrayList<Object>();
 				if (name.equals("TABLES"))
 				{
@@ -4152,7 +4154,7 @@ public class PlanCacheManager
 				}
 			}
 
-			final ArrayList<Object> retval = new ArrayList<Object>();
+			final List<Object> retval = new ArrayList<Object>();
 			while (!(obj instanceof DataEndMarker))
 			{
 				if (obj instanceof Exception)
@@ -4218,11 +4220,11 @@ public class PlanCacheManager
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(final Transaction tx) throws Exception
+		public List<Object> execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
-				final ArrayList<Object> retval = new ArrayList<Object>();
+				final List<Object> retval = new ArrayList<Object>();
 				ArrayList<Object> row = new ArrayList<Object>();
 				if (name.equals("TABLES"))
 				{
@@ -4330,7 +4332,7 @@ public class PlanCacheManager
 				}
 			}
 
-			final ArrayList<Object> retval = new ArrayList<Object>();
+			final List<Object> retval = new ArrayList<Object>();
 			while (!(obj instanceof DataEndMarker))
 			{
 				if (obj instanceof Exception)
@@ -4396,11 +4398,11 @@ public class PlanCacheManager
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(final Transaction tx) throws Exception
+		public List<Object> execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
-				final ArrayList<Object> retval = new ArrayList<Object>();
+				final List<Object> retval = new ArrayList<Object>();
 				ArrayList<Object> row = new ArrayList<Object>();
 				if (table.equals("TABLES"))
 				{
@@ -4508,7 +4510,7 @@ public class PlanCacheManager
 				}
 			}
 
-			final ArrayList<Object> retval = new ArrayList<Object>();
+			final List<Object> retval = new ArrayList<Object>();
 			while (!(obj instanceof DataEndMarker))
 			{
 				if (obj instanceof Exception)
@@ -4817,11 +4819,11 @@ public class PlanCacheManager
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(final Transaction tx) throws Exception
+		public List<Object> execute(final Transaction tx) throws Exception
 		{
 			if (tableID >= 0 && tableID <= 12)
 			{
-				final ArrayList<Object> retval = new ArrayList<Object>();
+				final List<Object> retval = new ArrayList<Object>();
 				ArrayList<Object> row = new ArrayList<Object>();
 				if (tableID == 0 && indexID == 0)
 				{
@@ -4960,7 +4962,7 @@ public class PlanCacheManager
 				}
 			}
 
-			final ArrayList<Object> retval = new ArrayList<Object>();
+			final List<Object> retval = new ArrayList<Object>();
 			while (!(obj instanceof DataEndMarker))
 			{
 				if (obj instanceof Exception)
@@ -5026,11 +5028,11 @@ public class PlanCacheManager
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(final Transaction tx) throws Exception
+		public List<Object> execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
-				final ArrayList<Object> retval = new ArrayList<Object>();
+				final List<Object> retval = new ArrayList<Object>();
 				ArrayList<Object> row = new ArrayList<Object>();
 				if (name.equals("PKTABLES"))
 				{
@@ -5194,7 +5196,7 @@ public class PlanCacheManager
 				}
 			}
 
-			final ArrayList<Object> retval = new ArrayList<Object>();
+			final List<Object> retval = new ArrayList<Object>();
 			while (!(obj instanceof DataEndMarker))
 			{
 				if (obj instanceof Exception)
@@ -5435,7 +5437,7 @@ public class PlanCacheManager
 			cmd.add("CLOSE");
 			worker.in.put(cmd);
 			tx.setIsolationLevel(iso);
-			return (Integer)((ArrayList<Object>)obj).get(0);
+			return (Integer)((List<Object>)obj).get(0);
 		}
 
 		public LengthPlan setParms(final String schema, final String table, final String col) throws Exception
@@ -5598,7 +5600,7 @@ public class PlanCacheManager
 				throw (Exception)obj;
 			}
 
-			final int retval = (Integer)((ArrayList<Object>)obj).get(0);
+			final int retval = (Integer)((List<Object>)obj).get(0);
 
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
@@ -5674,7 +5676,7 @@ public class PlanCacheManager
 				throw (Exception)obj;
 			}
 
-			final int retval = (Integer)((ArrayList<Object>)obj).get(0);
+			final int retval = (Integer)((List<Object>)obj).get(0);
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
 			worker.in.put(cmd);
@@ -5741,7 +5743,7 @@ public class PlanCacheManager
 				throw (Exception)obj;
 			}
 
-			final int retval = (Integer)((ArrayList<Object>)obj).get(0);
+			final int retval = (Integer)((List<Object>)obj).get(0);
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
 			worker.in.put(cmd);
@@ -5766,11 +5768,11 @@ public class PlanCacheManager
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(final Transaction tx) throws Exception
+		public List<Object> execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
-				final ArrayList<Object> retval = new ArrayList<Object>();
+				final List<Object> retval = new ArrayList<Object>();
 				ArrayList<Object> row = new ArrayList<Object>();
 				if (name.equals("PKTABLES"))
 				{
@@ -5909,7 +5911,7 @@ public class PlanCacheManager
 				}
 			}
 
-			final ArrayList<Object> retval = new ArrayList<Object>();
+			final List<Object> retval = new ArrayList<Object>();
 			while (!(obj instanceof DataEndMarker))
 			{
 				if (obj instanceof Exception)
@@ -5990,11 +5992,11 @@ public class PlanCacheManager
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(final Transaction tx) throws Exception
+		public List<Object> execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
-				final ArrayList<Object> retval = new ArrayList<Object>();
+				final List<Object> retval = new ArrayList<Object>();
 				retval.add("NONE");
 				retval.add("{-1}");
 				retval.add("{0}");
@@ -6042,7 +6044,7 @@ public class PlanCacheManager
 				throw (Exception)obj;
 			}
 
-			final ArrayList<Object> retval = (ArrayList<Object>)obj;
+			final List<Object> retval = (List<Object>)obj;
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
 			worker.in.put(cmd);
@@ -6078,11 +6080,11 @@ public class PlanCacheManager
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(final Transaction tx) throws Exception
+		public List<Object> execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
-				final ArrayList<Object> retval = new ArrayList<Object>();
+				final List<Object> retval = new ArrayList<Object>();
 				if (name.equals("PKTABLES"))
 				{
 					retval.add(0);
@@ -6227,7 +6229,7 @@ public class PlanCacheManager
 			cmd.add("CLOSE");
 			worker.in.put(cmd);
 			tx.setIsolationLevel(iso);
-			return (ArrayList<Object>)obj;
+			return (List<Object>)obj;
 		}
 
 		public TableAndIndexIDPlan setParms(final String schema, final String name) throws Exception
@@ -6316,7 +6318,7 @@ public class PlanCacheManager
 				throw (Exception)obj;
 			}
 
-			final Long retval = (Long)((ArrayList<Object>)obj).get(0);
+			final Long retval = (Long)((List<Object>)obj).get(0);
 			cmd = new ArrayList<Object>(1);
 			cmd.add("CLOSE");
 			worker.in.put(cmd);
@@ -6458,7 +6460,7 @@ public class PlanCacheManager
 			cmd.add("CLOSE");
 			worker.in.put(cmd);
 			tx.setIsolationLevel(iso);
-			return (Integer)((ArrayList<Object>)obj).get(0);
+			return (Integer)((List<Object>)obj).get(0);
 		}
 
 		public TableIDPlan setParms(final String schema, final String name) throws Exception
@@ -6543,7 +6545,7 @@ public class PlanCacheManager
 			cmd.add("CLOSE");
 			worker.in.put(cmd);
 			tx.setIsolationLevel(iso);
-			final String type = (String)((ArrayList<Object>)obj).get(0);
+			final String type = (String)((List<Object>)obj).get(0);
 			if (type.equals("E"))
 			{
 				return 1;
@@ -6554,7 +6556,7 @@ public class PlanCacheManager
 			}
 		}
 
-		public TableTypePlan setParms(final String schema, final String name) throws Exception
+		public TableTypePlan setParms(final String schema, final String name)
 		{
 			this.schema = schema;
 			if (schema.equals("SYS"))
@@ -6585,11 +6587,11 @@ public class PlanCacheManager
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(final Transaction tx) throws Exception
+		public List<Object> execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
-				final ArrayList<Object> retval = new ArrayList<Object>();
+				final List<Object> retval = new ArrayList<Object>();
 				ArrayList<Object> row = new ArrayList<Object>();
 				if (name.equals("PKTABLES"))
 				{
@@ -6728,7 +6730,7 @@ public class PlanCacheManager
 				}
 			}
 
-			final ArrayList<Object> retval = new ArrayList<Object>();
+			final List<Object> retval = new ArrayList<Object>();
 			while (!(obj instanceof DataEndMarker))
 			{
 				if (obj instanceof Exception)
@@ -6809,12 +6811,12 @@ public class PlanCacheManager
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(final Transaction tx) throws Exception
+		public List<Object> execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
-				final ArrayList<Object> retval = new ArrayList<Object>();
-				final ArrayList<Object> row = new ArrayList<Object>();
+				final List<Object> retval = new ArrayList<Object>();
+				final List<Object> row = new ArrayList<Object>();
 				if (table.equals("TABLES"))
 				{
 					row.add("PKTABLES");
@@ -6915,7 +6917,7 @@ public class PlanCacheManager
 				}
 			}
 
-			final ArrayList<Object> retval = new ArrayList<Object>();
+			final List<Object> retval = new ArrayList<Object>();
 			while (!(obj instanceof DataEndMarker))
 			{
 				if (obj instanceof Exception)
@@ -6977,11 +6979,11 @@ public class PlanCacheManager
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(final Transaction tx) throws Exception
+		public List<Object> execute(final Transaction tx) throws Exception
 		{
 			if (schema.equals("SYS"))
 			{
-				final ArrayList<Object> retval = new ArrayList<Object>();
+				final List<Object> retval = new ArrayList<Object>();
 				ArrayList<Object> row = new ArrayList<Object>();
 				if (table.equals("TABLES"))
 				{
@@ -7105,7 +7107,7 @@ public class PlanCacheManager
 				}
 			}
 
-			final ArrayList<Object> retval = new ArrayList<Object>();
+			final List<Object> retval = new ArrayList<Object>();
 			while (!(obj instanceof DataEndMarker))
 			{
 				if (obj instanceof Exception)
@@ -7171,7 +7173,7 @@ public class PlanCacheManager
 		{
 			if (schema.equals("SYS"))
 			{
-				final ArrayList<Object> retval = new ArrayList<Object>();
+				final List<Object> retval = new ArrayList<Object>();
 				if (name.equals("PKTABLES"))
 				{
 					return retval;
@@ -7327,7 +7329,7 @@ public class PlanCacheManager
 		{
 			if (schema.equals("SYS"))
 			{
-				final ArrayList<Object> retval = new ArrayList<Object>();
+				final List<Object> retval = new ArrayList<Object>();
 				if (name.equals("TABLES"))
 				{
 					return retval;
@@ -7457,7 +7459,7 @@ public class PlanCacheManager
 			this.p = p;
 		}
 
-		public ArrayList execute(Transaction tx) throws Exception
+		public List execute(Transaction tx) throws Exception
 		{
 			int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
@@ -7499,7 +7501,7 @@ public class PlanCacheManager
 			cmd.add("CLOSE");
 			worker.in.put(cmd);
 			tx.setIsolationLevel(iso);
-			return (ArrayList<Object>) obj;
+			return (List<Object>) obj;
 		}
 
 		public ExternalTableInfoPlan setParms(int tableID) throws Exception
@@ -7637,7 +7639,7 @@ public class PlanCacheManager
 			cmd.add("CLOSE");
 			worker.in.put(cmd);
 			tx.setIsolationLevel(iso);
-			return (String)((ArrayList<Object>)obj).get(0);
+			return (String)((List<Object>)obj).get(0);
 		}
 
 		public ViewSQLPlan setParms(final String schema, final String name) throws Exception
@@ -7664,7 +7666,7 @@ public class PlanCacheManager
 			this.p = p;
 		}
 
-		public ArrayList<Object> execute(final Transaction tx) throws Exception
+		public List<Object> execute(final Transaction tx) throws Exception
 		{
 			final int iso = tx.getIsolationLevel();
 			tx.setIsolationLevel(Transaction.ISOLATION_RR);
@@ -7675,7 +7677,7 @@ public class PlanCacheManager
 			cmd.add(1000000000);
 			worker.in.put(cmd);
 
-			final ArrayList<Object> retval = new ArrayList<Object>();
+			final List<Object> retval = new ArrayList<Object>();
 			Object obj = null;
 			while (true)
 			{

@@ -3,6 +3,7 @@ package com.exascale.managers;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.PriorityBlockingQueue;
 import com.exascale.optimizer.MetaData;
@@ -64,7 +65,7 @@ public class MaintenanceManager extends HRDBMSThread
 		// find a free spot
 		// compress things to make a free spot
 		// next depth
-		final ArrayList<ArrayList<Task>> depths = buildDepths();
+		final List<List<Task>> depths = buildDepths();
 		long time = -1;
 		int i = 0;
 		final int size = depths.size();
@@ -98,12 +99,12 @@ public class MaintenanceManager extends HRDBMSThread
 		return;
 	}
 
-	private static ArrayList<ArrayList<Task>> buildDepths()
+	private static List<List<Task>> buildDepths()
 	{
-		final ArrayList<ArrayList<Task>> retval = new ArrayList<ArrayList<Task>>();
-		ArrayList<Task> level = new ArrayList<Task>();
-		ArrayList<Task> queued = new ArrayList<Task>();
-		ArrayList<Task> list = new ArrayList<Task>(tasks);
+		final List<List<Task>> retval = new ArrayList<>();
+		List<Task> level = new ArrayList<Task>();
+		List<Task> queued = new ArrayList<Task>();
+		List<Task> list = new ArrayList<Task>(tasks);
 		while (true)
 		{
 			Collections.sort(list, new ScheduleComparator());
@@ -141,7 +142,7 @@ public class MaintenanceManager extends HRDBMSThread
 		}
 	}
 
-	private static Free largeCloseFree(final long startRequest, final long endRequest, final ArrayList<Task> layer)
+	private static Free largeCloseFree(final long startRequest, final long endRequest, final List<Task> layer)
 	{
 		// start is inside a task or outside
 		int i = 0;
@@ -227,7 +228,7 @@ public class MaintenanceManager extends HRDBMSThread
 		return new Free(startRequest, endRequest);
 	}
 
-	private static void makeSpace(final ArrayList<Task> layer, final long start, final long end)
+	private static void makeSpace(final List<Task> layer, final long start, final long end)
 	{
 		int i = 0;
 		for (final Task task : layer)
@@ -278,7 +279,7 @@ public class MaintenanceManager extends HRDBMSThread
 		}
 	}
 
-	private static long totalPriorFree(final ArrayList<Task> layer, final long endTime)
+	private static long totalPriorFree(final List<Task> layer, final long endTime)
 	{
 		int i = 0;
 		long retval = 0;

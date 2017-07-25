@@ -11,6 +11,8 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.List;
+
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.MaintenanceManager;
 import com.exascale.misc.Utils;
@@ -78,8 +80,8 @@ public class DeleteFilesTask extends Task
 			try
 			{
 				final long start = System.currentTimeMillis();
-				final ArrayList<String> tables = new ArrayList<String>();
-				final ArrayList<String> indexes = new ArrayList<String>();
+				final List<String> tables = new ArrayList<String>();
+				final List<String> indexes = new ArrayList<String>();
 				final long target = Long.parseLong(HRDBMSWorker.getHParms().getProperty("old_file_cleanup_target_days")) * 24 * 60 * 60 * 1000;
 				String sql = "SELECT SCHEMA, TABNAME FROM SYS.TABLES";
 				final Connection conn = DriverManager.getConnection("jdbc:hrdbms://localhost:" + HRDBMSWorker.getHParms().getProperty("port_number"));
@@ -122,16 +124,16 @@ public class DeleteFilesTask extends Task
 			}
 		}
 
-		private ArrayList<Object> makeTree(final ArrayList<Integer> nodes)
+		private List<Object> makeTree(final List<Integer> nodes)
 		{
 			final int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 			if (nodes.size() <= max)
 			{
-				final ArrayList<Object> retval = new ArrayList<Object>(nodes);
+				final List<Object> retval = new ArrayList<Object>(nodes);
 				return retval;
 			}
 
-			final ArrayList<Object> retval = new ArrayList<Object>();
+			final List<Object> retval = new ArrayList<Object>();
 			int i = 0;
 			while (i < max)
 			{
@@ -148,7 +150,7 @@ public class DeleteFilesTask extends Task
 			{
 				final int first = (Integer)retval.get(j);
 				retval.remove(j);
-				final ArrayList<Integer> list = new ArrayList<Integer>(perNode + 1);
+				final List<Integer> list = new ArrayList<Integer>(perNode + 1);
 				list.add(first);
 				int k = 0;
 				while (k < perNode && i < size)
@@ -162,7 +164,7 @@ public class DeleteFilesTask extends Task
 				j++;
 			}
 
-			if (((ArrayList<Integer>)retval.get(0)).size() <= max)
+			if (((List<Integer>)retval.get(0)).size() <= max)
 			{
 				return retval;
 			}
@@ -171,7 +173,7 @@ public class DeleteFilesTask extends Task
 			i = 0;
 			while (i < retval.size())
 			{
-				final ArrayList<Integer> list = (ArrayList<Integer>)retval.remove(i);
+				final List<Integer> list = (List<Integer>)retval.remove(i);
 				retval.add(i, makeTree(list));
 				i++;
 			}
@@ -179,27 +181,27 @@ public class DeleteFilesTask extends Task
 			return retval;
 		}
 
-		private void sendDeleteIndexes(final ArrayList<String> indexes) throws Exception
+		private void sendDeleteIndexes(final List<String> indexes) throws Exception
 		{
 			final Transaction tx = new Transaction(Transaction.ISOLATION_CS);
 
-			final ArrayList<Integer> nodes = MetaData.getWorkerNodes();
-			final ArrayList<Object> tree = makeTree(nodes);
+			final List<Integer> nodes = MetaData.getWorkerNodes();
+			final List<Object> tree = makeTree(nodes);
 
 			boolean allOK = true;
-			final ArrayList<SendIndexThread> threads = new ArrayList<SendIndexThread>();
+			final List<SendIndexThread> threads = new ArrayList<SendIndexThread>();
 			for (final Object o : tree)
 			{
 				if (o instanceof Integer)
 				{
-					final ArrayList<Object> list = new ArrayList<Object>(1);
+					final List<Object> list = new ArrayList<Object>(1);
 					list.add(o);
 					final SendIndexThread thread = new SendIndexThread(list, tx, indexes);
 					threads.add(thread);
 				}
 				else
 				{
-					final SendIndexThread thread = new SendIndexThread((ArrayList<Object>)o, tx, indexes);
+					final SendIndexThread thread = new SendIndexThread((List<Object>)o, tx, indexes);
 					threads.add(thread);
 				}
 			}
@@ -237,26 +239,26 @@ public class DeleteFilesTask extends Task
 			}
 		}
 
-		private void sendDeleteTables(final ArrayList<String> tables) throws Exception
+		private void sendDeleteTables(final List<String> tables) throws Exception
 		{
 			final Transaction tx = new Transaction(Transaction.ISOLATION_CS);
-			final ArrayList<Integer> nodes = MetaData.getWorkerNodes();
-			final ArrayList<Object> tree = makeTree(nodes);
+			final List<Integer> nodes = MetaData.getWorkerNodes();
+			final List<Object> tree = makeTree(nodes);
 
 			boolean allOK = true;
-			final ArrayList<SendTableThread> threads = new ArrayList<SendTableThread>();
+			final List<SendTableThread> threads = new ArrayList<SendTableThread>();
 			for (final Object o : tree)
 			{
 				if (o instanceof Integer)
 				{
-					final ArrayList<Object> list = new ArrayList<Object>(1);
+					final List<Object> list = new ArrayList<Object>(1);
 					list.add(o);
 					final SendTableThread thread = new SendTableThread(list, tx, tables);
 					threads.add(thread);
 				}
 				else
 				{
-					final SendTableThread thread = new SendTableThread((ArrayList<Object>)o, tx, tables);
+					final SendTableThread thread = new SendTableThread((List<Object>)o, tx, tables);
 					threads.add(thread);
 				}
 			}
@@ -297,12 +299,12 @@ public class DeleteFilesTask extends Task
 
 	private class SendIndexThread extends HRDBMSThread
 	{
-		private final ArrayList<Object> tree;
+		private final List<Object> tree;
 		private final Transaction tx;
-		private final ArrayList<String> indexes;
+		private final List<String> indexes;
 		private boolean ok = true;
 
-		public SendIndexThread(final ArrayList<Object> tree, final Transaction tx, final ArrayList<String> indexes)
+		public SendIndexThread(final List<Object> tree, final Transaction tx, final List<String> indexes)
 		{
 			this.tree = tree;
 			this.tx = tx;
@@ -320,7 +322,7 @@ public class DeleteFilesTask extends Task
 			Object obj = tree.get(0);
 			while (obj instanceof ArrayList)
 			{
-				obj = ((ArrayList)obj).get(0);
+				obj = ((List)obj).get(0);
 			}
 
 			Socket sock = null;
@@ -374,12 +376,12 @@ public class DeleteFilesTask extends Task
 
 	private class SendTableThread extends HRDBMSThread
 	{
-		private final ArrayList<Object> tree;
+		private final List<Object> tree;
 		private final Transaction tx;
-		private final ArrayList<String> tables;
+		private final List<String> tables;
 		private boolean ok = true;
 
-		public SendTableThread(final ArrayList<Object> tree, final Transaction tx, final ArrayList<String> tables)
+		public SendTableThread(final List<Object> tree, final Transaction tx, final List<String> tables)
 		{
 			this.tree = tree;
 			this.tx = tx;
@@ -397,7 +399,7 @@ public class DeleteFilesTask extends Task
 			Object obj = tree.get(0);
 			while (obj instanceof ArrayList)
 			{
-				obj = ((ArrayList)obj).get(0);
+				obj = ((List)obj).get(0);
 			}
 
 			Socket sock = null;

@@ -31,9 +31,9 @@ public class HTTPCsvExternal  implements ExternalTableType, Serializable
 		}
 	}
 
-	protected HashMap<String, String> cols2Types;
-	protected HashMap<String, Integer> cols2Pos;
-	protected TreeMap<Integer, String> pos2Col;
+	protected Map<String, String> cols2Types;
+	protected Map<String, Integer> cols2Pos;
+	protected Map<Integer, String> pos2Col;
 	protected String name;
 	protected String schema;
 
@@ -51,13 +51,13 @@ public class HTTPCsvExternal  implements ExternalTableType, Serializable
         return this.getClass().getDeclaredField("params").getType();
     }
 
-	public void setCols2Types(HashMap<String, String> cols2Types) {
+	public void setCols2Types(Map<String, String> cols2Types) {
 		this.cols2Types = cols2Types;
 	}
-	public void setCols2Pos(HashMap<String, Integer> cols2Pos) {
+	public void setCols2Pos(Map<String, Integer> cols2Pos) {
 		this.cols2Pos = cols2Pos;
 	}
-	public void setPos2Col(TreeMap<Integer, String> pos2Col) {
+	public void setPos2Col(Map<Integer, String> pos2Col) {
 		this.pos2Col = pos2Col;
 	}
 	public void setName(String name) {
@@ -113,7 +113,7 @@ public class HTTPCsvExternal  implements ExternalTableType, Serializable
 	}
 
 	@Override
-	public ArrayList next() {
+	public List next() {
 		String inputLine;
 		try {
 			line++;
@@ -138,9 +138,9 @@ public class HTTPCsvExternal  implements ExternalTableType, Serializable
 
 	/** Convert csv line into table row.
 	 *  Runtime exception is thrown when type of CSV column does not match type of table column	 */
-	protected ArrayList<Object> convertCsvLineToObject(final String inputLine)
+	protected List<Object> convertCsvLineToObject(final String inputLine)
 	{
-		final ArrayList<Object> retval = new ArrayList<Object>();
+		final List<Object> retval = new ArrayList<Object>();
 		ArrayList<String> row = new ArrayList<>(Arrays.asList(inputLine.split(params.getDelimiter())));
 		if (row.size() != pos2Col.size()) {
 			throw new ExternalTableException(
@@ -213,7 +213,7 @@ public class HTTPCsvExternal  implements ExternalTableType, Serializable
 		OperatorUtils.serializeCSVExternalParams(params, out, prev);
 	}
 
-	public static HTTPCsvExternal deserializeKnown(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static HTTPCsvExternal deserializeKnown(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HTTPCsvExternal value = (HTTPCsvExternal)unsafe.allocateInstance(HTTPCsvExternal.class);
 		prev.put(OperatorUtils.readLong(in), value);

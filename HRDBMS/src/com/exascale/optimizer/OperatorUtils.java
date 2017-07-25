@@ -129,12 +129,12 @@ public class OperatorUtils
 		return ret;
 	}
 
-	public static ArrayDeque<String> deserializeADS(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Deque<String> deserializeADS(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (ArrayDeque<String>)readReference(in, prev);
+			return (Deque<String>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.ADS.equals(type))
@@ -161,7 +161,7 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static AggregateOperator deserializeAgOp(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static AggregateOperator deserializeAgOp(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		switch(type) {
@@ -184,12 +184,12 @@ public class OperatorUtils
 		}
 	}
 
-	public static ArrayList<AggregateOperator> deserializeALAgOp(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static List<AggregateOperator> deserializeALAgOp(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (ArrayList<AggregateOperator>)readReference(in, prev);
+			return (List<AggregateOperator>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.ALAGOP.equals(type))
@@ -204,7 +204,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final ArrayList<AggregateOperator> retval = new ArrayList<AggregateOperator>(size);
+		final List<AggregateOperator> retval = new ArrayList<AggregateOperator>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -216,12 +216,12 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static ArrayList<ArrayList<Boolean>> deserializeALALB(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static List<List<Boolean>> deserializeALALB(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (ArrayList<ArrayList<Boolean>>)readReference(in, prev);
+			return (List<List<Boolean>>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.ALALB.equals(type))
@@ -236,7 +236,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final ArrayList<ArrayList<Boolean>> retval = new ArrayList<ArrayList<Boolean>>(size);
+		final List<List<Boolean>> retval = new ArrayList<List<Boolean>>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -248,12 +248,12 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static ArrayList<ArrayList<Filter>> deserializeALALF(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static List<List<Filter>> deserializeALALF(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (ArrayList<ArrayList<Filter>>)readReference(in, prev);
+			return (List<List<Filter>>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.ALALF.equals(type))
@@ -268,7 +268,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final ArrayList<ArrayList<Filter>> retval = new ArrayList<ArrayList<Filter>>(size);
+		final List<List<Filter>> retval = new ArrayList<List<Filter>>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -280,12 +280,12 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static ArrayList<ArrayList<Object>> deserializeALALO(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static List<List<Object>> deserializeALALO(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (ArrayList<ArrayList<Object>>)readReference(in, prev);
+			return (List<List<Object>>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.ALALO.equals(type))
@@ -300,7 +300,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final ArrayList<ArrayList<Object>> retval = new ArrayList<ArrayList<Object>>(size);
+		final List<List<Object>> retval = new ArrayList<List<Object>>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -312,12 +312,12 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static ArrayList<ArrayList<String>> deserializeALALS(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static List<List<String>> deserializeALALS(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (ArrayList<ArrayList<String>>)readReference(in, prev);
+			return (List<List<String>>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.ALALS.equals(type))
@@ -332,7 +332,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final ArrayList<ArrayList<String>> retval = new ArrayList<ArrayList<String>>(size);
+		final List<List<String>> retval = new ArrayList<List<String>>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -344,12 +344,12 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static ArrayList<Boolean> deserializeALB(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static List<Boolean> deserializeALB(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (ArrayList<Boolean>)readReference(in, prev);
+			return (List<Boolean>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.ALB.equals(type))
@@ -364,7 +364,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final ArrayList<Boolean> retval = new ArrayList<Boolean>(size);
+		final List<Boolean> retval = new ArrayList<Boolean>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -376,12 +376,12 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static ArrayList<Filter> deserializeALF(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static List<Filter> deserializeALF(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (ArrayList<Filter>)readReference(in, prev);
+			return (List<Filter>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.ALF.equals(type))
@@ -396,7 +396,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final ArrayList<Filter> retval = new ArrayList<Filter>(size);
+		final List<Filter> retval = new ArrayList<Filter>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -408,12 +408,12 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static ArrayList<HashSet<HashMap<Filter, Filter>>> deserializeALHSHM(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static List<Set<Map<Filter, Filter>>> deserializeALHSHM(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (ArrayList<HashSet<HashMap<Filter, Filter>>>)readReference(in, prev);
+			return (List<Set<Map<Filter, Filter>>>)readReference(in, prev);
 		}
 
 		if (HrdbmsType.ALHSHM.equals(type))
@@ -428,7 +428,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final ArrayList<HashSet<HashMap<Filter, Filter>>> retval = new ArrayList<>(size);
+		final List<Set<Map<Filter, Filter>>> retval = new ArrayList<>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -440,12 +440,12 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static ArrayList<Integer> deserializeALI(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static List<Integer> deserializeALI(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (ArrayList<Integer>)readReference(in, prev);
+			return (List<Integer>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.ALI.equals(type))
@@ -460,7 +460,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final ArrayList<Integer> retval = new ArrayList<Integer>(size);
+		final List<Integer> retval = new ArrayList<Integer>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -472,12 +472,12 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static ArrayList<Index> deserializeALIndx(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static List<Index> deserializeALIndx(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (ArrayList<Index>)readReference(in, prev);
+			return (List<Index>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.ALINDX.equals(type))
@@ -492,7 +492,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final ArrayList<Index> retval = new ArrayList<Index>(size);
+		final List<Index> retval = new ArrayList<Index>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -504,12 +504,12 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static ArrayList<Object> deserializeALO(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static List<Object> deserializeALO(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (ArrayList<Object>)readReference(in, prev);
+			return (List<Object>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.ALO.equals(type))
@@ -524,7 +524,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final ArrayList<Object> retval = new ArrayList<Object>(size);
+		final List<Object> retval = new ArrayList<Object>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -566,12 +566,12 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static ArrayList<Operator> deserializeALOp(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static List<Operator> deserializeALOp(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (ArrayList<Operator>)readReference(in, prev);
+			return (List<Operator>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.ALOP.equals(type))
@@ -586,7 +586,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final ArrayList<Operator> retval = new ArrayList<>(size);
+		final List<Operator> retval = new ArrayList<>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -598,12 +598,12 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static ArrayList<RIDAndIndexKeys> deserializeALRAIK(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static List<RIDAndIndexKeys> deserializeALRAIK(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (ArrayList<RIDAndIndexKeys>)readReference(in, prev);
+			return (List<RIDAndIndexKeys>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.ALRAIK.equals(type))
@@ -618,7 +618,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final ArrayList<RIDAndIndexKeys> retval = new ArrayList<>(size);
+		final List<RIDAndIndexKeys> retval = new ArrayList<>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -631,12 +631,12 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static ArrayList<String> deserializeALS(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static List<String> deserializeALS(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (ArrayList<String>)readReference(in, prev);
+			return (List<String>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.ALS.equals(type))
@@ -651,7 +651,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final ArrayList<String> retval = new ArrayList<>(size);
+		final List<String> retval = new ArrayList<>(size);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -663,7 +663,7 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static boolean[] deserializeBoolArray(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static boolean[] deserializeBoolArray(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
@@ -695,7 +695,7 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static CNFFilter deserializeCNF(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static CNFFilter deserializeCNF(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
@@ -716,7 +716,7 @@ public class OperatorUtils
 		return CNFFilter.deserializeKnown(in, prev); // already read type
 	}
 
-	public static Filter deserializeFilter(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Filter deserializeFilter(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
@@ -737,7 +737,7 @@ public class OperatorUtils
 		return Filter.deserializeKnown(in, prev); // type already read
 	}
 
-    public static HTTPCsvExternal deserializeCSVExternal(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+    public static HTTPCsvExternal deserializeCSVExternal(final InputStream in, final Map<Long, Object> prev) throws Exception
     {
         final HrdbmsType type = getType(in);
         if (HrdbmsType.REFERENCE.equals(type))
@@ -751,7 +751,7 @@ public class OperatorUtils
         return HTTPCsvExternal.deserializeKnown(in, prev); // type already read
     }
 
-    public static CsvExternalParams deserializeCSVExternalParams(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+    public static CsvExternalParams deserializeCSVExternalParams(final InputStream in, final Map<Long, Object> prev) throws Exception
     {
         final HrdbmsType type = getType(in);
         if (HrdbmsType.REFERENCE.equals(type))
@@ -765,7 +765,7 @@ public class OperatorUtils
         return CsvExternalParams.deserializeKnown(in, prev); // type already read
     }
 
-	public static HDFSCsvExternal deserializeHDFSCsvExternal(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static HDFSCsvExternal deserializeHDFSCsvExternal(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
@@ -779,7 +779,7 @@ public class OperatorUtils
 		return HDFSCsvExternal.deserializeKnown(in, prev); // type already read
 	}
 
-    public static FastStringTokenizer deserializeFST(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+    public static FastStringTokenizer deserializeFST(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
@@ -801,12 +801,12 @@ public class OperatorUtils
 		// type
 	}
 
-	public static HashMap<Filter, Filter> deserializeHMF(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Map<Filter, Filter> deserializeHMF(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (HashMap<Filter, Filter>)readReference(in, prev);
+			return (Map<Filter, Filter>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.HMF.equals(type))
@@ -821,7 +821,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final HashMap<Filter, Filter> retval = new HashMap<>(4 * size / 3 + 1);
+		final Map<Filter, Filter> retval = new HashMap<>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -835,12 +835,12 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static HashMap<Integer, Operator> deserializeHMIntOp(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Map<Integer, Operator> deserializeHMIntOp(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (HashMap<Integer, Operator>)readReference(in, prev);
+			return (Map<Integer, Operator>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.HMINTOP.equals(type))
@@ -855,7 +855,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final HashMap<Integer, Operator> retval = new HashMap<Integer, Operator>(4 * size / 3 + 1);
+		final Map<Integer, Operator> retval = new HashMap<Integer, Operator>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -869,12 +869,12 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static HashMap<Operator, CNFFilter> deserializeHMOpCNF(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Map<Operator, CNFFilter> deserializeHMOpCNF(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (HashMap<Operator, CNFFilter>)readReference(in, prev);
+			return (Map<Operator, CNFFilter>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.HMOPCNF.equals(type))
@@ -889,7 +889,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final HashMap<Operator, CNFFilter> retval = new HashMap<>(4 * size / 3 + 1);
+		final Map<Operator, CNFFilter> retval = new HashMap<>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -903,12 +903,12 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static HashSet<HashMap<Filter, Filter>> deserializeHSHM(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Set<Map<Filter, Filter>> deserializeHSHM(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (HashSet<HashMap<Filter, Filter>>)readReference(in, prev);
+			return (Set<Map<Filter, Filter>>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.HSHM.equals(type))
@@ -923,7 +923,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final HashSet<HashMap<Filter, Filter>> retval = new HashSet<>(4 * size / 3 + 1);
+		final Set<Map<Filter, Filter>> retval = new HashSet<>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -935,12 +935,12 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static HashSet<Object> deserializeHSO(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Set<Object> deserializeHSO(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (HashSet<Object>)readReference(in, prev);
+			return (Set<Object>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.HSO.equals(type))
@@ -955,7 +955,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final HashSet<Object> retval = new HashSet<Object>(4 * size / 3 + 1);
+		final Set<Object> retval = new HashSet<Object>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -997,12 +997,12 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static HashSet<String> deserializeHSS(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Set<String> deserializeHSS(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (HashSet<String>)readReference(in, prev);
+			return (Set<String>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.HSS.equals(type))
@@ -1017,7 +1017,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final HashSet<String> retval = new HashSet<String>(4 * size / 3 + 1);
+		final Set<String> retval = new HashSet<String>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -1029,7 +1029,7 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static Index deserializeIndex(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Index deserializeIndex(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
@@ -1050,7 +1050,7 @@ public class OperatorUtils
 		return Index.deserializeKnown(in, prev);
 	}
 
-	public static int[] deserializeIntArray(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static int[] deserializeIntArray(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
@@ -1082,7 +1082,39 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static Operator deserializeOperator(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Map<Integer, Integer> deserializeMapIntInt(final InputStream in, final Map<Long, Object> prev) throws Exception
+	{
+		final HrdbmsType type = getType(in);
+		if (HrdbmsType.REFERENCE.equals(type))
+		{
+			return (Map<Integer, Integer>)readReference(in, prev);
+		}
+
+		if (!HrdbmsType.HMINTINT.equals(type))
+		{
+			throw new Exception("Corrupted stream. Expected type HMINTOP but received " + type);
+		}
+
+		final long id = readLong(in);
+		if (id == -1)
+		{
+			return null;
+		}
+
+		final int size = readShort(in);
+		final Map<Integer, Integer> retval = new HashMap<>(4 * size / 3 + 1);
+		prev.put(id, retval);
+		int i = 0;
+		while (i < size)
+		{
+			retval.put(readInt(in), readInt(in));
+			i++;
+		}
+
+		return retval;
+	}
+
+	public static Operator deserializeOperator(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		switch (type)
@@ -1172,7 +1204,7 @@ public class OperatorUtils
 		}
 	}
 
-	public static String[] deserializeStringArray(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static String[] deserializeStringArray(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
@@ -1204,12 +1236,12 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static HashMap<String, String> deserializeStringHM(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Map<String, String> deserializeStringHM(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (HashMap<String, String>)readReference(in, prev);
+			return (Map<String, String>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.HMSTRINGSTRING.equals(type))
@@ -1226,7 +1258,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final HashMap<String, String> retval = new HashMap<String, String>(4 * size / 3 + 1);
+		final Map<String, String> retval = new HashMap<String, String>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -1240,12 +1272,12 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static HashMap<String, Integer> deserializeStringIntHM(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Map<String, Integer> deserializeStringIntHM(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (HashMap<String, Integer>)readReference(in, prev);
+			return (Map<String, Integer>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.HMSTRINGINT.equals(type))
@@ -1260,7 +1292,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final HashMap<String, Integer> retval = new HashMap<String, Integer>(4 * size / 3 + 1);
+		final Map<String, Integer> retval = new HashMap<String, Integer>(4 * size / 3 + 1);
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -1274,12 +1306,12 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static TreeMap<Integer, String> deserializeTM(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Map<Integer, String> deserializeTM(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
 		{
-			return (TreeMap<Integer, String>)readReference(in, prev);
+			return (Map<Integer, String>)readReference(in, prev);
 		}
 
 		if (!HrdbmsType.TREEMAP.equals(type))
@@ -1294,7 +1326,7 @@ public class OperatorUtils
 		}
 
 		final int size = readShort(in);
-		final TreeMap<Integer, String> retval = new TreeMap<Integer, String>();
+		final Map<Integer, String> retval = new TreeMap<Integer, String>();
 		prev.put(id, retval);
 		int i = 0;
 		while (i < size)
@@ -1334,7 +1366,7 @@ public class OperatorUtils
 		return (val != 0);
 	}
 
-	public static Boolean readBoolClass(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Boolean readBoolClass(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.BOOLNULL.equals(type))
@@ -1350,7 +1382,7 @@ public class OperatorUtils
 		return readBool(in);
 	}
 
-	public static MyDate readDate(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static MyDate readDate(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.MYDATENULL.equals(type))
@@ -1377,7 +1409,7 @@ public class OperatorUtils
 		return new MyDate(l);
 	}
 
-	public static Double readDoubleClass(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Double readDoubleClass(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.DOUBLENULL.equals(type))
@@ -1411,7 +1443,7 @@ public class OperatorUtils
 		return bytesToInt(data);
 	}
 
-	public static Integer readIntClass(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Integer readIntClass(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.INTEGERNULL.equals(type))
@@ -1443,7 +1475,7 @@ public class OperatorUtils
 		return bytesToLong(data);
 	}
 
-	public static Long readLongClass(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Long readLongClass(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.LONGNULL.equals(type))
@@ -1468,7 +1500,7 @@ public class OperatorUtils
 		return bytesToLong(data);
 	}
 
-	public static Object readObject(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Object readObject(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		switch (type)
@@ -1495,7 +1527,7 @@ public class OperatorUtils
 		}
 	}
 
-	public static Object readReference(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static Object readReference(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final long id = readLong(in);
 		final Object obj = prev.get(id);
@@ -1514,7 +1546,7 @@ public class OperatorUtils
 		return bytesToInt(data);
 	}
 
-	public static String readString(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static String readString(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HrdbmsType type = getType(in);
 		if (HrdbmsType.REFERENCE.equals(type))
@@ -1541,7 +1573,7 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static String readStringKnown(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static String readStringKnown(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final long id = readLong(in);
 		if (id == -1)
@@ -1557,7 +1589,7 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static void serializeADS(final ArrayDeque<String> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeADS(final Deque<String> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1585,7 +1617,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALAgOp(final ArrayList<AggregateOperator> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALAgOp(final List<AggregateOperator> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1612,7 +1644,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALALB(final ArrayList<ArrayList<Boolean>> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALALB(final List<? extends List<Boolean>> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1631,7 +1663,7 @@ public class OperatorUtils
 		writeType(HrdbmsType.ALALB, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
-		for (final ArrayList<Boolean> entry : als)
+		for (final List<Boolean> entry : als)
 		{
 			serializeALB(entry, out, prev);
 		}
@@ -1639,7 +1671,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALALF(final ArrayList<ArrayList<Filter>> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALALF(final List<? extends List<Filter>> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1658,7 +1690,7 @@ public class OperatorUtils
 		writeType(HrdbmsType.ALALF, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
-		for (final ArrayList<Filter> entry : als)
+		for (final List<Filter> entry : als)
 		{
 			serializeALF(entry, out, prev);
 		}
@@ -1666,7 +1698,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALALO(final ArrayList<ArrayList<Object>> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALALO(final List<? extends List<Object>> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1685,7 +1717,7 @@ public class OperatorUtils
 		writeType(HrdbmsType.ALALO, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
-		for (final ArrayList<Object> entry : als)
+		for (final List<Object> entry : als)
 		{
 			serializeALO(entry, out, prev);
 		}
@@ -1693,7 +1725,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALALS(final ArrayList<ArrayList<String>> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALALS(final List<? extends List<String>> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1712,7 +1744,7 @@ public class OperatorUtils
 		writeType(HrdbmsType.ALALS, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
-		for (final ArrayList<String> entry : als)
+		for (final List<String> entry : als)
 		{
 			serializeALS(entry, out, prev);
 		}
@@ -1720,7 +1752,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALB(final ArrayList<Boolean> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALB(final List<Boolean> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1747,7 +1779,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALF(final ArrayList<Filter> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALF(final List<Filter> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1774,7 +1806,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALHSHM(final ArrayList<HashSet<HashMap<Filter, Filter>>> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALHSHM(final List<? extends Set<? extends Map<Filter, Filter>>> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1793,7 +1825,7 @@ public class OperatorUtils
 		writeType(HrdbmsType.ALHSHM, out);
 		prev.put(als, writeID(out));
 		writeShort(als.size(), out);
-		for (final HashSet<HashMap<Filter, Filter>> entry : als)
+		for (final Set<? extends Map<Filter, Filter>> entry : als)
 		{
 			serializeHSHM(entry, out, prev);
 		}
@@ -1801,7 +1833,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALI(final ArrayList<Integer> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALI(final List<Integer> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1828,7 +1860,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALIndx(final ArrayList<Index> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALIndx(final List<Index> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1855,7 +1887,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALO(final ArrayList<Object> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALO(final List<Object> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1905,7 +1937,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALOp(final ArrayList<Operator> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALOp(final List<Operator> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1932,7 +1964,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALOp(final ArrayList<Operator> als, final OutputStream out, final IdentityHashMap<Object, Long> prev, final boolean flag) throws Exception
+	public static void serializeALOp(final List<Operator> als, final OutputStream out, final IdentityHashMap<Object, Long> prev, final boolean flag) throws Exception
 	{
 		if (als == null)
 		{
@@ -1959,7 +1991,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALRAIK(final ArrayList<RIDAndIndexKeys> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALRAIK(final List<RIDAndIndexKeys> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -1986,7 +2018,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeALS(final ArrayList<String> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeALS(final List<String> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -2112,7 +2144,7 @@ public class OperatorUtils
 		d.serialize(out, prev);
 	}
 
-	public static void serializeHMF(final HashMap<Filter, Filter> hmf, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeHMF(final Map<Filter, Filter> hmf, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (hmf == null)
 		{
@@ -2139,7 +2171,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeHMIntOp(final HashMap<Integer, Operator> hm, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeHMIntOp(final Map<Integer, Operator> hm, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (hm == null)
 		{
@@ -2170,7 +2202,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeHMOpCNF(final HashMap<Operator, CNFFilter> hm, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeHMOpCNF(final Map<Operator, CNFFilter> hm, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (hm == null)
 		{
@@ -2201,7 +2233,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeHSHM(final HashSet<HashMap<Filter, Filter>> hshm, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeHSHM(final Set<? extends Map<Filter, Filter>> hshm, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (hshm == null)
 		{
@@ -2220,7 +2252,7 @@ public class OperatorUtils
 		writeType(HrdbmsType.HSHM, out);
 		prev.put(hshm, writeID(out));
 		writeShort(hshm.size(), out);
-		for (final HashMap<Filter, Filter> entry : hshm)
+		for (final Map<Filter, Filter> entry : hshm)
 		{
 			serializeHMF(entry, out, prev);
 		}
@@ -2228,7 +2260,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeHSO(final HashSet<Object> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeHSO(final Set<Object> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -2278,7 +2310,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeHSS(final HashSet<String> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeHSS(final Set<String> als, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (als == null)
 		{
@@ -2345,6 +2377,34 @@ public class OperatorUtils
 		return;
 	}
 
+	public static void serializeMapIntInt(final Map<Integer, Integer> map, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	{
+		if (map == null)
+		{
+			writeType(HrdbmsType.HMINTINT, out);
+			writeLong(-1, out);
+			return;
+		}
+
+		final Long id = prev.get(map);
+		if (id != null)
+		{
+			serializeReference(id, out);
+			return;
+		}
+
+		writeType(HrdbmsType.HMF, out);
+		prev.put(map, writeID(out));
+		writeShort(map.size(), out);
+		for (final Map.Entry<Integer, Integer> entry : map.entrySet())
+		{
+			writeInt(entry.getKey(), out);
+			writeInt(entry.getValue(), out);
+		}
+
+		return;
+	}
+
 	public static void serializeOperator(final Operator op, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (op == null)
@@ -2391,7 +2451,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeStringHM(final HashMap<String, String> hm, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeStringHM(final Map<String, String> hm, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (hm == null)
 		{
@@ -2423,7 +2483,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeStringIntHM(final HashMap<String, Integer> hm, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeStringIntHM(final Map<String, Integer> hm, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (hm == null)
 		{
@@ -2454,7 +2514,7 @@ public class OperatorUtils
 		return;
 	}
 
-	public static void serializeTM(final TreeMap<Integer, String> hm, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
+	public static void serializeTM(final Map<Integer, String> hm, final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception
 	{
 		if (hm == null)
 		{
@@ -2684,12 +2744,12 @@ public class OperatorUtils
 		return retval;
 	}
 
-	public static byte[] rsToBytes(final List<ArrayList<Object>> rows) throws Exception
+	public static byte[] rsToBytes(final List<List<Object>> rows) throws Exception
 	{
 		final ByteBuffer[] results = new ByteBuffer[rows.size()];
 		int rIndex = 0;
-		final ArrayList<byte[]> bytes = new ArrayList<byte[]>();
-		for (final ArrayList<Object> val : rows)
+		final List<byte[]> bytes = new ArrayList<byte[]>();
+		for (final List<Object> val : rows)
 		{
 			bytes.clear();
 			int size = val.size() + 8;
@@ -2736,7 +2796,7 @@ public class OperatorUtils
 				// }
 				else if (o instanceof ArrayList)
 				{
-					if (((ArrayList)o).size() != 0)
+					if (((List)o).size() != 0)
 					{
 						final Exception e = new Exception("Non-zero size ArrayList in toBytes()");
 						throw e;
@@ -2881,16 +2941,16 @@ public class OperatorUtils
 	}
 
 	/** Arranges worker nodes into a tree */
-	public static ArrayList<Object> makeTree(final ArrayList<Integer> nodes)
+	public static List<Object> makeTree(final List<Integer> nodes)
 	{
 		final int max = MAX_NEIGHBOR_NODES;
 		if (nodes.size() <= max)
 		{
-			final ArrayList<Object> retval = new ArrayList<Object>(nodes);
+			final List<Object> retval = new ArrayList<Object>(nodes);
 			return retval;
 		}
 
-		final ArrayList<Object> retval = new ArrayList<Object>();
+		final List<Object> retval = new ArrayList<Object>();
 		int i = 0;
 		while (i < max)
 		{
@@ -2907,7 +2967,7 @@ public class OperatorUtils
 		{
 			final int first = (Integer)retval.get(j);
 			retval.remove(j);
-			final ArrayList<Integer> list = new ArrayList<Integer>(perNode + 1);
+			final List<Integer> list = new ArrayList<Integer>(perNode + 1);
 			list.add(first);
 			int k = 0;
 			while (k < perNode && i < size)
@@ -2921,7 +2981,7 @@ public class OperatorUtils
 			j++;
 		}
 
-		if (((ArrayList<Integer>)retval.get(0)).size() <= max)
+		if (((List<Integer>)retval.get(0)).size() <= max)
 		{
 			return retval;
 		}
@@ -2930,7 +2990,7 @@ public class OperatorUtils
 		i = 0;
 		while (i < retval.size())
 		{
-			final ArrayList<Integer> list = (ArrayList<Integer>)retval.remove(i);
+			final List<Integer> list = (List<Integer>)retval.remove(i);
 			retval.add(i, makeTree(list));
 			i++;
 		}

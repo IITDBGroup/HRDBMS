@@ -6,12 +6,13 @@ import com.exascale.optimizer.Operator;
 import com.exascale.tables.Transaction;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public final class Utils
 {
-	public static ArrayList<Object> convertToHosts(final ArrayList<Object> tree, final Transaction tx) throws Exception
+	public static List<Object> convertToHosts(final List<Object> tree, final Transaction tx) throws Exception
 	{
-		final ArrayList<Object> retval = new ArrayList<Object>();
+		final List<Object> retval = new ArrayList<Object>();
 		int i = 0;
 		final int size = tree.size();
 		while (i < size)
@@ -24,7 +25,7 @@ public final class Utils
 			}
 			else
 			{
-				retval.add(convertToHosts((ArrayList<Object>)obj, tx));
+				retval.add(convertToHosts((List<Object>)obj, tx));
 			}
 
 			i++;

@@ -4,12 +4,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
+
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.HrdbmsType;
@@ -33,18 +29,18 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		}
 	}
 
-	private ArrayList<Operator> children = new ArrayList<Operator>(2);
+	private List<Operator> children = new ArrayList<Operator>(2);
 	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
+	private Map<String, String> cols2Types;
+	private Map<String, Integer> cols2Pos;
+	private Map<Integer, String> pos2Col;
 	private MetaData meta;
 	private CNFFilter cnfFilters;
-	private HashSet<HashMap<Filter, Filter>> f;
+	private Set<Map<Filter, Filter>> f;
 	private int childPos = -1;
 	private int node;
 	private boolean indexAccess = false;
-	private ArrayList<Index> dynamicIndexes;
+	private List<Index> dynamicIndexes;
 	private long rightChildCard = 16;
 	private boolean alreadySorted = false;
 	private boolean cardSet = false;
@@ -52,7 +48,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	private long leftChildCard = 16;
 	private long txnum;
 
-	public NestedLoopJoinOperator(final ArrayList<Filter> filters, final MetaData meta)
+	public NestedLoopJoinOperator(final List<Filter> filters, final MetaData meta)
 	{
 		this.meta = meta;
 		this.addFilter(filters);
@@ -69,7 +65,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		this.meta = meta;
 	}
 
-	public static NestedLoopJoinOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static NestedLoopJoinOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final NestedLoopJoinOperator value = (NestedLoopJoinOperator)unsafe.allocateInstance(NestedLoopJoinOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -111,9 +107,9 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 
 			if (children.size() == 2 && children.get(0).getCols2Types() != null && children.get(1).getCols2Types() != null)
 			{
-				cols2Types = (HashMap<String, String>)children.get(0).getCols2Types().clone();
-				cols2Pos = (HashMap<String, Integer>)children.get(0).getCols2Pos().clone();
-				pos2Col = (TreeMap<Integer, String>)children.get(0).getPos2Col().clone();
+				cols2Types = new HashMap<>(children.get(0).getCols2Types());
+				cols2Pos = new HashMap<>(children.get(0).getCols2Pos());
+				pos2Col = new HashMap<>(children.get(0).getPos2Col());
 
 				cols2Types.putAll(children.get(1).getCols2Types());
 				for (final Map.Entry entry : children.get(1).getPos2Col().entrySet())
@@ -131,12 +127,12 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		}
 	}
 
-	public void addFilter(final ArrayList<Filter> filters)
+	public void addFilter(final List<Filter> filters)
 	{
 		if (f == null)
 		{
-			f = new HashSet<HashMap<Filter, Filter>>();
-			final HashMap<Filter, Filter> map = new HashMap<Filter, Filter>();
+			f = new HashSet<Map<Filter, Filter>>();
+			final Map<Filter, Filter> map = new HashMap<Filter, Filter>();
 			for (final Filter filter : filters)
 			{
 				map.put(filter, filter);
@@ -146,7 +142,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		}
 		else
 		{
-			final HashMap<Filter, Filter> map = new HashMap<Filter, Filter>();
+			final Map<Filter, Filter> map = new HashMap<Filter, Filter>();
 			for (final Filter filter : filters)
 			{
 				map.put(filter, filter);
@@ -157,7 +153,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	}
 
 	@Override
-	public void addJoinCondition(final ArrayList<Filter> filters)
+	public void addJoinCondition(final List<Filter> filters)
 	{
 		addFilter(filters);
 	}
@@ -174,7 +170,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
 		return children;
 	}
@@ -214,24 +210,24 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	}
 
 	@Override
-	public HashMap<String, Integer> getCols2Pos()
+	public Map<String, Integer> getCols2Pos()
 	{
 		return cols2Pos;
 	}
 
 	@Override
-	public HashMap<String, String> getCols2Types()
+	public Map<String, String> getCols2Types()
 	{
 		return cols2Types;
 	}
 
-	public HashSet<HashMap<Filter, Filter>> getHSHM()
+	public Set<Map<Filter, Filter>> getHSHM()
 	{
 		return getHSHMFilter();
 	}
 
 	@Override
-	public HashSet<HashMap<Filter, Filter>> getHSHMFilter()
+	public Set<Map<Filter, Filter>> getHSHMFilter()
 	{
 		return f;
 	}
@@ -243,10 +239,10 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	}
 
 	@Override
-	public ArrayList<String> getJoinForChild(final Operator op)
+	public List<String> getJoinForChild(final Operator op)
 	{
 		Filter x = null;
-		for (final HashMap<Filter, Filter> filters : f)
+		for (final Map<Filter, Filter> filters : f)
 		{
 			if (filters.size() == 1)
 			{
@@ -277,12 +273,12 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 
 		if (op.getCols2Pos().keySet().contains(x.leftColumn()))
 		{
-			final ArrayList<String> retval = new ArrayList<String>(1);
+			final List<String> retval = new ArrayList<String>(1);
 			retval.add(x.leftColumn());
 			return retval;
 		}
 
-		final ArrayList<String> retval = new ArrayList<String>(1);
+		final List<String> retval = new ArrayList<String>(1);
 		retval.add(x.rightColumn());
 		return retval;
 	}
@@ -300,16 +296,16 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	}
 
 	@Override
-	public TreeMap<Integer, String> getPos2Col()
+	public Map<Integer, String> getPos2Col()
 	{
 		return pos2Col;
 	}
 
 	@Override
-	public ArrayList<String> getReferences()
+	public List<String> getReferences()
 	{
-		final ArrayList<String> retval = new ArrayList<String>(f.size());
-		for (final HashMap<Filter, Filter> filters : f)
+		final List<String> retval = new ArrayList<String>(f.size());
+		for (final Map<Filter, Filter> filters : f)
 		{
 			for (final Filter filter : filters.keySet())
 			{
@@ -433,7 +429,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		childPos = pos;
 	}
 
-	public void setDynamicIndex(final ArrayList<Index> indexes)
+	public void setDynamicIndex(final List<Index> indexes)
 	{
 		indexAccess = true;
 		this.dynamicIndexes = indexes;
@@ -468,9 +464,9 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		this.txnum = txnum;
 	}
 
-	public ArrayList<String> sortKeys()
+	public List<String> sortKeys()
 	{
-		for (final HashMap<Filter, Filter> filters : f)
+		for (final Map<Filter, Filter> filters : f)
 		{
 			if (filters.size() == 1)
 			{
@@ -506,7 +502,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 								// children.get(1).getCols2Pos().get(vStr);
 							}
 
-							final ArrayList<String> retval = new ArrayList<String>(1);
+							final List<String> retval = new ArrayList<String>(1);
 							retval.add(vStr);
 							return retval;
 						}
@@ -522,9 +518,9 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		return null;
 	}
 
-	public ArrayList<Boolean> sortOrders()
+	public List<Boolean> sortOrders()
 	{
-		for (final HashMap<Filter, Filter> filters : f)
+		for (final Map<Filter, Filter> filters : f)
 		{
 			if (filters.size() == 1)
 			{
@@ -561,7 +557,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 								// children.get(1).getCols2Pos().get(vStr);
 							}
 
-							final ArrayList<Boolean> retval = new ArrayList<Boolean>(1);
+							final List<Boolean> retval = new ArrayList<Boolean>(1);
 							retval.add(vBool);
 							return retval;
 						}
@@ -616,8 +612,8 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 		}
 		else if (usesHash)
 		{
-			final ArrayList<String> lefts = this.getJoinForChild(children.get(0));
-			final ArrayList<String> rights = this.getJoinForChild(children.get(1));
+			final List<String> lefts = this.getJoinForChild(children.get(0));
+			final List<String> rights = this.getJoinForChild(children.get(1));
 			dynamicOp = new HashJoinOperator(lefts.get(0), rights.get(0), meta);
 			((HashJoinOperator)dynamicOp).setTXNum(txnum);
 			if (lefts.size() > 1)
@@ -700,7 +696,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 
 	public boolean usesHash()
 	{
-		for (final HashMap<Filter, Filter> filters : f)
+		for (final Map<Filter, Filter> filters : f)
 		{
 			if (filters.size() == 1)
 			{
@@ -721,7 +717,7 @@ public final class NestedLoopJoinOperator extends JoinOperator implements Serial
 	{
 		boolean isSort = false;
 
-		for (final HashMap<Filter, Filter> filters : f)
+		for (final Map<Filter, Filter> filters : f)
 		{
 			if (filters.size() == 1)
 			{

@@ -2,12 +2,14 @@ package com.exascale.testing;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 public class Score
 {
 	public static void main(final String[] args)
 	{
-		final ArrayList<Integer> columns = new ArrayList<Integer>();
+		final List<Integer> columns = new ArrayList<Integer>();
 		columns.add(0);
 		columns.add(1);
 		columns.add(2);
@@ -17,7 +19,7 @@ public class Score
 		columns.add(6);
 		columns.add(7);
 		columns.add(8);
-		ArrayList<ArrayList<Integer>> accesses = new ArrayList<ArrayList<Integer>>();
+		ArrayList<List<Integer>> accesses = new ArrayList<List<Integer>>();
 		ArrayList<Integer> access = new ArrayList<Integer>();
 		access.add(0);
 		access.add(1);
@@ -104,7 +106,7 @@ public class Score
 		columns.add(14);
 		columns.add(15);
 
-		accesses = new ArrayList<ArrayList<Integer>>();
+		accesses = new ArrayList<List<Integer>>();
 		access = new ArrayList<Integer>();
 		access.add(4);
 		access.add(5);
@@ -300,9 +302,9 @@ public class Score
 		System.out.println("New score for LINEITEM(7) was " + score);
 	}
 
-	private static int score(final ArrayList<Integer> order, final ArrayList<ArrayList<Integer>> accesses)
+	private static int score(final List<Integer> order, final List<List<Integer>> accesses)
 	{
-		final ArrayList<Integer> disk = new ArrayList<Integer>();
+		final List<Integer> disk = new ArrayList<Integer>();
 		disk.add(-1);
 		disk.addAll(order);
 		int copies = 1;
@@ -322,9 +324,9 @@ public class Score
 		}
 
 		int score = 0;
-		for (final ArrayList<Integer> access : accesses)
+		for (final List<Integer> access : accesses)
 		{
-			final HashSet<Integer> sbs = new HashSet<Integer>();
+			final Set<Integer> sbs = new HashSet<Integer>();
 			for (final int col : access)
 			{
 				int found = 0;

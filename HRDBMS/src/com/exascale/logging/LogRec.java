@@ -6,6 +6,9 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 import com.exascale.filesystem.Block;
 import com.exascale.managers.HRDBMSWorker;
 
@@ -224,7 +227,7 @@ public class LogRec implements Comparable<LogRec>
 		{
 			buffer.position(28);
 			int size = buffer.getInt();
-			final ArrayList<Integer> retval = new ArrayList<Integer>(size);
+			final List<Integer> retval = new ArrayList<Integer>(size);
 			while (size > 0)
 			{
 				retval.add(buffer.getInt());
@@ -238,7 +241,7 @@ public class LogRec implements Comparable<LogRec>
 		{
 			buffer.position(28);
 			int size = buffer.getInt();
-			final ArrayList<Integer> retval = new ArrayList<Integer>(size);
+			final List<Integer> retval = new ArrayList<Integer>(size);
 			while (size > 0)
 			{
 				retval.add(buffer.getInt());
@@ -252,7 +255,7 @@ public class LogRec implements Comparable<LogRec>
 		{
 			buffer.position(28);
 			int size = buffer.getInt();
-			final ArrayList<Integer> retval = new ArrayList<Integer>(size);
+			final List<Integer> retval = new ArrayList<Integer>(size);
 			while (size > 0)
 			{
 				retval.add(buffer.getInt());
@@ -310,7 +313,7 @@ public class LogRec implements Comparable<LogRec>
 			final int numTx = buffer.getInt();
 
 			int i = 0;
-			final HashSet<Long> txs = new HashSet<Long>();
+			final Set<Long> txs = new HashSet<Long>();
 			while (i < numTx)
 			{
 				txs.add(buffer.getLong());

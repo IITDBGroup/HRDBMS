@@ -4,9 +4,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
+import java.util.*;
+
 import com.exascale.filesystem.RID;
 import com.exascale.misc.HrdbmsType;
 
@@ -29,15 +28,15 @@ public class RIDAndIndexKeys implements Serializable
 	}
 
 	private RID rid;
-	private ArrayList<ArrayList<Object>> indexKeys;
+	private List<List<Object>> indexKeys;
 
-	public RIDAndIndexKeys(final RID rid, final ArrayList<ArrayList<Object>> indexKeys)
+	public RIDAndIndexKeys(final RID rid, final List<List<Object>> indexKeys)
 	{
 		this.rid = rid;
 		this.indexKeys = indexKeys;
 	}
 
-	public static RIDAndIndexKeys deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static RIDAndIndexKeys deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final RIDAndIndexKeys value = (RIDAndIndexKeys)unsafe.allocateInstance(RIDAndIndexKeys.class);
 		final HrdbmsType type = OperatorUtils.getType(in);
@@ -78,7 +77,7 @@ public class RIDAndIndexKeys implements Serializable
 		return rid.equals(r.rid) && indexKeys.equals(r.indexKeys);
 	}
 
-	public ArrayList<ArrayList<Object>> getIndexKeys()
+	public List<List<Object>> getIndexKeys()
 	{
 		return indexKeys;
 	}

@@ -1,18 +1,16 @@
 package com.exascale.testing;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
+import java.util.*;
 
 public class ColOrderL
 {
 	private static final Object lock = new Object();
 	private static int lowScore = Integer.MAX_VALUE;
-	private static ArrayList<Integer> lowOrder = null;
+	private static List<Integer> lowOrder = null;
 
 	public static void main(final String[] args)
 	{
-		final ArrayList<ArrayList<Integer>> accesses = new ArrayList<ArrayList<Integer>>();
+		final List<List<Integer>> accesses = new ArrayList<List<Integer>>();
 		ArrayList<Integer> access = new ArrayList<Integer>();
 		access.add(4);
 		access.add(5);
@@ -143,7 +141,7 @@ public class ColOrderL
 		int start = 0;
 		while (start < 15)
 		{
-			final ArrayList<Thread> threads = new ArrayList<Thread>();
+			final List<Thread> threads = new ArrayList<Thread>();
 			boolean epFirst = true;
 			int i = 0;
 			while (i < 16)
@@ -207,7 +205,7 @@ public class ColOrderL
 		}
 	}
 
-	private static void displayResults(final String table, final ArrayList<Integer> result)
+	private static void displayResults(final String table, final List<Integer> result)
 	{
 		String out = table + " = COLORDER(" + (result.get(0) + 1);
 		int i = 1;
@@ -221,9 +219,9 @@ public class ColOrderL
 		System.out.println(out);
 	}
 
-	private static ArrayList<Integer> doIt(final int first, final int start, final boolean epFirst, final ArrayList<ArrayList<Integer>> accesses)
+	private static List<Integer> doIt(final int first, final int start, final boolean epFirst, final List<List<Integer>> accesses)
 	{
-		final ArrayList<Integer> cols = new ArrayList<Integer>();
+		final List<Integer> cols = new ArrayList<Integer>();
 		int j = 0;
 		while (j < 16)
 		{
@@ -239,9 +237,9 @@ public class ColOrderL
 
 		while (permIter.hasNext())
 		{
-			final ArrayList<Integer> temp = permIter.next();
+			final List<Integer> temp = permIter.next();
 			temp.add(0, first);
-			final ArrayList<Integer> order = new ArrayList<Integer>();
+			final List<Integer> order = new ArrayList<Integer>();
 			int i = 0;
 			while (i < start)
 			{
@@ -281,9 +279,9 @@ public class ColOrderL
 		return lowOrder;
 	}
 
-	private static int score(final ArrayList<Integer> order, final ArrayList<ArrayList<Integer>> accesses)
+	private static int score(final List<Integer> order, final List<List<Integer>> accesses)
 	{
-		final ArrayList<Integer> disk = new ArrayList<Integer>();
+		final List<Integer> disk = new ArrayList<Integer>();
 		disk.add(-1);
 		disk.addAll(order);
 		int copies = 1;
@@ -303,9 +301,9 @@ public class ColOrderL
 		}
 
 		int score = 0;
-		for (final ArrayList<Integer> access : accesses)
+		for (final List<Integer> access : accesses)
 		{
-			final HashSet<Integer> sbs = new HashSet<Integer>();
+			final Set<Integer> sbs = new HashSet<Integer>();
 			for (final int col : access)
 			{
 				int found = 0;
@@ -343,9 +341,9 @@ public class ColOrderL
 		private final int first;
 		private final int start;
 		private final boolean epFirst;
-		private final ArrayList<ArrayList<Integer>> accesses;
+		private final List<List<Integer>> accesses;
 
-		public DoItThread(final int first, final int start, final boolean epFirst, final ArrayList<ArrayList<Integer>> accesses)
+		public DoItThread(final int first, final int start, final boolean epFirst, final List<List<Integer>> accesses)
 		{
 			this.first = first;
 			this.start = start;
@@ -360,16 +358,16 @@ public class ColOrderL
 		}
 	}
 
-	private static class PermIterator implements Iterator<ArrayList<Integer>>
+	private static class PermIterator implements Iterator<List<Integer>>
 	{
 		private int[] next = null;
 
 		private final int n;
 		private int[] perm;
 		private int[] dirs;
-		private final ArrayList<Integer> initial;
+		private final List<Integer> initial;
 
-		public PermIterator(final ArrayList<Integer> initial)
+		public PermIterator(final List<Integer> initial)
 		{
 			this.initial = initial;
 			n = initial.size();
@@ -399,11 +397,11 @@ public class ColOrderL
 		}
 
 		@Override
-		public ArrayList<Integer> next()
+		public List<Integer> next()
 		{
 			final int[] r = makeNext();
 			next = null;
-			final ArrayList<Integer> retval = new ArrayList<Integer>();
+			final List<Integer> retval = new ArrayList<Integer>();
 			for (final int index : r)
 			{
 				retval.add(initial.get(index));

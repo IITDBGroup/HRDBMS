@@ -1,17 +1,18 @@
 package com.exascale.optimizer;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class FullSelect
 {
 	private final SubSelect sub;
 	private final FullSelect full;
-	private final ArrayList<ConnectedSelect> connected;
+	private final List<ConnectedSelect> connected;
 	private final OrderBy orderBy;
 	private final FetchFirst fetchFirst;
-	private ArrayList<Column> cols;
+	private List<Column> cols;
 
-	public FullSelect(final SubSelect sub, final FullSelect full, final ArrayList<ConnectedSelect> connected, final OrderBy orderBy, final FetchFirst fetchFirst)
+	public FullSelect(final SubSelect sub, final FullSelect full, final List<ConnectedSelect> connected, final OrderBy orderBy, final FetchFirst fetchFirst)
 	{
 		this.sub = sub;
 		this.full = full;
@@ -20,7 +21,7 @@ public class FullSelect
 		this.fetchFirst = fetchFirst;
 	}
 
-	public void addCols(final ArrayList<Column> cols)
+	public void addCols(final List<Column> cols)
 	{
 		this.cols = cols;
 	}
@@ -77,12 +78,12 @@ public class FullSelect
 		return retval;
 	}
 
-	public ArrayList<Column> getCols()
+	public List<Column> getCols()
 	{
 		return cols;
 	}
 
-	public ArrayList<ConnectedSelect> getConnected()
+	public List<ConnectedSelect> getConnected()
 	{
 		return connected;
 	}

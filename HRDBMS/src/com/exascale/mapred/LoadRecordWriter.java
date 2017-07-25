@@ -8,6 +8,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import com.exascale.optimizer.OperatorUtils;
@@ -18,11 +19,11 @@ import com.exascale.optimizer.MetaData;
 
 public class LoadRecordWriter extends RecordWriter
 {
-	private static HashMap<String, LoadRecordWriter> writers = new HashMap<String, LoadRecordWriter>();
+	private static Map<String, LoadRecordWriter> writers = new HashMap<String, LoadRecordWriter>();
 	private final String table;
 	private int lastNode = -1;
-	public HashMap<Integer, ArrayList<ArrayList<Object>>> rows = new HashMap<Integer, ArrayList<ArrayList<Object>>>();
-	public HashMap<Integer, ArrayList<ArrayList<Object>>> processing;
+	public Map<Integer, List<List<Object>>> rows = new HashMap<>();
+	public Map<Integer, List<List<Object>>> processing;
 	private final String portString;
 	public LoadThread thread = null;
 	private int size = 0;
@@ -48,12 +49,12 @@ public class LoadRecordWriter extends RecordWriter
 		}
 	}
 
-	private static final byte[] rsToBytes(final ArrayList<ArrayList<Object>> rows) throws Exception
+	private static final byte[] rsToBytes(final List<List<Object>> rows) throws Exception
 	{
 		final ByteBuffer[] results = new ByteBuffer[rows.size()];
 		int rIndex = 0;
-		final ArrayList<byte[]> bytes = new ArrayList<byte[]>();
-		for (final ArrayList<Object> val : rows)
+		final List<byte[]> bytes = new ArrayList<byte[]>();
+		for (final List<Object> val : rows)
 		{
 			bytes.clear();
 			int size = val.size() + 8;
@@ -100,7 +101,7 @@ public class LoadRecordWriter extends RecordWriter
 				// }
 				else if (o instanceof ArrayList)
 				{
-					if (((ArrayList)o).size() != 0)
+					if (((List)o).size() != 0)
 					{
 						final Exception e = new Exception("Non-zero size ArrayList in toBytes()");
 						throw e;
@@ -201,7 +202,7 @@ public class LoadRecordWriter extends RecordWriter
 	{
 		String hostname;
 		processing = rows;
-		rows = new HashMap<Integer, ArrayList<ArrayList<Object>>>();
+		rows = new HashMap<Integer, List<List<Object>>>();
 		size = 0;
 		try
 		{
@@ -260,10 +261,10 @@ public class LoadRecordWriter extends RecordWriter
 			}
 		}
 		final ALOWritable alo = (ALOWritable)arg1;
-		ArrayList<ArrayList<Object>> devRows = rows.get(device);
+		List<List<Object>> devRows = rows.get(device);
 		if (devRows == null)
 		{
-			devRows = new ArrayList<ArrayList<Object>>();
+			devRows = new ArrayList<List<Object>>();
 			devRows.add(alo.get());
 		}
 		else
@@ -284,10 +285,10 @@ public class LoadRecordWriter extends RecordWriter
 		private final String hostname;
 		private final String portString;
 		private final String table;
-		private final ArrayList<ArrayList<Object>> rows;
+		private final List<List<Object>> rows;
 		private final int device;
 
-		public ConfirmationThread(final String hostname, final String portString, final String table, final int device, final ArrayList<ArrayList<Object>> rows)
+		public ConfirmationThread(final String hostname, final String portString, final String table, final int device, final List<List<Object>> rows)
 		{
 			super("c.e.m.ConfirmationThread");
 			this.hostname = hostname;
@@ -350,9 +351,9 @@ public class LoadRecordWriter extends RecordWriter
 		private final String hostname;
 		private final String portString;
 		private final String table;
-		private final HashMap<Integer, ArrayList<ArrayList<Object>>> rows;
+		private final Map<Integer, List<List<Object>>> rows;
 
-		public LoadThread(final String hostname, final String portString, final String table, final HashMap<Integer, ArrayList<ArrayList<Object>>> rows)
+		public LoadThread(final String hostname, final String portString, final String table, final Map<Integer, List<List<Object>>> rows)
 		{
 			super("c.e.m.LoadThread");
 			this.hostname = hostname;
@@ -369,10 +370,10 @@ public class LoadRecordWriter extends RecordWriter
 		@Override
 		public void run()
 		{
-			final ArrayList<ConfirmationThread> threads = new ArrayList<ConfirmationThread>();
+			final List<ConfirmationThread> threads = new ArrayList<ConfirmationThread>();
 			for (final Map.Entry entry : rows.entrySet())
 			{
-				final ConfirmationThread thread = new ConfirmationThread(hostname, portString, table, (Integer)entry.getKey(), (ArrayList<ArrayList<Object>>)entry.getValue());
+				final ConfirmationThread thread = new ConfirmationThread(hostname, portString, table, (Integer)entry.getKey(), (List<List<Object>>)entry.getValue());
 				thread.start();
 				threads.add(thread);
 			}

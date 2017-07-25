@@ -11,6 +11,7 @@ import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.LockSupport;
@@ -72,7 +73,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 		final String dir = this.fn.substring(0, split);
 		final String relative = this.fn.substring(split + 1);
 
-		final ArrayList<Path> files = new ArrayList<Path>();
+		final List<Path> files = new ArrayList<Path>();
 		final File dirFile = new File(dir);
 		final File[] files3 = dirFile.listFiles();
 		for (final File f : files3)
@@ -316,7 +317,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 		}
 	}
 
-	public int read(final ByteBuffer arg0, final long arg1, final ArrayList<Integer> cols, final int layoutSize) throws IOException
+	public int read(final ByteBuffer arg0, final long arg1, final List<Integer> cols, final int layoutSize) throws IOException
 	{
 		try
 		{
@@ -456,7 +457,7 @@ public class SparseCompressedFileChannel2 extends FileChannel
 		return bb.capacity();
 	}
 
-	public int read3(final ByteBuffer bb, final ByteBuffer bb2, final ByteBuffer bb3, final long arg1, final ArrayList<Integer> cols, final int layoutSize) throws IOException
+	public int read3(final ByteBuffer bb, final ByteBuffer bb2, final ByteBuffer bb3, final long arg1, final List<Integer> cols, final int layoutSize) throws IOException
 	{
 		read(bb, arg1, cols, layoutSize);
 		read(bb2, arg1 + Page.BLOCK_SIZE, cols, layoutSize);

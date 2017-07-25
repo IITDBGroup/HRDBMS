@@ -129,8 +129,8 @@ public class LogManager extends HRDBMSThread
 					final FileChannel fc2 = f.getChannel();
 					fc2.truncate(0);
 					final Iterator<LogRec> iter = new ForwardLogIterator(fn);
-					final ArrayList<LogRec> toArchive = new ArrayList<LogRec>();
-					final ArrayList<LogRec> toKeep = new ArrayList<LogRec>();
+					final List<LogRec> toArchive = new ArrayList<LogRec>();
+					final List<LogRec> toKeep = new ArrayList<LogRec>();
 					while (iter.hasNext())
 					{
 						final LogRec rec = iter.next();
@@ -338,8 +338,8 @@ public class LogManager extends HRDBMSThread
 		{
 			try
 			{
-				final HashMap<BlockAndTransaction, ArrayList<LogRec>> toWrite = new HashMap<BlockAndTransaction, ArrayList<LogRec>>();
-				final HashSet<LogRec> ordered = new HashSet<LogRec>();
+				final Map<BlockAndTransaction, List<LogRec>> toWrite = new HashMap<BlockAndTransaction, List<LogRec>>();
+				final Set<LogRec> ordered = new HashSet<LogRec>();
 				final FileChannel fc = getFile(fn);
 				// synchronized (Transaction.txList)
 				{
@@ -355,7 +355,7 @@ public class LogManager extends HRDBMSThread
 								final Block block = ins.getBlock();
 								final long t = ins.txnum();
 								final BlockAndTransaction key = new BlockAndTransaction(block, t);
-								ArrayList<LogRec> myToWrite = toWrite.get(key);
+								List<LogRec> myToWrite = toWrite.get(key);
 								if (myToWrite == null)
 								{
 									myToWrite = new ArrayList<LogRec>();
@@ -373,7 +373,7 @@ public class LogManager extends HRDBMSThread
 								final Block block = ins.getBlock();
 								final long t = ins.txnum();
 								final BlockAndTransaction key = new BlockAndTransaction(block, t);
-								ArrayList<LogRec> myToWrite = toWrite.get(key);
+								List<LogRec> myToWrite = toWrite.get(key);
 								if (myToWrite == null)
 								{
 									myToWrite = new ArrayList<LogRec>();
@@ -405,9 +405,9 @@ public class LogManager extends HRDBMSThread
 				try
 				{
 					// consolidate stuff in toWrite
-					for (final Map.Entry<BlockAndTransaction, ArrayList<LogRec>> entry : toWrite.entrySet())
+					for (final Map.Entry<BlockAndTransaction, List<LogRec>> entry : toWrite.entrySet())
 					{
-						final ArrayList<LogRec> value = entry.getValue();
+						final List<LogRec> value = entry.getValue();
 						final int size = value.size();
 						if (size == 1)
 						{
@@ -421,7 +421,7 @@ public class LogManager extends HRDBMSThread
 							regions.add(value.get(i++));
 						}
 
-						ArrayList<LogRec> recs = regions.generateLogRecs();
+						List<LogRec> recs = regions.generateLogRecs();
 
 						for (final LogRec rec : recs)
 						{
@@ -502,8 +502,8 @@ public class LogManager extends HRDBMSThread
 		{
 			try
 			{
-				final HashMap<BlockAndTransaction, ArrayList<LogRec>> toWrite = new HashMap<BlockAndTransaction, ArrayList<LogRec>>();
-				final HashSet<LogRec> ordered = new HashSet<LogRec>();
+				final Map<BlockAndTransaction, List<LogRec>> toWrite = new HashMap<BlockAndTransaction, List<LogRec>>();
+				final Set<LogRec> ordered = new HashSet<LogRec>();
 				final FileChannel fc = getFile(fn);
 				// synchronized (Transaction.txList)
 				{
@@ -519,7 +519,7 @@ public class LogManager extends HRDBMSThread
 								final Block block = ins.getBlock();
 								final long t = ins.txnum();
 								final BlockAndTransaction key = new BlockAndTransaction(block, t);
-								ArrayList<LogRec> myToWrite = toWrite.get(key);
+								List<LogRec> myToWrite = toWrite.get(key);
 								if (myToWrite == null)
 								{
 									myToWrite = new ArrayList<LogRec>();
@@ -537,7 +537,7 @@ public class LogManager extends HRDBMSThread
 								final Block block = ins.getBlock();
 								final long t = ins.txnum();
 								final BlockAndTransaction key = new BlockAndTransaction(block, t);
-								ArrayList<LogRec> myToWrite = toWrite.get(key);
+								List<LogRec> myToWrite = toWrite.get(key);
 								if (myToWrite == null)
 								{
 									myToWrite = new ArrayList<LogRec>();
@@ -568,9 +568,9 @@ public class LogManager extends HRDBMSThread
 				try
 				{
 					// consolidate stuff in toWrite
-					for (final Map.Entry<BlockAndTransaction, ArrayList<LogRec>> entry : toWrite.entrySet())
+					for (final Map.Entry<BlockAndTransaction, List<LogRec>> entry : toWrite.entrySet())
 					{
-						final ArrayList<LogRec> value = entry.getValue();
+						final List<LogRec> value = entry.getValue();
 						final int size = value.size();
 						if (size == 1)
 						{
@@ -584,7 +584,7 @@ public class LogManager extends HRDBMSThread
 							regions.add(value.get(i++));
 						}
 
-						ArrayList<LogRec> recs = regions.generateLogRecs();
+						List<LogRec> recs = regions.generateLogRecs();
 
 						for (final LogRec rec : recs)
 						{
@@ -907,11 +907,11 @@ public class LogManager extends HRDBMSThread
 			fn = fn.substring(0, fn.length() - 10) + "xa.log";
 		}
 
-		final HashSet<Long> commitList = new HashSet<Long>();
-		final HashSet<Long> rollbackList = new HashSet<Long>();
-		final HashSet<Long> needsCommit = new HashSet<Long>();
-		final HashSet<String> truncated = new HashSet<String>();
-		final HashMap<String, Long> trunc2LSN = new HashMap<String, Long>();
+		final Set<Long> commitList = new HashSet<Long>();
+		final Set<Long> rollbackList = new HashSet<Long>();
+		final Set<Long> needsCommit = new HashSet<Long>();
+		final Set<String> truncated = new HashSet<String>();
+		final Map<String, Long> trunc2LSN = new HashMap<String, Long>();
 		// Transaction.txListLock.lock();
 		synchronized (Transaction.txListLock)
 		{
@@ -1329,8 +1329,8 @@ public class LogManager extends HRDBMSThread
 
 	private static class PageRegions
 	{
-		private final HashMap<Integer, LogRec> starts = new HashMap<Integer, LogRec>();
-		private final ArrayList<LogRec> remove = new ArrayList<LogRec>();
+		private final Map<Integer, LogRec> starts = new HashMap<Integer, LogRec>();
+		private final List<LogRec> remove = new ArrayList<LogRec>();
 		private final SparseByteArray before = new SparseByteArray();
 		private final SparseByteArray after = new SparseByteArray();
 
@@ -1386,10 +1386,10 @@ public class LogManager extends HRDBMSThread
 			return;
 		}
 
-		public ArrayList<LogRec> generateLogRecs() throws Exception
+		public List<LogRec> generateLogRecs() throws Exception
 		{
-			final ArrayList<LogRec> retval = new ArrayList<LogRec>();
-			final ArrayList<Integer> offs = before.getOffsets();
+			final List<LogRec> retval = new ArrayList<LogRec>();
+			final List<Integer> offs = before.getOffsets();
 			for (final int off : offs)
 			{
 				final LogRec rec = starts.remove(off);
@@ -1412,9 +1412,9 @@ public class LogManager extends HRDBMSThread
 			return retval;
 		}
 
-		public ArrayList<LogRec> generateRemovals()
+		public List<LogRec> generateRemovals()
 		{
-			final ArrayList<LogRec> retval = new ArrayList<LogRec>();
+			final List<LogRec> retval = new ArrayList<LogRec>();
 			for (final LogRec rec : starts.values())
 			{
 				retval.add(rec);
@@ -1466,9 +1466,9 @@ public class LogManager extends HRDBMSThread
 			return retval;
 		}
 
-		public ArrayList<Integer> getOffsets()
+		public List<Integer> getOffsets()
 		{
-			final ArrayList<Integer> retval = new ArrayList<Integer>();
+			final List<Integer> retval = new ArrayList<Integer>();
 			int offset = -1;
 			int i = 0;
 			while (i < Page.BLOCK_SIZE)

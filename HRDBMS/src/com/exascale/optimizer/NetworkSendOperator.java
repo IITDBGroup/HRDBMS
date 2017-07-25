@@ -12,11 +12,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedOutputStream;
 import com.exascale.managers.HRDBMSWorker;
@@ -52,9 +48,9 @@ public class NetworkSendOperator implements Operator, Serializable
 	protected MetaData meta;
 	protected Operator child;
 	protected Operator parent;
-	protected HashMap<String, String> cols2Types;
-	protected HashMap<String, Integer> cols2Pos;
-	protected TreeMap<Integer, String> pos2Col;
+	protected Map<String, String> cols2Types;
+	protected Map<String, Integer> cols2Pos;
+	protected Map<Integer, String> pos2Col;
 	protected transient Socket sock;
 	protected transient OutputStream out;
 	protected int node;
@@ -79,7 +75,7 @@ public class NetworkSendOperator implements Operator, Serializable
 		received = new AtomicLong(0);
 	}
 
-	public static NetworkSendOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static NetworkSendOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final NetworkSendOperator value = (NetworkSendOperator)unsafe.allocateInstance(NetworkSendOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -172,9 +168,9 @@ public class NetworkSendOperator implements Operator, Serializable
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
-		final ArrayList<Operator> retval = new ArrayList<Operator>(1);
+		final List<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
@@ -219,13 +215,13 @@ public class NetworkSendOperator implements Operator, Serializable
 	}
 
 	@Override
-	public HashMap<String, Integer> getCols2Pos()
+	public Map<String, Integer> getCols2Pos()
 	{
 		return cols2Pos;
 	}
 
 	@Override
-	public HashMap<String, String> getCols2Types()
+	public Map<String, String> getCols2Types()
 	{
 		return cols2Types;
 	}
@@ -243,13 +239,13 @@ public class NetworkSendOperator implements Operator, Serializable
 	}
 
 	@Override
-	public TreeMap<Integer, String> getPos2Col()
+	public Map<Integer, String> getPos2Col()
 	{
 		return pos2Col;
 	}
 
 	@Override
-	public ArrayList<String> getReferences()
+	public List<String> getReferences()
 	{
 		return null;
 	}
@@ -511,11 +507,11 @@ public class NetworkSendOperator implements Operator, Serializable
 
 	protected byte[] toBytes(final Object v) throws Exception
 	{
-		ArrayList<byte[]> bytes = null;
-		ArrayList<Object> val = null;
+		List<byte[]> bytes = null;
+		List<Object> val = null;
 		if (v instanceof ArrayList)
 		{
-			val = (ArrayList<Object>)v;
+			val = (List<Object>)v;
 			if (val.size() == 0)
 			{
 				throw new Exception("Empty ArrayList in toBytes()");

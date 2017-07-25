@@ -118,7 +118,7 @@ public class ConnectionWorker extends HRDBMSThread
 	private static long soffset;
 	private static Charset scs = StandardCharsets.UTF_8;
 	private static int BATCHES_PER_CHECK;
-	private static HashMap<Integer, Integer> disk2BatchCount = new HashMap<Integer, Integer>();
+	private static Map<Integer, Integer> disk2BatchCount = new HashMap<Integer, Integer>();
 	private static ConcurrentHashMap<String, FileChannel> loadFCs = new ConcurrentHashMap<String, FileChannel>();
 	private static ConcurrentHashMap<ConnectionWorker, ConnectionWorker> delayedDML = new ConcurrentHashMap<ConnectionWorker, ConnectionWorker>();
 	private static HJOMultiHashMap<ConnectionWorker, XAWorker> delayedWorkers = new HJOMultiHashMap<ConnectionWorker, XAWorker>();;
@@ -218,7 +218,7 @@ public class ConnectionWorker extends HRDBMSThread
 		return crunchifyWriter.toString();
 	}
 
-	private static FieldValue[] aloToFieldValues(final ArrayList<Object> row)
+	private static FieldValue[] aloToFieldValues(final List<Object> row)
 	{
 		final FieldValue[] retval = new FieldValue[row.size()];
 		int i = 0;
@@ -263,7 +263,7 @@ public class ConnectionWorker extends HRDBMSThread
 		return ret;
 	}
 
-	private static void cloneInto(final ArrayList<Object> target, final ArrayList<Object> source)
+	private static void cloneInto(final List<Object> target, final List<Object> source)
 	{
 		for (final Object o : source)
 		{
@@ -271,14 +271,14 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 	}
 
-	private static void doMinMax(final Block block, final ArrayList<ArrayList<Object>> pageSet, final TreeMap<Integer, String> pos2Col, final boolean isV5OrHigher, final boolean isV6OrHigher)
+	private static void doMinMax(final Block block, final List<List<Object>> pageSet, final Map<Integer, String> pos2Col, final boolean isV5OrHigher, final boolean isV6OrHigher)
 	{
 		final int cols = pos2Col.size();
 		final int rows = pageSet.size();
 		int i = 0;
 		while (i < cols)
 		{
-			final ArrayList col = new ArrayList(rows);
+			final List col = new ArrayList(rows);
 			int j = 0;
 			while (j < rows)
 			{
@@ -310,7 +310,7 @@ public class ConnectionWorker extends HRDBMSThread
 					upper = new Filter(colName, "G", "" + u);
 				}
 
-				HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
+				HashSet<Map<Filter, Filter>> hshm = new HashSet<Map<Filter, Filter>>();
 				HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
 				hm.put(lower, lower);
 				hshm.add(hm);
@@ -377,7 +377,7 @@ public class ConnectionWorker extends HRDBMSThread
 						mhm.multiPut(hash, cnfEntry);
 					}
 				}
-				hshm = new HashSet<HashMap<Filter, Filter>>();
+				hshm = new HashSet<Map<Filter, Filter>>();
 				hm = new HashMap<Filter, Filter>();
 				hm.put(upper, upper);
 				hshm.add(hm);
@@ -442,7 +442,7 @@ public class ConnectionWorker extends HRDBMSThread
 		pageSet.clear();
 	}
 
-	private static void doReorg(final String schema, final String table, final ArrayList<Index> indexes, final Transaction tx, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> pos2Col, final ArrayList<Boolean> uniques) throws Exception
+	private static void doReorg(final String schema, final String table, final List<Index> indexes, final Transaction tx, final Map<String, String> cols2Types, final Map<Integer, String> pos2Col, final List<Boolean> uniques) throws Exception
 	{
 		final String dirList = HRDBMSWorker.getHParms().getProperty("data_directories");
 		final FastStringTokenizer tokens = new FastStringTokenizer(dirList, ",", false);
@@ -488,9 +488,9 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 	}
 
-	private static ArrayList<String> getAllNodes(final ArrayList<Object> tree, final String remove)
+	private static List<String> getAllNodes(final List<Object> tree, final String remove)
 	{
-		final ArrayList<String> retval = new ArrayList<String>();
+		final List<String> retval = new ArrayList<String>();
 		for (final Object o : tree)
 		{
 			if (o instanceof String)
@@ -503,7 +503,7 @@ public class ConnectionWorker extends HRDBMSThread
 			else
 			{
 				// ArrayList<Object>
-				retval.addAll(getAllNodes((ArrayList<Object>)o, remove));
+				retval.addAll(getAllNodes((List<Object>)o, remove));
 			}
 		}
 
@@ -549,11 +549,11 @@ public class ConnectionWorker extends HRDBMSThread
 		return to + "," + HRDBMSWorker.getHParms().getProperty("data_directories");
 	}
 
-	private static ArrayList<String> getDataPaths()
+	private static List<String> getDataPaths()
 	{
 		final String paths = HRDBMSWorker.getHParms().getProperty("data_directories");
 		final StringTokenizer tokens = new StringTokenizer(paths, ",", false);
-		final ArrayList<String> retval = new ArrayList<String>();
+		final List<String> retval = new ArrayList<String>();
 		while (tokens.hasMoreTokens())
 		{
 			String token = tokens.nextToken();
@@ -589,9 +589,9 @@ public class ConnectionWorker extends HRDBMSThread
 		return dirs;
 	}
 
-	private static ArrayList<String> getIndexFilesInPath(final String path) throws Exception
+	private static List<String> getIndexFilesInPath(final String path) throws Exception
 	{
-		final ArrayList<Path> files = new ArrayList<Path>();
+		final List<Path> files = new ArrayList<Path>();
 		final File dirFile = new File(path);
 		final File[] files2 = dirFile.listFiles();
 		for (final File f : files2)
@@ -602,7 +602,7 @@ public class ConnectionWorker extends HRDBMSThread
 			}
 		}
 
-		final ArrayList<String> retval = new ArrayList<String>();
+		final List<String> retval = new ArrayList<String>();
 		for (final Path file : files)
 		{
 			retval.add(file.toAbsolutePath().toString());
@@ -611,9 +611,9 @@ public class ConnectionWorker extends HRDBMSThread
 		return retval;
 	}
 
-	private static ArrayList<String> getTableFilesInPath(final String path) throws Exception
+	private static List<String> getTableFilesInPath(final String path) throws Exception
 	{
-		final ArrayList<Path> files = new ArrayList<Path>();
+		final List<Path> files = new ArrayList<Path>();
 		final File dirFile = new File(path);
 		final File[] files2 = dirFile.listFiles();
 		for (final File f : files2)
@@ -624,7 +624,7 @@ public class ConnectionWorker extends HRDBMSThread
 			}
 		}
 
-		final ArrayList<String> retval = new ArrayList<String>();
+		final List<String> retval = new ArrayList<String>();
 		for (final Path file : files)
 		{
 			retval.add(file.toAbsolutePath().toString());
@@ -644,7 +644,7 @@ public class ConnectionWorker extends HRDBMSThread
 		{
 			if (key instanceof ArrayList)
 			{
-				final byte[] data = toBytesForHash((ArrayList<Object>)key);
+				final byte[] data = toBytesForHash((List<Object>)key);
 				eHash = MurmurHash.hash64(data, data.length);
 			}
 			else
@@ -681,16 +681,16 @@ public class ConnectionWorker extends HRDBMSThread
 		return buff;
 	}
 
-	private static ArrayList<Object> makeTree(final ArrayList<String> nodes)
+	private static List<Object> makeTree(final List<String> nodes)
 	{
 		final int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 		if (nodes.size() <= max)
 		{
-			final ArrayList<Object> retval = new ArrayList<Object>(nodes);
+			final List<Object> retval = new ArrayList<Object>(nodes);
 			return retval;
 		}
 
-		final ArrayList<Object> retval = new ArrayList<Object>();
+		final List<Object> retval = new ArrayList<Object>();
 		int i = 0;
 		while (i < max)
 		{
@@ -707,7 +707,7 @@ public class ConnectionWorker extends HRDBMSThread
 		{
 			final String first = (String)retval.get(j);
 			retval.remove(j);
-			final ArrayList<String> list = new ArrayList<String>(perNode + 1);
+			final List<String> list = new ArrayList<String>(perNode + 1);
 			list.add(first);
 			int k = 0;
 			while (k < perNode && i < size)
@@ -721,7 +721,7 @@ public class ConnectionWorker extends HRDBMSThread
 			j++;
 		}
 
-		if (((ArrayList<String>)retval.get(0)).size() <= max)
+		if (((List<String>)retval.get(0)).size() <= max)
 		{
 			return retval;
 		}
@@ -730,7 +730,7 @@ public class ConnectionWorker extends HRDBMSThread
 		i = 0;
 		while (i < retval.size())
 		{
-			final ArrayList<String> list = (ArrayList<String>)retval.remove(i);
+			final List<String> list = (List<String>)retval.remove(i);
 			retval.add(i, makeTree(list));
 			i++;
 		}
@@ -753,8 +753,8 @@ public class ConnectionWorker extends HRDBMSThread
 		readNonCoord(numBytes, in2);
 		final int num = bytesToInt(numBytes);
 		int pos = 0;
-		// ArrayList<ArrayList<Object>> retval = new
-		// ArrayList<ArrayList<Object>>(num);
+		// ArrayList<List<Object>> retval = new
+		// ArrayList<List<Object>>(num);
 		int i = 0;
 		while (i < num)
 		{
@@ -804,7 +804,7 @@ public class ConnectionWorker extends HRDBMSThread
 			}
 
 			pos += size;
-			// retval.add((ArrayList<Object>)fromBytes(data));
+			// retval.add((List<Object>)fromBytes(data));
 			i++;
 		}
 
@@ -814,9 +814,9 @@ public class ConnectionWorker extends HRDBMSThread
 		return bb;
 	}
 
-	private static boolean rebuildTree(final ArrayList<Object> tree, final String remove)
+	private static boolean rebuildTree(final List<Object> tree, final String remove)
 	{
-		final ArrayList<String> nodes = new ArrayList<String>();
+		final List<String> nodes = new ArrayList<String>();
 		for (final Object o : tree)
 		{
 			if (o instanceof String)
@@ -829,7 +829,7 @@ public class ConnectionWorker extends HRDBMSThread
 			else
 			{
 				// ArrayList<Object>
-				nodes.addAll(getAllNodes((ArrayList<Object>)o, remove));
+				nodes.addAll(getAllNodes((List<Object>)o, remove));
 			}
 		}
 
@@ -843,12 +843,12 @@ public class ConnectionWorker extends HRDBMSThread
 		return false;
 	}
 
-	private static void sendCommit(final ArrayList<Object> tree, final Transaction tx)
+	private static void sendCommit(final List<Object> tree, final Transaction tx)
 	{
 		Object obj = tree.get(0);
 		while (obj instanceof ArrayList)
 		{
-			obj = ((ArrayList)obj).get(0);
+			obj = ((List)obj).get(0);
 		}
 
 		final String hostname = (String)obj;
@@ -905,12 +905,12 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 	}
 
-	private static void sendRollback(final ArrayList<Object> tree, final Transaction tx)
+	private static void sendRollback(final List<Object> tree, final Transaction tx)
 	{
 		Object obj = tree.get(0);
 		while (obj instanceof ArrayList)
 		{
-			obj = ((ArrayList)obj).get(0);
+			obj = ((List)obj).get(0);
 		}
 
 		final String hostname = (String)obj;
@@ -984,7 +984,7 @@ public class ConnectionWorker extends HRDBMSThread
 		return retval;
 	}
 
-	private static byte[] toBytesForHash(final ArrayList<Object> key)
+	private static byte[] toBytesForHash(final List<Object> key)
 	{
 		final StringBuilder sb = new StringBuilder();
 		for (final Object o : key)
@@ -1059,7 +1059,7 @@ public class ConnectionWorker extends HRDBMSThread
 			@SuppressWarnings("restriction")
 			final int me = (int)(100 * osBean.getSystemCpuLoad());
 
-			final HashMap<Integer, String> coords = MetaData.getCoordMap();
+			final Map<Integer, String> coords = MetaData.getCoordMap();
 
 			boolean imLow = true;
 			String lowHost = null;
@@ -1142,7 +1142,7 @@ public class ConnectionWorker extends HRDBMSThread
 				sock.close();
 				if (worker != null)
 				{
-					final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+					final List<Object> cmd2 = new ArrayList<Object>(1);
 					cmd2.add("CLOSE");
 					worker.in.put(cmd2);
 				}
@@ -1182,7 +1182,7 @@ public class ConnectionWorker extends HRDBMSThread
 				sock.close();
 				if (worker != null)
 				{
-					final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+					final List<Object> cmd2 = new ArrayList<Object>(1);
 					cmd2.add("CLOSE");
 					worker.in.put(cmd2);
 				}
@@ -1216,7 +1216,7 @@ public class ConnectionWorker extends HRDBMSThread
 				while (true)
 				{
 					final List<XAWorker> workers = delayedWorkers.get(this);
-					final ArrayList<XAWorker> clone = new ArrayList<XAWorker>(workers);
+					final List<XAWorker> clone = new ArrayList<XAWorker>(workers);
 
 					boolean didSomething = false;
 					for (final XAWorker worker : clone)
@@ -1290,7 +1290,7 @@ public class ConnectionWorker extends HRDBMSThread
 					{
 						break;
 					}
-					final ArrayList<XAWorker> clone = new ArrayList<XAWorker>(workers);
+					final List<XAWorker> clone = new ArrayList<XAWorker>(workers);
 					int i = 0;
 					for (final XAWorker worker : clone)
 					{
@@ -1342,7 +1342,7 @@ public class ConnectionWorker extends HRDBMSThread
 			while (true)
 			{
 				final List<XAWorker> workers = delayedWorkers.get(this);
-				final ArrayList<XAWorker> clone = new ArrayList<XAWorker>(workers);
+				final List<XAWorker> clone = new ArrayList<XAWorker>(workers);
 				boolean didSomething = false;
 				for (final XAWorker worker : clone)
 				{
@@ -1440,7 +1440,7 @@ public class ConnectionWorker extends HRDBMSThread
 				{
 					if (worker != null)
 					{
-						final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+						final List<Object> cmd2 = new ArrayList<Object>(1);
 						cmd2.add("CLOSE");
 						while (true)
 						{
@@ -1473,7 +1473,7 @@ public class ConnectionWorker extends HRDBMSThread
 					sock.close();
 					if (worker != null)
 					{
-						final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+						final List<Object> cmd2 = new ArrayList<Object>(1);
 						cmd2.add("CLOSE");
 						worker.in.put(cmd2);
 					}
@@ -1491,7 +1491,7 @@ public class ConnectionWorker extends HRDBMSThread
 					sock.close();
 					if (worker != null)
 					{
-						final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+						final List<Object> cmd2 = new ArrayList<Object>(1);
 						cmd2.add("CLOSE");
 						worker.in.put(cmd2);
 					}
@@ -1524,7 +1524,7 @@ public class ConnectionWorker extends HRDBMSThread
 					sock.close();
 					if (worker != null)
 					{
-						final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+						final List<Object> cmd2 = new ArrayList<Object>(1);
 						cmd2.add("CLOSE");
 						worker.in.put(cmd2);
 					}
@@ -1544,7 +1544,7 @@ public class ConnectionWorker extends HRDBMSThread
 					sock.close();
 					if (worker != null)
 					{
-						final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+						final List<Object> cmd2 = new ArrayList<Object>(1);
 						cmd2.add("CLOSE");
 						worker.in.put(cmd2);
 					}
@@ -1938,7 +1938,7 @@ public class ConnectionWorker extends HRDBMSThread
 					closeConnection();
 					if (worker != null)
 					{
-						final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+						final List<Object> cmd2 = new ArrayList<Object>(1);
 						cmd2.add("CLOSE");
 						worker.in.put(cmd2);
 					}
@@ -2246,7 +2246,7 @@ public class ConnectionWorker extends HRDBMSThread
 			// exception", e);
 			if (worker != null)
 			{
-				final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+				final List<Object> cmd2 = new ArrayList<Object>(1);
 				cmd2.add("CLOSE");
 				while (true)
 				{
@@ -2271,11 +2271,11 @@ public class ConnectionWorker extends HRDBMSThread
 
 	private void checkpoint()
 	{
-		ArrayList<Object> tree = null;
+		List<Object> tree = null;
 		try
 		{
 			final ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
-			tree = (ArrayList<Object>)objIn.readObject();
+			tree = (List<Object>)objIn.readObject();
 		}
 		catch (final Exception e)
 		{
@@ -2288,13 +2288,13 @@ public class ConnectionWorker extends HRDBMSThread
 		Object obj = tree.get(0);
 		while (obj instanceof ArrayList)
 		{
-			obj = ((ArrayList)obj).get(0);
+			obj = ((List)obj).get(0);
 		}
 
 		removeFromTree((String)obj, tree, null); // also delete parents if now
 		// empty
 
-		final ArrayList<SendCheckpointThread> threads = new ArrayList<SendCheckpointThread>();
+		final List<SendCheckpointThread> threads = new ArrayList<SendCheckpointThread>();
 		for (final Object o : tree)
 		{
 			threads.add(new SendCheckpointThread(o));
@@ -2455,7 +2455,7 @@ public class ConnectionWorker extends HRDBMSThread
 			sock.close();
 			if (worker != null)
 			{
-				final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+				final List<Object> cmd2 = new ArrayList<Object>(1);
 				cmd2.add("CLOSE");
 				worker.in.put(cmd2);
 			}
@@ -2473,7 +2473,7 @@ public class ConnectionWorker extends HRDBMSThread
 			return;
 		}
 
-		final ArrayList<Object> al = new ArrayList<Object>(1);
+		final List<Object> al = new ArrayList<Object>(1);
 		al.add("CLOSE");
 		while (true)
 		{
@@ -2496,12 +2496,12 @@ public class ConnectionWorker extends HRDBMSThread
 		byte[] bytes;
 		String schema;
 		String table;
-		ArrayList<Object> tree;
+		List<Object> tree;
 		Transaction tx;
 		final byte[] txBytes = new byte[8];
 		int type;
-		TreeMap<Integer, String> pos2Col;
-		HashMap<String, String> cols2Types;
+		Map<Integer, String> pos2Col;
+		Map<String, String> cols2Types;
 
 		try
 		{
@@ -2520,11 +2520,11 @@ public class ConnectionWorker extends HRDBMSThread
 			readNonCoord(lenBytes);
 			type = bytesToInt(lenBytes);
 			final ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
-			tree = (ArrayList<Object>)objIn.readObject();
-			pos2Col = (TreeMap<Integer, String>)objIn.readObject();
-			cols2Types = (HashMap<String, String>)objIn.readObject();
+			tree = (List<Object>)objIn.readObject();
+			pos2Col = (Map<Integer, String>)objIn.readObject();
+			cols2Types = (Map<String, String>)objIn.readObject();
 
-			final ArrayList<FlushLoadThread> threads = new ArrayList<FlushLoadThread>();
+			final List<FlushLoadThread> threads = new ArrayList<FlushLoadThread>();
 			// new MetaData();
 			final int limit = MetaData.getNumDevices();
 
@@ -2544,13 +2544,13 @@ public class ConnectionWorker extends HRDBMSThread
 			Object obj = tree.get(0);
 			while (obj instanceof ArrayList)
 			{
-				obj = ((ArrayList)obj).get(0);
+				obj = ((List)obj).get(0);
 			}
 
 			removeFromTree((String)obj, tree, null); // also delete parents if
 			// now empty
 
-			final ArrayList<SendHierClusterThread> threads2 = new ArrayList<SendHierClusterThread>();
+			final List<SendHierClusterThread> threads2 = new ArrayList<SendHierClusterThread>();
 			for (final Object o : tree)
 			{
 				threads2.add(new SendHierClusterThread(schema, table, pos2Col, cols2Types, o, tx, type));
@@ -2628,13 +2628,13 @@ public class ConnectionWorker extends HRDBMSThread
 		String table = null;
 		byte[] schemaData = null;
 		byte[] tableData = null;
-		ArrayList<String> indexes;
-		ArrayList<ArrayList<String>> keys;
-		ArrayList<ArrayList<String>> types;
-		ArrayList<ArrayList<Boolean>> orders;
-		ArrayList<RIDAndIndexKeys> raiks = null;
-		TreeMap<Integer, String> pos2Col = null;
-		HashMap<String, String> cols2Types = null;
+		List<String> indexes;
+		List<List<String>> keys;
+		List<List<String>> types;
+		List<List<Boolean>> orders;
+		List<RIDAndIndexKeys> raiks = null;
+		Map<Integer, String> pos2Col = null;
+		Map<String, String> cols2Types = null;
 		int type;
 		try
 		{
@@ -2656,21 +2656,21 @@ public class ConnectionWorker extends HRDBMSThread
 			type = bytesToInt(tableLenBytes);
 			// ObjectInputStream objIn = new
 			// ObjectInputStream(sock.getInputStream());
-			final HashMap<Long, Object> prev = new HashMap<Long, Object>();
+			final Map<Long, Object> prev = new HashMap<Long, Object>();
 			indexes = OperatorUtils.deserializeALS(in, prev);
-			// indexes = (ArrayList<String>)objIn.readObject();
+			// indexes = (List<String>)objIn.readObject();
 			raiks = OperatorUtils.deserializeALRAIK(in, prev);
-			// raiks = (ArrayList<RIDAndIndexKeys>)objIn.readObject();
+			// raiks = (List<RIDAndIndexKeys>)objIn.readObject();
 			keys = OperatorUtils.deserializeALALS(in, prev);
-			// keys = (ArrayList<ArrayList<String>>)objIn.readObject();
+			// keys = (List<List<String>>)objIn.readObject();
 			types = OperatorUtils.deserializeALALS(in, prev);
-			// types = (ArrayList<ArrayList<String>>)objIn.readObject();
+			// types = (List<List<String>>)objIn.readObject();
 			orders = OperatorUtils.deserializeALALB(in, prev);
-			// orders = (ArrayList<ArrayList<Boolean>>)objIn.readObject();
+			// orders = (List<List<Boolean>>)objIn.readObject();
 			pos2Col = OperatorUtils.deserializeTM(in, prev);
-			// pos2Col = (TreeMap<Integer, String>)objIn.readObject();
+			// pos2Col = (Map<Integer, String>)objIn.readObject();
 			cols2Types = OperatorUtils.deserializeStringHM(in, prev);
-			// cols2Types = (HashMap<String, String>)objIn.readObject();
+			// cols2Types = (Map<String, String>)objIn.readObject();
 		}
 		catch (final Exception e)
 		{
@@ -2685,9 +2685,9 @@ public class ConnectionWorker extends HRDBMSThread
 			map.multiPut(raik.getRID().getDevice(), raik);
 		}
 
-		final ArrayList<FlushDeleteThread> threads = new ArrayList<FlushDeleteThread>();
-		final ArrayList<String> dmlTxStrs = new ArrayList<String>();
-		final ArrayList<Integer> sorted = new ArrayList(map.getKeySet());
+		final List<FlushDeleteThread> threads = new ArrayList<FlushDeleteThread>();
+		final List<String> dmlTxStrs = new ArrayList<String>();
+		final List<Integer> sorted = new ArrayList(map.getKeySet());
 		Collections.sort(sorted);
 		for (final Object o : sorted)
 		{
@@ -2751,13 +2751,13 @@ public class ConnectionWorker extends HRDBMSThread
 
 	private void delFileIndex()
 	{
-		ArrayList<Object> tree = null;
-		ArrayList<String> indexes = null;
+		List<Object> tree = null;
+		List<String> indexes = null;
 		try
 		{
 			final ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
-			tree = (ArrayList<Object>)objIn.readObject();
-			indexes = (ArrayList<String>)objIn.readObject();
+			tree = (List<Object>)objIn.readObject();
+			indexes = (List<String>)objIn.readObject();
 		}
 		catch (final Exception e)
 		{
@@ -2765,12 +2765,12 @@ public class ConnectionWorker extends HRDBMSThread
 			return;
 		}
 
-		final ArrayList<String> paths = getDataPaths();
+		final List<String> paths = getDataPaths();
 		for (final String path : paths)
 		{
 			try
 			{
-				final ArrayList<String> files = getIndexFilesInPath(path);
+				final List<String> files = getIndexFilesInPath(path);
 				for (final String file : files)
 				{
 					final String index = file.substring(0, file.indexOf(".indx"));
@@ -2790,13 +2790,13 @@ public class ConnectionWorker extends HRDBMSThread
 		Object obj = tree.get(0);
 		while (obj instanceof ArrayList)
 		{
-			obj = ((ArrayList)obj).get(0);
+			obj = ((List)obj).get(0);
 		}
 
 		removeFromTree((String)obj, tree, null); // also delete parents if now
 		// empty
 
-		final ArrayList<SendDelFiIThread> threads = new ArrayList<SendDelFiIThread>();
+		final List<SendDelFiIThread> threads = new ArrayList<SendDelFiIThread>();
 		for (final Object o : tree)
 		{
 			threads.add(new SendDelFiIThread(o, indexes));
@@ -2846,13 +2846,13 @@ public class ConnectionWorker extends HRDBMSThread
 
 	private void delFileTable()
 	{
-		ArrayList<Object> tree = null;
-		ArrayList<String> tables = null;
+		List<Object> tree = null;
+		List<String> tables = null;
 		try
 		{
 			final ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
-			tree = (ArrayList<Object>)objIn.readObject();
-			tables = (ArrayList<String>)objIn.readObject();
+			tree = (List<Object>)objIn.readObject();
+			tables = (List<String>)objIn.readObject();
 		}
 		catch (final Exception e)
 		{
@@ -2860,12 +2860,12 @@ public class ConnectionWorker extends HRDBMSThread
 			return;
 		}
 
-		final ArrayList<String> paths = getDataPaths();
+		final List<String> paths = getDataPaths();
 		for (final String path : paths)
 		{
 			try
 			{
-				final ArrayList<String> files = getTableFilesInPath(path);
+				final List<String> files = getTableFilesInPath(path);
 				for (final String file : files)
 				{
 					final String table = file.substring(0, file.indexOf(".tbl"));
@@ -2885,13 +2885,13 @@ public class ConnectionWorker extends HRDBMSThread
 		Object obj = tree.get(0);
 		while (obj instanceof ArrayList)
 		{
-			obj = ((ArrayList)obj).get(0);
+			obj = ((List)obj).get(0);
 		}
 
 		removeFromTree((String)obj, tree, null); // also delete parents if now
 		// empty
 
-		final ArrayList<SendDelFiTThread> threads = new ArrayList<SendDelFiTThread>();
+		final List<SendDelFiTThread> threads = new ArrayList<SendDelFiTThread>();
 		for (final Object o : tree)
 		{
 			threads.add(new SendDelFiTThread(o, tables));
@@ -2941,7 +2941,7 @@ public class ConnectionWorker extends HRDBMSThread
 
 	private void delLoadMetaData()
 	{
-		ArrayList<Object> tree = null;
+		List<Object> tree = null;
 		final byte[] keyLength = new byte[4];
 		int length;
 		byte[] data;
@@ -2954,7 +2954,7 @@ public class ConnectionWorker extends HRDBMSThread
 			readNonCoord(data);
 			key = new String(data, StandardCharsets.UTF_8);
 			final ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
-			tree = (ArrayList<Object>)objIn.readObject();
+			tree = (List<Object>)objIn.readObject();
 		}
 		catch (final Exception e)
 		{
@@ -2967,13 +2967,13 @@ public class ConnectionWorker extends HRDBMSThread
 		Object obj = tree.get(0);
 		while (obj instanceof ArrayList)
 		{
-			obj = ((ArrayList)obj).get(0);
+			obj = ((List)obj).get(0);
 		}
 
 		removeFromTree((String)obj, tree, null); // also delete parents if now
 		// empty
 
-		final ArrayList<SendRemoveLDMDThread> threads = new ArrayList<SendRemoveLDMDThread>();
+		final List<SendRemoveLDMDThread> threads = new ArrayList<SendRemoveLDMDThread>();
 		for (final Object o : tree)
 		{
 			threads.add(new SendRemoveLDMDThread(o, keyLength, data));
@@ -3036,9 +3036,9 @@ public class ConnectionWorker extends HRDBMSThread
 		final String schema = name.substring(0, name.indexOf('.'));
 		final String table = name.substring(name.indexOf('.') + 1);
 		final Transaction tx = new Transaction(Transaction.ISOLATION_UR);
-		final ArrayList<String> keys = new ArrayList<String>();
-		final ArrayList<String> types = new ArrayList<String>();
-		final ArrayList<Boolean> orders = new ArrayList<Boolean>();
+		final List<String> keys = new ArrayList<String>();
+		final List<String> types = new ArrayList<String>();
+		final List<Boolean> orders = new ArrayList<Boolean>();
 		keys.add(table + ".KEY2");
 		String keyVal = null;
 		if (key instanceof Integer)
@@ -3077,7 +3077,7 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 		orders.add(true);
 		// determine node and device
-		final ArrayList<Object> partial = new ArrayList<Object>();
+		final List<Object> partial = new ArrayList<Object>();
 		partial.add(key);
 		final long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
 		final int node = (int)(hash % MetaData.numWorkerNodes);
@@ -3088,18 +3088,18 @@ public class ConnectionWorker extends HRDBMSThread
 		iOp.setDevice(device);
 		iOp.getIndex().setTransaction(tx);
 		iOp.getIndex().setCondition(new Filter(table + ".KEY2", "E", keyVal));
-		final HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
+		final Map<String, Integer> cols2Pos = new HashMap<String, Integer>();
 		cols2Pos.put(table + ".KEY2", 0);
 		cols2Pos.put(table + ".VAL", 1);
-		final TreeMap<Integer, String> pos2Col = new TreeMap<Integer, String>();
+		final Map<Integer, String> pos2Col = new TreeMap<Integer, String>();
 		pos2Col.put(0, table + ".KEY2");
 		pos2Col.put(1, table + ".VAL");
 		final TableScanOperator tOp = new TableScanOperator(schema, table, meta, tx, true, cols2Pos, pos2Col);
-		final ArrayList<Integer> devs = new ArrayList<Integer>();
+		final List<Integer> devs = new ArrayList<Integer>();
 		devs.add(device);
 		tOp.addActiveDevices(devs);
 		tOp.setChildForDevice(device, iOp);
-		final ArrayList<String> needed = new ArrayList<String>();
+		final List<String> needed = new ArrayList<String>();
 		needed.add(table + ".VAL");
 		tOp.setNeededCols(needed);
 		tOp.setNode(node);
@@ -3149,7 +3149,7 @@ public class ConnectionWorker extends HRDBMSThread
 						sock.close();
 						if (worker != null)
 						{
-							final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+							final List<Object> cmd2 = new ArrayList<Object>(1);
 							cmd2.add("CLOSE");
 							worker.in.put(cmd2);
 						}
@@ -3159,7 +3159,7 @@ public class ConnectionWorker extends HRDBMSThread
 					{
 						if (worker != null)
 						{
-							final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+							final List<Object> cmd2 = new ArrayList<Object>(1);
 							cmd2.add("CLOSE");
 							worker.in.put(cmd2);
 						}
@@ -3193,7 +3193,7 @@ public class ConnectionWorker extends HRDBMSThread
 					sock.close();
 					if (worker != null)
 					{
-						final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+						final List<Object> cmd2 = new ArrayList<Object>(1);
 						cmd2.add("CLOSE");
 						worker.in.put(cmd2);
 					}
@@ -3203,7 +3203,7 @@ public class ConnectionWorker extends HRDBMSThread
 				{
 					if (worker != null)
 					{
-						final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+						final List<Object> cmd2 = new ArrayList<Object>(1);
 						cmd2.add("CLOSE");
 						while (true)
 						{
@@ -3249,7 +3249,7 @@ public class ConnectionWorker extends HRDBMSThread
 
 	private void doNext()
 	{
-		final ArrayList<Object> al = new ArrayList<Object>();
+		final List<Object> al = new ArrayList<Object>();
 		al.add("NEXT");
 
 		final byte[] arg = new byte[4];
@@ -3273,7 +3273,7 @@ public class ConnectionWorker extends HRDBMSThread
 						sock.close();
 						if (worker != null)
 						{
-							final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+							final List<Object> cmd2 = new ArrayList<Object>(1);
 							cmd2.add("CLOSE");
 							worker.in.put(cmd2);
 						}
@@ -3283,7 +3283,7 @@ public class ConnectionWorker extends HRDBMSThread
 					{
 						if (worker != null)
 						{
-							final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+							final List<Object> cmd2 = new ArrayList<Object>(1);
 							cmd2.add("CLOSE");
 							worker.in.put(cmd2);
 						}
@@ -3317,7 +3317,7 @@ public class ConnectionWorker extends HRDBMSThread
 					sock.close();
 					if (worker != null)
 					{
-						final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+						final List<Object> cmd2 = new ArrayList<Object>(1);
 						cmd2.add("CLOSE");
 						worker.in.put(cmd2);
 					}
@@ -3327,7 +3327,7 @@ public class ConnectionWorker extends HRDBMSThread
 				{
 					if (worker != null)
 					{
-						final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+						final List<Object> cmd2 = new ArrayList<Object>(1);
 						cmd2.add("CLOSE");
 						while (true)
 						{
@@ -3362,7 +3362,7 @@ public class ConnectionWorker extends HRDBMSThread
 			}
 		}
 
-		final ArrayList<Object> buffer = new ArrayList<Object>(num);
+		final List<Object> buffer = new ArrayList<Object>(num);
 		while (num > 0)
 		{
 			Object obj = null;
@@ -3428,7 +3428,7 @@ public class ConnectionWorker extends HRDBMSThread
 				sock.close();
 				if (worker != null)
 				{
-					final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+					final List<Object> cmd2 = new ArrayList<Object>(1);
 					cmd2.add("CLOSE");
 					worker.in.put(cmd2);
 				}
@@ -3438,7 +3438,7 @@ public class ConnectionWorker extends HRDBMSThread
 			{
 				if (worker != null)
 				{
-					final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+					final List<Object> cmd2 = new ArrayList<Object>(1);
 					cmd2.add("CLOSE");
 					while (true)
 					{
@@ -3472,7 +3472,7 @@ public class ConnectionWorker extends HRDBMSThread
 		final Transaction tx2 = new Transaction(Transaction.ISOLATION_CS);
 
 		// determine node and device
-		final ArrayList<Object> partial = new ArrayList<Object>();
+		final List<Object> partial = new ArrayList<Object>();
 		partial.add(key);
 		final long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
 		final int node = (int)(hash % MetaData.numWorkerNodes);
@@ -3515,7 +3515,7 @@ public class ConnectionWorker extends HRDBMSThread
 		 * cal.get(Calendar.DAY_OF_MONTH)); } orders.add(true);
 		 */
 		// determine node and device
-		final ArrayList<Object> partial = new ArrayList<Object>();
+		final List<Object> partial = new ArrayList<Object>();
 		partial.add(key);
 		final long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
 		final int node = (int)(hash % MetaData.numWorkerNodes);
@@ -3560,7 +3560,7 @@ public class ConnectionWorker extends HRDBMSThread
 		{
 			if (worker != null)
 			{
-				final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+				final List<Object> cmd2 = new ArrayList<Object>(1);
 				cmd2.add("CLOSE");
 				while (true)
 				{
@@ -3615,7 +3615,7 @@ public class ConnectionWorker extends HRDBMSThread
 		{
 			if (worker != null)
 			{
-				final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+				final List<Object> cmd2 = new ArrayList<Object>(1);
 				cmd2.add("CLOSE");
 				while (true)
 				{
@@ -3727,9 +3727,9 @@ public class ConnectionWorker extends HRDBMSThread
 		final ObjectOutputStream objOut = new ObjectOutputStream(sock.getOutputStream());
 		// numNodes = (Integer)objIn.readObject();
 		// delimiter = (String)objIn.readObject();
-		// pos2Col = (TreeMap<Integer, String>)objIn.readObject();
-		// cols2Types = (HashMap<String, String>)objIn.readObject();
-		// pos2Length = (HashMap<Integer, Integer>)objIn.readObject();
+		// pos2Col = (Map<Integer, String>)objIn.readObject();
+		// cols2Types = (Map<String, String>)objIn.readObject();
+		// pos2Length = (Map<Integer, Integer>)objIn.readObject();
 		// pmd = (PartitionMetaData)objIn.readObject();
 		objOut.writeObject(new Integer(ldmd.numNodes));
 		objOut.writeObject(ldmd.delimiter);
@@ -3770,7 +3770,7 @@ public class ConnectionWorker extends HRDBMSThread
 				}
 			}
 
-			final ArrayList<Object> buffer = new ArrayList<Object>();
+			final List<Object> buffer = new ArrayList<Object>();
 			Object obj = worker.out.take();
 			if (!(obj instanceof HashMap))
 			{
@@ -3822,7 +3822,7 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 		catch (final Exception e)
 		{
-			final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+			final List<Object> cmd2 = new ArrayList<Object>(1);
 			cmd2.add("CLOSE");
 			while (true)
 			{
@@ -3847,10 +3847,10 @@ public class ConnectionWorker extends HRDBMSThread
 
 	private void hadoopLoad()
 	{
-		// ArrayList<ArrayList<Object>> list;
+		// ArrayList<List<Object>> list;
 		ByteBuffer list;
-		HashMap<String, Integer> cols2Pos;
-		TreeMap<Integer, String> pos2Col;
+		Map<String, Integer> cols2Pos;
+		Map<Integer, String> pos2Col;
 		String schema;
 		String table;
 		final byte[] devBytes = new byte[4];
@@ -3925,15 +3925,15 @@ public class ConnectionWorker extends HRDBMSThread
 		String table = null;
 		byte[] schemaData = null;
 		byte[] tableData = null;
-		ArrayList<String> indexes;
-		ArrayList<ArrayList<String>> keys;
-		ArrayList<ArrayList<String>> types;
-		ArrayList<ArrayList<Boolean>> orders;
-		ArrayList<ArrayList<Object>> list = null;
-		HashMap<String, Integer> cols2Pos;
+		List<String> indexes;
+		List<List<String>> keys;
+		List<List<String>> types;
+		List<List<Boolean>> orders;
+		List<List<Object>> list = null;
+		Map<String, Integer> cols2Pos;
 		PartitionMetaData partMeta;
-		TreeMap<Integer, String> pos2Col = null;
-		HashMap<String, String> cols2Types = null;
+		Map<Integer, String> pos2Col = null;
+		Map<String, String> cols2Types = null;
 		int type;
 		String ngExp;
 		String nExp;
@@ -3971,7 +3971,7 @@ public class ConnectionWorker extends HRDBMSThread
 			tableData = new byte[tableLength];
 			readNonCoord(tableData, in);
 			dExp = new String(tableData, StandardCharsets.UTF_8);
-			final HashMap<Long, Object> prev = new HashMap<Long, Object>();
+			final Map<Long, Object> prev = new HashMap<Long, Object>();
 			indexes = OperatorUtils.deserializeALS(in, prev);
 			list = OperatorUtils.deserializeALALO(in, prev);
 			keys = OperatorUtils.deserializeALALS(in, prev);
@@ -3982,16 +3982,16 @@ public class ConnectionWorker extends HRDBMSThread
 			cols2Types = OperatorUtils.deserializeStringHM(in, prev);
 			// ObjectInputStream objIn = new
 			// ObjectInputStream(sock.getInputStream());
-			// indexes = (ArrayList<String>)objIn.readObject();
-			// list = (ArrayList<ArrayList<Object>>)objIn.readObject();
-			// keys = (ArrayList<ArrayList<String>>)objIn.readObject();
-			// types = (ArrayList<ArrayList<String>>)objIn.readObject();
-			// orders = (ArrayList<ArrayList<Boolean>>)objIn.readObject();
-			// cols2Pos = (HashMap<String, Integer>)objIn.readObject();
-			// pos2Col = (TreeMap<Integer, String>)objIn.readObject();
-			// cols2Types = (HashMap<String, String>)objIn.readObject();
+			// indexes = (List<String>)objIn.readObject();
+			// list = (List<List<Object>>)objIn.readObject();
+			// keys = (List<List<String>>)objIn.readObject();
+			// types = (List<List<String>>)objIn.readObject();
+			// orders = (List<List<Boolean>>)objIn.readObject();
+			// cols2Pos = (Map<String, Integer>)objIn.readObject();
+			// pos2Col = (Map<Integer, String>)objIn.readObject();
+			// cols2Types = (Map<String, String>)objIn.readObject();
 
-			final HashMap<String, String> cols2Types2 = new HashMap<String, String>();
+			final Map<String, String> cols2Types2 = new HashMap<String, String>();
 			for (final Map.Entry entry : cols2Types.entrySet())
 			{
 				String col = (String)entry.getKey();
@@ -4008,15 +4008,15 @@ public class ConnectionWorker extends HRDBMSThread
 			return;
 		}
 
-		final HJOMultiHashMap<Integer, ArrayList<Object>> map = new HJOMultiHashMap<Integer, ArrayList<Object>>();
-		for (final ArrayList<Object> row : list)
+		final HJOMultiHashMap<Integer, List<Object>> map = new HJOMultiHashMap<Integer, List<Object>>();
+		for (final List<Object> row : list)
 		{
 			map.multiPut(MetaData.determineDevice(row, partMeta, cols2Pos), row);
 		}
 
-		final ArrayList<FlushInsertThread> threads = new ArrayList<FlushInsertThread>();
-		final ArrayList<String> dmlTxStrs = new ArrayList<String>();
-		final ArrayList<Integer> sorted = new ArrayList(map.getKeySet());
+		final List<FlushInsertThread> threads = new ArrayList<FlushInsertThread>();
+		final List<String> dmlTxStrs = new ArrayList<String>();
+		final List<Integer> sorted = new ArrayList(map.getKeySet());
 		Collections.sort(sorted);
 		for (final Object o : sorted)
 		{
@@ -4088,10 +4088,10 @@ public class ConnectionWorker extends HRDBMSThread
 		String table = null;
 		byte[] schemaData = null;
 		byte[] tableData = null;
-		// ArrayList<ArrayList<Object>> list = null;
+		// ArrayList<List<Object>> list = null;
 		ByteBuffer list = null;
-		TreeMap<Integer, String> pos2Col = null;
-		HashMap<String, String> cols2Types = null;
+		Map<Integer, String> pos2Col = null;
+		Map<String, String> cols2Types = null;
 		int type;
 		final byte[] devBytes = new byte[4];
 		int device;
@@ -4123,8 +4123,8 @@ public class ConnectionWorker extends HRDBMSThread
 			objIn.readObject();
 			objIn.readObject();
 			objIn.readObject();
-			pos2Col = (TreeMap<Integer, String>)objIn.readObject();
-			cols2Types = (HashMap<String, String>)objIn.readObject();
+			pos2Col = (Map<Integer, String>)objIn.readObject();
+			cols2Types = (Map<String, String>)objIn.readObject();
 
 			final Exception le = loadExceptions.get(txNum);
 			if (le != null)
@@ -4199,7 +4199,7 @@ public class ConnectionWorker extends HRDBMSThread
 
 	private void localCommit()
 	{
-		ArrayList<Object> tree = null;
+		List<Object> tree = null;
 		final byte[] txBytes = new byte[8];
 		long txNum = -1;
 		try
@@ -4207,7 +4207,7 @@ public class ConnectionWorker extends HRDBMSThread
 			readNonCoord(txBytes);
 			txNum = bytesToLong(txBytes);
 			final ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
-			tree = (ArrayList<Object>)objIn.readObject();
+			tree = (List<Object>)objIn.readObject();
 
 			final Exception le = loadExceptions.get(txNum);
 			if (le != null)
@@ -4240,7 +4240,7 @@ public class ConnectionWorker extends HRDBMSThread
 		Object obj = tree.get(0);
 		while (obj instanceof ArrayList)
 		{
-			obj = ((ArrayList)obj).get(0);
+			obj = ((List)obj).get(0);
 		}
 
 		removeFromTree((String)obj, tree, null); // also delete parents if now
@@ -4254,7 +4254,7 @@ public class ConnectionWorker extends HRDBMSThread
 
 	private void localRollback()
 	{
-		ArrayList<Object> tree = null;
+		List<Object> tree = null;
 		final byte[] txBytes = new byte[8];
 		long txNum = -1;
 		try
@@ -4262,7 +4262,7 @@ public class ConnectionWorker extends HRDBMSThread
 			readNonCoord(txBytes);
 			txNum = bytesToLong(txBytes);
 			final ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
-			tree = (ArrayList<Object>)objIn.readObject();
+			tree = (List<Object>)objIn.readObject();
 		}
 		catch (final Exception e)
 		{
@@ -4287,7 +4287,7 @@ public class ConnectionWorker extends HRDBMSThread
 		Object obj = tree.get(0);
 		while (obj instanceof ArrayList)
 		{
-			obj = ((ArrayList)obj).get(0);
+			obj = ((List)obj).get(0);
 		}
 
 		removeFromTree((String)obj, tree, null); // also delete parents if now
@@ -4301,7 +4301,7 @@ public class ConnectionWorker extends HRDBMSThread
 
 	private void massDelete()
 	{
-		ArrayList<Object> tree = null;
+		List<Object> tree = null;
 		final byte[] txBytes = new byte[8];
 		long txNum = -1;
 		final byte[] schemaLenBytes = new byte[4];
@@ -4312,12 +4312,12 @@ public class ConnectionWorker extends HRDBMSThread
 		String table = null;
 		byte[] schemaData = null;
 		byte[] tableData = null;
-		ArrayList<String> indexes;
-		ArrayList<ArrayList<String>> keys;
-		ArrayList<ArrayList<String>> types;
-		ArrayList<ArrayList<Boolean>> orders;
-		TreeMap<Integer, String> pos2Col;
-		HashMap<String, String> cols2Types;
+		List<String> indexes;
+		List<List<String>> keys;
+		List<List<String>> types;
+		List<List<Boolean>> orders;
+		Map<Integer, String> pos2Col;
+		Map<String, String> cols2Types;
 		int type;
 		boolean logged;
 
@@ -4350,13 +4350,13 @@ public class ConnectionWorker extends HRDBMSThread
 			readNonCoord(typeData);
 			type = bytesToInt(typeData);
 			final ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
-			tree = (ArrayList<Object>)objIn.readObject();
-			indexes = (ArrayList<String>)objIn.readObject();
-			keys = (ArrayList<ArrayList<String>>)objIn.readObject();
-			types = (ArrayList<ArrayList<String>>)objIn.readObject();
-			orders = (ArrayList<ArrayList<Boolean>>)objIn.readObject();
-			pos2Col = (TreeMap<Integer, String>)objIn.readObject();
-			cols2Types = (HashMap<String, String>)objIn.readObject();
+			tree = (List<Object>)objIn.readObject();
+			indexes = (List<String>)objIn.readObject();
+			keys = (List<List<String>>)objIn.readObject();
+			types = (List<List<String>>)objIn.readObject();
+			orders = (List<List<Boolean>>)objIn.readObject();
+			pos2Col = (Map<Integer, String>)objIn.readObject();
+			cols2Types = (Map<String, String>)objIn.readObject();
 		}
 		catch (final Exception e)
 		{
@@ -4367,22 +4367,22 @@ public class ConnectionWorker extends HRDBMSThread
 		Object obj = tree.get(0);
 		while (obj instanceof ArrayList)
 		{
-			obj = ((ArrayList)obj).get(0);
+			obj = ((List)obj).get(0);
 		}
 
 		removeFromTree((String)obj, tree, null); // also delete parents if now
 		// empty
 
-		final ArrayList<SendMassDeleteThread> threads = new ArrayList<SendMassDeleteThread>();
+		final List<SendMassDeleteThread> threads = new ArrayList<SendMassDeleteThread>();
 		for (Object o : tree)
 		{
 			if (!(o instanceof ArrayList))
 			{
-				final ArrayList<Object> o2 = new ArrayList<Object>();
+				final List<Object> o2 = new ArrayList<Object>();
 				o2.add(o);
 				o = o2;
 			}
-			threads.add(new SendMassDeleteThread((ArrayList<Object>)o, tx, schema, table, keys, types, orders, indexes, pos2Col, cols2Types, logged, type));
+			threads.add(new SendMassDeleteThread((List<Object>)o, tx, schema, table, keys, types, orders, indexes, pos2Col, cols2Types, logged, type));
 		}
 
 		for (final SendMassDeleteThread thread : threads)
@@ -4416,8 +4416,8 @@ public class ConnectionWorker extends HRDBMSThread
 			{
 				// mass delete table and indexes
 				final File[] dirs = getDirs(HRDBMSWorker.getHParms().getProperty("data_directories"));
-				final ArrayList<MassDeleteThread> threads1 = new ArrayList<MassDeleteThread>();
-				final ArrayList<String> dmlTxStrs = new ArrayList<String>();
+				final List<MassDeleteThread> threads1 = new ArrayList<MassDeleteThread>();
+				final List<String> dmlTxStrs = new ArrayList<String>();
 				int device = 0;
 				for (final File dir : dirs)
 				{
@@ -4510,8 +4510,8 @@ public class ConnectionWorker extends HRDBMSThread
 		int numCols;
 		final byte[] uBytes = new byte[4];
 		int unique;
-		ArrayList<Integer> devices;
-		ArrayList<Object> tree;
+		List<Integer> devices;
+		List<Object> tree;
 		Transaction tx;
 		final byte[] txBytes = new byte[8];
 
@@ -4529,10 +4529,10 @@ public class ConnectionWorker extends HRDBMSThread
 			readNonCoord(fnBytes);
 			fn = new String(fnBytes, StandardCharsets.UTF_8);
 			final ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
-			devices = (ArrayList<Integer>)objIn.readObject();
-			tree = (ArrayList<Object>)objIn.readObject();
+			devices = (List<Integer>)objIn.readObject();
+			tree = (List<Object>)objIn.readObject();
 
-			final ArrayList<CreateIndexThread> threads = new ArrayList<CreateIndexThread>();
+			final List<CreateIndexThread> threads = new ArrayList<CreateIndexThread>();
 			for (final int device : devices)
 			{
 				threads.add(new CreateIndexThread(fn, numCols, device, unique, tx));
@@ -4547,13 +4547,13 @@ public class ConnectionWorker extends HRDBMSThread
 			Object obj = tree.get(0);
 			while (obj instanceof ArrayList)
 			{
-				obj = ((ArrayList)obj).get(0);
+				obj = ((List)obj).get(0);
 			}
 
 			removeFromTree((String)obj, tree, null); // also delete parents if
 			// now empty
 
-			final ArrayList<SendHierNewIndexThread> threads2 = new ArrayList<SendHierNewIndexThread>();
+			final List<SendHierNewIndexThread> threads2 = new ArrayList<SendHierNewIndexThread>();
 			for (final Object o : tree)
 			{
 				threads2.add(new SendHierNewIndexThread(ncBytes, uBytes, fnLenBytes, fnBytes, devices, o, tx));
@@ -4626,14 +4626,14 @@ public class ConnectionWorker extends HRDBMSThread
 		String fn;
 		final byte[] ncBytes = new byte[4];
 		int numCols;
-		ArrayList<Integer> devices;
-		ArrayList<Object> tree;
+		List<Integer> devices;
+		List<Object> tree;
 		Transaction tx;
 		final byte[] txBytes = new byte[8];
 		int type;
-		ArrayList<ColDef> defs = null;
-		ArrayList<Integer> colOrder = null;
-		ArrayList<Integer> organization = null;
+		List<ColDef> defs = null;
+		List<Integer> colOrder = null;
+		List<Integer> organization = null;
 
 		try
 		{
@@ -4649,17 +4649,17 @@ public class ConnectionWorker extends HRDBMSThread
 			readNonCoord(fnLenBytes);
 			type = bytesToInt(fnLenBytes);
 			final ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
-			devices = (ArrayList<Integer>)objIn.readObject();
-			tree = (ArrayList<Object>)objIn.readObject();
-			defs = (ArrayList<ColDef>)objIn.readObject();
+			devices = (List<Integer>)objIn.readObject();
+			tree = (List<Object>)objIn.readObject();
+			defs = (List<ColDef>)objIn.readObject();
 			if (type != 0)
 			{
-				colOrder = (ArrayList<Integer>)objIn.readObject();
-				organization = (ArrayList<Integer>)objIn.readObject();
+				colOrder = (List<Integer>)objIn.readObject();
+				organization = (List<Integer>)objIn.readObject();
 				HRDBMSWorker.logger.debug("Received message to create table with organization: " + organization);
 			}
 
-			final ArrayList<CreateTableThread> threads = new ArrayList<CreateTableThread>();
+			final List<CreateTableThread> threads = new ArrayList<CreateTableThread>();
 			for (final int device : devices)
 			{
 				threads.add(new CreateTableThread(fn, numCols, device, tx, type, defs, colOrder, organization));
@@ -4674,13 +4674,13 @@ public class ConnectionWorker extends HRDBMSThread
 			Object obj = tree.get(0);
 			while (obj instanceof ArrayList)
 			{
-				obj = ((ArrayList)obj).get(0);
+				obj = ((List)obj).get(0);
 			}
 
 			removeFromTree((String)obj, tree, null); // also delete parents if
 			// now empty
 
-			final ArrayList<SendHierNewTableThread> threads2 = new ArrayList<SendHierNewTableThread>();
+			final List<SendHierNewTableThread> threads2 = new ArrayList<SendHierNewTableThread>();
 			for (final Object o : tree)
 			{
 				threads2.add(new SendHierNewTableThread(ncBytes, fnLenBytes, fnBytes, devices, o, tx, type, defs, colOrder, organization));
@@ -4755,16 +4755,16 @@ public class ConnectionWorker extends HRDBMSThread
 		byte[] fn2Bytes;
 		String iFn;
 		String tFn;
-		ArrayList<Integer> devices;
-		ArrayList<String> keys;
-		ArrayList<String> types;
-		ArrayList<Boolean> orders;
-		ArrayList<Integer> poses;
-		TreeMap<Integer, String> pos2Col;
-		HashMap<String, String> cols2Types;
+		List<Integer> devices;
+		List<String> keys;
+		List<String> types;
+		List<Boolean> orders;
+		List<Integer> poses;
+		Map<Integer, String> pos2Col;
+		Map<String, String> cols2Types;
 		final byte[] txBytes = new byte[8];
 		long txnum;
-		ArrayList<Object> tree;
+		List<Object> tree;
 		int type;
 
 		try
@@ -4784,17 +4784,17 @@ public class ConnectionWorker extends HRDBMSThread
 			readNonCoord(fnLenBytes);
 			type = bytesToInt(fnLenBytes);
 			final ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
-			devices = (ArrayList<Integer>)objIn.readObject();
-			keys = (ArrayList<String>)objIn.readObject();
-			types = (ArrayList<String>)objIn.readObject();
-			orders = (ArrayList<Boolean>)objIn.readObject();
-			poses = (ArrayList<Integer>)objIn.readObject();
-			pos2Col = (TreeMap<Integer, String>)objIn.readObject();
-			cols2Types = (HashMap<String, String>)objIn.readObject();
-			tree = (ArrayList<Object>)objIn.readObject();
+			devices = (List<Integer>)objIn.readObject();
+			keys = (List<String>)objIn.readObject();
+			types = (List<String>)objIn.readObject();
+			orders = (List<Boolean>)objIn.readObject();
+			poses = (List<Integer>)objIn.readObject();
+			pos2Col = (Map<Integer, String>)objIn.readObject();
+			cols2Types = (Map<String, String>)objIn.readObject();
+			tree = (List<Object>)objIn.readObject();
 			tx = new Transaction(txnum);
 
-			final ArrayList<PopIndexThread> threads = new ArrayList<PopIndexThread>();
+			final List<PopIndexThread> threads = new ArrayList<PopIndexThread>();
 			for (final int device : devices)
 			{
 				threads.add(new PopIndexThread(iFn, tFn, device, keys, types, orders, poses, pos2Col, cols2Types, tx, type));
@@ -4809,13 +4809,13 @@ public class ConnectionWorker extends HRDBMSThread
 			Object obj = tree.get(0);
 			while (obj instanceof ArrayList)
 			{
-				obj = ((ArrayList)obj).get(0);
+				obj = ((List)obj).get(0);
 			}
 
 			removeFromTree((String)obj, tree, null); // also delete parents if
 			// now empty
 
-			final ArrayList<SendHierPopIndexThread> threads2 = new ArrayList<SendHierPopIndexThread>();
+			final List<SendHierPopIndexThread> threads2 = new ArrayList<SendHierPopIndexThread>();
 			for (final Object o : tree)
 			{
 				threads2.add(new SendHierPopIndexThread(txBytes, fnLenBytes, fnBytes, fn2LenBytes, fn2Bytes, devices, keys, types, orders, poses, pos2Col, cols2Types, o, type));
@@ -4874,7 +4874,7 @@ public class ConnectionWorker extends HRDBMSThread
 
 	private void prepare()
 	{
-		ArrayList<Object> tree = null;
+		List<Object> tree = null;
 		final byte[] txBytes = new byte[8];
 		long txNum = -1;
 		final byte[] lenBytes = new byte[4];
@@ -4891,7 +4891,7 @@ public class ConnectionWorker extends HRDBMSThread
 			readNonCoord(data);
 			host = new String(data, StandardCharsets.UTF_8);
 			final ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
-			tree = (ArrayList<Object>)objIn.readObject();
+			tree = (List<Object>)objIn.readObject();
 		}
 		catch (final Exception e)
 		{
@@ -4913,13 +4913,13 @@ public class ConnectionWorker extends HRDBMSThread
 		Object obj = tree.get(0);
 		while (obj instanceof ArrayList)
 		{
-			obj = ((ArrayList)obj).get(0);
+			obj = ((List)obj).get(0);
 		}
 
 		removeFromTree((String)obj, tree, null); // also delete parents if now
 		// empty
 
-		final ArrayList<SendPrepareThread> threads = new ArrayList<SendPrepareThread>();
+		final List<SendPrepareThread> threads = new ArrayList<SendPrepareThread>();
 		for (final Object o : tree)
 		{
 			threads.add(new SendPrepareThread(o, tx, lenBytes, data));
@@ -5054,9 +5054,9 @@ public class ConnectionWorker extends HRDBMSThread
 			}
 
 			fn += (schema + ".PK" + table + ".indx");
-			final ArrayList<String> keys = new ArrayList<String>();
-			final ArrayList<String> types = new ArrayList<String>();
-			final ArrayList<Boolean> orders = new ArrayList<Boolean>();
+			final List<String> keys = new ArrayList<String>();
+			final List<String> types = new ArrayList<String>();
+			final List<Boolean> orders = new ArrayList<Boolean>();
 			keys.add(table + ".KEY2");
 			final FieldValue[] fva = new FieldValue[1];
 			final FieldValue[] fva2 = new FieldValue[2];
@@ -5142,7 +5142,7 @@ public class ConnectionWorker extends HRDBMSThread
 					// FileManager.getFile(tfn);
 					final int block = 1 + random.nextInt(maxPlus + 1);
 					// request block
-					final HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+					final Map<Integer, DataType> layout = new HashMap<Integer, DataType>();
 					final Schema sch = new Schema(layout, MetaData.myNodeNum(), device);
 					final Block toRequest = new Block(tfn, block);
 					tx.requestPage(toRequest);
@@ -5156,7 +5156,7 @@ public class ConnectionWorker extends HRDBMSThread
 				else
 				{
 					// already exists
-					final HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+					final Map<Integer, DataType> layout = new HashMap<Integer, DataType>();
 					final Schema sch = new Schema(layout, MetaData.myNodeNum(), device);
 					// new MetaData();
 					final String tfn = MetaData.getDevicePath(device) + schema + "." + table + ".tbl";
@@ -5235,7 +5235,7 @@ public class ConnectionWorker extends HRDBMSThread
 						sock.close();
 						if (worker != null)
 						{
-							final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+							final List<Object> cmd2 = new ArrayList<Object>(1);
 							cmd2.add("CLOSE");
 							worker.in.put(cmd2);
 						}
@@ -5245,7 +5245,7 @@ public class ConnectionWorker extends HRDBMSThread
 					{
 						if (worker != null)
 						{
-							final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+							final List<Object> cmd2 = new ArrayList<Object>(1);
 							cmd2.add("CLOSE");
 							worker.in.put(cmd2);
 						}
@@ -5279,7 +5279,7 @@ public class ConnectionWorker extends HRDBMSThread
 					sock.close();
 					if (worker != null)
 					{
-						final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+						final List<Object> cmd2 = new ArrayList<Object>(1);
 						cmd2.add("CLOSE");
 						worker.in.put(cmd2);
 					}
@@ -5289,7 +5289,7 @@ public class ConnectionWorker extends HRDBMSThread
 				{
 					if (worker != null)
 					{
-						final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+						final List<Object> cmd2 = new ArrayList<Object>(1);
 						cmd2.add("CLOSE");
 						while (true)
 						{
@@ -5353,8 +5353,8 @@ public class ConnectionWorker extends HRDBMSThread
 		readNonCoord(numBytes);
 		final int num = bytesToInt(numBytes);
 		int pos = 0;
-		// ArrayList<ArrayList<Object>> retval = new
-		// ArrayList<ArrayList<Object>>(num);
+		// ArrayList<List<Object>> retval = new
+		// ArrayList<List<Object>>(num);
 		int i = 0;
 		while (i < num)
 		{
@@ -5404,7 +5404,7 @@ public class ConnectionWorker extends HRDBMSThread
 			}
 
 			pos += size;
-			// retval.add((ArrayList<Object>)fromBytes(data));
+			// retval.add((List<Object>)fromBytes(data));
 			i++;
 		}
 
@@ -5494,9 +5494,9 @@ public class ConnectionWorker extends HRDBMSThread
 			}
 
 			fn += (schema + ".PK" + table + ".indx");
-			final ArrayList<String> keys = new ArrayList<String>();
-			final ArrayList<String> types = new ArrayList<String>();
-			final ArrayList<Boolean> orders = new ArrayList<Boolean>();
+			final List<String> keys = new ArrayList<String>();
+			final List<String> types = new ArrayList<String>();
+			final List<Boolean> orders = new ArrayList<Boolean>();
 			keys.add(table + ".KEY2");
 			final FieldValue[] fva = new FieldValue[1];
 			if (key instanceof Integer)
@@ -5545,7 +5545,7 @@ public class ConnectionWorker extends HRDBMSThread
 					return;
 				}
 
-				final HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+				final Map<Integer, DataType> layout = new HashMap<Integer, DataType>();
 				final Schema sch = new Schema(layout, MetaData.myNodeNum(), device);
 				final RID rid = line.getRid();
 				final int block = rid.getBlockNum();
@@ -5576,7 +5576,7 @@ public class ConnectionWorker extends HRDBMSThread
 		}
 	}
 
-	private void removeFromTree(final String host, final ArrayList<Object> tree, final ArrayList<Object> parent)
+	private void removeFromTree(final String host, final List<Object> tree, final List<Object> parent)
 	{
 		for (final Object o : tree)
 		{
@@ -5594,14 +5594,14 @@ public class ConnectionWorker extends HRDBMSThread
 			}
 			else
 			{
-				removeFromTree(host, (ArrayList<Object>)o, tree);
+				removeFromTree(host, (List<Object>)o, tree);
 			}
 		}
 	}
 
 	private void reorg()
 	{
-		ArrayList<Object> tree = null;
+		List<Object> tree = null;
 		final byte[] txBytes = new byte[8];
 		long txNum = -1;
 		final byte[] schemaLenBytes = new byte[4];
@@ -5610,10 +5610,10 @@ public class ConnectionWorker extends HRDBMSThread
 		final byte[] tableLenBytes = new byte[4];
 		byte[] tableBytes;
 		String table;
-		ArrayList<Index> indexes;
-		HashMap<String, String> cols2Types;
-		TreeMap<Integer, String> pos2Col;
-		ArrayList<Boolean> uniques;
+		List<Index> indexes;
+		Map<String, String> cols2Types;
+		Map<Integer, String> pos2Col;
+		List<Boolean> uniques;
 		try
 		{
 			readNonCoord(schemaLenBytes);
@@ -5627,11 +5627,11 @@ public class ConnectionWorker extends HRDBMSThread
 			readNonCoord(txBytes);
 			txNum = bytesToLong(txBytes);
 			final ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
-			tree = (ArrayList<Object>)objIn.readObject();
-			indexes = (ArrayList<Index>)objIn.readObject();
-			cols2Types = (HashMap<String, String>)objIn.readObject();
-			pos2Col = (TreeMap<Integer, String>)objIn.readObject();
-			uniques = (ArrayList<Boolean>)objIn.readObject();
+			tree = (List<Object>)objIn.readObject();
+			indexes = (List<Index>)objIn.readObject();
+			cols2Types = (Map<String, String>)objIn.readObject();
+			pos2Col = (Map<Integer, String>)objIn.readObject();
+			uniques = (List<Boolean>)objIn.readObject();
 		}
 		catch (final Exception e)
 		{
@@ -5642,13 +5642,13 @@ public class ConnectionWorker extends HRDBMSThread
 		Object obj = tree.get(0);
 		while (obj instanceof ArrayList)
 		{
-			obj = ((ArrayList)obj).get(0);
+			obj = ((List)obj).get(0);
 		}
 
 		removeFromTree((String)obj, tree, null); // also delete parents if now
 		// empty
 
-		final ArrayList<SendReorgThread> threads = new ArrayList<SendReorgThread>();
+		final List<SendReorgThread> threads = new ArrayList<SendReorgThread>();
 		for (final Object o : tree)
 		{
 			threads.add(new SendReorgThread(o, tx, schemaLenBytes, schemaBytes, tableLenBytes, tableBytes, indexes, cols2Types, pos2Col, uniques));
@@ -5794,7 +5794,7 @@ public class ConnectionWorker extends HRDBMSThread
 				sock.close();
 				if (worker != null)
 				{
-					final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+					final List<Object> cmd2 = new ArrayList<Object>(1);
 					cmd2.add("CLOSE");
 					worker.in.put(cmd2);
 				}
@@ -5804,7 +5804,7 @@ public class ConnectionWorker extends HRDBMSThread
 			{
 				if (worker != null)
 				{
-					final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+					final List<Object> cmd2 = new ArrayList<Object>(1);
 					cmd2.add("CLOSE");
 					while (true)
 					{
@@ -5853,7 +5853,7 @@ public class ConnectionWorker extends HRDBMSThread
 				sock.close();
 				if (worker != null)
 				{
-					final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+					final List<Object> cmd2 = new ArrayList<Object>(1);
 					cmd2.add("CLOSE");
 					worker.in.put(cmd2);
 				}
@@ -5863,7 +5863,7 @@ public class ConnectionWorker extends HRDBMSThread
 			{
 				if (worker != null)
 				{
-					final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+					final List<Object> cmd2 = new ArrayList<Object>(1);
 					cmd2.add("CLOSE");
 					while (true)
 					{
@@ -5911,7 +5911,7 @@ public class ConnectionWorker extends HRDBMSThread
 				sock.close();
 				if (worker != null)
 				{
-					final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+					final List<Object> cmd2 = new ArrayList<Object>(1);
 					cmd2.add("CLOSE");
 					worker.in.put(cmd2);
 				}
@@ -5921,7 +5921,7 @@ public class ConnectionWorker extends HRDBMSThread
 			{
 				if (worker != null)
 				{
-					final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+					final List<Object> cmd2 = new ArrayList<Object>(1);
 					cmd2.add("CLOSE");
 					while (true)
 					{
@@ -5969,7 +5969,7 @@ public class ConnectionWorker extends HRDBMSThread
 				sock.close();
 				if (worker != null)
 				{
-					final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+					final List<Object> cmd2 = new ArrayList<Object>(1);
 					cmd2.add("CLOSE");
 					worker.in.put(cmd2);
 				}
@@ -5979,7 +5979,7 @@ public class ConnectionWorker extends HRDBMSThread
 			{
 				if (worker != null)
 				{
-					final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+					final List<Object> cmd2 = new ArrayList<Object>(1);
 					cmd2.add("CLOSE");
 					while (true)
 					{
@@ -6029,7 +6029,7 @@ public class ConnectionWorker extends HRDBMSThread
 				sock.close();
 				if (worker != null)
 				{
-					final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+					final List<Object> cmd2 = new ArrayList<Object>(1);
 					cmd2.add("CLOSE");
 					worker.in.put(cmd2);
 				}
@@ -6039,7 +6039,7 @@ public class ConnectionWorker extends HRDBMSThread
 			{
 				if (worker != null)
 				{
-					final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+					final List<Object> cmd2 = new ArrayList<Object>(1);
 					cmd2.add("CLOSE");
 					while (true)
 					{
@@ -6060,7 +6060,7 @@ public class ConnectionWorker extends HRDBMSThread
 
 	private void setLoadMetaData()
 	{
-		ArrayList<Object> tree = null;
+		List<Object> tree = null;
 		final byte[] keyLength = new byte[4];
 		int length;
 		byte[] data;
@@ -6074,7 +6074,7 @@ public class ConnectionWorker extends HRDBMSThread
 			readNonCoord(data);
 			key = new String(data, StandardCharsets.UTF_8);
 			final ObjectInputStream objIn = new ObjectInputStream(sock.getInputStream());
-			tree = (ArrayList<Object>)objIn.readObject();
+			tree = (List<Object>)objIn.readObject();
 			ldmd = (LoadMetaData)objIn.readObject();
 		}
 		catch (final Exception e)
@@ -6088,13 +6088,13 @@ public class ConnectionWorker extends HRDBMSThread
 		Object obj = tree.get(0);
 		while (obj instanceof ArrayList)
 		{
-			obj = ((ArrayList)obj).get(0);
+			obj = ((List)obj).get(0);
 		}
 
 		removeFromTree((String)obj, tree, null); // also delete parents if now
 		// empty
 
-		final ArrayList<SendLDMDThread> threads = new ArrayList<SendLDMDThread>();
+		final List<SendLDMDThread> threads = new ArrayList<SendLDMDThread>();
 		for (final Object o : tree)
 		{
 			threads.add(new SendLDMDThread(o, keyLength, data, ldmd));
@@ -6165,7 +6165,7 @@ public class ConnectionWorker extends HRDBMSThread
 						sock.close();
 						if (worker != null)
 						{
-							final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+							final List<Object> cmd2 = new ArrayList<Object>(1);
 							cmd2.add("CLOSE");
 							worker.in.put(cmd2);
 						}
@@ -6175,7 +6175,7 @@ public class ConnectionWorker extends HRDBMSThread
 					{
 						if (worker != null)
 						{
-							final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+							final List<Object> cmd2 = new ArrayList<Object>(1);
 							cmd2.add("CLOSE");
 							worker.in.put(cmd2);
 						}
@@ -6209,7 +6209,7 @@ public class ConnectionWorker extends HRDBMSThread
 					sock.close();
 					if (worker != null)
 					{
-						final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+						final List<Object> cmd2 = new ArrayList<Object>(1);
 						cmd2.add("CLOSE");
 						worker.in.put(cmd2);
 					}
@@ -6219,7 +6219,7 @@ public class ConnectionWorker extends HRDBMSThread
 				{
 					if (worker != null)
 					{
-						final ArrayList<Object> cmd2 = new ArrayList<Object>(1);
+						final List<Object> cmd2 = new ArrayList<Object>(1);
 						cmd2.add("CLOSE");
 						while (true)
 						{
@@ -6260,11 +6260,11 @@ public class ConnectionWorker extends HRDBMSThread
 
 	private final byte[] toBytes(final Object v) throws Exception
 	{
-		ArrayList<byte[]> bytes = null;
-		ArrayList<Object> val;
+		List<byte[]> bytes = null;
+		List<Object> val;
 		if (v instanceof ArrayList)
 		{
-			val = (ArrayList<Object>)v;
+			val = (List<Object>)v;
 		}
 		else
 		{
@@ -6341,7 +6341,7 @@ public class ConnectionWorker extends HRDBMSThread
 			// }
 			else if (o instanceof ArrayList)
 			{
-				if (((ArrayList)o).size() != 0)
+				if (((List)o).size() != 0)
 				{
 					final Exception e = new Exception();
 					HRDBMSWorker.logger.error("Non-zero size ArrayList in toBytes()", e);
@@ -6435,15 +6435,15 @@ public class ConnectionWorker extends HRDBMSThread
 		String table = null;
 		byte[] schemaData = null;
 		byte[] tableData = null;
-		ArrayList<String> indexes;
-		ArrayList<ArrayList<String>> keys;
-		ArrayList<ArrayList<String>> types;
-		ArrayList<ArrayList<Boolean>> orders;
-		ArrayList<RIDAndIndexKeys> raiks = null;
-		ArrayList<ArrayList<Object>> list2;
-		HashMap<String, Integer> cols2Pos;
-		TreeMap<Integer, String> pos2Col = null;
-		HashMap<String, String> cols2Types = null;
+		List<String> indexes;
+		List<List<String>> keys;
+		List<List<String>> types;
+		List<List<Boolean>> orders;
+		List<RIDAndIndexKeys> raiks = null;
+		List<List<Object>> list2;
+		Map<String, Integer> cols2Pos;
+		Map<Integer, String> pos2Col = null;
+		Map<String, String> cols2Types = null;
 		int type;
 		String ngExp, nExp, dExp;
 		PartitionMetaData pmd;
@@ -6480,33 +6480,33 @@ public class ConnectionWorker extends HRDBMSThread
 			tableData = new byte[tableLength];
 			readNonCoord(tableData, in);
 			dExp = new String(tableData, StandardCharsets.UTF_8);
-			final HashMap<Long, Object> prev = new HashMap<Long, Object>();
+			final Map<Long, Object> prev = new HashMap<Long, Object>();
 			// ObjectInputStream objIn = new
 			// ObjectInputStream(sock.getInputStream());
 			indexes = OperatorUtils.deserializeALS(in, prev);
-			// indexes = (ArrayList<String>)objIn.readObject();
+			// indexes = (List<String>)objIn.readObject();
 			raiks = OperatorUtils.deserializeALRAIK(in, prev);
-			// raiks = (ArrayList<RIDAndIndexKeys>)objIn.readObject();
+			// raiks = (List<RIDAndIndexKeys>)objIn.readObject();
 			keys = OperatorUtils.deserializeALALS(in, prev);
-			// keys = (ArrayList<ArrayList<String>>)objIn.readObject();
+			// keys = (List<List<String>>)objIn.readObject();
 			types = OperatorUtils.deserializeALALS(in, prev);
-			// types = (ArrayList<ArrayList<String>>)objIn.readObject();
+			// types = (List<List<String>>)objIn.readObject();
 			orders = OperatorUtils.deserializeALALB(in, prev);
-			// orders = (ArrayList<ArrayList<Boolean>>)objIn.readObject();
+			// orders = (List<List<Boolean>>)objIn.readObject();
 			list2 = OperatorUtils.deserializeALALO(in, prev);
-			// list2 = (ArrayList<ArrayList<Object>>)objIn.readObject();
+			// list2 = (List<List<Object>>)objIn.readObject();
 			cols2Pos = OperatorUtils.deserializeStringIntHM(in, prev);
-			// cols2Pos = (HashMap<String, Integer>)objIn.readObject();
+			// cols2Pos = (Map<String, Integer>)objIn.readObject();
 			pos2Col = OperatorUtils.deserializeTM(in, prev);
-			// pos2Col = (TreeMap<Integer, String>)objIn.readObject();
+			// pos2Col = (Map<Integer, String>)objIn.readObject();
 			cols2Types = OperatorUtils.deserializeStringHM(in, prev);
 			if (cols2Types == null)
 			{
 				HRDBMSWorker.logger.debug("CW update deserialized null cols2Types");
 			}
-			// cols2Types = (HashMap<String, String>)objIn.readObject();
+			// cols2Types = (Map<String, String>)objIn.readObject();
 
-			final HashMap<String, String> cols2Types2 = new HashMap<String, String>();
+			final Map<String, String> cols2Types2 = new HashMap<String, String>();
 			for (final Map.Entry entry : cols2Types.entrySet())
 			{
 				String col = (String)entry.getKey();
@@ -6529,9 +6529,9 @@ public class ConnectionWorker extends HRDBMSThread
 			map.multiPut(raik.getRID().getDevice(), raik);
 		}
 
-		final ArrayList<FlushDeleteThread> threads = new ArrayList<FlushDeleteThread>();
-		final ArrayList<String> dmlTxStrs = new ArrayList<String>();
-		ArrayList<Integer> sorted = new ArrayList(map.getKeySet());
+		final List<FlushDeleteThread> threads = new ArrayList<FlushDeleteThread>();
+		final List<String> dmlTxStrs = new ArrayList<String>();
+		List<Integer> sorted = new ArrayList(map.getKeySet());
 		Collections.sort(sorted);
 		for (final Object o : sorted)
 		{
@@ -6589,13 +6589,13 @@ public class ConnectionWorker extends HRDBMSThread
 
 		if (list2 != null)
 		{
-			final HJOMultiHashMap<Integer, ArrayList<Object>> map2 = new HJOMultiHashMap<Integer, ArrayList<Object>>();
-			for (final ArrayList<Object> row : list2)
+			final HJOMultiHashMap<Integer, List<Object>> map2 = new HJOMultiHashMap<Integer, List<Object>>();
+			for (final List<Object> row : list2)
 			{
 				map2.multiPut(MetaData.determineDevice(row, pmd, cols2Pos), row);
 			}
 
-			final ArrayList<FlushInsertThread> threads2 = new ArrayList<FlushInsertThread>();
+			final List<FlushInsertThread> threads2 = new ArrayList<FlushInsertThread>();
 			sorted = new ArrayList(map2.getKeySet());
 			Collections.sort(sorted);
 			for (final Object o : sorted)
@@ -6818,11 +6818,11 @@ public class ConnectionWorker extends HRDBMSThread
 		private Exception e = null;
 		private final Transaction tx;
 		private final int type;
-		private ArrayList<ColDef> defs;
-		private ArrayList<Integer> colOrder;
-		private ArrayList<Integer> organization;
+		private List<ColDef> defs;
+		private List<Integer> colOrder;
+		private List<Integer> organization;
 
-		public CreateTableThread(final String tbl, final int cols, final int device, final Transaction tx, final int type, final ArrayList<ColDef> defs, final ArrayList<Integer> colOrder, final ArrayList<Integer> organization)
+		public CreateTableThread(final String tbl, final int cols, final int device, final Transaction tx, final int type, final List<ColDef> defs, final List<Integer> colOrder, final List<Integer> organization)
 		{
 			this.tbl = tbl;
 			this.cols = cols;
@@ -6861,7 +6861,7 @@ public class ConnectionWorker extends HRDBMSThread
 			}
 		}
 
-		private static void createTableHeader(final String tbl, final int cols, final int device, final Transaction tx, final int type, final ArrayList<ColDef> defs, final ArrayList<Integer> colOrder, final ArrayList<Integer> organization) throws Exception
+		private static void createTableHeader(final String tbl, final int cols, final int device, final Transaction tx, final int type, final List<ColDef> defs, final List<Integer> colOrder, final List<Integer> organization) throws Exception
 		{
 			// new MetaData();
 			String fn = MetaData.getDevicePath(device);
@@ -7096,16 +7096,16 @@ public class ConnectionWorker extends HRDBMSThread
 		private boolean ok = true;
 		String schema;
 		String table;
-		ArrayList<ArrayList<String>> keys;
-		ArrayList<ArrayList<String>> types;
-		ArrayList<ArrayList<Boolean>> orders;
-		ArrayList<String> indexes;
+		List<List<String>> keys;
+		List<List<String>> types;
+		List<List<Boolean>> orders;
+		List<String> indexes;
 		Set<RIDAndIndexKeys> raiks;
-		TreeMap<Integer, String> pos2Col;
+		Map<Integer, String> pos2Col;
 		int type;
 		private Exception e;
 
-		public FlushDeleteThread(final Set<RIDAndIndexKeys> raiks, final Transaction tx, final String schema, final String table, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final ArrayList<String> indexes, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type)
+		public FlushDeleteThread(final Set<RIDAndIndexKeys> raiks, final Transaction tx, final String schema, final String table, final List<List<String>> keys, final List<List<String>> types, final List<List<Boolean>> orders, final List<String> indexes, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types, final int type)
 		{
 			this.raiks = raiks;
 			this.tx = tx;
@@ -7145,7 +7145,7 @@ public class ConnectionWorker extends HRDBMSThread
 
 				final Iterator<RIDAndIndexKeys> it = raiks.iterator();
 				final int num = it.next().getRID().getDevice();
-				final HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+				final Map<Integer, DataType> layout = new HashMap<Integer, DataType>();
 				final Schema sch = new Schema(layout, MetaData.myNodeNum(), num);
 				for (final Object o : map.getKeySet())
 				{
@@ -7211,18 +7211,18 @@ public class ConnectionWorker extends HRDBMSThread
 		private boolean ok = true;
 		String schema;
 		String table;
-		ArrayList<ArrayList<String>> keys;
-		ArrayList<ArrayList<String>> types;
-		ArrayList<ArrayList<Boolean>> orders;
-		ArrayList<String> indexes;
-		List<ArrayList<Object>> list;
-		HashMap<String, Integer> cols2Pos;
+		List<List<String>> keys;
+		List<List<String>> types;
+		List<List<Boolean>> orders;
+		List<String> indexes;
+		List<List<Object>> list;
+		Map<String, Integer> cols2Pos;
 		int num;
-		TreeMap<Integer, String> pos2Col;
-		HashMap<String, String> cols2Types;
+		Map<Integer, String> pos2Col;
+		Map<String, String> cols2Types;
 		int type;
 
-		public FlushInsertThread(final List<ArrayList<Object>> list, final Transaction tx, final String schema, final String table, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final ArrayList<String> indexes, final HashMap<String, Integer> cols2Pos, final int num, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type)
+		public FlushInsertThread(final List<List<Object>> list, final Transaction tx, final String schema, final String table, final List<List<String>> keys, final List<List<String>> types, final List<List<Boolean>> orders, final List<String> indexes, final Map<String, Integer> cols2Pos, final int num, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types, final int type)
 		{
 			this.list = list;
 			this.tx = tx;
@@ -7267,14 +7267,14 @@ public class ConnectionWorker extends HRDBMSThread
 					int block = maxPlus - 1;
 
 					// request block
-					final HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+					final Map<Integer, DataType> layout = new HashMap<Integer, DataType>();
 					Schema sch = new Schema(layout, MetaData.myNodeNum(), num);
 					Block toRequest = new Block(tfn, block);
 					// HRDBMSWorker.logger.debug("Requesting " + toRequest);
 					tx.requestPage(toRequest);
 					tx.read(toRequest, sch, true);
 					raiks = new ArrayList<RIDAndIndexKeys>();
-					for (final ArrayList<Object> row : list)
+					for (final List<Object> row : list)
 					{
 						final RID rid = sch.insertRow(aloToFieldValues(row));
 						if (rid.getBlockNum() != block)
@@ -7289,12 +7289,12 @@ public class ConnectionWorker extends HRDBMSThread
 							tx.read(toRequest, sch, true);
 						}
 
-						final ArrayList<ArrayList<Object>> indexKeys = new ArrayList<ArrayList<Object>>();
+						final List<List<Object>> indexKeys = new ArrayList<List<Object>>();
 						int i = 0;
 						for (final String index : indexes)
 						{
-							final ArrayList<String> key = keys.get(i);
-							final ArrayList<Object> k = new ArrayList<Object>();
+							final List<String> key = keys.get(i);
+							final List<Object> k = new ArrayList<Object>();
 							for (final String col : key)
 							{
 								try
@@ -7337,7 +7337,7 @@ public class ConnectionWorker extends HRDBMSThread
 					// request block
 					Block toRequest = new Block(tfn, block);
 					tx.requestPage(toRequest, new ArrayList<Integer>(pos2Col.keySet()));
-					final HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+					final Map<Integer, DataType> layout = new HashMap<Integer, DataType>();
 					for (final Map.Entry entry : pos2Col.entrySet())
 					{
 						final String type = cols2Types.get(entry.getValue());
@@ -7368,7 +7368,7 @@ public class ConnectionWorker extends HRDBMSThread
 					Schema sch = new Schema(layout, MetaData.myNodeNum(), num);
 					tx.read(toRequest, sch, new ArrayList<Integer>(pos2Col.keySet()), false, true);
 					raiks = new ArrayList<RIDAndIndexKeys>();
-					for (final ArrayList<Object> row : list)
+					for (final List<Object> row : list)
 					{
 						final RID rid = sch.insertRowColTable(aloToFieldValues(row));
 						if (rid.getBlockNum() != block)
@@ -7380,12 +7380,12 @@ public class ConnectionWorker extends HRDBMSThread
 							tx.read(toRequest, sch, new ArrayList<Integer>(pos2Col.keySet()), false, true);
 						}
 
-						final ArrayList<ArrayList<Object>> indexKeys = new ArrayList<ArrayList<Object>>();
+						final List<List<Object>> indexKeys = new ArrayList<List<Object>>();
 						int i = 0;
 						for (final String index : indexes)
 						{
-							final ArrayList<String> key = keys.get(i);
-							final ArrayList<Object> k = new ArrayList<Object>();
+							final List<String> key = keys.get(i);
+							final List<Object> k = new ArrayList<Object>();
 							for (final String col : key)
 							{
 								try
@@ -7438,11 +7438,11 @@ public class ConnectionWorker extends HRDBMSThread
 		private boolean ok = true;
 		String schema;
 		String table;
-		// ArrayList<ArrayList<Object>> list;
+		// ArrayList<List<Object>> list;
 		// byte[] list;
 		private final int num;
-		TreeMap<Integer, String> pos2Col;
-		HashMap<String, String> cols2Types;
+		Map<Integer, String> pos2Col;
+		Map<String, String> cols2Types;
 		int type;
 
 		// LinkedBlockingQueue<Object> queue = new
@@ -7451,7 +7451,7 @@ public class ConnectionWorker extends HRDBMSThread
 		// SPSCQueue(Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_batch")));
 		// IndexWriterThread thread;
 
-		public FlushLoadThread(final Transaction tx, final String schema, final String table, final int num, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type)
+		public FlushLoadThread(final Transaction tx, final String schema, final String table, final int num, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types, final int type)
 		{
 			// this.list = list;
 			this.tx = tx;
@@ -7527,7 +7527,7 @@ public class ConnectionWorker extends HRDBMSThread
 					bfcOp.start();
 					block -= 1;
 					// request block
-					final HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+					final Map<Integer, DataType> layout = new HashMap<Integer, DataType>();
 					Schema sch = new Schema(layout, MetaData.myNodeNum(), num);
 					Block toRequest = new Block(file, block);
 					tx.requestPage(toRequest);
@@ -7551,10 +7551,10 @@ public class ConnectionWorker extends HRDBMSThread
 						// o);
 						// }
 						// }
-						final ArrayList<Object> row = (ArrayList<Object>)o;
+						final List<Object> row = (List<Object>)o;
 						final RID rid = sch.insertRowAppend(aloToFieldValues(row));
-						// ArrayList<ArrayList<Object>> indexKeys = new
-						// ArrayList<ArrayList<Object>>();
+						// ArrayList<List<Object>> indexKeys = new
+						// ArrayList<List<Object>>();
 						// i = 0;
 						// for (String index : indexes)
 						// {
@@ -7654,14 +7654,14 @@ public class ConnectionWorker extends HRDBMSThread
 					final Block b = new Block(file, 0);
 					tx.requestPage(b);
 					final HeaderPage hp = tx.readHeaderPage(b, 1);
-					final ArrayList<Integer> intClustering = hp.getClustering();
+					final List<Integer> intClustering = hp.getClustering();
 					// HRDBMSWorker.logger.debug("Header page returned an
 					// organization of: " + intClustering);
 					Operator top = bfcOp;
 					if (intClustering.size() != 0)
 					{
-						final ArrayList<String> keys = new ArrayList<String>(intClustering.size());
-						final ArrayList<Boolean> orders = new ArrayList<Boolean>(intClustering.size());
+						final List<String> keys = new ArrayList<String>(intClustering.size());
+						final List<Boolean> orders = new ArrayList<Boolean>(intClustering.size());
 						for (final int index : intClustering)
 						{
 							keys.add(pos2Col.get(index));
@@ -7695,7 +7695,7 @@ public class ConnectionWorker extends HRDBMSThread
 					Block toRequest = new Block(file, block);
 					tx.requestPage(toRequest, new ArrayList<Integer>(pos2Col.keySet()));
 					// request block
-					final HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+					final Map<Integer, DataType> layout = new HashMap<Integer, DataType>();
 					for (final Map.Entry entry : pos2Col.entrySet())
 					{
 						final String type = cols2Types.get(entry.getValue());
@@ -7731,11 +7731,11 @@ public class ConnectionWorker extends HRDBMSThread
 
 					// new ArrayList<RIDAndIndexKeys>();
 					Object o = top.next(top);
-					final ArrayList<ArrayList<Object>> pageSet = new ArrayList<ArrayList<Object>>();
+					final List<List<Object>> pageSet = new ArrayList<List<Object>>();
 					while (o instanceof ArrayList)
 					{
 						rows++;
-						final ArrayList<Object> row = (ArrayList<Object>)o;
+						final List<Object> row = (List<Object>)o;
 						final RID rid = sch.insertRowColTableAppend(aloToFieldValues(row));
 						final int newBlock = rid.getBlockNum();
 						if (newBlock == block)
@@ -7895,7 +7895,7 @@ public class ConnectionWorker extends HRDBMSThread
 					return;
 				}
 
-				final ArrayList<Object> row = (ArrayList<Object>)next;
+				final List<Object> row = (List<Object>)next;
 				retval = row.get(0);
 				root.close();
 			}
@@ -7910,11 +7910,11 @@ public class ConnectionWorker extends HRDBMSThread
 	private static class IndexWriterThread extends HRDBMSThread
 	{
 		private final SPSCQueue queue;
-		private final ArrayList<Index> indexes;
+		private final List<Index> indexes;
 		private boolean ok = true;
 		private boolean isFieldValues = false;
 
-		public IndexWriterThread(final SPSCQueue queue, final ArrayList<Index> indexes, final boolean isFieldValues)
+		public IndexWriterThread(final SPSCQueue queue, final List<Index> indexes, final boolean isFieldValues)
 		{
 			this.queue = queue;
 			this.indexes = indexes;
@@ -7978,16 +7978,16 @@ public class ConnectionWorker extends HRDBMSThread
 		private final Transaction tx;
 		private int num = 0;
 		private boolean ok = true;
-		private final ArrayList<String> indexes;
-		private final ArrayList<ArrayList<String>> keys;
-		private final ArrayList<ArrayList<String>> types;
-		private final ArrayList<ArrayList<Boolean>> orders;
-		private final TreeMap<Integer, String> pos2Col;
-		private final HashMap<String, String> cols2Types;
+		private final List<String> indexes;
+		private final List<List<String>> keys;
+		private final List<List<String>> types;
+		private final List<List<Boolean>> orders;
+		private final Map<Integer, String> pos2Col;
+		private final Map<String, String> cols2Types;
 		private final boolean logged;
 		private final int type;
 
-		public MassDeleteThread(final File file, final Transaction tx, final ArrayList<String> indexes, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final boolean logged, final int type)
+		public MassDeleteThread(final File file, final Transaction tx, final List<String> indexes, final List<List<String>> keys, final List<List<String>> types, final List<List<Boolean>> orders, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types, final boolean logged, final int type)
 		{
 			this.file = file;
 			this.tx = tx;
@@ -8036,7 +8036,7 @@ public class ConnectionWorker extends HRDBMSThread
 					return;
 				}
 
-				final HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+				final Map<Integer, DataType> layout = new HashMap<Integer, DataType>();
 				for (final Map.Entry entry : pos2Col.entrySet())
 				{
 					final String type = cols2Types.get(entry.getValue());
@@ -8131,7 +8131,7 @@ public class ConnectionWorker extends HRDBMSThread
 						{
 							final int length = lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1;
 							int i = 0;
-							final ArrayList<Block> toRequest = new ArrayList<Block>();
+							final List<Block> toRequest = new ArrayList<Block>();
 							while (i < length)
 							{
 								if ((lastRequested + i + 1) % numCols == 1)
@@ -8219,7 +8219,7 @@ public class ConnectionWorker extends HRDBMSThread
 					return;
 				}
 
-				final HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+				final Map<Integer, DataType> layout = new HashMap<Integer, DataType>();
 				for (final Map.Entry entry : pos2Col.entrySet())
 				{
 					final String type = cols2Types.get(entry.getValue());
@@ -8314,7 +8314,7 @@ public class ConnectionWorker extends HRDBMSThread
 						{
 							final int length = lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1;
 							int i = 0;
-							final ArrayList<Block> toRequest = new ArrayList<Block>();
+							final List<Block> toRequest = new ArrayList<Block>();
 							while (i < length)
 							{
 								if ((lastRequested + i + 1) % numCols == 1)
@@ -8387,17 +8387,17 @@ public class ConnectionWorker extends HRDBMSThread
 		private final String iFn;
 		private String tFn;
 		private final int device;
-		private final ArrayList<String> keys;
-		private final ArrayList<String> types;
-		private final ArrayList<Boolean> orders;
-		private final ArrayList<Integer> poses;
+		private final List<String> keys;
+		private final List<String> types;
+		private final List<Boolean> orders;
+		private final List<Integer> poses;
 		private boolean ok = true;
-		private final TreeMap<Integer, String> pos2Col;
-		private final HashMap<String, String> cols2Types;
+		private final Map<Integer, String> pos2Col;
+		private final Map<String, String> cols2Types;
 		private final Transaction tx;
 		private final int type;
 
-		public PopIndexThread(final String iFn, final String tFn, final int device, final ArrayList<String> keys, final ArrayList<String> types, final ArrayList<Boolean> orders, final ArrayList<Integer> poses, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final Transaction tx, final int type)
+		public PopIndexThread(final String iFn, final String tFn, final int device, final List<String> keys, final List<String> types, final List<Boolean> orders, final List<Integer> poses, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types, final Transaction tx, final int type)
 		{
 			this.iFn = iFn;
 			this.tFn = tFn;
@@ -8450,7 +8450,7 @@ public class ConnectionWorker extends HRDBMSThread
 					i++;
 				}
 
-				final HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+				final Map<Integer, DataType> layout = new HashMap<Integer, DataType>();
 				for (final Map.Entry entry : pos2Col.entrySet())
 				{
 					final String type = cols2Types.get(entry.getValue());
@@ -8529,7 +8529,7 @@ public class ConnectionWorker extends HRDBMSThread
 								idx.myPages.clear();
 								idx.cache.clear();
 							}
-							final ArrayList<FieldValue> row = new ArrayList<FieldValue>(types.size());
+							final List<FieldValue> row = new ArrayList<FieldValue>(types.size());
 							final RID rid = r.getRID();
 							int j = 0;
 							final int pSize = poses.size();
@@ -8556,7 +8556,7 @@ public class ConnectionWorker extends HRDBMSThread
 				else
 				{
 					// col table
-					final ArrayList<Integer> cols = new ArrayList<Integer>(poses);
+					final List<Integer> cols = new ArrayList<Integer>(poses);
 					Collections.sort(cols);
 					final int numCols = pos2Col.size();
 					final int MY_PREFETCH_REQUEST_SIZE = layout.size() * PREFETCH_REQUEST_SIZE / cols.size();
@@ -8577,7 +8577,7 @@ public class ConnectionWorker extends HRDBMSThread
 							// PREFETCH_REQUEST_SIZE < numBlocks ?
 							// PREFETCH_REQUEST_SIZE : numBlocks - lastRequested
 							// - 1];
-							final ArrayList<Block> toRequest = new ArrayList<Block>();
+							final List<Block> toRequest = new ArrayList<Block>();
 							int j = 0;
 							final int length = lastRequested + MY_PREFETCH_REQUEST_SIZE < numBlocks ? MY_PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1;
 							while (j < length)
@@ -8632,7 +8632,7 @@ public class ConnectionWorker extends HRDBMSThread
 								idx.cache.clear();
 							}
 
-							final ArrayList<FieldValue> r = new ArrayList<FieldValue>(pos2Col.size() * 2);
+							final List<FieldValue> r = new ArrayList<FieldValue>(pos2Col.size() * 2);
 							int index = 0;
 							while (index < pos2Col.size())
 							{
@@ -8675,16 +8675,16 @@ public class ConnectionWorker extends HRDBMSThread
 		private final String dir;
 		private final String schema;
 		private final String table;
-		private final ArrayList<Index> indexes;
+		private final List<Index> indexes;
 		private final Transaction tx;
 		private boolean ok = true;
 		private final Exception e = null;
-		private final HashMap<String, String> cols2Types;
-		private final TreeMap<Integer, String> pos2Col;
-		private final ArrayList<Boolean> uniques;
+		private final Map<String, String> cols2Types;
+		private final Map<Integer, String> pos2Col;
+		private final List<Boolean> uniques;
 		private int type;
 
-		public ReorgThread(final String dir, final String schema, final String table, final ArrayList<Index> indexes, final Transaction tx, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> pos2Col, final ArrayList<Boolean> uniques, final int type)
+		public ReorgThread(final String dir, final String schema, final String table, final List<Index> indexes, final Transaction tx, final Map<String, String> cols2Types, final Map<Integer, String> pos2Col, final List<Boolean> uniques, final int type)
 		{
 			this.dir = dir;
 			this.schema = schema;
@@ -8727,13 +8727,13 @@ public class ConnectionWorker extends HRDBMSThread
 					return;
 				}
 
-				final HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
+				final Map<String, Integer> cols2Pos = new HashMap<String, Integer>();
 				for (final Map.Entry entry : pos2Col.entrySet())
 				{
 					cols2Pos.put((String)entry.getValue(), (Integer)entry.getKey());
 				}
 
-				final ArrayList<String> indexFNs = new ArrayList<String>();
+				final List<String> indexFNs = new ArrayList<String>();
 				for (final Index index : indexes)
 				{
 					String temp = dir;
@@ -8786,7 +8786,7 @@ public class ConnectionWorker extends HRDBMSThread
 				// FIXME type usage and col defs
 				final CreateTableThread createT = new CreateTableThread(fn, pos2Col.size(), null, type);
 				createT.run();
-				final ArrayList<String> newIndexFNs = new ArrayList<String>();
+				final List<String> newIndexFNs = new ArrayList<String>();
 				i = 0;
 				for (final String fn2 : indexFNs)
 				{
@@ -8797,7 +8797,7 @@ public class ConnectionWorker extends HRDBMSThread
 					i++;
 				}
 
-				final HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+				final Map<Integer, DataType> layout = new HashMap<Integer, DataType>();
 				for (final Map.Entry entry : pos2Col.entrySet())
 				{
 					final String type = cols2Types.get(entry.getValue());
@@ -8829,7 +8829,7 @@ public class ConnectionWorker extends HRDBMSThread
 				final Schema sch = new Schema(layout);
 				int onPage = 1;
 				int lastRequested = 0;
-				final ArrayList<Index> idxs = new ArrayList<Index>();
+				final List<Index> idxs = new ArrayList<Index>();
 				i = 0;
 				for (final String index : newIndexFNs)
 				{
@@ -8853,7 +8853,7 @@ public class ConnectionWorker extends HRDBMSThread
 					block = FileManager.numBlocks.get(newFN);
 				}
 				// request block
-				final HashMap<Integer, DataType> layout2 = new HashMap<Integer, DataType>();
+				final Map<Integer, DataType> layout2 = new HashMap<Integer, DataType>();
 				Schema sch2 = new Schema(layout);
 				Block toRequest2 = new Block(newFN, block);
 				tx.requestPage(toRequest2);
@@ -8887,12 +8887,12 @@ public class ConnectionWorker extends HRDBMSThread
 						}
 
 						final RID rid = sch2.insertRowAppend(r.getAllCols());
-						final ArrayList<ArrayList<Object>> indexKeys = new ArrayList<ArrayList<Object>>();
+						final List<List<Object>> indexKeys = new ArrayList<List<Object>>();
 						i = 0;
 						for (final Index index : idxs)
 						{
-							final ArrayList<String> key = index.getKeys();
-							final ArrayList<Object> k = new ArrayList<Object>();
+							final List<String> key = index.getKeys();
+							final List<Object> k = new ArrayList<Object>();
 							for (final String col : key)
 							{
 								k.add(r.getCol(cols2Pos.get(col)));
@@ -9019,7 +9019,7 @@ public class ConnectionWorker extends HRDBMSThread
 					outMsg[15] = 0;
 					out.write(outMsg);
 					final ObjectOutputStream objOut = new ObjectOutputStream(out);
-					final ArrayList<Object> alo = new ArrayList<Object>(1);
+					final List<Object> alo = new ArrayList<Object>(1);
 					alo.add(o);
 					objOut.writeObject(alo);
 					objOut.flush();
@@ -9035,13 +9035,13 @@ public class ConnectionWorker extends HRDBMSThread
 				}
 				sendOK = true;
 			}
-			else if (((ArrayList<Object>)o).size() > 0)
+			else if (((List<Object>)o).size() > 0)
 			{
 				Socket sock = null;
-				Object obj2 = ((ArrayList<Object>)o).get(0);
+				Object obj2 = ((List<Object>)o).get(0);
 				while (obj2 instanceof ArrayList)
 				{
-					obj2 = ((ArrayList<Object>)obj2).get(0);
+					obj2 = ((List<Object>)obj2).get(0);
 				}
 
 				final String hostname = (String)obj2;
@@ -9126,7 +9126,7 @@ public class ConnectionWorker extends HRDBMSThread
 					out.write(outMsg);
 					out.write(longToBytes(tx.number()));
 					final ObjectOutputStream objOut = new ObjectOutputStream(out);
-					final ArrayList<Object> alo = new ArrayList<Object>(1);
+					final List<Object> alo = new ArrayList<Object>(1);
 					alo.add(o);
 					objOut.writeObject(alo);
 					objOut.flush();
@@ -9143,13 +9143,13 @@ public class ConnectionWorker extends HRDBMSThread
 					System.exit(1);
 				}
 			}
-			else if (((ArrayList<Object>)o).size() > 0)
+			else if (((List<Object>)o).size() > 0)
 			{
 				Socket sock = null;
-				Object obj2 = ((ArrayList<Object>)o).get(0);
+				Object obj2 = ((List<Object>)o).get(0);
 				while (obj2 instanceof ArrayList)
 				{
-					obj2 = ((ArrayList<Object>)obj2).get(0);
+					obj2 = ((List<Object>)obj2).get(0);
 				}
 
 				final String hostname = (String)obj2;
@@ -9198,10 +9198,10 @@ public class ConnectionWorker extends HRDBMSThread
 					HRDBMSWorker.logger.fatal("BLACKLIST", e);
 					System.exit(1);
 					// retry others
-					final boolean toDo = rebuildTree((ArrayList<Object>)o, (String)obj2);
+					final boolean toDo = rebuildTree((List<Object>)o, (String)obj2);
 					if (toDo)
 					{
-						sendCommit((ArrayList<Object>)o, tx);
+						sendCommit((List<Object>)o, tx);
 					}
 				}
 			}
@@ -9212,9 +9212,9 @@ public class ConnectionWorker extends HRDBMSThread
 	{
 		private final Object o;
 		private boolean sendOK;
-		private final ArrayList<String> indexes;
+		private final List<String> indexes;
 
-		public SendDelFiIThread(final Object o, final ArrayList<String> indexes)
+		public SendDelFiIThread(final Object o, final List<String> indexes)
 		{
 			this.o = o;
 			this.indexes = indexes;
@@ -9246,7 +9246,7 @@ public class ConnectionWorker extends HRDBMSThread
 					outMsg[15] = 0;
 					out.write(outMsg);
 					final ObjectOutputStream objOut = new ObjectOutputStream(out);
-					final ArrayList<Object> alo = new ArrayList<Object>(1);
+					final List<Object> alo = new ArrayList<Object>(1);
 					alo.add(o);
 					objOut.writeObject(alo);
 					objOut.writeObject(indexes);
@@ -9263,13 +9263,13 @@ public class ConnectionWorker extends HRDBMSThread
 				}
 				sendOK = true;
 			}
-			else if (((ArrayList<Object>)o).size() > 0)
+			else if (((List<Object>)o).size() > 0)
 			{
 				Socket sock = null;
-				Object obj2 = ((ArrayList<Object>)o).get(0);
+				Object obj2 = ((List<Object>)o).get(0);
 				while (obj2 instanceof ArrayList)
 				{
-					obj2 = ((ArrayList<Object>)obj2).get(0);
+					obj2 = ((List<Object>)obj2).get(0);
 				}
 
 				final String hostname = (String)obj2;
@@ -9321,9 +9321,9 @@ public class ConnectionWorker extends HRDBMSThread
 	{
 		private final Object o;
 		private boolean sendOK;
-		private final ArrayList<String> tables;
+		private final List<String> tables;
 
-		public SendDelFiTThread(final Object o, final ArrayList<String> tables)
+		public SendDelFiTThread(final Object o, final List<String> tables)
 		{
 			this.o = o;
 			this.tables = tables;
@@ -9355,7 +9355,7 @@ public class ConnectionWorker extends HRDBMSThread
 					outMsg[15] = 0;
 					out.write(outMsg);
 					final ObjectOutputStream objOut = new ObjectOutputStream(out);
-					final ArrayList<Object> alo = new ArrayList<Object>(1);
+					final List<Object> alo = new ArrayList<Object>(1);
 					alo.add(o);
 					objOut.writeObject(alo);
 					objOut.writeObject(tables);
@@ -9372,13 +9372,13 @@ public class ConnectionWorker extends HRDBMSThread
 				}
 				sendOK = true;
 			}
-			else if (((ArrayList<Object>)o).size() > 0)
+			else if (((List<Object>)o).size() > 0)
 			{
 				Socket sock = null;
-				Object obj2 = ((ArrayList<Object>)o).get(0);
+				Object obj2 = ((List<Object>)o).get(0);
 				while (obj2 instanceof ArrayList)
 				{
-					obj2 = ((ArrayList<Object>)obj2).get(0);
+					obj2 = ((List<Object>)obj2).get(0);
 				}
 
 				final String hostname = (String)obj2;
@@ -9430,15 +9430,15 @@ public class ConnectionWorker extends HRDBMSThread
 	{
 		private final String schema;
 		private final String table;
-		private final TreeMap<Integer, String> pos2Col;
-		private final HashMap<String, String> cols2Types;
+		private final Map<Integer, String> pos2Col;
+		private final Map<String, String> cols2Types;
 
 		private final Object o;
 		private boolean ok = true;
 		private final Transaction tx;
 		private final int type;
 
-		public SendHierClusterThread(final String schema, final String table, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final Object o, final Transaction tx, final int type)
+		public SendHierClusterThread(final String schema, final String table, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types, final Object o, final Transaction tx, final int type)
 		{
 			this.schema = schema;
 			this.table = table;
@@ -9484,7 +9484,7 @@ public class ConnectionWorker extends HRDBMSThread
 					out.write(stringToBytes(table));
 					out.write(intToBytes(type));
 					final ObjectOutputStream objOut = new ObjectOutputStream(out);
-					final ArrayList<Object> alo = new ArrayList<Object>(1);
+					final List<Object> alo = new ArrayList<Object>(1);
 					alo.add(o);
 					objOut.writeObject(alo);
 					objOut.writeObject(pos2Col);
@@ -9501,13 +9501,13 @@ public class ConnectionWorker extends HRDBMSThread
 					ok = false;
 				}
 			}
-			else if (((ArrayList<Object>)o).size() > 0)
+			else if (((List<Object>)o).size() > 0)
 			{
 				Socket sock = null;
-				Object obj2 = ((ArrayList<Object>)o).get(0);
+				Object obj2 = ((List<Object>)o).get(0);
 				while (obj2 instanceof ArrayList)
 				{
-					obj2 = ((ArrayList<Object>)obj2).get(0);
+					obj2 = ((List<Object>)obj2).get(0);
 				}
 
 				final String hostname = (String)obj2;
@@ -9561,12 +9561,12 @@ public class ConnectionWorker extends HRDBMSThread
 		private final byte[] uBytes;
 		private final byte[] fnLenBytes;
 		private final byte[] fnBytes;
-		ArrayList<Integer> devices;
+		List<Integer> devices;
 		Object o;
 		boolean ok = true;
 		Transaction tx;
 
-		public SendHierNewIndexThread(final byte[] ncBytes, final byte[] uBytes, final byte[] fnLenBytes, final byte[] fnBytes, final ArrayList<Integer> devices, final Object o, final Transaction tx)
+		public SendHierNewIndexThread(final byte[] ncBytes, final byte[] uBytes, final byte[] fnLenBytes, final byte[] fnBytes, final List<Integer> devices, final Object o, final Transaction tx)
 		{
 			this.ncBytes = ncBytes;
 			this.uBytes = uBytes;
@@ -9614,7 +9614,7 @@ public class ConnectionWorker extends HRDBMSThread
 					out.write(fnBytes);
 					final ObjectOutputStream objOut = new ObjectOutputStream(out);
 					objOut.writeObject(devices);
-					final ArrayList<Object> alo = new ArrayList<Object>(1);
+					final List<Object> alo = new ArrayList<Object>(1);
 					alo.add(o);
 					objOut.writeObject(alo);
 					objOut.flush();
@@ -9629,13 +9629,13 @@ public class ConnectionWorker extends HRDBMSThread
 					ok = false;
 				}
 			}
-			else if (((ArrayList<Object>)o).size() > 0)
+			else if (((List<Object>)o).size() > 0)
 			{
 				Socket sock = null;
-				Object obj2 = ((ArrayList<Object>)o).get(0);
+				Object obj2 = ((List<Object>)o).get(0);
 				while (obj2 instanceof ArrayList)
 				{
-					obj2 = ((ArrayList<Object>)obj2).get(0);
+					obj2 = ((List<Object>)obj2).get(0);
 				}
 
 				final String hostname = (String)obj2;
@@ -9686,16 +9686,16 @@ public class ConnectionWorker extends HRDBMSThread
 		private final byte[] ncBytes;
 		private final byte[] fnLenBytes;
 		private final byte[] fnBytes;
-		private final ArrayList<Integer> devices;
+		private final List<Integer> devices;
 		private final Object o;
 		private boolean ok = true;
 		private final Transaction tx;
 		private final int type;
-		private final ArrayList<ColDef> defs;
-		private final ArrayList<Integer> colOrder;
-		private final ArrayList<Integer> organization;
+		private final List<ColDef> defs;
+		private final List<Integer> colOrder;
+		private final List<Integer> organization;
 
-		public SendHierNewTableThread(final byte[] ncBytes, final byte[] fnLenBytes, final byte[] fnBytes, final ArrayList<Integer> devices, final Object o, final Transaction tx, final int type, final ArrayList<ColDef> defs, final ArrayList<Integer> colOrder, final ArrayList<Integer> organization)
+		public SendHierNewTableThread(final byte[] ncBytes, final byte[] fnLenBytes, final byte[] fnBytes, final List<Integer> devices, final Object o, final Transaction tx, final int type, final List<ColDef> defs, final List<Integer> colOrder, final List<Integer> organization)
 		{
 			this.ncBytes = ncBytes;
 			this.fnLenBytes = fnLenBytes;
@@ -9746,7 +9746,7 @@ public class ConnectionWorker extends HRDBMSThread
 					out.write(intToBytes(type));
 					final ObjectOutputStream objOut = new ObjectOutputStream(out);
 					objOut.writeObject(devices);
-					final ArrayList<Object> alo = new ArrayList<Object>(1);
+					final List<Object> alo = new ArrayList<Object>(1);
 					alo.add(o);
 					objOut.writeObject(alo);
 					objOut.writeObject(defs);
@@ -9767,13 +9767,13 @@ public class ConnectionWorker extends HRDBMSThread
 					ok = false;
 				}
 			}
-			else if (((ArrayList<Object>)o).size() > 0)
+			else if (((List<Object>)o).size() > 0)
 			{
 				Socket sock = null;
-				Object obj2 = ((ArrayList<Object>)o).get(0);
+				Object obj2 = ((List<Object>)o).get(0);
 				while (obj2 instanceof ArrayList)
 				{
-					obj2 = ((ArrayList<Object>)obj2).get(0);
+					obj2 = ((List<Object>)obj2).get(0);
 				}
 
 				final String hostname = (String)obj2;
@@ -9832,18 +9832,18 @@ public class ConnectionWorker extends HRDBMSThread
 		private final byte[] fnBytes;
 		private final byte[] fn2LenBytes;
 		private final byte[] fn2Bytes;
-		private final ArrayList<Integer> devices;
-		private final ArrayList<String> keys;
-		private final ArrayList<String> types;
-		private final ArrayList<Boolean> orders;
-		private final ArrayList<Integer> poses;
-		private final TreeMap<Integer, String> pos2Col;
-		private final HashMap<String, String> cols2Types;
+		private final List<Integer> devices;
+		private final List<String> keys;
+		private final List<String> types;
+		private final List<Boolean> orders;
+		private final List<Integer> poses;
+		private final Map<Integer, String> pos2Col;
+		private final Map<String, String> cols2Types;
 		Object o;
 		boolean ok = true;
 		int type;
 
-		public SendHierPopIndexThread(final byte[] txBytes, final byte[] fnLenBytes, final byte[] fnBytes, final byte[] fn2LenBytes, final byte[] fn2Bytes, final ArrayList<Integer> devices, final ArrayList<String> keys, final ArrayList<String> types, final ArrayList<Boolean> orders, final ArrayList<Integer> poses, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final Object o, final int type)
+		public SendHierPopIndexThread(final byte[] txBytes, final byte[] fnLenBytes, final byte[] fnBytes, final byte[] fn2LenBytes, final byte[] fn2Bytes, final List<Integer> devices, final List<String> keys, final List<String> types, final List<Boolean> orders, final List<Integer> poses, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types, final Object o, final int type)
 		{
 			this.txBytes = txBytes;
 			this.fnLenBytes = fnLenBytes;
@@ -9899,7 +9899,7 @@ public class ConnectionWorker extends HRDBMSThread
 					out.write(intToBytes(type));
 					final ObjectOutputStream objOut = new ObjectOutputStream(out);
 					objOut.writeObject(devices);
-					final ArrayList<Object> alo = new ArrayList<Object>(1);
+					final List<Object> alo = new ArrayList<Object>(1);
 					alo.add(o);
 					objOut.writeObject(keys);
 					objOut.writeObject(types);
@@ -9920,13 +9920,13 @@ public class ConnectionWorker extends HRDBMSThread
 					ok = false;
 				}
 			}
-			else if (((ArrayList<Object>)o).size() > 0)
+			else if (((List<Object>)o).size() > 0)
 			{
 				Socket sock = null;
-				Object obj2 = ((ArrayList<Object>)o).get(0);
+				Object obj2 = ((List<Object>)o).get(0);
 				while (obj2 instanceof ArrayList)
 				{
-					obj2 = ((ArrayList<Object>)obj2).get(0);
+					obj2 = ((List<Object>)obj2).get(0);
 				}
 
 				final String hostname = (String)obj2;
@@ -10023,7 +10023,7 @@ public class ConnectionWorker extends HRDBMSThread
 					out.write(lenBytes);
 					out.write(data);
 					final ObjectOutputStream objOut = new ObjectOutputStream(out);
-					final ArrayList<Object> alo = new ArrayList<Object>(1);
+					final List<Object> alo = new ArrayList<Object>(1);
 					alo.add(o);
 					objOut.writeObject(alo);
 					objOut.writeObject(ldmd);
@@ -10040,13 +10040,13 @@ public class ConnectionWorker extends HRDBMSThread
 				}
 				sendOK = true;
 			}
-			else if (((ArrayList<Object>)o).size() > 0)
+			else if (((List<Object>)o).size() > 0)
 			{
 				Socket sock = null;
-				Object obj2 = ((ArrayList<Object>)o).get(0);
+				Object obj2 = ((List<Object>)o).get(0);
 				while (obj2 instanceof ArrayList)
 				{
-					obj2 = ((ArrayList<Object>)obj2).get(0);
+					obj2 = ((List<Object>)obj2).get(0);
 				}
 
 				final String hostname = (String)obj2;
@@ -10098,22 +10098,22 @@ public class ConnectionWorker extends HRDBMSThread
 
 	private class SendMassDeleteThread extends HRDBMSThread
 	{
-		private final ArrayList<Object> tree;
+		private final List<Object> tree;
 		private final Transaction tx;
 		private boolean ok;
 		// int num;
 		String schema;
 		String table;
-		ArrayList<ArrayList<String>> keys;
-		ArrayList<ArrayList<String>> types;
-		ArrayList<ArrayList<Boolean>> orders;
-		ArrayList<String> indexes;
-		TreeMap<Integer, String> pos2Col;
-		HashMap<String, String> cols2Types;
+		List<List<String>> keys;
+		List<List<String>> types;
+		List<List<Boolean>> orders;
+		List<String> indexes;
+		Map<Integer, String> pos2Col;
+		Map<String, String> cols2Types;
 		boolean logged;
 		int type;
 
-		public SendMassDeleteThread(final ArrayList<Object> tree, final Transaction tx, final String schema, final String table, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final ArrayList<String> indexes, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final boolean logged, final int type)
+		public SendMassDeleteThread(final List<Object> tree, final Transaction tx, final String schema, final String table, final List<List<String>> keys, final List<List<String>> types, final List<List<Boolean>> orders, final List<String> indexes, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types, final boolean logged, final int type)
 		{
 			this.tree = tree;
 			this.tx = tx;
@@ -10140,12 +10140,12 @@ public class ConnectionWorker extends HRDBMSThread
 			sendMassDelete(tree, tx);
 		}
 
-		private void sendMassDelete(final ArrayList<Object> tree, final Transaction tx)
+		private void sendMassDelete(final List<Object> tree, final Transaction tx)
 		{
 			Object obj = tree.get(0);
 			while (obj instanceof ArrayList)
 			{
-				obj = ((ArrayList)obj).get(0);
+				obj = ((List)obj).get(0);
 			}
 
 			final String hostname = (String)obj;
@@ -10277,7 +10277,7 @@ public class ConnectionWorker extends HRDBMSThread
 					out.write(lenBytes);
 					out.write(data);
 					final ObjectOutputStream objOut = new ObjectOutputStream(out);
-					final ArrayList<Object> alo = new ArrayList<Object>(1);
+					final List<Object> alo = new ArrayList<Object>(1);
 					alo.add(o);
 					objOut.writeObject(alo);
 					objOut.flush();
@@ -10293,13 +10293,13 @@ public class ConnectionWorker extends HRDBMSThread
 				}
 				sendOK = true;
 			}
-			else if (((ArrayList<Object>)o).size() > 0)
+			else if (((List<Object>)o).size() > 0)
 			{
 				Socket sock = null;
-				Object obj2 = ((ArrayList<Object>)o).get(0);
+				Object obj2 = ((List<Object>)o).get(0);
 				while (obj2 instanceof ArrayList)
 				{
-					obj2 = ((ArrayList<Object>)obj2).get(0);
+					obj2 = ((List<Object>)obj2).get(0);
 				}
 
 				final String hostname = (String)obj2;
@@ -10549,7 +10549,7 @@ public class ConnectionWorker extends HRDBMSThread
 					out.write(lenBytes);
 					out.write(data);
 					final ObjectOutputStream objOut = new ObjectOutputStream(out);
-					final ArrayList<Object> alo = new ArrayList<Object>(1);
+					final List<Object> alo = new ArrayList<Object>(1);
 					alo.add(o);
 					objOut.writeObject(alo);
 					objOut.flush();
@@ -10565,13 +10565,13 @@ public class ConnectionWorker extends HRDBMSThread
 				}
 				sendOK = true;
 			}
-			else if (((ArrayList<Object>)o).size() > 0)
+			else if (((List<Object>)o).size() > 0)
 			{
 				Socket sock = null;
-				Object obj2 = ((ArrayList<Object>)o).get(0);
+				Object obj2 = ((List<Object>)o).get(0);
 				while (obj2 instanceof ArrayList)
 				{
-					obj2 = ((ArrayList<Object>)obj2).get(0);
+					obj2 = ((List<Object>)obj2).get(0);
 				}
 
 				final String hostname = (String)obj2;
@@ -10629,12 +10629,12 @@ public class ConnectionWorker extends HRDBMSThread
 		private final byte[] schemaBytes;
 		private final byte[] tableLenBytes;
 		private final byte[] tableBytes;
-		private final ArrayList<Index> indexes;
-		private final HashMap<String, String> cols2Types;
-		private final TreeMap<Integer, String> pos2Col;
-		private final ArrayList<Boolean> uniques;
+		private final List<Index> indexes;
+		private final Map<String, String> cols2Types;
+		private final Map<Integer, String> pos2Col;
+		private final List<Boolean> uniques;
 
-		public SendReorgThread(final Object o, final Transaction tx, final byte[] schemaLenBytes, final byte[] schemaBytes, final byte[] tableLenBytes, final byte[] tableBytes, final ArrayList<Index> indexes, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> pos2Col, final ArrayList<Boolean> uniques)
+		public SendReorgThread(final Object o, final Transaction tx, final byte[] schemaLenBytes, final byte[] schemaBytes, final byte[] tableLenBytes, final byte[] tableBytes, final List<Index> indexes, final Map<String, String> cols2Types, final Map<Integer, String> pos2Col, final List<Boolean> uniques)
 		{
 			this.o = o;
 			this.tx = tx;
@@ -10679,7 +10679,7 @@ public class ConnectionWorker extends HRDBMSThread
 					out.write(tableBytes);
 					out.write(longToBytes(tx.number()));
 					final ObjectOutputStream objOut = new ObjectOutputStream(out);
-					final ArrayList<Object> alo = new ArrayList<Object>(1);
+					final List<Object> alo = new ArrayList<Object>(1);
 					alo.add(o);
 					objOut.writeObject(alo);
 					objOut.writeObject(indexes);
@@ -10699,13 +10699,13 @@ public class ConnectionWorker extends HRDBMSThread
 				}
 				sendOK = true;
 			}
-			else if (((ArrayList<Object>)o).size() > 0)
+			else if (((List<Object>)o).size() > 0)
 			{
 				Socket sock = null;
-				Object obj2 = ((ArrayList<Object>)o).get(0);
+				Object obj2 = ((List<Object>)o).get(0);
 				while (obj2 instanceof ArrayList)
 				{
-					obj2 = ((ArrayList<Object>)obj2).get(0);
+					obj2 = ((List<Object>)obj2).get(0);
 				}
 
 				final String hostname = (String)obj2;
@@ -10796,7 +10796,7 @@ public class ConnectionWorker extends HRDBMSThread
 					out.write(outMsg);
 					out.write(longToBytes(tx.number()));
 					final ObjectOutputStream objOut = new ObjectOutputStream(out);
-					final ArrayList<Object> alo = new ArrayList<Object>(1);
+					final List<Object> alo = new ArrayList<Object>(1);
 					alo.add(o);
 					objOut.writeObject(alo);
 					objOut.flush();
@@ -10813,13 +10813,13 @@ public class ConnectionWorker extends HRDBMSThread
 					System.exit(1);
 				}
 			}
-			else if (((ArrayList<Object>)o).size() > 0)
+			else if (((List<Object>)o).size() > 0)
 			{
 				Socket sock = null;
-				Object obj2 = ((ArrayList<Object>)o).get(0);
+				Object obj2 = ((List<Object>)o).get(0);
 				while (obj2 instanceof ArrayList)
 				{
-					obj2 = ((ArrayList<Object>)obj2).get(0);
+					obj2 = ((List<Object>)obj2).get(0);
 				}
 
 				final String hostname = (String)obj2;
@@ -10868,10 +10868,10 @@ public class ConnectionWorker extends HRDBMSThread
 					HRDBMSWorker.logger.fatal("BLACKLIST", e);
 					System.exit(1);
 					// retry others
-					final boolean toDo = rebuildTree((ArrayList<Object>)o, (String)obj2);
+					final boolean toDo = rebuildTree((List<Object>)o, (String)obj2);
 					if (toDo)
 					{
-						sendRollback((ArrayList<Object>)o, tx);
+						sendRollback((List<Object>)o, tx);
 					}
 				}
 			}

@@ -12,38 +12,33 @@ import com.exascale.threads.HRDBMSThread;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 
 /** Load data from a file on the coordinator without using an external table as intermediary */
 public class ReadThread extends HRDBMSThread
 {
     private final File file;
-    protected final HashMap<Integer, Integer> pos2Length;
-    protected final ArrayList<String> indexes;
+    protected final Map<Integer, Integer> pos2Length;
+    protected final List<String> indexes;
     protected boolean ok = true;
     protected volatile long num = 0;
-    protected final HashMap<String, Integer> cols2Pos;
-    PartitionMetaData spmd;
-    protected final ArrayList<ArrayList<String>> keys;
-    protected final ArrayList<ArrayList<String>> types;
-    protected final ArrayList<ArrayList<Boolean>> orders;
-    protected final TreeMap<Integer, String> pos2Col;
-    protected final HashMap<String, String> cols2Types;
+    protected final Map<String, Integer> cols2Pos;
+    protected final List<List<String>> keys;
+    protected final List<List<String>> types;
+    protected final List<List<Boolean>> orders;
+    protected final Map<Integer, String> pos2Col;
+    protected final Map<String, String> cols2Types;
     protected final int type;
     protected final LoadOperator loadOperator;
-    private final ArrayList<String> types2 = new ArrayList<String>();
+    private final List<String> types2 = new ArrayList<String>();
 
-    public ReadThread(LoadOperator loadOperator, final File file, final HashMap<Integer, Integer> pos2Length, final ArrayList<String> indexes, final PartitionMetaData spmd, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final int type)
+    public ReadThread(LoadOperator loadOperator, final File file, final Map<Integer, Integer> pos2Length, final List<String> indexes, final List<List<String>> keys, final List<List<String>> types, final List<List<Boolean>> orders, final int type)
     {
         this.loadOperator = loadOperator;
         this.file = file;
         this.pos2Length = pos2Length;
         this.indexes = indexes;
         this.cols2Pos = loadOperator.getCols2Pos();
-        this.spmd = spmd;
         this.keys = keys;
         this.types = types;
         this.orders = orders;
@@ -77,7 +72,7 @@ public class ReadThread extends HRDBMSThread
             final int numNodes = MetaData.numWorkerNodes;
             while (!(o instanceof DataEndMarker))
             {
-                final ArrayList<Object> row = (ArrayList<Object>)o;
+                final List<Object> row = (List<Object>)o;
                 num++;
                 // Check the length of character columns against the schema
                 for (final Map.Entry entry : pos2Length.entrySet())
@@ -88,7 +83,7 @@ public class ReadThread extends HRDBMSThread
                         return;
                     }
                 }
-                final ArrayList<Integer> nodes = MetaData.determineNode(loadOperator.getSchema(), loadOperator.getTable(), row, loadOperator.getTransaction(), pmeta, cols2Pos, numNodes);
+                final List<Integer> nodes = MetaData.determineNode(loadOperator.getSchema(), loadOperator.getTable(), row, loadOperator.getTransaction(), pmeta, cols2Pos, numNodes);
                 final int device = MetaData.determineDevice(row, pmeta, cols2Pos);
 
                 loadOperator.getLock().readLock().lock();
@@ -112,7 +107,7 @@ public class ReadThread extends HRDBMSThread
                         }
                     }
 
-                    master = FlushMasterThread.flush(loadOperator, indexes, spmd, keys, types, orders, type);
+                    master = FlushMasterThread.flush(loadOperator, indexes, keys, types, orders, type);
                 }
 
                 o = next(in);
@@ -129,7 +124,7 @@ public class ReadThread extends HRDBMSThread
 
             if (loadOperator.getMap().totalSize() > 0)
             {
-                master = FlushMasterThread.flush(loadOperator, indexes, spmd, keys, types, orders, true, type);
+                master = FlushMasterThread.flush(loadOperator, indexes, keys, types, orders, true, type);
                 master.join();
                 if (!master.getOK())
                 {
@@ -145,7 +140,7 @@ public class ReadThread extends HRDBMSThread
             // Wait for the master flush thread to empty out into the child flush threads.
             while (count > 0 && loadOperator.getMap().totalSize() == 0)
             {
-                master = FlushMasterThread.flush(loadOperator, indexes, spmd, keys, types, orders, true, type);
+                master = FlushMasterThread.flush(loadOperator, indexes, keys, types, orders, true, type);
                 master.join();
                 if (!master.getOK())
                 {
@@ -188,7 +183,7 @@ public class ReadThread extends HRDBMSThread
             return new DataEndMarker();
         }
 
-        final ArrayList<Object> row = new ArrayList<Object>();
+        final List<Object> row = new ArrayList<Object>();
         final FastStringTokenizer tokens = new FastStringTokenizer(line, loadOperator.getDelimiter(), false);
         int i = 0;
         while (tokens.hasMoreTokens())

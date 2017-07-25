@@ -1,6 +1,7 @@
 package com.exascale.optimizer.parse;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import com.exascale.optimizer.*;
 import com.exascale.optimizer.externalTable.*;
@@ -27,7 +28,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	@Override
 	public Expression visitCaseExp(final SelectParser.CaseExpContext ctx)
 	{
-		final ArrayList<Case> cases = new ArrayList<Case>(ctx.caseCase().size());
+		final List<Case> cases = new ArrayList<Case>(ctx.caseCase().size());
 		for (final SelectParser.CaseCaseContext context : ctx.caseCase())
 		{
 			cases.add((Case)visit(context));
@@ -67,9 +68,9 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public ArrayList<Column> visitColList(final SelectParser.ColListContext ctx)
+	public List<Column> visitColList(final SelectParser.ColListContext ctx)
 	{
-		final ArrayList<Column> cols = new ArrayList<Column>();
+		final List<Column> cols = new ArrayList<Column>();
 		for (final SelectParser.ColumnNameContext context : ctx.columnName())
 		{
 			cols.add((Column)visit(context));
@@ -85,9 +86,9 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public ArrayList<Integer> visitColOrder(final SelectParser.ColOrderContext ctx)
+	public List<Integer> visitColOrder(final SelectParser.ColOrderContext ctx)
 	{
-		final ArrayList<Integer> colOrder = new ArrayList<Integer>();
+		final List<Integer> colOrder = new ArrayList<Integer>();
 		for (final TerminalNode node : ctx.INTEGER())
 		{
 			colOrder.add(Integer.parseInt(node.getText().trim()));
@@ -100,7 +101,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	public CTE visitCommonTableExpression(final SelectParser.CommonTableExpressionContext ctx)
 	{
 		final String tableName = ctx.IDENTIFIER().getText();
-		final ArrayList<Column> cols = new ArrayList<Column>();
+		final List<Column> cols = new ArrayList<Column>();
 
 		if (ctx.columnName() != null)
 		{
@@ -150,7 +151,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	@Override
 	public Expression visitCountDistinct(final SelectParser.CountDistinctContext ctx)
 	{
-		final ArrayList<Expression> arguments = new ArrayList<Expression>(1);
+		final List<Expression> arguments = new ArrayList<Expression>(1);
 		arguments.add((Expression)visit(ctx.expression()));
 		return new Expression(new Function("COUNT", arguments, true));
 	}
@@ -166,7 +167,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	{
 		final TableName index = (TableName)visit(ctx.tableName(0));
 		final TableName table = (TableName)visit(ctx.tableName(1));
-		final ArrayList<IndexDef> defs = new ArrayList<IndexDef>();
+		final List<IndexDef> defs = new ArrayList<IndexDef>();
 		for (final SelectParser.IndexDefContext context : ctx.indexDef())
 		{
 			defs.add((IndexDef)visit(context));
@@ -184,7 +185,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	public CreateTable visitCreateTable(final SelectParser.CreateTableContext ctx)
 	{
 		final TableName table = (TableName)visit(ctx.tableName());
-		final ArrayList<ColDef> cols = new ArrayList<ColDef>();
+		final List<ColDef> cols = new ArrayList<ColDef>();
 		for (final SelectParser.ColDefContext context : ctx.colDef())
 		{
 			cols.add((ColDef)visit(context));
@@ -213,10 +214,10 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 			type = 1;
 		}
 
-		ArrayList<Integer> colOrder = null;
+		List<Integer> colOrder = null;
 		if (ctx.colOrder() != null)
 		{
-			colOrder = (ArrayList<Integer>)visit(ctx.colOrder());
+			colOrder = (List<Integer>)visit(ctx.colOrder());
 		}
 
 		CreateTable retval = null;
@@ -231,7 +232,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 
 		if (ctx.organization() != null)
 		{
-			final ArrayList<Integer> organization = (ArrayList<Integer>)visit(ctx.organization());
+			final List<Integer> organization = (List<Integer>)visit(ctx.organization());
 			retval.setOrganization(organization);
 		}
 
@@ -397,7 +398,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	@Override
 	public FromClause visitFromClause(final SelectParser.FromClauseContext ctx)
 	{
-		final ArrayList<TableReference> tables = new ArrayList<TableReference>(ctx.tableReference().size());
+		final List<TableReference> tables = new ArrayList<TableReference>(ctx.tableReference().size());
 		for (final SelectParser.TableReferenceContext context : ctx.tableReference())
 		{
 			tables.add((TableReference)visit(context));
@@ -413,7 +414,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 		// (fetchFirst)? ;
 		SubSelect sub = null;
 		FullSelect full = null;
-		final ArrayList<ConnectedSelect> connected = new ArrayList<ConnectedSelect>();
+		final List<ConnectedSelect> connected = new ArrayList<ConnectedSelect>();
 		OrderBy orderBy = null;
 		FetchFirst fetchFirst = null;
 
@@ -450,7 +451,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	@Override
 	public Expression visitFunction(final SelectParser.FunctionContext ctx)
 	{
-		final ArrayList<Expression> arguments = new ArrayList<Expression>(ctx.expression().size());
+		final List<Expression> arguments = new ArrayList<Expression>(ctx.expression().size());
 		for (final SelectParser.ExpressionContext context : ctx.expression())
 		{
 			arguments.add((Expression)visit(context));
@@ -461,7 +462,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	@Override
 	public GroupBy visitGroupBy(final SelectParser.GroupByContext ctx)
 	{
-		final ArrayList<Column> cols = new ArrayList<Column>(ctx.columnName().size());
+		final List<Column> cols = new ArrayList<Column>(ctx.columnName().size());
 		for (final SelectParser.ColumnNameContext context : ctx.columnName())
 		{
 			cols.add((Column)visit(context));
@@ -501,7 +502,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 
 		if (ctx.valuesList().size() == 1)
 		{
-			final ArrayList<Expression> exps = new ArrayList<Expression>();
+			final List<Expression> exps = new ArrayList<Expression>();
 			for (final SelectParser.ExpressionContext exp : ctx.valuesList().get(0).expression())
 			{
 				exps.add((Expression)visit(exp));
@@ -510,10 +511,10 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 		}
 		else
 		{
-			final ArrayList<ArrayList<Expression>> mExps = new ArrayList<ArrayList<Expression>>();
+			final List<List<Expression>> mExps = new ArrayList<List<Expression>>();
 			for (final SelectParser.ValuesListContext ctx2 : ctx.valuesList())
 			{
-				final ArrayList<Expression> exps = new ArrayList<Expression>();
+				final List<Expression> exps = new ArrayList<Expression>();
 				for (final SelectParser.ExpressionContext exp : ctx2.expression())
 				{
 					exps.add((Expression)visit(exp));
@@ -631,7 +632,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	@Override
 	public Expression visitList(final SelectParser.ListContext ctx)
 	{
-		final ArrayList<Expression> exps = new ArrayList<Expression>(ctx.expression().size());
+		final List<Expression> exps = new ArrayList<Expression>(ctx.expression().size());
 		for (final SelectParser.ExpressionContext context : ctx.expression())
 		{
 			exps.add((Expression)visit(context));
@@ -791,7 +792,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	@Override
 	public OrderBy visitOrderBy(final SelectParser.OrderByContext ctx)
 	{
-		final ArrayList<SortKey> keys = new ArrayList<SortKey>(ctx.sortKey().size());
+		final List<SortKey> keys = new ArrayList<SortKey>(ctx.sortKey().size());
 		for (final SelectParser.SortKeyContext context : ctx.sortKey())
 		{
 			keys.add((SortKey)visit(context));
@@ -801,9 +802,9 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	}
 
 	@Override
-	public ArrayList<Integer> visitOrganization(final SelectParser.OrganizationContext ctx)
+	public List<Integer> visitOrganization(final SelectParser.OrganizationContext ctx)
 	{
-		final ArrayList<Integer> organization = new ArrayList<Integer>();
+		final List<Integer> organization = new ArrayList<Integer>();
 		for (final TerminalNode node : ctx.INTEGER())
 		{
 			organization.add(Integer.parseInt(node.getText().trim()));
@@ -821,7 +822,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	@Override
 	public PrimaryKey visitPrimaryKey(final SelectParser.PrimaryKeyContext ctx)
 	{
-		final ArrayList<Column> cols = new ArrayList<Column>();
+		final List<Column> cols = new ArrayList<Column>();
 		for (final SelectParser.ColumnNameContext context : ctx.columnName())
 		{
 			cols.add((Column)visit(context));
@@ -863,7 +864,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	public SearchCondition visitSearchCondition(final SelectParser.SearchConditionContext ctx)
 	{
 		final SearchClause search = (SearchClause)visit(ctx.searchClause());
-		final ArrayList<ConnectedSearchClause> connected = new ArrayList<ConnectedSearchClause>();
+		final List<ConnectedSearchClause> connected = new ArrayList<ConnectedSearchClause>();
 		if (ctx.connectedSearchClause() != null)
 		{
 			for (final SelectParser.ConnectedSearchClauseContext context : ctx.connectedSearchClause())
@@ -927,7 +928,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 			return (Runstats)visit(ctx.runstats());
 		}
 
-		final ArrayList<CTE> ctes = new ArrayList<CTE>();
+		final List<CTE> ctes = new ArrayList<CTE>();
 
 		if (ctx.commonTableExpression() != null)
 		{
@@ -946,7 +947,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 	{
 		boolean selectAll = true;
 		boolean selectStar = false;
-		final ArrayList<SelectListEntry> selectList = new ArrayList<SelectListEntry>();
+		final List<SelectListEntry> selectList = new ArrayList<SelectListEntry>();
 		if (ctx.selecthow() != null)
 		{
 			if (!ctx.selecthow().getText().equals("ALL"))
@@ -1100,7 +1101,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 
 		if (ctx.setClause().size() == 1)
 		{
-			ArrayList<Column> cols;
+			List<Column> cols;
 			if (ctx.setClause(0).colList() == null)
 			{
 				cols = new ArrayList<Column>(1);
@@ -1108,7 +1109,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 			}
 			else
 			{
-				cols = (ArrayList<Column>)visit(ctx.setClause(0).colList());
+				cols = (List<Column>)visit(ctx.setClause(0).colList());
 			}
 			final Expression exp = (Expression)visit(ctx.setClause(0).expression());
 			Where where = null;
@@ -1120,12 +1121,12 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 			return new Update(table, cols, exp, where);
 		}
 
-		final ArrayList<ArrayList<Column>> cols2 = new ArrayList<ArrayList<Column>>();
-		final ArrayList<Expression> exps2 = new ArrayList<Expression>();
-		final ArrayList<Where> wheres2 = new ArrayList<Where>();
+		final List<List<Column>> cols2 = new ArrayList<List<Column>>();
+		final List<Expression> exps2 = new ArrayList<Expression>();
+		final List<Where> wheres2 = new ArrayList<Where>();
 		for (final SelectParser.SetClauseContext ctx2 : ctx.setClause())
 		{
-			ArrayList<Column> cols;
+			List<Column> cols;
 			if (ctx2.colList() == null)
 			{
 				cols = new ArrayList<Column>(1);
@@ -1133,7 +1134,7 @@ public class SelectVisitorImpl extends SelectBaseVisitor<Object>
 			}
 			else
 			{
-				cols = (ArrayList<Column>)visit(ctx2.colList());
+				cols = (List<Column>)visit(ctx2.colList());
 			}
 			final Expression exp = (Expression)visit(ctx2.expression());
 			Where where = null;

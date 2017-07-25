@@ -68,11 +68,11 @@ public class TableScanOperator extends AbstractTableScanOperator
 	protected static sun.misc.Unsafe unsafe;
 	protected static long offset;
 
-	public static MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>> noResults;
-	public static ConcurrentHashMap<HashSet<HashMap<Filter, Filter>>, AtomicLong> noResultCounts;
+	public static MultiHashMap<Block, Set<Map<Filter, Filter>>> noResults;
+	public static ConcurrentHashMap<Set<Map<Filter, Filter>>, AtomicLong> noResultCounts;
 	public static AtomicInteger skippedPages = new AtomicInteger(0);
 	protected static Object intraTxLock = new Object();
-	protected static HashMap<String, AtomicInteger> sharedDmlTxCounters = new HashMap<String, AtomicInteger>();
+	protected static Map<String, AtomicInteger> sharedDmlTxCounters = new HashMap<String, AtomicInteger>();
 	protected static Configuration config;
 	protected static LogManager logger;
 	protected static ShutdownManager shutdown;
@@ -83,7 +83,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 	public static AtomicLong nonSMTSolveTime = new AtomicLong(0);
 	public static AtomicLong pbpeMaintenanceTime = new AtomicLong(0);
 	public static AtomicInteger SMTSolverCalls = new AtomicInteger(0);
-	public static ConcurrentHashMap<String, HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet>> problemCache;
+	public static ConcurrentHashMap<String, Map<Set<Set<Map<Filter, Filter>>>, BitSet>> problemCache;
 	public static LinkedBlockingQueue<String> prtq;
 
     // Class responsible to read data from external sources
@@ -92,33 +92,33 @@ public class TableScanOperator extends AbstractTableScanOperator
 
 	protected int PAGES_IN_ADVANCE;
 
-	protected transient ArrayList<String> ins;
+	protected transient List<String> ins;
 	public transient volatile BufferedLinkedBlockingQueue readBuffer;
-	protected transient volatile HashMap<Operator, BufferedLinkedBlockingQueue> readBuffers;
+	protected transient volatile Map<Operator, BufferedLinkedBlockingQueue> readBuffers;
 	protected boolean startDone = false;
 	protected transient boolean optimize;
-	protected transient HashMap<Operator, HashSet<HashMap<Filter, Filter>>> filters = new HashMap<Operator, HashSet<HashMap<Filter, Filter>>>();
-	protected ArrayList<Integer> neededPos;
-	protected ArrayList<Integer> fetchPos;
+	protected transient Map<Operator, Set<Map<Filter, Filter>>> filters = new HashMap<>();
+	protected List<Integer> neededPos;
+	protected List<Integer> fetchPos;
 	protected String[] midPos2Col;
-	protected HashMap<String, String> midCols2Types;
+	protected Map<String, String> midCols2Types;
 
 	// happen at runtime?
-	protected transient HashMap<Operator, ArrayList<Integer>> activeDevices = new HashMap<Operator, ArrayList<Integer>>();
-	protected transient HashMap<Operator, ArrayList<Integer>> activeNodes = new HashMap<Operator, ArrayList<Integer>>();
-	public ArrayList<Integer> devices = new ArrayList<Integer>();
+	protected transient Map<Operator, List<Integer>> activeDevices = new HashMap<Operator, List<Integer>>();
+	protected transient Map<Operator, List<Integer>> activeNodes = new HashMap<Operator, List<Integer>>();
+	public List<Integer> devices = new ArrayList<Integer>();
 	protected boolean phase2Done = false;
-	public HashMap<Integer, Operator> device2Child = new HashMap<Integer, Operator>();
-	protected ArrayList<Operator> children = new ArrayList<Operator>();
-	protected transient ArrayList<String> randomIns;
-	protected transient HashMap<String, Integer> ins2Device;
+	public Map<Integer, Operator> device2Child = new HashMap<Integer, Operator>();
+	protected List<Operator> children = new ArrayList<Operator>();
+	protected transient List<String> randomIns;
+	protected transient Map<String, Integer> ins2Device;
 	protected boolean indexOnly = false;
 	protected transient volatile boolean forceDone;
 	public Transaction tx;
 	public boolean getRID = false;
-	protected HashMap<String, String> tableCols2Types;
-	protected TreeMap<Integer, String> tablePos2Col;
-	protected HashMap<String, Integer> tableCols2Pos;
+	protected Map<String, String> tableCols2Types;
+	protected Map<Integer, String> tablePos2Col;
+	protected Map<String, Integer> tableCols2Pos;
 	protected boolean releaseLocks = false;
 	protected boolean sample = false;
 	protected long sPer;
@@ -126,7 +126,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 	protected transient AtomicLong received;
 	protected transient volatile boolean demReceived;
 	protected int tType = 0;
-	protected volatile transient HashSet<Integer> referencesHash = null;
+	protected volatile transient Set<Integer> referencesHash = null;
 
 	static
 	{
@@ -157,23 +157,23 @@ public class TableScanOperator extends AbstractTableScanOperator
 					if (isV5OrHigher)
 					{
 						pbpeCache2 = (ConcurrentHashMap<String, MultiHashMap<Integer, CNFEntry>>)in.readObject();
-						noResults = new MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>>();
+						noResults = new MultiHashMap<>();
 					}
 					else
 					{
-						noResults = (MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>>)in.readObject();
+						noResults = (MultiHashMap<Block, Set<Map<Filter, Filter>>>)in.readObject();
 					}
 					in.close();
 				}
 				catch (final Exception e)
 				{
-					noResults = new MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>>();
+					noResults = new MultiHashMap<>();
 					pbpeCache2 = new ConcurrentHashMap<String, MultiHashMap<Integer, CNFEntry>>();
 				}
 			}
 			else
 			{
-				noResults = new MultiHashMap<Block, HashSet<HashMap<Filter, Filter>>>();
+				noResults = new MultiHashMap<>();
 				pbpeCache2 = new ConcurrentHashMap<String, MultiHashMap<Integer, CNFEntry>>();
 			}
 			
@@ -183,24 +183,24 @@ public class TableScanOperator extends AbstractTableScanOperator
 				try
 				{
 					ObjectInputStream in2 = new ObjectInputStream(new FileInputStream("pbpe.stats"));
-					noResultCounts = (ConcurrentHashMap<HashSet<HashMap<Filter, Filter>>, AtomicLong>)in2.readObject();
+					noResultCounts = (ConcurrentHashMap<Set<Map<Filter, Filter>>, AtomicLong>)in2.readObject();
 				}
 				catch(Exception e)
 				{
-					noResultCounts = new ConcurrentHashMap<HashSet<HashMap<Filter, Filter>>, AtomicLong>();
+					noResultCounts = new ConcurrentHashMap<>();
 				}
 			}
 			else
 			{
-				noResultCounts = new ConcurrentHashMap<HashSet<HashMap<Filter, Filter>>, AtomicLong>();
+				noResultCounts = new ConcurrentHashMap<>();
 			}
 
 			if (isV9)
 			{
-				problemCache = new ConcurrentHashMap<String, HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet>>();
+				problemCache = new ConcurrentHashMap<>();
 				for (final Map.Entry entry : pbpeCache2.entrySet())
 				{
-					final HashSet<CNFEntry> entries = new HashSet<CNFEntry>();
+					final Set<CNFEntry> entries = new HashSet<CNFEntry>();
 					final MultiHashMap<Integer, CNFEntry> mhm = (MultiHashMap<Integer, CNFEntry>)entry.getValue();
 					final Set<Integer> hashCodes = mhm.getKeySet();
 					for (final int hash : hashCodes)
@@ -223,7 +223,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 					}
 
 					final String fn = (String)entry.getKey();
-					final HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> problems = buildProblems(entries, 1, length);
+					final Map<Set<Set<Map<Filter, Filter>>>, BitSet> problems = buildProblems(entries, 1, length);
 					problemCache.put(fn, problems);
 				}
 
@@ -255,7 +255,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 		}
 	}
 
-	public TableScanOperator(final String schema, final String name, final MetaData meta, final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> tablePos2Col, final HashMap<String, String> tableCols2Types, final HashMap<String, Integer> tableCols2Pos) throws Exception
+	public TableScanOperator(final String schema, final String name, final MetaData meta, final Map<String, Integer> cols2Pos, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types, final Map<Integer, String> tablePos2Col, final Map<String, String> tableCols2Types, final Map<String, Integer> tableCols2Pos) throws Exception
 	{
 		super(schema, name, meta, cols2Pos, pos2Col, cols2Types);
 		this.tableCols2Types = tableCols2Types;
@@ -267,9 +267,9 @@ public class TableScanOperator extends AbstractTableScanOperator
 	public TableScanOperator(final String schema, final String name, final MetaData meta, final Transaction tx) throws Exception
 	{
 		super(schema, name, meta, tx);
-		tableCols2Types = (HashMap<String, String>)cols2Types.clone();
-		tablePos2Col = (TreeMap<Integer, String>)pos2Col.clone();
-		tableCols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
+		tableCols2Types = new HashMap<>(cols2Types);
+		tablePos2Col = new HashMap<>(pos2Col);
+		tableCols2Pos = new HashMap<>(cols2Pos);
 		received = new AtomicLong(0);
 	}
 
@@ -285,24 +285,24 @@ public class TableScanOperator extends AbstractTableScanOperator
 	public TableScanOperator(final String schema, final String name, final MetaData meta, final Transaction tx, final boolean releaseLocks) throws Exception
 	{
 		super(schema, name, meta, tx);
-		tableCols2Types = (HashMap<String, String>)cols2Types.clone();
-		tablePos2Col = (TreeMap<Integer, String>)pos2Col.clone();
-		tableCols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
+		tableCols2Types = new HashMap<>(cols2Types);
+		tablePos2Col = new HashMap<>(pos2Col);
+		tableCols2Pos = new HashMap<>(cols2Pos);
 		this.releaseLocks = releaseLocks;
 		received = new AtomicLong(0);
 	}
 
-	public TableScanOperator(final String schema, final String name, final MetaData meta, final Transaction tx, final boolean releaseLocks, final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Col) throws Exception
+	public TableScanOperator(final String schema, final String name, final MetaData meta, final Transaction tx, final boolean releaseLocks, final Map<String, Integer> cols2Pos, final Map<Integer, String> pos2Col) throws Exception
 	{
 		super(schema, name, meta, cols2Pos, pos2Col, MetaData.getCols2TypesForTable(schema, name, tx));
-		tableCols2Types = (HashMap<String, String>)cols2Types.clone();
-		tablePos2Col = (TreeMap<Integer, String>)pos2Col.clone();
-		tableCols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
+		tableCols2Types = new HashMap<>(cols2Types);
+		tablePos2Col = new HashMap<>(pos2Col);
+		tableCols2Pos = new HashMap<>(cols2Pos);
 		this.releaseLocks = releaseLocks;
 		received = new AtomicLong(0);
 	}
 
-	public static TableScanOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static TableScanOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final TableScanOperator value = (TableScanOperator)unsafe.allocateInstance(TableScanOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -342,18 +342,18 @@ public class TableScanOperator extends AbstractTableScanOperator
 		return value;
 	}
 
-	private static HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> buildProblems(final HashSet<CNFEntry> entries, final int stride, final int length)
+	private static Map<Set<Set<Map<Filter, Filter>>>, BitSet> buildProblems(final Set<CNFEntry> entries, final int stride, final int length)
 	{
 		final int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
 		final boolean isV6OrHigher = (pbpeVer >= 6);
-		final HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> retval = new HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet>();
+		final Map<Set<Set<Map<Filter, Filter>>>, BitSet> retval = new HashMap<>();
 
-		final HashMap<HashSet<Integer>, HashSet<HashSet<HashMap<Filter, Filter>>>> tempMap = new HashMap<HashSet<Integer>, HashSet<HashSet<HashMap<Filter, Filter>>>>();
+		final Map<Set<Integer>, Set<Set<Map<Filter, Filter>>>> tempMap = new HashMap<>();
 		int pos = 1;
 		while (pos < length)
 		{
-			final HashSet<Integer> key = new HashSet<Integer>();
-			final HashSet<HashSet<HashMap<Filter, Filter>>> tempHSHM = new HashSet<HashSet<HashMap<Filter, Filter>>>();
+			final Set<Integer> key = new HashSet<Integer>();
+			final Set<Set<Map<Filter, Filter>>> tempHSHM = new HashSet<>();
 			int i = 0;
 			for (final CNFEntry entry : entries)
 			{
@@ -370,7 +370,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 				i++;
 			}
 
-			HashSet<HashSet<HashMap<Filter, Filter>>> hshm = tempMap.get(key);
+			Set<Set<Map<Filter, Filter>>> hshm = tempMap.get(key);
 			if (hshm == null)
 			{
 				hshm = tempHSHM;
@@ -399,7 +399,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 		return retval;
 	}
 
-	protected static boolean canAnythingInRangeSatisfyFilters(final ArrayList<Filter> filters, Object lowLE, Object highLE) throws Exception
+	protected static boolean canAnythingInRangeSatisfyFilters(final List<Filter> filters, Object lowLE, Object highLE) throws Exception
 	{
 		if (lowLE == null)
 		{
@@ -473,7 +473,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 				}
 			}
 
-			final HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
+			final Map<String, Integer> cols2Pos = new HashMap<String, Integer>();
 			String col = null;
 			if (filter.leftIsColumn())
 			{
@@ -484,9 +484,9 @@ public class TableScanOperator extends AbstractTableScanOperator
 				col = filter.rightColumn();
 			}
 			cols2Pos.put(col, 0);
-			final ArrayList<Object> row1 = new ArrayList<Object>(1);
+			final List<Object> row1 = new ArrayList<Object>(1);
 			row1.add(lowLE);
-			final ArrayList<Object> row2 = new ArrayList<Object>(1);
+			final List<Object> row2 = new ArrayList<Object>(1);
 			row2.add(highLE);
 
 			try
@@ -519,7 +519,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 
 	public void addActiveDeviceForParent(final int i, final Operator op)
 	{
-		ArrayList<Integer> list = activeDevices.get(op);
+		List<Integer> list = activeDevices.get(op);
 
 		if (list == null)
 		{
@@ -532,14 +532,14 @@ public class TableScanOperator extends AbstractTableScanOperator
 		list.add(i);
 	}
 
-	public void addActiveDevices(final ArrayList<Integer> devs)
+	public void addActiveDevices(final List<Integer> devs)
 	{
 		devices.addAll(devs);
 	}
 
-	public void addActiveDevicesForParent(final ArrayList<Integer> is, final Operator op)
+	public void addActiveDevicesForParent(final List<Integer> is, final Operator op)
 	{
-		final ArrayList<Integer> list = activeDevices.get(op);
+		final List<Integer> list = activeDevices.get(op);
 
 		if (list == null)
 		{
@@ -552,7 +552,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 
 	public void addActiveNodeForParent(final int i, final Operator op)
 	{
-		ArrayList<Integer> list = activeNodes.get(op);
+		List<Integer> list = activeNodes.get(op);
 
 		if (list == null)
 		{
@@ -565,11 +565,11 @@ public class TableScanOperator extends AbstractTableScanOperator
 		list.add(i);
 	}
 
-	public void addFilter(final ArrayList<Filter> filters, final Operator op, final Operator opParent, final Transaction tx) throws Exception
+	public void addFilter(final List<Filter> filters, final Operator op, final Operator opParent, final Transaction tx) throws Exception
 	{
 		opParents.put(opParent, op);
 
-		HashSet<HashMap<Filter, Filter>> f = this.filters.get(op);
+		Set<Map<Filter, Filter>> f = this.filters.get(op);
 		if (f == null)
 		{
 			final Operator op2 = opParents.get(op);
@@ -582,8 +582,8 @@ public class TableScanOperator extends AbstractTableScanOperator
 			}
 			else
 			{
-				f = new HashSet<HashMap<Filter, Filter>>();
-				final HashMap<Filter, Filter> map = new HashMap<Filter, Filter>();
+				f = new HashSet<Map<Filter, Filter>>();
+				final Map<Filter, Filter> map = new HashMap<Filter, Filter>();
 				for (final Filter filter : filters)
 				{
 					map.put(filter, filter);
@@ -598,7 +598,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 			}
 		}
 
-		final HashMap<Filter, Filter> map = new HashMap<Filter, Filter>();
+		final Map<Filter, Filter> map = new HashMap<Filter, Filter>();
 		for (final Filter filter : filters)
 		{
 			map.put(filter, filter);
@@ -625,7 +625,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
 		return children;
 	}
@@ -667,11 +667,11 @@ public class TableScanOperator extends AbstractTableScanOperator
 		}
 		if (neededPos != null)
 		{
-			retval.neededPos = (ArrayList<Integer>)neededPos.clone();
+			retval.neededPos = new ArrayList<>(neededPos);
 		}
 		if (fetchPos != null)
 		{
-			retval.fetchPos = (ArrayList<Integer>)fetchPos.clone();
+			retval.fetchPos = new ArrayList<>(fetchPos);
 		}
 		if (midPos2Col != null)
 		{
@@ -679,11 +679,11 @@ public class TableScanOperator extends AbstractTableScanOperator
 		}
 		if (midCols2Types != null)
 		{
-			retval.midCols2Types = (HashMap<String, String>)midCols2Types.clone();
+			retval.midCols2Types = new HashMap<>(midCols2Types);
 		}
-		retval.cols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
-		retval.pos2Col = (TreeMap<Integer, String>)pos2Col.clone();
-		retval.cols2Types = (HashMap<String, String>)cols2Types.clone();
+		retval.cols2Pos = new HashMap<>(cols2Pos);
+		retval.pos2Col = new HashMap<>(pos2Col);
+		retval.cols2Types = new HashMap<>(cols2Types);
 		retval.set = set;
 		retval.partMeta = partMeta;
 		retval.phase2Done = phase2Done;
@@ -694,7 +694,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 		retval.tType = tType;
 		if (devices != null)
 		{
-			retval.devices = (ArrayList<Integer>)devices.clone();
+			retval.devices = new ArrayList<>(devices);
 		}
 		retval.indexOnly = indexOnly;
 		if (alias != null && !alias.equals(""))
@@ -767,7 +767,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 		return partMeta.deviceIsHash();
 	}
 
-	public ArrayList<Integer> deviceSet()
+	public List<Integer> deviceSet()
 	{
 		return partMeta.deviceSet();
 	}
@@ -827,17 +827,17 @@ public class TableScanOperator extends AbstractTableScanOperator
 		return orderedFilters.get(op);
 	}
 
-	public ArrayList<String> getDeviceHash()
+	public List<String> getDeviceHash()
 	{
 		return partMeta.getDeviceHash();
 	}
 
-	public ArrayList<Integer> getDeviceList()
+	public List<Integer> getDeviceList()
 	{
 		return devices;
 	}
 
-	public ArrayList<Integer> getDeviceList(final Operator op)
+	public List<Integer> getDeviceList(final Operator op)
 	{
 		return activeDevices.get(op);
 	}
@@ -847,15 +847,15 @@ public class TableScanOperator extends AbstractTableScanOperator
 		return partMeta.getDeviceRangeCol();
 	}
 
-	public ArrayList<Object> getDeviceRanges()
+	public List<Object> getDeviceRanges()
 	{
 		return partMeta.getDeviceRanges();
 	}
 
-	public ArrayList<Integer> getDevicesMatchingRangeFilters(final ArrayList<Filter> rangeFilters) throws Exception
+	public List<Integer> getDevicesMatchingRangeFilters(final List<Filter> rangeFilters) throws Exception
 	{
-		final ArrayList<Integer> retval = new ArrayList<Integer>();
-		ArrayList<Integer> deviceList = null;
+		final List<Integer> retval = new ArrayList<Integer>();
+		List<Integer> deviceList = null;
 		if (partMeta.allDevices())
 		{
 			final int num = partMeta.getNumDevices();
@@ -903,7 +903,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 		return null;
 	}
 
-	public HashSet<HashMap<Filter, Filter>> getHSHM()
+	public Set<Map<Filter, Filter>> getHSHM()
 	{
 		final CNFFilter retval = orderedFilters.get(parents.get(0));
 		if (retval == null)
@@ -919,12 +919,12 @@ public class TableScanOperator extends AbstractTableScanOperator
 		return midPos2Col;
 	}
 
-	public ArrayList<String> getNodeGroupHash()
+	public List<String> getNodeGroupHash()
 	{
 		return partMeta.getNodeGroupHash();
 	}
 
-	public HashMap<Integer, ArrayList<Integer>> getNodeGroupHashMap()
+	public Map<Integer, List<Integer>> getNodeGroupHashMap()
 	{
 		return partMeta.getNodeGroupHashMap();
 	}
@@ -934,15 +934,15 @@ public class TableScanOperator extends AbstractTableScanOperator
 		return partMeta.getNodeGroupRangeCol();
 	}
 
-	public ArrayList<Object> getNodeGroupRanges()
+	public List<Object> getNodeGroupRanges()
 	{
 		return partMeta.getNodeGroupRanges();
 	}
 
-	public ArrayList<Integer> getNodeGroupsMatchingRangeFilters(final ArrayList<Filter> rangeFilters) throws Exception
+	public List<Integer> getNodeGroupsMatchingRangeFilters(final List<Filter> rangeFilters) throws Exception
 	{
-		final ArrayList<Integer> retval = new ArrayList<Integer>();
-		final ArrayList<Integer> nodeGroupList = partMeta.nodeGroupSet();
+		final List<Integer> retval = new ArrayList<Integer>();
+		final List<Integer> nodeGroupList = partMeta.nodeGroupSet();
 
 		Object oldLE = null;
 		int i = 0;
@@ -965,17 +965,17 @@ public class TableScanOperator extends AbstractTableScanOperator
 		return retval;
 	}
 
-	public ArrayList<String> getNodeHash()
+	public List<String> getNodeHash()
 	{
 		return partMeta.getNodeHash();
 	}
 
-	public ArrayList<Integer> getNodeList()
+	public List<Integer> getNodeList()
 	{
 		return partMeta.nodeSet();
 	}
 
-	public ArrayList<Integer> getNodeList(final Operator op)
+	public List<Integer> getNodeList(final Operator op)
 	{
 		return activeNodes.get(op);
 	}
@@ -985,15 +985,15 @@ public class TableScanOperator extends AbstractTableScanOperator
 		return partMeta.getNodeRangeCol();
 	}
 
-	public ArrayList<Object> getNodeRanges()
+	public List<Object> getNodeRanges()
 	{
 		return partMeta.getNodeRanges();
 	}
 
-	public ArrayList<Integer> getNodesMatchingRangeFilters(final ArrayList<Filter> rangeFilters) throws Exception
+	public List<Integer> getNodesMatchingRangeFilters(final List<Filter> rangeFilters) throws Exception
 	{
-		final ArrayList<Integer> retval = new ArrayList<Integer>();
-		ArrayList<Integer> nodeList = null;
+		final List<Integer> retval = new ArrayList<Integer>();
+		List<Integer> nodeList = null;
 		if (partMeta.allNodes())
 		{
 			final int num = partMeta.getNumNodes();
@@ -1012,7 +1012,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 			{
 				final Iterator iter = partMeta.getNodeGroupHashMap().values().iterator();
 				iter.hasNext();
-				final int size = ((ArrayList<Integer>)(iter.next())).size();
+				final int size = ((List<Integer>)(iter.next())).size();
 				while (i < size)
 				{
 					nodeList.add(i);
@@ -1069,8 +1069,8 @@ public class TableScanOperator extends AbstractTableScanOperator
 		cols2Types.put("_RID3", "INT");
 		cols2Types.put("_RID4", "INT");
 
-		final HashMap<String, Integer> newCols2Pos = new HashMap<String, Integer>();
-		final TreeMap<Integer, String> newPos2Col = new TreeMap<Integer, String>();
+		final Map<String, Integer> newCols2Pos = new HashMap<String, Integer>();
+		final Map<Integer, String> newPos2Col = new TreeMap<Integer, String>();
 		newCols2Pos.put("_RID1", 0);
 		newCols2Pos.put("_RID2", 1);
 		newCols2Pos.put("_RID3", 2);
@@ -1113,7 +1113,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 		return name;
 	}
 
-	public HashMap<String, Integer> getTableCols2Pos()
+	public Map<String, Integer> getTableCols2Pos()
 	{
 		return tableCols2Pos;
 	}
@@ -1230,7 +1230,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 		return partMeta.nodeGroupIsHash();
 	}
 
-	public ArrayList<Integer> nodeGroupSet()
+	public List<Integer> nodeGroupSet()
 	{
 		return partMeta.nodeGroupSet();
 	}
@@ -1240,7 +1240,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 		return partMeta.nodeIsHash();
 	}
 
-	public ArrayList<Integer> nodeSet()
+	public List<Integer> nodeSet()
 	{
 		return partMeta.nodeSet();
 	}
@@ -1392,11 +1392,11 @@ public class TableScanOperator extends AbstractTableScanOperator
 		scanIndex.setTransaction(new Transaction(0));
 	}
 
-	public void setNeededCols(ArrayList<String> needed)
+	public void setNeededCols(List<String> needed)
 	{
 		if (getRID)
 		{
-			final ArrayList<String> newNeeded = new ArrayList<String>(needed.size());
+			final List<String> newNeeded = new ArrayList<String>(needed.size());
 			needed.remove(0);
 			needed.remove(0);
 			needed.remove(0);
@@ -1427,7 +1427,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 		}
 
 		int i = 0;
-		final HashMap<String, Integer> fetchCols2Pos = new HashMap<String, Integer>();
+		final Map<String, Integer> fetchCols2Pos = new HashMap<String, Integer>();
 		midPos2Col = new String[fetchPos.size()];
 		midCols2Types = new HashMap<String, String>();
 		for (final int pos : fetchPos)
@@ -1453,7 +1453,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 		// update internal metadata x3
 		cols2Pos = new HashMap<String, Integer>();
 		pos2Col = new TreeMap<Integer, String>();
-		final HashMap<String, String> tempCols2Types = new HashMap<String, String>();
+		final Map<String, String> tempCols2Types = new HashMap<String, String>();
 		i = 0;
 		for (final String col : needed)
 		{
@@ -1599,7 +1599,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 	{
 		if (referencesHash == null)
 		{
-			final HashSet<Integer> temp = new HashSet<Integer>();
+			final Set<Integer> temp = new HashSet<Integer>();
 			for (final String s : filter.getReferencesHash())
 			{
 				temp.add(s.hashCode());
@@ -1613,11 +1613,11 @@ public class TableScanOperator extends AbstractTableScanOperator
 
 	public static class CNFEntry implements Serializable
 	{
-		private final HashSet<HashMap<Filter, Filter>> cnf;
+		private final Set<Map<Filter, Filter>> cnf;
 		private final BitSet bitSet;
 		private final AtomicLong usage = new AtomicLong(0);
 
-		public CNFEntry(final HashSet<HashMap<Filter, Filter>> cnf, final BitSet bitSet)
+		public CNFEntry(final Set<Map<Filter, Filter>> cnf, final BitSet bitSet)
 		{
 			this.cnf = cnf;
 			this.bitSet = bitSet;
@@ -1635,7 +1635,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 			return bitSet;
 		}
 
-		public HashSet<HashMap<Filter, Filter>> getCNF()
+		public Set<Map<Filter, Filter>> getCNF()
 		{
 			return cnf;
 		}
@@ -1755,7 +1755,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 			int get = 0;
 			int skip = 0;
 			boolean checkNoResults = (filter != null && !(filter instanceof NullCNFFilter) && !sample);
-			HashSet<HashMap<Filter, Filter>> hshm = null;
+			Set<Map<Filter, Filter>> hshm = null;
 			if (checkNoResults)
 			{
 				hshm = filter.getHSHM();
@@ -1825,14 +1825,14 @@ public class TableScanOperator extends AbstractTableScanOperator
 				}
 			}
 
-			final ArrayList<String> types = new ArrayList<String>(midPos2Col.length);
+			final List<String> types = new ArrayList<String>(midPos2Col.length);
 			for (final String entry : midPos2Col)
 			{
 				types.add(midCols2Types.get(entry));
 			}
 
-			final ArrayList<Integer> cols = new ArrayList<Integer>(fetchPos.size());
-			final HashMap<Integer, Integer> rowToIterator = new HashMap<Integer, Integer>();
+			final List<Integer> cols = new ArrayList<Integer>(fetchPos.size());
+			final Map<Integer, Integer> rowToIterator = new HashMap<Integer, Integer>();
 
 			if (!getRID)
 			{
@@ -1893,7 +1893,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 						throw new Exception("Unable to open file " + in);
 					}
 
-					final HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+					final Map<Integer, DataType> layout = new HashMap<Integer, DataType>();
 					for (final Map.Entry entry : tablePos2Col.entrySet())
 					{
 						final String type = tableCols2Types.get(entry.getValue());
@@ -1943,7 +1943,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 					final int MAX_PAGES_IN_ADVANCE = PREFETCH_REQUEST_SIZE * 2;
 
 					RequestPagesThread raThread = null;
-					final ArrayList<Integer> skipped = new ArrayList<Integer>();
+					final List<Integer> skipped = new ArrayList<Integer>();
 
 					BitSet pagesToSkip = null;
 					BitSet newPagesToSkip = null;
@@ -1984,7 +1984,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 								// PREFETCH_REQUEST_SIZE < numBlocks ?
 								// PREFETCH_REQUEST_SIZE : numBlocks -
 								// lastRequested - 1];
-								final ArrayList<Block> toRequest = new ArrayList<Block>();
+								final List<Block> toRequest = new ArrayList<Block>();
 								int i = 0;
 								final int length = lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1;
 								while (i < length)
@@ -2008,7 +2008,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 										{
 											final ThreadMXBean tmxb = ManagementFactory.getThreadMXBean();
 											final long start = tmxb.getCurrentThreadCpuTime();
-											final Set<HashSet<HashMap<Filter, Filter>>> filters = noResults.get(block);
+											final Set<Set<Map<Filter, Filter>>> filters = noResults.get(block);
 											if (filters.size() > 0)
 											{
 												// HRDBMSWorker.logger.debug("Filters
@@ -2091,7 +2091,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 							}
 							else
 							{
-								final ArrayList<Block> toRequest = new ArrayList<Block>();
+								final List<Block> toRequest = new ArrayList<Block>();
 								int i = 0;
 								final int length = lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1;
 								while (i < length)
@@ -2163,7 +2163,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 						final Block thisBlock = new Block(in, onPage);
 						if (hshm != null)
 						{
-							// Set<HashSet<HashMap<Filter, Filter>>> filters =
+							// Set<Set<Map<Filter, Filter>>> filters =
 							// noResults.get(thisBlock);
 							// if (filter != null && !canSatisfy(hshm, filters))
 							// {
@@ -2299,7 +2299,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 
 										if (neededPosNeeded)
 										{
-											final ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
+											final List<Object> newRow = new ArrayList<Object>(neededPos.size());
 											int z = 0;
 											final int limit = neededPos.size();
 											// for (final int pos : neededPos)
@@ -2339,7 +2339,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 								else
 								{
 									hadResults = true;
-									// final ArrayList<Object> newRow = new
+									// final List<Object> newRow = new
 									// ArrayList<Object>(neededPos.size());
 									// for (final int pos : neededPos)
 									// {
@@ -2365,7 +2365,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 						{
 							final ThreadMXBean tmxb = ManagementFactory.getThreadMXBean();
 							final long start = tmxb.getCurrentThreadCpuTime();
-							final HashSet<Filter> falseForPage = filter.getFalseResults();
+							final Set<Filter> falseForPage = filter.getFalseResults();
 							for (final Filter f : falseForPage)
 							{
 								CompressedBitSet bs = falseFilters.get(f);
@@ -2423,12 +2423,12 @@ public class TableScanOperator extends AbstractTableScanOperator
 						{
 							final Filter f = (Filter)entry.getKey();
 							final CompressedBitSet bs = (CompressedBitSet)entry.getValue();
-							final HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
+							final Map<Filter, Filter> hm = new HashMap<Filter, Filter>();
 							hm.put(f, f);
-							final HashSet<HashMap<Filter, Filter>> hshm2 = new HashSet<HashMap<Filter, Filter>>();
+							final Set<Map<Filter, Filter>> hshm2 = new HashSet<Map<Filter, Filter>>();
 							hshm2.add(hm);
 							final CNFEntry cnfEntry = new CNFEntry(hshm2, bs);
-							final HashSet<Integer> hashCodes = getAllHashCodes(hshm2);
+							final Set<Integer> hashCodes = getAllHashCodes(hshm2);
 							for (final int i : hashCodes)
 							{
 								final ConcurrentHashMap<CNFEntry, CNFEntry> map = mhm.getMap(i);
@@ -2472,7 +2472,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 							mhm = pbpeCache2.get(in);
 						}
 
-						final HashSet<Integer> hashCodes = getAllHashCodes(hshm);
+						final Set<Integer> hashCodes = getAllHashCodes(hshm);
 						for (final int i : hashCodes)
 						{
 							final ConcurrentHashMap<CNFEntry, CNFEntry> map = mhm.getMap(i);
@@ -2546,7 +2546,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 					// @?Parallel
 					final int device = ins2Device.get(in2);
 					final int currentPage = -1;
-					final HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+					final Map<Integer, DataType> layout = new HashMap<Integer, DataType>();
 					for (final Map.Entry entry : tablePos2Col.entrySet())
 					{
 						final String type = tableCols2Types.get(entry.getValue());
@@ -2582,7 +2582,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 					{
 						if (!indexOnly)
 						{
-							final long partialRid = (Long)(((ArrayList<Object>)o).get(0));
+							final long partialRid = (Long)(((List<Object>)o).get(0));
 							final int blockNum = (int)(partialRid >> 32);
 							final int recNum = (int)(partialRid & 0xFFFFFFFF);
 							// HRDBMSWorker.logger.debug("Col table index fetch
@@ -2599,7 +2599,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 							{
 								node2 = -1;
 							}
-							final ArrayList<FieldValue> r = sch.getRowForColTable(new RID(node2, device, blockNum, recNum));
+							final List<FieldValue> r = sch.getRowForColTable(new RID(node2, device, blockNum, recNum));
 							row.clear();
 
 							int j = 0;
@@ -2660,7 +2660,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 									{
 										if (neededPosNeeded)
 										{
-											final ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
+											final List<Object> newRow = new ArrayList<Object>(neededPos.size());
 											for (final int pos : neededPos)
 											{
 												newRow.add(row.get(pos));
@@ -2714,17 +2714,17 @@ public class TableScanOperator extends AbstractTableScanOperator
 							if (filter != null)
 							{
 								filter.updateCols2Pos(child.getCols2Pos());
-								if (!filter.passes((ArrayList<Object>)o))
+								if (!filter.passes((List<Object>)o))
 								{
 									o = child.next(TableScanOperator.this);
 									continue;
 								}
 							}
 
-							final ArrayList<Object> row2 = new ArrayList<Object>(pos2Col.size());
+							final List<Object> row2 = new ArrayList<Object>(pos2Col.size());
 							for (final String col : pos2Col.values())
 							{
-								row2.add(((ArrayList<Object>)o).get(child.getCols2Pos().get(col)));
+								row2.add(((List<Object>)o).get(child.getCols2Pos().get(col)));
 							}
 
 							if (!forceDone)
@@ -2769,7 +2769,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 			// boolean checkNoResults = (filter != null && !(filter instanceof
 			// NullCNFFilter) && !sample);
 			boolean checkNoResults = false;
-			HashSet<HashMap<Filter, Filter>> hshm = null;
+			Set<Map<Filter, Filter>> hshm = null;
 			if (checkNoResults)
 			{
 				hshm = filter.getHSHM();
@@ -2826,7 +2826,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 					}
 				}
 			}
-			final ArrayList<String> types = new ArrayList<String>(midPos2Col.length);
+			final List<String> types = new ArrayList<String>(midPos2Col.length);
 			for (final String entry : midPos2Col)
 			{
 				types.add(midCols2Types.get(entry));
@@ -2861,7 +2861,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 						// in);
 						throw new Exception("Unable to open file " + in);
 					}
-					final HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+					final Map<Integer, DataType> layout = new HashMap<Integer, DataType>();
 					for (final Map.Entry entry : tablePos2Col.entrySet())
 					{
 						final String type = tableCols2Types.get(entry.getValue());
@@ -2933,7 +2933,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 								// PREFETCH_REQUEST_SIZE < numBlocks ?
 								// PREFETCH_REQUEST_SIZE : numBlocks -
 								// lastRequested - 1];
-								final ArrayList<Block> toRequest = new ArrayList<Block>();
+								final List<Block> toRequest = new ArrayList<Block>();
 								int i = 0;
 								final int length = lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1;
 								while (i < length)
@@ -2941,7 +2941,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 									final Block block = new Block(in, lastRequested + i + 1);
 									// if (hshm != null)
 									// {
-									// Set<HashSet<HashMap<Filter, Filter>>>
+									// Set<Set<Map<Filter, Filter>>>
 									// filters = noResults.get(block);
 									// if (filter != null &&
 									// filters.contains(hshm))
@@ -2975,7 +2975,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 							}
 							else
 							{
-								final ArrayList<Block> toRequest = new ArrayList<Block>();
+								final List<Block> toRequest = new ArrayList<Block>();
 								int i = 0;
 								final int length = lastRequested + PREFETCH_REQUEST_SIZE < numBlocks ? PREFETCH_REQUEST_SIZE : numBlocks - lastRequested - 1;
 								while (i < length)
@@ -3048,7 +3048,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 						// Block thisBlock = new Block(in, onPage);
 						// if (hshm != null)
 						// {
-						// Set<HashSet<HashMap<Filter, Filter>>> filters =
+						// Set<Set<Map<Filter, Filter>>> filters =
 						// noResults.get(thisBlock);
 						// if (filter != null && filters.contains(hshm))
 						// {
@@ -3171,7 +3171,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 							// {
 							// if (filter.passes(row))
 							// {
-							// final ArrayList<Object> newRow = new
+							// final List<Object> newRow = new
 							// ArrayList<Object>(neededPos.size());
 							// for (final int pos : neededPos)
 							// {
@@ -3182,7 +3182,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 							// }
 							// else
 							// {
-							// final ArrayList<Object> newRow = new
+							// final List<Object> newRow = new
 							// ArrayList<Object>(neededPos.size());
 							// for (final int pos : neededPos)
 							// {
@@ -3227,7 +3227,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 
 										if (neededPosNeeded)
 										{
-											final ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
+											final List<Object> newRow = new ArrayList<Object>(neededPos.size());
 											int z = 0;
 											final int limit = neededPos.size();
 											// for (final int pos : neededPos)
@@ -3266,7 +3266,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 								}
 								else
 								{
-									// final ArrayList<Object> newRow = new
+									// final List<Object> newRow = new
 									// ArrayList<Object>(neededPos.size());
 									// for (final int pos : neededPos)
 									// {
@@ -3324,7 +3324,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 					// @?Parallel
 					final int device = ins2Device.get(in2);
 					final int currentPage = -1;
-					final HashMap<Integer, DataType> layout = new HashMap<Integer, DataType>();
+					final Map<Integer, DataType> layout = new HashMap<Integer, DataType>();
 					for (final Map.Entry entry : tablePos2Col.entrySet())
 					{
 						final String type = tableCols2Types.get(entry.getValue());
@@ -3360,7 +3360,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 					{
 						if (!indexOnly)
 						{
-							final long partialRid = (Long)(((ArrayList<Object>)o).get(0));
+							final long partialRid = (Long)(((List<Object>)o).get(0));
 							final int blockNum = (int)(partialRid >> 32);
 							final int recNum = (int)(partialRid & 0xFFFFFFFF);
 							if (blockNum != currentPage)
@@ -3449,7 +3449,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 								// {
 								// if (filter.passes(row))
 								// {
-								// final ArrayList<Object> newRow = new
+								// final List<Object> newRow = new
 								// ArrayList<Object>(neededPos.size());
 								// for (final int pos : neededPos)
 								// {
@@ -3460,7 +3460,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 								// }
 								// else
 								// {
-								// final ArrayList<Object> newRow = new
+								// final List<Object> newRow = new
 								// ArrayList<Object>(neededPos.size());
 								// for (final int pos : neededPos)
 								// {
@@ -3500,7 +3500,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 
 										if (neededPosNeeded)
 										{
-											final ArrayList<Object> newRow = new ArrayList<Object>(neededPos.size());
+											final List<Object> newRow = new ArrayList<Object>(neededPos.size());
 											for (final int pos : neededPos)
 											{
 												newRow.add(row.get(pos));
@@ -3532,7 +3532,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 								}
 								else
 								{
-									// final ArrayList<Object> newRow = new
+									// final List<Object> newRow = new
 									// ArrayList<Object>(neededPos.size());
 									// for (final int pos : neededPos)
 									// {
@@ -3560,17 +3560,17 @@ public class TableScanOperator extends AbstractTableScanOperator
 							if (filter != null)
 							{
 								filter.updateCols2Pos(child.getCols2Pos());
-								if (!filter.passes((ArrayList<Object>)o))
+								if (!filter.passes((List<Object>)o))
 								{
 									o = child.next(TableScanOperator.this);
 									continue;
 								}
 							}
 
-							final ArrayList<Object> row2 = new ArrayList<Object>(pos2Col.size());
+							final List<Object> row2 = new ArrayList<Object>(pos2Col.size());
 							for (final String col : pos2Col.values())
 							{
-								row2.add(((ArrayList<Object>)o).get(child.getCols2Pos().get(col)));
+								row2.add(((List<Object>)o).get(child.getCols2Pos().get(col)));
 							}
 
 							if (!forceDone)
@@ -3622,7 +3622,7 @@ public class TableScanOperator extends AbstractTableScanOperator
                     } else {
                         CNFFilter filter = orderedFilters.get(parents.get(0));
                         if (filter != null) {
-                            if (filter.passes((ArrayList<Object>) row)) {
+                            if (filter.passes((List<Object>) row)) {
                                 readBuffer.put(row);
                             }
                         } else {
@@ -3669,7 +3669,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 			tsoCount.decrementAndGet();
 		}
 
-		private boolean canSatisfy(final HashSet<HashMap<Filter, Filter>> hshm, final Set<HashSet<HashMap<Filter, Filter>>> filters)
+		private boolean canSatisfy(final Set<Map<Filter, Filter>> hshm, final Set<Set<Map<Filter, Filter>>> filters)
 		{
 			if (filters.contains(hshm))
 			{
@@ -3680,8 +3680,8 @@ public class TableScanOperator extends AbstractTableScanOperator
 			}
 
 			final long start = System.currentTimeMillis();
-			final ArrayList<Filter> ands = new ArrayList<Filter>();
-			for (final HashMap<Filter, Filter> hm : hshm)
+			final List<Filter> ands = new ArrayList<Filter>();
+			for (final Map<Filter, Filter> hm : hshm)
 			{
 				if (hm.size() == 1)
 				{
@@ -3710,11 +3710,11 @@ public class TableScanOperator extends AbstractTableScanOperator
 
 			// if we can prove that one of the filters in "ands" cannot be
 			// satisfied, we can return false
-			for (final HashSet<HashMap<Filter, Filter>> hshm2 : filters)
+			for (final Set<Map<Filter, Filter>> hshm2 : filters)
 			{
 				if (hshm2.size() == 1)
 				{
-					for (final HashMap<Filter, Filter> hm : hshm2)
+					for (final Map<Filter, Filter> hm : hshm2)
 					{
 						if (hm.size() == 1)
 						{
@@ -3868,15 +3868,15 @@ public class TableScanOperator extends AbstractTableScanOperator
 				return true;
 			}
 
-			final ArrayList<Filter> ranges = new ArrayList<Filter>();
-			for (final HashSet<HashMap<Filter, Filter>> hshm2 : filters)
+			final List<Filter> ranges = new ArrayList<Filter>();
+			for (final Set<Map<Filter, Filter>> hshm2 : filters)
 			{
 				if (hshm2.size() == 2)
 				{
 					Filter l = null;
 					Filter g = null;
 					String col = null;
-					for (final HashMap<Filter, Filter> hm : hshm2)
+					for (final Map<Filter, Filter> hm : hshm2)
 					{
 						if (hm.size() == 1)
 						{
@@ -4057,7 +4057,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 			return true;
 		}
 
-		private boolean canSatisfySMT(final HashSet<HashMap<Filter, Filter>> hshm, final Set<HashSet<HashMap<Filter, Filter>>> filters, final SolverContext context)
+		private boolean canSatisfySMT(final Set<Map<Filter, Filter>> hshm, final Set<Set<Map<Filter, Filter>>> filters, final SolverContext context)
 		{
 			if (filters.contains(hshm))
 			{
@@ -4087,11 +4087,11 @@ public class TableScanOperator extends AbstractTableScanOperator
 			final FormulaManager fmgr = context.getFormulaManager();
 			final BooleanFormulaManager bmgr = fmgr.getBooleanFormulaManager();
 			final RationalFormulaManager rmgr = fmgr.getRationalFormulaManager();
-			final HashMap<String, RationalFormula> vars = new HashMap<String, RationalFormula>();
-			final HashSet<String> neededCols = getNeededCols(hshm);
+			final Map<String, RationalFormula> vars = new HashMap<String, RationalFormula>();
+			final Set<String> neededCols = getNeededCols(hshm);
 
-			final ArrayList<BooleanFormula> clauses = new ArrayList<BooleanFormula>();
-			for (final HashSet<HashMap<Filter, Filter>> hshm2 : filters)
+			final List<BooleanFormula> clauses = new ArrayList<BooleanFormula>();
+			for (final Set<Map<Filter, Filter>> hshm2 : filters)
 			{
 				if (containsNeededCol(hshm2, neededCols))
 				{
@@ -4149,17 +4149,17 @@ public class TableScanOperator extends AbstractTableScanOperator
 			}
 		}
 
-		private BitSet computePagesToSkip(final HashSet<HashMap<Filter, Filter>> hshm, final SolverContext context, final String fn, final int stride, final boolean v8, final boolean v9)
+		private BitSet computePagesToSkip(final Set<Map<Filter, Filter>> hshm, final SolverContext context, final String fn, final int stride, final boolean v8, final boolean v9)
 		{
 			final ThreadMXBean tmxb = ManagementFactory.getThreadMXBean();
-			HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> problems = null;
-			final HashSet<CNFEntry> entries = new HashSet<CNFEntry>();
+			Map<Set<Set<Map<Filter, Filter>>>, BitSet> problems = null;
+			final Set<CNFEntry> entries = new HashSet<CNFEntry>();
 			long end1 = 0;
 			final long start = tmxb.getCurrentThreadCpuTime();
 
 			if (!v9)
 			{
-				final HashSet<Integer> hashCodes = getAllHashCodes(hshm);
+				final Set<Integer> hashCodes = getAllHashCodes(hshm);
 				// HRDBMSWorker.logger.debug("Hash codes for " + hshm + " are "
 				// + hashCodes);
 				final MultiHashMap<Integer, CNFEntry> mhm = pbpeCache2.get(fn);
@@ -4230,8 +4230,8 @@ public class TableScanOperator extends AbstractTableScanOperator
 			}
 			else
 			{
-				final HashSet<Integer> hashCodes = getAllHashCodes(hshm);
-				final HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> temp = problemCache.get(fn);
+				final Set<Integer> hashCodes = getAllHashCodes(hshm);
+				final Map<Set<Set<Map<Filter, Filter>>>, BitSet> temp = problemCache.get(fn);
 				if (temp == null)
 				{
 					final MultiHashMap<Integer, CNFEntry> mhm = pbpeCache2.get(fn);
@@ -4270,16 +4270,16 @@ public class TableScanOperator extends AbstractTableScanOperator
 				}
 				else
 				{
-					problems = new HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet>();
+					problems = new HashMap<>();
 					for (final Map.Entry entry : temp.entrySet())
 					{
-						HashSet<HashSet<HashMap<Filter, Filter>>> set = (HashSet<HashSet<HashMap<Filter, Filter>>>)entry.getKey();
-						set = (HashSet<HashSet<HashMap<Filter, Filter>>>)set.clone();
-						final Iterator<HashSet<HashMap<Filter, Filter>>> iter = set.iterator();
+						Set<Set<Map<Filter, Filter>>> set = (Set<Set<Map<Filter, Filter>>>)entry.getKey();
+						set = (new HashSet<>(set));
+						final Iterator<Set<Map<Filter, Filter>>> iter = set.iterator();
 						while (iter.hasNext())
 						{
-							final HashSet<HashMap<Filter, Filter>> hshm2 = iter.next();
-							final HashSet<Integer> hashCodes2 = getAllHashCodes(hshm2);
+							final Set<Map<Filter, Filter>> hshm2 = iter.next();
+							final Set<Integer> hashCodes2 = getAllHashCodes(hshm2);
 							hashCodes2.retainAll(hashCodes);
 							if (hashCodes2.size() == 0)
 							{
@@ -4329,9 +4329,9 @@ public class TableScanOperator extends AbstractTableScanOperator
 			return retval;
 		}
 
-		private boolean containsNeededCol(final HashSet<HashMap<Filter, Filter>> hshm, final HashSet<String> needed)
+		private boolean containsNeededCol(final Set<Map<Filter, Filter>> hshm, final Set<String> needed)
 		{
-			for (final HashMap<Filter, Filter> hm : hshm)
+			for (final Map<Filter, Filter> hm : hshm)
 			{
 				for (final Filter f : hm.keySet())
 				{
@@ -4368,9 +4368,9 @@ public class TableScanOperator extends AbstractTableScanOperator
 			return false;
 		}
 
-		private boolean containsStringMatching(final HashSet<HashMap<Filter, Filter>> hshm)
+		private boolean containsStringMatching(final Set<Map<Filter, Filter>> hshm)
 		{
-			for (final HashMap<Filter, Filter> hm : hshm)
+			for (final Map<Filter, Filter> hm : hshm)
 			{
 				for (final Filter f : hm.keySet())
 				{
@@ -4384,7 +4384,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 			return false;
 		}
 
-		private BooleanFormula convertFToBF(final Filter f, final BooleanFormulaManager bmgr, final RationalFormulaManager rmgr, final HashMap<String, RationalFormula> vars)
+		private BooleanFormula convertFToBF(final Filter f, final BooleanFormulaManager bmgr, final RationalFormulaManager rmgr, final Map<String, RationalFormula> vars)
 		{
 			RationalFormula r = null;
 			RationalFormula r2 = null;
@@ -4487,9 +4487,9 @@ public class TableScanOperator extends AbstractTableScanOperator
 			}
 		}
 
-		private BooleanFormula convertHMToBF(final HashMap<Filter, Filter> hm, final BooleanFormulaManager bmgr, final RationalFormulaManager rmgr, final HashMap<String, RationalFormula> vars)
+		private BooleanFormula convertHMToBF(final Map<Filter, Filter> hm, final BooleanFormulaManager bmgr, final RationalFormulaManager rmgr, final Map<String, RationalFormula> vars)
 		{
-			final ArrayList<BooleanFormula> clauses = new ArrayList<BooleanFormula>();
+			final List<BooleanFormula> clauses = new ArrayList<BooleanFormula>();
 			for (final Filter f : hm.keySet())
 			{
 				if (f.op().equals("LI") || f.op().equals("NL"))
@@ -4515,10 +4515,10 @@ public class TableScanOperator extends AbstractTableScanOperator
 			return b;
 		}
 
-		private BooleanFormula convertHSHMToBF(final HashSet<HashMap<Filter, Filter>> hshm, final BooleanFormulaManager bmgr, final RationalFormulaManager rmgr, final HashMap<String, RationalFormula> vars)
+		private BooleanFormula convertHSHMToBF(final Set<Map<Filter, Filter>> hshm, final BooleanFormulaManager bmgr, final RationalFormulaManager rmgr, final Map<String, RationalFormula> vars)
 		{
-			final ArrayList<BooleanFormula> clauses = new ArrayList<BooleanFormula>();
-			for (final HashMap<Filter, Filter> hm : hshm)
+			final List<BooleanFormula> clauses = new ArrayList<BooleanFormula>();
+			for (final Map<Filter, Filter> hm : hshm)
 			{
 				final BooleanFormula b = convertHMToBF(hm, bmgr, rmgr, vars);
 				if (b != null)
@@ -4542,10 +4542,10 @@ public class TableScanOperator extends AbstractTableScanOperator
 			return b;
 		}
 
-		private HashSet<Integer> getAllHashCodes(final HashSet<HashMap<Filter, Filter>> hshm)
+		private Set<Integer> getAllHashCodes(final Set<Map<Filter, Filter>> hshm)
 		{
-			final HashSet<Integer> retval = new HashSet<Integer>();
-			for (final HashMap<Filter, Filter> hm : hshm)
+			final Set<Integer> retval = new HashSet<Integer>();
+			for (final Map<Filter, Filter> hm : hshm)
 			{
 				for (final Filter f : hm.keySet())
 				{
@@ -4576,10 +4576,10 @@ public class TableScanOperator extends AbstractTableScanOperator
 			return retval;
 		}
 
-		private HashSet<String> getNeededCols(final HashSet<HashMap<Filter, Filter>> hshm)
+		private Set<String> getNeededCols(final Set<Map<Filter, Filter>> hshm)
 		{
-			final HashSet<String> retval = new HashSet<String>();
-			for (final HashMap<Filter, Filter> hm : hshm)
+			final Set<String> retval = new HashSet<String>();
+			for (final Map<Filter, Filter> hm : hshm)
 			{
 				for (final Filter f : hm.keySet())
 				{
@@ -4610,7 +4610,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 			return retval;
 		}
 
-		private BitSet solveProblems(final HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> problems, final SolverContext context, final HashSet<HashMap<Filter, Filter>> hshm)
+		private BitSet solveProblems(final Map<Set<Set<Map<Filter, Filter>>>, BitSet> problems, final SolverContext context, final Set<Map<Filter, Filter>> hshm)
 		{
 			final int pbpeVer = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("pbpe_version"));
 			final boolean isV6OrHigher = (pbpeVer >= 6);
@@ -4625,7 +4625,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 			}
 			for (final Map.Entry entry : problems.entrySet())
 			{
-				final HashSet<HashSet<HashMap<Filter, Filter>>> hshshm = (HashSet<HashSet<HashMap<Filter, Filter>>>)entry.getKey();
+				final Set<Set<Map<Filter, Filter>>> hshshm = (Set<Set<Map<Filter, Filter>>>)entry.getKey();
 				if (!canSatisfySMT(hshm, hshshm, context))
 				{
 					if (isV6OrHigher)
@@ -4642,13 +4642,13 @@ public class TableScanOperator extends AbstractTableScanOperator
 			return retval;
 		}
 
-		private BitSet solveProblemsNonSMT(final HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> problems, final HashSet<HashMap<Filter, Filter>> hshm)
+		private BitSet solveProblemsNonSMT(final Map<Set<Set<Map<Filter, Filter>>>, BitSet> problems, final Set<Map<Filter, Filter>> hshm)
 		{
 			final BitSet retval = new CompressedBitSet();
 
 			for (final Map.Entry entry : problems.entrySet())
 			{
-				final HashSet<HashSet<HashMap<Filter, Filter>>> hshshm = (HashSet<HashSet<HashMap<Filter, Filter>>>)entry.getKey();
+				final Set<Set<Map<Filter, Filter>>> hshshm = (Set<Set<Map<Filter, Filter>>>)entry.getKey();
 				if (!canSatisfy(hshm, hshshm))
 				{
 					((CompressedBitSet)retval).or((CompressedBitSet)entry.getValue());
@@ -4682,13 +4682,13 @@ public class TableScanOperator extends AbstractTableScanOperator
 
 	private final class InitThread extends ThreadPoolThread
 	{
-		private final ArrayList<ReaderThread> reads = new ArrayList<ReaderThread>(ins.size());
+		private final List<ReaderThread> reads = new ArrayList<ReaderThread>(ins.size());
 
 		@Override
 		public void run()
 		{
-			final ArrayList<String> dmlTxStrs = new ArrayList<String>();
-			final ArrayList<Integer> sorted = new ArrayList(MetaData.getNumDevices());
+			final List<String> dmlTxStrs = new ArrayList<String>();
+			final List<Integer> sorted = new ArrayList(MetaData.getNumDevices());
 			int i = 0;
 			while (i < MetaData.getNumDevices())
 			{
@@ -4885,7 +4885,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 	private static class ProblemRebuildThread extends HRDBMSThread
 	{
 		private final LinkedBlockingQueue<String> q;
-		private final HashMap<String, Long> times = new HashMap<String, Long>();
+		private final Map<String, Long> times = new HashMap<String, Long>();
 
 		public ProblemRebuildThread(final LinkedBlockingQueue<String> q)
 		{
@@ -4911,7 +4911,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 					}
 
 					// rebuild data for fragment fn
-					final HashSet<CNFEntry> entries = new HashSet<CNFEntry>();
+					final Set<CNFEntry> entries = new HashSet<CNFEntry>();
 					time = System.currentTimeMillis();
 					final MultiHashMap<Integer, CNFEntry> mhm = pbpeCache2.get(fn);
 					final Set<Integer> hashCodes = mhm.getKeySet();
@@ -4934,7 +4934,7 @@ public class TableScanOperator extends AbstractTableScanOperator
 						}
 					}
 
-					final HashMap<HashSet<HashSet<HashMap<Filter, Filter>>>, BitSet> problems = buildProblems(entries, 1, length);
+					final Map<Set<Set<Map<Filter, Filter>>>, BitSet> problems = buildProblems(entries, 1, length);
 					problemCache.put(fn, problems);
 					times.put(fn, time);
 				}

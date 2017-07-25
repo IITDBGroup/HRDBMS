@@ -10,11 +10,7 @@ import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
@@ -42,13 +38,13 @@ public final class IntersectOperator implements Operator, Serializable
 	}
 
 	private transient MetaData meta;
-	private ArrayList<Operator> children = new ArrayList<Operator>();
+	private List<Operator> children = new ArrayList<Operator>();
 	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
+	private Map<String, String> cols2Types;
+	private Map<String, Integer> cols2Pos;
+	private Map<Integer, String> pos2Col;
 	private int node;
-	private transient ArrayList<HashSet<ArrayList<Object>>> sets;
+	private transient List<Set<List<Object>>> sets;
 	private transient BufferedLinkedBlockingQueue buffer;
 	private long estimate = 16;
 	private transient boolean inMem;
@@ -57,11 +53,11 @@ public final class IntersectOperator implements Operator, Serializable
 	private volatile boolean startDone = false;
 
 	private boolean estimateSet = false;
-	private transient ArrayList<ArrayList<String>> externalFiles;
+	private transient List<List<String>> externalFiles;
 
-	private transient ArrayList<ArrayList<RandomAccessFile>> rafs;
+	private transient List<List<RandomAccessFile>> rafs;
 
-	private transient ArrayList<ArrayList<FileChannel>> fcs;
+	private transient List<List<FileChannel>> fcs;
 	private transient AtomicLong received;
 	private transient volatile boolean demReceived;
 
@@ -71,7 +67,7 @@ public final class IntersectOperator implements Operator, Serializable
 		received = new AtomicLong(0);
 	}
 
-	public static IntersectOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static IntersectOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final IntersectOperator value = (IntersectOperator)unsafe.allocateInstance(IntersectOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -106,11 +102,11 @@ public final class IntersectOperator implements Operator, Serializable
 
 	private static final byte[] toBytes(final Object v) throws Exception
 	{
-		ArrayList<byte[]> bytes = null;
-		ArrayList<Object> val;
+		List<byte[]> bytes = null;
+		List<Object> val;
 		if (v instanceof ArrayList)
 		{
-			val = (ArrayList<Object>)v;
+			val = (List<Object>)v;
 		}
 		else
 		{
@@ -184,7 +180,7 @@ public final class IntersectOperator implements Operator, Serializable
 			// }
 			else if (o instanceof ArrayList)
 			{
-				if (((ArrayList)o).size() != 0)
+				if (((List)o).size() != 0)
 				{
 					final Exception e = new Exception("Non-zero size ArrayList in toBytes()");
 					HRDBMSWorker.logger.error("Non-zero size ArrayList in toBytes()", e);
@@ -270,7 +266,7 @@ public final class IntersectOperator implements Operator, Serializable
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
 		return children;
 	}
@@ -309,13 +305,13 @@ public final class IntersectOperator implements Operator, Serializable
 	}
 
 	@Override
-	public HashMap<String, Integer> getCols2Pos()
+	public Map<String, Integer> getCols2Pos()
 	{
 		return cols2Pos;
 	}
 
 	@Override
-	public HashMap<String, String> getCols2Types()
+	public Map<String, String> getCols2Types()
 	{
 		return cols2Types;
 	}
@@ -333,13 +329,13 @@ public final class IntersectOperator implements Operator, Serializable
 	}
 
 	@Override
-	public TreeMap<Integer, String> getPos2Col()
+	public Map<Integer, String> getPos2Col()
 	{
 		return pos2Col;
 	}
 
 	@Override
-	public ArrayList<String> getReferences()
+	public List<String> getReferences()
 	{
 		return new ArrayList<String>();
 	}
@@ -452,7 +448,7 @@ public final class IntersectOperator implements Operator, Serializable
 				op.reset();
 			}
 
-			sets = new ArrayList<HashSet<ArrayList<Object>>>();
+			sets = new ArrayList<>();
 			buffer.clear();
 			new InitThread().start();
 		}
@@ -511,7 +507,7 @@ public final class IntersectOperator implements Operator, Serializable
 	@Override
 	public void start() throws Exception
 	{
-		sets = new ArrayList<HashSet<ArrayList<Object>>>();
+		sets = new ArrayList<>();
 		startDone = true;
 		for (final Operator op : children)
 		{
@@ -530,7 +526,7 @@ public final class IntersectOperator implements Operator, Serializable
 
 	private void cleanupExternal()
 	{
-		for (final ArrayList<FileChannel> fc : fcs)
+		for (final List<FileChannel> fc : fcs)
 		{
 			for (final FileChannel f : fc)
 			{
@@ -544,7 +540,7 @@ public final class IntersectOperator implements Operator, Serializable
 			}
 		}
 
-		for (final ArrayList<RandomAccessFile> raf : rafs)
+		for (final List<RandomAccessFile> raf : rafs)
 		{
 			for (final RandomAccessFile r : raf)
 			{
@@ -558,7 +554,7 @@ public final class IntersectOperator implements Operator, Serializable
 			}
 		}
 
-		for (final ArrayList<String> files : externalFiles)
+		for (final List<String> files : externalFiles)
 		{
 			for (final String fn : files)
 			{
@@ -570,14 +566,14 @@ public final class IntersectOperator implements Operator, Serializable
 	private void createTempFiles() throws Exception
 	{
 		int i = 0; // fileNum
-		externalFiles = new ArrayList<ArrayList<String>>();
-		rafs = new ArrayList<ArrayList<RandomAccessFile>>();
-		fcs = new ArrayList<ArrayList<FileChannel>>();
+		externalFiles = new ArrayList<List<String>>();
+		rafs = new ArrayList<List<RandomAccessFile>>();
+		fcs = new ArrayList<List<FileChannel>>();
 		while (i < numFiles)
 		{
-			final ArrayList<String> files = new ArrayList<String>();
-			final ArrayList<RandomAccessFile> raf = new ArrayList<RandomAccessFile>();
-			final ArrayList<FileChannel> fc = new ArrayList<FileChannel>();
+			final List<String> files = new ArrayList<String>();
+			final List<RandomAccessFile> raf = new ArrayList<RandomAccessFile>();
+			final List<FileChannel> fc = new ArrayList<FileChannel>();
 			int j = 0; // child num
 			while (j < children.size())
 			{
@@ -618,7 +614,7 @@ public final class IntersectOperator implements Operator, Serializable
 	private void doExternal()
 	{
 		int i = 0; // fileNum
-		ArrayList<HashSet<ArrayList<Object>>> sets = new ArrayList<HashSet<ArrayList<Object>>>();
+		ArrayList<Set<List<Object>>> sets = new ArrayList<>();
 		ReadBackThread thread = new ReadBackThread(i, sets);
 		thread.start();
 		while (i < numFiles)
@@ -637,7 +633,7 @@ public final class IntersectOperator implements Operator, Serializable
 
 			if (i + 1 < numFiles)
 			{
-				sets = new ArrayList<HashSet<ArrayList<Object>>>();
+				sets = new ArrayList<>();
 				thread = new ReadBackThread(i + 1, sets);
 				thread.start();
 			}
@@ -646,7 +642,7 @@ public final class IntersectOperator implements Operator, Serializable
 		}
 	}
 
-	private void flushBucket(final ArrayList<byte[]> bucket, final int fileNum, final int childNum) throws Exception
+	private void flushBucket(final List<byte[]> bucket, final int fileNum, final int childNum) throws Exception
 	{
 		final FileChannel fc = fcs.get(fileNum).get(childNum);
 		for (final byte[] data : bucket)
@@ -658,10 +654,10 @@ public final class IntersectOperator implements Operator, Serializable
 		bucket.clear();
 	}
 
-	private void flushBuckets(final ArrayList<ArrayList<byte[]>> buckets, final int childNum) throws Exception
+	private void flushBuckets(final List<List<byte[]>> buckets, final int childNum) throws Exception
 	{
 		int i = 0;
-		for (final ArrayList<byte[]> bucket : buckets)
+		for (final List<byte[]> bucket : buckets)
 		{
 			flushBucket(bucket, i, childNum);
 			i++;
@@ -670,7 +666,7 @@ public final class IntersectOperator implements Operator, Serializable
 
 	private final class InitThread extends ThreadPoolThread
 	{
-		private final ArrayList<ReadThread> threads = new ArrayList<ReadThread>(children.size());
+		private final List<ReadThread> threads = new ArrayList<ReadThread>(children.size());
 
 		@Override
 		public void run()
@@ -843,7 +839,7 @@ public final class IntersectOperator implements Operator, Serializable
 			{
 				final ReadThread read = new ReadThread(i);
 				threads.add(read);
-				sets.add(new HashSet<ArrayList<Object>>());
+				sets.add(new HashSet<List<Object>>());
 				read.start();
 				i++;
 			}
@@ -882,7 +878,7 @@ public final class IntersectOperator implements Operator, Serializable
 			for (final Object o : sets.get(minI))
 			{
 				boolean inAll = true;
-				for (final HashSet<ArrayList<Object>> set : sets)
+				for (final Set<List<Object>> set : sets)
 				{
 					try
 					{
@@ -943,9 +939,9 @@ public final class IntersectOperator implements Operator, Serializable
 	private class ReadBackThread extends HRDBMSThread
 	{
 		private final int fileNum;
-		private final ArrayList<HashSet<ArrayList<Object>>> sets;
+		private final List<Set<List<Object>>> sets;
 
-		public ReadBackThread(final int fileNum, final ArrayList<HashSet<ArrayList<Object>>> sets)
+		public ReadBackThread(final int fileNum, final List<Set<List<Object>>> sets)
 		{
 			this.fileNum = fileNum;
 			this.sets = sets;
@@ -956,11 +952,11 @@ public final class IntersectOperator implements Operator, Serializable
 		{
 			try
 			{
-				final ArrayList<FileChannel> fs = fcs.get(fileNum);
+				final List<FileChannel> fs = fcs.get(fileNum);
 				for (final FileChannel f : fs)
 				{
 					final FileChannel fc = new BufferedFileChannel(f, 8 * 1024 * 1024);
-					final HashSet<ArrayList<Object>> set = new HashSet<ArrayList<Object>>();
+					final Set<List<Object>> set = new HashSet<List<Object>>();
 					sets.add(set);
 					fc.position(0);
 					final ByteBuffer bb1 = ByteBuffer.allocate(4);
@@ -975,7 +971,7 @@ public final class IntersectOperator implements Operator, Serializable
 						final int length = bb1.getInt();
 						final ByteBuffer bb = ByteBuffer.allocate(length);
 						fc.read(bb);
-						final ArrayList<Object> row = (ArrayList<Object>)fromBytes(bb.array());
+						final List<Object> row = (List<Object>)fromBytes(bb.array());
 						set.add(row);
 					}
 				}
@@ -983,7 +979,7 @@ public final class IntersectOperator implements Operator, Serializable
 				int i = 0;
 				long minCard = Long.MAX_VALUE;
 				int minI = -1;
-				for (final HashSet<ArrayList<Object>> set : sets)
+				for (final Set<List<Object>> set : sets)
 				{
 					final long card = set.size();
 					if (card < minCard)
@@ -998,7 +994,7 @@ public final class IntersectOperator implements Operator, Serializable
 				for (final Object o : sets.get(minI))
 				{
 					boolean inAll = true;
-					for (final HashSet<ArrayList<Object>> set : sets)
+					for (final Set<List<Object>> set : sets)
 					{
 						try
 						{
@@ -1062,7 +1058,7 @@ public final class IntersectOperator implements Operator, Serializable
 			{
 				return new DataEndMarker();
 			}
-			final ArrayList<Object> retval = new ArrayList<Object>(numFields);
+			final List<Object> retval = new ArrayList<Object>(numFields);
 			int i = 0;
 			while (i < numFields)
 			{
@@ -1157,7 +1153,7 @@ public final class IntersectOperator implements Operator, Serializable
 			{
 				if (inMem)
 				{
-					final HashSet<ArrayList<Object>> set = sets.get(childNum);
+					final Set<List<Object>> set = sets.get(childNum);
 					Object o = op.next(IntersectOperator.this);
 					if (o instanceof DataEndMarker)
 					{
@@ -1169,7 +1165,7 @@ public final class IntersectOperator implements Operator, Serializable
 					}
 					while (!(o instanceof DataEndMarker))
 					{
-						set.add((ArrayList<Object>)o);
+						set.add((List<Object>)o);
 						o = op.next(IntersectOperator.this);
 						if (o instanceof DataEndMarker)
 						{
@@ -1185,7 +1181,7 @@ public final class IntersectOperator implements Operator, Serializable
 				{
 					try
 					{
-						final ArrayList<ArrayList<byte[]>> buckets = new ArrayList<ArrayList<byte[]>>();
+						final List<List<byte[]>> buckets = new ArrayList<List<byte[]>>();
 						int i = 0;
 						while (i < numFiles)
 						{
@@ -1213,7 +1209,7 @@ public final class IntersectOperator implements Operator, Serializable
 
 							final byte[] data = toBytes(o);
 							final int hash = (int)(hash(data) % numFiles);
-							final ArrayList<byte[]> bucket = buckets.get(hash);
+							final List<byte[]> bucket = buckets.get(hash);
 							bucket.add(data);
 							if (bucket.size() > 8192)
 							{

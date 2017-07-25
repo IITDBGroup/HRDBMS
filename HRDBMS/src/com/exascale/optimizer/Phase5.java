@@ -1,9 +1,7 @@
 package com.exascale.optimizer;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
+import java.util.*;
+
 import com.exascale.filesystem.Page;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
@@ -17,12 +15,12 @@ public final class Phase5
 	private static final int N_MAX = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 	private final RootOperator root;
 	private final MetaData meta;
-	private final HashMap<Operator, Long> cCache = new HashMap<Operator, Long>();
+	private final Map<Operator, Long> cCache = new HashMap<Operator, Long>();
 	private final Transaction tx;
-	private final HashMap<ArrayList<Filter>, Double> likelihoodCache;
-	private final HashMap<String, Integer> typeCache = new HashMap<String, Integer>();
+	private final Map<List<Filter>, Double> likelihoodCache;
+	private final Map<String, Integer> typeCache = new HashMap<String, Integer>();
 
-	public Phase5(final RootOperator root, final Transaction tx, final HashMap<ArrayList<Filter>, Double> likelihoodCache)
+	public Phase5(final RootOperator root, final Transaction tx, final Map<List<Filter>, Double> likelihoodCache)
 	{
 		this.root = root;
 		this.tx = tx;
@@ -30,7 +28,7 @@ public final class Phase5
 		meta = root.getMeta();
 	}
 
-	public static void clearOpParents(final Operator op, final HashSet<Operator> touched)
+	public static void clearOpParents(final Operator op, final Set<Operator> touched)
 	{
 		if (touched.contains(op))
 		{
@@ -51,12 +49,12 @@ public final class Phase5
 		}
 	}
 
-	private static void gatherSendsAndReceives(final NetworkHashReceiveOperator op, final HashSet<NetworkHashAndSendOperator> sends, final HashSet<NetworkHashReceiveOperator> receives) throws Exception
+	private static void gatherSendsAndReceives(final NetworkHashReceiveOperator op, final Set<NetworkHashAndSendOperator> sends, final Set<NetworkHashReceiveOperator> receives) throws Exception
 	{
 		for (final Operator o : op.children())
 		{
 			sends.add((NetworkHashAndSendOperator)o);
-			final ArrayList<Operator> parents = ((NetworkHashAndSendOperator)o).parents();
+			final List<Operator> parents = ((NetworkHashAndSendOperator)o).parents();
 			for (final Operator o2 : parents)
 			{
 				receives.add((NetworkHashReceiveOperator)o2);
@@ -64,7 +62,7 @@ public final class Phase5
 		}
 	}
 
-	private static Index getIndexFor(final ArrayList<Index> indexes, final String col)
+	private static Index getIndexFor(final List<Index> indexes, final String col)
 	{
 		for (final Index index : indexes)
 		{
@@ -107,8 +105,8 @@ public final class Phase5
 			return;
 		}
 
-		final HashMap<String, IndexOperator> file2Index = new HashMap<String, IndexOperator>();
-		for (final Operator op : (ArrayList<Operator>)table.children().get(0).children().clone())
+		final Map<String, IndexOperator> file2Index = new HashMap<String, IndexOperator>();
+		for (final Operator op : new ArrayList<>(table.children().get(0).children()))
 		{
 			if (op.children().size() > 1)
 			{
@@ -141,8 +139,8 @@ public final class Phase5
 			return;
 		}
 
-		final HashMap<String, IndexOperator> file2Index = new HashMap<String, IndexOperator>();
-		for (final Operator op : (ArrayList<Operator>)table.children().get(0).children().clone())
+		final Map<String, IndexOperator> file2Index = new HashMap<String, IndexOperator>();
+		for (final Operator op : new ArrayList<>(table.children().get(0).children()))
 		{
 			if (op.children().size() > 1)
 			{
@@ -195,8 +193,8 @@ public final class Phase5
 
 	private void addIndexesToTableScans() throws Exception
 	{
-		final ArrayList<TableScanOperator> s = getTableScans(root, new HashSet<Operator>());
-		final HashSet<TableScanOperator> set = new HashSet<TableScanOperator>(s);
+		final List<TableScanOperator> s = getTableScans(root, new HashSet<Operator>());
+		final Set<TableScanOperator> set = new HashSet<TableScanOperator>(s);
 
 		for (final TableScanOperator table : set)
 		{
@@ -235,9 +233,9 @@ public final class Phase5
 	{
 		final Operator child = table.children().get(0);
 		table.removeChild(child);
-		final ArrayList<String> cols = new ArrayList<String>(1);
+		final List<String> cols = new ArrayList<String>(1);
 		cols.add(child.getPos2Col().get(0));
-		final ArrayList<Boolean> orders = new ArrayList<Boolean>(1);
+		final List<Boolean> orders = new ArrayList<Boolean>(1);
 		orders.add(true);
 		final SortOperator sort = new SortOperator(cols, orders, meta);
 		try
@@ -255,11 +253,11 @@ public final class Phase5
 		// cCache.clear();
 	}
 
-	private void buildNetwork(final HashSet<NetworkHashAndSendOperator> sends, final HashSet<NetworkHashReceiveOperator> receives) throws Exception
+	private void buildNetwork(final Set<NetworkHashAndSendOperator> sends, final Set<NetworkHashReceiveOperator> receives) throws Exception
 	{
 		for (final Operator o : receives)
 		{
-			for (final Operator o2 : (ArrayList<Operator>)o.children().clone())
+			for (final Operator o2 : new ArrayList<>(o.children()))
 			{
 				o2.removeChild(o2);
 			}
@@ -288,12 +286,12 @@ public final class Phase5
 		while (layers < maxHops)
 		{
 			// build another layer
-			final HashMap<Integer, RoutingOperator> nodeToOp = new HashMap<Integer, RoutingOperator>();
+			final Map<Integer, RoutingOperator> nodeToOp = new HashMap<Integer, RoutingOperator>();
 			toID = fromID;
 			fromID = Phase4.id.getAndIncrement();
 			for (final Operator o : current)
 			{
-				final ArrayList<Integer> targets = ResourceManager.getNetworkTargetsForNode(o.getNode());
+				final List<Integer> targets = ResourceManager.getNetworkTargetsForNode(o.getNode());
 				for (final int x : targets)
 				{
 					RoutingOperator route = nodeToOp.get(x);
@@ -327,7 +325,7 @@ public final class Phase5
 		}
 
 		// connect to receives
-		final HashMap<Integer, NetworkHashReceiveOperator> nodeToReceives = new HashMap<Integer, NetworkHashReceiveOperator>();
+		final Map<Integer, NetworkHashReceiveOperator> nodeToReceives = new HashMap<Integer, NetworkHashReceiveOperator>();
 		for (final NetworkHashReceiveOperator o : receives)
 		{
 			nodeToReceives.put(o.getNode(), o);
@@ -335,7 +333,7 @@ public final class Phase5
 
 		for (final RoutingOperator o : current)
 		{
-			final ArrayList<Integer> targets = ResourceManager.getNetworkTargetsForNode(o.getNode());
+			final List<Integer> targets = ResourceManager.getNetworkTargetsForNode(o.getNode());
 			for (final int x : targets)
 			{
 				final NetworkHashReceiveOperator nhro = nodeToReceives.get(x);
@@ -349,9 +347,9 @@ public final class Phase5
 
 	private long cardHJO(final Operator op) throws Exception
 	{
-		final HashSet<HashMap<Filter, Filter>> hshm = ((HashJoinOperator)op).getHSHM();
+		final Set<Map<Filter, Filter>> hshm = ((HashJoinOperator)op).getHSHM();
 		double max = -1;
-		for (final HashMap<Filter, Filter> hm : hshm)
+		for (final Map<Filter, Filter> hm : hshm)
 		{
 			final double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
 			if (temp > max)
@@ -410,9 +408,9 @@ public final class Phase5
 
 	private long cardNL(final Operator op) throws Exception
 	{
-		final HashSet<HashMap<Filter, Filter>> hshm = ((NestedLoopJoinOperator)op).getHSHM();
+		final Set<Map<Filter, Filter>> hshm = ((NestedLoopJoinOperator)op).getHSHM();
 		double max = -1;
-		for (final HashMap<Filter, Filter> hm : hshm)
+		for (final Map<Filter, Filter> hm : hshm)
 		{
 			final double temp = meta.likelihood(new ArrayList<Filter>(hm.keySet()), tx, op);
 			if (temp > max)
@@ -537,7 +535,7 @@ public final class Phase5
 
 	private long cardTSO(Operator op) throws Exception
 	{
-		final HashSet<HashMap<Filter, Filter>> hshm = ((TableScanOperator)op).getHSHM();
+		final Set<Map<Filter, Filter>> hshm = ((TableScanOperator)op).getHSHM();
 		if (hshm != null)
 		{
 			if (op.children().size() == 0)
@@ -777,7 +775,7 @@ public final class Phase5
 		return retval;
 	}
 
-	private void cleanupOrderedFilters(final Operator op, final HashSet<Operator> touched)
+	private void cleanupOrderedFilters(final Operator op, final Set<Operator> touched)
 	{
 		if (touched.contains(op))
 		{
@@ -826,7 +824,7 @@ public final class Phase5
 			return;
 		}
 
-		final HashSet<String> cols = new HashSet<String>();
+		final Set<String> cols = new HashSet<String>();
 		for (final Operator op : table.children().get(0).children())
 		{
 			if (op.children().size() > 1)
@@ -873,10 +871,10 @@ public final class Phase5
 
 	private void correctForDevices(final TableScanOperator table) throws Exception
 	{
-		for (final Operator child : (ArrayList<Operator>)table.children().clone())
+		for (final Operator child : new ArrayList<>(table.children()))
 		{
 			table.removeChild(child);
-			final ArrayList<Integer> devices = table.getDeviceList();
+			final List<Integer> devices = table.getDeviceList();
 			for (final int device : devices)
 			{
 				final Operator clone = cloneTree(child);
@@ -902,14 +900,14 @@ public final class Phase5
 	{
 		if (receive.children().size() > N_MAX)
 		{
-			final HashSet<NetworkHashAndSendOperator> sends = new HashSet<NetworkHashAndSendOperator>();
-			final HashSet<NetworkHashReceiveOperator> receives = new HashSet<NetworkHashReceiveOperator>();
+			final Set<NetworkHashAndSendOperator> sends = new HashSet<NetworkHashAndSendOperator>();
+			final Set<NetworkHashReceiveOperator> receives = new HashSet<NetworkHashReceiveOperator>();
 			gatherSendsAndReceives(receive, sends, receives);
 			buildNetwork(sends, receives);
 		}
 	}
 
-	private void doMToNForAll(final Operator op, final HashSet<Operator> visited) throws Exception
+	private void doMToNForAll(final Operator op, final Set<Operator> visited) throws Exception
 	{
 		if (op instanceof NetworkSendOperator)
 		{
@@ -934,10 +932,10 @@ public final class Phase5
 
 	private void doubleCheckCNF(final TableScanOperator table)
 	{
-		final HashMap<String, Index> cols2Indexes = getCols2Indexes(table);
+		final Map<String, Index> cols2Indexes = getCols2Indexes(table);
 		final CNFFilter cnf = table.getCNFForParent(table.firstParent());
-		final HashSet<HashMap<Filter, Filter>> hshm = cnf.getHSHM();
-		for (final HashMap<Filter, Filter> hm : (HashSet<HashMap<Filter, Filter>>)hshm.clone())
+		final Set<Map<Filter, Filter>> hshm = cnf.getHSHM();
+		for (final Map<Filter, Filter> hm : new HashSet<>(hshm))
 		{
 			if (hm.size() > 1)
 			{
@@ -946,7 +944,7 @@ public final class Phase5
 
 			for (final Filter f : hm.keySet())
 			{
-				final ArrayList<String> references = new ArrayList<String>(2);
+				final List<String> references = new ArrayList<String>(2);
 				if (f.leftIsColumn())
 				{
 					references.add(f.leftColumn());
@@ -1005,15 +1003,15 @@ public final class Phase5
 		cnf.setHSHM(hshm);
 	}
 
-	private HashMap<String, Index> getCols2Indexes(final Operator op)
+	private Map<String, Index> getCols2Indexes(final Operator op)
 	{
-		final HashMap<String, Index> retval = new HashMap<String, Index>();
+		final Map<String, Index> retval = new HashMap<String, Index>();
 		if (op instanceof IndexOperator)
 		{
 			if (!(op.parent() instanceof UnionOperator) || op.parent().children().size() == 1)
 			{
 				final Index index = ((IndexOperator)op).getIndex();
-				final ArrayList<String> cols = index.getKeys();
+				final List<String> cols = index.getKeys();
 				for (final String col : cols)
 				{
 					if (retval.containsKey(col))
@@ -1046,7 +1044,7 @@ public final class Phase5
 		}
 	}
 
-	private ArrayList<TableScanOperator> getTableScans(final Operator op, final HashSet<Operator> touched) throws Exception
+	private List<TableScanOperator> getTableScans(final Operator op, final Set<Operator> touched) throws Exception
 	{
 		ArrayList<TableScanOperator> retval = null;
 		if (touched.contains(op))
@@ -1107,7 +1105,7 @@ public final class Phase5
 		}
 
 		final IndexOperator index = (IndexOperator)union.children().get(0);
-		final ArrayList<String> references = new ArrayList<String>();
+		final List<String> references = new ArrayList<String>();
 		references.addAll(table.getCols2Pos().keySet());
 		for (final String col : table.getCNFForParent(table.firstParent()).getReferences())
 		{
@@ -1119,7 +1117,7 @@ public final class Phase5
 		if (index.getIndex().getKeys().containsAll(references))
 		{
 			// index only access
-			HashMap<String, String> cols2Types = null;
+			Map<String, String> cols2Types = null;
 			try
 			{
 				cols2Types = MetaData.getCols2TypesForTable(table.getSchema(), table.getTable(), tx);
@@ -1129,7 +1127,7 @@ public final class Phase5
 				HRDBMSWorker.logger.error("", e);
 				throw e;
 			}
-			final ArrayList<String> types = new ArrayList<String>(references.size());
+			final List<String> types = new ArrayList<String>(references.size());
 			for (final String col : references)
 			{
 				types.add(cols2Types.get(col));
@@ -1169,7 +1167,7 @@ public final class Phase5
 		}
 	}
 
-	private void indexOnlyScan(final Operator op, final HashSet<Operator> touched) throws Exception
+	private void indexOnlyScan(final Operator op, final Set<Operator> touched) throws Exception
 	{
 		if (op instanceof NetworkSendOperator)
 		{
@@ -1198,14 +1196,14 @@ public final class Phase5
 			if (top.getType() == 0)
 			{
 				final String[] needed = top.getMidPos2Col();
-				final ArrayList<String> needed2 = new ArrayList<String>(needed.length);
+				final List<String> needed2 = new ArrayList<String>(needed.length);
 				for (final String n : needed)
 				{
 					needed2.add(n);
 				}
 
 				// if exists index with all these cols, use it
-				final ArrayList<Index> available = MetaData.getIndexesForTable(top.getSchema(), top.getTable(), tx);
+				final List<Index> available = MetaData.getIndexesForTable(top.getSchema(), top.getTable(), tx);
 				int bestSize = Integer.MAX_VALUE;
 				for (final Index index : available)
 				{
@@ -1232,7 +1230,7 @@ public final class Phase5
 		}
 	}
 
-	private void largeGBs(final Operator op, final HashSet<Operator> touched) throws Exception
+	private void largeGBs(final Operator op, final Set<Operator> touched) throws Exception
 	{
 		if (op instanceof NetworkSendOperator)
 		{
@@ -1416,7 +1414,7 @@ public final class Phase5
 		}
 	}
 
-	private void setCards(final Operator op, final HashSet<Operator> touched) throws Exception
+	private void setCards(final Operator op, final Set<Operator> touched) throws Exception
 	{
 		if (op instanceof NetworkSendOperator)
 		{
@@ -1643,7 +1641,7 @@ public final class Phase5
 		}
 	}
 
-	private void setSpecificCoord(final Operator op, final HashSet<Operator> touched) throws Exception
+	private void setSpecificCoord(final Operator op, final Set<Operator> touched) throws Exception
 	{
 		if (op instanceof NetworkSendOperator)
 		{
@@ -1676,7 +1674,7 @@ public final class Phase5
 		}
 	}
 
-	private void setTableTypes(final Operator op, final HashSet<Operator> touched) throws Exception
+	private void setTableTypes(final Operator op, final Set<Operator> touched) throws Exception
 	{
 		if (op instanceof NetworkSendOperator)
 		{
@@ -1708,7 +1706,7 @@ public final class Phase5
 		}
 	}
 
-	private void sortLimit(final Operator op, final HashSet<Operator> touched)
+	private void sortLimit(final Operator op, final Set<Operator> touched)
 	{
 		if (op instanceof NetworkSendOperator)
 		{
@@ -1751,7 +1749,7 @@ public final class Phase5
 		}
 	}
 
-	private void turnOffDistinctUnion(final Operator op, boolean seenIntersect, final HashSet<Operator> touched)
+	private void turnOffDistinctUnion(final Operator op, boolean seenIntersect, final Set<Operator> touched)
 	{
 		if (op instanceof NetworkSendOperator)
 		{
@@ -1790,13 +1788,13 @@ public final class Phase5
 
 	private void useIndexes(final String schema, final String table, final CNFFilter cnf, final TableScanOperator tOp) throws Exception
 	{
-		final HashSet<HashMap<Filter, Filter>> hshm = cnf.getHSHM();
+		final Set<Map<Filter, Filter>> hshm = cnf.getHSHM();
 		// System.out.println("HSHM is " + hshm);
-		final ArrayList<Index> available = MetaData.getIndexesForTable(schema, table, tx);
-		for (final HashMap<Filter, Filter> hm : (HashSet<HashMap<Filter, Filter>>)hshm.clone())
+		final List<Index> available = MetaData.getIndexesForTable(schema, table, tx);
+		for (final Map<Filter, Filter> hm : new HashSet<>(hshm))
 		{
 			// System.out.println("Looking at " + hm);
-			final ArrayList<Index> indexes = new ArrayList<Index>();
+			final List<Index> indexes = new ArrayList<Index>();
 			boolean doIt = true;
 			double likely = 0;
 			for (final Filter f : hm.keySet())
@@ -1848,7 +1846,7 @@ public final class Phase5
 				{
 					col = f.rightColumn();
 				}
-				for (final HashMap<Filter, Filter> hm2 : hshm)
+				for (final Map<Filter, Filter> hm2 : hshm)
 				{
 					if (hm != hm2 && hm2.size() == 1)
 					{

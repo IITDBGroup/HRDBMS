@@ -9,12 +9,12 @@ import com.exascale.managers.ResourceManager;
 
 public class HJOMultiHashMap<K, V>
 {
-	private final ConcurrentHashMap<K, ArrayList<V>> map;
+	private final ConcurrentHashMap<K, List<V>> map;
 	private final AtomicInteger size = new AtomicInteger(0);
 
 	public HJOMultiHashMap()
 	{
-		map = new ConcurrentHashMap<K, ArrayList<V>>(16, 0.75f, 6 * ResourceManager.cpus);
+		map = new ConcurrentHashMap<K, List<V>>(16, 0.75f, 6 * ResourceManager.cpus);
 	}
 
 	public void clear()
@@ -23,9 +23,9 @@ public class HJOMultiHashMap<K, V>
 		size.set(0);
 	}
 
-	public ArrayList<V> get(final K key)
+	public List<V> get(final K key)
 	{
-		final ArrayList<V> retval = map.get(key);
+		final List<V> retval = map.get(key);
 		if (retval == null)
 		{
 			return new ArrayList<V>();
@@ -45,12 +45,12 @@ public class HJOMultiHashMap<K, V>
 	{
 		if (map.containsKey(key))
 		{
-			final ArrayList<V> vector = map.get(key);
+			final List<V> vector = map.get(key);
 			vector.add(val);
 		}
 		else
 		{
-			ArrayList<V> vector = new ArrayList<V>();
+			List<V> vector = new ArrayList<V>();
 			vector.add(val);
 			if (map.putIfAbsent(key, vector) != null)
 			{
@@ -64,7 +64,7 @@ public class HJOMultiHashMap<K, V>
 
 	public void multiRemove(final K key)
 	{
-		final ArrayList<V> removed = map.remove(key);
+		final List<V> removed = map.remove(key);
 		if (removed != null)
 		{
 			size.addAndGet(-removed.size());

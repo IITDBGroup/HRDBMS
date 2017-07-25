@@ -1,12 +1,13 @@
 package com.exascale.misc;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class BloomFilter
 {
 	private byte[][] bits;
-	private ConcurrentHashMap<Long, ArrayList<Object>> cache;
+	private ConcurrentHashMap<Long, List<Object>> cache;
 
 	public BloomFilter()
 	{
@@ -21,7 +22,7 @@ public class BloomFilter
 
 	public BloomFilter(final boolean flag)
 	{
-		cache = new ConcurrentHashMap<Long, ArrayList<Object>>(4 * 1024 * 1024, 1.0f);
+		cache = new ConcurrentHashMap<Long, List<Object>>(4 * 1024 * 1024, 1.0f);
 	}
 
 	public void add(final long hash)
@@ -39,7 +40,7 @@ public class BloomFilter
 		return;
 	}
 
-	public void add(final long hash, final ArrayList<Object> val)
+	public void add(final long hash, final List<Object> val)
 	{
 		cache.put(hash & 0x3FFFFFl, val);
 	}
@@ -52,9 +53,9 @@ public class BloomFilter
 		return (bits[bytePos >>> 23][bytePos & 0x7fffff] & ((byte)(1 << bitPos))) != 0;
 	}
 
-	public boolean passes(final long hash, final ArrayList<Object> val)
+	public boolean passes(final long hash, final List<Object> val)
 	{
-		final ArrayList<Object> o = cache.get(hash & 0x3FFFFFl);
+		final List<Object> o = cache.get(hash & 0x3FFFFFl);
 		return !val.equals(o);
 	}
 }

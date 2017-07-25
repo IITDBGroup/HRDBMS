@@ -1,8 +1,6 @@
 package com.exascale.threads;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Vector;
+import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.ResourceManager;
@@ -109,7 +107,7 @@ public class XAWorker extends HRDBMSThread
 				{
 					try
 					{
-						final ArrayList<Object> command = (ArrayList<Object>)in.take();
+						final List<Object> command = (List<Object>)in.take();
 						final String text = (String)command.get(0);
 						if (text.equals("CLOSE"))
 						{
@@ -189,7 +187,7 @@ public class XAWorker extends HRDBMSThread
 			{
 				if (p.getTrees().size() > 1)
 				{
-					final ArrayList<SubXAThread> threads = p.executeMultiNoResult();
+					final List<SubXAThread> threads = p.executeMultiNoResult();
 					updateCount = p.getUpdateCount();
 					for (final SubXAThread thread : threads)
 					{
@@ -271,7 +269,7 @@ public class XAWorker extends HRDBMSThread
 		return runInline;
 	}
 
-	private void setPlanAndTransaction(final Operator op, final HashSet<Operator> visited) throws Exception
+	private void setPlanAndTransaction(final Operator op, final Set<Operator> visited) throws Exception
 	{
 		if ((!(op instanceof TableScanOperator)) && visited.contains(op))
 		{

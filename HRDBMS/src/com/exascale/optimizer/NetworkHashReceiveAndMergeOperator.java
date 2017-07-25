@@ -11,11 +11,7 @@ import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedInputStream;
 import com.exascale.managers.HRDBMSWorker;
@@ -51,12 +47,12 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 	}
 
 	private boolean send = false;
-	private ArrayList<String> sortCols;
+	private List<String> sortCols;
 	private boolean[] orders;
 	private int ID;
 	private int[] sortPos;
 
-	public NetworkHashReceiveAndMergeOperator(final int ID, final ArrayList<String> sortCols, final ArrayList<Boolean> orders, final MetaData meta)
+	public NetworkHashReceiveAndMergeOperator(final int ID, final List<String> sortCols, final List<Boolean> orders, final MetaData meta)
 	{
 		super(meta);
 		this.sortCols = sortCols;
@@ -70,7 +66,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 		received = new AtomicLong(0);
 	}
 
-	public NetworkHashReceiveAndMergeOperator(final int ID, final ArrayList<String> sortCols, final boolean[] orders, final MetaData meta)
+	public NetworkHashReceiveAndMergeOperator(final int ID, final List<String> sortCols, final boolean[] orders, final MetaData meta)
 	{
 		super(meta);
 		this.sortCols = sortCols;
@@ -79,7 +75,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 		received = new AtomicLong(0);
 	}
 
-	public static NetworkHashReceiveAndMergeOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static NetworkHashReceiveAndMergeOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final NetworkHashReceiveAndMergeOperator value = (NetworkHashReceiveAndMergeOperator)unsafe.allocateInstance(NetworkHashReceiveAndMergeOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -355,10 +351,10 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 
 	private class ALOO
 	{
-		private final ArrayList<Object> alo;
+		private final List<Object> alo;
 		private final Operator op;
 
-		public ALOO(final ArrayList<Object> alo, final Operator op)
+		public ALOO(final List<Object> alo, final Operator op)
 		{
 			this.alo = alo;
 			this.op = op;
@@ -370,7 +366,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 			return this == o;
 		}
 
-		public ArrayList<Object> getALO()
+		public List<Object> getALO()
 		{
 			return alo;
 		}
@@ -430,8 +426,8 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 				return 0;
 			}
 
-			final ArrayList<Object> lhs = l.getALO();
-			final ArrayList<Object> rhs = r.getALO();
+			final List<Object> lhs = l.getALO();
+			final List<Object> rhs = r.getALO();
 			int result = 0;
 			int i = 0;
 
@@ -498,15 +494,15 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 
 	private final class ReadThread extends ThreadPoolThread
 	{
-		private final ArrayList<Operator> children;
-		// private final HashMap<Operator, ArrayList<Object>> rows = new
-		// HashMap<Operator, ArrayList<Object>>();
-		// private final TreeMap<ArrayList<Object>, Operator> rows = new
-		// TreeMap<ArrayList<Object>, Operator>(new MergeComparator());
+		private final List<Operator> children;
+		// private final Map<Operator, List<Object>> rows = new
+		// HashMap<Operator, List<Object>>();
+		// private final Map<List<Object>, Operator> rows = new
+		// TreeMap<List<Object>, Operator>(new MergeComparator());
 		private final AuxPairingHeap<ALOO> rows = new AuxPairingHeap<ALOO>(new MergeComparator());
 		private ALOO minEntry;
 
-		public ReadThread(final ArrayList<Operator> children)
+		public ReadThread(final List<Operator> children)
 		{
 			this.children = children;
 		}
@@ -518,7 +514,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 			{
 				try
 				{
-					final ArrayList<Object> row = readRow(op);
+					final List<Object> row = readRow(op);
 					if (row != null)
 					{
 						rows.insert(new ALOO(row, op));
@@ -554,7 +550,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 				}
 				try
 				{
-					final ArrayList<Object> row = readRow(minEntry.getOp());
+					final List<Object> row = readRow(minEntry.getOp());
 					if (row != null)
 					{
 						rows.insert(new ALOO(row, minEntry.getOp()));
@@ -607,7 +603,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 					throw e;
 				}
 			}
-			final ArrayList<Object> retval = new ArrayList<Object>(numFields);
+			final List<Object> retval = new ArrayList<Object>(numFields);
 			int i = 0;
 			while (i < numFields)
 			{
@@ -677,7 +673,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 			return retval;
 		}
 
-		private ArrayList<Object> readRow(final Operator op) throws Exception
+		private List<Object> readRow(final Operator op) throws Exception
 		{
 			try
 			{
@@ -718,7 +714,7 @@ public final class NetworkHashReceiveAndMergeOperator extends NetworkReceiveOper
 					}
 
 					// readCounter.getAndIncrement();
-					return (ArrayList<Object>)row;
+					return (List<Object>)row;
 				}
 			}
 			catch (final Exception e)

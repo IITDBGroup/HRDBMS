@@ -9,12 +9,8 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Locale;
-import java.util.Map;
-import java.util.StringTokenizer;
-import java.util.TreeMap;
+import java.util.*;
+
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Mapper;
@@ -26,23 +22,23 @@ import com.exascale.optimizer.PartitionMetaData;
 
 public class LoadMapper extends Mapper<LongWritable, Text, MyLongWritable, ALOWritable>
 {
-	private TreeMap<Integer, String> pos2Col;
-	private HashMap<String, String> cols2Types;
+	private Map<Integer, String> pos2Col;
+	private Map<String, String> cols2Types;
 	private PartitionMetaData pmd;
 	private String schema;
 	private String table;
-	private final HashMap<String, Integer> cols2Pos = new HashMap<String, Integer>();
+	private final Map<String, Integer> cols2Pos = new HashMap<String, Integer>();
 	private int numNodes;
 	private String delimiter;
-	private final ArrayList<String> types2 = new ArrayList<String>();
-	private HashMap<Integer, Integer> pos2Length;
-	private ArrayList<Integer> workerNodes;
-	private ArrayList<Integer> coordNodes;
+	private final List<String> types2 = new ArrayList<String>();
+	private Map<Integer, Integer> pos2Length;
+	private List<Integer> workerNodes;
+	private List<Integer> coordNodes;
 	private String portString;
 	private int numDevices;
 	private int numWorkers;
 
-	public static int determineDevice(final ArrayList<Object> row, final PartitionMetaData pmeta, final HashMap<String, Integer> cols2Pos, final int numDevices) throws Exception
+	public static int determineDevice(final List<Object> row, final PartitionMetaData pmeta, final Map<String, Integer> cols2Pos, final int numDevices) throws Exception
 	{
 		pmeta.getTable();
 		final String table = pmeta.getTable();
@@ -52,8 +48,8 @@ public class LoadMapper extends Mapper<LongWritable, Text, MyLongWritable, ALOWr
 		}
 		else if (pmeta.deviceIsHash())
 		{
-			final ArrayList<String> devHash = pmeta.getDeviceHash();
-			final ArrayList<Object> partial = new ArrayList<Object>();
+			final List<String> devHash = pmeta.getDeviceHash();
+			final List<Object> partial = new ArrayList<Object>();
 			for (final String col : devHash)
 			{
 				try
@@ -82,7 +78,7 @@ public class LoadMapper extends Mapper<LongWritable, Text, MyLongWritable, ALOWr
 		{
 			final String col = table + "." + pmeta.getDeviceRangeCol();
 			final Object obj = row.get(cols2Pos.get(col));
-			final ArrayList<Object> ranges = pmeta.getDeviceRanges();
+			final List<Object> ranges = pmeta.getDeviceRanges();
 			int i = 0;
 			final int size = ranges.size();
 			while (i < size)
@@ -124,7 +120,7 @@ public class LoadMapper extends Mapper<LongWritable, Text, MyLongWritable, ALOWr
 		{
 			if (key instanceof ArrayList)
 			{
-				final byte[] data = toBytesForHash((ArrayList<Object>)key);
+				final byte[] data = toBytesForHash((List<Object>)key);
 				eHash = MurmurHash.hash64(data, data.length);
 			}
 			else
@@ -147,7 +143,7 @@ public class LoadMapper extends Mapper<LongWritable, Text, MyLongWritable, ALOWr
 		return buff;
 	}
 
-	private static byte[] toBytesForHash(final ArrayList<Object> key)
+	private static byte[] toBytesForHash(final List<Object> key)
 	{
 		final StringBuilder sb = new StringBuilder();
 		for (final Object o : key)
@@ -191,7 +187,7 @@ public class LoadMapper extends Mapper<LongWritable, Text, MyLongWritable, ALOWr
 	// ArrayList<Object> val;
 	// if (v instanceof ArrayList)
 	// {
-	// val = (ArrayList<Object>)v;
+	// val = (List<Object>)v;
 	// }
 	// else
 	// {
@@ -261,7 +257,7 @@ public class LoadMapper extends Mapper<LongWritable, Text, MyLongWritable, ALOWr
 	// }
 	// else if (o instanceof ArrayList)
 	// {
-	// if (((ArrayList)o).size() != 0)
+	// if (((List)o).size() != 0)
 	// {
 	// Exception e = new Exception("Non-zero size ArrayList in toBytes()");
 	// HRDBMSWorker.logger.error("Non-zero size ArrayList in toBytes()", e);
@@ -338,7 +334,7 @@ public class LoadMapper extends Mapper<LongWritable, Text, MyLongWritable, ALOWr
 	{
 		try
 		{
-			final ArrayList<Object> row = parseValue(value);
+			final List<Object> row = parseValue(value);
 
 			for (final Map.Entry entry : pos2Length.entrySet())
 			{
@@ -348,7 +344,7 @@ public class LoadMapper extends Mapper<LongWritable, Text, MyLongWritable, ALOWr
 				}
 			}
 
-			final ArrayList<Integer> nodes = MetaData.determineNodeNoLookups(schema, table, row, pmd, cols2Pos, numNodes, workerNodes, coordNodes);
+			final List<Integer> nodes = MetaData.determineNodeNoLookups(schema, table, row, pmd, cols2Pos, numNodes, workerNodes, coordNodes);
 			final int device = determineDevice(row, pmd, cols2Pos, numDevices);
 			for (final Integer node : nodes)
 			{
@@ -430,12 +426,12 @@ public class LoadMapper extends Mapper<LongWritable, Text, MyLongWritable, ALOWr
 			final ObjectInputStream objIn = new ObjectInputStream(in);
 			numNodes = (Integer)objIn.readObject();
 			delimiter = (String)objIn.readObject();
-			pos2Col = (TreeMap<Integer, String>)objIn.readObject();
-			cols2Types = (HashMap<String, String>)objIn.readObject();
-			pos2Length = (HashMap<Integer, Integer>)objIn.readObject();
+			pos2Col = (Map<Integer, String>)objIn.readObject();
+			cols2Types = (Map<String, String>)objIn.readObject();
+			pos2Length = (Map<Integer, Integer>)objIn.readObject();
 			pmd = (PartitionMetaData)objIn.readObject();
-			workerNodes = (ArrayList<Integer>)objIn.readObject();
-			coordNodes = (ArrayList<Integer>)objIn.readObject();
+			workerNodes = (List<Integer>)objIn.readObject();
+			coordNodes = (List<Integer>)objIn.readObject();
 		}
 		catch (final ClassNotFoundException e)
 		{
@@ -448,10 +444,10 @@ public class LoadMapper extends Mapper<LongWritable, Text, MyLongWritable, ALOWr
 		sock.close();
 	}
 
-	private ArrayList<Object> parseValue(final Text in) throws Exception
+	private List<Object> parseValue(final Text in) throws Exception
 	{
 		final String line = in.toString();
-		final ArrayList<Object> row = new ArrayList<Object>();
+		final List<Object> row = new ArrayList<Object>();
 		final StringTokenizer tokens = new StringTokenizer(line, delimiter, false);
 		int i = 0;
 		while (tokens.hasMoreTokens())

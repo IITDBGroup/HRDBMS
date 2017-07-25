@@ -32,26 +32,26 @@ import org.antlr.v4.runtime.misc.Pair;
 /** Metadata about the tables and other objects stored in HRDBMS */
 public final class MetaData implements Serializable
 {
-	private static final HashMap<ConnectionWorker, String> defaultSchemas = new HashMap<ConnectionWorker, String>();
+	private static final Map<ConnectionWorker, String> defaultSchemas = new HashMap<ConnectionWorker, String>();
 	private static int myNode;
-	private static HashMap<Integer, String> nodeTable = new HashMap<Integer, String>();
+	private static Map<Integer, String> nodeTable = new HashMap<Integer, String>();
 	public static int numWorkerNodes = 0;
-	private static ArrayList<Integer> coords = new ArrayList<Integer>();
-	private static ArrayList<Integer> workers = new ArrayList<Integer>();
-	private static ConcurrentHashMap<String, ArrayList<Object>> getPartitioningCache = new ConcurrentHashMap<String, ArrayList<Object>>();
-	private static ConcurrentHashMap<String, ArrayList<Object>> getIndexesCache = new ConcurrentHashMap<String, ArrayList<Object>>();
-	private static ConcurrentHashMap<String, ArrayList<Object>> getUniqueIndexesCache = new ConcurrentHashMap<String, ArrayList<Object>>();
-	private static ConcurrentHashMap<String, ArrayList<Object>> getKeysCache = new ConcurrentHashMap<String, ArrayList<Object>>();
-	private static ConcurrentHashMap<String, ArrayList<Object>> getTypesCache = new ConcurrentHashMap<String, ArrayList<Object>>();
-	private static ConcurrentHashMap<String, ArrayList<Object>> getOrdersCache = new ConcurrentHashMap<String, ArrayList<Object>>();
-	private static ConcurrentHashMap<String, ArrayList<Object>> getIndexColsForTableCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static List<Integer> coords = new ArrayList<Integer>();
+	private static List<Integer> workers = new ArrayList<Integer>();
+	private static ConcurrentHashMap<String, List<Object>> getPartitioningCache = new ConcurrentHashMap<String, List<Object>>();
+	private static ConcurrentHashMap<String, List<Object>> getIndexesCache = new ConcurrentHashMap<String, List<Object>>();
+	private static ConcurrentHashMap<String, List<Object>> getUniqueIndexesCache = new ConcurrentHashMap<String, List<Object>>();
+	private static ConcurrentHashMap<String, List<Object>> getKeysCache = new ConcurrentHashMap<String, List<Object>>();
+	private static ConcurrentHashMap<String, List<Object>> getTypesCache = new ConcurrentHashMap<String, List<Object>>();
+	private static ConcurrentHashMap<String, List<Object>> getOrdersCache = new ConcurrentHashMap<String, List<Object>>();
+	private static ConcurrentHashMap<String, List<Object>> getIndexColsForTableCache = new ConcurrentHashMap<String, List<Object>>();
 	private static ConcurrentHashMap<String, Integer> getLengthCache = new ConcurrentHashMap<String, Integer>();
 	private static ConcurrentHashMap<String, Integer> getTableIDCache = new ConcurrentHashMap<String, Integer>();
 	private static ConcurrentHashMap<String, Long> getColCardCache = new ConcurrentHashMap<String, Long>();
-	private static ConcurrentHashMap<String, ArrayList<Object>> getIndexIDsForTableCache = new ConcurrentHashMap<String, ArrayList<Object>>();
-	private static ConcurrentHashMap<String, ArrayList<Object>> getCols2PosForTableCache = new ConcurrentHashMap<String, ArrayList<Object>>();
-	private static ConcurrentHashMap<String, ArrayList<Object>> getCols2TypesCache = new ConcurrentHashMap<String, ArrayList<Object>>();
-	private static ConcurrentHashMap<String, ArrayList<Object>> getUniqueCache = new ConcurrentHashMap<String, ArrayList<Object>>();
+	private static ConcurrentHashMap<String, List<Object>> getIndexIDsForTableCache = new ConcurrentHashMap<String, List<Object>>();
+	private static ConcurrentHashMap<String, List<Object>> getCols2PosForTableCache = new ConcurrentHashMap<String, List<Object>>();
+	private static ConcurrentHashMap<String, List<Object>> getCols2TypesCache = new ConcurrentHashMap<String, List<Object>>();
+	private static ConcurrentHashMap<String, List<Object>> getUniqueCache = new ConcurrentHashMap<String, List<Object>>();
 	private static ConcurrentHashMap<String, Long> getTableCardCache = new ConcurrentHashMap<String, Long>();
 	private static ConcurrentHashMap<String, String> getColTypeCache = new ConcurrentHashMap<String, String>();
 	private static ConcurrentHashMap<String, Object> getDistCache = new ConcurrentHashMap<String, Object>();
@@ -126,7 +126,7 @@ public final class MetaData implements Serializable
 	}
 
 	private transient ConnectionWorker connection = null;
-	private final HashMap<ColAndTree, String> gtfcCache = new HashMap<ColAndTree, String>();
+	private final Map<ColAndTree, String> gtfcCache = new HashMap<ColAndTree, String>();
 
 	public MetaData()
 	{
@@ -185,11 +185,11 @@ public final class MetaData implements Serializable
 		}
 	}
 
-	protected static ArrayList<Object> getPartitioningCache(String key) {
+	protected static List<Object> getPartitioningCache(String key) {
 		return getPartitioningCache.get(key);
 	}
 
-	protected static void putPartitioningCache(String key, ArrayList<Object> value) {
+	protected static void putPartitioningCache(String key, List<Object> value) {
 		getPartitioningCache.put(key, value);
 	}
 
@@ -199,17 +199,17 @@ public final class MetaData implements Serializable
 		return getColTypeCache.get(key);
 	}
 
-	public static void cluster(final String schema, final String table, final Transaction tx, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type) throws Exception
+	public static void cluster(final String schema, final String table, final Transaction tx, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types, final int type) throws Exception
 	{
-		final ArrayList<Integer> nodes = getWorkerNodes();
-		final ArrayList<Object> tree = makeTree(nodes);
-		final ArrayList<Socket> sockets = new ArrayList<Socket>();
+		final List<Integer> nodes = getWorkerNodes();
+		final List<Object> tree = makeTree(nodes);
+		final List<Socket> sockets = new ArrayList<Socket>();
 
 		final int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 
 		for (final Object o : tree)
 		{
-			ArrayList<Object> list;
+			List<Object> list;
 			if (o instanceof Integer)
 			{
 				list = new ArrayList<Object>(1);
@@ -217,13 +217,13 @@ public final class MetaData implements Serializable
 			}
 			else
 			{
-				list = (ArrayList<Object>)o;
+				list = (List<Object>)o;
 			}
 
 			Object obj = list.get(0);
 			while (obj instanceof ArrayList)
 			{
-				obj = ((ArrayList)obj).get(0);
+				obj = ((List)obj).get(0);
 			}
 
 			Socket sock;
@@ -277,9 +277,9 @@ public final class MetaData implements Serializable
 		}
 	}
 
-	public static TreeMap<Integer, String> cols2PosFlip(final HashMap<String, Integer> cols2Pos)
+	public static Map<Integer, String> cols2PosFlip(final Map<String, Integer> cols2Pos)
 	{
-		final TreeMap<Integer, String> retval = new TreeMap<Integer, String>();
+		final Map<Integer, String> retval = new TreeMap<Integer, String>();
 
 		for (final Map.Entry entry : cols2Pos.entrySet())
 		{
@@ -289,7 +289,7 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	public static void createIndex(final String schema, final String table, final String index, final ArrayList<IndexDef> defs, final boolean unique, final Transaction tx) throws Exception
+	public static void createIndex(final String schema, final String table, final String index, final List<IndexDef> defs, final boolean unique, final Transaction tx) throws Exception
 	{
 		Integer tableID = getTableIDCache.get(schema + "." + table);
 		if (tableID == null)
@@ -299,7 +299,7 @@ public final class MetaData implements Serializable
 		}
 		final int id = PlanCacheManager.getNextIndexID().setParms(tableID).execute(tx);
 		PlanCacheManager.getInsertIndex().setParms(id, index, tableID, unique).execute(tx);
-		final HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
+		final Map<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
 		int pos = 0;
 		for (final IndexDef def : defs)
 		{
@@ -320,7 +320,7 @@ public final class MetaData implements Serializable
             tableID = PlanCacheManager.getTableID().setParms(theSchema, theTable).execute(tx);
             getTableIDCache.put(theSchema + "." + theTable, tableID);
         }
-        final ArrayList<Object> meta = PlanCacheManager.getExternalTableInfo().setParms(tableID).execute(tx);
+        final List<Object> meta = PlanCacheManager.getExternalTableInfo().setParms(tableID).execute(tx);
 
         Object extObject;
         try {
@@ -332,7 +332,7 @@ public final class MetaData implements Serializable
         if(extObject instanceof ExternalTableType) {
             ExternalTableType extTable = (ExternalTableType) extObject;
             extTable.setCols2Types(getCols2TypesForTable(theSchema, theTable, tx));
-            HashMap<String, Integer> cols2Pos = getCols2PosForTable(theSchema, theTable, tx);
+            Map<String, Integer> cols2Pos = getCols2PosForTable(theSchema, theTable, tx);
             extTable.setCols2Pos(cols2Pos);
             extTable.setPos2Col(cols2PosFlip(cols2Pos));
             extTable.setName(theTable);
@@ -348,7 +348,7 @@ public final class MetaData implements Serializable
 
 	public void createExternalTable(String schema, String table, List<ColDef> defs, Transaction tx, String javaClassName, String params) throws Exception
 	{
-		HashMap<String, String> cols2Types = getCols2Types(defs);
+		Map<String, String> cols2Types = getCols2Types(defs);
 		new PartitionMetaData(schema, table, PartitionMetaData.NONE, PartitionMetaData.ANY, "ALL,HASH,{COL}", tx, cols2Types);
 		int tableID = PlanCacheManager.getNextTableID().setParms().execute(tx);
 		String typeFlag = HrdbmsConstants.TABLESTRINGEXTERNAL;
@@ -399,10 +399,10 @@ public final class MetaData implements Serializable
 		return new Pair<>(type, length);
 	}
 
-	public static void createTable(final String schema, final String table, final ArrayList<ColDef> defs, final ArrayList<String> pks, final Transaction tx, final String nodeGroupExp, final String nodeExp, final String deviceExp, final int tType, final ArrayList<Integer> colOrder, final ArrayList<Integer> organization) throws Exception
+	public static void createTable(final String schema, final String table, final List<ColDef> defs, final List<String> pks, final Transaction tx, final String nodeGroupExp, final String nodeExp, final String deviceExp, final int tType, final List<Integer> colOrder, final List<Integer> organization) throws Exception
 	{
 		// validate expressions
-		final HashMap<String, String> cols2Types = getCols2Types(defs);
+		final Map<String, String> cols2Types = getCols2Types(defs);
 
 		new PartitionMetaData(schema, table, nodeGroupExp, nodeExp, deviceExp, tx, cols2Types);
 		// tables
@@ -448,7 +448,7 @@ public final class MetaData implements Serializable
 			indexID = PlanCacheManager.getNextIndexID().setParms(tableID).execute(tx);
 			PlanCacheManager.getInsertIndex().setParms(indexID, "PK" + table, tableID, true).execute(tx);
 
-			final HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
+			final Map<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
 			int pos = 0;
 			for (final String col : pks)
 			{
@@ -472,7 +472,7 @@ public final class MetaData implements Serializable
 		PlanCacheManager.getInsertView().setParms(id, schema, table, text).execute(tx);
 	}
 
-	public static int determineDevice(final ArrayList<Object> row, final PartitionMetaData pmeta, final HashMap<String, Integer> cols2Pos) throws Exception
+	public static int determineDevice(final List<Object> row, final PartitionMetaData pmeta, final Map<String, Integer> cols2Pos) throws Exception
 	{
 		pmeta.getTable();
 		final String table = pmeta.getTable();
@@ -482,8 +482,8 @@ public final class MetaData implements Serializable
 		}
 		else if (pmeta.deviceIsHash())
 		{
-			final ArrayList<String> devHash = pmeta.getDeviceHash();
-			final ArrayList<Object> partial = new ArrayList<Object>();
+			final List<String> devHash = pmeta.getDeviceHash();
+			final List<Object> partial = new ArrayList<Object>();
 			final int z = devHash.size();
 			int i = 0;
 			while (i < z)
@@ -515,7 +515,7 @@ public final class MetaData implements Serializable
 		{
 			final String col = table + "." + pmeta.getDeviceRangeCol();
 			final Object obj = row.get(cols2Pos.get(col));
-			final ArrayList<Object> ranges = pmeta.getDeviceRanges();
+			final List<Object> ranges = pmeta.getDeviceRanges();
 			int i = 0;
 			final int size = ranges.size();
 			while (i < size)
@@ -546,13 +546,13 @@ public final class MetaData implements Serializable
 		}
 	}
 
-	public static int determineDevice(final String schema, final String table, final ArrayList<Object> row, final PartitionMetaData pmeta, final Transaction tx) throws Exception
+	public static int determineDevice(final String schema, final String table, final List<Object> row, final PartitionMetaData pmeta, final Transaction tx) throws Exception
 	{
-		final HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
+		final Map<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
 		if (pmeta.deviceIsHash())
 		{
-			final ArrayList<String> devHash = pmeta.getDeviceHash();
-			final ArrayList<Object> partial = new ArrayList<Object>();
+			final List<String> devHash = pmeta.getDeviceHash();
+			final List<Object> partial = new ArrayList<Object>();
 			for (final String col : devHash)
 			{
 				partial.add(row.get(cols2Pos.get(table + "." + col)));
@@ -572,7 +572,7 @@ public final class MetaData implements Serializable
 		{
 			final String col = table + "." + pmeta.getDeviceRangeCol();
 			final Object obj = row.get(cols2Pos.get(col));
-			final ArrayList<Object> ranges = pmeta.getDeviceRanges();
+			final List<Object> ranges = pmeta.getDeviceRanges();
 			int i = 0;
 			final int size = ranges.size();
 			while (i < size)
@@ -603,33 +603,33 @@ public final class MetaData implements Serializable
 		}
 	}
 
-	public static ArrayList<Integer> determineNode(final String schema, final String table, final ArrayList<Object> row, final Transaction tx, final PartitionMetaData pmeta, final HashMap<String, Integer> cols2Pos, final int numNodes) throws Exception
+	public static List<Integer> determineNode(final String schema, final String table, final List<Object> row, final Transaction tx, final PartitionMetaData pmeta, final Map<String, Integer> cols2Pos, final int numNodes) throws Exception
 	{
 		if (pmeta.noNodeGroupSet())
 		{
 			if (pmeta.anyNode())
 			{
-				final ArrayList<Integer> retval = getWorkerNodes();
+				final List<Integer> retval = getWorkerNodes();
 				return retval;
 			}
 			else if (pmeta.isSingleNodeSet())
 			{
 				if (pmeta.getSingleNode() == -1)
 				{
-					final ArrayList<Integer> retval = getCoordNodes();
+					final List<Integer> retval = getCoordNodes();
 					return retval;
 				}
 				else
 				{
-					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					final List<Integer> retval = new ArrayList<Integer>();
 					retval.add(pmeta.getSingleNode());
 					return retval;
 				}
 			}
 			else if (pmeta.nodeIsHash())
 			{
-				final ArrayList<String> nodeHash = pmeta.getNodeHash();
-				final ArrayList<Object> partial = new ArrayList<Object>();
+				final List<String> nodeHash = pmeta.getNodeHash();
+				final List<Object> partial = new ArrayList<Object>();
 				final int z = nodeHash.size();
 				int i = 0;
 				while (i < z)
@@ -641,14 +641,14 @@ public final class MetaData implements Serializable
 				final long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
 				if (pmeta.allNodes())
 				{
-					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					final List<Integer> retval = new ArrayList<Integer>();
 					retval.add((int)(hash % numNodes)); // LOOKOUT if we ever do
 					// dynamic # nodes
 					return retval;
 				}
 				else
 				{
-					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					final List<Integer> retval = new ArrayList<Integer>();
 					retval.add(pmeta.nodeSet().get((int)(hash % pmeta.nodeSet().size())));
 					return retval;
 				}
@@ -658,7 +658,7 @@ public final class MetaData implements Serializable
 				// range
 				final String col = table + "." + pmeta.getNodeRangeCol();
 				final Object obj = row.get(cols2Pos.get(col));
-				final ArrayList<Object> ranges = pmeta.getNodeRanges();
+				final List<Object> ranges = pmeta.getNodeRanges();
 				int i = 0;
 				final int size = ranges.size();
 				while (i < size)
@@ -667,13 +667,13 @@ public final class MetaData implements Serializable
 					{
 						if (pmeta.allNodes())
 						{
-							final ArrayList<Integer> retval = new ArrayList<Integer>();
+							final List<Integer> retval = new ArrayList<Integer>();
 							retval.add(i);
 							return retval;
 						}
 						else
 						{
-							final ArrayList<Integer> retval = new ArrayList<Integer>();
+							final List<Integer> retval = new ArrayList<Integer>();
 							retval.add(pmeta.nodeSet().get(i));
 							return retval;
 						}
@@ -684,13 +684,13 @@ public final class MetaData implements Serializable
 
 				if (pmeta.allNodes())
 				{
-					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					final List<Integer> retval = new ArrayList<Integer>();
 					retval.add(i);
 					return retval;
 				}
 				else
 				{
-					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					final List<Integer> retval = new ArrayList<Integer>();
 					retval.add(pmeta.nodeSet().get(i));
 					return retval;
 				}
@@ -698,15 +698,15 @@ public final class MetaData implements Serializable
 		}
 		else
 		{
-			ArrayList<Integer> ngSet = null;
+			List<Integer> ngSet = null;
 			if (pmeta.isSingleNodeGroupSet())
 			{
 				ngSet = pmeta.getNodeGroupHashMap().get(pmeta.getSingleNodeGroup());
 			}
 			else if (pmeta.nodeGroupIsHash())
 			{
-				final ArrayList<String> nodeGroupHash = pmeta.getNodeGroupHash();
-				final ArrayList<Object> partial = new ArrayList<Object>();
+				final List<String> nodeGroupHash = pmeta.getNodeGroupHash();
+				final List<Object> partial = new ArrayList<Object>();
 				final int z = nodeGroupHash.size();
 				int i = 0;
 				while (i < z)
@@ -722,7 +722,7 @@ public final class MetaData implements Serializable
 			{
 				final String col = table + "." + pmeta.getNodeGroupRangeCol();
 				final Object obj = row.get(cols2Pos.get(col));
-				final ArrayList<Object> ranges = pmeta.getNodeGroupRanges();
+				final List<Object> ranges = pmeta.getNodeGroupRanges();
 				int i = 0;
 				final int size = ranges.size();
 				while (i < size)
@@ -748,14 +748,14 @@ public final class MetaData implements Serializable
 			}
 			else if (pmeta.isSingleNodeSet())
 			{
-				final ArrayList<Integer> retval = new ArrayList<Integer>();
+				final List<Integer> retval = new ArrayList<Integer>();
 				retval.add(ngSet.get(pmeta.getSingleNode()));
 				return retval;
 			}
 			else if (pmeta.nodeIsHash())
 			{
-				final ArrayList<String> nodeHash = pmeta.getNodeHash();
-				final ArrayList<Object> partial = new ArrayList<Object>();
+				final List<String> nodeHash = pmeta.getNodeHash();
+				final List<Object> partial = new ArrayList<Object>();
 				final int z = nodeHash.size();
 				int i = 0;
 				while (i < z)
@@ -767,13 +767,13 @@ public final class MetaData implements Serializable
 				final long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
 				if (pmeta.allNodes())
 				{
-					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					final List<Integer> retval = new ArrayList<Integer>();
 					retval.add(ngSet.get((int)(hash % ngSet.size())));
 					return retval;
 				}
 				else
 				{
-					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					final List<Integer> retval = new ArrayList<Integer>();
 					retval.add(ngSet.get(pmeta.nodeSet().get((int)(hash % pmeta.nodeSet().size()))));
 					return retval;
 				}
@@ -783,7 +783,7 @@ public final class MetaData implements Serializable
 				// range
 				final String col = table + "." + pmeta.getNodeRangeCol();
 				final Object obj = row.get(cols2Pos.get(col));
-				final ArrayList<Object> ranges = pmeta.getNodeRanges();
+				final List<Object> ranges = pmeta.getNodeRanges();
 				int i = 0;
 				final int size = ranges.size();
 				while (i < size)
@@ -792,13 +792,13 @@ public final class MetaData implements Serializable
 					{
 						if (pmeta.allNodes())
 						{
-							final ArrayList<Integer> retval = new ArrayList<Integer>();
+							final List<Integer> retval = new ArrayList<Integer>();
 							retval.add(ngSet.get(i));
 							return retval;
 						}
 						else
 						{
-							final ArrayList<Integer> retval = new ArrayList<Integer>();
+							final List<Integer> retval = new ArrayList<Integer>();
 							retval.add(ngSet.get(pmeta.nodeSet().get(i)));
 							return retval;
 						}
@@ -809,13 +809,13 @@ public final class MetaData implements Serializable
 
 				if (pmeta.allNodes())
 				{
-					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					final List<Integer> retval = new ArrayList<Integer>();
 					retval.add(ngSet.get(i));
 					return retval;
 				}
 				else
 				{
-					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					final List<Integer> retval = new ArrayList<Integer>();
 					retval.add(ngSet.get(pmeta.nodeSet().get(i)));
 					return retval;
 				}
@@ -823,7 +823,7 @@ public final class MetaData implements Serializable
 		}
 	}
 
-	public static ArrayList<Integer> determineNodeNoLookups(final String schema, final String table, final ArrayList<Object> row, final PartitionMetaData pmeta, final HashMap<String, Integer> cols2Pos, final int numNodes, final ArrayList<Integer> workerNodes, final ArrayList<Integer> coordNodes) throws Exception
+	public static List<Integer> determineNodeNoLookups(final String schema, final String table, final List<Object> row, final PartitionMetaData pmeta, final Map<String, Integer> cols2Pos, final int numNodes, final List<Integer> workerNodes, final List<Integer> coordNodes) throws Exception
 	{
 		if (pmeta.noNodeGroupSet())
 		{
@@ -839,15 +839,15 @@ public final class MetaData implements Serializable
 				}
 				else
 				{
-					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					final List<Integer> retval = new ArrayList<Integer>();
 					retval.add(pmeta.getSingleNode());
 					return retval;
 				}
 			}
 			else if (pmeta.nodeIsHash())
 			{
-				final ArrayList<String> nodeHash = pmeta.getNodeHash();
-				final ArrayList<Object> partial = new ArrayList<Object>();
+				final List<String> nodeHash = pmeta.getNodeHash();
+				final List<Object> partial = new ArrayList<Object>();
 				for (final String col : nodeHash)
 				{
 					partial.add(row.get(cols2Pos.get(table + "." + col)));
@@ -856,14 +856,14 @@ public final class MetaData implements Serializable
 				final long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
 				if (pmeta.allNodes())
 				{
-					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					final List<Integer> retval = new ArrayList<Integer>();
 					retval.add((int)(hash % numNodes)); // LOOKOUT if we ever do
 					// dynamic # nodes
 					return retval;
 				}
 				else
 				{
-					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					final List<Integer> retval = new ArrayList<Integer>();
 					retval.add(pmeta.nodeSet().get((int)(hash % pmeta.nodeSet().size())));
 					return retval;
 				}
@@ -873,7 +873,7 @@ public final class MetaData implements Serializable
 				// range
 				final String col = table + "." + pmeta.getNodeRangeCol();
 				final Object obj = row.get(cols2Pos.get(col));
-				final ArrayList<Object> ranges = pmeta.getNodeRanges();
+				final List<Object> ranges = pmeta.getNodeRanges();
 				int i = 0;
 				final int size = ranges.size();
 				while (i < size)
@@ -882,13 +882,13 @@ public final class MetaData implements Serializable
 					{
 						if (pmeta.allNodes())
 						{
-							final ArrayList<Integer> retval = new ArrayList<Integer>();
+							final List<Integer> retval = new ArrayList<Integer>();
 							retval.add(i);
 							return retval;
 						}
 						else
 						{
-							final ArrayList<Integer> retval = new ArrayList<Integer>();
+							final List<Integer> retval = new ArrayList<Integer>();
 							retval.add(pmeta.nodeSet().get(i));
 							return retval;
 						}
@@ -899,13 +899,13 @@ public final class MetaData implements Serializable
 
 				if (pmeta.allNodes())
 				{
-					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					final List<Integer> retval = new ArrayList<Integer>();
 					retval.add(i);
 					return retval;
 				}
 				else
 				{
-					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					final List<Integer> retval = new ArrayList<Integer>();
 					retval.add(pmeta.nodeSet().get(i));
 					return retval;
 				}
@@ -913,15 +913,15 @@ public final class MetaData implements Serializable
 		}
 		else
 		{
-			ArrayList<Integer> ngSet = null;
+			List<Integer> ngSet = null;
 			if (pmeta.isSingleNodeGroupSet())
 			{
 				ngSet = pmeta.getNodeGroupHashMap().get(pmeta.getSingleNodeGroup());
 			}
 			else if (pmeta.nodeGroupIsHash())
 			{
-				final ArrayList<String> nodeGroupHash = pmeta.getNodeGroupHash();
-				final ArrayList<Object> partial = new ArrayList<Object>();
+				final List<String> nodeGroupHash = pmeta.getNodeGroupHash();
+				final List<Object> partial = new ArrayList<Object>();
 				for (final String col : nodeGroupHash)
 				{
 					partial.add(row.get(cols2Pos.get(table + "." + col)));
@@ -934,7 +934,7 @@ public final class MetaData implements Serializable
 			{
 				final String col = table + "." + pmeta.getNodeGroupRangeCol();
 				final Object obj = row.get(cols2Pos.get(col));
-				final ArrayList<Object> ranges = pmeta.getNodeGroupRanges();
+				final List<Object> ranges = pmeta.getNodeGroupRanges();
 				int i = 0;
 				final int size = ranges.size();
 				while (i < size)
@@ -960,14 +960,14 @@ public final class MetaData implements Serializable
 			}
 			else if (pmeta.isSingleNodeSet())
 			{
-				final ArrayList<Integer> retval = new ArrayList<Integer>();
+				final List<Integer> retval = new ArrayList<Integer>();
 				retval.add(ngSet.get(pmeta.getSingleNode()));
 				return retval;
 			}
 			else if (pmeta.nodeIsHash())
 			{
-				final ArrayList<String> nodeHash = pmeta.getNodeHash();
-				final ArrayList<Object> partial = new ArrayList<Object>();
+				final List<String> nodeHash = pmeta.getNodeHash();
+				final List<Object> partial = new ArrayList<Object>();
 				for (final String col : nodeHash)
 				{
 					partial.add(row.get(cols2Pos.get(table + "." + col)));
@@ -976,13 +976,13 @@ public final class MetaData implements Serializable
 				final long hash = 0x7FFFFFFFFFFFFFFFL & hash(partial);
 				if (pmeta.allNodes())
 				{
-					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					final List<Integer> retval = new ArrayList<Integer>();
 					retval.add(ngSet.get((int)(hash % ngSet.size())));
 					return retval;
 				}
 				else
 				{
-					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					final List<Integer> retval = new ArrayList<Integer>();
 					retval.add(ngSet.get(pmeta.nodeSet().get((int)(hash % pmeta.nodeSet().size()))));
 					return retval;
 				}
@@ -992,7 +992,7 @@ public final class MetaData implements Serializable
 				// range
 				final String col = table + "." + pmeta.getNodeRangeCol();
 				final Object obj = row.get(cols2Pos.get(col));
-				final ArrayList<Object> ranges = pmeta.getNodeRanges();
+				final List<Object> ranges = pmeta.getNodeRanges();
 				int i = 0;
 				final int size = ranges.size();
 				while (i < size)
@@ -1001,13 +1001,13 @@ public final class MetaData implements Serializable
 					{
 						if (pmeta.allNodes())
 						{
-							final ArrayList<Integer> retval = new ArrayList<Integer>();
+							final List<Integer> retval = new ArrayList<Integer>();
 							retval.add(ngSet.get(i));
 							return retval;
 						}
 						else
 						{
-							final ArrayList<Integer> retval = new ArrayList<Integer>();
+							final List<Integer> retval = new ArrayList<Integer>();
 							retval.add(ngSet.get(pmeta.nodeSet().get(i)));
 							return retval;
 						}
@@ -1018,13 +1018,13 @@ public final class MetaData implements Serializable
 
 				if (pmeta.allNodes())
 				{
-					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					final List<Integer> retval = new ArrayList<Integer>();
 					retval.add(ngSet.get(i));
 					return retval;
 				}
 				else
 				{
-					final ArrayList<Integer> retval = new ArrayList<Integer>();
+					final List<Integer> retval = new ArrayList<Integer>();
 					retval.add(ngSet.get(pmeta.nodeSet().get(i)));
 					return retval;
 				}
@@ -1035,7 +1035,7 @@ public final class MetaData implements Serializable
 	public static void dropIndex(final String schema, final String index, final Transaction tx) throws Exception
 	{
 		PlanCacheManager.invalidate();
-		final ArrayList<Object> row = PlanCacheManager.getTableAndIndexID().setParms(schema, index).execute(tx);
+		final List<Object> row = PlanCacheManager.getTableAndIndexID().setParms(schema, index).execute(tx);
 		final int tableID = (Integer)row.get(0);
 		final int indexID = (Integer)row.get(1);
 		PlanCacheManager.getDeleteIndex().setParms(tableID, indexID).execute(tx);
@@ -1099,14 +1099,14 @@ public final class MetaData implements Serializable
 		PlanCacheManager.getDeleteView().setParms(schema, table).execute(tx);
 	}
 
-	public static Index getBestCompoundIndex(final HashSet<String> cols, final String schema, final String table, final Transaction tx) throws Exception
+	public static Index getBestCompoundIndex(final Set<String> cols, final String schema, final String table, final Transaction tx) throws Exception
 	{
 		if (cols.size() <= 1)
 		{
 			return null;
 		}
 
-		final ArrayList<Index> indexes = getIndexesForTable(schema, table, tx);
+		final List<Index> indexes = getIndexesForTable(schema, table, tx);
 		int maxCount = 1;
 		Index maxIndex = null;
 		for (final Index index : indexes)
@@ -1158,7 +1158,7 @@ public final class MetaData implements Serializable
 		return maxIndex;
 	}
 
-	public static long getCard(final String schema, final String table, final String col, final HashMap<String, Double> generated, final Transaction tx)
+	public static long getCard(final String schema, final String table, final String col, final Map<String, Double> generated, final Transaction tx)
 	{
 		try
 		{
@@ -1203,7 +1203,7 @@ public final class MetaData implements Serializable
 		return getCard(schema, table, col, op.getGenerated(), tx);
 	}
 
-	public static long getColgroupCard(final ArrayList<String> schemas, final ArrayList<String> tables, final ArrayList<String> cols, final HashMap<String, Double> generated, final Transaction tx) throws Exception
+	public static long getColgroupCard(final List<String> schemas, final List<String> tables, final List<String> cols, final Map<String, Double> generated, final Transaction tx) throws Exception
 	{
 		boolean oneSchema = true;
 		boolean oneTable = true;
@@ -1249,7 +1249,7 @@ public final class MetaData implements Serializable
 				tableID = PlanCacheManager.getTableID().setParms(theSchema, theTable).execute(tx);
 				getTableIDCache.put(theSchema + "." + theTable, tableID);
 			}
-			ArrayList<Object> rs = getIndexIDsForTableCache.get(theSchema + "." + theTable);
+			List<Object> rs = getIndexIDsForTableCache.get(theSchema + "." + theTable);
 			if (rs == null)
 			{
 				rs = PlanCacheManager.getIndexIDsForTable().setParms(theSchema, theTable).execute(tx);
@@ -1259,12 +1259,12 @@ public final class MetaData implements Serializable
 			{
 				if (!(r instanceof DataEndMarker))
 				{
-					final ArrayList<Object> row = (ArrayList<Object>)r;
+					final List<Object> row = (List<Object>)r;
 					final int count = PlanCacheManager.getIndexColCount().setParms(tableID, (Integer)row.get(0)).execute(tx);
 					if (count == schemas.size())
 					{
 						boolean hasAllCols = true;
-						final HashMap<String, Integer> cols2Pos = getCols2PosForTable(theSchema, theTable, tx);
+						final Map<String, Integer> cols2Pos = getCols2PosForTable(theSchema, theTable, tx);
 						for (final String col : cols)
 						{
 							final int colID = cols2Pos.get(theTable + "." + col);
@@ -1285,7 +1285,7 @@ public final class MetaData implements Serializable
 							}
 							else
 							{
-								final ArrayList<Object> cardRow = (ArrayList<Object>)o;
+								final List<Object> cardRow = (List<Object>)o;
 								return (Long)cardRow.get(0);
 							}
 						}
@@ -1305,15 +1305,15 @@ public final class MetaData implements Serializable
 		return (long)card;
 	}
 
-	public static long getColgroupCard(final ArrayList<String> schemas, final ArrayList<String> tables, final ArrayList<String> cols, final RootOperator op, final Transaction tx) throws Exception
+	public static long getColgroupCard(final List<String> schemas, final List<String> tables, final List<String> cols, final RootOperator op, final Transaction tx) throws Exception
 	{
 		return getColgroupCard(schemas, tables, cols, op.getGenerated(), tx);
 	}
 
-	public static HashMap<String, Integer> getCols2PosForTable(final String schema, final String name, final Transaction tx) throws Exception
+	public static Map<String, Integer> getCols2PosForTable(final String schema, final String name, final Transaction tx) throws Exception
 	{
-		final HashMap<String, Integer> retval = new HashMap<String, Integer>();
-		ArrayList<Object> rs = getCols2PosForTableCache.get(schema + "." + name);
+		final Map<String, Integer> retval = new HashMap<String, Integer>();
+		List<Object> rs = getCols2PosForTableCache.get(schema + "." + name);
 		if (rs == null)
 		{
 			rs = PlanCacheManager.getCols2PosForTable().setParms(schema, name).execute(tx);
@@ -1345,7 +1345,7 @@ public final class MetaData implements Serializable
 			}
 			else
 			{
-				final ArrayList<Object> row = (ArrayList<Object>)r;
+				final List<Object> row = (List<Object>)r;
 				retval.put(name + "." + (String)row.get(0), (Integer)row.get(1));
 			}
 		}
@@ -1353,10 +1353,9 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	public static HashMap<String, String> getCols2TypesForTable(final String schema, final String name, final Transaction tx) throws Exception
-	{
-		final HashMap<String, String> retval = new HashMap<String, String>();
-		ArrayList<Object> rs = getCols2TypesCache.get(schema + "." + name);
+	public static Map<String, String> getCols2TypesForTable(final String schema, final String name, final Transaction tx) throws Exception {
+		final Map<String, String> retval = new HashMap<String, String>();
+		List<Object> rs = getCols2TypesCache.get(schema + "." + name);
 		if (rs == null)
 		{
 			rs = PlanCacheManager.getCols2Types().setParms(schema, name).execute(tx);
@@ -1366,7 +1365,7 @@ public final class MetaData implements Serializable
 		{
 			if (!(r instanceof DataEndMarker))
 			{
-				final ArrayList<Object> row = (ArrayList<Object>)r;
+				final List<Object> row = (List<Object>)r;
 				final String col = name + "." + (String)row.get(0);
 				String type = (String)row.get(1);
 				if (type.equals("BIGINT"))
@@ -1389,7 +1388,7 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	public static ArrayList<String> getColsFromIndexFileName(final String index, final Transaction tx, final ArrayList<ArrayList<String>> keys, final ArrayList<String> indexes) throws Exception
+	public static List<String> getColsFromIndexFileName(final String index, final Transaction tx, final List<List<String>> keys, final List<String> indexes) throws Exception
 	{
 		int i = 0;
 		for (final String indx : indexes)
@@ -1405,9 +1404,9 @@ public final class MetaData implements Serializable
 		return null;
 	}
 
-	public static HashMap<Integer, String> getCoordMap()
+	public static Map<Integer, String> getCoordMap()
 	{
-		final HashMap<Integer, String> retval = new HashMap<Integer, String>();
+		final Map<Integer, String> retval = new HashMap<Integer, String>();
 		for (final Map.Entry entry : nodeTable.entrySet())
 		{
 			final int node = (Integer)entry.getKey();
@@ -1421,9 +1420,9 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	public static ArrayList<Integer> getCoordNodes()
+	public static List<Integer> getCoordNodes()
 	{
-		return (ArrayList<Integer>)coords.clone();
+		return new ArrayList<>(coords);
 	}
 
 	public static String getDevicePath(final int num)
@@ -1440,12 +1439,12 @@ public final class MetaData implements Serializable
 		return path;
 	}
 
-	public static ArrayList<Integer> getDevicesForTable(final String schema, final String table, final Transaction tx) throws Exception
+	public static List<Integer> getDevicesForTable(final String schema, final String table, final Transaction tx) throws Exception
 	{
 		final PartitionMetaData pmeta = new PartitionMetaData(schema, table, tx);
 		if (pmeta.allDevices())
 		{
-			final ArrayList<Integer> retval = new ArrayList<Integer>();
+			final List<Integer> retval = new ArrayList<Integer>();
 			int i = 0;
 			final int num = getNumDevices();
 			while (i < num)
@@ -1479,20 +1478,20 @@ public final class MetaData implements Serializable
 		}
 	}
 
-	public static ArrayList<String> getIndexColsForTable(final String schema, final String table, final Transaction tx) throws Exception
+	public static List<String> getIndexColsForTable(final String schema, final String table, final Transaction tx) throws Exception
 	{
-		ArrayList<Object> rs = getIndexColsForTableCache.get(schema + "." + table);
+		List<Object> rs = getIndexColsForTableCache.get(schema + "." + table);
 		if (rs == null)
 		{
 			rs = PlanCacheManager.getIndexColsForTable().setParms(schema, table).execute(tx);
 			getIndexColsForTableCache.put(schema + "." + table, rs);
 		}
-		final ArrayList<String> retRow = new ArrayList<String>();
+		final List<String> retRow = new ArrayList<String>();
 		for (final Object o : rs)
 		{
 			if (!(o instanceof DataEndMarker))
 			{
-				final ArrayList<Object> row = (ArrayList<Object>)o;
+				final List<Object> row = (List<Object>)o;
 				retRow.add(table + "." + row.get(0));
 			}
 		}
@@ -1500,10 +1499,10 @@ public final class MetaData implements Serializable
 		return retRow;
 	}
 
-	public static ArrayList<Index> getIndexesForTable(final String schema, final String table, final Transaction tx) throws Exception
+	public static List<Index> getIndexesForTable(final String schema, final String table, final Transaction tx) throws Exception
 	{
-		final ArrayList<Index> retval = new ArrayList<Index>();
-		ArrayList<Object> rs = getIndexesCache.get(schema + "." + table);
+		final List<Index> retval = new ArrayList<Index>();
+		List<Object> rs = getIndexesCache.get(schema + "." + table);
 		if (rs == null)
 		{
 			rs = PlanCacheManager.getIndexes().setParms(schema, table).execute(tx);
@@ -1513,18 +1512,18 @@ public final class MetaData implements Serializable
 		{
 			if (!(o instanceof DataEndMarker))
 			{
-				final ArrayList<Object> row = (ArrayList<Object>)o;
-				ArrayList<Object> rs2 = getKeysCache.get(schema + "." + row.get(0));
+				final List<Object> row = (List<Object>)o;
+				List<Object> rs2 = getKeysCache.get(schema + "." + row.get(0));
 				if (rs2 == null)
 				{
 					rs2 = PlanCacheManager.getKeys().setParms(schema, (String)row.get(0)).execute(tx);
 					getKeysCache.put(schema + "." + row.get(0), rs2);
 				}
 				// tabname, colname
-				final ArrayList<String> keys = new ArrayList<String>();
+				final List<String> keys = new ArrayList<String>();
 				for (final Object o2 : rs2)
 				{
-					final ArrayList<Object> row2 = (ArrayList<Object>)o2;
+					final List<Object> row2 = (List<Object>)o2;
 					keys.add(row2.get(0) + "." + row2.get(1));
 				}
 
@@ -1534,10 +1533,10 @@ public final class MetaData implements Serializable
 					rs2 = PlanCacheManager.getTypes().setParms(schema, (String)row.get(0)).execute(tx);
 					getTypesCache.put(schema + "." + row.get(0), rs2);
 				}
-				final ArrayList<String> types = new ArrayList<String>();
+				final List<String> types = new ArrayList<String>();
 				for (final Object o2 : rs2)
 				{
-					final ArrayList<Object> row2 = (ArrayList<Object>)o2;
+					final List<Object> row2 = (List<Object>)o2;
 					String type = (String)row2.get(0);
 					if (type.equals("BIGINT"))
 					{
@@ -1560,12 +1559,12 @@ public final class MetaData implements Serializable
 					rs2 = PlanCacheManager.getOrders().setParms(schema, (String)row.get(0)).execute(tx);
 					getOrdersCache.put(schema + "." + row.get(0), rs2);
 				}
-				final ArrayList<Boolean> orders = new ArrayList<Boolean>();
+				final List<Boolean> orders = new ArrayList<Boolean>();
 				for (final Object o2 : rs2)
 				{
 					if (!(o2 instanceof DataEndMarker))
 					{
-						final ArrayList<Object> row2 = (ArrayList<Object>)o2;
+						final List<Object> row2 = (List<Object>)o2;
 						final String ord = (String)row2.get(0);
 						boolean order = true;
 						if (!ord.equals("A"))
@@ -1583,22 +1582,22 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	public static ArrayList<String> getIndexFileNamesForTable(final String schema, final String table, final Transaction tx) throws Exception
+	public static List<String> getIndexFileNamesForTable(final String schema, final String table, final Transaction tx) throws Exception
 	{
-		ArrayList<Object> rs = getIndexesCache.get(schema + "." + table);
+		List<Object> rs = getIndexesCache.get(schema + "." + table);
 		if (rs == null)
 		{
 			rs = PlanCacheManager.getIndexes().setParms(schema, table).execute(tx);
 			getIndexesCache.put(schema + "." + table, rs);
 		}
 
-		final ArrayList<String> retval = new ArrayList<String>();
+		final List<String> retval = new ArrayList<String>();
 
 		for (final Object o : rs)
 		{
 			if (!(o instanceof DataEndMarker))
 			{
-				final ArrayList<Object> row = (ArrayList<Object>)o;
+				final List<Object> row = (List<Object>)o;
 				retval.add(schema + "." + row.get(0) + ".indx");
 			}
 		}
@@ -1606,26 +1605,26 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	public static ArrayList<ArrayList<String>> getKeys(final ArrayList<String> indexes, final Transaction tx) throws Exception
+	public static List<List<String>> getKeys(final List<String> indexes, final Transaction tx) throws Exception
 	{
-		final ArrayList<ArrayList<String>> retval = new ArrayList<ArrayList<String>>();
+		final List<List<String>> retval = new ArrayList<>();
 		for (final String index : indexes)
 		{
 			final String schema = index.substring(0, index.indexOf('.'));
 			final String name = index.substring(schema.length() + 1, index.indexOf('.', schema.length() + 1));
-			ArrayList<Object> rs = getKeysCache.get(schema + "." + name);
+			List<Object> rs = getKeysCache.get(schema + "." + name);
 			if (rs == null)
 			{
 				rs = PlanCacheManager.getKeys().setParms(schema, name).execute(tx);
 				getKeysCache.put(schema + "." + name, rs);
 			}
 			// tabname, colname
-			final ArrayList<String> retRow = new ArrayList<String>();
+			final List<String> retRow = new ArrayList<String>();
 			for (final Object o : rs)
 			{
 				if (!(o instanceof DataEndMarker))
 				{
-					final ArrayList<Object> row = (ArrayList<Object>)o;
+					final List<Object> row = (List<Object>)o;
 					retRow.add(row.get(0) + "." + row.get(1));
 				}
 			}
@@ -1656,16 +1655,16 @@ public final class MetaData implements Serializable
 		return nodeTable.get(myNode);
 	}
 
-	public static ArrayList<Integer> getNodesForTable(final String schema, final String table, final Transaction tx) throws Exception
+	public static List<Integer> getNodesForTable(final String schema, final String table, final Transaction tx) throws Exception
 	{
-		ArrayList<Object> r = getPartitioningCache.get(schema + "." + table);
+		List<Object> r = getPartitioningCache.get(schema + "." + table);
 		if (r == null)
 		{
 			r = PlanCacheManager.getPartitioning().setParms(schema, table).execute(tx);
 			getPartitioningCache.put(schema + "." + table, r);
 		}
 
-		final ArrayList<Object> row = r;
+		final List<Object> row = r;
 		final String nodeGroupExp = (String)row.get(0);
 		final String nodeExp = (String)row.get(1);
 
@@ -1673,20 +1672,20 @@ public final class MetaData implements Serializable
 		{
 			if (nodeExp.startsWith(PartitionMetaData.ALL) || nodeExp.startsWith(PartitionMetaData.ANY))
 			{
-				final ArrayList<Integer> retval = getWorkerNodes();
+				final List<Integer> retval = getWorkerNodes();
 				return retval;
 			}
 
 			final StringTokenizer tokens1 = new StringTokenizer(nodeExp, ",", false);
 			final String nodeSet = tokens1.nextToken();
 			final StringTokenizer tokens2 = new StringTokenizer(nodeSet, "|{}", false);
-			final HashSet<Integer> retval = new HashSet<Integer>();
+			final Set<Integer> retval = new HashSet<Integer>();
 			while (tokens2.hasMoreTokens())
 			{
 				final int node = Integer.parseInt(tokens2.nextToken());
 				if (node == -1)
 				{
-					final ArrayList<Integer> coords = getCoordNodes();
+					final List<Integer> coords = getCoordNodes();
 					retval.addAll(coords);
 				}
 				else
@@ -1701,7 +1700,7 @@ public final class MetaData implements Serializable
 		final StringTokenizer tokens1 = new StringTokenizer(nodeGroupExp, ",", false);
 		final String nodeGroupSet = tokens1.nextToken();
 		final StringTokenizer tokens2 = new StringTokenizer(nodeGroupSet, "|{}", false);
-		final HashSet<Integer> retval = new HashSet<Integer>();
+		final Set<Integer> retval = new HashSet<Integer>();
 		while (tokens2.hasMoreTokens())
 		{
 			final int node = Integer.parseInt(tokens2.nextToken());
@@ -1716,25 +1715,25 @@ public final class MetaData implements Serializable
 		return numDevices;
 	}
 
-	public static ArrayList<ArrayList<Boolean>> getOrders(final ArrayList<String> indexes, final Transaction tx) throws Exception
+	public static List<List<Boolean>> getOrders(final List<String> indexes, final Transaction tx) throws Exception
 	{
-		final ArrayList<ArrayList<Boolean>> retval = new ArrayList<ArrayList<Boolean>>();
+		final List<List<Boolean>> retval = new ArrayList<List<Boolean>>();
 		for (final String index : indexes)
 		{
 			final String schema = index.substring(0, index.indexOf('.'));
 			final String name = index.substring(schema.length() + 1, index.indexOf('.', schema.length() + 1));
-			ArrayList<Object> rs = getOrdersCache.get(schema + "." + name);
+			List<Object> rs = getOrdersCache.get(schema + "." + name);
 			if (rs == null)
 			{
 				rs = PlanCacheManager.getOrders().setParms(schema, name).execute(tx);
 				getOrdersCache.put(schema + "." + name, rs);
 			}
-			final ArrayList<Boolean> retRow = new ArrayList<Boolean>();
+			final List<Boolean> retRow = new ArrayList<Boolean>();
 			for (final Object o : rs)
 			{
 				if (!(o instanceof DataEndMarker))
 				{
-					final ArrayList<Object> row = (ArrayList<Object>)o;
+					final List<Object> row = (List<Object>)o;
 					final String ord = (String)row.get(0);
 					boolean order = true;
 					if (!ord.equals("A"))
@@ -1750,10 +1749,10 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	public static TreeMap<Integer, String> getPos2ColForTable(final String schema, final String name, final Transaction tx) throws Exception
+	public static Map<Integer, String> getPos2ColForTable(final String schema, final String name, final Transaction tx) throws Exception
 	{
-		final TreeMap<Integer, String> retval = new TreeMap<Integer, String>();
-		ArrayList<Object> rs = getCols2PosForTableCache.get(schema + "." + name);
+		final Map<Integer, String> retval = new TreeMap<Integer, String>();
+		List<Object> rs = getCols2PosForTableCache.get(schema + "." + name);
 		if (rs == null)
 		{
 			rs = PlanCacheManager.getCols2PosForTable().setParms(schema, name).execute(tx);
@@ -1766,7 +1765,7 @@ public final class MetaData implements Serializable
 			}
 			else
 			{
-				final ArrayList<Object> row = (ArrayList<Object>)r;
+				final List<Object> row = (List<Object>)r;
 				retval.put((Integer)row.get(1), name + "." + (String)row.get(0));
 			}
 		}
@@ -1803,8 +1802,7 @@ public final class MetaData implements Serializable
 		}
 	}
 
-	public static int getTypeForTable(final String schema, final String table, final Transaction tx) throws Exception
-	{
+	public static int getTypeForTable(final String schema, final String table, final Transaction tx) throws Exception {
 		final boolean haveLock = tableMetaLock.tryLock();
 		if (haveLock)
 		{
@@ -1825,25 +1823,25 @@ public final class MetaData implements Serializable
 		return result;
 	}
 
-	public static ArrayList<ArrayList<String>> getTypes(final ArrayList<String> indexes, final Transaction tx) throws Exception
+	public static List<List<String>> getTypes(final List<String> indexes, final Transaction tx) throws Exception
 	{
-		final ArrayList<ArrayList<String>> retval = new ArrayList<ArrayList<String>>();
+		final List<List<String>> retval = new ArrayList<List<String>>();
 		for (final String index : indexes)
 		{
 			final String schema = index.substring(0, index.indexOf('.'));
 			final String name = index.substring(schema.length() + 1, index.indexOf('.', schema.length() + 1));
-			ArrayList<Object> rs = getTypesCache.get(schema + "." + name);
+			List<Object> rs = getTypesCache.get(schema + "." + name);
 			if (rs == null)
 			{
 				rs = PlanCacheManager.getTypes().setParms(schema, name).execute(tx);
 				getTypesCache.put(schema + "." + name, rs);
 			}
-			final ArrayList<String> retRow = new ArrayList<String>();
+			final List<String> retRow = new ArrayList<String>();
 			for (final Object o : rs)
 			{
 				if (!(o instanceof DataEndMarker))
 				{
-					final ArrayList<Object> row = (ArrayList<Object>)o;
+					final List<Object> row = (List<Object>)o;
 					String type = (String)row.get(0);
 					if (type.equals("BIGINT"))
 					{
@@ -1866,10 +1864,10 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	public static ArrayList<Boolean> getUnique(final String schema, final String table, final Transaction tx) throws Exception
+	public static List<Boolean> getUnique(final String schema, final String table, final Transaction tx) throws Exception
 	{
-		final ArrayList<Boolean> retval = new ArrayList<Boolean>();
-		ArrayList<Object> rs = getUniqueCache.get(schema + "." + table);
+		final List<Boolean> retval = new ArrayList<Boolean>();
+		List<Object> rs = getUniqueCache.get(schema + "." + table);
 		if (rs == null)
 		{
 			rs = PlanCacheManager.getUnique().setParms(schema, table).execute(tx);
@@ -1879,7 +1877,7 @@ public final class MetaData implements Serializable
 		{
 			if (!(o instanceof DataEndMarker))
 			{
-				final ArrayList<Object> row = (ArrayList<Object>)o;
+				final List<Object> row = (List<Object>)o;
 				final boolean unique = (((String)row.get(1)).equals("Y"));
 				retval.add(unique);
 			}
@@ -1888,10 +1886,10 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	public static ArrayList<Index> getUniqueIndexesForTable(final String schema, final String table, final Transaction tx) throws Exception
+	public static List<Index> getUniqueIndexesForTable(final String schema, final String table, final Transaction tx) throws Exception
 	{
-		final ArrayList<Index> retval = new ArrayList<Index>();
-		ArrayList<Object> rs = getUniqueIndexesCache.get(schema + "." + table);
+		final List<Index> retval = new ArrayList<Index>();
+		List<Object> rs = getUniqueIndexesCache.get(schema + "." + table);
 		if (rs == null)
 		{
 			rs = PlanCacheManager.getUniqueIndexes().setParms(schema, table).execute(tx);
@@ -1901,18 +1899,18 @@ public final class MetaData implements Serializable
 		{
 			if (!(o instanceof DataEndMarker))
 			{
-				final ArrayList<Object> row = (ArrayList<Object>)o;
-				ArrayList<Object> rs2 = getKeysCache.get(schema + "." + row.get(0));
+				final List<Object> row = (List<Object>)o;
+				List<Object> rs2 = getKeysCache.get(schema + "." + row.get(0));
 				if (rs2 == null)
 				{
 					rs2 = PlanCacheManager.getKeys().setParms(schema, (String)row.get(0)).execute(tx);
 					getKeysCache.put(schema + "." + row.get(0), rs2);
 				}
 				// tabname, colname
-				final ArrayList<String> keys = new ArrayList<String>();
+				final List<String> keys = new ArrayList<String>();
 				for (final Object o2 : rs2)
 				{
-					final ArrayList<Object> row2 = (ArrayList<Object>)o2;
+					final List<Object> row2 = (List<Object>)o2;
 					keys.add(row2.get(0) + "." + row2.get(1));
 				}
 
@@ -1922,10 +1920,10 @@ public final class MetaData implements Serializable
 					rs2 = PlanCacheManager.getTypes().setParms(schema, (String)row.get(0)).execute(tx);
 					getTypesCache.put(schema + "." + row.get(0), rs2);
 				}
-				final ArrayList<String> types = new ArrayList<String>();
+				final List<String> types = new ArrayList<String>();
 				for (final Object o2 : rs2)
 				{
-					final ArrayList<Object> row2 = (ArrayList<Object>)o2;
+					final List<Object> row2 = (List<Object>)o2;
 					String type = (String)row2.get(0);
 					if (type.equals("BIGINT"))
 					{
@@ -1948,12 +1946,12 @@ public final class MetaData implements Serializable
 					rs2 = PlanCacheManager.getOrders().setParms(schema, (String)row.get(0)).execute(tx);
 					getOrdersCache.put(schema + "." + row.get(0), rs2);
 				}
-				final ArrayList<Boolean> orders = new ArrayList<Boolean>();
+				final List<Boolean> orders = new ArrayList<Boolean>();
 				for (final Object o2 : rs2)
 				{
 					if (!(o2 instanceof DataEndMarker))
 					{
-						final ArrayList<Object> row2 = (ArrayList<Object>)o2;
+						final List<Object> row2 = (List<Object>)o2;
 						final String ord = (String)row2.get(0);
 						boolean order = true;
 						if (!ord.equals("A"))
@@ -1976,9 +1974,9 @@ public final class MetaData implements Serializable
 		return PlanCacheManager.getViewSQL().setParms(schema, name).execute(tx);
 	}
 
-	public static ArrayList<Integer> getWorkerNodes()
+	public static List<Integer> getWorkerNodes()
 	{
-		return (ArrayList<Integer>)workers.clone();
+		return workers;
 	}
 
 	public static boolean isMyIP(final String host) throws Exception
@@ -2020,25 +2018,25 @@ public final class MetaData implements Serializable
 		return myNode;
 	}
 
-	public static void populateIndex(final String schema, final String index, final String table, final Transaction tx, final HashMap<String, Integer> cols2Pos) throws Exception
+	public static void populateIndex(final String schema, final String index, final String table, final Transaction tx, final Map<String, Integer> cols2Pos) throws Exception
 	{
 		final String iFn = schema + "." + index + ".indx";
 		final String tFn = schema + "." + table + ".tbl";
-		final ArrayList<Integer> nodes = getNodesForTable(schema, table, tx);
-		final ArrayList<Integer> devices = MetaData.getDevicesForTable(schema, table, tx);
-		ArrayList<Object> rs = getKeysCache.get(schema + "." + index);
+		final List<Integer> nodes = getNodesForTable(schema, table, tx);
+		final List<Integer> devices = MetaData.getDevicesForTable(schema, table, tx);
+		List<Object> rs = getKeysCache.get(schema + "." + index);
 		if (rs == null)
 		{
 			rs = PlanCacheManager.getKeys().setParms(schema, index).execute(tx);
 			getKeysCache.put(schema + "." + index, rs);
 		}
 		// tabname, colname
-		final ArrayList<String> keys = new ArrayList<String>();
+		final List<String> keys = new ArrayList<String>();
 		for (final Object o : rs)
 		{
 			if (!(o instanceof DataEndMarker))
 			{
-				final ArrayList<Object> row = (ArrayList<Object>)o;
+				final List<Object> row = (List<Object>)o;
 				keys.add(row.get(0) + "." + row.get(1));
 			}
 		}
@@ -2049,12 +2047,12 @@ public final class MetaData implements Serializable
 			rs = PlanCacheManager.getTypes().setParms(schema, index).execute(tx);
 			getTypesCache.put(schema + "." + index, rs);
 		}
-		final ArrayList<String> types = new ArrayList<String>();
+		final List<String> types = new ArrayList<String>();
 		for (final Object o : rs)
 		{
 			if (!(o instanceof DataEndMarker))
 			{
-				final ArrayList<Object> row = (ArrayList<Object>)o;
+				final List<Object> row = (List<Object>)o;
 				String type = (String)row.get(0);
 				if (type.equals("BIGINT"))
 				{
@@ -2078,12 +2076,12 @@ public final class MetaData implements Serializable
 			rs = PlanCacheManager.getOrders().setParms(schema, index).execute(tx);
 			getOrdersCache.put(schema + "." + index, rs);
 		}
-		final ArrayList<Boolean> orders = new ArrayList<Boolean>();
+		final List<Boolean> orders = new ArrayList<Boolean>();
 		for (final Object o : rs)
 		{
 			if (!(o instanceof DataEndMarker))
 			{
-				final ArrayList<Object> row = (ArrayList<Object>)o;
+				final List<Object> row = (List<Object>)o;
 				final String ord = (String)row.get(0);
 				boolean order = true;
 				if (!ord.equals("A"))
@@ -2094,23 +2092,23 @@ public final class MetaData implements Serializable
 			}
 		}
 
-		final ArrayList<Integer> poses = new ArrayList<Integer>();
+		final List<Integer> poses = new ArrayList<Integer>();
 		for (final String col : keys)
 		{
 			poses.add(cols2Pos.get(col));
 		}
 
-		final ArrayList<Object> tree = makeTree(nodes);
-		final ArrayList<Socket> sockets = new ArrayList<Socket>();
+		final List<Object> tree = makeTree(nodes);
+		final List<Socket> sockets = new ArrayList<Socket>();
 		final int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 
-		final TreeMap<Integer, String> pos2Col = cols2PosFlip(cols2Pos);
-		final HashMap<String, String> cols2Types = getCols2TypesForTable(schema, table, tx);
+		final Map<Integer, String> pos2Col = cols2PosFlip(cols2Pos);
+		final Map<String, String> cols2Types = getCols2TypesForTable(schema, table, tx);
 		final int type = getTypeForTable(schema, table, tx);
 
 		for (final Object o : tree)
 		{
-			ArrayList<Object> list;
+			List<Object> list;
 			if (o instanceof Integer)
 			{
 				list = new ArrayList<Object>(1);
@@ -2118,13 +2116,13 @@ public final class MetaData implements Serializable
 			}
 			else
 			{
-				list = (ArrayList<Object>)o;
+				list = (List<Object>)o;
 			}
 
 			Object obj = list.get(0);
 			while (obj instanceof ArrayList)
 			{
-				obj = ((ArrayList)obj).get(0);
+				obj = ((List)obj).get(0);
 			}
 
 			Socket sock;
@@ -2193,9 +2191,9 @@ public final class MetaData implements Serializable
 		final Transaction tTx = new Transaction(Transaction.ISOLATION_UR);
 		final int tableID = PlanCacheManager.getTableID().setParms(schema, table).execute(tTx);
 		final TableStatsThread tThread = new TableStatsThread(schema, table, tableID, tTx);
-		final TreeMap<Integer, String> pos2Col = getPos2ColForTable(schema, table, tTx);
-		final ArrayList<RunstatsThread> threads = new ArrayList<RunstatsThread>();
-		final ArrayList<Transaction> cTxs = new ArrayList<Transaction>();
+		final Map<Integer, String> pos2Col = getPos2ColForTable(schema, table, tTx);
+		final List<RunstatsThread> threads = new ArrayList<RunstatsThread>();
+		final List<Transaction> cTxs = new ArrayList<Transaction>();
 
 		tThread.start();
 		tThread.join();
@@ -2205,7 +2203,7 @@ public final class MetaData implements Serializable
 			allOK = false;
 		}
 
-		final ArrayList<Transaction> cdTxs = new ArrayList<Transaction>();
+		final List<Transaction> cdTxs = new ArrayList<Transaction>();
 		// if (allOK)
 		// {
 		int i = 0;
@@ -2220,9 +2218,9 @@ public final class MetaData implements Serializable
 		final long card = PlanCacheManager.getTableCard().setParms(schema, table).execute(cTxs.get(0));
 
 		// indexes
-		final ArrayList<Transaction> iTxs = new ArrayList<Transaction>();
-		final ArrayList<Object> rs = PlanCacheManager.getIndexIDsForTable().setParms(schema, table).execute(tTx);
-		final HashMap<String, Integer> colToIndex = new HashMap<String, Integer>();
+		final List<Transaction> iTxs = new ArrayList<Transaction>();
+		final List<Object> rs = PlanCacheManager.getIndexIDsForTable().setParms(schema, table).execute(tTx);
+		final Map<String, Integer> colToIndex = new HashMap<String, Integer>();
 		int iThreads = 0;
 		for (final Object o : rs)
 		{
@@ -2230,17 +2228,17 @@ public final class MetaData implements Serializable
 			{
 				continue;
 			}
-			final ArrayList<Object> row = (ArrayList<Object>)o;
+			final List<Object> row = (List<Object>)o;
 			final int indexID = (Integer)row.get(0);
-			final ArrayList<Object> rs2 = PlanCacheManager.getKeysByID().setParms(tableID, indexID).execute(tTx);
-			final ArrayList<String> keys = new ArrayList<String>();
+			final List<Object> rs2 = PlanCacheManager.getKeysByID().setParms(tableID, indexID).execute(tTx);
+			final List<String> keys = new ArrayList<String>();
 			for (final Object o2 : rs2)
 			{
 				if (o2 instanceof DataEndMarker)
 				{
 					continue;
 				}
-				keys.add((String)((ArrayList<Object>)o2).get(0));
+				keys.add((String)((List<Object>)o2).get(0));
 			}
 
 			final Transaction itx = new Transaction(Transaction.ISOLATION_UR);
@@ -2284,7 +2282,7 @@ public final class MetaData implements Serializable
 			j += 2;
 		}
 
-		final ArrayList<RunstatsThread> submitted = new ArrayList<RunstatsThread>();
+		final List<RunstatsThread> submitted = new ArrayList<RunstatsThread>();
 		HRDBMSWorker.logger.debug("THREADS:" + threads);
 		for (final RunstatsThread thread : threads)
 		{
@@ -2371,7 +2369,7 @@ public final class MetaData implements Serializable
 
 	public static boolean verifyColExistence(final String schema, final String table, final String col, final Transaction tx) throws Exception
 	{
-		final HashMap<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
+		final Map<String, Integer> cols2Pos = getCols2PosForTable(schema, table, tx);
 		return cols2Pos.containsKey(table + "." + col);
 	}
 
@@ -2388,9 +2386,9 @@ public final class MetaData implements Serializable
 
 	public static boolean verifyInsert(final String schema, final String table, final Operator op, final Transaction tx) throws Exception
 	{
-		final TreeMap<Integer, String> catalogPos2Col = getPos2ColForTable(schema, table, tx);
-		final HashMap<String, String> catalogCols2Types = getCols2TypesForTable(schema, table, tx);
-		final HashMap<Integer, String> catalogPos2Types = new HashMap<Integer, String>();
+		final Map<Integer, String> catalogPos2Col = getPos2ColForTable(schema, table, tx);
+		final Map<String, String> catalogCols2Types = getCols2TypesForTable(schema, table, tx);
+		final Map<Integer, String> catalogPos2Types = new HashMap<Integer, String>();
 		int i = 0;
 		final int s1 = catalogPos2Col.size();
 		while (i < s1)
@@ -2399,7 +2397,7 @@ public final class MetaData implements Serializable
 			i++;
 		}
 
-		final HashMap<Integer, String> opPos2Types = new HashMap<Integer, String>();
+		final Map<Integer, String> opPos2Types = new HashMap<Integer, String>();
 		i = 0;
 		final int s2 = op.getPos2Col().size();
 		while (i < s2)
@@ -2473,7 +2471,7 @@ public final class MetaData implements Serializable
 		return true;
 	}
 
-	public static boolean verifyUpdate(final String schema, final String tbl, final ArrayList<Column> cols, final ArrayList<String> buildList, final Operator op, final Transaction tx) throws Exception
+	public static boolean verifyUpdate(final String schema, final String tbl, final List<Column> cols, final List<String> buildList, final Operator op, final Transaction tx) throws Exception
 	{
 		// verify that all columns are 1 part - parseException
 		for (final Column col : cols)
@@ -2486,9 +2484,9 @@ public final class MetaData implements Serializable
 		// get data types for cols on this table
 		// make sure that selecting the buildList cols from op in that order
 		// satisfies updates for cols on this table
-		final TreeMap<Integer, String> catalogPos2Col = getPos2ColForTable(schema, tbl, tx);
-		final HashMap<String, String> catalogCols2Types = getCols2TypesForTable(schema, tbl, tx);
-		final HashMap<Integer, String> catalogPos2Types = new HashMap<Integer, String>();
+		final Map<Integer, String> catalogPos2Col = getPos2ColForTable(schema, tbl, tx);
+		final Map<String, String> catalogCols2Types = getCols2TypesForTable(schema, tbl, tx);
+		final Map<Integer, String> catalogPos2Types = new HashMap<Integer, String>();
 		int i = 0;
 		final int s1 = catalogPos2Col.size();
 		while (i < s1)
@@ -2497,7 +2495,7 @@ public final class MetaData implements Serializable
 			i++;
 		}
 
-		final HashMap<Integer, String> opPos2Types = new HashMap<Integer, String>();
+		final Map<Integer, String> opPos2Types = new HashMap<Integer, String>();
 		i = 0;
 		final int s2 = catalogPos2Col.size();
 		while (i < s2)
@@ -2631,15 +2629,15 @@ public final class MetaData implements Serializable
 	private static void buildIndex(final String schema, final String index, final String table, final int numCols, final boolean unique, final Transaction tx) throws Exception
 	{
 		final String fn = schema + "." + index + ".indx";
-		final ArrayList<Integer> nodes = getNodesForTable(schema, table, tx);
-		final ArrayList<Integer> devices = MetaData.getDevicesForTable(schema, table, tx);
-		final ArrayList<Object> tree = makeTree(nodes);
-		final ArrayList<Socket> sockets = new ArrayList<Socket>();
+		final List<Integer> nodes = getNodesForTable(schema, table, tx);
+		final List<Integer> devices = MetaData.getDevicesForTable(schema, table, tx);
+		final List<Object> tree = makeTree(nodes);
+		final List<Socket> sockets = new ArrayList<Socket>();
 		final int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 
 		for (final Object o : tree)
 		{
-			ArrayList<Object> list;
+			List<Object> list;
 			if (o instanceof Integer)
 			{
 				list = new ArrayList<Object>(1);
@@ -2647,13 +2645,13 @@ public final class MetaData implements Serializable
 			}
 			else
 			{
-				list = (ArrayList<Object>)o;
+				list = (List<Object>)o;
 			}
 
 			Object obj = list.get(0);
 			while (obj instanceof ArrayList)
 			{
-				obj = ((ArrayList)obj).get(0);
+				obj = ((List)obj).get(0);
 			}
 
 			Socket sock;
@@ -2713,7 +2711,7 @@ public final class MetaData implements Serializable
 		}
 	}
 
-	private static void buildTable(final String schema, final String table, final int numCols, final Transaction tx, final int tType, final ArrayList<ColDef> defs, ArrayList<Integer> colOrder, ArrayList<Integer> organization) throws Exception
+	private static void buildTable(final String schema, final String table, final int numCols, final Transaction tx, final int tType, final List<ColDef> defs, List<Integer> colOrder, List<Integer> organization) throws Exception
 	{
 		if (tType != 0 && colOrder == null)
 		{
@@ -2731,15 +2729,15 @@ public final class MetaData implements Serializable
 		}
 
 		final String fn = schema + "." + table + ".tbl";
-		final ArrayList<Integer> nodes = getNodesForTable(schema, table, tx);
-		final ArrayList<Integer> devices = MetaData.getDevicesForTable(schema, table, tx);
-		final ArrayList<Object> tree = makeTree(nodes);
-		final ArrayList<Socket> sockets = new ArrayList<Socket>();
+		final List<Integer> nodes = getNodesForTable(schema, table, tx);
+		final List<Integer> devices = MetaData.getDevicesForTable(schema, table, tx);
+		final List<Object> tree = makeTree(nodes);
+		final List<Socket> sockets = new ArrayList<Socket>();
 		final int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 
 		for (final Object o : tree)
 		{
-			ArrayList<Object> list;
+			List<Object> list;
 			if (o instanceof Integer)
 			{
 				list = new ArrayList<Object>(1);
@@ -2747,13 +2745,13 @@ public final class MetaData implements Serializable
 			}
 			else
 			{
-				list = (ArrayList<Object>)o;
+				list = (List<Object>)o;
 			}
 
 			Object obj = list.get(0);
 			while (obj instanceof ArrayList)
 			{
-				obj = ((ArrayList)obj).get(0);
+				obj = ((List)obj).get(0);
 			}
 
 			Socket sock;
@@ -2831,9 +2829,9 @@ public final class MetaData implements Serializable
 		return false;
 	}
 
-	private static ArrayList<Object> convertToHosts(final ArrayList<Object> tree, final Transaction tx) throws Exception
+	private static List<Object> convertToHosts(final List<Object> tree, final Transaction tx) throws Exception
 	{
-		final ArrayList<Object> retval = new ArrayList<Object>();
+		final List<Object> retval = new ArrayList<Object>();
 		int i = 0;
 		final int size = tree.size();
 		while (i < size)
@@ -2845,7 +2843,7 @@ public final class MetaData implements Serializable
 			}
 			else
 			{
-				retval.add(convertToHosts((ArrayList<Object>)obj, tx));
+				retval.add(convertToHosts((List<Object>)obj, tx));
 			}
 
 			i++;
@@ -2854,7 +2852,7 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	private static void defaultDate(final ArrayList<MyDate> retval)
+	private static void defaultDate(final List<MyDate> retval)
 	{
 		retval.add(new MyDate(1960, 1, 1));
 		retval.add(new MyDate(2000, 1, 1));
@@ -2863,7 +2861,7 @@ public final class MetaData implements Serializable
 		retval.add(new MyDate(2060, 1, 1));
 	}
 
-	private static void defaultDouble(final ArrayList<Double> retval)
+	private static void defaultDouble(final List<Double> retval)
 	{
 		retval.add(Double.MIN_VALUE);
 		retval.add(Double.MIN_VALUE / 2);
@@ -2949,7 +2947,7 @@ public final class MetaData implements Serializable
 		{
 			if (key instanceof ArrayList)
 			{
-				final byte[] data = toBytesForHash((ArrayList<Object>)key);
+				final byte[] data = toBytesForHash((List<Object>)key);
 				eHash = MurmurHash.hash64(data, data.length);
 			}
 			else
@@ -2996,16 +2994,16 @@ public final class MetaData implements Serializable
 		return buff;
 	}
 
-	private static ArrayList<Object> makeTree(final ArrayList<Integer> nodes)
+	private static List<Object> makeTree(final List<Integer> nodes)
 	{
 		final int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 		if (nodes.size() <= max)
 		{
-			final ArrayList<Object> retval = new ArrayList<Object>(nodes);
+			final List<Object> retval = new ArrayList<Object>(nodes);
 			return retval;
 		}
 
-		final ArrayList<Object> retval = new ArrayList<Object>();
+		final List<Object> retval = new ArrayList<Object>();
 		int i = 0;
 		while (i < max)
 		{
@@ -3022,7 +3020,7 @@ public final class MetaData implements Serializable
 		{
 			final int first = (Integer)retval.get(j);
 			retval.remove(j);
-			final ArrayList<Integer> list = new ArrayList<Integer>(perNode + 1);
+			final List<Integer> list = new ArrayList<Integer>(perNode + 1);
 			list.add(first);
 			int k = 0;
 			while (k < perNode && i < size)
@@ -3036,7 +3034,7 @@ public final class MetaData implements Serializable
 			j++;
 		}
 
-		if (((ArrayList<Integer>)retval.get(0)).size() <= max)
+		if (((List<Integer>)retval.get(0)).size() <= max)
 		{
 			return retval;
 		}
@@ -3045,7 +3043,7 @@ public final class MetaData implements Serializable
 		i = 0;
 		while (i < retval.size())
 		{
-			final ArrayList<Integer> list = (ArrayList<Integer>)retval.remove(i);
+			final List<Integer> list = (List<Integer>)retval.remove(i);
 			retval.add(i, makeTree(list));
 			i++;
 		}
@@ -3053,7 +3051,7 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	private static boolean references(final ArrayList<Filter> filters, final ArrayList<String> cols)
+	private static boolean references(final List<Filter> filters, final List<String> cols)
 	{
 		for (final Filter filter : filters)
 		{
@@ -3135,7 +3133,7 @@ public final class MetaData implements Serializable
 		return t.getTable().equals(q);
 	}
 
-	private static byte[] toBytesForHash(final ArrayList<Object> key)
+	private static byte[] toBytesForHash(final List<Object> key)
 	{
 		final StringBuilder sb = new StringBuilder();
 		for (final Object o : key)
@@ -3174,13 +3172,13 @@ public final class MetaData implements Serializable
 	}
 
 	/** Generates cardinality statistics for use by the optimizer */
-	public HashMap<String, Double> generateCard(final Operator op, final Transaction tx, final Operator tree) throws Exception
+	public Map<String, Double> generateCard(final Operator op, final Transaction tx, final Operator tree) throws Exception
 	{
-		final HashMap<Operator, ArrayList<String>> tables = new HashMap<Operator, ArrayList<String>>();
-		final HashMap<Operator, ArrayList<ArrayList<Filter>>> filters = new HashMap<Operator, ArrayList<ArrayList<Filter>>>();
-		final HashMap<Operator, HashMap<String, Double>> retval = new HashMap<Operator, HashMap<String, Double>>();
-		final ArrayList<Operator> leaves = getLeaves(op);
-		final ArrayList<Operator> queued = new ArrayList<Operator>(leaves.size());
+		final Map<Operator, List<String>> tables = new HashMap<Operator, List<String>>();
+		final Map<Operator, List<List<Filter>>> filters = new HashMap<Operator, List<List<Filter>>>();
+		final Map<Operator, Map<String, Double>> retval = new HashMap<Operator, Map<String, Double>>();
+		final List<Operator> leaves = getLeaves(op);
+		final List<Operator> queued = new ArrayList<Operator>(leaves.size());
 		for (final Operator leaf : leaves)
 		{
 			final Operator o = doWork(leaf, tables, filters, retval, tx, tree);
@@ -3210,7 +3208,7 @@ public final class MetaData implements Serializable
 		return retval.get(queued.get(0));
 	}
 
-	public long getCard(final String col, final HashMap<String, Double> generated, final Transaction tx, final Operator tree) throws Exception
+	public long getCard(final String col, final Map<String, Double> generated, final Transaction tx, final Operator tree) throws Exception
 	{
 		final String c = col.substring(col.indexOf('.') + 1);
 		final String ST = getTableForCol(col, tree);
@@ -3250,16 +3248,16 @@ public final class MetaData implements Serializable
 		return getCard(col, op.getGenerated(), tx, tree);
 	}
 
-	public long getColgroupCard(final ArrayList<String> cs, final HashMap<String, Double> generated, final Transaction tx, final Operator tree) throws Exception
+	public long getColgroupCard(final List<String> cs, final Map<String, Double> generated, final Transaction tx, final Operator tree) throws Exception
 	{
 		if (cs.size() == 0)
 		{
 			return 1;
 		}
 
-		final ArrayList<String> schemas = new ArrayList<String>();
-		final ArrayList<String> tables = new ArrayList<String>();
-		final ArrayList<String> cols = new ArrayList<String>();
+		final List<String> schemas = new ArrayList<String>();
+		final List<String> tables = new ArrayList<String>();
+		final List<String> cols = new ArrayList<String>();
 		for (final String c : cs)
 		{
 			cols.add(c.substring(c.indexOf('.') + 1));
@@ -3341,7 +3339,7 @@ public final class MetaData implements Serializable
 
 		if (oneSchema && oneTable && theSchema != null && theTable != null)
 		{
-			ArrayList<Object> rs = getIndexIDsForTableCache.get(theSchema + "." + theTable);
+			List<Object> rs = getIndexIDsForTableCache.get(theSchema + "." + theTable);
 			if (rs == null)
 			{
 				rs = PlanCacheManager.getIndexIDsForTable().setParms(theSchema, theTable).execute(tx);
@@ -3351,12 +3349,12 @@ public final class MetaData implements Serializable
 			{
 				if (!(r instanceof DataEndMarker))
 				{
-					final ArrayList<Object> row = (ArrayList<Object>)r;
+					final List<Object> row = (List<Object>)r;
 					final int count = PlanCacheManager.getIndexColCount().setParms(tableID, (Integer)row.get(0)).execute(tx);
 					if (count == schemas.size())
 					{
 						boolean hasAllCols = true;
-						final HashMap<String, Integer> cols2Pos = getCols2PosForTable(theSchema, theTable, tx);
+						final Map<String, Integer> cols2Pos = getCols2PosForTable(theSchema, theTable, tx);
 						for (final String col : cols)
 						{
 							final int colID = cols2Pos.get(theTable + "." + col);
@@ -3377,7 +3375,7 @@ public final class MetaData implements Serializable
 							}
 							else
 							{
-								final ArrayList<Object> cardRow = (ArrayList<Object>)o;
+								final List<Object> cardRow = (List<Object>)o;
 								return (Long)cardRow.get(0);
 							}
 						}
@@ -3398,7 +3396,7 @@ public final class MetaData implements Serializable
 		return (long)card;
 	}
 
-	public long getColgroupCard(final ArrayList<String> cols, final RootOperator op, final Transaction tx, final Operator tree) throws Exception
+	public long getColgroupCard(final List<String> cols, final RootOperator op, final Transaction tx, final Operator tree) throws Exception
 	{
 		return getColgroupCard(cols, op.getGenerated(), tx, tree);
 	}
@@ -3443,7 +3441,7 @@ public final class MetaData implements Serializable
 			return s;
 		}
 
-		final ArrayList<TableScanOperator> tables = new ArrayList<TableScanOperator>();
+		final List<TableScanOperator> tables = new ArrayList<TableScanOperator>();
 		getTables(tree, new HashSet<Operator>(), tables);
 		if (isQualified(col))
 		{
@@ -3521,7 +3519,7 @@ public final class MetaData implements Serializable
 		}
 	}
 
-	public double likelihood(final ArrayList<Filter> filters, final HashMap<String, Double> generated, final Transaction tx, final Operator tree) throws Exception
+	public double likelihood(final List<Filter> filters, final Map<String, Double> generated, final Transaction tx, final Operator tree) throws Exception
 	{
 		double sum = 0;
 
@@ -3538,12 +3536,12 @@ public final class MetaData implements Serializable
 		return sum;
 	}
 
-	public double likelihood(final ArrayList<Filter> filters, final RootOperator op, final Transaction tx, final Operator tree) throws Exception
+	public double likelihood(final List<Filter> filters, final RootOperator op, final Transaction tx, final Operator tree) throws Exception
 	{
 		return likelihood(filters, op.getGenerated(), tx, tree);
 	}
 
-	public double likelihood(final ArrayList<Filter> filters, final Transaction tx, final Operator tree) throws Exception
+	public double likelihood(final List<Filter> filters, final Transaction tx, final Operator tree) throws Exception
 	{
 		double sum = 0;
 
@@ -3561,7 +3559,7 @@ public final class MetaData implements Serializable
 	}
 
 	// likelihood of a row directly out of the table passing this test
-	public double likelihood(final Filter filter, final HashMap<String, Double> generated, final Transaction tx, final Operator tree) throws Exception
+	public double likelihood(final Filter filter, final Map<String, Double> generated, final Transaction tx, final Operator tree) throws Exception
 	{
 		long leftCard = 1;
 		long rightCard = 1;
@@ -3783,7 +3781,7 @@ public final class MetaData implements Serializable
 	{
 		long leftCard = 1;
 		long rightCard = 1;
-		final HashMap<String, Double> generated = new HashMap<String, Double>();
+		final Map<String, Double> generated = new HashMap<String, Double>();
 
 		if (filter instanceof ConstantFilter)
 		{
@@ -3992,10 +3990,10 @@ public final class MetaData implements Serializable
 		throw new Exception("Unknown operator in likelihood()");
 	}
 
-	public double likelihood(final HashSet<HashMap<Filter, Filter>> hshm, final HashMap<String, Double> generated, final Transaction tx, final Operator tree) throws Exception
+	public double likelihood(final Set<Map<Filter, Filter>> hshm, final Map<String, Double> generated, final Transaction tx, final Operator tree) throws Exception
 	{
-		final ArrayList<Double> ands = new ArrayList<Double>(hshm.size());
-		for (final HashMap<Filter, Filter> ored : hshm)
+		final List<Double> ands = new ArrayList<Double>(hshm.size());
+		for (final Map<Filter, Filter> ored : hshm)
 		{
 			double sum = 0;
 
@@ -4021,21 +4019,21 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	public double likelihood(final HashSet<HashMap<Filter, Filter>> hshm, final RootOperator op, final Transaction tx, final Operator tree) throws Exception
+	public double likelihood(final Set<Map<Filter, Filter>> hshm, final RootOperator op, final Transaction tx, final Operator tree) throws Exception
 	{
 		return likelihood(hshm, op.getGenerated(), tx, tree);
 	}
 
-	private Operator doWork(Operator op, final HashMap<Operator, ArrayList<String>> tables, final HashMap<Operator, ArrayList<ArrayList<Filter>>> filters, final HashMap<Operator, HashMap<String, Double>> retvals, final Transaction tx, final Operator tree) throws Exception
+	private Operator doWork(Operator op, final Map<Operator, List<String>> tables, final Map<Operator, List<List<Filter>>> filters, final Map<Operator, Map<String, Double>> retvals, final Transaction tx, final Operator tree) throws Exception
 	{
-		ArrayList<String> t;
-		ArrayList<ArrayList<Filter>> f;
-		HashMap<String, Double> r;
+		List<String> t;
+		List<List<Filter>> f;
+		Map<String, Double> r;
 
 		if (op instanceof TableScanOperator)
 		{
 			t = new ArrayList<String>();
-			f = new ArrayList<ArrayList<Filter>>();
+			f = new ArrayList<>();
 			r = new HashMap<String, Double>();
 		}
 		else
@@ -4055,24 +4053,24 @@ public final class MetaData implements Serializable
 			}
 			else if (op instanceof SelectOperator)
 			{
-				final ArrayList<Filter> filter = new ArrayList<Filter>(((SelectOperator)op).getFilter());
+				final List<Filter> filter = new ArrayList<Filter>(((SelectOperator)op).getFilter());
 				f.add(filter);
 				// System.out.println("Op is SelectOperator");
 				// System.out.println("Filter list is " + f);
 			}
 			else if (op instanceof SemiJoinOperator)
 			{
-				final HashSet<HashMap<Filter, Filter>> hshm = ((SemiJoinOperator)op).getHSHM();
-				for (final HashMap<Filter, Filter> ored : hshm)
+				final Set<Map<Filter, Filter>> hshm = ((SemiJoinOperator)op).getHSHM();
+				for (final Map<Filter, Filter> ored : hshm)
 				{
-					final ArrayList<Filter> filter = new ArrayList<Filter>(ored.keySet());
+					final List<Filter> filter = new ArrayList<Filter>(ored.keySet());
 					f.add(filter);
 				}
 			}
 			else if (op instanceof AntiJoinOperator)
 			{
-				final HashSet<HashMap<Filter, Filter>> hshm = ((AntiJoinOperator)op).getHSHM();
-				final ArrayList<Filter> al = new ArrayList<Filter>();
+				final Set<Map<Filter, Filter>> hshm = ((AntiJoinOperator)op).getHSHM();
+				final List<Filter> al = new ArrayList<Filter>();
 				al.add(new ConstantFilter(1 - this.likelihood(hshm, r, tx, tree)));
 				f.add(al);
 			}
@@ -4087,7 +4085,7 @@ public final class MetaData implements Serializable
 				{
 					// System.out.println("Output col: " + col);
 					double card;
-					final ArrayList<String> keys = ((MultiOperator)op).getKeys();
+					final List<String> keys = ((MultiOperator)op).getKeys();
 					if (keys.size() == 1)
 					{
 						card = this.getCard(keys.get(0), r, tx, tree);
@@ -4101,7 +4099,7 @@ public final class MetaData implements Serializable
 						card = this.getColgroupCard(keys, r, tx, tree);
 					}
 
-					for (final ArrayList<Filter> filter : f)
+					for (final List<Filter> filter : f)
 					{
 						if (references(filter, new ArrayList(keys)))
 						{
@@ -4125,7 +4123,7 @@ public final class MetaData implements Serializable
 					card *= getTableCard(schema, table2, tx);
 				}
 
-				for (final ArrayList<Filter> filter : f)
+				for (final List<Filter> filter : f)
 				{
 					card *= this.likelihood(filter, r, tx, tree);
 				}
@@ -4145,7 +4143,7 @@ public final class MetaData implements Serializable
 					card *= getTableCard(schema, table2, tx);
 				}
 
-				for (final ArrayList<Filter> filter : f)
+				for (final List<Filter> filter : f)
 				{
 					card *= this.likelihood(filter, r, tx, tree);
 				}
@@ -4159,9 +4157,9 @@ public final class MetaData implements Serializable
 				for (final Map.Entry entry : ((RenameOperator)op).getRenameMap().entrySet())
 				{
 					double card = this.getCard((String)entry.getKey(), r, tx, tree);
-					for (final ArrayList<Filter> filter : f)
+					for (final List<Filter> filter : f)
 					{
-						final ArrayList<String> keys = new ArrayList<String>(1);
+						final List<String> keys = new ArrayList<String>(1);
 						keys.add((String)entry.getKey());
 						if (references(filter, keys))
 						{
@@ -4186,7 +4184,7 @@ public final class MetaData implements Serializable
 					card *= getTableCard(schema, table2, tx);
 				}
 
-				for (final ArrayList<Filter> filter : f)
+				for (final List<Filter> filter : f)
 				{
 					card *= this.likelihood(filter, r, tx, tree);
 				}
@@ -4206,7 +4204,7 @@ public final class MetaData implements Serializable
 					card *= getTableCard(schema, table2, tx);
 				}
 
-				for (final ArrayList<Filter> filter : f)
+				for (final List<Filter> filter : f)
 				{
 					card *= this.likelihood(filter, r, tx, tree);
 				}
@@ -4288,10 +4286,10 @@ public final class MetaData implements Serializable
 		}
 	}
 
-	private ArrayList<MyDate> getDateQuartiles(final String col, final Transaction tx, final Operator tree) throws Exception
+	private List<MyDate> getDateQuartiles(final String col, final Transaction tx, final Operator tree) throws Exception
 	{
 		// SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-		final ArrayList<MyDate> retval = new ArrayList<MyDate>(5);
+		final List<MyDate> retval = new ArrayList<MyDate>(5);
 		final String c = col.substring(col.indexOf('.') + 1);
 		final String ST = getTableForCol(col, tree);
 		if (ST == null)
@@ -4313,7 +4311,7 @@ public final class MetaData implements Serializable
 		}
 		else
 		{
-			for (final Object obj : (ArrayList<Object>)o)
+			for (final Object obj : (List<Object>)o)
 			{
 				final String val = (String)obj;
 				final int year = Integer.parseInt(val.substring(0, 4));
@@ -4326,9 +4324,9 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	private ArrayList<Double> getDoubleQuartiles(final String col, final Transaction tx, final Operator tree) throws Exception
+	private List<Double> getDoubleQuartiles(final String col, final Transaction tx, final Operator tree) throws Exception
 	{
-		final ArrayList<Double> retval = new ArrayList<Double>(5);
+		final List<Double> retval = new ArrayList<Double>(5);
 		final String c = col.substring(col.indexOf('.') + 1);
 		final String ST = getTableForCol(col, tree);
 		if (ST == null)
@@ -4350,7 +4348,7 @@ public final class MetaData implements Serializable
 		}
 		else
 		{
-			for (final Object obj : (ArrayList<Object>)o)
+			for (final Object obj : (List<Object>)o)
 			{
 				final String val = (String)obj;
 				retval.add(Double.parseDouble(val));
@@ -4360,16 +4358,16 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	private ArrayList<Operator> getLeaves(final Operator op)
+	private List<Operator> getLeaves(final Operator op)
 	{
 		if (op.children().size() == 0)
 		{
-			final ArrayList<Operator> retval = new ArrayList<Operator>(1);
+			final List<Operator> retval = new ArrayList<Operator>(1);
 			retval.add(op);
 			return retval;
 		}
 
-		final ArrayList<Operator> retval = new ArrayList<Operator>();
+		final List<Operator> retval = new ArrayList<Operator>();
 		for (final Operator o : op.children())
 		{
 			retval.addAll(getLeaves(o));
@@ -4378,9 +4376,9 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	private ArrayList<String> getStringQuartiles(final String col, final Transaction tx, final Operator tree) throws Exception
+	private List<String> getStringQuartiles(final String col, final Transaction tx, final Operator tree) throws Exception
 	{
-		final ArrayList<String> retval = new ArrayList<String>(5);
+		final List<String> retval = new ArrayList<String>(5);
 		final String c = col.substring(col.indexOf('.') + 1);
 		final String ST = getTableForCol(col, tree);
 		if (ST == null)
@@ -4410,7 +4408,7 @@ public final class MetaData implements Serializable
 		}
 		else
 		{
-			for (final Object obj : (ArrayList<Object>)o)
+			for (final Object obj : (List<Object>)o)
 			{
 				final String val = (String)obj;
 				retval.add(val);
@@ -4420,7 +4418,7 @@ public final class MetaData implements Serializable
 		return retval;
 	}
 
-	private void getTables(final Operator op, final HashSet<Operator> touched, final ArrayList<TableScanOperator> tables)
+	private void getTables(final Operator op, final Set<Operator> touched, final List<TableScanOperator> tables)
 	{
 		if (touched.contains(op))
 		{
@@ -4446,7 +4444,7 @@ public final class MetaData implements Serializable
 
 	private double percentAbove(final String col, final double val, final Transaction tx, final Operator tree) throws Exception
 	{
-		final ArrayList<Double> quartiles = getDoubleQuartiles(col, tx, tree);
+		final List<Double> quartiles = getDoubleQuartiles(col, tx, tree);
 		// System.out.println("In percentAbove with col = " + col +
 		// " and val = " + val);
 		// System.out.println("Quartiles are " + quartiles);
@@ -4485,7 +4483,7 @@ public final class MetaData implements Serializable
 
 	private double percentAbove(final String col, final MyDate val, final Transaction tx, final Operator tree) throws Exception
 	{
-		final ArrayList<MyDate> quartiles = getDateQuartiles(col, tx, tree);
+		final List<MyDate> quartiles = getDateQuartiles(col, tx, tree);
 		if (quartiles == null)
 		{
 			return 0.5;
@@ -4521,7 +4519,7 @@ public final class MetaData implements Serializable
 
 	private double percentAbove(final String col, final String val, final Transaction tx, final Operator tree) throws Exception
 	{
-		final ArrayList<String> quartiles = getStringQuartiles(col, tx, tree);
+		final List<String> quartiles = getStringQuartiles(col, tx, tree);
 		if (quartiles == null)
 		{
 			return 0.5;
@@ -4557,7 +4555,7 @@ public final class MetaData implements Serializable
 
 	private double percentBelow(final String col, final double val, final Transaction tx, final Operator tree) throws Exception
 	{
-		final ArrayList<Double> quartiles = getDoubleQuartiles(col, tx, tree);
+		final List<Double> quartiles = getDoubleQuartiles(col, tx, tree);
 		if (quartiles == null)
 		{
 			return 0.5;
@@ -4593,7 +4591,7 @@ public final class MetaData implements Serializable
 
 	private double percentBelow(final String col, final MyDate val, final Transaction tx, final Operator tree) throws Exception
 	{
-		final ArrayList<MyDate> quartiles = getDateQuartiles(col, tx, tree);
+		final List<MyDate> quartiles = getDateQuartiles(col, tx, tree);
 		if (quartiles == null)
 		{
 			return 0.5;
@@ -4629,7 +4627,7 @@ public final class MetaData implements Serializable
 
 	private double percentBelow(final String col, final String val, final Transaction tx, final Operator tree) throws Exception
 	{
-		final ArrayList<String> quartiles = getStringQuartiles(col, tx, tree);
+		final List<String> quartiles = getStringQuartiles(col, tx, tree);
 		if (quartiles == null)
 		{
 			return 0.5;
@@ -4758,7 +4756,7 @@ public final class MetaData implements Serializable
 				{
 					throw new Exception("No data in table: " + sql);
 				}
-				ArrayList<Object> row = (ArrayList<Object>)o;
+				List<Object> row = (List<Object>)o;
 				String low = null;
 				String q1 = null;
 				String q2 = null;
@@ -4805,7 +4803,7 @@ public final class MetaData implements Serializable
 
 				if (o2 instanceof DataEndMarker)
 				{
-					row = (ArrayList<Object>)o;
+					row = (List<Object>)o;
 					if (type.equals("INT"))
 					{
 						high = q3 = q2 = q1 = Integer.toString((Integer)row.get(0));
@@ -4888,7 +4886,7 @@ public final class MetaData implements Serializable
 				}
 				else
 				{
-					row = (ArrayList<Object>)o2;
+					row = (List<Object>)o2;
 					if (type.equals("INT"))
 					{
 						q1 = Integer.toString((Integer)row.get(0));
@@ -4929,7 +4927,7 @@ public final class MetaData implements Serializable
 
 				if (o2 instanceof DataEndMarker)
 				{
-					row = (ArrayList<Object>)o;
+					row = (List<Object>)o;
 					if (type.equals("INT"))
 					{
 						high = q3 = q2 = Integer.toString((Integer)row.get(0));
@@ -5012,7 +5010,7 @@ public final class MetaData implements Serializable
 				}
 				else
 				{
-					row = (ArrayList<Object>)o2;
+					row = (List<Object>)o2;
 					if (type.equals("INT"))
 					{
 						q2 = Integer.toString((Integer)row.get(0));
@@ -5053,7 +5051,7 @@ public final class MetaData implements Serializable
 
 				if (o2 instanceof DataEndMarker)
 				{
-					row = (ArrayList<Object>)o;
+					row = (List<Object>)o;
 					if (type.equals("INT"))
 					{
 						high = q3 = Integer.toString((Integer)row.get(0));
@@ -5136,7 +5134,7 @@ public final class MetaData implements Serializable
 				}
 				else
 				{
-					row = (ArrayList<Object>)o2;
+					row = (List<Object>)o2;
 					if (type.equals("INT"))
 					{
 						q3 = Integer.toString((Integer)row.get(0));
@@ -5175,7 +5173,7 @@ public final class MetaData implements Serializable
 					i++;
 				}
 
-				row = (ArrayList<Object>)o;
+				row = (List<Object>)o;
 				if (type.equals("INT"))
 				{
 					high = Integer.toString((Integer)row.get(0));
@@ -5354,7 +5352,7 @@ public final class MetaData implements Serializable
 						return;
 					}
 
-					unique = (String)((ArrayList<Object>)obj2).get(3);
+					unique = (String)((List<Object>)obj2).get(3);
 				}
 
 				long card = -1;
@@ -5419,7 +5417,7 @@ public final class MetaData implements Serializable
 						return;
 					}
 
-					card = (Long)((ArrayList<Object>)obj).get(0);
+					card = (Long)((List<Object>)obj).get(0);
 					if (totalCard > 1000000)
 					{
 						card = (long)(card + ((100.0d * card * card * (100.0d - p)) / (totalCard * p * p)));
@@ -5504,7 +5502,7 @@ public final class MetaData implements Serializable
 	{
 		private final String schema;
 		private final String table;
-		private final ArrayList<String> keys;
+		private final List<String> keys;
 		private final int tableID;
 		private final int indexID;
 		private Transaction tx;
@@ -5512,7 +5510,7 @@ public final class MetaData implements Serializable
 		private final long totalCard;
 		private long p;
 
-		public IndexStatsThread(final String schema, final String table, final ArrayList<String> keys, final int tableID, final int indexID, final Transaction tx, final long totalCard)
+		public IndexStatsThread(final String schema, final String table, final List<String> keys, final int tableID, final int indexID, final Transaction tx, final long totalCard)
 		{
 			this.schema = schema;
 			this.table = table;
@@ -5575,7 +5573,7 @@ public final class MetaData implements Serializable
 					return;
 				}
 
-				final String unique = (String)((ArrayList<Object>)obj2).get(3);
+				final String unique = (String)((List<Object>)obj2).get(3);
 				long card = -1;
 				if (unique.equals("Y"))
 				{
@@ -5653,7 +5651,7 @@ public final class MetaData implements Serializable
 						return;
 					}
 
-					card = (Long)((ArrayList<Object>)obj2).get(0);
+					card = (Long)((List<Object>)obj2).get(0);
 					if (totalCard > 1000000)
 					{
 						card = (long)(card + ((100.0d * card * card * (100.0d - p)) / (totalCard * p * p)));
@@ -5809,7 +5807,7 @@ public final class MetaData implements Serializable
 					return;
 				}
 
-				final long card = (Long)((ArrayList<Object>)obj).get(0);
+				final long card = (Long)((List<Object>)obj).get(0);
 				final Random random = new Random();
 				int updateCount = -1;
 				while (updateCount == -1)
@@ -5882,7 +5880,7 @@ public final class MetaData implements Serializable
 		}
 	}
 
-	private static HashMap<String, String> getCols2Types(final List<ColDef> defs) {
+	private static Map<String, String> getCols2Types(final List<ColDef> defs) {
 		HashMap<String, String> cols2Types = new HashMap<>();
 		for (ColDef def : defs)
 		{

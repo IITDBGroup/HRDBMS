@@ -19,6 +19,7 @@ import java.net.URI;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.Map;
 
 /** Properties for the CSV external table implementation */
 public class CsvExternalParams implements ExternalParamsInterface {
@@ -122,7 +123,7 @@ public class CsvExternalParams implements ExternalParamsInterface {
         OperatorUtils.writeInt(source.ordinal(), out);
     }
 
-    public static CsvExternalParams deserializeKnown(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+    public static CsvExternalParams deserializeKnown(final InputStream in, final Map<Long, Object> prev) throws Exception
     {
         final CsvExternalParams value = (CsvExternalParams)unsafe.allocateInstance(CsvExternalParams.class);
         prev.put(OperatorUtils.readLong(in), value);

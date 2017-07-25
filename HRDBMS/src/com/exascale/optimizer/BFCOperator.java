@@ -6,12 +6,8 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
+
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.BufferedFileChannel;
 import com.exascale.misc.DataEndMarker;
@@ -46,13 +42,13 @@ public class BFCOperator implements Operator
 	private Operator parent;
 	private final MetaData meta;
 	private final BufferedFileChannel bfc;
-	private final TreeMap<Integer, String> pos2Col;
-	private final HashMap<String, Integer> cols2Pos;
-	private final HashMap<String, String> cols2Type;
+	private final Map<Integer, String> pos2Col;
+	private final Map<String, Integer> cols2Pos;
+	private final Map<String, String> cols2Type;
 	private final byte[] sizeBuff = new byte[4];
 	private byte[] data = null;
 
-	public BFCOperator(final BufferedFileChannel bfc, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Type, final MetaData meta)
+	public BFCOperator(final BufferedFileChannel bfc, final Map<Integer, String> pos2Col, final Map<String, String> cols2Type, final MetaData meta)
 	{
 		this.bfc = bfc;
 		this.pos2Col = pos2Col;
@@ -78,7 +74,7 @@ public class BFCOperator implements Operator
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
 		return null;
 	}
@@ -101,13 +97,13 @@ public class BFCOperator implements Operator
 	}
 
 	@Override
-	public HashMap<String, Integer> getCols2Pos()
+	public Map<String, Integer> getCols2Pos()
 	{
 		return cols2Pos;
 	}
 
 	@Override
-	public HashMap<String, String> getCols2Types()
+	public Map<String, String> getCols2Types()
 	{
 		return cols2Type;
 	}
@@ -125,13 +121,13 @@ public class BFCOperator implements Operator
 	}
 
 	@Override
-	public TreeMap<Integer, String> getPos2Col()
+	public Map<Integer, String> getPos2Col()
 	{
 		return pos2Col;
 	}
 
 	@Override
-	public ArrayList<String> getReferences()
+	public List<String> getReferences()
 	{
 		return null;
 	}
@@ -264,7 +260,7 @@ public class BFCOperator implements Operator
 				throw e;
 			}
 		}
-		final ArrayList<Object> retval = new ArrayList<Object>(numFields);
+		final List<Object> retval = new ArrayList<Object>(numFields);
 		int i = 0;
 		while (i < numFields)
 		{

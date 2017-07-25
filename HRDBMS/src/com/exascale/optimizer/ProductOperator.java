@@ -10,13 +10,7 @@ import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.Map;
-import java.util.TreeMap;
-import java.util.Vector;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
@@ -47,15 +41,15 @@ public final class ProductOperator extends JoinOperator implements Serializable
 		}
 	}
 
-	private ArrayList<Operator> children = new ArrayList<Operator>(2);
+	private List<Operator> children = new ArrayList<Operator>(2);
 
 	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
+	private Map<String, String> cols2Types;
+	private Map<String, Integer> cols2Pos;
+	private Map<Integer, String> pos2Col;
 	private transient final MetaData meta;
 	private transient volatile BufferedLinkedBlockingQueue outBuffer;
-	private transient volatile Vector<ArrayList<Object>> inBuffer;
+	private transient volatile Vector<List<Object>> inBuffer;
 	private transient int NUM_RT_THREADS;
 	private transient int NUM_PTHREADS;
 	// private final AtomicLong outCount = new AtomicLong(0);
@@ -67,7 +61,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	private transient ConcurrentHashMap<String, RandomAccessFile> rafs;
 	private transient ConcurrentHashMap<String, FileChannel> fcs;
 	private transient byte[] types;
-	private transient HashSet<HashMap<Filter, Filter>> hshm = null;
+	private transient Set<Map<Filter, Filter>> hshm = null;
 	private transient Boolean semi = null;
 	private transient Boolean anti = null;
 	private transient AtomicLong received;
@@ -85,7 +79,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 		received = new AtomicLong(0);
 	}
 
-	public static ProductOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static ProductOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final ProductOperator value = (ProductOperator)unsafe.allocateInstance(ProductOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -123,9 +117,9 @@ public final class ProductOperator extends JoinOperator implements Serializable
 
 			if (children.size() == 2 && children.get(0).getCols2Types() != null && children.get(1).getCols2Types() != null)
 			{
-				cols2Types = (HashMap<String, String>)children.get(0).getCols2Types().clone();
-				cols2Pos = (HashMap<String, Integer>)children.get(0).getCols2Pos().clone();
-				pos2Col = (TreeMap<Integer, String>)children.get(0).getPos2Col().clone();
+				cols2Types = new HashMap<>(children.get(0).getCols2Types());
+				cols2Pos = new HashMap<>(children.get(0).getCols2Pos());
+				pos2Col = new HashMap<>(children.get(0).getPos2Col());
 
 				cols2Types.putAll(children.get(1).getCols2Types());
 				for (final Map.Entry entry : children.get(1).getPos2Col().entrySet())
@@ -142,7 +136,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	}
 
 	@Override
-	public void addJoinCondition(final ArrayList<Filter> filters)
+	public void addJoinCondition(final List<Filter> filters)
 	{
 		throw new UnsupportedOperationException("ProductOperator does not support addJoinCondition");
 
@@ -156,7 +150,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
 		return children;
 	}
@@ -198,19 +192,19 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	}
 
 	@Override
-	public HashMap<String, Integer> getCols2Pos()
+	public Map<String, Integer> getCols2Pos()
 	{
 		return cols2Pos;
 	}
 
 	@Override
-	public HashMap<String, String> getCols2Types()
+	public Map<String, String> getCols2Types()
 	{
 		return cols2Types;
 	}
 
 	@Override
-	public HashSet<HashMap<Filter, Filter>> getHSHMFilter()
+	public Set<Map<Filter, Filter>> getHSHMFilter()
 	{
 		return null;
 	}
@@ -222,7 +216,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	}
 
 	@Override
-	public ArrayList<String> getJoinForChild(final Operator op)
+	public List<String> getJoinForChild(final Operator op)
 	{
 		return null;
 	}
@@ -240,15 +234,15 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	}
 
 	@Override
-	public TreeMap<Integer, String> getPos2Col()
+	public Map<Integer, String> getPos2Col()
 	{
 		return pos2Col;
 	}
 
 	@Override
-	public ArrayList<String> getReferences()
+	public List<String> getReferences()
 	{
-		final ArrayList<String> retval = new ArrayList<String>(0);
+		final List<String> retval = new ArrayList<String>(0);
 		return retval;
 	}
 
@@ -379,7 +373,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 		childPos = pos;
 	}
 
-	public void setHSHM(final HashSet<HashMap<Filter, Filter>> hshm)
+	public void setHSHM(final Set<Map<Filter, Filter>> hshm)
 	{
 		this.hshm = hshm;
 	}
@@ -422,7 +416,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	public void start() throws Exception
 	{
 		final int maxAllowed = (int)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")) / 2);
-		inBuffer = new Vector<ArrayList<Object>>(maxAllowed);
+		inBuffer = new Vector<>(maxAllowed);
 		inMem = true;
 		if (rightChildCard > maxAllowed)
 		{
@@ -533,14 +527,14 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	private class LeftThread extends HRDBMSThread
 	{
 		private final BufferedLinkedBlockingQueue q;
-		private HashSet<ArrayList<Object>> toRemove = null;
+		private Set<List<Object>> toRemove = null;
 
 		public LeftThread(final BufferedLinkedBlockingQueue q)
 		{
 			this.q = q;
 		}
 
-		public LeftThread(final BufferedLinkedBlockingQueue q, final HashSet<ArrayList<Object>> toRemove)
+		public LeftThread(final BufferedLinkedBlockingQueue q, final Set<List<Object>> toRemove)
 		{
 			this.q = q;
 			this.toRemove = toRemove;
@@ -551,7 +545,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 		{
 			try
 			{
-				final ArrayList<SubLeftThread> threads = new ArrayList<SubLeftThread>();
+				final List<SubLeftThread> threads = new ArrayList<SubLeftThread>();
 				for (final FileChannel fc : fcs.values())
 				{
 					final SubLeftThread thread = new SubLeftThread(q, fc, toRemove);
@@ -586,7 +580,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 			try
 			{
 				CNFFilter cnf = null;
-				HashSet<ArrayList<Object>> toRemove = null;
+				Set<List<Object>> toRemove = null;
 				if (hshm != null)
 				{
 					cnf = new CNFFilter(hshm, meta, cols2Pos, ProductOperator.this);
@@ -594,7 +588,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 
 				if ((semi != null || anti != null) && !inMem)
 				{
-					toRemove = new HashSet<ArrayList<Object>>();
+					toRemove = new HashSet<>();
 				}
 
 				SPSCQueue writeQueue = null;
@@ -632,7 +626,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 					// @Parallel
 					while (!(o instanceof DataEndMarker))
 					{
-						final ArrayList<Object> lRow = (ArrayList<Object>)o;
+						final List<Object> lRow = (List<Object>)o;
 						int i = 0;
 						boolean found = false;
 						while (true)
@@ -654,9 +648,9 @@ public final class ProductOperator extends JoinOperator implements Serializable
 									continue;
 								}
 							}
-							final ArrayList<Object> orow = inBuffer.get(i);
+							final List<Object> orow = inBuffer.get(i);
 							i++;
-							final ArrayList<Object> rRow = orow;
+							final List<Object> rRow = orow;
 
 							if (orow == null)
 							{
@@ -686,7 +680,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 								}
 								else
 								{
-									final ArrayList<Object> out = new ArrayList<Object>(lRow.size() + rRow.size());
+									final List<Object> out = new ArrayList<Object>(lRow.size() + rRow.size());
 									out.addAll(lRow);
 									out.addAll(rRow);
 									outBuffer.put(out);
@@ -772,7 +766,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 							}
 							else
 							{
-								new LeftThread(readQueue, (HashSet<ArrayList<Object>>)toRemove.clone()).start();
+								new LeftThread(readQueue, new HashSet<List<Object>>(toRemove)).start();
 								toRemove.clear();
 							}
 						}
@@ -842,7 +836,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 				}
 				while (!(o instanceof DataEndMarker) && (inMem || inBuffer.size() < inBuffer.capacity()))
 				{
-					inBuffer.add((ArrayList<Object>)o);
+					inBuffer.add((List<Object>)o);
 					o = child.next(ProductOperator.this);
 					if (o instanceof DataEndMarker)
 					{
@@ -915,9 +909,9 @@ public final class ProductOperator extends JoinOperator implements Serializable
 		private final FileChannel fc;
 		private boolean ok = true;
 		private Exception e;
-		private final HashSet<ArrayList<Object>> toRemove;
+		private final Set<List<Object>> toRemove;
 
-		public SubLeftThread(final BufferedLinkedBlockingQueue q, final FileChannel fc, final HashSet<ArrayList<Object>> toRemove)
+		public SubLeftThread(final BufferedLinkedBlockingQueue q, final FileChannel fc, final Set<List<Object>> toRemove)
 		{
 			this.q = q;
 			this.fc = fc;
@@ -953,7 +947,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 					ByteBuffer bb = ByteBuffer.allocate(length);
 					final long pos = fc.position();
 					fc.read(bb);
-					final ArrayList<Object> row = (ArrayList<Object>)fromBytes(bb.array(), types);
+					final List<Object> row = (List<Object>)fromBytes(bb.array(), types);
 					if (toRemove != null && row != null && toRemove.contains(row))
 					{
 						bb = ByteBuffer.allocate(1);
@@ -984,7 +978,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 				return new ArrayList<Object>();
 			}
 
-			final ArrayList<Object> retval = new ArrayList<Object>(numFields);
+			final List<Object> retval = new ArrayList<Object>(numFields);
 			int i = 0;
 			while (i < numFields)
 			{
@@ -1160,12 +1154,12 @@ public final class ProductOperator extends JoinOperator implements Serializable
 	private class SubWriteThread extends HRDBMSThread
 	{
 		private final String fn;
-		private final ArrayList<ArrayList<Object>> rows;
+		private final List<List<Object>> rows;
 		private boolean ok = true;
 		private Exception e;
 		private final byte[] types;
 
-		public SubWriteThread(final String fn, final ArrayList<ArrayList<Object>> rows, final byte[] types)
+		public SubWriteThread(final String fn, final List<List<Object>> rows, final byte[] types)
 		{
 			this.fn = fn;
 			this.rows = rows;
@@ -1301,12 +1295,12 @@ public final class ProductOperator extends JoinOperator implements Serializable
 			bb.put((byte)(val & 0xff));
 		}
 
-		private final byte[] rsToBytes(final ArrayList<ArrayList<Object>> rows, final byte[] types) throws Exception
+		private final byte[] rsToBytes(final List<List<Object>> rows, final byte[] types) throws Exception
 		{
 			final ByteBuffer[] results = new ByteBuffer[rows.size()];
 			int rIndex = 0;
-			final ArrayList<byte[]> bytes = new ArrayList<byte[]>();
-			final ArrayList<Integer> stringCols = new ArrayList<Integer>(rows.get(0).size());
+			final List<byte[]> bytes = new ArrayList<byte[]>();
+			final List<Integer> stringCols = new ArrayList<Integer>(rows.get(0).size());
 			int startSize = 4;
 			int a = 0;
 			for (final byte b : types)
@@ -1328,7 +1322,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 				a++;
 			}
 
-			for (final ArrayList<Object> val : rows)
+			for (final List<Object> val : rows)
 			{
 				int size = startSize;
 				for (final int y : stringCols)
@@ -1441,7 +1435,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 			try
 			{
 				// until we get DEM, write all data to disk
-				final ArrayList<ArrayList<ArrayList<Object>>> rows = new ArrayList<ArrayList<ArrayList<Object>>>();
+				final List<List<List<Object>>> rows = new ArrayList<>();
 				final byte[] types1 = new byte[children.get(0).getPos2Col().size()];
 				int j = 0;
 				for (final String col : children.get(0).getPos2Col().values())
@@ -1483,13 +1477,13 @@ public final class ProductOperator extends JoinOperator implements Serializable
 				final int limit = (int)(ResourceManager.QUEUE_SIZE * Double.parseDouble(HRDBMSWorker.getHParms().getProperty("hash_external_factor")) / 2) / mod;
 				while (i < mod)
 				{
-					rows.add(new ArrayList<ArrayList<Object>>(limit));
+					rows.add(new ArrayList<>(limit));
 					i++;
 				}
 
 				final String name = this.toString() + System.currentTimeMillis() + ".ext";
 				createFilesAndChannels(name);
-				final ArrayList<SubWriteThread> threads = new ArrayList<SubWriteThread>();
+				final List<SubWriteThread> threads = new ArrayList<SubWriteThread>();
 
 				i = 0;
 				while (true)
@@ -1538,7 +1532,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 					}
 					else
 					{
-						rows.get(i % mod).add((ArrayList<Object>)o);
+						rows.get(i % mod).add((List<Object>)o);
 						if (i % mod == mod - 1 && rows.get(0).size() >= limit)
 						{
 							if (threads.size() != 0)
@@ -1571,7 +1565,7 @@ public final class ProductOperator extends JoinOperator implements Serializable
 							j = 0;
 							while (j < mod)
 							{
-								rows.add(new ArrayList<ArrayList<Object>>(limit));
+								rows.add(new ArrayList<List<Object>>(limit));
 								j++;
 							}
 						}

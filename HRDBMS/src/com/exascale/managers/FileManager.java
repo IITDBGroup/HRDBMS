@@ -5,13 +5,7 @@ import java.io.FileWriter;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.StringTokenizer;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
@@ -45,7 +39,7 @@ public class FileManager
 		HRDBMSWorker.logger.info("Starting initialization of the File Manager.");
 		setDirs(HRDBMSWorker.getHParms().getProperty("data_directories"));
 
-		final ArrayList<OpenThread> threads = new ArrayList<OpenThread>();
+		final List<OpenThread> threads = new ArrayList<OpenThread>();
 		for (final File dir : dirs)
 		{
 			if (!dir.exists())
@@ -300,7 +294,7 @@ public class FileManager
 		return retval;
 	}
 
-	public static ReadThread read(final Page p, final Block b, final ByteBuffer bb, final ArrayList<Integer> cols, final int layoutSize) throws Exception
+	public static ReadThread read(final Page p, final Block b, final ByteBuffer bb, final List<Integer> cols, final int layoutSize) throws Exception
 	{
 		// final FileChannel fc = FileManager.getFile(b.fileName());
 		// if (b.number() > numBlocks.get(b.fileName()) + 1)
@@ -313,7 +307,7 @@ public class FileManager
 		return retval;
 	}
 
-	public static ReadThread read(final Page p, final Block b, final ByteBuffer bb, final ArrayList<Integer> cols, final int layoutSize, final int rank, final int rankSize) throws Exception
+	public static ReadThread read(final Page p, final Block b, final ByteBuffer bb, final List<Integer> cols, final int layoutSize, final int rank, final int rankSize) throws Exception
 	{
 		// final FileChannel fc = FileManager.getFile(b.fileName());
 		// if (b.number() > numBlocks.get(b.fileName()) + 1)
@@ -354,13 +348,13 @@ public class FileManager
 		return retval;
 	}
 
-	public static void read(final Page p, final Block b, final ByteBuffer bb, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos) throws Exception
+	public static void read(final Page p, final Block b, final ByteBuffer bb, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final List<Integer> fetchPos) throws Exception
 	{
 		final ReadThread retval = new ReadThread(p, b, bb, schema, schemaMap, tx, fetchPos);
 		retval.start();
 	}
 
-	public static void read(final Page p, final Block b, final ByteBuffer bb, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos, final int rank, final int rankSize) throws Exception
+	public static void read(final Page p, final Block b, final ByteBuffer bb, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final List<Integer> fetchPos, final int rank, final int rankSize) throws Exception
 	{
 		final ReadThread retval = new ReadThread(p, b, bb, schema, schemaMap, tx, fetchPos);
 		retval.setRank(rankSize);
@@ -368,7 +362,7 @@ public class FileManager
 		retval.start();
 	}
 
-	public static ReadThread read(final Page p, final int num, final ArrayList<Integer> indexes, final Page[] bp, final int rank, final int rankSize) throws Exception
+	public static ReadThread read(final Page p, final int num, final List<Integer> indexes, final Page[] bp, final int rank, final int rankSize) throws Exception
 	{
 		// final FileChannel fc = FileManager.getFile(b.fileName());
 		// if (b.number() > numBlocks.get(b.fileName()) + 1)
@@ -394,7 +388,7 @@ public class FileManager
 		return retval;
 	}
 
-	public static Read3Thread read3(final Page p, final Page p2, final Page p3, final Block b, final ByteBuffer bb, final ByteBuffer bb2, final ByteBuffer bb3, final ArrayList<Integer> cols, final int layoutSize) throws Exception
+	public static Read3Thread read3(final Page p, final Page p2, final Page p3, final Block b, final ByteBuffer bb, final ByteBuffer bb2, final ByteBuffer bb3, final List<Integer> cols, final int layoutSize) throws Exception
 	{
 		// final FileChannel fc = FileManager.getFile(b.fileName());
 		// if (b.number() > numBlocks.get(b.fileName()) + 1)
@@ -422,13 +416,13 @@ public class FileManager
 		return retval;
 	}
 
-	public static void read3(final Page p, final Page p2, final Page p3, final Block b, final ByteBuffer bb, final ByteBuffer bb2, final ByteBuffer bb3, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos) throws Exception
+	public static void read3(final Page p, final Page p2, final Page p3, final Block b, final ByteBuffer bb, final ByteBuffer bb2, final ByteBuffer bb3, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final List<Integer> fetchPos) throws Exception
 	{
 		final Read3Thread retval = new Read3Thread(p, p2, p3, b, bb, bb2, bb3, schema1, schema2, schema3, schemaMap, tx, fetchPos);
 		retval.start();
 	}
 
-	public static void read3(final Page p, final Page p2, final Page p3, final Block b, final ByteBuffer bb, final ByteBuffer bb2, final ByteBuffer bb3, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos, final int rank, final int rankSize) throws Exception
+	public static void read3(final Page p, final Page p2, final Page p3, final Block b, final ByteBuffer bb, final ByteBuffer bb2, final ByteBuffer bb3, final Schema schema1, final Schema schema2, final Schema schema3, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final List<Integer> fetchPos, final int rank, final int rankSize) throws Exception
 	{
 		final Read3Thread retval = new Read3Thread(p, p2, p3, b, bb, bb2, bb3, schema1, schema2, schema3, schemaMap, tx, fetchPos);
 		retval.setRank(rank);
@@ -449,7 +443,7 @@ public class FileManager
 		return retval;
 	}
 
-	public static void readSync(final Page p, final Block b, final ByteBuffer bb, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final ArrayList<Integer> fetchPos) throws Exception
+	public static void readSync(final Page p, final Block b, final ByteBuffer bb, final Schema schema, final ConcurrentHashMap<Integer, Schema> schemaMap, final Transaction tx, final List<Integer> fetchPos) throws Exception
 	{
 		final ReadThread retval = new ReadThread(p, b, bb, schema, schemaMap, tx, fetchPos);
 		retval.run();
@@ -635,7 +629,7 @@ public class FileManager
 		{
 			try
 			{
-				final ArrayList<Path> files = new ArrayList<Path>();
+				final List<Path> files = new ArrayList<Path>();
 				final File path = new File(dir);
 				final File[] files2 = path.listFiles();
 				for (final File f : files2)
@@ -647,8 +641,8 @@ public class FileManager
 					}
 				}
 
-				final HashSet<String> set = new HashSet<String>();
-				final HashMap<String, Integer> tops = new HashMap<String, Integer>();
+				final Set<String> set = new HashSet<String>();
+				final Map<String, Integer> tops = new HashMap<String, Integer>();
 				for (final Path file2 : files)
 				{
 					final String s = file2.toAbsolutePath().toString().substring(0, file2.toAbsolutePath().toString().lastIndexOf('.'));

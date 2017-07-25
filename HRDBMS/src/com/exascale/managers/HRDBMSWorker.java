@@ -2,6 +2,7 @@ package com.exascale.managers;
 
 import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -38,7 +39,7 @@ public class HRDBMSWorker
 	private static BlockingQueue<String> in = new LinkedBlockingQueue<String>(); // message
 	// queue
 	private static AtomicLong THREAD_NUMBER = new AtomicLong(0);
-	private static ConcurrentHashMap<Long, ArrayList<Thread>> waitList = new ConcurrentHashMap<Long, ArrayList<Thread>>();
+	private static ConcurrentHashMap<Long, List<Thread>> waitList = new ConcurrentHashMap<Long, List<Thread>>();
 	public static org.apache.log4j.Logger logger;
 	public static volatile CheckpointManager checkpoint;
 	private static FileAppender fa;
@@ -213,7 +214,7 @@ public class HRDBMSWorker
 		// WAITING and notify them
 		if (waitList.containsKey(index))
 		{
-			final ArrayList<Thread> threads = waitList.get(index);
+			final List<Thread> threads = waitList.get(index);
 			for (final Thread thread : threads)
 			{
 				while (thread.getState() != Thread.State.WAITING)
@@ -316,13 +317,13 @@ public class HRDBMSWorker
 		{
 			if (!waitList.containsKey(thread))
 			{
-				final ArrayList<Thread> temp = new ArrayList<Thread>();
+				final List<Thread> temp = new ArrayList<Thread>();
 				temp.add(waiter);
 				waitList.put(thread, temp);
 			}
 			else
 			{
-				final ArrayList<Thread> temp = waitList.get(thread);
+				final List<Thread> temp = waitList.get(thread);
 				temp.add(waiter);
 			}
 		}

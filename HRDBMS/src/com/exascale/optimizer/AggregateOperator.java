@@ -1,20 +1,19 @@
 package com.exascale.optimizer;
 
 import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
+import java.util.*;
+
 import com.exascale.threads.ThreadPoolThread;
 
 public interface AggregateOperator
 {
 	public AggregateOperator clone();
 
-	public AggregateResultThread getHashThread(HashMap<String, Integer> cols2Pos) throws Exception;
+	public AggregateResultThread getHashThread(Map<String, Integer> cols2Pos) throws Exception;
 
 	public String getInputColumn();
 
-	public AggregateResultThread newProcessingThread(ArrayList<ArrayList<Object>> rows, HashMap<String, Integer> cols2Pos);
+	public AggregateResultThread newProcessingThread(List<List<Object>> rows, Map<String, Integer> cols2Pos);
 
 	public String outputColumn();
 
@@ -39,12 +38,12 @@ public interface AggregateOperator
 			return null;
 		}
 
-		public Object getResult(final ArrayList<Object> keys) throws Exception
+		public Object getResult(final List<Object> keys) throws Exception
 		{
 			return null;
 		}
 
-		public void put(final ArrayList<Object> row, final ArrayList<Object> groupKeys) throws Exception
+		public void put(final List<Object> row, final List<Object> groupKeys) throws Exception
 		{
 		}
 

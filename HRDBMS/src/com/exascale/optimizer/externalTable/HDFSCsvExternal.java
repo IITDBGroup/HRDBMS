@@ -163,9 +163,9 @@ public class HDFSCsvExternal extends HTTPCsvExternal implements MultiThreadedExt
             HRDBMSWorker.logger.error("", e);
             return null;
         }
-        retval.cols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
-        retval.pos2Col = (TreeMap<Integer, String>)pos2Col.clone();
-        retval.cols2Types = (HashMap<String, String>)cols2Types.clone();
+        retval.cols2Pos = new HashMap<>(cols2Pos);
+        retval.pos2Col = new HashMap<>(pos2Col);
+        retval.cols2Types = new HashMap<>(cols2Types);
         retval.schema = schema;
         retval.name = name;
         retval.node = node;
@@ -234,9 +234,9 @@ public class HDFSCsvExternal extends HTTPCsvExternal implements MultiThreadedExt
     }
 
     @Override
-    public ArrayList next() {
+    public List next() {
         String currentLine, nextLine;
-        ArrayList row;
+        List row;
 
         try {
             // reading first block
@@ -331,10 +331,10 @@ public class HDFSCsvExternal extends HTTPCsvExternal implements MultiThreadedExt
     }
 
     /** Convert csv line into table row. */
-    protected ArrayList<Object> convertCsvLineToObject(final String inputLine)
+    protected List<Object> convertCsvLineToObject(final String inputLine)
     {
-        final ArrayList<Object> retval = new ArrayList<>();
-        ArrayList<String> row = new ArrayList<>(Arrays.asList(inputLine.split(params.getDelimiter())));
+        final List<Object> retval = new ArrayList<>();
+        List<String> row = new ArrayList<>(Arrays.asList(inputLine.split(params.getDelimiter())));
         if (row.size() + 1 != pos2Col.size()) {
             throw new ExternalTableException(
                     "Line: " + inputLine
@@ -403,7 +403,7 @@ public class HDFSCsvExternal extends HTTPCsvExternal implements MultiThreadedExt
         OperatorUtils.serializeCSVExternalParams(params, out, prev);
     }
 
-	public static HDFSCsvExternal deserializeKnown(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static HDFSCsvExternal deserializeKnown(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final HDFSCsvExternal value = (HDFSCsvExternal)unsafe.allocateInstance(HDFSCsvExternal.class);
 		prev.put(OperatorUtils.readLong(in), value);

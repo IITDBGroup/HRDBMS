@@ -1,22 +1,23 @@
 package com.exascale.optimizer;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class Insert extends SQLStatement
 {
 	private final TableName table;
-	private ArrayList<Expression> exps;
-	private ArrayList<ArrayList<Expression>> mExps;
+	private List<Expression> exps;
+	private List<List<Expression>> mExps;
 	private boolean fromSelect = false;
 	private FullSelect select;
 
-	public Insert(final TableName table, final ArrayList<ArrayList<Expression>> mExps, final boolean multi)
+	public Insert(final TableName table, final List<List<Expression>> mExps, final boolean multi)
 	{
 		this.table = table;
 		this.mExps = mExps;
 	}
 
-	public Insert(final TableName table, final ArrayList<Expression> exps)
+	public Insert(final TableName table, final List<Expression> exps)
 	{
 		this.table = table;
 		this.exps = exps;
@@ -34,12 +35,12 @@ public class Insert extends SQLStatement
 		return fromSelect;
 	}
 
-	public ArrayList<Expression> getExpressions()
+	public List<Expression> getExpressions()
 	{
 		return exps;
 	}
 
-	public ArrayList<ArrayList<Expression>> getMultiExpressions()
+	public List<List<Expression>> getMultiExpressions()
 	{
 		return mExps;
 	}

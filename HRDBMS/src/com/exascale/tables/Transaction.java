@@ -2,10 +2,7 @@ package com.exascale.tables;
 
 import java.io.IOException;
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.TreeSet;
-import java.util.WeakHashMap;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.exceptions.LockAbortException;
@@ -55,7 +52,7 @@ public class Transaction implements Serializable
 
 	public static Object txListLock = new Object();
 
-	public static WeakHashMap<Transaction, ConcurrentHashMap<String, HashMap<Integer, Integer>>> colMaps = new WeakHashMap<Transaction, ConcurrentHashMap<String, HashMap<Integer, Integer>>>();
+	public static WeakHashMap<Transaction, ConcurrentHashMap<String, Map<Integer, Integer>>> colMaps = new WeakHashMap<>();
 
 	private final long txnum;
 	public int level;
@@ -272,14 +269,14 @@ public class Transaction implements Serializable
 		return retval;
 	}
 
-	public HashMap<Integer, Integer> getColOrder(final Block bl) throws Exception
+	public Map<Integer, Integer> getColOrder(final Block bl) throws Exception
 	{
 		final Block b = new Block(bl.fileName(), 0);
 		requestPage(b);
 
 		final HeaderPage hp = readHeaderPage(b, 1);
-		final ArrayList<Integer> order = hp.getColOrder();
-		final HashMap<Integer, Integer> retval = new HashMap<Integer, Integer>();
+		final List<Integer> order = hp.getColOrder();
+		final Map<Integer, Integer> retval = new HashMap<Integer, Integer>();
 		int index = 0;
 		for (final int i : order)
 		{
@@ -360,7 +357,7 @@ public class Transaction implements Serializable
 		return p;
 	}
 
-	public Page[] getPage(final Block b, final ArrayList<Integer> cols) throws Exception
+	public Page[] getPage(final Block b, final List<Integer> cols) throws Exception
 	{
 		final Page[] retval = new Page[cols.size()];
 
@@ -374,17 +371,17 @@ public class Transaction implements Serializable
 		}
 		else
 		{
-			ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = null;
+			ConcurrentHashMap<String, Map<Integer, Integer>> colMap = null;
 			synchronized (colMaps)
 			{
 				colMap = colMaps.get(this);
 				if (colMap == null)
 				{
-					colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
+					colMap = new ConcurrentHashMap<String, Map<Integer, Integer>>();
 					colMaps.put(this, colMap);
 				}
 			}
-			HashMap<Integer, Integer> map = colMap.get(b.fileName());
+			Map<Integer, Integer> map = colMap.get(b.fileName());
 			if (map == null)
 			{
 				map = getColOrder(b);
@@ -452,7 +449,7 @@ public class Transaction implements Serializable
 		}
 	}
 
-	public void read(final Block b, final Schema schema, final ArrayList<Integer> cols, final boolean forIter) throws Exception
+	public void read(final Block b, final Schema schema, final List<Integer> cols, final boolean forIter) throws Exception
 	{
 		if (!reorder)
 		{
@@ -469,17 +466,17 @@ public class Transaction implements Serializable
 		}
 		else
 		{
-			ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = null;
+			ConcurrentHashMap<String, Map<Integer, Integer>> colMap = null;
 			synchronized (colMaps)
 			{
 				colMap = colMaps.get(this);
 				if (colMap == null)
 				{
-					colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
+					colMap = new ConcurrentHashMap<String, Map<Integer, Integer>>();
 					colMaps.put(this, colMap);
 				}
 			}
-			HashMap<Integer, Integer> map = colMap.get(b.fileName());
+			Map<Integer, Integer> map = colMap.get(b.fileName());
 			if (map == null)
 			{
 				map = getColOrder(b);
@@ -507,7 +504,7 @@ public class Transaction implements Serializable
 		}
 	}
 
-	public void read(final Block b, final Schema schema, final ArrayList<Integer> cols, final boolean forIter, final boolean lock) throws Exception
+	public void read(final Block b, final Schema schema, final List<Integer> cols, final boolean forIter, final boolean lock) throws Exception
 	{
 		if (!reorder)
 		{
@@ -521,17 +518,17 @@ public class Transaction implements Serializable
 		}
 		else
 		{
-			ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = null;
+			ConcurrentHashMap<String, Map<Integer, Integer>> colMap = null;
 			synchronized (colMaps)
 			{
 				colMap = colMaps.get(this);
 				if (colMap == null)
 				{
-					colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
+					colMap = new ConcurrentHashMap<String, Map<Integer, Integer>>();
 					colMaps.put(this, colMap);
 				}
 			}
-			HashMap<Integer, Integer> map = colMap.get(b.fileName());
+			Map<Integer, Integer> map = colMap.get(b.fileName());
 			if (map == null)
 			{
 				map = getColOrder(b);
@@ -647,7 +644,7 @@ public class Transaction implements Serializable
 		BufferManager.requestPage(b, this.number());
 	}
 
-	public void requestPage(final Block b, final ArrayList<Integer> cols) throws Exception
+	public void requestPage(final Block b, final List<Integer> cols) throws Exception
 	{
 		final TreeSet<Integer> pages = new TreeSet<Integer>();
 		if (!reorder)
@@ -661,17 +658,17 @@ public class Transaction implements Serializable
 		}
 		else
 		{
-			ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = null;
+			ConcurrentHashMap<String, Map<Integer, Integer>> colMap = null;
 			synchronized (colMaps)
 			{
 				colMap = colMaps.get(this);
 				if (colMap == null)
 				{
-					colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
+					colMap = new ConcurrentHashMap<String, Map<Integer, Integer>>();
 					colMaps.put(this, colMap);
 				}
 			}
-			HashMap<Integer, Integer> map = colMap.get(b.fileName());
+			Map<Integer, Integer> map = colMap.get(b.fileName());
 			if (map == null)
 			{
 				map = getColOrder(b);
@@ -717,8 +714,8 @@ public class Transaction implements Serializable
 	public void requestPages(final Block[] bs) throws Exception
 	{
 		// HRDBMSWorker.logger.debug("Short TX request pages starting");
-		final ArrayList<Block> bs1 = new ArrayList<Block>();
-		final ArrayList<Block> bs2 = new ArrayList<Block>();
+		final List<Block> bs1 = new ArrayList<Block>();
+		final List<Block> bs2 = new ArrayList<Block>();
 		int i = 0;
 		while (i < bs.length)
 		{
@@ -759,7 +756,7 @@ public class Transaction implements Serializable
 		// HRDBMSWorker.logger.debug("Short TX request pages ending");
 	}
 
-	public RequestPagesThread requestPages(final Block[] bs, final ArrayList<Integer> cols) throws Exception
+	public RequestPagesThread requestPages(final Block[] bs, final List<Integer> cols) throws Exception
 	{
 		final Block[] bs2 = new Block[bs.length * cols.size()];
 		int pos = 0;
@@ -774,17 +771,17 @@ public class Transaction implements Serializable
 			}
 			else
 			{
-				ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = null;
+				ConcurrentHashMap<String, Map<Integer, Integer>> colMap = null;
 				synchronized (colMaps)
 				{
 					colMap = colMaps.get(this);
 					if (colMap == null)
 					{
-						colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
+						colMap = new ConcurrentHashMap<String, Map<Integer, Integer>>();
 						colMaps.put(this, colMap);
 					}
 				}
-				HashMap<Integer, Integer> map = colMap.get(b.fileName());
+				Map<Integer, Integer> map = colMap.get(b.fileName());
 				if (map == null)
 				{
 					map = getColOrder(b);
@@ -800,7 +797,7 @@ public class Transaction implements Serializable
 		return BufferManager.requestPages(bs2, this.number());
 	}
 
-	public RequestPagesThread requestPages(final Block[] bs, final ArrayList<Integer> cols, final int layoutSize) throws Exception
+	public RequestPagesThread requestPages(final Block[] bs, final List<Integer> cols, final int layoutSize) throws Exception
 	{
 		ArrayList<Integer> newCols = null;
 		boolean build = false;
@@ -826,17 +823,17 @@ public class Transaction implements Serializable
 				{
 					build = false;
 				}
-				ConcurrentHashMap<String, HashMap<Integer, Integer>> colMap = null;
+				ConcurrentHashMap<String, Map<Integer, Integer>> colMap = null;
 				synchronized (colMaps)
 				{
 					colMap = colMaps.get(this);
 					if (colMap == null)
 					{
-						colMap = new ConcurrentHashMap<String, HashMap<Integer, Integer>>();
+						colMap = new ConcurrentHashMap<String, Map<Integer, Integer>>();
 						colMaps.put(this, colMap);
 					}
 				}
-				HashMap<Integer, Integer> map = colMap.get(b.fileName());
+				Map<Integer, Integer> map = colMap.get(b.fileName());
 				if (map == null)
 				{
 					map = getColOrder(b);
@@ -863,7 +860,7 @@ public class Transaction implements Serializable
 
 		ArrayList<Integer> set = new ArrayList<Integer>();
 		int rank = 0;
-		final ArrayList<RequestPagesThread> threads = new ArrayList<RequestPagesThread>();
+		final List<RequestPagesThread> threads = new ArrayList<RequestPagesThread>();
 		for (final int page : pages)
 		{
 			if (set.size() == 0)
@@ -921,13 +918,13 @@ public class Transaction implements Serializable
 		return retval;
 	}
 
-	public void requestPages(final Block[] bs, final Schema[] schemas, final int schemaIndex, final ConcurrentHashMap<Integer, Schema> schemaMap, final ArrayList<Integer> fetchPos) throws Exception
+	public void requestPages(final Block[] bs, final Schema[] schemas, final int schemaIndex, final ConcurrentHashMap<Integer, Schema> schemaMap, final List<Integer> fetchPos) throws Exception
 	{
 		// BufferManager.requestPages(bs, this, schemas, schemaIndex, schemaMap,
 		// fetchPos);
 		// HRDBMSWorker.logger.debug("Long TX request pages starting");
-		final ArrayList<Block> bs1 = new ArrayList<Block>();
-		final ArrayList<Block> bs2 = new ArrayList<Block>();
+		final List<Block> bs1 = new ArrayList<Block>();
+		final List<Block> bs2 = new ArrayList<Block>();
 		int i = 0;
 		while (i < bs.length)
 		{

@@ -4,8 +4,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.Map;
+
 import com.exascale.optimizer.OperatorUtils;
 
 public final class FastStringTokenizer implements Serializable
@@ -60,7 +61,7 @@ public final class FastStringTokenizer implements Serializable
 		index = 0;
 	}
 
-	public static FastStringTokenizer deserializeKnown(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static FastStringTokenizer deserializeKnown(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final FastStringTokenizer value = (FastStringTokenizer)unsafe.allocateInstance(FastStringTokenizer.class);
 		prev.put(OperatorUtils.readLong(in), value);

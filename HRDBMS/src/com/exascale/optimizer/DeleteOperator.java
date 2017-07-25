@@ -7,12 +7,7 @@ import java.io.Serializable;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.List;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
 import com.exascale.filesystem.RID;
@@ -26,15 +21,15 @@ import com.exascale.threads.HRDBMSThread;
 
 public final class DeleteOperator implements Operator, Serializable
 {
-	private static HashMap<Long, HashMap<String, DeleteOperator>> txDelayedMaps = new HashMap<Long, HashMap<String, DeleteOperator>>();
+	private static Map<Long, Map<String, DeleteOperator>> txDelayedMaps = new HashMap<Long, Map<String, DeleteOperator>>();
 	private static IdentityHashMap<DeleteOperator, List<RIDAndIndexKeys>> delayedRows = new IdentityHashMap<DeleteOperator, List<RIDAndIndexKeys>>();
-	private static HashMap<Long, IdentityHashMap<DeleteOperator, DeleteOperator>> notYetStarted = new HashMap<Long, IdentityHashMap<DeleteOperator, DeleteOperator>>();
+	private static Map<Long, IdentityHashMap<DeleteOperator, DeleteOperator>> notYetStarted = new HashMap<Long, IdentityHashMap<DeleteOperator, DeleteOperator>>();
 	// private static AtomicInteger debugCounter = new AtomicInteger(0);
 	private Operator child;
 	private final MetaData meta;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
+	private Map<String, String> cols2Types;
+	private Map<String, Integer> cols2Pos;
+	private Map<Integer, String> pos2Col;
 	private Operator parent;
 	private int node;
 	private final String schema;
@@ -77,7 +72,7 @@ public final class DeleteOperator implements Operator, Serializable
 		{
 			// HRDBMSWorker.logger.debug("Entering wakeUpDelayed with " +
 			// txDelayedMaps); //DEBUG
-			final HashMap<String, DeleteOperator> map = txDelayedMaps.get(tx.number());
+			final Map<String, DeleteOperator> map = txDelayedMaps.get(tx.number());
 
 			if (map == null)
 			{
@@ -101,7 +96,7 @@ public final class DeleteOperator implements Operator, Serializable
 		synchronized (txDelayedMaps)
 		{
 			final List<RIDAndIndexKeys> retval = delayedRows.remove(owner);
-			final HashMap<String, DeleteOperator> map = txDelayedMaps.get(tx.number());
+			final Map<String, DeleteOperator> map = txDelayedMaps.get(tx.number());
 			final String key = schema + "." + table + "~" + node;
 			map.remove(key);
 			if (map.size() == 0)
@@ -142,7 +137,7 @@ public final class DeleteOperator implements Operator, Serializable
 		synchronized (txDelayedMaps)
 		{
 			final String key = schema + "." + table + "~" + node;
-			HashMap<String, DeleteOperator> map = txDelayedMaps.get(tx.number());
+			Map<String, DeleteOperator> map = txDelayedMaps.get(tx.number());
 			if (map == null)
 			{
 				map = new HashMap<String, DeleteOperator>();
@@ -183,7 +178,7 @@ public final class DeleteOperator implements Operator, Serializable
 		synchronized (txDelayedMaps)
 		{
 			final String key = schema + "." + table + "~" + node;
-			final HashMap<String, DeleteOperator> map = txDelayedMaps.get(tx.number());
+			final Map<String, DeleteOperator> map = txDelayedMaps.get(tx.number());
 			if (map == null)
 			{
 				return false;
@@ -232,9 +227,9 @@ public final class DeleteOperator implements Operator, Serializable
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
-		final ArrayList<Operator> retval = new ArrayList<Operator>(1);
+		final List<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
@@ -264,13 +259,13 @@ public final class DeleteOperator implements Operator, Serializable
 	}
 
 	@Override
-	public HashMap<String, Integer> getCols2Pos()
+	public Map<String, Integer> getCols2Pos()
 	{
 		return cols2Pos;
 	}
 
 	@Override
-	public HashMap<String, String> getCols2Types()
+	public Map<String, String> getCols2Types()
 	{
 		return cols2Types;
 	}
@@ -288,15 +283,15 @@ public final class DeleteOperator implements Operator, Serializable
 	}
 
 	@Override
-	public TreeMap<Integer, String> getPos2Col()
+	public Map<Integer, String> getPos2Col()
 	{
 		return pos2Col;
 	}
 
 	@Override
-	public ArrayList<String> getReferences()
+	public List<String> getReferences()
 	{
-		final ArrayList<String> retval = new ArrayList<String>();
+		final List<String> retval = new ArrayList<String>();
 		return retval;
 	}
 
@@ -437,12 +432,12 @@ public final class DeleteOperator implements Operator, Serializable
 			}
 		}
 
-		ArrayList<String> indexes;
-		ArrayList<ArrayList<String>> keys;
-		ArrayList<ArrayList<String>> types;
-		ArrayList<ArrayList<Boolean>> orders;
-		TreeMap<Integer, String> tP2C;
-		HashMap<String, String> tC2T;
+		List<String> indexes;
+		List<List<String>> keys;
+		List<List<String>> types;
+		List<List<Boolean>> orders;
+		Map<Integer, String> tP2C;
+		Map<String, String> tC2T;
 		int type;
 		try
 		{
@@ -460,16 +455,16 @@ public final class DeleteOperator implements Operator, Serializable
 			{
 				try
 				{
-					final ArrayList<Object> row = (ArrayList<Object>)o;
+					final List<Object> row = (List<Object>)o;
 					final int node = (Integer)row.get(child.getCols2Pos().get("_RID1"));
 					final int device = (Integer)row.get(child.getCols2Pos().get("_RID2"));
 					final int block = (Integer)row.get(child.getCols2Pos().get("_RID3"));
 					final int rec = (Integer)row.get(child.getCols2Pos().get("_RID4"));
-					final ArrayList<ArrayList<Object>> indexKeys = new ArrayList<ArrayList<Object>>();
+					final List<List<Object>> indexKeys = new ArrayList<List<Object>>();
 					for (final String index : indexes)
 					{
-						final ArrayList<Object> keys2 = new ArrayList<Object>();
-						final ArrayList<String> cols = MetaData.getColsFromIndexFileName(index, tx, keys, indexes);
+						final List<Object> keys2 = new ArrayList<Object>();
+						final List<String> cols = MetaData.getColsFromIndexFileName(index, tx, keys, indexes);
 						for (final String col : cols)
 						{
 							keys2.add(row.get(child.getCols2Pos().get(col)));
@@ -568,7 +563,7 @@ public final class DeleteOperator implements Operator, Serializable
 		return "DeleteOperator";
 	}
 
-	private void delayedFlush(final ArrayList<String> indexes, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final int type) throws Exception
+	private void delayedFlush(final List<String> indexes, final List<List<String>> keys, final List<List<String>> types, final List<List<Boolean>> orders, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types, final int type) throws Exception
 	{
 		// HRDBMSWorker.logger.debug("Delayed flush with " + map.totalSize() + "
 		// entries"); //DEBUG
@@ -576,7 +571,7 @@ public final class DeleteOperator implements Operator, Serializable
 		int node = -1;
 		boolean realOwner = false;
 		int realNode = -1;
-		final HashSet copy = new HashSet(map.getKeySet());
+		final Set copy = new HashSet(map.getKeySet());
 		for (final Object o : copy)
 		{
 			node = (Integer)o;
@@ -672,11 +667,11 @@ public final class DeleteOperator implements Operator, Serializable
 		}
 	}
 
-	private void flush(final ArrayList<String> indexes, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final TreeMap<Integer, String> tP2C, final HashMap<String, String> tC2T, final int type) throws Exception
+	private void flush(final List<String> indexes, final List<List<String>> keys, final List<List<String>> types, final List<List<Boolean>> orders, final Map<Integer, String> tP2C, final Map<String, String> tC2T, final int type) throws Exception
 	{
 		// HRDBMSWorker.logger.debug("Non-delayed flush for " + map.size() + "
 		// nodes and " + map.totalSize() + " rows"); //DEBUG
-		final ArrayList<FlushThread> threads = new ArrayList<FlushThread>();
+		final List<FlushThread> threads = new ArrayList<FlushThread>();
 		for (final Object o : map.getKeySet())
 		{
 			final int node = (Integer)o;
@@ -685,7 +680,7 @@ public final class DeleteOperator implements Operator, Serializable
 			// node); //DEBUG
 			if (node == -1)
 			{
-				final ArrayList<Integer> coords = MetaData.getCoordNodes();
+				final List<Integer> coords = MetaData.getCoordNodes();
 
 				for (final Integer coord : coords)
 				{
@@ -729,17 +724,17 @@ public final class DeleteOperator implements Operator, Serializable
 	private class FlushThread extends HRDBMSThread
 	{
 		private final List<RIDAndIndexKeys> list;
-		private final ArrayList<String> indexes;
+		private final List<String> indexes;
 		private boolean ok = true;
 		private final int node;
-		private final ArrayList<ArrayList<String>> keys;
-		private final ArrayList<ArrayList<String>> types;
-		private final ArrayList<ArrayList<Boolean>> orders;
-		private final TreeMap<Integer, String> tP2C;
-		private final HashMap<String, String> tC2T;
+		private final List<List<String>> keys;
+		private final List<List<String>> types;
+		private final List<List<Boolean>> orders;
+		private final Map<Integer, String> tP2C;
+		private final Map<String, String> tC2T;
 		private final int type;
 
-		public FlushThread(final List<RIDAndIndexKeys> list, final ArrayList<String> indexes, final int node, final ArrayList<ArrayList<String>> keys, final ArrayList<ArrayList<String>> types, final ArrayList<ArrayList<Boolean>> orders, final TreeMap<Integer, String> tP2C, final HashMap<String, String> tC2T, final int type)
+		public FlushThread(final List<RIDAndIndexKeys> list, final List<String> indexes, final int node, final List<List<String>> keys, final List<List<String>> types, final List<List<Boolean>> orders, final Map<Integer, String> tP2C, final Map<String, String> tC2T, final int type)
 		{
 			this.list = list;
 			this.indexes = indexes;

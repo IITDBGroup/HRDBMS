@@ -18,14 +18,9 @@ import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.StringTokenizer;
-import java.util.TreeMap;
-import java.util.Vector;
+
 import com.exascale.filesystem.Page;
 import com.exascale.filesystem.RID;
 import com.exascale.managers.FileManager;
@@ -34,14 +29,14 @@ import com.exascale.managers.HRDBMSWorker;
 /** Sets up HRDBMS's internal metadata tables in the SYS schema. The cattxt file in the project's root directory has similar information but appears not to be used */
 public class CatalogCode
 {
-	private static TreeMap<String, Long> vars = new TreeMap<String, Long>();
+	private static Map<String, Long> vars = new TreeMap<String, Long>();
 
 	private static Vector<Integer> sizes = new Vector<Integer>();
 	private static Vector<String> tableLines = new Vector<String>();
 	private static Vector<Vector<String>> data = new Vector<Vector<String>>();
 	private static Vector<Vector<String>> colTypes = new Vector<Vector<String>>();
-	private static HashSet<String> racks = new HashSet<String>();
-	private static HashMap<String, Socket> sockets = new HashMap<String, Socket>();
+	private static Set<String> racks = new HashSet<String>();
+	private static Map<String, Socket> sockets = new HashMap<String, Socket>();
 	private static ServerSocket listen;
 	private static InputStream in;
 	private static OutputStream sockOut;
@@ -326,7 +321,7 @@ public class CatalogCode
 		}
 	}
 
-	private static void buildIndexData(final PrintWriter out, final TreeMap<TextRowSorter, RID> keys2RID, final int numKeys, final String name, final boolean unique) throws Exception
+	private static void buildIndexData(final PrintWriter out, final Map<TextRowSorter, RID> keys2RID, final int numKeys, final String name, final boolean unique) throws Exception
 	{
 		final ByteBuffer data = ByteBuffer.allocate(Page.BLOCK_SIZE);
 		buildIndexDataBuffer(keys2RID, numKeys, data, unique);
@@ -353,7 +348,7 @@ public class CatalogCode
 		}
 	}
 
-	private static void buildIndexDataBuffer(final TreeMap<TextRowSorter, RID> keys2RID, final int numKeys, final ByteBuffer data, final boolean unique) throws UnsupportedEncodingException
+	private static void buildIndexDataBuffer(final Map<TextRowSorter, RID> keys2RID, final int numKeys, final ByteBuffer data, final boolean unique) throws UnsupportedEncodingException
 	{
 		data.position(0);
 		data.putInt(numKeys); // num key cols
@@ -841,7 +836,7 @@ public class CatalogCode
 	{
 		final Vector<String> nTable = getTable("SYS.NODES", tableLines, data);
 		final Vector<String> bTable = getTable("SYS.BACKUPS", tableLines, data);
-		final HashMap<Integer, String> nodes2Rack = new HashMap<Integer, String>();
+		final Map<Integer, String> nodes2Rack = new HashMap<Integer, String>();
 
 		for (final String nRow : nTable)
 		{
@@ -888,7 +883,7 @@ public class CatalogCode
 			return;
 		}
 
-		final HashMap<Integer, Integer> nodes2NumTables = new HashMap<Integer, Integer>();
+		final Map<Integer, Integer> nodes2NumTables = new HashMap<Integer, Integer>();
 		for (final Map.Entry<Integer, String> entry : nodes2Rack.entrySet())
 		{
 			nodes2NumTables.put(entry.getKey(), 1);
@@ -988,7 +983,7 @@ public class CatalogCode
 				}
 			}
 
-			final TreeMap<Integer, Integer> pos2ColID = new TreeMap<Integer, Integer>();
+			final Map<Integer, Integer> pos2ColID = new TreeMap<Integer, Integer>();
 
 			for (final String icRow : icTable)
 			{
@@ -1005,7 +1000,7 @@ public class CatalogCode
 				}
 			}
 
-			final TreeMap<Integer, String> pos2Type = new TreeMap<Integer, String>();
+			final Map<Integer, String> pos2Type = new TreeMap<Integer, String>();
 			for (final Map.Entry<Integer, Integer> entry : pos2ColID.entrySet())
 			{
 				for (final String cRow : cTable)
@@ -1030,7 +1025,7 @@ public class CatalogCode
 			final Vector<String> table = getTable("SYS." + tName, tableLines, data);
 			HRDBMSWorker.logger.debug("Fetched the base table.");
 			HRDBMSWorker.logger.debug("Table has " + table.size() + " rows");
-			final TreeMap<TextRowSorter, RID> keys2RIDs = new TreeMap<TextRowSorter, RID>();
+			final Map<TextRowSorter, RID> keys2RIDs = new TreeMap<TextRowSorter, RID>();
 			int rowNum = 0;
 			for (final String row : table)
 			{
@@ -1558,7 +1553,7 @@ public class CatalogCode
 
 		final Vector<String> t = getTable(table, tableLines, data);
 
-		final HashSet<String> unique = new HashSet<String>();
+		final Set<String> unique = new HashSet<String>();
 		for (final String row : t)
 		{
 			String comp = "";
@@ -1704,9 +1699,9 @@ public class CatalogCode
 	 * return -1; }
 	 */
 
-	private static int getNodePreferLocal(final int primary, final String priRack, final HashMap<Integer, String> nodes2Rack, final HashMap<Integer, Integer> nodes2NumTables)
+	private static int getNodePreferLocal(final int primary, final String priRack, final Map<Integer, String> nodes2Rack, final Map<Integer, Integer> nodes2NumTables)
 	{
-		final HashMap<Integer, Integer> candidates = new HashMap<Integer, Integer>();
+		final Map<Integer, Integer> candidates = new HashMap<Integer, Integer>();
 		for (final Map.Entry<Integer, String> entry : nodes2Rack.entrySet())
 		{
 			if (entry.getKey().intValue() >= 0 && entry.getKey().intValue() != primary)
@@ -1761,9 +1756,9 @@ public class CatalogCode
 		return lowKey;
 	}
 
-	private static int getNodePreferNonLocal(final int primary, final int secondary, final String priRack, final HashMap<Integer, String> nodes2Rack, final HashMap<Integer, Integer> nodes2NumTables)
+	private static int getNodePreferNonLocal(final int primary, final int secondary, final String priRack, final Map<Integer, String> nodes2Rack, final Map<Integer, Integer> nodes2NumTables)
 	{
-		final HashMap<Integer, Integer> candidates = new HashMap<Integer, Integer>();
+		final Map<Integer, Integer> candidates = new HashMap<Integer, Integer>();
 		for (final Map.Entry<Integer, String> entry : nodes2Rack.entrySet())
 		{
 			if (entry.getKey().intValue() >= 0 && entry.getKey().intValue() != primary && entry.getKey().intValue() != secondary)

@@ -1,9 +1,6 @@
 package com.exascale.managers;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import com.exascale.exceptions.LockAbortException;
 import com.exascale.filesystem.Block;
@@ -81,9 +78,9 @@ public class LockManager extends HRDBMSThread
 
 			try
 			{
-				final ArrayList<Vertice> starting = new ArrayList<Vertice>();
-				final HashMap<Vertice, Vertice> vertices = new HashMap<Vertice, Vertice>();
-				final HashMap<Thread, SubLockManager> threads2SLMs = new HashMap<Thread, SubLockManager>();
+				final List<Vertice> starting = new ArrayList<Vertice>();
+				final Map<Vertice, Vertice> vertices = new HashMap<Vertice, Vertice>();
+				final Map<Thread, SubLockManager> threads2SLMs = new HashMap<Thread, SubLockManager>();
 
 				while (true)
 				{
@@ -94,7 +91,7 @@ public class LockManager extends HRDBMSThread
 						for (final Map.Entry entry : manager.waitList.entrySet())
 						{
 							// for each thread
-							for (final Thread thread : (ArrayList<Thread>)entry.getValue())
+							for (final Thread thread : (List<Thread>)entry.getValue())
 							{
 								Vertice vertice = new Vertice(manager.threads2Txs.get(thread), thread);
 								threads2SLMs.put(thread, manager);
@@ -134,7 +131,7 @@ public class LockManager extends HRDBMSThread
 									// xLock
 									// get the list of all TXs that have sLocks
 									// on this block
-									final HashSet<Long> targetTXs = manager.sBlocksToTXs.get(entry.getKey());
+									final Set<Long> targetTXs = manager.sBlocksToTXs.get(entry.getKey());
 									for (final Long txnum : targetTXs)
 									{
 										Vertice vertice2 = new Vertice(txnum);
@@ -163,7 +160,7 @@ public class LockManager extends HRDBMSThread
 						if (cycle)
 						{
 							vertice.removeAllEdges();
-							final ArrayList<Thread> threads = vertice.getThreads();
+							final List<Thread> threads = vertice.getThreads();
 							for (final Thread thread : threads)
 							{
 								killed.put(thread, thread);
@@ -171,7 +168,7 @@ public class LockManager extends HRDBMSThread
 								final Long tx = manager.threads2Txs.remove(thread);
 								manager.txs2Threads.remove(tx);
 								final Block b = manager.inverseWaitList.remove(thread);
-								final ArrayList<Thread> threads2 = manager.waitList.get(b);
+								final List<Thread> threads2 = manager.waitList.get(b);
 								threads2.remove(thread);
 								if (threads2.size() == 0)
 								{
@@ -218,7 +215,7 @@ public class LockManager extends HRDBMSThread
 
 	private boolean checkForCycles(final Vertice vertice)
 	{
-		final HashSet<Edge> edges = new HashSet<Edge>();
+		final Set<Edge> edges = new HashSet<Edge>();
 		for (final Vertice dest : vertice.edges)
 		{
 			final Edge edge = new Edge(vertice, dest);
@@ -242,7 +239,7 @@ public class LockManager extends HRDBMSThread
 	// }
 	// }
 
-	private boolean checkForCycles(final Vertice start, final Vertice orig, final HashSet<Edge> edges)
+	private boolean checkForCycles(final Vertice start, final Vertice orig, final Set<Edge> edges)
 	{
 		for (final Vertice dest : start.edges)
 		{
@@ -305,8 +302,8 @@ public class LockManager extends HRDBMSThread
 	private static class Vertice
 	{
 		private final long txnum;
-		private final HashSet<Thread> threads = new HashSet<Thread>();
-		private final HashSet<Vertice> edges = new HashSet<Vertice>();
+		private final Set<Thread> threads = new HashSet<Thread>();
+		private final Set<Vertice> edges = new HashSet<Vertice>();
 
 		public Vertice(final Long txnum)
 		{
@@ -340,7 +337,7 @@ public class LockManager extends HRDBMSThread
 			return txnum == rhs.txnum;
 		}
 
-		public ArrayList<Thread> getThreads()
+		public List<Thread> getThreads()
 		{
 			return new ArrayList<Thread>(threads);
 		}

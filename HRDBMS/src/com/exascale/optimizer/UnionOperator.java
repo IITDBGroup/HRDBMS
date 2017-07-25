@@ -10,11 +10,7 @@ import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
@@ -42,28 +38,28 @@ public final class UnionOperator implements Operator, Serializable
 		}
 	}
 
-	private ArrayList<Operator> children = new ArrayList<Operator>();
+	private List<Operator> children = new ArrayList<Operator>();
 	private transient final MetaData meta;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
+	private Map<String, String> cols2Types;
+	private Map<String, Integer> cols2Pos;
+	private Map<Integer, String> pos2Col;
 	private Operator parent;
 	private int node;
 	private boolean distinct;
 	private transient BufferedLinkedBlockingQueue buffer;
-	private transient ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>> set;
+	private transient ConcurrentHashMap<List<Object>, List<Object>> set;
 	// private final AtomicLong counter = new AtomicLong(0);
 	private long estimate = 16;
-	private transient ArrayList<ReadThread> threads;
+	private transient List<ReadThread> threads;
 	private boolean startDone = false;
 	private boolean estimateSet = false;
 	private transient boolean inMem;
 	private transient int numFiles = 1;
-	private transient ArrayList<ArrayList<String>> externalFiles;
+	private transient List<List<String>> externalFiles;
 
-	private transient ArrayList<ArrayList<RandomAccessFile>> rafs;
+	private transient List<List<RandomAccessFile>> rafs;
 
-	private transient ArrayList<ArrayList<FileChannel>> fcs;
+	private transient List<List<FileChannel>> fcs;
 	private transient AtomicLong received;
 	private transient volatile boolean demReceived;
 
@@ -74,7 +70,7 @@ public final class UnionOperator implements Operator, Serializable
 		received = new AtomicLong(0);
 	}
 
-	public static UnionOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static UnionOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final UnionOperator value = (UnionOperator)unsafe.allocateInstance(UnionOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -104,7 +100,7 @@ public final class UnionOperator implements Operator, Serializable
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
 		return children;
 	}
@@ -149,13 +145,13 @@ public final class UnionOperator implements Operator, Serializable
 	}
 
 	@Override
-	public HashMap<String, Integer> getCols2Pos()
+	public Map<String, Integer> getCols2Pos()
 	{
 		return cols2Pos;
 	}
 
 	@Override
-	public HashMap<String, String> getCols2Types()
+	public Map<String, String> getCols2Types()
 	{
 		return cols2Types;
 	}
@@ -173,15 +169,15 @@ public final class UnionOperator implements Operator, Serializable
 	}
 
 	@Override
-	public TreeMap<Integer, String> getPos2Col()
+	public Map<Integer, String> getPos2Col()
 	{
 		return pos2Col;
 	}
 
 	@Override
-	public ArrayList<String> getReferences()
+	public List<String> getReferences()
 	{
-		final ArrayList<String> retval = new ArrayList<String>(0);
+		final List<String> retval = new ArrayList<String>(0);
 		return retval;
 	}
 
@@ -422,7 +418,7 @@ public final class UnionOperator implements Operator, Serializable
 
 				if (inMem)
 				{
-					set = new ConcurrentHashMap<ArrayList<Object>, ArrayList<Object>>((int)estimate, 1.0f, children.size());
+					set = new ConcurrentHashMap<List<Object>, List<Object>>((int)estimate, 1.0f, children.size());
 				}
 				else
 				{
@@ -470,7 +466,7 @@ public final class UnionOperator implements Operator, Serializable
 			{
 				if (inMem)
 				{
-					for (final ArrayList<Object> o : set.keySet())
+					for (final List<Object> o : set.keySet())
 					{
 						while (true)
 						{
@@ -508,7 +504,7 @@ public final class UnionOperator implements Operator, Serializable
 
 		private void cleanupExternal()
 		{
-			for (final ArrayList<FileChannel> fc : fcs)
+			for (final List<FileChannel> fc : fcs)
 			{
 				for (final FileChannel f : fc)
 				{
@@ -522,7 +518,7 @@ public final class UnionOperator implements Operator, Serializable
 				}
 			}
 
-			for (final ArrayList<RandomAccessFile> raf : rafs)
+			for (final List<RandomAccessFile> raf : rafs)
 			{
 				for (final RandomAccessFile r : raf)
 				{
@@ -536,7 +532,7 @@ public final class UnionOperator implements Operator, Serializable
 				}
 			}
 
-			for (final ArrayList<String> files : externalFiles)
+			for (final List<String> files : externalFiles)
 			{
 				for (final String fn : files)
 				{
@@ -548,14 +544,14 @@ public final class UnionOperator implements Operator, Serializable
 		private void createTempFiles() throws Exception
 		{
 			int i = 0; // fileNum
-			externalFiles = new ArrayList<ArrayList<String>>();
-			rafs = new ArrayList<ArrayList<RandomAccessFile>>();
-			fcs = new ArrayList<ArrayList<FileChannel>>();
+			externalFiles = new ArrayList<List<String>>();
+			rafs = new ArrayList<List<RandomAccessFile>>();
+			fcs = new ArrayList<List<FileChannel>>();
 			while (i < numFiles)
 			{
-				final ArrayList<String> files = new ArrayList<String>();
-				final ArrayList<RandomAccessFile> raf = new ArrayList<RandomAccessFile>();
-				final ArrayList<FileChannel> fc = new ArrayList<FileChannel>();
+				final List<String> files = new ArrayList<String>();
+				final List<RandomAccessFile> raf = new ArrayList<RandomAccessFile>();
+				final List<FileChannel> fc = new ArrayList<FileChannel>();
 				int j = 0; // child num
 				while (j < children.size())
 				{
@@ -598,7 +594,7 @@ public final class UnionOperator implements Operator, Serializable
 			int i = 0; // fileNum
 			final double factor = Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor"));
 			final int size = (int)(ResourceManager.QUEUE_SIZE * factor);
-			HashSet<ArrayList<Object>> set = new HashSet<ArrayList<Object>>(size);
+			HashSet<List<Object>> set = new HashSet<List<Object>>(size);
 			ReadBackThread thread = new ReadBackThread(i, set);
 			thread.start();
 			while (i < numFiles)
@@ -614,15 +610,15 @@ public final class UnionOperator implements Operator, Serializable
 					{
 					}
 				}
-				final HashSet<ArrayList<Object>> temp = set;
+				final Set<List<Object>> temp = set;
 				if (i + 1 < numFiles)
 				{
-					set = new HashSet<ArrayList<Object>>(size);
+					set = new HashSet<List<Object>>(size);
 					thread = new ReadBackThread(i + 1, set);
 					thread.start();
 				}
 
-				for (final ArrayList<Object> row : temp)
+				for (final List<Object> row : temp)
 				{
 					buffer.put(row);
 				}
@@ -635,9 +631,9 @@ public final class UnionOperator implements Operator, Serializable
 	private class ReadBackThread extends HRDBMSThread
 	{
 		private final int fileNum;
-		private final HashSet<ArrayList<Object>> set;
+		private final Set<List<Object>> set;
 
-		public ReadBackThread(final int fileNum, final HashSet<ArrayList<Object>> set)
+		public ReadBackThread(final int fileNum, final Set<List<Object>> set)
 		{
 			this.fileNum = fileNum;
 			this.set = set;
@@ -648,7 +644,7 @@ public final class UnionOperator implements Operator, Serializable
 		{
 			try
 			{
-				final ArrayList<FileChannel> fs = fcs.get(fileNum);
+				final List<FileChannel> fs = fcs.get(fileNum);
 				for (final FileChannel f : fs)
 				{
 					final FileChannel fc = new BufferedFileChannel(f, 8 * 1024 * 1024);
@@ -665,7 +661,7 @@ public final class UnionOperator implements Operator, Serializable
 						final int length = bb1.getInt();
 						final ByteBuffer bb = ByteBuffer.allocate(length);
 						fc.read(bb);
-						final ArrayList<Object> row = (ArrayList<Object>)fromBytes(bb.array());
+						final List<Object> row = (List<Object>)fromBytes(bb.array());
 						set.add(row);
 					}
 				}
@@ -693,7 +689,7 @@ public final class UnionOperator implements Operator, Serializable
 			{
 				return new DataEndMarker();
 			}
-			final ArrayList<Object> retval = new ArrayList<Object>(numFields);
+			final List<Object> retval = new ArrayList<Object>(numFields);
 			int i = 0;
 			while (i < numFields)
 			{
@@ -807,7 +803,7 @@ public final class UnionOperator implements Operator, Serializable
 						}
 						if (distinct)
 						{
-							set.put((ArrayList<Object>)o, (ArrayList<Object>)o);
+							set.put((List<Object>)o, (List<Object>)o);
 						}
 						else
 						{
@@ -853,7 +849,7 @@ public final class UnionOperator implements Operator, Serializable
 			{
 				try
 				{
-					final ArrayList<ArrayList<byte[]>> buckets = new ArrayList<ArrayList<byte[]>>();
+					final List<List<byte[]>> buckets = new ArrayList<List<byte[]>>();
 					int i = 0;
 					while (i < numFiles)
 					{
@@ -881,7 +877,7 @@ public final class UnionOperator implements Operator, Serializable
 
 						final byte[] data = toBytes(o);
 						final int hash = (int)(hash(data) % numFiles);
-						final ArrayList<byte[]> bucket = buckets.get(hash);
+						final List<byte[]> bucket = buckets.get(hash);
 						bucket.add(data);
 						if (bucket.size() > 8192)
 						{
@@ -909,7 +905,7 @@ public final class UnionOperator implements Operator, Serializable
 			}
 		}
 
-		private void flushBucket(final ArrayList<byte[]> bucket, final int fileNum, final int childNum) throws Exception
+		private void flushBucket(final List<byte[]> bucket, final int fileNum, final int childNum) throws Exception
 		{
 			final FileChannel fc = fcs.get(fileNum).get(childNum);
 			for (final byte[] data : bucket)
@@ -921,10 +917,10 @@ public final class UnionOperator implements Operator, Serializable
 			bucket.clear();
 		}
 
-		private void flushBuckets(final ArrayList<ArrayList<byte[]>> buckets, final int childNum) throws Exception
+		private void flushBuckets(final List<List<byte[]>> buckets, final int childNum) throws Exception
 		{
 			int i = 0;
-			for (final ArrayList<byte[]> bucket : buckets)
+			for (final List<byte[]> bucket : buckets)
 			{
 				flushBucket(bucket, i, childNum);
 				i++;
@@ -948,11 +944,11 @@ public final class UnionOperator implements Operator, Serializable
 
 		private final byte[] toBytes(final Object v) throws Exception
 		{
-			ArrayList<byte[]> bytes = null;
-			ArrayList<Object> val;
+			List<byte[]> bytes = null;
+			List<Object> val;
 			if (v instanceof ArrayList)
 			{
-				val = (ArrayList<Object>)v;
+				val = (List<Object>)v;
 			}
 			else
 			{
@@ -1026,7 +1022,7 @@ public final class UnionOperator implements Operator, Serializable
 				// }
 				else if (o instanceof ArrayList)
 				{
-					if (((ArrayList)o).size() != 0)
+					if (((List)o).size() != 0)
 					{
 						final Exception e = new Exception("Non-zero size ArrayList in toBytes()");
 						HRDBMSWorker.logger.error("Non-zero size ArrayList in toBytes()", e);

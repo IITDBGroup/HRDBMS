@@ -10,15 +10,7 @@ import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
@@ -55,16 +47,16 @@ public final class SortOperator implements Operator, Serializable
 	}
 	private Operator child;
 	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
+	private Map<String, String> cols2Types;
+	private Map<String, Integer> cols2Pos;
+	private Map<Integer, String> pos2Col;
 	private boolean startDone = false;
 	private transient boolean closeDone;
-	private ArrayList<String> sortCols;
+	private List<String> sortCols;
 	private boolean[] orders;
 	private transient SortThread sortThread;
 	private transient volatile BufferedLinkedBlockingQueue readBuffer;
-	private transient volatile ArrayList<ArrayList<Object>> result;
+	private transient volatile List<List<Object>> result;
 	private volatile int[] sortPos;
 	private transient int NUM_RT_THREADS;
 	private transient final MetaData meta;
@@ -73,13 +65,13 @@ public final class SortOperator implements Operator, Serializable
 	private int node;
 	private long childCard = 16;
 	private boolean cardSet = false;
-	private transient ArrayList<String> externalFiles;
+	private transient List<String> externalFiles;
 	private long limit = 0;
 	private transient AtomicLong received;
 	private transient volatile boolean demReceived;
 	private long txnum;
 
-	public SortOperator(final ArrayList<String> sortCols, final ArrayList<Boolean> orders, final MetaData meta)
+	public SortOperator(final List<String> sortCols, final List<Boolean> orders, final MetaData meta)
 	{
 		this.sortCols = sortCols;
 		this.orders = new boolean[orders.size()];
@@ -92,7 +84,7 @@ public final class SortOperator implements Operator, Serializable
 		received = new AtomicLong(0);
 	}
 
-	public SortOperator(final ArrayList<String> sortCols, final boolean[] orders, final MetaData meta)
+	public SortOperator(final List<String> sortCols, final boolean[] orders, final MetaData meta)
 	{
 		this.sortCols = sortCols;
 		this.orders = orders;
@@ -100,7 +92,7 @@ public final class SortOperator implements Operator, Serializable
 		received = new AtomicLong(0);
 	}
 
-	public static SortOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static SortOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final SortOperator value = (SortOperator)unsafe.allocateInstance(SortOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -140,7 +132,7 @@ public final class SortOperator implements Operator, Serializable
 			pos2Col = child.getPos2Col();
 			int i = 0;
 			sortPos = new int[sortCols.size()];
-			final ArrayList<String> newSortCols = new ArrayList<String>();
+			final List<String> newSortCols = new ArrayList<String>();
 			for (final String sortCol : sortCols)
 			{
 				try
@@ -210,9 +202,9 @@ public final class SortOperator implements Operator, Serializable
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
-		final ArrayList<Operator> retval = new ArrayList<Operator>(1);
+		final List<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
@@ -220,7 +212,7 @@ public final class SortOperator implements Operator, Serializable
 	@Override
 	public SortOperator clone()
 	{
-		final SortOperator retval = new SortOperator((ArrayList<String>)sortCols.clone(), orders.clone(), meta);
+		final SortOperator retval = new SortOperator(new ArrayList<>(sortCols), orders.clone(), meta);
 		retval.node = node;
 		retval.childCard = childCard;
 		retval.cardSet = cardSet;
@@ -273,18 +265,18 @@ public final class SortOperator implements Operator, Serializable
 	}
 
 	@Override
-	public HashMap<String, Integer> getCols2Pos()
+	public Map<String, Integer> getCols2Pos()
 	{
 		return cols2Pos;
 	}
 
 	@Override
-	public HashMap<String, String> getCols2Types()
+	public Map<String, String> getCols2Types()
 	{
 		return cols2Types;
 	}
 
-	public ArrayList<String> getKeys()
+	public List<String> getKeys()
 	{
 		return sortCols;
 	}
@@ -301,9 +293,9 @@ public final class SortOperator implements Operator, Serializable
 		return node;
 	}
 
-	public ArrayList<Boolean> getOrders()
+	public List<Boolean> getOrders()
 	{
-		final ArrayList<Boolean> retval = new ArrayList<Boolean>(orders.length);
+		final List<Boolean> retval = new ArrayList<Boolean>(orders.length);
 		for (final boolean b : orders)
 		{
 			retval.add(b);
@@ -313,13 +305,13 @@ public final class SortOperator implements Operator, Serializable
 	}
 
 	@Override
-	public TreeMap<Integer, String> getPos2Col()
+	public Map<Integer, String> getPos2Col()
 	{
 		return pos2Col;
 	}
 
 	@Override
-	public ArrayList<String> getReferences()
+	public List<String> getReferences()
 	{
 		return new ArrayList<String>(sortCols);
 	}
@@ -548,7 +540,7 @@ public final class SortOperator implements Operator, Serializable
 		try
 		{
 			final ReverseComparator cmp = new ReverseComparator();
-			final AuxPairingHeap<ArrayList<Object>> bh = new AuxPairingHeap<ArrayList<Object>>(cmp);
+			final AuxPairingHeap<List<Object>> bh = new AuxPairingHeap<>(cmp);
 			Object o = child.next(this);
 			if (o instanceof DataEndMarker)
 			{
@@ -566,7 +558,7 @@ public final class SortOperator implements Operator, Serializable
 					return;
 				}
 
-				final ArrayList<Object> row = (ArrayList<Object>)o;
+				final List<Object> row = (List<Object>)o;
 				if (bh.size() < limit)
 				{
 					bh.insert(row);
@@ -593,7 +585,7 @@ public final class SortOperator implements Operator, Serializable
 			}
 
 			// sort and write to queue
-			final ArrayList<ArrayList<Object>> result = new ArrayList<ArrayList<Object>>();
+			final List<List<Object>> result = new ArrayList<List<Object>>();
 			while (bh.size() > 0)
 			{
 				result.add(bh.extractMin());
@@ -601,7 +593,7 @@ public final class SortOperator implements Operator, Serializable
 
 			Collections.reverse(result);
 
-			for (final ArrayList<Object> row : result)
+			for (final List<Object> row : result)
 			{
 				readBuffer.put(row);
 			}
@@ -616,10 +608,10 @@ public final class SortOperator implements Operator, Serializable
 
 	private class ALOO
 	{
-		private final ArrayList<Object> alo;
+		private final List<Object> alo;
 		private final Object op;
 
-		public ALOO(final ArrayList<Object> alo, final Object op)
+		public ALOO(final List<Object> alo, final Object op)
 		{
 			this.alo = alo;
 			this.op = op;
@@ -631,7 +623,7 @@ public final class SortOperator implements Operator, Serializable
 			return this == o;
 		}
 
-		public ArrayList<Object> getALO()
+		public List<Object> getALO()
 		{
 			return alo;
 		}
@@ -654,8 +646,8 @@ public final class SortOperator implements Operator, Serializable
 				return 0;
 			}
 
-			final ArrayList<Object> lhs = l.getALO();
-			final ArrayList<Object> rhs = r.getALO();
+			final List<Object> lhs = l.getALO();
+			final List<Object> rhs = r.getALO();
 			int result = 0;
 			int i = 0;
 
@@ -730,8 +722,8 @@ public final class SortOperator implements Operator, Serializable
 				return 0;
 			}
 
-			final ArrayList<Object> lhs = (ArrayList<Object>)l;
-			final ArrayList<Object> rhs = (ArrayList<Object>)r;
+			final List<Object> lhs = (List<Object>)l;
+			final List<Object> rhs = (List<Object>)r;
 
 			int result = 0;
 			int i = 0;
@@ -849,7 +841,7 @@ public final class SortOperator implements Operator, Serializable
 				if (result == null)
 				{
 					// result = ResourceManager.newDiskBackedArray(childCard);
-					result = new ArrayList<ArrayList<Object>>((int)childCard);
+					result = new ArrayList<List<Object>>((int)childCard);
 				}
 				int i = 0;
 
@@ -910,7 +902,7 @@ public final class SortOperator implements Operator, Serializable
 		private void externalSort(final double percentInMem)
 		{
 			final ConcurrentHashMap<WriteDataThread, WriteDataThread> threads = new ConcurrentHashMap<WriteDataThread, WriteDataThread>();
-			final ArrayList<ArrayList<ArrayList<Object>>> bins = new ArrayList<ArrayList<ArrayList<Object>>>();
+			final List<List<List<Object>>> bins = new ArrayList<>();
 			HRDBMSWorker.logger.debug("Doing external sort");
 			// double factor =
 			// Double.parseDouble(HRDBMSWorker.getHParms().getProperty("external_factor"));
@@ -918,7 +910,7 @@ public final class SortOperator implements Operator, Serializable
 			final int size = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("sort_bucket_size"));
 			final int numInMem = 0;
 			externalFiles = new ArrayList<String>();
-			result = new ArrayList<ArrayList<Object>>(size);
+			result = new ArrayList<List<Object>>(size);
 			final ConcurrentHashMap<String, HRDBMSThread> map = new ConcurrentHashMap<String, HRDBMSThread>();
 			final ConcurrentHashMap<String, RandomAccessFile> map2 = new ConcurrentHashMap<String, RandomAccessFile>();
 			final ConcurrentHashMap<String, FileChannel> map3 = new ConcurrentHashMap<String, FileChannel>();
@@ -982,7 +974,7 @@ public final class SortOperator implements Operator, Serializable
 							return;
 						}
 
-						result.add((ArrayList<Object>)o);
+						result.add((List<Object>)o);
 					}
 					catch (final Exception e)
 					{
@@ -1042,7 +1034,7 @@ public final class SortOperator implements Operator, Serializable
 					if (j < numInMem)
 					{
 						bins.add(result);
-						result = new ArrayList<ArrayList<Object>>(size);
+						result = new ArrayList<List<Object>>(size);
 					}
 					else
 					{
@@ -1160,7 +1152,7 @@ public final class SortOperator implements Operator, Serializable
 				return new ArrayList<Object>();
 			}
 
-			final ArrayList<Object> retval = new ArrayList<Object>(numFields);
+			final List<Object> retval = new ArrayList<Object>(numFields);
 			int i = 0;
 			while (i < numFields)
 			{
@@ -1340,7 +1332,7 @@ public final class SortOperator implements Operator, Serializable
 			{
 				try
 				{
-					final ArrayList<Object> row = ((ReadDataThread)op).readRow();
+					final List<Object> row = ((ReadDataThread)op).readRow();
 					if (row != null)
 					{
 						rows.insert(new ALOO(row, op));
@@ -1377,7 +1369,7 @@ public final class SortOperator implements Operator, Serializable
 				}
 				try
 				{
-					final ArrayList<Object> row = ((ReadDataThread)minEntry.getOp()).readRow();
+					final List<Object> row = ((ReadDataThread)minEntry.getOp()).readRow();
 					if (row != null)
 					{
 						rows.insert(new ALOO(row, minEntry.getOp()));
@@ -1500,12 +1492,12 @@ public final class SortOperator implements Operator, Serializable
 			bb.put((byte)(val & 0xff));
 		}
 
-		private final byte[] rsToBytes(final ArrayList<ArrayList<Object>> rows, final byte[] types) throws Exception
+		private final byte[] rsToBytes(final List<List<Object>> rows, final byte[] types) throws Exception
 		{
 			final ByteBuffer[] results = new ByteBuffer[rows.size()];
 			int rIndex = 0;
-			final ArrayList<byte[]> bytes = new ArrayList<byte[]>();
-			final ArrayList<Integer> stringCols = new ArrayList<Integer>(rows.get(0).size());
+			final List<byte[]> bytes = new ArrayList<byte[]>();
+			final List<Integer> stringCols = new ArrayList<Integer>(rows.get(0).size());
 			int startSize = 4;
 			int a = 0;
 			for (final byte b : types)
@@ -1527,7 +1519,7 @@ public final class SortOperator implements Operator, Serializable
 				a++;
 			}
 
-			for (final ArrayList<Object> val : rows)
+			for (final List<Object> val : rows)
 			{
 				int size = startSize;
 				for (final int y : stringCols)
@@ -1624,7 +1616,7 @@ public final class SortOperator implements Operator, Serializable
 					// long nullCount = 0; //DEBUG
 					while (i < size)
 					{
-						ArrayList<Object> row = null;
+						List<Object> row = null;
 						while (row == null)
 						{
 							try
@@ -1677,8 +1669,8 @@ public final class SortOperator implements Operator, Serializable
 					return 0;
 				}
 
-				final ArrayList<Object> lhs = (ArrayList<Object>)l;
-				final ArrayList<Object> rhs = (ArrayList<Object>)r;
+				final List<Object> lhs = (List<Object>)l;
+				final List<Object> rhs = (List<Object>)r;
 
 				int result = 0;
 				int i = 0;
@@ -1749,7 +1741,7 @@ public final class SortOperator implements Operator, Serializable
 			private String fn;
 			private long offset;
 			private int numRecs;
-			public ArrayList<ArrayList<Object>> data;
+			public List<List<Object>> data;
 			private boolean ok = true;
 			private Exception e;
 			private int readOffset = 0;
@@ -1766,7 +1758,7 @@ public final class SortOperator implements Operator, Serializable
 				{
 					throw new Exception("Null fn");
 				}
-				this.data = new ArrayList<ArrayList<Object>>(numRecs);
+				this.data = new ArrayList<List<Object>>(numRecs);
 				this.offset = offset;
 				this.map2 = map2;
 				this.map3 = map3;
@@ -1780,7 +1772,7 @@ public final class SortOperator implements Operator, Serializable
 				inMem = false;
 			}
 
-			public ReadDataThread(final String fn, final long offset, final int numRecs, final ConcurrentHashMap<String, RandomAccessFile> map2, final ConcurrentHashMap<String, FileChannel> map3, final byte[] types, final int index, final ArrayList<ArrayList<ArrayList<Object>>> bins)
+			public ReadDataThread(final String fn, final long offset, final int numRecs, final ConcurrentHashMap<String, RandomAccessFile> map2, final ConcurrentHashMap<String, FileChannel> map3, final byte[] types, final int index, final List<List<List<Object>>> bins)
 			{
 				this.data = bins.get(index);
 				inMem = true;
@@ -1810,7 +1802,7 @@ public final class SortOperator implements Operator, Serializable
 				return ok;
 			}
 
-			public ArrayList<Object> readRow() throws Exception
+			public List<Object> readRow() throws Exception
 			{
 				if (inMem)
 				{
@@ -1901,7 +1893,7 @@ public final class SortOperator implements Operator, Serializable
 						fc.read(bb);
 						try
 						{
-							final ArrayList<Object> row = (ArrayList<Object>)fromBytes(bb.array(), types);
+							final List<Object> row = (List<Object>)fromBytes(bb.array(), types);
 							data.add(row);
 						}
 						catch (final Exception e)
@@ -1925,9 +1917,9 @@ public final class SortOperator implements Operator, Serializable
 
 		private final class ReaderThread extends ThreadPoolThread
 		{
-			private volatile ArrayList<ArrayList<Object>> array;
+			private volatile List<List<Object>> array;
 
-			public ReaderThread(final ArrayList<ArrayList<Object>> array)
+			public ReaderThread(final List<List<Object>> array)
 			{
 				this.array = array;
 			}
@@ -1948,7 +1940,7 @@ public final class SortOperator implements Operator, Serializable
 					}
 					while (!(o instanceof DataEndMarker))
 					{
-						array.add((ArrayList<Object>)o);
+						array.add((List<Object>)o);
 						o = child.next(SortOperator.this);
 						if (o instanceof DataEndMarker)
 						{

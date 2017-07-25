@@ -1,6 +1,7 @@
 package com.exascale.optimizer;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class Expression
 {
@@ -16,9 +17,9 @@ public class Expression
 	private String op;
 	private Expression rhs;
 	private SubSelect select;
-	private ArrayList<Expression> list;
+	private List<Expression> list;
 	private final boolean isList;
-	private ArrayList<Case> cases;
+	private List<Case> cases;
 	private Expression defaultResult;
 	private final boolean isCase;
 
@@ -33,7 +34,7 @@ public class Expression
 		isCase = false;
 	}
 
-	public Expression(final ArrayList<Case> cases, final Expression defaultResult)
+	public Expression(final List<Case> cases, final Expression defaultResult)
 	{
 		this.cases = cases;
 		this.defaultResult = defaultResult;
@@ -46,7 +47,7 @@ public class Expression
 		isCase = true;
 	}
 
-	public Expression(final ArrayList<Expression> list)
+	public Expression(final List<Expression> list)
 	{
 		this.list = list;
 		isLiteral = false;
@@ -150,7 +151,7 @@ public class Expression
 
 		if (isList)
 		{
-			final ArrayList<Expression> newList = new ArrayList<Expression>();
+			final List<Expression> newList = new ArrayList<Expression>();
 			for (final Expression e : list)
 			{
 				newList.add(e.clone());
@@ -161,7 +162,7 @@ public class Expression
 
 		if (isCase)
 		{
-			final ArrayList<Case> newCases = new ArrayList<Case>();
+			final List<Case> newCases = new ArrayList<Case>();
 			for (final Case c : cases)
 			{
 				newCases.add(c.clone());
@@ -361,7 +362,7 @@ public class Expression
 		return true;
 	}
 
-	public ArrayList<Case> getCases()
+	public List<Case> getCases()
 	{
 		return cases;
 	}
@@ -386,7 +387,7 @@ public class Expression
 		return lhs;
 	}
 
-	public ArrayList<Expression> getList()
+	public List<Expression> getList()
 	{
 		return list;
 	}

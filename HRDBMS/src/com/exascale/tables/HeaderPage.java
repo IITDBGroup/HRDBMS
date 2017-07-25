@@ -1,6 +1,8 @@
 package com.exascale.tables;
 
 import java.util.ArrayList;
+import java.util.List;
+
 import com.exascale.filesystem.Page;
 import com.exascale.managers.HRDBMSWorker;
 
@@ -20,7 +22,7 @@ public class HeaderPage
 		}
 	}
 
-	public ArrayList<Integer> getClustering()
+	public List<Integer> getClustering()
 	{
 		final int pageSize = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("page_size"));
 		if (pageSize < 252 * 1024)
@@ -31,7 +33,7 @@ public class HeaderPage
 		int pos = 131072;
 		final int size = p.getInt(pos);
 		pos += 4;
-		final ArrayList<Integer> retval = new ArrayList<Integer>(size);
+		final List<Integer> retval = new ArrayList<Integer>(size);
 		int i = 0;
 		while (i < size)
 		{
@@ -43,12 +45,12 @@ public class HeaderPage
 		return retval;
 	}
 
-	public ArrayList<Integer> getColOrder()
+	public List<Integer> getColOrder()
 	{
 		int pos = 26220;
 		final int size = p.getInt(pos);
 		pos += 4;
-		final ArrayList<Integer> retval = new ArrayList<Integer>(size);
+		final List<Integer> retval = new ArrayList<Integer>(size);
 		int i = 0;
 		while (i < size)
 		{
@@ -65,9 +67,9 @@ public class HeaderPage
 		return device;
 	}
 
-	public ArrayList<Byte> getHeaderBytes(final int size)
+	public List<Byte> getHeaderBytes(final int size)
 	{
-		final ArrayList<Byte> retval = new ArrayList<Byte>(size);
+		final List<Byte> retval = new ArrayList<Byte>(size);
 		int pos = 8;
 		int i = 0;
 		while (i < size)

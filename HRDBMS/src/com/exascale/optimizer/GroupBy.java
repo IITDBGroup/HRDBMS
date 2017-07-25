@@ -1,12 +1,13 @@
 package com.exascale.optimizer;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class GroupBy
 {
-	private final ArrayList<Column> cols;
+	private final List<Column> cols;
 
-	public GroupBy(final ArrayList<Column> cols)
+	public GroupBy(final List<Column> cols)
 	{
 		this.cols = cols;
 	}
@@ -14,7 +15,7 @@ public class GroupBy
 	@Override
 	public GroupBy clone()
 	{
-		final ArrayList<Column> newCols = new ArrayList<Column>();
+		final List<Column> newCols = new ArrayList<Column>();
 		for (final Column col : cols)
 		{
 			newCols.add(col.clone());
@@ -23,7 +24,7 @@ public class GroupBy
 		return new GroupBy(newCols);
 	}
 
-	public ArrayList<Column> getCols()
+	public List<Column> getCols()
 	{
 		return cols;
 	}

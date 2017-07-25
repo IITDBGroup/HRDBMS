@@ -10,9 +10,8 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.TreeMap;
+import java.util.*;
+
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.MaintenanceManager;
 import com.exascale.misc.Utils;
@@ -91,16 +90,16 @@ public class InitReorgTask extends Task
 		return buff;
 	}
 
-	private static ArrayList<Object> makeTree(final ArrayList<Integer> nodes)
+	private static List<Object> makeTree(final List<Integer> nodes)
 	{
 		final int max = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_neighbor_nodes"));
 		if (nodes.size() <= max)
 		{
-			final ArrayList<Object> retval = new ArrayList<Object>(nodes);
+			final List<Object> retval = new ArrayList<Object>(nodes);
 			return retval;
 		}
 
-		final ArrayList<Object> retval = new ArrayList<Object>();
+		final List<Object> retval = new ArrayList<Object>();
 		int i = 0;
 		while (i < max)
 		{
@@ -117,7 +116,7 @@ public class InitReorgTask extends Task
 		{
 			final int first = (Integer)retval.get(j);
 			retval.remove(j);
-			final ArrayList<Integer> list = new ArrayList<Integer>(perNode + 1);
+			final List<Integer> list = new ArrayList<Integer>(perNode + 1);
 			list.add(first);
 			int k = 0;
 			while (k < perNode && i < size)
@@ -131,7 +130,7 @@ public class InitReorgTask extends Task
 			j++;
 		}
 
-		if (((ArrayList<Integer>)retval.get(0)).size() <= max)
+		if (((List<Integer>)retval.get(0)).size() <= max)
 		{
 			return retval;
 		}
@@ -140,7 +139,7 @@ public class InitReorgTask extends Task
 		i = 0;
 		while (i < retval.size())
 		{
-			final ArrayList<Integer> list = (ArrayList<Integer>)retval.remove(i);
+			final List<Integer> list = (List<Integer>)retval.remove(i);
 			retval.add(i, makeTree(list));
 			i++;
 		}
@@ -178,8 +177,8 @@ public class InitReorgTask extends Task
 		{
 			try
 			{
-				final ArrayList<String> tables = new ArrayList<String>();
-				final HashMap<String, Long> times = new HashMap<String, Long>();
+				final List<String> tables = new ArrayList<String>();
+				final Map<String, Long> times = new HashMap<String, Long>();
 				final long target = Long.parseLong(HRDBMSWorker.getHParms().getProperty("reorg_refresh_target_days")) * 24 * 60 * 60 * 1000;
 				final String sql = "SELECT SCHEMA, TABNAME, TABLEID FROM SYS.TABLES";
 				final int numCoords = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("number_of_coords"));
@@ -211,13 +210,13 @@ public class InitReorgTask extends Task
 						final long start = System.currentTimeMillis();
 
 						Transaction tx = new Transaction(Transaction.ISOLATION_CS);
-						final ArrayList<Index> indexes = MetaData.getIndexesForTable(table.substring(0, table.indexOf('.')), table.substring(table.indexOf('.') + 1), tx);
-						final ArrayList<Integer> nodes = MetaData.getNodesForTable(table.substring(0, table.indexOf('.')), table.substring(table.indexOf('.') + 1), tx);
-						final HashMap<String, String> cols2Types = MetaData.getCols2TypesForTable(table.substring(0, table.indexOf('.')), table.substring(table.indexOf('.') + 1), tx);
-						final TreeMap<Integer, String> pos2Col = MetaData.getPos2ColForTable(table.substring(0, table.indexOf('.')), table.substring(table.indexOf('.') + 1), tx);
+						final List<Index> indexes = MetaData.getIndexesForTable(table.substring(0, table.indexOf('.')), table.substring(table.indexOf('.') + 1), tx);
+						final List<Integer> nodes = MetaData.getNodesForTable(table.substring(0, table.indexOf('.')), table.substring(table.indexOf('.') + 1), tx);
+						final Map<String, String> cols2Types = MetaData.getCols2TypesForTable(table.substring(0, table.indexOf('.')), table.substring(table.indexOf('.') + 1), tx);
+						final Map<Integer, String> pos2Col = MetaData.getPos2ColForTable(table.substring(0, table.indexOf('.')), table.substring(table.indexOf('.') + 1), tx);
 
-						final ArrayList<Object> tree = makeTree(nodes);
-						final ArrayList<Boolean> uniques = MetaData.getUnique(table.substring(0, table.indexOf('.')), table.substring(table.indexOf('.') + 1), tx);
+						final List<Object> tree = makeTree(nodes);
+						final List<Boolean> uniques = MetaData.getUnique(table.substring(0, table.indexOf('.')), table.substring(table.indexOf('.') + 1), tx);
 
 						tx.commit();
 						tx = new Transaction(Transaction.ISOLATION_CS);
@@ -260,22 +259,22 @@ public class InitReorgTask extends Task
 			}
 		}
 
-		private void sendReorgs(final ArrayList<Object> tree, final String schema, final String table, final ArrayList<Index> indexes, final Transaction tx, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> pos2Col, final ArrayList<Boolean> uniques) throws Exception
+		private void sendReorgs(final List<Object> tree, final String schema, final String table, final List<Index> indexes, final Transaction tx, final Map<String, String> cols2Types, final Map<Integer, String> pos2Col, final List<Boolean> uniques) throws Exception
 		{
 			boolean allOK = true;
-			final ArrayList<SendReorgThread> threads = new ArrayList<SendReorgThread>();
+			final List<SendReorgThread> threads = new ArrayList<SendReorgThread>();
 			for (final Object o : tree)
 			{
 				if (o instanceof Integer)
 				{
-					final ArrayList<Object> list = new ArrayList<Object>(1);
+					final List<Object> list = new ArrayList<Object>(1);
 					list.add(o);
 					final SendReorgThread thread = new SendReorgThread(list, schema, table, indexes, tx, cols2Types, pos2Col, uniques);
 					threads.add(thread);
 				}
 				else
 				{
-					final SendReorgThread thread = new SendReorgThread((ArrayList<Object>)o, schema, table, indexes, tx, cols2Types, pos2Col, uniques);
+					final SendReorgThread thread = new SendReorgThread((List<Object>)o, schema, table, indexes, tx, cols2Types, pos2Col, uniques);
 					threads.add(thread);
 				}
 			}
@@ -314,17 +313,17 @@ public class InitReorgTask extends Task
 
 	private static class SendReorgThread extends HRDBMSThread
 	{
-		private final ArrayList<Object> tree;
+		private final List<Object> tree;
 		private final String schema;
 		private final String table;
-		private final ArrayList<Index> indexes;
+		private final List<Index> indexes;
 		private final Transaction tx;
 		private boolean ok;
-		private final HashMap<String, String> cols2Types;
-		private final TreeMap<Integer, String> pos2Col;
-		private final ArrayList<Boolean> uniques;
+		private final Map<String, String> cols2Types;
+		private final Map<Integer, String> pos2Col;
+		private final List<Boolean> uniques;
 
-		public SendReorgThread(final ArrayList<Object> tree, final String schema, final String table, final ArrayList<Index> indexes, final Transaction tx, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> pos2Col, final ArrayList<Boolean> uniques)
+		public SendReorgThread(final List<Object> tree, final String schema, final String table, final List<Index> indexes, final Transaction tx, final Map<String, String> cols2Types, final Map<Integer, String> pos2Col, final List<Boolean> uniques)
 		{
 			this.tree = tree;
 			this.schema = schema;
@@ -336,12 +335,12 @@ public class InitReorgTask extends Task
 			this.uniques = uniques;
 		}
 
-		private static boolean sendReorg(final ArrayList<Object> tree, final String schema, final String table, final ArrayList<Index> indexes, final Transaction tx, final HashMap<String, String> cols2Types, final TreeMap<Integer, String> pos2Col, final ArrayList<Boolean> uniques)
+		private static boolean sendReorg(final List<Object> tree, final String schema, final String table, final List<Index> indexes, final Transaction tx, final Map<String, String> cols2Types, final Map<Integer, String> pos2Col, final List<Boolean> uniques)
 		{
 			Object obj = tree.get(0);
 			while (obj instanceof ArrayList)
 			{
-				obj = ((ArrayList)obj).get(0);
+				obj = ((List)obj).get(0);
 			}
 
 			Socket sock = null;

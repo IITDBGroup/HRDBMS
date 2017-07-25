@@ -22,6 +22,9 @@ import com.exascale.misc.LOMultiHashMap;
 import com.exascale.misc.ScalableStampedRWLock;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Transaction;
+import org.apache.hadoop.mapred.Operation;
+
+import javax.naming.OperationNotSupportedException;
 
 public final class LoadOperator implements Operator, Serializable
 {
@@ -29,18 +32,17 @@ public final class LoadOperator implements Operator, Serializable
 	static int PORT_NUMBER = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("port_number"));
 	static int MAX_BATCH = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("max_batch"));
 	private static sun.misc.Unsafe unsafe;
-	private transient MetaData meta;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
+	private Map<String, String> cols2Types;
+	private Map<String, Integer> cols2Pos;
+	private Map<Integer, String> pos2Col;
 	private Operator parent, child;
-	private int node;
+	private int node, tableType;
 	private transient Plan plan;
 	private String schema;
 	private String table;
 	private transient final AtomicLong num = new AtomicLong(0);
 	private volatile transient boolean done = false;
-	private transient final LOMultiHashMap map = new LOMultiHashMap<Long, ArrayList<Object>>();
+	private transient final LOMultiHashMap map = new LOMultiHashMap<Long, List<Object>>();
 	private Transaction tx;
 	private boolean replace;
 	private String delimiter;
@@ -50,6 +52,10 @@ public final class LoadOperator implements Operator, Serializable
 	private transient Map<Pair, AtomicInteger> waitTill;
 	private volatile transient List<FlushThread> waitThreads;
 	private transient ScalableStampedRWLock lock;
+	private List<String> indexes;
+	private List<List<String>> keys, types;
+	private List<List<Boolean>> orders;
+	private Map<Integer, Integer> pos2Length = new HashMap<>();
 
 	static
 	{
@@ -65,36 +71,42 @@ public final class LoadOperator implements Operator, Serializable
 		}
 	}
 
+	public LoadOperator() {}
+
 	/**TODO - get rid of unused parameters */
 	public LoadOperator(final String schema, final String table, final boolean replace, final String delimiter, final String glob, final MetaData meta, final Transaction tx) throws Exception
 	{
-		this.schema = schema;
-		this.table = table;
-		this.replace = replace;
-		this.delimiter = delimiter;
-		this.glob = glob;
-		this.meta = meta;
-        this.tx = tx;
-        cols2Types = MetaData.getCols2TypesForTable(schema, table, tx);
-        cols2Pos = MetaData.getCols2PosForTable(schema, table, tx);
-        pos2Col = MetaData.cols2PosFlip(cols2Pos);
+		this(schema, table, replace, delimiter, glob, MetaData.cols2PosFlip(MetaData.getCols2PosForTable(schema, table, tx)),
+				MetaData.getCols2TypesForTable(schema, table, tx), MetaData.getCols2PosForTable(schema, table, tx), tx);
     }
 
-    public LoadOperator(final String schema, final String table, final boolean replace, final String delimiter, final String glob, final MetaData meta,
-                        final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types, final HashMap<String, Integer> cols2Pos, final Transaction tx)
-    {
+    public LoadOperator(final String schema, final String table, final boolean replace, final String delimiter, final String glob,
+                        final Map<Integer, String> pos2Col, final Map<String, String> cols2Types, final Map<String, Integer> cols2Pos, final Transaction tx) throws Exception {
         this.schema = schema;
         this.table = table;
         this.replace = replace;
         this.delimiter = delimiter;
         this.glob = glob;
-        this.meta = meta;
         this.cols2Types = cols2Types;
         this.cols2Pos = cols2Pos;
         this.pos2Col = pos2Col;
         this.tx = tx;
-    }
 
+		// We query the meta data tables here and save off the values so that the metadata can be serialized to the worker.
+		tableType = MetaData.getTypeForTable(schema, table, tx);
+		indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
+		keys = MetaData.getKeys(indexes, tx);
+		types = MetaData.getTypes(indexes, tx);
+		orders = MetaData.getOrders(indexes, tx);
+		for (final Map.Entry entry : cols2Types.entrySet())
+		{
+			if (entry.getValue().equals("CHAR"))
+			{
+				final int length = MetaData.getLengthForCharCol(schema, table, (String)entry.getKey(), tx);
+				pos2Length.put(cols2Pos.get(entry.getKey()), length);
+			}
+		}
+    }
 
     @Override
 	public void start() throws Exception
@@ -115,9 +127,6 @@ public final class LoadOperator implements Operator, Serializable
 			// See prior commit for MassDeleteOperator code to reintroduce this feature.
 		}
 
-		final int type = MetaData.getTypeForTable(schema, table, tx);
-
-		final ArrayList<String> indexes = MetaData.getIndexFileNamesForTable(schema, table, tx);
 		final List<String> indexNames = new ArrayList<>();
 		for (final String s : indexes)
 		{
@@ -125,40 +134,10 @@ public final class LoadOperator implements Operator, Serializable
 			final int end = s.indexOf('.', start);
 			indexNames.add(s.substring(start, end));
 		}
-		// DEBUG
-		// if (indexes.size() == 0)
-		// {
-		// Exception e = new Exception();
-		// HRDBMSWorker.logger.debug("No indexes found", e);
-		// }
-		// DEBUG
-		final ArrayList<ArrayList<String>> keys = MetaData.getKeys(indexes, tx);
-		// DEBUG
-		// HRDBMSWorker.logger.debug("Keys = " + keys);
-		// DEBUG
-		final ArrayList<ArrayList<String>> types = MetaData.getTypes(indexes, tx);
-		// DEBUG
-		// HRDBMSWorker.logger.debug("Types = " + types);
-		// DEBUG
-		final ArrayList<ArrayList<Boolean>> orders = MetaData.getOrders(indexes, tx);
-		// DEBUG
-		// HRDBMSWorker.logger.debug("Orders = " + orders);
-		// DEBUG
-
-		final HashMap<Integer, Integer> pos2Length = new HashMap<>();
-		for (final Map.Entry entry : cols2Types.entrySet())
-		{
-			if (entry.getValue().equals("CHAR"))
-			{
-				final int length = MetaData.getLengthForCharCol(schema, table, (String)entry.getKey(), tx);
-				pos2Length.put(cols2Pos.get(entry.getKey()), length);
-			}
-		}
 
 		final List<ReadThread> threads = new ArrayList<>();
-		final PartitionMetaData spmd = new MetaData().getPartMeta(schema, table, tx);
 
-		threads.add(new ExternalReadThread(this, pos2Length, indexes, spmd, keys, types, orders, type));
+		threads.add(new ExternalReadThread(this, pos2Length, indexes, keys, types, orders, tableType));
 		threads.forEach(ThreadPoolThread::start);
 
 		boolean allOK = true;
@@ -189,12 +168,13 @@ public final class LoadOperator implements Operator, Serializable
 		}
 
 		// Note that we cluster the data on loading, but don't keep it up to date with new inserts
-		MetaData.cluster(schema, table, tx, pos2Col, cols2Types, type);
-
-		for (final String index : indexNames)
-		{
-			MetaData.populateIndex(schema, index, table, tx, cols2Pos);
-		}
+		//TODO run this on coordinator after load.
+//		MetaData.cluster(schema, table, tx, pos2Col, cols2Types, tableType);
+//
+//		for (final String index : indexNames)
+//		{
+//			MetaData.populateIndex(schema, index, table, tx, cols2Pos);
+//		}
 
 		done = true;
 	}
@@ -258,7 +238,7 @@ public final class LoadOperator implements Operator, Serializable
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
 		return child == null ? Lists.newArrayList() : Lists.newArrayList(child);
 	}
@@ -270,21 +250,20 @@ public final class LoadOperator implements Operator, Serializable
 	}
 
 	@Override
-	public HashMap<String, Integer> getCols2Pos()
+	public Map<String, Integer> getCols2Pos()
 	{
 		return cols2Pos;
 	}
 
 	@Override
-	public HashMap<String, String> getCols2Types()
+	public Map<String, String> getCols2Types()
 	{
 		return cols2Types;
 	}
 
 	@Override
-	public MetaData getMeta()
-	{
-		return meta;
+	public MetaData getMeta() {
+		return null;
 	}
 
 	@Override
@@ -299,13 +278,13 @@ public final class LoadOperator implements Operator, Serializable
 	}
 
 	@Override
-	public TreeMap<Integer, String> getPos2Col()
+	public Map<Integer, String> getPos2Col()
 	{
 		return pos2Col;
 	}
 
 	@Override
-	public ArrayList<String> getReferences()
+	public List<String> getReferences()
 	{
 		return Lists.newArrayList();  //TODO needed?
 	}
@@ -363,8 +342,22 @@ public final class LoadOperator implements Operator, Serializable
 	@Override
 	public LoadOperator clone()
 	{
-		final LoadOperator retval = new LoadOperator(schema, table, replace, delimiter, glob, meta, pos2Col, cols2Types, cols2Pos, tx);
+		final LoadOperator retval = new LoadOperator(); //schema, table, replace, delimiter, glob, meta, pos2Col, cols2Types, cols2Pos, tx);
+		retval.schema = schema;
+		retval.table = table;
+		retval.replace = replace;
+		retval.delimiter = delimiter;
+		retval.glob = glob;
+		retval.pos2Col = pos2Col;
+		retval.cols2Types = cols2Types;
+		retval.cols2Pos = cols2Pos;
+		retval.tx = tx;
 		retval.node = node;
+		retval.indexes = indexes;
+		retval.keys = keys;
+		retval.types = types;
+		retval.orders = orders;
+		retval.pos2Length = pos2Length;
 		return retval;
 	}
 
@@ -389,13 +382,18 @@ public final class LoadOperator implements Operator, Serializable
 		OperatorUtils.writeString(table, out, prev);
 		OperatorUtils.writeString(delimiter, out, prev);
 		OperatorUtils.writeString(glob, out, prev);
+		OperatorUtils.serializeALS(indexes, out, prev);
+		OperatorUtils.serializeALALS(keys, out, prev);
+		OperatorUtils.serializeALALS(types, out, prev);
+		OperatorUtils.serializeALALB(orders, out, prev);
+		OperatorUtils.serializeMapIntInt(pos2Length, out, prev);
 		OperatorUtils.writeLong(tx.number(), out);
 		OperatorUtils.writeBool(replace, out);
 		OperatorUtils.writeInt(node, out);
 		OperatorUtils.writeBool(phase2Done, out);
 	}
 
-	public static LoadOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static LoadOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final LoadOperator value = (LoadOperator)unsafe.allocateInstance(LoadOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -408,11 +406,15 @@ public final class LoadOperator implements Operator, Serializable
 		value.table = OperatorUtils.readString(in, prev);
 		value.delimiter = OperatorUtils.readString(in, prev);
 		value.glob = OperatorUtils.readString(in, prev);
+		value.indexes = OperatorUtils.deserializeALS(in, prev);
+		value.keys = OperatorUtils.deserializeALALS(in, prev);
+		value.types = OperatorUtils.deserializeALALS(in, prev);
+		value.orders = OperatorUtils.deserializeALALB(in, prev);
+		value.pos2Length = OperatorUtils.deserializeMapIntInt(in, prev);
 		value.tx = new Transaction(OperatorUtils.readLong(in));
 		value.replace = OperatorUtils.readBool(in);
 		value.node = OperatorUtils.readInt(in);
 		value.phase2Done = OperatorUtils.readBool(in);
-		value.meta = new MetaData();
 		return value;
 	}
 

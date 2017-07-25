@@ -11,6 +11,8 @@ import java.nio.charset.CharsetEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+
 import org.apache.hadoop.io.Writable;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MyDate;
@@ -37,12 +39,12 @@ public class ALOWritable implements Writable
 			unsafe = null;
 		}
 	}
-	private ArrayList<Object> array;
+	private List<Object> array;
 	private final CharsetDecoder cd = cs.newDecoder();
 
 	private final CharsetEncoder ce = cs.newEncoder();
 
-	public ArrayList<Object> get()
+	public List<Object> get()
 	{
 		return array;
 	}
@@ -55,7 +57,7 @@ public class ALOWritable implements Writable
 			final int size = arg0.readInt();
 			final byte[] data = new byte[size];
 			arg0.readFully(data);
-			array = (ArrayList<Object>)fromBytes(data);
+			array = (List<Object>)fromBytes(data);
 		}
 		catch (final Exception e)
 		{
@@ -70,7 +72,7 @@ public class ALOWritable implements Writable
 		}
 	}
 
-	public void set(final ArrayList<Object> array)
+	public void set(final List<Object> array)
 	{
 		this.array = array;
 	}
@@ -112,7 +114,7 @@ public class ALOWritable implements Writable
 				throw e;
 			}
 		}
-		final ArrayList<Object> retval = new ArrayList<Object>(numFields);
+		final List<Object> retval = new ArrayList<Object>(numFields);
 		int i = 0;
 		while (i < numFields)
 		{
@@ -174,11 +176,11 @@ public class ALOWritable implements Writable
 
 	protected byte[] toBytes(final Object v) throws IOException
 	{
-		ArrayList<byte[]> bytes = null;
-		ArrayList<Object> val = null;
+		List<byte[]> bytes = null;
+		List<Object> val = null;
 		if (v instanceof ArrayList)
 		{
-			val = (ArrayList<Object>)v;
+			val = (List<Object>)v;
 			if (val.size() == 0)
 			{
 				throw new IOException("Empty ArrayList in toBytes()");

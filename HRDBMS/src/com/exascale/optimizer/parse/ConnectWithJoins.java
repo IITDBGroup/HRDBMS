@@ -7,6 +7,8 @@ import com.exascale.threads.ConnectionWorker;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 import static com.exascale.optimizer.parse.ParseUtils.getMatchingCol;
 import static com.exascale.optimizer.parse.ParseUtils.verifyTypes;
@@ -22,7 +24,7 @@ public class ConnectWithJoins extends AbstractParseController {
     {
         // assume join is already cnf
         // and contains only columns
-        final HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
+        final Set<Map<Filter, Filter>> hshm = new HashSet<Map<Filter, Filter>>();
         HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
         if (join.getClause().getPredicate() != null)
         {
@@ -293,7 +295,7 @@ public class ConnectWithJoins extends AbstractParseController {
     {
         // assume join is already cnf
         // and contains only columns
-        final HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
+        final Set<Map<Filter, Filter>> hshm = new HashSet<Map<Filter, Filter>>();
         HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
         if (join.getClause().getPredicate() != null)
         {
@@ -561,7 +563,7 @@ public class ConnectWithJoins extends AbstractParseController {
     {
         // assume join is already cnf
         // and contains only columns
-        final HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
+        final Set<Map<Filter, Filter>> hshm = new HashSet<Map<Filter, Filter>>();
         HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
         if (join.getClause().getPredicate() != null)
         {
@@ -825,7 +827,7 @@ public class ConnectWithJoins extends AbstractParseController {
     {
         // assume join is already cnf
         // and contains only columns
-        final HashSet<HashMap<Filter, Filter>> hshm = new HashSet<HashMap<Filter, Filter>>();
+        final Set<Map<Filter, Filter>> hshm = new HashSet<Map<Filter, Filter>>();
         HashMap<Filter, Filter> hm = new HashMap<Filter, Filter>();
         if (join.getClause().getPredicate() != null)
         {

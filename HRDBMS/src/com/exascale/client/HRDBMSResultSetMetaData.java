@@ -3,15 +3,16 @@ package com.exascale.client;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.TreeMap;
 
 public class HRDBMSResultSetMetaData implements ResultSetMetaData
 {
-	private final HashMap<String, Integer> cols2Pos;
-	private final TreeMap<Integer, String> pos2Cols;
-	private final HashMap<String, String> cols2Types;
+	private final Map<String, Integer> cols2Pos;
+	private final Map<Integer, String> pos2Cols;
+	private final Map<String, String> cols2Types;
 
-	public HRDBMSResultSetMetaData(final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Cols, final HashMap<String, String> cols2Types)
+	public HRDBMSResultSetMetaData(final Map<String, Integer> cols2Pos, final Map<Integer, String> pos2Cols, final Map<String, String> cols2Types)
 	{
 		this.cols2Pos = cols2Pos;
 		this.pos2Cols = pos2Cols;

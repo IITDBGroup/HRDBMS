@@ -26,12 +26,8 @@ import java.sql.SQLXML;
 import java.sql.Statement;
 import java.sql.Time;
 import java.sql.Timestamp;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Calendar;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
+
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
 import com.exascale.misc.MyDate;
@@ -58,16 +54,16 @@ public class HRDBMSResultSet implements ResultSet
 			unsafe = null;
 		}
 	}
-	private final ArrayList<Object> rs = new ArrayList<Object>();
+	private final List<Object> rs = new ArrayList<Object>();
 	private int firstRowIs = 0;
 	private int position = -1;
 	private boolean closed = false;
 	private final HRDBMSConnection conn;
 	private int fetchSize;
 	private boolean wasNull = false;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Cols;
-	private HashMap<String, String> cols2Types;
+	private Map<String, Integer> cols2Pos;
+	private Map<Integer, String> pos2Cols;
+	private Map<String, String> cols2Types;
 	private final HRDBMSStatement stmt;
 
 	private final CharsetDecoder cd = cs.newDecoder();
@@ -222,7 +218,7 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Past end of result set");
 		}
 
-		final ArrayList<Object> alo = (ArrayList<Object>)row;
+		final List<Object> alo = (List<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
@@ -274,7 +270,7 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Past end of result set");
 		}
 
-		final ArrayList<Object> alo = (ArrayList<Object>)row;
+		final List<Object> alo = (List<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
@@ -421,7 +417,7 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Past end of result set");
 		}
 
-		final ArrayList<Object> alo = (ArrayList<Object>)row;
+		final List<Object> alo = (List<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
@@ -472,7 +468,7 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Past end of result set");
 		}
 
-		final ArrayList<Object> alo = (ArrayList<Object>)row;
+		final List<Object> alo = (List<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
@@ -517,7 +513,7 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Past end of result set");
 		}
 
-		final ArrayList<Object> alo = (ArrayList<Object>)row;
+		final List<Object> alo = (List<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
@@ -562,7 +558,7 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Past end of result set");
 		}
 
-		final ArrayList<Object> alo = (ArrayList<Object>)row;
+		final List<Object> alo = (List<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
@@ -624,7 +620,7 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Past end of result set");
 		}
 
-		final ArrayList<Object> alo = (ArrayList<Object>)row;
+		final List<Object> alo = (List<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
@@ -670,7 +666,7 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Past end of result set");
 		}
 
-		final ArrayList<Object> alo = (ArrayList<Object>)row;
+		final List<Object> alo = (List<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
@@ -721,7 +717,7 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Past end of result set");
 		}
 
-		final ArrayList<Object> alo = (ArrayList<Object>)row;
+		final List<Object> alo = (List<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
@@ -773,7 +769,7 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Past end of result set");
 		}
 
-		final ArrayList<Object> alo = (ArrayList<Object>)row;
+		final List<Object> alo = (List<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
@@ -821,7 +817,7 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Past end of result set");
 		}
 
-		final ArrayList<Object> alo = (ArrayList<Object>)row;
+		final List<Object> alo = (List<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
@@ -867,7 +863,7 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Past end of result set");
 		}
 
-		final ArrayList<Object> alo = (ArrayList<Object>)row;
+		final List<Object> alo = (List<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
@@ -954,7 +950,7 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Past end of result set");
 		}
 
-		final ArrayList<Object> alo = (ArrayList<Object>)row;
+		final List<Object> alo = (List<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
@@ -1004,7 +1000,7 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Past end of result set");
 		}
 
-		final ArrayList<Object> alo = (ArrayList<Object>)row;
+		final List<Object> alo = (List<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
@@ -1094,7 +1090,7 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Past end of result set");
 		}
 
-		final ArrayList<Object> alo = (ArrayList<Object>)row;
+		final List<Object> alo = (List<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
@@ -1159,7 +1155,7 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Past end of result set");
 		}
 
-		final ArrayList<Object> alo = (ArrayList<Object>)row;
+		final List<Object> alo = (List<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
@@ -1241,7 +1237,7 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Past end of result set");
 		}
 
-		final ArrayList<Object> alo = (ArrayList<Object>)row;
+		final List<Object> alo = (List<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
@@ -1286,7 +1282,7 @@ public class HRDBMSResultSet implements ResultSet
 			throw new SQLException("Past end of result set");
 		}
 
-		final ArrayList<Object> alo = (ArrayList<Object>)row;
+		final List<Object> alo = (List<Object>)row;
 
 		if (columnIndex < 1 || columnIndex > alo.size())
 		{
@@ -2160,7 +2156,7 @@ public class HRDBMSResultSet implements ResultSet
 		{
 			return new DataEndMarker();
 		}
-		final ArrayList<Object> retval = new ArrayList<Object>(numFields);
+		final List<Object> retval = new ArrayList<Object>(numFields);
 		int i = 0;
 		while (i < numFields)
 		{
@@ -2393,9 +2389,9 @@ public class HRDBMSResultSet implements ResultSet
 		conn.out.flush();
 
 		final ObjectInputStream in = new ObjectInputStream(conn.in);
-		cols2Pos = (HashMap<String, Integer>)in.readObject();
-		pos2Cols = (TreeMap<Integer, String>)in.readObject();
-		cols2Types = (HashMap<String, String>)in.readObject();
+		cols2Pos = (Map<String, Integer>)in.readObject();
+		pos2Cols = (Map<Integer, String>)in.readObject();
+		cols2Types = (Map<String, String>)in.readObject();
 	}
 
 	private void sendCloseRS() throws Exception

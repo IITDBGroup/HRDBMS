@@ -16,12 +16,7 @@ import java.nio.charset.CharsetEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.Locale;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedInputStream;
@@ -59,12 +54,12 @@ public final class RoutingOperator implements Operator
 		}
 	}
 	private CharsetEncoder ce = cs.newEncoder();
-	private ArrayList<String> hashCols;
+	private List<String> hashCols;
 	private int fromID;
 	private int toID;
 	private ConcurrentHashMap<Integer, Socket> connections = new ConcurrentHashMap<Integer, Socket>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
 	private transient OutputStream[] outs = null;
-	private ArrayList<Operator> parents = new ArrayList<Operator>();
+	private List<Operator> parents = new ArrayList<Operator>();
 	private boolean error = false;
 	private transient String errorText;
 	private int connCount = 0;
@@ -76,17 +71,17 @@ public final class RoutingOperator implements Operator
 	private boolean first = false;
 	private boolean last = false;
 	private transient Operator child;
-	private ArrayList<Operator> children;
+	private List<Operator> children;
 	private int starting;
 	private int numNodes;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
+	private Map<String, String> cols2Types;
+	private Map<String, Integer> cols2Pos;
+	private Map<Integer, String> pos2Col;
 	private volatile boolean fullyStarted = false;
-	private transient HashMap<Operator, Socket> socks;
-	private transient HashMap<Operator, OutputStream> outsMiddle;
-	private transient HashMap<Operator, InputStream> ins;
-	private transient ArrayList<ReadThread> threads;
+	private transient Map<Operator, Socket> socks;
+	private transient Map<Operator, OutputStream> outsMiddle;
+	private transient Map<Operator, InputStream> ins;
+	private transient List<ReadThread> threads;
 	private boolean send = false;
 	private transient OutputStream[] outs2;
 	private transient ConcurrentHashMap<Integer, AtomicLong> usage;
@@ -97,7 +92,7 @@ public final class RoutingOperator implements Operator
 		received = new AtomicLong(0);
 	}
 
-	public static RoutingOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static RoutingOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final RoutingOperator value = (RoutingOperator)unsafe.allocateInstance(RoutingOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -139,7 +134,7 @@ public final class RoutingOperator implements Operator
 		{
 			if (key instanceof ArrayList)
 			{
-				final byte[] data = toBytesForHash((ArrayList<Object>)key);
+				final byte[] data = toBytesForHash((List<Object>)key);
 				eHash = MurmurHash.hash64(data, data.length);
 			}
 			else
@@ -212,7 +207,7 @@ public final class RoutingOperator implements Operator
 		return bb.array();
 	}
 
-	private static byte[] toBytesForHash(final ArrayList<Object> key)
+	private static byte[] toBytesForHash(final List<Object> key)
 	{
 		final StringBuilder sb = new StringBuilder();
 		for (final Object o : key)
@@ -286,7 +281,7 @@ public final class RoutingOperator implements Operator
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
 		return children;
 	}
@@ -379,13 +374,13 @@ public final class RoutingOperator implements Operator
 	}
 
 	@Override
-	public HashMap<String, Integer> getCols2Pos()
+	public Map<String, Integer> getCols2Pos()
 	{
 		return cols2Pos;
 	}
 
 	@Override
-	public HashMap<String, String> getCols2Types()
+	public Map<String, String> getCols2Types()
 	{
 		return cols2Types;
 	}
@@ -395,7 +390,7 @@ public final class RoutingOperator implements Operator
 		return fromID;
 	}
 
-	public ArrayList<String> getHashCols()
+	public List<String> getHashCols()
 	{
 		return hashCols;
 	}
@@ -413,13 +408,13 @@ public final class RoutingOperator implements Operator
 	}
 
 	@Override
-	public TreeMap<Integer, String> getPos2Col()
+	public Map<Integer, String> getPos2Col()
 	{
 		return pos2Col;
 	}
 
 	@Override
-	public ArrayList<String> getReferences()
+	public List<String> getReferences()
 	{
 		return null;
 	}
@@ -466,7 +461,7 @@ public final class RoutingOperator implements Operator
 		return null;
 	}
 
-	public ArrayList<Operator> parents()
+	public List<Operator> parents()
 	{
 		return parents;
 	}
@@ -540,7 +535,7 @@ public final class RoutingOperator implements Operator
 	{
 	}
 
-	public void setFirst(final ArrayList<String> hashCols)
+	public void setFirst(final List<String> hashCols)
 	{
 		first = true;
 		this.hashCols = hashCols;
@@ -641,7 +636,7 @@ public final class RoutingOperator implements Operator
 					{
 						received.getAndIncrement();
 					}
-					final ArrayList<Object> key = new ArrayList<Object>(hashCols.size());
+					final List<Object> key = new ArrayList<Object>(hashCols.size());
 					while (!(o instanceof DataEndMarker))
 					{
 						final byte[] obj;
@@ -672,16 +667,16 @@ public final class RoutingOperator implements Operator
 							final String col = hashCols.get(z++);
 							int pos = -1;
 							pos = child.getCols2Pos().get(col);
-							key.add(((ArrayList<Object>)o).get(pos));
+							key.add(((List<Object>)o).get(pos));
 						}
 
 						final int finalDest = (int)(starting + ((0x7FFFFFFFFFFFFFFFL & hash(key)) % numNodes));
-						final ArrayList<Integer> route = ResourceManager.getRoute(node, finalDest);
+						final List<Integer> route = ResourceManager.getRoute(node, finalDest);
 						int nextHop = route.get(0);
 						if (route.size() >= 2)
 						{
 							final int twoHops = route.get(1);
-							final ArrayList<Integer> alternatives = ResourceManager.getAlternateMiddlemen(node, twoHops, nextHop);
+							final List<Integer> alternatives = ResourceManager.getAlternateMiddlemen(node, twoHops, nextHop);
 							AtomicLong primaryUsage = usage.get(nextHop);
 							if (primaryUsage == null)
 							{
@@ -720,7 +715,7 @@ public final class RoutingOperator implements Operator
 							}
 						}
 						final OutputStream out = outs2[nextHop];
-						obj = toBytes((ArrayList<Object>)o, route);
+						obj = toBytes((List<Object>)o, route);
 						out.write(obj);
 
 						o = child.next(this);
@@ -947,7 +942,7 @@ public final class RoutingOperator implements Operator
 		return "RoutingOperator(" + node + ") FROMID = " + fromID + " TOID = " + toID;
 	}
 
-	private byte[] toBytes(final ArrayList<Object> val, final ArrayList<Integer> route) throws Exception
+	private byte[] toBytes(final List<Object> val, final List<Integer> route) throws Exception
 	{
 		ArrayList<byte[]> bytes = null;
 		if (val.size() == 0)
@@ -1072,11 +1067,11 @@ public final class RoutingOperator implements Operator
 
 	private byte[] toBytes(final Object v) throws Exception
 	{
-		ArrayList<byte[]> bytes = null;
-		ArrayList<Object> val = null;
+		List<byte[]> bytes = null;
+		List<Object> val = null;
 		if (v instanceof ArrayList)
 		{
-			val = (ArrayList<Object>)v;
+			val = (List<Object>)v;
 			if (val.size() == 0)
 			{
 				throw new Exception("Empty ArrayList in toBytes()");
@@ -1294,7 +1289,7 @@ public final class RoutingOperator implements Operator
 					if (!last)
 					{
 						final int twoHops = bb.getInt(size - 4);
-						final ArrayList<Integer> alternatives = ResourceManager.getAlternateMiddlemen(node, twoHops, nextHop);
+						final List<Integer> alternatives = ResourceManager.getAlternateMiddlemen(node, twoHops, nextHop);
 						AtomicLong primaryUsage = usage.get(nextHop);
 						if (primaryUsage == null)
 						{

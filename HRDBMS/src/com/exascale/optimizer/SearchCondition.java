@@ -1,13 +1,14 @@
 package com.exascale.optimizer;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class SearchCondition
 {
 	private SearchClause search;
-	private ArrayList<ConnectedSearchClause> connected;
+	private List<ConnectedSearchClause> connected;
 
-	public SearchCondition(final SearchClause search, final ArrayList<ConnectedSearchClause> connected)
+	public SearchCondition(final SearchClause search, final List<ConnectedSearchClause> connected)
 	{
 		this.search = search;
 		this.connected = connected;
@@ -31,7 +32,7 @@ public class SearchCondition
 	@Override
 	public SearchCondition clone()
 	{
-		final ArrayList<ConnectedSearchClause> c = new ArrayList<ConnectedSearchClause>();
+		final List<ConnectedSearchClause> c = new ArrayList<ConnectedSearchClause>();
 		if (connected != null)
 		{
 			for (final ConnectedSearchClause csc : connected)
@@ -93,7 +94,7 @@ public class SearchCondition
 		return search;
 	}
 
-	public ArrayList<ConnectedSearchClause> getConnected()
+	public List<ConnectedSearchClause> getConnected()
 	{
 		return connected;
 	}
@@ -103,7 +104,7 @@ public class SearchCondition
 		this.search = search;
 	}
 
-	public void setConnected(final ArrayList<ConnectedSearchClause> connected)
+	public void setConnected(final List<ConnectedSearchClause> connected)
 	{
 		this.connected = connected;
 	}

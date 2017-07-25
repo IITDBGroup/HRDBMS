@@ -5,21 +5,18 @@ import com.exascale.tables.Transaction;
 
 import javax.naming.OperationNotSupportedException;
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 
 /** Initial efforts at an external table scan operator involved subclassing AbstractTableScanOperator.  However,
  *  subclassing TableScanOperator proved more workable. */
 public abstract class AbstractTableScanOperator implements Operator, Serializable {
     protected transient MetaData meta;
-    protected transient HashMap<Operator, Operator> opParents = new HashMap<Operator, Operator>();
-    protected ArrayList<Operator> parents = new ArrayList<Operator>();
-    protected HashMap<Operator, CNFFilter> orderedFilters = new HashMap<Operator, CNFFilter>();
-    protected HashMap<String, String> cols2Types;
-    protected HashMap<String, Integer> cols2Pos;
-    protected TreeMap<Integer, String> pos2Col;
+    protected transient Map<Operator, Operator> opParents = new HashMap<Operator, Operator>();
+    protected List<Operator> parents = new ArrayList<Operator>();
+    protected Map<Operator, CNFFilter> orderedFilters = new HashMap<Operator, CNFFilter>();
+    protected Map<String, String> cols2Types;
+    protected Map<String, Integer> cols2Pos;
+    protected Map<Integer, String> pos2Col;
     protected Operator parent;
     protected int node;
     protected String name;
@@ -28,13 +25,13 @@ public abstract class AbstractTableScanOperator implements Operator, Serializabl
     protected boolean set = false;
     protected transient PartitionMetaData partMeta; // OK now that clone won't
 
-    public AbstractTableScanOperator(final String schema, final String name, final MetaData meta, final HashMap<String, Integer> cols2Pos, final TreeMap<Integer, String> pos2Col, final HashMap<String, String> cols2Types) {
+    public AbstractTableScanOperator(final String schema, final String name, final MetaData meta, final Map<String, Integer> cols2Pos, final Map<Integer, String> pos2Col, final Map<String, String> cols2Types) {
         this.meta = meta;
         this.name = name;
         this.schema = schema;
-        this.cols2Types = (HashMap<String, String>)cols2Types.clone();
-        this.cols2Pos = (HashMap<String, Integer>)cols2Pos.clone();
-        this.pos2Col = (TreeMap<Integer, String>)pos2Col.clone();
+        this.cols2Types = new HashMap<>(cols2Types);
+        this.cols2Pos = new HashMap<>(cols2Pos);
+        this.pos2Col = new HashMap<>(pos2Col);
     }
 
     public AbstractTableScanOperator(final String schema, final String name, final MetaData meta, final Transaction tx) throws Exception {
@@ -53,9 +50,9 @@ public abstract class AbstractTableScanOperator implements Operator, Serializabl
     }
 
     @Override
-    public ArrayList<Operator> children()
+    public List<Operator> children()
     {
-        final ArrayList<Operator> retval = new ArrayList<Operator>(0);
+        final List<Operator> retval = new ArrayList<Operator>(0);
         return retval;
     }
 
@@ -66,13 +63,13 @@ public abstract class AbstractTableScanOperator implements Operator, Serializabl
     }
 
     @Override
-    public HashMap<String, Integer> getCols2Pos()
+    public Map<String, Integer> getCols2Pos()
     {
         return cols2Pos;
     }
 
     @Override
-    public HashMap<String, String> getCols2Types()
+    public Map<String, String> getCols2Types()
     {
         return cols2Types;
     }
@@ -90,15 +87,15 @@ public abstract class AbstractTableScanOperator implements Operator, Serializabl
     }
 
     @Override
-    public TreeMap<Integer, String> getPos2Col()
+    public Map<Integer, String> getPos2Col()
     {
         return pos2Col;
     }
 
     @Override
-    public ArrayList<String> getReferences()
+    public List<String> getReferences()
     {
-        final ArrayList<String> retval = new ArrayList<String>(0);
+        final List<String> retval = new ArrayList<String>(0);
         return retval;
     }
 
@@ -160,9 +157,9 @@ public abstract class AbstractTableScanOperator implements Operator, Serializabl
     public void setAlias(final String alias)
     {
         this.alias = alias;
-        final TreeMap<Integer, String> newPos2Col = new TreeMap<Integer, String>();
-        final HashMap<String, Integer> newCols2Pos = new HashMap<String, Integer>();
-        final HashMap<String, String> newCols2Types = new HashMap<String, String>();
+        final Map<Integer, String> newPos2Col = new TreeMap<Integer, String>();
+        final Map<String, Integer> newCols2Pos = new HashMap<String, Integer>();
+        final Map<String, String> newCols2Types = new HashMap<String, String>();
         for (final Map.Entry entry : pos2Col.entrySet())
         {
             String val = (String)entry.getValue();
@@ -213,11 +210,11 @@ public abstract class AbstractTableScanOperator implements Operator, Serializabl
     @Override
     public Operator clone() { return null; };
 
-    public ArrayList<Operator> parents()
+    public List<Operator> parents()
     {
         if (parents.size() == 0)
         {
-            final ArrayList<Operator> retval = new ArrayList<Operator>();
+            final List<Operator> retval = new ArrayList<Operator>();
             {
                 retval.add(null);
             }

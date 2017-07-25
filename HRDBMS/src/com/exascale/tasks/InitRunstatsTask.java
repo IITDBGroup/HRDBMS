@@ -6,6 +6,9 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.managers.MaintenanceManager;
 import com.exascale.optimizer.MetaData;
@@ -26,8 +29,8 @@ public class InitRunstatsTask extends Task
 		{
 			try
 			{
-				final ArrayList<String> tables = new ArrayList<String>();
-				final HashMap<String, Long> times = new HashMap<String, Long>();
+				final List<String> tables = new ArrayList<String>();
+				final Map<String, Long> times = new HashMap<String, Long>();
 				final long target = Long.parseLong(HRDBMSWorker.getHParms().getProperty("statistics_refresh_target_days")) * 24 * 60 * 60 * 1000;
 				String sql = "SELECT SCHEMA, TABNAME, TABLEID FROM SYS.TABLES";
 				final int numCoords = Integer.parseInt(HRDBMSWorker.getHParms().getProperty("number_of_coords"));

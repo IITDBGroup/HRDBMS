@@ -1,17 +1,18 @@
 package com.exascale.optimizer;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class PrimaryKey
 {
-	private final ArrayList<Column> cols;
+	private final List<Column> cols;
 
-	public PrimaryKey(final ArrayList<Column> cols)
+	public PrimaryKey(final List<Column> cols)
 	{
 		this.cols = cols;
 	}
 
-	public ArrayList<Column> getCols()
+	public List<Column> getCols()
 	{
 		return cols;
 	}

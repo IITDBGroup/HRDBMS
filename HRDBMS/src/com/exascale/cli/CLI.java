@@ -7,6 +7,7 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 import java.util.Scanner;
 
@@ -204,7 +205,7 @@ public class CLI
 			start = System.currentTimeMillis();
 			final ResultSet rs = stmt.executeQuery(cmd);
 			final ResultSetMetaData meta = rs.getMetaData();
-			final ArrayList<Integer> offsets = new ArrayList<Integer>();
+			final List<Integer> offsets = new ArrayList<Integer>();
 			int i = 1;
 			final StringBuilder line = new StringBuilder(64 * 1024);
 			final int colCount = meta.getColumnCount();

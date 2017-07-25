@@ -4,10 +4,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
@@ -33,9 +30,9 @@ public final class TopOperator implements Operator, Serializable
 	}
 	private Operator child;
 	private Operator parent;
-	private HashMap<String, String> cols2Types;
-	private HashMap<String, Integer> cols2Pos;
-	private TreeMap<Integer, String> pos2Col;
+	private Map<String, String> cols2Types;
+	private Map<String, Integer> cols2Pos;
+	private Map<Integer, String> pos2Col;
 	private transient final MetaData meta;
 	private AtomicLong remaining;
 
@@ -52,7 +49,7 @@ public final class TopOperator implements Operator, Serializable
 		received = new AtomicLong(0);
 	}
 
-	public static TopOperator deserialize(final InputStream in, final HashMap<Long, Object> prev) throws Exception
+	public static TopOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final TopOperator value = (TopOperator)unsafe.allocateInstance(TopOperator.class);
 		prev.put(OperatorUtils.readLong(in), value);
@@ -86,9 +83,9 @@ public final class TopOperator implements Operator, Serializable
 	}
 
 	@Override
-	public ArrayList<Operator> children()
+	public List<Operator> children()
 	{
-		final ArrayList<Operator> retval = new ArrayList<Operator>(1);
+		final List<Operator> retval = new ArrayList<Operator>(1);
 		retval.add(child);
 		return retval;
 	}
@@ -117,13 +114,13 @@ public final class TopOperator implements Operator, Serializable
 	}
 
 	@Override
-	public HashMap<String, Integer> getCols2Pos()
+	public Map<String, Integer> getCols2Pos()
 	{
 		return cols2Pos;
 	}
 
 	@Override
-	public HashMap<String, String> getCols2Types()
+	public Map<String, String> getCols2Types()
 	{
 		return cols2Types;
 	}
@@ -141,15 +138,15 @@ public final class TopOperator implements Operator, Serializable
 	}
 
 	@Override
-	public TreeMap<Integer, String> getPos2Col()
+	public Map<Integer, String> getPos2Col()
 	{
 		return pos2Col;
 	}
 
 	@Override
-	public ArrayList<String> getReferences()
+	public List<String> getReferences()
 	{
-		final ArrayList<String> retval = new ArrayList<String>(0);
+		final List<String> retval = new ArrayList<String>(0);
 		return retval;
 	}
 
