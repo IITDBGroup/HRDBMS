@@ -1092,7 +1092,7 @@ public class OperatorUtils
 
 		if (!HrdbmsType.HMINTINT.equals(type))
 		{
-			throw new Exception("Corrupted stream. Expected type HMINTOP but received " + type);
+			throw new Exception("Corrupted stream. Expected type HMINTINT but received " + type);
 		}
 
 		final long id = readLong(in);
@@ -2393,7 +2393,7 @@ public class OperatorUtils
 			return;
 		}
 
-		writeType(HrdbmsType.HMF, out);
+		writeType(HrdbmsType.HMINTINT, out);
 		prev.put(map, writeID(out));
 		writeShort(map.size(), out);
 		for (final Map.Entry<Integer, Integer> entry : map.entrySet())

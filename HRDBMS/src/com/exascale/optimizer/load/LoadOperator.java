@@ -22,9 +22,6 @@ import com.exascale.misc.LOMultiHashMap;
 import com.exascale.misc.ScalableStampedRWLock;
 import com.exascale.tables.Plan;
 import com.exascale.tables.Transaction;
-import org.apache.hadoop.mapred.Operation;
-
-import javax.naming.OperationNotSupportedException;
 
 public final class LoadOperator implements Operator, Serializable
 {
@@ -74,7 +71,7 @@ public final class LoadOperator implements Operator, Serializable
 	public LoadOperator() {}
 
 	/**TODO - get rid of unused parameters */
-	public LoadOperator(final String schema, final String table, final boolean replace, final String delimiter, final String glob, final MetaData meta, final Transaction tx) throws Exception
+	public LoadOperator(final String schema, final String table, final boolean replace, final String delimiter, final String glob, final Transaction tx) throws Exception
 	{
 		this(schema, table, replace, delimiter, glob, MetaData.cols2PosFlip(MetaData.getCols2PosForTable(schema, table, tx)),
 				MetaData.getCols2TypesForTable(schema, table, tx), MetaData.getCols2PosForTable(schema, table, tx), tx);
@@ -111,6 +108,7 @@ public final class LoadOperator implements Operator, Serializable
     @Override
 	public void start() throws Exception
 	{
+		HRDBMSWorker.logger.info("gotstarted");
 		if (child != null) {
 			child.start();
 		} else {
@@ -342,7 +340,7 @@ public final class LoadOperator implements Operator, Serializable
 	@Override
 	public LoadOperator clone()
 	{
-		final LoadOperator retval = new LoadOperator(); //schema, table, replace, delimiter, glob, meta, pos2Col, cols2Types, cols2Pos, tx);
+		final LoadOperator retval = new LoadOperator();
 		retval.schema = schema;
 		retval.table = table;
 		retval.replace = replace;
