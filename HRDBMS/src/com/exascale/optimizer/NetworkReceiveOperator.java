@@ -90,6 +90,11 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	public static NetworkReceiveOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
 		final NetworkReceiveOperator value = (NetworkReceiveOperator)unsafe.allocateInstance(NetworkReceiveOperator.class);
+		deserialize(in, prev, value);
+		return value;
+	}
+
+	protected static void deserialize(final InputStream in, final Map<Long, Object> prev, NetworkReceiveOperator value) throws Exception {
 		prev.put(OperatorUtils.readLong(in), value);
 		value.meta = new MetaData();
 		value.children = OperatorUtils.deserializeALOp(in, prev);
@@ -104,7 +109,6 @@ public class NetworkReceiveOperator implements Operator, Serializable
 		value.received = new AtomicLong(0);
 		value.demReceived = false;
 		value.txnum = OperatorUtils.readLong(in);
-		return value;
 	}
 
 	private static int bytesToInt(final byte[] val)
@@ -345,6 +349,10 @@ public class NetworkReceiveOperator implements Operator, Serializable
 		}
 
 		OperatorUtils.writeType(HrdbmsType.NRO, out);
+		serializeProtected(out, prev);
+	}
+
+	protected void serializeProtected(final OutputStream out, final IdentityHashMap<Object, Long> prev) throws Exception {
 		prev.put(this, OperatorUtils.writeID(out));
 		// recreate meta
 		OperatorUtils.serializeALOp(children, out, prev);
@@ -838,7 +846,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 			{
 				try
 				{
-					outBuffer.put(new DataEndMarker());
+					preClose();
 					// HRDBMSWorker.logger.debug("Wrote DEM: " +
 					// NetworkReceiveOperator.this.toString());
 					break;
@@ -849,5 +857,9 @@ public class NetworkReceiveOperator implements Operator, Serializable
 				}
 			}
 		}
+	}
+
+	protected void preClose() throws Exception {
+		outBuffer.put(new DataEndMarker());
 	}
 }

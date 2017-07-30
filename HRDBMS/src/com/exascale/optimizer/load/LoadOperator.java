@@ -69,7 +69,6 @@ public final class LoadOperator implements Operator, Serializable
 
 	public LoadOperator() {	}
 
-	/**TODO - get rid of unused parameters */
 	public LoadOperator(final String schema, final String table, final boolean replace, final String delimiter, final String glob, final Transaction tx) throws Exception
 	{
 		this(schema, table, replace, delimiter, glob, MetaData.cols2PosFlip(MetaData.getCols2PosForTable(schema, table, tx)),
@@ -124,16 +123,7 @@ public final class LoadOperator implements Operator, Serializable
 			// See prior commit for MassDeleteOperator code to reintroduce this feature.
 		}
 
-		final List<String> indexNames = new ArrayList<>();
-		for (final String s : indexes)
-		{
-			final int start = s.indexOf('.') + 1;
-			final int end = s.indexOf('.', start);
-			indexNames.add(s.substring(start, end));
-		}
-
 		final List<ReadThread> threads = new ArrayList<>();
-
 		threads.add(new ExternalReadThread(this, pos2Length, indexes, keys, types, orders, tableType, partitionMetaData));
 		threads.forEach(ThreadPoolThread::start);
 
@@ -163,15 +153,6 @@ public final class LoadOperator implements Operator, Serializable
 		{
 			num.set(Long.MIN_VALUE);
 		}
-
-		// Note that we cluster the data on loading, but don't keep it up to date with new inserts
-		//TODO run this on coordinator after load.
-//		MetaData.cluster(schema, table, tx, pos2Col, cols2Types, tableType);
-//
-//		for (final String index : indexNames)
-//		{
-//			MetaData.populateIndex(schema, index, table, tx, cols2Pos);
-//		}
 
 		done = true;
 	}
@@ -436,9 +417,9 @@ public final class LoadOperator implements Operator, Serializable
 	}
 
 	@Override
-	public void setPlan(final Plan plan)
-	{
+	public void setPlan(final Plan plan) {
 		this.plan = plan;
+		MetaData.getWorkerNodes().forEach(plan::addNode);
 	}
 
 	public void setTransaction(final Transaction tx)
@@ -475,4 +456,8 @@ public final class LoadOperator implements Operator, Serializable
 	String getDelimiter() { return delimiter; }
 
 	ExternalTableScanOperator getChild() { return child == null ? null : (ExternalTableScanOperator) child; }
+
+	int getTableType() { return tableType; }
+
+	List<String> getIndexes() { return indexes; }
 }

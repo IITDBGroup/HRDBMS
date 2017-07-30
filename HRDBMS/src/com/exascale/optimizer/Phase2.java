@@ -4,6 +4,7 @@ import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.optimizer.load.LoadOperator;
+import com.exascale.optimizer.load.LoadReceiveOperator;
 import com.exascale.tables.Transaction;
 
 /** Splits table scans across nodes according to partitioning scheme. */
@@ -255,7 +256,7 @@ public final class Phase2
             final List<List<Integer>> nodeLists = new ArrayList<>(1);
             nodeLists.add(nodeList);
 
-            final NetworkReceiveOperator receive = new NetworkReceiveOperator(meta);
+            final LoadReceiveOperator receive = new LoadReceiveOperator(meta, (LoadOperator)op);
             for (final int node : nodeList)
             {
                 final LoadOperator lo = t.clone();

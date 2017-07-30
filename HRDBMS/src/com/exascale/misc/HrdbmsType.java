@@ -98,7 +98,8 @@ public enum HrdbmsType {
     CSVEXTERNALPARAMS, // 94 - External Table Parameters
     HDFSCSVEXTERNALTABLE, // 95 - HDFS External Table Implementation
     LOADO, // 96 - Load operator
-    HMINTINT; // 97 - Hash Map int to int
+    HMINTINT, // 97 - Hash Map int to int
+    LOADRO; // 98 - Load receive op
     // Make sure to add new values at the end to maintain the above ordinals as they should be.
 
     public static HrdbmsType fromInt(int value) { return HrdbmsType.values()[value]; }
