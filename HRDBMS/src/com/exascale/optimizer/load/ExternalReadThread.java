@@ -5,6 +5,7 @@ import com.exascale.misc.DataEndMarker;
 import com.exascale.optimizer.MetaData;
 import com.exascale.optimizer.PartitionMetaData;
 import com.exascale.optimizer.externalTable.ExternalTableScanOperator;
+import com.google.common.collect.Lists;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -14,10 +15,13 @@ import java.util.Map;
 /** Read data from an external table on the workers */
 public class ExternalReadThread extends ReadThread {
     private ExternalTableScanOperator op;
+    private PartitionMetaData pmeta;
 
-    public ExternalReadThread(final LoadOperator loadOperator, final Map<Integer, Integer> pos2Length, final List<String> indexes, final List<List<String>> keys, final List<List<String>> types, final List<List<Boolean>> orders, final int type) {
+    public ExternalReadThread(final LoadOperator loadOperator, final Map<Integer, Integer> pos2Length, final List<String> indexes, final List<List<String>> keys,
+                              final List<List<String>> types, final List<List<Boolean>> orders, final int type, final PartitionMetaData pmeta) {
         super(loadOperator, null, pos2Length, indexes, keys, types, orders, type);
         op = loadOperator.getChild();
+        this.pmeta = pmeta;
     }
 
     @Override
@@ -27,7 +31,6 @@ public class ExternalReadThread extends ReadThread {
         try
         {
             Object o = op.next(loadOperator);
-            final PartitionMetaData pmeta = new PartitionMetaData(loadOperator.getSchema(), loadOperator.getTable(), loadOperator.getTransaction());
             final int numNodes = MetaData.numWorkerNodes;
             while (!(o instanceof DataEndMarker))
             {
@@ -41,13 +44,13 @@ public class ExternalReadThread extends ReadThread {
                         return;
                     }
                 }
-                final List<Integer> nodes = MetaData.determineNode(loadOperator.getSchema(), loadOperator.getTable(), row, loadOperator.getTransaction(), pmeta, cols2Pos, numNodes);
+                // Determine which nodes need to load the row (reason it's nodeS is due to replicas).
+                List<Integer> nodes = MetaData.determineNode(loadOperator.getSchema(), loadOperator.getTable(), row, loadOperator.getTransaction(), pmeta, cols2Pos, numNodes);
                 final int device = MetaData.determineDevice(row, pmeta, cols2Pos);
 
                 loadOperator.getLock().readLock().lock();
                 for (final Integer node : nodes)
-                {
-                    loadOperator.getPlan().addNode(node);
+                {   // Copy the same data to all the nodes where it should be replicated.  Replicated across nodes, not across devices.
                     final long key = (((long)node) << 32) + device;
                     loadOperator.getMap().multiPut(key, row);
                 }
@@ -78,7 +81,6 @@ public class ExternalReadThread extends ReadThread {
                 }
             }
 
-            // TODO - there were slight changes made to ReadThread,  incorporate them.
             if (loadOperator.getMap().totalSize() > 0)
             {
                 master = FlushMasterThread.flush(loadOperator, indexes, keys, types, orders, true, type);

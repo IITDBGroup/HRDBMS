@@ -1,8 +1,6 @@
 package com.exascale.optimizer.load;
 
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.Serializable;
+import java.io.*;
 import java.lang.reflect.Field;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -53,6 +51,7 @@ public final class LoadOperator implements Operator, Serializable
 	private List<List<String>> keys, types;
 	private List<List<Boolean>> orders;
 	private Map<Integer, Integer> pos2Length = new HashMap<>();
+	private PartitionMetaData partitionMetaData;
 
 	static
 	{
@@ -68,7 +67,7 @@ public final class LoadOperator implements Operator, Serializable
 		}
 	}
 
-	public LoadOperator() {}
+	public LoadOperator() {	}
 
 	/**TODO - get rid of unused parameters */
 	public LoadOperator(final String schema, final String table, final boolean replace, final String delimiter, final String glob, final Transaction tx) throws Exception
@@ -103,12 +102,12 @@ public final class LoadOperator implements Operator, Serializable
 				pos2Length.put(cols2Pos.get(entry.getKey()), length);
 			}
 		}
+		partitionMetaData = new PartitionMetaData(getSchema(), getTable(), getTransaction());
     }
 
     @Override
 	public void start() throws Exception
 	{
-		HRDBMSWorker.logger.info("gotstarted");
 		if (child != null) {
 			child.start();
 		} else {
@@ -135,7 +134,7 @@ public final class LoadOperator implements Operator, Serializable
 
 		final List<ReadThread> threads = new ArrayList<>();
 
-		threads.add(new ExternalReadThread(this, pos2Length, indexes, keys, types, orders, tableType));
+		threads.add(new ExternalReadThread(this, pos2Length, indexes, keys, types, orders, tableType, partitionMetaData));
 		threads.forEach(ThreadPoolThread::start);
 
 		boolean allOK = true;
@@ -356,6 +355,11 @@ public final class LoadOperator implements Operator, Serializable
 		retval.types = types;
 		retval.orders = orders;
 		retval.pos2Length = pos2Length;
+		try {
+			retval.partitionMetaData = new PartitionMetaData(getSchema(), getTable(), getTransaction());
+		} catch (Exception e) {
+			HRDBMSWorker.logger.error("Cloning Load Op", e);
+		}
 		return retval;
 	}
 
@@ -385,6 +389,8 @@ public final class LoadOperator implements Operator, Serializable
 		OperatorUtils.serializeALALS(types, out, prev);
 		OperatorUtils.serializeALALB(orders, out, prev);
 		OperatorUtils.serializeMapIntInt(pos2Length, out, prev);
+		ObjectOutputStream objectStream = new ObjectOutputStream(out);
+		objectStream.writeObject(partitionMetaData);
 		OperatorUtils.writeLong(tx.number(), out);
 		OperatorUtils.writeBool(replace, out);
 		OperatorUtils.writeInt(node, out);
@@ -393,7 +399,7 @@ public final class LoadOperator implements Operator, Serializable
 
 	public static LoadOperator deserialize(final InputStream in, final Map<Long, Object> prev) throws Exception
 	{
-		final LoadOperator value = (LoadOperator)unsafe.allocateInstance(LoadOperator.class);
+		final LoadOperator value = new LoadOperator();
 		prev.put(OperatorUtils.readLong(in), value);
 		value.child = OperatorUtils.deserializeOperator(in, prev);
 		value.parent = OperatorUtils.deserializeOperator(in, prev);
@@ -409,6 +415,8 @@ public final class LoadOperator implements Operator, Serializable
 		value.types = OperatorUtils.deserializeALALS(in, prev);
 		value.orders = OperatorUtils.deserializeALALB(in, prev);
 		value.pos2Length = OperatorUtils.deserializeMapIntInt(in, prev);
+		ObjectInputStream objectStream = new ObjectInputStream(in);
+		value.partitionMetaData = (PartitionMetaData) objectStream.readObject();
 		value.tx = new Transaction(OperatorUtils.readLong(in));
 		value.replace = OperatorUtils.readBool(in);
 		value.node = OperatorUtils.readInt(in);
