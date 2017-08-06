@@ -5,10 +5,7 @@ import com.exascale.misc.DataEndMarker;
 import com.exascale.optimizer.MetaData;
 import com.exascale.optimizer.PartitionMetaData;
 import com.exascale.optimizer.externalTable.ExternalTableScanOperator;
-import com.google.common.collect.Lists;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -36,6 +33,7 @@ public class ExternalReadThread extends ReadThread {
             {
                 final List<Object> row = (List<Object>)o;
                 num++;
+                // Skip loading string values that are longer than the char column length.
                 for (final Map.Entry entry : pos2Length.entrySet())
                 {
                     if (((String)row.get((Integer)entry.getKey())).length() > (Integer)entry.getValue())
@@ -128,7 +126,7 @@ public class ExternalReadThread extends ReadThread {
         catch (final Exception e)
         {
             ok = false;
-            HRDBMSWorker.logger.debug("", e);
+            HRDBMSWorker.logger.debug("c.e.o.l.ExternalReadThread error", e);
         }
     }
 }

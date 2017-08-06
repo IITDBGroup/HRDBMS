@@ -255,6 +255,12 @@ public final class Phase2
             List<Integer> nodeList = meta.getNodesForTable(t.getSchema(), t.getTable(), tx);
             final List<List<Integer>> nodeLists = new ArrayList<>(1);
             nodeLists.add(nodeList);
+			final int numDevices = meta.getNumDevices();
+			final List<Integer> deviceList = new ArrayList<>();
+			for(int i = 0; i < numDevices; i++) {
+				deviceList.add(i);
+			}
+			((TableScanOperator)t.children().get(0)).addActiveDevices(deviceList);
 
             final LoadReceiveOperator receive = new LoadReceiveOperator(meta, (LoadOperator)op);
             for (final int node : nodeList)
