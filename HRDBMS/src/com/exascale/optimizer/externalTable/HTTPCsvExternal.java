@@ -1,5 +1,6 @@
 package com.exascale.optimizer.externalTable;
 
+import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.HrdbmsType;
 import com.exascale.misc.MyDate;
 import com.exascale.optimizer.OperatorUtils;
@@ -195,9 +196,11 @@ public class HTTPCsvExternal  implements ExternalTableType, Serializable
 	public void close()
 	{
 		try {
-			input.close();
+			if(input != null) {
+				input.close();
+			}
 		} catch (Exception e) {
-			throw new ExternalTableException("Error during closing InputBuffer reading CSV file");
+			throw new ExternalTableException(e);
 		}
 	}
 

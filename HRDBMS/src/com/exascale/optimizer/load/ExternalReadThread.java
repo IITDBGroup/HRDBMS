@@ -32,6 +32,8 @@ public class ExternalReadThread extends ReadThread {
             while (!(o instanceof DataEndMarker))
             {
                 final List<Object> row = (List<Object>)o;
+                // Remove last column - it is a pseudocolumn used to fake out the HRDBMS hash partitioning.
+                row.remove(row.size()-1);
                 num++;
                 // Skip loading string values that are longer than the char column length.
                 for (final Map.Entry entry : pos2Length.entrySet())
