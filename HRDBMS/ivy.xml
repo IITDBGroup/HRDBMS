@@ -51,6 +51,7 @@
         <dependency org="net.jpountz.lz4" name="lz4" rev="1.3.0"/>
         <dependency org="com.google.errorprone" name="error_prone_annotations" rev="2.0.11"/>
         <dependency org="org.sosy-lab" name="java-smt" rev="1.0.1"/>
+        <dependency org="mysql" name="mysql-connector-java" rev="8.0.7-dmr"/>
         <conflict manager="strict"/>
     </dependencies>
 </ivy-module>
