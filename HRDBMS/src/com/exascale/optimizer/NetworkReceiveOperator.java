@@ -595,6 +595,12 @@ public class NetworkReceiveOperator implements Operator, Serializable
 						return;
 					}
 
+					HRDBMSWorker.logger.debug("############ RECEIVED " + row.toString());
+					if (row instanceof DirectConnectionRequest) {
+						HRDBMSWorker.logger.debug("############ DCR  RECEIVED " + row.toString());
+						continue;
+					}
+
 					final boolean ok = outBuffer.putNow(row);
 
 					if (!ok)
@@ -686,6 +692,10 @@ public class NetworkReceiveOperator implements Operator, Serializable
 
 					final Object row = fromBytes(data);
 
+					if (row instanceof DirectConnectionRequest) {
+						continue;
+					}
+
 					outBuffer.put(row);
 				}
 
@@ -724,6 +734,15 @@ public class NetworkReceiveOperator implements Operator, Serializable
 			{
 				return fromBytesException(bb);
 			}
+
+			if (bytes[4] == 6) {
+				bb.position(5); // skip bytes[4]
+				final int from = bb.getInt();
+				final int to = bb.getInt();
+				return new DirectConnectionRequest(from, to);
+			}
+
+			// TODO inform the prof, A possible bug here maybe it is data but still bytes[4] = 5 || 6 || 10, I dont know what header(when serializing) is!
 			final ArrayList<Object> retval = new ArrayList<Object>(numFields);
 			int i = 0;
 

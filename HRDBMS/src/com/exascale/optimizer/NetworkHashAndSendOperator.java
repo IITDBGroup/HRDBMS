@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedOutputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.DirectConnectionRequest;
 import com.exascale.misc.HrdbmsType;
 import com.exascale.misc.MurmurHash;
 
@@ -466,8 +467,12 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 					}
 
 					final int hash = (int)(starting + ((0x7FFFFFFFFFFFFFFFL & hash(key)) % numNodes));
+					HRDBMSWorker.logger.debug("############ SENT " + o.toString() + " TO " + hash);
+
 					final OutputStream out = outs2[hash];
 					out.write(obj);
+
+					out.write(toBytes(new DirectConnectionRequest((byte) 29, (byte) 12)));
 
 					o = child.next(this);
 					if (o instanceof DataEndMarker)

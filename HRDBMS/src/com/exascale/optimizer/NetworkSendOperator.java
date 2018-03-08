@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.exascale.compression.CompressedOutputStream;
 import com.exascale.managers.HRDBMSWorker;
 import com.exascale.misc.DataEndMarker;
+import com.exascale.misc.DirectConnectionRequest;
 import com.exascale.misc.HrdbmsType;
 import com.exascale.misc.MyDate;
 import com.exascale.tables.Plan;
@@ -114,6 +115,33 @@ public class NetworkSendOperator implements Operator, Serializable
 		retval[8] = 5;
 		return retval;
 	}
+
+	private static byte[] toBytesDCR(final Object v)
+	{
+		final DirectConnectionRequest dcr = (DirectConnectionRequest) v;
+		final byte[] retval = new byte[17];
+		int from = dcr.getFrom();
+		int to = dcr.getTo();
+		retval[0] = 0;
+		retval[1] = 0;
+		retval[2] = 0;
+		retval[3] = 13;
+		retval[4] = 0;
+		retval[5] = 0;
+		retval[6] = 0;
+		retval[7] = 3;
+		retval[8] = 6;
+		retval[0] = (byte)(from >> 24);
+		retval[10] = (byte)((from & 0x00FF0000) >> 16);
+		retval[11] = (byte)((from & 0x0000FF00) >> 8);
+		retval[12] = (byte)((from & 0x000000FF));
+		retval[13] = (byte)(to >> 24);
+		retval[14] = (byte)((to & 0x00FF0000) >> 16);
+		retval[15] = (byte)((to & 0x0000FF00) >> 8);
+		retval[16] = (byte)((to & 0x000000FF));
+		return retval;
+	}
+
 
 	private static byte[] toBytesException(final Object v)
 	{
@@ -524,6 +552,9 @@ public class NetworkSendOperator implements Operator, Serializable
 		else if (v instanceof Exception)
 		{
 			return toBytesException(v);
+		}
+		else if (v instanceof DirectConnectionRequest) {
+			return toBytesDCR(v);
 		}
 		else
 		{
