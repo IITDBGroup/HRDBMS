@@ -1559,6 +1559,8 @@ public class ConnectionWorker extends HRDBMSThread
 				final int from = bytesToInt(fromBytes);
 				final int to = bytesToInt(toBytes);
 
+				HRDBMSWorker.logger.debug("#####################" + command + " FROM " + from + " TO " + to);
+
 				if (command.equals("GET     "))
 				{
 					while (!XAManager.rP2)
@@ -1933,6 +1935,13 @@ public class ConnectionWorker extends HRDBMSThread
 						}
 					}
 				}
+
+				//else if (command.equals("DIRCTCON")) {
+				//	final byte[] idBytes = new byte[4];
+				//	num = in.read(idBytes);
+				//	HRDBMSWorker.logger.debug("########## I WILL TRY TO OPEN DIRECT CONNECTION FROM " + from + " TO " + to + " !!");
+				//}
+
 				else if (command.equals("CLOSE   "))
 				{
 					closeConnection();

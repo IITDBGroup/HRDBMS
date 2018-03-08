@@ -225,6 +225,19 @@ public final class NetworkHashReceiveOperator extends NetworkReceiveOperator
 							map.clear();
 							map = null;
 							out.flush();
+
+							//HRDBMSWorker.logger.debug("########## I WILL COMMAND TO OPEN DIRECT CONNECTION FROM " + node + " TO " + child.getNode() + " !!");
+							//final byte[] command2 = "DIRCTCON".getBytes(StandardCharsets.UTF_8);
+							//final byte[] from2 = intToBytes(node);
+							//final byte[] to2 = intToBytes(child.getNode());
+							//final byte[] idBytes2 = intToBytes(ID);
+							//final byte[] data2 = new byte[command2.length + from2.length + to2.length + idBytes2.length];
+							//System.arraycopy(command2, 0, data2, 0, 8);
+							//System.arraycopy(from2, 0, data2, 8, 4);
+							//System.arraycopy(to2, 0, data2, 12, 4);
+							//System.arraycopy(idBytes2, 0, data2, 16, 4);
+							//out.write(data2);
+							//out.flush();
 						}
 						else
 						{

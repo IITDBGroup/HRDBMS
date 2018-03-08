@@ -595,6 +595,17 @@ public class NetworkReceiveOperator implements Operator, Serializable
 						return;
 					}
 
+					if (row != null) {
+						HRDBMSWorker.logger.debug("############ RECEIVED " + row.toString());
+						if (row instanceof DirectConnectionRequest) {
+							HRDBMSWorker.logger.debug("############ DCR  RECEIVED " + row.toString());
+							continue;
+						}
+					}
+					else {
+						HRDBMSWorker.logger.debug("############ RECEIVED NULL");
+					}
+
 					final boolean ok = outBuffer.putNow(row);
 
 					if (!ok)
@@ -686,6 +697,10 @@ public class NetworkReceiveOperator implements Operator, Serializable
 
 					final Object row = fromBytes(data);
 
+					if (row instanceof DirectConnectionRequest) {
+						continue;
+					}
+
 					outBuffer.put(row);
 				}
 
@@ -720,6 +735,13 @@ public class NetworkReceiveOperator implements Operator, Serializable
 			{
 				return new DataEndMarker();
 			}
+
+			if (bytes[4] == 6) {
+				final byte from = (byte) 0;//bytes[7];
+				final byte to = (byte) 0;//bytes[8];
+				return new DirectConnectionRequest(from, to);
+			}
+
 			if (bytes[4] == 10)
 			{
 				return fromBytesException(bb);
