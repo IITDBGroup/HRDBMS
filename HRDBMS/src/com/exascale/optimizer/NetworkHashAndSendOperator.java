@@ -43,6 +43,8 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 	private int numNodes;
 	private int id;
 	private int starting;
+	private ConcurrentHashMap<Integer, Socket> directCons = new ConcurrentHashMap<Integer, Socket>();
+	private ConcurrentHashMap<Integer, OutputStream> directOuts = new ConcurrentHashMap<Integer, OutputStream>();
 	private ConcurrentHashMap<Integer, Socket> connections = new ConcurrentHashMap<Integer, Socket>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
 	private transient OutputStream[] outs = null;
 	private ArrayList<Operator> parents = new ArrayList<Operator>();
@@ -89,6 +91,8 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		value.id = OperatorUtils.readInt(in);
 		value.starting = OperatorUtils.readInt(in);
 		value.connections = new ConcurrentHashMap<Integer, Socket>(Phase3.MAX_INCOMING_CONNECTIONS, 1.0f, Phase3.MAX_INCOMING_CONNECTIONS);
+		value.directCons = new ConcurrentHashMap<Integer, Socket>();
+		value.directOuts = new ConcurrentHashMap<Integer, OutputStream>();
 		value.parents = OperatorUtils.deserializeALOp(in, prev);
 		value.error = OperatorUtils.readBool(in);
 		value.connCount = OperatorUtils.readInt(in);
@@ -158,6 +162,16 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		}
 
 		return retval;
+	}
+
+	public synchronized void addDircetConnection(final int from, final Socket sock) {
+		directCons.put(from, sock);
+		try {
+			directOuts.put(from, new CompressedOutputStream(new BufferedOutputStream(sock.getOutputStream())));
+		}
+		catch (Exception e) {
+			HRDBMSWorker.logger.error("Something went wrong with DIRECT CONNCETION", e);
+		}
 	}
 
 	@Override
@@ -401,6 +415,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 	@Override
 	public synchronized void start() throws Exception
 	{
+		int countToDCR = 2;
 		if (numNodes != numParents)
 		{
 			HRDBMSWorker.logger.debug("Wrong number of parents " + this);
@@ -466,13 +481,20 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 						key.add(((ArrayList<Object>)o).get(pos));
 					}
 
+					// TODO check with prof about this, this might not be the actual fromNode.
 					final int hash = (int)(starting + ((0x7FFFFFFFFFFFFFFFL & hash(key)) % numNodes));
 					HRDBMSWorker.logger.debug("############ SENT " + o.toString() + " FROM " + this.node + " TO " + hash);
 
-					final OutputStream out = outs2[hash];
+					OutputStream out;
+					if (directOuts.containsKey(hash)) {
+						out = directOuts.get(hash);
+					}
+					else {
+						out = outs2[hash];
+					}
 					out.write(obj);
 
-					if (this.node != hash) {
+					if (this.node != hash && countToDCR-- == 0) {
 						// TODO statistics
 						out.write(toBytes(new DirectConnectionRequest(hash, this.node, java.lang.System.identityHashCode(this))));
 					}

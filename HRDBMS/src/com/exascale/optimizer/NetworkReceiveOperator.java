@@ -443,6 +443,25 @@ public class NetworkReceiveOperator implements Operator, Serializable
 		}
 	}
 
+	private void handleDCR(DirectConnectionRequest dcr) throws Exception {
+		final DirectConnection dirCon = new DirectConnection(dcr.getTo());
+		final BufferedOutputStream out = new BufferedOutputStream(dirCon.getOutputStream());
+		final byte[] command = "DIRCTCON".getBytes(StandardCharsets.UTF_8);
+		final byte[] from = intToBytes(this.node);
+		final byte[] to = intToBytes(dcr.getTo());
+		final byte[] operatorId = intToBytes(dcr.getOpId());
+		final byte[] data = new byte[command.length + from.length + to.length + operatorId.length];
+		System.arraycopy(command, 0, data, 0, 8);
+		System.arraycopy(from, 0, data, 8, 4);
+		System.arraycopy(to, 0, data, 12, 4);
+		System.arraycopy(operatorId, 0, data, 16, 4);
+		out.write(data);
+		out.flush();
+		//dirCon.close();
+		// TODO Maintain a hashmap to be used for closing the direct connection
+		final ReadThread readThread = new ReadThread(dirCon);
+	}
+
 	public void start(final boolean flag) throws Exception
 	{
 		outBuffer = new BufferedLinkedBlockingQueue(ResourceManager.QUEUE_SIZE);
@@ -496,6 +515,39 @@ public class NetworkReceiveOperator implements Operator, Serializable
 		}
 	}
 
+	private final class DirectConnection {
+		private Socket sock;
+		private InputStream in;
+		private OutputStream out;
+
+		public DirectConnection(int to) throws Exception {
+			this.sock = new Socket();
+			sock.setReceiveBufferSize(4194304);
+			sock.setSendBufferSize(4194304);
+			sock.connect(new InetSocketAddress(MetaData.getHostNameForNode(to), WORKER_PORT));
+			this.in = this.sock.getInputStream();
+			this.out = this.sock.getOutputStream();
+		}
+
+		public Socket getSock() {
+			return this.sock;
+		}
+
+		public InputStream getInputStream() {
+			return this.in;
+		}
+
+		public OutputStream getOutputStream() {
+			return this.out;
+		}
+
+		public void close() throws Exception {
+			this.in.close();
+			this.out.close();
+			this.sock.close();
+		}
+	}
+
 	private final class ReadThread extends ThreadPoolThread
 	{
 		private Operator op;
@@ -505,10 +557,15 @@ public class NetworkReceiveOperator implements Operator, Serializable
 		private final Random random = new Random();
 		private String fn;
 		private ByteBuffer buff;
+		private DirectConnection dirCon = null;
 
 		public ReadThread(final Operator op)
 		{
 			this.op = op;
+		}
+
+		public ReadThread(DirectConnection dirCon) {
+			this.dirCon = dirCon;
 		}
 
 		@Override
@@ -517,9 +574,15 @@ public class NetworkReceiveOperator implements Operator, Serializable
 			final long start = System.currentTimeMillis();
 			try
 			{
-				sock = socks.get(op);
-				in = new CompressedInputStream(ins.get(op));
-				op = null;
+				if (dirCon != null) {
+					sock = dirCon.getSock();
+					in = new CompressedInputStream(dirCon.getInputStream());
+				}
+				else {
+					sock = socks.get(op);
+					in = new CompressedInputStream(ins.get(op));
+					op = null;
+				}
 				final byte[] sizeBuff = new byte[4];
 				byte[] data = null;
 
@@ -595,8 +658,14 @@ public class NetworkReceiveOperator implements Operator, Serializable
 						return;
 					}
 
-					HRDBMSWorker.logger.debug("############ RECEIVED " + row.toString());
+					HRDBMSWorker.logger.debug("############ RECEIVED " + ((dirCon != null) ? "ON A DIRECT CONNECTION " : "") + row.toString());
 					if (row instanceof DirectConnectionRequest) {
+						try {
+							handleDCR((DirectConnectionRequest) row);
+						}
+						catch (Exception e) {
+							HRDBMSWorker.logger.error("Direct Connection Failed!!", e);
+						}
 						continue;
 					}
 
