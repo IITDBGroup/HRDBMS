@@ -467,12 +467,15 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 					}
 
 					final int hash = (int)(starting + ((0x7FFFFFFFFFFFFFFFL & hash(key)) % numNodes));
-					HRDBMSWorker.logger.debug("############ SENT " + o.toString() + " TO " + hash);
+					HRDBMSWorker.logger.debug("############ SENT " + o.toString() + " FROM " + this.node + " TO " + hash);
 
 					final OutputStream out = outs2[hash];
 					out.write(obj);
 
-					out.write(toBytes(new DirectConnectionRequest((byte) 29, (byte) 12)));
+					if (this.node != hash) {
+						// TODO statistics
+						out.write(toBytes(new DirectConnectionRequest(hash, this.node, java.lang.System.identityHashCode(this))));
+					}
 
 					o = child.next(this);
 					if (o instanceof DataEndMarker)

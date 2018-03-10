@@ -597,7 +597,6 @@ public class NetworkReceiveOperator implements Operator, Serializable
 
 					HRDBMSWorker.logger.debug("############ RECEIVED " + row.toString());
 					if (row instanceof DirectConnectionRequest) {
-						HRDBMSWorker.logger.debug("############ DCR  RECEIVED " + row.toString());
 						continue;
 					}
 
@@ -739,7 +738,8 @@ public class NetworkReceiveOperator implements Operator, Serializable
 				bb.position(5); // skip bytes[4]
 				final int from = bb.getInt();
 				final int to = bb.getInt();
-				return new DirectConnectionRequest(from, to);
+				final int opId = bb.getInt();
+				return new DirectConnectionRequest(from, to, opId);
 			}
 
 			// TODO inform the prof, A possible bug here maybe it is data but still bytes[4] = 5 || 6 || 10, I dont know what header(when serializing) is!
