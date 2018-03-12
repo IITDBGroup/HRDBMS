@@ -1956,7 +1956,7 @@ public class ConnectionWorker extends HRDBMSThread
 
 					final Operator op = routingOperators.get(opId);
 					if (op instanceof NetworkHashAndSendOperator) {
-						((NetworkHashAndSendOperator) op).addDircetConnection(from, sock);
+						((NetworkHashAndSendOperator) op).addDirectConnection(from, sock);
 					}
 					else {
 						HRDBMSWorker.logger.error("Something went wrong in DIRECT CONNECTION command");

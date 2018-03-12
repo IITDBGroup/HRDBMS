@@ -444,6 +444,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 	}
 
 	private void handleDCR(DirectConnectionRequest dcr) throws Exception {
+		HRDBMSWorker.logger.debug("################ I WILL PROCESS DCR " + dcr);
 		final DirectConnection dirCon = new DirectConnection(dcr.getTo());
 		final BufferedOutputStream out = new BufferedOutputStream(dirCon.getOutputStream());
 		final byte[] command = "DIRCTCON".getBytes(StandardCharsets.UTF_8);
@@ -460,6 +461,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 		//dirCon.close();
 		// TODO Maintain a hashmap to be used for closing the direct connection
 		final ReadThread readThread = new ReadThread(dirCon);
+		readThread.start();
 	}
 
 	public void start(final boolean flag) throws Exception
@@ -575,6 +577,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 			try
 			{
 				if (dirCon != null) {
+					HRDBMSWorker.logger.debug("################ I AM STARTING DIRECT CONNECTION READER");
 					sock = dirCon.getSock();
 					in = new CompressedInputStream(dirCon.getInputStream());
 				}
@@ -658,7 +661,7 @@ public class NetworkReceiveOperator implements Operator, Serializable
 						return;
 					}
 
-					HRDBMSWorker.logger.debug("############ RECEIVED " + ((dirCon != null) ? "ON A DIRECT CONNECTION " : "") + row.toString());
+					HRDBMSWorker.logger.debug("############ RECEIVED " + ((dirCon != null) ? "VIA A DIRECT CONNECTION " : "") + row.toString());
 					if (row instanceof DirectConnectionRequest) {
 						try {
 							handleDCR((DirectConnectionRequest) row);

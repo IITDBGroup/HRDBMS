@@ -164,7 +164,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		return retval;
 	}
 
-	public synchronized void addDircetConnection(final int from, final Socket sock) {
+	public void addDirectConnection(final int from, final Socket sock) {
 		directCons.put(from, sock);
 		try {
 			directOuts.put(from, new CompressedOutputStream(new BufferedOutputStream(sock.getOutputStream())));
@@ -172,6 +172,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 		catch (Exception e) {
 			HRDBMSWorker.logger.error("Something went wrong with DIRECT CONNCETION", e);
 		}
+		HRDBMSWorker.logger.debug("############ DIRECTS ADDED" + directOuts);
 	}
 
 	@Override
@@ -415,7 +416,7 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 	@Override
 	public synchronized void start() throws Exception
 	{
-		int countToDCR = 2;
+		int countToDCR = 0;//2;
 		if (numNodes != numParents)
 		{
 			HRDBMSWorker.logger.debug("Wrong number of parents " + this);
@@ -493,10 +494,14 @@ public final class NetworkHashAndSendOperator extends NetworkSendOperator
 						out = outs2[hash];
 					}
 					out.write(obj);
+					out.flush();
 
 					if (this.node != hash && countToDCR-- == 0) {
 						// TODO statistics
 						out.write(toBytes(new DirectConnectionRequest(hash, this.node, java.lang.System.identityHashCode(this))));
+						out.flush();
+						Thread.sleep(20000);
+						HRDBMSWorker.logger.debug("############ DIRECTS" + directOuts);
 					}
 
 					o = child.next(this);
