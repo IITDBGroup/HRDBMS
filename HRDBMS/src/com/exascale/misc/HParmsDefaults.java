@@ -37,7 +37,7 @@ public class HParmsDefaults extends Properties
 		retval.setProperty("temp_directories", "/home/hrdbms/");
 		retval.setProperty("queue_block_size", "256");
 		retval.setProperty("catalog_creation_tcp_wait_ms", "5000");
-		retval.setProperty("max_neighbor_nodes", "100");
+		retval.setProperty("max_neighbor_nodes", "4");
 		retval.setProperty("max_local_no_hash_product", "2");
 		retval.setProperty("max_local_sort", "2");
 		retval.setProperty("parallel_sort_min_rows", Integer.toString((int)(2500 * Math.pow(Math.pow(Runtime.getRuntime().availableProcessors(), 2), 1.0 / 3.0))));
