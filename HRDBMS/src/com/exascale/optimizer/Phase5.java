@@ -261,7 +261,7 @@ public final class Phase5
 		{
 			for (final Operator o2 : (ArrayList<Operator>)o.children().clone())
 			{
-				o2.removeChild(o2);
+				o.removeChild(o2);
 			}
 		}
 
