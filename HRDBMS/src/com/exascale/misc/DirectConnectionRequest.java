@@ -4,27 +4,31 @@ import java.io.Serializable;
 
 public final class DirectConnectionRequest implements Serializable
 {
-  private byte from;
-  private byte to;
+  private int from;
+  private int to;
+  private int opId;
 
-  public DirectConnectionRequest(final byte from, final byte to) {
+  public DirectConnectionRequest(final int from, final int to, final int opId) {
     this.from = from;
     this.to = to;
+    this.opId = opId;
   }
 
-  public byte getFrom() {
-    return from;
+  public int getFrom() {
+    return this.from;
   }
 
-  public byte getTo() {
-    return to;
+  public int getTo() {
+    return this.to;
+  }
+
+  public int getOpId() {
+    return this.opId;
   }
 
   @Override
 	public String toString()
 	{
-    int from = (int) this.from;
-    int to = (int) this.to;
-    return "DIRECT CONNECTION REQUEST REQUIRED FROM " + from + " TO " + to;
+    return "DIRECT CONNECTION REQUEST REQUIRED FROM " + this.from + " TO " + this.to + " WITH OP ID " + this.opId;
   }
 }

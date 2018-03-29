@@ -37,6 +37,96 @@ services:
      networks:
         appnet:
           ipv4_address: 17.17.0.4
+  worker3:
+     container_name: "hrdbmsworker3"
+     extends:
+        service: node
+     ports:
+        - "5030:5015"
+     networks:
+        appnet:
+          ipv4_address: 17.17.0.5
+  worker4:
+     container_name: "hrdbmsworker4"
+     extends:
+        service: node
+     ports:
+        - "5040:5015"
+     networks:
+        appnet:
+          ipv4_address: 17.17.0.6
+  worker5:
+     container_name: "hrdbmsworker5"
+     extends:
+        service: node
+     ports:
+        - "5050:5015"
+     networks:
+        appnet:
+          ipv4_address: 17.17.0.7
+  worker6:
+     container_name: "hrdbmsworker6"
+     extends:
+        service: node
+     ports:
+        - "5060:5015"
+     networks:
+        appnet:
+          ipv4_address: 17.17.0.8
+  worker7:
+     container_name: "hrdbmsworker7"
+     extends:
+        service: node
+     ports:
+        - "5070:5015"
+     networks:
+        appnet:
+          ipv4_address: 17.17.0.9
+  worker8:
+     container_name: "hrdbmsworker8"
+     extends:
+        service: node
+     ports:
+        - "5080:5015"
+     networks:
+        appnet:
+          ipv4_address: 17.17.0.10
+  worker9:
+     container_name: "hrdbmsworker9"
+     extends:
+        service: node
+     ports:
+        - "5090:5015"
+     networks:
+        appnet:
+          ipv4_address: 17.17.0.11
+  worker10:
+     container_name: "hrdbmsworker10"
+     extends:
+        service: node
+     ports:
+        - "5100:5015"
+     networks:
+        appnet:
+          ipv4_address: 17.17.0.12
+  worker11:
+     container_name: "hrdbmsworker11"
+     extends:
+        service: node
+     ports:
+        - "5110:5015"
+     networks:
+        appnet:
+          ipv4_address: 17.17.0.13
+  worker12:
+     container_name: "hrdbmsworker12"
+     extends:
+        service: node
+     ports:
+        - "5120:5015"
+     networks:
+        appnet:
+          ipv4_address: 17.17.0.14
 networks:
   appnet:
     external: true

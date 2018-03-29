@@ -119,19 +119,31 @@ public class NetworkSendOperator implements Operator, Serializable
 	private static byte[] toBytesDCR(final Object v)
 	{
 		final DirectConnectionRequest dcr = (DirectConnectionRequest) v;
-		final byte[] retval = new byte[9];
+		final byte[] retval = new byte[21];
+		int from = dcr.getFrom();
+		int to = dcr.getTo();
+		int opId = dcr.getOpId();
 		retval[0] = 0;
 		retval[1] = 0;
 		retval[2] = 0;
-		retval[3] = 5;
+		retval[3] = 17;
 		retval[4] = 0;
 		retval[5] = 0;
 		retval[6] = 0;
-		retval[7] = 1;
+		retval[7] = 4;
 		retval[8] = 6;
-		// TODO
-		//dcr.getFrom();
-		//dcr.getTo();
+		retval[0] = (byte)(from >> 24);
+		retval[10] = (byte)((from & 0x00FF0000) >> 16);
+		retval[11] = (byte)((from & 0x0000FF00) >> 8);
+		retval[12] = (byte)((from & 0x000000FF));
+		retval[13] = (byte)(to >> 24);
+		retval[14] = (byte)((to & 0x00FF0000) >> 16);
+		retval[15] = (byte)((to & 0x0000FF00) >> 8);
+		retval[16] = (byte)((to & 0x000000FF));
+		retval[17] = (byte)(opId >> 24);
+		retval[18] = (byte)((opId & 0x00FF0000) >> 16);
+		retval[19] = (byte)((opId & 0x0000FF00) >> 8);
+		retval[20] = (byte)((opId & 0x000000FF));
 		return retval;
 	}
 

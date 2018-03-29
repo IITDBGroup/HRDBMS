@@ -85,6 +85,7 @@ import com.exascale.optimizer.MetaData;
 import com.exascale.optimizer.PartitionMetaData;
 import com.exascale.optimizer.NetworkReceiveOperator;
 import com.exascale.optimizer.NetworkSendOperator;
+import com.exascale.optimizer.NetworkHashAndSendOperator;
 import com.exascale.optimizer.Operator;
 import com.exascale.optimizer.OperatorUtils;
 import com.exascale.optimizer.RIDAndIndexKeys;
@@ -106,6 +107,7 @@ import com.sun.management.OperatingSystemMXBean;
 public class ConnectionWorker extends HRDBMSThread
 {
 	private static ConcurrentHashMap<Integer, Operator> sends;
+	private static ConcurrentHashMap<Integer, Operator> routingOperators;
 	private static int PREFETCH_REQUEST_SIZE;
 	private static int PAGES_IN_ADVANCE;
 	private static ConcurrentHashMap<String, LoadMetaData> ldmds = new ConcurrentHashMap<String, LoadMetaData>(16, 0.75f, 6 * ResourceManager.cpus);
@@ -126,6 +128,7 @@ public class ConnectionWorker extends HRDBMSThread
 	static
 	{
 		sends = new ConcurrentHashMap<Integer, Operator>();
+		routingOperators = new ConcurrentHashMap<Integer, Operator>();
 		final HParms hparms = HRDBMSWorker.getHParms();
 		PREFETCH_REQUEST_SIZE = Integer.parseInt(hparms.getProperty("prefetch_request_size")); // 80
 		PAGES_IN_ADVANCE = Integer.parseInt(hparms.getProperty("pages_in_advance")); // 40
@@ -1721,6 +1724,9 @@ public class ConnectionWorker extends HRDBMSThread
 					final int id = bytesToInt(idBytes);
 					HashMap<Long, Object> map = new HashMap<Long, Object>();
 					final Operator op = OperatorUtils.deserializeOperator(in, map);
+					if (op instanceof NetworkHashAndSendOperator) {
+						routingOperators.putIfAbsent(java.lang.System.identityHashCode(op), op);
+					}
 					map.clear();
 					map = null;
 					if (sends.putIfAbsent(id, op) == null)
@@ -1936,11 +1942,26 @@ public class ConnectionWorker extends HRDBMSThread
 					}
 				}
 
-				//else if (command.equals("DIRCTCON")) {
-				//	final byte[] idBytes = new byte[4];
-				//	num = in.read(idBytes);
-				//	HRDBMSWorker.logger.debug("########## I WILL TRY TO OPEN DIRECT CONNECTION FROM " + from + " TO " + to + " !!");
-				//}
+				else if (command.equals("DIRCTCON")) {
+					final byte[] opIdBytes = new byte[4];
+					num = in.read(opIdBytes);
+					if (num != 4)
+					{
+						throw new Exception("Received less than 4 bytes when reading id field in DIRECT CONNECTION command.");
+					}
+
+					final int opId = bytesToInt(opIdBytes);
+
+					HRDBMSWorker.logger.debug("########## I WILL TRY TO ADD DIRECT CONNECTION FROM " + from + " TO " + to + " WITH OPERATOR ID " + opId + " !!");
+
+					final Operator op = routingOperators.get(opId);
+					if (op instanceof NetworkHashAndSendOperator) {
+						((NetworkHashAndSendOperator) op).addDirectConnection(from, sock);
+					}
+					else {
+						HRDBMSWorker.logger.error("Something went wrong in DIRECT CONNECTION command");
+					}
+				}
 
 				else if (command.equals("CLOSE   "))
 				{
