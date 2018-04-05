@@ -255,6 +255,10 @@ public final class RoutingOperator implements Operator
 	{
 		op.registerParent(this);
 
+		if (children == null)
+			children = new ArrayList<Operator> ();
+		children.add(op);
+		
 		if (cols2Types == null)
 		{
 			cols2Types = op.getCols2Types();
@@ -1392,5 +1396,11 @@ public final class RoutingOperator implements Operator
 				}
 			}
 		}
+	}
+
+	public void serialize(OutputStream out, IdentityHashMap<Object, Long> prev, boolean b)
+	{
+		// TODO Auto-generated method stub
+		
 	}
 }

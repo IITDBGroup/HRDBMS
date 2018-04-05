@@ -1952,7 +1952,10 @@ public class OperatorUtils
 		writeShort(als.size(), out);
 		for (final Operator entry : als)
 		{
-			((NetworkSendOperator)entry).serialize(out, prev, false);
+			if (entry instanceof RoutingOperator)
+				((RoutingOperator) entry).serialize(out, prev);
+			else 
+				((NetworkSendOperator)entry).serialize(out, prev, false);
 		}
 
 		return;
